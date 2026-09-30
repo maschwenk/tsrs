@@ -125,9 +125,7 @@ impl tsrs_checker::Program for Program {
 // `checker::Program::as_module_specifier_generation_host`.
 impl tsrs_modulespecifiers::ModuleSpecifierGenerationHost for Program {
     fn get_symlink_cache(&self) -> P<KnownSymlinks> {
-        // Go `Program.GetSymlinkCache` (program.go:2309, memoized KnownSymlinks built from resolutions and package.json
-        // dependencies) is not ported yet.
-        todo!("compiler: Program.GetSymlinkCache")
+        Program::get_symlink_cache(self)
     }
 
     fn get_global_typings_cache_location(&self) -> String {

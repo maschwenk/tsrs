@@ -28,6 +28,7 @@ use crate::outputpaths;
 use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic};
 use crate::projectreferencefilemapper::{projectReferenceFileMapper, SourceOutputAndProjectReference};
 use crate::fileloader::str_slice;
+use tsrs_module::symlinks::{self, KnownSymlinks};
 use tsrs_module::{ResolutionHost, ResolvedProjectReference};
 
 pub type CreateModuleResolver = Box<dyn Fn(ResolverOptions) -> Box<dyn Resolver> + Send + Sync>;
@@ -110,6 +111,7 @@ pub struct Program {
     has_emit_blocking_diagnostics: FxHashSet<Path>,
 
     packages_map: OnceLock<FxHashMap<String, bool>>,
+    known_symlinks: OnceLock<P<KnownSymlinks>>,
 }
 
 impl std::ops::Deref for Program {
@@ -265,6 +267,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         program_diagnostics: Vec::new(),
         has_emit_blocking_diagnostics: FxHashSet::default(),
         packages_map: OnceLock::new(),
+        known_symlinks: OnceLock::new(),
     };
     p.init_checker_pool();
     p.verify_compiler_options();
@@ -1679,6 +1682,106 @@ impl Program {
 
     pub fn has_ts_file(&self) -> bool {
         self.files.iter().any(|f| tspath::has_implementation_ts_file_extension(f.file_name()))
+    }
+
+    pub fn get_symlink_cache(&self) -> P<KnownSymlinks> {
+        *self.known_symlinks.get_or_init(|| {
+            let resolver = self.new_resolver();
+            let known_symlinks = symlinks::new_known_symlink(self.get_current_directory(), self.use_case_sensitive_file_names());
+
+            // Resolved modules store realpath information when they're resolved inside node_modules
+            if !self.resolved_modules.is_empty() || !self.type_resolutions_in_file.is_empty() {
+                known_symlinks.set_symlinks_from_resolutions(
+                    |callback, file| self.for_each_resolved_module(callback, file),
+                    |callback, file| self.for_each_resolved_type_reference_directive(callback, file),
+                );
+            }
+
+            // Check other dependencies for symlinks
+            let mut seen_package_jsons: tsrs_core::collections::Set<Path> = tsrs_core::collections::Set::default();
+            for (file_path, meta) in &self.source_file_meta_datas {
+                if meta.package_json_directory.is_empty()
+                    || !self.source_file_may_be_emitted(self.get_source_file_by_path(file_path).unwrap(), false)
+                    || !seen_package_jsons.add_if_absent(self.to_path(&meta.package_json_directory))
+                {
+                    continue;
+                }
+                let package_json_name = tspath::combine_paths(&meta.package_json_directory, &["package.json"]);
+                let info = self.get_package_json_info(&package_json_name);
+                let Some(contents) = info.and_then(|info| info.get_contents()) else {
+                    continue;
+                };
+
+                for dep in contents.get_runtime_dependency_names().keys() {
+                    // Skip work in common case: we already saved a symlink for this package directory
+                    // in the node_modules adjacent to this package.json
+                    let possible_directory_path = self.to_path(&tspath::combine_paths(&meta.package_json_directory, &["node_modules", dep]));
+                    if known_symlinks.has_directory(&possible_directory_path) {
+                        continue;
+                    }
+                    if !dep.starts_with("@types") {
+                        let possible_types_directory_path = self.to_path(&tspath::combine_paths(
+                            &meta.package_json_directory,
+                            &["node_modules", &module::get_types_package_name(dep)],
+                        ));
+                        if known_symlinks.has_directory(&possible_types_directory_path) {
+                            continue;
+                        }
+                    }
+
+                    if let Some(package_resolution) = resolver
+                        .resolve_package_directory(dep, &package_json_name, ModuleKind::CommonJS, None)
+                        .filter(|r| r.is_resolved() && !r.original_path.is_empty())
+                    {
+                        known_symlinks.process_resolution(
+                            &tspath::combine_paths(package_resolution.original_path, &["package.json"]),
+                            &tspath::combine_paths(package_resolution.resolved_file_name, &["package.json"]),
+                        );
+                    }
+                }
+            }
+            P::new(known_symlinks)
+        })
+    }
+
+    pub fn for_each_resolved_module(
+        &self,
+        callback: &mut dyn FnMut(&ResolvedModule, &str, ResolutionMode, &Path),
+        file: Option<P<SourceFile>>,
+    ) {
+        for_each_resolution(&self.resolved_modules, |resolution, module_name, mode, file_path| callback(resolution, module_name, mode, file_path), file);
+    }
+
+    pub fn for_each_resolved_type_reference_directive(
+        &self,
+        callback: &mut dyn FnMut(&ResolvedTypeReferenceDirective, &str, ResolutionMode, &Path),
+        file: Option<P<SourceFile>>,
+    ) {
+        for_each_resolution(
+            &self.type_resolutions_in_file,
+            |resolution, module_name, mode, file_path| callback(resolution, module_name, mode, file_path),
+            file,
+        );
+    }
+}
+
+fn for_each_resolution<T>(
+    resolution_cache: &FxHashMap<Path, ModeAwareCache<P<T>>>,
+    mut callback: impl FnMut(&T, &str, ResolutionMode, &Path),
+    file: Option<P<SourceFile>>,
+) {
+    if let Some(file) = file {
+        if let Some(resolutions) = resolution_cache.get(file.path()) {
+            for (key, resolution) in resolutions {
+                callback(resolution, key.name, key.mode, file.path());
+            }
+        }
+    } else {
+        for (file_path, resolutions) in resolution_cache {
+            for (key, resolution) in resolutions {
+                callback(resolution, key.name, key.mode, file_path);
+            }
+        }
     }
 }
 
