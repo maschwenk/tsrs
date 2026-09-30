@@ -427,12 +427,12 @@ impl Checker {
     // flow.go:377
     pub(crate) fn narrow_type(&mut self, f: P<FlowState>, t: P<Type>, expr: P<Node>, assume_true: bool) -> P<Type> {
         // for `a?.b`, we emulate a synthetic `a !== null && a !== undefined` condition for `a`
-        let parent = expr.parent().unwrap();
-        if ast::is_expression_of_optional_chain_root(expr)
-            || ast::is_binary_expression(parent)
+        if ast::is_expression_of_optional_chain_root(expr) || {
+            let parent = expr.parent().unwrap();
+            ast::is_binary_expression(parent)
                 && (parent.as_binary_expression().operator_token.kind == Kind::QuestionQuestionToken || parent.as_binary_expression().operator_token.kind == Kind::QuestionQuestionEqualsToken)
                 && parent.as_binary_expression().left == expr
-        {
+        } {
             return self.narrow_type_by_optionality(f, t, expr, assume_true);
         }
         match expr.kind {
@@ -2580,9 +2580,7 @@ impl Checker {
             return self.string_type;
         }
         if ast::is_for_of_statement(grandparent) {
-            // SIG: Go's checkRightHandSideOfForOf may return nil; the generated signature returns P<Type>.
-            let t = self.check_right_hand_side_of_for_of(grandparent);
-            return t;
+            return self.check_right_hand_side_of_for_of(grandparent);
         }
         self.error_type
     }
@@ -2622,10 +2620,7 @@ impl Checker {
         match parent.kind {
             Kind::ForInStatement => return self.string_type,
             Kind::ForOfStatement => {
-                // SIG: Go's checkRightHandSideOfForOf may return nil (then falls through to errorType); the
-                // generated signature returns P<Type>.
-                let t = self.check_right_hand_side_of_for_of(parent);
-                return t;
+                return self.check_right_hand_side_of_for_of(parent);
             }
             Kind::BinaryExpression => return self.get_assigned_type_of_binary_expression(parent),
             Kind::DeleteExpression => return self.undefined_type,
