@@ -216,7 +216,7 @@ fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandL
         errors.extend(program.get_declaration_diagnostics(None));
     }
     let errors = compiler::sort_and_deduplicate_diagnostics(&errors);
-    CompilationResult { diagnostics: errors, options: program.options(), program }
+    CompilationResult { diagnostics: errors, options: program.options().get(), program }
 }
 
 // newCompilerTest + verifyDiagnostics
