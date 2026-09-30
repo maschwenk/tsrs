@@ -274,7 +274,7 @@ impl Checker {
                     }
                 } else if self.legacy_decorators && (node.kind == Kind::GetAccessor || node.kind == Kind::SetAccessor) {
                     let symbol = self.get_symbol_of_declaration(node).unwrap();
-                    let declarations: Vec<P<Node>> = symbol.declarations().clone();
+                    let declarations: Vec<P<Node>> = symbol.declarations().to_vec();
                     let accessors = ast::get_all_accessor_declarations_for_declaration(node, &declarations);
                     if ast::has_decorators(accessors.first_accessor) && Some(node) == accessors.second_accessor {
                         return self.grammar_error_on_first_token(node, &diagnostics::Decorators_cannot_be_applied_to_multiple_get_Slashset_accessors_of_the_same_name, &[]);

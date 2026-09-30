@@ -553,7 +553,7 @@ impl Checker {
                         }
                     }
                 }
-                *prop.declarations.borrow_mut() = member_symbol.declarations().clone();
+                prop.declarations.set(member_symbol.declarations());
                 prop.parent.set(member_symbol.parent());
                 prop.value_declaration.set(member_symbol.value_declaration());
                 links.resolved_type.set(Some(t));
@@ -689,7 +689,7 @@ impl Checker {
             return;
         }
         if self.is_deprecated_symbol(prop) {
-            let declarations = prop.declarations().clone();
+            let declarations = prop.declarations();
             self.add_deprecated_suggestion(name, &declarations, name.text());
         }
     }
@@ -787,7 +787,7 @@ impl Checker {
                 let right_prop = members.lookup(left_prop.name()).unwrap();
                 let right_type = self.get_type_of_symbol(right_prop);
                 if right_prop.flags().intersects(SymbolFlags::Optional) {
-                    let mut declarations = left_prop.declarations().clone();
+                    let mut declarations = left_prop.declarations().to_vec();
                     declarations.extend(right_prop.declarations().iter().copied());
                     let flags = SymbolFlags::Property | (left_prop.flags() & SymbolFlags::Optional);
                     let result = self.new_symbol(flags, left_prop.name());
@@ -807,7 +807,7 @@ impl Checker {
                     }
                     self.spread_links.get(result).left_spread.set(Some(left_prop));
                     self.spread_links.get(result).right_spread.set(Some(right_prop));
-                    *result.declarations.borrow_mut() = declarations;
+                    result.set_declarations(&declarations);
                     links.name_type.set(self.value_symbol_links.get(left_prop).name_type.get());
                     members.set(left_prop.name(), result);
                 }
@@ -901,7 +901,7 @@ impl Checker {
                     let prop_type = self.get_type_of_symbol(prop);
                     links.resolved_type.set(Some(self.add_optionality_ex(prop_type, true /*isProperty*/, true /*isOptional*/)));
                 }
-                *result.declarations.borrow_mut() = prop.declarations().clone();
+                result.declarations.set(prop.declarations());
                 links.name_type.set(self.value_symbol_links.get(prop).name_type.get());
                 self.mapped_symbol_links.get(result).synthetic_origin.set(Some(prop));
                 members.set(prop.name(), result);
@@ -940,7 +940,7 @@ impl Checker {
         } else {
             links.resolved_type.set(Some(self.get_type_of_symbol(prop)));
         }
-        *result.declarations.borrow_mut() = prop.declarations().clone();
+        result.declarations.set(prop.declarations());
         links.name_type.set(self.value_symbol_links.get(prop).name_type.get());
         self.mapped_symbol_links.get(result).synthetic_origin.set(Some(prop));
         result
@@ -1305,8 +1305,8 @@ impl Checker {
             || symbol.flags().intersects(SymbolFlags::Accessor) && !symbol.flags().intersects(SymbolFlags::SetAccessor)
             || symbol.flags().intersects(SymbolFlags::EnumMember)
             || {
-                let declarations = symbol.declarations().clone();
-                declarations.into_iter().any(|d| self.is_readonly_assignment_declaration(d))
+                let declarations = symbol.declarations();
+                declarations.iter().any(|&d| self.is_readonly_assignment_declaration(d))
             }
     }
 
@@ -1565,7 +1565,7 @@ impl Checker {
     // checker.go:14289
     pub(crate) fn is_deprecated_symbol(&mut self, symbol: P<Symbol>) -> bool {
         let parent_symbol = self.get_parent_of_symbol(symbol);
-        let declarations = symbol.declarations().clone();
+        let declarations = symbol.declarations();
         if let Some(parent_symbol) = parent_symbol {
             if declarations.len() > 1 {
                 if parent_symbol.flags().intersects(SymbolFlags::Interface) {
@@ -1705,8 +1705,8 @@ impl Checker {
             if let Some(value_declaration) = source.value_declaration() {
                 tsrs_binder::set_value_declaration(target, value_declaration);
             }
-            let source_declarations = source.declarations().clone();
-            target.declarations.borrow_mut().extend(source_declarations);
+            let source_declarations = source.declarations();
+            target.append_declarations(&source_declarations);
             if source.members().is_some() {
                 let target_members = get_symbol_table(&target.members);
                 self.merge_symbol_table(target_members, source.members(), unidirectional, None);
@@ -1762,9 +1762,9 @@ impl Checker {
 
     // checker.go:14461
     pub(crate) fn add_duplicate_declaration_errors_for_symbols(&mut self, target: P<Symbol>, message: &'static Message, symbol_name: &str, source: P<Symbol>) {
-        let target_declarations = target.declarations().clone();
-        for node in target_declarations {
-            let source_declarations = source.declarations().clone();
+        let target_declarations = target.declarations();
+        for &node in target_declarations {
+            let source_declarations = source.declarations();
             self.add_duplicate_declaration_error(node, message, symbol_name, &source_declarations);
         }
     }
@@ -1890,7 +1890,7 @@ impl Checker {
     pub(crate) fn clone_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol> {
         let result = self.new_symbol(symbol.flags(), symbol.name());
         // Force reallocation if anything is ever appended to declarations
-        *result.declarations.borrow_mut() = symbol.declarations().clone();
+        result.declarations.set(symbol.declarations());
         result.parent.set(symbol.parent());
         result.value_declaration.set(symbol.value_declaration());
         result.members.set(symbol.members().map(|m| m.clone_table()));
@@ -1978,8 +1978,8 @@ impl Checker {
         }
         let links = self.late_bound_links.get(symbol);
         if links.late_symbol.get().is_none() && {
-            let declarations = symbol.declarations().clone();
-            declarations.into_iter().any(|d| self.has_late_bindable_name(d))
+            let declarations = symbol.declarations();
+            declarations.iter().any(|&d| self.has_late_bindable_name(d))
         } {
             // force late binding of members/exports. This will set the late-bound symbol
             let parent = self.get_merged_symbol(symbol.parent().unwrap());
@@ -2211,9 +2211,9 @@ impl Checker {
                 export_star = lookup_export(module_symbol, InternalSymbolNameExportStar);
             }
             if let Some(export_star) = export_star {
-                let declarations = export_star.declarations().clone();
+                let declarations = export_star.declarations();
                 let mut default_export: Option<P<Node>> = None;
-                for decl in declarations {
+                for &decl in declarations {
                     if !(ast::is_export_declaration(decl) && decl.module_specifier().is_some()) {
                         continue;
                     }
@@ -2418,10 +2418,10 @@ impl Checker {
         }
         let result = self.new_symbol(value_symbol.flags() | type_symbol.flags(), value_symbol.name());
         assert!(!value_symbol.declarations().is_empty() || !type_symbol.declarations().is_empty());
-        let mut declarations = value_symbol.declarations().clone();
+        let mut declarations = value_symbol.declarations().to_vec();
         declarations.extend(type_symbol.declarations().iter().copied());
         declarations.dedup();
-        *result.declarations.borrow_mut() = declarations;
+        result.set_declarations(&declarations);
         result.parent.set(value_symbol.parent());
         if result.parent().is_none() {
             result.parent.set(type_symbol.parent());
@@ -2596,8 +2596,8 @@ impl Checker {
                 } else {
                     self.error(Some(name), &diagnostics::Module_0_declares_1_locally_but_it_is_not_exported, &[&module_name, &declaration_name])
                 };
-                let declarations = local_symbol.declarations().clone();
-                for (i, decl) in declarations.into_iter().enumerate() {
+                let declarations = local_symbol.declarations();
+                for (i, &decl) in declarations.iter().enumerate() {
                     diagnostic.add_related_info(create_diagnostic_for_node(
                         Some(decl),
                         if i == 0 { &diagnostics::X_0_is_declared_here } else { &diagnostics::X_and_here },

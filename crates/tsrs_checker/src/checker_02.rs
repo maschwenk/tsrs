@@ -945,7 +945,7 @@ impl Checker {
             }
             let symbol = self.get_resolved_symbol_or_nil(node);
             if let Some(symbol) = symbol {
-                let declarations = symbol.declarations().clone();
+                let declarations = symbol.declarations();
                 if declarations.iter().any(|&d| ast::is_type_declaration(d) && self.is_deprecated_declaration(d)) {
                     let suggestion_node = self.get_deprecated_suggestion_node(node).unwrap();
                     self.add_deprecated_suggestion(suggestion_node, &declarations, symbol.name());
@@ -1477,7 +1477,7 @@ impl Checker {
         let mut body_declaration: Option<P<Node>> = None;
         let mut last_seen_non_ambient_declaration: Option<P<Node>> = None;
         let mut previous_declaration: Option<P<Node>> = None;
-        let declarations: Vec<P<Node>> = symbol.declarations().clone();
+        let declarations: Vec<P<Node>> = symbol.declarations().to_vec();
         let is_constructor = symbol.flags().intersects(SymbolFlags::Constructor);
         let mut duplicate_function_declaration = false;
         let mut multiple_constructor_implementation = false;

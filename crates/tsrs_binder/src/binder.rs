@@ -7,7 +7,7 @@ use tsrs_ast::{
     Diagnostic, DiagnosticExt, FlowFlags, FlowList, FlowNode, Kind, ModifierFlags, Node, NodeFlags, NodeList, SourceFile, Symbol,
     SymbolFlags, SymbolTable,
 };
-use tsrs_core::{alloc_str, tspath, P};
+use tsrs_core::{alloc_str, tspath, OwnedCell, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use tsrs_scanner as scanner;
@@ -114,10 +114,10 @@ fn bind_source_file_worker(file: P<SourceFile>) {
 
 fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>) -> P<FlowNode> {
     P::new(FlowNode {
-        flags: Cell::new(flags),
-        node: Cell::new(node),
-        antecedent: Cell::new(antecedent),
-        antecedents: Cell::new(None),
+        flags: OwnedCell::new(flags),
+        node: OwnedCell::new(node),
+        antecedent: OwnedCell::new(antecedent),
+        antecedents: OwnedCell::new(None),
     })
 }
 
@@ -268,7 +268,7 @@ impl Binder {
                                 message_needs_name = false;
                             }
                             let mut multiple_default_exports = false;
-                            let declarations_len = symbol.declarations.borrow().len();
+                            let declarations_len = symbol.declarations().len();
                             if declarations_len != 0 {
                                 // If the current node is a default export of some sort, then check if
                                 // there are any other default exports that we need to error on.
@@ -305,7 +305,7 @@ impl Binder {
                                 let suggestion = format!("export type {{ {} }}", node.name().unwrap().text());
                                 diag.add_related_info(self.create_diagnostic_for_node(node, &diagnostics::Did_you_mean_0, &[&suggestion]));
                             }
-                            let declarations: Vec<P<Node>> = symbol.declarations.borrow().clone();
+                            let declarations = symbol.declarations();
                             for (index, declaration) in declarations.iter().copied().enumerate() {
                                 let decl = ast::get_name_of_declaration(Some(declaration)).unwrap_or(declaration);
                                 let d = if message_needs_name {
@@ -612,7 +612,7 @@ impl Binder {
     }
 
     pub(crate) fn new_flow_list(&mut self, head: P<FlowNode>, tail: Option<P<FlowList>>) -> P<FlowList> {
-        P::new(FlowList { flow: head, next: Cell::new(tail) })
+        P::new(FlowList { flow: head, next: OwnedCell::new(tail) })
     }
 
     pub(crate) fn combine_flow_lists(&mut self, head: Option<P<FlowList>>, tail: Option<P<FlowList>>) -> Option<P<FlowList>> {
@@ -1096,7 +1096,7 @@ impl Binder {
         let prototype_symbol = self.new_symbol(SymbolFlags::Property | SymbolFlags::Prototype, "prototype");
         let symbol_export = (*ast::get_exports(symbol)).get(prototype_symbol.name.get());
         if let Some(symbol_export) = symbol_export {
-            let first_declaration = symbol_export.declarations.borrow()[0];
+            let first_declaration = symbol_export.declarations()[0];
             self.error_on_node(first_declaration, &diagnostics::Duplicate_identifier_0, &[&ast::symbol_name(prototype_symbol)]);
         }
         ast::get_exports(symbol).set(prototype_symbol.name.get(), prototype_symbol);
@@ -1144,7 +1144,7 @@ impl Binder {
                 s
             }
         };
-        assignment_symbol.declarations.borrow_mut().push(node);
+        assignment_symbol.append_declarations(&[node]);
     }
 
     pub(crate) fn bind_module_exports_assignment(&mut self, node: P<Node>) {
@@ -1841,11 +1841,11 @@ impl Binder {
         let locals = ast::get_locals(self.file.as_node());
         if (*locals).get(name).is_none() {
             let symbol = self.new_symbol(SymbolFlags::FunctionScopedVariable | SymbolFlags::ModuleExports, name);
-            *symbol.declarations.borrow_mut() = vec![self.file.as_node()];
+            symbol.set_declarations(&vec![self.file.as_node()]);
             symbol.value_declaration.set(Some(self.file.as_node()));
             if name == "module" {
                 let exports_property = self.new_symbol(SymbolFlags::ModuleExports | SymbolFlags::Property, "exports");
-                *exports_property.declarations.borrow_mut() = symbol.declarations.borrow().clone();
+                exports_property.declarations.set(symbol.declarations());
                 exports_property.value_declaration.set(symbol.value_declaration.get());
                 exports_property.parent.set(Some(symbol));
                 let members = SymbolTable::new();
@@ -2774,11 +2774,8 @@ impl Binder {
     pub(crate) fn add_declaration_to_symbol(&mut self, symbol: P<Symbol>, node: P<Node>, symbol_flags: SymbolFlags) {
         symbol.flags.set(symbol.flags.get() | symbol_flags);
         node.declaration_data().unwrap().symbol.set(Some(symbol));
-        {
-            let mut declarations = symbol.declarations.borrow_mut();
-            if !declarations.contains(&node) {
-                declarations.push(node);
-            }
+        if !symbol.declarations().contains(&node) {
+            symbol.append_declarations(&[node]);
         }
         // On merge of const enum module with class or function, reset const enum only flag (namespaces will already recalculate)
         if symbol.flags.get().intersects(SymbolFlags::ConstEnumOnlyModule)

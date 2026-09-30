@@ -287,8 +287,8 @@ impl Checker {
     // checker.go:19839
     pub(crate) fn resolve_base_types_of_interface(&mut self, t: P<Type>) {
         let data = t.as_interface_type();
-        let declarations = t.symbol().unwrap().declarations().clone();
-        for declaration in declarations {
+        let declarations = t.symbol().unwrap().declarations();
+        for &declaration in declarations {
             if ast::is_interface_declaration(declaration) {
                 for &node in ast::get_extends_heritage_clause_elements(declaration) {
                     let type_from_node = self.get_type_from_type_node(node);
@@ -463,8 +463,8 @@ impl Checker {
         let mut readonly_computed_number_property = true;
         let mut readonly_computed_symbol_property = true;
         let mut property_symbols: Vec<P<Symbol>> = Vec::new();
-        let declarations = index_symbol.declarations().clone();
-        for declaration in declarations {
+        let declarations = index_symbol.declarations();
+        for &declaration in declarations {
             if ast::is_index_signature_declaration(declaration) {
                 let parameters = declaration.parameters();
                 let return_type_node = declaration.type_node();
@@ -653,7 +653,7 @@ impl Checker {
             return Vec::new();
         };
         let mut result = Vec::new();
-        let declarations = symbol.declarations().clone();
+        let declarations = symbol.declarations();
         for (i, &decl) in declarations.iter().enumerate() {
             if !ast::is_function_like(decl) {
                 continue;
@@ -1552,17 +1552,17 @@ impl Checker {
         }
         if antecedent.is_none() {
             antecedent = Some(P::new(FlowNode {
-                flags: Cell::new(FlowFlags::Start),
-                node: Cell::new(None),
-                antecedent: Cell::new(None),
-                antecedents: Cell::new(None),
+                flags: tsrs_core::OwnedCell::new(FlowFlags::Start),
+                node: tsrs_core::OwnedCell::new(None),
+                antecedent: tsrs_core::OwnedCell::new(None),
+                antecedents: tsrs_core::OwnedCell::new(None),
             }));
         }
         let true_condition = P::new(FlowNode {
-            flags: Cell::new(FlowFlags::TrueCondition),
-            node: Cell::new(Some(expr)),
-            antecedent: Cell::new(antecedent),
-            antecedents: Cell::new(None),
+            flags: tsrs_core::OwnedCell::new(FlowFlags::TrueCondition),
+            node: tsrs_core::OwnedCell::new(Some(expr)),
+            antecedent: tsrs_core::OwnedCell::new(antecedent),
+            antecedents: tsrs_core::OwnedCell::new(None),
         });
         let true_type = self.get_flow_type_of_reference_ex(param.name().unwrap(), init_type, init_type, Some(fn_), Some(true_condition));
         if true_type == init_type {
@@ -1571,10 +1571,10 @@ impl Checker {
         // "x is T" means that x is T if and only if it returns true. If it returns false then x is not T.
         // This means that if the function is called with an argument of type trueType, there can't be anything left in the `else` branch. It must reduce to `never`.
         let false_condition = P::new(FlowNode {
-            flags: Cell::new(FlowFlags::FalseCondition),
-            node: Cell::new(Some(expr)),
-            antecedent: Cell::new(antecedent),
-            antecedents: Cell::new(None),
+            flags: tsrs_core::OwnedCell::new(FlowFlags::FalseCondition),
+            node: tsrs_core::OwnedCell::new(Some(expr)),
+            antecedent: tsrs_core::OwnedCell::new(antecedent),
+            antecedents: tsrs_core::OwnedCell::new(None),
         });
         let false_flow_type = self.get_flow_type_of_reference_ex(param.name().unwrap(), init_type, true_type, Some(fn_), Some(false_condition));
         let false_subtype = self.get_reduced_type(false_flow_type);
@@ -1805,7 +1805,7 @@ impl Checker {
             CheckFlags::Instantiated
                 | symbol.check_flags() & (CheckFlags::Readonly | CheckFlags::Late | CheckFlags::OptionalParameter | CheckFlags::RestParameter),
         );
-        *result.declarations.borrow_mut() = symbol.declarations().clone();
+        result.declarations.set(symbol.declarations());
         result.parent.set(symbol.parent());
         result.value_declaration.set(symbol.value_declaration());
         let result_links = self.value_symbol_links.get(result);
@@ -2036,7 +2036,7 @@ fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTy
             if let Some(modifiers_prop) = modifiers_prop {
                 mapped_links.synthetic_origin.set(Some(modifiers_prop));
                 if st.should_link_prop_declarations {
-                    *prop.declarations.borrow_mut() = modifiers_prop.declarations().clone();
+                    prop.declarations.set(modifiers_prop.declarations());
                 }
             }
             st.members.set(prop.name(), prop);

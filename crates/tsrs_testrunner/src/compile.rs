@@ -199,7 +199,9 @@ fn compile_files_ex(
 
 fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>, harness_options: &HarnessOptions) -> CompilationResult {
     let mut opts = compiler::ProgramOptions::new(config, host);
-    opts.single_threaded = Tristate::True;
+    if test_program_is_single_threaded() {
+        opts.single_threaded = Tristate::True;
+    }
     let program = compiler::new_program(opts);
     let mut errors = Vec::new();
     errors.extend(program.get_config_file_parsing_diagnostics());
@@ -278,5 +280,24 @@ fn convert(d: P<Diagnostic>, files: &mut FxHashMap<P<SourceFile>, Rc<FileLike>>)
         args: d.message_args().to_vec(),
         chain: d.message_chain().iter().map(|c| convert(*c, files)).collect(),
         related: d.related_information().iter().map(|r| convert(*r, files)).collect(),
+    }
+}
+
+// Go testutil.TestProgramIsSingleThreaded: programs stay single-threaded unless
+// TS_TEST_PROGRAM_SINGLE_THREADED says otherwise (Go also goes multi-threaded under the race detector).
+fn test_program_is_single_threaded() -> bool {
+    static SINGLE_THREADED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *SINGLE_THREADED.get_or_init(|| match std::env::var("TS_TEST_PROGRAM_SINGLE_THREADED") {
+        Ok(v) => parse_go_bool(&v).unwrap_or(true),
+        Err(_) => true,
+    })
+}
+
+// Go strconv.ParseBool.
+fn parse_go_bool(v: &str) -> Option<bool> {
+    match v {
+        "1" | "t" | "T" | "TRUE" | "true" | "True" => Some(true),
+        "0" | "f" | "F" | "FALSE" | "false" | "False" => Some(false),
+        _ => None,
     }
 }

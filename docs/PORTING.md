@@ -70,6 +70,8 @@ referenced through `tsrs_core::P<T>`:
   `RefCell<T>` for growable collections (`Vec`, maps). Fields that are set at construction and
   never change are plain fields. Never hold a `RefCell` borrow across a call that might
   touch the same cell; copy out what you need first.
+  Objects shared between checker threads (AST, binder symbols, …) use `OwnedCell` / `FrozenCell` instead
+  (see "Threading").
 - Go slices stored in long-lived objects -> `&'static [T]` built with `tsrs_core::alloc_slice(&v)` /
   `alloc_vec(v)`; wrapped in `Cell` if reassigned. A nil slice and an empty slice are both `&[]`
   unless the Go code distinguishes nil from empty, in which case use `Option<&'static [T]>`.
@@ -77,6 +79,40 @@ referenced through `tsrs_core::P<T>`:
   literals are already `&'static str`.
 - Go value structs (`core.TextRange`, small option structs) -> plain `#[derive(Clone, Copy)]` structs.
 - Types with a name alias for the common pointer: none. Write `P<Node>`, `Option<P<Type>>` out.
+
+### Threading
+
+Parsing and binding run per file (in parallel) and finish before checking. Checking runs on N checkers
+(Go's default 4, `--checkers N`, `--singleThreaded` = 1), each on its own OS thread with a 512 MB stack
+(`tsrs_compiler::checkerpool`). Each thread allocates in its own leak arena; `P<T>` is `Send + Sync` by decree,
+so the compiler does not police sharing. The rules:
+
+- **Shared, frozen after binding**: AST nodes and node lists, `SourceFile`, binder symbols and symbol tables,
+  flow nodes, parse/bind diagnostics, `TsConfigSourceFile`. Their mutable fields are written by the parser/binder
+  (or config parser) that builds them and are read-only once the file is bound. Checkers only read them.
+- **Checker-owned**: types, signatures, links, transient/merged/late-bound symbols and the tables a checker
+  creates, synthetic nodes and diagnostics a checker creates. Only that checker touches them. Go keeps all
+  checker state about shared objects in link stores keyed by the object; so do we. Go clones a symbol before
+  mutating it unless it is transient (e.g. `mergeSymbol`); so do we.
+- **Lazily initialized shared data** mirrors Go's synchronization: node/symbol ids are atomics, `SourceFile`
+  line maps, position maps and identifier sets are `OnceLock`s, binding runs under a `std::sync::Once`
+  (Go `bindOnce`), the lazily parsed JSDoc cache is guarded by `jsdoc_mu` (Go `jsdocMu`).
+
+Cell types for shared objects (`tsrs_core::frozen`):
+
+- `OwnedCell<T>`: `Cell` API (`get`/`set`/`replace`) for `Copy` fields of shared objects. Only the owner writes:
+  the parser/binder before the file is bound, or a checker on objects it created.
+- `FrozenCell<T>`: `RefCell` API (`borrow`/`borrow_mut`) without a runtime borrow flag, for collections in shared
+  objects (`SymbolTable`, the lazily filled JSDoc cache, `TsConfigSourceFile`). `RefCell` cannot be used there: its flag is written by
+  `borrow()`, so concurrent readers race. Same owner rule for `borrow_mut`; `borrow_mut_locked` is for a cache
+  whose every access holds one lock. Never hold a `borrow_mut` guard across a call that reads the same cell.
+- `Cell`/`RefCell` stay fine for checker-owned objects (types, links, checker state).
+
+Checking the contract: build with `--features tsrs_core/checked-cells` (or a debug build) and run with
+`TSRS_CHECK_SHARED=1`. The pool then binds all files, records every arena allocation made so far as shared, and
+any `OwnedCell::set` / `FrozenCell::borrow_mut` on such an object panics with a backtrace pointing at the write.
+Checked builds also keep an atomic borrow counter in `FrozenCell` to catch aliasing like `RefCell` does.
+ThreadSanitizer is not usable here (the installed nightly's TSan runtime crashes at startup on this macOS).
 
 ### Function signatures
 
@@ -139,7 +175,7 @@ callback, even when the closure does not need it.
 - Go `panic(...)` -> `panic!(...)`. `debug.Assert(cond, msg)` -> `debug_assert!`-free: use `assert!(cond, msg)`.
 - `defer` -> restructure, or a small scope guard; keep the same effect on all return paths.
 - Goroutines / `sync.WaitGroup` / work groups -> sequential code unless the owning crate documents a parallel entry
-  point (file parsing uses rayon). `sync.Once` -> `std::sync::OnceLock`. `sync.Mutex` -> `std::sync::Mutex` only if
+  point (file parsing and binding use rayon; the checker pool runs one OS thread per checker, see "Threading"). `sync.Once` -> `std::sync::OnceLock`. `sync.Mutex` -> `std::sync::Mutex` only if
   the data really is shared between threads, otherwise drop it. `atomic.*` -> the `std::sync::atomic` equivalent.
 - `switch` with fallthrough, labeled `break`/`continue`, `goto` -> loops with labels / `match`; preserve evaluation order.
 - Type switches on node kind -> `match node.kind`.

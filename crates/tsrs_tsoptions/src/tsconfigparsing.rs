@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::fmt::Display;
 use std::sync::LazyLock;
 
@@ -365,17 +364,18 @@ fn initializer_of(property_assignment: P<Node>) -> P<Node> {
     property_assignment.initializer().unwrap()
 }
 
+// Filled while the config is parsed; read-only (and read by checker threads) afterwards.
 pub struct TsConfigSourceFile {
-    pub extended_source_files: RefCell<Vec<String>>,
-    pub(crate) config_file_specs: RefCell<Option<ConfigFileSpecs>>,
+    pub extended_source_files: tsrs_core::FrozenCell<Vec<String>>,
+    pub(crate) config_file_specs: tsrs_core::FrozenCell<Option<ConfigFileSpecs>>,
     pub source_file: P<SourceFile>,
 }
 
 impl TsConfigSourceFile {
     pub fn new(source_file: P<SourceFile>) -> P<TsConfigSourceFile> {
         P::new(TsConfigSourceFile {
-            extended_source_files: RefCell::new(Vec::new()),
-            config_file_specs: RefCell::new(None),
+            extended_source_files: tsrs_core::FrozenCell::new(Vec::new()),
+            config_file_specs: tsrs_core::FrozenCell::new(None),
             source_file,
         })
     }

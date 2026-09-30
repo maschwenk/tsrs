@@ -668,7 +668,7 @@ impl Checker {
         if is_import_specifier(node) {
             let target_symbol = self.resolve_alias_with_deprecation_check(symbol, node);
             if self.is_deprecated_symbol(target_symbol) && !target_symbol.declarations().is_empty() {
-                let declarations = target_symbol.declarations().clone();
+                let declarations = target_symbol.declarations();
                 self.add_deprecated_suggestion(node, &declarations, target_symbol.name());
             }
         }
@@ -752,8 +752,8 @@ impl Checker {
         let mut exported_declaration_spaces = DeclarationSpaces::None;
         let mut non_exported_declaration_spaces = DeclarationSpaces::None;
         let mut default_exported_declaration_spaces = DeclarationSpaces::None;
-        let declarations = symbol.declarations().clone();
-        for &d in &declarations {
+        let declarations = symbol.declarations();
+        for &d in declarations {
             let declaration_spaces = self.get_declaration_spaces(d);
             let effective_declaration_flags = self.get_effective_declaration_flags(d, ModifierFlags::Export | ModifierFlags::Default);
             if effective_declaration_flags.intersects(ModifierFlags::Export) {
@@ -772,8 +772,8 @@ impl Checker {
         let common_declaration_spaces_for_default_and_non_default = default_exported_declaration_spaces & non_default_exported_declaration_spaces;
         if !common_declaration_spaces_for_exports_and_locals.is_empty() || !common_declaration_spaces_for_default_and_non_default.is_empty() {
             // declaration spaces for exported and non-exported declarations intersect
-            let declarations = symbol.declarations().clone();
-            for &d in &declarations {
+            let declarations = symbol.declarations();
+            for &d in declarations {
                 let declaration_spaces = self.get_declaration_spaces(d);
                 let name = get_name_of_declaration(d);
                 // Only error on the declarations that contributed to the intersecting spaces.
@@ -796,8 +796,8 @@ impl Checker {
             let mut result = DeclarationSpaces::None;
             let symbol = c.get_symbol_of_declaration(node).unwrap();
             let target = c.resolve_alias(symbol);
-            let declarations = target.declarations().clone();
-            for &d in &declarations {
+            let declarations = target.declarations();
+            for &d in declarations {
                 result |= c.get_declaration_spaces(d);
             }
             result
@@ -1021,8 +1021,8 @@ impl Checker {
             {
                 continue;
             }
-            let declarations = local.declarations().clone();
-            for declaration in declarations {
+            let declarations = local.declarations();
+            for &declaration in declarations {
                 if is_variable_declaration(declaration) || is_parameter_declaration(declaration) || is_binding_element(declaration) {
                     variable_parents.insert(get_root_declaration(declaration).parent().unwrap());
                 } else if is_import_clause(declaration) || is_import_specifier(declaration) || is_namespace_import(declaration) {

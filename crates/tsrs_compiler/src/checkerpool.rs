@@ -1,6 +1,5 @@
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
-use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_core::P;
@@ -47,6 +46,39 @@ impl Checker {
 #[cfg(not(feature = "checker"))]
 fn new_checker(_program: &'static Program) -> Box<Checker> {
     Box::new(Checker { type_count: 0, symbol_count: 0, total_instantiation_count: 0 })
+}
+
+// Checkers recurse deeply (the single-threaded CLI runs on a 512 MB stack); each checker thread gets the same.
+pub const CHECKER_STACK_SIZE: usize = 512 << 20;
+
+// Go core.WorkGroup as used by the checker pool: runs `task(i)` for every index, each on its own OS thread,
+// and waits for all of them. Single-threaded runs execute the tasks in order on the calling thread.
+fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sync) {
+    if single_threaded || count <= 1 {
+        (0..count).for_each(task);
+        return;
+    }
+    std::thread::scope(|s| {
+        let task = &task;
+        let handles: Vec<_> = (0..count)
+            .map(|i| {
+                std::thread::Builder::new()
+                    .name(format!("checker-{i}"))
+                    .stack_size(CHECKER_STACK_SIZE)
+                    .spawn_scoped(s, move || task(i))
+                    .expect("failed to spawn checker thread")
+            })
+            .collect();
+        let mut panic = None;
+        for handle in handles {
+            if let Err(payload) = handle.join() {
+                panic.get_or_insert(payload);
+            }
+        }
+        if let Some(payload) = panic {
+            std::panic::resume_unwind(payload);
+        }
+    });
 }
 
 // A checker is mutated only while its mutex is held, by exactly one thread at a time; the pool
@@ -260,9 +292,7 @@ fn get_checker_association_weights(base_weights: &[i64], import_counts: &[i64]) 
 
 impl checkerPool {
     pub(crate) fn new(program: &Program) -> checkerPool {
-        // Go defaults to 4 checkers; tsrs defaults to a single checker until parallel checking
-        // is turned on. `--checkers N` still selects the Go assignment scheme for N checkers.
-        let mut checker_count = 1;
+        let mut checker_count = 4;
         if program.single_threaded() {
             checker_count = 1;
         } else if let Some(c) = program.options().checkers {
@@ -276,9 +306,17 @@ impl checkerPool {
 
     fn create_checkers(&self, program: &'static Program) -> &poolState {
         self.state.get_or_init(|| {
-            let checkers: Vec<CheckerSlot> = (0..self.checker_count)
-                .map(|_| CheckerSlot(Mutex::new(new_checker(program))))
-                .collect();
+            if tsrs_core::ptr::shared_check::enabled() {
+                // Debug aid: bind up front so every parser/binder allocation is recorded as shared.
+                tsrs_core::ptr::shared_check::thaw();
+                program.bind_source_files();
+                tsrs_core::ptr::shared_check::freeze_shared_objects();
+            }
+            let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
+            run_work_group(self.single_threaded, self.checker_count, |i| {
+                *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
+            });
+            let checkers: Vec<CheckerSlot> = slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect();
 
             let files = &program.files;
             let mut associations = vec![0usize; files.len()];
@@ -348,11 +386,7 @@ impl checkerPool {
             let mut guard = state.checkers[idx].0.lock().unwrap();
             cb(idx, &mut guard);
         };
-        if self.single_threaded {
-            (0..state.checkers.len()).for_each(run);
-        } else {
-            crate::program::worker_pool().install(|| (0..state.checkers.len()).into_par_iter().for_each(run));
-        }
+        run_work_group(self.single_threaded, state.checkers.len(), run);
     }
 
     pub(crate) fn get_global_diagnostics(&self, program: &'static Program) -> Vec<P<Diagnostic>> {
@@ -384,11 +418,7 @@ impl checkerPool {
                 }
             }
         };
-        if single_threaded || self.single_threaded {
-            (0..state.checkers.len()).for_each(run);
-        } else {
-            crate::program::worker_pool().install(|| (0..state.checkers.len()).into_par_iter().for_each(run));
-        }
+        run_work_group(single_threaded || self.single_threaded, state.checkers.len(), run);
     }
 }
 

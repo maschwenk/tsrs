@@ -1678,7 +1678,7 @@ pub(crate) fn try_get_property_access_or_identifier_to_string(expr: P<Node>) -> 
 
 // utilities.go:1633
 pub(crate) fn all_declarations_in_same_source_file(symbol: P<Symbol>) -> bool {
-    let declarations = symbol.declarations().clone();
+    let declarations = symbol.declarations();
     if declarations.len() > 1 {
         let mut source_file: Option<P<SourceFile>> = None;
         for (i, &d) in declarations.iter().enumerate() {

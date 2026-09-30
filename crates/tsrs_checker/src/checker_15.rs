@@ -2388,7 +2388,7 @@ impl Checker {
                         let symbol = self.new_symbol(SymbolFlags::Property, InternalSymbolNameIndex);
                         symbol.check_flags.set(symbol.check_flags.get() | CheckFlags::IndexSymbol);
                         symbol.value_declaration.set(Some(declarations[0]));
-                        *symbol.declarations.borrow_mut() = declarations;
+                        symbol.set_declarations(&declarations);
                         symbol.parent.set(t.symbol());
                         let links = self.value_symbol_links.get(symbol);
                         links.resolved_type.set(info.value_type.get());

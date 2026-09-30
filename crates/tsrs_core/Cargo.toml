@@ -7,6 +7,10 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Atomic borrow checking for FrozenCell in release builds (always on with debug_assertions).
+checked-cells = []
+
 [dependencies]
 bumpalo.workspace = true
 rustc-hash.workspace = true

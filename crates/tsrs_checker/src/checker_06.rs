@@ -55,7 +55,7 @@ fn get_instantiated_type_part(c: &mut Checker, st: &mut InstantiationExpressionS
         if !tsrs_core::same(&call_signatures, resolved.call_signatures()) || !tsrs_core::same(&construct_signatures, resolved.construct_signatures()) {
             let symbol = c.new_symbol(SymbolFlags::None, InternalSymbolNameInstantiationExpression);
             assert!(t.symbol().is_some(), "Instantiation expression source type must have a symbol");
-            *symbol.declarations.borrow_mut() = t.symbol().unwrap().declarations.borrow().clone();
+            symbol.declarations.set(t.symbol().unwrap().declarations());
             let result = c.new_object_type(ObjectFlags::Anonymous | ObjectFlags::InstantiationExpressionType, Some(symbol));
             c.set_structured_type_members(result, resolved.members.get(), &call_signatures, &construct_signatures, resolved.index_infos.get());
             result.as_instantiation_expression_type().node.set(Some(st.node));
@@ -481,9 +481,9 @@ impl Checker {
         }
         let local_or_export_symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(symbol)).unwrap();
         let target_symbol = self.resolve_alias_with_deprecation_check(local_or_export_symbol, node);
-        let has_declarations = !target_symbol.declarations.borrow().is_empty();
+        let has_declarations = !target_symbol.declarations().is_empty();
         if has_declarations && self.is_deprecated_symbol(target_symbol) && self.is_uncalled_function_reference(node, target_symbol) {
-            let declarations = target_symbol.declarations.borrow().clone();
+            let declarations = target_symbol.declarations();
             self.add_deprecated_suggestion(node, &declarations, node.text());
         }
         let mut declaration = local_or_export_symbol.value_declaration.get();
@@ -853,8 +853,8 @@ impl Checker {
             }
             Some(prop) => {
                 let target_prop_symbol = self.resolve_alias_with_deprecation_check(prop, right);
-                if self.is_deprecated_symbol(target_prop_symbol) && self.is_uncalled_function_reference(node, target_prop_symbol) && !target_prop_symbol.declarations.borrow().is_empty() {
-                    let declarations = target_prop_symbol.declarations.borrow().clone();
+                if self.is_deprecated_symbol(target_prop_symbol) && self.is_uncalled_function_reference(node, target_prop_symbol) && !target_prop_symbol.declarations().is_empty() {
+                    let declarations = target_prop_symbol.declarations();
                     self.add_deprecated_suggestion(right, &declarations, right.text());
                 }
                 self.check_property_not_used_before_declaration(prop, node, right);
@@ -1273,7 +1273,7 @@ impl Checker {
             if ast::is_call_like_expression(parent) {
                 return ast::is_call_or_new_expression(parent) && ast::is_identifier(node) && self.has_matching_argument(parent, node);
             }
-            let declarations = symbol.declarations.borrow().clone();
+            let declarations = symbol.declarations();
             return declarations.iter().all(|&d| !ast::is_function_like(d) || self.is_deprecated_declaration(d));
         }
         true
@@ -1393,7 +1393,7 @@ impl Checker {
             }
             // A class field cannot be accessed via super.* from a derived class.
             // This is true for both [[Set]] (old) and [[Define]] (ES spec) semantics.
-            if !flags.intersects(ModifierFlags::Static) && prop.declarations.borrow().iter().any(|&d| is_class_instance_property(d)) {
+            if !flags.intersects(ModifierFlags::Static) && prop.declarations().iter().any(|&d| is_class_instance_property(d)) {
                 if let Some(error_node) = error_node {
                     let prop_string = self.symbol_to_string(prop);
                     self.error(Some(error_node), &diagnostics::Class_field_0_defined_by_the_parent_class_is_not_accessible_in_the_child_class_via_super, &[&prop_string]);
@@ -2556,7 +2556,7 @@ impl Checker {
             let left_parent = left.parent().unwrap();
             if ast::is_declaration_node(left_parent) && ast::get_assignment_declaration_kind(left_parent) == JSDeclarationKind::ExportsProperty {
                 if let Some(symbol) = self.symbol_node_links.get(left).resolved_symbol.get() {
-                    if symbol.declarations.borrow().len() > 1 && right_type.flags().intersects(TypeFlags::Undefined) {
+                    if symbol.declarations().len() > 1 && right_type.flags().intersects(TypeFlags::Undefined) {
                         return;
                     }
                 }

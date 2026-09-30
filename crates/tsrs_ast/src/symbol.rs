@@ -1,9 +1,9 @@
-use std::cell::{Cell, Ref, RefCell};
+use std::cell::Cell;
 use std::sync::atomic::AtomicU64;
 
 use indexmap::IndexMap;
 use rustc_hash::FxBuildHasher;
-use tsrs_core::P;
+use tsrs_core::{FrozenCell, OwnedCell, P};
 
 use crate::ast::{Node, SourceFile};
 use crate::checkflags::CheckFlags;
@@ -15,22 +15,22 @@ use crate::*;
 
 #[derive(Default)]
 pub struct Symbol {
-    pub flags: Cell<SymbolFlags>,
-    pub check_flags: Cell<CheckFlags>, // Non-zero only in transient symbols created by Checker
-    pub name: Cell<&'static str>,
-    pub declarations: RefCell<Vec<P<Node>>>,
-    pub value_declaration: Cell<Option<P<Node>>>,
-    pub members: Cell<Option<P<SymbolTable>>>,
-    pub exports: Cell<Option<P<SymbolTable>>>,
+    pub flags: OwnedCell<SymbolFlags>,
+    pub check_flags: OwnedCell<CheckFlags>, // Non-zero only in transient symbols created by Checker
+    pub name: OwnedCell<&'static str>,
+    pub declarations: OwnedCell<&'static [P<Node>]>, // Go slice: shared by copies, replaced (not mutated) on append
+    pub value_declaration: OwnedCell<Option<P<Node>>>,
+    pub members: OwnedCell<Option<P<SymbolTable>>>,
+    pub exports: OwnedCell<Option<P<SymbolTable>>>,
     pub(crate) id: AtomicU64,
-    pub parent: Cell<Option<P<Symbol>>>,
-    pub export_symbol: Cell<Option<P<Symbol>>>,
+    pub parent: OwnedCell<Option<P<Symbol>>>,
+    pub export_symbol: OwnedCell<Option<P<Symbol>>>,
 }
 
 impl Symbol {
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).
     pub fn new(flags: SymbolFlags, name: &'static str) -> P<Symbol> {
-        P::new(Symbol { flags: Cell::new(flags), name: Cell::new(name), ..Default::default() })
+        P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedCell::new(name), ..Default::default() })
     }
 
     #[inline]
@@ -49,10 +49,23 @@ impl Symbol {
     pub fn name(&self) -> &'static str {
         self.name.get()
     }
-    /// Borrow of the declarations list; do not hold it across calls that may push declarations.
     #[inline]
-    pub fn declarations(&self) -> Ref<'_, Vec<P<Node>>> {
-        self.declarations.borrow()
+    pub fn declarations(&self) -> &'static [P<Node>] {
+        self.declarations.get()
+    }
+    #[inline]
+    pub fn set_declarations(&self, declarations: &[P<Node>]) {
+        self.declarations.set(tsrs_core::alloc_slice(declarations))
+    }
+    /// Go `append(symbol.Declarations, declarations...)`.
+    pub fn append_declarations(&self, declarations: &[P<Node>]) {
+        if declarations.is_empty() {
+            return;
+        }
+        let mut result = Vec::with_capacity(self.declarations.get().len() + declarations.len());
+        result.extend_from_slice(self.declarations.get());
+        result.extend_from_slice(declarations);
+        self.declarations.set(tsrs_core::alloc_vec(result))
     }
     #[inline]
     pub fn value_declaration(&self) -> Option<P<Node>> {
@@ -104,16 +117,16 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
     if symbol.flags.get().intersects(SymbolFlags::Transient) {
         return None;
     }
-    if symbol.declarations.borrow().is_empty() {
+    if symbol.declarations.get().is_empty() {
         // A class's implicit prototype has no declaration of its own.
         assert!(symbol.flags.get().intersects(SymbolFlags::Prototype), "File-bound symbol has no declarations");
         let parent = symbol.parent.get();
         assert!(parent.is_some_and(|p| p.flags.get().intersects(SymbolFlags::Class)), "Prototype has no declaring class");
         symbol = parent.unwrap();
         assert!(!symbol.flags.get().intersects(SymbolFlags::Transient), "Prototype parent is not file-bound");
-        assert!(!symbol.declarations.borrow().is_empty(), "Prototype parent has no declarations");
+        assert!(!symbol.declarations.get().is_empty(), "Prototype parent has no declarations");
     }
-    let first = symbol.declarations.borrow()[0];
+    let first = symbol.declarations.get()[0];
     let file = get_source_file_of_node(first);
     assert!(file.is_some(), "File-bound declaration has no source file");
     file
@@ -125,7 +138,7 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
 // a Go nil table is `None`. Iteration is in insertion order and returns snapshots.
 
 #[derive(Default)]
-pub struct SymbolTable(RefCell<IndexMap<&'static str, P<Symbol>, FxBuildHasher>>);
+pub struct SymbolTable(FrozenCell<IndexMap<&'static str, P<Symbol>, FxBuildHasher>>);
 
 impl SymbolTable {
     /// Go `make(ast.SymbolTable)`.
@@ -135,12 +148,12 @@ impl SymbolTable {
 
     /// Go `make(ast.SymbolTable, n)`.
     pub fn with_capacity(n: usize) -> P<SymbolTable> {
-        P::new(SymbolTable(RefCell::new(IndexMap::with_capacity_and_hasher(n, FxBuildHasher))))
+        P::new(SymbolTable(FrozenCell::new(IndexMap::with_capacity_and_hasher(n, FxBuildHasher))))
     }
 
     /// Go `maps.Clone(table)` for a non-nil table.
     pub fn clone_table(&self) -> P<SymbolTable> {
-        P::new(SymbolTable(RefCell::new(self.0.borrow().clone())))
+        P::new(SymbolTable(FrozenCell::new(self.0.borrow().clone())))
     }
 
     /// Go `table[name]`. On a `P<SymbolTable>` receiver `table.get(name)` resolves to `P::get`, so use

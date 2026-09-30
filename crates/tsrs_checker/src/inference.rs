@@ -899,7 +899,7 @@ impl Checker {
         for target_prop in properties {
             let source_prop = self.get_property_of_type(source, target_prop.name.get());
             if let Some(source_prop) = source_prop {
-                let declarations = source_prop.declarations.borrow().clone();
+                let declarations = source_prop.declarations();
                 if !declarations.iter().any(|&d| self.is_skip_direct_inference_node(d)) {
                     let source_prop_type = self.get_type_of_symbol(source_prop);
                     let s = self.remove_missing_type(source_prop_type, source_prop.flags.get().intersects(SymbolFlags::Optional));
@@ -1265,7 +1265,7 @@ impl Checker {
             }
             let check_flags = CheckFlags::ReverseMapped | if readonly_mask && self.is_readonly_symbol(prop) { CheckFlags::Readonly } else { CheckFlags::None };
             let inferred_prop = self.new_symbol_ex(SymbolFlags::Property | (prop.flags.get() & optional_mask), prop.name.get(), check_flags);
-            *inferred_prop.declarations.borrow_mut() = prop.declarations.borrow().clone();
+            inferred_prop.declarations.set(prop.declarations());
             let name_type = self.value_symbol_links.get(prop).name_type.get();
             self.value_symbol_links.get(inferred_prop).name_type.set(name_type);
             let links = self.reverse_mapped_symbol_links.get(inferred_prop);
@@ -1405,7 +1405,7 @@ impl Checker {
             let literal_prop = self.new_symbol(SymbolFlags::Property, &name);
             self.value_symbol_links.get(literal_prop).resolved_type.set(Some(self.any_type));
             if let Some(symbol) = t.symbol() {
-                *literal_prop.declarations.borrow_mut() = symbol.declarations.borrow().clone();
+                literal_prop.declarations.set(symbol.declarations());
                 literal_prop.value_declaration.set(symbol.value_declaration.get());
             }
             members.set(literal_prop.name.get(), literal_prop);
@@ -1858,7 +1858,7 @@ impl Checker {
     pub(crate) fn is_from_inference_blocked_source(&mut self, t: P<Type>) -> bool {
         match t.symbol() {
             Some(symbol) => {
-                let declarations = symbol.declarations.borrow().clone();
+                let declarations = symbol.declarations();
                 declarations.iter().any(|&d| self.is_skip_direct_inference_node(d))
             }
             None => false,
@@ -1918,7 +1918,7 @@ pub(crate) fn has_inference_candidates_or_default(info: P<InferenceInfo>) -> boo
 // inference.go:1659
 pub(crate) fn has_type_parameter_default(tp: P<Type>) -> bool {
     if let Some(symbol) = tp.symbol() {
-        for &d in symbol.declarations.borrow().iter() {
+        for &d in symbol.declarations().iter() {
             if ast::is_type_parameter_declaration(d) && d.as_type_parameter_declaration().default_type().is_some() {
                 return true;
             }

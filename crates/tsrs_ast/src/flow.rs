@@ -1,7 +1,7 @@
 use std::cell::Cell;
 
 use bitflags::bitflags;
-use tsrs_core::{alloc, P};
+use tsrs_core::{alloc, OwnedCell, P};
 
 use crate::ast::{new_node, Node, NodeFactoryHooks};
 use crate::generated::NodeData;
@@ -34,10 +34,10 @@ bitflags! {
 // FlowNode
 
 pub struct FlowNode {
-    pub flags: Cell<FlowFlags>,
-    pub node: Cell<Option<P<Node>>>,            // Associated AST node
-    pub antecedent: Cell<Option<P<FlowNode>>>,  // Antecedent for all but FlowLabel
-    pub antecedents: Cell<Option<P<FlowList>>>, // Linked list of antecedents for FlowLabel
+    pub flags: OwnedCell<FlowFlags>,
+    pub node: OwnedCell<Option<P<Node>>>,            // Associated AST node
+    pub antecedent: OwnedCell<Option<P<FlowNode>>>,  // Antecedent for all but FlowLabel
+    pub antecedents: OwnedCell<Option<P<FlowList>>>, // Linked list of antecedents for FlowLabel
 }
 
 impl FlowNode {
@@ -57,7 +57,7 @@ impl FlowNode {
 
 pub struct FlowList {
     pub flow: P<FlowNode>,
-    pub next: Cell<Option<P<FlowList>>>,
+    pub next: OwnedCell<Option<P<FlowList>>>,
 }
 
 pub type FlowLabel = FlowNode;

@@ -1555,7 +1555,7 @@ impl Checker {
                     } else {
                         deprecated_node = access_node;
                     }
-                    let declarations = prop.declarations().clone();
+                    let declarations = prop.declarations();
                     self.add_deprecated_suggestion(deprecated_node, &declarations, &prop_name);
                 }
                 if let Some(access_expression) = access_expression {
@@ -1925,8 +1925,8 @@ impl Checker {
 
     // checker.go:27815
     pub(crate) fn get_declaring_constructor(&mut self, symbol: P<Symbol>) -> Option<P<Node>> {
-        let declarations = symbol.declarations().clone();
-        for declaration in declarations {
+        let declarations = symbol.declarations();
+        for &declaration in declarations {
             let container = get_this_container(declaration, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
             if is_constructor_declaration(container) {
                 return Some(container);

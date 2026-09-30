@@ -2,3 +2,4 @@ target/
 *.log
 .DS_Store
 ts-ref
+__pycache__/
