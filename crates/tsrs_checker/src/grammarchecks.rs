@@ -756,142 +756,799 @@ impl Checker {
 
     // grammarchecks.go:722
     pub(crate) fn check_grammar_for_use_strict_simple_parameter_list(&mut self, node: P<Node>) -> bool {
-        todo!()
+        if self.language_version >= ScriptTarget::ES2016 {
+            let body = node.body();
+            let mut use_strict_directive: Option<P<Node>> = None;
+            if let Some(body) = body {
+                if is_block(body) {
+                    use_strict_directive = binder::find_use_strict_prologue(ast::get_source_file_of_node(node).unwrap(), body.statements());
+                }
+            }
+            if let Some(use_strict_directive) = use_strict_directive {
+                let non_simple_parameters: Vec<P<Node>> = node
+                    .parameters()
+                    .iter()
+                    .copied()
+                    .filter(|&n| {
+                        let parameter = n.as_parameter_declaration();
+                        parameter.initializer.is_some() || ast::is_binding_pattern(parameter.name) || crate::is_rest_parameter(n)
+                    })
+                    .collect();
+                if !non_simple_parameters.is_empty() {
+                    for &parameter in &non_simple_parameters {
+                        let err = self.error(Some(parameter), &diagnostics::This_parameter_is_not_allowed_with_use_strict_directive, &[]);
+                        err.add_related_info(create_diagnostic_for_node(Some(use_strict_directive), &diagnostics::X_use_strict_directive_used_here, &[]));
+                    }
+
+                    let err = self.error(Some(use_strict_directive), &diagnostics::X_use_strict_directive_cannot_be_used_with_non_simple_parameter_list, &[]);
+                    for (index, &parameter) in non_simple_parameters.iter().enumerate() {
+                        let related_message = if index == 0 { &diagnostics::Non_simple_parameter_declared_here } else { &diagnostics::X_and_here };
+                        err.add_related_info(create_diagnostic_for_node(Some(parameter), related_message, &[]));
+                    }
+
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     // grammarchecks.go:758
     pub(crate) fn check_grammar_function_like_declaration(&mut self, node: P<Node>) -> bool {
-        todo!()
+        // Prevent cascading error by short-circuit
+        let file = ast::get_source_file_of_node(node).unwrap();
+        let func_data = node.function_like_data().unwrap();
+        self.check_grammar_modifiers(node)
+            || self.check_grammar_type_parameter_list(func_data.type_parameters.get(), file)
+            || self.check_grammar_parameter_list(func_data.parameters.get().unwrap())
+            || self.check_grammar_arrow_function(node, file)
+            || (ast::is_function_like_declaration(node) && self.check_grammar_for_use_strict_simple_parameter_list(node))
     }
 
     // grammarchecks.go:767
     pub(crate) fn check_grammar_class_like_declaration(&mut self, node: P<Node>) -> bool {
-        todo!()
+        let file = ast::get_source_file_of_node(node).unwrap();
+        self.check_grammar_class_declaration_heritage_clauses(node, file) || self.check_grammar_type_parameter_list(node.type_parameter_list(), file)
     }
 
     // grammarchecks.go:772
     pub(crate) fn check_grammar_arrow_function(&mut self, node: P<Node>, file: P<SourceFile>) -> bool {
-        todo!()
+        if !is_arrow_function(node) {
+            return false;
+        }
+
+        let arrow_func = node.as_arrow_function();
+        let type_parameters = arrow_func.function_like_base.type_parameters.get();
+        if let Some(type_parameters) = type_parameters {
+            let type_param_nodes = type_parameters.nodes;
+            let has_constraint = !type_param_nodes.is_empty() && type_param_nodes[0].as_type_parameter_declaration().constraint.is_some();
+            if !(type_param_nodes.len() > 1 || type_parameters.has_trailing_comma() || has_constraint) {
+                if tspath::file_extension_is_one_of(file.file_name(), &[tspath::EXTENSION_MTS, tspath::EXTENSION_CTS]) {
+                    // TODO(danielr): should we return early here?
+                    self.grammar_error_on_node(type_parameters.nodes[0], &diagnostics::This_syntax_is_reserved_in_files_with_the_mts_or_cts_extension_Add_a_trailing_comma_or_explicit_constraint, &[]);
+                }
+            }
+        }
+
+        let equals_greater_than_token = arrow_func.equals_greater_than_token;
+        let arrow_full_text = &file.text()[equals_greater_than_token.pos() as usize..equals_greater_than_token.end() as usize];
+        arrow_full_text.chars().any(stringutil::is_line_break) && self.grammar_error_on_node(equals_greater_than_token, &diagnostics::Line_terminator_not_permitted_before_arrow, &[])
     }
 
     // grammarchecks.go:796
     pub(crate) fn check_grammar_index_signature_parameters(&mut self, node: P<Node>) -> bool {
-        todo!()
+        let index_signature = node.as_index_signature_declaration();
+        let parameters = index_signature.function_like_base.parameters.get().unwrap();
+        let param_nodes = parameters.nodes;
+
+        if param_nodes.is_empty() {
+            return self.grammar_error_on_node(node, &diagnostics::An_index_signature_must_have_exactly_one_parameter, &[]);
+        }
+
+        let parameter_node = param_nodes[0];
+        let parameter = parameter_node.as_parameter_declaration();
+        if param_nodes.len() != 1 {
+            return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_must_have_exactly_one_parameter, &[]);
+        }
+
+        self.check_grammar_for_disallowed_trailing_comma(Some(parameters), &diagnostics::An_index_signature_cannot_have_a_trailing_comma);
+        if let Some(dot_dot_dot_token) = parameter.dot_dot_dot_token {
+            return self.grammar_error_on_node(dot_dot_dot_token, &diagnostics::An_index_signature_cannot_have_a_rest_parameter, &[]);
+        }
+        if parameter_node.modifiers().is_some() {
+            return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_parameter_cannot_have_an_accessibility_modifier, &[]);
+        }
+        if let Some(question_token) = parameter.question_token() {
+            return self.grammar_error_on_node(question_token, &diagnostics::An_index_signature_parameter_cannot_have_a_question_mark, &[]);
+        }
+        if parameter.initializer.is_some() {
+            return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_parameter_cannot_have_an_initializer, &[]);
+        }
+        let Some(type_node) = parameter.type_() else {
+            return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_parameter_must_have_a_type_annotation, &[]);
+        };
+        let t = self.get_type_from_type_node(type_node);
+        if some_type(t, |t| t.flags().intersects(TypeFlags::StringOrNumberLiteralOrUnique)) || self.is_generic_type(t) {
+            return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_parameter_type_cannot_be_a_literal_type_or_generic_type_Consider_using_a_mapped_object_type_instead, &[]);
+        }
+        if !every_type(t, |t| self.is_valid_index_key_type(t)) {
+            return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_parameter_type_must_be_string_number_symbol_or_a_template_literal_type, &[]);
+        }
+        if index_signature.function_like_base.type_.get().is_none() {
+            return self.grammar_error_on_node(node, &diagnostics::An_index_signature_must_have_a_type_annotation, &[]);
+        }
+        false
     }
 
     // grammarchecks.go:840
     pub(crate) fn check_grammar_index_signature(&mut self, node: P<Node>) -> bool {
-        todo!()
+        // Prevent cascading error by short-circuit
+        self.check_grammar_modifiers(node) || self.check_grammar_index_signature_parameters(node)
     }
 
     // grammarchecks.go:845
     pub(crate) fn check_grammar_for_at_least_one_type_argument(&mut self, node: P<Node>, type_arguments: Option<P<NodeList>>) -> bool {
-        todo!()
+        if let Some(type_arguments) = type_arguments {
+            if type_arguments.nodes.is_empty() {
+                let source_file = ast::get_source_file_of_node(node).unwrap();
+                let start = type_arguments.pos() - "<".len() as i32;
+                let end = scanner::skip_trivia(source_file.text(), type_arguments.end()) + ">".len() as i32;
+                return self.grammar_error_at_pos(source_file.as_node(), start, end - start, &diagnostics::Type_argument_list_cannot_be_empty, &[]);
+            }
+        }
+        false
     }
 
     // grammarchecks.go:855
     pub(crate) fn check_grammar_type_arguments(&mut self, node: P<Node>, type_arguments: Option<P<NodeList>>) -> bool {
-        todo!()
+        self.check_grammar_for_disallowed_trailing_comma(type_arguments, &diagnostics::Trailing_comma_not_allowed) || self.check_grammar_for_at_least_one_type_argument(node, type_arguments)
     }
 
     // grammarchecks.go:859
     pub(crate) fn check_grammar_tagged_template_chain(&mut self, node: P<Node>) -> bool {
-        todo!()
+        let tagged_template = node.as_tagged_template_expression();
+        if tagged_template.question_dot_token.is_some() || node.flags().intersects(NodeFlags::OptionalChain) {
+            return self.grammar_error_on_node(tagged_template.template, &diagnostics::Tagged_template_expressions_are_not_permitted_in_an_optional_chain, &[]);
+        }
+        false
     }
 
     // grammarchecks.go:866
     pub(crate) fn check_grammar_heritage_clause(&mut self, node: P<Node>) -> bool {
-        todo!()
+        let heritage_clause = node.as_heritage_clause();
+        let types = heritage_clause.types.get();
+        if self.check_grammar_for_disallowed_trailing_comma(Some(types), &diagnostics::Trailing_comma_not_allowed) {
+            return true;
+        }
+        if types.nodes.is_empty() {
+            let list_type = scanner::token_to_string(heritage_clause.token);
+            // TODO(danielr): why not error on the token?
+            return self.grammar_error_at_pos(node, types.pos(), 0, &diagnostics::X_0_list_cannot_be_empty, &[&list_type]);
+        }
+
+        for &node in types.nodes {
+            if self.check_grammar_expression_with_type_arguments(node) {
+                return true;
+            }
+        }
+        false
     }
 
     // grammarchecks.go:885
     pub(crate) fn check_grammar_expression_with_type_arguments(&mut self, node: P<Node>) -> bool {
-        todo!()
+        if is_expression_with_type_arguments(node) && node.expression().unwrap().kind == Kind::ImportKeyword && node.type_argument_list().is_some() {
+            return self.grammar_error_on_node(node, &diagnostics::This_use_of_import_is_invalid_import_calls_can_be_written_but_they_must_have_parentheses_and_cannot_have_type_arguments, &[]);
+        }
+        self.check_grammar_type_arguments(node, node.type_argument_list())
     }
 
     // grammarchecks.go:892
     pub(crate) fn check_grammar_class_declaration_heritage_clauses(&mut self, node: P<Node>, file: P<SourceFile>) -> bool {
-        todo!()
+        let mut seen_extends_clause = false;
+        let mut seen_implements_clause = false;
+
+        let class_like_data = node.class_like_data().unwrap();
+
+        if !self.check_grammar_modifiers(node) {
+            if let Some(heritage_clauses) = class_like_data.heritage_clauses.get() {
+                for &heritage_clause_node in heritage_clauses.nodes {
+                    let heritage_clause = heritage_clause_node.as_heritage_clause();
+                    if heritage_clause.token == Kind::ExtendsKeyword {
+                        if seen_extends_clause {
+                            return self.grammar_error_on_first_token(heritage_clause_node, &diagnostics::X_extends_clause_already_seen, &[]);
+                        }
+
+                        if seen_implements_clause {
+                            return self.grammar_error_on_first_token(heritage_clause_node, &diagnostics::X_extends_clause_must_precede_implements_clause, &[]);
+                        }
+
+                        let type_nodes = heritage_clause.types.get().nodes;
+                        if type_nodes.len() > 1 {
+                            return self.grammar_error_on_first_token(type_nodes[1], &diagnostics::Classes_can_only_extend_a_single_class, &[]);
+                        }
+
+                        seen_extends_clause = true;
+                    } else {
+                        if heritage_clause.token != Kind::ImplementsKeyword {
+                            panic!("Unexpected token {:?}", heritage_clause.token);
+                        }
+                        if seen_implements_clause {
+                            return self.grammar_error_on_first_token(heritage_clause_node, &diagnostics::X_implements_clause_already_seen, &[]);
+                        }
+
+                        seen_implements_clause = true;
+                    }
+
+                    // Grammar checking heritageClause inside class declaration
+                    self.check_grammar_heritage_clause(heritage_clause_node);
+                }
+            }
+        }
+
+        false
     }
 
     // grammarchecks.go:935
     pub(crate) fn check_grammar_interface_declaration(&mut self, node: P<Node>) -> bool {
-        todo!()
+        if let Some(heritage_clauses) = node.as_interface_declaration().heritage_clauses {
+            let mut seen_extends_clause = false;
+            for &heritage_clause_node in heritage_clauses.nodes {
+                let heritage_clause = heritage_clause_node.as_heritage_clause();
+
+                match heritage_clause.token {
+                    Kind::ExtendsKeyword => {
+                        if seen_extends_clause {
+                            return self.grammar_error_on_first_token(heritage_clause_node, &diagnostics::X_extends_clause_already_seen, &[]);
+                        }
+                        seen_extends_clause = true;
+                    }
+                    Kind::ImplementsKeyword => {
+                        return self.grammar_error_on_first_token(heritage_clause_node, &diagnostics::Interface_declaration_cannot_have_implements_clause, &[]);
+                    }
+                    _ => panic!("Unexpected token {:?}", heritage_clause.token),
+                }
+
+                // Grammar checking heritageClause inside class declaration
+                self.check_grammar_heritage_clause(heritage_clause_node);
+            }
+        }
+
+        false
     }
 
     // grammarchecks.go:961
     pub(crate) fn check_grammar_computed_property_name(&mut self, node: P<Node>) -> bool {
-        todo!()
+        // If node is not a computedPropertyName, just skip the grammar checking
+        if node.kind != Kind::ComputedPropertyName {
+            return false;
+        }
+
+        let computed_property_name = node.as_computed_property_name();
+        if computed_property_name.expression.kind == Kind::BinaryExpression && computed_property_name.expression.as_binary_expression().operator_token.kind == Kind::CommaToken {
+            return self.grammar_error_on_node(computed_property_name.expression, &diagnostics::A_comma_expression_is_not_allowed_in_a_computed_property_name, &[]);
+        }
+        false
     }
 
     // grammarchecks.go:974
     pub(crate) fn check_grammar_for_generator(&mut self, node: P<Node>) -> bool {
-        todo!()
+        if let Some(body_data) = node.body_data() {
+            if let Some(asterisk_token) = body_data.asterisk_token {
+                if node.kind != Kind::FunctionDeclaration && node.kind != Kind::FunctionExpression && node.kind != Kind::MethodDeclaration {
+                    panic!("Unexpected node kind {:?}", node.kind);
+                }
+                if node.flags().intersects(NodeFlags::Ambient) {
+                    return self.grammar_error_on_node(asterisk_token, &diagnostics::Generators_are_not_allowed_in_an_ambient_context, &[]);
+                }
+                if body_data.body.is_none() {
+                    return self.grammar_error_on_node(asterisk_token, &diagnostics::An_overload_signature_cannot_be_declared_as_a_generator, &[]);
+                }
+            }
+        }
+
+        false
     }
 
     // grammarchecks.go:990
     pub(crate) fn check_grammar_for_invalid_question_mark(&mut self, postfix_token: Option<P<Node>>, message: &'static Message) -> bool {
-        todo!()
+        match postfix_token {
+            Some(postfix_token) => postfix_token.kind == Kind::QuestionToken && self.grammar_error_on_node(postfix_token, message, &[]),
+            None => false,
+        }
     }
 
     // grammarchecks.go:994
     pub(crate) fn check_grammar_for_invalid_exclamation_token(&mut self, postfix_token: Option<P<Node>>, message: &'static Message) -> bool {
-        todo!()
+        match postfix_token {
+            Some(postfix_token) => postfix_token.kind == Kind::ExclamationToken && self.grammar_error_on_node(postfix_token, message, &[]),
+            None => false,
+        }
     }
 
     // grammarchecks.go:998
     pub(crate) fn check_grammar_object_literal_expression(&mut self, node: P<Node>, in_destructuring: bool) -> bool {
-        todo!()
+        let mut seen: FxHashMap<String, DeclarationMeaning> = FxHashMap::default();
+
+        let properties = node.as_object_literal_expression().properties.nodes;
+        for &prop in properties {
+            if prop.kind == Kind::SpreadAssignment {
+                let spread_assignment = prop.as_spread_assignment();
+                if in_destructuring {
+                    // a rest property cannot be destructured any further
+                    let expression = ast::skip_parentheses(spread_assignment.expression);
+                    if is_array_literal_expression(expression) || is_object_literal_expression(expression) {
+                        return self.grammar_error_on_node(spread_assignment.expression, &diagnostics::A_rest_element_cannot_contain_a_binding_pattern, &[]);
+                    }
+                }
+                continue;
+            }
+            let name = prop.name().unwrap();
+            if name.kind == Kind::ComputedPropertyName {
+                // If the name is not a ComputedPropertyName, the grammar checking will skip it
+                self.check_grammar_computed_property_name(name);
+            }
+
+            if prop.kind == Kind::ShorthandPropertyAssignment && !in_destructuring {
+                let shorthand_prop = prop.as_shorthand_property_assignment();
+                if let Some(object_assignment_initializer) = shorthand_prop.object_assignment_initializer.get() {
+                    // having objectAssignmentInitializer is only valid in an ObjectAssignmentPattern.
+                    // Outside of destructuring, it is a syntax error.
+
+                    // Try to grab the last node prior to the initializer,
+                    // then error on the first token following (which should be the `=` token).
+                    let mut last_node_before_initializer: Option<P<Node>> = None;
+                    prop.for_each_child(&mut |child| {
+                        if child != object_assignment_initializer {
+                            last_node_before_initializer = Some(child);
+                            return false;
+                        }
+                        true
+                    });
+
+                    self.grammar_error_on_first_token(last_node_before_initializer.unwrap(), &diagnostics::Did_you_mean_to_use_a_Colon_An_can_only_follow_a_property_name_when_the_containing_object_literal_is_part_of_a_destructuring_pattern, &[]);
+                }
+            }
+
+            if name.kind == Kind::PrivateIdentifier {
+                self.grammar_error_on_node(name, &diagnostics::Private_identifiers_are_not_allowed_outside_class_bodies, &[]);
+            }
+
+            // Modifiers are never allowed on properties except for 'async' on a method declaration
+            let modifiers = prop.modifier_nodes();
+            if !modifiers.is_empty() {
+                if ast::can_have_modifiers(prop) {
+                    for &m in modifiers {
+                        if ast::is_modifier(m) && (m.kind != Kind::AsyncKeyword || prop.kind != Kind::MethodDeclaration) {
+                            self.grammar_error_on_node(m, &diagnostics::X_0_modifier_cannot_be_used_here, &[&scanner::get_text_of_node(m)]);
+                        }
+                    }
+                } else if ast::can_have_illegal_modifiers(prop) {
+                    for &m in modifiers {
+                        if ast::is_modifier(m) {
+                            self.grammar_error_on_node(m, &diagnostics::X_0_modifier_cannot_be_used_here, &[&scanner::get_text_of_node(m)]);
+                        }
+                    }
+                }
+            }
+
+            // ECMA-262 11.1.5 Object Initializer
+            // If previous is not undefined then throw a SyntaxError exception if any of the following conditions are true
+            // a.This production is contained in strict code and IsDataDescriptor(previous) is true and
+            // IsDataDescriptor(propId.descriptor) is true.
+            //    b.IsDataDescriptor(previous) is true and IsAccessorDescriptor(propId.descriptor) is true.
+            //    c.IsAccessorDescriptor(previous) is true and IsDataDescriptor(propId.descriptor) is true.
+            //    d.IsAccessorDescriptor(previous) is true and IsAccessorDescriptor(propId.descriptor) is true
+            // and either both previous and propId.descriptor have[[Get]] fields or both previous and propId.descriptor have[[Set]] fields
+            let current_kind: DeclarationMeaning;
+            match prop.kind {
+                Kind::ShorthandPropertyAssignment | Kind::PropertyAssignment => {
+                    let common_prop = if prop.kind == Kind::ShorthandPropertyAssignment {
+                        prop.class_like_data();
+                        &prop.as_shorthand_property_assignment().named_member_base
+                    } else {
+                        &prop.as_property_assignment().named_member_base
+                    };
+
+                    // Grammar checking for computedPropertyName and shorthandPropertyAssignment
+                    self.check_grammar_for_invalid_exclamation_token(common_prop.postfix_token, &diagnostics::A_definite_assignment_assertion_is_not_permitted_in_this_context);
+                    self.check_grammar_for_invalid_question_mark(common_prop.postfix_token, &diagnostics::An_object_member_cannot_be_declared_optional);
+
+                    if name.kind == Kind::NumericLiteral {
+                        self.check_grammar_numeric_literal(name);
+                    }
+
+                    if name.kind == Kind::BigIntLiteral {
+                        self.add_error_or_suggestion(true, create_diagnostic_for_node(Some(name), &diagnostics::A_bigint_literal_cannot_be_used_as_a_property_name, &[]));
+                    }
+
+                    current_kind = DeclarationMeaning::PropertyAssignment;
+                }
+                Kind::MethodDeclaration => current_kind = DeclarationMeaning::Method,
+                Kind::GetAccessor => current_kind = DeclarationMeaning::GetAccessor,
+                Kind::SetAccessor => current_kind = DeclarationMeaning::SetAccessor,
+                _ => panic!("Unexpected node kind {:?}", prop.kind),
+            }
+
+            if !in_destructuring {
+                let (effective_name, ok) = self.get_effective_property_name_for_property_name_node(name);
+                if !ok {
+                    continue;
+                }
+
+                let existing_kind = seen.get(&effective_name).copied().unwrap_or_default();
+                if existing_kind.is_empty() {
+                    seen.insert(effective_name, current_kind);
+                } else if current_kind.intersects(DeclarationMeaning::Method) && existing_kind.intersects(DeclarationMeaning::Method) {
+                    self.grammar_error_on_node(name, &diagnostics::Duplicate_identifier_0, &[&scanner::get_text_of_node(name)]);
+                } else if current_kind.intersects(DeclarationMeaning::PropertyAssignment) && existing_kind.intersects(DeclarationMeaning::PropertyAssignment) {
+                    self.grammar_error_on_node(name, &diagnostics::An_object_literal_cannot_have_multiple_properties_with_the_same_name, &[&scanner::get_text_of_node(name)]);
+                } else if current_kind.intersects(DeclarationMeaning::GetOrSetAccessor) && existing_kind.intersects(DeclarationMeaning::GetOrSetAccessor) {
+                    if existing_kind != DeclarationMeaning::GetOrSetAccessor && current_kind != existing_kind {
+                        seen.insert(effective_name, current_kind | existing_kind);
+                    } else {
+                        return self.grammar_error_on_node(name, &diagnostics::An_object_literal_cannot_have_multiple_get_Slashset_accessors_with_the_same_name, &[]);
+                    }
+                } else {
+                    return self.grammar_error_on_node(name, &diagnostics::An_object_literal_cannot_have_property_and_accessor_with_the_same_name, &[]);
+                }
+            }
+        }
+
+        false
     }
 
     // grammarchecks.go:1138
     pub(crate) fn check_grammar_jsx_element(&mut self, node: P<Node>) -> bool {
-        todo!()
+        self.check_grammar_jsx_name(node.tag_name());
+        self.check_grammar_type_arguments(node, node.type_argument_list());
+        let mut seen: FxHashSet<&'static str> = FxHashSet::default();
+        for &attr_node in node.attributes().unwrap().properties() {
+            if attr_node.kind == Kind::JsxSpreadAttribute {
+                continue;
+            }
+            let attr = attr_node.as_jsx_attribute();
+            let name = attr.name;
+            let initializer = attr.initializer;
+            let text_of_name = name.text();
+            if !seen.contains(text_of_name) {
+                seen.insert(text_of_name);
+            } else {
+                return self.grammar_error_on_node(name, &diagnostics::JSX_elements_cannot_have_multiple_attributes_with_the_same_name, &[]);
+            }
+            if let Some(initializer) = initializer {
+                if initializer.kind == Kind::JsxExpression && initializer.expression().is_none() {
+                    return self.grammar_error_on_node(initializer, &diagnostics::JSX_attributes_must_only_be_assigned_a_non_empty_expression, &[]);
+                }
+            }
+        }
+        false
     }
 
     // grammarchecks.go:1162
     pub(crate) fn check_grammar_jsx_name(&mut self, node: P<Node>) -> bool {
-        todo!()
+        if is_property_access_expression(node) && is_jsx_namespaced_name(node.expression().unwrap()) {
+            return self.grammar_error_on_node(node.expression().unwrap(), &diagnostics::JSX_property_access_expressions_cannot_include_JSX_namespace_names, &[]);
+        }
+
+        if is_jsx_namespaced_name(node) && self.compiler_options.get_jsx_transform_enabled() && !scanner::is_intrinsic_jsx_name(node.as_jsx_namespaced_name().namespace.text()) {
+            return self.grammar_error_on_node(node, &diagnostics::React_components_cannot_include_JSX_namespace_names, &[]);
+        }
+
+        false
     }
 
     // grammarchecks.go:1174
     pub(crate) fn check_grammar_jsx_expression(&mut self, node: P<Node>) -> bool {
-        todo!()
+        if let Some(expression) = node.as_jsx_expression().expression {
+            if ast::is_comma_sequence(expression) {
+                return self.grammar_error_on_node(expression, &diagnostics::JSX_expressions_may_not_use_the_comma_operator_Did_you_mean_to_write_an_array, &[]);
+            }
+        }
+
+        false
     }
 
     // grammarchecks.go:1182
     pub(crate) fn check_grammar_for_in_or_for_of_statement(&mut self, for_in_or_of_statement: P<Node>) -> bool {
-        todo!()
+        let as_node = for_in_or_of_statement;
+        let stmt = for_in_or_of_statement.as_for_in_or_of_statement();
+        if self.check_grammar_statement_in_ambient_context(as_node) {
+            return true;
+        }
+
+        if for_in_or_of_statement.kind == Kind::ForOfStatement {
+            if let Some(await_modifier) = stmt.await_modifier {
+                if !for_in_or_of_statement.flags().intersects(NodeFlags::AwaitContext) {
+                    let source_file = ast::get_source_file_of_node(as_node).unwrap();
+                    if ast::is_in_top_level_context(as_node) {
+                        if !self.has_parse_diagnostics(source_file) {
+                            if !ast::is_effective_external_module(source_file, &self.compiler_options) {
+                                self.add_diagnostic(create_diagnostic_for_node(Some(await_modifier), &diagnostics::X_for_await_loops_are_only_allowed_at_the_top_level_of_a_file_when_that_file_is_a_module_but_this_file_has_no_imports_or_exports_Consider_adding_an_empty_export_to_make_this_file_a_module, &[]));
+                            }
+                            let mut fallthrough_es = false;
+                            let mut fallthrough_default = false;
+                            match self.module_kind {
+                                ModuleKind::Node16 | ModuleKind::Node18 | ModuleKind::Node20 | ModuleKind::NodeNext => {
+                                    let source_file_meta_data = self.program.get_source_file_meta_data(source_file.path());
+                                    if source_file_meta_data.implied_node_format == ModuleKind::CommonJS {
+                                        self.add_diagnostic(create_diagnostic_for_node(Some(await_modifier), &diagnostics::The_current_file_is_a_CommonJS_module_and_cannot_use_await_at_the_top_level, &[]));
+                                    } else {
+                                        fallthrough_es = true;
+                                    }
+                                }
+                                ModuleKind::ES2022 | ModuleKind::ESNext | ModuleKind::Preserve | ModuleKind::System => fallthrough_es = true,
+                                _ => fallthrough_default = true,
+                            }
+                            if fallthrough_es && !(self.language_version >= ScriptTarget::ES2017) {
+                                fallthrough_default = true;
+                            }
+                            if fallthrough_default {
+                                self.add_diagnostic(create_diagnostic_for_node(Some(await_modifier), &diagnostics::Top_level_for_await_loops_are_only_allowed_when_the_module_option_is_set_to_es2022_esnext_system_node16_node18_node20_nodenext_or_preserve_and_the_target_option_is_set_to_es2017_or_higher, &[]));
+                            }
+                        }
+                    } else {
+                        // use of 'for-await-of' in non-async function
+                        if !self.has_parse_diagnostics(source_file) {
+                            let diagnostic = create_diagnostic_for_node(Some(await_modifier), &diagnostics::X_for_await_loops_are_only_allowed_within_async_functions_and_at_the_top_levels_of_modules, &[]);
+                            let containing_func = ast::get_containing_function(for_in_or_of_statement);
+                            if let Some(containing_func) = containing_func {
+                                if containing_func.kind != Kind::Constructor {
+                                    assert!(!ast::get_function_flags(Some(containing_func)).intersects(FunctionFlags::Async), "Enclosing function should never be an async function.");
+                                    let related_info = create_diagnostic_for_node(Some(containing_func), &diagnostics::Did_you_mean_to_mark_this_function_as_async, &[]);
+                                    diagnostic.add_related_info(related_info);
+                                }
+                            }
+                            self.add_diagnostic(diagnostic);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if is_for_of_statement(as_node) && !for_in_or_of_statement.flags().intersects(NodeFlags::AwaitContext) && is_identifier(stmt.initializer) && stmt.initializer.text() == "async" {
+            self.grammar_error_on_node(stmt.initializer, &diagnostics::The_left_hand_side_of_a_for_of_statement_may_not_be_async, &[]);
+            return false;
+        }
+
+        if stmt.initializer.kind == Kind::VariableDeclarationList {
+            let variable_list = stmt.initializer;
+            if !self.check_grammar_variable_declaration_list(variable_list) {
+                let declarations = variable_list.as_variable_declaration_list().declarations;
+
+                // declarations.length can be zero if there is an error in variable declaration in for-of or for-in
+                // See http://www.ecma-international.org/ecma-262/6.0/#sec-for-in-and-for-of-statements for details
+                // For example:
+                //      var let = 10;
+                //      for (let of [1,2,3]) {} // this is invalid ES6 syntax
+                //      for (let in [1,2,3]) {} // this is invalid ES6 syntax
+                // We will then want to skip on grammar checking on variableList declaration
+                if declarations.nodes.is_empty() {
+                    return false;
+                }
+
+                if declarations.nodes.len() > 1 {
+                    let diagnostic = if for_in_or_of_statement.kind == Kind::ForInStatement {
+                        &diagnostics::Only_a_single_variable_declaration_is_allowed_in_a_for_in_statement
+                    } else {
+                        &diagnostics::Only_a_single_variable_declaration_is_allowed_in_a_for_of_statement
+                    };
+                    return self.grammar_error_on_first_token(declarations.nodes[1], diagnostic, &[]);
+                }
+
+                let first_variable_declaration_node = declarations.nodes[0];
+                let first_variable_declaration = first_variable_declaration_node.as_variable_declaration();
+                if first_variable_declaration.initializer().is_some() {
+                    let diagnostic = if for_in_or_of_statement.kind == Kind::ForInStatement {
+                        &diagnostics::The_variable_declaration_of_a_for_in_statement_cannot_have_an_initializer
+                    } else {
+                        &diagnostics::The_variable_declaration_of_a_for_of_statement_cannot_have_an_initializer
+                    };
+                    return self.grammar_error_on_node(first_variable_declaration.name, diagnostic, &[]);
+                }
+                if first_variable_declaration.type_().is_some() {
+                    let diagnostic = if for_in_or_of_statement.kind == Kind::ForInStatement {
+                        &diagnostics::The_left_hand_side_of_a_for_in_statement_cannot_use_a_type_annotation
+                    } else {
+                        &diagnostics::The_left_hand_side_of_a_for_of_statement_cannot_use_a_type_annotation
+                    };
+                    return self.grammar_error_on_node(first_variable_declaration_node, diagnostic, &[]);
+                }
+            }
+        }
+
+        false
     }
 
     // grammarchecks.go:1289
     pub(crate) fn check_grammar_accessor(&mut self, accessor: P<Node>) -> bool {
-        todo!()
+        let body = accessor.body();
+        let parent_kind = accessor.parent().unwrap().kind;
+        if !accessor.flags().intersects(NodeFlags::Ambient) && parent_kind != Kind::TypeLiteral && parent_kind != Kind::InterfaceDeclaration {
+            if body.is_none() && !ast::has_syntactic_modifier(accessor, ModifierFlags::Abstract) {
+                return self.grammar_error_at_pos(accessor, accessor.end() - 1, ";".len() as i32, &diagnostics::X_0_expected, &[&"{"]);
+            }
+        }
+        if let Some(body) = body {
+            if ast::has_syntactic_modifier(accessor, ModifierFlags::Abstract) {
+                return self.grammar_error_on_node(accessor, &diagnostics::An_abstract_accessor_cannot_have_an_implementation, &[]);
+            }
+            if parent_kind == Kind::TypeLiteral || parent_kind == Kind::InterfaceDeclaration {
+                return self.grammar_error_on_node(body, &diagnostics::An_implementation_cannot_be_declared_in_ambient_contexts, &[]);
+            }
+        }
+
+        let func_data = accessor.function_like_data();
+        let mut type_parameters: Option<P<NodeList>> = None;
+        if let Some(func_data) = func_data {
+            type_parameters = func_data.type_parameters.get();
+        }
+
+        if type_parameters.is_some() {
+            return self.grammar_error_on_node(accessor.name().unwrap(), &diagnostics::An_accessor_cannot_have_type_parameters, &[]);
+        }
+        if !self.does_accessor_have_correct_parameter_count(accessor) {
+            return self.grammar_error_on_node(
+                accessor.name().unwrap(),
+                if accessor.kind == Kind::GetAccessor { &diagnostics::A_get_accessor_cannot_have_parameters } else { &diagnostics::A_set_accessor_must_have_exactly_one_parameter },
+                &[],
+            );
+        }
+        if accessor.kind == Kind::SetAccessor {
+            if func_data.unwrap().type_.get().is_some() {
+                return self.grammar_error_on_node(accessor.name().unwrap(), &diagnostics::A_set_accessor_cannot_have_a_return_type_annotation, &[]);
+            }
+
+            let Some(parameter_node) = get_set_accessor_value_parameter(accessor) else {
+                panic!("Return value does not match parameter count assertion.");
+            };
+            let parameter = parameter_node.as_parameter_declaration();
+            if let Some(dot_dot_dot_token) = parameter.dot_dot_dot_token {
+                return self.grammar_error_on_node(dot_dot_dot_token, &diagnostics::A_set_accessor_cannot_have_rest_parameter, &[]);
+            }
+            if let Some(question_token) = parameter.question_token() {
+                return self.grammar_error_on_node(question_token, &diagnostics::A_set_accessor_cannot_have_an_optional_parameter, &[]);
+            }
+            if parameter.initializer.is_some() {
+                return self.grammar_error_on_node(accessor.name().unwrap(), &diagnostics::A_set_accessor_parameter_cannot_have_an_initializer, &[]);
+            }
+        }
+
+        false
     }
 
+    // Does the accessor have the right number of parameters?
+    //
+    //	A `get` accessor has no parameters or a single `this` parameter.
+    //	A `set` accessor has one parameter or a `this` parameter and one more parameter.
     // grammarchecks.go:1345
     pub(crate) fn does_accessor_have_correct_parameter_count(&mut self, accessor: P<Node>) -> bool {
-        todo!()
+        // `getAccessorThisParameter` returns `nil` if the accessor's arity is incorrect,
+        // even if there is a `this` parameter declared.
+        self.get_accessor_this_parameter(accessor).is_some() || accessor.parameters().len() == if accessor.kind == Kind::GetAccessor { 0 } else { 1 }
     }
 
     // grammarchecks.go:1351
     pub(crate) fn check_grammar_type_operator_node(&mut self, node: P<Node>) -> bool {
-        todo!()
+        let type_operator = node.as_type_operator_node();
+        if type_operator.operator == Kind::UniqueKeyword {
+            let inner_type = type_operator.type_;
+            if inner_type.kind != Kind::SymbolKeyword {
+                return self.grammar_error_on_node(inner_type, &diagnostics::X_0_expected, &[&scanner::token_to_string(Kind::SymbolKeyword)]);
+            }
+            let parent = ast::walk_up_parenthesized_types(node.parent()).unwrap();
+            match parent.kind {
+                Kind::VariableDeclaration => {
+                    let decl = parent.as_variable_declaration();
+                    if decl.name.kind != Kind::Identifier {
+                        return self.grammar_error_on_node(node, &diagnostics::X_unique_symbol_types_may_not_be_used_on_a_variable_declaration_with_a_binding_name, &[]);
+                    }
+                    if !crate::is_variable_declaration_in_variable_statement(parent) {
+                        return self.grammar_error_on_node(node, &diagnostics::X_unique_symbol_types_are_only_allowed_on_variables_in_a_variable_statement, &[]);
+                    }
+                    if !parent.parent().unwrap().flags().intersects(NodeFlags::Const) {
+                        return self.grammar_error_on_node(parent.as_variable_declaration().name, &diagnostics::A_variable_whose_type_is_a_unique_symbol_type_must_be_const, &[]);
+                    }
+                }
+                Kind::PropertyDeclaration => {
+                    if !ast::is_static(parent) || !has_readonly_modifier(parent) {
+                        return self.grammar_error_on_node(parent.as_property_declaration().name(), &diagnostics::A_property_of_a_class_whose_type_is_a_unique_symbol_type_must_be_both_static_and_readonly, &[]);
+                    }
+                }
+                Kind::PropertySignature => {
+                    if !ast::has_syntactic_modifier(parent, ModifierFlags::Readonly) {
+                        return self.grammar_error_on_node(parent.as_property_signature_declaration().name(), &diagnostics::A_property_of_an_interface_or_type_literal_whose_type_is_a_unique_symbol_type_must_be_readonly, &[]);
+                    }
+                }
+                _ => {
+                    return self.grammar_error_on_node(node, &diagnostics::X_unique_symbol_types_are_not_allowed_here, &[]);
+                }
+            }
+        } else if type_operator.operator == Kind::ReadonlyKeyword {
+            let inner_type = type_operator.type_;
+            if inner_type.kind != Kind::ArrayType && inner_type.kind != Kind::TupleType {
+                return self.grammar_error_on_first_token(node, &diagnostics::X_readonly_type_modifier_is_only_permitted_on_array_and_tuple_literal_types, &[&scanner::token_to_string(Kind::SymbolKeyword)]);
+            }
+        }
+
+        false
     }
 
     // grammarchecks.go:1391
     pub(crate) fn check_grammar_for_invalid_dynamic_name(&mut self, node: P<Node>, message: &'static Message) -> bool {
-        todo!()
+        if !self.is_non_bindable_dynamic_name(node) {
+            return false;
+        }
+        let expression = if is_element_access_expression(node) {
+            ast::skip_parentheses(node.as_element_access_expression().argument_expression)
+        } else {
+            node.expression().unwrap()
+        };
+
+        if !ast::is_entity_name_expression(expression) {
+            return self.grammar_error_on_node(node, message, &[]);
+        }
+
+        false
     }
 
+    // Indicates whether a declaration name is a dynamic name that cannot be late-bound.
     // grammarchecks.go:1410
     pub(crate) fn is_non_bindable_dynamic_name(&mut self, node: P<Node>) -> bool {
-        todo!()
+        ast::is_dynamic_name(node) && !self.is_late_bindable_name(node)
     }
 
     // grammarchecks.go:1414
     pub(crate) fn check_grammar_method(&mut self, node: P<Node>) -> bool {
-        todo!()
+        if self.check_grammar_function_like_declaration(node) {
+            return true;
+        }
+
+        let parent = node.parent().unwrap();
+        if node.kind == Kind::MethodDeclaration {
+            if parent.kind == Kind::ObjectLiteralExpression {
+                // We only disallow modifier on a method declaration if it is a property of object-literal-expression
+                if let Some(modifiers) = node.modifiers() {
+                    let nodes = modifiers.nodes();
+                    if !(nodes.len() == 1 && nodes[0].kind == Kind::AsyncKeyword) {
+                        return self.grammar_error_on_first_token(node, &diagnostics::Modifiers_cannot_appear_here, &[]);
+                    }
+                }
+
+                let method_decl = node.as_method_declaration();
+                if self.check_grammar_for_invalid_question_mark(method_decl.named_member_base.postfix_token, &diagnostics::An_object_member_cannot_be_declared_optional) {
+                    return true;
+                }
+                if self.check_grammar_for_invalid_exclamation_token(method_decl.named_member_base.postfix_token, &diagnostics::A_definite_assignment_assertion_is_not_permitted_in_this_context) {
+                    return true;
+                }
+                if node.body().is_none() {
+                    return self.grammar_error_at_pos(node, node.end() - 1, ";".len() as i32, &diagnostics::X_0_expected, &[&"{"]);
+                }
+            }
+            if self.check_grammar_for_generator(node) {
+                return true;
+            }
+        }
+
+        if ast::is_class_like(parent) {
+            // Technically, computed properties in ambient contexts is disallowed
+            // for property declarations and accessors too, not just methods.
+            // However, property declarations disallow computed names in general,
+            // and accessors are not allowed in ambient contexts in general,
+            // so this error only really matters for methods.
+            if node.flags().intersects(NodeFlags::Ambient) {
+                return self.check_grammar_for_invalid_dynamic_name(node.name().unwrap(), &diagnostics::A_computed_property_name_in_an_ambient_context_must_refer_to_an_expression_whose_type_is_a_literal_type_or_a_unique_symbol_type);
+            } else if node.kind == Kind::MethodDeclaration && node.body().is_none() {
+                return self.check_grammar_for_invalid_dynamic_name(node.name().unwrap(), &diagnostics::A_computed_property_name_in_a_method_overload_must_refer_to_an_expression_whose_type_is_a_literal_type_or_a_unique_symbol_type);
+            }
+        } else if parent.kind == Kind::InterfaceDeclaration {
+            return self.check_grammar_for_invalid_dynamic_name(node.name().unwrap(), &diagnostics::A_computed_property_name_in_an_interface_must_refer_to_an_expression_whose_type_is_a_literal_type_or_a_unique_symbol_type);
+        } else if parent.kind == Kind::TypeLiteral {
+            return self.check_grammar_for_invalid_dynamic_name(node.name().unwrap(), &diagnostics::A_computed_property_name_in_a_type_literal_must_refer_to_an_expression_whose_type_is_a_literal_type_or_a_unique_symbol_type);
+        }
+
+        false
     }
 
     // grammarchecks.go:1462
