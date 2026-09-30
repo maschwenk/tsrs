@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::{Diagnostic, SourceFile};
@@ -11,6 +11,7 @@ use tsrs_vfs::FS;
 
 use crate::commandlineoption::CompilerOptionsValue;
 use crate::contentmappers::Mapper;
+use crate::outputpaths::{self, OutputPathsHost};
 use crate::parsedoptions::ParsedOptions;
 use crate::tsconfigparsing::{get_file_names_from_config_specs, TsConfigSourceFile};
 use crate::wildcarddirectories::get_wildcard_directories;
@@ -50,6 +51,13 @@ pub struct ParsedCommandLine {
     pub(crate) wildcard_directories: OnceLock<Option<OrderedMap<String, bool>>>,
     pub(crate) include_globs: OnceLock<Vec<Glob>>,
 
+    pub(crate) source_and_output_maps: OnceLock<SourceAndOutputMaps>,
+
+    pub(crate) common_source_directory: OnceLock<String>,
+    // Go appends checkSourceFilesBelongToPath diagnostics to Errors from inside CommonSourceDirectory's
+    // sync.Once; they are kept here and reported after Errors by GetConfigFileParsingDiagnostics.
+    pub(crate) common_source_directory_errors: Mutex<Vec<P<Diagnostic>>>,
+
     pub(crate) resolved_project_reference_paths: OnceLock<Vec<String>>,
 
     pub(crate) literal_file_names_len: usize,
@@ -67,6 +75,9 @@ impl ParsedCommandLine {
             compare_paths_options: ComparePathsOptions::default(),
             wildcard_directories: OnceLock::new(),
             include_globs: OnceLock::new(),
+            source_and_output_maps: OnceLock::new(),
+            common_source_directory: OnceLock::new(),
+            common_source_directory_errors: Mutex::new(Vec::new()),
             resolved_project_reference_paths: OnceLock::new(),
             literal_file_names_len: 0,
             file_names_by_path: OnceLock::new(),
@@ -125,12 +136,140 @@ impl ParsedCommandLine {
         }
     }
 
+    pub fn source_to_project_reference(&self) -> Option<&FxHashMap<Path, P<SourceOutputAndProjectReference>>> {
+        self.source_and_output_maps.get().map(|m| &m.source_to_project_reference)
+    }
+
+    pub fn output_dts_to_project_reference(&self) -> Option<&FxHashMap<Path, P<SourceOutputAndProjectReference>>> {
+        self.source_and_output_maps.get().map(|m| &m.output_dts_to_project_reference)
+    }
+
+    // Go method on *ParsedCommandLine; the maps point back at the command line, so it takes the arena pointer.
+    pub fn parse_input_output_names(this: P<ParsedCommandLine>) {
+        this.get().source_and_output_maps.get_or_init(|| {
+            let p = this.get();
+            let mut source_to_output: FxHashMap<Path, P<SourceOutputAndProjectReference>> = FxHashMap::default();
+            let mut output_dts_to_source: FxHashMap<Path, P<SourceOutputAndProjectReference>> = FxHashMap::default();
+
+            for (output_dts, source) in p.get_output_declaration_and_source_file_names() {
+                let path = tspath::to_path(&source, p.get_current_directory(), p.use_case_sensitive_file_names());
+                let project_reference = P::new(SourceOutputAndProjectReference { source, output_dts: output_dts.clone(), resolved: this });
+                if !output_dts.is_empty() {
+                    output_dts_to_source
+                        .insert(tspath::to_path(&output_dts, p.get_current_directory(), p.use_case_sensitive_file_names()), project_reference);
+                }
+                source_to_output.insert(path, project_reference);
+            }
+            SourceAndOutputMaps { source_to_project_reference: source_to_output, output_dts_to_project_reference: output_dts_to_source }
+        });
+    }
+
+    pub fn common_source_directory(&self) -> String {
+        self.common_source_directory
+            .get_or_init(|| {
+                let files = || -> Vec<String> {
+                    self.parsed_config
+                        .file_names
+                        .iter()
+                        .filter(|file| {
+                            !(self.compiler_options().unwrap().no_emit_for_js_files.is_true() && tspath::has_js_file_extension(file))
+                                && !tspath::is_declaration_file_name(file)
+                        })
+                        .cloned()
+                        .collect()
+                };
+
+                let mut check = |source_files: &[String], root_directory: &str| self.check_source_files_belong_to_path(source_files, root_directory);
+                outputpaths::get_common_source_directory(
+                    &self.compiler_options().unwrap(),
+                    files,
+                    self.get_current_directory(),
+                    self.use_case_sensitive_file_names(),
+                    Some(&mut check),
+                )
+            })
+            .clone()
+    }
+
+    pub(crate) fn check_source_files_belong_to_path(&self, source_files: &[String], root_directory: &str) -> bool {
+        let mut all_files_belong_to_path = true;
+        for file in source_files {
+            let absolute_source_file_path = tspath::get_canonical_file_name(
+                &tspath::get_normalized_absolute_path(file, self.get_current_directory()),
+                self.use_case_sensitive_file_names(),
+            );
+            if !tspath::contains_path(root_directory, file, &self.compare_paths_options) {
+                self.common_source_directory_errors.lock().unwrap().push(tsrs_ast::new_compiler_diagnostic(
+                    &tsrs_diagnostics::File_0_is_not_under_rootDir_1_rootDir_is_expected_to_contain_all_source_files,
+                    &[&absolute_source_file_path, &root_directory],
+                ));
+                all_files_belong_to_path = false;
+            }
+        }
+
+        all_files_belong_to_path
+    }
+
     pub fn get_current_directory(&self) -> &str {
         &self.compare_paths_options.current_directory
     }
 
     pub fn use_case_sensitive_file_names(&self) -> bool {
         self.compare_paths_options.use_case_sensitive_file_names
+    }
+
+    pub(crate) fn get_output_declaration_and_source_file_names(&self) -> Vec<(String, String)> {
+        let options = self.compiler_options().unwrap();
+        let mut result = Vec::with_capacity(self.parsed_config.file_names.len());
+        for file_name in &self.parsed_config.file_names {
+            let mut output_dts = String::new();
+            if !tspath::is_declaration_file_name(file_name) && !tspath::file_extension_is(file_name, tspath::EXTENSION_JSON) {
+                output_dts = outputpaths::get_output_declaration_file_name_worker(file_name, &options, self);
+            }
+            result.push((output_dts, file_name.clone()));
+        }
+        result
+    }
+
+    pub fn get_output_file_names(&self) -> Vec<String> {
+        let options = self.compiler_options().unwrap();
+        let mut result = Vec::new();
+        for file_name in &self.parsed_config.file_names {
+            if tspath::is_declaration_file_name(file_name) {
+                continue;
+            }
+            let js_file_name = outputpaths::get_output_js_file_name(file_name, &options, self);
+            let is_json = tspath::file_extension_is(file_name, tspath::EXTENSION_JSON);
+            if !js_file_name.is_empty() {
+                if !is_json {
+                    let source_map = outputpaths::get_source_map_file_path(&js_file_name, &options);
+                    result.push(js_file_name);
+                    if !source_map.is_empty() {
+                        result.push(source_map);
+                    }
+                } else {
+                    result.push(js_file_name);
+                }
+            }
+            if is_json {
+                continue;
+            }
+            if options.get_emit_declarations() {
+                let dts_file_name = outputpaths::get_output_declaration_file_name_worker(file_name, &options, self);
+                if !dts_file_name.is_empty() {
+                    let declaration_map = format!("{dts_file_name}.map");
+                    result.push(dts_file_name);
+                    if self.get_content_mapper_for_file_name(file_name).is_none() && options.get_are_declaration_maps_enabled() {
+                        result.push(declaration_map);
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    pub fn get_build_info_file_name(&self) -> String {
+        outputpaths::get_build_info_file_name(&self.compiler_options().unwrap(), &self.compare_paths_options)
     }
 
     // WildcardDirectories returns the cached wildcard directories, initializing them if needed
@@ -256,9 +395,12 @@ impl ParsedCommandLine {
             // todo: !!! should be ConfigFile.ParseDiagnostics, check if they are the same
             let mut result: Vec<P<Diagnostic>> = config_file.source_file.diagnostics().to_vec();
             result.extend(self.errors.iter().copied());
+            result.extend(self.common_source_directory_errors.lock().unwrap().iter().copied());
             return result;
         }
-        self.errors.clone()
+        let mut result = self.errors.clone();
+        result.extend(self.common_source_directory_errors.lock().unwrap().iter().copied());
+        result
     }
 
     // PossiblyMatchesFileName is a fast check to see if a file is currently included by a config
@@ -362,5 +504,34 @@ impl ParsedCommandLine {
             literal_file_names_len,
             ..ParsedCommandLine::empty()
         }
+    }
+}
+
+pub struct SourceOutputAndProjectReference {
+    pub source: String,
+    pub output_dts: String,
+    pub resolved: P<ParsedCommandLine>,
+}
+
+pub(crate) struct SourceAndOutputMaps {
+    source_to_project_reference: FxHashMap<Path, P<SourceOutputAndProjectReference>>,
+    output_dts_to_project_reference: FxHashMap<Path, P<SourceOutputAndProjectReference>>,
+}
+
+impl OutputPathsHost for ParsedCommandLine {
+    fn common_source_directory(&self) -> String {
+        ParsedCommandLine::common_source_directory(self)
+    }
+
+    fn content_mapper_extensions(&self) -> Vec<String> {
+        ParsedCommandLine::content_mapper_extensions(self)
+    }
+
+    fn get_current_directory(&self) -> &str {
+        ParsedCommandLine::get_current_directory(self)
+    }
+
+    fn use_case_sensitive_file_names(&self) -> bool {
+        ParsedCommandLine::use_case_sensitive_file_names(self)
     }
 }

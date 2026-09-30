@@ -16,6 +16,8 @@ mod parsinghelpers;
 mod tsconfigparsing;
 mod wildcarddirectories;
 
+pub mod outputpaths;
+
 pub mod tsoptionstest;
 
 #[cfg(test)]
