@@ -76,3 +76,9 @@ pub(crate) use semicolon_writer::*;
 pub use singlelinestringwriter::*;
 pub use textwriter::*;
 pub use utilities::*;
+
+#[cfg(test)]
+mod printer_test;
+
+#[cfg(test)]
+mod utilities_test;
