@@ -1,0 +1,1 @@
+a.ts(10,7): error TS2322: Type '{ appppppppppppppppppppppppppppppppppppppppppppppppppp: number; [Symbol.iterator]: number; [Symbol.asyncIterator]: number; [Symbol.hasInstance]: number; ... 12 more ...; e: number; }' is not assignable to type 'number'.

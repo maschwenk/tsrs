@@ -328,7 +328,9 @@ impl Program {
     pub fn bind_source_files(&self) {
         let unbound: Vec<P<SourceFile>> = self.files.iter().copied().filter(|f| !f.is_bound()).collect();
         if self.single_threaded() {
-            unbound.into_iter().for_each(tsrs_binder::bind_source_file);
+            // Go's single-threaded work group runs queued functions last-queued first, so files bind in reverse
+            // program order. The order is observable: the binder assigns symbol ids (private names).
+            unbound.into_iter().rev().for_each(tsrs_binder::bind_source_file);
         } else {
             worker_pool().install(|| unbound.into_par_iter().for_each(tsrs_binder::bind_source_file));
         }
