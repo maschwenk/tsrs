@@ -42,6 +42,7 @@ unused_variables = "allow"
 unused_imports = "allow"
 unused_mut = "allow"
 non_upper_case_globals = "allow"
+non_camel_case_types = "allow"
 
 [workspace.lints.clippy]
 all = "allow"

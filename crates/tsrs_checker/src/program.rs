@@ -1,0 +1,50 @@
+use tsrs_core::tspath::Path;
+use tsrs_core::{CompilerOptions, ModuleKind, ResolutionMode};
+use tsrs_module::{ModeAwareCacheKey, ResolvedModule};
+
+use crate::*;
+
+/// Placeholder for `*tsoptions.ParsedCommandLine`: only project-reference features reach it from the checker.
+pub trait ProjectReferenceCommandLine: Send + Sync {
+    fn compiler_options(&self) -> P<CompilerOptions>;
+    fn common_source_directory(&self) -> String;
+}
+
+/// Go `tsoptions.SourceOutputAndProjectReference`.
+pub struct SourceOutputAndProjectReference {
+    pub source: String,
+    pub output_dts: String,
+    pub resolved: &'static dyn ProjectReferenceCommandLine,
+}
+
+/// Go `checker.Program` (plus the `modulespecifiers.ModuleSpecifierGenerationHost` methods the checker calls).
+/// `ast.HasFileName` parameters are `P<SourceFile>`.
+pub trait Program: Send + Sync {
+    fn options(&self) -> P<CompilerOptions>;
+    fn source_files(&self) -> &'static [P<SourceFile>];
+    fn bind_source_files(&self);
+    fn file_exists(&self, file_name: &str) -> bool;
+    fn get_source_file(&self, file_name: &str) -> Option<P<SourceFile>>;
+    fn get_source_file_for_resolved_module(&self, file_name: &str) -> Option<P<SourceFile>>;
+    fn get_emit_module_format_of_file(&self, source_file: P<SourceFile>) -> ModuleKind;
+    fn get_emit_syntax_for_usage_location(&self, source_file: P<SourceFile>, usage_location: P<Node>) -> ResolutionMode;
+    fn get_implied_node_format_for_emit(&self, source_file: P<SourceFile>) -> ModuleKind;
+    fn get_resolved_module(&self, current_source_file: P<SourceFile>, module_reference: &str, mode: ResolutionMode) -> Option<P<ResolvedModule>>;
+    fn get_resolved_modules(&self) -> &FxHashMap<Path, FxHashMap<ModeAwareCacheKey, P<ResolvedModule>>>;
+    fn get_packages_map(&self) -> &FxHashMap<String, bool>;
+    fn get_source_file_meta_data(&self, path: &Path) -> ast::SourceFileMetaData;
+    /// Go `(moduleReference string, specifier *ast.Node)`.
+    fn get_jsx_runtime_import_specifier(&self, path: &Path) -> (String, Option<P<Node>>);
+    fn get_import_helpers_import_specifier(&self, path: &Path) -> Option<P<Node>>;
+    fn source_file_may_be_emitted(&self, source_file: P<SourceFile>, force_dts_emit: bool) -> bool;
+    fn is_source_file_default_library(&self, path: &Path) -> bool;
+    fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference>;
+    fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<&'static dyn ProjectReferenceCommandLine>;
+    fn common_source_directory(&self) -> String;
+
+    // Host (modulespecifiers.ModuleSpecifierGenerationHost) methods used by checker code
+    fn use_case_sensitive_file_names(&self) -> bool;
+    fn get_current_directory(&self) -> String;
+    fn get_default_resolution_mode_for_file(&self, file: P<SourceFile>) -> ResolutionMode;
+    fn get_mode_for_usage_location(&self, file: P<SourceFile>, module_specifier: P<Node>) -> ResolutionMode;
+}
