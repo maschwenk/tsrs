@@ -261,7 +261,7 @@ pub struct ScannerState {
     pub(crate) token: Kind,                          // Kind of current token
     pub(crate) token_value: &'static str,            // Parsed value of current token
     pub(crate) token_flags: TokenFlags,              // Flags for current token
-    pub(crate) comment_directives_len: usize,        // Go keeps the directives slice itself in the state; see rewind
+    pub(crate) comment_directives: &'static [CommentDirective], // a snapshot, like Go's slice header: Rewind restores it
     pub(crate) skip_jsdoc_leading_asterisks: i32,    // Leading asterisks to skip when scanning types inside JSDoc. Should be 0 outside JSDoc
 }
 
@@ -275,7 +275,6 @@ pub struct Scanner {
     errors: Vec<ScanError>,
     skip_trivia: bool,
     pub(crate) state: ScannerState,
-    comment_directives: Vec<CommentDirective>,
 
     number_cache: FxHashMap<&'static str, &'static str>,
     hex_number_cache: FxHashMap<&'static str, &'static str>,
@@ -433,19 +432,16 @@ impl Scanner {
         TextRange::new(self.state.token_start, self.state.pos)
     }
 
-    pub fn comment_directives(&self) -> &[CommentDirective] {
-        &self.comment_directives
+    pub fn comment_directives(&self) -> &'static [CommentDirective] {
+        self.state.comment_directives
     }
 
     pub fn mark(&self) -> ScannerState {
-        let mut state = self.state;
-        state.comment_directives_len = self.comment_directives.len();
-        state
+        self.state
     }
 
     pub fn rewind(&mut self, state: ScannerState) {
         self.state = state;
-        self.comment_directives.truncate(state.comment_directives_len);
     }
 
     /// Go: `onError != nil`. Enables buffering of scanner diagnostics (see the module docs).
@@ -546,7 +542,6 @@ impl Scanner {
         self.text = text;
         self.end = text.len() as i32;
         self.state = ScannerState::default();
-        self.comment_directives.clear();
     }
 
     pub fn set_language_variant(&mut self, language_variant: LanguageVariant) {
@@ -1226,7 +1221,11 @@ impl Scanner {
         } else {
             return;
         };
-        self.comment_directives.push(CommentDirective { loc: TextRange::new(start, end), kind });
+        // Directives are rare; copying keeps every saved state's snapshot intact (Go shares the backing array,
+        // but never rewrites elements below a saved length).
+        let mut directives = self.state.comment_directives.to_vec();
+        directives.push(CommentDirective { loc: TextRange::new(start, end), kind });
+        self.state.comment_directives = tsrs_core::alloc_vec(directives);
     }
 
     pub fn re_scan_less_than_token(&mut self) -> Kind {

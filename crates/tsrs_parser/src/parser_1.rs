@@ -562,7 +562,7 @@ impl Parser {
     }
 
     pub(crate) fn finish_source_file(&mut self, result: P<SourceFile>, is_declaration_file: bool) {
-        result.comment_directives.set(alloc_slice(self.scanner.comment_directives()));
+        result.comment_directives.set(self.scanner.comment_directives());
         result.pragmas.set(alloc_vec(get_comment_pragmas(&mut self.factory, self.source_text)));
         self.process_pragmas_into_fields(result);
         result.set_diagnostics(&attach_file_to_diagnostics(&self.diagnostics, result));
