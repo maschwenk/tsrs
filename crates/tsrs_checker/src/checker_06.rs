@@ -2017,101 +2017,700 @@ impl Checker {
 
     // checker.go:12490
     pub(crate) fn check_assertion(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        if node.kind == Kind::TypeAssertionExpression {
+            let file = ast::get_source_file_of_node(node);
+            if let Some(file) = file {
+                if tspath::file_extension_is_one_of(file.file_name(), &[tspath::EXTENSION_MTS, tspath::EXTENSION_CTS]) {
+                    self.grammar_error_on_node(node, &diagnostics::This_syntax_is_reserved_in_files_with_the_mts_or_cts_extension_Use_an_as_expression_instead, &[]);
+                }
+            }
+            if self.should_check_erasable_syntax(node) {
+                let source_file = ast::get_source_file_of_node(node).unwrap();
+                let loc = TextRange::new(tsrs_scanner::skip_trivia(source_file.text(), node.pos()), node.expression().unwrap().pos());
+                self.add_diagnostic(ast::new_diagnostic(Some(source_file), loc, &diagnostics::This_syntax_is_not_allowed_when_erasableSyntaxOnly_is_enabled, &[]));
+            }
+        }
+        let type_node = node.type_node().unwrap();
+        let expr_type = self.check_expression_ex(node.expression().unwrap(), check_mode);
+        // Always check the type node so its identifiers are resolved. resolveName knows not
+        // to resolve (or report an error for) the `const` in a `const` assertion, so this is
+        // safe even for `x as const` and keeps diagnostics stable regardless of traversal order.
+        self.check_source_element(Some(type_node));
+        if crate::is_const_type_reference(type_node) {
+            if !self.is_valid_const_assertion_argument(node.expression().unwrap()) {
+                self.error(node.expression(), &diagnostics::A_const_assertion_can_only_be_applied_to_references_to_enum_members_or_string_number_boolean_array_or_object_literals, &[]);
+            }
+            return self.get_regular_type_of_literal_type(expr_type);
+        }
+        let links = self.assertion_links.get(node);
+        links.expr_type.set(Some(expr_type));
+        self.check_node_deferred(node);
+        self.get_type_from_type_node(type_node)
     }
 
     // checker.go:12518
     pub(crate) fn check_assertion_deferred(&mut self, node: P<Node>) {
-        todo!()
+        let type_node = node.type_node().unwrap();
+        let assertion_expr_type = self.assertion_links.get(node).expr_type.get().unwrap();
+        let base_type = self.get_base_type_of_literal_type(assertion_expr_type);
+        let expr_type = self.get_regular_type_of_object_literal(base_type);
+        let target_type = self.get_type_from_type_node(type_node);
+        if !self.is_error_type(target_type) {
+            let widened_type = self.get_widened_type(expr_type);
+            if !self.is_type_comparable_to(target_type, widened_type) {
+                let mut err_node = node;
+                if type_node.flags().intersects(NodeFlags::Reparsed) {
+                    err_node = type_node;
+                }
+                self.check_type_comparable_to(
+                    expr_type,
+                    target_type,
+                    err_node,
+                    Some(&diagnostics::Conversion_of_type_0_to_type_1_may_be_a_mistake_because_neither_type_sufficiently_overlaps_with_the_other_If_this_was_intentional_convert_the_expression_to_unknown_first),
+                );
+            }
+        }
     }
 
     // checker.go:12534
     pub(crate) fn check_binary_expression(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        let binary = node.as_binary_expression();
+        self.check_binary_like_expression(binary.left, binary.operator_token, binary.right(), check_mode, Some(node))
     }
 
     // checker.go:12539
     pub(crate) fn check_binary_like_expression(&mut self, left: P<Node>, operator_token: P<Node>, right: P<Node>, check_mode: CheckMode, error_node: Option<P<Node>>) -> P<Type> {
-        todo!()
+        let operator = operator_token.kind;
+        if operator == Kind::EqualsToken && (left.kind == Kind::ObjectLiteralExpression || left.kind == Kind::ArrayLiteralExpression) {
+            let right_type = self.check_expression_ex(right, check_mode);
+            return self.check_destructuring_assignment(left, right_type, check_mode, right.kind == Kind::ThisKeyword);
+        }
+        let mut left_type = self.check_expression_ex(left, check_mode);
+        let mut right_type = self.check_expression_ex(right, check_mode);
+        if ast::is_logical_or_coalescing_binary_operator(operator) {
+            let mut parent = left.parent().unwrap().parent().unwrap();
+            while ast::is_parenthesized_expression(parent) || ast::is_logical_or_coalescing_binary_expression(parent) {
+                parent = parent.parent().unwrap();
+            }
+            if operator == Kind::AmpersandAmpersandToken || ast::is_if_statement(parent) {
+                let mut body: Option<P<Node>> = None;
+                if ast::is_if_statement(parent) {
+                    body = Some(parent.as_if_statement().then_statement);
+                }
+                self.check_testing_known_truthy_callable_or_awaitable_or_enum_member_type(left, left_type, body);
+            }
+            if ast::is_logical_binary_operator(operator) {
+                self.check_truthiness_of_type(left_type, left);
+            }
+        }
+        match operator {
+            Kind::AsteriskToken
+            | Kind::AsteriskAsteriskToken
+            | Kind::AsteriskEqualsToken
+            | Kind::AsteriskAsteriskEqualsToken
+            | Kind::SlashToken
+            | Kind::SlashEqualsToken
+            | Kind::PercentToken
+            | Kind::PercentEqualsToken
+            | Kind::MinusToken
+            | Kind::MinusEqualsToken
+            | Kind::LessThanLessThanToken
+            | Kind::LessThanLessThanEqualsToken
+            | Kind::GreaterThanGreaterThanToken
+            | Kind::GreaterThanGreaterThanEqualsToken
+            | Kind::GreaterThanGreaterThanGreaterThanToken
+            | Kind::GreaterThanGreaterThanGreaterThanEqualsToken
+            | Kind::BarToken
+            | Kind::BarEqualsToken
+            | Kind::CaretToken
+            | Kind::CaretEqualsToken
+            | Kind::AmpersandToken
+            | Kind::AmpersandEqualsToken => {
+                if left_type == self.silent_never_type || right_type == self.silent_never_type {
+                    return self.silent_never_type;
+                }
+                left_type = self.check_non_null_type(left_type, left);
+                right_type = self.check_non_null_type(right_type, right);
+                // if a user tries to apply a bitwise operator to 2 boolean operands
+                // try and return them a helpful suggestion
+                if left_type.flags().intersects(TypeFlags::BooleanLike) && right_type.flags().intersects(TypeFlags::BooleanLike) {
+                    let suggested_operator = self.get_suggested_boolean_operator(operator);
+                    if suggested_operator != Kind::Unknown {
+                        self.error(
+                            Some(operator_token),
+                            &diagnostics::The_0_operator_is_not_allowed_for_boolean_types_Consider_using_1_instead,
+                            &[&tsrs_scanner::token_to_string(operator_token.kind), &tsrs_scanner::token_to_string(suggested_operator)],
+                        );
+                        return self.number_type;
+                    }
+                }
+                // otherwise just check each operand separately and report errors as normal
+                let left_ok = self.check_arithmetic_operand_type(left, left_type, &diagnostics::The_left_hand_side_of_an_arithmetic_operation_must_be_of_type_any_number_bigint_or_an_enum_type, true /*isAwaitValid*/);
+                let right_ok = self.check_arithmetic_operand_type(right, right_type, &diagnostics::The_right_hand_side_of_an_arithmetic_operation_must_be_of_type_any_number_bigint_or_an_enum_type, true /*isAwaitValid*/);
+                let result_type: P<Type>;
+                // If both are any or unknown, allow operation; assume it will resolve to number
+                if self.is_type_assignable_to_kind(left_type, TypeFlags::AnyOrUnknown) && self.is_type_assignable_to_kind(right_type, TypeFlags::AnyOrUnknown)
+                    || !self.maybe_type_of_kind(left_type, TypeFlags::BigIntLike) && !self.maybe_type_of_kind(right_type, TypeFlags::BigIntLike)
+                {
+                    result_type = self.number_type;
+                } else if self.both_are_big_int_like(left_type, right_type) {
+                    match operator {
+                        Kind::GreaterThanGreaterThanGreaterThanToken | Kind::GreaterThanGreaterThanGreaterThanEqualsToken => {
+                            self.report_operator_error(left_type, operator, right_type, error_node, None);
+                        }
+                        Kind::AsteriskAsteriskToken | Kind::AsteriskAsteriskEqualsToken => {
+                            if self.language_version < ScriptTarget::ES2016 {
+                                self.error(error_node, &diagnostics::Exponentiation_cannot_be_performed_on_bigint_values_unless_the_target_option_is_set_to_es2016_or_later, &[]);
+                            }
+                        }
+                        _ => {}
+                    }
+                    result_type = self.bigint_type;
+                } else {
+                    self.report_operator_error(left_type, operator, right_type, error_node, Some(&mut |c: &mut Checker, l: P<Type>, r: P<Type>| c.both_are_big_int_like(l, r)));
+                    result_type = self.error_type;
+                }
+                if left_ok && right_ok {
+                    self.check_assignment_operator(left, operator, right, left_type, result_type);
+                    match operator {
+                        Kind::LessThanLessThanToken
+                        | Kind::LessThanLessThanEqualsToken
+                        | Kind::GreaterThanGreaterThanToken
+                        | Kind::GreaterThanGreaterThanEqualsToken
+                        | Kind::GreaterThanGreaterThanGreaterThanToken
+                        | Kind::GreaterThanGreaterThanGreaterThanEqualsToken => {
+                            let rhs_eval = self.evaluate(right, right);
+                            if let Some(LiteralValue::Number(num_value)) = rhs_eval.value {
+                                if num_value.abs() >= Number(32.0) {
+                                    // Elevate from suggestion to error within an enum member
+                                    let is_error = ast::walk_up_parenthesized_expressions(right.parent().unwrap().parent()).is_some_and(ast::is_enum_member);
+                                    self.error_or_suggestion(
+                                        is_error,
+                                        error_node,
+                                        &diagnostics::This_operation_can_be_simplified_This_shift_is_identical_to_0_1_2,
+                                        &[&tsrs_scanner::get_text_of_node(left), &tsrs_scanner::token_to_string(operator), &num_value.remainder(Number(32.0))],
+                                    );
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                result_type
+            }
+            Kind::PlusToken | Kind::PlusEqualsToken => {
+                if left_type == self.silent_never_type || right_type == self.silent_never_type {
+                    return self.silent_never_type;
+                }
+                if !self.is_type_assignable_to_kind(left_type, TypeFlags::StringLike) && !self.is_type_assignable_to_kind(right_type, TypeFlags::StringLike) {
+                    left_type = self.check_non_null_type(left_type, left);
+                    right_type = self.check_non_null_type(right_type, right);
+                }
+                let mut result_type: Option<P<Type>> = None;
+                if self.is_type_assignable_to_kind_ex(left_type, TypeFlags::NumberLike, true /*strict*/) && self.is_type_assignable_to_kind_ex(right_type, TypeFlags::NumberLike, true /*strict*/) {
+                    // Operands of an enum type are treated as having the primitive type Number.
+                    // If both operands are of the Number primitive type, the result is of the Number primitive type.
+                    result_type = Some(self.number_type);
+                } else if self.is_type_assignable_to_kind_ex(left_type, TypeFlags::BigIntLike, true /*strict*/) && self.is_type_assignable_to_kind_ex(right_type, TypeFlags::BigIntLike, true /*strict*/) {
+                    // If both operands are of the BigInt primitive type, the result is of the BigInt primitive type.
+                    result_type = Some(self.bigint_type);
+                } else if self.is_type_assignable_to_kind_ex(left_type, TypeFlags::StringLike, true /*strict*/) || self.is_type_assignable_to_kind_ex(right_type, TypeFlags::StringLike, true /*strict*/) {
+                    // If one or both operands are of the String primitive type, the result is of the String primitive type.
+                    result_type = Some(self.string_type);
+                } else if is_type_any(Some(left_type)) || is_type_any(Some(right_type)) {
+                    // Otherwise, the result is of type Any.
+                    // NOTE: unknown type here denotes error type. Old compiler treated this case as any type so do we.
+                    if self.is_error_type(left_type) || self.is_error_type(right_type) {
+                        result_type = Some(self.error_type);
+                    } else {
+                        result_type = Some(self.any_type);
+                    }
+                }
+                // Symbols are not allowed at all in arithmetic expressions
+                if let Some(rt) = result_type {
+                    if !self.check_for_disallowed_es_symbol_operand(left, right, left_type, right_type, operator) {
+                        return rt;
+                    }
+                }
+                let Some(result_type) = result_type else {
+                    // Types that have a reasonably good chance of being a valid operand type.
+                    // If both types have an awaited type of one of these, we'll assume the user
+                    // might be missing an await without doing an exhaustive check that inserting
+                    // await(s) will actually be a completely valid binary expression.
+                    let close_enough_kind = TypeFlags::NumberLike | TypeFlags::BigIntLike | TypeFlags::StringLike | TypeFlags::AnyOrUnknown;
+                    self.report_operator_error(
+                        left_type,
+                        operator,
+                        right_type,
+                        error_node,
+                        Some(&mut |c: &mut Checker, left: P<Type>, right: P<Type>| c.is_type_assignable_to_kind(left, close_enough_kind) && c.is_type_assignable_to_kind(right, close_enough_kind)),
+                    );
+                    return self.any_type;
+                };
+                if operator == Kind::PlusEqualsToken {
+                    self.check_assignment_operator(left, operator, right, left_type, result_type);
+                }
+                result_type
+            }
+            Kind::LessThanToken | Kind::GreaterThanToken | Kind::LessThanEqualsToken | Kind::GreaterThanEqualsToken => {
+                if self.check_for_disallowed_es_symbol_operand(left, right, left_type, right_type, operator) {
+                    let non_null_left = self.check_non_null_type(left_type, left);
+                    left_type = self.get_base_type_of_literal_type_for_comparison(non_null_left);
+                    let non_null_right = self.check_non_null_type(right_type, right);
+                    right_type = self.get_base_type_of_literal_type_for_comparison(non_null_right);
+                    self.report_operator_error_unless(left_type, operator, right_type, error_node, |c, left, right| {
+                        if is_type_any(Some(left)) || is_type_any(Some(right)) {
+                            return true;
+                        }
+                        let number_or_big_int_type = c.number_or_big_int_type;
+                        let left_assignable_to_number = c.is_type_assignable_to(left, number_or_big_int_type);
+                        let right_assignable_to_number = c.is_type_assignable_to(right, number_or_big_int_type);
+                        left_assignable_to_number && right_assignable_to_number || !left_assignable_to_number && !right_assignable_to_number && c.are_types_comparable(left, right)
+                    });
+                }
+                self.boolean_type
+            }
+            Kind::EqualsEqualsToken | Kind::ExclamationEqualsToken | Kind::EqualsEqualsEqualsToken | Kind::ExclamationEqualsEqualsToken => {
+                // We suppress errors in CheckMode.TypeOnly (meaning the invocation came from getTypeOfExpression). During
+                // control flow analysis it is possible for operands to temporarily have narrower types, and those narrower
+                // types may cause the operands to not be comparable. We don't want such errors reported (see #46475).
+                if !check_mode.intersects(CheckMode::TypeOnly) {
+                    if (is_literal_expression_of_object(left) || is_literal_expression_of_object(right))
+                        // only report for === and !== in JS, not == or !=
+                        && (!ast::is_in_js_file(left) || (operator == Kind::EqualsEqualsEqualsToken || operator == Kind::ExclamationEqualsEqualsToken))
+                    {
+                        let eq_type = operator == Kind::EqualsEqualsToken || operator == Kind::EqualsEqualsEqualsToken;
+                        self.error(error_node, &diagnostics::This_condition_will_always_return_0_since_JavaScript_compares_objects_by_reference_not_value, &[&if eq_type { "false" } else { "true" }]);
+                    }
+                    self.check_nan_equality(error_node, operator, left, right);
+                    self.report_operator_error_unless(left_type, operator, right_type, error_node, |c, left, right| c.is_type_equality_comparable_to(left, right) || c.is_type_equality_comparable_to(right, left));
+                }
+                self.boolean_type
+            }
+            Kind::InstanceOfKeyword => self.check_instance_of_expression(left, right, left_type, right_type, check_mode),
+            Kind::InKeyword => self.check_in_expression(left, right, left_type, right_type),
+            Kind::AmpersandAmpersandToken | Kind::AmpersandAmpersandEqualsToken => {
+                let mut result_type = left_type;
+                if self.has_type_facts(left_type, TypeFacts::Truthy) {
+                    let mut t = left_type;
+                    if !self.strict_null_checks {
+                        t = self.get_base_type_of_literal_type(right_type);
+                    }
+                    let falsy = self.extract_definitely_falsy_types(t);
+                    result_type = self.get_union_type(&[falsy, right_type]);
+                }
+                if operator == Kind::AmpersandAmpersandEqualsToken {
+                    self.check_assignment_operator(left, operator, right, left_type, right_type);
+                }
+                result_type
+            }
+            Kind::BarBarToken | Kind::BarBarEqualsToken => {
+                let mut result_type = left_type;
+                if self.has_type_facts(left_type, TypeFacts::Falsy) {
+                    let removed = self.remove_definitely_falsy_types(left_type);
+                    let non_nullable = self.get_non_nullable_type(removed);
+                    result_type = self.get_union_type_ex(&[non_nullable, right_type], UnionReduction::Subtype, None, None);
+                }
+                if operator == Kind::BarBarEqualsToken {
+                    self.check_assignment_operator(left, operator, right, left_type, right_type);
+                }
+                result_type
+            }
+            Kind::QuestionQuestionToken | Kind::QuestionQuestionEqualsToken => {
+                if operator == Kind::QuestionQuestionToken {
+                    self.check_nullish_coalesce_operands(left, right);
+                }
+                let mut result_type = left_type;
+                if self.has_type_facts(left_type, TypeFacts::EQUndefinedOrNull) {
+                    let non_nullable = self.get_non_nullable_type(left_type);
+                    result_type = self.get_union_type_ex(&[non_nullable, right_type], UnionReduction::Subtype, None, None);
+                }
+                if operator == Kind::QuestionQuestionEqualsToken {
+                    self.check_assignment_operator(left, operator, right, left_type, right_type);
+                }
+                result_type
+            }
+            Kind::EqualsToken => {
+                self.check_assignment_operator(left, operator, right, left_type, right_type);
+                right_type
+            }
+            Kind::CommaToken => {
+                if !self.compiler_options.allow_unreachable_code.is_true() && self.is_side_effect_free(left) && !self.is_indirect_call(left.parent().unwrap()) {
+                    let sf = ast::get_source_file_of_node(left).unwrap();
+                    let start = tsrs_scanner::skip_trivia(sf.text(), left.pos());
+                    let is_in_diag2657 = sf.diagnostics().iter().any(|d| {
+                        if d.code() != diagnostics::JSX_expressions_must_have_one_parent_element.code() {
+                            return false;
+                        }
+                        d.loc().contains(start)
+                    });
+                    if !is_in_diag2657 {
+                        self.error(Some(left), &diagnostics::Left_side_of_comma_operator_is_unused_and_has_no_side_effects, &[]);
+                    }
+                }
+                right_type
+            }
+            _ => panic!("Unhandled case in checkBinaryLikeExpression"),
+        }
     }
 
     // checker.go:12755
     pub(crate) fn check_destructuring_assignment(&mut self, node: P<Node>, source_type: P<Type>, check_mode: CheckMode, right_is_this: bool) -> P<Type> {
-        todo!()
+        let mut source_type = source_type;
+        let mut target: P<Node>;
+        if ast::is_shorthand_property_assignment(node) {
+            let initializer = node.as_shorthand_property_assignment().object_assignment_initializer();
+            if let Some(initializer) = initializer {
+                // In strict null checking mode, if a default value of a non-undefined type is specified, remove
+                // undefined from the final type.
+                if self.strict_null_checks {
+                    let initializer_type = self.check_expression(initializer);
+                    if !self.has_type_facts(initializer_type, TypeFacts::IsUndefined) {
+                        source_type = self.get_type_with_facts(source_type, TypeFacts::NEUndefined);
+                    }
+                }
+                self.check_binary_like_expression(node.name().unwrap(), node.as_shorthand_property_assignment().equals_token().unwrap(), initializer, check_mode, None);
+            }
+            target = node.name().unwrap();
+        } else {
+            target = node;
+        }
+        if ast::is_binary_expression(target) && target.as_binary_expression().operator_token.kind == Kind::EqualsToken {
+            self.check_binary_expression(target, check_mode);
+            target = target.as_binary_expression().left;
+            // A default value is specified, so remove undefined from the final type.
+            if self.strict_null_checks {
+                source_type = self.get_type_with_facts(source_type, TypeFacts::NEUndefined);
+            }
+        }
+        if ast::is_object_literal_expression(target) {
+            return self.check_object_literal_assignment(target, source_type, right_is_this);
+        }
+        if ast::is_array_literal_expression(target) {
+            return self.check_array_literal_assignment(target, source_type, check_mode);
+        }
+        self.check_reference_assignment(target, source_type, check_mode)
     }
 
     // checker.go:12788
     pub(crate) fn check_object_literal_assignment(&mut self, node: P<Node>, source_type: P<Type>, right_is_this: bool) -> P<Type> {
-        todo!()
+        let properties = node.property_list();
+        if self.strict_null_checks && properties.nodes.is_empty() {
+            return self.check_non_null_type(source_type, node);
+        }
+        for i in 0..properties.nodes.len() {
+            self.check_object_literal_destructuring_property_assignment(node, source_type, i as i32, Some(properties), right_is_this);
+        }
+        source_type
     }
 
+    // Note: If property cannot be a SpreadAssignment, then allProperties does not need to be provided
     // checker.go:12800
     pub(crate) fn check_object_literal_destructuring_property_assignment(&mut self, node: P<Node>, object_literal_type: P<Type>, property_index: i32, all_properties: Option<P<NodeList>>, right_is_this: bool) -> Option<P<Type>> {
-        todo!()
+        let properties = node.properties();
+        let property = properties[property_index as usize];
+        if ast::is_property_assignment(property) || ast::is_shorthand_property_assignment(property) {
+            let name = property.name();
+
+            if let Some(name) = name {
+                if ast::is_private_identifier(name) {
+                    self.grammar_error_on_node(name, &diagnostics::Private_identifiers_cannot_be_used_in_destructuring_patterns, &[]);
+                }
+            }
+
+            let expr_type = self.get_literal_type_from_property_name(name.unwrap());
+            if is_type_usable_as_property_name(expr_type) {
+                let text = get_property_name_from_type(expr_type);
+                let prop = self.get_property_of_type(object_literal_type, &text);
+                if let Some(prop) = prop {
+                    self.mark_property_as_referenced(prop, Some(property), right_is_this);
+                    self.check_property_accessibility(property, false /*isSuper*/, true /*writing*/, object_literal_type, prop);
+                }
+            }
+            let access_flags = AccessFlags::ExpressionPosition | if self.has_default_value(property) { AccessFlags::AllowMissing } else { AccessFlags::empty() };
+            let element_type = self.get_indexed_access_type_ex(object_literal_type, expr_type, access_flags, name, None);
+            let t = self.get_flow_type_of_destructuring(property, element_type);
+            let mut expr = property;
+            if ast::is_property_assignment(property) {
+                expr = property.initializer().unwrap();
+            }
+            return Some(self.check_destructuring_assignment(expr, t, CheckMode::Normal, false));
+        }
+        if ast::is_spread_assignment(property) {
+            if (property_index as usize) < properties.len() - 1 {
+                self.error(Some(property), &diagnostics::A_rest_element_must_be_last_in_a_destructuring_pattern, &[]);
+                return None;
+            }
+            if self.language_version < LanguageFeatureMinimumTarget.object_spread_rest {
+                self.check_external_emit_helpers(property, ExternalEmitHelpers::Rest);
+            }
+            let mut non_rest_names: Vec<P<Node>> = Vec::new();
+            if let Some(all_properties) = all_properties {
+                for &other_property in all_properties.nodes {
+                    if !ast::is_spread_assignment(other_property) {
+                        // SIG: Go appends otherProperty.Name() (never nil for non-spread object literal members).
+                        non_rest_names.push(other_property.name().unwrap());
+                    }
+                }
+            }
+            // SIG: getRestType's symbol parameter should be Option<P<Symbol>> (Go passes objectLiteralType.symbol, which
+            // can be nil); this unwrap panics where Go would pass nil.
+            let t = self.get_rest_type(object_literal_type, &non_rest_names, object_literal_type.symbol().unwrap());
+            self.check_grammar_for_disallowed_trailing_comma(all_properties, &diagnostics::A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma);
+            return Some(self.check_destructuring_assignment(property.expression().unwrap(), t, CheckMode::Normal, false));
+        }
+        self.error(Some(property), &diagnostics::Property_assignment_expected, &[]);
+        None
     }
 
     // checker.go:12851
     pub(crate) fn check_array_literal_assignment(&mut self, node: P<Node>, source_type: P<Type>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        let elements = node.elements();
+        // This elementType will be used if the specific property corresponding to this index is not
+        // present (aka the tuple element property). This call also checks that the parentType is in
+        // fact an iterable or array (depending on target language).
+        let undefined_type = self.undefined_type;
+        let possibly_out_of_bounds_type = self.check_iterated_type_or_element_type(IterationUse::Destructuring | IterationUse::PossiblyOutOfBounds, source_type, undefined_type, Some(node));
+        let mut in_bounds_type = if self.compiler_options.no_unchecked_indexed_access == Tristate::True { None } else { Some(possibly_out_of_bounds_type) };
+        for i in 0..elements.len() {
+            let mut t = possibly_out_of_bounds_type;
+            if elements[i].kind == Kind::SpreadElement {
+                if in_bounds_type.is_none() {
+                    in_bounds_type = Some(self.check_iterated_type_or_element_type(IterationUse::Destructuring, source_type, undefined_type, Some(node)));
+                }
+                t = in_bounds_type.unwrap();
+            }
+            self.check_array_literal_destructuring_element_assignment(node, source_type, i as i32, t, check_mode);
+        }
+        source_type
     }
 
     // checker.go:12871
     pub(crate) fn check_array_literal_destructuring_element_assignment(&mut self, node: P<Node>, source_type: P<Type>, element_index: i32, element_type: P<Type>, check_mode: CheckMode) -> Option<P<Type>> {
-        todo!()
+        let elements = node.element_list();
+        let element = elements.nodes[element_index as usize];
+        if !ast::is_omitted_expression(element) {
+            if !ast::is_spread_element(element) {
+                let index_type = self.get_number_literal_type(Number(element_index as f64));
+                if self.is_array_like_type(source_type) {
+                    // We create a synthetic expression so that getIndexedAccessType doesn't get confused
+                    // when the element is a SyntaxKind.ElementAccessExpression.
+                    let access_flags = AccessFlags::ExpressionPosition | if self.has_default_value(element) { AccessFlags::AllowMissing } else { AccessFlags::empty() };
+                    let synthetic = self.create_synthetic_expression(element, index_type, false, None);
+                    let element_type = self.get_indexed_access_type_or_undefined(source_type, index_type, access_flags, Some(synthetic), None).unwrap_or(self.error_type);
+                    let mut assigned_type = element_type;
+                    if self.has_default_value(element) {
+                        assigned_type = self.get_type_with_facts(element_type, TypeFacts::NEUndefined);
+                    }
+                    let t = self.get_flow_type_of_destructuring(element, assigned_type);
+                    return Some(self.check_destructuring_assignment(element, t, check_mode, false));
+                }
+                return Some(self.check_destructuring_assignment(element, element_type, check_mode, false));
+            }
+            if (element_index as usize) < elements.nodes.len() - 1 {
+                self.error(Some(element), &diagnostics::A_rest_element_must_be_last_in_a_destructuring_pattern, &[]);
+            } else {
+                let rest_expression = element.expression().unwrap();
+                if ast::is_binary_expression(rest_expression) && rest_expression.as_binary_expression().operator_token.kind == Kind::EqualsToken {
+                    self.error(Some(rest_expression.as_binary_expression().operator_token), &diagnostics::A_rest_element_cannot_have_an_initializer, &[]);
+                } else {
+                    self.check_grammar_for_disallowed_trailing_comma(Some(elements), &diagnostics::A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma);
+                    let t = if every_type(source_type, is_tuple_type) {
+                        self.map_type(source_type, |c, t| Some(c.slice_tuple_type(t, element_index, 0))).unwrap()
+                    } else {
+                        self.create_array_type(element_type)
+                    };
+                    return Some(self.check_destructuring_assignment(rest_expression, t, check_mode, false));
+                }
+            }
+        }
+        None
     }
 
     // checker.go:12912
     pub(crate) fn check_reference_assignment(&mut self, target: P<Node>, source_type: P<Type>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        let target_type = self.check_expression_ex(target, check_mode);
+        let is_spread = ast::is_spread_assignment(target.parent().unwrap());
+        let message: &'static Message = if is_spread {
+            &diagnostics::The_target_of_an_object_rest_assignment_must_be_a_variable_or_a_property_access
+        } else {
+            &diagnostics::The_left_hand_side_of_an_assignment_expression_must_be_a_variable_or_a_property_access
+        };
+        let optional_message: &'static Message = if is_spread {
+            &diagnostics::The_target_of_an_object_rest_assignment_may_not_be_an_optional_property_access
+        } else {
+            &diagnostics::The_left_hand_side_of_an_assignment_expression_may_not_be_an_optional_property_access
+        };
+        if self.check_reference_expression(target, message, optional_message) {
+            self.check_type_assignable_to_and_optionally_elaborate(source_type, target_type, target, target, None, None);
+        }
+        source_type
     }
 
     // checker.go:12926
     pub(crate) fn report_operator_error(&mut self, left_type: P<Type>, operator: Kind, right_type: P<Type>, error_node: Option<P<Node>>, is_related: Option<&mut dyn FnMut(&mut Checker, P<Type>, P<Type>) -> bool>) {
-        todo!()
+        let mut is_related = is_related;
+        let mut would_work_with_await = false;
+        if let Some(is_related) = is_related.as_deref_mut() {
+            let awaited_left_type = self.get_awaited_type_no_alias(left_type);
+            let awaited_right_type = self.get_awaited_type_no_alias(right_type);
+            would_work_with_await = !(awaited_left_type == Some(left_type) && awaited_right_type == Some(right_type))
+                && awaited_left_type.is_some()
+                && awaited_right_type.is_some()
+                && is_related(self, awaited_left_type.unwrap(), awaited_right_type.unwrap());
+        }
+        let mut effective_left = left_type;
+        let mut effective_right = right_type;
+        if !would_work_with_await {
+            if let Some(is_related) = is_related.as_deref_mut() {
+                (effective_left, effective_right) = self.get_base_types_if_unrelated(left_type, right_type, is_related);
+            }
+        }
+        let (left_str, right_str) = self.get_type_names_for_error_display(effective_left, effective_right);
+        match operator {
+            Kind::EqualsEqualsEqualsToken | Kind::EqualsEqualsToken | Kind::ExclamationEqualsEqualsToken | Kind::ExclamationEqualsToken => {
+                self.error_and_maybe_suggest_await(error_node, would_work_with_await, &diagnostics::This_comparison_appears_to_be_unintentional_because_the_types_0_and_1_have_no_overlap, &[&left_str, &right_str]);
+            }
+            _ => {
+                self.error_and_maybe_suggest_await(error_node, would_work_with_await, &diagnostics::Operator_0_cannot_be_applied_to_types_1_and_2, &[&tsrs_scanner::token_to_string(operator), &left_str, &right_str]);
+            }
+        }
     }
 
     // checker.go:12947
-    pub(crate) fn report_operator_error_unless(&mut self, left_type: P<Type>, operator: Kind, right_type: P<Type>, error_node: Option<P<Node>>, types_are_compatible: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool) {
-        todo!()
+    pub(crate) fn report_operator_error_unless(&mut self, left_type: P<Type>, operator: Kind, right_type: P<Type>, error_node: Option<P<Node>>, mut types_are_compatible: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool) {
+        if !types_are_compatible(self, left_type, right_type) {
+            self.report_operator_error(left_type, operator, right_type, error_node, Some(&mut types_are_compatible));
+        }
     }
 
     // checker.go:12953
-    pub(crate) fn get_base_types_if_unrelated(&mut self, left_type: P<Type>, right_type: P<Type>, is_related: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool) -> (P<Type>, P<Type>) {
-        todo!()
+    pub(crate) fn get_base_types_if_unrelated(&mut self, left_type: P<Type>, right_type: P<Type>, mut is_related: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool) -> (P<Type>, P<Type>) {
+        let mut effective_left = left_type;
+        let mut effective_right = right_type;
+        let left_base = self.get_base_type_of_literal_type(left_type);
+        let right_base = self.get_base_type_of_literal_type(right_type);
+        if !is_related(self, left_base, right_base) {
+            effective_left = left_base;
+            effective_right = right_base;
+        }
+        (effective_left, effective_right)
     }
 
     // checker.go:12965
     pub(crate) fn check_assignment_operator(&mut self, left: P<Node>, operator: Kind, right: P<Node>, left_type: P<Type>, right_type: P<Type>) {
-        todo!()
+        let mut left_type = left_type;
+        if ast::is_assignment_operator(operator) {
+            // We ignore assignments of undefined to CommonJS exports when there are multiple assignment declarations
+            let left_parent = left.parent().unwrap();
+            if ast::is_declaration_node(left_parent) && ast::get_assignment_declaration_kind(left_parent) == JSDeclarationKind::ExportsProperty {
+                if let Some(symbol) = self.symbol_node_links.get(left).resolved_symbol.get() {
+                    if symbol.declarations.borrow().len() > 1 && right_type.flags().intersects(TypeFlags::Undefined) {
+                        return;
+                    }
+                }
+            }
+            // getters can be a subtype of setters, so to check for assignability we use the setter's type instead
+            if ast::is_compound_assignment(operator) && ast::is_property_access_expression(left) {
+                left_type = self.check_property_access_expression(left, CheckMode::Normal, true /*writeOnly*/);
+            }
+            if self.check_reference_expression(
+                left,
+                &diagnostics::The_left_hand_side_of_an_assignment_expression_must_be_a_variable_or_a_property_access,
+                &diagnostics::The_left_hand_side_of_an_assignment_expression_may_not_be_an_optional_property_access,
+            ) {
+                let mut head_message: Option<&'static Message> = None;
+                if self.exact_optional_property_types && ast::is_property_access_expression(left) && self.maybe_type_of_kind(right_type, TypeFlags::Undefined) {
+                    let expression_type = self.get_type_of_expression(left.expression().unwrap());
+                    let target = self.get_type_of_property_of_type(expression_type, left.name().unwrap().text());
+                    if self.is_exact_optional_property_mismatch(Some(right_type), target) {
+                        head_message = Some(&diagnostics::Type_0_is_not_assignable_to_type_1_with_exactOptionalPropertyTypes_Colon_true_Consider_adding_undefined_to_the_type_of_the_target);
+                    }
+                }
+                // to avoid cascading errors check assignability only if 'isReference' check succeeded and no errors were reported
+                self.check_type_assignable_to_and_optionally_elaborate(right_type, left_type, left, right, head_message, None);
+            }
+        }
     }
 
     // checker.go:12991
     pub(crate) fn both_are_big_int_like(&mut self, left: P<Type>, right: P<Type>) -> bool {
-        todo!()
+        self.is_type_assignable_to_kind(left, TypeFlags::BigIntLike) && self.is_type_assignable_to_kind(right, TypeFlags::BigIntLike)
     }
 
     // checker.go:12995
     pub(crate) fn get_suggested_boolean_operator(&mut self, operator: Kind) -> Kind {
-        todo!()
+        match operator {
+            Kind::BarToken | Kind::BarEqualsToken => Kind::BarBarToken,
+            Kind::CaretToken | Kind::CaretEqualsToken => Kind::ExclamationEqualsEqualsToken,
+            Kind::AmpersandToken | Kind::AmpersandEqualsToken => Kind::AmpersandAmpersandToken,
+            _ => Kind::Unknown,
+        }
     }
 
     // checker.go:13007
     pub(crate) fn check_arithmetic_operand_type(&mut self, operand: P<Node>, t: P<Type>, diagnostic: &'static Message, is_await_valid: bool) -> bool {
-        todo!()
+        let number_or_big_int_type = self.number_or_big_int_type;
+        if !self.is_type_assignable_to(t, number_or_big_int_type) {
+            let mut awaited_type: Option<P<Type>> = None;
+            if is_await_valid {
+                awaited_type = self.get_awaited_type_of_promise(t);
+            }
+            let maybe_missing_await = awaited_type.is_some() && self.is_type_assignable_to(awaited_type.unwrap(), number_or_big_int_type);
+            self.error_and_maybe_suggest_await(Some(operand), maybe_missing_await, diagnostic, &[]);
+            return false;
+        }
+        true
     }
 
+    // Return true if there was no error, false if there was an error.
     // checker.go:13020
     pub(crate) fn check_for_disallowed_es_symbol_operand(&mut self, left: P<Node>, right: P<Node>, left_type: P<Type>, right_type: P<Type>, operator: Kind) -> bool {
-        todo!()
+        let offending_symbol_operand = if self.maybe_type_of_kind_considering_base_constraint(left_type, TypeFlags::ESSymbolLike) {
+            Some(left)
+        } else if self.maybe_type_of_kind_considering_base_constraint(right_type, TypeFlags::ESSymbolLike) {
+            Some(right)
+        } else {
+            None
+        };
+        if offending_symbol_operand.is_some() {
+            self.error(offending_symbol_operand, &diagnostics::The_0_operator_cannot_be_applied_to_type_symbol, &[&tsrs_scanner::token_to_string(operator)]);
+            return false;
+        }
+        true
     }
 
     // checker.go:13035
     pub(crate) fn check_nan_equality(&mut self, error_node: Option<P<Node>>, operator: Kind, left: P<Node>, right: P<Node>) {
-        todo!()
+        let is_left_nan = self.is_global_nan(ast::skip_parentheses(left));
+        let is_right_nan = self.is_global_nan(ast::skip_parentheses(right));
+        if is_left_nan || is_right_nan {
+            let keyword = if operator == Kind::EqualsEqualsEqualsToken || operator == Kind::EqualsEqualsToken { Kind::FalseKeyword } else { Kind::TrueKeyword };
+            let err = self.error(error_node, &diagnostics::This_condition_will_always_return_0, &[&tsrs_scanner::token_to_string(keyword)]);
+            if is_left_nan && is_right_nan {
+                return;
+            }
+            let mut operator_string = "";
+            if operator == Kind::ExclamationEqualsEqualsToken || operator == Kind::ExclamationEqualsToken {
+                operator_string = tsrs_scanner::token_to_string(Kind::ExclamationToken);
+            }
+            let location = if is_left_nan { right } else { left };
+            let expression = ast::skip_parentheses(location);
+            let mut entity_name = "...".to_string();
+            if ast::is_entity_name_expression(expression) {
+                entity_name = crate::entity_name_to_string(expression);
+            }
+            let suggestion = format!("{}Number.isNaN({})", operator_string, entity_name);
+            err.add_related_info(create_diagnostic_for_node(Some(location), &diagnostics::Did_you_mean_0, &[&suggestion]));
+        }
     }
 
     // checker.go:13061
     pub(crate) fn is_global_nan(&mut self, expr: P<Node>) -> bool {
-        todo!()
+        if ast::is_identifier(expr) && expr.text() == "NaN" {
+            let global_nan_symbol = self.get_global_nan_symbol_or_nil();
+            return global_nan_symbol.is_some() && global_nan_symbol == Some(self.get_resolved_symbol(expr));
+        }
+        false
     }
 }

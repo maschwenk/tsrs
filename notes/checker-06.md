@@ -13,6 +13,8 @@
 - `get_this_type_of_object_literal_from_contextual_type(.., contextual_type: P<Type>)`: Go passes a nil-able type; should be `Option<P<Type>>`. Guarded at the call site.
 - `get_mapper_from_context(n: P<InferenceContext>)`: Go accepts nil (returns nil). Guarded at the call site.
 
+- `get_rest_type(.., symbol: P<Symbol>)` (checker_08): Go passes `objectLiteralType.symbol`, which can be nil (union/primitive source in an object rest destructuring assignment). Should be `Option<P<Symbol>>`; the call site in `check_object_literal_destructuring_property_assignment` unwraps (panics where Go passes nil) until fixed.
+
 ## Doubts
 - `check_synthetic_expression`: `SyntheticExpression.type_` is `&'static dyn Any`; the port downcasts to `Type` or `P<Type>`. Whoever builds synthetic expressions must store one of those.
 - `get_instantiation_expression_type`: Go's nested closures were turned into free helper fns with a shared state struct; `checkTypeArguments` returning nil is modelled as an empty Vec (check that its port returns empty exactly when Go returns nil).
