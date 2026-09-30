@@ -19,6 +19,7 @@ tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
 tsrs_modulespecifiers.workspace = true
 tsrs_checker = { workspace = true, optional = true }
+tsrs_declarations = { workspace = true, optional = true }
 rustc-hash.workspace = true
 indexmap.workspace = true
 bitflags.workspace = true
@@ -28,4 +29,4 @@ rayon.workspace = true
 # The checker crate is being ported concurrently; without this feature the program still loads,
 # parses and binds files (enough for --listFilesOnly), but has no type checker.
 default = ["checker"]
-checker = ["dep:tsrs_checker"]
+checker = ["dep:tsrs_checker", "dep:tsrs_declarations"]

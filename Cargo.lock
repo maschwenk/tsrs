@@ -293,6 +293,7 @@ dependencies = [
  "tsrs_binder",
  "tsrs_checker",
  "tsrs_core",
+ "tsrs_declarations",
  "tsrs_diagnostics",
  "tsrs_module",
  "tsrs_modulespecifiers",

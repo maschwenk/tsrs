@@ -112,6 +112,7 @@ pub struct Program {
 
     packages_map: OnceLock<FxHashMap<String, bool>>,
     known_symlinks: OnceLock<P<KnownSymlinks>>,
+    declaration_diagnostic_cache: Mutex<FxHashMap<P<SourceFile>, Vec<P<Diagnostic>>>>,
 }
 
 impl std::ops::Deref for Program {
@@ -268,6 +269,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         has_emit_blocking_diagnostics: FxHashSet::default(),
         packages_map: OnceLock::new(),
         known_symlinks: OnceLock::new(),
+        declaration_diagnostic_cache: Mutex::new(FxHashMap::default()),
     };
     p.init_checker_pool();
     p.verify_compiler_options();
@@ -1261,9 +1263,54 @@ impl Program {
         self.pool().get_global_diagnostics(self)
     }
 
-    // Declaration emit is not ported; declaration diagnostics are always empty.
-    pub fn get_declaration_diagnostics(&self, _source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+    // program.go:1475. Go's `collectDiagnostics(ctx, sourceFile, true /*concurrent*/, p.getDeclarationDiagnosticsForFile)`
+    // runs one task per file, each taking the file's checker from the pool; here the files run grouped by checker on
+    // the checker threads (in file order within a checker), like the other checker-backed diagnostics.
+    #[cfg(feature = "checker")]
+    pub fn get_declaration_diagnostics(&'static self, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        let result = match source_file {
+            Some(file) => self.get_declaration_diagnostics_for_file(None, file),
+            None => {
+                let diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = self.files.iter().map(|_| Mutex::new(Vec::new())).collect();
+                self.pool().for_each_checker_group_do(self, self.files, self.single_threaded(), |c, file_index, file| {
+                    *diagnostics[file_index].lock().unwrap() = self.get_declaration_diagnostics_for_file(Some(c), file);
+                });
+                diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect()
+            }
+        };
+        filter_and_sort_diagnostics(result)
+    }
+
+    // Declaration emit needs the checker; without it declaration diagnostics are empty.
+    #[cfg(not(feature = "checker"))]
+    pub fn get_declaration_diagnostics(&'static self, _source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         Vec::new()
+    }
+
+    // program.go:1626. `c` is the file's checker when the caller already holds it (Go `newEmitHost` takes it from
+    // the pool); with `None` it is taken here.
+    #[cfg(feature = "checker")]
+    fn get_declaration_diagnostics_for_file(&'static self, c: Option<&mut Checker>, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+        if source_file.is_declaration_file.get() {
+            return Vec::new();
+        }
+
+        if let Some(cached) = self.declaration_diagnostic_cache.lock().unwrap().get(&source_file) {
+            return cached.clone();
+        }
+
+        let mut guard;
+        let c = match c {
+            Some(c) => c,
+            None => {
+                guard = self.get_type_checker_for_file(source_file);
+                &mut *guard
+            }
+        };
+        let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
+        let host = crate::emithost::new_emit_host(self, c.get_emit_resolver(), checker_slot);
+        let diagnostics = checker_slot.lend(c, || crate::emitter::get_declaration_diagnostics(host, self, source_file));
+        self.declaration_diagnostic_cache.lock().unwrap().entry(source_file).or_insert(diagnostics).clone()
     }
 
     fn get_semantic_diagnostics_with_checker(&'static self, c: &mut Checker, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {

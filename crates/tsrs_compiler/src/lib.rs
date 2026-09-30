@@ -3,6 +3,8 @@ mod checker_program;
 mod checkerpool;
 pub mod diagnosticwriter;
 mod emitter;
+#[cfg(feature = "checker")]
+mod emithost;
 mod file_include;
 mod fileloader;
 mod filesparser;

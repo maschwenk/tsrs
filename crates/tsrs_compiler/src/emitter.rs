@@ -90,3 +90,22 @@ pub(crate) fn get_source_files_to_emit(
     let target_source_files = target_source_files.unwrap_or_else(|| host.source_files());
     target_source_files.iter().copied().filter(|&f| source_file_may_be_emitted(f, host, force_dts_emit, force_js_emit)).collect()
 }
+
+fn is_source_file_not_json(file: P<SourceFile>) -> bool {
+    !ast::is_json_source_file(file)
+}
+
+// emitter.go:566. Runs inside the caller's `CheckerSlot::lend` (the host's resolver borrows the checker from it).
+#[cfg(feature = "checker")]
+pub(crate) fn get_declaration_diagnostics(host: &'static crate::emithost::EmitHost, program: &Program, file: P<SourceFile>) -> Vec<P<tsrs_ast::Diagnostic>> {
+    // TODO: use p.getSourceFilesToEmit cache
+    // Go passes the emit host as the SourceFileMayBeEmittedHost; its methods forward to the program.
+    let full_files: Vec<P<SourceFile>> = get_source_files_to_emit(program, Some(&[file]), false, false).into_iter().filter(|&f| is_source_file_not_json(f)).collect();
+    if !full_files.iter().any(|&f| f == file) {
+        return Vec::new();
+    }
+    let options = program.options();
+    let transform = tsrs_declarations::new_declaration_transformer(host, None, options, "", "");
+    transform.base.transform_source_file(file);
+    transform.get_diagnostics()
+}
