@@ -520,9 +520,8 @@ pub fn is_private_identifier_class_element_declaration(node: P<Node>) -> bool {
 
 pub fn is_object_literal_or_class_expression_method_or_accessor(node: P<Node>) -> bool {
     let kind = node.kind;
-    let parent_kind = node.parent().unwrap().kind;
     (kind == Kind::MethodDeclaration || kind == Kind::GetAccessor || kind == Kind::SetAccessor)
-        && (parent_kind == Kind::ObjectLiteralExpression || parent_kind == Kind::ClassExpression)
+        && (node.parent().unwrap().kind == Kind::ObjectLiteralExpression || node.parent().unwrap().kind == Kind::ClassExpression)
 }
 
 pub fn is_object_literal_element(node: P<Node>) -> bool {
