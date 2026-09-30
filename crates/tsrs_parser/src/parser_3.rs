@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast as ast;
-use tsrs_ast::{Kind, ModifierFlags, ModifierList, Node, NodeFlags, NodeList, OperatorPrecedence};
+use tsrs_ast::{Kind, ModifierFlags, ModifierList, Node, NodeFlags, NodeList, OperatorPrecedence, TokenFlags};
 use tsrs_core::{LanguageVariant, TextRange, Tristate, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
@@ -1543,7 +1543,1179 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
-// @@PARSER3_CONTINUE@@
+    pub(crate) fn parse_primary_expression(&mut self) -> P<Node> {
+        let token = self.token;
+        match token {
+            Kind::NoSubstitutionTemplateLiteral | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::StringLiteral => {
+                if token == Kind::NoSubstitutionTemplateLiteral && self.scanner.token_flags().intersects(TokenFlags::IsInvalid) {
+                    self.re_scan_template_token(false /*isTaggedTemplate*/);
+                }
+                return self.parse_literal_expression();
+            }
+            Kind::ThisKeyword | Kind::SuperKeyword | Kind::NullKeyword | Kind::TrueKeyword | Kind::FalseKeyword => {
+                return self.parse_keyword_expression();
+            }
+            Kind::OpenParenToken => return self.parse_parenthesized_expression(),
+            Kind::OpenBracketToken => return self.parse_array_literal_expression(),
+            Kind::OpenBraceToken => return self.parse_object_literal_expression(),
+            Kind::AsyncKeyword => {
+                // Async arrow functions are parsed earlier in parseAssignmentExpressionOrHigher.
+                // If we encounter `async [no LineTerminator here] function` then this is an async
+                // function; otherwise, its an identifier.
+                if self.look_ahead(Parser::next_token_is_function_keyword_on_same_line) {
+                    return self.parse_function_expression();
+                }
+            }
+            Kind::AtToken => return self.parse_decorated_expression(),
+            Kind::ClassKeyword => return self.parse_class_expression(),
+            Kind::FunctionKeyword => return self.parse_function_expression(),
+            Kind::NewKeyword => return self.parse_new_expression_or_new_dot_target(),
+            Kind::SlashToken | Kind::SlashEqualsToken => {
+                if self.re_scan_slash_token() == Kind::RegularExpressionLiteral {
+                    return self.parse_literal_expression();
+                }
+            }
+            Kind::TemplateHead => return self.parse_template_expression(false /*isTaggedTemplate*/),
+            Kind::PrivateIdentifier => return self.parse_private_identifier(),
+            _ => {}
+        }
+        self.parse_identifier_with_diagnostic(Some(&diagnostics::Expression_expected), None)
+    }
+
+    pub(crate) fn parse_parenthesized_expression(&mut self) -> P<Node> {
+        let pos = self.node_pos();
+        let jsdoc = self.jsdoc_scanner_info();
+        self.parse_expected(Kind::OpenParenToken);
+        let expression = self.parse_expression_allow_in();
+        self.parse_expected(Kind::CloseParenToken);
+        let node = self.factory.new_parenthesized_expression(expression);
+        let result = self.finish_node(node, pos);
+        self.with_jsdoc(result, jsdoc);
+        result
+    }
+
+    pub(crate) fn parse_array_literal_expression(&mut self) -> P<Node> {
+        let pos = self.node_pos();
+        let open_bracket_position = self.scanner.token_start();
+        let open_bracket_parsed = self.parse_expected(Kind::OpenBracketToken);
+        let multi_line = self.has_preceding_line_break();
+        let elements = self.parse_delimited_list(ParsingContext::ArrayLiteralMembers, Parser::parse_argument_or_array_literal_element).unwrap();
+        self.parse_expected_matching_brackets(Kind::OpenBracketToken, Kind::CloseBracketToken, open_bracket_parsed, open_bracket_position);
+        let node = self.factory.new_array_literal_expression(elements, multi_line);
+        self.finish_node(node, pos)
+    }
+
+    pub(crate) fn parse_object_literal_expression(&mut self) -> P<Node> {
+        let pos = self.node_pos();
+        let open_brace_position = self.scanner.token_start();
+        let open_brace_parsed = self.parse_expected(Kind::OpenBraceToken);
+        let multi_line = self.has_preceding_line_break();
+        let properties = self.parse_delimited_list(ParsingContext::ObjectLiteralMembers, Parser::parse_object_literal_element).unwrap();
+        self.parse_expected_matching_brackets(Kind::OpenBraceToken, Kind::CloseBraceToken, open_brace_parsed, open_brace_position);
+        let node = self.factory.new_object_literal_expression(properties, multi_line);
+        self.finish_node(node, pos)
+    }
+
+    pub(crate) fn parse_object_literal_element(&mut self) -> P<Node> {
+        let pos = self.node_pos();
+        let jsdoc = self.jsdoc_scanner_info();
+        if self.parse_optional(Kind::DotDotDotToken) {
+            let expression = self.parse_assignment_expression_or_higher();
+            let node = self.factory.new_spread_assignment(expression);
+            let result = self.finish_node(node, pos);
+            self.with_jsdoc(result, jsdoc);
+            return result;
+        }
+        let modifiers = self.parse_modifiers_ex(true /*allowDecorators*/, false /*permitConstAsModifier*/, false /*stopOnStartOfClassStaticBlock*/);
+        if self.parse_contextual_modifier(Kind::GetKeyword) {
+            return self.parse_accessor_declaration(pos, jsdoc, modifiers, Kind::GetAccessor, ParseFlags::None);
+        }
+        if self.parse_contextual_modifier(Kind::SetKeyword) {
+            return self.parse_accessor_declaration(pos, jsdoc, modifiers, Kind::SetAccessor, ParseFlags::None);
+        }
+        let asterisk_token = self.parse_optional_token(Kind::AsteriskToken);
+        let token_is_identifier = self.is_identifier();
+        let name = self.parse_property_name();
+        // Disallowing of optional property assignments and definite assignment assertion happens in the grammar checker.
+        let mut postfix_token = self.parse_optional_token(Kind::QuestionToken);
+        // Decorators, Modifiers, questionToken, and exclamationToken are not supported by property assignments and are reported in the grammar checker
+        if postfix_token.is_none() {
+            postfix_token = self.parse_optional_token(Kind::ExclamationToken);
+        }
+        if asterisk_token.is_some() || self.token == Kind::OpenParenToken || self.token == Kind::LessThanToken {
+            return self.parse_method_declaration(pos, jsdoc, modifiers, asterisk_token, name, postfix_token, None /*diagnosticMessage*/);
+        }
+        // check if it is short-hand property assignment or normal property assignment
+        // NOTE: if token is EqualsToken it is interpreted as CoverInitializedName production
+        // CoverInitializedName[Yield] :
+        //     IdentifierReference[?Yield] Initializer[In, ?Yield]
+        // this is necessary because ObjectLiteral productions are also used to cover grammar for ObjectAssignmentPattern
+        let node: P<Node>;
+        let is_shorthand_property_assignment = token_is_identifier && self.token != Kind::ColonToken;
+        if is_shorthand_property_assignment {
+            let equals_token = self.parse_optional_token(Kind::EqualsToken);
+            let mut initializer: Option<P<Node>> = None;
+            if equals_token.is_some() {
+                initializer = Some(self.do_in_context(NodeFlags::DisallowInContext, false, Parser::parse_assignment_expression_or_higher));
+            }
+            node = self.factory.new_shorthand_property_assignment(modifiers, name, postfix_token, None /*typeNode*/, equals_token, initializer);
+        } else {
+            self.parse_expected(Kind::ColonToken);
+            let initializer = self.do_in_context(NodeFlags::DisallowInContext, false, Parser::parse_assignment_expression_or_higher);
+            node = self.factory.new_property_assignment(modifiers, name, postfix_token, None /*typeNode*/, Some(initializer));
+        }
+        self.finish_node(node, pos);
+        self.with_jsdoc(node, jsdoc);
+        node
+    }
+
+    pub(crate) fn parse_function_expression(&mut self) -> P<Node> {
+        // GeneratorExpression:
+        //      function* BindingIdentifier [Yield][opt](FormalParameters[Yield]){ GeneratorBody }
+        //
+        // FunctionExpression:
+        //      function BindingIdentifier[opt](FormalParameters){ FunctionBody }
+        let save_contex_flags = self.context_flags;
+        self.set_context_flags(NodeFlags::DecoratorContext, false);
+        let pos = self.node_pos();
+        let jsdoc = self.jsdoc_scanner_info();
+        let modifiers = self.parse_modifiers();
+        self.parse_expected(Kind::FunctionKeyword);
+        let asterisk_token = self.parse_optional_token(Kind::AsteriskToken);
+        let is_generator = asterisk_token.is_some();
+        let is_async = modifier_list_has_async(modifiers);
+        let signature_flags = (if is_generator { ParseFlags::Yield } else { ParseFlags::None }) | (if is_async { ParseFlags::Await } else { ParseFlags::None });
+        let name = if is_generator && is_async {
+            self.do_in_context(NodeFlags::YieldContext | NodeFlags::AwaitContext, true, Parser::parse_optional_binding_identifier)
+        } else if is_generator {
+            self.do_in_context(NodeFlags::YieldContext, true, Parser::parse_optional_binding_identifier)
+        } else if is_async {
+            self.do_in_context(NodeFlags::AwaitContext, true, Parser::parse_optional_binding_identifier)
+        } else {
+            self.parse_optional_binding_identifier()
+        };
+        let type_parameters = self.parse_type_parameters();
+        let parameters = self.parse_parameters(signature_flags);
+        let return_type = self.parse_return_type(Kind::ColonToken, false /*isType*/);
+        let body = self.parse_function_block(signature_flags, None /*diagnosticMessage*/);
+        self.context_flags = save_contex_flags;
+        let result = self.factory.new_function_expression(modifiers, asterisk_token, name, type_parameters, parameters, return_type, None /*fullSignature*/, body);
+        self.finish_node(result, pos);
+        self.with_jsdoc(result, jsdoc);
+        self.check_js_syntax(result);
+        result
+    }
+
+    pub(crate) fn parse_optional_binding_identifier(&mut self) -> Option<P<Node>> {
+        if self.is_binding_identifier() {
+            return Some(self.parse_binding_identifier());
+        }
+        None
+    }
+
+    pub(crate) fn parse_decorated_expression(&mut self) -> P<Node> {
+        let pos = self.node_pos();
+        let jsdoc = self.jsdoc_scanner_info();
+        let modifiers = self.parse_modifiers_ex(true /*allowDecorators*/, false /*permitConstAsModifier*/, false /*stopOnStartOfClassStaticBlock*/);
+        if self.token == Kind::ClassKeyword {
+            return self.parse_class_declaration_or_expression(pos, jsdoc, modifiers, Kind::ClassExpression);
+        }
+        let node_pos = self.node_pos();
+        self.parse_error_at(node_pos, node_pos, &diagnostics::Expression_expected, &[]);
+        let node = self.factory.new_missing_declaration(modifiers);
+        self.finish_node(node, pos)
+    }
+
+    pub(crate) fn unparse_expression_with_type_arguments(&mut self, expression: Option<P<Node>>, type_arguments: Option<P<NodeList>>, result: P<Node>) {
+        // force overwrite the `.Parent` of the expression and type arguments to erase the fact that they may have originally been parsed as an ExpressionWithTypeArguments and be parented to such
+        if let Some(expression) = expression {
+            expression.set_parent(Some(result));
+        }
+        if let Some(type_arguments) = type_arguments {
+            for a in type_arguments.nodes {
+                a.set_parent(Some(result));
+            }
+        }
+    }
+
+    pub(crate) fn parse_new_expression_or_new_dot_target(&mut self) -> P<Node> {
+        let pos = self.node_pos();
+        self.parse_expected(Kind::NewKeyword);
+        if self.parse_optional(Kind::DotToken) {
+            let name = self.parse_identifier_name();
+            let node = self.factory.new_meta_property(Kind::NewKeyword, name);
+            return self.finish_node(node, pos);
+        }
+        let expression_pos = self.node_pos();
+        let primary = self.parse_primary_expression();
+        let mut expression = self.parse_member_expression_rest(expression_pos, primary, false /*allowOptionalChain*/);
+        let mut type_arguments: Option<P<NodeList>> = None;
+        // Absorb type arguments into NewExpression when preceding expression is ExpressionWithTypeArguments
+        if expression.kind == Kind::ExpressionWithTypeArguments {
+            type_arguments = expression.type_argument_list();
+            expression = expression.as_expression_with_type_arguments().expression;
+        }
+        if self.token == Kind::QuestionDotToken {
+            let text = scanner::get_text_of_node_from_source_text(self.source_text, expression, false /*includeTrivia*/);
+            self.parse_error_at_current_token(&diagnostics::Invalid_optional_chain_from_new_expression_Did_you_mean_to_call_0, &[&text]);
+        }
+        let mut argument_list: Option<P<NodeList>> = None;
+        if self.token == Kind::OpenParenToken {
+            argument_list = Some(self.parse_argument_list());
+        }
+        let node = self.factory.new_new_expression(expression, type_arguments, argument_list);
+        let node = self.finish_node(node, pos);
+        let result = self.check_js_syntax(node);
+        self.unparse_expression_with_type_arguments(Some(expression), type_arguments, result);
+        result
+    }
+
+    pub(crate) fn parse_keyword_expression(&mut self) -> P<Node> {
+        let pos = self.node_pos();
+        let result = self.factory.new_keyword_expression(self.token);
+        self.next_token();
+        self.finish_node(result, pos)
+    }
+
+    pub(crate) fn parse_literal_expression(&mut self) -> P<Node> {
+        let pos = self.node_pos();
+        let text = tsrs_core::alloc_str(&self.scanner.token_value());
+        let token_flags = self.scanner.token_flags();
+        let result = match self.token {
+            Kind::StringLiteral => self.factory.new_string_literal(text, token_flags),
+            Kind::NumericLiteral => self.factory.new_numeric_literal(text, token_flags),
+            Kind::BigIntLiteral => self.factory.new_big_int_literal(text, token_flags),
+            Kind::RegularExpressionLiteral => self.factory.new_regular_expression_literal(text, token_flags),
+            Kind::NoSubstitutionTemplateLiteral => self.factory.new_no_substitution_template_literal(text, token_flags),
+            _ => panic!("Unhandled case in parseLiteralExpression"),
+        };
+        self.next_token();
+        self.finish_node(result, pos)
+    }
+
+    pub(crate) fn parse_identifier_name_error_on_unicode_escape_sequence(&mut self) -> P<Node> {
+        if self.scanner.has_unicode_escape() || self.scanner.has_extended_unicode_escape() {
+            self.parse_error_at_current_token(&diagnostics::Unicode_escape_sequence_cannot_appear_here, &[]);
+        }
+        self.create_identifier(token_is_identifier_or_keyword(self.token))
+    }
+
+    pub(crate) fn parse_binding_identifier(&mut self) -> P<Node> {
+        self.parse_binding_identifier_with_diagnostic(None)
+    }
+
+    pub(crate) fn parse_binding_identifier_with_diagnostic(&mut self, private_identifier_diagnostic_message: Option<&'static Message>) -> P<Node> {
+        let save_has_await_identifier = self.statement_has_await_identifier;
+        let is_binding_identifier = self.is_binding_identifier();
+        let id = self.create_identifier_with_diagnostic(is_binding_identifier, None /*diagnosticMessage*/, private_identifier_diagnostic_message);
+        self.statement_has_await_identifier = save_has_await_identifier;
+        id
+    }
+
+    pub(crate) fn parse_identifier_name(&mut self) -> P<Node> {
+        self.parse_identifier_name_with_diagnostic(None)
+    }
+
+    pub(crate) fn parse_identifier_name_with_diagnostic(&mut self, diagnostic_message: Option<&'static Message>) -> P<Node> {
+        self.create_identifier_with_diagnostic(token_is_identifier_or_keyword(self.token), diagnostic_message, None)
+    }
+
+    pub(crate) fn parse_identifier(&mut self) -> P<Node> {
+        self.parse_identifier_with_diagnostic(None, None)
+    }
+
+    pub(crate) fn parse_identifier_with_diagnostic(&mut self, diagnostic_message: Option<&'static Message>, private_identifier_diagnostic_message: Option<&'static Message>) -> P<Node> {
+        let is_identifier = self.is_identifier();
+        self.create_identifier_with_diagnostic(is_identifier, diagnostic_message, private_identifier_diagnostic_message)
+    }
+
+    pub(crate) fn create_identifier(&mut self, is_identifier: bool) -> P<Node> {
+        self.create_identifier_with_diagnostic(is_identifier, None, None)
+    }
+
+    pub(crate) fn create_identifier_with_diagnostic(&mut self, is_identifier: bool, diagnostic_message: Option<&'static Message>, private_identifier_diagnostic_message: Option<&'static Message>) -> P<Node> {
+        if is_identifier {
+            let pos = if self.scanner.has_preceding_jsdoc_leading_asterisks() { self.scanner.token_start() } else { self.node_pos() };
+            let text = tsrs_core::alloc_str(&self.scanner.token_value());
+            self.next_token_without_check();
+            let id = self.new_identifier(text);
+            return self.finish_node(id, pos);
+        }
+        if self.token == Kind::PrivateIdentifier {
+            if let Some(private_identifier_diagnostic_message) = private_identifier_diagnostic_message {
+                self.parse_error_at_current_token(private_identifier_diagnostic_message, &[]);
+            } else {
+                self.parse_error_at_current_token(&diagnostics::Private_identifiers_are_not_allowed_outside_class_bodies, &[]);
+            }
+            return self.create_identifier(true /*isIdentifier*/);
+        }
+        // Only for end of file because the error gets reported incorrectly on embedded script tags.
+        let report_at_current_position = self.token == Kind::EndOfFile;
+        if let Some(diagnostic_message) = diagnostic_message {
+            if report_at_current_position {
+                let pos = self.scanner.token_full_start();
+                self.parse_error_at(pos, pos, diagnostic_message, &[]);
+            } else {
+                self.parse_error_at_current_token(diagnostic_message, &[]);
+            }
+        } else if is_reserved_word(self.token) {
+            let token_text = self.scanner.token_text();
+            if report_at_current_position {
+                let pos = self.scanner.token_full_start();
+                self.parse_error_at(pos, pos, &diagnostics::Identifier_expected_0_is_a_reserved_word_that_cannot_be_used_here, &[&token_text]);
+            } else {
+                self.parse_error_at_current_token(&diagnostics::Identifier_expected_0_is_a_reserved_word_that_cannot_be_used_here, &[&token_text]);
+            }
+        } else if report_at_current_position {
+            let pos = self.scanner.token_full_start();
+            self.parse_error_at(pos, pos, &diagnostics::Identifier_expected, &[]);
+        } else {
+            self.parse_error_at_current_token(&diagnostics::Identifier_expected, &[]);
+        }
+        self.create_missing_identifier()
+    }
+
+    pub(crate) fn new_node_list(&mut self, loc: TextRange, nodes: &[P<Node>]) -> P<NodeList> {
+        let list = self.factory.new_node_list(nodes.to_vec());
+        list.loc.set(loc);
+        list
+    }
+
+    pub(crate) fn new_modifier_list(&mut self, loc: TextRange, nodes: &[P<Node>]) -> P<ModifierList> {
+        let list = self.factory.new_modifier_list(nodes.to_vec());
+        list.list.loc.set(loc);
+        list
+    }
+
+    pub(crate) fn finish_node(&mut self, node: P<Node>, pos: i32) -> P<Node> {
+        let end = self.node_pos();
+        self.finish_node_with_end(node, pos, end)
+    }
+
+    pub(crate) fn finish_node_with_end(&mut self, node: P<Node>, pos: i32, end: i32) -> P<Node> {
+        node.set_loc(TextRange::new(pos, end));
+        node.set_flags(node.flags() | self.context_flags);
+        if self.has_parse_error {
+            node.set_flags(node.flags() | NodeFlags::ThisNodeHasError);
+            self.has_parse_error = false;
+        }
+        self.override_parent_in_immediate_children(node);
+        node
+    }
+
+    pub(crate) fn override_parent_in_immediate_children(&mut self, node: P<Node>) {
+        self.current_parent = Some(node);
+        let current_parent = self.current_parent;
+        node.for_each_child(&mut |n| {
+            n.set_parent(current_parent);
+            false
+        });
+        self.current_parent = None;
+    }
+
+    pub(crate) fn next_token_is_slash(&mut self) -> bool {
+        self.next_token() == Kind::SlashToken
+    }
+
+    pub(crate) fn scan_type_member_start(&mut self) -> bool {
+        // Return true if we have the start of a signature member
+        if self.token == Kind::OpenParenToken || self.token == Kind::LessThanToken || self.token == Kind::GetKeyword || self.token == Kind::SetKeyword {
+            return true;
+        }
+        let mut id_token = false;
+        // Eat up all modifiers, but hold on to the last one in case it is actually an identifier
+        while ast::is_modifier_kind(self.token) {
+            id_token = true;
+            self.next_token();
+        }
+        // Index signatures and computed property names are type members
+        if self.token == Kind::OpenBracketToken {
+            return true;
+        }
+        // Try to get the first property-like token following all modifiers
+        if self.is_literal_property_name() {
+            id_token = true;
+            self.next_token();
+        }
+        // If we were able to get any potential identifier, check that it is
+        // the start of a member declaration
+        if id_token {
+            return self.token == Kind::OpenParenToken || self.token == Kind::LessThanToken || self.token == Kind::QuestionToken || self.token == Kind::ColonToken || self.token == Kind::CommaToken || self.can_parse_semicolon();
+        }
+        false
+    }
+
+    pub(crate) fn scan_class_member_start(&mut self) -> bool {
+        let mut id_token = Kind::Unknown;
+        if self.token == Kind::AtToken {
+            return true;
+        }
+        // Eat up all modifiers, but hold on to the last one in case it is actually an identifier.
+        while ast::is_modifier_kind(self.token) {
+            id_token = self.token;
+            // If the idToken is a class modifier (protected, private, public, and static), it is
+            // certain that we are starting to parse class member. This allows better error recovery
+            // Example:
+            //      public foo() ...     // true
+            //      public @dec blah ... // true; we will then report an error later
+            //      export public ...    // true; we will then report an error later
+            if ast::is_class_member_modifier(id_token) {
+                return true;
+            }
+            self.next_token();
+        }
+        if self.token == Kind::AsteriskToken {
+            return true;
+        }
+        // Try to get the first property-like token following all modifiers.
+        // This can either be an identifier or the 'get' or 'set' keywords.
+        if self.is_literal_property_name() {
+            id_token = self.token;
+            self.next_token();
+        }
+        // Index signatures and computed properties are class members; we can parse.
+        if self.token == Kind::OpenBracketToken {
+            return true;
+        }
+        // If we were able to get any potential identifier...
+        if id_token != Kind::Unknown {
+            // If we have a non-keyword identifier, or if we have an accessor, then it's safe to parse.
+            if !ast::is_keyword(id_token) || id_token == Kind::SetKeyword || id_token == Kind::GetKeyword {
+                return true;
+            }
+            // If it *is* a keyword, but not an accessor, check a little farther along
+            // to see if it should actually be parsed as a class member.
+            match self.token {
+                Kind::OpenParenToken // Method declaration
+                | Kind::LessThanToken // Generic Method declaration
+                | Kind::ExclamationToken // Non-null assertion on property name
+                | Kind::ColonToken // Type Annotation for declaration
+                | Kind::EqualsToken // Initializer for declaration
+                | Kind::QuestionToken => {
+                    // Not valid, but permitted so that it gets caught later on.
+                    return true;
+                }
+                _ => {}
+            }
+            // Covers
+            //  - Semicolons     (declaration termination)
+            //  - Closing braces (end-of-class, must be declaration)
+            //  - End-of-files   (not valid, but permitted so that it gets caught later on)
+            //  - Line-breaks    (enabling *automatic semicolon insertion*)
+            return self.can_parse_semicolon();
+        }
+        false
+    }
+
+    pub(crate) fn can_parse_semicolon(&mut self) -> bool {
+        // If there's a real semicolon, then we can always parse it out.
+        // We can parse out an optional semicolon in ASI cases in the following cases.
+        self.token == Kind::SemicolonToken || self.token == Kind::CloseBraceToken || self.token == Kind::EndOfFile || self.has_preceding_line_break()
+    }
+
+    pub(crate) fn try_parse_semicolon(&mut self) -> bool {
+        if !self.can_parse_semicolon() {
+            return false;
+        }
+        if self.token == Kind::SemicolonToken {
+            // consume the semicolon if it was explicitly provided.
+            self.next_token();
+        }
+        true
+    }
+
+    pub(crate) fn parse_semicolon(&mut self) -> bool {
+        self.try_parse_semicolon() || self.parse_expected(Kind::SemicolonToken)
+    }
+
+    pub(crate) fn is_literal_property_name(&mut self) -> bool {
+        token_is_identifier_or_keyword(self.token) || self.token == Kind::StringLiteral || self.token == Kind::NumericLiteral || self.token == Kind::BigIntLiteral
+    }
+
+    pub(crate) fn is_start_of_statement(&mut self) -> bool {
+        match self.token {
+            // 'catch' and 'finally' do not actually indicate that the code is part of a statement,
+            // however, we say they are here so that we may gracefully parse them and error later.
+            Kind::AtToken
+            | Kind::SemicolonToken
+            | Kind::OpenBraceToken
+            | Kind::VarKeyword
+            | Kind::LetKeyword
+            | Kind::UsingKeyword
+            | Kind::FunctionKeyword
+            | Kind::ClassKeyword
+            | Kind::EnumKeyword
+            | Kind::IfKeyword
+            | Kind::DoKeyword
+            | Kind::WhileKeyword
+            | Kind::ForKeyword
+            | Kind::ContinueKeyword
+            | Kind::BreakKeyword
+            | Kind::ReturnKeyword
+            | Kind::WithKeyword
+            | Kind::SwitchKeyword
+            | Kind::ThrowKeyword
+            | Kind::TryKeyword
+            | Kind::DebuggerKeyword
+            | Kind::CatchKeyword
+            | Kind::FinallyKeyword => true,
+            Kind::ImportKeyword => self.is_start_of_declaration() || self.is_next_token_open_paren_or_less_than_or_dot(),
+            Kind::ConstKeyword | Kind::ExportKeyword => self.is_start_of_declaration(),
+            Kind::AsyncKeyword | Kind::DeclareKeyword | Kind::InterfaceKeyword | Kind::ModuleKeyword | Kind::NamespaceKeyword | Kind::TypeKeyword | Kind::GlobalKeyword | Kind::DeferKeyword => {
+                // When these don't start a declaration, they're an identifier in an expression statement
+                true
+            }
+            Kind::AccessorKeyword | Kind::PublicKeyword | Kind::PrivateKeyword | Kind::ProtectedKeyword | Kind::StaticKeyword | Kind::ReadonlyKeyword => {
+                // When these don't start a declaration, they may be the start of a class member if an identifier
+                // immediately follows. Otherwise they're an identifier in an expression statement.
+                self.is_start_of_declaration() || !self.look_ahead(Parser::next_token_is_identifier_or_keyword_on_same_line)
+            }
+            _ => self.is_start_of_expression(),
+        }
+    }
+
+    pub(crate) fn is_start_of_declaration(&mut self) -> bool {
+        self.look_ahead(Parser::scan_start_of_declaration)
+    }
+
+    pub(crate) fn scan_start_of_declaration(&mut self) -> bool {
+        loop {
+            match self.token {
+                Kind::VarKeyword | Kind::LetKeyword | Kind::ConstKeyword | Kind::FunctionKeyword | Kind::ClassKeyword | Kind::EnumKeyword => {
+                    return true;
+                }
+                Kind::UsingKeyword => return self.is_using_declaration(),
+                Kind::AwaitKeyword => return self.is_await_using_declaration(),
+                // 'declare', 'module', 'namespace', 'interface'* and 'type' are all legal JavaScript identifiers;
+                // however, an identifier cannot be followed by another identifier on the same line. This is what we
+                // count on to parse out the respective declarations. For instance, we exploit this to say that
+                //
+                //    namespace n
+                //
+                // can be none other than the beginning of a namespace declaration, but need to respect that JavaScript sees
+                //
+                //    namespace
+                //    n
+                //
+                // as the identifier 'namespace' on one line followed by the identifier 'n' on another.
+                // We need to look one token ahead to see if it permissible to try parsing a declaration.
+                //
+                // *Note*: 'interface' is actually a strict mode reserved word. So while
+                //
+                //   "use strict"
+                //   interface
+                //   I {}
+                //
+                // could be legal, it would add complexity for very little gain.
+                Kind::InterfaceKeyword | Kind::TypeKeyword | Kind::DeferKeyword => return self.next_token_is_identifier_on_same_line(),
+                Kind::ModuleKeyword | Kind::NamespaceKeyword => return self.next_token_is_identifier_or_string_literal_on_same_line(),
+                Kind::AbstractKeyword | Kind::AccessorKeyword | Kind::AsyncKeyword | Kind::DeclareKeyword | Kind::PrivateKeyword | Kind::ProtectedKeyword | Kind::PublicKeyword | Kind::ReadonlyKeyword => {
+                    let previous_token = self.token;
+                    self.next_token();
+                    // ASI takes effect for this modifier.
+                    if self.has_preceding_line_break() {
+                        return false;
+                    }
+                    if previous_token == Kind::DeclareKeyword && self.token == Kind::TypeKeyword {
+                        // If we see 'declare type', then commit to parsing a type alias. parseTypeAliasDeclaration will
+                        // report Line_break_not_permitted_here if needed.
+                        return true;
+                    }
+                    continue;
+                }
+                Kind::GlobalKeyword => {
+                    self.next_token();
+                    return self.token == Kind::OpenBraceToken || self.token == Kind::Identifier || self.token == Kind::ExportKeyword;
+                }
+                Kind::ImportKeyword => {
+                    self.next_token();
+                    return self.token == Kind::DeferKeyword || self.token == Kind::StringLiteral || self.token == Kind::AsteriskToken || self.token == Kind::OpenBraceToken || token_is_identifier_or_keyword(self.token);
+                }
+                Kind::ExportKeyword => {
+                    self.next_token();
+                    if self.token == Kind::EqualsToken || self.token == Kind::AsteriskToken || self.token == Kind::OpenBraceToken || self.token == Kind::DefaultKeyword || self.token == Kind::AsKeyword || self.token == Kind::AtToken {
+                        return true;
+                    }
+                    if self.token == Kind::TypeKeyword {
+                        self.next_token();
+                        return self.token == Kind::AsteriskToken || self.token == Kind::OpenBraceToken || self.is_identifier() && !self.has_preceding_line_break();
+                    }
+                    continue;
+                }
+                Kind::StaticKeyword => {
+                    self.next_token();
+                    continue;
+                }
+                _ => {}
+            }
+            return false;
+        }
+    }
+
+    pub(crate) fn is_start_of_expression(&mut self) -> bool {
+        if self.is_start_of_left_hand_side_expression() {
+            return true;
+        }
+        match self.token {
+            Kind::PlusToken
+            | Kind::MinusToken
+            | Kind::TildeToken
+            | Kind::ExclamationToken
+            | Kind::DeleteKeyword
+            | Kind::TypeOfKeyword
+            | Kind::VoidKeyword
+            | Kind::PlusPlusToken
+            | Kind::MinusMinusToken
+            | Kind::LessThanToken
+            | Kind::AwaitKeyword
+            | Kind::YieldKeyword
+            | Kind::PrivateIdentifier
+            | Kind::AtToken => {
+                // Yield/await always starts an expression.  Either it is an identifier (in which case
+                // it is definitely an expression).  Or it's a keyword (either because we're in
+                // a generator or async function, or in strict mode (or both)) and it started a yield or await expression.
+                return true;
+            }
+            _ => {}
+        }
+        // Error tolerance.  If we see the start of some binary operator, we consider
+        // that the start of an expression.  That way we'll parse out a missing identifier,
+        // give a good message about an identifier being missing, and then consume the
+        // rest of the binary expression.
+        if self.is_binary_operator() {
+            return true;
+        }
+        self.is_identifier()
+    }
+
+    pub(crate) fn is_start_of_left_hand_side_expression(&mut self) -> bool {
+        match self.token {
+            Kind::ThisKeyword
+            | Kind::SuperKeyword
+            | Kind::NullKeyword
+            | Kind::TrueKeyword
+            | Kind::FalseKeyword
+            | Kind::NumericLiteral
+            | Kind::BigIntLiteral
+            | Kind::StringLiteral
+            | Kind::NoSubstitutionTemplateLiteral
+            | Kind::TemplateHead
+            | Kind::OpenParenToken
+            | Kind::OpenBracketToken
+            | Kind::OpenBraceToken
+            | Kind::FunctionKeyword
+            | Kind::ClassKeyword
+            | Kind::NewKeyword
+            | Kind::SlashToken
+            | Kind::SlashEqualsToken
+            | Kind::Identifier => return true,
+            Kind::ImportKeyword => return self.is_next_token_open_paren_or_less_than_or_dot(),
+            _ => {}
+        }
+        self.is_identifier()
+    }
+
+    pub(crate) fn is_start_of_type(&mut self, in_start_of_parameter: bool) -> bool {
+        match self.token {
+            Kind::AnyKeyword
+            | Kind::UnknownKeyword
+            | Kind::StringKeyword
+            | Kind::NumberKeyword
+            | Kind::BigIntKeyword
+            | Kind::BooleanKeyword
+            | Kind::ReadonlyKeyword
+            | Kind::SymbolKeyword
+            | Kind::UniqueKeyword
+            | Kind::VoidKeyword
+            | Kind::UndefinedKeyword
+            | Kind::NullKeyword
+            | Kind::ThisKeyword
+            | Kind::TypeOfKeyword
+            | Kind::NeverKeyword
+            | Kind::OpenBraceToken
+            | Kind::OpenBracketToken
+            | Kind::LessThanToken
+            | Kind::BarToken
+            | Kind::AmpersandToken
+            | Kind::NewKeyword
+            | Kind::StringLiteral
+            | Kind::NumericLiteral
+            | Kind::BigIntLiteral
+            | Kind::TrueKeyword
+            | Kind::FalseKeyword
+            | Kind::ObjectKeyword
+            | Kind::AsteriskToken
+            | Kind::QuestionToken
+            | Kind::ExclamationToken
+            | Kind::DotDotDotToken
+            | Kind::InferKeyword
+            | Kind::ImportKeyword
+            | Kind::AssertsKeyword
+            | Kind::NoSubstitutionTemplateLiteral
+            | Kind::TemplateHead => return true,
+            Kind::FunctionKeyword => return !in_start_of_parameter,
+            Kind::MinusToken => return !in_start_of_parameter && self.look_ahead(Parser::next_token_is_numeric_or_big_int_literal),
+            Kind::OpenParenToken => {
+                // Only consider '(' the start of a type if followed by ')', '...', an identifier, a modifier,
+                // or something that starts a type. We don't want to consider things like '(1)' a type.
+                return !in_start_of_parameter && self.look_ahead(Parser::next_is_parenthesized_or_function_type);
+            }
+            _ => {}
+        }
+        self.is_identifier()
+    }
+
+    pub(crate) fn next_token_is_numeric_or_big_int_literal(&mut self) -> bool {
+        self.next_token();
+        self.token == Kind::NumericLiteral || self.token == Kind::BigIntLiteral
+    }
+
+    pub(crate) fn next_is_parenthesized_or_function_type(&mut self) -> bool {
+        self.next_token();
+        self.token == Kind::CloseParenToken || self.is_start_of_parameter(false /*isJSDocParameter*/) || self.is_start_of_type(false /*inStartOfParameter*/)
+    }
+
+    pub(crate) fn is_start_of_parameter(&mut self, is_jsdoc_parameter: bool) -> bool {
+        self.token == Kind::DotDotDotToken || self.is_binding_identifier_or_private_identifier_or_pattern() || ast::is_modifier_kind(self.token) || self.token == Kind::AtToken || self.is_start_of_type(!is_jsdoc_parameter /*inStartOfParameter*/)
+    }
+
+    pub(crate) fn is_binding_identifier_or_private_identifier_or_pattern(&mut self) -> bool {
+        self.token == Kind::OpenBraceToken || self.token == Kind::OpenBracketToken || self.token == Kind::PrivateIdentifier || self.is_binding_identifier()
+    }
+
+    pub(crate) fn is_next_token_open_paren_or_less_than_or_dot(&mut self) -> bool {
+        self.look_ahead(Parser::next_token_is_open_paren_or_less_than_or_dot)
+    }
+
+    pub(crate) fn next_token_is_open_paren_or_less_than_or_dot(&mut self) -> bool {
+        matches!(self.next_token(), Kind::OpenParenToken | Kind::LessThanToken | Kind::DotToken)
+    }
+
+    pub(crate) fn next_token_is_identifier_on_same_line(&mut self) -> bool {
+        self.next_token();
+        self.is_identifier() && !self.has_preceding_line_break()
+    }
+
+    pub(crate) fn next_token_is_identifier_or_string_literal_on_same_line(&mut self) -> bool {
+        self.next_token();
+        (self.is_identifier() || self.token == Kind::StringLiteral) && !self.has_preceding_line_break()
+    }
+
+    // Ignore strict mode flag because we will report an error in type checker instead.
+    pub(crate) fn is_identifier(&mut self) -> bool {
+        if self.token == Kind::Identifier {
+            return true;
+        }
+        // If we have a 'yield' keyword, and we're in the [yield] context, then 'yield' is
+        // considered a keyword and is not an identifier.
+        // If we have a 'await' keyword, and we're in the [Await] context, then 'await' is
+        // considered a keyword and is not an identifier.
+        if self.token == Kind::YieldKeyword && self.in_yield_context() || self.token == Kind::AwaitKeyword && self.in_await_context() {
+            return false;
+        }
+        self.token > Kind::LastReservedWord
+    }
+
+    pub(crate) fn is_binding_identifier(&mut self) -> bool {
+        // `let await`/`let yield` in [Yield] or [Await] are allowed here and disallowed in the binder.
+        self.token == Kind::Identifier || self.token > Kind::LastReservedWord
+    }
+
+    pub(crate) fn is_import_attribute_name(&mut self) -> bool {
+        token_is_identifier_or_keyword(self.token) || self.token == Kind::StringLiteral
+    }
+
+    pub(crate) fn is_binary_operator(&mut self) -> bool {
+        if self.in_disallow_in_context() && self.token == Kind::InKeyword {
+            return false;
+        }
+        ast::get_binary_operator_precedence(self.token) != OperatorPrecedence::Invalid
+    }
+
+    pub(crate) fn is_valid_heritage_clause_object_literal(&mut self) -> bool {
+        self.look_ahead(Parser::next_is_valid_heritage_clause_object_literal)
+    }
+
+    pub(crate) fn next_is_valid_heritage_clause_object_literal(&mut self) -> bool {
+        if self.next_token() == Kind::CloseBraceToken {
+            // if we see "extends {}" then only treat the {} as what we're extending (and not
+            // the class body) if we have:
+            //
+            //      extends {} {
+            //      extends {},
+            //      extends {} extends
+            //      extends {} implements
+            let next = self.next_token();
+            return next == Kind::CommaToken || next == Kind::OpenBraceToken || next == Kind::ExtendsKeyword || next == Kind::ImplementsKeyword;
+        }
+        true
+    }
+
+    pub(crate) fn is_heritage_clause(&mut self) -> bool {
+        self.token == Kind::ExtendsKeyword || self.token == Kind::ImplementsKeyword
+    }
+
+    pub(crate) fn is_heritage_clause_extends_or_implements_keyword(&mut self) -> bool {
+        self.is_heritage_clause() && self.look_ahead(Parser::next_is_start_of_expression)
+    }
+
+    pub(crate) fn next_is_start_of_expression(&mut self) -> bool {
+        self.next_token();
+        self.is_start_of_expression()
+    }
+
+    pub(crate) fn is_using_declaration(&mut self) -> bool {
+        // 'using' always starts a lexical declaration if followed by an identifier. We also eagerly parse
+        // |ObjectBindingPattern| so that we can report a grammar error during check. We don't parse out
+        // |ArrayBindingPattern| since it potentially conflicts with element access (i.e., `using[x]`).
+        self.look_ahead(|p| p.next_token_is_binding_identifier_or_start_of_destructuring_on_same_line(false /*disallowOf*/))
+    }
+
+    pub(crate) fn next_token_is_equals_or_semicolon_or_colon_token(&mut self) -> bool {
+        self.next_token();
+        self.token == Kind::EqualsToken || self.token == Kind::SemicolonToken || self.token == Kind::ColonToken
+    }
+
+    pub(crate) fn next_token_is_binding_identifier_or_start_of_destructuring_on_same_line(&mut self, disallow_of: bool) -> bool {
+        self.next_token();
+        if disallow_of && self.token == Kind::OfKeyword {
+            return self.look_ahead(Parser::next_token_is_equals_or_semicolon_or_colon_token);
+        }
+        (self.is_binding_identifier() || self.token == Kind::OpenBraceToken) && !self.has_preceding_line_break()
+    }
+
+    pub(crate) fn next_token_is_binding_identifier_or_start_of_destructuring_on_same_line_disallow_of(&mut self) -> bool {
+        self.next_token_is_binding_identifier_or_start_of_destructuring_on_same_line(true /*disallowOf*/)
+    }
+
+    pub(crate) fn is_await_using_declaration(&mut self) -> bool {
+        self.look_ahead(Parser::next_is_using_keyword_then_binding_identifier_or_start_of_object_destructuring_on_same_line)
+    }
+
+    pub(crate) fn next_is_using_keyword_then_binding_identifier_or_start_of_object_destructuring_on_same_line(&mut self) -> bool {
+        self.next_token() == Kind::UsingKeyword && self.next_token_is_binding_identifier_or_start_of_destructuring_on_same_line(false /*disallowOf*/)
+    }
+
+    pub(crate) fn next_token_is_token_string_literal(&mut self) -> bool {
+        self.next_token() == Kind::StringLiteral
+    }
+
+    pub(crate) fn set_context_flags(&mut self, flags: NodeFlags, value: bool) {
+        if value {
+            self.context_flags |= flags;
+        } else {
+            self.context_flags &= !flags;
+        }
+    }
+
+    pub(crate) fn do_in_context<T>(&mut self, flags: NodeFlags, value: bool, f: impl FnOnce(&mut Parser) -> T) -> T {
+        let save_context_flags = self.context_flags;
+        self.set_context_flags(flags, value);
+        let result = f(self);
+        self.context_flags = save_context_flags;
+        result
+    }
+
+    pub(crate) fn in_yield_context(&self) -> bool {
+        self.context_flags.intersects(NodeFlags::YieldContext)
+    }
+
+    pub(crate) fn in_disallow_in_context(&self) -> bool {
+        self.context_flags.intersects(NodeFlags::DisallowInContext)
+    }
+
+    pub(crate) fn in_disallow_conditional_types_context(&self) -> bool {
+        self.context_flags.intersects(NodeFlags::DisallowConditionalTypesContext)
+    }
+
+    pub(crate) fn in_decorator_context(&self) -> bool {
+        self.context_flags.intersects(NodeFlags::DecoratorContext)
+    }
+
+    pub(crate) fn in_await_context(&self) -> bool {
+        self.context_flags.intersects(NodeFlags::AwaitContext)
+    }
+
+    pub(crate) fn skip_range_trivia(&self, text_range: TextRange) -> TextRange {
+        TextRange::new(scanner::skip_trivia(self.source_text, text_range.pos()), text_range.end())
+    }
+
+    pub(crate) fn process_pragmas_into_fields(&mut self, context: P<ast::SourceFile>) {
+        let mut check_js_directive: Option<P<ast::CheckJsDirective>> = None;
+        let mut referenced_files: Vec<P<ast::FileReference>> = Vec::new();
+        let mut type_reference_directives: Vec<P<ast::FileReference>> = Vec::new();
+        let mut lib_reference_directives: Vec<P<ast::FileReference>> = Vec::new();
+        // context.AmdDependencies = nil
+        for pragma in context.pragmas() {
+            match &*pragma.name {
+                "reference" => {
+                    let types = pragma.args.get("types");
+                    let lib = pragma.args.get("lib");
+                    let path = pragma.args.get("path");
+                    let resolution_mode = pragma.args.get("resolution-mode");
+                    let preserve = pragma.args.get("preserve");
+                    let no_default_lib = pragma.args.get("no-default-lib");
+                    if no_default_lib.is_some_and(|no_default_lib| no_default_lib.value == "true") {
+                        // Ignored.
+                    } else if let Some(types) = types {
+                        let mut parsed = tsrs_core::ResolutionMode::default();
+                        if let Some(resolution_mode) = resolution_mode {
+                            parsed = self.parse_resolution_mode(&resolution_mode.value, resolution_mode.pos(), resolution_mode.end());
+                        }
+                        type_reference_directives.push(P::new(ast::FileReference {
+                            text_range: types.text_range,
+                            file_name: types.value,
+                            resolution_mode: parsed,
+                            preserve: preserve.is_some_and(|preserve| preserve.value == "true"),
+                        }));
+                    } else if let Some(lib) = lib {
+                        lib_reference_directives.push(P::new(ast::FileReference {
+                            text_range: lib.text_range,
+                            file_name: lib.value,
+                            resolution_mode: tsrs_core::ResolutionMode::default(),
+                            preserve: preserve.is_some_and(|preserve| preserve.value == "true"),
+                        }));
+                    } else if let Some(path) = path {
+                        referenced_files.push(P::new(ast::FileReference {
+                            text_range: path.text_range,
+                            file_name: path.value,
+                            resolution_mode: tsrs_core::ResolutionMode::default(),
+                            preserve: preserve.is_some_and(|preserve| preserve.value == "true"),
+                        }));
+                    } else {
+                        self.parse_error_at_range(pragma.comment_range.text_range, &diagnostics::Invalid_reference_directive_syntax, &[]);
+                    }
+                }
+                "ts-check" | "ts-nocheck" => {
+                    // _last_ of either nocheck or check in a file is the "winner"
+                    if check_js_directive.is_none_or(|directive| pragma.comment_range.text_range.pos() > directive.range.text_range.pos()) {
+                        check_js_directive = Some(P::new(ast::CheckJsDirective {
+                            enabled: &*pragma.name == "ts-check",
+                            range: pragma.comment_range,
+                        }));
+                    }
+                }
+                "jsx" | "jsxfrag" | "jsximportsource" | "jsxruntime" => {
+                    // Nothing to do here
+                }
+                _ => panic!("Unhandled pragma kind: {}", pragma.name),
+            }
+        }
+        context.check_js_directive.set(check_js_directive);
+        context.referenced_files.set(tsrs_core::alloc_vec(referenced_files));
+        context.type_reference_directives.set(tsrs_core::alloc_vec(type_reference_directives));
+        context.lib_reference_directives.set(tsrs_core::alloc_vec(lib_reference_directives));
+    }
+
+    pub(crate) fn parse_resolution_mode(&mut self, mode: &str, pos: i32, end: i32) -> tsrs_core::ResolutionMode {
+        let mut resolution_kind = tsrs_core::ResolutionMode::default();
+        if mode == "import" {
+            resolution_kind = tsrs_core::ModuleKind::ESNext;
+            return resolution_kind;
+        }
+        if mode == "require" {
+            resolution_kind = tsrs_core::ModuleKind::CommonJS;
+            return resolution_kind;
+        }
+        self.parse_error_at(pos, end, &diagnostics::X_resolution_mode_should_be_either_require_or_import, &[]);
+        resolution_kind
+    }
+
+    pub(crate) fn js_error_at_range(&mut self, loc: TextRange, message: &'static Message, args: &[&dyn Display]) {
+        let range = TextRange::new(scanner::skip_trivia(self.source_text, loc.pos()), loc.end());
+        self.js_diagnostics.push(ast::new_diagnostic(None, range, message, args));
+    }
+
+    pub(crate) fn check_js_decorator_syntax(&mut self, node: P<Node>) {
+        let modifiers = node.modifier_nodes();
+        if modifiers.is_empty() {
+            return;
+        }
+
+        if ast::can_have_illegal_decorators(node) {
+            for &modifier in modifiers {
+                if ast::is_decorator(modifier) {
+                    self.js_error_at_range(modifier.loc(), &diagnostics::Decorators_are_not_valid_here, &[]);
+                    break;
+                }
+            }
+        } else if ast::can_have_decorators(node) {
+            let decorator_index = find_index(modifiers, |m| ast::is_decorator(m));
+            if decorator_index >= 0 {
+                if ast::is_class_declaration(node) {
+                    let export_index = find_index(modifiers, is_export_modifier);
+                    if export_index >= 0 {
+                        let default_index = find_index(modifiers, |m| m.kind == Kind::DefaultKeyword);
+                        if decorator_index > export_index && default_index >= 0 && decorator_index < default_index {
+                            // Decorator between `export` and `default`
+                            self.js_error_at_range(modifiers[decorator_index as usize].loc(), &diagnostics::Decorators_are_not_valid_here, &[]);
+                        } else if decorator_index < export_index {
+                            // Find a trailing decorator after the export keyword
+                            let mut trailing_decorator_index: i32 = -1;
+                            for i in export_index as usize..modifiers.len() {
+                                if ast::is_decorator(modifiers[i]) {
+                                    trailing_decorator_index = i as i32;
+                                    break;
+                                }
+                            }
+                            if trailing_decorator_index >= 0 {
+                                let trailing = modifiers[trailing_decorator_index as usize];
+                                let diag = ast::new_diagnostic(
+                                    None,
+                                    TextRange::new(scanner::skip_trivia(self.source_text, trailing.loc().pos()), trailing.loc().end()),
+                                    &diagnostics::Decorators_may_not_appear_after_export_or_export_default_if_they_also_appear_before_export,
+                                    &[],
+                                );
+                                let decorator = modifiers[decorator_index as usize];
+                                diag.add_related_info(ast::new_diagnostic(
+                                    None,
+                                    TextRange::new(scanner::skip_trivia(self.source_text, decorator.loc().pos()), decorator.loc().end()),
+                                    &diagnostics::Decorator_used_before_export_here,
+                                    &[],
+                                ));
+                                self.js_diagnostics.push(diag);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn check_js_syntax(&mut self, node: P<Node>) -> P<Node> {
+        if !node.flags().intersects(NodeFlags::JavaScriptFile) || node.flags().intersects(NodeFlags::JSDoc | NodeFlags::Reparsed) {
+            return node;
+        }
+        match node.kind {
+            Kind::Parameter
+            | Kind::PropertyDeclaration
+            | Kind::MethodDeclaration
+            | Kind::MethodSignature
+            | Kind::Constructor
+            | Kind::GetAccessor
+            | Kind::SetAccessor
+            | Kind::FunctionExpression
+            | Kind::FunctionDeclaration
+            | Kind::ArrowFunction
+            | Kind::VariableDeclaration
+            | Kind::IndexSignature => {
+                if matches!(node.kind, Kind::Parameter | Kind::PropertyDeclaration | Kind::MethodDeclaration) {
+                    if let Some(token) = node.question_token() {
+                        if !token.flags().intersects(NodeFlags::Reparsed) && ast::is_question_token(token) {
+                            self.js_error_at_range(token.loc(), &diagnostics::The_0_modifier_can_only_be_used_in_TypeScript_files, &[&"?"]);
+                        }
+                    }
+                    // fallthrough
+                }
+                if ast::is_function_like(Some(node)) && node.body().is_none() {
+                    self.js_error_at_range(node.loc(), &diagnostics::Signature_declarations_can_only_be_used_in_TypeScript_files, &[]);
+                } else if let Some(t) = node.type_node().filter(|t| !t.flags().intersects(NodeFlags::Reparsed)) {
+                    self.js_error_at_range(t.loc(), &diagnostics::Type_annotations_can_only_be_used_in_TypeScript_files, &[]);
+                }
+            }
+            Kind::ImportDeclaration => {
+                if node.import_clause().is_some_and(|clause| clause.is_type_only()) {
+                    self.js_error_at_range(node.loc(), &diagnostics::X_0_declarations_can_only_be_used_in_TypeScript_files, &[&"import type"]);
+                }
+            }
+            Kind::ExportDeclaration => {
+                if node.is_type_only() {
+                    self.js_error_at_range(node.loc(), &diagnostics::X_0_declarations_can_only_be_used_in_TypeScript_files, &[&"export type"]);
+                }
+            }
+            Kind::ImportSpecifier => {
+                if node.is_type_only() {
+                    self.js_error_at_range(node.loc(), &diagnostics::X_0_declarations_can_only_be_used_in_TypeScript_files, &[&"import...type"]);
+                }
+            }
+            Kind::ExportSpecifier => {
+                if node.is_type_only() {
+                    self.js_error_at_range(node.loc(), &diagnostics::X_0_declarations_can_only_be_used_in_TypeScript_files, &[&"export...type"]);
+                }
+            }
+            Kind::ImportEqualsDeclaration => {
+                self.js_error_at_range(node.loc(), &diagnostics::X_import_can_only_be_used_in_TypeScript_files, &[]);
+            }
+            Kind::ExportAssignment => {
+                if node.as_export_assignment().is_export_equals {
+                    self.js_error_at_range(node.loc(), &diagnostics::X_export_can_only_be_used_in_TypeScript_files, &[]);
+                }
+            }
+            Kind::HeritageClause => {
+                if node.as_heritage_clause().token == Kind::ImplementsKeyword {
+                    self.js_error_at_range(node.loc(), &diagnostics::X_implements_clauses_can_only_be_used_in_TypeScript_files, &[]);
+                }
+            }
+            Kind::InterfaceDeclaration => {
+                self.js_error_at_range(node.name().unwrap().loc(), &diagnostics::X_0_declarations_can_only_be_used_in_TypeScript_files, &[&"interface"]);
+            }
+            Kind::ModuleDeclaration => {
+                let keyword = scanner::token_to_string(node.as_module_declaration().keyword);
+                self.js_error_at_range(node.name().unwrap().loc(), &diagnostics::X_0_declarations_can_only_be_used_in_TypeScript_files, &[&keyword]);
+            }
+            Kind::TypeAliasDeclaration => {
+                self.js_error_at_range(node.name().unwrap().loc(), &diagnostics::Type_aliases_can_only_be_used_in_TypeScript_files, &[]);
+            }
+            Kind::EnumDeclaration => {
+                self.js_error_at_range(node.name().unwrap().loc(), &diagnostics::X_0_declarations_can_only_be_used_in_TypeScript_files, &[&"enum"]);
+            }
+            Kind::NonNullExpression => {
+                self.js_error_at_range(node.loc(), &diagnostics::Non_null_assertions_can_only_be_used_in_TypeScript_files, &[]);
+            }
+            Kind::AsExpression => {
+                self.js_error_at_range(node.type_node().unwrap().loc(), &diagnostics::Type_assertion_expressions_can_only_be_used_in_TypeScript_files, &[]);
+            }
+            Kind::SatisfiesExpression => {
+                self.js_error_at_range(node.type_node().unwrap().loc(), &diagnostics::Type_satisfaction_expressions_can_only_be_used_in_TypeScript_files, &[]);
+            }
+            _ => {}
+        }
+        // Check decorator placement in JS files
+        self.check_js_decorator_syntax(node);
+        // Check absence of type parameters, type arguments and non-JavaScript modifiers
+        match node.kind {
+            Kind::ClassDeclaration
+            | Kind::ClassExpression
+            | Kind::MethodDeclaration
+            | Kind::Constructor
+            | Kind::GetAccessor
+            | Kind::SetAccessor
+            | Kind::FunctionExpression
+            | Kind::FunctionDeclaration
+            | Kind::ArrowFunction
+            | Kind::VariableStatement
+            | Kind::PropertyDeclaration => {
+                if !matches!(node.kind, Kind::VariableStatement | Kind::PropertyDeclaration) {
+                    if let Some(list) = node.type_parameter_list() {
+                        if list.nodes.iter().any(|n| !n.flags().intersects(NodeFlags::Reparsed)) {
+                            self.js_error_at_range(list.loc.get(), &diagnostics::Type_parameter_declarations_can_only_be_used_in_TypeScript_files, &[]);
+                        }
+                    }
+                    // fallthrough
+                }
+                for &modifier in node.modifier_nodes() {
+                    if !modifier.flags().intersects(NodeFlags::Reparsed) && modifier.kind != Kind::Decorator && !ast::modifier_to_flag(modifier.kind).intersects(ModifierFlags::JavaScript) {
+                        let text = scanner::token_to_string(modifier.kind);
+                        self.js_error_at_range(modifier.loc(), &diagnostics::The_0_modifier_can_only_be_used_in_TypeScript_files, &[&text]);
+                    }
+                }
+            }
+            Kind::Parameter => {
+                if node.modifier_nodes().iter().any(|&m| ast::is_modifier(m)) {
+                    self.js_error_at_range(node.modifiers().unwrap().list.loc.get(), &diagnostics::Parameter_modifiers_can_only_be_used_in_TypeScript_files, &[]);
+                }
+            }
+            Kind::CallExpression | Kind::NewExpression | Kind::ExpressionWithTypeArguments | Kind::JsxSelfClosingElement | Kind::JsxOpeningElement | Kind::TaggedTemplateExpression => {
+                if let Some(list) = node.type_argument_list() {
+                    if list.nodes.iter().any(|n| !n.flags().intersects(NodeFlags::Reparsed)) {
+                        self.js_error_at_range(list.loc.get(), &diagnostics::Type_arguments_can_only_be_used_in_TypeScript_files, &[]);
+                    }
+                }
+            }
+            _ => {}
+        }
+        node
+    }
 }
 
 // If true, we should abort parsing an error function.
@@ -1567,4 +2739,211 @@ fn should_consume_binary_operator(operator: Kind, operator_precedence: OperatorP
     operator_precedence == current_precedence && operator == Kind::AsteriskAsteriskToken
 }
 
-// @@PARSER3_FREE_FUNCTIONS@@
+pub(crate) fn is_reserved_word(token: Kind) -> bool {
+    Kind::FirstReservedWord <= token && token <= Kind::LastReservedWord
+}
+
+pub(crate) fn attach_file_to_diagnostics(diagnostics: &[P<ast::Diagnostic>], file: P<ast::SourceFile>) -> Vec<P<ast::Diagnostic>> {
+    for d in diagnostics {
+        d.set_file(Some(file));
+        for r in d.related_information() {
+            r.set_file(Some(file));
+        }
+    }
+    diagnostics.to_vec()
+}
+
+pub(crate) fn get_comment_pragmas(f: &mut ast::NodeFactory, source_text: &str) -> Vec<ast::Pragma> {
+    let mut pragmas = Vec::new();
+    for comment_range in scanner::get_leading_comment_ranges(f, source_text, 0) {
+        let comment = &source_text[comment_range.pos() as usize..comment_range.end() as usize];
+        pragmas.extend(extract_pragmas(comment_range, comment));
+    }
+    pragmas
+}
+
+fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pragma> {
+    let mut text = text;
+    if comment_range.kind == Kind::SingleLineCommentTrivia {
+        let mut pos: usize = 2;
+        let triple_slash = match_(text, pos, "/");
+        if triple_slash {
+            pos += 1;
+        }
+        pos = skip_blanks(text, pos);
+        if triple_slash && match_(text, pos, "<") {
+            let tag_name = extract_name(text, pos + 1);
+            if tag_name != "reference" {
+                return Vec::new();
+            }
+            pos += 10;
+            let mut args: FxHashMap<&'static str, ast::PragmaArgument> = FxHashMap::default();
+            loop {
+                pos = skip_blanks(text, pos);
+                if match_(text, pos, "/>") {
+                    break;
+                }
+                let arg_name = extract_name(text, pos);
+                if arg_name.is_empty() {
+                    break;
+                }
+                pos = skip_blanks(text, pos + arg_name.len());
+                if !match_(text, pos, "=") {
+                    break;
+                }
+                pos = skip_blanks(text, pos + 1);
+                let Some(value) = extract_quoted_string(text, pos) else {
+                    break;
+                };
+                let name = tsrs_core::alloc_str(&arg_name);
+                args.insert(
+                    name,
+                    ast::PragmaArgument {
+                        text_range: TextRange::new(comment_range.pos() + pos as i32 + 1, comment_range.pos() + pos as i32 + 1 + value.len() as i32),
+                        name,
+                        value: tsrs_core::alloc_str(value),
+                    },
+                );
+                pos += value.len() + 2;
+            }
+            return vec![ast::Pragma { comment_range, name: "reference", args }];
+        }
+        if match_(text, pos, "@") {
+            pos += 1;
+            let pragma_name = extract_name(text, pos);
+            if !(pragma_name == "ts-check" || pragma_name == "ts-nocheck") {
+                return Vec::new();
+            }
+            return vec![ast::Pragma { comment_range, name: tsrs_core::alloc_str(&pragma_name), args: FxHashMap::default() }];
+        }
+    }
+    if comment_range.kind == Kind::MultiLineCommentTrivia {
+        text = text.strip_suffix("*/").unwrap_or(text);
+        let mut pos: usize = 2;
+        let mut pragmas = Vec::new();
+        loop {
+            let found = skip_to(text, pos, "@");
+            if found < 0 {
+                break;
+            }
+            pos = found as usize;
+            // Mirrors the /@(\S+)(\s+(?:\S.*)?)?$/gm pragma regex used by TypeScript: the '@'
+            // must be immediately followed by a non-whitespace pragma name, and the remainder
+            // of the line is consumed as that pragma's arguments. As a consequence, only the
+            // first '@'-token on a line is considered, so an unrelated '@token' earlier on the
+            // line (e.g. an email address) prevents a later '@jsx' on the same line from being
+            // treated as a pragma.
+            let name_pos = pos + 1;
+            let name_end = skip_non_blanks(text, name_pos);
+            if name_end == name_pos {
+                pos += 1;
+                continue;
+            }
+            let line_end = line_end_pos(text, pos);
+            let pragma_name = text[name_pos..name_end].to_lowercase();
+            if pragma_name == "jsx" || pragma_name == "jsxfrag" || pragma_name == "jsximportsource" || pragma_name == "jsxruntime" {
+                let start = skip_blanks(text, name_end);
+                let arg_end = skip_non_blanks(text, start);
+                if arg_end != start {
+                    let mut args: FxHashMap<&'static str, ast::PragmaArgument> = FxHashMap::default();
+                    args.insert(
+                        "factory",
+                        ast::PragmaArgument {
+                            text_range: TextRange::new(comment_range.pos() + start as i32, comment_range.pos() + arg_end as i32),
+                            name: "factory",
+                            value: tsrs_core::alloc_str(&text[start..arg_end]),
+                        },
+                    );
+                    pragmas.push(ast::Pragma { comment_range, name: tsrs_core::alloc_str(&pragma_name), args });
+                }
+            }
+            pos = line_end;
+        }
+        return pragmas;
+    }
+    Vec::new()
+}
+
+fn match_(text: &str, pos: usize, s: &str) -> bool {
+    text.as_bytes()[pos..].starts_with(s.as_bytes())
+}
+
+fn skip_blanks(text: &str, pos: usize) -> usize {
+    let bytes = text.as_bytes();
+    let mut pos = pos;
+    while pos < bytes.len() && (bytes[pos] == b' ' || bytes[pos] == b'\t') {
+        pos += 1;
+    }
+    pos
+}
+
+fn skip_non_blanks(text: &str, pos: usize) -> usize {
+    let bytes = text.as_bytes();
+    let mut pos = pos;
+    while pos < bytes.len() && (bytes[pos] != b' ' && bytes[pos] != b'\t' && bytes[pos] != b'\r' && bytes[pos] != b'\n') {
+        pos += 1;
+    }
+    pos
+}
+
+fn skip_to(text: &str, pos: usize, s: &str) -> i32 {
+    if pos >= text.len() {
+        return -1;
+    }
+    let haystack = &text.as_bytes()[pos..];
+    let needle = s.as_bytes();
+    match haystack.windows(needle.len()).position(|w| w == needle) {
+        None => -1,
+        Some(i) => (pos + i) as i32,
+    }
+}
+
+fn line_end_pos(text: &str, pos: usize) -> usize {
+    let mut pos = pos;
+    while pos < text.len() {
+        let ch = text[pos..].chars().next().unwrap();
+        if tsrs_core::stringutil::is_line_break(ch) {
+            return pos;
+        }
+        pos += ch.len_utf8();
+    }
+    text.len()
+}
+
+fn extract_name(text: &str, pos: usize) -> String {
+    let bytes = text.as_bytes();
+    let start = pos;
+    let mut pos = pos;
+    while pos < bytes.len() && (bytes[pos] >= b'A' && bytes[pos] <= b'Z' || bytes[pos] >= b'a' && bytes[pos] <= b'z' || bytes[pos] == b'-') {
+        pos += 1;
+    }
+    text[start..pos].to_lowercase()
+}
+
+fn extract_quoted_string(text: &str, pos: usize) -> Option<&str> {
+    let bytes = text.as_bytes();
+    if pos == bytes.len() {
+        return None;
+    }
+    let quote = bytes[pos];
+    if quote != b'\'' && quote != b'"' {
+        return None;
+    }
+    let mut pos = pos + 1;
+    let start = pos;
+    while pos < bytes.len() && bytes[pos] != quote {
+        pos += 1;
+    }
+    if pos == bytes.len() {
+        return None;
+    }
+    Some(&text[start..pos])
+}
+
+// core.FindIndex
+fn find_index(nodes: &[P<Node>], mut f: impl FnMut(P<Node>) -> bool) -> i32 {
+    match nodes.iter().position(|&n| f(n)) {
+        Some(i) => i as i32,
+        None => -1,
+    }
+}
