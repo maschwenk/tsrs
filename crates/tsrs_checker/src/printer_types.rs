@@ -11,8 +11,8 @@ use crate::*;
 // names. `printer::NodeFactory` is deliberately not re-exported (it would clash with `tsrs_ast::NodeFactory` in the stub
 // files' glob imports); reach it as `e.factory`.
 pub use tsrs_printer::{
-    get_single_line_string_writer, new_emit_context, new_printer, new_text_writer, EmitContext, EmitFlags,
-    EmitTextWriter, PrintHandlers, Printer, PrinterOptions,
+    escape_string, get_single_line_string_writer, new_emit_context, new_printer, new_text_writer, EmitContext,
+    EmitFlags, EmitTextWriter, PrintHandlers, Printer, PrinterOptions, QuoteChar,
 };
 
 // nodebuilder/types.go
