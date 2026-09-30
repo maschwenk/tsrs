@@ -12,6 +12,8 @@ mod outputpaths;
 mod processing_diagnostic;
 mod program;
 mod projectreferencefilemapper;
+#[cfg(all(test, feature = "checker"))]
+mod modulespecifiers_oracle_test;
 
 pub use checkerpool::CheckerGuard;
 pub use file_include::FileIncludeReason;
