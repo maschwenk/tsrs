@@ -1467,7 +1467,7 @@ impl Checker {
 
     // checker.go:14210
     // the callback is stored in `deferred_diagnostic_callbacks: Vec<Box<dyn FnOnce(&mut Checker)>>`, so it must be
-    // `FnOnce + 'static``).
+    // `FnOnce + 'static`.
     pub(crate) fn add_deferred_diagnostic(&mut self, callback: impl FnOnce(&mut Checker) + 'static) {
         self.deferred_diagnostic_callbacks.push(Box::new(callback));
     }

@@ -8,7 +8,7 @@ use tsrs_core::P;
 use crate::program::{sort_and_deduplicate_diagnostics, Program};
 
 #[cfg(feature = "checker")]
-pub use tsrs_checker::Checker;
+pub use tsrs_checker::{Checker, Context};
 
 #[cfg(feature = "checker")]
 fn new_checker(program: &'static Program) -> Box<Checker> {
@@ -24,9 +24,18 @@ pub struct Checker {
     pub total_instantiation_count: u32,
 }
 
+// Go `context.Context` (see tsrs_checker::Context).
+#[cfg(not(feature = "checker"))]
+#[derive(Clone, Copy, Default)]
+pub struct Context;
+
 #[cfg(not(feature = "checker"))]
 impl Checker {
-    pub fn get_diagnostics(&mut self, _source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+    pub fn get_diagnostics_exported(&mut self, _ctx: Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+        unimplemented!("tsrs_compiler was built without the `checker` feature")
+    }
+
+    pub fn get_suggestion_diagnostics(&mut self, _ctx: Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         unimplemented!("tsrs_compiler was built without the `checker` feature")
     }
 

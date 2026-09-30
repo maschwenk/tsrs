@@ -8,7 +8,7 @@ use tsrs_ast::{
     self as ast, compare_diagnostics, equal_diagnostics, equal_diagnostics_no_related_info, new_compiler_diagnostic, new_diagnostic,
     CommentDirectiveKind, Diagnostic, DiagnosticExt, FileReference, Kind, Node, SourceFile, SourceFileMetaData,
 };
-use crate::checkerpool::Checker;
+use crate::checkerpool::{Checker, Context};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{CompilerOptions, JsxEmit, ModuleKind, ModuleResolutionKind, ResolutionMode, ScriptKind, ScriptTarget, Tristate, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
@@ -471,6 +471,10 @@ impl Program {
 
     pub fn get_semantic_diagnostics(&'static self, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         self.collect_checker_diagnostics(source_file, |c, file| self.get_semantic_diagnostics_with_checker(c, file))
+    }
+
+    pub fn get_suggestion_diagnostics(&'static self, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        self.collect_checker_diagnostics(source_file, |c, file| self.get_suggestion_diagnostics_with_checker(c, file))
     }
 
     pub fn get_program_diagnostics(&'static self) -> Vec<P<Diagnostic>> {
@@ -1230,7 +1234,7 @@ impl Program {
 
         // Checker creation forces binding, so bind diagnostics will be populated.
         let mut diags: Vec<P<Diagnostic>> = source_file.bind_diagnostics().to_vec();
-        diags.extend(file_checker.get_diagnostics(Some(source_file)));
+        diags.extend(file_checker.get_diagnostics_exported(Context, source_file));
 
         if include_deferred_globals {
             let current_globals = file_checker.get_global_diagnostics();
@@ -1267,6 +1271,13 @@ impl Program {
             }
         }
         filtered
+    }
+
+    fn get_suggestion_diagnostics_with_checker(&self, file_checker: &mut Checker, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+        if self.skip_type_checking(source_file, false) {
+            return Vec::new();
+        }
+        file_checker.get_suggestion_diagnostics(Context, source_file)
     }
 
     fn get_diagnostics_with_preceding_directives(
