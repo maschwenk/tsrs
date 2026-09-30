@@ -6,7 +6,9 @@
 //	tsrs-oracle-printer hash MODE < list          print "hash path" for every "path[\tFLAGS]" line on stdin
 //
 // MODE selects the PrinterOptions: "default" (PrinterOptions{}, what `createPrinterWithDefaults` uses) or
-// "nocomments" (RemoveComments, what `createPrinterWithRemoveComments` uses for type printing). The "synth" modes
+// "nocomments" (RemoveComments, what `createPrinterWithRemoveComments` uses for type printing), "omitsemi"
+// (RemoveComments+OmitTrailingSemicolon+NeverAsciiEscape, another checker printer), "preserve" (CRLF,
+// PreserveSourceNewlines, NeverAsciiEscape, TerminateUnterminatedLiterals, ES2021 target). The "synth" modes
 // exercise the paths the checker's node builder hits: every top-level statement is deep-cloned through an EmitContext
 // factory (synthesized nodes, no positions, original pointers) and written without a source file; "synth" uses a
 // TextWriter("\n"), "synthflags" additionally sets EFSingleLine|EFNoAsciiEscaping on every cloned node and writes to
@@ -50,6 +52,10 @@ func options(mode string) printer.PrinterOptions {
 		return printer.PrinterOptions{}
 	case "nocomments":
 		return printer.PrinterOptions{RemoveComments: true}
+	case "omitsemi":
+		return printer.PrinterOptions{RemoveComments: true, OmitTrailingSemicolon: true, NeverAsciiEscape: true}
+	case "preserve":
+		return printer.PrinterOptions{NewLine: core.NewLineKindCRLF, NeverAsciiEscape: true, PreserveSourceNewlines: true, TerminateUnterminatedLiterals: true, Target: core.ScriptTargetES2021}
 	default:
 		panic("unknown mode " + mode)
 	}

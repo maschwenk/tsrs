@@ -8,7 +8,8 @@ New crate `crates/tsrs_printer` (Go `internal/printer`). Public API is documente
   parse a file, print it, compare hashes. Modes: `default` (PrinterOptions{}), `nocomments` (RemoveComments),
   `synth` / `synthflags` / `synthmulti` (every statement deep-cloned through an EmitContext factory, printed without a
   source file; `synthflags` adds EFSingleLine|EFNoAsciiEscaping and the single-line writer, `synthmulti` adds
-  EFMultiLine|EFStartOnNewLine|EFIndented).
+  EFMultiLine|EFStartOnNewLine|EFIndented), `omitsemi` (RemoveComments+OmitTrailingSemicolon+NeverAsciiEscape),
+  `preserve` (CRLF, PreserveSourceNewlines, NeverAsciiEscape, TerminateUnterminatedLiterals, ES2021).
 - Result (2026-09-30): test units (17319, 838 skipped for parse errors, 30 files where both sides panic on
   JSImportDeclaration/JSDoc like Go): 16480/16481 identical in every mode (also with jsx+force flags); libs 113/113 in
   every mode. The one mismatch is `regexInvalidUtf8WithUnicodeFlag.ts`, a non-UTF-8 file that the Rust vfs decodes with
@@ -67,4 +68,4 @@ New crate `crates/tsrs_printer` (Go `internal/printer`). Public API is documente
 ## Doubts
 
 - None found by the oracle; paths it cannot reach (unique helper names / external helpers, PrintHandlers hooks,
-  `id_to_symbol`, helper emission, PreserveSourceNewlines) were ported by reading only.
+  `id_to_symbol`, helper emission) were ported by reading only.

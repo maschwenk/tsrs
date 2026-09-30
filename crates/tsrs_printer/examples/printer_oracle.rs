@@ -24,6 +24,15 @@ fn options(mode: &str) -> PrinterOptions {
     match mode {
         "default" => PrinterOptions::default(),
         "nocomments" => PrinterOptions { remove_comments: true, ..Default::default() },
+        "omitsemi" => PrinterOptions { remove_comments: true, omit_trailing_semicolon: true, never_ascii_escape: true, ..Default::default() },
+        "preserve" => PrinterOptions {
+            new_line: tsrs_core::NewLineKind::CRLF,
+            never_ascii_escape: true,
+            preserve_source_newlines: true,
+            terminate_unterminated_literals: true,
+            target: tsrs_core::ScriptTarget::ES2021,
+            ..Default::default()
+        },
         other => panic!("unknown mode {}", other),
     }
 }
