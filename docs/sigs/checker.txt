@@ -784,7 +784,7 @@ get_base_type_of_literal_type | pub fn get_base_type_of_literal_type(&mut self, 
 get_base_type_of_literal_type_for_comparison | pub(crate) fn get_base_type_of_literal_type_for_comparison(&mut self, t: P<Type>) -> P<Type> | checker.go:25924 | Checker
 get_base_type_of_literal_type_union | pub(crate) fn get_base_type_of_literal_type_union(&mut self, t: P<Type>) -> P<Type> | checker.go:25947 | Checker
 get_base_type_variable_of_class | pub(crate) fn get_base_type_variable_of_class(&mut self, symbol: P<Symbol>) -> Option<P<Type>> | checker.go:17260 | Checker
-get_base_types | pub fn get_base_types(&mut self, t: P<Type>) -> Vec<P<Type>> | checker.go:19508 | Checker
+get_base_types | pub fn get_base_types(&mut self, t: P<Type>) -> &'static [P<Type>] | checker.go:19508 | Checker
 get_base_types_if_unrelated | pub(crate) fn get_base_types_if_unrelated(&mut self, left_type: P<Type>, right_type: P<Type>, is_related: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool) -> (P<Type>, P<Type>) | checker.go:12953 | Checker
 get_best_match_indexed_access_type_or_undefined | pub(crate) fn get_best_match_indexed_access_type_or_undefined(&mut self, source: P<Type>, target: P<Type>, name_type: P<Type>) -> Option<P<Type>> | relater.go:618 | Checker
 get_best_matching_type | pub(crate) fn get_best_matching_type(&mut self, source: P<Type>, target: P<Type>, is_related_to: impl FnMut(&mut Checker, P<Type>, P<Type>) -> Ternary) -> Option<P<Type>> | relater.go:872 | Checker

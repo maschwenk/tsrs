@@ -120,26 +120,9 @@ impl tsrs_checker::Program for Program {
     }
 }
 
-// Go `*compiler.Program` satisfies `outputpaths.OutputPathsHost` and `modulespecifiers.ModuleSpecifierGenerationHost`
-// structurally; the node builder reaches them through `checker::Program::as_module_specifier_generation_host`.
-impl tsrs_tsoptions::outputpaths::OutputPathsHost for Program {
-    fn common_source_directory(&self) -> String {
-        Program::common_source_directory(self).to_string()
-    }
-
-    fn content_mapper_extensions(&self) -> Vec<String> {
-        self.opts.config.content_mapper_extensions()
-    }
-
-    fn get_current_directory(&self) -> &str {
-        Program::get_current_directory(self)
-    }
-
-    fn use_case_sensitive_file_names(&self) -> bool {
-        Program::use_case_sensitive_file_names(self)
-    }
-}
-
+// Go `*compiler.Program` satisfies `modulespecifiers.ModuleSpecifierGenerationHost` structurally (its supertrait
+// `OutputPathsHost` is implemented in program.rs); the node builder reaches it through
+// `checker::Program::as_module_specifier_generation_host`.
 impl tsrs_modulespecifiers::ModuleSpecifierGenerationHost for Program {
     fn get_symlink_cache(&self) -> P<KnownSymlinks> {
         // Go `Program.GetSymlinkCache` (program.go:2309, memoized KnownSymlinks built from resolutions and package.json
