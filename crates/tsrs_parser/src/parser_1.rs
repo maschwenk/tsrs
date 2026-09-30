@@ -130,7 +130,7 @@ pub struct Parser {
 
 pub(crate) fn new_parser() -> Parser {
     Parser {
-        scanner: scanner::new_scanner(),
+        scanner: Scanner::new(),
         factory: NodeFactory::default(),
         opts: SourceFileParseOptions::default(),
         source_text: "",
@@ -384,12 +384,25 @@ impl Parser {
             _ => NodeFlags::None,
         };
         self.scanner.set_text(self.source_text);
-        self.scanner.set_on_error(Some(Parser::scan_error));
+        self.scanner.set_on_error(true);
         self.scanner.set_language_variant(self.language_variant);
     }
 
     pub(crate) fn scan_error(&mut self, message: &'static Message, pos: i32, length: i32, args: &[&dyn Display]) {
         self.parse_error_at_range(new_text_range(pos, pos + length), message, args);
+    }
+
+    // The scanner buffers what Go reports through its synchronous error callback; this must run
+    // right after every scanner call that can report (scan, re_scan_*, scan_jsx_*, scan_jsdoc_*)
+    // so scanner errors interleave with parser errors exactly as in Go.
+    pub(crate) fn report_scan_errors(&mut self) {
+        if !self.scanner.has_errors() {
+            return;
+        }
+        for error in self.scanner.take_errors() {
+            let args: Vec<&dyn Display> = error.args.iter().map(|arg| arg as &dyn Display).collect();
+            self.scan_error(error.message, error.start, error.length, &args);
+        }
     }
 
     pub(crate) fn parse_error_at(&mut self, pos: i32, end: i32, message: &'static Message, args: &[&dyn Display]) -> Option<P<Diagnostic>> {
@@ -465,21 +478,25 @@ impl Parser {
             self.parse_error_at_current_token(&diagnostics::Keywords_cannot_contain_escape_characters, &[]);
         }
         self.token = self.scanner.scan();
+        self.report_scan_errors();
         self.token
     }
 
     pub(crate) fn next_token_without_check(&mut self) -> Kind {
         self.token = self.scanner.scan();
+        self.report_scan_errors();
         self.token
     }
 
     pub(crate) fn next_token_jsdoc(&mut self) -> Kind {
         self.token = self.scanner.scan_jsdoc_token();
+        self.report_scan_errors();
         self.token
     }
 
     pub(crate) fn next_jsdoc_comment_text_token(&mut self, in_backticks: bool) -> Kind {
         self.token = self.scanner.scan_jsdoc_comment_text_token(in_backticks);
+        self.report_scan_errors();
         self.token
     }
 
