@@ -64,7 +64,7 @@ impl NodeBuilderImpl {
             }
             return r;
         }
-        self.ctx().tracker.get().unwrap().report_inference_fallback(node);
+        self.ctx().tracker.get().unwrap().report_inference_fallback(c, node);
         let t = self.get_type_from_type_node(c, node, false);
         self.type_to_type_node(c, t)
     }
@@ -151,8 +151,8 @@ impl wrappingTracker {
     }
 
     // nodecopy.go:159
-    pub fn report_inference_fallback(&self, node: P<Node>) {
-        self.wrapped.report_inference_fallback(node); // Should this also be deferred?
+    pub fn report_inference_fallback(&self, c: &mut Checker, node: P<Node>) {
+        self.wrapped.report_inference_fallback(c, node); // Should this also be deferred?
     }
 
     // nodecopy.go:163
@@ -188,7 +188,7 @@ impl wrappingTracker {
     }
 
     // nodecopy.go:183
-    pub fn track_symbol(&self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
+    pub fn track_symbol(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
         self.bound.tracked_symbols.borrow_mut().push(P::new(TrackedSymbolArgs { symbol, enclosing_declaration, meaning }));
         false
     }
@@ -238,7 +238,7 @@ impl NodeBuilderImpl {
         }
         let tracked_symbols = bound.tracked_symbols.borrow().clone();
         for a in tracked_symbols {
-            ctx.tracker.get().unwrap().track_symbol(a.symbol, a.enclosing_declaration, a.meaning);
+            ctx.tracker.get().unwrap().track_symbol(c, a.symbol, a.enclosing_declaration, a.meaning);
         }
         true
     }
@@ -483,7 +483,7 @@ impl ExistingNodeTree {
             {
                 // In isolated declaration we will not do rest parameter expansion so there is no need to report on these.
                 if sym_at_location != Some(unknown_symbol) {
-                    self.tracker().report_inference_fallback(node);
+                    self.tracker().report_inference_fallback(c, node);
                 }
                 introduces_error = true;
                 return (introduces_error, self.set_text_range(c, b.f.deep_clone_node(Some(node)).unwrap(), node), sym);
@@ -505,10 +505,10 @@ impl ExistingNodeTree {
                 && !ast::is_declaration_name(node)
                 && c.is_symbol_accessible(Some(sym), enclosing_declaration, meaning, false).accessibility != SymbolAccessibility::Accessible
             {
-                self.tracker().report_inference_fallback(node);
+                self.tracker().report_inference_fallback(c, node);
                 introduces_error = true;
             } else {
-                self.tracker().track_symbol(sym, enclosing_declaration, meaning);
+                self.tracker().track_symbol(c, sym, enclosing_declaration, meaning);
             }
             return (introduces_error, self.attach_symbol_to_leftmost_identifier(c, leftmost, node, Some(sym)), None);
         }

@@ -63,6 +63,14 @@ impl EmitContext {
         self.emit_helpers.borrow_mut().clear();
     }
 
+    // emitcontext.go:90
+    // Go `NewNodeVisitor`: a visitor over `self.factory` with the environment-tracking hooks (VisitParameters,
+    // VisitFunctionBody, VisitIterationBody, VisitTopLevelStatements = VisitVariableEnvironment,
+    // VisitEmbeddedStatement). The hooks capture this context (`P::from_static`; contexts are arena-allocated).
+    pub fn new_node_visitor(&self, visit: VisitFn) -> NodeVisitor {
+        todo!()
+    }
+
     pub(crate) fn on_create(&self, node: P<Node>) {
         node.flags.set(node.flags.get() | NodeFlags::Synthesized);
     }

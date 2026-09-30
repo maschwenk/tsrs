@@ -850,7 +850,7 @@ impl NodeBuilderImpl {
 
     // nodebuilderimpl.go:848
     pub(crate) fn symbol_to_expression(&self, c: &mut Checker, symbol: P<Symbol>, mask: SymbolFlags) -> P<Node> {
-        self.tracker().track_symbol(symbol, self.ctx().enclosing_declaration.get(), mask);
+        self.tracker().track_symbol(c, symbol, self.ctx().enclosing_declaration.get(), mask);
         self.symbol_to_expression_worker(c, symbol, mask)
     }
 
@@ -1092,7 +1092,7 @@ impl NodeBuilderImpl {
     // TODO: move `lookupSymbolChain` and co to `symbolaccessibility.go` (but getSpecifierForModuleSymbol uses much context which makes that hard?)
     // nodebuilderimpl.go:1061
     pub(crate) fn lookup_symbol_chain(&self, c: &mut Checker, symbol: P<Symbol>, meaning: SymbolFlags, yield_module_symbol: bool) -> Vec<P<Symbol>> {
-        self.tracker().track_symbol(symbol, self.ctx().enclosing_declaration.get(), meaning);
+        self.tracker().track_symbol(c, symbol, self.ctx().enclosing_declaration.get(), meaning);
         self.lookup_symbol_chain_worker(c, symbol, meaning, yield_module_symbol)
     }
 

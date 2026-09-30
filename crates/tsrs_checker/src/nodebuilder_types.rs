@@ -311,8 +311,8 @@ pub struct wrappingTracker {
 }
 
 impl SymbolTracker for wrappingTracker {
-    fn track_symbol(&self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
-        wrappingTracker::track_symbol(self, symbol, enclosing_declaration, meaning)
+    fn track_symbol(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
+        wrappingTracker::track_symbol(self, c, symbol, enclosing_declaration, meaning)
     }
     fn report_inaccessible_this_error(&self) {
         wrappingTracker::report_inaccessible_this_error(self)
@@ -338,8 +338,8 @@ impl SymbolTracker for wrappingTracker {
     fn report_non_serializable_property(&self, property_name: &str) {
         wrappingTracker::report_non_serializable_property(self, property_name)
     }
-    fn report_inference_fallback(&self, node: P<Node>) {
-        wrappingTracker::report_inference_fallback(self, node)
+    fn report_inference_fallback(&self, c: &mut Checker, node: P<Node>) {
+        wrappingTracker::report_inference_fallback(self, c, node)
     }
     fn push_error_fallback_node(&self, node: Option<P<Node>>) {
         wrappingTracker::push_error_fallback_node(self, node)
@@ -370,10 +370,13 @@ pub struct DeclarationFileLinks {
 }
 
 /// Go `EmitResolver`, handled as `P<EmitResolver>`, a checker holder (`&self, c: &mut Checker`). Go's `checker`
-/// field is dropped; `checkerMu` (locking wrappers are not ported), `isValueAliasDeclaration`, `aliasMarkingVisitor`
-/// and `referenceResolver` serve only the emit-side functions, which are not ported.
+/// field is dropped and so is `checkerMu`: the exported methods that lock it in Go (`IsDeclarationVisible`, ...) are
+/// the `_exported`/unsuffixed `pub` methods, and the declaration transformer serializes access to the checker itself
+/// (tsrs_declarations `Resolver::lock`). `isValueAliasDeclaration` / `aliasMarkingVisitor` are Go method values of
+/// `isValueAliasDeclarationWorker` / `aliasMarkingVisitorWorker`; Rust calls those methods directly.
 #[derive(Default)]
 pub struct EmitResolver {
+    pub reference_resolver: std::cell::OnceCell<P<tsrs_binder::ReferenceResolver<Checker>>>,
     pub jsx_links: tsrs_core::LinkStore<Node, JSXLinks>,
     pub declaration_links: tsrs_core::LinkStore<Node, DeclarationLinks>,
     pub declaration_file_links: tsrs_core::LinkStore<Node, DeclarationFileLinks>,

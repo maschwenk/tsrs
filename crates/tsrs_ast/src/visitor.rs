@@ -18,6 +18,7 @@ pub type VisitNodeHook = Rc<dyn Fn(Option<P<Node>>, &mut NodeVisitor) -> Option<
 pub type VisitNodesHook = Rc<dyn Fn(Option<P<NodeList>>, &mut NodeVisitor) -> Option<P<NodeList>>>;
 pub type VisitModifiersHook = Rc<dyn Fn(Option<P<ModifierList>>, &mut NodeVisitor) -> Option<P<ModifierList>>>;
 
+#[derive(Clone)]
 pub struct NodeVisitor {
     pub visit: Option<VisitFn>, // Required. The callback used to visit a node
     pub factory: NodeFactory,   // Required. The NodeFactory used to produce new nodes when passed to VisitEachChild

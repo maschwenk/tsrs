@@ -314,6 +314,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_declarations"
+version = "0.1.0"
+dependencies = [
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_checker",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_modulespecifiers",
+ "tsrs_printer",
+ "tsrs_scanner",
+ "tsrs_tsoptions",
+]
+
+[[package]]
 name = "tsrs_diagnostics"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,131 @@
+{
+  "moduleDir": "../../ts-ref/tsc",
+  "package": "github.com/microsoft/TypeScript/tsc/internal/transformers/declarations",
+  "resultOnlyPackages": [
+    "github.com/microsoft/TypeScript/tsc/internal/ast",
+    "github.com/microsoft/TypeScript/tsc/internal/core",
+    "github.com/microsoft/TypeScript/tsc/internal/printer",
+    "github.com/microsoft/TypeScript/tsc/internal/checker",
+    "github.com/microsoft/TypeScript/tsc/internal/transformers"
+  ],
+  "outDir": "../../crates/tsrs_declarations/src",
+  "sigsFile": "../../docs/sigs/declarations.txt",
+  "advisorySigsFile": "../../docs/sigs/declarations_advisory.txt",
+  "prelude": "use crate::*;\n",
+  "checkerType": "noCheckerTypeInThisPackage",
+  "files": [
+    {
+      "go": "transform.go",
+      "declsNote": "hand-ported in types.rs",
+      "chunks": [
+        {
+          "rust": "transform_1.rs",
+          "from": 1,
+          "to": 1339
+        },
+        {
+          "rust": "transform_2.rs",
+          "from": 1340,
+          "to": 2327
+        },
+        {
+          "rust": "transform_3.rs",
+          "from": 2328,
+          "to": 3100
+        }
+      ]
+    },
+    {
+      "go": "diagnostics.go",
+      "rust": "diagnostics_.rs",
+      "declsNote": "hand-ported in types.rs"
+    },
+    {
+      "go": "tracker.go",
+      "rust": "tracker.rs",
+      "declsNote": "hand-ported in types.rs"
+    },
+    {
+      "go": "util.go",
+      "rust": "util.rs"
+    },
+    {
+      "go": "supplementalreferences.go",
+      "rust": "supplementalreferences.rs",
+      "declsNote": "hand-ported in types.rs"
+    }
+  ],
+  "notPorted": [],
+  "skipFuncs": [],
+  "arenaTypes": [
+    "DeclarationTransformer",
+    "SymbolTrackerImpl",
+    "SymbolTrackerSharedState",
+    "SupplementalReferencesTransformer"
+  ],
+  "typeMap": {
+    "*ast.Node": "P<Node>",
+    "*ast.Symbol": "P<Symbol>",
+    "*ast.SourceFile": "P<SourceFile>",
+    "*ast.NodeList": "P<NodeList>",
+    "*ast.ModifierList": "P<ModifierList>",
+    "*ast.Diagnostic": "P<Diagnostic>",
+    "*ast.FileReference": "P<FileReference>",
+    "*ast.NodeFactory": "&NodeFactory",
+    "*ast.NodeVisitor": "NodeVisitor",
+    "ast.SymbolTable": "P<SymbolTable>",
+    "ast.HasFileName": "P<SourceFile>",
+    "*diagnostics.Message": "&'static Message",
+    "core.Tristate": "Tristate",
+    "*core.CompilerOptions": "P<CompilerOptions>",
+    "*printer.EmitContext": "P<EmitContext>",
+    "*printer.NodeFactory": "&NodeFactory",
+    "printer.EmitResolver": "Resolver",
+    "printer.SymbolAccessibilityResult": "&SymbolAccessibilityResult",
+    "DeclarationEmitHost": "&'static dyn DeclarationEmitHost",
+    "OutputPaths": "OutputPaths",
+    "GetSymbolAccessibilityDiagnostic": "GetSymbolAccessibilityDiagnostic",
+    "*SymbolAccessibilityDiagnostic": "P<SymbolAccessibilityDiagnostic>",
+    "iter.Seq": "Vec<$0>"
+  },
+  "dataInterfaces": [
+    {
+      "iface": "ast.nodeData",
+      "rust": "P<Node>",
+      "except": [
+        "SourceFile"
+      ]
+    }
+  ],
+  "constraintMap": {
+    "any": "",
+    "comparable": "Copy + Eq + std::hash::Hash",
+    "cmp.Ordered": "Copy + Ord"
+  },
+  "wordReplacements": {
+    "JSDoc": "Jsdoc",
+    "NaN": "Nan",
+    "IDs": "Ids",
+    "CJS": "Cjs"
+  },
+  "zeroValueGenerics": [
+    "core.Find",
+    "core.FindLast",
+    "core.FirstOrNil",
+    "core.LastOrNil"
+  ],
+  "coalesceGenerics": [
+    "core.OrElse",
+    "core.Coalesce",
+    "core.FirstNonZero"
+  ],
+  "nilTolerantParams": [
+    "ast.SymbolTable"
+  ],
+  "nilTransparent": true,
+  "paramForwarding": "forward",
+  "overrides": {
+    "SymbolTrackerImpl.TrackSymbol.p1": "Option",
+    "SymbolTrackerImpl.PushErrorFallbackNode.p0": "Option"
+  }
+}

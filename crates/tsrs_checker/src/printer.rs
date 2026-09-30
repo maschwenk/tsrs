@@ -1339,9 +1339,9 @@ pub fn new_symbol_tracker_impl(context: P<NodeBuilderContext>, tracker: Option<&
 
 impl SymbolTrackerImpl {
     // symboltracker.go:28
-    pub fn track_symbol(&self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
+    pub fn track_symbol(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
         if !self.disable_track_symbol.get() {
-            if self.inner.is_some_and(|inner| inner.track_symbol(symbol, enclosing_declaration, meaning)) {
+            if self.inner.is_some_and(|inner| inner.track_symbol(c, symbol, enclosing_declaration, meaning)) {
                 self.on_diagnostic_reported();
                 return true;
             }
@@ -1431,11 +1431,11 @@ impl SymbolTrackerImpl {
     }
 
     // symboltracker.go:110
-    pub fn report_inference_fallback(&self, node: P<Node>) {
+    pub fn report_inference_fallback(&self, c: &mut Checker, node: P<Node>) {
         let Some(inner) = self.inner else {
             return;
         };
-        inner.report_inference_fallback(node);
+        inner.report_inference_fallback(c, node);
     }
 
     // symboltracker.go:117

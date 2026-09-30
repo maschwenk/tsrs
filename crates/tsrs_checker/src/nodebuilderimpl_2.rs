@@ -310,7 +310,7 @@ impl NodeBuilderImpl {
                     if let Some(type_predicate) = type_predicate {
                         if !self.pseudo_return_type_matches_predicate(c, pt, type_predicate) {
                             if !self.ctx().suppress_report_inference_fallback.get() {
-                                self.tracker().report_inference_fallback(declaration);
+                                self.tracker().report_inference_fallback(c, declaration);
                             }
                             pt = None;
                         }
@@ -660,12 +660,12 @@ impl NodeBuilderImpl {
         let first_identifier = ast::get_first_identifier(access_expression);
         let name = c.resolve_name(enclosing_declaration, first_identifier.text(), SymbolFlags::Value | SymbolFlags::ExportValue, None /*nameNotFoundMessage*/, true /*isUse*/, false);
         if let Some(name) = name {
-            self.tracker().track_symbol(name, enclosing_declaration, SymbolFlags::Value);
+            self.tracker().track_symbol(c, name, enclosing_declaration, SymbolFlags::Value);
         } else {
             // Name does not resolve at target location, track symbol at dest location (should be inaccessible)
             let fallback = c.resolve_name(Some(first_identifier), first_identifier.text(), SymbolFlags::Value | SymbolFlags::ExportValue, None /*nameNotFoundMessage*/, true /*isUse*/, false);
             if let Some(fallback) = fallback {
-                self.tracker().track_symbol(fallback, enclosing_declaration, SymbolFlags::Value);
+                self.tracker().track_symbol(c, fallback, enclosing_declaration, SymbolFlags::Value);
             }
         }
     }
@@ -1527,7 +1527,7 @@ impl NodeBuilderImpl {
             if let Some(cached_result) = cached_result {
                 // TODO:: check if we instead store late painted statements associated with this?
                 for arg in cached_result.tracked_symbols.iter() {
-                    self.tracker().track_symbol(arg.symbol, arg.enclosing_declaration, arg.meaning);
+                    self.tracker().track_symbol(c, arg.symbol, arg.enclosing_declaration, arg.meaning);
                 }
                 if cached_result.truncating {
                     self.ctx().truncating.set(true);

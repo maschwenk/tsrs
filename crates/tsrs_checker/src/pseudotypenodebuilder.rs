@@ -16,10 +16,10 @@ impl NodeBuilderImpl {
                 let error_nodes = t.as_pseudo_type_inferred().error_nodes;
                 if !error_nodes.is_empty() {
                     for &n in error_nodes {
-                        ctx.tracker.get().unwrap().report_inference_fallback(n);
+                        ctx.tracker.get().unwrap().report_inference_fallback(c, n);
                     }
                 } else {
-                    ctx.tracker.get().unwrap().report_inference_fallback(t.as_pseudo_type_inferred().expression);
+                    ctx.tracker.get().unwrap().report_inference_fallback(c, t.as_pseudo_type_inferred().expression);
                 }
             }
             let old_suppress = ctx.suppress_report_inference_fallback.get();
@@ -32,7 +32,7 @@ impl NodeBuilderImpl {
             if !self.can_reuse_existing_js_type_node(c, existing, checker_type) {
                 let ctx = self.ctx();
                 if !ctx.suppress_report_inference_fallback.get() {
-                    ctx.tracker.get().unwrap().report_inference_fallback(existing);
+                    ctx.tracker.get().unwrap().report_inference_fallback(c, existing);
                 }
                 let old_suppress = ctx.suppress_report_inference_fallback.get();
                 ctx.suppress_report_inference_fallback.set(true);
@@ -57,12 +57,12 @@ impl NodeBuilderImpl {
                 let error_nodes = inferred.error_nodes;
                 if !error_nodes.is_empty() {
                     for &n in error_nodes {
-                        self.ctx().tracker.get().unwrap().report_inference_fallback(n);
+                        self.ctx().tracker.get().unwrap().report_inference_fallback(c, n);
                     }
                 } else if is_entity_name_expression(node) && is_declaration(node.parent().unwrap()) {
-                    self.ctx().tracker.get().unwrap().report_inference_fallback(node.parent().unwrap());
+                    self.ctx().tracker.get().unwrap().report_inference_fallback(c, node.parent().unwrap());
                 } else {
-                    self.ctx().tracker.get().unwrap().report_inference_fallback(node);
+                    self.ctx().tracker.get().unwrap().report_inference_fallback(c, node);
                 }
                 if inferred.is_signature_return {
                     let sig = c.get_signature_from_declaration(node);
@@ -91,7 +91,7 @@ impl NodeBuilderImpl {
             }
             PseudoTypeKind::NoResult => {
                 let node = t.as_pseudo_type_no_result().declaration;
-                self.ctx().tracker.get().unwrap().report_inference_fallback(node);
+                self.ctx().tracker.get().unwrap().report_inference_fallback(c, node);
                 if is_function_like(node) && !is_accessor(node) {
                     let sig = c.get_signature_from_declaration(node);
                     return self.serialize_return_type_for_signature(c, sig, false);
@@ -416,13 +416,13 @@ impl NodeBuilderImpl {
                 if !error_nodes.is_empty() {
                     if report_errors {
                         for &n in error_nodes {
-                            self.ctx().tracker.get().unwrap().report_inference_fallback(n);
+                            self.ctx().tracker.get().unwrap().report_inference_fallback(c, n);
                         }
                     }
                     return false;
                 }
                 if report_errors {
-                    self.ctx().tracker.get().unwrap().report_inference_fallback(t.as_pseudo_type_inferred().expression);
+                    self.ctx().tracker.get().unwrap().report_inference_fallback(c, t.as_pseudo_type_inferred().expression);
                 }
                 false
             }
@@ -461,7 +461,7 @@ impl NodeBuilderImpl {
                         }
                         if target_prop.is_none() {
                             if report_errors {
-                                self.ctx().tracker.get().unwrap().report_inference_fallback(e.name.parent().unwrap());
+                                self.ctx().tracker.get().unwrap().report_inference_fallback(c, e.name.parent().unwrap());
                             }
                             return false;
                         }
@@ -470,7 +470,7 @@ impl NodeBuilderImpl {
                     let target_is_optional = target_prop.flags().intersects(SymbolFlags::Optional);
                     if e.optional != target_is_optional {
                         if report_errors {
-                            self.ctx().tracker.get().unwrap().report_inference_fallback(e.name.parent().unwrap());
+                            self.ctx().tracker.get().unwrap().report_inference_fallback(c, e.name.parent().unwrap());
                         }
                         return false;
                     }
@@ -484,10 +484,10 @@ impl NodeBuilderImpl {
                                     if d.type_.kind == PseudoTypeKind::Inferred && !d.type_.as_pseudo_type_inferred().error_nodes.is_empty() {
                                         // Re-report the fine-grained error nodes; the recursive call used reportErrors=false
                                         for &n in d.type_.as_pseudo_type_inferred().error_nodes {
-                                            self.ctx().tracker.get().unwrap().report_inference_fallback(n);
+                                            self.ctx().tracker.get().unwrap().report_inference_fallback(c, n);
                                         }
                                     } else if !is_structural_pseudo_type(d.type_) {
-                                        self.ctx().tracker.get().unwrap().report_inference_fallback(e.name.parent().unwrap());
+                                        self.ctx().tracker.get().unwrap().report_inference_fallback(c, e.name.parent().unwrap());
                                     }
                                 }
                                 return false;
@@ -508,7 +508,7 @@ impl NodeBuilderImpl {
                             if let Some(target_predicate) = target_predicate {
                                 if !self.pseudo_return_type_matches_predicate(c, Some(d.return_type), target_predicate) {
                                     if report_errors {
-                                        self.ctx().tracker.get().unwrap().report_inference_fallback(e.name.parent().unwrap());
+                                        self.ctx().tracker.get().unwrap().report_inference_fallback(c, e.name.parent().unwrap());
                                     }
                                     return false;
                                 }
@@ -516,7 +516,7 @@ impl NodeBuilderImpl {
                                 let return_type = c.get_return_type_of_signature(target_sig);
                                 if !self.pseudo_type_equivalent_to_type(c, Some(d.return_type), Some(return_type), false, false) {
                                     if report_errors {
-                                        self.ctx().tracker.get().unwrap().report_inference_fallback(e.name.parent().unwrap());
+                                        self.ctx().tracker.get().unwrap().report_inference_fallback(c, e.name.parent().unwrap());
                                     }
                                     return false;
                                 }
@@ -526,7 +526,7 @@ impl NodeBuilderImpl {
                             let d = e.as_pseudo_get_accessor();
                             if !self.pseudo_type_equivalent_to_type(c, Some(d.type_), Some(prop_type), false, false) {
                                 if report_errors {
-                                    self.ctx().tracker.get().unwrap().report_inference_fallback(e.name.parent().unwrap());
+                                    self.ctx().tracker.get().unwrap().report_inference_fallback(c, e.name.parent().unwrap());
                                 }
                                 return false;
                             }
@@ -536,7 +536,7 @@ impl NodeBuilderImpl {
                             let write_type = c.get_write_type_of_symbol(target_prop);
                             if !self.pseudo_type_equivalent_to_type(c, Some(d.parameter.type_), write_type, false, false) {
                                 if report_errors {
-                                    self.ctx().tracker.get().unwrap().report_inference_fallback(e.name.parent().unwrap());
+                                    self.ctx().tracker.get().unwrap().report_inference_fallback(c, e.name.parent().unwrap());
                                 }
                                 return false;
                             }
@@ -578,7 +578,7 @@ impl NodeBuilderImpl {
                 let pt = t.as_pseudo_type_single_call_signature();
                 if target_sig.type_parameters.get().len() != pt.type_parameters.len() {
                     if report_errors {
-                        self.ctx().tracker.get().unwrap().report_inference_fallback(pt.signature);
+                        self.ctx().tracker.get().unwrap().report_inference_fallback(c, pt.signature);
                     }
                     return false;
                 }
@@ -590,7 +590,7 @@ impl NodeBuilderImpl {
                 if let Some(target_predicate) = target_predicate {
                     if !self.pseudo_return_type_matches_predicate(c, Some(pt.return_type), target_predicate) {
                         if report_errors {
-                            self.ctx().tracker.get().unwrap().report_inference_fallback(pt.signature);
+                            self.ctx().tracker.get().unwrap().report_inference_fallback(c, pt.signature);
                         }
                         return false;
                     }
@@ -605,7 +605,7 @@ impl NodeBuilderImpl {
             }
             PseudoTypeKind::NoResult => {
                 if report_errors {
-                    self.ctx().tracker.get().unwrap().report_inference_fallback(t.as_pseudo_type_no_result().declaration);
+                    self.ctx().tracker.get().unwrap().report_inference_fallback(c, t.as_pseudo_type_no_result().declaration);
                 }
                 false
             }
@@ -619,7 +619,7 @@ impl NodeBuilderImpl {
         let this_parameter = target_sig.this_parameter.get();
         if this_parameter.is_some() && params.is_empty() {
             if report_errors {
-                self.ctx().tracker.get().unwrap().report_inference_fallback(non_param_error_location); // missing `this` param
+                self.ctx().tracker.get().unwrap().report_inference_fallback(c, non_param_error_location); // missing `this` param
             }
             return false;
         } else if this_parameter.is_some() && is_this_identifier(params[0].name) {
@@ -627,21 +627,21 @@ impl NodeBuilderImpl {
             let param_type = c.get_type_of_parameter(target_param);
             if !self.pseudo_type_equivalent_to_type(c, Some(params[0].type_), Some(param_type), params[0].optional, false) {
                 if report_errors {
-                    self.ctx().tracker.get().unwrap().report_inference_fallback(params[0].name.parent().unwrap());
+                    self.ctx().tracker.get().unwrap().report_inference_fallback(c, params[0].name.parent().unwrap());
                 }
                 return false;
             }
             params = &params[1..];
         } else if this_parameter.is_some() {
             if report_errors {
-                self.ctx().tracker.get().unwrap().report_inference_fallback(non_param_error_location);
+                self.ctx().tracker.get().unwrap().report_inference_fallback(c, non_param_error_location);
             }
             return false;
         }
         let target_params = target_sig.parameters.get();
         if target_params.len() != params.len() {
             if report_errors {
-                self.ctx().tracker.get().unwrap().report_inference_fallback(non_param_error_location);
+                self.ctx().tracker.get().unwrap().report_inference_fallback(c, non_param_error_location);
             }
             return false; // TODO: spread tuple params may mess with this check
         }
@@ -649,14 +649,14 @@ impl NodeBuilderImpl {
             let target_param = target_params[i];
             if p.optional != c.is_optional_parameter(target_param.value_declaration().unwrap()) {
                 if report_errors {
-                    self.ctx().tracker.get().unwrap().report_inference_fallback(p.name.parent().unwrap());
+                    self.ctx().tracker.get().unwrap().report_inference_fallback(c, p.name.parent().unwrap());
                 }
                 return false;
             }
             let param_type = c.get_type_of_parameter(target_param);
             if !self.pseudo_type_equivalent_to_type(c, Some(p.type_), Some(param_type), p.optional, false) {
                 if report_errors {
-                    self.ctx().tracker.get().unwrap().report_inference_fallback(p.name.parent().unwrap());
+                    self.ctx().tracker.get().unwrap().report_inference_fallback(c, p.name.parent().unwrap());
                 }
                 return false;
             }

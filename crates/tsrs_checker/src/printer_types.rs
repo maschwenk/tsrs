@@ -19,7 +19,7 @@ pub use tsrs_printer::{
 
 /// Go `nodebuilder.SymbolTracker`.
 pub trait SymbolTracker {
-    fn track_symbol(&self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool;
+    fn track_symbol(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool;
     fn report_inaccessible_this_error(&self);
     fn report_private_in_base_of_class_expression(&self, property_name: &str);
     fn report_inaccessible_unique_symbol_error(&self);
@@ -28,7 +28,7 @@ pub trait SymbolTracker {
     fn report_truncation_error(&self);
     fn report_nonlocal_augmentation(&self, containing_file: P<SourceFile>, parent_symbol: P<Symbol>, augmenting_symbol: P<Symbol>);
     fn report_non_serializable_property(&self, property_name: &str);
-    fn report_inference_fallback(&self, node: P<Node>);
+    fn report_inference_fallback(&self, c: &mut Checker, node: P<Node>);
     fn push_error_fallback_node(&self, node: Option<P<Node>>);
     fn pop_error_fallback_node(&self);
 
@@ -106,6 +106,40 @@ pub enum SymbolAccessibility {
     NotResolved,
 }
 
+/// Go `printer.TypeReferenceSerializationKind` (printer/emitresolver.go).
+#[repr(i32)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum TypeReferenceSerializationKind {
+    // The TypeReferenceNode could not be resolved.
+    // The type name should be emitted using a safe fallback.
+    Unknown,
+    // The TypeReferenceNode resolves to a type with a constructor
+    // function that can be reached at runtime (e.g. a `class`
+    // declaration or a `var` declaration for the static side
+    // of a type, such as the global `Promise` type in lib.d.ts).
+    TypeWithConstructSignatureAndValue,
+    // The TypeReferenceNode resolves to a Void-like, Nullable, or Never type.
+    VoidNullableOrNeverType,
+    // The TypeReferenceNode resolves to a Number-like type.
+    NumberLikeType,
+    // The TypeReferenceNode resolves to a BigInt-like type.
+    BigIntLikeType,
+    // The TypeReferenceNode resolves to a String-like type.
+    StringLikeType,
+    // The TypeReferenceNode resolves to a Boolean-like type.
+    BooleanType,
+    // The TypeReferenceNode resolves to an Array-like type.
+    ArrayLikeType,
+    // The TypeReferenceNode resolves to the ESSymbol type.
+    ESSymbolType,
+    // The TypeReferenceNode resolved to the global Promise constructor symbol.
+    Promise,
+    // The TypeReferenceNode resolves to a Function type or a type with call signatures.
+    TypeWithCallSignature,
+    // The TypeReferenceNode resolves to any other type.
+    ObjectType,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct SymbolAccessibilityResult {
     pub accessibility: SymbolAccessibility,
@@ -150,8 +184,8 @@ pub struct SymbolTrackerImpl {
 }
 
 impl SymbolTracker for SymbolTrackerImpl {
-    fn track_symbol(&self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
-        SymbolTrackerImpl::track_symbol(self, symbol, enclosing_declaration, meaning)
+    fn track_symbol(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
+        SymbolTrackerImpl::track_symbol(self, c, symbol, enclosing_declaration, meaning)
     }
     fn report_inaccessible_this_error(&self) {
         SymbolTrackerImpl::report_inaccessible_this_error(self)
@@ -177,8 +211,8 @@ impl SymbolTracker for SymbolTrackerImpl {
     fn report_non_serializable_property(&self, property_name: &str) {
         SymbolTrackerImpl::report_non_serializable_property(self, property_name)
     }
-    fn report_inference_fallback(&self, node: P<Node>) {
-        SymbolTrackerImpl::report_inference_fallback(self, node)
+    fn report_inference_fallback(&self, c: &mut Checker, node: P<Node>) {
+        SymbolTrackerImpl::report_inference_fallback(self, c, node)
     }
     fn push_error_fallback_node(&self, node: Option<P<Node>>) {
         SymbolTrackerImpl::push_error_fallback_node(self, node)

@@ -32,6 +32,7 @@ add_types_to_intersection | pub(crate) fn add_types_to_intersection(&mut self, t
 add_types_to_union | pub(crate) fn add_types_to_union(&mut self, source_types: &[P<Type>]) -> (Vec<P<Type>>, TypeFlags) | checker.go:26231 | Checker
 add_undefined_to_globals_or_error_on_redeclaration | pub(crate) fn add_undefined_to_globals_or_error_on_redeclaration(&mut self) | checker.go:1493 | Checker
 alias | pub fn alias(&self) -> Option<P<TypeAlias>> | rust:types.rs:1017 | Type
+alias_marking_visitor_worker | pub(crate) fn alias_marking_visitor_worker(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:260 | EmitResolver
 all_declarations_in_same_source_file | pub(crate) fn all_declarations_in_same_source_file(symbol: P<Symbol>) -> bool | utilities.go:1633 | -
 all_types_assignable_to_kind | pub(crate) fn all_types_assignable_to_kind(&mut self, source: P<Type>, kind: TypeFlags) -> bool | checker.go:28098 | Checker
 all_types_assignable_to_kind_ex | pub(crate) fn all_types_assignable_to_kind_ex(&mut self, source: P<Type>, kind: TypeFlags, strict: bool) -> bool | checker.go:28102 | Checker
@@ -555,6 +556,8 @@ create_import_attributes_for_module_specifier | pub(crate) fn create_import_attr
 create_instantiated_symbol_table | pub(crate) fn create_instantiated_symbol_table(&mut self, symbols: &[P<Symbol>], m: P<TypeMapper>) -> Option<P<SymbolTable>> | checker.go:21070 | Checker
 create_iterable_type | pub(crate) fn create_iterable_type(&mut self, iterated_type: P<Type>) -> P<Type> | checker.go:25167 | Checker
 create_jsx_attributes_type_from_attributes_property | pub(crate) fn create_jsx_attributes_type_from_attributes_property(&mut self, opening_like_element: P<Node>, check_mode: CheckMode) -> P<Type> | jsx.go:710 | Checker
+create_late_bound_index_signatures | pub fn create_late_bound_index_signatures(&self, c: &mut Checker, emit_context: P<EmitContext>, container: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Vec<P<Node>> | emitresolver.go:1061 | EmitResolver
+create_literal_const_value | pub fn create_literal_const_value(&self, c: &mut Checker, emit_context: P<EmitContext>, node: P<Node>, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> | emitresolver.go:988 | EmitResolver
 create_mapped_type_node_from_type | pub(crate) fn create_mapped_type_node_from_type(&self, c: &mut Checker, t: P<Type>) -> P<Node> | nodebuilderimpl.go:1530 | NodeBuilderImpl
 create_marker_type | pub(crate) fn create_marker_type(&mut self, symbol: P<Symbol>, source: P<Type>, target: P<Type>) -> P<Type> | relater.go:1446 | Checker
 create_mode_mismatch_details | pub fn create_mode_mismatch_details(program: &'static dyn Program, file: P<SourceFile>) -> DiagnosticDetails | utilities.go:1875 | -
@@ -578,6 +581,7 @@ create_promise_return_type | pub(crate) fn create_promise_return_type(&mut self,
 create_promise_type | pub(crate) fn create_promise_type(&mut self, promised_type: P<Type>) -> P<Type> | checker.go:20689 | Checker
 create_property_name_node_for_identifier_or_literal | pub(crate) fn create_property_name_node_for_identifier_or_literal(&self, c: &mut Checker, name: &str, single_quote: bool, string_named: bool, is_method: bool, symbol: P<Symbol>) -> P<Node> | nodebuilderimpl.go:2466 | NodeBuilderImpl
 create_recovery_boundary | pub(crate) fn create_recovery_boundary(&self, c: &mut Checker) -> P<recoveryBoundary> | nodecopy.go:195 | NodeBuilderImpl
+create_return_type_of_signature_declaration | pub fn create_return_type_of_signature_declaration(&self, c: &mut Checker, emit_context: P<EmitContext>, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> | emitresolver.go:950 | EmitResolver
 create_reverse_mapped_type | pub(crate) fn create_reverse_mapped_type(&mut self, source: P<Type>, target: P<Type>, constraint: P<Type>) -> Option<P<Type>> | inference.go:1014 | Checker
 create_signature_for_jsx_intrinsic | pub(crate) fn create_signature_for_jsx_intrinsic(&mut self, node: P<Node>, result: P<Type>) -> P<Signature> | jsx.go:1171 | Checker
 create_signature_instantiation | pub(crate) fn create_signature_instantiation(&mut self, sig: P<Signature>, type_arguments: &[P<Type>]) -> P<Signature> | checker.go:19669 | Checker
@@ -591,6 +595,9 @@ create_tuple_type_ex | pub(crate) fn create_tuple_type_ex(&mut self, element_typ
 create_type_from_generic_global_type | pub(crate) fn create_type_from_generic_global_type(&mut self, generic_global_type: P<Type>, type_arguments: &[P<Type>]) -> P<Type> | checker.go:25138 | Checker
 create_type_node_from_object_type | pub(crate) fn create_type_node_from_object_type(&self, c: &mut Checker, t: P<Type>) -> Option<P<Node>> | nodebuilderimpl.go:2782 | NodeBuilderImpl
 create_type_nodes_from_resolved_type | pub(crate) fn create_type_nodes_from_resolved_type(&self, c: &mut Checker, resolved_type: P<Type>) -> Option<P<NodeList>> | nodebuilderimpl.go:2719 | NodeBuilderImpl
+create_type_of_declaration | pub fn create_type_of_declaration(&self, c: &mut Checker, emit_context: P<EmitContext>, declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> | emitresolver.go:974 | EmitResolver
+create_type_of_expression | pub fn create_type_of_expression(&self, c: &mut Checker, emit_context: P<EmitContext>, expression: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> | emitresolver.go:1049 | EmitResolver
+create_type_parameters_of_signature_declaration | pub fn create_type_parameters_of_signature_declaration(&self, c: &mut Checker, emit_context: P<EmitContext>, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<Vec<P<Node>>> | emitresolver.go:962 | EmitResolver
 create_type_predicate_from_type_predicate_node | pub(crate) fn create_type_predicate_from_type_predicate_node(&mut self, node: P<Node>, signature: P<Signature>) -> P<TypePredicate> | relater.go:2117 | Checker
 create_type_reference | pub(crate) fn create_type_reference(&mut self, target: P<Type>, type_arguments: &[P<Type>]) -> P<Type> | checker.go:25573 | Checker
 create_type_reference_ex | pub(crate) fn create_type_reference_ex(&mut self, target: P<Type>, type_arguments: &[P<Type>], object_flags: ObjectFlags) -> P<Type> | checker.go:25577 | Checker
@@ -825,6 +832,7 @@ get_conditional_type | pub(crate) fn get_conditional_type(&mut self, root: P<Con
 get_conditional_type_instantiation | pub(crate) fn get_conditional_type_instantiation(&mut self, t: P<Type>, mapper: P<TypeMapper>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> | checker.go:22910 | Checker
 get_conditional_type_key | pub(crate) fn get_conditional_type_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, for_constraint: bool) -> CacheHashKey | checker.go:17943 | -
 get_constant_value | pub fn get_constant_value(&mut self, node: P<Node>) -> Option<LiteralValue> | services.go:870 | Checker
+get_constant_value | pub fn get_constant_value(&self, c: &mut Checker, node: P<Node>) -> Option<LiteralValue> | emitresolver.go:1158 | EmitResolver
 get_constituent_count | pub(crate) fn get_constituent_count(t: P<Type>) -> i32 | checker.go:26922 | -
 get_constituent_count_of_types | pub(crate) fn get_constituent_count_of_types(types: &[P<Type>]) -> i32 | checker.go:26932 | -
 get_constituent_property | pub(crate) fn get_constituent_property(&mut self, object_type: P<Type>, property_name: &str) -> Option<P<Symbol>> | checker.go:8429 | Checker
@@ -922,6 +930,7 @@ get_effective_call_arguments | pub(crate) fn get_effective_call_arguments(&mut s
 get_effective_check_node | pub(crate) fn get_effective_check_node(&mut self, argument: P<Node>) -> Option<P<Node>> | checker.go:9573 | Checker
 get_effective_constraint_of_intersection | pub(crate) fn get_effective_constraint_of_intersection(&mut self, types: &[P<Type>], target_is_union: bool) -> Option<P<Type>> | relater.go:2315 | Checker
 get_effective_declaration_flags | pub fn get_effective_declaration_flags(&mut self, n: P<Node>, flags_to_check: ModifierFlags) -> ModifierFlags | checker.go:3729 | Checker
+get_effective_declaration_flags | pub fn get_effective_declaration_flags(&self, c: &mut Checker, node: P<Node>, flags: ModifierFlags) -> ModifierFlags | emitresolver.go:1151 | EmitResolver
 get_effective_decorator_arguments | pub(crate) fn get_effective_decorator_arguments(&mut self, node: P<Node>) -> Vec<P<Node>> | checker.go:30631 | Checker
 get_effective_first_argument_for_jsx_signature | pub(crate) fn get_effective_first_argument_for_jsx_signature(&mut self, signature: P<Signature>, node: P<Node>) -> Option<P<Type>> | jsx.go:925 | Checker
 get_effective_parameter_declaration | pub(crate) fn get_effective_parameter_declaration(symbol: P<Symbol>) -> Option<P<Node>> | nodebuilderimpl.go:1715 | -
@@ -932,6 +941,7 @@ get_effective_type_argument_at_index | pub(crate) fn get_effective_type_argument
 get_effective_type_arguments | pub(crate) fn get_effective_type_arguments(&mut self, node: P<Node>, type_parameters: &[P<Type>]) -> Vec<P<Type>> | checker.go:22329 | Checker
 get_effects_signature | pub(crate) fn get_effects_signature(&mut self, node: P<Node>) -> Option<P<Signature>> | flow.go:2047 | Checker
 get_elaboration_element_for_jsx_child | pub(crate) fn get_elaboration_element_for_jsx_child(&mut self, child: P<Node>, name_type: P<Type>, get_invalid_text_diagnostic: InvalidTextDiagnosticFn) -> JsxElaborationElement | jsx.go:393 | Checker
+get_element_access_expression_name | pub fn get_element_access_expression_name(&self, c: &mut Checker, expression: P<Node>) -> String | emitresolver.go:924 | EmitResolver
 get_element_type_of_array_type | pub(crate) fn get_element_type_of_array_type(&mut self, t: P<Type>) -> Option<P<Type>> | checker.go:23974 | Checker
 get_element_type_of_evolving_array_type | pub(crate) fn get_element_type_of_evolving_array_type(&mut self, t: P<Type>) -> P<Type> | flow.go:1520 | Checker
 get_element_type_of_slice_of_tuple_type | pub(crate) fn get_element_type_of_slice_of_tuple_type(&mut self, t: P<Type>, index: i32, end_skip_count: i32, writing: bool, no_reductions: bool) -> Option<P<Type>> | checker.go:25300 | Checker
@@ -948,6 +958,7 @@ get_entity_name_for_extending_interface | pub(crate) fn get_entity_name_for_exte
 get_entity_name_from_type_node | pub(crate) fn get_entity_name_from_type_node(node: P<Node>) -> Option<P<Node>> | checker.go:29362 | -
 get_enum_literal_type | pub(crate) fn get_enum_literal_type(&mut self, value: LiteralValue, enum_symbol: P<Symbol>, symbol: P<Symbol>) -> P<Type> | checker.go:25832 | Checker
 get_enum_member_value | pub(crate) fn get_enum_member_value(&mut self, node: P<Node>) -> evaluator::Result | checker.go:24382 | Checker
+get_enum_member_value | pub fn get_enum_member_value(&self, c: &mut Checker, node: P<Node>) -> evaluator::Result | emitresolver.go:89 | EmitResolver
 get_erased_signature | pub(crate) fn get_erased_signature(&mut self, signature: P<Signature>) -> P<Signature> | checker.go:19737 | Checker
 get_error_node_for_call_node | pub(crate) fn get_error_node_for_call_node(node: P<Node>) -> Option<P<Node>> | checker.go:10035 | -
 get_error_state | pub(crate) fn get_error_state(&self, c: &mut Checker) -> errorState | relater.go:3212 | Relater
@@ -973,6 +984,7 @@ get_exports_of_module_worker | pub(crate) fn get_exports_of_module_worker(&mut s
 get_exports_of_symbol | pub(crate) fn get_exports_of_symbol(&mut self, symbol: P<Symbol>) -> Option<P<SymbolTable>> | checker.go:16243 | Checker
 get_external_module_container | pub(crate) fn get_external_module_container(&mut self, declaration: P<Node>) -> Option<P<Symbol>> | symbolaccessibility.go:253 | Checker
 get_external_module_file_from_declaration | pub(crate) fn get_external_module_file_from_declaration(&mut self, declaration: P<Node>) -> Option<P<SourceFile>> | checker.go:15372 | Checker
+get_external_module_file_from_declaration | pub fn get_external_module_file_from_declaration(&self, c: &mut Checker, declaration: P<Node>) -> Option<P<SourceFile>> | emitresolver.go:832 | EmitResolver
 get_external_module_member | pub(crate) fn get_external_module_member(&mut self, node: P<Node>, specifier: P<Node>, dont_resolve_alias: bool) -> Option<P<Symbol>> | checker.go:14905 | Checker
 get_external_module_require_argument | pub(crate) fn get_external_module_require_argument(node: P<Node>) -> Option<P<Node>> | utilities.go:233 | -
 get_extract_string_type | pub(crate) fn get_extract_string_type(&mut self, t: P<Type>) -> P<Type> | checker.go:27179 | Checker
@@ -1153,8 +1165,10 @@ get_jsx_element_type_at | pub(crate) fn get_jsx_element_type_at(&mut self, locat
 get_jsx_element_type_symbol | pub(crate) fn get_jsx_element_type_symbol(&mut self, jsx_namespace: Option<P<Symbol>>) -> Option<P<Symbol>> | jsx.go:1057 | Checker
 get_jsx_element_type_type_at | pub(crate) fn get_jsx_element_type_type_at(&mut self, location: P<Node>) -> Option<P<Type>> | jsx.go:1277 | Checker
 get_jsx_factory_entity | pub(crate) fn get_jsx_factory_entity(&mut self, location: Option<P<Node>>) -> Option<P<Node>> | jsx.go:1404 | Checker
+get_jsx_factory_entity | pub fn get_jsx_factory_entity(&self, c: &mut Checker, location: P<Node>) -> Option<P<Node>> | emitresolver.go:53 | EmitResolver
 get_jsx_fragment_factory | pub fn get_jsx_fragment_factory(&mut self, location: P<Node>) -> String | exports.go:288 | Checker
 get_jsx_fragment_factory_entity | pub(crate) fn get_jsx_fragment_factory_entity(&mut self, location: Option<P<Node>>) -> Option<P<Node>> | jsx.go:1414 | Checker
+get_jsx_fragment_factory_entity | pub fn get_jsx_fragment_factory_entity(&self, c: &mut Checker, location: P<Node>) -> Option<P<Node>> | emitresolver.go:59 | EmitResolver
 get_jsx_fragment_type | pub(crate) fn get_jsx_fragment_type(&mut self, node: P<Node>) -> P<Type> | jsx.go:500 | Checker
 get_jsx_library_managed_attributes | pub(crate) fn get_jsx_library_managed_attributes(&mut self, jsx_namespace: Option<P<Symbol>>) -> Option<P<Symbol>> | jsx.go:1050 | Checker
 get_jsx_managed_attributes_from_located_attributes | pub(crate) fn get_jsx_managed_attributes_from_located_attributes(&mut self, context: P<Node>, ns: Option<P<Symbol>>, attributes_type: P<Type>) -> P<Type> | jsx.go:1018 | Checker
@@ -1269,6 +1283,7 @@ get_private_identifier_property_of_type | pub(crate) fn get_private_identifier_p
 get_promised_type_of_promise | pub fn get_promised_type_of_promise(&mut self, t: P<Type>) -> Option<P<Type>> | checker.go:29389 | Checker
 get_promised_type_of_promise_ex | pub(crate) fn get_promised_type_of_promise_ex(&mut self, t: P<Type>, error_node: Option<P<Node>>, this_type_for_error_out: Option<&mut Option<P<Type>>>) -> Option<P<Type>> | checker.go:29396 | Checker
 get_propagating_flags_of_types | pub(crate) fn get_propagating_flags_of_types(&mut self, types: &[P<Type>], exclude_kinds: TypeFlags) -> ObjectFlags | checker.go:25648 | Checker
+get_properties_of_container_function | pub fn get_properties_of_container_function(&self, c: &mut Checker, node: Option<P<Node>>) -> Vec<P<Symbol>> | emitresolver.go:1257 | EmitResolver
 get_properties_of_context | pub(crate) fn get_properties_of_context(&mut self, context: P<WideningContext>) -> Vec<P<Symbol>> | checker.go:18806 | Checker
 get_properties_of_object_type | pub(crate) fn get_properties_of_object_type(&mut self, t: P<Type>) -> Vec<P<Symbol>> | checker.go:19198 | Checker
 get_properties_of_type | pub fn get_properties_of_type(&mut self, t: P<Type>) -> Vec<P<Symbol>> | checker.go:19190 | Checker
@@ -1296,7 +1311,14 @@ get_reduced_type | pub fn get_reduced_type(&mut self, t: P<Type>) -> P<Type> | c
 get_reduced_union_type | pub(crate) fn get_reduced_union_type(&mut self, union_type: P<Type>) -> P<Type> | checker.go:22240 | Checker
 get_ref | pub fn get_ref(&self) -> Option<P<RefCell<FxHashMap<K, V>>>> | rust:types.rs:63 | GoMap
 get_reference_candidate | pub(crate) fn get_reference_candidate(&mut self, node: P<Node>) -> P<Node> | flow.go:1861 | Checker
+get_reference_resolver | pub(crate) fn get_reference_resolver(&self, c: &mut Checker) -> P<ReferenceResolver<Checker>> | emitresolver.go:842 | EmitResolver
 get_reference_root | pub(crate) fn get_reference_root(&mut self, node: P<Node>) -> P<Node> | flow.go:1876 | Checker
+get_referenced_export_container | pub fn get_referenced_export_container(&self, c: &mut Checker, node: P<Node>, prefix_locals: bool) -> Option<P<Node>> | emitresolver.go:858 | EmitResolver
+get_referenced_import_declaration | pub fn get_referenced_import_declaration(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | emitresolver.go:875 | EmitResolver
+get_referenced_member_value_declaration | pub fn get_referenced_member_value_declaration(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | emitresolver.go:935 | EmitResolver
+get_referenced_value_declaration | pub fn get_referenced_value_declaration(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | emitresolver.go:889 | EmitResolver
+get_referenced_value_declaration_unsafe | pub fn get_referenced_value_declaration_unsafe(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | emitresolver.go:900 | EmitResolver
+get_referenced_value_declarations | pub fn get_referenced_value_declarations(&self, c: &mut Checker, node: P<Node>) -> Vec<P<Node>> | emitresolver.go:904 | EmitResolver
 get_referenced_value_or_alias_symbol | pub(crate) fn get_referenced_value_or_alias_symbol(&mut self, reference: P<Node>) -> Option<P<Symbol>> | checker.go:14142 | Checker
 get_regular_type_of_expression | pub(crate) fn get_regular_type_of_expression(&mut self, expr: P<Node>) -> P<Type> | checker.go:32608 | Checker
 get_regular_type_of_literal_type | pub(crate) fn get_regular_type_of_literal_type(&mut self, t: P<Type>) -> P<Type> | checker.go:25743 | Checker
@@ -1567,6 +1589,7 @@ get_type_predicate_of_signature | pub fn get_type_predicate_of_signature(&mut se
 get_type_predicate_parent | pub(crate) fn get_type_predicate_parent(&mut self, node: P<Node>) -> Option<P<Node>> | checker.go:3147 | Checker
 get_type_reference_arity | pub(crate) fn get_type_reference_arity(&mut self, t: P<Type>) -> i32 | checker.go:23938 | Checker
 get_type_reference_name | pub(crate) fn get_type_reference_name(node: P<Node>) -> Option<P<Node>> | checker.go:24157 | -
+get_type_reference_serialization_kind | pub fn get_type_reference_serialization_kind(&self, c: &mut Checker, type_name: Option<P<Node>>, location: Option<P<Node>>) -> TypeReferenceSerializationKind | emitresolver.go:1165 | EmitResolver
 get_type_reference_type | pub(crate) fn get_type_reference_type(&mut self, node: P<Node>, symbol: P<Symbol>) -> P<Type> | checker.go:23607 | Checker
 get_type_with_default | pub(crate) fn get_type_with_default(&mut self, t: P<Type>, default_expression: Option<P<Node>>) -> P<Type> | flow.go:2389 | Checker
 get_type_with_facts | pub(crate) fn get_type_with_facts(&mut self, t: P<Type>, include: TypeFacts) -> P<Type> | checker.go:31639 | Checker
@@ -1780,6 +1803,7 @@ is_accessible | pub(crate) fn is_accessible(&mut self, ctx: &accessibleSymbolCha
 is_actively_expanding | pub(crate) fn is_actively_expanding(&self, c: &mut Checker) -> bool | nodebuilderimpl.go:231 | NodeBuilderImpl
 is_additive_operator | pub(crate) fn is_additive_operator(kind: Kind) -> bool | utilities.go:812 | -
 is_additive_operator_or_higher | pub(crate) fn is_additive_operator_or_higher(kind: Kind) -> bool | utilities.go:816 | -
+is_alias_resolved_to_value | pub(crate) fn is_alias_resolved_to_value(&self, c: &mut Checker, symbol: Option<P<Symbol>>, exclude_type_only_values: bool) -> bool | emitresolver.go:764 | EmitResolver
 is_any_symbol_accessible | pub fn is_any_symbol_accessible(&mut self, symbols: &[P<Symbol>], enclosing_declaration: Option<P<Node>>, initial_symbol: P<Symbol>, meaning: SymbolFlags, should_compute_aliases_to_make_visible: bool, allow_modules: bool) -> Option<P<SymbolAccessibilityResult>> | symbolaccessibility.go:26 | Checker
 is_applicable_index_type | pub(crate) fn is_applicable_index_type(&mut self, source: P<Type>, target: P<Type>) -> bool | checker.go:19398 | Checker
 is_arity_smaller | pub(crate) fn is_arity_smaller(&mut self, signature: P<Signature>, target: P<Node>) -> bool | checker.go:10530 | Checker
@@ -1808,12 +1832,14 @@ is_class_derived_from_declaring_classes | pub(crate) fn is_class_derived_from_de
 is_class_instance_property | pub(crate) fn is_class_instance_property(node: P<Node>) -> bool | utilities.go:1060 | -
 is_class_instance_side | pub(crate) fn is_class_instance_side(c: &mut Checker, t: P<Type>) -> bool | nodebuilderimpl.go:337 | -
 is_coercible_under_double_equals | pub(crate) fn is_coercible_under_double_equals(source: P<Type>, target: P<Type>) -> bool | flow.go:1928 | -
+is_common_js_module_exports | pub(crate) fn is_common_js_module_exports(node: P<Node>) -> bool | emitresolver.go:249 | -
 is_common_js_require | pub(crate) fn is_common_js_require(&mut self, node: P<Node>) -> bool | checker.go:15997 | Checker
 is_compound_like_assignment | pub(crate) fn is_compound_like_assignment(assignment: P<Node>) -> bool | utilities.go:122 | -
 is_conflicting_private_property | pub(crate) fn is_conflicting_private_property(prop: P<Symbol>) -> bool | checker.go:22284 | -
 is_const_context | pub(crate) fn is_const_context(&mut self, node: P<Node>) -> bool | checker.go:13833 | Checker
 is_const_enum_object_type | pub(crate) fn is_const_enum_object_type(t: P<Type>) -> bool | checker.go:28134 | -
 is_const_enum_or_const_enum_only_module | fn is_const_enum_or_const_enum_only_module(s: P<Symbol>) -> bool | emitresolver.go:693 | -
+is_const_enum_or_const_enum_only_module | pub(crate) fn is_const_enum_or_const_enum_only_module(s: P<Symbol>) -> bool | emitresolver.go:693 | -
 is_const_enum_symbol | pub(crate) fn is_const_enum_symbol(symbol: P<Symbol>) -> bool | checker.go:28138 | -
 is_const_type_reference | pub(crate) fn is_const_type_reference(node: P<Node>) -> bool | utilities.go:127 | -
 is_const_type_reference_name | pub(crate) fn is_const_type_reference_name(node: Option<P<Node>>) -> bool | utilities.go:133 | -
@@ -1832,11 +1858,13 @@ is_conversion_or_interface_implementation_message | pub(crate) fn is_conversion_
 is_declaration_contained_by | pub(crate) fn is_declaration_contained_by(&mut self, symbol: P<Symbol>, container: P<Symbol>) -> bool | checker.go:22472 | Checker
 is_declaration_readonly | pub(crate) fn is_declaration_readonly(declaration: P<Node>) -> bool | utilities.go:871 | -
 is_declaration_visible | pub(crate) fn is_declaration_visible(&self, c: &mut Checker, node: Option<P<Node>>) -> bool | emitresolver.go:111 | EmitResolver
+is_declaration_visible_exported | pub fn is_declaration_visible_exported(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:104 | EmitResolver
 is_declaration_with_explicit_type_annotation | pub(crate) fn is_declaration_with_explicit_type_annotation(&mut self, node: P<Node>) -> bool | flow.go:2197 | Checker
 is_deeply_nested_type | pub(crate) fn is_deeply_nested_type(&mut self, t: P<Type>, stack: &[P<Type>], max_depth: i32) -> bool | relater.go:766 | Checker
 is_default_binding_context | pub(crate) fn is_default_binding_context(location: P<Node>) -> bool | nodebuilderimpl.go:932 | -
 is_deferred_type | pub(crate) fn is_deferred_type(&mut self, t: P<Type>, check_tuples: bool) -> bool | checker.go:24945 | Checker
 is_deferred_type_reference_node | pub(crate) fn is_deferred_type_reference_node(&mut self, node: P<Node>, has_default_type_arguments: bool) -> bool | checker.go:23697 | Checker
+is_definitely_reference_to_global_symbol_object | pub fn is_definitely_reference_to_global_symbol_object(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:544 | EmitResolver
 is_delete_target | pub(crate) fn is_delete_target(node: P<Node>) -> bool | utilities.go:109 | -
 is_deprecated_declaration | pub fn is_deprecated_declaration(&mut self, declaration: P<Node>) -> bool | checker.go:14269 | Checker
 is_deprecated_symbol | pub(crate) fn is_deprecated_symbol(&mut self, symbol: P<Symbol>) -> bool | checker.go:14289 | Checker
@@ -1855,6 +1883,7 @@ is_empty_object_type | pub(crate) fn is_empty_object_type(&mut self, t: P<Type>)
 is_empty_object_type_or_spreads_into_empty_object | pub(crate) fn is_empty_object_type_or_spreads_into_empty_object(&mut self, t: P<Type>) -> bool | checker.go:13822 | Checker
 is_empty_resolved_type | pub(crate) fn is_empty_resolved_type(&mut self, t: &'static StructuredType) -> bool | checker.go:26951 | Checker
 is_entity_name_visible | pub(crate) fn is_entity_name_visible(&self, c: &mut Checker, entity_name: P<Node>, enclosing_declaration: Option<P<Node>>, should_compute_alias_to_make_visible: bool) -> SymbolAccessibilityResult | emitresolver.go:340 | EmitResolver
+is_entity_name_visible_exported | pub fn is_entity_name_visible_exported(&self, c: &mut Checker, entity_name: P<Node>, enclosing_declaration: Option<P<Node>>) -> SymbolAccessibilityResult | emitresolver.go:334 | EmitResolver
 is_enum_literal | pub fn is_enum_literal(&self) -> bool | rust:types.rs:1045 | Type
 is_enum_type_related_to | pub(crate) fn is_enum_type_related_to(&mut self, source: P<Symbol>, target: P<Symbol>, error_reporter: Option<ErrorReporter<'_>>) -> bool | relater.go:281 | Checker
 is_equality_operator | pub(crate) fn is_equality_operator(kind: Kind) -> bool | utilities.go:838 | -
@@ -1872,6 +1901,8 @@ is_excluded_mapped_property_name | pub(crate) fn is_excluded_mapped_property_nam
 is_exhaustive_switch_statement | pub(crate) fn is_exhaustive_switch_statement(&mut self, node: P<Node>) -> bool | flow.go:1933 | Checker
 is_expandable_type | pub(crate) fn is_expandable_type(&self, c: &mut Checker, t: P<Type>, is_alias: bool) -> bool | nodebuilderimpl.go:175 | NodeBuilderImpl
 is_expanding | pub(crate) fn is_expanding(ctx: P<NodeBuilderContext>) -> bool | nodebuilder_hover.go:16 | -
+is_expando_function_declaration | pub fn is_expando_function_declaration(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:675 | EmitResolver
+is_expando_function_declaration_unsafe | pub fn is_expando_function_declaration_unsafe(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:660 | EmitResolver
 is_expando_property_function_with_return_type_annotation | pub(crate) fn is_expando_property_function_with_return_type_annotation(&mut self, node: P<Node>) -> bool | flow.go:2202 | Checker
 is_exponentiation_operator | pub(crate) fn is_exponentiation_operator(kind: Kind) -> bool | utilities.go:800 | -
 is_export_assignment_expression_name | pub(crate) fn is_export_assignment_expression_name(node: Option<P<Node>>) -> bool | utilities.go:143 | -
@@ -1905,6 +1936,8 @@ is_identifier_type_reference | pub(crate) fn is_identifier_type_reference(node: 
 is_ignored_jsx_property | pub(crate) fn is_ignored_jsx_property(source: P<Type>, source_prop: P<Symbol>) -> bool | relater.go:2859 | -
 is_immediately_used_in_initializer_of_block_scoped_variable | pub(crate) fn is_immediately_used_in_initializer_of_block_scoped_variable(declaration: P<Node>, usage: P<Node>, decl_container: P<Node>) -> bool | checker.go:2113 | -
 is_implementation_compatible_with_overload | pub(crate) fn is_implementation_compatible_with_overload(&mut self, implementation: P<Signature>, overload: P<Signature>) -> bool | checker.go:3744 | Checker
+is_implementation_of_overload | pub fn is_implementation_of_overload(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:467 | EmitResolver
+is_import_required_by_augmentation | pub fn is_import_required_by_augmentation(&self, c: &mut Checker, decl: P<Node>) -> bool | emitresolver.go:508 | EmitResolver
 is_import_type_qualifier_part | pub(crate) fn is_import_type_qualifier_part(node: P<Node>) -> Option<P<Node>> | utilities.go:1174 | -
 is_in_ambient_or_type_node | pub(crate) fn is_in_ambient_or_type_node(node: P<Node>) -> bool | utilities.go:1101 | -
 is_in_ambient_or_type_node | pub(crate) fn is_in_ambient_or_type_node(&mut self, node: P<Node>) -> bool | checker.go:11438 | Checker
@@ -1940,9 +1973,11 @@ is_known_symbol | pub fn is_known_symbol(symbol: P<Symbol>) -> bool | utilities.
 is_late_bindable_ast | pub(crate) fn is_late_bindable_ast(node: P<Node>) -> bool | checker.go:20331 | -
 is_late_bindable_index_signature | pub(crate) fn is_late_bindable_index_signature(&mut self, node: P<Node>) -> bool | checker.go:20317 | Checker
 is_late_bindable_name | pub(crate) fn is_late_bindable_name(&mut self, node: P<Node>) -> bool | checker.go:20302 | Checker
+is_late_bound | pub fn is_late_bound(&self, c: &mut Checker, node: Option<P<Node>>) -> bool | emitresolver.go:71 | EmitResolver
 is_late_bound_name | pub(crate) fn is_late_bound_name(name: &str) -> bool | utilities.go:1029 | -
 is_lib_symbol_for_hover_verbosity | pub fn is_lib_symbol_for_hover_verbosity(&mut self, symbol: Option<P<Symbol>>) -> bool | services.go:1125 | Checker
 is_lib_type_for_hover_verbosity | pub fn is_lib_type_for_hover_verbosity(&mut self, t: P<Type>) -> bool | services.go:1140 | Checker
+is_literal_const_declaration | pub fn is_literal_const_declaration(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:643 | EmitResolver
 is_literal_expression_of_object | pub(crate) fn is_literal_expression_of_object(node: P<Node>) -> bool | utilities.go:1107 | -
 is_literal_of_contextual_type | pub(crate) fn is_literal_of_contextual_type(&mut self, candidate_type: P<Type>, contextual_type: Option<P<Type>>) -> bool | checker.go:25992 | Checker
 is_literal_type | pub(crate) fn is_literal_type(t: P<Type>) -> bool | checker.go:25863 | -
@@ -1966,6 +2001,7 @@ is_mutable_array_like_type | pub(crate) fn is_mutable_array_like_type(&mut self,
 is_mutable_array_or_tuple | pub(crate) fn is_mutable_array_or_tuple(&mut self, t: P<Type>) -> bool | checker.go:23970 | Checker
 is_mutable_local_variable_declaration | pub(crate) fn is_mutable_local_variable_declaration(&mut self, declaration: P<Node>) -> bool | utilities.go:1096 | Checker
 is_mutable_tuple_type | pub(crate) fn is_mutable_tuple_type(t: P<Type>) -> bool | checker.go:23954 | -
+is_name_resolvable | pub fn is_name_resolvable(&self, c: &mut Checker, location: Option<P<Node>>, name: &str) -> bool | emitresolver.go:916 | EmitResolver
 is_named_member | pub(crate) fn is_named_member(&mut self, symbol: P<Symbol>, id: &str) -> bool | checker.go:22483 | Checker
 is_namespace_member | pub(crate) fn is_namespace_member(&self, _c: &mut Checker, p: P<Symbol>) -> bool | nodebuilder_hover.go:598 | NodeBuilderImpl
 is_namespace_reexport_declaration | pub(crate) fn is_namespace_reexport_declaration(node: P<Node>) -> bool | symbolaccessibility.go:616 | -
@@ -2002,6 +2038,7 @@ is_only_importable_as_default | pub(crate) fn is_only_importable_as_default(&mut
 is_optional_declaration | pub(crate) fn is_optional_declaration(declaration: P<Node>) -> bool | utilities.go:298 | -
 is_optional_parameter | pub(crate) fn is_optional_parameter(&mut self, node: P<Node>) -> bool | utilities.go:302 | Checker
 is_optional_parameter | pub(crate) fn is_optional_parameter(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:639 | EmitResolver
+is_optional_parameter_exported | pub fn is_optional_parameter_exported(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:65 | EmitResolver
 is_optional_property_declaration | pub(crate) fn is_optional_property_declaration(&mut self, node: P<Node>) -> bool | checker.go:11933 | Checker
 is_optional_uninitialized_parameter_property | pub(crate) fn is_optional_uninitialized_parameter_property(&self, c: &mut Checker, parameter: P<Node>) -> bool | emitresolver.go:622 | EmitResolver
 is_or_contains_matching_reference | pub(crate) fn is_or_contains_matching_reference(&mut self, source: P<Node>, target: P<Node>) -> bool | flow.go:1898 | Checker
@@ -2049,6 +2086,7 @@ is_reducible_intersection | pub(crate) fn is_reducible_intersection(&mut self, t
 is_reference_to_some_type | pub(crate) fn is_reference_to_some_type(&mut self, t: Option<P<Type>>, targets: &[P<Type>]) -> bool | checker.go:6566 | Checker
 is_reference_to_type | pub(crate) fn is_reference_to_type(&mut self, t: Option<P<Type>>, target: P<Type>) -> bool | checker.go:6562 | Checker
 is_referenced | pub(crate) fn is_referenced(&mut self, symbol: P<Symbol>) -> bool | checker.go:7245 | Checker
+is_referenced_alias_declaration | pub fn is_referenced_alias_declaration(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:697 | EmitResolver
 is_related_to | pub(crate) fn is_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, recursion_flags: RecursionFlags, report_errors: bool) -> Ternary | relater.go:2629 | Relater
 is_related_to_ex | pub(crate) fn is_related_to_ex(&self, c: &mut Checker, original_source: P<Type>, original_target: P<Type>, recursion_flags: RecursionFlags, report_errors: bool, head_message: Option<&'static Message>, intersection_state: IntersectionState) -> Ternary | relater.go:2633 | Relater
 is_related_to_simple | pub(crate) fn is_related_to_simple(&self, c: &mut Checker, source: P<Type>, target: P<Type>) -> Ternary | relater.go:2621 | Relater
@@ -2097,7 +2135,7 @@ is_string_named | pub(crate) fn is_string_named(&self, c: &mut Checker, d: P<Nod
 is_structural_pseudo_type | pub(crate) fn is_structural_pseudo_type(t: P<PseudoType>) -> bool | pseudotypenodebuilder.go:632 | -
 is_super_call | pub(crate) fn is_super_call(n: P<Node>) -> bool | utilities.go:1136 | -
 is_symbol_accessible | pub fn is_symbol_accessible(&mut self, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_aliases_to_make_visible: bool) -> SymbolAccessibilityResult | symbolaccessibility.go:839 | Checker
-is_symbol_accessible | pub(crate) fn is_symbol_accessible(&self, c: &mut Checker, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult | emitresolver.go:681 | EmitResolver
+is_symbol_accessible | pub fn is_symbol_accessible(&self, c: &mut Checker, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult | emitresolver.go:681 | EmitResolver
 is_symbol_accessible_by_flags | pub fn is_symbol_accessible_by_flags(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, flags: SymbolFlags) -> bool | symbolaccessibility.go:21 | Checker
 is_symbol_accessible_worker | pub(crate) fn is_symbol_accessible_worker(&mut self, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_aliases_to_make_visible: bool, allow_modules: bool) -> SymbolAccessibilityResult | symbolaccessibility.go:843 | Checker
 is_symbol_assigned | pub(crate) fn is_symbol_assigned(&mut self, symbol: P<Symbol>) -> bool | flow.go:2661 | Checker
@@ -2117,6 +2155,7 @@ is_this_initialized_object_binding_expression | pub(crate) fn is_this_initialize
 is_this_property | pub(crate) fn is_this_property(node: P<Node>) -> bool | utilities.go:966 | -
 is_this_property_access_in_constructor | pub(crate) fn is_this_property_access_in_constructor(&mut self, node: P<Node>, prop: P<Symbol>) -> bool | checker.go:27798 | Checker
 is_this_property_and_this_typed | pub(crate) fn is_this_property_and_this_typed(&mut self, node: P<Node>) -> bool | checker.go:32408 | Checker
+is_this_property_assignment_declaration_redundant | pub fn is_this_property_assignment_declaration_redundant(&self, c: &mut Checker, node: Option<P<Node>>) -> bool | emitresolver.go:1292 | EmitResolver
 is_this_type | pub fn is_this_type(&self) -> bool | rust:types.rs:1582 | TypeParameter
 is_this_type_parameter | pub(crate) fn is_this_type_parameter(t: P<Type>) -> bool | utilities.go:1056 | -
 is_thisless | pub(crate) fn is_thisless(symbol: P<Symbol>) -> bool | checker.go:21139 | -
@@ -2126,6 +2165,7 @@ is_thisless_type | pub(crate) fn is_thisless_type(node: P<Node>) -> bool | check
 is_thisless_type_parameter | pub(crate) fn is_thisless_type_parameter(node: P<Node>) -> bool | checker.go:21193 | -
 is_thisless_variable_like_declaration | pub(crate) fn is_thisless_variable_like_declaration(node: P<Node>) -> bool | checker.go:21158 | -
 is_top_level_in_external_module_augmentation | pub(crate) fn is_top_level_in_external_module_augmentation(node: Option<P<Node>>) -> bool | utilities.go:245 | -
+is_top_level_value_import_equals_with_entity_name | pub fn is_top_level_value_import_equals_with_entity_name(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:789 | EmitResolver
 is_top_signature | pub(crate) fn is_top_signature(&mut self, s: P<Signature>) -> bool | relater.go:1708 | Checker
 is_trivially_serializable_computed_name | pub(crate) fn is_trivially_serializable_computed_name(&self, c: &mut Checker, e: Option<P<Node>>) -> bool | nodebuilderimpl.go:2150 | NodeBuilderImpl
 is_truthy | pub fn is_truthy(v: LiteralValue) -> bool | rust:evaluator.rs:153 | -
@@ -2193,6 +2233,8 @@ is_valid_override_of | pub(crate) fn is_valid_override_of(&mut self, source_prop
 is_valid_property_access_for_completions | pub(crate) fn is_valid_property_access_for_completions(&mut self, node: P<Node>, t: P<Type>, property: P<Symbol>) -> bool | checker.go:11828 | Checker
 is_valid_spread_type | pub(crate) fn is_valid_spread_type(&mut self, t: P<Type>) -> bool | checker.go:13722 | Checker
 is_valid_type_for_template_literal_placeholder | pub(crate) fn is_valid_type_for_template_literal_placeholder(&mut self, source: P<Type>, target: P<Type>, compare_types: TypeComparer) -> bool | relater.go:2509 | Checker
+is_value_alias_declaration | pub fn is_value_alias_declaration(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:723 | EmitResolver
+is_value_alias_declaration_worker | pub(crate) fn is_value_alias_declaration_worker(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:735 | EmitResolver
 is_value_symbol_accessible | pub fn is_value_symbol_accessible(&mut self, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>) -> bool | symbolaccessibility.go:16 | Checker
 is_var_const_like | pub(crate) fn is_var_const_like(&mut self, node: P<Node>) -> bool | checker.go:19042 | Checker
 is_variable_declaration_in_variable_statement | pub(crate) fn is_variable_declaration_in_variable_statement(node: P<Node>) -> bool | utilities.go:1014 | -
@@ -2254,7 +2296,9 @@ mark_export_specifier_alias_referenced | pub(crate) fn mark_export_specifier_ali
 mark_identifier_alias_referenced | pub(crate) fn mark_identifier_alias_referenced(&mut self, location: P<Node>) | checker.go:28867 | Checker
 mark_import_equals_alias_referenced | pub(crate) fn mark_import_equals_alias_referenced(&mut self, location: P<Node>) | checker.go:29018 | Checker
 mark_jsx_alias_referenced | pub(crate) fn mark_jsx_alias_referenced(&mut self, node: P<Node>) | checker.go:28972 | Checker
+mark_linked_aliases | pub(crate) fn mark_linked_aliases(&self, c: &mut Checker, node: P<Node>) | emitresolver.go:278 | EmitResolver
 mark_linked_references | pub(crate) fn mark_linked_references(&mut self, location: P<Node>, hint: ReferenceHint, prop_symbol: Option<P<Symbol>>, parent_type: Option<P<Type>>) | checker.go:28659 | Checker
+mark_linked_references_recursively | pub fn mark_linked_references_recursively(&self, c: &mut Checker, file: Option<P<SourceFile>>) | emitresolver.go:808 | EmitResolver
 mark_node_assignments | pub(crate) fn mark_node_assignments(&mut self, node: P<Node>) -> bool | rust:checker.rs:1489 | Checker
 mark_node_assignments_worker | pub(crate) fn mark_node_assignments_worker(&mut self, node: P<Node>) -> bool | flow.go:2700 | Checker
 mark_property_alias_referenced | pub(crate) fn mark_property_alias_referenced(&mut self, location: P<Node>, prop_symbol: Option<P<Symbol>>, parent_type: Option<P<Type>>) | checker.go:28877 | Checker
@@ -2412,6 +2456,7 @@ pop_error_fallback_node | pub fn pop_error_fallback_node(&self) | nodecopy.go:13
 pop_inference_context | pub(crate) fn pop_inference_context(&mut self) | checker.go:31448 | Checker
 pop_type_resolution | pub(crate) fn pop_type_resolution(&mut self) -> bool | checker.go:19119 | Checker
 pragma_factory_argument | fn pragma_factory_argument(pragma: &'static Pragma) -> &'static str | rust:jsx.rs:1592 | -
+precalculate_declaration_emit_visibility | pub fn precalculate_declaration_emit_visibility(&self, c: &mut Checker, file: P<SourceFile>) | emitresolver.go:236 | EmitResolver
 prepend_type_mapping | pub(crate) fn prepend_type_mapping(source: P<Type>, target: P<Type>, mapper: Option<P<TypeMapper>>) -> P<TypeMapper> | rust:mapper.rs:171 | -
 primitive_type_alias_suggestions | pub fn primitive_type_alias_suggestions() -> &'static FxHashMap<&'static str, P<Symbol>> | rust:checker.rs:1962 | -
 produce_deferred_diagnostics | pub(crate) fn produce_deferred_diagnostics(&mut self) | checker.go:14214 | Checker
@@ -2486,8 +2531,8 @@ report_inaccessible_this_error | pub fn report_inaccessible_this_error(&self) | 
 report_inaccessible_this_error | pub fn report_inaccessible_this_error(&self) | nodecopy.go:151 | wrappingTracker
 report_inaccessible_unique_symbol_error | pub fn report_inaccessible_unique_symbol_error(&self) | symboltracker.go:58 | SymbolTrackerImpl
 report_inaccessible_unique_symbol_error | pub fn report_inaccessible_unique_symbol_error(&self) | nodecopy.go:155 | wrappingTracker
-report_inference_fallback | pub fn report_inference_fallback(&self, node: P<Node>) | symboltracker.go:110 | SymbolTrackerImpl
-report_inference_fallback | pub fn report_inference_fallback(&self, node: P<Node>) | nodecopy.go:159 | wrappingTracker
+report_inference_fallback | pub fn report_inference_fallback(&self, c: &mut Checker, node: P<Node>) | symboltracker.go:110 | SymbolTrackerImpl
+report_inference_fallback | pub fn report_inference_fallback(&self, c: &mut Checker, node: P<Node>) | nodecopy.go:159 | wrappingTracker
 report_invalid_import_equals_export_member | pub(crate) fn report_invalid_import_equals_export_member(&mut self, name: P<Node>, declaration_name: &str, module_name: &str) | checker.go:15184 | Checker
 report_likely_unsafe_import_required_error | pub fn report_likely_unsafe_import_required_error(&self, specifier: &str, symbol_name: &str) | symboltracker.go:74 | SymbolTrackerImpl
 report_likely_unsafe_import_required_error | pub fn report_likely_unsafe_import_required_error(&self, specifier: &str, symbol_name: &str) | nodecopy.go:163 | wrappingTracker
@@ -2524,6 +2569,8 @@ report_unused_variables | pub(crate) fn report_unused_variables(&mut self, node:
 report_widening_errors_in_type | pub(crate) fn report_widening_errors_in_type(&mut self, t: P<Type>) -> bool | checker.go:20838 | Checker
 requires_adding_implicit_undefined | pub fn requires_adding_implicit_undefined(&mut self, node: P<Node>) -> bool | exports.go:374 | Checker
 requires_adding_implicit_undefined | pub(crate) fn requires_adding_implicit_undefined(&self, c: &mut Checker, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>) -> bool | emitresolver.go:585 | EmitResolver
+requires_adding_implicit_undefined_exported | pub fn requires_adding_implicit_undefined_exported(&self, c: &mut Checker, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>) -> bool | emitresolver.go:568 | EmitResolver
+requires_adding_implicit_undefined_unsafe | pub fn requires_adding_implicit_undefined_unsafe(&self, c: &mut Checker, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>) -> bool | emitresolver.go:577 | EmitResolver
 requires_adding_implicit_undefined_worker | pub(crate) fn requires_adding_implicit_undefined_worker(&self, c: &mut Checker, parameter: P<Node>, enclosing_declaration: Option<P<Node>>) -> bool | emitresolver.go:605 | EmitResolver
 reset_maybe_stack | pub(crate) fn reset_maybe_stack(&self, c: &mut Checker, maybe_start: i32, propagating_variance_flags: RelationComparisonResult, mark_all_as_succeeded: bool) | relater.go:3201 | Relater
 resolution_extension_is_ts_or_json | pub(crate) fn resolution_extension_is_ts_or_json(ext: &str) -> bool | checker.go:15748 | -
@@ -2601,6 +2648,7 @@ set | pub(crate) fn set(&self, key: CacheHashKey, result: RelationComparisonResu
 set_comment_range | pub(crate) fn set_comment_range(&self, c: &mut Checker, node: P<Node>, range_: Option<P<Node>>) | nodebuilderimpl.go:485 | NodeBuilderImpl
 set_node_links_for_private_identifier_scope | pub(crate) fn set_node_links_for_private_identifier_scope(&mut self, node: P<Node>) | checker.go:10724 | Checker
 set_ref | pub fn set_ref(&self, m: Option<P<RefCell<FxHashMap<K, V>>>>) | rust:types.rs:66 | GoMap
+set_referenced_import_declaration | pub fn set_referenced_import_declaration(&self, c: &mut Checker, node: P<Node>, ref_: P<Node>) | emitresolver.go:869 | EmitResolver
 set_requires_scope_change_cache | pub(crate) fn set_requires_scope_change_cache(&mut self, node: P<Node>, value: Tristate) | checker.go:1548 | Checker
 set_structured_type_members | pub(crate) fn set_structured_type_members(&mut self, t: P<Type>, members: Option<P<SymbolTable>>, call_signatures: &[P<Signature>], construct_signatures: &[P<Signature>], index_infos: &[P<IndexInfo>]) | checker.go:25615 | Checker
 set_text_range | fn set_text_range(self, c: &mut Checker, range_: P<Node>, location: P<Node>) -> P<Node> | rust:nodecopy.rs:391 | ExistingNodeTree
@@ -2702,8 +2750,8 @@ token_is_identifier_or_keyword_or_greater_than | pub(crate) fn token_is_identifi
 trace_unions_or_intersections_too_large | pub(crate) fn trace_unions_or_intersections_too_large(&self, c: &mut Checker, source: P<Type>, target: P<Type>) | relater.go:5030 | Relater
 track_computed_name | pub(crate) fn track_computed_name(&self, c: &mut Checker, access_expression: P<Node>, enclosing_declaration: Option<P<Node>>) | nodebuilderimpl.go:2433 | NodeBuilderImpl
 track_existing_entity_name | fn track_existing_entity_name(self, c: &mut Checker, node: P<Node>, override_enclosing: Option<P<Node>>) -> (bool, P<Node>, Option<P<Symbol>>) | rust:nodecopy.rs:430 | ExistingNodeTree
-track_symbol | pub fn track_symbol(&self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool | symboltracker.go:28 | SymbolTrackerImpl
-track_symbol | pub fn track_symbol(&self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool | nodecopy.go:183 | wrappingTracker
+track_symbol | pub fn track_symbol(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool | symboltracker.go:28 | SymbolTrackerImpl
+track_symbol | pub fn track_symbol(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool | nodecopy.go:183 | wrappingTracker
 tracker | fn tracker(self) -> &'static dyn SymbolTracker | rust:nodecopy.rs:395 | ExistingNodeTree
 tracker | pub(crate) fn tracker(&self) -> &'static dyn SymbolTracker | rust:nodebuilderimpl_1.rs:55 | NodeBuilderImpl
 transform_type_of_members | pub(crate) fn transform_type_of_members(&mut self, t: P<Type>, f: impl FnMut(&mut Checker, P<Type>) -> P<Type>) -> P<SymbolTable> | checker.go:28646 | Checker
@@ -2738,6 +2786,7 @@ try_get_this_type_at_ex | pub(crate) fn try_get_this_type_at_ex(&mut self, node:
 try_get_this_type_at_ex_exported | pub fn try_get_this_type_at_ex_exported(&mut self, node: P<Node>, include_global_this: bool, container: P<Node>) -> Option<P<Type>> | checker.go:12341 | Checker
 try_get_type_at_position | pub(crate) fn try_get_type_at_position(&mut self, signature: P<Signature>, pos: i32) -> Option<P<Type>> | relater.go:1798 | Checker
 try_get_type_from_type_node | pub(crate) fn try_get_type_from_type_node(&mut self, node: P<Node>) -> Option<P<Type>> | checker.go:23224 | Checker
+try_js_type_node_to_type_node | pub fn try_js_type_node_to_type_node(&self, c: &mut Checker, emit_context: P<EmitContext>, type_node: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> | emitresolver.go:1272 | EmitResolver
 try_js_type_node_to_type_node | pub fn try_js_type_node_to_type_node(&self, c: &mut Checker, node: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:272 | NodeBuilder
 try_js_type_node_to_type_node | pub(crate) fn try_js_type_node_to_type_node(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | nodecopy.go:20 | NodeBuilderImpl
 try_merge_union_of_object_type_and_empty_object | pub(crate) fn try_merge_union_of_object_type_and_empty_object(&mut self, t: P<Type>, readonly: bool) -> P<Type> | checker.go:13748 | Checker
