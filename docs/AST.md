@@ -17,9 +17,9 @@ Import everything with `use tsrs_ast::*;` (or `use tsrs_ast as ast;` and `ast::i
 ```rust
 pub struct Node {
     pub kind: Kind,                       // never changes
-    pub flags: Cell<NodeFlags>,
-    pub loc: Cell<TextRange>,
-    pub parent: Cell<Option<P<Node>>>,
+    pub flags: OwnedCell<NodeFlags>,     // OwnedCell = Cell written only by the node's owner, see PORTING.md "Threading"
+    pub loc: OwnedCell<TextRange>,
+    pub parent: OwnedCell<Option<P<Node>>>,
     pub(crate) id: AtomicU64,             // lazily assigned, see get_node_id (utilities)
     pub data: NodeData,
 }
@@ -125,7 +125,8 @@ Field types:
   `end_flow_node`, `return_flow_node`, `fallthrough_flow_node` (`Cell<Option<P<FlowNode>>>`).
 
 **Cell fields.** Besides the bookkeeping fields above, exactly the fields the parser's reparser
-writes after construction are `Cell`s (everything else is a plain immutable field):
+writes after construction are `Cell`s (everything else is a plain immutable field). All of these are
+`tsrs_core::OwnedCell` (same API as `Cell`), because checkers read them concurrently (PORTING.md, "Threading"):
 `ModifiersBase.modifiers`; `FunctionLikeBase.{type_parameters, parameters, type_, full_signature}`;
 `ClassLikeBase.{type_parameters, heritage_clauses}`; `VariableDeclaration.{type_, initializer}`;
 `ParameterDeclaration.{type_, question_token}`; `PropertyDeclaration.{type_, initializer}`;

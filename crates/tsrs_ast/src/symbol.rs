@@ -3,7 +3,7 @@ use std::sync::atomic::AtomicU64;
 
 use indexmap::IndexMap;
 use rustc_hash::FxBuildHasher;
-use tsrs_core::{FrozenCell, FrozenRef, P};
+use tsrs_core::{FrozenCell, FrozenRef, OwnedCell, P};
 
 use crate::ast::{Node, SourceFile};
 use crate::checkflags::CheckFlags;
@@ -15,22 +15,22 @@ use crate::*;
 
 #[derive(Default)]
 pub struct Symbol {
-    pub flags: Cell<SymbolFlags>,
-    pub check_flags: Cell<CheckFlags>, // Non-zero only in transient symbols created by Checker
-    pub name: Cell<&'static str>,
+    pub flags: OwnedCell<SymbolFlags>,
+    pub check_flags: OwnedCell<CheckFlags>, // Non-zero only in transient symbols created by Checker
+    pub name: OwnedCell<&'static str>,
     pub declarations: FrozenCell<Vec<P<Node>>>,
-    pub value_declaration: Cell<Option<P<Node>>>,
-    pub members: Cell<Option<P<SymbolTable>>>,
-    pub exports: Cell<Option<P<SymbolTable>>>,
+    pub value_declaration: OwnedCell<Option<P<Node>>>,
+    pub members: OwnedCell<Option<P<SymbolTable>>>,
+    pub exports: OwnedCell<Option<P<SymbolTable>>>,
     pub(crate) id: AtomicU64,
-    pub parent: Cell<Option<P<Symbol>>>,
-    pub export_symbol: Cell<Option<P<Symbol>>>,
+    pub parent: OwnedCell<Option<P<Symbol>>>,
+    pub export_symbol: OwnedCell<Option<P<Symbol>>>,
 }
 
 impl Symbol {
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).
     pub fn new(flags: SymbolFlags, name: &'static str) -> P<Symbol> {
-        P::new(Symbol { flags: Cell::new(flags), name: Cell::new(name), ..Default::default() })
+        P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedCell::new(name), ..Default::default() })
     }
 
     #[inline]

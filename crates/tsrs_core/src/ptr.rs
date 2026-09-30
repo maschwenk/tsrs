@@ -5,11 +5,12 @@
 //! `P<T>` is a `Copy` pointer to a value that lives for the rest of the process.
 //! Equality, hashing and ordering are by address, exactly like Go pointers.
 //!
-//! Mutable fields inside arena values use `Cell` / `RefCell`.
+//! Mutable fields inside arena values use `Cell` / `RefCell`, or `OwnedCell` / `FrozenCell` in
+//! objects shared between checker threads.
 //!
-//! Threading contract: values are only mutated by the thread that created them
-//! (parser/binder per file, checker per checker). After a file is bound its AST is
-//! read-only and may be shared. `P<T>` is therefore declared `Send + Sync`.
+//! Threading contract ("Threading" in docs/PORTING.md): values are only mutated by the thread that
+//! created them (parser/binder per file, checker per checker). After a file is bound its AST and
+//! symbols are read-only and shared. `P<T>` is therefore declared `Send + Sync`.
 
 use bumpalo::Bump;
 use std::fmt;
@@ -17,7 +18,12 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 thread_local! {
-    static ARENA: &'static Bump = Box::leak(Box::new(Bump::with_capacity(1 << 20)));
+    static ARENA: &'static Bump = {
+        let arena: &'static Bump = Box::leak(Box::new(Bump::with_capacity(1 << 20)));
+        #[cfg(any(debug_assertions, feature = "checked-cells"))]
+        shared_check::register(arena);
+        arena
+    };
 }
 
 #[inline]
@@ -152,6 +158,70 @@ pub fn alloc<T>(value: T) -> &'static T {
 /// Bytes allocated so far by the current thread's arena.
 pub fn arena_allocated_bytes() -> usize {
     with_arena(|a| a.allocated_bytes())
+}
+
+/// Debug aid for the threading contract (checked builds only, opt-in with `TSRS_CHECK_SHARED=1`):
+/// `freeze_shared_objects` records every arena allocation made so far (the parsed and bound program) as
+/// shared, and `assert_not_shared` panics when a checker writes to such an object. Release builds without
+/// `checked-cells` compile both to nothing.
+pub mod shared_check {
+    use bumpalo::Bump;
+    use std::sync::{Mutex, OnceLock, RwLock};
+
+    struct ArenaRef(&'static Bump);
+    // SAFETY: only used to read chunk bounds while the owning threads are idle.
+    unsafe impl Send for ArenaRef {}
+
+    static ARENAS: Mutex<Vec<ArenaRef>> = Mutex::new(Vec::new());
+    static FROZEN: RwLock<Vec<(usize, usize)>> = RwLock::new(Vec::new());
+
+    #[cfg(any(debug_assertions, feature = "checked-cells"))]
+    pub(super) fn register(arena: &'static Bump) {
+        ARENAS.lock().unwrap().push(ArenaRef(arena));
+    }
+
+    #[inline]
+    pub fn enabled() -> bool {
+        if !cfg!(any(debug_assertions, feature = "checked-cells")) {
+            return false;
+        }
+        static ENABLED: OnceLock<bool> = OnceLock::new();
+        *ENABLED.get_or_init(|| std::env::var("TSRS_CHECK_SHARED").is_ok_and(|v| v == "1"))
+    }
+
+    /// Forgets the recorded shared objects (a new program is about to be bound).
+    pub fn thaw() {
+        FROZEN.write().unwrap().clear();
+    }
+
+    /// Call while no other thread allocates (between binding and checking).
+    pub fn freeze_shared_objects() {
+        if !enabled() {
+            return;
+        }
+        let mut ranges = Vec::new();
+        for arena in ARENAS.lock().unwrap().iter() {
+            // SAFETY: the owning threads are idle; the chunks are only read.
+            for (ptr, len) in unsafe { arena.0.iter_allocated_chunks_raw() } {
+                ranges.push((ptr as usize, ptr as usize + len));
+            }
+        }
+        ranges.sort_unstable();
+        *FROZEN.write().unwrap() = ranges;
+    }
+
+    #[inline]
+    pub fn assert_not_shared<T: ?Sized>(object: &T, what: &str) {
+        if !enabled() {
+            return;
+        }
+        let addr = object as *const T as *const () as usize;
+        let frozen = FROZEN.read().unwrap();
+        let i = frozen.partition_point(|&(start, _)| start <= addr);
+        if i > 0 && addr < frozen[i - 1].1 {
+            panic!("write to shared {what} at {addr:#x} after binding (threading contract, docs/PORTING.md)");
+        }
+    }
 }
 
 #[cfg(test)]

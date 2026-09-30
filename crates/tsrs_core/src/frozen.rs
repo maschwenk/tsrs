@@ -15,7 +15,7 @@
 //! Builds with `debug_assertions` or the `checked-cells` feature keep an atomic borrow counter and panic
 //! on aliasing violations, like `RefCell` but without a data race; release builds do no bookkeeping.
 
-use std::cell::UnsafeCell;
+use std::cell::{Cell, UnsafeCell};
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 
@@ -65,11 +65,31 @@ impl<T> FrozenCell<T> {
     pub fn borrow_mut(&self) -> FrozenRefMut<'_, T> {
         #[cfg(any(debug_assertions, feature = "checked-cells"))]
         {
+            crate::ptr::shared_check::assert_not_shared(self, "FrozenCell");
             if self.state.compare_exchange(0, -1, Ordering::Acquire, Ordering::Relaxed).is_err() {
                 panic!("FrozenCell already borrowed");
             }
         }
         // SAFETY: see the module contract; only the owning thread writes, and no other borrow is live.
+        FrozenRefMut {
+            value: unsafe { &mut *self.value.get() },
+            #[cfg(any(debug_assertions, feature = "checked-cells"))]
+            state: &self.state,
+        }
+    }
+
+    /// `borrow_mut` for a cell of a shared object whose every access after binding happens under one lock
+    /// (Go guards such lazily filled caches with a mutex, e.g. `SourceFile.jsdocMu`); the caller holds that
+    /// lock exclusively.
+    #[inline]
+    pub fn borrow_mut_locked(&self) -> FrozenRefMut<'_, T> {
+        #[cfg(any(debug_assertions, feature = "checked-cells"))]
+        {
+            if self.state.compare_exchange(0, -1, Ordering::Acquire, Ordering::Relaxed).is_err() {
+                panic!("FrozenCell already borrowed");
+            }
+        }
+        // SAFETY: the caller's exclusive lock excludes every other access.
         FrozenRefMut {
             value: unsafe { &mut *self.value.get() },
             #[cfg(any(debug_assertions, feature = "checked-cells"))]
@@ -155,6 +175,54 @@ impl<T> Drop for FrozenRefMut<'_, T> {
     #[inline]
     fn drop(&mut self) {
         self.state.store(0, Ordering::Release);
+    }
+}
+
+/// `Cell<T>` for fields of shared arena objects (binder symbols) that only their owner writes: after binding,
+/// checkers write these fields only on objects they created themselves (transient symbols). Checked builds
+/// verify that with `shared_check` (`TSRS_CHECK_SHARED=1`); otherwise it is a plain `Cell`.
+#[repr(transparent)]
+#[derive(Default)]
+pub struct OwnedCell<T>(Cell<T>);
+
+impl<T> OwnedCell<T> {
+    #[inline]
+    pub const fn new(value: T) -> OwnedCell<T> {
+        OwnedCell(Cell::new(value))
+    }
+
+    #[inline]
+    pub fn set(&self, value: T) {
+        crate::ptr::shared_check::assert_not_shared(self, "OwnedCell");
+        self.0.set(value)
+    }
+
+    #[inline]
+    pub fn replace(&self, value: T) -> T {
+        crate::ptr::shared_check::assert_not_shared(self, "OwnedCell");
+        self.0.replace(value)
+    }
+}
+
+impl<T: Copy> OwnedCell<T> {
+    #[inline]
+    pub fn get(&self) -> T {
+        self.0.get()
+    }
+}
+
+/// Read access for helpers written against `&Cell<T>` (they must not write through it after binding).
+impl<T> std::ops::Deref for OwnedCell<T> {
+    type Target = Cell<T>;
+    #[inline]
+    fn deref(&self) -> &Cell<T> {
+        &self.0
+    }
+}
+
+impl<T: Copy + fmt::Debug> fmt::Debug for OwnedCell<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.get().fmt(f)
     }
 }
 

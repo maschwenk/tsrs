@@ -32,6 +32,13 @@ pub fn install_panic_hook(quiet: bool) {
         if !quiet {
             eprintln!("panic: {message} at {location}");
         }
+        // Debug aid: TSRS_TEST_BACKTRACE=<file> appends every panic's backtrace to <file>.
+        if let Some(path) = std::env::var_os("TSRS_TEST_BACKTRACE") {
+            let trace = format!("panic: {message} at {location}\n{}\n", std::backtrace::Backtrace::force_capture());
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                let _ = f.write_all(trace.as_bytes());
+            }
+        }
         LAST_PANIC.with(|p| *p.borrow_mut() = Some(PanicInfo { message, location }));
     }));
 }

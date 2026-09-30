@@ -7,7 +7,7 @@ use tsrs_ast::{
     Diagnostic, DiagnosticExt, FlowFlags, FlowList, FlowNode, Kind, ModifierFlags, Node, NodeFlags, NodeList, SourceFile, Symbol,
     SymbolFlags, SymbolTable,
 };
-use tsrs_core::{alloc_str, tspath, P};
+use tsrs_core::{alloc_str, tspath, OwnedCell, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use tsrs_scanner as scanner;
@@ -114,10 +114,10 @@ fn bind_source_file_worker(file: P<SourceFile>) {
 
 fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>) -> P<FlowNode> {
     P::new(FlowNode {
-        flags: Cell::new(flags),
-        node: Cell::new(node),
-        antecedent: Cell::new(antecedent),
-        antecedents: Cell::new(None),
+        flags: OwnedCell::new(flags),
+        node: OwnedCell::new(node),
+        antecedent: OwnedCell::new(antecedent),
+        antecedents: OwnedCell::new(None),
     })
 }
 
@@ -612,7 +612,7 @@ impl Binder {
     }
 
     pub(crate) fn new_flow_list(&mut self, head: P<FlowNode>, tail: Option<P<FlowList>>) -> P<FlowList> {
-        P::new(FlowList { flow: head, next: Cell::new(tail) })
+        P::new(FlowList { flow: head, next: OwnedCell::new(tail) })
     }
 
     pub(crate) fn combine_flow_lists(&mut self, head: Option<P<FlowList>>, tail: Option<P<FlowList>>) -> Option<P<FlowList>> {

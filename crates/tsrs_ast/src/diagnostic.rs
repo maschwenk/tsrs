@@ -1,10 +1,9 @@
-use std::cell::Cell;
 use std::cmp::Ordering;
 use std::fmt;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_core::tspath::Path;
-use tsrs_core::{alloc_slice, alloc_str, undefined_text_range, ResolutionMode, TextRange, P};
+use tsrs_core::{alloc_slice, alloc_str, undefined_text_range, OwnedCell, ResolutionMode, TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Category, Key, Message};
 
 use crate::SourceFile;
@@ -30,27 +29,27 @@ pub struct RepopulateDiagnosticInfo {
 // Diagnostic
 
 pub struct Diagnostic {
-    file: Cell<Option<P<SourceFile>>>,
-    loc: Cell<TextRange>,
+    file: OwnedCell<Option<P<SourceFile>>>,
+    loc: OwnedCell<TextRange>,
     code: i32,
-    category: Cell<Category>,
+    category: OwnedCell<Category>,
     // source, when non-empty, is a custom prefix (e.g. a content mapper's name) shown instead of "TS"
     // before the code. It marks the diagnostic as coming from an external source whose ranges point
     // into the file's original, untransformed text.
-    source: Cell<&'static str>,
+    source: OwnedCell<&'static str>,
     // Original message; may be nil.
     message: Option<&'static Message>,
     // messageText is an already-localized message used when message is nil, e.g. a diagnostic
     // deserialized from an external process that owns its own localization.
-    message_text: Cell<&'static str>,
+    message_text: OwnedCell<&'static str>,
     message_key: Key,
     message_args: Vec<String>,
-    message_chain: Cell<&'static [P<Diagnostic>]>,
-    related_information: Cell<&'static [P<Diagnostic>]>,
+    message_chain: OwnedCell<&'static [P<Diagnostic>]>,
+    related_information: OwnedCell<&'static [P<Diagnostic>]>,
     reports_unnecessary: bool,
     reports_deprecated: bool,
-    skipped_on_no_emit: Cell<bool>,
-    repopulate_info: Cell<Option<&'static RepopulateDiagnosticInfo>>,
+    skipped_on_no_emit: OwnedCell<bool>,
+    repopulate_info: OwnedCell<Option<&'static RepopulateDiagnosticInfo>>,
 }
 
 impl Diagnostic {
@@ -173,21 +172,21 @@ impl DiagnosticExt for P<Diagnostic> {
 
     fn clone_diagnostic(self) -> P<Diagnostic> {
         P::new(Diagnostic {
-            file: Cell::new(self.file.get()),
-            loc: Cell::new(self.loc.get()),
+            file: OwnedCell::new(self.file.get()),
+            loc: OwnedCell::new(self.loc.get()),
             code: self.code,
-            category: Cell::new(self.category.get()),
-            source: Cell::new(self.source.get()),
+            category: OwnedCell::new(self.category.get()),
+            source: OwnedCell::new(self.source.get()),
             message: self.message,
-            message_text: Cell::new(self.message_text.get()),
+            message_text: OwnedCell::new(self.message_text.get()),
             message_key: self.message_key,
             message_args: self.message_args.clone(),
-            message_chain: Cell::new(self.message_chain.get()),
-            related_information: Cell::new(self.related_information.get()),
+            message_chain: OwnedCell::new(self.message_chain.get()),
+            related_information: OwnedCell::new(self.related_information.get()),
             reports_unnecessary: self.reports_unnecessary,
             reports_deprecated: self.reports_deprecated,
-            skipped_on_no_emit: Cell::new(self.skipped_on_no_emit.get()),
-            repopulate_info: Cell::new(self.repopulate_info.get()),
+            skipped_on_no_emit: OwnedCell::new(self.skipped_on_no_emit.get()),
+            repopulate_info: OwnedCell::new(self.repopulate_info.get()),
         })
     }
 }
@@ -223,21 +222,21 @@ impl fmt::Debug for Diagnostic {
 
 pub fn new_diagnostic(file: Option<P<SourceFile>>, loc: TextRange, message: &'static Message, args: &[&dyn fmt::Display]) -> P<Diagnostic> {
     P::new(Diagnostic {
-        file: Cell::new(file),
-        loc: Cell::new(loc),
+        file: OwnedCell::new(file),
+        loc: OwnedCell::new(loc),
         code: message.code(),
-        category: Cell::new(message.category()),
-        source: Cell::new(""),
+        category: OwnedCell::new(message.category()),
+        source: OwnedCell::new(""),
         message: Some(message),
-        message_text: Cell::new(""),
+        message_text: OwnedCell::new(""),
         message_key: message.key(),
         message_args: diagnostics::stringify_args(args),
-        message_chain: Cell::new(&[]),
-        related_information: Cell::new(&[]),
+        message_chain: OwnedCell::new(&[]),
+        related_information: OwnedCell::new(&[]),
         reports_unnecessary: message.reports_unnecessary(),
         reports_deprecated: message.reports_deprecated(),
-        skipped_on_no_emit: Cell::new(false),
-        repopulate_info: Cell::new(None),
+        skipped_on_no_emit: OwnedCell::new(false),
+        repopulate_info: OwnedCell::new(None),
     })
 }
 
@@ -267,21 +266,21 @@ pub fn new_external_diagnostic(
     message_text: &str,
 ) -> P<Diagnostic> {
     P::new(Diagnostic {
-        file: Cell::new(file),
-        loc: Cell::new(loc),
+        file: OwnedCell::new(file),
+        loc: OwnedCell::new(loc),
         code,
-        category: Cell::new(category),
-        source: Cell::new(alloc_str(source)),
+        category: OwnedCell::new(category),
+        source: OwnedCell::new(alloc_str(source)),
         message: None,
-        message_text: Cell::new(alloc_str(message_text)),
+        message_text: OwnedCell::new(alloc_str(message_text)),
         message_key: Key::default(),
         message_args: Vec::new(),
-        message_chain: Cell::new(&[]),
-        related_information: Cell::new(&[]),
+        message_chain: OwnedCell::new(&[]),
+        related_information: OwnedCell::new(&[]),
         reports_unnecessary: false,
         reports_deprecated: false,
-        skipped_on_no_emit: Cell::new(false),
-        repopulate_info: Cell::new(None),
+        skipped_on_no_emit: OwnedCell::new(false),
+        repopulate_info: OwnedCell::new(None),
     })
 }
 

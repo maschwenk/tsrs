@@ -8,7 +8,7 @@ use tsrs_core::collections::Set;
 use tsrs_core::tspath::Path;
 use tsrs_core::{
     alloc_slice, alloc_str, alloc_vec, compute_ecma_line_starts, undefined_text_range, LanguageVariant, ResolutionMode,
-    FrozenCell, ScriptKind, TextPos, TextRange, Tristate, P,
+    FrozenCell, OwnedCell, ScriptKind, TextPos, TextRange, Tristate, P,
 };
 use tsrs_diagnostics as diagnostics;
 
@@ -98,9 +98,9 @@ pub fn new_node_factory(hooks: NodeFactoryHooks) -> NodeFactory {
 pub(crate) fn new_node(kind: Kind, data: NodeData, hooks: &NodeFactoryHooks) -> P<Node> {
     let n = P::new(Node {
         kind,
-        flags: Cell::new(NodeFlags::None),
-        loc: Cell::new(undefined_text_range()),
-        parent: Cell::new(None),
+        flags: OwnedCell::new(NodeFlags::None),
+        loc: OwnedCell::new(undefined_text_range()),
+        parent: OwnedCell::new(None),
         id: AtomicU64::new(0),
         data,
     });
@@ -158,7 +158,7 @@ pub(crate) fn clone_node(updated: P<Node>, original: P<Node>, hooks: &NodeFactor
 // NodeList
 
 pub struct NodeList {
-    pub loc: Cell<TextRange>,
+    pub loc: OwnedCell<TextRange>,
     pub nodes: &'static [P<Node>],
 }
 
@@ -173,7 +173,7 @@ impl NodeFactory {
 
     /// Stores `nodes` without copying (keeps slice identity, e.g. for sentinel slices).
     pub fn new_node_list_from_static(&self, nodes: &'static [P<Node>]) -> P<NodeList> {
-        P::new(NodeList { loc: Cell::new(undefined_text_range()), nodes })
+        P::new(NodeList { loc: OwnedCell::new(undefined_text_range()), nodes })
     }
 }
 
@@ -220,7 +220,7 @@ impl NodeFactory {
     pub fn new_modifier_list(&self, nodes: Vec<P<Node>>) -> P<ModifierList> {
         let nodes = alloc_vec(nodes);
         P::new(ModifierList {
-            list: NodeList { loc: Cell::new(undefined_text_range()), nodes },
+            list: NodeList { loc: OwnedCell::new(undefined_text_range()), nodes },
             modifier_flags: modifiers_to_flags(nodes),
         })
     }
@@ -250,7 +250,7 @@ impl ModifierList {
 
     pub fn clone_list(&self, f: &NodeFactory) -> P<ModifierList> {
         P::new(ModifierList {
-            list: NodeList { loc: Cell::new(self.list.loc.get()), nodes: self.list.nodes },
+            list: NodeList { loc: OwnedCell::new(self.list.loc.get()), nodes: self.list.nodes },
             modifier_flags: self.modifier_flags,
         })
     }
@@ -260,9 +260,9 @@ impl ModifierList {
 
 pub struct Node {
     pub kind: Kind,
-    pub flags: Cell<NodeFlags>,
-    pub loc: Cell<TextRange>,
-    pub parent: Cell<Option<P<Node>>>,
+    pub flags: OwnedCell<NodeFlags>,
+    pub loc: OwnedCell<TextRange>,
+    pub parent: OwnedCell<Option<P<Node>>>,
     pub(crate) id: AtomicU64,
     pub data: NodeData,
 }
@@ -1364,7 +1364,7 @@ pub trait HasFileName {
 }
 
 pub struct SourceFile {
-    node: Cell<Option<P<Node>>>, // back pointer to the SourceFile node, set by the factory
+    node: OwnedCell<Option<P<Node>>>, // back pointer to the SourceFile node, set by the factory
     pub declaration_base: DeclarationBase,
     pub locals_container_base: LocalsContainerBase,
 
@@ -1375,43 +1375,43 @@ pub struct SourceFile {
     pub end_of_file_token: P<Node>, // TokenNode[*EndOfFileToken]
 
     // Fields set by parser
-    pub diagnostics: Cell<&'static [P<Diagnostic>]>,
-    pub js_diagnostics: Cell<&'static [P<Diagnostic>]>,
-    pub jsdoc_diagnostics: Cell<&'static [P<Diagnostic>]>,
-    pub language_variant: Cell<LanguageVariant>,
-    pub script_kind: Cell<ScriptKind>,
-    pub is_declaration_file: Cell<bool>,
-    pub uses_uri_style_node_core_modules: Cell<Tristate>,
-    pub identifier_count: Cell<usize>,
-    pub imports: Cell<&'static [P<Node>]>,              // []LiteralLikeNode
-    pub module_augmentations: Cell<&'static [P<Node>]>, // []ModuleName
-    pub ambient_module_names: Cell<&'static [&'static str]>,
-    pub comment_directives: Cell<&'static [CommentDirective]>,
+    pub diagnostics: OwnedCell<&'static [P<Diagnostic>]>,
+    pub js_diagnostics: OwnedCell<&'static [P<Diagnostic>]>,
+    pub jsdoc_diagnostics: OwnedCell<&'static [P<Diagnostic>]>,
+    pub language_variant: OwnedCell<LanguageVariant>,
+    pub script_kind: OwnedCell<ScriptKind>,
+    pub is_declaration_file: OwnedCell<bool>,
+    pub uses_uri_style_node_core_modules: OwnedCell<Tristate>,
+    pub identifier_count: OwnedCell<usize>,
+    pub imports: OwnedCell<&'static [P<Node>]>,              // []LiteralLikeNode
+    pub module_augmentations: OwnedCell<&'static [P<Node>]>, // []ModuleName
+    pub ambient_module_names: OwnedCell<&'static [&'static str]>,
+    pub comment_directives: OwnedCell<&'static [CommentDirective]>,
     // Written by the parser; with lazy JSDoc, also by any checker thread under `jsdoc_mu` (Go `jsdocMu`).
     pub(crate) jsdoc_cache: FrozenCell<FxHashMap<P<Node>, &'static [P<Node>]>>,
     jsdoc_mu: RwLock<()>,
-    pub(crate) has_lazy_jsdoc: Cell<bool>,
+    pub(crate) has_lazy_jsdoc: OwnedCell<bool>,
     identifiers: OnceLock<Set<&'static str>>,
-    pub reparsed_clones: Cell<&'static [P<Node>]>,
-    pub pragmas: Cell<&'static [Pragma]>,
-    pub referenced_files: Cell<&'static [P<FileReference>]>,
-    pub type_reference_directives: Cell<&'static [P<FileReference>]>,
-    pub lib_reference_directives: Cell<&'static [P<FileReference>]>,
-    pub check_js_directive: Cell<Option<P<CheckJsDirective>>>,
-    pub node_count: Cell<usize>,
-    pub text_count: Cell<usize>,
-    pub common_js_module_indicator: Cell<Option<P<Node>>>,
+    pub reparsed_clones: OwnedCell<&'static [P<Node>]>,
+    pub pragmas: OwnedCell<&'static [Pragma]>,
+    pub referenced_files: OwnedCell<&'static [P<FileReference>]>,
+    pub type_reference_directives: OwnedCell<&'static [P<FileReference>]>,
+    pub lib_reference_directives: OwnedCell<&'static [P<FileReference>]>,
+    pub check_js_directive: OwnedCell<Option<P<CheckJsDirective>>>,
+    pub node_count: OwnedCell<usize>,
+    pub text_count: OwnedCell<usize>,
+    pub common_js_module_indicator: OwnedCell<Option<P<Node>>>,
     // If this is the SourceFile itself, then this module was "forced"
     // to be an external module (previously "true").
-    pub external_module_indicator: Cell<Option<P<Node>>>,
+    pub external_module_indicator: OwnedCell<Option<P<Node>>>,
 
     // Fields set by binder
     is_bound: AtomicBool,
     bind_once: Once,
-    pub bind_diagnostics: Cell<&'static [P<Diagnostic>]>,
-    pub symbol_count: Cell<usize>,
-    pub pattern_ambient_modules: Cell<&'static [P<PatternAmbientModule>]>,
-    pub global_exports: Cell<Option<P<SymbolTable>>>,
+    pub bind_diagnostics: OwnedCell<&'static [P<Diagnostic>]>,
+    pub symbol_count: OwnedCell<usize>,
+    pub pattern_ambient_modules: OwnedCell<&'static [P<PatternAmbientModule>]>,
+    pub global_exports: OwnedCell<Option<P<SymbolTable>>>,
 
     // Fields set by ECMALineMap
     ecma_line_map: OnceLock<&'static [TextPos]>,
@@ -1434,45 +1434,45 @@ impl NodeFactory {
             panic!("fileName should be normalized and absolute: {:?}", opts.file_name);
         }
         let data: &'static SourceFile = tsrs_core::alloc(SourceFile {
-            node: Cell::new(None),
-            declaration_base: DeclarationBase { symbol: Cell::new(None) },
-            locals_container_base: LocalsContainerBase { locals: Cell::new(None), next_container: Cell::new(None) },
+            node: OwnedCell::new(None),
+            declaration_base: DeclarationBase { symbol: OwnedCell::new(None) },
+            locals_container_base: LocalsContainerBase { locals: OwnedCell::new(None), next_container: OwnedCell::new(None) },
             parse_options: opts,
             text,
             statements,
             end_of_file_token,
-            diagnostics: Cell::new(&[]),
-            js_diagnostics: Cell::new(&[]),
-            jsdoc_diagnostics: Cell::new(&[]),
-            language_variant: Cell::new(LanguageVariant::default()),
-            script_kind: Cell::new(ScriptKind::default()),
-            is_declaration_file: Cell::new(false),
-            uses_uri_style_node_core_modules: Cell::new(Tristate::Unknown),
-            identifier_count: Cell::new(0),
-            imports: Cell::new(&[]),
-            module_augmentations: Cell::new(&[]),
-            ambient_module_names: Cell::new(&[]),
-            comment_directives: Cell::new(&[]),
+            diagnostics: OwnedCell::new(&[]),
+            js_diagnostics: OwnedCell::new(&[]),
+            jsdoc_diagnostics: OwnedCell::new(&[]),
+            language_variant: OwnedCell::new(LanguageVariant::default()),
+            script_kind: OwnedCell::new(ScriptKind::default()),
+            is_declaration_file: OwnedCell::new(false),
+            uses_uri_style_node_core_modules: OwnedCell::new(Tristate::Unknown),
+            identifier_count: OwnedCell::new(0),
+            imports: OwnedCell::new(&[]),
+            module_augmentations: OwnedCell::new(&[]),
+            ambient_module_names: OwnedCell::new(&[]),
+            comment_directives: OwnedCell::new(&[]),
             jsdoc_cache: FrozenCell::new(FxHashMap::default()),
             jsdoc_mu: RwLock::new(()),
-            has_lazy_jsdoc: Cell::new(false),
+            has_lazy_jsdoc: OwnedCell::new(false),
             identifiers: OnceLock::new(),
-            reparsed_clones: Cell::new(&[]),
-            pragmas: Cell::new(&[]),
-            referenced_files: Cell::new(&[]),
-            type_reference_directives: Cell::new(&[]),
-            lib_reference_directives: Cell::new(&[]),
-            check_js_directive: Cell::new(None),
-            node_count: Cell::new(0),
-            text_count: Cell::new(0),
-            common_js_module_indicator: Cell::new(None),
-            external_module_indicator: Cell::new(None),
+            reparsed_clones: OwnedCell::new(&[]),
+            pragmas: OwnedCell::new(&[]),
+            referenced_files: OwnedCell::new(&[]),
+            type_reference_directives: OwnedCell::new(&[]),
+            lib_reference_directives: OwnedCell::new(&[]),
+            check_js_directive: OwnedCell::new(None),
+            node_count: OwnedCell::new(0),
+            text_count: OwnedCell::new(0),
+            common_js_module_indicator: OwnedCell::new(None),
+            external_module_indicator: OwnedCell::new(None),
             is_bound: AtomicBool::new(false),
             bind_once: Once::new(),
-            bind_diagnostics: Cell::new(&[]),
-            symbol_count: Cell::new(0),
-            pattern_ambient_modules: Cell::new(&[]),
-            global_exports: Cell::new(None),
+            bind_diagnostics: OwnedCell::new(&[]),
+            symbol_count: OwnedCell::new(0),
+            pattern_ambient_modules: OwnedCell::new(&[]),
+            global_exports: OwnedCell::new(None),
             ecma_line_map: OnceLock::new(),
             position_map: OnceLock::new(),
         });
@@ -1601,7 +1601,7 @@ impl SourceFile {
             return jsdocs;
         }
         let jsdocs = alloc_vec(parse(self, n));
-        self.jsdoc_cache.borrow_mut().insert(n, jsdocs);
+        self.jsdoc_cache.borrow_mut_locked().insert(n, jsdocs);
         jsdocs
     }
 
