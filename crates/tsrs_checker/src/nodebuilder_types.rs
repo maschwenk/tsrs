@@ -216,19 +216,3 @@ pub struct localsRecord {
     pub name: String,
     pub old_symbol: P<Symbol>,
 }
-
-// pseudochecker/checker.go
-
-/// Placeholder for Go `pseudochecker.PseudoChecker` (package `internal/pseudochecker` is not ported yet; its
-/// `GetTypeOfDeclaration`/`GetTypeOfAccessor`/`GetReturnTypeOfSignature` and `PseudoType`, and the checker's
-/// pseudotypenodebuilder.go that consumes them, are needed by `serialize_type_for_declaration` /
-/// `serialize_return_type_for_signature` when they reuse existing annotations).
-pub struct PseudoChecker {
-    pub strict_null_checks: bool,
-    pub exact_optional_property_types: bool,
-}
-
-/// Go `pseudochecker.NewPseudoChecker`.
-pub fn new_pseudo_checker(strict_null_checks: bool, exact_optional_property_types: bool) -> P<PseudoChecker> {
-    P::new(PseudoChecker { strict_null_checks, exact_optional_property_types })
-}

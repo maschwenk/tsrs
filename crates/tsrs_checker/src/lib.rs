@@ -16,6 +16,8 @@ pub(crate) use tsrs_core::{alloc, alloc_slice, alloc_str, alloc_vec, CompilerOpt
 pub(crate) use tsrs_diagnostics::{self as diagnostics, Message};
 pub(crate) use tsrs_module::ResolvedModule;
 pub(crate) use tsrs_scanner::Scanner;
+pub(crate) use tsrs_pseudochecker as pseudochecker;
+pub(crate) use tsrs_pseudochecker::{new_pseudo_checker, PseudoChecker, PseudoObjectElement, PseudoParameter, PseudoType};
 
 // Data model (checker-foundation).
 pub mod checker;

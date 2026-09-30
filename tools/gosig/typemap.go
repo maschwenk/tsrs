@@ -111,6 +111,9 @@ func (m *TypeMapper) paramStyle() bool { return m.cfg.CheckerHolderStyle == "par
 // neither checker holders nor arena types (a config review is needed).
 func (m *TypeMapper) unlistedHolders() []string {
 	var out []string
+	if m.checker == nil {
+		return nil // the package has no state-machine type (e.g. pseudochecker, modulespecifiers)
+	}
 	for _, name := range m.main.Scope().Names() {
 		tn, ok := m.main.Scope().Lookup(name).(*types.TypeName)
 		_, holder := m.cfg.CheckerHolders[name]

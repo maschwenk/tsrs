@@ -343,6 +343,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_pseudochecker"
+version = "0.1.0"
+dependencies = [
+ "tsrs_ast",
+ "tsrs_core",
+]
+
+[[package]]
 name = "tsrs_scanner"
 version = "0.1.0"
 dependencies = [
