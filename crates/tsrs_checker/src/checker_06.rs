@@ -452,12 +452,7 @@ impl Checker {
 
     // checker.go:11234
     pub(crate) fn check_synthetic_expression(&mut self, node: P<Node>) -> P<Type> {
-        let type_any = node.as_synthetic_expression().type_;
-        // Go stores the *Type in an `any` field; accept either a `&'static Type` or a `&'static P<Type>` payload.
-        let t = match type_any.downcast_ref::<Type>() {
-            Some(t) => P::from_static(t),
-            None => *type_any.downcast_ref::<P<Type>>().expect("SyntheticExpression.Type must hold a checker *Type"),
-        };
+        let t = synthetic_expression_type(node);
         if node.as_synthetic_expression().is_spread {
             let number_type = self.number_type;
             return self.get_indexed_access_type(t, number_type);

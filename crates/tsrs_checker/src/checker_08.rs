@@ -996,7 +996,7 @@ impl Checker {
                 if ast::is_qualified_name(name) {
                     containing_qualified_name = get_containing_qualified_name_node(name);
                 }
-                let can_suggest_typeof = self.global_object_type.id != TypeId(0)
+                let can_suggest_typeof = self.global_object_type != self.unassigned_type
                     && meaning.intersects(SymbolFlags::Type)
                     && containing_qualified_name.is_some_and(|n| !ast::is_type_of_expression(n.parent().unwrap()))
                     && self.try_get_qualified_name_as_value(containing_qualified_name.unwrap()).is_some();

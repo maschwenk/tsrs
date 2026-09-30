@@ -118,9 +118,13 @@ pub(crate) fn is_spread_argument(arg: P<Node>) -> bool {
     ast::is_spread_element(arg) || ast::is_synthetic_expression(arg) && arg.as_synthetic_expression().is_spread
 }
 
+// Go `node.AsSyntheticExpression().Type.(*Type)`. The Go `any` field holds the checker type as a `&'static P<Type>`;
+// `create_synthetic_expression` is the only writer.
+pub(crate) fn synthetic_expression_type(node: P<Node>) -> P<Type> {
+    *node.as_synthetic_expression().type_.downcast_ref::<P<Type>>().expect("SyntheticExpression.Type must hold a checker *Type")
+}
+
 impl Checker {
-    // The synthetic expression's Go `any` type field holds the checker type as a `&'static P<Type>`
-    // (read it back with `downcast_ref::<P<Type>>()`).
     // checker.go:30605
     pub(crate) fn create_synthetic_expression(&mut self, parent: P<Node>, t: P<Type>, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
         let result = self.factory.new_synthetic_expression(alloc(t), is_spread, tuple_name_source);

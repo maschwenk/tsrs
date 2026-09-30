@@ -2439,8 +2439,3 @@ impl Checker {
     }
 }
 
-// Go `arg.AsSyntheticExpression().Type.(*Type)`: synthetic expressions store their checker type as a `P<Type>`
-// behind `&'static dyn Any` (created with `alloc(t)`).
-fn synthetic_expression_type(arg: P<Node>) -> P<Type> {
-    *arg.as_synthetic_expression().type_.downcast_ref::<P<Type>>().expect("SyntheticExpression.type_ is not a *Type")
-}

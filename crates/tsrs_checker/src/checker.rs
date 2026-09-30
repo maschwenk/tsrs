@@ -958,6 +958,9 @@ pub struct Checker {
     pub reported_unreachable_nodes: Set<P<Node>>,
     pub non_existent_properties: Set<NonExistentPropertyKey>,
     pub deferred_diagnostic_callbacks: Vec<Box<dyn FnOnce(&mut Checker)>>,
+    /// The placeholder that `P<Type>` fields hold until Go would assign them (Go nil). Compare against it where Go
+    /// tests such a field against nil (`c.globalObjectType != nil`).
+    pub unassigned_type: P<Type>,
 }
 
 /// Go `NewChecker(program, tracer)`. The tracer and the returned mutex are not ported.
@@ -1294,6 +1297,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         reported_unreachable_nodes: Set::new(),
         non_existent_properties: Set::new(),
         deferred_diagnostic_callbacks: Vec::new(),
+        unassigned_type: dummy_type,
     });
     c.undefined_symbol = c.new_symbol(SymbolFlags::Property, "undefined");
     c.arguments_symbol = c.new_symbol(SymbolFlags::Property, "arguments");
