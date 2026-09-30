@@ -54,12 +54,12 @@ impl NodeBuilderImpl {
     // nodebuilderscopes.go:53
     pub(crate) fn enter_signature_scope(&self, c: &mut Checker, signature: P<Signature>) -> (Vec<P<Symbol>>, Box<dyn FnMut(&mut Checker)>) {
         let expanded_params = c.get_expanded_parameters(signature, true /*skipUnionExpanding*/).swap_remove(0);
-        let cleanup = self.enter_new_scope(c, signature.declaration(), &expanded_params, signature.type_parameters(), signature.parameters(), signature.mapper.get());
+        let cleanup = self.enter_new_scope(c, signature.declaration(), &expanded_params, signature.type_parameters(), Some(signature.parameters()), signature.mapper.get());
         (expanded_params, cleanup)
     }
 
     // nodebuilderscopes.go:59
-    pub(crate) fn enter_new_scope(&self, c: &mut Checker, declaration: Option<P<Node>>, expanded_params: &[P<Symbol>], type_parameters: &[P<Type>], original_parameters: &[P<Symbol>], mapper: Option<P<TypeMapper>>) -> Box<dyn FnMut(&mut Checker)> {
+    pub(crate) fn enter_new_scope(&self, c: &mut Checker, declaration: Option<P<Node>>, expanded_params: &[P<Symbol>], type_parameters: &[P<Type>], original_parameters: Option<&[P<Symbol>]>, mapper: Option<P<TypeMapper>>) -> Box<dyn FnMut(&mut Checker)> {
         let mut cleanup_context = clone_node_builder_context(self.ctx());
         // For regular function/method declarations, the enclosing declaration will already be signature.declaration,
         // so this is a no-op, but for arrow functions and function expressions, the enclosing declaration will be
@@ -98,16 +98,13 @@ impl NodeBuilderImpl {
             // could potentially add another fake scope into the chain is right here, so we don't
             // traverse all ancestors.
 
-            // Go passes nil slices where the Rust port passes empty ones; an empty slice means "nil" here (the only
-            // callers that pass a non-nil `originalParameters` pass the signature's parameters, which are non-empty
-            // whenever the expanded parameters are).
             if expanded_params.is_empty() {
                 cleanup_params = None;
             } else {
                 cleanup_params = push_fake_scope(self, c, "params", &mut |b, c, add| {
                     for (p_index, &param) in expanded_params.iter().enumerate() {
-                        let original_param = original_parameters.get(p_index).copied();
-                        if !original_parameters.is_empty() && original_param != Some(param) {
+                        let original_param = original_parameters.and_then(|o| o.get(p_index).copied());
+                        if original_parameters.is_some() && original_param != Some(param) {
                             // Can't reference the expanded parameter name, just the original, unless we've expanded the param list for some reason
                             if let Some(original_param) = original_param {
                                 add(original_param.name(), original_param);

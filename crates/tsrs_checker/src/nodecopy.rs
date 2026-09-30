@@ -270,7 +270,7 @@ impl NodeBuilderImpl {
             let meaning = if parent.as_import_type_node().is_type_of { SymbolFlags::Value } else { SymbolFlags::Type };
             let mut parent_symbol: Option<P<Symbol>> = None;
             if let Some(node_symbol) = node_symbol {
-                if is_symbol_accessible_nilable(c, Some(node_symbol), ctx.enclosing_declaration.get(), meaning, false).accessibility == SymbolAccessibility::Accessible {
+                if c.is_symbol_accessible(Some(node_symbol), ctx.enclosing_declaration.get(), meaning, false).accessibility == SymbolAccessibility::Accessible {
                     parent_symbol = Some(self.lookup_symbol_chain(c, node_symbol, meaning, true)[0]);
                 }
             }
@@ -316,36 +316,6 @@ impl NodeBuilderImpl {
         }
         enc
     }
-}
-
-// SIG: `Checker::is_symbol_accessible` should take `Option<P<Symbol>>` / `Option<P<Node>>`: Go's `IsSymbolAccessible`
-// accepts nil for both (it is `isSymbolAccessibleWorker(..., true /*allowModules*/)`), and nodecopy.go passes
-// `b.ctx.enclosingDeclaration` (nil for context-free calls) and a possibly-nil `this` container symbol. Until the
-// signature changes, this is its Go body.
-fn is_symbol_accessible_nilable(c: &mut Checker, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_aliases_to_make_visible: bool) -> SymbolAccessibilityResult {
-    c.is_symbol_accessible_worker(symbol, enclosing_declaration, meaning, should_compute_aliases_to_make_visible, true /*allowModules*/)
-}
-
-// SIG: `NodeBuilderImpl::serialize_type_name`'s `type_arguments` should be `Option<P<NodeList>>`: nodecopy.go passes
-// the result of `visitor.VisitNodes(...)`, nil when the reference has no type arguments, and serializeTypeName hands
-// it unchanged to `symbolToTypeNode` (which takes `Option`). Until the signature changes, the nil case runs the Go
-// body of serializeTypeName (nodebuilderimpl.go:442) here.
-fn serialize_type_name_nilable(c: &mut Checker, b: P<NodeBuilderImpl>, node: P<Node>, is_type_of: bool, type_arguments: Option<P<NodeList>>) -> Option<P<Node>> {
-    if let Some(type_arguments) = type_arguments {
-        return b.serialize_type_name(c, node, is_type_of, type_arguments);
-    }
-    let meaning = if is_type_of { SymbolFlags::Value } else { SymbolFlags::Type };
-    let symbol = c.resolve_entity_name(node, meaning, true, false, Some(node))?;
-
-    let mut resolved_symbol = symbol;
-    if symbol.flags().intersects(SymbolFlags::Alias) {
-        resolved_symbol = c.resolve_alias(symbol);
-    }
-
-    if is_symbol_accessible_nilable(c, Some(symbol), b.ctx().enclosing_declaration.get(), meaning, false).accessibility != SymbolAccessibility::Accessible {
-        return None;
-    }
-    b.symbol_to_type_node(c, resolved_symbol, meaning, None)
 }
 
 // nodecopy.go:288
@@ -481,7 +451,7 @@ impl ExistingNodeTree {
             // `this` isn't a bindable identifier - skip resolution, find a relevant `this` symbol directly and avoid exhaustive scope traversal
             let this_container = c.get_this_container(leftmost, false, false).unwrap();
             sym = c.get_symbol_of_declaration(this_container);
-            if is_symbol_accessible_nilable(c, sym, Some(leftmost), meaning, false).accessibility != SymbolAccessibility::Accessible {
+            if c.is_symbol_accessible(sym, Some(leftmost), meaning, false).accessibility != SymbolAccessibility::Accessible {
                 introduces_error = true;
                 self.tracker().report_inaccessible_this_error();
             }
@@ -533,7 +503,7 @@ impl ExistingNodeTree {
             }
             if !sym.flags().intersects(SymbolFlags::TypeParameter) /* Type parameters are visible in the current context if they are are resolvable */
                 && !ast::is_declaration_name(node)
-                && is_symbol_accessible_nilable(c, Some(sym), enclosing_declaration, meaning, false).accessibility != SymbolAccessibility::Accessible
+                && c.is_symbol_accessible(Some(sym), enclosing_declaration, meaning, false).accessibility != SymbolAccessibility::Accessible
             {
                 self.tracker().report_inference_fallback(node);
                 introduces_error = true;
@@ -569,7 +539,7 @@ impl ExistingNodeTree {
         }
 
         let type_arguments = self.visit_nodes(c, v, node.type_argument_list());
-        let serialized_name = serialize_type_name_nilable(c, self.b, expr_name_node, true, type_arguments);
+        let serialized_name = self.b.serialize_type_name(c, expr_name_node, true, type_arguments);
         if let Some(serialized_name) = serialized_name {
             return Some(self.set_text_range(c, serialized_name, expr_name_node));
         }
@@ -605,7 +575,7 @@ impl ExistingNodeTree {
             Some(self.set_text_range(c, updated, node))
         } else {
             let type_arguments = self.visit_nodes(c, v, node.type_argument_list());
-            let serialized_name = serialize_type_name_nilable(c, b, type_name, false, type_arguments);
+            let serialized_name = b.serialize_type_name(c, type_name, false, type_arguments);
             if let Some(serialized_name) = serialized_name {
                 return Some(self.set_text_range(c, serialized_name, type_name));
             }
@@ -911,7 +881,7 @@ impl ExistingNodeTree {
             let ct = node.as_conditional_type_node();
             let check_type = self.visit_node(c, v, Some(ct.check_type)).unwrap();
             let infer_type_parameters = c.get_infer_type_parameters(node);
-            let mut dispose = b.enter_new_scope(c, Some(node), &[], &infer_type_parameters, &[], None);
+            let mut dispose = b.enter_new_scope(c, Some(node), &[], &infer_type_parameters, None, None);
             let extends_type = self.visit_node(c, v, Some(ct.extends_type)).unwrap();
             let true_type = self.visit_node(c, v, Some(ct.true_type)).unwrap();
             dispose(c);
@@ -976,7 +946,7 @@ impl ExistingNodeTree {
                 let symbol = c.get_symbol_of_declaration(node.as_mapped_type_node().type_parameter).unwrap();
                 type_params = vec![c.get_declared_type_of_type_parameter(symbol)];
             }
-            exit = Some(b.enter_new_scope(c, Some(node), params, &type_params, &[], None));
+            exit = Some(b.enter_new_scope(c, Some(node), params, &type_params, None, None));
         }
         let mut result = self.visit_existing_node_tree_symbols_worker(c, v, node);
         if let Some(mut exit) = exit {

@@ -466,9 +466,6 @@ impl EmitResolver {
 
     // emitresolver.go:681
     pub(crate) fn is_symbol_accessible(&self, c: &mut Checker, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult {
-        // SIG: Go calls `r.checker.IsSymbolAccessible(symbol, enclosingDeclaration, ...)`, which accepts nil for both
-        // (it is `isSymbolAccessibleWorker(..., true /*allowModules*/)`); `Checker::is_symbol_accessible` should take
-        // `Option<P<Symbol>>` / `Option<P<Node>>`. Until then, call its body directly.
-        c.is_symbol_accessible_worker(symbol, enclosing_declaration, meaning, should_compute_alias_to_mark_visible, true /*allowModules*/)
+        c.is_symbol_accessible(symbol, enclosing_declaration, meaning, should_compute_alias_to_mark_visible)
     }
 }

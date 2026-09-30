@@ -10,40 +10,10 @@ use tsrs_ast as ast;
 //   const (nodebuilderimpl.go:2450): propertyNameNodeKindIdentifier, propertyNameNodeKindNumericLiteral,
 //     propertyNameNodeKindStringLiteral
 
-// Go `b.ctx.tracker` (always set while a node builder entry point runs).
-fn tracker(b: &NodeBuilderImpl) -> &'static dyn SymbolTracker {
-    b.ctx().tracker.get().unwrap()
-}
-
 // Go `b.ctx.approximateLength += n`.
 fn add_approximate_length(b: &NodeBuilderImpl, n: i32) {
     let ctx = b.ctx();
     ctx.approximate_length.set(ctx.approximate_length.get() + n);
-}
-
-// SIG: printer.rs `is_value_symbol_accessible` / `is_type_symbol_accessible` / `is_symbol_accessible` take
-// `enclosing_declaration: P<Node>`, but Go passes `b.ctx.enclosingDeclaration`, which may be nil (then
-// `isSymbolAccessibleWorker` reports Accessible). They should take `Option<P<Node>>`; until then these adapters
-// reproduce the nil case.
-fn is_value_symbol_accessible_opt(c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>) -> bool {
-    match enclosing_declaration {
-        Some(enclosing_declaration) => c.is_value_symbol_accessible(symbol, enclosing_declaration),
-        None => true,
-    }
-}
-
-fn is_type_symbol_accessible_opt(c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>) -> bool {
-    match enclosing_declaration {
-        Some(enclosing_declaration) => c.is_type_symbol_accessible(symbol, enclosing_declaration),
-        None => true,
-    }
-}
-
-fn is_symbol_accessible_opt(c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_aliases_to_make_visible: bool) -> SymbolAccessibilityResult {
-    match enclosing_declaration {
-        Some(enclosing_declaration) => c.is_symbol_accessible(symbol, enclosing_declaration, meaning, should_compute_aliases_to_make_visible),
-        None => SymbolAccessibilityResult { accessibility: SymbolAccessibility::Accessible, ..Default::default() },
-    }
 }
 
 // Go `defer`: runs the closure when dropped.
@@ -340,7 +310,7 @@ impl NodeBuilderImpl {
                     if let Some(type_predicate) = type_predicate {
                         if !self.pseudo_return_type_matches_predicate(c, pt, type_predicate) {
                             if !self.ctx().suppress_report_inference_fallback.get() {
-                                tracker(self).report_inference_fallback(declaration);
+                                self.tracker().report_inference_fallback(declaration);
                             }
                             pt = None;
                         }
@@ -374,7 +344,7 @@ impl NodeBuilderImpl {
         // TODO: going through emit resolver here is weird. Relayer these APIs.
         let r = c.get_emit_resolver();
         // The only caller checks that `b.ctx.enclosingDeclaration` is non-nil first.
-        r.is_entity_name_visible(c, e.unwrap().name().unwrap().expression().unwrap(), self.ctx().enclosing_declaration.get().unwrap(), false).accessibility == SymbolAccessibility::Accessible
+        r.is_entity_name_visible(c, e.unwrap().name().unwrap().expression().unwrap(), self.ctx().enclosing_declaration.get(), false).accessibility == SymbolAccessibility::Accessible
     }
 
     // nodebuilderimpl.go:2159
@@ -530,12 +500,7 @@ impl NodeBuilderImpl {
             && (ast::is_parameter_declaration(declaration.unwrap()) || ast::is_property_signature_declaration(declaration.unwrap()) || ast::is_property_declaration(declaration.unwrap()))
             && {
                 let r = c.get_emit_resolver();
-                // SIG: emitresolver_subset.rs `requires_adding_implicit_undefined` takes `enclosing_declaration: P<Node>`,
-                // but Go passes `b.ctx.enclosingDeclaration`, which may be nil; it should be `Option<P<Node>>`. Go only
-                // tests it with `enclosingDeclaration != nil && ast.IsFunctionLikeDeclaration(enclosingDeclaration)`, so
-                // the declaration itself (a parameter or property, never function-like) stands in for nil exactly.
-                let enclosing_declaration = self.ctx().enclosing_declaration.get().unwrap_or(declaration.unwrap());
-                r.requires_adding_implicit_undefined(c, declaration.unwrap(), symbol, enclosing_declaration)
+                r.requires_adding_implicit_undefined(c, declaration.unwrap(), symbol, self.ctx().enclosing_declaration.get())
             };
         let add_undefined_for_parameter = requires_adding_undefined && (ast::is_parameter_declaration(declaration.unwrap()) /*|| ast.IsJSDocParameterTag(declaration)*/);
         if add_undefined_for_parameter {
@@ -695,12 +660,12 @@ impl NodeBuilderImpl {
         let first_identifier = ast::get_first_identifier(access_expression);
         let name = c.resolve_name(enclosing_declaration, first_identifier.text(), SymbolFlags::Value | SymbolFlags::ExportValue, None /*nameNotFoundMessage*/, true /*isUse*/, false);
         if let Some(name) = name {
-            tracker(self).track_symbol(name, enclosing_declaration, SymbolFlags::Value);
+            self.tracker().track_symbol(name, enclosing_declaration, SymbolFlags::Value);
         } else {
             // Name does not resolve at target location, track symbol at dest location (should be inaccessible)
             let fallback = c.resolve_name(Some(first_identifier), first_identifier.text(), SymbolFlags::Value | SymbolFlags::ExportValue, None /*nameNotFoundMessage*/, true /*isUse*/, false);
             if let Some(fallback) = fallback {
-                tracker(self).track_symbol(fallback, enclosing_declaration, SymbolFlags::Value);
+                self.tracker().track_symbol(fallback, enclosing_declaration, SymbolFlags::Value);
             }
         }
     }
@@ -804,7 +769,7 @@ impl NodeBuilderImpl {
                 Some(parent) => parent,
                 None => name_type_symbol,
             };
-            if enum_enclosing_declaration.is_some() && c.is_symbol_accessible_by_flags(enum_symbol, enum_enclosing_declaration.unwrap(), SymbolFlags::Value) {
+            if enum_enclosing_declaration.is_some() && c.is_symbol_accessible_by_flags(enum_symbol, enum_enclosing_declaration, SymbolFlags::Value) {
                 let save_enclosing_declaration = self.ctx().enclosing_declaration.get();
                 self.ctx().enclosing_declaration.set(enum_enclosing_declaration);
                 let expression = self.symbol_to_expression(c, name_type_symbol, SymbolFlags::Value);
@@ -863,7 +828,7 @@ impl NodeBuilderImpl {
                 }
             } else {
                 let property_name = c.symbol_to_string(property_symbol);
-                tracker(self).report_non_serializable_property(&property_name);
+                self.tracker().report_non_serializable_property(&property_name);
             }
         }
         if let Some(value_declaration) = property_symbol.value_declaration() {
@@ -1005,10 +970,10 @@ impl NodeBuilderImpl {
                     continue;
                 }
                 if get_declaration_modifier_flags_from_symbol(property_symbol).intersects(ModifierFlags::Private | ModifierFlags::Protected) {
-                    tracker(self).report_private_in_base_of_class_expression(property_symbol.name());
+                    self.tracker().report_private_in_base_of_class_expression(property_symbol.name());
                 }
                 if is_private_identifier_symbol(Some(property_symbol)) {
-                    tracker(self).report_private_in_base_of_class_expression(ast::symbol_name(property_symbol));
+                    self.tracker().report_private_in_base_of_class_expression(ast::symbol_name(property_symbol));
                 }
             }
             if self.check_truncation_length(c) && (i + 2 < properties.len() as i32 - 1) {
@@ -1079,10 +1044,7 @@ impl NodeBuilderImpl {
             // and not `(abstract new () => {}) & {}`
             if type_element_count != 0 {
                 // create a copy of the object type without any abstract construct signatures.
-                // SIG: nb-1 changed `get_resolved_type_without_abstract_construct_signatures` to take the type itself
-                // (`t`, which `resolve_structured_type_members` returned as `resolved`); this branch still has the
-                // `&'static StructuredType` stub. After the merge this call is `(c, t)`.
-                types.push(self.get_resolved_type_without_abstract_construct_signatures(c, resolved));
+                types.push(self.get_resolved_type_without_abstract_construct_signatures(c, t));
             }
             let intersection = c.get_intersection_type(&types);
             return self.type_to_type_node(c, Some(intersection));
@@ -1159,7 +1121,7 @@ impl NodeBuilderImpl {
             }
             // typeof is allowed only for static/non local functions
             let result = (self.ctx().flags.get().intersects(Flags::UseTypeOfFunction) || self.ctx().visited_types.borrow().has(&type_id)) // it is type of the symbol uses itself recursively
-                && (!self.ctx().flags.get().intersects(Flags::UseStructuralFallback) || is_value_symbol_accessible_opt(c, symbol, self.ctx().enclosing_declaration.get())); // And the build is going to succeed without visibility error or there is no structural fallback allowed
+                && (!self.ctx().flags.get().intersects(Flags::UseStructuralFallback) || c.is_value_symbol_accessible(symbol, self.ctx().enclosing_declaration.get())); // And the build is going to succeed without visibility error or there is no structural fallback allowed
             return (result, symbol);
         }
         (false, symbol)
@@ -1181,7 +1143,7 @@ impl NodeBuilderImpl {
             && !(symbol.value_declaration().is_some()
                 && ast::is_class_like(symbol.value_declaration().unwrap())
                 && self.ctx().flags.get().intersects(Flags::WriteClassExpressionAsTypeLiteral)
-                && (!ast::is_class_declaration(symbol.value_declaration().unwrap()) || is_symbol_accessible_opt(c, symbol, self.ctx().enclosing_declaration.get(), is_instance_type, false /*shouldComputeAliasesToMakeVisible*/).accessibility != SymbolAccessibility::Accessible))
+                && (!ast::is_class_declaration(symbol.value_declaration().unwrap()) || c.is_symbol_accessible(Some(symbol), self.ctx().enclosing_declaration.get(), is_instance_type, false /*shouldComputeAliasesToMakeVisible*/).accessibility != SymbolAccessibility::Accessible))
             || symbol.flags().intersects(SymbolFlags::Enum | SymbolFlags::ValueModule);
         if non_function_result {
             return (true, symbol);
@@ -1283,7 +1245,7 @@ impl NodeBuilderImpl {
             if self.ctx().visited_types.borrow().has(&t.id) {
                 if !self.ctx().flags.get().intersects(Flags::AllowAnonymousIdentifier) {
                     self.ctx().encountered_error.set(true);
-                    tracker(self).report_cyclic_structure_error();
+                    self.tracker().report_cyclic_structure_error();
                 }
                 return Some(self.create_elided_information_placeholder(c));
             }
@@ -1442,7 +1404,7 @@ impl NodeBuilderImpl {
         } else if self.ctx().flags.get().intersects(Flags::WriteClassExpressionAsTypeLiteral)
             && t.symbol().unwrap().value_declaration().is_some()
             && ast::is_class_like(t.symbol().unwrap().value_declaration().unwrap())
-            && !is_value_symbol_accessible_opt(c, t.symbol().unwrap(), self.ctx().enclosing_declaration.get())
+            && !c.is_value_symbol_accessible(t.symbol().unwrap(), self.ctx().enclosing_declaration.get())
         {
             self.create_anonymous_type_node(c, t)
         } else {
@@ -1564,7 +1526,7 @@ impl NodeBuilderImpl {
             if let Some(cached_result) = cached_result {
                 // TODO:: check if we instead store late painted statements associated with this?
                 for arg in cached_result.tracked_symbols.iter() {
-                    tracker(self).track_symbol(arg.symbol, arg.enclosing_declaration, arg.meaning);
+                    self.tracker().track_symbol(arg.symbol, arg.enclosing_declaration, arg.meaning);
                 }
                 if cached_result.truncating {
                     self.ctx().truncating.set(true);
@@ -1751,11 +1713,11 @@ impl NodeBuilderImpl {
         }
         if t.flags().intersects(TypeFlags::UniqueESSymbol) {
             if !self.ctx().flags.get().intersects(Flags::AllowUniqueESSymbolType) {
-                if is_value_symbol_accessible_opt(c, t.symbol().unwrap(), self.ctx().enclosing_declaration.get()) {
+                if c.is_value_symbol_accessible(t.symbol().unwrap(), self.ctx().enclosing_declaration.get()) {
                     add_approximate_length(self, 6);
                     return self.symbol_to_type_node(c, t.symbol().unwrap(), SymbolFlags::Value, None);
                 }
-                tracker(self).report_inaccessible_unique_symbol_error();
+                self.tracker().report_inaccessible_unique_symbol_error();
             }
             add_approximate_length(self, 13);
             return Some(self.f.new_type_operator_node(Kind::UniqueKeyword, self.f.new_keyword_type_node(Kind::SymbolKeyword)));
@@ -1789,14 +1751,14 @@ impl NodeBuilderImpl {
                 if !self.ctx().encountered_error.get() && !self.ctx().flags.get().intersects(Flags::AllowThisInObjectLiteral) {
                     self.ctx().encountered_error.set(true);
                 }
-                tracker(self).report_inaccessible_this_error();
+                self.tracker().report_inaccessible_this_error();
             }
             add_approximate_length(self, 4);
             return Some(self.f.new_this_type_node());
         }
 
         let mut _decrement_depth: Option<Defer> = None;
-        if in_type_alias.is_empty() && t.alias().is_some() && (self.ctx().flags.get().intersects(Flags::UseAliasDefinedOutsideCurrentScope) || is_type_symbol_accessible_opt(c, t.alias().symbol().unwrap(), self.ctx().enclosing_declaration.get())) {
+        if in_type_alias.is_empty() && t.alias().is_some() && (self.ctx().flags.get().intersects(Flags::UseAliasDefinedOutsideCurrentScope) || c.is_type_symbol_accessible(t.alias().symbol().unwrap(), self.ctx().enclosing_declaration.get())) {
             // If we should expand this type alias, skip the alias and fall through to expand the underlying type
             if !self.should_expand_type(c, t, true /*isAlias*/) {
                 let sym = t.alias().symbol().unwrap();
@@ -1999,13 +1961,13 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:3651
-    pub(crate) fn create_access_expression(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn create_access_expression(&self, c: &mut Checker, node: P<Node>) -> P<Node> {
         if ast::is_qualified_name(node) {
             let qualified_name = node.as_qualified_name();
-            let left = self.create_access_expression(c, qualified_name.left).unwrap();
-            Some(self.f.new_property_access_expression(left, None /*questionDotToken*/, self.f.deep_clone_node(Some(qualified_name.right)).unwrap(), NodeFlags::None))
+            let left = self.create_access_expression(c, qualified_name.left);
+            self.f.new_property_access_expression(left, None /*questionDotToken*/, self.f.deep_clone_node(Some(qualified_name.right)).unwrap(), NodeFlags::None)
         } else if ast::is_identifier(node) || ast::is_property_access_expression(node) || ast::is_expression_with_type_arguments(node) {
-            self.f.deep_clone_node(Some(node))
+            self.f.deep_clone_node(Some(node)).unwrap()
         } else {
             panic!("unexpected access node kind: {}", node.kind_string());
         }

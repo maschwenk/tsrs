@@ -190,7 +190,7 @@ impl NodeBuilderImpl {
                     Some(d.signature),
                     &expanded_params,
                     signature.type_parameters.get(),
-                    signature.parameters.get(),
+                    Some(signature.parameters.get()),
                     signature.mapper.get(),
                 );
                 let mut type_params: Option<P<NodeList>> = None;
@@ -255,7 +255,7 @@ impl NodeBuilderImpl {
                             e.signature(),
                             &expanded_params,
                             signature.type_parameters.get(),
-                            signature.parameters.get(),
+                            Some(signature.parameters.get()),
                             signature.mapper.get(),
                         ));
                     }

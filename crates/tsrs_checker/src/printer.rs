@@ -1275,8 +1275,8 @@ impl Checker {
      */
 
     // symbolaccessibility.go:839
-    pub fn is_symbol_accessible(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_aliases_to_make_visible: bool) -> SymbolAccessibilityResult {
-        self.is_symbol_accessible_worker(Some(symbol), enclosing_declaration, meaning, should_compute_aliases_to_make_visible, true /*allowModules*/)
+    pub fn is_symbol_accessible(&mut self, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_aliases_to_make_visible: bool) -> SymbolAccessibilityResult {
+        self.is_symbol_accessible_worker(symbol, enclosing_declaration, meaning, should_compute_aliases_to_make_visible, true /*allowModules*/)
     }
 
     // symbolaccessibility.go:843

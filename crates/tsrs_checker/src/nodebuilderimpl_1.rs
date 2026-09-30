@@ -51,7 +51,8 @@ pub(crate) fn new_node_builder_impl(ch: &mut Checker, e: P<EmitContext>, id_to_s
 }
 
 impl NodeBuilderImpl {
-    fn tracker(&self) -> &'static dyn SymbolTracker {
+    // Go `b.ctx.tracker` (always set while a node builder entry point runs).
+    pub(crate) fn tracker(&self) -> &'static dyn SymbolTracker {
         self.ctx().tracker.get().unwrap()
     }
 
@@ -249,7 +250,7 @@ impl NodeBuilderImpl {
             let type_ref = root.as_type_reference_node();
             let type_arguments = root.type_argument_list();
             if self.ctx().flags.get().intersects(Flags::UseInstantiationExpressions) && type_arguments.is_some() && !type_arguments.unwrap().nodes.is_empty() {
-                let access = self.create_access_expression(c, type_ref.type_name).unwrap();
+                let access = self.create_access_expression(c, type_ref.type_name);
                 let mut expr = self.create_expression_with_type_arguments(c, access, type_arguments);
                 for id in get_access_stack(ref_) {
                     expr = self.f.new_property_access_expression(expr, None, id, NodeFlags::None);
@@ -262,7 +263,7 @@ impl NodeBuilderImpl {
             }
             return Some(self.f.update_type_reference_node(root, type_name, ref_.type_argument_list()));
         }
-        let mut expr = self.create_access_expression(c, root).unwrap();
+        let mut expr = self.create_access_expression(c, root);
         for id in get_access_stack(ref_) {
             expr = self.f.new_property_access_expression(expr, None, id, NodeFlags::None);
         }
@@ -406,7 +407,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:442
-    pub(crate) fn serialize_type_name(&self, c: &mut Checker, node: P<Node>, is_type_of: bool, type_arguments: P<NodeList>) -> Option<P<Node>> {
+    pub(crate) fn serialize_type_name(&self, c: &mut Checker, node: P<Node>, is_type_of: bool, type_arguments: Option<P<NodeList>>) -> Option<P<Node>> {
         let mut meaning = SymbolFlags::Type;
         if is_type_of {
             meaning = SymbolFlags::Value;
@@ -418,12 +419,10 @@ impl NodeBuilderImpl {
             resolved_symbol = c.resolve_alias(symbol);
         }
 
-        // SIG: Checker::is_symbol_accessible's enclosing_declaration should be Option<P<Node>> (Go passes a nil-able
-        // b.ctx.enclosingDeclaration and isSymbolAccessibleWorker nil-checks it).
-        if c.is_symbol_accessible(symbol, self.ctx().enclosing_declaration.get().unwrap(), meaning, false).accessibility != SymbolAccessibility::Accessible {
+        if c.is_symbol_accessible(Some(symbol), self.ctx().enclosing_declaration.get(), meaning, false).accessibility != SymbolAccessibility::Accessible {
             return None;
         }
-        self.symbol_to_type_node(c, resolved_symbol, meaning, Some(type_arguments))
+        self.symbol_to_type_node(c, resolved_symbol, meaning, type_arguments)
     }
 }
 
@@ -843,7 +842,7 @@ impl NodeBuilderImpl {
             if !self.ctx().flags.get().intersects(Flags::UseInstantiationExpressions) || is_entity_name(lhs) && (type_parameter_nodes.is_none() || type_parameter_nodes.unwrap().nodes.is_empty()) {
                 return self.f.new_qualified_name(lhs, identifier);
             }
-            let access = self.create_access_expression(c, lhs).unwrap();
+            let access = self.create_access_expression(c, lhs);
             return self.create_expression_with_type_arguments(c, self.f.new_property_access_expression(access, None, identifier, NodeFlags::None), type_parameter_nodes);
         }
         identifier
@@ -1120,21 +1119,18 @@ impl NodeBuilderImpl {
     // nodebuilderimpl.go:1087
     pub(crate) fn get_symbol_chain(&self, c: &mut Checker, symbol: P<Symbol>, meaning: SymbolFlags, end_of_chain: bool, yield_module_symbol: bool) -> Vec<P<Symbol>> {
         let enclosing_declaration = self.ctx().enclosing_declaration.get();
-        // SIG: get_accessible_symbol_chain / needs_qualification / get_containers_of_symbol should take
-        // enclosing_declaration: Option<P<Node>> (Go reaches here with a nil enclosing declaration under
-        // UseFullyQualifiedType, and the callees nil-check it).
-        let mut accessible_symbol_chain = c.get_accessible_symbol_chain(symbol, enclosing_declaration.unwrap(), meaning, self.ctx().flags.get().intersects(Flags::UseOnlyExternalAliasing));
+        let mut accessible_symbol_chain = c.get_accessible_symbol_chain(symbol, enclosing_declaration, meaning, self.ctx().flags.get().intersects(Flags::UseOnlyExternalAliasing));
         let mut qualifier_meaning = meaning;
         if accessible_symbol_chain.len() > 1 {
             qualifier_meaning = get_qualified_left_meaning(meaning);
         }
-        if accessible_symbol_chain.is_empty() || c.needs_qualification(accessible_symbol_chain[0], enclosing_declaration.unwrap(), qualifier_meaning) {
+        if accessible_symbol_chain.is_empty() || c.needs_qualification(accessible_symbol_chain[0], enclosing_declaration, qualifier_meaning) {
             // Go up and add our parent.
             let mut root = symbol;
             if !accessible_symbol_chain.is_empty() {
                 root = accessible_symbol_chain[0];
             }
-            let parents = c.get_containers_of_symbol(root, enclosing_declaration.unwrap(), meaning);
+            let parents = c.get_containers_of_symbol(root, enclosing_declaration, meaning);
             if !parents.is_empty() {
                 let mut parent_specifiers: Vec<sortedSymbolNamePair> = parents
                     .iter()
@@ -1656,7 +1652,7 @@ impl NodeBuilderImpl {
 
         // nameType and templateType nodes have to be in the new scope
         let scope_type_parameter = c.get_type_parameter_from_mapped_type(t);
-        let mut cleanup = self.enter_new_scope(c, Some(declaration), &[], &[scope_type_parameter], &[], None);
+        let mut cleanup = self.enter_new_scope(c, Some(declaration), &[], &[scope_type_parameter], None, None);
         let type_parameter_declaration_node = self.type_parameter_to_declaration_with_constraint(c, type_parameter, appropriate_constraint_type_node);
         let mut name_type_node: Option<P<Node>> = None;
         if decl.name_type.is_some() {
@@ -1865,9 +1861,7 @@ impl NodeBuilderImpl {
     // nodebuilderimpl.go:1785
     pub(crate) fn clone_binding_name(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> {
         if is_computed_property_name(node) && c.is_late_bindable_name(node) {
-            // SIG: track_computed_name's enclosing_declaration should be Option<P<Node>> (Go passes the nil-able
-            // b.ctx.enclosingDeclaration straight to resolveName/TrackSymbol).
-            self.track_computed_name(c, node.expression().unwrap(), self.ctx().enclosing_declaration.get().unwrap());
+            self.track_computed_name(c, node.expression().unwrap(), self.ctx().enclosing_declaration.get());
         }
 
         let mut visitor = new_node_visitor(Some(self.clone_binding_name_visitor.get().unwrap().clone()), Some(self.f.clone()), NodeVisitorHooks::default());
