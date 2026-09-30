@@ -127,9 +127,9 @@ impl NodeBuilder {
 
     // SerializeTypeForDeclaration implements NodeBuilderInterface.
     // nodebuilder.go:134
-    pub fn serialize_type_for_declaration(&self, c: &mut Checker, declaration: P<Node>, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> {
+    pub fn serialize_type_for_declaration(&self, c: &mut Checker, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> {
         self.enter_context(enclosing_declaration, flags, internal_flags, tracker);
-        let result = self.impl_.serialize_type_for_declaration(c, Some(declaration), None, Some(symbol), true);
+        let result = self.impl_.serialize_type_for_declaration(c, Some(declaration), None, symbol, true);
         self.exit_context(Some(result))
     }
 

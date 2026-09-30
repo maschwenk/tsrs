@@ -349,7 +349,7 @@ impl SymbolTracker for wrappingTracker {
     }
 }
 
-// emitresolver.go (only the part the node builder and symbol accessibility use; see emitresolver_subset.rs)
+// emitresolver.go (the data; the functions are in emitresolver.rs)
 
 // Links for jsx
 #[derive(Default)]

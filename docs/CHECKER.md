@@ -17,7 +17,8 @@ The `checker-foundation` agent implements the data model and keeps this file acc
 | `printer.go`, `symbolaccessibility.go`, `symboltracker.go` | `printer.rs` — type/symbol/signature -> string for messages |
 | `nodebuilder.go`, `nodebuilderimpl.go`, `nodebuilderscopes.go` | `nodebuilder.rs`, `nodebuilderimpl_1.rs` (1–1850), `nodebuilderimpl_2.rs` (1851–end), `nodebuilderscopes.rs`; data model in `nodebuilder_types.rs` + `printer_types.rs` (section "Node builder") |
 | `nodecopy.go`, `pseudotypenodebuilder.go`, `nodebuilder_hover.go` | `nodecopy.rs`, `pseudotypenodebuilder.rs`, `nodebuilder_hover.rs` (node builder, same conventions) |
-| `emitresolver.go`, `services.go` | only what the node builder / symbol accessibility and the `.types`/`.symbols` baseline writer reach: `emitresolver_subset.rs`, `services.rs` (the rest is in `skipFuncs`) |
+| `emitresolver.go` | `emitresolver.rs` (all of it; section "Node builder", paragraph "Emit resolver") |
+| `services.go` | only what the node builder / symbol accessibility and the `.types`/`.symbols` baseline writer reach: `services.rs` (the rest is in `skipFuncs`) |
 | `tracer.go` | not ported |
 | `../pseudochecker/*.go`, `../modulespecifiers/*.go` | crates `tsrs_pseudochecker`, `tsrs_modulespecifiers` (section "Node builder") |
 | `../evaluator/evaluator.go` | `evaluator.rs` (foundation) |
@@ -204,13 +205,19 @@ fields plain), `originalRecoveryScopeState` (Copy), `wrappingTracker { wrapped: 
 (`P<…>`, implements `SymbolTracker`; `markError(w.wrapped.ReportX)` is
 `self.bound.mark_error(Some(Box::new(move || wrapped.report_x())))` with `let wrapped = self.wrapped;`).
 
-**Emit resolver subset** (emitresolver_subset.rs): `EmitResolver` is `P<EmitResolver>`, a checker holder (`&self,
-c: &mut Checker`, Go `r.checker.foo()` -> `c.foo()`), with `jsx_links`, `declaration_links` (`is_visible: Cell<Tristate>`),
-`declaration_file_links`. Only `isDeclarationVisible`, `determineIfDeclarationIsVisible`, `getMeaningOfEntityNameReference`,
-`isEntityNameVisible`, `noopAddVisibleAlias`, `hasVisibleDeclarations`, `requiresAddingImplicitUndefined[Worker]`,
-`declaredParameterTypeContainsUndefined`, `isOptionalUninitializedParameterProperty`, `isRequiredInitializedParameter`,
-`isOptionalParameter`, `isSymbolAccessible` are generated (their exported locking wrappers are not). Callers:
-`let r = c.get_emit_resolver(); r.has_visible_declarations(c, symbol, compute)`.
+**Emit resolver** (emitresolver.rs, all of emitresolver.go): `EmitResolver` is `P<EmitResolver>`, a checker holder
+(`&self, c: &mut Checker`, Go `r.checker.foo()` -> `c.foo()`), with `jsx_links`, `declaration_links` (`is_visible:
+Cell<Tristate>`), `declaration_file_links` (`tsrs_core::LinkStore`) and `reference_resolver: OnceCell<P<ReferenceResolver<Checker>>>`
+(Go's lazily built `binder.ReferenceResolver`; hooks are `Checker` methods as `fn` pointers). Go's `checkerMu` is
+dropped: the exported Go methods that lock it are the `pub` methods (a Go name that exists both exported and unexported
+gets an `_exported` suffix on the exported one, e.g. `is_declaration_visible_exported`), and the caller serializes checker
+access (tsrs_declarations `Resolver`, which borrows the file's checker per call; the Go `...Unsafe` / `IsSymbolAccessible`
+/ `GetPropertiesOfContainerFunction` methods are the ones it calls with `c` already borrowed, from symbol-tracker
+callbacks). Go's method-value fields `isValueAliasDeclaration` / `aliasMarkingVisitor` are calls of the `..._worker`
+methods (`node.for_each_child(&mut |n| self.alias_marking_visitor_worker(c, n))`). The `Create*` methods build
+`new_node_builder(c, emit_context)` per call and call its entry points with `Some(tracker)`; Go nil-vs-empty results
+keep `Option` (`create_type_parameters_of_signature_declaration -> Option<Vec<P<Node>>>`, `None` exactly when Go's
+slice is nil, i.e. empty). Checker-internal callers: `let r = c.get_emit_resolver(); r.has_visible_declarations(c, symbol, compute)`.
 
 **pseudochecker** (crate `tsrs_pseudochecker`, no checker dependency; checker imports it as `pseudochecker::`, with
 `PseudoChecker`, `PseudoType`, `PseudoParameter`, `PseudoObjectElement`, `new_pseudo_checker` at the crate root):
