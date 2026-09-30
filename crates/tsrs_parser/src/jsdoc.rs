@@ -757,6 +757,7 @@ impl Parser {
             }
             while self.token == Kind::PrivateIdentifier {
                 self.scanner.re_scan_hash_token();
+                self.report_scan_errors();
                 self.next_token_jsdoc();
                 let right = self.parse_identifier();
                 let qualified = self.factory.new_qualified_name(name, right);
