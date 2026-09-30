@@ -615,7 +615,7 @@ impl IterationTypesResolver {
     pub fn resolve_iteration_type(&self, c: &mut Checker, t: P<Type>, error_node: Option<P<Node>>) -> Option<P<Type>> {
         if self.is_async {
             return c.get_awaited_type_ex(
-                Some(t),
+                t,
                 error_node,
                 Some(&diagnostics::Type_of_await_operand_must_either_be_a_valid_promise_or_must_not_contain_a_callable_then_member),
                 &[],
@@ -1342,7 +1342,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.string_or_number_type = c.get_union_type(&[c.string_type, c.number_type]);
     c.string_number_symbol_type = c.get_union_type(&[c.string_type, c.number_type, c.es_symbol_type]);
     c.number_or_big_int_type = c.get_union_type(&[c.number_type, c.bigint_type]);
-    c.numeric_string_type = c.get_template_literal_type(&["", ""], &[c.number_type]).unwrap(); // The `${number}` type
+    c.numeric_string_type = c.get_template_literal_type(&["", ""], &[c.number_type]); // The `${number}` type
     c.template_constraint_type = c.get_union_type(&[c.string_type, c.number_type, c.boolean_type, c.bigint_type, c.null_type, c.undefined_type]);
     c.unique_literal_type = c.new_intrinsic_type(TypeFlags::Never, "never"); // Special `never` flagged by union reduction to behave as a literal
     c.unique_literal_mapper = new_function_type_mapper(|c, t| c.get_unique_literal_type_for_type_parameter(t));
@@ -1463,7 +1463,7 @@ impl Checker {
     }
 
     pub(crate) fn is_primitive_or_object_or_empty_type(&mut self, t: P<Type>) -> bool {
-        t.flags().intersects(TypeFlags::Primitive | TypeFlags::NonPrimitive) || self.is_empty_anonymous_object_type(Some(t))
+        t.flags().intersects(TypeFlags::Primitive | TypeFlags::NonPrimitive) || self.is_empty_anonymous_object_type(t)
     }
 
     pub(crate) fn contains_missing_type(&mut self, t: P<Type>) -> bool {
@@ -1471,11 +1471,11 @@ impl Checker {
     }
 
     pub(crate) fn could_contain_type_variables(&mut self, t: P<Type>) -> bool {
-        self.could_contain_type_variables_worker(Some(t))
+        self.could_contain_type_variables_worker(t)
     }
 
     pub(crate) fn is_string_index_signature_only_type(&mut self, t: P<Type>) -> bool {
-        self.is_string_index_signature_only_type_worker(Some(t))
+        self.is_string_index_signature_only_type_worker(t)
     }
 
     pub(crate) fn mark_node_assignments(&mut self, node: P<Node>) -> bool {

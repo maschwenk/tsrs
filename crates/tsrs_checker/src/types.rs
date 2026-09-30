@@ -1494,10 +1494,10 @@ impl MappedType {
         self.template_type.get()
     }
     pub fn resolve_components(&self, c: &mut Checker, typ: P<Type>) {
-        c.get_type_parameter_from_mapped_type(Some(typ));
-        c.get_constraint_type_from_mapped_type(Some(typ));
-        c.get_name_type_from_mapped_type(Some(typ));
-        c.get_template_type_from_mapped_type(Some(typ));
+        c.get_type_parameter_from_mapped_type(typ);
+        c.get_constraint_type_from_mapped_type(typ);
+        c.get_name_type_from_mapped_type(typ);
+        c.get_template_type_from_mapped_type(typ);
     }
 }
 
