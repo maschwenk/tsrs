@@ -1561,3 +1561,647 @@ impl Checker {
         self.flow_loop_cache.insert(key, result);
         flow_type_of(result)
     }
+
+    // flow.go:1404
+    pub(crate) fn get_type_at_flow_array_mutation(&mut self, f: P<FlowState>, flow: P<FlowNode>) -> FlowType {
+        if f.declared() == self.auto_type || f.declared() == self.auto_array_type {
+            let node = flow.node().unwrap();
+            let expr = if ast::is_call_expression(node) {
+                node.expression().unwrap().expression().unwrap()
+            } else {
+                node.as_binary_expression().left.expression().unwrap()
+            };
+            let candidate = self.get_reference_candidate(expr);
+            if self.is_matching_reference(f.ref_node(), candidate) {
+                let flow_type = self.get_type_at_flow_node(f, flow.antecedent().unwrap());
+                let flow_type_t = flow_type.t.unwrap();
+                if flow_type_t.object_flags().intersects(ObjectFlags::EvolvingArray) {
+                    let mut evolved_type = flow_type_t;
+                    if ast::is_call_expression(node) {
+                        for &arg in node.arguments() {
+                            evolved_type = self.add_evolving_array_element_type(evolved_type, arg);
+                        }
+                    } else {
+                        // We must get the context free expression type so as to not recur in an uncached fashion on the LHS (which causes exponential blowup in compile time)
+                        let index_type = self.get_context_free_type_of_expression(node.as_binary_expression().left.as_element_access_expression().argument_expression);
+                        if self.is_type_assignable_to_kind(index_type, TypeFlags::NumberLike) {
+                            evolved_type = self.add_evolving_array_element_type(evolved_type, node.as_binary_expression().right());
+                        }
+                    }
+                    return self.new_flow_type(evolved_type, flow_type.incomplete);
+                }
+                return flow_type;
+            }
+        }
+        FlowType::default()
+    }
+
+    // flow.go:1436
+    pub(crate) fn get_discriminant_property_access(&mut self, f: P<FlowState>, expr: P<Node>, computed_type: P<Type>) -> Option<P<Node>> {
+        // As long as the computed type is a subset of the declared type, we use the full declared type to detect
+        // a discriminant property. In cases where the computed type isn't a subset, e.g because of a preceding type
+        // predicate narrowing, we use the actual computed type.
+        let declared_type = f.declared();
+        if declared_type.flags().intersects(TypeFlags::Union) || computed_type.flags().intersects(TypeFlags::Union) {
+            let access = self.get_candidate_discriminant_property_access(f, expr);
+            if let Some(access) = access {
+                let (name, ok) = self.get_accessed_property_name(access);
+                if ok {
+                    let mut t = computed_type;
+                    if declared_type.flags().intersects(TypeFlags::Union) && self.is_type_subset_of(computed_type, declared_type) {
+                        t = declared_type;
+                    }
+                    if self.is_discriminant_property(Some(t), &name) {
+                        return Some(access);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    // flow.go:1457
+    pub(crate) fn get_candidate_discriminant_property_access(&mut self, f: P<FlowState>, expr: P<Node>) -> Option<P<Node>> {
+        let reference = f.ref_node();
+        if ast::is_binding_pattern(reference) || ast::is_function_expression_or_arrow_function(reference) || ast::is_object_literal_method(reference) {
+            // When the reference is a binding pattern or function or arrow expression, we are narrowing a pseudo-reference in
+            // getNarrowedTypeOfSymbol. An identifier for a destructuring variable declared in the same binding pattern or
+            // parameter declared in the same parameter list is a candidate.
+            if ast::is_identifier(expr) {
+                let symbol = self.get_resolved_symbol(expr);
+                let declaration = self.get_export_symbol_of_value_symbol_if_exported(Some(symbol)).value_declaration();
+                if let Some(declaration) = declaration {
+                    if (ast::is_binding_element(declaration) || ast::is_parameter_declaration(declaration))
+                        && Some(reference) == declaration.parent()
+                        && declaration.initializer().is_none()
+                        && !has_dot_dot_dot_token(declaration)
+                    {
+                        return Some(declaration);
+                    }
+                }
+            }
+        } else if ast::is_access_expression(expr) {
+            // An access expression is a candidate if the reference matches the left hand expression.
+            if self.is_matching_reference(reference, expr.expression().unwrap()) {
+                return Some(expr);
+            }
+        } else if ast::is_identifier(expr) {
+            let symbol = self.get_resolved_symbol(expr);
+            if self.is_constant_variable(symbol) {
+                let declaration = symbol.value_declaration().unwrap();
+                let initializer = get_candidate_variable_declaration_initializer(declaration);
+                // Given 'const x = obj.kind', allow 'x' as an alias for 'obj.kind'
+                if let Some(initializer) = initializer {
+                    if ast::is_access_expression(initializer) && self.is_matching_reference(reference, initializer.expression().unwrap()) {
+                        return Some(initializer);
+                    }
+                }
+                // Given 'const { kind: x } = obj', allow 'x' as an alias for 'obj.kind'
+                if ast::is_binding_element(declaration) && declaration.initializer().is_none() {
+                    let initializer = get_candidate_variable_declaration_initializer(declaration.parent().unwrap().parent().unwrap());
+                    if let Some(initializer) = initializer {
+                        if (ast::is_identifier(initializer) || ast::is_access_expression(initializer)) && self.is_matching_reference(reference, initializer) {
+                            return Some(declaration);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+// flow.go:1496
+pub(crate) fn get_candidate_variable_declaration_initializer(node: P<Node>) -> Option<P<Node>> {
+    if ast::is_variable_declaration(node) && node.type_node().is_none() {
+        if let Some(initializer) = node.initializer() {
+            return Some(ast::skip_parentheses(initializer));
+        }
+    }
+    None
+}
+
+impl Checker {
+    // An evolving array type tracks the element types that have so far been seen in an
+    // 'x.push(value)' or 'x[n] = value' operation along the control flow graph. Evolving
+    // array types are ultimately converted into manifest array types (using getFinalArrayType)
+    // and never escape the getFlowTypeOfReference function.
+    // flow.go:1509
+    pub(crate) fn get_evolving_array_type(&mut self, element_type: P<Type>) -> P<Type> {
+        let key = CachedTypeKey { kind: CachedTypeKind::EvolvingArrayType, type_id: element_type.id };
+        let result = self.cached_types.get(&key).copied();
+        match result {
+            Some(result) => result,
+            None => {
+                let result = self.new_object_type(ObjectFlags::EvolvingArray, None);
+                result.as_evolving_array_type().element_type.set(Some(element_type));
+                self.cached_types.insert(key, result);
+                result
+            }
+        }
+    }
+
+    // flow.go:1520
+    pub(crate) fn get_element_type_of_evolving_array_type(&mut self, t: P<Type>) -> P<Type> {
+        if t.object_flags().intersects(ObjectFlags::EvolvingArray) {
+            return t.as_evolving_array_type().element_type.get().unwrap();
+        }
+        self.never_type
+    }
+}
+
+// flow.go:1527
+pub(crate) fn is_evolving_array_type_list(types: &[P<Type>]) -> bool {
+    let mut has_evolving_array_type = false;
+    for &t in types {
+        if !t.flags().intersects(TypeFlags::Never) {
+            if !t.object_flags().intersects(ObjectFlags::EvolvingArray) {
+                return false;
+            }
+            has_evolving_array_type = true;
+        }
+    }
+    has_evolving_array_type
+}
+
+impl Checker {
+    // Return true if the given node is 'x' in an 'x.length', x.push(value)', 'x.unshift(value)' or
+    // 'x[n] = value' operation, where 'n' is an expression of type any, undefined, or a number-like type.
+    // flow.go:1542
+    pub(crate) fn is_evolving_array_operation_target(&mut self, node: P<Node>) -> bool {
+        let root = self.get_reference_root(node);
+        let parent = root.parent().unwrap();
+        let is_length_push_or_unshift = ast::is_property_access_expression(parent)
+            && (parent.name().unwrap().text() == "length"
+                || ast::is_call_expression(parent.parent().unwrap()) && ast::is_identifier(parent.name().unwrap()) && ast::is_push_or_unshift_identifier(parent.name().unwrap()));
+        let is_element_assignment = ast::is_element_access_expression(parent)
+            && parent.expression() == Some(root)
+            && ast::is_binary_expression(parent.parent().unwrap())
+            && parent.parent().unwrap().as_binary_expression().operator_token.kind == Kind::EqualsToken
+            && parent.parent().unwrap().as_binary_expression().left == parent
+            && !ast::is_assignment_target(parent.parent().unwrap())
+            && {
+                let index_type = self.get_type_of_expression(parent.as_element_access_expression().argument_expression);
+                self.is_type_assignable_to_kind(index_type, TypeFlags::NumberLike)
+            };
+        is_length_push_or_unshift || is_element_assignment
+    }
+
+    // When adding evolving array element types we do not perform subtype reduction. Instead,
+    // we defer subtype reduction until the evolving array type is finalized into a manifest
+    // array type.
+    // flow.go:1557
+    pub(crate) fn add_evolving_array_element_type(&mut self, evolving_array_type: P<Type>, node: P<Node>) -> P<Type> {
+        let context_free_type = self.get_context_free_type_of_expression(node);
+        let base_type = self.get_base_type_of_literal_type(context_free_type);
+        let new_element_type = self.get_regular_type_of_object_literal(base_type);
+        let element_type = evolving_array_type.as_evolving_array_type().element_type.get().unwrap();
+        if self.is_type_subset_of(new_element_type, element_type) {
+            return evolving_array_type;
+        }
+        let union_type = self.get_union_type(&[element_type, new_element_type]);
+        self.get_evolving_array_type(union_type)
+    }
+
+    // flow.go:1566
+    pub(crate) fn finalize_evolving_array_type(&mut self, t: P<Type>) -> P<Type> {
+        if t.object_flags().intersects(ObjectFlags::EvolvingArray) {
+            return self.get_final_array_type(t.as_evolving_array_type());
+        }
+        t
+    }
+
+    // flow.go:1573
+    pub(crate) fn get_final_array_type(&mut self, t: &'static EvolvingArrayType) -> P<Type> {
+        if t.final_array_type.get().is_none() {
+            let final_array_type = self.create_final_array_type(t.element_type.get().unwrap());
+            t.final_array_type.set(Some(final_array_type));
+        }
+        t.final_array_type.get().unwrap()
+    }
+
+    // flow.go:1580
+    pub(crate) fn create_final_array_type(&mut self, element_type: P<Type>) -> P<Type> {
+        if element_type.flags().intersects(TypeFlags::Never) {
+            return self.auto_array_type;
+        } else if element_type.flags().intersects(TypeFlags::Union) {
+            let union_type = self.get_union_type_ex(element_type.types(), UnionReduction::Subtype, None, None);
+            return self.create_array_type(union_type);
+        }
+        self.create_array_type(element_type)
+    }
+
+    // flow.go:1590
+    pub(crate) fn report_flow_control_error(&mut self, node: P<Node>) {
+        let block = ast::find_ancestor(node, ast::is_function_or_module_block).unwrap();
+        let source_file = ast::get_source_file_of_node(node).unwrap();
+        let span = tsrs_scanner::get_range_of_token_at_position(source_file, block.statement_list().unwrap().pos());
+        self.add_diagnostic(ast::new_diagnostic(Some(source_file), span, &diagnostics::The_containing_function_or_module_body_is_too_large_for_control_flow_analysis, &[]));
+    }
+
+    // flow.go:1597
+    pub(crate) fn is_matching_reference(&mut self, source: P<Node>, target: P<Node>) -> bool {
+        match target.kind {
+            Kind::ParenthesizedExpression | Kind::NonNullExpression => {
+                return self.is_matching_reference(source, target.expression().unwrap());
+            }
+            Kind::BinaryExpression => {
+                return ast::is_assignment_expression(target, false) && self.is_matching_reference(source, target.as_binary_expression().left)
+                    || ast::is_binary_expression(target)
+                        && target.as_binary_expression().operator_token.kind == Kind::CommaToken
+                        && self.is_matching_reference(source, target.as_binary_expression().right());
+            }
+            _ => {}
+        }
+        match source.kind {
+            Kind::MetaProperty => {
+                return ast::is_meta_property(target)
+                    && source.as_meta_property().keyword_token == target.as_meta_property().keyword_token
+                    && source.name().unwrap().text() == target.name().unwrap().text();
+            }
+            Kind::Identifier | Kind::PrivateIdentifier => {
+                if ast::is_this_in_type_query(source) {
+                    return target.kind == Kind::ThisKeyword;
+                }
+                if ast::is_identifier(target) && self.get_resolved_symbol(source) == self.get_resolved_symbol(target) {
+                    return true;
+                }
+                if ast::is_variable_declaration(target) || ast::is_binding_element(target) {
+                    let source_symbol = self.get_resolved_symbol(source);
+                    let export_symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(source_symbol));
+                    return Some(export_symbol) == self.get_symbol_of_declaration(target);
+                }
+                return false;
+            }
+            Kind::ThisKeyword => {
+                return target.kind == Kind::ThisKeyword;
+            }
+            Kind::SuperKeyword => {
+                return target.kind == Kind::SuperKeyword;
+            }
+            Kind::NonNullExpression | Kind::ParenthesizedExpression | Kind::SatisfiesExpression => {
+                return self.is_matching_reference(source.expression().unwrap(), target);
+            }
+            Kind::PropertyAccessExpression | Kind::ElementAccessExpression => {
+                let (source_property_name, ok) = self.get_accessed_property_name(source);
+                if ok && ast::is_access_expression(target) {
+                    let (target_property_name, ok) = self.get_accessed_property_name(target);
+                    if ok {
+                        return target_property_name == source_property_name && self.is_matching_reference(source.expression().unwrap(), target.expression().unwrap());
+                    }
+                }
+                if ast::is_element_access_expression(source) && ast::is_element_access_expression(target) {
+                    let source_arg = source.as_element_access_expression().argument_expression;
+                    let target_arg = target.as_element_access_expression().argument_expression;
+                    if ast::is_identifier(source_arg) && ast::is_identifier(target_arg) {
+                        let symbol = self.get_resolved_symbol(source_arg);
+                        if symbol == self.get_resolved_symbol(target_arg)
+                            && (self.is_constant_variable(symbol) || self.is_parameter_or_mutable_local_variable(symbol) && !self.is_symbol_assigned(symbol))
+                        {
+                            return self.is_matching_reference(source.expression().unwrap(), target.expression().unwrap());
+                        }
+                    }
+                }
+            }
+            Kind::QualifiedName => {
+                if ast::is_access_expression(target) {
+                    let (target_property_name, ok) = self.get_accessed_property_name(target);
+                    if ok {
+                        return source.as_qualified_name().right.text() == target_property_name && self.is_matching_reference(source.as_qualified_name().left, target.expression().unwrap());
+                    }
+                }
+            }
+            Kind::BinaryExpression => {
+                return ast::is_binary_expression(source)
+                    && source.as_binary_expression().operator_token.kind == Kind::CommaToken
+                    && self.is_matching_reference(source.as_binary_expression().right(), target);
+            }
+            _ => {}
+        }
+        false
+    }
+
+    // Return the flow cache key for a "dotted name" (i.e. a sequence of identifiers
+    // separated by dots). The key consists of the id of the symbol referenced by the
+    // leftmost identifier followed by zero or more property names separated by dots.
+    // The result is nonDottedNameCacheKey if the reference isn't a dotted name.
+    // flow.go:1657
+    pub(crate) fn get_flow_reference_key(&mut self, f: P<FlowState>) -> CacheHashKey {
+        let mut b = keyBuilder::default();
+        if self.write_flow_cache_key(&mut b, f.ref_node(), f.declared(), f.initial(), f.flow_container.get()) {
+            return b.hash();
+        }
+        nonDottedNameCacheKey // Reference isn't a dotted name
+    }
+
+    // flow.go:1665
+    pub(crate) fn write_flow_cache_key(&mut self, b: &mut keyBuilder, node: P<Node>, declared_type: P<Type>, initial_type: P<Type>, flow_container: Option<P<Node>>) -> bool {
+        match node.kind {
+            Kind::Identifier | Kind::ThisKeyword => {
+                if node.kind == Kind::Identifier && !ast::is_this_in_type_query(node) {
+                    let symbol = self.get_resolved_symbol(node);
+                    if symbol == self.unknown_symbol {
+                        return false;
+                    }
+                    b.write_symbol(symbol);
+                }
+                b.write_byte(b':');
+                b.write_type(declared_type);
+                if initial_type != declared_type {
+                    b.write_byte(b'=');
+                    b.write_type(initial_type);
+                }
+                if flow_container.is_some() {
+                    b.write_byte(b'@');
+                    b.write_node(flow_container);
+                }
+                return true;
+            }
+            Kind::NonNullExpression | Kind::ParenthesizedExpression => {
+                return self.write_flow_cache_key(b, node.expression().unwrap(), declared_type, initial_type, flow_container);
+            }
+            Kind::QualifiedName => {
+                if !self.write_flow_cache_key(b, node.as_qualified_name().left, declared_type, initial_type, flow_container) {
+                    return false;
+                }
+                b.write_byte(b'.');
+                b.write_string(node.as_qualified_name().right.text());
+                return true;
+            }
+            Kind::PropertyAccessExpression | Kind::ElementAccessExpression => {
+                let (prop_name, ok) = self.get_accessed_property_name(node);
+                if ok {
+                    if !self.write_flow_cache_key(b, node.expression().unwrap(), declared_type, initial_type, flow_container) {
+                        return false;
+                    }
+                    b.write_byte(b'.');
+                    b.write_string(&prop_name);
+                    return true;
+                }
+                if ast::is_element_access_expression(node) && ast::is_identifier(node.as_element_access_expression().argument_expression) {
+                    let symbol = self.get_resolved_symbol(node.as_element_access_expression().argument_expression);
+                    if self.is_constant_variable(symbol) || self.is_parameter_or_mutable_local_variable(symbol) && !self.is_symbol_assigned(symbol) {
+                        if !self.write_flow_cache_key(b, node.expression().unwrap(), declared_type, initial_type, flow_container) {
+                            return false;
+                        }
+                        b.write_string(".@");
+                        b.write_symbol(symbol);
+                        return true;
+                    }
+                }
+            }
+            Kind::ObjectBindingPattern | Kind::ArrayBindingPattern | Kind::FunctionDeclaration | Kind::FunctionExpression | Kind::ArrowFunction | Kind::MethodDeclaration => {
+                b.write_node(Some(node));
+                b.write_byte(b'#');
+                b.write_type(declared_type);
+                return true;
+            }
+            _ => {}
+        }
+        false
+    }
+
+    // flow.go:1727
+    pub(crate) fn get_accessed_property_name(&mut self, access: P<Node>) -> (String, bool) {
+        if ast::is_property_access_expression(access) {
+            return (access.name().unwrap().text().to_string(), true);
+        }
+        if ast::is_element_access_expression(access) {
+            return self.try_get_element_access_expression_name(access);
+        }
+        if ast::is_binding_element(access) {
+            return self.get_destructuring_property_name(access);
+        }
+        if ast::is_parameter_declaration(access) {
+            let index = access.parent().unwrap().parameters().iter().position(|&p| p == access).map_or(-1, |i| i as i32);
+            return (index.to_string(), true);
+        }
+        (String::new(), false)
+    }
+
+    // flow.go:1743
+    pub(crate) fn try_get_element_access_expression_name(&mut self, node: P<Node>) -> (String, bool) {
+        let argument_expression = node.as_element_access_expression().argument_expression;
+        if ast::is_string_or_numeric_literal_like(argument_expression) {
+            return (argument_expression.text().to_string(), true);
+        } else if ast::is_entity_name_expression(argument_expression) {
+            return self.try_get_name_from_entity_name_expression(argument_expression);
+        }
+        (String::new(), false)
+    }
+
+    // flow.go:1753
+    pub(crate) fn try_get_name_from_entity_name_expression(&mut self, node: P<Node>) -> (String, bool) {
+        let symbol = self.resolve_entity_name(node, SymbolFlags::Value, true /*ignoreErrors*/, false, None);
+        let symbol = match symbol {
+            Some(symbol) if self.is_constant_variable(symbol) || symbol.flags().intersects(SymbolFlags::EnumMember) => symbol,
+            _ => return (String::new(), false),
+        };
+        let declaration = match symbol.value_declaration() {
+            Some(declaration) => declaration,
+            None => return (String::new(), false),
+        };
+        let t = self.try_get_type_from_type_node(declaration);
+        if let Some(t) = t {
+            let (name, ok) = try_get_name_from_type(t);
+            if ok {
+                return (name, true);
+            }
+        }
+        // We exclude binding elements because their initializers don't solely determine their types and resolving
+        // full types can cause circularities (see https://github.com/microsoft/TypeScript/issues/63192).
+        if has_only_expression_initializer(declaration) && !ast::is_binding_element(declaration) && self.is_block_scoped_name_declared_before_use(declaration, node) {
+            if let Some(initializer) = declaration.initializer() {
+                let initializer_type = self.get_type_of_expression(initializer);
+                return try_get_name_from_type(initializer_type);
+            } else if ast::is_enum_member(declaration) {
+                return match ast::try_get_text_of_property_name(declaration.name().unwrap()) {
+                    Some(text) => (text, true),
+                    None => (String::new(), false),
+                };
+            }
+        }
+        (String::new(), false)
+    }
+}
+
+// flow.go:1782
+pub(crate) fn try_get_name_from_type(t: P<Type>) -> (String, bool) {
+    if t.flags().intersects(TypeFlags::UniqueESSymbol) {
+        return (t.as_unique_es_symbol_type().name.get().to_string(), true);
+    } else if t.flags().intersects(TypeFlags::StringOrNumberLiteral) {
+        return (evaluator::any_to_string(t.as_literal_type().value.get().unwrap()), true);
+    }
+    (String::new(), false)
+}
+
+impl Checker {
+    // flow.go:1792
+    pub(crate) fn get_destructuring_property_name(&mut self, node: P<Node>) -> (String, bool) {
+        let parent = node.parent().unwrap();
+        if ast::is_binding_element(node) && ast::is_object_binding_pattern(parent) {
+            return self.get_literal_property_name_text(get_binding_element_property_name(node).unwrap());
+        }
+        if ast::is_property_assignment(node) || ast::is_shorthand_property_assignment(node) {
+            return self.get_literal_property_name_text(node.name().unwrap());
+        }
+        if ast::is_array_literal_expression(parent) || ast::is_array_binding_pattern(parent) {
+            let index = parent.elements().iter().position(|&e| e == node).map_or(-1, |i| i as i32);
+            return (index.to_string(), true);
+        }
+        (String::new(), false)
+    }
+
+    // flow.go:1806
+    pub(crate) fn get_literal_property_name_text(&mut self, name: P<Node>) -> (String, bool) {
+        let t = self.get_literal_type_from_property_name(name);
+        if t.flags().intersects(TypeFlags::StringLiteral | TypeFlags::NumberLiteral) {
+            return (evaluator::any_to_string(t.as_literal_type().value.get().unwrap()), true);
+        }
+        (String::new(), false)
+    }
+
+    // flow.go:1814
+    pub(crate) fn is_constant_reference(&mut self, node: P<Node>) -> bool {
+        match node.kind {
+            Kind::ThisKeyword => {
+                return true;
+            }
+            Kind::Identifier => {
+                if !ast::is_this_in_type_query(node) {
+                    let symbol = self.get_resolved_symbol(node);
+                    return self.is_constant_variable(symbol)
+                        || self.is_parameter_or_mutable_local_variable(symbol) && !self.is_symbol_assigned(symbol)
+                        || symbol.value_declaration().is_some() && ast::is_function_expression(symbol.value_declaration().unwrap());
+                }
+            }
+            Kind::PropertyAccessExpression | Kind::ElementAccessExpression => {
+                // The resolvedSymbol property is initialized by checkPropertyAccess or checkElementAccess before we get here.
+                if self.is_constant_reference(node.expression().unwrap()) {
+                    let symbol = self.get_resolved_symbol_or_nil(node);
+                    if let Some(symbol) = symbol {
+                        return self.is_readonly_symbol(symbol);
+                    }
+                }
+            }
+            Kind::ObjectBindingPattern | Kind::ArrayBindingPattern => {
+                let root_declaration = ast::get_root_declaration(node.parent().unwrap());
+                if ast::is_parameter_declaration(root_declaration) || ast::is_variable_declaration(root_declaration) && ast::is_catch_clause(root_declaration.parent().unwrap()) {
+                    return !self.is_some_symbol_assigned(root_declaration);
+                }
+                return ast::is_variable_declaration(root_declaration) && self.is_var_const_like(root_declaration);
+            }
+            _ => {}
+        }
+        false
+    }
+
+    // flow.go:1841
+    pub(crate) fn contains_matching_reference(&mut self, source: P<Node>, target: P<Node>) -> bool {
+        let mut source = source;
+        while ast::is_access_expression(source) {
+            source = source.expression().unwrap();
+            if self.is_matching_reference(source, target) {
+                return true;
+            }
+        }
+        false
+    }
+
+    // flow.go:1851
+    pub(crate) fn optional_chain_contains_reference(&mut self, source: P<Node>, target: P<Node>) -> bool {
+        let mut source = source;
+        while ast::is_optional_chain(source) {
+            source = source.expression().unwrap();
+            if self.is_matching_reference(source, target) {
+                return true;
+            }
+        }
+        false
+    }
+
+    // flow.go:1861
+    pub(crate) fn get_reference_candidate(&mut self, node: P<Node>) -> P<Node> {
+        match node.kind {
+            Kind::ParenthesizedExpression => {
+                return self.get_reference_candidate(node.expression().unwrap());
+            }
+            Kind::BinaryExpression => match node.as_binary_expression().operator_token.kind {
+                Kind::EqualsToken | Kind::BarBarEqualsToken | Kind::AmpersandAmpersandEqualsToken | Kind::QuestionQuestionEqualsToken => {
+                    return self.get_reference_candidate(node.as_binary_expression().left);
+                }
+                Kind::CommaToken => {
+                    return self.get_reference_candidate(node.as_binary_expression().right());
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+        node
+    }
+
+    // flow.go:1876
+    pub(crate) fn get_reference_root(&mut self, node: P<Node>) -> P<Node> {
+        let parent = node.parent().unwrap();
+        if ast::is_parenthesized_expression(parent)
+            || ast::is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind == Kind::EqualsToken && parent.as_binary_expression().left == node
+            || ast::is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind == Kind::CommaToken && parent.as_binary_expression().right() == node
+        {
+            return self.get_reference_root(parent);
+        }
+        node
+    }
+
+    // flow.go:1886
+    pub(crate) fn has_matching_argument(&mut self, expression: P<Node>, reference: P<Node>) -> bool {
+        for &argument in expression.arguments() {
+            if self.is_or_contains_matching_reference(reference, argument) || self.optional_chain_contains_reference(argument, reference) {
+                return true;
+            }
+        }
+        let callee = expression.expression().unwrap();
+        if ast::is_property_access_expression(callee) && self.is_or_contains_matching_reference(reference, callee.expression().unwrap()) {
+            return true;
+        }
+        false
+    }
+
+    // flow.go:1898
+    pub(crate) fn is_or_contains_matching_reference(&mut self, source: P<Node>, target: P<Node>) -> bool {
+        self.is_matching_reference(source, target) || self.contains_matching_reference(source, target)
+    }
+
+    // Return a new type in which occurrences of the string, number and bigint primitives and placeholder template
+    // literal types in typeWithPrimitives have been replaced with occurrences of compatible and more specific types
+    // from typeWithLiterals. This is essentially a limited form of intersection between the two types. We avoid a
+    // true intersection because it is more costly and, when applied to union types, generates a large number of
+    // types we don't actually care about.
+    // flow.go:1907
+    pub(crate) fn replace_primitives_with_literals(&mut self, type_with_primitives: P<Type>, type_with_literals: P<Type>) -> P<Type> {
+        if self.maybe_type_of_kind(type_with_primitives, TypeFlags::String | TypeFlags::TemplateLiteral | TypeFlags::Number | TypeFlags::BigInt)
+            && self.maybe_type_of_kind(type_with_literals, TypeFlags::StringLiteral | TypeFlags::TemplateLiteral | TypeFlags::StringMapping | TypeFlags::NumberLiteral | TypeFlags::BigIntLiteral)
+        {
+            return self
+                .map_type(type_with_primitives, move |c, t| {
+                    if t.flags().intersects(TypeFlags::String) {
+                        Some(c.extract_types_of_kind(type_with_literals, TypeFlags::String | TypeFlags::StringLiteral | TypeFlags::TemplateLiteral | TypeFlags::StringMapping))
+                    } else if c.is_pattern_literal_type(t) && !c.maybe_type_of_kind(type_with_literals, TypeFlags::String | TypeFlags::TemplateLiteral | TypeFlags::StringMapping) {
+                        Some(c.extract_types_of_kind(type_with_literals, TypeFlags::StringLiteral))
+                    } else if t.flags().intersects(TypeFlags::Number) {
+                        Some(c.extract_types_of_kind(type_with_literals, TypeFlags::Number | TypeFlags::NumberLiteral))
+                    } else if t.flags().intersects(TypeFlags::BigInt) {
+                        Some(c.extract_types_of_kind(type_with_literals, TypeFlags::BigInt | TypeFlags::BigIntLiteral))
+                    } else {
+                        Some(t)
+                    }
+                })
+                .unwrap();
+        }
+        type_with_primitives
+    }
+}
+
+// flow.go:1928
+pub(crate) fn is_coercible_under_double_equals(source: P<Type>, target: P<Type>) -> bool {
+    source.flags().intersects(TypeFlags::Number | TypeFlags::String | TypeFlags::BooleanLiteral) && target.flags().intersects(TypeFlags::Number | TypeFlags::String | TypeFlags::Boolean)
+}
