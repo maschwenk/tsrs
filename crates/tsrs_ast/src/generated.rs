@@ -1540,7 +1540,7 @@ impl ClassExpression {
 
 pub struct HeritageClause {
     pub token: Kind,
-    pub types: P<NodeList>,
+    pub types: Cell<P<NodeList>>,
 }
 
 impl HeritageClause {
@@ -1550,7 +1550,11 @@ impl HeritageClause {
     }
     #[inline]
     pub fn types(&self) -> P<NodeList> {
-        self.types
+        self.types.get()
+    }
+    #[inline]
+    pub fn set_types(&self, value: P<NodeList>) {
+        self.types.set(value)
     }
 }
 
@@ -4111,13 +4115,13 @@ impl TypePredicateNode {
 }
 
 pub struct ImportAttribute {
-    pub name: P<Node>,
+    pub name: Option<P<Node>>,
     pub value: P<Node>,
 }
 
 impl ImportAttribute {
     #[inline]
-    pub fn name(&self) -> P<Node> {
+    pub fn name(&self) -> Option<P<Node>> {
         self.name
     }
     #[inline]
@@ -7996,7 +8000,7 @@ impl Node {
             NodeData::MetaProperty(d) => Some(d.name()),
             NodeData::PropertyAssignment(d) => Some(d.name()),
             NodeData::ShorthandPropertyAssignment(d) => Some(d.name()),
-            NodeData::ImportAttribute(d) => Some(d.name()),
+            NodeData::ImportAttribute(d) => d.name(),
             NodeData::NamedTupleMember(d) => Some(d.name()),
             NodeData::JsxNamespacedName(d) => Some(d.name()),
             NodeData::JsxAttribute(d) => Some(d.name()),
@@ -9013,7 +9017,7 @@ impl NodeFactory {
     pub fn new_heritage_clause(&mut self, token: Kind, types: P<NodeList>) -> P<Node> {
         self.new_node(Kind::HeritageClause, NodeData::HeritageClause(alloc(HeritageClause {
             token: token,
-            types: types,
+            types: Cell::new(types),
         })))
     }
 
@@ -10556,14 +10560,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_import_attribute(&mut self, name: P<Node>, value: P<Node>) -> P<Node> {
+    pub fn new_import_attribute(&mut self, name: Option<P<Node>>, value: P<Node>) -> P<Node> {
         self.new_node(Kind::ImportAttribute, NodeData::ImportAttribute(alloc(ImportAttribute {
             name: name,
             value: value,
         })))
     }
 
-    pub fn update_import_attribute(&mut self, node: P<Node>, name: P<Node>, value: P<Node>) -> P<Node> {
+    pub fn update_import_attribute(&mut self, node: P<Node>, name: Option<P<Node>>, value: P<Node>) -> P<Node> {
         let data = node.as_import_attribute();
         if name != data.name() || value != data.value() {
             return update_node(self.new_import_attribute(name, value), node, &self.hooks);
@@ -14162,14 +14166,14 @@ impl TypePredicateNode {
 
 impl ImportAttribute {
     pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
-        v(self.name())
+        visit(v, self.name())
             || v(self.value())
     }
 }
 
 impl ImportAttribute {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = v.visit_node_hooked(self.name());
         let value_ = v.visit_node_hooked(Some(self.value())).expect("visitor removed a required child");
         v.factory.update_import_attribute(node, name_, value_)
     }

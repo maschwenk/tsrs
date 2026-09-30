@@ -644,11 +644,13 @@ impl Parser {
                             .copied()
                             .find(|node| node.as_heritage_clause().token == Kind::ImplementsKeyword)
                         {
-                            let types = implements_clause.as_heritage_clause().types;
+                            let heritage_clause = implements_clause.as_heritage_clause();
+                            let types = heritage_clause.types();
                             let clone = self.add_deep_clone_reparse(Some(implements_tag.class_name)).unwrap();
                             let mut nodes = types.nodes().to_vec();
                             nodes.push(clone);
-                            types.set_nodes(alloc_vec(nodes));
+                            let new_types = self.new_node_list(types.loc(), &nodes);
+                            heritage_clause.set_types(new_types);
                             self.finish_mutated_node(implements_clause);
                             return;
                         }
@@ -667,7 +669,8 @@ impl Parser {
                         Some(heritage_clauses) => {
                             let mut nodes = heritage_clauses.nodes().to_vec();
                             nodes.push(heritage_clause);
-                            heritage_clauses.set_nodes(alloc_vec(nodes));
+                            let new_list = self.new_node_list(heritage_clauses.loc(), &nodes);
+                            class.heritage_clauses.set(Some(new_list));
                         }
                     }
                     self.finish_mutated_node(parent);
@@ -682,8 +685,8 @@ impl Parser {
                             .copied()
                             .find(|node| node.as_heritage_clause().token == Kind::ExtendsKeyword)
                         {
-                            if extends_clause.as_heritage_clause().types.nodes().len() == 1 {
-                                let target_node = extends_clause.as_heritage_clause().types.nodes()[0];
+                            if extends_clause.as_heritage_clause().types().nodes().len() == 1 {
+                                let target_node = extends_clause.as_heritage_clause().types().nodes()[0];
                                 let target = target_node.as_expression_with_type_arguments();
                                 let source = tag.class_name().as_expression_with_type_arguments();
                                 if ast::has_same_property_access_name(target.expression, source.expression) {

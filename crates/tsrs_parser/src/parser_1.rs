@@ -182,6 +182,7 @@ pub(crate) fn is_missing_node_list(list: Option<P<NodeList>>) -> bool {
 }
 
 pub fn parse_source_file(opts: SourceFileParseOptions, source_text: &str, script_kind: ScriptKind) -> P<SourceFile> {
+    crate::jsdoc::init();
     let mut p = new_parser();
     p.initialize_state(opts, source_text, script_kind);
     p.next_token();
@@ -2012,7 +2013,7 @@ impl Parser {
                 for clause in heritage_clauses.nodes {
                     let clause = clause.as_heritage_clause();
                     if clause.token == Kind::ExtendsKeyword {
-                        for expr in clause.types.nodes {
+                        for expr in clause.types().nodes {
                             self.check_js_syntax(*expr);
                         }
                     }

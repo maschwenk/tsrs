@@ -865,8 +865,7 @@ impl Parser {
             self.parse_error_at_current_token(&diagnostics::Identifier_or_string_literal_expected, &[]);
         }
         let value = self.parse_assignment_expression_or_higher();
-        // FIXME(ast): Go passes a nil name here; ImportAttribute.name must become nilable in tsrs_ast.
-        let node = self.factory.new_import_attribute(name.unwrap(), value);
+        let node = self.factory.new_import_attribute(name, value);
         self.finish_node(node, pos)
     }
 

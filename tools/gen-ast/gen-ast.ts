@@ -68,6 +68,7 @@ const CELL_EXPLICIT = new Set([
     "TypeAliasDeclaration.Type",
     "ImportClause.PhaseModifier",
     "ExpressionWithTypeArguments.TypeArguments",
+    "HeritageClause.Types",
 ]);
 
 // Fields that exist in Go but carry no data in a type-check-only port.

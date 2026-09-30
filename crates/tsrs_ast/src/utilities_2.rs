@@ -226,7 +226,7 @@ pub fn get_implements_heritage_clause_elements(node: P<Node>) -> &'static [P<Nod
 
 pub fn get_heritage_elements(node: P<Node>, kind: Kind) -> &'static [P<Node>] {
     if let Some(clause) = get_heritage_clause(node, kind) {
-        return clause.as_heritage_clause().types.nodes;
+        return clause.as_heritage_clause().types().nodes;
     }
     &[]
 }

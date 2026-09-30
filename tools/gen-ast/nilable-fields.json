@@ -33,6 +33,7 @@
  "FunctionLikeBase.Type",
  "FunctionLikeBase.TypeParameters",
  "IfStatement.ElseStatement",
+ "ImportAttribute.name",
  "ImportClause.NamedBindings",
  "ImportClause.name",
  "ImportDeclaration.Attributes",
