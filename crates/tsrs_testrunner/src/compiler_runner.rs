@@ -6,13 +6,16 @@ use std::sync::LazyLock;
 use regex::Regex;
 use tsrs_core::tspath;
 
-use crate::harnessutil::{self, NamedTestConfiguration, OptionTable};
-use crate::test_case_parser;
+use crate::harnessutil::{self, NamedTestConfiguration, OptionTable, TestConfiguration, TestFile};
+use crate::test_case_parser::{self, TestCaseContent, TestUnit};
 
 // Posix-style path to sources under test
 pub const SRC_FOLDER: &str = "/.src";
 
 pub const SUITES: [&str; 2] = ["compiler", "conformance"];
+
+const REQUIRE_STR: &str = "require(";
+static REFERENCES_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"reference[\t\n\x0C\r ]path").unwrap());
 
 static COMPILER_BASELINE_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\.tsx?$").unwrap());
 
@@ -177,4 +180,134 @@ pub enum Outcome {
     Skip(String),
     // A harness-level failure that is not a panic (t.Fatalf in Go).
     Error(String),
+}
+
+fn create_harness_test_file(unit: &TestUnit, current_directory: &str) -> TestFile {
+    TestFile { unit_name: tspath::get_normalized_absolute_path(&unit.name, current_directory), content: unit.content.clone() }
+}
+
+pub struct SplitUnits {
+    pub current_directory: String,
+    pub ts_config_files: Vec<TestFile>,
+    // equivalent to the files that will be passed on the command line
+    pub to_be_compiled: Vec<TestFile>,
+    // equivalent to other files on the file system not directly passed to the compiler (ie things that are referenced by other files)
+    pub other_files: Vec<TestFile>,
+}
+
+// The file-assembly part of newCompilerTest. `ts_config_file_names` is ParsedConfig.FileNames of the
+// test's tsconfig.json, if it has one. May rewrite `baseurl` in the harness configuration.
+pub fn split_units(payload: &TestCaseContent, harness_config: &mut TestConfiguration, ts_config_file_names: Option<&[String]>) -> SplitUnits {
+    let current_directory = tspath::get_normalized_absolute_path(harness_config.get("currentdirectory").map_or("", String::as_str), SRC_FOLDER);
+    let units = &payload.test_unit_data;
+    let mut to_be_compiled = Vec::new();
+    let mut other_files = Vec::new();
+    let mut ts_config_files = Vec::new();
+    if let (Some(file_names), Some(ts_config_unit)) = (ts_config_file_names, payload.ts_config_file_unit_data.as_ref()) {
+        ts_config_files.push(create_harness_test_file(ts_config_unit, &current_directory));
+        for unit in units {
+            if file_names.contains(&tspath::get_normalized_absolute_path(&unit.name, &current_directory)) {
+                to_be_compiled.push(create_harness_test_file(unit, &current_directory));
+            } else {
+                other_files.push(create_harness_test_file(unit, &current_directory));
+            }
+        }
+    } else {
+        if let Some(base_url) = harness_config.get("baseurl").cloned() {
+            if !tspath::is_rooted_disk_path(&base_url) {
+                harness_config.insert("baseurl".to_string(), tspath::get_normalized_absolute_path(&base_url, &current_directory));
+            }
+        }
+
+        let last_unit = units.last().unwrap();
+        // We need to assemble the list of input files for the compiler and other related files on the 'filesystem' (ie in a multi-file test)
+        // If the last file in a test uses require or a triple slash reference we'll assume all other files will be brought in via references,
+        // otherwise, assume all files are just meant to be in the same compilation session without explicit references to one another.
+        if harness_config.get("noimplicitreferences").is_some_and(|v| !v.is_empty())
+            || last_unit.content.contains(REQUIRE_STR)
+            || REFERENCES_REGEX.is_match(&last_unit.content)
+        {
+            to_be_compiled.push(create_harness_test_file(last_unit, &current_directory));
+            for unit in &units[..units.len() - 1] {
+                other_files.push(create_harness_test_file(unit, &current_directory));
+            }
+        } else {
+            to_be_compiled = units.iter().map(|unit| create_harness_test_file(unit, &current_directory)).collect();
+        }
+    }
+    SplitUnits { current_directory, ts_config_files, to_be_compiled, other_files }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Checks unit parsing and file assembly for every test variant against the input files the Go harness
+    // produced (tools/oracle/testrunner `diags` output). Skipped when the oracle files are absent.
+    #[test]
+    fn units_match_go_harness() {
+        let scratch = repo_root().join("target/scratch/testrunner");
+        let (Ok(diags), Ok(table)) =
+            (std::fs::read_to_string(scratch.join("diags.jsonl")), crate::oracle::load_option_table(&scratch.join("options.json").to_string_lossy()))
+        else {
+            eprintln!("oracle files missing; skipping");
+            return;
+        };
+        let mut checked = 0;
+        let mut mismatches = Vec::new();
+        let mut paths: rustc_hash::FxHashMap<String, String> = Default::default();
+        for suite in SUITES {
+            for p in enumerate_test_files(suite) {
+                paths.insert(format!("{suite}/{}", tspath::get_base_file_name(&p)), p);
+            }
+        }
+        for line in diags.lines() {
+            let v: serde_json::Value = serde_json::from_str(line).unwrap();
+            if v.get("error").is_some() || v.get("files").is_none() {
+                continue;
+            }
+            let suite = v["suite"].as_str().unwrap();
+            let name = v["name"].as_str().unwrap();
+            let file = regex::Regex::new(r"\(.*\)").unwrap().replace(name, "").into_owned();
+            let path = &paths[&format!("{suite}/{file}")];
+            let content = read_test_file(path);
+            let stem = baseline_stem(name);
+            let items = expand_test_file(suite, path, &table).unwrap();
+            let item = items.iter().find(|i| i.name == stem).unwrap_or_else(|| panic!("no variant {stem}"));
+            let mut config = find_configuration(&content, &table, &item.config).unwrap().map(|c| c.config).unwrap_or_default();
+            let payload = test_case_parser::make_units_from_test(&content, path);
+            if payload.global_options.get("runexternalcode").is_some_and(|v| v == "true") {
+                // content-mapped files are baselined with their transformed text
+                continue;
+            }
+            let all_names: Vec<String> =
+                payload.test_unit_data.iter().map(|u| tspath::get_normalized_absolute_path(&u.name, &payload.current_directory)).collect();
+            let has_ts_config = payload.ts_config_file_unit_data.is_some();
+            let split = split_units(&payload, &mut config, if has_ts_config { Some(&all_names) } else { None });
+            let mine: Vec<(String, String)> = split
+                .ts_config_files
+                .iter()
+                .chain(&split.to_be_compiled)
+                .chain(&split.other_files)
+                .map(|f| (f.unit_name.clone(), f.content.clone()))
+                .collect();
+            let mut go: Vec<(String, String)> = v["files"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|f| (f["name"].as_str().unwrap().to_string(), f["content"].as_str().unwrap().to_string()))
+                .collect();
+            let mut mine = mine;
+            if has_ts_config {
+                mine[1..].sort();
+                go[1..].sort();
+            }
+            checked += 1;
+            if mine != go {
+                mismatches.push(format!("{suite}/{name}"));
+            }
+        }
+        assert!(mismatches.is_empty(), "{} of {checked} mismatched, e.g. {:?}", mismatches.len(), &mismatches[..mismatches.len().min(10)]);
+        eprintln!("{checked} variants match");
+    }
 }

@@ -22,8 +22,6 @@ use crate::harnessutil::{self, HarnessOptions, OptKind, OptionDecl, OptionTable,
 use crate::test_case_parser::{self, TestUnit};
 use crate::tsbaseline;
 
-const REQUIRE_STR: &str = "require(";
-static REFERENCES_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"reference[\t\n\x0C\r ]path").unwrap());
 
 // harnessutil `compilerOptions`: the declared options plus harness-only compiler options.
 static HARNESS_COMPILER_OPTIONS: LazyLock<Vec<&'static CommandLineOption>> = LazyLock::new(|| {
@@ -264,10 +262,6 @@ fn parse_test_ts_config(content: &test_case_parser::TestCaseContent) -> Option<P
         &[],
         None,
     )))
-}
-
-fn create_harness_test_file(unit: &TestUnit, current_directory: &str) -> TestFile {
-    TestFile { unit_name: tspath::get_normalized_absolute_path(&unit.name, current_directory), content: unit.content.clone() }
 }
 
 thread_local! {
@@ -520,44 +514,8 @@ pub fn run(item: &TestItem, table: &OptionTable) -> Outcome {
     let ts_config = parse_test_ts_config(&payload);
 
     let mut harness_config: TestConfiguration = named_configuration.map(|c| c.config).unwrap_or_default();
-    let current_directory = tspath::get_normalized_absolute_path(harness_config.get("currentdirectory").map_or("", String::as_str), SRC_FOLDER);
-
-    let units = &payload.test_unit_data;
-    let mut to_be_compiled = Vec::new();
-    let mut other_files = Vec::new();
-    let mut ts_config_files = Vec::new();
-    if let Some(ts_config) = ts_config {
-        ts_config_files.push(create_harness_test_file(payload.ts_config_file_unit_data.as_ref().unwrap(), &current_directory));
-        for unit in units {
-            if ts_config.parsed_config.file_names.contains(&tspath::get_normalized_absolute_path(&unit.name, &current_directory)) {
-                to_be_compiled.push(create_harness_test_file(unit, &current_directory));
-            } else {
-                other_files.push(create_harness_test_file(unit, &current_directory));
-            }
-        }
-    } else {
-        if let Some(base_url) = harness_config.get("baseurl").cloned() {
-            if !tspath::is_rooted_disk_path(&base_url) {
-                harness_config.insert("baseurl".to_string(), tspath::get_normalized_absolute_path(&base_url, &current_directory));
-            }
-        }
-
-        let last_unit = units.last().unwrap();
-        // We need to assemble the list of input files for the compiler and other related files on the 'filesystem' (ie in a multi-file test)
-        // If the last file in a test uses require or a triple slash reference we'll assume all other files will be brought in via references,
-        // otherwise, assume all files are just meant to be in the same compilation session without explicit references to one another.
-        if harness_config.get("noimplicitreferences").is_some_and(|v| !v.is_empty())
-            || last_unit.content.contains(REQUIRE_STR)
-            || REFERENCES_REGEX.is_match(&last_unit.content)
-        {
-            to_be_compiled.push(create_harness_test_file(last_unit, &current_directory));
-            for unit in &units[..units.len() - 1] {
-                other_files.push(create_harness_test_file(unit, &current_directory));
-            }
-        } else {
-            to_be_compiled = units.iter().map(|unit| create_harness_test_file(unit, &current_directory)).collect();
-        }
-    }
+    let split = compiler_runner::split_units(&payload, &mut harness_config, ts_config.map(|t| t.parsed_config.file_names.as_slice()));
+    let compiler_runner::SplitUnits { current_directory, ts_config_files, to_be_compiled, other_files } = split;
 
     let result = match compile_files(&to_be_compiled, &other_files, Some(&harness_config), ts_config, &current_directory, &payload.symlinks) {
         Ok(r) => r,
