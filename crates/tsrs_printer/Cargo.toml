@@ -1,0 +1,20 @@
+[package]
+name = "tsrs_printer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tsrs_core.workspace = true
+tsrs_ast.workspace = true
+tsrs_scanner.workspace = true
+rustc-hash.workspace = true
+indexmap.workspace = true
+bitflags.workspace = true
+
+[dev-dependencies]
+tsrs_parser.workspace = true
+tsrs_vfs.workspace = true
