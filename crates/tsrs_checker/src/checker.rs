@@ -1423,8 +1423,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
 // Methods for Go's function-valued Checker fields.
 
 impl Checker {
-    pub(crate) fn compare_symbols(&mut self, s1: P<Symbol>, s2: P<Symbol>) -> i32 {
-        self.compare_symbols_worker(Some(s1), Some(s2))
+    pub(crate) fn compare_symbols(&mut self, s1: Option<P<Symbol>>, s2: Option<P<Symbol>>) -> i32 {
+        self.compare_symbols_worker(s1, s2)
     }
 
     pub(crate) fn compare_symbol_chains(&mut self, a: &[P<Symbol>], b: &[P<Symbol>]) -> i32 {

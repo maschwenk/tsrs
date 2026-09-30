@@ -1344,7 +1344,7 @@ embeds!(ObjectType, structured_type, StructuredType);
 pub struct TypeReference {
     pub object_type: ObjectType,
     pub node: Cell<Option<P<Node>>>, // TypeReferenceNode | ArrayTypeNode | TupleTypeNode when deferred, else nil
-    pub resolved_type_arguments: Cell<&'static [P<Type>]>,
+    pub resolved_type_arguments: Cell<Option<&'static [P<Type>]>>, // nil = not computed (Go tests against nil)
 }
 embeds!(TypeReference, object_type, ObjectType);
 
@@ -1530,7 +1530,7 @@ pub struct UnionOrIntersectionType {
     pub types: Cell<&'static [P<Type>]>,
     pub property_cache: Cell<Option<P<SymbolTable>>>,
     pub property_cache_without_function_property_augment: Cell<Option<P<SymbolTable>>>,
-    pub resolved_properties: Cell<&'static [P<Symbol>]>,
+    pub resolved_properties: Cell<Option<&'static [P<Symbol>]>>, // nil = not computed (Go tests against nil)
 }
 embeds!(UnionOrIntersectionType, structured_type, StructuredType);
 

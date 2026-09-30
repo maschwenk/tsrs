@@ -449,7 +449,7 @@ pub(crate) fn create_symbol_table(symbols: &[P<Symbol>]) -> Option<P<SymbolTable
 impl Checker {
     // utilities.go:361
     pub(crate) fn sort_symbols(&mut self, symbols: &mut [P<Symbol>]) {
-        symbols.sort_by(|&a, &b| self.compare_symbols(a, b).cmp(&0));
+        symbols.sort_by(|&a, &b| self.compare_symbols(Some(a), Some(b)).cmp(&0));
     }
 
     // utilities.go:365
@@ -588,9 +588,7 @@ pub fn compare_types(c: &mut Checker, t1: Option<P<Type>>, t2: Option<P<Type>>) 
                 return r;
             }
         } else {
-            // SIG: Go calls the compareSymbols field (= compareSymbolsWorker) with possibly nil symbols;
-            // Checker::compare_symbols takes non-Option symbols, so call the worker directly.
-            let r = c.compare_symbols_worker(t1.symbol(), t2.symbol());
+            let r = c.compare_symbols(t1.symbol(), t2.symbol());
             if r != 0 {
                 return r;
             }
@@ -611,7 +609,7 @@ pub fn compare_types(c: &mut Checker, t1: Option<P<Type>>, t2: Option<P<Type>>) 
             // Here we know we have references to instantiations of the same type because we have matching targets.
             if r1.node.get().is_none() && r2.node.get().is_none() {
                 // Non-deferred type references with the same target are sorted by their type argument lists.
-                let r = compare_type_lists(c, t1.as_type_reference().resolved_type_arguments.get(), t2.as_type_reference().resolved_type_arguments.get());
+                let r = compare_type_lists(c, t1.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]), t2.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]));
                 if r != 0 {
                     return r;
                 }
@@ -845,7 +843,7 @@ pub(crate) fn compare_type_names(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i
         return r;
     }
     // Keep distinct same-named declarations together before comparing alias arguments or structure.
-    c.compare_symbols(s1, s2)
+    c.compare_symbols(Some(s1), Some(s2))
 }
 
 // utilities.go:651

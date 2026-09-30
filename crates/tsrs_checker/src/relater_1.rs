@@ -1779,7 +1779,7 @@ impl Checker {
                 for i in stack_index + 1..self.variance_stack.len() {
                     let a = self.variance_stack[i].symbol;
                     let b = self.variance_stack[min_index].symbol;
-                    if self.compare_symbols(a, b) < 0 {
+                    if self.compare_symbols(Some(a), Some(b)) < 0 {
                         min_index = i;
                     }
                 }

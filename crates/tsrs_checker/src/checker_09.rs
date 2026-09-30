@@ -300,9 +300,9 @@ impl Checker {
                 type_parameters.push(this_type);
                 d.all_type_parameters.set(alloc_vec(type_parameters));
                 d.outer_type_parameter_count.set(outer_type_parameter_count as i32);
-                d.resolved_type_arguments.set(d.type_parameters());
+                d.resolved_type_arguments.set(Some(d.type_parameters()));
                 d.instantiations.make();
-                d.instantiations.set(get_type_list_key(d.resolved_type_arguments.get()), t);
+                d.instantiations.set(get_type_list_key(d.type_parameters()), t);
                 d.target.set(Some(t));
             }
         }
@@ -467,7 +467,7 @@ impl keyBuilder {
             constrained: &mut bool,
         ) {
             b.write_type(ref_.target().unwrap());
-            for &t in ref_.as_type_reference().resolved_type_arguments.get() {
+            for &t in ref_.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]) {
                 if t.flags().intersects(TypeFlags::TypeParameter) {
                     if ignore_constraints || c.get_constraint_of_type_parameter(t).is_none() {
                         let index = match type_parameters.iter().position(|&tp| tp == t) {
@@ -2052,8 +2052,7 @@ impl Checker {
             (TypeSystemPropertyName::Type, TypeSystemEntity::Symbol(s)) => self.value_symbol_links.get(s).resolved_type.get().is_some(),
             (TypeSystemPropertyName::DeclaredType, TypeSystemEntity::Symbol(s)) => self.type_alias_links.get(s).declared_type.get().is_some(),
             (TypeSystemPropertyName::ResolvedTypeArguments, TypeSystemEntity::Type(t)) => {
-                // Go tests `resolvedTypeArguments != nil`; the Rust field cannot distinguish nil from empty.
-                !t.as_type_reference().resolved_type_arguments.get().is_empty()
+                t.as_type_reference().resolved_type_arguments.get().is_some()
             }
             (TypeSystemPropertyName::ResolvedBaseTypes, TypeSystemEntity::Type(t)) => t.as_interface_type().base_types_resolved.get(),
             (TypeSystemPropertyName::ResolvedBaseConstructorType, TypeSystemEntity::Type(t)) => {
@@ -2125,9 +2124,7 @@ impl Checker {
     // checker.go:19205
     pub(crate) fn get_properties_of_union_or_intersection_type(&mut self, t: P<Type>) -> Vec<P<Symbol>> {
         let d = t.as_union_or_intersection_type();
-        // Go tests `resolvedProperties == nil`; the Rust field cannot distinguish nil from empty, so an empty
-        // result is recomputed (without observable effect beyond the repeated work).
-        if d.resolved_properties.get().is_empty() {
+        if d.resolved_properties.get().is_none() {
             let mut checked: FxHashSet<&'static str> = FxHashSet::default();
             let mut props: Vec<P<Symbol>> = Vec::new();
             for &current in d.types.get() {
@@ -2150,9 +2147,9 @@ impl Checker {
                     break;
                 }
             }
-            d.resolved_properties.set(alloc_vec(props));
+            d.resolved_properties.set(Some(alloc_vec(props)));
         }
-        d.resolved_properties.get().to_vec()
+        d.resolved_properties.get().unwrap().to_vec()
     }
 
     // checker.go:19231

@@ -1032,7 +1032,7 @@ impl Checker {
             ""
         };
         tsrs_core::get_spelling_suggestion(name, symbols.iter().copied(), get_candidate_name, |a: &P<Symbol>, b: &P<Symbol>| {
-            c.borrow_mut().compare_symbols(*a, *b)
+            c.borrow_mut().compare_symbols(Some(*a), Some(*b))
         })
     }
 

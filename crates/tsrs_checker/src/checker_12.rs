@@ -1619,7 +1619,7 @@ impl Checker {
         d.instantiations.make();
         d.instantiations.set(get_type_list_key(d.type_parameters()), t);
         d.target.set(Some(t));
-        d.resolved_type_arguments.set(d.type_parameters());
+        d.resolved_type_arguments.set(Some(d.type_parameters()));
         d.declared_members_resolved.set(true);
         d.declared_members.set(Some(members));
         d.element_infos.set(alloc_slice(element_infos));
@@ -1980,7 +1980,7 @@ impl Checker {
         let t = self.new_object_type(ObjectFlags::Reference | object_flags | propagating_flags, target.symbol());
         let d = t.as_type_reference();
         d.target.set(Some(target));
-        d.resolved_type_arguments.set(alloc_slice(type_arguments));
+        d.resolved_type_arguments.set(Some(alloc_slice(type_arguments)));
         intf.instantiations.set(id, t);
         t
     }

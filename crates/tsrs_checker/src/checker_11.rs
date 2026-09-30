@@ -599,7 +599,7 @@ impl Checker {
     // checker.go:22289
     pub fn get_type_arguments(&mut self, t: P<Type>) -> Vec<P<Type>> {
         let d = t.as_type_reference();
-        if d.resolved_type_arguments.get().is_empty() {
+        if d.resolved_type_arguments.get().is_none() {
             let n = d.target.get().unwrap().as_interface_type();
             if !self.push_type_resolution(t.into(), TypeSystemPropertyName::ResolvedTypeArguments) {
                 return vec![self.error_type; n.type_parameters().len()];
@@ -623,13 +623,13 @@ impl Checker {
                 }
             }
             if self.pop_type_resolution() {
-                if d.resolved_type_arguments.get().is_empty() {
+                if d.resolved_type_arguments.get().is_none() {
                     let instantiated = self.instantiate_types(&type_arguments, d.mapper.get());
-                    d.resolved_type_arguments.set(alloc_vec(instantiated));
+                    d.resolved_type_arguments.set(Some(alloc_vec(instantiated)));
                 }
             } else {
-                if d.resolved_type_arguments.get().is_empty() {
-                    d.resolved_type_arguments.set(alloc_vec(vec![self.error_type; n.type_parameters().len()]));
+                if d.resolved_type_arguments.get().is_none() {
+                    d.resolved_type_arguments.set(Some(alloc_vec(vec![self.error_type; n.type_parameters().len()])));
                 }
                 let error_node = if node.is_some() { node } else { self.current_node };
                 if let Some(target_symbol) = d.target.get().unwrap().symbol() {
@@ -640,7 +640,7 @@ impl Checker {
                 }
             }
         }
-        d.resolved_type_arguments.get().to_vec()
+        d.resolved_type_arguments.get().unwrap().to_vec()
     }
 
     // checker.go:22329
@@ -1016,7 +1016,7 @@ impl Checker {
             let object_flags = t.object_flags();
             if object_flags.intersects(ObjectFlags::Reference | ObjectFlags::Anonymous | ObjectFlags::Mapped) {
                 if object_flags.intersects(ObjectFlags::Reference) && t.as_type_reference().node.get().is_none() {
-                    let resolved_type_arguments = t.as_type_reference().resolved_type_arguments.get();
+                    let resolved_type_arguments = t.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]);
                     let new_type_arguments = self.instantiate_types(resolved_type_arguments, Some(m));
                     // Go core.Same: instantiateList returns the input slice iff no element changed
                     if new_type_arguments.as_slice() == resolved_type_arguments {

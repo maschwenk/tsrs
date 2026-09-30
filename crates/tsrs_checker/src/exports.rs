@@ -233,7 +233,7 @@ impl Checker {
 
     // exports.go:394
     pub fn compare_symbols_exported(&mut self, s1: P<Symbol>, s2: P<Symbol>) -> i32 {
-        self.compare_symbols(s1, s2)
+        self.compare_symbols(Some(s1), Some(s2))
     }
 }
 
