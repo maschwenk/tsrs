@@ -12,3 +12,34 @@ bitflags! {
         const AsyncGenerator = Self::Async.bits() | Self::Generator.bits();
     }
 }
+
+use tsrs_core::P;
+
+use crate::ast::Node;
+use crate::kind::Kind;
+use crate::modifierflags::ModifierFlags;
+
+pub fn get_function_flags(node: Option<P<Node>>) -> FunctionFlags {
+    let Some(node) = node else {
+        return FunctionFlags::Invalid;
+    };
+    let Some(data) = node.body_data() else {
+        return FunctionFlags::Invalid;
+    };
+    let mut flags = FunctionFlags::Normal;
+    match node.kind {
+        Kind::FunctionDeclaration | Kind::FunctionExpression | Kind::MethodDeclaration | Kind::ArrowFunction => {
+            if node.kind != Kind::ArrowFunction && data.asterisk_token.is_some() {
+                flags |= FunctionFlags::Generator;
+            }
+            if crate::has_syntactic_modifier(node, ModifierFlags::Async) {
+                flags |= FunctionFlags::Async;
+            }
+        }
+        _ => {}
+    }
+    if data.body.is_none() {
+        flags |= FunctionFlags::Invalid;
+    }
+    flags
+}
