@@ -2205,3 +2205,956 @@ impl Checker {
 pub(crate) fn is_coercible_under_double_equals(source: P<Type>, target: P<Type>) -> bool {
     source.flags().intersects(TypeFlags::Number | TypeFlags::String | TypeFlags::BooleanLiteral) && target.flags().intersects(TypeFlags::Number | TypeFlags::String | TypeFlags::Boolean)
 }
+
+impl Checker {
+    // flow.go:1933
+    pub(crate) fn is_exhaustive_switch_statement(&mut self, node: P<Node>) -> bool {
+        let links = self.switch_statement_links.get(node);
+        if links.exhaustive_state.get() == ExhaustiveState::Unknown {
+            // Indicate resolution is in process
+            links.exhaustive_state.set(ExhaustiveState::Computing);
+            let is_exhaustive = self.compute_exhaustive_switch_statement(node);
+            if links.exhaustive_state.get() == ExhaustiveState::Computing {
+                links.exhaustive_state.set(if is_exhaustive { ExhaustiveState::True } else { ExhaustiveState::False });
+            }
+        } else if links.exhaustive_state.get() == ExhaustiveState::Computing {
+            // Resolve circularity to false
+            links.exhaustive_state.set(ExhaustiveState::False);
+        }
+        links.exhaustive_state.get() == ExhaustiveState::True
+    }
+
+    // flow.go:1949
+    pub(crate) fn compute_exhaustive_switch_statement(&mut self, node: P<Node>) -> bool {
+        let expression = node.expression().unwrap();
+        if ast::is_type_of_expression(expression) {
+            let witnesses = self.get_switch_clause_type_of_witnesses(node);
+            let witnesses = match witnesses {
+                Some(witnesses) => witnesses,
+                None => return false,
+            };
+            let operand_type = self.check_expression_cached(expression.expression().unwrap());
+            let operand_constraint = self.get_base_constraint_or_type(operand_type);
+            // Get the not-equal flags for all handled cases.
+            let not_equal_facts = self.get_not_equal_facts_from_typeof_switch(0, 0, witnesses);
+            if operand_constraint.flags().intersects(TypeFlags::AnyOrUnknown) {
+                // We special case the top types to be exhaustive when all cases are handled.
+                return TypeFacts::AllTypeofNE & not_equal_facts == TypeFacts::AllTypeofNE;
+            }
+            // A missing not-equal flag indicates that the type wasn't handled by some case.
+            return !some_type(operand_constraint, |t| self.get_type_facts(t, not_equal_facts) == not_equal_facts);
+        }
+        let expression_type = self.check_expression_cached(expression);
+        let t = self.get_base_constraint_or_type(expression_type);
+        if !is_literal_type(t) {
+            return false;
+        }
+        let switch_types = self.get_switch_clause_types(node);
+        if switch_types.is_empty() || switch_types.iter().any(|&t| is_neither_unit_type_nor_never(t)) {
+            return false;
+        }
+        let regular_type = self.map_type(t, |c, t| Some(c.get_regular_type_of_literal_type(t))).unwrap();
+        self.each_type_contained_in(regular_type, &switch_types)
+    }
+
+    // flow.go:1978
+    pub(crate) fn each_type_contained_in(&mut self, source: P<Type>, types: &[P<Type>]) -> bool {
+        if source.flags().intersects(TypeFlags::Union) {
+            return !source.as_union_type().types().iter().any(|t| !types.contains(t));
+        }
+        types.contains(&source)
+    }
+
+    // Get the type names from all cases in a switch on `typeof`. The default clause and/or duplicate type names are
+    // represented as empty strings. Return nil if one or more case clause expressions are not string literals.
+    // flow.go:1989
+    pub(crate) fn get_switch_clause_type_of_witnesses(&mut self, node: P<Node>) -> Option<&'static [&'static str]> {
+        let links = self.switch_statement_links.get(node);
+        if !links.witnesses_computed.get() {
+            let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes;
+            let mut witnesses: Option<Vec<&'static str>> = Some(vec![""; clauses.len()]);
+            for (i, &clause) in clauses.iter().enumerate() {
+                if clause.kind == Kind::CaseClause {
+                    let expression = clause.expression().unwrap();
+                    if !ast::is_string_literal_like(expression) {
+                        witnesses = None;
+                        break;
+                    }
+                    let text = expression.text();
+                    let w = witnesses.as_mut().unwrap();
+                    if !w.contains(&text) {
+                        w[i] = text;
+                    }
+                }
+            }
+            links.witnesses.set(witnesses.map(alloc_vec));
+            links.witnesses_computed.set(true);
+        }
+        links.witnesses.get()
+    }
+
+    // Return the combined not-equal type facts for all cases except those between the start and end indices.
+    // flow.go:2012
+    pub(crate) fn get_not_equal_facts_from_typeof_switch(&mut self, start: i32, end: i32, witnesses: &[&str]) -> TypeFacts {
+        let mut facts = TypeFacts::None;
+        for (i, &witness) in witnesses.iter().enumerate() {
+            let i = i as i32;
+            if (i < start || i >= end) && !witness.is_empty() {
+                let f = match typeofNEFacts.get(witness) {
+                    Some(&f) => f,
+                    None => TypeFacts::TypeofNEHostObject,
+                };
+                facts |= f;
+            }
+        }
+        facts
+    }
+
+    // flow.go:2026
+    pub(crate) fn get_switch_clause_types(&mut self, node: P<Node>) -> Vec<P<Type>> {
+        let links = self.switch_statement_links.get(node);
+        if !links.switch_types_computed.get() {
+            let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes;
+            let mut types = Vec::with_capacity(clauses.len());
+            for &clause in clauses {
+                types.push(self.get_type_of_switch_clause(clause));
+            }
+            links.switch_types.set(alloc_vec(types));
+            links.switch_types_computed.set(true);
+        }
+        links.switch_types.get().to_vec()
+    }
+
+    // flow.go:2040
+    pub(crate) fn get_type_of_switch_clause(&mut self, clause: P<Node>) -> P<Type> {
+        if clause.kind == Kind::CaseClause {
+            let t = self.get_type_of_expression(clause.expression().unwrap());
+            return self.get_regular_type_of_literal_type(t);
+        }
+        self.never_type
+    }
+
+    // flow.go:2047
+    pub(crate) fn get_effects_signature(&mut self, node: P<Node>) -> Option<P<Signature>> {
+        let links = self.signature_links.get(node);
+        let mut signature = links.effects_signature.get();
+        if signature.is_none() {
+            // A call expression parented by an expression statement is a potential assertion. Other call
+            // expressions are potential type predicate function calls. In order to avoid triggering
+            // circularities in control flow analysis, we use getTypeOfDottedName when resolving the call
+            // target expression of an assertion.
+            let mut func_type: Option<P<Type>> = None;
+            if ast::is_binary_expression(node) {
+                let right_type = self.check_non_null_expression(node.as_binary_expression().right());
+                func_type = self.get_symbol_has_instance_method_of_object_type(right_type);
+            } else if ast::is_expression_statement(node.parent().unwrap()) {
+                func_type = self.get_type_of_dotted_name(node.expression().unwrap(), None /*diagnostic*/);
+            } else if node.expression().unwrap().kind != Kind::SuperKeyword {
+                let expression = node.expression().unwrap();
+                if ast::is_optional_chain(node) {
+                    let expression_type = self.check_expression(expression);
+                    let optional_type = self.get_optional_expression_type(expression_type, expression);
+                    func_type = Some(self.check_non_null_type(optional_type, expression));
+                } else {
+                    func_type = Some(self.check_non_null_expression(expression));
+                }
+            }
+            let mut apparent_type: Option<P<Type>> = None;
+            if let Some(func_type) = func_type {
+                apparent_type = Some(self.get_apparent_type(func_type));
+            }
+            let signatures = self.get_signatures_of_type(apparent_type.unwrap_or(self.unknown_type), SignatureKind::Call);
+            if signatures.len() == 1 && signatures[0].type_parameters.get().is_empty() {
+                signature = Some(signatures[0]);
+            } else if signatures.iter().any(|&s| self.has_type_predicate_or_never_return_type(s)) {
+                signature = Some(self.get_resolved_signature(node, None, CheckMode::Normal));
+            }
+            if !(signature.is_some() && self.has_type_predicate_or_never_return_type(signature.unwrap())) {
+                signature = Some(self.unknown_signature);
+            }
+            links.effects_signature.set(signature);
+        }
+        if signature == Some(self.unknown_signature) {
+            return None;
+        }
+        signature
+    }
+
+    /**
+     * Get the type of the `[Symbol.hasInstance]` method of an object type.
+     */
+    // flow.go:2093
+    pub(crate) fn get_symbol_has_instance_method_of_object_type(&mut self, t: P<Type>) -> Option<P<Type>> {
+        let has_instance_property_name = self.get_property_name_for_known_symbol_name("hasInstance");
+        if self.all_types_assignable_to_kind(t, TypeFlags::NonPrimitive) {
+            let has_instance_property = self.get_property_of_type(t, &has_instance_property_name);
+            if let Some(has_instance_property) = has_instance_property {
+                let has_instance_property_type = self.get_type_of_symbol(has_instance_property);
+                if !self.get_signatures_of_type(has_instance_property_type, SignatureKind::Call).is_empty() {
+                    return Some(has_instance_property_type);
+                }
+            }
+        }
+        None
+    }
+
+    // flow.go:2107
+    pub(crate) fn get_property_name_for_known_symbol_name(&mut self, symbol_name: &str) -> String {
+        let ctor_type = self.get_global_es_symbol_constructor_symbol_or_nil();
+        if let Some(ctor_type) = ctor_type {
+            let ctor_symbol_type = self.get_type_of_symbol(ctor_type);
+            let unique_type = self.get_type_of_property_of_type(ctor_symbol_type, symbol_name);
+            if let Some(unique_type) = unique_type {
+                if is_type_usable_as_property_name(unique_type) {
+                    return get_property_name_from_type(unique_type);
+                }
+            }
+        }
+        format!("{}@{}", ast::InternalSymbolNamePrefix, symbol_name)
+    }
+
+    // We require the dotted function name in an assertion expression to be comprised of identifiers
+    // that reference function, method, class or value module symbols; or variable, property or
+    // parameter symbols with declarations that have explicit type annotations. Such references are
+    // resolvable with no possibility of triggering circularities in control flow analysis.
+    // flow.go:2122
+    pub(crate) fn get_type_of_dotted_name(&mut self, node: P<Node>, diagnostic: Option<P<Diagnostic>>) -> Option<P<Type>> {
+        if !node.flags().intersects(NodeFlags::InWithStatement) {
+            match node.kind {
+                Kind::Identifier => {
+                    let resolved = self.get_resolved_symbol(node);
+                    let symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(resolved));
+                    return self.get_explicit_type_of_symbol(symbol, diagnostic);
+                }
+                Kind::ThisKeyword => {
+                    return self.get_explicit_this_type(node);
+                }
+                Kind::SuperKeyword => {
+                    return Some(self.check_super_expression(node));
+                }
+                Kind::PropertyAccessExpression => {
+                    let t = self.get_type_of_dotted_name(node.expression().unwrap(), diagnostic);
+                    if let Some(t) = t {
+                        let name = node.name().unwrap();
+                        let mut prop: Option<P<Symbol>> = None;
+                        if ast::is_private_identifier(name) {
+                            if let Some(symbol) = t.symbol() {
+                                let private_name = tsrs_binder::get_symbol_name_for_private_identifier(symbol, name.text());
+                                prop = self.get_property_of_type(t, &private_name);
+                            }
+                        } else {
+                            prop = self.get_property_of_type(t, name.text());
+                        }
+                        if let Some(prop) = prop {
+                            return self.get_explicit_type_of_symbol(prop, diagnostic);
+                        }
+                    }
+                }
+                Kind::ParenthesizedExpression => {
+                    return self.get_type_of_dotted_name(node.expression().unwrap(), diagnostic);
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    // flow.go:2155
+    pub(crate) fn get_explicit_type_of_symbol(&mut self, symbol: P<Symbol>, diagnostic: Option<P<Diagnostic>>) -> Option<P<Type>> {
+        let symbol = self.resolve_symbol(symbol);
+        if !self.resolving_explicit_type_of_symbol.add_if_absent(symbol) {
+            return None;
+        }
+        let result = self.get_explicit_type_of_symbol_worker(symbol, diagnostic);
+        self.resolving_explicit_type_of_symbol.delete(&symbol);
+        result
+    }
+
+    // Body of getExplicitTypeOfSymbol after the circularity guard (Go uses `defer` to remove the guard).
+    fn get_explicit_type_of_symbol_worker(&mut self, symbol: P<Symbol>, diagnostic: Option<P<Diagnostic>>) -> Option<P<Type>> {
+        if symbol.flags().intersects(SymbolFlags::Function | SymbolFlags::Method | SymbolFlags::Class | SymbolFlags::ValueModule) {
+            return Some(self.get_type_of_symbol(symbol));
+        }
+        if symbol.flags().intersects(SymbolFlags::Variable | SymbolFlags::Property) {
+            if symbol.check_flags.get().intersects(CheckFlags::Mapped) {
+                let origin = self.mapped_symbol_links.get(symbol).synthetic_origin.get();
+                if let Some(origin) = origin {
+                    if self.get_explicit_type_of_symbol(origin, diagnostic).is_some() {
+                        return Some(self.get_type_of_symbol(symbol));
+                    }
+                }
+            }
+            let declaration = symbol.value_declaration();
+            if let Some(declaration) = declaration {
+                if self.is_declaration_with_explicit_type_annotation(declaration) {
+                    return Some(self.get_type_of_symbol(symbol));
+                }
+                if ast::is_variable_declaration(declaration) && ast::is_for_of_statement(declaration.parent().unwrap().parent().unwrap()) {
+                    let statement = declaration.parent().unwrap().parent().unwrap();
+                    let expression_type = self.get_type_of_dotted_name(statement.expression().unwrap(), None /*diagnostic*/);
+                    if let Some(expression_type) = expression_type {
+                        let use_ = if statement.as_for_in_or_of_statement().await_modifier.is_some() { IterationUse::ForAwaitOf } else { IterationUse::ForOf };
+                        let undefined_type = self.undefined_type;
+                        return Some(self.check_iterated_type_or_element_type(use_, expression_type, undefined_type, None /*errorNode*/));
+                    }
+                }
+                if let Some(diagnostic) = diagnostic {
+                    let symbol_string = self.symbol_to_string(symbol);
+                    diagnostic.add_related_info(create_diagnostic_for_node(Some(declaration), &diagnostics::X_0_needs_an_explicit_type_annotation, &[&symbol_string]));
+                }
+            }
+        }
+        None
+    }
+
+    // flow.go:2197
+    pub(crate) fn is_declaration_with_explicit_type_annotation(&mut self, node: P<Node>) -> bool {
+        (ast::is_variable_declaration(node) || ast::is_property_declaration(node) || ast::is_property_signature_declaration(node) || ast::is_parameter_declaration(node)) && node.type_node().is_some()
+            || self.is_expando_property_function_with_return_type_annotation(node)
+    }
+
+    // flow.go:2202
+    pub(crate) fn is_expando_property_function_with_return_type_annotation(&mut self, node: P<Node>) -> bool {
+        if ast::is_binary_expression(node) {
+            let expr = node.as_binary_expression().right();
+            if ast::is_function_like(expr) && expr.type_node().is_some() {
+                return true;
+            }
+        }
+        false
+    }
+
+    // flow.go:2211
+    pub(crate) fn has_type_predicate_or_never_return_type(&mut self, sig: P<Signature>) -> bool {
+        if self.get_type_predicate_of_signature(sig).is_some() {
+            return true;
+        }
+        match sig.declaration.get() {
+            Some(declaration) => {
+                let return_type = self.get_return_type_from_annotation(declaration).unwrap_or(self.unknown_type);
+                return_type.flags().intersects(TypeFlags::Never)
+            }
+            None => false,
+        }
+    }
+
+    // flow.go:2215
+    pub(crate) fn get_explicit_this_type(&mut self, node: P<Node>) -> Option<P<Type>> {
+        let container = ast::get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
+        if ast::is_function_like(container) {
+            let signature = self.get_signature_from_declaration(container);
+            if let Some(this_parameter) = signature.this_parameter.get() {
+                return self.get_explicit_type_of_symbol(this_parameter, None);
+            }
+        }
+        if let Some(parent) = container.parent() {
+            if ast::is_class_like(parent) {
+                let symbol = self.get_symbol_of_declaration(parent).unwrap();
+                if ast::is_static(container) {
+                    return Some(self.get_type_of_symbol(symbol));
+                } else {
+                    return self.get_declared_type_of_symbol(symbol).as_interface_type().this_type.get();
+                }
+            }
+        }
+        None
+    }
+
+    // flow.go:2234
+    pub(crate) fn get_initial_type(&mut self, node: P<Node>) -> P<Type> {
+        match node.kind {
+            Kind::VariableDeclaration => return self.get_initial_type_of_variable_declaration(node),
+            Kind::BindingElement => return self.get_initial_type_of_binding_element(node),
+            _ => {}
+        }
+        panic!("Unhandled case in getInitialType");
+    }
+
+    // flow.go:2244
+    pub(crate) fn get_initial_type_of_variable_declaration(&mut self, node: P<Node>) -> P<Type> {
+        if let Some(initializer) = node.initializer() {
+            return self.get_type_of_initializer(initializer);
+        }
+        let grandparent = node.parent().unwrap().parent().unwrap();
+        if ast::is_for_in_statement(grandparent) {
+            return self.string_type;
+        }
+        if ast::is_for_of_statement(grandparent) {
+            // SIG: Go's checkRightHandSideOfForOf may return nil; the generated signature returns P<Type>.
+            let t = self.check_right_hand_side_of_for_of(grandparent);
+            return t;
+        }
+        self.error_type
+    }
+
+    // flow.go:2260
+    pub(crate) fn get_type_of_initializer(&mut self, node: P<Node>) -> P<Type> {
+        // Return the cached type if one is available. If the type of the variable was inferred
+        // from its initializer, we'll already have cached the type. Otherwise we compute it now
+        // without caching such that transient types are reflected.
+        if self.type_node_links.has(node) {
+            let t = self.type_node_links.get(node).resolved_type.get();
+            if let Some(t) = t {
+                return t;
+            }
+        }
+        self.get_type_of_expression(node)
+    }
+
+    // flow.go:2273
+    pub(crate) fn get_initial_type_of_binding_element(&mut self, node: P<Node>) -> P<Type> {
+        let pattern = node.parent().unwrap();
+        let parent_type = self.get_initial_type(pattern.parent().unwrap());
+        let t = if ast::is_object_binding_pattern(pattern) {
+            self.get_type_of_destructured_property(parent_type, get_binding_element_property_name(node).unwrap())
+        } else if !has_dot_dot_dot_token(node) {
+            let index = pattern.elements().iter().position(|&e| e == node).map_or(-1, |i| i as i32);
+            self.get_type_of_destructured_array_element(parent_type, index)
+        } else {
+            self.get_type_of_destructured_spread_expression(parent_type)
+        };
+        self.get_type_with_default(t, node.initializer())
+    }
+
+    // flow.go:2288
+    pub(crate) fn get_assigned_type(&mut self, node: P<Node>) -> P<Type> {
+        let parent = node.parent().unwrap();
+        match parent.kind {
+            Kind::ForInStatement => return self.string_type,
+            Kind::ForOfStatement => {
+                // SIG: Go's checkRightHandSideOfForOf may return nil (then falls through to errorType); the
+                // generated signature returns P<Type>.
+                let t = self.check_right_hand_side_of_for_of(parent);
+                return t;
+            }
+            Kind::BinaryExpression => return self.get_assigned_type_of_binary_expression(parent),
+            Kind::DeleteExpression => return self.undefined_type,
+            Kind::ArrayLiteralExpression => return self.get_assigned_type_of_array_literal_element(parent, node),
+            Kind::SpreadElement => return self.get_assigned_type_of_spread_expression(parent),
+            Kind::PropertyAssignment => return self.get_assigned_type_of_property_assignment(parent),
+            Kind::ShorthandPropertyAssignment => return self.get_assigned_type_of_shorthand_property_assignment(parent),
+            _ => {}
+        }
+        self.error_type
+    }
+
+    // flow.go:2314
+    pub(crate) fn get_assigned_type_of_binary_expression(&mut self, node: P<Node>) -> P<Type> {
+        let parent = node.parent().unwrap();
+        let is_destructuring_default_assignment = ast::is_array_literal_expression(parent) && self.is_destructuring_assignment_target(parent)
+            || ast::is_property_assignment(parent) && self.is_destructuring_assignment_target(parent.parent().unwrap());
+        if is_destructuring_default_assignment {
+            let assigned_type = self.get_assigned_type(node);
+            return self.get_type_with_default(assigned_type, Some(node.as_binary_expression().right()));
+        }
+        self.get_type_of_expression(node.as_binary_expression().right())
+    }
+
+    // flow.go:2323
+    pub(crate) fn get_assigned_type_of_array_literal_element(&mut self, node: P<Node>, element: P<Node>) -> P<Type> {
+        let assigned_type = self.get_assigned_type(node);
+        let index = node.elements().iter().position(|&e| e == element).map_or(-1, |i| i as i32);
+        self.get_type_of_destructured_array_element(assigned_type, index)
+    }
+
+    // flow.go:2327
+    pub(crate) fn get_type_of_destructured_array_element(&mut self, t: P<Type>, index: i32) -> P<Type> {
+        if every_type(t, |t| self.is_tuple_like_type(t)) {
+            if let Some(element_type) = self.get_tuple_element_type(t, index) {
+                return element_type;
+            }
+        }
+        let undefined_type = self.undefined_type;
+        let element_type = self.check_iterated_type_or_element_type(IterationUse::Destructuring, t, undefined_type, None /*errorNode*/);
+        self.include_undefined_in_index_signature(element_type)
+    }
+
+    // flow.go:2339
+    pub(crate) fn include_undefined_in_index_signature(&mut self, t: P<Type>) -> P<Type> {
+        if self.compiler_options.no_unchecked_indexed_access == Tristate::True {
+            return self.get_union_type(&[t, self.missing_type]);
+        }
+        t
+    }
+
+    // flow.go:2349
+    pub(crate) fn get_assigned_type_of_spread_expression(&mut self, node: P<Node>) -> P<Type> {
+        let assigned_type = self.get_assigned_type(node.parent().unwrap());
+        self.get_type_of_destructured_spread_expression(assigned_type)
+    }
+
+    // flow.go:2353
+    pub(crate) fn get_type_of_destructured_spread_expression(&mut self, t: P<Type>) -> P<Type> {
+        let undefined_type = self.undefined_type;
+        let element_type = self.check_iterated_type_or_element_type(IterationUse::Destructuring, t, undefined_type, None /*errorNode*/);
+        self.create_array_type(element_type)
+    }
+
+    // flow.go:2361
+    pub(crate) fn get_assigned_type_of_property_assignment(&mut self, node: P<Node>) -> P<Type> {
+        let assigned_type = self.get_assigned_type(node.parent().unwrap());
+        self.get_type_of_destructured_property(assigned_type, node.name().unwrap())
+    }
+
+    // flow.go:2365
+    pub(crate) fn get_type_of_destructured_property(&mut self, t: P<Type>, name: P<Node>) -> P<Type> {
+        let name_type = self.get_literal_type_from_property_name(name);
+        if !is_type_usable_as_property_name(name_type) {
+            return self.error_type;
+        }
+        let text = get_property_name_from_type(name_type);
+        if let Some(prop_type) = self.get_type_of_property_of_type(t, &text) {
+            return prop_type;
+        }
+        if let Some(index_info) = self.get_applicable_index_info_for_name(t, &text) {
+            return self.include_undefined_in_index_signature(index_info.value_type.get().unwrap());
+        }
+        self.error_type
+    }
+
+    // flow.go:2380
+    pub(crate) fn get_assigned_type_of_shorthand_property_assignment(&mut self, node: P<Node>) -> P<Type> {
+        let assigned_type = self.get_assigned_type_of_property_assignment(node);
+        self.get_type_with_default(assigned_type, node.as_shorthand_property_assignment().object_assignment_initializer())
+    }
+
+    // flow.go:2384
+    pub(crate) fn is_destructuring_assignment_target(&mut self, parent: P<Node>) -> bool {
+        let grandparent = parent.parent().unwrap();
+        ast::is_binary_expression(grandparent) && grandparent.as_binary_expression().left == parent
+            || ast::is_for_of_statement(grandparent) && grandparent.initializer() == Some(parent)
+    }
+
+    // flow.go:2389
+    pub(crate) fn get_type_with_default(&mut self, t: P<Type>, default_expression: Option<P<Node>>) -> P<Type> {
+        if let Some(default_expression) = default_expression {
+            let non_undefined_type = self.get_non_undefined_type(t);
+            let default_type = self.get_type_of_expression(default_expression);
+            return self.get_union_type(&[non_undefined_type, default_type]);
+        }
+        t
+    }
+
+    // Remove those constituent types of declaredType to which no constituent type of assignedType is assignable.
+    // For example, when a variable of type number | string | boolean is assigned a value of type number | boolean,
+    // we remove type string.
+    // flow.go:2399
+    pub(crate) fn get_assignment_reduced_type(&mut self, declared_type: P<Type>, assigned_type: P<Type>) -> P<Type> {
+        if declared_type == assigned_type {
+            return declared_type;
+        }
+        if assigned_type.flags().intersects(TypeFlags::Never) {
+            return assigned_type;
+        }
+        let key = AssignmentReducedKey { id1: declared_type.id, id2: assigned_type.id };
+        if let Some(&result) = self.assignment_reduced_types.get(&key) {
+            return result;
+        }
+        let result = self.get_assignment_reduced_type_worker(declared_type, assigned_type);
+        self.assignment_reduced_types.insert(key, result);
+        result
+    }
+
+    // flow.go:2415
+    pub(crate) fn get_assignment_reduced_type_worker(&mut self, declared_type: P<Type>, assigned_type: P<Type>) -> P<Type> {
+        let filtered_type = self.filter_type(declared_type, move |c, t| c.type_maybe_assignable_to(assigned_type, t));
+        // Ensure that we narrow to fresh types if the assignment is a fresh boolean literal type.
+        let mut reduced_type = filtered_type;
+        if assigned_type.flags().intersects(TypeFlags::BooleanLiteral) && is_fresh_literal_type(assigned_type) {
+            reduced_type = self.map_type(filtered_type, |c, t| Some(c.get_fresh_type_of_literal_type(t))).unwrap();
+        }
+        // Our crude heuristic produces an invalid result in some cases: see GH#26130.
+        // For now, when that happens, we give up and don't narrow at all.  (This also
+        // means we'll never narrow for erroneous assignments where the assigned type
+        // is not assignable to the declared type.)
+        if self.is_type_assignable_to(assigned_type, reduced_type) {
+            return reduced_type;
+        }
+        declared_type
+    }
+
+    // flow.go:2434
+    pub(crate) fn type_maybe_assignable_to(&mut self, source: P<Type>, target: P<Type>) -> bool {
+        if !source.flags().intersects(TypeFlags::Union) {
+            return self.is_type_assignable_to(source, target);
+        }
+        // Quick exit when source union contains the target type
+        if contains_type(source.types(), target) {
+            return true;
+        }
+        // Otherwise, check if any constituent type of the source union is assignable to the target type
+        for &t in source.types() {
+            if self.is_type_assignable_to(t, target) {
+                return true;
+            }
+        }
+        false
+    }
+
+    // flow.go:2451
+    pub(crate) fn get_type_predicate_argument(&mut self, predicate: P<TypePredicate>, call_expression: P<Node>) -> Option<P<Node>> {
+        if predicate.kind.get() == TypePredicateKind::Identifier || predicate.kind.get() == TypePredicateKind::AssertsIdentifier {
+            let arguments = call_expression.arguments();
+            let parameter_index = predicate.parameter_index.get();
+            if parameter_index >= 0 && (parameter_index as usize) < arguments.len() {
+                return Some(arguments[parameter_index as usize]);
+            }
+        } else {
+            let invoked_expression = ast::skip_parentheses(call_expression.expression().unwrap());
+            if ast::is_access_expression(invoked_expression) {
+                return Some(ast::skip_parentheses(invoked_expression.expression().unwrap()));
+            }
+        }
+        None
+    }
+
+    // flow.go:2466
+    pub(crate) fn get_flow_type_in_constructor(&mut self, symbol: P<Symbol>, constructor: P<Node>) -> Option<P<Type>> {
+        let symbol_name = symbol.name();
+        let access_name = if symbol_name.starts_with(&format!("{}#", ast::InternalSymbolNamePrefix)) {
+            let start = symbol_name.find('@').map_or(0, |i| i + 1);
+            self.factory.new_private_identifier(alloc_str(&symbol_name[start..]))
+        } else {
+            self.factory.new_identifier(symbol_name)
+        };
+        let this_keyword = self.factory.new_keyword_expression(Kind::ThisKeyword);
+        let reference = self.factory.new_property_access_expression(this_keyword, None, access_name, NodeFlags::None);
+        reference.expression().unwrap().set_parent(Some(reference));
+        reference.set_parent(Some(constructor));
+        reference.flow_node_data().unwrap().flow_node.set(constructor.as_constructor_declaration().return_flow_node.get());
+        let flow_type = self.get_flow_type_of_property(reference, Some(symbol));
+        if self.no_implicit_any && (flow_type == self.auto_type || flow_type == self.auto_array_type) {
+            let symbol_string = self.symbol_to_string(symbol);
+            let type_string = self.type_to_string_exported(flow_type);
+            self.error(symbol.value_declaration(), &diagnostics::Member_0_implicitly_has_an_1_type, &[&symbol_string, &type_string]);
+        }
+        // We don't infer a type if assignments are only null or undefined.
+        if every_type(flow_type, |t| self.is_nullable_type(t)) {
+            return None;
+        }
+        Some(self.convert_auto_to_any(flow_type))
+    }
+
+    // flow.go:2488
+    pub(crate) fn get_flow_type_in_static_blocks(&mut self, symbol: P<Symbol>, static_blocks: &[P<Node>]) -> Option<P<Type>> {
+        let symbol_name = symbol.name();
+        let access_name = if symbol_name.starts_with(&format!("{}#", ast::InternalSymbolNamePrefix)) {
+            let start = symbol_name.find('@').map_or(0, |i| i + 1);
+            self.factory.new_private_identifier(alloc_str(&symbol_name[start..]))
+        } else {
+            self.factory.new_identifier(symbol_name)
+        };
+        for &static_block in static_blocks {
+            let this_keyword = self.factory.new_keyword_expression(Kind::ThisKeyword);
+            let reference = self.factory.new_property_access_expression(this_keyword, None, access_name, NodeFlags::None);
+            reference.expression().unwrap().set_parent(Some(reference));
+            reference.set_parent(Some(static_block));
+            reference.flow_node_data().unwrap().flow_node.set(static_block.as_class_static_block_declaration().return_flow_node.get());
+            let flow_type = self.get_flow_type_of_property(reference, Some(symbol));
+            if self.no_implicit_any && (flow_type == self.auto_type || flow_type == self.auto_array_type) {
+                let symbol_string = self.symbol_to_string(symbol);
+                let type_string = self.type_to_string_exported(flow_type);
+                self.error(symbol.value_declaration(), &diagnostics::Member_0_implicitly_has_an_1_type, &[&symbol_string, &type_string]);
+            }
+            // We don't infer a type if assignments are only null or undefined.
+            if every_type(flow_type, |t| self.is_nullable_type(t)) {
+                continue;
+            }
+            return Some(self.convert_auto_to_any(flow_type));
+        }
+        None
+    }
+
+    // flow.go:2513
+    pub(crate) fn is_reachable_flow_node(&mut self, flow: P<FlowNode>) -> bool {
+        let f = self.get_flow_state();
+        let result = self.is_reachable_flow_node_worker(f, flow, false /*noCacheCheck*/);
+        self.put_flow_state(f);
+        self.last_flow_node = Some(flow);
+        self.last_flow_node_reachable = result;
+        result
+    }
+
+    // flow.go:2522
+    pub(crate) fn is_reachable_flow_node_worker(&mut self, f: P<FlowState>, flow: P<FlowNode>, no_cache_check: bool) -> bool {
+        let mut flow = flow;
+        let mut no_cache_check = no_cache_check;
+        loop {
+            if Some(flow) == self.last_flow_node {
+                return self.last_flow_node_reachable;
+            }
+            let flags = flow.flags();
+            if flags.intersects(FlowFlags::Shared) {
+                if !no_cache_check && f.reduce_labels.borrow().is_empty() {
+                    if let Some(&reachable) = self.flow_node_reachable.get(&flow) {
+                        return reachable;
+                    }
+                    let reachable = self.is_reachable_flow_node_worker(f, flow, true /*noCacheCheck*/);
+                    self.flow_node_reachable.insert(flow, reachable);
+                    return reachable;
+                }
+                no_cache_check = false;
+            }
+            if flags.intersects(FlowFlags::Assignment | FlowFlags::Condition | FlowFlags::ArrayMutation) {
+                flow = flow.antecedent().unwrap();
+            } else if flags.intersects(FlowFlags::Call) {
+                let node = flow.node().unwrap();
+                if let Some(signature) = self.get_effects_signature(node) {
+                    if let Some(predicate) = self.get_type_predicate_of_signature(signature) {
+                        if predicate.kind.get() == TypePredicateKind::AssertsIdentifier && predicate.t.get().is_none() {
+                            let arguments = node.arguments();
+                            let parameter_index = predicate.parameter_index.get();
+                            if parameter_index >= 0 && (parameter_index as usize) < arguments.len() && self.is_false_expression(arguments[parameter_index as usize]) {
+                                return false;
+                            }
+                        }
+                    }
+                    if self.get_return_type_of_signature(signature).flags().intersects(TypeFlags::Never) {
+                        return false;
+                    }
+                }
+                flow = flow.antecedent().unwrap();
+            } else if flags.intersects(FlowFlags::BranchLabel) {
+                // A branching point is reachable if any branch is reachable.
+                let mut next = get_branch_label_antecedents(flow, &f.reduce_labels.borrow());
+                while let Some(list) = next {
+                    next = list.next.get();
+                    if self.is_reachable_flow_node_worker(f, list.flow, false /*noCacheCheck*/) {
+                        return true;
+                    }
+                }
+                return false;
+            } else if flags.intersects(FlowFlags::LoopLabel) {
+                let antecedents = match flow.antecedents() {
+                    Some(antecedents) => antecedents,
+                    None => return false,
+                };
+                // A loop is reachable if the control flow path that leads to the top is reachable.
+                flow = antecedents.flow;
+            } else if flags.intersects(FlowFlags::SwitchClause) {
+                // The control flow path representing an unmatched value in a switch statement with
+                // no default clause is unreachable if the switch statement is exhaustive.
+                let data = flow.node().unwrap().as_flow_switch_clause_data();
+                if data.clause_start == data.clause_end && self.is_exhaustive_switch_statement(data.switch_statement) {
+                    return false;
+                }
+                flow = flow.antecedent().unwrap();
+            } else if flags.intersects(FlowFlags::ReduceLabel) {
+                // Cache is unreliable once we start adjusting labels
+                self.last_flow_node = None;
+                f.reduce_labels.borrow_mut().push(P::from_static(flow.node().unwrap().as_flow_reduce_label_data()));
+                let result = self.is_reachable_flow_node_worker(f, flow.antecedent().unwrap(), false /*noCacheCheck*/);
+                f.reduce_labels.borrow_mut().pop();
+                return result;
+            } else {
+                return !flags.intersects(FlowFlags::Unreachable);
+            }
+        }
+    }
+
+    // flow.go:2589
+    pub(crate) fn is_false_expression(&mut self, expr: P<Node>) -> bool {
+        let node = ast::skip_parentheses(expr);
+        if node.kind == Kind::FalseKeyword {
+            return true;
+        }
+        if ast::is_binary_expression(node) {
+            let binary = node.as_binary_expression();
+            return binary.operator_token.kind == Kind::AmpersandAmpersandToken && (self.is_false_expression(binary.left) || self.is_false_expression(binary.right()))
+                || binary.operator_token.kind == Kind::BarBarToken && self.is_false_expression(binary.left) && self.is_false_expression(binary.right());
+        }
+        false
+    }
+
+    // Return true if the given flow node is preceded by a 'super(...)' call in every possible code path
+    // leading to the node.
+    // flow.go:2604
+    pub(crate) fn is_post_super_flow_node(&mut self, flow: P<FlowNode>, no_cache_check: bool) -> bool {
+        let f = self.get_flow_state();
+        let result = self.is_post_super_flow_node_worker(f, flow, no_cache_check);
+        self.put_flow_state(f);
+        result
+    }
+
+    // flow.go:2611
+    pub(crate) fn is_post_super_flow_node_worker(&mut self, f: P<FlowState>, flow: P<FlowNode>, no_cache_check: bool) -> bool {
+        let mut flow = flow;
+        let mut no_cache_check = no_cache_check;
+        loop {
+            let flags = flow.flags();
+            if flags.intersects(FlowFlags::Shared) {
+                if !no_cache_check {
+                    if let Some(&post_super) = self.flow_node_post_super.get(&flow) {
+                        return post_super;
+                    }
+                    let post_super = self.is_post_super_flow_node_worker(f, flow, true /*noCacheCheck*/);
+                    self.flow_node_post_super.insert(flow, post_super);
+                }
+                no_cache_check = false;
+            }
+            if flags.intersects(FlowFlags::Assignment | FlowFlags::Condition | FlowFlags::ArrayMutation | FlowFlags::SwitchClause) {
+                flow = flow.antecedent().unwrap();
+            } else if flags.intersects(FlowFlags::Call) {
+                if flow.node().unwrap().expression().unwrap().kind == Kind::SuperKeyword {
+                    return true;
+                }
+                flow = flow.antecedent().unwrap();
+            } else if flags.intersects(FlowFlags::BranchLabel) {
+                let mut next = get_branch_label_antecedents(flow, &f.reduce_labels.borrow());
+                while let Some(list) = next {
+                    next = list.next.get();
+                    if !self.is_post_super_flow_node_worker(f, list.flow, false /*noCacheCheck*/) {
+                        return false;
+                    }
+                }
+                return true;
+            } else if flags.intersects(FlowFlags::LoopLabel) {
+                // A loop is post-super if the control flow path that leads to the top is post-super.
+                flow = flow.antecedents().unwrap().flow;
+            } else if flags.intersects(FlowFlags::ReduceLabel) {
+                f.reduce_labels.borrow_mut().push(P::from_static(flow.node().unwrap().as_flow_reduce_label_data()));
+                let result = self.is_post_super_flow_node_worker(f, flow.antecedent().unwrap(), false /*noCacheCheck*/);
+                f.reduce_labels.borrow_mut().pop();
+                return result;
+            } else {
+                // Unreachable nodes are considered post-super to silence errors
+                return flags.intersects(FlowFlags::Unreachable);
+            }
+        }
+    }
+
+    // Check if a parameter, catch variable, or mutable local variable is definitely assigned anywhere
+    // flow.go:2655
+    pub(crate) fn is_symbol_assigned_definitely(&mut self, symbol: P<Symbol>) -> bool {
+        self.ensure_assignments_marked(symbol);
+        self.marked_assignment_symbol_links.get(symbol).has_definite_assignment.get()
+    }
+
+    // Check if a parameter, catch variable, or mutable local variable is assigned anywhere
+    // flow.go:2661
+    pub(crate) fn is_symbol_assigned(&mut self, symbol: P<Symbol>) -> bool {
+        self.ensure_assignments_marked(symbol);
+        self.marked_assignment_symbol_links.get(symbol).last_assignment_pos.get() != 0
+    }
+
+    // Return true if there are no assignments to the given symbol or if the given location
+    // is past the last assignment to the symbol.
+    // flow.go:2668
+    pub(crate) fn is_past_last_assignment(&mut self, symbol: P<Symbol>, location: Option<P<Node>>) -> bool {
+        self.ensure_assignments_marked(symbol);
+        let last_assignment_pos = self.marked_assignment_symbol_links.get(symbol).last_assignment_pos.get();
+        last_assignment_pos == 0 || location.is_some() && last_assignment_pos < location.unwrap().pos()
+    }
+
+    // flow.go:2674
+    pub(crate) fn ensure_assignments_marked(&mut self, symbol: P<Symbol>) {
+        let parent = ast::find_ancestor(symbol.value_declaration(), ast::is_function_or_source_file);
+        let parent = match parent {
+            Some(parent) => parent,
+            None => return,
+        };
+        let links = self.node_links.get(parent);
+        if !links.flags.get().intersects(NodeCheckFlags::AssignmentsMarked) {
+            links.flags.set(links.flags.get() | NodeCheckFlags::AssignmentsMarked);
+            if !self.has_parent_with_assignments_marked(parent) {
+                self.mark_node_assignments(parent);
+            }
+        }
+    }
+
+    // flow.go:2688
+    pub(crate) fn has_parent_with_assignments_marked(&mut self, node: P<Node>) -> bool {
+        ast::find_ancestor(node.parent(), |node| ast::is_function_or_source_file(node) && self.node_links.get(node).flags.get().intersects(NodeCheckFlags::AssignmentsMarked)).is_some()
+    }
+
+    // For all assignments within the given root node, record the last assignment source position for all
+    // referenced parameters and mutable local variables. When assignments occur in nested functions  or
+    // references occur in export specifiers, record math.MaxInt32 as the assignment position. When
+    // assignments occur in compound statements, record the ending source position of the compound statement
+    // as the assignment position (this is more conservative than full control flow analysis, but requires
+    // only a single walk over the AST).
+    // flow.go:2700
+    pub(crate) fn mark_node_assignments_worker(&mut self, node: P<Node>) -> bool {
+        match node.kind {
+            Kind::Identifier => {
+                let assignment_kind = get_assignment_target_kind(node);
+                if assignment_kind != AssignmentKind::None {
+                    let symbol = self.get_resolved_symbol(node);
+                    if self.is_parameter_or_mutable_local_variable(symbol) {
+                        let links = self.marked_assignment_symbol_links.get(symbol);
+                        let pos = links.last_assignment_pos.get();
+                        if pos == 0 || pos != i32::MAX {
+                            let referencing_function = ast::find_ancestor(node, ast::is_function_or_source_file);
+                            let declaring_function = ast::find_ancestor(symbol.value_declaration(), ast::is_function_or_source_file);
+                            if referencing_function == declaring_function {
+                                links.last_assignment_pos.set(self.extend_assignment_position(Some(node), symbol.value_declaration().unwrap()));
+                            } else {
+                                links.last_assignment_pos.set(i32::MAX);
+                            }
+                        }
+                        if assignment_kind == AssignmentKind::Definite {
+                            links.has_definite_assignment.set(true);
+                        }
+                    }
+                }
+                return false;
+            }
+            Kind::ExportSpecifier => {
+                let export_declaration_node = node.parent().unwrap().parent().unwrap();
+                let export_declaration = export_declaration_node.as_export_declaration();
+                let name = node.property_name_or_name().unwrap();
+                if !node.is_type_only() && !export_declaration.is_type_only && export_declaration.module_specifier.is_none() && !ast::is_string_literal(name) {
+                    let symbol = self.resolve_entity_name(name, SymbolFlags::Value, true /*ignoreErrors*/, true /*dontResolveAlias*/, None);
+                    if let Some(symbol) = symbol {
+                        if self.is_parameter_or_mutable_local_variable(symbol) {
+                            let links = self.marked_assignment_symbol_links.get(symbol);
+                            links.last_assignment_pos.set(i32::MAX);
+                        }
+                    }
+                }
+                return false;
+            }
+            Kind::InterfaceDeclaration | Kind::TypeAliasDeclaration | Kind::JSTypeAliasDeclaration | Kind::EnumDeclaration => {
+                return false;
+            }
+            _ => {}
+        }
+        if ast::is_type_node(node) {
+            return false;
+        }
+        node.for_each_child(&mut |child| self.mark_node_assignments(child))
+    }
+
+    // Extend the position of the given assignment target node to the end of any intervening variable statement,
+    // expression statement, compound statement, or class declaration occurring between the node and the given
+    // declaration node.
+    // flow.go:2749
+    pub(crate) fn extend_assignment_position(&mut self, node: Option<P<Node>>, declaration: P<Node>) -> i32 {
+        let mut node = node;
+        let mut pos = node.unwrap().pos();
+        while let Some(n) = node {
+            if n.pos() <= declaration.pos() {
+                break;
+            }
+            match n.kind {
+                Kind::VariableStatement
+                | Kind::ExpressionStatement
+                | Kind::IfStatement
+                | Kind::DoStatement
+                | Kind::WhileStatement
+                | Kind::ForStatement
+                | Kind::ForInStatement
+                | Kind::ForOfStatement
+                | Kind::WithStatement
+                | Kind::SwitchStatement
+                | Kind::TryStatement
+                | Kind::ClassDeclaration => {
+                    pos = n.end();
+                }
+                _ => {}
+            }
+            node = n.parent();
+        }
+        pos
+    }
+}

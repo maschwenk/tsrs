@@ -345,7 +345,7 @@ pub struct SwitchStatementLinks {
     pub switch_types_computed: Cell<bool>,
     pub witnesses_computed: Cell<bool>,
     pub switch_types: Cell<&'static [P<Type>]>,
-    pub witnesses: Cell<&'static [&'static str]>,
+    pub witnesses: Cell<Option<&'static [&'static str]>>, // Go nil (non-literal case) vs empty
 }
 
 #[derive(Default)]
