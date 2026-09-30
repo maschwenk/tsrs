@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 use bitflags::bitflags;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, CommentRange, Diagnostic, DiagnosticExt, Kind, ModifierFlags, ModifierList, Node, NodeFactory, NodeFlags, NodeList, SourceFile, SourceFileParseOptions, TokenFlags};
-use tsrs_core::{alloc_slice, alloc_str, new_text_range, tspath, LanguageVariant, ScriptKind, TextRange, P};
+use tsrs_core::{alloc_slice, alloc_str, alloc_vec, new_text_range, tspath, LanguageVariant, ScriptKind, TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_scanner::{self as scanner, Scanner, ScannerState};
 
@@ -555,17 +555,17 @@ impl Parser {
         }
         collect_external_module_references(result);
         if ast::is_in_js_file(Some(node)) {
-            result.set_js_diagnostics(attach_file_to_diagnostics(&self.js_diagnostics, result));
+            result.set_js_diagnostics(&attach_file_to_diagnostics(&self.js_diagnostics, result));
         }
         result
     }
 
     pub(crate) fn finish_source_file(&mut self, result: P<SourceFile>, is_declaration_file: bool) {
-        result.comment_directives.replace(self.scanner.comment_directives().to_vec());
-        result.pragmas.replace(get_comment_pragmas(&mut self.factory, self.source_text));
+        result.comment_directives.set(alloc_slice(self.scanner.comment_directives()));
+        result.pragmas.set(alloc_vec(get_comment_pragmas(&mut self.factory, self.source_text)));
         self.process_pragmas_into_fields(result);
-        result.set_diagnostics(attach_file_to_diagnostics(&self.diagnostics, result));
-        result.set_jsdoc_diagnostics(attach_file_to_diagnostics(&self.jsdoc_diagnostics, result));
+        result.set_diagnostics(&attach_file_to_diagnostics(&self.diagnostics, result));
+        result.set_jsdoc_diagnostics(&attach_file_to_diagnostics(&self.jsdoc_diagnostics, result));
         result.is_declaration_file.set(is_declaration_file);
         result.language_variant.set(self.language_variant);
         result.script_kind.set(self.script_kind);
@@ -581,18 +581,18 @@ impl Parser {
         }
         self.reparsed_clones.sort_by(|a, b| ast::compare_node_positions(*a, *b).cmp(&0));
         result.reparsed_clones.set(alloc_slice(&self.reparsed_clones));
-        ast::set_external_module_indicator(result, &self.opts.external_module_indicator_options);
+        ast::set_external_module_indicator(&result, self.opts.external_module_indicator_options);
     }
 
-    pub(crate) fn create_jsdoc_cache(&self) -> Option<FxHashMap<P<Node>, &'static [P<Node>]>> {
+    pub(crate) fn create_jsdoc_cache(&self) -> FxHashMap<P<Node>, &'static [P<Node>]> {
         if self.jsdoc_infos.is_empty() {
-            return None;
+            return FxHashMap::default();
         }
         let mut result = FxHashMap::with_capacity_and_hasher(self.jsdoc_infos.len(), Default::default());
         for info in &self.jsdoc_infos {
             result.insert(info.parent, info.js_docs);
         }
-        Some(result)
+        result
     }
 
     pub(crate) fn parse_toplevel_statement(&mut self, i: usize) -> P<Node> {
@@ -834,7 +834,9 @@ impl Parser {
 
     pub(crate) fn create_missing_list(&mut self) -> P<NodeList> {
         let pos = self.node_pos();
-        P::new(NodeList { loc: Cell::new(new_text_range(pos, pos)), nodes: missing_list_nodes() })
+        let result = self.factory.new_node_list_from_static(missing_list_nodes());
+        result.loc.set(new_text_range(pos, pos));
+        result
     }
 
     // Returns true if we should abort parsing.
@@ -2373,7 +2375,9 @@ impl Parser {
             _ => {}
         }
         // The user alternatively might have misspelled or forgotten to add a space after a common keyword.
-        let mut suggestion = tsrs_core::get_spelling_suggestion_for_strings(expression_text, viable_keyword_suggestions.iter().copied());
+        let mut suggestion = tsrs_core::get_spelling_suggestion_for_strings(expression_text, viable_keyword_suggestions.iter().copied())
+            .map(|s| s.to_string())
+            .unwrap_or_default();
         if suggestion.is_empty() {
             suggestion = get_space_suggestion(expression_text);
         }
