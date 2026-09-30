@@ -495,7 +495,7 @@ impl Checker {
 
     // checker.go:4744
     pub(crate) fn are_properties_abstract_or_interface(&mut self, base: P<Symbol>, base_declaration_flags: ModifierFlags) -> bool {
-        let declarations = base.declarations().clone();
+        let declarations = base.declarations();
         if base.check_flags().intersects(CheckFlags::Synthetic) {
             return declarations.iter().any(|&d| self.is_property_abstract_or_interface(d, base_declaration_flags));
         }
@@ -831,8 +831,8 @@ impl Checker {
         };
         // Go iterates a map here (random order); an insertion-ordered map keeps diagnostics deterministic.
         let mut index_signature_map: collections::OrderedMap<P<Type>, Vec<P<Node>>> = Default::default();
-        let declarations = index_symbol.declarations().clone();
-        for declaration in declarations {
+        let declarations = index_symbol.declarations();
+        for &declaration in declarations {
             if is_index_signature_declaration(declaration) {
                 let parameters = declaration.parameters();
                 if parameters.len() == 1 {
@@ -1034,18 +1034,18 @@ impl Checker {
         let links = self.declared_type_links.get(enum_symbol);
         if !links.enum_checked.get() {
             links.enum_checked.set(true);
-            let declarations = enum_symbol.declarations().clone();
+            let declarations = enum_symbol.declarations();
             if declarations.len() > 1 {
                 let enum_is_const = is_enum_const(node);
                 // check that const is placed\omitted on all enum declarations
-                for &decl in &declarations {
+                for &decl in declarations {
                     if is_enum_declaration(decl) && is_enum_const(decl) != enum_is_const {
                         self.error(get_name_of_declaration(decl), &diagnostics::Enum_declarations_must_all_be_const_or_non_const, &[]);
                     }
                 }
             }
             let mut seen_enum_missing_initial_initializer = false;
-            for &declaration in &declarations {
+            for &declaration in declarations {
                 // return true if we hit a violation of the rule, false otherwise
                 if declaration.kind != Kind::EnumDeclaration {
                     continue;
@@ -1826,7 +1826,7 @@ impl Checker {
                 if symbol.flags().intersects(SymbolFlags::Namespace | SymbolFlags::Enum) {
                     continue;
                 }
-                let declarations = symbol.declarations().clone();
+                let declarations = symbol.declarations();
                 let exported_declarations_count = declarations.iter().filter(|&&d| is_not_overload(d) && !is_accessor(d) && !is_interface_declaration(d)).count();
                 if symbol.flags().intersects(SymbolFlags::TypeAlias) && exported_declarations_count <= 2 {
                     // it is legal to merge type alias with other values
@@ -1834,7 +1834,7 @@ impl Checker {
                     continue;
                 }
                 if exported_declarations_count > 1 && !declarations.iter().all(|&node| get_assignment_declaration_kind(node) == JSDeclarationKind::ExportsProperty) {
-                    for &declaration in &declarations {
+                    for &declaration in declarations {
                         if is_not_overload(declaration) {
                             self.error(Some(declaration), &diagnostics::Cannot_redeclare_exported_variable_0, &[&id]);
                         }
@@ -2047,7 +2047,7 @@ impl Checker {
                     }
                 }
             }
-            let declarations = symbol.declarations().clone();
+            let declarations = symbol.declarations();
             if declarations.len() > 1 {
                 if declarations.iter().any(|&d| d != node && is_variable_like(d) && !self.are_declaration_flags_identical(d, node)) {
                     self.error(Some(name), &diagnostics::All_declarations_of_0_must_have_identical_modifiers, &[&tsrs_scanner::declaration_name_to_string(Some(name))]);

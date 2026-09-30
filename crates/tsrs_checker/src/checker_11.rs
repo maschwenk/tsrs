@@ -238,7 +238,7 @@ impl Checker {
         }
         prop_types.extend_from_slice(&index_types);
         let result = self.new_symbol_ex(prop_flags | optional_flag, name, check_flags | synthetic_flag);
-        *result.declarations.borrow_mut() = declarations;
+        result.set_declarations(&declarations);
         if !has_non_uniform_value_declaration {
             if let Some(first_value_declaration) = first_value_declaration {
                 result.value_declaration.set(Some(first_value_declaration));
@@ -319,7 +319,7 @@ impl Checker {
     // checker.go:22065
     pub(crate) fn create_symbol_with_type(&mut self, source: P<Symbol>, t: Option<P<Type>>) -> P<Symbol> {
         let symbol = self.new_symbol_ex(source.flags(), source.name(), source.check_flags.get() & CheckFlags::Readonly);
-        *symbol.declarations.borrow_mut() = source.declarations().clone();
+        symbol.declarations.set(source.declarations());
         symbol.parent.set(source.parent());
         symbol.value_declaration.set(source.value_declaration());
         let links = self.value_symbol_links.get(symbol);
@@ -1142,7 +1142,7 @@ impl Checker {
                         type_parameters = filtered;
                     } else if target.symbol().unwrap().flags().intersects(SymbolFlags::Method | SymbolFlags::TypeLiteral) {
                         let mut filtered = Vec::new();
-                        let declarations = t.symbol().unwrap().declarations().clone();
+                        let declarations = t.symbol().unwrap().declarations();
                         for tp in type_parameters {
                             if declarations.iter().any(|&d| self.is_type_parameter_possibly_referenced(tp, d)) {
                                 filtered.push(tp);

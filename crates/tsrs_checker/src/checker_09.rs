@@ -28,7 +28,7 @@ impl Checker {
         let mut inferences: Vec<P<Type>> = Vec::new();
         if let Some(symbol) = t.symbol() {
             if !symbol.declarations().is_empty() {
-                let declarations = symbol.declarations().clone();
+                let declarations = symbol.declarations();
                 for declaration in declarations {
                     let declaration_parent = declaration.parent().unwrap();
                     if is_infer_type_node(declaration_parent) {
@@ -316,8 +316,8 @@ impl Checker {
     // and if none of the base interfaces have a "this" type.
     // checker.go:17680
     pub(crate) fn is_thisless_interface(&mut self, symbol: P<Symbol>) -> bool {
-        let declarations = symbol.declarations().clone();
-        for declaration in declarations {
+        let declarations = symbol.declarations();
+        for &declaration in declarations {
             if is_interface_declaration(declaration) {
                 if declaration.flags().intersects(NodeFlags::ContainsThis) {
                     return false;
@@ -1158,7 +1158,7 @@ impl Checker {
         }
         if t.is_none() {
             let mut types: Vec<P<Type>> = Vec::new();
-            let declarations = symbol.declarations().clone();
+            let declarations = symbol.declarations();
             for (i, &declaration) in declarations.iter().enumerate() {
                 if is_binary_expression(declaration) && declaration.type_node().is_some() {
                     t = Some(self.get_type_from_type_node(declaration.type_node().unwrap()));
@@ -1302,8 +1302,8 @@ impl Checker {
         }
         let mut all_this = true;
         let mut type_annotation: Option<P<Node>> = None;
-        let declarations = symbol.declarations().clone();
-        for declaration in declarations {
+        let declarations = symbol.declarations();
+        for &declaration in declarations {
             if !is_binary_expression(declaration) {
                 all_this = false;
                 break;
@@ -2479,8 +2479,8 @@ impl Checker {
             }
             // Go: `t.symbol.Declarations != nil`; a nil and an empty declaration list both iterate nothing.
             if !self.pop_type_resolution() {
-                let declarations = t.symbol().unwrap().declarations().clone();
-                for declaration in declarations {
+                let declarations = t.symbol().unwrap().declarations();
+                for &declaration in declarations {
                     if is_class_declaration(declaration) || is_interface_declaration(declaration) {
                         self.report_circular_base_type(declaration, t);
                     }

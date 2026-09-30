@@ -772,7 +772,7 @@ impl Checker {
             let synthetic_type;
             if has_synthetic_default {
                 let anonymous_symbol = self.new_symbol(SymbolFlags::TypeLiteral, InternalSymbolNameType);
-                *anonymous_symbol.declarations.borrow_mut() = original_symbol.declarations().clone();
+                anonymous_symbol.declarations.set(original_symbol.declarations());
                 let default_containing_object = self.create_default_property_wrapper_for_module(symbol, Some(original_symbol), Some(anonymous_symbol));
                 self.value_symbol_links.get(anonymous_symbol).resolved_type.set(Some(default_containing_object));
                 if self.is_valid_spread_type(t) {
@@ -838,7 +838,7 @@ impl Checker {
         if anonymous_symbol.is_none() {
             if let Some(original_symbol) = original_symbol {
                 let s = self.new_symbol(SymbolFlags::ObjectLiteral, InternalSymbolNameObject);
-                *s.declarations.borrow_mut() = original_symbol.declarations().clone();
+                s.declarations.set(original_symbol.declarations());
                 anonymous_symbol = Some(s);
             }
         }
@@ -848,7 +848,7 @@ impl Checker {
     // checker.go:16044
     pub(crate) fn clone_type_as_module_type(&mut self, symbol: P<Symbol>, module_type: P<Type>, reference_parent: P<Node>) -> P<Symbol> {
         let result = self.new_symbol(symbol.flags(), symbol.name());
-        *result.declarations.borrow_mut() = symbol.declarations().clone();
+        result.declarations.set(symbol.declarations());
         result.value_declaration.set(symbol.value_declaration());
         result.members.set(symbol.members().map(|m| m.clone_table()));
         result.exports.set(symbol.exports().map(|e| e.clone_table()));
@@ -1080,8 +1080,8 @@ impl Checker {
             links[kind].set(early_symbols);
             // fill in any as-yet-unresolved late-bound members.
             let mut late_symbols: Option<P<SymbolTable>> = None;
-            let declarations = symbol.declarations().clone();
-            for decl in declarations {
+            let declarations = symbol.declarations();
+            for &decl in declarations {
                 for member in get_members_of_declaration(decl) {
                     if is_static == ast::has_static_modifier(member) {
                         if self.has_late_bindable_name(member) {
@@ -1096,8 +1096,8 @@ impl Checker {
             }
             if is_static {
                 if let Some(assignment_symbol) = symbol.exports().and_then(|e| e.lookup(InternalSymbolNameAssignmentDeclaration)) {
-                    let declarations = assignment_symbol.declarations().clone();
-                    for member in declarations {
+                    let declarations = assignment_symbol.declarations();
+                    for &member in declarations {
                         if self.has_late_bindable_name(member) {
                             let late = *late_symbols.get_or_insert_with(SymbolTable::new);
                             self.late_bind_member(symbol, early_symbols, late, member);
@@ -1170,11 +1170,11 @@ impl Checker {
                     // If we have an existing early-bound member, combine its declarations so that we can
                     // report an error at each declaration.
                     let declarations: Vec<P<Node>> = if let Some(early_symbol) = early_symbol {
-                        let mut v = early_symbol.declarations().clone();
+                        let mut v = early_symbol.declarations().to_vec();
                         v.extend(late_symbol.declarations().iter().copied());
                         v
                     } else {
-                        late_symbol.declarations().clone()
+                        late_symbol.declarations().to_vec()
                     };
                     let mut name = member_name.clone();
                     if t.flags().intersects(TypeFlags::UniqueESSymbol) {
@@ -1224,7 +1224,7 @@ impl Checker {
         // (note: unlike `addDeclarationToLateBoundSymbol` we do not set up a `.lateSymbol` on `decl`'s links,
         // since that would point at an index symbol and not a single property symbol, like most consumers would expect)
         if index_symbol.declarations().is_empty() || !decl.symbol().unwrap().flags().intersects(SymbolFlags::ReplaceableByMethod) {
-            index_symbol.declarations.borrow_mut().push(decl);
+            index_symbol.append_declarations(&[decl]);
         }
     }
 }
@@ -1245,15 +1245,15 @@ impl Checker {
         self.late_bound_links.get(member_symbol).late_symbol.set(Some(symbol));
         if symbol.declarations().is_empty() || !member_symbol.flags().intersects(SymbolFlags::ReplaceableByMethod) {
             symbol.flags.set(symbol.flags() | symbol_flags);
-            symbol.declarations.borrow_mut().push(member);
+            symbol.append_declarations(&[member]);
         } else if symbol.flags().intersects(SymbolFlags::ReplaceableByMethod) && member_symbol.flags().intersects(SymbolFlags::Method) {
             // Remove all replacable-by-method members, along with their flags.
             let mut declarations: Vec<P<Node>> = symbol.declarations().iter().copied().filter(|d| is_not_replacable_by_method(*d)).collect();
             declarations.push(member);
-            *symbol.declarations.borrow_mut() = declarations;
+            symbol.set_declarations(&declarations);
             let old_flags = symbol.flags();
             symbol.flags.set(SymbolFlags::Transient);
-            let declarations = symbol.declarations().clone();
+            let declarations = symbol.declarations();
             for d in declarations {
                 symbol.flags.set(symbol.flags() | d.symbol().unwrap().flags());
             }
@@ -1324,8 +1324,8 @@ impl Checker {
             if let Some(export_stars) = export_stars {
                 let nested_symbols = SymbolTable::new();
                 let mut lookup_table: ExportCollisionTable = FxHashMap::default();
-                let declarations = export_stars.declarations().clone();
-                for node in declarations {
+                let declarations = export_stars.declarations();
+                for &node in declarations {
                     let import_attributes_type = c.get_type_from_import_attributes(ast::get_import_attributes(node));
                     let resolved_module = c.resolve_external_module_name(node, node.module_specifier().unwrap(), false /*ignoreErrors*/, import_attributes_type);
                     let exported_symbols = visit(c, st, resolved_module, Some(node), is_type_only || node.is_type_only());
@@ -1510,7 +1510,7 @@ impl Checker {
                 }
                 if !target.declarations().is_empty() {
                     if self.is_deprecated_symbol(target) {
-                        let declarations = target.declarations().clone();
+                        let declarations = target.declarations();
                         self.add_deprecated_suggestion(location, &declarations, target.name());
                         break;
                     } else {

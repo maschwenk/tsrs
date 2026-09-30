@@ -1292,7 +1292,7 @@ impl Checker {
     pub(crate) fn add_implementation_success_elaboration(&mut self, s: &mut CallState, failed: P<Signature>, diagnostic: P<Diagnostic>) {
         if let Some(failed_declaration) = failed.declaration() {
             if let Some(symbol) = failed_declaration.symbol() {
-                let declarations = symbol.declarations.borrow().clone();
+                let declarations = symbol.declarations();
                 if declarations.len() > 1 {
                     let implementation = declarations.iter().copied().find(|&d| is_function_like_declaration(d) && node_is_present(d.body()));
                     if let Some(implementation) = implementation {

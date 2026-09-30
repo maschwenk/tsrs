@@ -991,7 +991,7 @@ pub fn is_global_source_file(node: P<Node>) -> bool {
 }
 
 pub fn get_declaration_of_kind(symbol: P<Symbol>, kind: Kind) -> Option<P<Node>> {
-    symbol.declarations.borrow().iter().copied().find(|declaration| declaration.kind == kind)
+    symbol.declarations().iter().copied().find(|declaration| declaration.kind == kind)
 }
 
 pub fn find_constructor_declaration(node: P<Node>) -> Option<P<Node>> {
@@ -1418,5 +1418,5 @@ pub fn is_exclusively_type_only_import_or_export(node: P<Node>) -> bool {
 }
 
 pub fn get_class_like_declaration_of_symbol(symbol: P<Symbol>) -> Option<P<Node>> {
-    symbol.declarations.borrow().iter().copied().find(|&d| is_class_like(d))
+    symbol.declarations().iter().copied().find(|&d| is_class_like(d))
 }

@@ -610,10 +610,10 @@ impl<H: 'static> NameResolver<H> {
 }
 
 pub fn get_local_symbol_for_export_default(symbol: P<Symbol>) -> Option<P<Symbol>> {
-    if !is_export_default_symbol(Some(symbol)) || symbol.declarations.borrow().is_empty() {
+    if !is_export_default_symbol(Some(symbol)) || symbol.declarations().is_empty() {
         return None;
     }
-    let declarations = symbol.declarations.borrow().clone();
+    let declarations = symbol.declarations();
     for decl in declarations {
         if let Some(local_symbol) = decl.local_symbol() {
             return Some(local_symbol);
@@ -626,7 +626,7 @@ pub(crate) fn is_export_default_symbol(symbol: Option<P<Symbol>>) -> bool {
     let Some(symbol) = symbol else {
         return false;
     };
-    let declarations = symbol.declarations.borrow();
+    let declarations = symbol.declarations();
     !declarations.is_empty() && ast::has_syntactic_modifier(declarations[0], ModifierFlags::Default)
 }
 
@@ -649,7 +649,7 @@ pub(crate) fn get_is_deferred_context(location: P<Node>, last_location: Option<P
 }
 
 pub(crate) fn is_type_parameter_symbol_declared_in_container(symbol: P<Symbol>, container: P<Node>) -> bool {
-    for &decl in symbol.declarations.borrow().iter() {
+    for &decl in symbol.declarations().iter() {
         if decl.kind == Kind::TypeParameter {
             let parent = decl.parent();
             if parent == Some(container) {

@@ -3,7 +3,7 @@ use std::sync::atomic::AtomicU64;
 
 use indexmap::IndexMap;
 use rustc_hash::FxBuildHasher;
-use tsrs_core::{FrozenCell, FrozenRef, OwnedCell, P};
+use tsrs_core::{FrozenCell, OwnedCell, P};
 
 use crate::ast::{Node, SourceFile};
 use crate::checkflags::CheckFlags;
@@ -18,7 +18,7 @@ pub struct Symbol {
     pub flags: OwnedCell<SymbolFlags>,
     pub check_flags: OwnedCell<CheckFlags>, // Non-zero only in transient symbols created by Checker
     pub name: OwnedCell<&'static str>,
-    pub declarations: FrozenCell<Vec<P<Node>>>,
+    pub declarations: OwnedCell<&'static [P<Node>]>, // Go slice: shared by copies, replaced (not mutated) on append
     pub value_declaration: OwnedCell<Option<P<Node>>>,
     pub members: OwnedCell<Option<P<SymbolTable>>>,
     pub exports: OwnedCell<Option<P<SymbolTable>>>,
@@ -49,10 +49,23 @@ impl Symbol {
     pub fn name(&self) -> &'static str {
         self.name.get()
     }
-    /// Borrow of the declarations list; do not hold it across calls that may push declarations.
     #[inline]
-    pub fn declarations(&self) -> FrozenRef<'_, Vec<P<Node>>> {
-        self.declarations.borrow()
+    pub fn declarations(&self) -> &'static [P<Node>] {
+        self.declarations.get()
+    }
+    #[inline]
+    pub fn set_declarations(&self, declarations: &[P<Node>]) {
+        self.declarations.set(tsrs_core::alloc_slice(declarations))
+    }
+    /// Go `append(symbol.Declarations, declarations...)`.
+    pub fn append_declarations(&self, declarations: &[P<Node>]) {
+        if declarations.is_empty() {
+            return;
+        }
+        let mut result = Vec::with_capacity(self.declarations.get().len() + declarations.len());
+        result.extend_from_slice(self.declarations.get());
+        result.extend_from_slice(declarations);
+        self.declarations.set(tsrs_core::alloc_vec(result))
     }
     #[inline]
     pub fn value_declaration(&self) -> Option<P<Node>> {
@@ -104,16 +117,16 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
     if symbol.flags.get().intersects(SymbolFlags::Transient) {
         return None;
     }
-    if symbol.declarations.borrow().is_empty() {
+    if symbol.declarations.get().is_empty() {
         // A class's implicit prototype has no declaration of its own.
         assert!(symbol.flags.get().intersects(SymbolFlags::Prototype), "File-bound symbol has no declarations");
         let parent = symbol.parent.get();
         assert!(parent.is_some_and(|p| p.flags.get().intersects(SymbolFlags::Class)), "Prototype has no declaring class");
         symbol = parent.unwrap();
         assert!(!symbol.flags.get().intersects(SymbolFlags::Transient), "Prototype parent is not file-bound");
-        assert!(!symbol.declarations.borrow().is_empty(), "Prototype parent has no declarations");
+        assert!(!symbol.declarations.get().is_empty(), "Prototype parent has no declarations");
     }
-    let first = symbol.declarations.borrow()[0];
+    let first = symbol.declarations.get()[0];
     let file = get_source_file_of_node(first);
     assert!(file.is_some(), "File-bound declaration has no source file");
     file

@@ -810,7 +810,7 @@ impl Checker {
                     let expr_type = self.check_jsx_attribute(attribute_decl, check_mode);
                     object_flags |= expr_type.object_flags() & ObjectFlags::PropagatingFlags;
                     let attribute_symbol = self.new_symbol(SymbolFlags::Property | member.flags(), member.name());
-                    *attribute_symbol.declarations.borrow_mut() = member.declarations.borrow().clone();
+                    attribute_symbol.declarations.set(member.declarations());
                     attribute_symbol.parent.set(member.parent());
                     if member.value_declaration().is_some() {
                         attribute_symbol.value_declaration.set(member.value_declaration());
@@ -1208,7 +1208,7 @@ impl Checker {
                 if properties_of_jsx_element_attrib_prop_interface.len() == 1 {
                     return properties_of_jsx_element_attrib_prop_interface[0].name().to_string();
                 }
-                let first_declaration = jsx_element_attrib_prop_interface_sym.declarations.borrow().first().copied();
+                let first_declaration = jsx_element_attrib_prop_interface_sym.declarations().first().copied();
                 if properties_of_jsx_element_attrib_prop_interface.len() > 1 && first_declaration.is_some() {
                     // More than one property on ElementAttributesProperty is an error
                     self.error(first_declaration, &diagnostics::The_global_type_JSX_0_may_not_have_more_than_one_property, &[&name_of_attrib_prop_container]);

@@ -349,8 +349,8 @@ impl Checker {
             if !ast::is_external_or_common_js_module(file) {
                 // It is an error for a non-external-module (i.e. script) to declare its own `globalThis`.
                 if let Some(file_global_this_symbol) = file.locals().and_then(|locals| locals.lookup("globalThis")) {
-                    let declarations = file_global_this_symbol.declarations().clone();
-                    for d in declarations {
+                    let declarations = file_global_this_symbol.declarations();
+                    for &d in declarations {
                         self.add_diagnostic(new_diagnostic_for_node(
                             Some(d),
                             Some(&diagnostics::Declaration_name_conflicts_with_built_in_global_identifier_0),
@@ -573,8 +573,8 @@ impl Checker {
         let name = self.undefined_symbol.name();
         let target_symbol = self.globals.lookup(name);
         if let Some(target_symbol) = target_symbol {
-            let declarations = target_symbol.declarations().clone();
-            for declaration in declarations {
+            let declarations = target_symbol.declarations();
+            for &declaration in declarations {
                 if !ast::is_type_declaration(declaration) {
                     self.add_diagnostic(create_diagnostic_for_node(
                         Some(declaration),
@@ -1071,7 +1071,6 @@ impl Checker {
                     ast::is_namespace_export_declaration(*d) || ast::is_source_file(*d) && d.as_source_file().global_exports().is_some()
                 })
             {
-                drop(declarations);
                 self.error_or_suggestion(
                     self.compiler_options.allow_umd_global_access != Tristate::True,
                     error_location,

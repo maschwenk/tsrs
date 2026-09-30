@@ -460,8 +460,7 @@ pub fn get_source_file_of_module(module: P<Symbol>) -> Option<P<SourceFile>> {
 
 pub fn get_non_augmentation_declaration(symbol: P<Symbol>) -> Option<P<Node>> {
     symbol
-        .declarations
-        .borrow()
+        .declarations()
         .iter()
         .copied()
         .find(|&d| !is_external_module_augmentation(d) && !is_global_scope_augmentation(d))

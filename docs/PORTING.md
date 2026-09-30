@@ -103,7 +103,7 @@ Cell types for shared objects (`tsrs_core::frozen`):
 - `OwnedCell<T>`: `Cell` API (`get`/`set`/`replace`) for `Copy` fields of shared objects. Only the owner writes:
   the parser/binder before the file is bound, or a checker on objects it created.
 - `FrozenCell<T>`: `RefCell` API (`borrow`/`borrow_mut`) without a runtime borrow flag, for collections in shared
-  objects (`Symbol.declarations`, `SymbolTable`). `RefCell` cannot be used there: its flag is written by
+  objects (`SymbolTable`, the lazily filled JSDoc cache, `TsConfigSourceFile`). `RefCell` cannot be used there: its flag is written by
   `borrow()`, so concurrent readers race. Same owner rule for `borrow_mut`; `borrow_mut_locked` is for a cache
   whose every access holds one lock. Never hold a `borrow_mut` guard across a call that reads the same cell.
 - `Cell`/`RefCell` stay fine for checker-owned objects (types, links, checker state).

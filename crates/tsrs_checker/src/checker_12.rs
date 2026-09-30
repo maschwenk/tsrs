@@ -421,8 +421,8 @@ impl Checker {
     // checker.go:24280
     pub(crate) fn append_local_type_parameters_of_class_or_interface_or_type_alias(&mut self, types: &[P<Type>], symbol: P<Symbol>) -> Vec<P<Type>> {
         let mut types = types.to_vec();
-        let declarations = symbol.declarations().clone();
-        for node in declarations {
+        let declarations = symbol.declarations();
+        for &node in declarations {
             if ast::node_kind_is(node, &[Kind::InterfaceDeclaration, Kind::ClassDeclaration, Kind::ClassExpression]) || is_type_alias(node) {
                 types = self.append_type_parameters(&types, node.type_parameters());
             }
@@ -496,7 +496,7 @@ impl Checker {
         let links = self.declared_type_links.get(symbol);
         if links.declared_type.get().is_none() {
             let mut member_type_list: Vec<P<Type>> = Vec::new();
-            let declarations = symbol.declarations().clone();
+            let declarations = symbol.declarations();
             for declaration in declarations {
                 if declaration.kind == Kind::EnumDeclaration {
                     for &member in declaration.members() {
