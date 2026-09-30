@@ -91,7 +91,7 @@ pub fn get_text_of_node_from_source_text(source_text: &str, node: P<Node>, inclu
     if node.flags().intersects(NodeFlags::ReparserTransformedLiteral) {
         // This is similar to `getLiteralTextOfNode` in the printer, but without the context of an `emitContext` to provide overrides
         if ast::is_string_literal(node) {
-            if node.as_string_literal().token_flags.intersects(TokenFlags::SingleQuote) {
+            if node.as_string_literal().token_flags().intersects(TokenFlags::SingleQuote) {
                 return format!("'{text}'");
             }
             return format!("\"{text}\"");
@@ -107,7 +107,7 @@ pub fn get_text_of_node_from_source_text(source_text: &str, node: P<Node>, inclu
 }
 
 pub fn get_text_of_node(node: P<Node>) -> String {
-    get_source_text_of_node_from_source_file(ast::get_source_file_of_node(node), node, false /*includeTrivia*/)
+    get_source_text_of_node_from_source_file(ast::get_source_file_of_node(node).unwrap(), node, false /*includeTrivia*/)
 }
 
 pub fn get_text_of_jsdoc_comment(comment: Option<P<NodeList>>) -> String {

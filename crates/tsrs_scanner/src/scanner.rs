@@ -2863,7 +2863,7 @@ pub fn get_scanner_for_source_file(source_file: P<SourceFile>, pos: i32) -> Scan
     s.text = source_file.text();
     s.state.pos = pos;
     s.end = s.text.len() as i32;
-    s.language_variant = source_file.language_variant;
+    s.language_variant = source_file.language_variant();
     s.scan();
     s
 }
@@ -2889,7 +2889,7 @@ pub fn get_token_pos_of_node(node: P<Node>, source_file: P<SourceFile>, include_
         return skip_trivia_ex(source_file.text(), node.pos(), Some(&SkipTriviaOptions { stop_at_comments: true, ..Default::default() }));
     }
     if include_jsdoc {
-        let jsdoc = node.js_doc(Some(source_file));
+        let jsdoc = node.jsdoc(Some(source_file.get()));
         if !jsdoc.is_empty() {
             return get_token_pos_of_node(jsdoc[0], source_file, false /*includeJSDoc*/);
         }
@@ -2929,7 +2929,7 @@ fn find_originating_jsdoc_satisfies_tag(source_file: P<SourceFile>, node: P<Node
             continue;
         }
         let mut first_satisfies_tag: Option<P<Node>> = None;
-        for js_doc in cur.eager_js_doc(Some(source_file)) {
+        for &js_doc in cur.eager_jsdoc(Some(source_file.get())) {
             if let Some(tags) = js_doc.as_jsdoc().tags {
                 for &tag in tags.nodes {
                     if !ast::is_jsdoc_satisfies_tag(tag) {
@@ -2938,11 +2938,10 @@ fn find_originating_jsdoc_satisfies_tag(source_file: P<SourceFile>, node: P<Node
                     if first_satisfies_tag.is_none() {
                         first_satisfies_tag = Some(tag);
                     }
-                    if let Some(type_expr) = tag.as_jsdoc_satisfies_tag().type_expression {
-                        if let Some(t) = type_expr.type_node() {
-                            if t.loc() == target_type.loc() {
-                                return Some(tag);
-                            }
+                    let type_expr = tag.as_jsdoc_satisfies_tag().type_expression;
+                    if let Some(t) = type_expr.type_node() {
+                        if t.loc() == target_type.loc() {
+                            return Some(tag);
                         }
                     }
                 }
@@ -3059,7 +3058,7 @@ pub fn compute_line_of_position(line_starts: &[TextPos], pos: i32) -> i32 {
     low - 1
 }
 
-pub fn get_ecma_line_starts(source_file: &(impl SourceFileLike + ?Sized)) -> &'static [TextPos] {
+pub fn get_ecma_line_starts<S: SourceFileLike + ?Sized>(source_file: &S) -> &[TextPos] {
     source_file.ecma_line_map()
 }
 
@@ -3195,6 +3194,12 @@ pub fn compute_position_of_line_and_utf16_character(
     res
 }
 
+/// Go `(*ast.NodeFactory).NewCommentRange`; the factory argument of `GetLeadingCommentRanges` /
+/// `GetTrailingCommentRanges` only served this constructor and is dropped.
+fn new_comment_range(kind: Kind, pos: i32, end: i32, has_trailing_new_line: bool) -> CommentRange {
+    CommentRange { text_range: TextRange::new(pos, end), kind, has_trailing_new_line }
+}
+
 pub fn get_leading_comment_ranges(text: &'static str, pos: i32) -> CommentRangeIter {
     iterate_comment_ranges(text, pos, false)
 }
@@ -3305,7 +3310,7 @@ impl Iterator for CommentRangeIter {
                         if self.collecting {
                             let mut result = None;
                             if self.has_pending_comment_range {
-                                result = Some(ast::new_comment_range(
+                                result = Some(new_comment_range(
                                     self.pending_kind,
                                     self.pending_pos,
                                     self.pending_end,
@@ -3342,7 +3347,7 @@ impl Iterator for CommentRangeIter {
 
         self.done = true;
         if self.has_pending_comment_range {
-            return Some(ast::new_comment_range(self.pending_kind, self.pending_pos, self.pending_end, self.pending_has_trailing_new_line));
+            return Some(new_comment_range(self.pending_kind, self.pending_pos, self.pending_end, self.pending_has_trailing_new_line));
         }
         None
     }

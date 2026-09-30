@@ -68,3 +68,55 @@ fn test_errors_are_buffered_in_report_order() {
     assert_eq!(errors[0].message.code(), tsrs_diagnostics::Multiple_consecutive_numeric_separators_are_not_permitted.code());
     assert!(!s.has_errors());
 }
+
+#[test]
+fn test_is_jsdoc_type_expression_or_child() {
+    use tsrs_ast::{NodeFactory, NodeFlags};
+    let mut f = NodeFactory::default();
+    let with = |n: tsrs_core::P<tsrs_ast::Node>, flags: NodeFlags, parent: Option<tsrs_core::P<tsrs_ast::Node>>| {
+        n.set_flags(flags);
+        n.set_parent(parent);
+        n
+    };
+    let name = f.new_identifier("T");
+    let js_doc_type = with(f.new_type_reference_node(name, None), NodeFlags::JSDoc, None);
+    let js_doc_type_child = with(f.new_identifier("a"), NodeFlags::JSDoc, Some(js_doc_type));
+    let members = f.new_node_list(vec![]);
+    let reparsed_type = with(f.new_type_literal_node(members), NodeFlags::Reparsed, None);
+    let reparsed_type_child = with(f.new_identifier("b"), NodeFlags::Reparsed, Some(reparsed_type));
+    let name = f.new_identifier("U");
+    let ordinary_type = f.new_type_reference_node(name, None);
+    let (tag_name, param_name) = (f.new_identifier("param"), f.new_identifier("p"));
+    let js_doc_tag = with(
+        f.new_jsdoc_parameter_or_property_tag(Kind::JSDocParameterTag, tag_name, param_name, false, None, false, None),
+        NodeFlags::JSDoc,
+        None,
+    );
+    let js_doc_tag_child = with(f.new_identifier("c"), NodeFlags::JSDoc, Some(js_doc_tag));
+    let all_type = f.new_jsdoc_all_type();
+    let type_expression = f.new_jsdoc_type_expression(all_type);
+
+    let tests = [
+        ("type expression", type_expression, true),
+        ("JSDoc type", js_doc_type, true),
+        ("JSDoc type child", js_doc_type_child, true),
+        ("reparsed type", reparsed_type, true),
+        ("reparsed type child", reparsed_type_child, true),
+        ("ordinary type", ordinary_type, false),
+        ("other JSDoc child", js_doc_tag_child, false),
+    ];
+    for (name, node, expected) in tests {
+        assert_eq!(crate::utilities::is_jsdoc_type_expression_or_child(node), expected, "{name}");
+    }
+}
+
+#[test]
+fn test_get_text_of_node_from_jsdoc_type_preserves_asterisk_type() {
+    use tsrs_ast::{NodeFactory, NodeFlags};
+    let source_text = ["", " * *"].join("\n");
+    let mut f = NodeFactory::default();
+    let node = f.new_jsdoc_all_type();
+    node.set_flags(NodeFlags::JSDoc);
+    node.set_loc(tsrs_core::TextRange::new(0, source_text.len() as i32));
+    assert_eq!(crate::get_text_of_node_from_source_text(&source_text, node, false /*includeTrivia*/), "*");
+}
