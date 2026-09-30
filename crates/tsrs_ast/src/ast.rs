@@ -1304,6 +1304,15 @@ impl ImportAttributes {
     }
 }
 
+/// Free-function spelling of `ImportAttributes::get_resolution_mode_override` (Go's nil-safe method on
+/// `*ImportAttributesNode`).
+pub fn get_resolution_mode_override(
+    node: Option<P<Node>>,
+    grammar_error_on_node: Option<&mut dyn FnMut(P<Node>, &'static diagnostics::Message, &[&dyn std::fmt::Display]) -> bool>,
+) -> Option<ResolutionMode> {
+    ImportAttributes::get_resolution_mode_override(node, grammar_error_on_node)
+}
+
 // PatternAmbientModule
 
 pub struct PatternAmbientModule {

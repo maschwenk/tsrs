@@ -134,6 +134,12 @@ writes after construction are `Cell`s (everything else is a plain immutable fiel
 `ReturnStatement.expression`; `ParenthesizedExpression.expression`; `BinaryExpression.{type_, right}`;
 `TypeAliasDeclaration.{type_parameters, type_}`; `ImportClause.phase_modifier`;
 `ExpressionWithTypeArguments.type_arguments`.
+`NodeList.nodes` is immutable. Where Go appends to an existing list in place (reparser.go:589
+`class.HeritageClauses.Nodes = append(...)`), build a new list with the same `loc` and store it in the owning
+Cell (`class.set_heritage_clauses(...)`). For reparser.go:575 (`implementsClause.AsHeritageClause().Types.Nodes =
+append(...)`), `HeritageClause.types` is not a Cell: build a new HeritageClause (same token, new types list with
+the old list's `loc`, same `loc`/flags as the old clause), put it in place of the old one in a new heritage
+clause list installed with `set_heritage_clauses`, and finish/parent it as Go finishes the mutated clause.
 
 **Getter methods — prefer these.** Every data struct (and every base struct) has one getter per Go
 field it has, *including fields promoted from embedded bases* (Go-style: `decl.body()` works on
@@ -269,6 +275,8 @@ antecedent: Cell<Option<P<FlowNode>>>, antecedents: Cell<Option<P<FlowList>>> }`
 `Kind::from_i16`, `Kind::Count`), `NodeFlags`, `ModifierFlags`, `SymbolFlags`, `CheckFlags`,
 `TokenFlags` (i32), `FunctionFlags` (+ `get_function_flags(Option<P<Node>>)`), `FlowFlags` are
 bitflags/enums per PORTING.md (`XxxFlags::None` is the empty set). `NodeId(pub u64)`, `SymbolId(pub u64)`.
+`get_resolution_mode_override(attributes: Option<P<Node>>, grammar_error_on_node) -> Option<ResolutionMode>` (Go's
+`(*ImportAttributesNode).GetResolutionModeOverride`, also `ImportAttributes::get_resolution_mode_override`).
 `AccessKind`, `CommentDirective{loc, kind}`, `CommentRange{text_range, kind, has_trailing_new_line}`,
 `FileReference`, `Pragma`, `PragmaArgument`, `PatternAmbientModule`, `CheckJsDirective`,
 `SourceFileMetaData` are plain structs as in Go (embedded `core.TextRange` becomes a `text_range` field
