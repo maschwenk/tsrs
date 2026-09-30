@@ -37,12 +37,12 @@ pub(crate) fn create_printer_with_remove_comments_never_ascii_escape(emit_contex
 impl Checker {
     // printer.go:43
     pub fn type_to_string_exported(&mut self, t: P<Type>) -> String {
-        todo!()
+        format!("type#{}", t.id.0) // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:47
     pub(crate) fn type_to_string(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>) -> String {
-        todo!()
+        format!("type#{}", t.id.0) // TEMPORARY placeholder until the node builder port merges
     }
 }
 
@@ -54,57 +54,57 @@ pub(crate) fn to_node_builder_flags(flags: TypeFormatFlags) -> Flags {
 impl Checker {
     // printer.go:59
     pub fn type_to_string_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
-        todo!()
+        format!("type#{}", t.id.0) // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:120
     pub fn symbol_to_string_exported(&mut self, s: P<Symbol>) -> String {
-        todo!()
+        { let s = s; s.name.get().to_string() } // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:124
     pub(crate) fn symbol_to_string(&mut self, symbol: P<Symbol>) -> String {
-        todo!()
+        { let s = symbol; s.name.get().to_string() } // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:128
     pub fn symbol_to_string_ex_exported(&mut self, symbol: P<Symbol>, enclosing_declaration: P<Node>, meaning: SymbolFlags, flags: SymbolFormatFlags) -> String {
-        todo!()
+        { let s = symbol; s.name.get().to_string() } // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:132
     pub(crate) fn symbol_to_string_ex(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, flags: SymbolFormatFlags) -> String {
-        todo!()
+        { let s = symbol; s.name.get().to_string() } // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:179
     pub(crate) fn signature_to_string(&mut self, signature: P<Signature>) -> String {
-        todo!()
+        String::from("?") // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:183
     pub fn signature_to_string_ex_exported(&mut self, signature: P<Signature>, enclosing_declaration: P<Node>, flags: TypeFormatFlags, vc: P<VerbosityContext>) -> String {
-        todo!()
+        String::from("?") // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:187
     pub(crate) fn signature_to_string_ex(&mut self, signature: P<Signature>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
-        todo!()
+        String::from("?") // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:229
     pub(crate) fn type_predicate_to_string(&mut self, type_predicate: P<TypePredicate>) -> String {
-        todo!()
+        String::from("?") // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:233
     pub(crate) fn type_predicate_to_string_ex(&mut self, type_predicate: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags) -> String {
-        todo!()
+        String::from("?") // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:249
     pub(crate) fn value_to_string(&mut self, value: LiteralValue) -> String {
-        todo!()
+        String::from("?") // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:253
@@ -124,12 +124,12 @@ impl Checker {
 
     // printer.go:300
     pub fn expand_symbol_for_hover(&mut self, symbol: P<Symbol>, meaning: SymbolFlags, vc: P<VerbosityContext>) -> String {
-        todo!()
+        String::from("?") // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:328
     pub fn type_parameter_to_string_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, vc: P<VerbosityContext>) -> String {
-        todo!()
+        format!("type#{}", t.id.0) // TEMPORARY placeholder until the node builder port merges
     }
 
     // printer.go:348
