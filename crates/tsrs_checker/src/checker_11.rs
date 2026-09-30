@@ -1893,7 +1893,7 @@ impl Checker {
             // Cache both the resolved symbol and the resolved type. The resolved symbol is needed when we check the
             // type reference in checkTypeReferenceNode.
             // handle LS queries on the `const` in `x as const` by resolving to the type of `x`
-            if is_const_type_reference(node) && is_assertion_expression(node.parent().unwrap()) {
+            if crate::is_const_type_reference(node) && is_assertion_expression(node.parent().unwrap()) {
                 let t = self.check_expression_cached(node.parent().unwrap().expression().unwrap());
                 links.resolved_type.set(Some(t));
             } else if let Some(t) = self.get_intended_type_from_jsdoc_type_reference(node) {
@@ -2253,8 +2253,8 @@ impl Checker {
                 let type_node = node.type_node().unwrap();
                 type_node.kind != Kind::ArrayType || self.may_resolve_type_alias(type_node.as_array_type_node().element_type)
             }
-            Kind::UnionType => node.as_union_type_node().types.nodes.iter().any(|&t| self.may_resolve_type_alias(t)),
-            Kind::IntersectionType => node.as_intersection_type_node().types.nodes.iter().any(|&t| self.may_resolve_type_alias(t)),
+            Kind::UnionType => node.as_union_type_node().types().nodes.iter().any(|&t| self.may_resolve_type_alias(t)),
+            Kind::IntersectionType => node.as_intersection_type_node().types().nodes.iter().any(|&t| self.may_resolve_type_alias(t)),
             Kind::IndexedAccessType => self.may_resolve_type_alias(node.as_indexed_access_type_node().object_type) || self.may_resolve_type_alias(node.as_indexed_access_type_node().index_type),
             Kind::ConditionalType => {
                 let n = node.as_conditional_type_node();
