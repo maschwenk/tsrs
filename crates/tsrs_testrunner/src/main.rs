@@ -4,6 +4,8 @@ mod compile;
 mod compiler_runner;
 mod diagnosticwriter;
 mod harnessutil;
+#[cfg(feature = "tsoptions")]
+mod options;
 mod oracle;
 mod pool;
 mod report;
@@ -69,9 +71,9 @@ pub struct Backend {
 
 pub fn option_table(spec: &BackendSpec) -> OptionTable {
     let path = spec.options.clone().or_else(|| std::env::var("TSRS_TEST_OPTIONS").ok());
-    #[cfg(feature = "compiler")]
+    #[cfg(feature = "tsoptions")]
     if path.is_none() {
-        return compile::tsoptions_option_table();
+        return options::tsoptions_option_table();
     }
     let path = path
         .unwrap_or_else(|| compiler_runner::repo_root().join("target/scratch/testrunner/options.json").to_string_lossy().into_owned());
