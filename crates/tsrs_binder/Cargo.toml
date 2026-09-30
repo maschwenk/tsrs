@@ -14,3 +14,6 @@ tsrs_ast.workspace = true
 tsrs_scanner.workspace = true
 rustc-hash.workspace = true
 bitflags.workspace = true
+
+[dev-dependencies]
+tsrs_parser.workspace = true
