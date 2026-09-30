@@ -1800,69 +1800,432 @@ pub(crate) fn get_verbatim_module_syntax_error_message(node: P<Node>) -> &'stati
 impl Checker {
     // checker.go:5858
     pub(crate) fn check_external_module_exports(&mut self, node: P<Node>) {
-        todo!()
+        let module_symbol = self.get_symbol_of_declaration(node).unwrap();
+        let links = self.module_symbol_links.get(module_symbol);
+        if !links.exports_checked.get() {
+            let export_equals_symbol = module_symbol.exports().and_then(|e| e.lookup(InternalSymbolNameExportEquals));
+            // An export assignment is in error if (a) the module exports value members or (b) if the module exports type or
+            // namespace members and the exported entity also exports type or namespace members.
+            if let Some(export_equals_symbol) = export_equals_symbol {
+                if self.has_exported_members_of_kind(module_symbol, SymbolFlags::Value) || self.has_shadowed_namespace(export_equals_symbol) {
+                    let declaration = self.get_declaration_of_alias_symbol(export_equals_symbol).or(export_equals_symbol.value_declaration());
+                    if let Some(declaration) = declaration {
+                        if !is_top_level_in_external_module_augmentation(Some(declaration)) {
+                            self.error(Some(declaration), &diagnostics::An_export_assignment_cannot_be_used_in_a_module_with_other_exported_elements, &[]);
+                        }
+                    }
+                }
+            }
+            // Checks for export * conflicts
+            let exports = self.get_exports_of_module(module_symbol);
+            for (id, symbol) in exports.entries() {
+                if id == InternalSymbolNameExportStar {
+                    continue;
+                }
+                // ECMA262: 15.2.1.1 It is a Syntax Error if the ExportedNames of ModuleItemList contains any duplicate entries.
+                // (TS Exceptions: namespaces, function overloads, enums, and interfaces)
+                if symbol.flags().intersects(SymbolFlags::Namespace | SymbolFlags::Enum) {
+                    continue;
+                }
+                let declarations = symbol.declarations().clone();
+                let exported_declarations_count = declarations.iter().filter(|&&d| is_not_overload(d) && !is_accessor(d) && !is_interface_declaration(d)).count();
+                if symbol.flags().intersects(SymbolFlags::TypeAlias) && exported_declarations_count <= 2 {
+                    // it is legal to merge type alias with other values
+                    // so count should be either 1 (just type alias) or 2 (type alias + merged value)
+                    continue;
+                }
+                if exported_declarations_count > 1 && !declarations.iter().all(|&node| get_assignment_declaration_kind(node) == JSDeclarationKind::ExportsProperty) {
+                    for &declaration in &declarations {
+                        if is_not_overload(declaration) {
+                            self.error(Some(declaration), &diagnostics::Cannot_redeclare_exported_variable_0, &[&id]);
+                        }
+                    }
+                }
+            }
+            links.exports_checked.set(true);
+        }
     }
 
     // checker.go:5903
     pub(crate) fn has_exported_members_of_kind(&mut self, module_symbol: P<Symbol>, kind: SymbolFlags) -> bool {
-        todo!()
+        let Some(exports) = module_symbol.exports() else {
+            return false;
+        };
+        for symbol in exports.values() {
+            if symbol.name() != InternalSymbolNameExportEquals && self.get_symbol_flags(symbol).intersects(kind) {
+                return true;
+            }
+        }
+        false
     }
 
     // checker.go:5912
     pub(crate) fn has_shadowed_namespace(&mut self, symbol: P<Symbol>) -> bool {
-        todo!()
+        if symbol.flags().intersects(SymbolFlags::NamespaceModule) && symbol.flags().intersects(SymbolFlags::Alias) {
+            let target = self.resolve_alias(symbol);
+            if target.flags().intersects(SymbolFlags::Namespace) && self.has_exported_members_of_kind(target, SymbolFlags::Type | SymbolFlags::Namespace) {
+                return true;
+            }
+        }
+        false
     }
 }
 
 // checker.go:5921
 pub(crate) fn is_not_overload(node: P<Node>) -> bool {
-    todo!()
+    !is_function_declaration(node) && !is_method_declaration(node) || node.body().is_some()
 }
 
 impl Checker {
     // checker.go:5925
     pub(crate) fn check_missing_declaration(&mut self, node: P<Node>) {
-        todo!()
+        self.check_decorators(node);
     }
 
     // checker.go:5929
     pub(crate) fn check_variable_statement(&mut self, node: P<Node>) {
-        todo!()
+        let var_statement = node.as_variable_statement();
+        let declaration_list = var_statement.declaration_list;
+        if !self.check_grammar_modifiers(node) && !self.check_grammar_variable_declaration_list(declaration_list) {
+            self.check_grammar_for_disallowed_block_scoped_variable_statement(node);
+        }
+        self.check_variable_declaration_list(declaration_list);
     }
 
     // checker.go:5938
     pub(crate) fn check_variable_declaration_list(&mut self, node: P<Node>) {
-        todo!()
+        let block_scope_kind = get_combined_node_flags(node) & NodeFlags::BlockScoped;
+        if (block_scope_kind == NodeFlags::Using || block_scope_kind == NodeFlags::AwaitUsing) && self.language_version < LanguageFeatureMinimumTarget.using_and_await_using {
+            self.check_external_emit_helpers(node, ExternalEmitHelpers::AddDisposableResourceAndDisposeResources);
+        }
+        self.check_source_elements(node.as_variable_declaration_list().declarations.nodes());
     }
 
     // checker.go:5946
     pub(crate) fn check_variable_declaration(&mut self, node: P<Node>) {
-        todo!()
+        self.check_grammar_variable_declaration(node);
+        self.check_variable_like_declaration(node);
     }
 
+    // Check variable, parameter, or property declaration
     // checker.go:5955
     pub(crate) fn check_variable_like_declaration(&mut self, node: P<Node>) {
-        todo!()
+        self.check_decorators(node);
+        let Some(name) = node.name() else {
+            return; // Missing array binding elements have no name
+        };
+        let type_node = node.type_node();
+        let initializer = node.initializer();
+        if !is_binding_element(node) {
+            self.check_source_element(type_node);
+        }
+        // For a computed property, just check the initializer and exit
+        // Do not use hasDynamicName here, because that returns false for well known symbols.
+        // We want to perform checkComputedPropertyName for all computed properties, including
+        // well known symbols.
+        if is_computed_property_name(name) {
+            self.check_computed_property_name(name);
+            if let Some(initializer) = initializer {
+                self.check_expression_cached(initializer);
+            }
+        }
+        if is_binding_element(node) {
+            let prop_name = node.property_name();
+
+            if let Some(prop_name) = prop_name.filter(|&p| is_private_identifier(p)) {
+                self.grammar_error_on_node(prop_name, &diagnostics::Private_identifiers_cannot_be_used_in_destructuring_patterns, &[]);
+            }
+
+            if prop_name.is_some() && is_identifier(node.name().unwrap()) && is_part_of_parameter_declaration(node) && node_is_missing(get_containing_function(node).unwrap().body()) {
+                // type F = ({a: string}) => void;
+                //               ^^^^^^
+                // variable renaming in function type notation is confusing,
+                // so we forbid it even if noUnusedLocals is not enabled
+                self.renamed_binding_elements_in_types.push(node);
+                return;
+            }
+            if is_object_binding_pattern(node.parent().unwrap()) && has_dot_dot_dot_token(node) && self.language_version < LanguageFeatureMinimumTarget.object_spread_rest {
+                self.check_external_emit_helpers(node, ExternalEmitHelpers::Rest);
+            }
+            // check computed properties inside property names of binding elements
+            if let Some(prop_name) = prop_name.filter(|&p| is_computed_property_name(p)) {
+                self.check_computed_property_name(prop_name);
+            }
+            // check private/protected variable access
+            let parent = node.parent().unwrap().parent().unwrap();
+            let parent_check_mode = if has_dot_dot_dot_token(node) { CheckMode::RestBindingElement } else { CheckMode::Normal };
+            let parent_type = self.get_type_for_binding_element_parent(parent, parent_check_mode);
+            let prop_name_name = node.property_name_or_name().unwrap();
+            if let Some(parent_type) = parent_type.filter(|_| !is_binding_pattern(prop_name_name)) {
+                let expr_type = self.get_literal_type_from_property_name(prop_name_name);
+                if is_type_usable_as_property_name(expr_type) {
+                    let name_text = get_property_name_from_type(expr_type);
+                    let property = self.get_property_of_type(parent_type, &name_text);
+                    if let Some(property) = property {
+                        self.mark_property_as_referenced(property, None /*nodeForCheckWriteOnly*/, false /*isSelfTypeAccess*/);
+                        // A destructuring is never a write-only reference.
+                        let is_super = parent.initializer().is_some_and(|i| i.kind == Kind::SuperKeyword);
+                        self.check_property_accessibility(node, is_super, false /*writing*/, parent_type, property);
+                    }
+                }
+            }
+        }
+        // For a binding pattern, check contained binding elements
+        if is_binding_pattern(name) {
+            self.check_source_elements(name.elements());
+        }
+        // For a parameter declaration with an initializer, error and exit if the containing function doesn't have a body
+        if initializer.is_some() && is_part_of_parameter_declaration(node) && node_is_missing(get_containing_function(node).unwrap().body()) {
+            self.error(Some(node), &diagnostics::A_parameter_initializer_is_only_allowed_in_a_function_or_constructor_implementation, &[]);
+            return;
+        }
+        // For a binding pattern, validate the initializer and exit
+        if is_binding_pattern(name) {
+            if crate::is_in_ambient_or_type_node(node) {
+                return;
+            }
+            let need_check_initializer = initializer.is_some() && node.parent().unwrap().parent().unwrap().kind != Kind::ForInStatement;
+            let need_check_widened_type = !name.elements().iter().any(|n| n.name().is_some());
+            if need_check_initializer || need_check_widened_type {
+                // Don't validate for-in initializer as it is already an error
+                let widened_type = self.get_widened_type_for_variable_like_declaration(node, false /*reportErrors*/);
+                if need_check_initializer {
+                    let initializer = initializer.unwrap();
+                    let initializer_type = self.check_expression_cached(initializer);
+                    if self.strict_null_checks && need_check_widened_type {
+                        self.check_non_null_non_void_type(initializer_type, node);
+                    } else {
+                        let target = self.get_widened_type_for_variable_like_declaration(node, false);
+                        self.check_type_assignable_to_and_optionally_elaborate(initializer_type, target, node, initializer, None, None);
+                    }
+                }
+                // check the binding pattern with empty elements
+                if need_check_widened_type {
+                    if is_array_binding_pattern(name) {
+                        let undefined_type = self.undefined_type;
+                        self.check_iterated_type_or_element_type(IterationUse::Destructuring, widened_type, undefined_type, Some(node));
+                    } else if self.strict_null_checks {
+                        self.check_non_null_non_void_type(widened_type, node);
+                    }
+                }
+            }
+            return;
+        }
+        // For a commonjs `const x = require`, validate the alias and exit
+        let symbol = self.get_symbol_of_declaration(node).unwrap();
+        if symbol.flags().intersects(SymbolFlags::Alias) && is_variable_declaration_initialized_to_require(node) {
+            self.check_alias_symbol(node);
+            return;
+        }
+        if is_big_int_literal(name) {
+            self.error(Some(name), &diagnostics::A_bigint_literal_cannot_be_used_as_a_property_name, &[]);
+        }
+        let symbol_type = self.get_type_of_symbol(symbol);
+        let t = self.convert_auto_to_any(symbol_type);
+        if Some(node) == symbol.value_declaration() {
+            // Node is the primary declaration of the symbol, just validate the initializer
+            // Don't validate for-in initializer as it is already an error
+            if let Some(initializer) = initializer.filter(|_| !is_for_in_statement(node.parent().unwrap().parent().unwrap())) {
+                let initializer_type = self.check_expression_cached(initializer);
+                self.check_type_assignable_to_and_optionally_elaborate(initializer_type, t, node, initializer, None /*headMessage*/, None);
+                let block_scope_kind = self.get_combined_node_flags_cached(node) & NodeFlags::BlockScoped;
+                if block_scope_kind == NodeFlags::AwaitUsing {
+                    let global_async_disposable_type = self.get_global_async_disposable_type();
+                    let global_disposable_type = self.get_global_disposable_type();
+                    if global_async_disposable_type != self.empty_object_type && global_disposable_type != self.empty_object_type {
+                        let types = [global_async_disposable_type, global_disposable_type, self.null_type, self.undefined_type];
+                        let optional_disposable_type = self.get_union_type(&types);
+                        let widened = self.widen_type_for_variable_like_declaration(Some(initializer_type), node, false);
+                        self.check_type_assignable_to(widened, optional_disposable_type, Some(initializer), Some(&diagnostics::The_initializer_of_an_await_using_declaration_must_be_either_an_object_with_a_Symbol_asyncDispose_or_Symbol_dispose_method_or_be_null_or_undefined));
+                    }
+                } else if block_scope_kind == NodeFlags::Using {
+                    let global_disposable_type = self.get_global_disposable_type();
+                    if global_disposable_type != self.empty_object_type {
+                        let types = [global_disposable_type, self.null_type, self.undefined_type];
+                        let optional_disposable_type = self.get_union_type(&types);
+                        let widened = self.widen_type_for_variable_like_declaration(Some(initializer_type), node, false);
+                        self.check_type_assignable_to(widened, optional_disposable_type, Some(initializer), Some(&diagnostics::The_initializer_of_a_using_declaration_must_be_either_an_object_with_a_Symbol_dispose_method_or_be_null_or_undefined));
+                    }
+                }
+            }
+            let declarations = symbol.declarations().clone();
+            if declarations.len() > 1 {
+                if declarations.iter().any(|&d| d != node && is_variable_like(d) && !self.are_declaration_flags_identical(d, node)) {
+                    self.error(Some(name), &diagnostics::All_declarations_of_0_must_have_identical_modifiers, &[&tsrs_scanner::declaration_name_to_string(Some(name))]);
+                }
+            }
+        } else {
+            // Node is a secondary declaration, check that type is identical to primary declaration and check that
+            // initializer is consistent with type associated with the node
+            let widened = self.get_widened_type_for_variable_like_declaration(node, false);
+            let declaration_type = self.convert_auto_to_any(widened);
+            if !self.is_error_type(t) && !self.is_error_type(declaration_type) && !self.is_type_identical_to(t, declaration_type) && !symbol.flags().intersects(SymbolFlags::Assignment) {
+                self.error_next_variable_or_property_declaration_must_have_same_type(symbol.value_declaration(), t, node, declaration_type);
+            }
+            if let Some(initializer) = initializer {
+                let initializer_type = self.check_expression_cached(initializer);
+                self.check_type_assignable_to_and_optionally_elaborate(initializer_type, declaration_type, node, initializer, None /*headMessage*/, None);
+            }
+            if let Some(value_declaration) = symbol.value_declaration() {
+                if !self.are_declaration_flags_identical(node, value_declaration) {
+                    self.error(Some(name), &diagnostics::All_declarations_of_0_must_have_identical_modifiers, &[&tsrs_scanner::declaration_name_to_string(Some(name))]);
+                }
+            }
+        }
+        if !is_property_declaration(node) && !is_property_signature_declaration(node) {
+            // We know we don't have a binding pattern or computed name here
+            self.check_exports_on_merged_declarations(node);
+            if is_variable_declaration(node) || is_binding_element(node) {
+                self.check_var_declared_names_not_shadowed(node);
+            }
+            self.check_collisions_for_declaration_name(node, node.name());
+        }
     }
 
     // checker.go:6119
     pub(crate) fn error_next_variable_or_property_declaration_must_have_same_type(&mut self, first_declaration: Option<P<Node>>, first_type: P<Type>, next_declaration: P<Node>, next_type: P<Type>) {
-        todo!()
+        let next_declaration_name = get_name_of_declaration(next_declaration);
+        let message = if is_property_declaration(next_declaration) || is_property_signature_declaration(next_declaration) {
+            &diagnostics::Subsequent_property_declarations_must_have_the_same_type_Property_0_must_be_of_type_1_but_here_has_type_2
+        } else {
+            &diagnostics::Subsequent_variable_declarations_must_have_the_same_type_Variable_0_must_be_of_type_1_but_here_has_type_2
+        };
+        let decl_name = tsrs_scanner::declaration_name_to_string(next_declaration_name);
+        let a1 = self.type_to_string(first_type, None);
+        let a2 = self.type_to_string(next_type, None);
+        let err = self.error(next_declaration_name, message, &[&decl_name, &a1, &a2]);
+        if let Some(first_declaration) = first_declaration {
+            err.add_related_info(create_diagnostic_for_node(Some(first_declaration), &diagnostics::X_0_was_also_declared_here, &[&decl_name]));
+        }
     }
 
     // checker.go:6131
     pub(crate) fn check_var_declared_names_not_shadowed(&mut self, node: P<Node>) {
-        todo!()
+        // - ScriptBody : StatementList
+        // It is a Syntax Error if any element of the LexicallyDeclaredNames of StatementList
+        // also occurs in the VarDeclaredNames of StatementList.
+
+        // - Block : { StatementList }
+        // It is a Syntax Error if any element of the LexicallyDeclaredNames of StatementList
+        // also occurs in the VarDeclaredNames of StatementList.
+
+        // Variable declarations are hoisted to the top of their function scope. They can shadow
+        // block scoped declarations, which bind tighter. this will not be flagged as duplicate definition
+        // by the binder as the declaration scope is different.
+        // A non-initialized declaration is a no-op as the block declaration will resolve before the var
+        // declaration. the problem is if the declaration has an initializer. this will act as a write to the
+        // block declared value. this is fine for let, but not const.
+        // Only consider declarations with initializers, uninitialized const declarations will not
+        // step on a let/const variable.
+        // Do not consider const and const declarations, as duplicate block-scoped declarations
+        // are handled by the binder.
+        // We are only looking for const declarations that step on let\const declarations from a
+        // different scope. e.g.:
+        //      {
+        //          const x = 0; // localDeclarationSymbol obtained after name resolution will correspond to this declaration
+        //          const x = 0; // symbol for this declaration will be 'symbol'
+        //      }
+
+        // skip block-scoped variables and parameters
+        if self.get_combined_node_flags_cached(node).intersects(NodeFlags::BlockScoped) || is_part_of_parameter_declaration(node) {
+            return;
+        }
+        // NOTE: in ES6 spec initializer is required in variable declarations where name is binding pattern
+        // so we'll always treat binding elements as initialized
+        let symbol = self.get_symbol_of_declaration(node).unwrap();
+        let name = node.name().unwrap();
+        if symbol.flags().intersects(SymbolFlags::FunctionScopedVariable) {
+            if !is_identifier(name) {
+                panic!("Identifier expected");
+            }
+            let local_declaration_symbol = self.resolve_name(Some(node), name.text(), SymbolFlags::Variable, None /*nameNotFoundMessage*/, false /*isUse*/, false);
+            if let Some(local_declaration_symbol) = local_declaration_symbol {
+                if local_declaration_symbol != symbol && local_declaration_symbol.flags().intersects(SymbolFlags::BlockScopedVariable) {
+                    if self.get_declaration_node_flags_from_symbol(local_declaration_symbol).intersects(NodeFlags::BlockScoped) {
+                        let var_decl_list = find_ancestor_kind(local_declaration_symbol.value_declaration(), Kind::VariableDeclarationList).unwrap();
+                        let mut container: Option<P<Node>> = None;
+                        let var_decl_list_parent = var_decl_list.parent().unwrap();
+                        if is_variable_statement(var_decl_list_parent) && var_decl_list_parent.parent().is_some() {
+                            container = var_decl_list_parent.parent();
+                        }
+                        // names of block-scoped and function scoped variables can collide only
+                        // if block scoped variable is defined in the function\module\source file scope (because of variable hoisting)
+                        let names_share_scope = container.is_some_and(|container| {
+                            is_block(container) && is_function_like(container.parent()) || is_module_block(container) || is_module_declaration(container) || is_source_file(container)
+                        });
+                        // here we know that function scoped variable is "shadowed" by block scoped one
+                        // a var declaration can't hoist past a lexical declaration and it results in a SyntaxError at runtime
+                        if !names_share_scope {
+                            let name = self.symbol_to_string(local_declaration_symbol);
+                            self.error(Some(node), &diagnostics::Cannot_initialize_outer_scoped_variable_0_in_the_same_scope_as_block_scoped_declaration_1, &[&name, &name]);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // checker.go:6192
     pub(crate) fn check_decorators(&mut self, node: P<Node>) {
-        todo!()
+        // skip this check for nodes that cannot have decorators. These should have already had an error reported by
+        // checkGrammarModifiers.
+        if !can_have_decorators(node) || !has_decorators(node) || !node_can_be_decorated(self.legacy_decorators, node, node.parent(), node.parent().unwrap().parent()) {
+            return;
+        }
+        let Some(first_decorator) = node.modifier_nodes().iter().copied().find(|&m| is_decorator(m)) else {
+            return;
+        };
+        if self.legacy_decorators {
+            self.check_external_emit_helpers(first_decorator, ExternalEmitHelpers::Decorate);
+            if is_parameter_declaration(node) {
+                self.check_external_emit_helpers(first_decorator, ExternalEmitHelpers::Param);
+            }
+        } else if self.language_version < LanguageFeatureMinimumTarget.class_and_class_element_decorators {
+            self.check_external_emit_helpers(first_decorator, ExternalEmitHelpers::ESDecorateAndRunInitializers);
+            if is_class_declaration(node) {
+                if node.name().is_none() || self.get_first_transformable_static_class_element(node).is_some() {
+                    self.check_external_emit_helpers(first_decorator, ExternalEmitHelpers::SetFunctionName);
+                }
+            } else if !is_class_expression(node) {
+                let name = node.name().unwrap();
+                if is_private_identifier(name) && (is_method_declaration(node) || is_accessor(node) || is_auto_accessor_property_declaration(node)) {
+                    self.check_external_emit_helpers(first_decorator, ExternalEmitHelpers::SetFunctionName);
+                }
+                if is_computed_property_name(name) {
+                    self.check_external_emit_helpers(first_decorator, ExternalEmitHelpers::PropKey);
+                }
+            }
+        }
+        self.mark_linked_references(node, ReferenceHint::Decorator, None, None);
+        for &modifier in node.modifier_nodes() {
+            if is_decorator(modifier) {
+                self.check_decorator(modifier);
+            }
+        }
     }
 
     // checker.go:6231
     pub(crate) fn check_decorator(&mut self, node: P<Node>) {
-        todo!()
+        self.check_grammar_decorator(node);
+        let signature = self.get_resolved_signature(node, None, CheckMode::Normal);
+        self.check_deprecated_signature(signature, node);
+        let return_type = self.get_return_type_of_signature(signature);
+        if return_type.flags().intersects(TypeFlags::Any) {
+            return;
+        }
+        // if we fail to get a signature and return type here, we will have already reported a grammar error in `checkDecorators`.
+        let decorator_signature = self.get_decorator_call_signature(node);
+        let Some(expected_return_type) = decorator_signature.and_then(|s| s.resolved_return_type.get()) else {
+            return;
+        };
+        let head_message: &'static Message = match node.parent().unwrap().kind {
+            Kind::ClassDeclaration | Kind::ClassExpression => &diagnostics::Decorator_function_return_type_0_is_not_assignable_to_type_1,
+            Kind::PropertyDeclaration if !self.legacy_decorators => &diagnostics::Decorator_function_return_type_0_is_not_assignable_to_type_1,
+            Kind::PropertyDeclaration | Kind::Parameter => &diagnostics::Decorator_function_return_type_is_0_but_is_expected_to_be_void_or_any,
+            Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => &diagnostics::Decorator_function_return_type_0_is_not_assignable_to_type_1,
+            _ => panic!("Unhandled case in checkDecorator"),
+        };
+        self.check_type_assignable_to(return_type, expected_return_type, node.expression(), Some(head_message));
     }
 
     // checker.go:6265
