@@ -1713,63 +1713,433 @@ pub(crate) fn get_unique_type_parameter_name(type_parameters: &[P<Type>], base_n
 impl Checker {
     // checker.go:7903
     pub(crate) fn check_expression_worker(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        match node.kind {
+            Kind::Identifier => self.check_identifier(node, check_mode),
+            Kind::PrivateIdentifier => self.check_private_identifier_expression(node),
+            Kind::ThisKeyword => self.check_this_expression(node),
+            Kind::SuperKeyword => self.check_super_expression(node),
+            Kind::NullKeyword => self.null_widening_type,
+            Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral => {
+                if self.is_skip_direct_inference_node(node) {
+                    return self.blocked_string_type;
+                }
+                let t = self.get_string_literal_type(node.text());
+                self.get_fresh_type_of_literal_type(t)
+            }
+            Kind::NumericLiteral => {
+                self.check_grammar_numeric_literal(node);
+                let t = self.get_number_literal_type(jsnum::from_string(node.text()));
+                self.get_fresh_type_of_literal_type(t)
+            }
+            Kind::BigIntLiteral => {
+                self.check_grammar_big_int_literal(node);
+                let t = self.get_big_int_literal_type(jsnum::new_pseudo_big_int(&jsnum::parse_pseudo_big_int(node.text()), false /*negative*/));
+                self.get_fresh_type_of_literal_type(t)
+            }
+            Kind::TrueKeyword => self.true_type,
+            Kind::FalseKeyword => self.false_type,
+            Kind::TemplateExpression => self.check_template_expression(node),
+            Kind::RegularExpressionLiteral => self.check_regular_expression_literal(node),
+            Kind::ArrayLiteralExpression => self.check_array_literal(node, check_mode),
+            Kind::ObjectLiteralExpression => self.check_object_literal(node, check_mode),
+            Kind::PropertyAccessExpression => self.check_property_access_expression(node, check_mode, false /*writeOnly*/),
+            Kind::QualifiedName => self.check_qualified_name(node, check_mode),
+            Kind::ElementAccessExpression => self.check_indexed_access(node, check_mode),
+            Kind::CallExpression => {
+                if is_import_call(node) {
+                    return self.check_import_call_expression(node);
+                }
+                self.check_call_expression(node, check_mode)
+            }
+            Kind::NewExpression => self.check_call_expression(node, check_mode),
+            Kind::TaggedTemplateExpression => self.check_tagged_template_expression(node),
+            Kind::ParenthesizedExpression => self.check_parenthesized_expression(node, check_mode),
+            Kind::ClassExpression => self.check_class_expression(node),
+            Kind::FunctionExpression | Kind::ArrowFunction => self.check_function_expression_or_object_literal_method(node, check_mode),
+            Kind::TypeAssertionExpression | Kind::AsExpression => self.check_assertion(node, check_mode),
+            Kind::TypeOfExpression => self.check_type_of_expression(node),
+            Kind::NonNullExpression => self.check_non_null_assertion(node),
+            Kind::ExpressionWithTypeArguments => self.check_expression_with_type_arguments(node),
+            Kind::SatisfiesExpression => self.check_satisfies_expression(node),
+            Kind::MetaProperty => self.check_meta_property(node),
+            Kind::DeleteExpression => self.check_delete_expression(node),
+            Kind::VoidExpression => self.check_void_expression(node),
+            Kind::AwaitExpression => self.check_await_expression(node),
+            Kind::PrefixUnaryExpression => self.check_prefix_unary_expression(node),
+            Kind::PostfixUnaryExpression => self.check_postfix_unary_expression(node),
+            Kind::BinaryExpression => self.check_binary_expression(node, check_mode),
+            Kind::ConditionalExpression => self.check_conditional_expression(node, check_mode),
+            Kind::SpreadElement => self.check_spread_expression(node, check_mode),
+            Kind::OmittedExpression => self.undefined_widening_type,
+            Kind::YieldExpression => self.check_yield_expression(node),
+            Kind::SyntheticExpression => self.check_synthetic_expression(node),
+            Kind::JsxExpression => self.check_jsx_expression(node, check_mode),
+            Kind::JsxElement => self.check_jsx_element(node, check_mode),
+            Kind::JsxSelfClosingElement => self.check_jsx_self_closing_element(node, check_mode),
+            Kind::JsxFragment => self.check_jsx_fragment(node),
+            Kind::JsxAttributes => self.check_jsx_attributes(node, check_mode),
+            Kind::JsxOpeningElement => panic!("Should never directly check a JsxOpeningElement"),
+            _ => self.error_type,
+        }
     }
 
     // checker.go:8009
     pub(crate) fn check_private_identifier_expression(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        self.check_grammar_private_identifier_expression(node);
+        let symbol = self.get_symbol_for_private_identifier_expression(node);
+        if let Some(symbol) = symbol {
+            self.mark_property_as_referenced(symbol, None /*nodeForCheckWriteOnly*/, false /*isSelfTypeAccess*/);
+        }
+        self.any_type
     }
 
     // checker.go:8018
     pub(crate) fn get_symbol_for_private_identifier_expression(&mut self, node: P<Node>) -> Option<P<Symbol>> {
-        todo!()
+        let links = self.symbol_node_links.get(node);
+        if links.resolved_symbol.get().is_none() {
+            let symbol = self.lookup_symbol_for_private_identifier_declaration(node.text(), node);
+            links.resolved_symbol.set(symbol);
+        }
+        links.resolved_symbol.get()
     }
 
     // checker.go:8026
     pub(crate) fn check_super_expression(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let is_call_expression = is_call_expression(node.parent().unwrap()) && node.parent().unwrap().expression() == Some(node);
+        let immediate_container = get_super_container(node, true /*stopOnFunctions*/);
+        let mut container = immediate_container;
+
+        // adjust the container reference in case if super is used inside arrow functions with arbitrarily deep nesting
+        if !is_call_expression {
+            while let Some(c) = container {
+                if !is_arrow_function(c) {
+                    break;
+                }
+                container = get_super_container(c, true /*stopOnFunctions*/);
+            }
+        }
+
+        let is_legal_usage_of_super_expression = |container: P<Node>| -> bool {
+            if is_call_expression {
+                // TS 1.0 SPEC (April 2014): 4.8.1
+                // Super calls are only permitted in constructors of derived classes
+                return is_constructor_declaration(container);
+            }
+            // TS 1.0 SPEC (April 2014)
+            // 'super' property access is allowed
+            // - In a constructor, instance member function, instance member accessor, or instance member variable initializer where this references a derived class instance
+            // - In a static member function or static member accessor
+
+            // topmost container must be something that is directly nested in the class declaration\object literal expression
+            if is_class_like(container.parent().unwrap()) || is_object_literal_expression(container.parent().unwrap()) {
+                if is_static(container) {
+                    return node_kind_is(
+                        container,
+                        &[Kind::MethodDeclaration, Kind::MethodSignature, Kind::GetAccessor, Kind::SetAccessor, Kind::PropertyDeclaration, Kind::ClassStaticBlockDeclaration],
+                    );
+                }
+                return node_kind_is(
+                    container,
+                    &[Kind::MethodDeclaration, Kind::MethodSignature, Kind::GetAccessor, Kind::SetAccessor, Kind::PropertyDeclaration, Kind::PropertySignature, Kind::Constructor],
+                );
+            }
+            false
+        };
+
+        if container.is_none() || !is_legal_usage_of_super_expression(container.unwrap()) {
+            // issue more specific error if super is used in computed property name
+            // class A { foo() { return "1" }}
+            // class B {
+            //     [super.foo()]() {}
+            // }
+            let current = find_ancestor_or_quit(node, |n| {
+                if Some(n) == container {
+                    return FindAncestorResult::Quit;
+                }
+                if is_computed_property_name(n) {
+                    return FindAncestorResult::True;
+                }
+                FindAncestorResult::False
+            });
+            if current.is_some_and(is_computed_property_name) {
+                self.error(Some(node), &diagnostics::X_super_cannot_be_referenced_in_a_computed_property_name, &[]);
+            } else if is_call_expression {
+                self.error(Some(node), &diagnostics::Super_calls_are_not_permitted_outside_constructors_or_in_nested_functions_inside_constructors, &[]);
+            } else if container.is_none()
+                || container.unwrap().parent().is_none()
+                || !(is_class_like(container.unwrap().parent().unwrap()) || is_object_literal_expression(container.unwrap().parent().unwrap()))
+            {
+                self.error(Some(node), &diagnostics::X_super_can_only_be_referenced_in_members_of_derived_classes_or_object_literal_expressions, &[]);
+            } else {
+                self.error(
+                    Some(node),
+                    &diagnostics::X_super_property_access_is_permitted_only_in_a_constructor_member_function_or_member_accessor_of_a_derived_class,
+                    &[],
+                );
+            }
+            return self.error_type;
+        }
+        let container = container.unwrap();
+        if !is_call_expression && immediate_container.is_some_and(is_constructor_declaration) {
+            self.check_this_before_super(
+                node,
+                container,
+                &diagnostics::X_super_must_be_called_before_accessing_a_property_of_super_in_the_constructor_of_a_derived_class,
+            );
+        }
+        if container.parent().unwrap().kind == Kind::ObjectLiteralExpression {
+            // for object literal assume that type of 'super' is 'any'
+            return self.any_type;
+        }
+        // at this point the only legal case for parent is ClassLikeDeclaration
+        let class_like_declaration = container.parent().unwrap();
+        if get_class_extends_heritage_element(class_like_declaration).is_none() {
+            self.error(Some(node), &diagnostics::X_super_can_only_be_referenced_in_a_derived_class, &[]);
+            return self.error_type;
+        }
+        if self.class_declaration_extends_null(class_like_declaration) {
+            if is_call_expression {
+                return self.error_type;
+            }
+            return self.null_widening_type;
+        }
+        let class_symbol = self.get_symbol_of_declaration(class_like_declaration).unwrap();
+        let class_type = self.get_declared_type_of_symbol(class_symbol);
+        let base_class_type = first_or_nil(&self.get_base_types(class_type));
+        let Some(base_class_type) = base_class_type else {
+            return self.error_type;
+        };
+        if is_constructor_declaration(container) && self.is_in_constructor_argument_initializer(node, container) {
+            // issue custom error message for super property access in constructor arguments (to be aligned with old compiler)
+            self.error(Some(node), &diagnostics::X_super_cannot_be_referenced_in_constructor_arguments, &[]);
+            return self.error_type;
+        }
+        if is_static(container) || is_call_expression {
+            if !is_call_expression
+                && self.language_version <= ScriptTarget::ES2021
+                && (is_property_declaration(container) || is_class_static_block_declaration(container))
+            {
+                // for `super.x` or `super[x]` in a static initializer, mark all enclosing
+                // block scope containers so that we can report potential collisions with
+                // `Reflect`.
+                let mut current = get_enclosing_block_scope_container(node.parent().unwrap());
+                while let Some(cur) = current {
+                    if !is_source_file(cur) || is_external_or_common_js_module(cur.as_source_file_p()) {
+                        let links = self.node_links.get(cur);
+                        links.flags.set(links.flags.get() | NodeCheckFlags::ContainsSuperPropertyInStaticInitializer);
+                    }
+                    current = get_enclosing_block_scope_container(cur);
+                }
+            }
+            return self.get_base_constructor_type_of_class(class_type);
+        }
+        let this_type = class_type.as_interface_type().this_type.get();
+        self.get_type_with_this_argument(base_class_type, this_type, false)
     }
 
     // checker.go:8136
     pub(crate) fn is_in_constructor_argument_initializer(&mut self, node: P<Node>, constructor_decl: P<Node>) -> bool {
-        todo!()
+        find_ancestor_or_quit(node, |n| {
+            if is_function_like_declaration(n) {
+                return FindAncestorResult::Quit;
+            }
+            if is_parameter_declaration(n) && n.parent() == Some(constructor_decl) {
+                return FindAncestorResult::True;
+            }
+            FindAncestorResult::False
+        })
+        .is_some()
     }
 
     // checker.go:8148
     pub(crate) fn check_template_expression(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let expr = node.as_template_expression();
+        let spans = expr.template_spans.nodes;
+        let length = spans.len();
+        let mut texts: Vec<&str> = vec![""; length + 1];
+        let mut types: Vec<P<Type>> = Vec::with_capacity(length);
+        texts[0] = expr.head.text();
+        for (i, &span) in spans.iter().enumerate() {
+            let t = self.check_expression(span.expression().unwrap());
+            if self.maybe_type_of_kind_considering_base_constraint(t, TypeFlags::ESSymbolLike) {
+                self.error(
+                    span.expression(),
+                    &diagnostics::Implicit_conversion_of_a_symbol_to_a_string_will_fail_at_runtime_Consider_wrapping_this_expression_in_String,
+                    &[],
+                );
+            }
+            texts[i + 1] = span.as_template_span().literal.text();
+            let template_constraint_type = self.template_constraint_type;
+            types.push(if self.is_type_assignable_to(t, template_constraint_type) { t } else { self.string_type });
+        }
+        let mut evaluated: Option<LiteralValue> = None;
+        if !is_tagged_template_expression(node.parent().unwrap()) {
+            evaluated = self.evaluate(node, node).value;
+        }
+        if let Some(evaluated) = evaluated {
+            let LiteralValue::String(s) = evaluated else {
+                panic!("evaluated template expression is not a string");
+            };
+            let t = self.get_string_literal_type(s);
+            return self.get_fresh_type_of_literal_type(t);
+        }
+        if self.is_const_context(node) || self.is_template_literal_context(node) || {
+            let contextual_type = self.get_contextual_type(node, ContextFlags::None).unwrap_or(self.unknown_type);
+            some_type(contextual_type, |t| self.is_template_literal_contextual_type(t))
+        } {
+            return self.get_template_literal_type(&texts, &types);
+        }
+        self.string_type
     }
 
     // checker.go:8175
     pub(crate) fn is_template_literal_context(&mut self, node: P<Node>) -> bool {
-        todo!()
+        let parent = node.parent().unwrap();
+        is_parenthesized_expression(parent) && self.is_template_literal_context(parent)
+            || is_element_access_expression(parent) && parent.as_element_access_expression().argument_expression == node
     }
 
     // checker.go:8180
     pub(crate) fn is_template_literal_contextual_type(&mut self, t: P<Type>) -> bool {
-        todo!()
+        t.flags().intersects(TypeFlags::StringLiteral | TypeFlags::TemplateLiteral)
+            || t.flags().intersects(TypeFlags::InstantiableNonPrimitive) && {
+                let constraint = self.get_base_constraint_of_type(t).unwrap_or(self.unknown_type);
+                self.maybe_type_of_kind(constraint, TypeFlags::StringLike)
+            }
     }
 
     // checker.go:8184
     pub(crate) fn check_regular_expression_literal(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let node_links = self.node_links.get(node);
+        if !node_links.flags.get().intersects(NodeCheckFlags::TypeChecked) {
+            node_links.flags.set(node_links.flags.get() | NodeCheckFlags::TypeChecked);
+            self.check_grammar_regular_expression_literal(node);
+        }
+        self.global_reg_exp_type
     }
 
     // checker.go:8193
     pub(crate) fn check_array_literal(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        let elements = node.elements();
+        let mut element_types: Vec<P<Type>> = vec![self.error_type; elements.len()];
+        let mut element_infos: Vec<TupleElementInfo> = vec![TupleElementInfo::default(); elements.len()];
+        self.push_cached_contextual_type(node);
+        let in_destructuring_pattern = is_assignment_target(node);
+        let in_const_context = self.is_const_context(node);
+        let contextual_type = self.get_apparent_type_of_contextual_type(node, ContextFlags::None);
+        let in_tuple_context = is_spread_into_call_or_new(node)
+            || contextual_type.is_some_and(|contextual_type| {
+                some_type(contextual_type, |t| {
+                    self.is_tuple_like_type(t)
+                        || self.is_generic_mapped_type(t) && t.as_mapped_type().name_type.get().is_none() && {
+                            let target = t.as_mapped_type().target.get().unwrap_or(t);
+                            self.get_homomorphic_type_variable(target).is_some()
+                        }
+                })
+            });
+        let mut has_omitted_expression = false;
+        for (i, &e) in elements.iter().enumerate() {
+            if is_spread_element(e) {
+                let spread_type = self.check_expression_ex(e.expression().unwrap(), check_mode);
+                if self.is_array_like_type(spread_type) {
+                    element_types[i] = spread_type;
+                    element_infos[i] = TupleElementInfo { flags: ElementFlags::Variadic, ..Default::default() };
+                } else if in_destructuring_pattern {
+                    // Given the following situation:
+                    //    var c: {};
+                    //    [...c] = ["", 0];
+                    //
+                    // c is represented in the tree as a spread element in an array literal.
+                    // But c really functions as a rest element, and its purpose is to provide
+                    // a contextual type for the right hand side of the assignment. Therefore,
+                    // instead of calling checkExpression on "...c", which will give an error
+                    // if c is not iterable/array-like, we need to act as if we are trying to
+                    // get the contextual element type from it. So we do something similar to
+                    // getContextualTypeForElementExpression, which will crucially not error
+                    // if there is no index type / iterated type.
+                    let number_type = self.number_type;
+                    let mut rest_element_type = self.get_index_type_of_type(spread_type, number_type);
+                    if rest_element_type.is_none() {
+                        let undefined_type = self.undefined_type;
+                        rest_element_type =
+                            self.get_iterated_type_or_element_type(IterationUse::Destructuring, spread_type, undefined_type, None /*errorNode*/, false /*checkAssignability*/);
+                        if rest_element_type.is_none() {
+                            rest_element_type = Some(self.unknown_type);
+                        }
+                    }
+                    element_types[i] = rest_element_type.unwrap();
+                    element_infos[i] = TupleElementInfo { flags: ElementFlags::Rest, ..Default::default() };
+                } else {
+                    let undefined_type = self.undefined_type;
+                    element_types[i] = self.check_iterated_type_or_element_type(IterationUse::Spread, spread_type, undefined_type, e.expression());
+                    element_infos[i] = TupleElementInfo { flags: ElementFlags::Rest, ..Default::default() };
+                }
+            } else if self.exact_optional_property_types && is_omitted_expression(e) {
+                has_omitted_expression = true;
+                element_types[i] = self.undefined_or_missing_type;
+                element_infos[i] = TupleElementInfo { flags: ElementFlags::Optional, ..Default::default() };
+            } else {
+                let t = self.check_expression_for_mutable_location(e, check_mode);
+                element_types[i] = self.add_optionality_ex(t, true /*isProperty*/, has_omitted_expression);
+                element_infos[i] =
+                    TupleElementInfo { flags: if has_omitted_expression { ElementFlags::Optional } else { ElementFlags::Required }, ..Default::default() };
+                if in_tuple_context
+                    && check_mode.intersects(CheckMode::Inferential)
+                    && !check_mode.intersects(CheckMode::SkipContextSensitive)
+                    && self.is_context_sensitive(e)
+                {
+                    let inference_context = self.get_inference_context(node);
+                    // In CheckMode.Inferential we should always have an inference context
+                    self.add_intra_expression_inference_site(inference_context.unwrap(), e, t);
+                }
+            }
+        }
+        self.pop_contextual_type();
+        if in_destructuring_pattern {
+            return self.create_tuple_type_ex(&element_types, &element_infos, false);
+        }
+        if check_mode.intersects(CheckMode::ForceTuple) || in_const_context || in_tuple_context {
+            let readonly = in_const_context && !contextual_type.is_some_and(|contextual_type| some_type(contextual_type, |t| self.is_mutable_array_like_type(t)));
+            let tuple = self.create_tuple_type_ex(&element_types, &element_infos, readonly /*readonly*/);
+            return self.create_array_literal_type(tuple);
+        }
+        let element_type: P<Type>;
+        if !element_types.is_empty() {
+            for i in 0..element_types.len() {
+                let e = element_types[i];
+                if element_infos[i].flags.intersects(ElementFlags::Variadic) {
+                    let number_type = self.number_type;
+                    element_types[i] = self.get_indexed_access_type_or_undefined(e, number_type, AccessFlags::None, None, None).unwrap_or(self.any_type);
+                }
+            }
+            element_type = self.get_union_type_ex(&element_types, UnionReduction::Subtype, None, None);
+        } else {
+            element_type = if self.strict_null_checks { self.implicit_never_type } else { self.undefined_widening_type };
+        }
+        let array_type = self.create_array_type_ex(element_type, in_const_context);
+        self.create_array_literal_type(array_type)
     }
 
     // checker.go:8275
     pub(crate) fn create_array_literal_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        if !t.object_flags().intersects(ObjectFlags::Reference) {
+            return t;
+        }
+        let key = CachedTypeKey { kind: CachedTypeKind::ArrayLiteralType, type_id: t.id };
+        if let Some(&cached) = self.cached_types.get(&key) {
+            return cached;
+        }
+        let literal_type = self.clone_type_reference(t);
+        literal_type.object_flags.set(literal_type.object_flags() | ObjectFlags::ArrayLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
+        self.cached_types.insert(key, literal_type);
+        literal_type
     }
 }
 
 // checker.go:8289
 pub(crate) fn is_spread_into_call_or_new(node: P<Node>) -> bool {
-    todo!()
+    let parent = walk_up_parenthesized_expressions(node.parent()).unwrap();
+    is_spread_element(parent) && is_call_or_new_expression(parent.parent().unwrap())
 }
 
 impl Checker {
