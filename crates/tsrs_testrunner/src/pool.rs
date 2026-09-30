@@ -21,6 +21,8 @@ pub struct PoolOptions {
     pub recycle: usize,
     pub worker_args: Vec<String>,
     pub progress: bool,
+    // Per-worker resident memory limit in MB (0 = unlimited); the running test is recorded as a crash.
+    pub mem_limit_mb: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -129,6 +131,7 @@ pub fn run_pool(items: &[TestItem], opts: &PoolOptions) -> Vec<Option<TestResult
     let total = items.len();
     let started = Instant::now();
     let mut last_progress = Instant::now();
+    let mut last_mem_check = Instant::now();
 
     let next_batch = |queue: &mut VecDeque<usize>, jobs: usize, recycle: usize| -> Vec<usize> {
         let per_worker = queue.len().div_ceil(jobs.max(1)).clamp(1, recycle.max(1));
@@ -220,10 +223,59 @@ pub fn run_pool(items: &[TestItem], opts: &PoolOptions) -> Vec<Option<TestResult
             }
         }
 
+        // Memory limit
+        if opts.mem_limit_mb > 0 && last_mem_check.elapsed() > Duration::from_secs(2) {
+            last_mem_check = Instant::now();
+            let live: Vec<usize> = (0..workers.len()).filter(|&i| workers[i].alive && workers[i].running.is_some()).collect();
+            let rss = resident_mb(&live.iter().map(|&i| workers[i].child.id()).collect::<Vec<_>>());
+            for i in live {
+                let w = &mut workers[i];
+                let Some(&mb) = rss.get(&w.child.id()) else { continue };
+                if mb <= opts.mem_limit_mb {
+                    continue;
+                }
+                let Some((running, _)) = w.running else { continue };
+                let _ = w.child.kill();
+                let _ = w.child.wait();
+                w.alive = false;
+                active -= 1;
+                results[w.batch[running]] = Some(TestResult {
+                    class: Class::Crash,
+                    ms: 0,
+                    diff: String::new(),
+                    panic: format!("memory limit exceeded ({mb} MB)"),
+                    loc: String::new(),
+                    skip: String::new(),
+                });
+                completed += 1;
+                for &rest in w.batch[running + 1..].iter().rev() {
+                    queue.push_front(rest);
+                }
+                w.done = w.batch.len();
+            }
+        }
+
         if opts.progress && last_progress.elapsed() > Duration::from_secs(10) {
             last_progress = Instant::now();
             eprintln!("  {completed}/{total} done, {}s", started.elapsed().as_secs());
         }
     }
     results
+}
+
+// Resident set size in MB per pid, via ps(1).
+fn resident_mb(pids: &[u32]) -> rustc_hash::FxHashMap<u32, u64> {
+    let mut out = rustc_hash::FxHashMap::default();
+    if pids.is_empty() {
+        return out;
+    }
+    let list = pids.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
+    let Ok(o) = Command::new("ps").args(["-o", "pid=,rss=", "-p", &list]).output() else { return out };
+    for line in String::from_utf8_lossy(&o.stdout).lines() {
+        let mut it = line.split_whitespace();
+        if let (Some(pid), Some(kb)) = (it.next().and_then(|p| p.parse().ok()), it.next().and_then(|k| k.parse::<u64>().ok())) {
+            out.insert(pid, kb / 1024);
+        }
+    }
+    out
 }

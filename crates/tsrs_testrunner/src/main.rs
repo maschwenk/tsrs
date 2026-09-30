@@ -24,7 +24,7 @@ use crate::harnessutil::OptionTable;
 
 const USAGE: &str = "usage:
   tsrs-test run [--suite compiler|conformance|all] [--filter <substr|regex>] [--list <file>]
-                [--jobs N] [--timeout S] [--recycle N] [--json <path>] [--panic-summary]
+                [--jobs N] [--timeout S] [--recycle N] [--mem-limit MB] [--json <path>] [--panic-summary]
   tsrs-test show <name> [--full]      expected vs actual for one test (id, variant stem or file name)
   tsrs-test crashes [--top N] [--examples N] [--json <path>]
   tsrs-test list [--suite ..] [--filter ..] [--list <file>]
@@ -190,6 +190,7 @@ fn cmd_run(mut args: Args, spec: BackendSpec) {
     let jobs = args.num("--jobs").unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()));
     let timeout = Duration::from_secs_f64(args.value("--timeout").map_or(20.0, |v| v.parse().unwrap_or(20.0)));
     let recycle = args.num("--recycle").unwrap_or(200);
+    let mem_limit_mb = args.num("--mem-limit").unwrap_or(6144) as u64;
     let json_path = args.value("--json").map(PathBuf::from);
     let panic_summary = args.flag("--panic-summary");
     let quiet = args.flag("--quiet");
@@ -205,7 +206,7 @@ fn cmd_run(mut args: Args, spec: BackendSpec) {
     if !quiet {
         eprintln!("running {} test variants with {jobs} workers", items.len());
     }
-    let opts = pool::PoolOptions { jobs: jobs.min(items.len()), timeout, recycle, worker_args: spec.args(), progress: !quiet };
+    let opts = pool::PoolOptions { jobs: jobs.min(items.len()), timeout, recycle, worker_args: spec.args(), progress: !quiet, mem_limit_mb };
     let results = pool::run_pool(&items, &opts);
 
     let dir = worker::results_dir();
