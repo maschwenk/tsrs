@@ -882,63 +882,395 @@ impl Checker {
         }
     }
 
+    /**
+     * Resolves a qualified name and any involved aliases.
+     */
     // checker.go:16095
     pub(crate) fn resolve_entity_name(&mut self, name: P<Node>, meaning: SymbolFlags, ignore_errors: bool, dont_resolve_alias: bool, location: Option<P<Node>>) -> Option<P<Symbol>> {
-        todo!()
+        if ast::node_is_missing(name) {
+            return None;
+        }
+        let mut symbol: Option<P<Symbol>>;
+        match name.kind {
+            Kind::Identifier => {
+                let mut message: Option<&'static Message> = None;
+                if !ignore_errors {
+                    if meaning == SymbolFlags::Namespace || ast::node_is_synthesized(name) {
+                        message = Some(&diagnostics::Cannot_find_namespace_0);
+                    } else {
+                        message = Some(self.get_cannot_find_name_diagnostic_for_name(ast::get_first_identifier(name)));
+                    }
+                }
+                let resolve_location = location.unwrap_or(name);
+                if meaning == SymbolFlags::Namespace {
+                    symbol = self.resolve_name(Some(resolve_location), name.text(), meaning, None, true /*isUse*/, false /*excludeGlobals*/).map(|s| self.get_merged_symbol(s));
+                    if symbol.is_none() {
+                        let alias = self.resolve_name(Some(resolve_location), name.text(), SymbolFlags::Alias, None, true /*isUse*/, false /*excludeGlobals*/).map(|s| self.get_merged_symbol(s));
+                        if let Some(alias) = alias {
+                            if alias.name() == InternalSymbolNameExportEquals {
+                                // resolve typedefs exported from commonjs, stored on the module symbol
+                                symbol = alias.parent();
+                            }
+                        }
+                    }
+                    if symbol.is_none() && message.is_some() {
+                        self.resolve_name(Some(resolve_location), name.text(), meaning, message, true /*isUse*/, false /*excludeGlobals*/);
+                    }
+                } else {
+                    symbol = self.resolve_name(Some(resolve_location), name.text(), meaning, message, true /*isUse*/, false /*excludeGlobals*/).map(|s| self.get_merged_symbol(s));
+                }
+            }
+            Kind::QualifiedName => {
+                let qualified = name.as_qualified_name();
+                symbol = self.resolve_qualified_name(name, qualified.left(), qualified.right(), meaning, ignore_errors, location);
+            }
+            Kind::PropertyAccessExpression => {
+                let access = name.as_property_access_expression();
+                symbol = self.resolve_qualified_name(name, access.expression(), access.name(), meaning, ignore_errors, location);
+            }
+            _ => panic!("Unknown entity name kind"),
+        }
+        if let Some(mut s) = symbol {
+            if s != self.unknown_symbol {
+                if !ast::node_is_synthesized(name)
+                    && ast::is_entity_name(name)
+                    && (s.flags().intersects(SymbolFlags::Alias) || name.parent().is_some_and(|p| p.kind == Kind::ExportAssignment))
+                {
+                    self.mark_symbol_of_alias_declaration_if_type_only(get_alias_declaration_from_name(name), None);
+                }
+                // We know a symbol with the given meaning exists along the alias chain, so resolve until we find it.
+                while !s.flags().intersects(meaning) && !dont_resolve_alias && s.flags().intersects(SymbolFlags::Alias) {
+                    s = self.resolve_alias(s);
+                }
+                symbol = Some(s);
+            }
+        }
+        symbol
     }
 
     // checker.go:16151
     pub(crate) fn resolve_qualified_name(&mut self, name: P<Node>, left: P<Node>, right: P<Node>, meaning: SymbolFlags, ignore_errors: bool, location: Option<P<Node>>) -> Option<P<Symbol>> {
-        todo!()
+        let namespace = self.resolve_entity_name(left, SymbolFlags::Namespace, ignore_errors, false /*dontResolveAlias*/, location);
+        let mut namespace = match namespace {
+            Some(n) if !ast::node_is_missing(right) => n,
+            _ => return None,
+        };
+        if namespace == self.unknown_symbol {
+            return Some(namespace);
+        }
+        if let Some(value_declaration) = namespace.value_declaration() {
+            if ast::is_in_js_file(value_declaration)
+                && self.compiler_options.get_module_resolution_kind() != ModuleResolutionKind::Bundler
+                && ast::is_variable_declaration(value_declaration)
+                && value_declaration.initializer().is_some()
+                && self.is_common_js_require(value_declaration.initializer().unwrap())
+            {
+                let module_name = value_declaration.initializer().unwrap().arguments()[0];
+                let module_sym = self.resolve_external_module_name(module_name, module_name, false /*ignoreErrors*/, None);
+                if let Some(module_sym) = module_sym {
+                    let resolved_module_symbol = self.resolve_external_module_symbol(module_sym, false /*dontResolveAlias*/);
+                    namespace = resolved_module_symbol;
+                }
+            }
+        }
+        let text = right.text();
+        let exports = self.get_exports_of_symbol(namespace);
+        let mut symbol = self.get_symbol(exports, text, meaning).map(|s| self.get_merged_symbol(s));
+        if symbol.is_none() && namespace.flags().intersects(SymbolFlags::Alias) {
+            // `namespace` can be resolved further if there was a symbol merge with a re-export
+            let resolved = self.resolve_alias(namespace);
+            let exports = self.get_exports_of_symbol(resolved);
+            symbol = self.get_symbol(exports, text, meaning).map(|s| self.get_merged_symbol(s));
+        }
+        if symbol.is_none() {
+            if !ignore_errors {
+                let namespace_name = self.get_fully_qualified_name(namespace, None /*containingLocation*/);
+                let declaration_name = tsrs_scanner::declaration_name_to_string(Some(right));
+                let suggestion_for_nonexistent_module = self.get_suggested_symbol_for_nonexistent_module(right, namespace);
+                if let Some(suggestion) = suggestion_for_nonexistent_module {
+                    let suggestion_name = self.symbol_to_string(suggestion);
+                    self.error(Some(right), &diagnostics::X_0_has_no_exported_member_named_1_Did_you_mean_2, &[&namespace_name, &declaration_name, &suggestion_name]);
+                    return None;
+                }
+                let mut containing_qualified_name: Option<P<Node>> = None;
+                if ast::is_qualified_name(name) {
+                    containing_qualified_name = get_containing_qualified_name_node(name);
+                }
+                let can_suggest_typeof = self.global_object_type.id != TypeId(0)
+                    && meaning.intersects(SymbolFlags::Type)
+                    && containing_qualified_name.is_some_and(|n| !ast::is_type_of_expression(n.parent().unwrap()))
+                    && self.try_get_qualified_name_as_value(containing_qualified_name.unwrap()).is_some();
+                if can_suggest_typeof {
+                    let containing_qualified_name = containing_qualified_name.unwrap();
+                    self.error(Some(containing_qualified_name), &diagnostics::X_0_refers_to_a_value_but_is_being_used_as_a_type_here_Did_you_mean_typeof_0, &[&crate::entity_name_to_string(containing_qualified_name)]);
+                    return None;
+                }
+                if meaning.intersects(SymbolFlags::Namespace) {
+                    let parent = name.parent().unwrap();
+                    if ast::is_qualified_name(parent) {
+                        let exports = self.get_exports_of_symbol(namespace);
+                        let exported_type_symbol = self.get_symbol(exports, text, SymbolFlags::Type).map(|s| self.get_merged_symbol(s));
+                        if let Some(exported_type_symbol) = exported_type_symbol {
+                            let qualified = parent.as_qualified_name();
+                            let symbol_name = self.symbol_to_string(exported_type_symbol);
+                            self.error(Some(qualified.right()), &diagnostics::Cannot_access_0_1_because_0_is_a_type_but_not_a_namespace_Did_you_mean_to_retrieve_the_type_of_the_property_1_in_0_with_0_1, &[&symbol_name, &qualified.right().text()]);
+                            return None;
+                        }
+                    }
+                }
+                self.error(Some(right), &diagnostics::Namespace_0_has_no_exported_member_1, &[&namespace_name, &declaration_name]);
+            }
+        }
+        symbol
     }
 
     // checker.go:16214
     pub(crate) fn try_get_qualified_name_as_value(&mut self, node: P<Node>) -> Option<P<Symbol>> {
-        todo!()
+        let id = ast::get_first_identifier(node);
+        let mut symbol = self.resolve_name(Some(id), id.text(), SymbolFlags::Value, None /*nameNotFoundMessage*/, true /*isUse*/, false /*excludeGlobals*/)?;
+        let mut n = id;
+        while ast::is_qualified_name(n.parent().unwrap()) {
+            let t = self.get_type_of_symbol(symbol);
+            symbol = self.get_property_of_type(t, n.parent().unwrap().as_qualified_name().right().text())?;
+            n = n.parent().unwrap();
+        }
+        Some(symbol)
     }
 
     // checker.go:16232
     pub(crate) fn get_suggested_symbol_for_nonexistent_module(&mut self, name: P<Node>, target_module: P<Symbol>) -> Option<P<Symbol>> {
-        todo!()
+        let exports = self.get_exports_of_module(target_module).values();
+        self.get_spelling_suggestion_for_name(name.text(), &exports, SymbolFlags::ModuleMember)
     }
 
     // checker.go:16236
     pub(crate) fn get_fully_qualified_name(&mut self, symbol: P<Symbol>, containing_location: Option<P<Node>>) -> String {
-        todo!()
+        if let Some(parent) = symbol.parent() {
+            let parent_name = self.get_fully_qualified_name(parent, containing_location);
+            return parent_name + "." + &self.symbol_to_string(symbol);
+        }
+        self.symbol_to_string_ex(symbol, containing_location, SymbolFlags::All, SymbolFormatFlags::DoNotIncludeSymbolChain | SymbolFormatFlags::AllowAnyNodeKind)
     }
 
     // checker.go:16243
     pub(crate) fn get_exports_of_symbol(&mut self, symbol: P<Symbol>) -> Option<P<SymbolTable>> {
-        todo!()
+        if symbol.flags().intersects(SymbolFlags::LateBindingContainer) {
+            return self.get_resolved_members_or_exports_of_symbol(symbol, MembersOrExportsResolutionKind::ResolvedExports);
+        }
+        if symbol.flags().intersects(SymbolFlags::Module) {
+            return Some(self.get_exports_of_module(symbol));
+        }
+        symbol.exports()
     }
 
+    // SIG: returns Option (Go returns a nil table when there are neither early nor late symbols; nil also
+    // means "not yet resolved" in the links, so it must not be replaced by an empty table).
     // checker.go:16253
-    pub(crate) fn get_resolved_members_or_exports_of_symbol(&mut self, symbol: P<Symbol>, resolution_kind: MembersOrExportsResolutionKind) -> P<SymbolTable> {
-        todo!()
+    pub(crate) fn get_resolved_members_or_exports_of_symbol(&mut self, symbol: P<Symbol>, resolution_kind: MembersOrExportsResolutionKind) -> Option<P<SymbolTable>> {
+        let links = self.members_and_exports_links.get(symbol);
+        let kind = resolution_kind as usize;
+        if links[kind].get().is_none() {
+            let is_static = resolution_kind == MembersOrExportsResolutionKind::ResolvedExports;
+            let mut early_symbols = symbol.exports();
+            if !is_static {
+                early_symbols = symbol.members();
+            } else if symbol.flags().intersects(SymbolFlags::Module) {
+                early_symbols = Some(self.get_exports_of_module_worker(Some(symbol)).0);
+            }
+            links[kind].set(early_symbols);
+            // fill in any as-yet-unresolved late-bound members.
+            let mut late_symbols: Option<P<SymbolTable>> = None;
+            let declarations = symbol.declarations().clone();
+            for decl in declarations {
+                for member in get_members_of_declaration(decl) {
+                    if is_static == ast::has_static_modifier(member) {
+                        if self.has_late_bindable_name(member) {
+                            let late = *late_symbols.get_or_insert_with(SymbolTable::new);
+                            self.late_bind_member(symbol, early_symbols, late, member);
+                        } else if self.has_late_bindable_index_signature(member) {
+                            let late = *late_symbols.get_or_insert_with(SymbolTable::new);
+                            self.late_bind_index_signature(symbol, early_symbols, late, member /* as LateBoundDeclaration | LateBoundBinaryExpressionDeclaration */);
+                        }
+                    }
+                }
+            }
+            if is_static {
+                if let Some(assignment_symbol) = symbol.exports().and_then(|e| e.lookup(InternalSymbolNameAssignmentDeclaration)) {
+                    let declarations = assignment_symbol.declarations().clone();
+                    for member in declarations {
+                        if self.has_late_bindable_name(member) {
+                            let late = *late_symbols.get_or_insert_with(SymbolTable::new);
+                            self.late_bind_member(symbol, early_symbols, late, member);
+                        }
+                    }
+                }
+            }
+            let combined = self.combine_symbol_tables(early_symbols, late_symbols);
+            links[kind].set(combined);
+        }
+        links[kind].get()
     }
 
+    // Performs late-binding of a dynamic member. This performs the same function for
+    // late-bound members that `declareSymbol` in binder.ts performs for early-bound
+    // members.
+    //
+    // If a symbol is a dynamic name from a computed property, we perform an additional "late"
+    // binding phase to attempt to resolve the name for the symbol from the type of the computed
+    // property's expression. If the type of the expression is a string-literal, numeric-literal,
+    // or unique symbol type, we can use that type as the name of the symbol.
+    //
+    // For example, given:
+    //
+    //	const x = Symbol();
+    //
+    //	interface I {
+    //	  [x]: number;
+    //	}
+    //
+    // The binder gives the property `[x]: number` a special symbol with the name "__computed".
+    // In the late-binding phase we can type-check the expression `x` and see that it has a
+    // unique symbol type which we can then use as the name of the member. This allows users
+    // to define custom symbols that can be used in the members of an object type.
+    //
+    // @param parent The containing symbol for the member.
+    // @param earlySymbols The early-bound symbols of the parent.
+    // @param lateSymbols The late-bound symbols of the parent.
+    // @param decl The member to bind.
     // checker.go:16328
     pub(crate) fn late_bind_member(&mut self, parent: P<Symbol>, early_symbols: Option<P<SymbolTable>>, late_symbols: P<SymbolTable>, decl: P<Node>) -> Option<P<Symbol>> {
-        todo!()
+        assert!(decl.symbol().is_some(), "The member is expected to have a symbol.");
+        let decl_symbol = decl.symbol().unwrap();
+        let links = self.symbol_node_links.get(decl);
+        if links.resolved_symbol.get().is_none() {
+            // In the event we attempt to resolve the late-bound name of this member recursively,
+            // fall back to the early-bound name of this member.
+            links.resolved_symbol.set(Some(decl_symbol));
+            let decl_name = if ast::is_binary_expression(decl) { decl.as_binary_expression().left() } else { decl.name().unwrap() };
+            let t = if ast::is_element_access_expression(decl_name) {
+                self.check_expression_cached(decl_name.as_element_access_expression().argument_expression())
+            } else {
+                self.check_computed_property_name(decl_name)
+            };
+            if is_type_usable_as_property_name(t) {
+                let member_name = get_property_name_from_type(t);
+                let symbol_flags = decl_symbol.flags();
+                // Get or add a late-bound symbol for the member. This allows us to merge late-bound accessor declarations.
+                let mut late_symbol = match late_symbols.lookup(&member_name) {
+                    Some(s) => s,
+                    None => {
+                        let s = self.new_symbol_ex(SymbolFlags::None, &member_name, CheckFlags::Late);
+                        late_symbols.set(s.name(), s);
+                        s
+                    }
+                };
+                // Report an error if there's a symbol declaration with the same name and conflicting flags.
+                let early_symbol = early_symbols.and_then(|e| e.lookup(&member_name));
+                if late_symbol.flags().intersects(get_excluded_symbol_flags(symbol_flags)) {
+                    // If we have an existing early-bound member, combine its declarations so that we can
+                    // report an error at each declaration.
+                    let declarations: Vec<P<Node>> = if let Some(early_symbol) = early_symbol {
+                        let mut v = early_symbol.declarations().clone();
+                        v.extend(late_symbol.declarations().iter().copied());
+                        v
+                    } else {
+                        late_symbol.declarations().clone()
+                    };
+                    let mut name = member_name.clone();
+                    if t.flags().intersects(TypeFlags::UniqueESSymbol) {
+                        name = tsrs_scanner::declaration_name_to_string(Some(decl_name));
+                    }
+                    for d in declarations {
+                        self.error(Some(ast::get_name_of_declaration(d).unwrap_or(d)), &diagnostics::Duplicate_identifier_0, &[&name]);
+                    }
+                    self.error(Some(decl_name), &diagnostics::Duplicate_identifier_0, &[&name]);
+                    if late_symbol.flags().intersects(SymbolFlags::Accessor) && late_symbol.flags() & SymbolFlags::Accessor != symbol_flags & SymbolFlags::Accessor {
+                        late_symbol.flags.set(late_symbol.flags() | SymbolFlags::Accessor);
+                    }
+                    late_symbol = self.new_symbol_ex(SymbolFlags::None, &member_name, CheckFlags::Late);
+                }
+                self.value_symbol_links.get(late_symbol).name_type.set(Some(t));
+                self.add_declaration_to_late_bound_symbol(late_symbol, decl, symbol_flags);
+                if late_symbol.parent().is_none() {
+                    late_symbol.parent.set(Some(parent));
+                }
+                links.resolved_symbol.set(Some(late_symbol));
+            }
+        }
+        links.resolved_symbol.get()
     }
 
     // checker.go:16391
     pub(crate) fn late_bind_index_signature(&mut self, parent: P<Symbol>, early_symbols: Option<P<SymbolTable>>, late_symbols: P<SymbolTable>, decl: P<Node>) {
-        todo!()
+        let _ = parent;
+        // First, late bind the index symbol itself, if needed
+        let index_symbol = match late_symbols.lookup(InternalSymbolNameIndex) {
+            Some(s) => s,
+            None => {
+                let early = early_symbols.and_then(|e| e.lookup(InternalSymbolNameIndex));
+                let index_symbol = match early {
+                    None => self.new_symbol_ex(SymbolFlags::None, InternalSymbolNameIndex, CheckFlags::Late),
+                    Some(early) => {
+                        let s = self.clone_symbol(early);
+                        s.check_flags.set(s.check_flags.get() | CheckFlags::Late);
+                        s
+                    }
+                };
+                late_symbols.set(InternalSymbolNameIndex, index_symbol);
+                index_symbol
+            }
+        };
+        // Then just add the computed name as a late bound declaration
+        // (note: unlike `addDeclarationToLateBoundSymbol` we do not set up a `.lateSymbol` on `decl`'s links,
+        // since that would point at an index symbol and not a single property symbol, like most consumers would expect)
+        if index_symbol.declarations().is_empty() || !decl.symbol().unwrap().flags().intersects(SymbolFlags::ReplaceableByMethod) {
+            index_symbol.declarations.borrow_mut().push(decl);
+        }
     }
 }
 
 // checker.go:16412
 pub(crate) fn is_not_replacable_by_method(decl: P<Node>) -> bool {
-    todo!()
+    !decl.symbol().unwrap().flags().intersects(SymbolFlags::ReplaceableByMethod)
 }
 
 impl Checker {
+    // Adds a declaration to a late-bound dynamic member. This performs the same function for
+    // late-bound members that `addDeclarationToSymbol` in binder.ts performs for early-bound
+    // members.
     // checker.go:16419
     pub(crate) fn add_declaration_to_late_bound_symbol(&mut self, symbol: P<Symbol>, member: P<Node>, symbol_flags: SymbolFlags) {
-        todo!()
+        assert!(symbol.check_flags.get().intersects(CheckFlags::Late), "Expected a late-bound symbol.");
+        let member_symbol = member.symbol().unwrap();
+        self.late_bound_links.get(member_symbol).late_symbol.set(Some(symbol));
+        if symbol.declarations().is_empty() || !member_symbol.flags().intersects(SymbolFlags::ReplaceableByMethod) {
+            symbol.flags.set(symbol.flags() | symbol_flags);
+            symbol.declarations.borrow_mut().push(member);
+        } else if symbol.flags().intersects(SymbolFlags::ReplaceableByMethod) && member_symbol.flags().intersects(SymbolFlags::Method) {
+            // Remove all replacable-by-method members, along with their flags.
+            let mut declarations: Vec<P<Node>> = symbol.declarations().iter().copied().filter(|d| is_not_replacable_by_method(*d)).collect();
+            declarations.push(member);
+            *symbol.declarations.borrow_mut() = declarations;
+            let old_flags = symbol.flags();
+            symbol.flags.set(SymbolFlags::Transient);
+            let declarations = symbol.declarations().clone();
+            for d in declarations {
+                symbol.flags.set(symbol.flags() | d.symbol().unwrap().flags());
+            }
+            if old_flags.intersects(SymbolFlags::Accessor) {
+                symbol.flags.set(symbol.flags() | SymbolFlags::Accessor);
+            }
+        }
+        if symbol_flags.intersects(SymbolFlags::Value) {
+            tsrs_binder::set_value_declaration(symbol, member);
+        }
     }
 
+    /**
+     * Gets a SymbolTable containing both the early- and late-bound members of a symbol.
+     *
+     * For a description of late-binding, see `lateBindMember`.
+     */
     // checker.go:16447
     pub(crate) fn get_members_of_symbol(&mut self, symbol: P<Symbol>) -> Option<P<SymbolTable>> {
         todo!()
