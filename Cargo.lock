@@ -240,6 +240,7 @@ dependencies = [
  "tsrs_ast",
  "tsrs_core",
  "tsrs_diagnostics",
+ "tsrs_parser",
  "tsrs_scanner",
 ]
 
@@ -256,6 +257,7 @@ dependencies = [
  "tsrs_diagnostics",
  "tsrs_module",
  "tsrs_scanner",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -265,7 +267,6 @@ dependencies = [
  "rustc-hash",
  "tsrs_ast",
  "tsrs_binder",
- "tsrs_checker",
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
@@ -338,6 +339,7 @@ dependencies = [
  "tsrs_core",
  "tsrs_diagnostics",
  "tsrs_scanner",
+ "tsrs_vfs",
 ]
 
 [[package]]
@@ -361,8 +363,13 @@ dependencies = [
  "rustc-hash",
  "serde_json",
  "similar",
+ "tsrs_ast",
+ "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
+ "tsrs_parser",
+ "tsrs_tsoptions",
+ "tsrs_vfs",
 ]
 
 [[package]]
@@ -395,6 +402,12 @@ name = "unicode-ident"
 version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d245f478577f809a851594d02313b640fb437e0bb33866753cff937863096954"
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "550a2b930b62486a393c52d5c3b84bff264b28aa437ed64694d31e93b1757af7"
 
 [[package]]
 name = "zmij"
