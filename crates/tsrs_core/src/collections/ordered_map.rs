@@ -100,28 +100,65 @@ pub fn diff_ordered_maps_func<K: Hash + Eq, V>(
 mod tests {
     use super::*;
 
+    fn pad_int(n: i32) -> String {
+        format!("{n:10}")
+    }
+
     #[test]
     fn test_ordered_map() {
         let mut m: OrderedMap<i32, String> = OrderedMap::default();
-        assert_eq!(m.size(), 0);
-        for i in 0..10 {
-            m.set(i, i.to_string());
+        assert!(!m.has(&1));
+        const N: i32 = 1000;
+        const START: i32 = 1;
+        const END: i32 = START + N;
+        // Seed the map with ascending keys and values for easier testing.
+        for i in START..END {
+            m.set(i, pad_int(i));
         }
-        assert_eq!(m.size(), 10);
-        assert!(m.has(&3));
-        assert_eq!(m.get_or_zero(&100), "");
-        assert_eq!(m.delete(&3), Some("3".to_string()));
-        assert_eq!(m.delete(&3), None);
+        assert_eq!(m.size(), N as usize);
+        // Attempt to overwrite existing keys in reverse order.
+        for i in (START..END).rev() {
+            m.set(i, pad_int(i));
+        }
+        assert_eq!(m.size(), N as usize);
+        for i in START..END {
+            assert_eq!(m.get(&i), Some(&pad_int(i)));
+        }
+        for (k, v) in &m {
+            assert_eq!(*v, pad_int(*k));
+        }
         let keys: Vec<i32> = m.keys().copied().collect();
-        assert_eq!(keys, vec![0, 1, 2, 4, 5, 6, 7, 8, 9]);
-        m.set(0, "zero".to_string());
-        assert_eq!(m.entry_at(0), Some((&0, &"zero".to_string())));
-        m.set(3, "3".to_string());
-        assert_eq!(m.entry_at(9), Some((&3, &"3".to_string())));
-        let c = m.clone();
+        assert_eq!(keys.len(), N as usize);
+        assert!(keys.is_sorted());
+        let values: Vec<&String> = m.values().collect();
+        assert!(values.is_sorted());
+        assert_eq!(m.keys().next(), Some(&START));
+        assert_eq!(m.values().next(), Some(&pad_int(START)));
+        for i in START + 1..END {
+            assert_eq!(m.delete(&i), Some(pad_int(i)));
+            assert!(!m.has(&i));
+            assert_eq!(m.get_or_zero(&i), "");
+            assert_eq!(m.delete(&i), None);
+        }
+        assert_eq!(m.size(), 1);
+        assert!(m.has(&START));
+        assert_eq!(m.delete(&START), Some(pad_int(START)));
+        assert_eq!(m.size(), 0);
+    }
+
+    #[test]
+    fn test_ordered_map_clone() {
+        let mut m: OrderedMap<i32, &str> = OrderedMap::default();
+        m.set(1, "one");
+        m.set(2, "two");
+        let clone = m.clone();
+        assert_eq!(clone.size(), 2);
+        m.delete(&1);
+        assert_eq!(m.size(), 1);
+        assert_eq!(clone.keys().copied().collect::<Vec<_>>(), vec![1, 2]);
+        assert_eq!(clone.values().copied().collect::<Vec<_>>(), vec!["one", "two"]);
         m.clear();
         assert_eq!(m.size(), 0);
-        assert_eq!(c.size(), 10);
     }
 
     #[test]
