@@ -70,7 +70,7 @@ pub fn run(args: DumpArgs) {
         files.push((f, rel_name(&config_dir, f.file_name())));
     }
 
-    let wanted: Option<FxHashSet<String>> = match args.text.as_str() {
+    let mut wanted: Option<FxHashSet<String>> = match args.text.as_str() {
         "all" | "none" => None,
         list => Some(
             std::fs::read_to_string(list)
@@ -103,6 +103,12 @@ pub fn run(args: DumpArgs) {
                 let p = args.out.join(kind).join(format!("{rel}.{kind}"));
                 std::fs::create_dir_all(p.parent().unwrap_or(Path::new("."))).unwrap();
                 std::fs::write(&p, section.as_bytes()).unwrap();
+            }
+            if let Some(w) = wanted.as_mut().filter(|_| kinds.len() == 1) {
+                if w.remove(rel) && w.is_empty() {
+                    // Every listed file is written; later files cannot change them.
+                    break;
+                }
             }
             if (i + 1) % 1000 == 0 {
                 eprintln!("{kind}: {}/{}", i + 1, files.len());

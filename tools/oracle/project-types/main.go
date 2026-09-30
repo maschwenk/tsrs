@@ -12,7 +12,7 @@
 // Output: <out>/manifest.<kind> with one line per file "<fnv1a64 hex>\t<line count>\t<relative path>" and a final
 // "#counts\t<types>\t<symbols>\t<instantiations>" line (checker counters after the walk); the per-file text goes to
 // <out>/<kind>/<relative path>.<kind> for every file (`--text all`, default), none, or the files listed (relative
-// paths, one per line). Relative paths are relative to the tsconfig directory, with `..` segments written as `_up_`.
+// paths, one per line; with a single --mode the walk stops after the last listed file). Relative paths are relative to the tsconfig directory, with `..` segments written as `_up_`.
 //
 // Build (from ts-ref/tsc, source copied to cmd/tsrs-oracle-project-types/main.go):
 //
@@ -159,6 +159,13 @@ func main() {
 				if err := os.WriteFile(p, []byte(section), 0o644); err != nil {
 					fmt.Fprintln(os.Stderr, err)
 					os.Exit(1)
+				}
+			}
+			if wanted != nil && len(kinds) == 1 && wanted[rels[i]] {
+				delete(wanted, rels[i])
+				if len(wanted) == 0 {
+					// Every listed file is written; later files cannot change them.
+					break
 				}
 			}
 			if (i+1)%1000 == 0 {
