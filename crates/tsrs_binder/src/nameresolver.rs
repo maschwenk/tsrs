@@ -101,8 +101,8 @@ impl<H: 'static> NameResolver<H> {
                 loc = loc.parent().unwrap();
             }
             let is_module_attributes = ast::is_module_declaration(loc)
-                && loc.as_module_declaration().attributes.is_some()
-                && last_location == loc.as_module_declaration().attributes;
+                && loc.as_module_declaration().attributes().is_some()
+                && last_location == loc.as_module_declaration().attributes();
             let locals = loc.locals();
             // Locals of a source file are not in scope (because they get merged into the global symbol table)
             if locals.is_some() && !ast::is_global_source_file(loc) {
@@ -148,7 +148,7 @@ impl<H: 'static> NameResolver<H> {
                     } else if loc.kind == Kind::ConditionalType {
                         // A type parameter declared using 'infer T' in a conditional type is visible only in
                         // the true branch of the conditional type.
-                        use_result = last_location == Some(loc.as_conditional_type_node().true_type);
+                        use_result = last_location == Some(loc.as_conditional_type_node().true_type());
                     }
                     if use_result {
                         break 'loop_;
@@ -160,7 +160,7 @@ impl<H: 'static> NameResolver<H> {
             'switch: {
                 match loc.kind {
                     Kind::SourceFile | Kind::ModuleDeclaration => {
-                        if loc.kind == Kind::SourceFile && !ast::is_external_or_common_js_module(P::from_static(loc.as_source_file())) {
+                        if loc.kind == Kind::SourceFile && !ast::is_external_or_common_js_module(loc.as_source_file().as_p()) {
                             break 'switch;
                         }
                         if is_module_attributes {
@@ -295,7 +295,7 @@ impl<H: 'static> NameResolver<H> {
                         let parent = loc.parent().unwrap();
                         if last_location == loc.expression()
                             && ast::is_heritage_clause(parent)
-                            && parent.as_heritage_clause().token == Kind::ExtendsKeyword
+                            && parent.as_heritage_clause().token() == Kind::ExtendsKeyword
                         {
                             let container = parent.parent().unwrap();
                             if ast::is_class_like(container) {
@@ -391,7 +391,7 @@ impl<H: 'static> NameResolver<H> {
                     Kind::Parameter => {
                         let parameter_declaration = loc.as_parameter_declaration();
                         if let Some(last) = last_location {
-                            if Some(last) == parameter_declaration.initializer || Some(last) == loc.name() && ast::is_binding_pattern(Some(last)) {
+                            if Some(last) == parameter_declaration.initializer() || Some(last) == loc.name() && ast::is_binding_pattern(last) {
                                 if associated_declaration_for_containing_initializer_or_binding_name.is_none() {
                                     associated_declaration_for_containing_initializer_or_binding_name = Some(loc);
                                 }
@@ -401,7 +401,7 @@ impl<H: 'static> NameResolver<H> {
                     Kind::BindingElement => {
                         let binding_element = loc.as_binding_element();
                         if let Some(last) = last_location {
-                            if Some(last) == binding_element.initializer || Some(last) == loc.name() && ast::is_binding_pattern(Some(last)) {
+                            if Some(last) == binding_element.initializer() || Some(last) == loc.name() && ast::is_binding_pattern(last) {
                                 if ast::is_part_of_parameter_declaration(loc)
                                     && associated_declaration_for_containing_initializer_or_binding_name.is_none()
                                 {
@@ -412,7 +412,7 @@ impl<H: 'static> NameResolver<H> {
                     }
                     Kind::InferType => {
                         if meaning.intersects(SymbolFlags::TypeParameter) {
-                            let type_parameter = loc.as_infer_type_node().type_parameter;
+                            let type_parameter = loc.as_infer_type_node().type_parameter();
                             if let Some(parameter_name) = type_parameter.name() {
                                 if name == parameter_name.text() {
                                     result = type_parameter.symbol();
@@ -424,7 +424,7 @@ impl<H: 'static> NameResolver<H> {
                     Kind::ExportSpecifier => {
                         let export_specifier = loc.as_export_specifier();
                         if last_location.is_some()
-                            && last_location == export_specifier.property_name
+                            && last_location == export_specifier.property_name()
                             && loc.parent().unwrap().parent().unwrap().module_specifier().is_some()
                         {
                             loc = loc.parent().unwrap().parent().unwrap().parent().unwrap();
@@ -554,7 +554,7 @@ impl<H: 'static> NameResolver<H> {
                     return self.compiler_options.get_emit_script_target() < ScriptTarget::ES2020;
                 }
                 if ast::is_binding_element(node)
-                    && node.as_binding_element().dot_dot_dot_token.is_some()
+                    && node.as_binding_element().dot_dot_dot_token().is_some()
                     && ast::is_object_binding_pattern(node.parent().unwrap())
                 {
                     return self.compiler_options.get_emit_script_target() < ScriptTarget::ES2017;
@@ -603,7 +603,7 @@ impl<H: 'static> NameResolver<H> {
             return arguments_symbol;
         }
         // Default implementation synthesizes a transient symbol for `arguments`
-        let arguments_symbol = P::new(Symbol::new(SymbolFlags::Property | SymbolFlags::Transient, "arguments"));
+        let arguments_symbol = Symbol::new(SymbolFlags::Property | SymbolFlags::Transient, "arguments");
         self.arguments_symbol.set(Some(arguments_symbol));
         arguments_symbol
     }
