@@ -139,3 +139,7 @@ impl KnownSymlinks {
         !s.is_empty() && (tspath::get_canonical_file_name(s, self.use_case_sensitive_file_names) == "node_modules" || s.starts_with('@'))
     }
 }
+
+#[cfg(test)]
+#[path = "knownsymlinks_test.rs"]
+mod knownsymlinks_test;
