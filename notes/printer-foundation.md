@@ -77,6 +77,13 @@ Foundation for the node builder (type/symbol/signature -> text). Data model desc
   of merging this branch's generated sigs file.
 - Stand-ins to replace at merge: printer_standin.rs (tsrs_printer), compiler `as_module_specifier_generation_host`.
 
+## Needs from others
+
+- `tsrs_printer` (printer-pkg): API assumed as in CHECKER.md "The tsrs_printer seam"; at merge delete printer_standin.rs
+  and re-export from `tsrs_printer` in printer_types.rs. `SymbolAccessibility`/`SymbolAccessibilityResult` live in
+  printer_types.rs; if tsrs_printer also exports them, keep one.
+- compiler: implement `tsrs_modulespecifiers::ModuleSpecifierGenerationHost` (+ `OutputPathsHost`) for its Program.
+
 ## Doubts
 
 - `CheckerSlot` uses one `unsafe` deref (NonNull from the lent `&mut Checker`); soundness relies on the dynamic
