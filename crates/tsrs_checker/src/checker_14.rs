@@ -1326,112 +1326,369 @@ pub(crate) fn get_mapped_type_modifiers(t: P<Type>) -> MappedTypeModifiers {
 
 // checker.go:29496
 pub(crate) fn get_mapped_type_optionality(t: P<Type>) -> i32 {
-    todo!()
+    let modifiers = get_mapped_type_modifiers(t);
+    if modifiers.intersects(MappedTypeModifiers::ExcludeOptional) {
+        return -1;
+    } else if modifiers.intersects(MappedTypeModifiers::IncludeOptional) {
+        return 1;
+    }
+    0
 }
 
 impl Checker {
+    // Return -1, 0, or 1, for stripped, unchanged, or added optionality respectively. When a homomorphic mapped type doesn't
+    // modify optionality, recursively consult the optionality of the type being mapped over to see if it strips or adds optionality.
+    // For intersections, return -1 or 1 when all constituents strip or add optionality, otherwise return 0.
     // checker.go:29510
     pub(crate) fn get_combined_mapped_type_optionality(&mut self, t: P<Type>) -> i32 {
-        todo!()
+        if t.object_flags().intersects(ObjectFlags::Mapped) {
+            let optionality = get_mapped_type_optionality(t);
+            if optionality != 0 {
+                return optionality;
+            }
+            let modifiers_type = self.get_modifiers_type_from_mapped_type(t);
+            return self.get_combined_mapped_type_optionality(modifiers_type);
+        }
+        if t.flags().intersects(TypeFlags::Intersection) {
+            let optionality = self.get_combined_mapped_type_optionality(t.types()[0]);
+            for &t in &t.types()[1..] {
+                if self.get_combined_mapped_type_optionality(t) != optionality {
+                    return 0;
+                }
+            }
+            return optionality;
+        }
+        0
     }
 }
 
 // checker.go:29530
 pub(crate) fn is_partial_mapped_type(t: P<Type>) -> bool {
-    todo!()
+    t.object_flags().intersects(ObjectFlags::Mapped) && get_mapped_type_modifiers(t).intersects(MappedTypeModifiers::IncludeOptional)
 }
 
 impl Checker {
     // checker.go:29534
     pub(crate) fn get_optional_expression_type(&mut self, expr_type: P<Type>, expression: P<Node>) -> P<Type> {
-        todo!()
+        if is_expression_of_optional_chain_root(expression) {
+            self.get_non_nullable_type(expr_type)
+        } else if is_optional_chain(expression) {
+            self.remove_optional_type_marker(expr_type)
+        } else {
+            expr_type
+        }
     }
 
     // checker.go:29545
     pub(crate) fn remove_optional_type_marker(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        if self.strict_null_checks {
+            let optional_type = self.optional_type;
+            return self.remove_type(t, optional_type);
+        }
+        t
     }
 
     // checker.go:29552
     pub(crate) fn propagate_optional_type_marker(&mut self, t: P<Type>, node: P<Node>, was_optional: bool) -> P<Type> {
-        todo!()
+        if was_optional {
+            if is_outermost_optional_chain(node) {
+                return self.get_optional_type(t, false);
+            }
+            return self.add_optional_type_marker(t);
+        }
+        t
     }
 
     // checker.go:29562
     pub(crate) fn remove_missing_type(&mut self, t: P<Type>, is_optional: bool) -> P<Type> {
-        todo!()
+        if self.exact_optional_property_types && is_optional {
+            let missing_type = self.missing_type;
+            return self.remove_type(t, missing_type);
+        }
+        t
     }
 
     // checker.go:29569
     pub fn remove_missing_or_undefined_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        if self.exact_optional_property_types {
+            let missing_type = self.missing_type;
+            return self.remove_type(t, missing_type);
+        }
+        self.get_type_with_facts(t, TypeFacts::NEUndefined)
     }
 
     // checker.go:29576
     pub(crate) fn remove_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        self.filter_type(t, |c, t| c.has_type_facts(t, TypeFacts::Truthy))
     }
 
     // checker.go:29580
     pub(crate) fn extract_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        self.map_type(t, |c, t| Some(c.get_definitely_falsy_part_of_type(t))).unwrap()
     }
 
     // checker.go:29584
     pub(crate) fn get_definitely_falsy_part_of_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        if t.flags().intersects(TypeFlags::String) {
+            self.empty_string_type
+        } else if t.flags().intersects(TypeFlags::Number) {
+            self.zero_type
+        } else if t.flags().intersects(TypeFlags::BigInt) {
+            self.zero_big_int_type
+        } else if t == self.regular_false_type
+            || t == self.false_type
+            || t.flags().intersects(TypeFlags::Void | TypeFlags::Undefined | TypeFlags::Null | TypeFlags::AnyOrUnknown)
+            || t.flags().intersects(TypeFlags::StringLiteral) && get_string_literal_value(t).is_empty()
+            || t.flags().intersects(TypeFlags::NumberLiteral) && get_number_literal_value(t).0 == 0.0
+            || t.flags().intersects(TypeFlags::BigIntLiteral) && is_zero_big_int(t)
+        {
+            t
+        } else {
+            self.never_type
+        }
     }
 
     // checker.go:29602
     pub(crate) fn get_constraint_declaration(&mut self, t: P<Type>) -> Option<P<Node>> {
-        todo!()
+        if let Some(symbol) = t.symbol() {
+            for &d in symbol.declarations().iter() {
+                if is_type_parameter_declaration(d) {
+                    if let Some(constraint) = d.as_type_parameter_declaration().constraint {
+                        return Some(constraint);
+                    }
+                }
+            }
+        }
+        None
     }
 
     // checker.go:29623
     pub(crate) fn get_template_literal_type(&mut self, texts: &[&str], types: &[P<Type>]) -> P<Type> {
-        todo!()
+        let union_index = find_index(types, |t| t.flags().intersects(TypeFlags::Never | TypeFlags::Union));
+        if union_index >= 0 {
+            if !self.check_cross_product_union(types) {
+                return self.error_type;
+            }
+            let union_index = union_index as usize;
+            return self
+                .map_type(types[union_index], |c, t| Some(c.get_template_literal_type(texts, &replace_element(types, union_index, t))))
+                .unwrap();
+        }
+        if types.contains(&self.wildcard_type) {
+            return self.wildcard_type;
+        }
+        let mut state = TemplateSpansState { new_types: Vec::new(), new_texts: Vec::new(), sb: String::new(), text_length: 0, too_large: false };
+        state.sb.push_str(texts[0]);
+        if !add_template_spans(self, &mut state, texts, types) {
+            if state.too_large {
+                let current_node = self.current_node;
+                self.error(current_node, &diagnostics::Type_instantiation_is_excessively_deep_and_possibly_infinite, &[]);
+                return self.error_type;
+            }
+            return self.string_type;
+        }
+        if state.new_types.is_empty() {
+            return self.get_string_literal_type(&stringutil::combine_surrogate_pairs(&state.sb));
+        }
+        state.new_texts.push(stringutil::combine_surrogate_pairs(&state.sb).into_owned());
+        let new_texts = state.new_texts;
+        let new_types = state.new_types;
+        if new_texts.iter().all(|t| t.is_empty()) {
+            if new_types.iter().all(|t| t.flags().intersects(TypeFlags::String)) {
+                return self.string_type;
+            }
+            // Normalize `${Mapping<xxx>}` into Mapping<xxx>
+            if new_types.len() == 1 && self.is_pattern_literal_type(new_types[0]) {
+                return new_types[0];
+            }
+        }
+        let new_text_refs: Vec<&str> = new_texts.iter().map(|s| s.as_str()).collect();
+        let key = get_template_type_key(&new_text_refs, &new_types);
+        let t = match self.template_literal_types.get(&key) {
+            Some(&t) => t,
+            None => {
+                let t = self.new_template_literal_type(&new_text_refs, &new_types);
+                self.template_literal_types.insert(key, t);
+                t
+            }
+        };
+        t
     }
 
     // checker.go:29702
     pub(crate) fn get_template_string_for_type(&mut self, t: P<Type>) -> String {
-        todo!()
+        if t.flags().intersects(TypeFlags::StringLiteral | TypeFlags::NumberLiteral | TypeFlags::BooleanLiteral | TypeFlags::BigIntLiteral) {
+            return evaluator::any_to_string(t.as_literal_type().value.get().unwrap());
+        } else if t.flags().intersects(TypeFlags::Nullable) {
+            return t.as_intrinsic_type().intrinsic_name.get().to_string();
+        }
+        String::new()
     }
 
     // checker.go:29712
     pub(crate) fn get_string_mapping_type(&mut self, symbol: P<Symbol>, t: P<Type>) -> P<Type> {
-        todo!()
+        if t.flags().intersects(TypeFlags::Union | TypeFlags::Never) {
+            self.map_type(t, |c, t| Some(c.get_string_mapping_type(symbol, t))).unwrap()
+        } else if t.flags().intersects(TypeFlags::StringLiteral) {
+            self.get_string_literal_type(&apply_string_mapping(symbol, &get_string_literal_value(t)))
+        } else if t.flags().intersects(TypeFlags::TemplateLiteral) {
+            let (texts, types) = self.apply_template_string_mapping(symbol, t.as_template_literal_type().texts.get(), t.as_template_literal_type().types.get());
+            let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+            self.get_template_literal_type(&text_refs, &types)
+        } else if t.flags().intersects(TypeFlags::StringMapping) && Some(symbol) == t.symbol() {
+            t
+        } else if t.flags().intersects(TypeFlags::Any | TypeFlags::String | TypeFlags::StringMapping) || self.is_generic_index_type(t) {
+            self.get_string_mapping_type_for_generic_type(symbol, t)
+        } else if self.is_pattern_literal_placeholder_type(t) {
+            let template = self.get_template_literal_type(&["", ""], &[t]);
+            self.get_string_mapping_type_for_generic_type(symbol, template)
+        } else {
+            t
+        }
     }
+}
+
+// Mutable state shared by the recursive `addSpans` closure of getTemplateLiteralType.
+struct TemplateSpansState {
+    new_types: Vec<P<Type>>,
+    new_texts: Vec<String>,
+    sb: String,
+    text_length: usize, // combined length of the segments already moved into newTexts
+    too_large: bool,
+}
+
+// checker.go:29645 (addSpans closure of getTemplateLiteralType)
+fn add_template_spans(c: &mut Checker, state: &mut TemplateSpansState, texts: &[&str], types: &[P<Type>]) -> bool {
+    for (i, &t) in types.iter().enumerate() {
+        if t.flags().intersects(TypeFlags::Literal | TypeFlags::Null | TypeFlags::Undefined) {
+            let s = c.get_template_string_for_type(t);
+            state.sb.push_str(&s);
+            state.sb.push_str(texts[i + 1]);
+        } else if t.flags().intersects(TypeFlags::TemplateLiteral) {
+            state.sb.push_str(t.as_template_literal_type().texts.get()[0]);
+            if !add_template_spans(c, state, t.as_template_literal_type().texts.get(), t.as_template_literal_type().types.get()) {
+                return false;
+            }
+            state.sb.push_str(texts[i + 1]);
+        } else if c.is_generic_index_type(t) || c.is_pattern_literal_placeholder_type(t) {
+            state.new_types.push(t);
+            state.new_texts.push(stringutil::combine_surrogate_pairs(&state.sb).into_owned());
+            state.text_length += state.sb.len();
+            state.sb.clear();
+            state.sb.push_str(texts[i + 1]);
+        } else {
+            return false;
+        }
+        if state.text_length + state.sb.len() > maxTemplateLiteralTypeLength as usize || state.new_types.len() > maxTemplateLiteralTypeSpans as usize {
+            state.too_large = true;
+            return false;
+        }
+    }
+    true
 }
 
 // checker.go:29731
 pub(crate) fn apply_string_mapping(symbol: P<Symbol>, str: &str) -> String {
-    todo!()
+    match intrinsicTypeKinds.get(symbol.name()).copied().unwrap_or_default() {
+        IntrinsicTypeKind::Uppercase => stringutil::to_upper_js(str),
+        IntrinsicTypeKind::Lowercase => stringutil::to_lower_js(str),
+        IntrinsicTypeKind::Capitalize => {
+            let (_, size) = stringutil::decode_js_string_rune(str);
+            stringutil::to_upper_js(&str[..size]) + &str[size..]
+        }
+        IntrinsicTypeKind::Uncapitalize => {
+            let (_, size) = stringutil::decode_js_string_rune(str);
+            stringutil::to_lower_js(&str[..size]) + &str[size..]
+        }
+        _ => str.to_string(),
+    }
 }
 
 impl Checker {
     // checker.go:29747
     pub(crate) fn apply_template_string_mapping(&mut self, symbol: P<Symbol>, texts: &[&str], types: &[P<Type>]) -> (Vec<String>, Vec<P<Type>>) {
-        todo!()
+        match intrinsicTypeKinds.get(symbol.name()).copied().unwrap_or_default() {
+            IntrinsicTypeKind::Uppercase | IntrinsicTypeKind::Lowercase => {
+                let new_texts: Vec<String> = texts.iter().map(|t| apply_string_mapping(symbol, t)).collect();
+                let new_types: Vec<P<Type>> = types.iter().map(|&t| self.get_string_mapping_type(symbol, t)).collect();
+                (new_texts, new_types)
+            }
+            IntrinsicTypeKind::Capitalize | IntrinsicTypeKind::Uncapitalize => {
+                if !texts[0].is_empty() {
+                    let mut new_texts: Vec<String> = texts.iter().map(|t| t.to_string()).collect();
+                    new_texts[0] = apply_string_mapping(symbol, &new_texts[0]);
+                    return (new_texts, types.to_vec());
+                }
+                let mut new_types = types.to_vec();
+                new_types[0] = self.get_string_mapping_type(symbol, new_types[0]);
+                (texts.iter().map(|t| t.to_string()).collect(), new_types)
+            }
+            _ => (texts.iter().map(|t| t.to_string()).collect(), types.to_vec()),
+        }
     }
 
     // checker.go:29765
     pub(crate) fn get_string_mapping_type_for_generic_type(&mut self, symbol: P<Symbol>, t: P<Type>) -> P<Type> {
-        todo!()
+        let key = StringMappingKey { s: symbol, t };
+        match self.string_mapping_types.get(&key) {
+            Some(&result) => result,
+            None => {
+                let result = self.new_string_mapping_type(symbol, t);
+                self.string_mapping_types.insert(key, result);
+                result
+            }
+        }
     }
 
+    // Given an indexed access on a mapped type of the form { [P in K]: E }[X], return an instantiation of E where P is
+    // replaced with X. Since this simplification doesn't account for mapped type modifiers, add 'undefined' to the
+    // resulting type if the mapped type includes a '?' modifier or if the modifiers type indicates that some properties
+    // are optional. If the modifiers type is generic, conservatively estimate optionality by recursively looking for
+    // mapped types that include '?' modifiers.
     // checker.go:29780
     pub(crate) fn substitute_indexed_mapped_type(&mut self, object_type: P<Type>, index: P<Type>) -> P<Type> {
-        todo!()
+        let type_parameter = self.get_type_parameter_from_mapped_type(object_type);
+        let mapper = new_simple_type_mapper(type_parameter, index);
+        let template_mapper = self.combine_type_mappers(object_type.as_mapped_type().mapper.get(), mapper);
+        let template_type = self.get_template_type_from_mapped_type(object_type.as_mapped_type().target.get().unwrap_or(object_type));
+        let instantiated_template_type = self.instantiate_type(template_type, Some(template_mapper));
+        let mut is_optional = get_mapped_type_optionality(object_type) > 0;
+        if !is_optional {
+            if self.is_generic_type(object_type) {
+                let modifiers_type = self.get_modifiers_type_from_mapped_type(object_type);
+                is_optional = self.get_combined_mapped_type_optionality(modifiers_type) > 0;
+            } else {
+                is_optional = self.could_access_optional_property(object_type, index);
+            }
+        }
+        self.add_optionality_ex(instantiated_template_type, true /*isProperty*/, is_optional)
     }
 
+    // Return true if an indexed access with the given object and index types could access an optional property.
     // checker.go:29796
     pub(crate) fn could_access_optional_property(&mut self, object_type: P<Type>, index_type: P<Type>) -> bool {
-        todo!()
+        let Some(index_constraint) = self.get_base_constraint_of_type(index_type) else {
+            return false;
+        };
+        self.get_properties_of_type(object_type).into_iter().any(|p| {
+            p.flags().intersects(SymbolFlags::Optional) && {
+                let literal = self.get_literal_type_from_property(p, TypeFlags::StringOrNumberLiteralOrUnique, false);
+                self.is_type_assignable_to(literal, index_constraint)
+            }
+        })
     }
 
     // checker.go:29803
     pub(crate) fn get_type_of_property_or_index_signature_of_type(&mut self, t: P<Type>, name: &str) -> Option<P<Type>> {
-        todo!()
+        let prop_type = self.get_type_of_property_of_type(t, name);
+        if prop_type.is_some() {
+            return prop_type;
+        }
+        let index_info = self.get_applicable_index_info_for_name(t, name);
+        if let Some(index_info) = index_info {
+            return Some(self.add_optionality_ex(index_info.value_type(), true /*isProperty*/, true /*isOptional*/));
+        }
+        None
     }
 
     // checker.go:29832
