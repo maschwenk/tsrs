@@ -1234,3 +1234,9 @@ impl SourceFile {
         &[]
     }
 }
+
+// utilities.go:1703
+pub fn is_external_module_indicator(node: P<Node>) -> bool {
+    // Exported top-level member indicates moduleness
+    is_any_import_or_re_export(node) || is_export_assignment(node) || has_syntactic_modifier(node, ModifierFlags::Export)
+}
