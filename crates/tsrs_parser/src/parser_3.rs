@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast as ast;
-use tsrs_ast::{Kind, ModifierFlags, ModifierList, Node, NodeFlags, NodeList, OperatorPrecedence, TokenFlags};
+use tsrs_ast::{DiagnosticExt, Kind, ModifierFlags, ModifierList, Node, NodeFlags, NodeList, OperatorPrecedence, TokenFlags};
 use tsrs_core::{LanguageVariant, TextRange, Tristate, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
@@ -375,7 +375,7 @@ impl Parser {
                 return None;
             }
         }
-        let node = self.factory.new_arrow_function(modifiers, type_parameters, parameters, return_type, None /*fullSignature*/, equals_greater_than_token, body);
+        let node = self.factory.new_arrow_function(modifiers, type_parameters, Some(parameters), return_type, None /*fullSignature*/, equals_greater_than_token, Some(body));
         let result = self.finish_node(node, pos);
         self.with_jsdoc(result, jsdoc);
         self.check_js_syntax(result);
@@ -479,7 +479,7 @@ impl Parser {
         let parameters = self.new_node_list(parameter.loc(), &[parameter]);
         let equals_greater_than_token = self.parse_expected_token(Kind::EqualsGreaterThanToken);
         let body = self.parse_arrow_function_expression_body(async_modifier.is_some() /*isAsync*/, allow_return_type_in_arrow_function);
-        let node = self.factory.new_arrow_function(async_modifier, None /*typeParameters*/, parameters, None /*returnType*/, None /*fullSignature*/, equals_greater_than_token, body);
+        let node = self.factory.new_arrow_function(async_modifier, None /*typeParameters*/, Some(parameters), None /*returnType*/, None /*fullSignature*/, equals_greater_than_token, Some(body));
         let result = self.finish_node(node, pos);
         self.with_jsdoc(result, jsdoc);
         result
@@ -685,8 +685,8 @@ impl Parser {
                 let last_child = children.nodes.last().copied();
                 if let Some(last_child) = last_child.filter(|last_child| {
                     last_child.kind == Kind::JsxElement
-                        && !ast::tag_names_are_equivalent(last_child.as_jsx_element().opening_element.tag_name().unwrap(), last_child.as_jsx_element().closing_element.tag_name().unwrap())
-                        && ast::tag_names_are_equivalent(opening.tag_name().unwrap(), last_child.as_jsx_element().closing_element.tag_name().unwrap())
+                        && !ast::tag_names_are_equivalent(last_child.as_jsx_element().opening_element.tag_name(), last_child.as_jsx_element().closing_element.tag_name())
+                        && ast::tag_names_are_equivalent(opening.tag_name(), last_child.as_jsx_element().closing_element.tag_name())
                 }) {
                     // when an unclosed JsxOpeningElement incorrectly parses its parent's JsxClosingElement,
                     // restructure (<div>(...<span>...</div>)) --> (<div>(...<span>...</>)</div>)
@@ -711,15 +711,15 @@ impl Parser {
                     closing_element = last_child_data.closing_element;
                 } else {
                     closing_element = self.parse_jsx_closing_element(opening, in_expression_context);
-                    if !ast::tag_names_are_equivalent(opening.tag_name().unwrap(), closing_element.tag_name().unwrap()) {
-                        if opening_tag.is_some_and(|opening_tag| ast::is_jsx_opening_element(opening_tag) && ast::tag_names_are_equivalent(closing_element.tag_name().unwrap(), opening_tag.tag_name().unwrap())) {
+                    if !ast::tag_names_are_equivalent(opening.tag_name(), closing_element.tag_name()) {
+                        if opening_tag.is_some_and(|opening_tag| ast::is_jsx_opening_element(opening_tag) && ast::tag_names_are_equivalent(closing_element.tag_name(), opening_tag.tag_name())) {
                             // opening incorrectly matched with its parent's closing -- put error on opening
-                            let text = scanner::get_text_of_node_from_source_text(self.source_text, opening.tag_name().unwrap(), false /*includeTrivia*/);
-                            self.parse_error_at_range(opening.tag_name().unwrap().loc(), &diagnostics::JSX_element_0_has_no_corresponding_closing_tag, &[&text]);
+                            let text = scanner::get_text_of_node_from_source_text(self.source_text, opening.tag_name(), false /*includeTrivia*/);
+                            self.parse_error_at_range(opening.tag_name().loc(), &diagnostics::JSX_element_0_has_no_corresponding_closing_tag, &[&text]);
                         } else {
                             // other opening/closing mismatches -- put error on closing
-                            let text = scanner::get_text_of_node_from_source_text(self.source_text, opening.tag_name().unwrap(), false /*includeTrivia*/);
-                            self.parse_error_at_range(closing_element.tag_name().unwrap().loc(), &diagnostics::Expected_corresponding_JSX_closing_tag_for_0, &[&text]);
+                            let text = scanner::get_text_of_node_from_source_text(self.source_text, opening.tag_name(), false /*includeTrivia*/);
+                            self.parse_error_at_range(closing_element.tag_name().loc(), &diagnostics::Expected_corresponding_JSX_closing_tag_for_0, &[&text]);
                         }
                     }
                 }
@@ -777,8 +777,8 @@ impl Parser {
             list.push(child);
             if ast::is_jsx_opening_element(opening_tag)
                 && child.kind == Kind::JsxElement
-                && !ast::tag_names_are_equivalent(child.as_jsx_element().opening_element.tag_name().unwrap(), child.as_jsx_element().closing_element.tag_name().unwrap())
-                && ast::tag_names_are_equivalent(opening_tag.tag_name().unwrap(), child.as_jsx_element().closing_element.tag_name().unwrap())
+                && !ast::tag_names_are_equivalent(child.as_jsx_element().opening_element.tag_name(), child.as_jsx_element().closing_element.tag_name())
+                && ast::tag_names_are_equivalent(opening_tag.tag_name(), child.as_jsx_element().closing_element.tag_name())
             {
                 // stop after parsing a mismatched child like <div>...(<span></div>) in order to reattach the </div> higher
                 break;
@@ -799,9 +799,9 @@ impl Parser {
                 } else {
                     // We want the error span to cover only 'Foo.Bar' in < Foo.Bar >
                     // or to cover only 'Foo' in < Foo >
-                    let tag = opening_tag.tag_name().unwrap();
+                    let tag = opening_tag.tag_name();
                     let start = std::cmp::min(scanner::skip_trivia(self.source_text, tag.pos()), tag.end());
-                    let text = scanner::get_text_of_node_from_source_text(self.source_text, opening_tag.tag_name().unwrap(), false /*includeTrivia*/);
+                    let text = scanner::get_text_of_node_from_source_text(self.source_text, opening_tag.tag_name(), false /*includeTrivia*/);
                     self.parse_error_at(start, tag.end(), &diagnostics::JSX_element_0_has_no_corresponding_closing_tag, &[&text]);
                 }
                 None
@@ -871,7 +871,7 @@ impl Parser {
         let tag_name = self.parse_jsx_element_name();
         if self.parse_expected_with_diagnostic(Kind::GreaterThanToken, None /*diagnosticMessage*/, false /*shouldAdvance*/) {
             // manually advance the scanner in order to look for jsx text inside jsx
-            if in_expression_context || !ast::tag_names_are_equivalent(open.tag_name().unwrap(), tag_name) {
+            if in_expression_context || !ast::tag_names_are_equivalent(open.tag_name(), tag_name) {
                 self.next_token();
             } else {
                 self.scan_jsx_text();
@@ -1705,7 +1705,7 @@ impl Parser {
         let return_type = self.parse_return_type(Kind::ColonToken, false /*isType*/);
         let body = self.parse_function_block(signature_flags, None /*diagnosticMessage*/);
         self.context_flags = save_contex_flags;
-        let result = self.factory.new_function_expression(modifiers, asterisk_token, name, type_parameters, parameters, return_type, None /*fullSignature*/, body);
+        let result = self.factory.new_function_expression(modifiers, asterisk_token, name, type_parameters, Some(parameters), return_type, None /*fullSignature*/, Some(body));
         self.finish_node(result, pos);
         self.with_jsdoc(result, jsdoc);
         self.check_js_syntax(result);
@@ -2452,7 +2452,7 @@ impl Parser {
         let mut type_reference_directives: Vec<P<ast::FileReference>> = Vec::new();
         let mut lib_reference_directives: Vec<P<ast::FileReference>> = Vec::new();
         // context.AmdDependencies = nil
-        for pragma in context.pragmas.borrow().iter() {
+        for pragma in context.pragmas() {
             match &*pragma.name {
                 "reference" => {
                     let types = pragma.args.get("types");
@@ -2466,25 +2466,25 @@ impl Parser {
                     } else if let Some(types) = types {
                         let mut parsed = tsrs_core::ResolutionMode::default();
                         if let Some(resolution_mode) = resolution_mode {
-                            parsed = self.parse_resolution_mode(&resolution_mode.value, resolution_mode.pos(), resolution_mode.end());
+                            parsed = self.parse_resolution_mode(&resolution_mode.value, resolution_mode.text_range.pos(), resolution_mode.text_range.end());
                         }
                         type_reference_directives.push(P::new(ast::FileReference {
                             text_range: types.text_range,
-                            file_name: types.value,
+                            file_name: types.value.clone(),
                             resolution_mode: parsed,
                             preserve: preserve.is_some_and(|preserve| preserve.value == "true"),
                         }));
                     } else if let Some(lib) = lib {
                         lib_reference_directives.push(P::new(ast::FileReference {
                             text_range: lib.text_range,
-                            file_name: lib.value,
+                            file_name: lib.value.clone(),
                             resolution_mode: tsrs_core::ResolutionMode::default(),
                             preserve: preserve.is_some_and(|preserve| preserve.value == "true"),
                         }));
                     } else if let Some(path) = path {
                         referenced_files.push(P::new(ast::FileReference {
                             text_range: path.text_range,
-                            file_name: path.value,
+                            file_name: path.value.clone(),
                             resolution_mode: tsrs_core::ResolutionMode::default(),
                             preserve: preserve.is_some_and(|preserve| preserve.value == "true"),
                         }));
@@ -2729,7 +2729,7 @@ fn type_has_arrow_function_blocking_parse_error(node: P<Node>) -> bool {
     match node.kind {
         Kind::TypeReference => ast::node_is_missing(Some(node.as_type_reference_node().type_name)),
         Kind::FunctionType | Kind::ConstructorType => {
-            is_missing_node_list(Some(node.function_like_data().unwrap().parameters.get())) || type_has_arrow_function_blocking_parse_error(node.type_node().unwrap())
+            is_missing_node_list(node.function_like_data().unwrap().parameters.get()) || type_has_arrow_function_blocking_parse_error(node.type_node().unwrap())
         }
         Kind::ParenthesizedType => type_has_arrow_function_blocking_parse_error(node.type_node().unwrap()),
         _ => false,
@@ -2783,7 +2783,7 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
                 return Vec::new();
             }
             pos += 10;
-            let mut args: FxHashMap<&'static str, ast::PragmaArgument> = FxHashMap::default();
+            let mut args: FxHashMap<String, ast::PragmaArgument> = FxHashMap::default();
             loop {
                 pos = skip_blanks(text, pos);
                 if match_(text, pos, "/>") {
@@ -2801,18 +2801,17 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
                 let Some(value) = extract_quoted_string(text, pos) else {
                     break;
                 };
-                let name = tsrs_core::alloc_str(&arg_name);
                 args.insert(
-                    name,
+                    arg_name.clone(),
                     ast::PragmaArgument {
                         text_range: TextRange::new(comment_range.pos() + pos as i32 + 1, comment_range.pos() + pos as i32 + 1 + value.len() as i32),
-                        name,
-                        value: tsrs_core::alloc_str(value),
+                        name: arg_name.clone(),
+                        value: value.to_string(),
                     },
                 );
                 pos += value.len() + 2;
             }
-            return vec![ast::Pragma { comment_range, name: "reference", args }];
+            return vec![ast::Pragma { comment_range, name: "reference".to_string(), args }];
         }
         if match_(text, pos, "@") {
             pos += 1;
@@ -2820,7 +2819,7 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
             if !(pragma_name == "ts-check" || pragma_name == "ts-nocheck") {
                 return Vec::new();
             }
-            return vec![ast::Pragma { comment_range, name: tsrs_core::alloc_str(&pragma_name), args: FxHashMap::default() }];
+            return vec![ast::Pragma { comment_range, name: pragma_name, args: FxHashMap::default() }];
         }
     }
     if comment_range.kind == Kind::MultiLineCommentTrivia {
@@ -2851,16 +2850,16 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
                 let start = skip_blanks(text, name_end);
                 let arg_end = skip_non_blanks(text, start);
                 if arg_end != start {
-                    let mut args: FxHashMap<&'static str, ast::PragmaArgument> = FxHashMap::default();
+                    let mut args: FxHashMap<String, ast::PragmaArgument> = FxHashMap::with_capacity_and_hasher(1, Default::default());
                     args.insert(
-                        "factory",
+                        "factory".to_string(),
                         ast::PragmaArgument {
                             text_range: TextRange::new(comment_range.pos() + start as i32, comment_range.pos() + arg_end as i32),
-                            name: "factory",
-                            value: tsrs_core::alloc_str(&text[start..arg_end]),
+                            name: "factory".to_string(),
+                            value: text[start..arg_end].to_string(),
                         },
                     );
-                    pragmas.push(ast::Pragma { comment_range, name: tsrs_core::alloc_str(&pragma_name), args });
+                    pragmas.push(ast::Pragma { comment_range, name: pragma_name.clone(), args });
                 }
             }
             pos = line_end;
