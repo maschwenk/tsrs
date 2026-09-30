@@ -11,8 +11,8 @@ use crate::*;
 // names. `printer::NodeFactory` is deliberately not re-exported (it would clash with `tsrs_ast::NodeFactory` in the stub
 // files' glob imports); reach it as `e.factory`.
 pub use tsrs_printer::{
-    get_single_line_string_writer, new_emit_context, new_printer, new_text_writer, EmitContext, EmitFlags,
-    EmitTextWriter, PrintHandlers, Printer, PrinterOptions,
+    escape_string, get_single_line_string_writer, new_emit_context, new_printer, new_text_writer, EmitContext,
+    EmitFlags, EmitTextWriter, PrintHandlers, Printer, PrinterOptions, QuoteChar,
 };
 
 // nodebuilder/types.go
@@ -128,12 +128,15 @@ pub struct VerbosityContext {
 
 // checker/symbolaccessibility.go
 
+/// Passed as `&accessibleSymbolChainContext`. Go copies the struct but shares the map (a reference type), and
+/// `canQualifySymbol` builds a new context around the same map, hence the `Rc<RefCell<…>>`.
+#[derive(Clone)]
 pub struct accessibleSymbolChainContext {
-    pub symbol: P<Symbol>,
+    pub symbol: Option<P<Symbol>>, // nil when canQualifySymbol recurses on a symbol without a parent
     pub enclosing_declaration: Option<P<Node>>,
     pub meaning: SymbolFlags,
     pub use_only_external_aliasing: bool,
-    pub visited_symbol_tables_map: FxHashMap<SymbolId, FxHashSet<symbolTableID>>,
+    pub visited_symbol_tables_map: std::rc::Rc<RefCell<FxHashMap<SymbolId, FxHashSet<symbolTableID>>>>,
 }
 
 // checker/symboltracker.go
