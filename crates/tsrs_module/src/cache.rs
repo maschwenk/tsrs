@@ -25,6 +25,10 @@ pub(crate) struct ModuleResolutionCache {
 }
 
 impl ModuleResolutionCache {
+    pub(crate) fn size(&self) -> usize {
+        self.cache.size()
+    }
+
     pub(crate) fn get(&self, key: &ModuleResolutionCacheKey) -> Option<P<ResolvedModule>> {
         self.cache.load(key)
     }
@@ -49,6 +53,10 @@ pub(crate) struct TypeRefDirectiveResolutionCache {
 }
 
 impl TypeRefDirectiveResolutionCache {
+    pub(crate) fn size(&self) -> usize {
+        self.cache.size()
+    }
+
     pub(crate) fn get(&self, key: &TypeRefDirectiveResolutionCacheKey) -> Option<P<ResolvedTypeReferenceDirective>> {
         self.cache.load(key)
     }
@@ -65,6 +73,10 @@ pub(crate) struct ParsedPatternsCache {
 }
 
 impl ParsedPatternsCache {
+    pub(crate) fn size(&self) -> usize {
+        self.cache.size()
+    }
+
     pub(crate) fn get(&self, path_mappings: Option<&OrderedMap<String, Vec<String>>>) -> P<ParsedPatterns> {
         let key = path_mappings.map_or(0, |m| m as *const OrderedMap<String, Vec<String>> as usize);
         match self.cache.load(&key) {

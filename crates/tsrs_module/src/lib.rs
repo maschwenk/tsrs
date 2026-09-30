@@ -10,3 +10,6 @@ pub use cache::*;
 pub use resolver::*;
 pub use types::*;
 pub use util::*;
+
+#[cfg(test)]
+mod resolver_test;

@@ -190,13 +190,13 @@ pub struct DefaultResolver {
     pub(crate) resolution_data: P<ResolutionData>,
     host: &'static dyn ResolutionHost,
     // reportDiagnostic: DiagnosticReporter
-    module_resolution_cache: ModuleResolutionCache,
-    type_ref_directive_resolution_cache: TypeRefDirectiveResolutionCache,
+    pub(crate) module_resolution_cache: ModuleResolutionCache,
+    pub(crate) type_ref_directive_resolution_cache: TypeRefDirectiveResolutionCache,
 
     // Cached representations for `core.CompilerOptions.paths`, keyed by the
     // path mappings themselves. This does not handle other path patterns such
     // as `typesVersions`.
-    parsed_patterns_for_paths: ParsedPatternsCache,
+    pub(crate) parsed_patterns_for_paths: ParsedPatternsCache,
 }
 
 pub struct ResolverOptions {
@@ -2249,7 +2249,7 @@ pub struct ParsedPatterns {
 }
 
 impl DefaultResolver {
-    fn get_parsed_patterns_for_paths(&self, compiler_options: &'static CompilerOptions) -> P<ParsedPatterns> {
+    pub(crate) fn get_parsed_patterns_for_paths(&self, compiler_options: &CompilerOptions) -> P<ParsedPatterns> {
         self.parsed_patterns_for_paths.get(compiler_options.paths.as_ref())
     }
 }
