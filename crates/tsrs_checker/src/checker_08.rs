@@ -2015,98 +2015,358 @@ impl Checker {
 
     // checker.go:17120
     pub(crate) fn check_declaration_initializer(&mut self, declaration: P<Node>, check_mode: CheckMode, contextual_type: Option<P<Type>>) -> P<Type> {
-        todo!()
+        let initializer = declaration.initializer().unwrap();
+        let t = match self.get_quick_type_of_expression(initializer) {
+            Some(t) => t,
+            None => {
+                if let Some(contextual_type) = contextual_type {
+                    self.check_expression_with_contextual_type(initializer, contextual_type, None /*inferenceContext*/, check_mode)
+                } else {
+                    self.check_expression_cached_ex(initializer, check_mode)
+                }
+            }
+        };
+        if ast::is_parameter_declaration(ast::get_root_declaration(declaration)) {
+            let name = declaration.name().unwrap();
+            match name.kind {
+                Kind::ObjectBindingPattern => {
+                    if is_object_literal_type(t) {
+                        return self.pad_object_literal_type(t, name);
+                    }
+                }
+                Kind::ArrayBindingPattern => {
+                    if is_tuple_type(t) {
+                        return self.pad_tuple_type(t, name);
+                    }
+                }
+                _ => {}
+            }
+        }
+        t
     }
 
     // checker.go:17146
     pub(crate) fn pad_object_literal_type(&mut self, t: P<Type>, pattern: P<Node>) -> P<Type> {
-        todo!()
+        let mut missing_elements: Vec<P<Node>> = Vec::new();
+        for &e in pattern.elements() {
+            if has_dot_dot_dot_token(e) {
+                continue;
+            }
+            let name = self.get_property_name_from_binding_element(e);
+            if name != InternalSymbolNameMissing && self.get_property_of_type(t, &name).is_none() {
+                missing_elements.push(e);
+            }
+        }
+        if missing_elements.is_empty() {
+            return t;
+        }
+        let members = SymbolTable::new();
+        for prop in self.get_properties_of_object_type(t) {
+            members.set(prop.name(), prop);
+        }
+        for e in missing_elements {
+            let name = self.get_property_name_from_binding_element(e);
+            let symbol = self.new_symbol(SymbolFlags::Property | SymbolFlags::Optional, &name);
+            let resolved_type = self.get_type_from_binding_element(e, false /*includePatternInType*/, true /*reportErrors*/);
+            self.value_symbol_links.get(symbol).resolved_type.set(Some(resolved_type));
+            members.set(symbol.name(), symbol);
+        }
+        let index_infos = self.get_index_infos_of_type(t);
+        let result = self.new_anonymous_type(t.symbol(), Some(members), &[], &[], &index_infos);
+        result.object_flags.set(t.object_flags());
+        result
     }
 
     // checker.go:17174
     pub(crate) fn get_property_name_from_binding_element(&mut self, e: P<Node>) -> String {
-        todo!()
+        let expr_type = self.get_literal_type_from_property_name(e.property_name_or_name().unwrap());
+        if is_type_usable_as_property_name(expr_type) {
+            return get_property_name_from_type(expr_type);
+        }
+        InternalSymbolNameMissing.to_string()
     }
 
     // checker.go:17182
     pub(crate) fn pad_tuple_type(&mut self, t: P<Type>, pattern: P<Node>) -> P<Type> {
-        todo!()
+        let pattern_elements = pattern.elements();
+        if t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) || self.get_type_reference_arity(t) as usize >= pattern_elements.len() {
+            return t;
+        }
+        let mut element_types = self.get_element_types(t);
+        let mut element_infos: Vec<TupleElementInfo> = t.target_tuple_type().element_infos.get().to_vec();
+        let mut i = self.get_type_reference_arity(t) as usize;
+        while i < pattern_elements.len() {
+            let e = pattern_elements[i];
+            if i < pattern_elements.len() - 1 || !(ast::is_binding_element(e) && has_dot_dot_dot_token(e)) {
+                let mut element_type = self.any_type;
+                if !ast::is_omitted_expression(e) && self.has_default_value(e) {
+                    element_type = self.get_type_from_binding_element(e, false /*includePatternInType*/, false /*reportErrors*/);
+                }
+                element_types.push(element_type);
+                element_infos.push(TupleElementInfo { flags: ElementFlags::Optional, labeled_declaration: None });
+                if !ast::is_omitted_expression(e) && !self.has_default_value(e) {
+                    let any_type = self.any_type;
+                    self.report_implicit_any(e, any_type, WideningKind::Normal);
+                }
+            }
+            i += 1;
+        }
+        let readonly = t.target_tuple_type().readonly.get();
+        self.create_tuple_type_ex(&element_types, &element_infos, readonly)
     }
 
     // checker.go:17206
     pub(crate) fn widen_type_inferred_from_initializer(&mut self, declaration: P<Node>, t: P<Type>) -> P<Type> {
-        todo!()
+        let widened = self.get_widened_literal_type_for_initializer(declaration, t);
+        if ast::is_in_js_file(declaration) {
+            if self.is_empty_literal_type(widened) {
+                let any_type = self.any_type;
+                self.report_implicit_any(declaration, any_type, WideningKind::Normal);
+                return self.any_type;
+            }
+            if self.is_empty_array_literal_type(widened) {
+                let any_array_type = self.any_array_type;
+                self.report_implicit_any(declaration, any_array_type, WideningKind::Normal);
+                return self.any_array_type;
+            }
+        }
+        widened
     }
 
     // checker.go:17221
     pub(crate) fn get_widened_literal_type_for_initializer(&mut self, declaration: P<Node>, t: P<Type>) -> P<Type> {
-        todo!()
+        if self.get_combined_node_flags_cached(declaration).intersects(NodeFlags::Constant) || is_declaration_readonly(declaration) {
+            return t;
+        }
+        self.get_widened_literal_type(t)
     }
 
     // checker.go:17228
     pub(crate) fn get_type_of_func_class_enum_module(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let links = self.value_symbol_links.get(symbol);
+        if links.resolved_type.get().is_none() {
+            let t = self.get_type_of_func_class_enum_module_worker(symbol);
+            links.resolved_type.set(Some(t));
+        }
+        links.resolved_type.get().unwrap()
     }
 
     // checker.go:17236
     pub(crate) fn get_type_of_func_class_enum_module_worker(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        if symbol.flags().intersects(SymbolFlags::Module) && is_shorthand_ambient_module_symbol(symbol) {
+            return self.any_type;
+        } else if symbol.flags().intersects(SymbolFlags::ValueModule)
+            && symbol.value_declaration().is_some_and(|d| ast::is_source_file(d) && d.as_source_file().common_js_module_indicator().is_some())
+        {
+            let resolved_module = self.resolve_external_module_symbol(symbol, false /*dontResolveAlias*/);
+            if resolved_module != symbol {
+                return self.get_type_of_symbol(resolved_module);
+            }
+        }
+        let t = self.new_object_type(ObjectFlags::Anonymous, Some(symbol));
+        if symbol.flags().intersects(SymbolFlags::Class) {
+            let base_type_variable = self.get_base_type_variable_of_class(symbol);
+            if let Some(base_type_variable) = base_type_variable {
+                return self.get_intersection_type(&[t, base_type_variable]);
+            }
+            return t;
+        }
+        if self.strict_null_checks && symbol.flags().intersects(SymbolFlags::Optional) {
+            return self.get_optional_type(t, true /*isProperty*/);
+        }
+        t
     }
 
     // checker.go:17260
     pub(crate) fn get_base_type_variable_of_class(&mut self, symbol: P<Symbol>) -> Option<P<Type>> {
-        todo!()
+        let declared_type = self.get_declared_type_of_class_or_interface(symbol);
+        let base_constructor_type = self.get_base_constructor_type_of_class(declared_type);
+        if base_constructor_type.flags().intersects(TypeFlags::TypeVariable) {
+            return Some(base_constructor_type);
+        } else if base_constructor_type.flags().intersects(TypeFlags::Intersection) {
+            return base_constructor_type.types().iter().copied().find(|t| t.flags().intersects(TypeFlags::TypeVariable));
+        }
+        None
     }
 
+    /**
+     * The base constructor of a class can resolve to
+     * * undefinedType if the class has no extends clause,
+     * * errorType if an error occurred during resolution of the extends expression,
+     * * nullType if the extends expression is the null value,
+     * * anyType if the extends expression has type any, or
+     * * an object type with at least one construct signature.
+     */
     // checker.go:17281
     pub fn get_base_constructor_type_of_class(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        let data = t.as_interface_type();
+        if let Some(resolved) = data.resolved_base_constructor_type.get() {
+            return resolved;
+        }
+        let Some(base_type_node) = get_base_type_node_of_class(t) else {
+            data.resolved_base_constructor_type.set(Some(self.undefined_type));
+            return data.resolved_base_constructor_type.get().unwrap();
+        };
+        if !self.push_type_resolution(t.into(), TypeSystemPropertyName::ResolvedBaseConstructorType) {
+            return self.error_type;
+        }
+        let base_constructor_type = self.check_expression(base_type_node.expression().unwrap());
+        if base_constructor_type.flags().intersects(TypeFlags::Object | TypeFlags::Intersection) {
+            // Resolving the members of a class requires us to resolve the base class of that class.
+            // We force resolution here such that we catch circularities now.
+            self.resolve_structured_type_members(base_constructor_type);
+        }
+        if !self.pop_type_resolution() {
+            let t_symbol = t.symbol().unwrap();
+            let name = self.symbol_to_string(t_symbol);
+            self.error(t_symbol.value_declaration(), &diagnostics::X_0_is_referenced_directly_or_indirectly_in_its_own_base_expression, &[&name]);
+            if data.resolved_base_constructor_type.get().is_none() {
+                data.resolved_base_constructor_type.set(Some(self.error_type));
+            }
+            return data.resolved_base_constructor_type.get().unwrap();
+        }
+        if !base_constructor_type.flags().intersects(TypeFlags::Any) && base_constructor_type != self.null_widening_type && !self.is_constructor_type(base_constructor_type) {
+            let type_name = self.type_to_string(base_constructor_type, None);
+            let err = self.error(base_type_node.expression(), &diagnostics::Type_0_is_not_a_constructor_function_type, &[&type_name]);
+            if base_constructor_type.flags().intersects(TypeFlags::TypeParameter) {
+                let constraint = self.get_constraint_from_type_parameter(base_constructor_type);
+                let mut ctor_return = self.unknown_type;
+                if let Some(constraint) = constraint {
+                    let ctor_sigs = self.get_signatures_of_type(constraint, SignatureKind::Construct);
+                    if !ctor_sigs.is_empty() {
+                        ctor_return = self.get_return_type_of_signature(ctor_sigs[0]);
+                    }
+                }
+                let base_symbol = base_constructor_type.symbol().unwrap();
+                if !base_symbol.declarations().is_empty() {
+                    let first_declaration = base_symbol.declarations()[0];
+                    let symbol_name = self.symbol_to_string(base_symbol);
+                    let return_name = self.type_to_string(ctor_return, None);
+                    err.add_related_info(create_diagnostic_for_node(Some(first_declaration), &diagnostics::Did_you_mean_for_0_to_be_constrained_to_type_new_args_Colon_any_1, &[&symbol_name, &return_name]));
+                }
+            }
+            if data.resolved_base_constructor_type.get().is_none() {
+                data.resolved_base_constructor_type.set(Some(self.error_type));
+            }
+            return data.resolved_base_constructor_type.get().unwrap();
+        }
+        if data.resolved_base_constructor_type.get().is_none() {
+            data.resolved_base_constructor_type.set(Some(base_constructor_type));
+        }
+        data.resolved_base_constructor_type.get().unwrap()
     }
 
     // checker.go:17333
     pub(crate) fn is_function_type(&mut self, t: P<Type>) -> bool {
-        todo!()
+        t.flags().intersects(TypeFlags::Object) && !self.get_signatures_of_type(t, SignatureKind::Call).is_empty()
     }
 
     // checker.go:17337
     pub(crate) fn is_constructor_type(&mut self, t: P<Type>) -> bool {
-        todo!()
+        if !self.get_signatures_of_type(t, SignatureKind::Construct).is_empty() {
+            return true;
+        }
+        if t.flags().intersects(TypeFlags::TypeVariable) {
+            let constraint = self.get_base_constraint_of_type(t);
+            return constraint.is_some_and(|c| self.is_mixin_constructor_type(c));
+        }
+        false
     }
 
+    // A type is a mixin constructor if it has a single construct signature taking no type parameters and a single
+    // rest parameter of type any[].
     // checker.go:17350
     pub(crate) fn is_mixin_constructor_type(&mut self, t: P<Type>) -> bool {
-        todo!()
+        let signatures = self.get_signatures_of_type(t, SignatureKind::Construct);
+        if signatures.len() == 1 {
+            let s = signatures[0];
+            if s.type_parameters.get().is_empty() && s.parameters.get().len() == 1 && signature_has_rest_parameter(s) {
+                let param_type = self.get_type_of_parameter(s.parameters.get()[0]);
+                return is_type_any(Some(param_type)) || self.get_element_type_of_array_type(param_type) == Some(self.any_type);
+            }
+        }
+        false
     }
 }
 
 // checker.go:17362
 pub(crate) fn signature_has_rest_parameter(sig: P<Signature>) -> bool {
-    todo!()
+    sig.flags().intersects(SignatureFlags::HasRestParameter)
 }
 
 impl Checker {
     // checker.go:17366
     pub(crate) fn get_type_of_parameter(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let declaration = symbol.value_declaration();
+        let t = self.get_type_of_symbol(symbol);
+        self.add_optionality_ex(t, false, declaration.is_some_and(|d| d.initializer().is_some() || is_optional_declaration(d)))
     }
 
     // checker.go:17371
     pub(crate) fn get_constraint_of_type(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        let flags = t.flags();
+        if flags.intersects(TypeFlags::TypeParameter) {
+            return self.get_constraint_of_type_parameter(t);
+        } else if flags.intersects(TypeFlags::IndexedAccess) {
+            return self.get_constraint_of_indexed_access(t);
+        } else if flags.intersects(TypeFlags::Conditional) {
+            return self.get_constraint_of_conditional_type(t);
+        }
+        self.get_base_constraint_of_type(t)
     }
 
     // checker.go:17383
     pub fn get_constraint_of_type_parameter(&mut self, type_parameter: P<Type>) -> Option<P<Type>> {
-        todo!()
+        if self.has_non_circular_base_constraint(type_parameter) {
+            return self.get_constraint_from_type_parameter(type_parameter);
+        }
+        None
     }
 
     // checker.go:17390
     pub(crate) fn has_non_circular_base_constraint(&mut self, t: P<Type>) -> bool {
-        todo!()
+        self.get_resolved_base_constraint(t, &[]) != self.circular_constraint_type
     }
 
+    // This is a worker function. Use getConstraintOfTypeParameter which guards against circular constraints
     // checker.go:17395
     pub(crate) fn get_constraint_from_type_parameter(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        if !t.flags().intersects(TypeFlags::TypeParameter) {
+            return None;
+        }
+
+        let tp = t.as_type_parameter();
+        if tp.constraint.get().is_none() {
+            let mut constraint: Option<P<Type>>;
+            if let Some(target) = tp.target.get() {
+                let target_constraint = self.get_constraint_of_type_parameter(target);
+                constraint = target_constraint.map(|tc| self.instantiate_type(tc, tp.mapper.get()));
+            } else {
+                let constraint_declaration = self.get_constraint_declaration(t);
+                if let Some(constraint_declaration) = constraint_declaration {
+                    let mut c = self.get_type_from_type_node(constraint_declaration);
+                    if c.flags().intersects(TypeFlags::Any) && !self.is_error_type(c) {
+                        // use stringNumberSymbolType as the base constraint for mapped type key constraints (unknown isn;t assignable to that, but `any` was),
+                        // use unknown otherwise
+                        if ast::is_mapped_type_node(constraint_declaration.parent().unwrap().parent().unwrap()) {
+                            c = self.string_number_symbol_type;
+                        } else {
+                            c = self.unknown_type;
+                        }
+                    }
+                    constraint = Some(c);
+                } else {
+                    constraint = self.get_inferred_type_parameter_constraint(t, false);
+                }
+            }
+            if constraint.is_none() {
+                constraint = Some(self.no_constraint_type);
+            }
+            tp.constraint.set(constraint);
+        }
+        if tp.constraint.get() != Some(self.no_constraint_type) {
+            return tp.constraint.get();
+        }
+        None
     }
 }
