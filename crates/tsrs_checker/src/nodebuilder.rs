@@ -249,8 +249,8 @@ impl NodeBuilder {
     // SymbolToParameterDeclaration implements NodeBuilderInterface.
     // nodebuilder.go:243
     pub fn symbol_to_parameter_declaration(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> {
-        // Go's value receiver copies the NodeBuilder, so the pushed context stack is the copy's; the shared impl ctx is
-        // what matters, and it is restored by exitContext exactly as with a pointer receiver.
+        // Go has a value receiver here (the copy's ctxStack is pushed/popped); the net effect on the shared impl ctx is
+        // the same as with a pointer receiver.
         self.enter_context(enclosing_declaration, flags, internal_flags, tracker);
         let result = self.impl_.symbol_to_parameter_declaration(c, symbol, false);
         self.exit_context(Some(result))
