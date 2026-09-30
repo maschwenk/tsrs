@@ -321,7 +321,7 @@ impl Parser {
     pub(crate) fn reparse_jsdoc_comment(&mut self, node: P<Node>, tag: P<Node>) {
         if let Some(comment) = tag.comment_list() {
             let cloned: Vec<P<Node>> = comment.nodes().iter().map(|&n| self.factory.deep_clone_reparse(Some(n)).unwrap()).collect();
-            let new_comment = self.factory.new_node_list(&cloned);
+            let new_comment = self.factory.new_node_list(cloned);
             new_comment.loc.set(comment.loc.get());
             let prop_jsdoc = self.factory.new_jsdoc(new_comment, None);
             self.finish_reparsed_node(prop_jsdoc, tag);
