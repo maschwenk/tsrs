@@ -6,6 +6,7 @@ pub mod glob;
 pub mod jsnum;
 pub mod semver;
 pub mod stringutil;
+pub mod tspath;
 
 mod languagevariant;
 mod scriptkind;
