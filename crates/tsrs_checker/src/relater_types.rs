@@ -161,3 +161,29 @@ pub struct Relater {
     pub relation_count: Cell<i32>,
     pub next: Cell<Option<P<Relater>>>,
 }
+
+// The Go `Discriminator` implementations; the method bodies are the inherent methods in relater_1.rs / checker_15.rs.
+
+impl Discriminator for TypeDiscriminator<'_> {
+    fn len(&mut self, c: &mut Checker) -> i32 {
+        TypeDiscriminator::len(self, c)
+    }
+    fn name(&mut self, c: &mut Checker, index: i32) -> String {
+        TypeDiscriminator::name(self, c, index)
+    }
+    fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool {
+        TypeDiscriminator::matches(self, c, index, t)
+    }
+}
+
+impl Discriminator for ObjectLiteralDiscriminator {
+    fn len(&mut self, c: &mut Checker) -> i32 {
+        ObjectLiteralDiscriminator::len(self, c)
+    }
+    fn name(&mut self, c: &mut Checker, index: i32) -> String {
+        ObjectLiteralDiscriminator::name(self, c, index)
+    }
+    fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool {
+        ObjectLiteralDiscriminator::matches(self, c, index, t)
+    }
+}
