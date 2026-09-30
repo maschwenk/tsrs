@@ -41,7 +41,7 @@ pub struct TrackedSymbolArgs {
 
 /// Go `SerializedTypeEntry`, handled as `P<SerializedTypeEntry>` (built once by a composite literal).
 pub struct SerializedTypeEntry {
-    pub node: P<Node>,
+    pub node: Option<P<Node>>, // Go stores the (possibly nil) result of the transform
     pub truncating: bool,
     pub added_length: i32,
     pub tracked_symbols: Vec<P<TrackedSymbolArgs>>,
