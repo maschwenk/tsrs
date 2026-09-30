@@ -11,7 +11,7 @@ pub struct InferenceKey {
 /// Arena handle (`P<InferenceState>`), pooled through `Checker::freeinference_state` like Go.
 #[derive(Default)]
 pub struct InferenceState {
-    pub inferences: Cell<&'static [P<InferenceInfo>]>,
+    pub inferences: RefCell<Vec<P<InferenceInfo>>>,
     pub original_source: Cell<Option<P<Type>>>,
     pub original_target: Cell<Option<P<Type>>>,
     pub priority: Cell<InferencePriority>,

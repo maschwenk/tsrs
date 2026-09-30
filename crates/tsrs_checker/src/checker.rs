@@ -707,7 +707,7 @@ pub struct Checker {
     pub discriminated_contextual_types: FxHashMap<DiscriminatedContextualTypeKey, P<Type>>,
     pub instantiation_expression_types: FxHashMap<InstantiationExpressionKey, P<Type>>,
     pub substitution_types: FxHashMap<SubstitutionTypeKey, P<Type>>,
-    pub reverse_mapped_cache: FxHashMap<ReverseMappedTypeKey, P<Type>>,
+    pub reverse_mapped_cache: FxHashMap<ReverseMappedTypeKey, Option<P<Type>>>, // Go stores nil results (lookup uses comma-ok)
     pub reverse_homomorphic_mapped_cache: FxHashMap<ReverseMappedTypeKey, P<Type>>,
     pub iteration_types_cache: FxHashMap<IterationTypesKey, IterationTypes>,
     pub marker_types: Set<P<Type>>,
