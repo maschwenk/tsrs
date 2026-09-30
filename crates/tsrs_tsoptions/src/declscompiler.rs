@@ -4,6 +4,9 @@ use tsrs_core::{PollingKind, ScriptTarget, Tristate, WatchDirectoryKind, WatchFi
 use tsrs_diagnostics as diagnostics;
 
 use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, DefaultValueDescription, ExtraValidation};
+use crate::parsinghelpers::for_each_compiler_options_field;
+use crate::tsconfigparsing::COMMAND_LINE_COMPILER_OPTIONS_MAP;
+use tsrs_core::CompilerOptions;
 
 pub static OPTIONS_DECLARATIONS: LazyLock<Vec<&'static CommandLineOption>> =
     LazyLock::new(|| COMMON_OPTIONS_WITH_BUILD.iter().chain(OPTIONS_FOR_COMPILER.iter()).copied().collect());
@@ -1406,3 +1409,57 @@ pub(crate) static OPTIONS_FOR_COMPILER: LazyLock<Vec<&'static CommandLineOption>
     ]
 });
 // END GENERATED
+
+fn options_have_changes(
+    old_options: Option<&CompilerOptions>,
+    new_options: Option<&CompilerOptions>,
+    decl_filter: impl Fn(&CommandLineOption) -> bool,
+) -> bool {
+    let (old_options, new_options) = match (old_options, new_options) {
+        (None, None) => return false,
+        (Some(old), Some(new)) if std::ptr::eq(old, new) => return false,
+        (Some(old), Some(new)) => (old, new),
+        _ => return true,
+    };
+    // Go ForEachCompilerOptionValue walks the struct fields by reflection and looks each one up by name.
+    macro_rules! compare_fields {
+        ($($field:ident: $json:literal,)*) => {
+            $(
+                if let Some(option_declaration) = COMMAND_LINE_COMPILER_OPTIONS_MAP.get($json) {
+                    if decl_filter(option_declaration) {
+                        let changed = if option_declaration.strict_flag {
+                            compare_strict(old_options, new_options, &old_options.$field, &new_options.$field)
+                        } else if option_declaration.allow_js_flag {
+                            old_options.get_allow_js() != new_options.get_allow_js()
+                        } else {
+                            old_options.$field != new_options.$field
+                        };
+                        if changed {
+                            return true;
+                        }
+                    }
+                }
+            )*
+        };
+    }
+    for_each_compiler_options_field!(compare_fields);
+    false
+}
+
+fn compare_strict<T: std::any::Any>(old_options: &CompilerOptions, new_options: &CompilerOptions, old_value: &T, new_value: &T) -> bool {
+    let old_value = (old_value as &dyn std::any::Any).downcast_ref::<Tristate>().copied().unwrap();
+    let new_value = (new_value as &dyn std::any::Any).downcast_ref::<Tristate>().copied().unwrap();
+    old_options.get_strict_option_value(old_value) != new_options.get_strict_option_value(new_value)
+}
+
+pub fn compiler_options_affect_semantic_diagnostics(old_options: Option<&CompilerOptions>, new_options: Option<&CompilerOptions>) -> bool {
+    options_have_changes(old_options, new_options, |option| option.affects_semantic_diagnostics)
+}
+
+pub fn compiler_options_affect_declaration_path(old_options: Option<&CompilerOptions>, new_options: Option<&CompilerOptions>) -> bool {
+    options_have_changes(old_options, new_options, |option| option.affects_declaration_path)
+}
+
+pub fn compiler_options_affect_emit(old_options: Option<&CompilerOptions>, new_options: Option<&CompilerOptions>) -> bool {
+    options_have_changes(old_options, new_options, |option| option.affects_emit)
+}
