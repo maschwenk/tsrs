@@ -1313,7 +1313,7 @@ get_ref | pub fn get_ref(&self) -> Option<P<RefCell<FxHashMap<K, V>>>> | rust:ty
 get_reference_candidate | pub(crate) fn get_reference_candidate(&mut self, node: P<Node>) -> P<Node> | flow.go:1861 | Checker
 get_reference_resolver | pub(crate) fn get_reference_resolver(&self, c: &mut Checker) -> P<ReferenceResolver<Checker>> | emitresolver.go:842 | EmitResolver
 get_reference_root | pub(crate) fn get_reference_root(&mut self, node: P<Node>) -> P<Node> | flow.go:1876 | Checker
-get_referenced_export_container | pub fn get_referenced_export_container(&self, c: &mut Checker, node: P<Node>, prefix_locals: bool) -> Option<P<Node>> | emitresolver.go:858 | EmitResolver
+get_referenced_export_container | pub fn get_referenced_export_container(&self, c: &mut Checker, node: P<Node>, prefix_locals: bool) -> Option<P<Node>> /*SourceFile|ModuleDeclaration|EnumDeclaration*/ | emitresolver.go:858 | EmitResolver
 get_referenced_import_declaration | pub fn get_referenced_import_declaration(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | emitresolver.go:875 | EmitResolver
 get_referenced_member_value_declaration | pub fn get_referenced_member_value_declaration(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | emitresolver.go:935 | EmitResolver
 get_referenced_value_declaration | pub fn get_referenced_value_declaration(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | emitresolver.go:889 | EmitResolver
@@ -2299,6 +2299,7 @@ mark_jsx_alias_referenced | pub(crate) fn mark_jsx_alias_referenced(&mut self, n
 mark_linked_aliases | pub(crate) fn mark_linked_aliases(&self, c: &mut Checker, node: P<Node>) | emitresolver.go:278 | EmitResolver
 mark_linked_references | pub(crate) fn mark_linked_references(&mut self, location: P<Node>, hint: ReferenceHint, prop_symbol: Option<P<Symbol>>, parent_type: Option<P<Type>>) | checker.go:28659 | Checker
 mark_linked_references_recursively | pub fn mark_linked_references_recursively(&self, c: &mut Checker, file: Option<P<SourceFile>>) | emitresolver.go:808 | EmitResolver
+mark_linked_references_recursively_visit | fn mark_linked_references_recursively_visit(c: &mut Checker, n: P<Node>) -> bool | rust:emitresolver.rs:884 | -
 mark_node_assignments | pub(crate) fn mark_node_assignments(&mut self, node: P<Node>) -> bool | rust:checker.rs:1489 | Checker
 mark_node_assignments_worker | pub(crate) fn mark_node_assignments_worker(&mut self, node: P<Node>) -> bool | flow.go:2700 | Checker
 mark_property_alias_referenced | pub(crate) fn mark_property_alias_referenced(&mut self, location: P<Node>, prop_symbol: Option<P<Symbol>>, parent_type: Option<P<Type>>) | checker.go:28877 | Checker
@@ -2637,7 +2638,7 @@ serialize_properties_with_truncation | pub(crate) fn serialize_properties_with_t
 serialize_return_type_for_signature | pub fn serialize_return_type_for_signature(&self, c: &mut Checker, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:117 | NodeBuilder
 serialize_return_type_for_signature | pub(crate) fn serialize_return_type_for_signature(&self, c: &mut Checker, signature: P<Signature>, try_reuse: bool) -> Option<P<Node>> | nodebuilderimpl.go:2095 | NodeBuilderImpl
 serialize_type_alias_for_namespace | pub(crate) fn serialize_type_alias_for_namespace(&self, c: &mut Checker, symbol: P<Symbol>, name: &str) -> P<Node> | nodebuilder_hover.go:558 | NodeBuilderImpl
-serialize_type_for_declaration | pub fn serialize_type_for_declaration(&self, c: &mut Checker, declaration: P<Node>, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:134 | NodeBuilder
+serialize_type_for_declaration | pub fn serialize_type_for_declaration(&self, c: &mut Checker, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:134 | NodeBuilder
 serialize_type_for_declaration | pub(crate) fn serialize_type_for_declaration(&self, c: &mut Checker, declaration: Option<P<Node>>, t: Option<P<Type>>, symbol: Option<P<Symbol>>, try_reuse: bool) -> P<Node> | nodebuilderimpl.go:2253 | NodeBuilderImpl
 serialize_type_for_expression | pub fn serialize_type_for_expression(&self, c: &mut Checker, expr: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:140 | NodeBuilder
 serialize_type_for_expression | pub(crate) fn serialize_type_for_expression(&self, c: &mut Checker, expr: P<Node>) -> Option<P<Node>> | nodebuilderimpl.go:1811 | NodeBuilderImpl
