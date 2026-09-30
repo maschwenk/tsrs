@@ -1243,115 +1243,471 @@ impl Checker {
         self.check_expression(node.expression().unwrap());
     }
 
+    // Returns the type of an expression. Unlike checkExpression, this function is simply concerned
+    // with computing the type and may not fully check all contained sub-expressions for errors.
     // checker.go:7509
     pub(crate) fn get_type_of_expression(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        // Don't bother caching types that require no flow analysis and are quick to compute.
+        let quick_type = self.get_quick_type_of_expression(node);
+        if let Some(quick_type) = quick_type {
+            return quick_type;
+        }
+        // If a type has been cached for the node, return it.
+        if let Some(cached_type) = self.flow_type_cache.as_ref().and_then(|m| m.get(&node).copied()) {
+            return cached_type;
+        }
+        let start_invocation_count = self.flow_invocation_count;
+        let t = self.check_expression_ex(node, CheckMode::TypeOnly);
+        // If control flow analysis was required to determine the type, it is worth caching.
+        if self.flow_invocation_count != start_invocation_count {
+            self.flow_type_cache.get_or_insert_with(FxHashMap::default).insert(node, t);
+        }
+        t
     }
 
+    // Returns the type of an expression. Unlike checkExpression, this function is simply concerned
+    // with computing the type and may not fully check all contained sub-expressions for errors.
     // checker.go:7533
     pub(crate) fn get_quick_type_of_expression(&mut self, node: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let expr = skip_parentheses(node);
+        if is_await_expression(expr) {
+            let t = self.get_quick_type_of_expression(expr.expression().unwrap());
+            if let Some(t) = t {
+                return self.get_awaited_type(t);
+            }
+            return None;
+        }
+        // Optimize for the common case of a call to a function with a single non-generic call
+        // signature where we can just fetch the return type without checking the arguments.
+        if is_call_expression(expr)
+            && expr.expression().unwrap().kind != Kind::SuperKeyword
+            && !is_require_call(expr, true /*requireStringLiteralLikeArgument*/)
+            && !self.is_symbol_or_symbol_for_call(expr)
+            && !is_import_call(expr)
+        {
+            if is_call_chain(expr) {
+                return self.get_return_type_of_single_non_generic_signature_of_call_chain(expr);
+            }
+            let func_type = self.check_non_null_expression(expr.expression().unwrap());
+            return self.get_return_type_of_single_non_generic_signature(func_type, SignatureKind::Call);
+        }
+        if is_new_expression(expr) {
+            let func_type = self.check_non_null_expression(expr.expression().unwrap());
+            return self.get_return_type_of_single_non_generic_signature(func_type, SignatureKind::Construct);
+        }
+        if is_assertion_expression(expr) && !crate::is_const_type_reference(expr.type_node().unwrap()) {
+            return Some(self.get_type_from_type_node(expr.type_node().unwrap()));
+        }
+        if is_literal_expression(node) || is_boolean_literal(node) {
+            return Some(self.check_expression(node));
+        }
+        None
     }
 
     // checker.go:7559
     pub(crate) fn get_return_type_of_single_non_generic_signature(&mut self, func_type: P<Type>, kind: SignatureKind) -> Option<P<Type>> {
-        todo!()
+        let signature = self.get_single_signature(func_type, kind, true /*allowMembers*/);
+        if let Some(signature) = signature {
+            if signature.type_parameters().is_empty() {
+                return Some(self.get_return_type_of_signature(signature));
+            }
+        }
+        None
     }
 
     // checker.go:7567
     pub(crate) fn get_return_type_of_single_non_generic_signature_of_call_chain(&mut self, expr: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let func_type = self.check_expression(expr.expression().unwrap());
+        let non_optional_type = self.get_optional_expression_type(func_type, expr.expression().unwrap());
+        let return_type = self.get_return_type_of_single_non_generic_signature(func_type, SignatureKind::Call);
+        if let Some(return_type) = return_type {
+            return Some(self.propagate_optional_type_marker(return_type, expr, non_optional_type != func_type));
+        }
+        None
     }
 
     // checker.go:7577
     pub(crate) fn check_non_null_expression(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let t = self.check_expression(node);
+        self.check_non_null_type(t, node)
     }
 
     // checker.go:7581
     pub(crate) fn check_non_null_type(&mut self, t: P<Type>, node: P<Node>) -> P<Type> {
-        todo!()
+        self.check_non_null_type_with_reporter(t, node, |c, node, facts| c.report_object_possibly_null_or_undefined_error(node, facts))
     }
 
     // checker.go:7585
-    pub(crate) fn check_non_null_type_with_reporter(&mut self, t: P<Type>, node: P<Node>, report_error: impl FnMut(&mut Checker, P<Node>, TypeFacts)) -> P<Type> {
-        todo!()
+    pub(crate) fn check_non_null_type_with_reporter(&mut self, t: P<Type>, node: P<Node>, mut report_error: impl FnMut(&mut Checker, P<Node>, TypeFacts)) -> P<Type> {
+        if self.strict_null_checks && t.flags().intersects(TypeFlags::Unknown) {
+            if is_entity_name_expression(node) {
+                let node_text = crate::entity_name_to_string(node);
+                if node_text.len() < 100 {
+                    self.error(Some(node), &diagnostics::X_0_is_of_type_unknown, &[&node_text]);
+                    return self.error_type;
+                }
+            }
+            self.error(Some(node), &diagnostics::Object_is_of_type_unknown, &[]);
+            return self.error_type;
+        }
+        let facts = self.get_type_facts(t, TypeFacts::IsUndefinedOrNull);
+        if facts.intersects(TypeFacts::IsUndefinedOrNull) {
+            report_error(self, node, facts);
+            let non_nullable = self.get_non_nullable_type(t);
+            if non_nullable.flags().intersects(TypeFlags::Nullable | TypeFlags::Never) {
+                return self.error_type;
+            }
+            return non_nullable;
+        }
+        t
     }
 
     // checker.go:7609
     pub(crate) fn check_non_null_non_void_type(&mut self, t: P<Type>, node: P<Node>) -> P<Type> {
-        todo!()
+        let non_null_type = self.check_non_null_type(t, node);
+        if non_null_type.flags().intersects(TypeFlags::Void) {
+            if is_entity_name_expression(node) {
+                let node_text = crate::entity_name_to_string(node);
+                if is_identifier(node) && node_text == "undefined" {
+                    self.error(Some(node), &diagnostics::The_value_0_cannot_be_used_here, &[&node_text]);
+                    return non_null_type;
+                }
+                if node_text.len() < 100 {
+                    self.error(Some(node), &diagnostics::X_0_is_possibly_undefined, &[&node_text]);
+                    return non_null_type;
+                }
+            }
+            self.error(Some(node), &diagnostics::Object_is_possibly_undefined, &[]);
+        }
+        non_null_type
     }
 
     // checker.go:7628
     pub(crate) fn report_object_possibly_null_or_undefined_error(&mut self, node: P<Node>, facts: TypeFacts) {
-        todo!()
+        let mut node_text = String::new();
+        if is_entity_name_expression(node) {
+            node_text = crate::entity_name_to_string(node);
+        }
+        if node.kind == Kind::NullKeyword {
+            self.error(Some(node), &diagnostics::The_value_0_cannot_be_used_here, &[&"null"]);
+            return;
+        }
+        if !node_text.is_empty() && node_text.len() < 100 {
+            if is_identifier(node) && node_text == "undefined" {
+                self.error(Some(node), &diagnostics::The_value_0_cannot_be_used_here, &[&"undefined"]);
+                return;
+            }
+            let message: &'static Message = if facts.intersects(TypeFacts::IsUndefined) {
+                if facts.intersects(TypeFacts::IsNull) { &diagnostics::X_0_is_possibly_null_or_undefined } else { &diagnostics::X_0_is_possibly_undefined }
+            } else {
+                &diagnostics::X_0_is_possibly_null
+            };
+            self.error(Some(node), message, &[&node_text]);
+        } else {
+            let message: &'static Message = if facts.intersects(TypeFacts::IsUndefined) {
+                if facts.intersects(TypeFacts::IsNull) { &diagnostics::Object_is_possibly_null_or_undefined } else { &diagnostics::Object_is_possibly_undefined }
+            } else {
+                &diagnostics::Object_is_possibly_null
+            };
+            self.error(Some(node), message, &[]);
+        }
     }
 
     // checker.go:7656
     pub(crate) fn check_expression_with_contextual_type(&mut self, node: P<Node>, contextual_type: P<Type>, inference_context: Option<P<InferenceContext>>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        let context_node = self.get_context_node(node).unwrap();
+        self.push_contextual_type(context_node, contextual_type, false /*isCache*/);
+        self.push_inference_context(context_node, inference_context);
+        let mut t = self.check_expression_ex(
+            node,
+            check_mode | CheckMode::Contextual | if inference_context.is_some() { CheckMode::Inferential } else { CheckMode::Normal },
+        );
+        // In CheckMode.Inferential we collect intra-expression inference sites to process before fixing any type
+        // parameters. This information is no longer needed after the call to checkExpression.
+        if let Some(inference_context) = inference_context {
+            if !inference_context.intra_expression_inference_sites.borrow().is_empty() {
+                inference_context.intra_expression_inference_sites.borrow_mut().clear();
+            }
+        }
+        // We strip literal freshness when an appropriate contextual type is present such that contextually typed
+        // literals always preserve their literal types (otherwise they might widen during type inference). An alternative
+        // here would be to not mark contextually typed literals as fresh in the first place.
+        if self.maybe_type_of_kind(t, TypeFlags::Literal) && {
+            let instantiated = self.instantiate_contextual_type(contextual_type, node, ContextFlags::None);
+            self.is_literal_of_contextual_type(t, Some(instantiated))
+        } {
+            t = self.get_regular_type_of_literal_type(t);
+        }
+        self.pop_inference_context();
+        self.pop_contextual_type();
+        t
     }
 
     // checker.go:7677
     pub(crate) fn get_context_node(&mut self, node: P<Node>) -> Option<P<Node>> {
-        todo!()
+        if is_jsx_attributes(node) && !is_jsx_self_closing_element(node.parent().unwrap()) {
+            // Needs to be the root JsxElement, so it encompasses the attributes _and_ the children (which are essentially part of the attributes)
+            return node.parent().unwrap().parent();
+        }
+        Some(node)
     }
 
     // checker.go:7685
     pub(crate) fn check_expression_cached(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        self.check_expression_cached_ex(node, CheckMode::Normal)
     }
 
     // checker.go:7689
     pub(crate) fn check_expression_cached_ex(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        if check_mode != CheckMode::Normal {
+            return self.check_expression_ex(node, check_mode);
+        }
+        let links = self.type_node_links.get(node);
+        if links.resolved_type.get().is_none() {
+            // When computing a type that we're going to cache, we need to ignore any ongoing control flow
+            // analysis because variables may have transient types in indeterminable states. Moving flowLoopStart
+            // to the top of the stack ensures all transient types are computed from a known point.
+            let save_flow_loop_stack = std::mem::take(&mut self.flow_loop_stack);
+            let save_flow_type_cache = self.flow_type_cache.take();
+            let t = self.check_expression_ex(node, check_mode);
+            links.resolved_type.set(Some(t));
+            self.flow_type_cache = save_flow_type_cache;
+            self.flow_loop_stack = save_flow_loop_stack;
+        }
+        links.resolved_type.get().unwrap()
     }
 
+    // Returns the type of an expression. Unlike checkExpression, this function is simply concerned
+    // with computing the type and may not fully check all contained sub-expressions for errors.
+    // It is intended for uses where you know there is no contextual type,
+    // and requesting the contextual type might cause a circularity or other bad behaviour.
+    // It sets the contextual type of the node to any before calling getTypeOfExpression.
     // checker.go:7714
     pub(crate) fn get_context_free_type_of_expression(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        if let Some(&cached) = self.context_free_types.get(&node) {
+            return cached;
+        }
+        let any_type = self.any_type;
+        self.push_contextual_type(node, any_type, false /*isCache*/);
+        let t = self.check_expression_ex(node, CheckMode::SkipContextSensitive);
+        self.context_free_types.insert(node, t);
+        self.pop_contextual_type();
+        t
     }
 
     // checker.go:7725
     pub(crate) fn check_expression(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        self.check_expression_ex(node, CheckMode::Normal)
     }
 
     // checker.go:7729
     pub(crate) fn check_expression_ex(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        let save_current_node = self.current_node;
+        self.current_node = Some(node);
+        self.instantiation_count = 0;
+        let uninstantiated_type = self.check_expression_worker(node, check_mode);
+        let t = self.instantiate_type_with_single_generic_call_signature(node, uninstantiated_type, check_mode);
+        if is_const_enum_object_type(t) {
+            self.check_const_enum_access(node, t);
+        }
+        self.current_node = save_current_node;
+        t
     }
 
     // checker.go:7745
     pub(crate) fn check_const_enum_access(&mut self, node: P<Node>, t: P<Type>) {
-        todo!()
+        // enum object type for const enums are only permitted in:
+        // - 'left' in property access
+        // - 'object' in indexed access
+        // - target in rhs of import statement
+        let parent = node.parent().unwrap();
+        let ok = is_property_access_expression(parent) && parent.expression() == Some(node)
+            || is_element_access_expression(parent) && parent.expression() == Some(node)
+            || ((is_identifier(node) || is_qualified_name(node)) && crate::is_in_right_side_of_import_or_export_assignment(node)
+                || is_type_query_node(parent) && parent.as_type_query_node().expr_name == node)
+            || is_export_specifier(parent); // We allow reexporting const enums
+        if !ok {
+            self.error(
+                Some(node),
+                &diagnostics::X_const_enums_can_only_be_used_in_property_or_index_access_expressions_or_the_right_hand_side_of_an_import_declaration_or_export_assignment_or_type_query,
+                &[],
+            );
+        }
+        // --verbatimModuleSyntax only gets checked here when the enum usage does not
+        // resolve to an import, because imports of ambient const enums get checked
+        // separately in `checkAliasSymbol`.
+        if self.compiler_options.isolated_modules.is_true()
+            || self.compiler_options.verbatim_module_syntax.is_true()
+                && ok
+                && self.resolve_name(Some(node), get_first_identifier(node).text(), SymbolFlags::Alias, None, false, true).is_none()
+        {
+            let symbol = t.symbol().unwrap();
+            assert!(symbol.flags().intersects(SymbolFlags::ConstEnum));
+            let const_enum_declaration = symbol.value_declaration().unwrap();
+            let redirect = self.program.get_project_reference_from_output_dts(get_source_file_of_node(const_enum_declaration).unwrap().path());
+            if const_enum_declaration.flags().intersects(NodeFlags::Ambient)
+                && !is_valid_type_only_alias_use_site(node)
+                && (redirect.is_none() || !redirect.unwrap().resolved.compiler_options().should_preserve_const_enums())
+            {
+                let flag_name = self.get_isolated_modules_like_flag_name();
+                self.error(Some(node), &diagnostics::Cannot_access_ambient_const_enums_when_0_is_enabled, &[&flag_name]);
+            }
+        }
     }
 
     // checker.go:7771
     pub(crate) fn instantiate_type_with_single_generic_call_signature(&mut self, node: P<Node>, t: P<Type>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        if !check_mode.intersects(CheckMode::Inferential | CheckMode::SkipGenericFunctions) {
+            return t;
+        }
+        let call_signature = self.get_single_signature(t, SignatureKind::Call, true /*allowMembers*/);
+        let construct_signature = self.get_single_signature(t, SignatureKind::Construct, true /*allowMembers*/);
+        let signature = call_signature.or(construct_signature);
+        let Some(signature) = signature else {
+            return t;
+        };
+        if signature.type_parameters().is_empty() {
+            return t;
+        }
+        let Some(contextual_type) = self.get_apparent_type_of_contextual_type(node, ContextFlags::NoConstraints) else {
+            return t;
+        };
+        let non_nullable = self.get_non_nullable_type(contextual_type);
+        let contextual_signature = self.get_single_signature(
+            non_nullable,
+            if call_signature.is_some() { SignatureKind::Call } else { SignatureKind::Construct },
+            false, /*allowMembers*/
+        );
+        let Some(contextual_signature) = contextual_signature else {
+            return t;
+        };
+        if !contextual_signature.type_parameters().is_empty() {
+            return t;
+        }
+        if check_mode.intersects(CheckMode::SkipGenericFunctions) {
+            self.skipped_generic_function(node, check_mode);
+            return self.any_function_type;
+        }
+        let context = self.get_inference_context(node).unwrap();
+        // We have an expression that is an argument of a generic function for which we are performing
+        // type argument inference. The expression is of a function type with a single generic call
+        // signature and a contextual function type with a single non-generic call signature. Now check
+        // if the outer function returns a function type with a single non-generic call signature and
+        // if some of the outer function type parameters have no inferences so far. If so, we can
+        // potentially add inferred type parameters to the outer function return type.
+        let mut return_signature: Option<P<Signature>> = None;
+        if let Some(context_signature) = context.signature.get() {
+            let return_type = self.get_return_type_of_signature(context_signature);
+            return_signature = self.get_single_call_or_construct_signature(return_type);
+        }
+        if let Some(return_signature) = return_signature {
+            if return_signature.type_parameters().is_empty() && !context.inferences.get().iter().all(|&info| has_inference_candidates(info)) {
+                // Instantiate the signature with its own type parameters as type arguments, possibly
+                // renaming the type parameters to ensure they have unique names.
+                let unique_type_parameters = self.get_unique_type_parameters(context, signature.type_parameters());
+                let instantiated_signature = self.get_signature_instantiation_without_filling_in_type_arguments(signature, &unique_type_parameters);
+                // Infer from the parameters of the instantiated signature to the parameters of the
+                // contextual signature starting with an empty set of inference candidates.
+                let inferences: Vec<P<InferenceInfo>> =
+                    context.inferences.get().iter().map(|info| new_inference_info(info.type_parameter.get().unwrap())).collect();
+                self.apply_to_parameter_types(instantiated_signature, contextual_signature, |c, source, target| {
+                    c.infer_types(&inferences, source, target, InferencePriority::None, true /*contravariant*/);
+                });
+                if inferences.iter().any(|&info| has_inference_candidates(info)) {
+                    // We have inference candidates, indicating that one or more type parameters are referenced
+                    // in the parameter types of the contextual signature. Now also infer from the return type.
+                    self.apply_to_return_types(instantiated_signature, contextual_signature, |c, source, target| {
+                        c.infer_types(&inferences, source, target, InferencePriority::None, false);
+                    });
+                    // If the type parameters for which we produced candidates do not have any inferences yet,
+                    // we adopt the new inference candidates and add the type parameters of the expression type
+                    // to the set of inferred type parameters for the outer function return type.
+                    if !has_overlapping_inferences(context.inferences.get(), &inferences) {
+                        // Go merges into context.inferences in place; the slice is immutable here, so merge a copy and
+                        // store it back.
+                        let mut merged = context.inferences.get().to_vec();
+                        self.merge_inferences(&mut merged, &inferences);
+                        context.inferences.set(alloc_vec(merged));
+                        let mut inferred_type_parameters = context.inferred_type_parameters.get().to_vec();
+                        inferred_type_parameters.extend_from_slice(&unique_type_parameters);
+                        context.inferred_type_parameters.set(alloc_vec(inferred_type_parameters));
+                        return self.get_or_create_type_from_signature(instantiated_signature);
+                    }
+                }
+            }
+        }
+        // TODO: The signature may reference any outer inference contexts, but we map pop off and then apply new inference contexts,
+        // and thus get different inferred types. That this is cached on the *first* such attempt is not currently an issue, since expression
+        // types *also* get cached on the first pass. If we ever properly speculate, though, the cached "isolatedSignatureType" signature
+        // field absolutely needs to be included in the list of speculative caches.
+        let instantiated = self.instantiate_signature_in_context_of(signature, contextual_signature, Some(context), None);
+        self.get_or_create_type_from_signature(instantiated)
     }
 
     // checker.go:7843
     pub(crate) fn get_outer_inference_type_parameters(&mut self) -> Vec<P<Type>> {
-        todo!()
+        let mut result: Vec<P<Type>> = Vec::new();
+        for i in 0..self.inference_context_infos.len() {
+            let context = self.inference_context_infos[i].context;
+            if let Some(context) = context {
+                for info in context.inferences.get() {
+                    result.push(info.type_parameter.get().unwrap());
+                }
+            }
+        }
+        result
     }
 
     // checker.go:7856
     pub(crate) fn get_unique_type_parameters(&mut self, context: P<InferenceContext>, type_parameters: &[P<Type>]) -> Vec<P<Type>> {
-        todo!()
+        let mut old_type_parameters: Vec<P<Type>> = Vec::new();
+        let mut new_type_parameters: Vec<P<Type>> = Vec::new();
+        let mut result: Vec<P<Type>> = Vec::with_capacity(type_parameters.len());
+        for &tp in type_parameters {
+            let name = tp.symbol().unwrap().name();
+            if has_type_parameter_by_name(context.inferred_type_parameters.get(), name) || has_type_parameter_by_name(&result, name) {
+                let mut all: Vec<P<Type>> = context.inferred_type_parameters.get().to_vec();
+                all.extend_from_slice(&result);
+                let new_name = get_unique_type_parameter_name(&all, name);
+                let symbol = self.new_symbol(SymbolFlags::TypeParameter, &new_name);
+                let new_type_parameter = self.new_type_parameter(Some(symbol));
+                new_type_parameter.as_type_parameter().target.set(Some(tp));
+                old_type_parameters.push(tp);
+                new_type_parameters.push(new_type_parameter);
+                result.push(new_type_parameter);
+            } else {
+                result.push(tp);
+            }
+        }
+        if !new_type_parameters.is_empty() {
+            let mapper = new_type_mapper(alloc_vec(old_type_parameters), alloc_slice(&new_type_parameters));
+            for tp in &new_type_parameters {
+                tp.as_type_parameter().mapper.set(Some(mapper));
+            }
+        }
+        result
     }
 }
 
 // checker.go:7883
 pub(crate) fn has_type_parameter_by_name(type_parameters: &[P<Type>], name: &str) -> bool {
-    todo!()
+    type_parameters.iter().any(|tp| tp.symbol().unwrap().name() == name)
 }
 
 // checker.go:7889
 pub(crate) fn get_unique_type_parameter_name(type_parameters: &[P<Type>], base_name: &str) -> String {
-    todo!()
+    let mut base_name = base_name;
+    while base_name.len() > 1 && base_name.as_bytes()[base_name.len() - 1].is_ascii_digit() {
+        base_name = &base_name[..base_name.len() - 1];
+    }
+    let mut index = 1;
+    loop {
+        let augmented_name = format!("{}{}", base_name, index);
+        if !has_type_parameter_by_name(type_parameters, &augmented_name) {
+            return augmented_name;
+        }
+        index += 1;
+    }
 }
 
 impl Checker {
