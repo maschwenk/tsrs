@@ -28,8 +28,17 @@ const USAGE: &str = "usage:
   tsrs-test show <name> [--full]      expected vs actual for one test (id, variant stem or file name)
   tsrs-test crashes [--top N] [--examples N] [--json <path>]
   tsrs-test list [--suite ..] [--filter ..] [--list <file>]
+  --syntax-only (any command): no checker; only config/program/syntactic diagnostics; results in target/test-results-syntax
 dev options (any command): --oracle <diags.jsonl> render Go-captured diagnostics instead of compiling;
                            --options <options.json> option table dumped by tools/oracle/testrunner";
+
+// Early-phase mode: collect only config-file, program and syntactic diagnostics (no checker), with results
+// under target/test-results-syntax.
+pub static SYNTAX_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn syntax_only() -> bool {
+    SYNTAX_ONLY.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 #[derive(Clone, Default)]
 pub struct BackendSpec {
@@ -45,6 +54,9 @@ impl BackendSpec {
         }
         if let Some(o) = &self.options {
             v.extend(["--options".to_string(), o.clone()]);
+        }
+        if syntax_only() {
+            v.push("--syntax-only".to_string());
         }
         v
     }
@@ -228,6 +240,22 @@ fn cmd_run(mut args: Args, spec: BackendSpec) {
     report::write_summary(&dir, &json_path, &summary);
     report::print_table(&this_run);
     println!("{:.1}s; results in {}", started.elapsed().as_secs_f64(), dir.display());
+    if syntax_only() {
+        // Tests whose reference baseline has no diagnostics or only TS1xxx ones are the ones a
+        // parser-only compiler can be expected to pass.
+        let (mut eligible, mut passing) = (0, 0);
+        for (item, r) in items.iter().zip(&results) {
+            let expected = compiler_runner::read_reference_baseline(&item.suite, &item.name);
+            let keys = baseline::diagnostic_keys(expected.as_deref().unwrap_or(baseline::NO_CONTENT));
+            if keys.iter().all(|k| k.rsplit(" TS").next().is_some_and(|c| c.len() == 4 && c.starts_with('1'))) {
+                eligible += 1;
+                if r.as_ref().is_some_and(|r| r.class == Class::Pass) {
+                    passing += 1;
+                }
+            }
+        }
+        println!("syntax-only: {passing}/{eligible} pass among tests whose reference baseline has only TS1xxx (or no) errors");
+    }
     if panic_summary {
         report::print_crashes(&this_run, 15, 2);
     }
@@ -329,6 +357,9 @@ fn main() {
     let cmd = argv.remove(0);
     let mut args = Args { rest: argv };
     let spec = BackendSpec { oracle: args.value("--oracle"), options: args.value("--options") };
+    if args.flag("--syntax-only") {
+        SYNTAX_ONLY.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
     match cmd.as_str() {
         "run" => cmd_run(args, spec),
         "show" => cmd_show(args, spec),

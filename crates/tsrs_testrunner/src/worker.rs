@@ -49,6 +49,7 @@ pub struct ItemResult {
 pub fn results_dir() -> PathBuf {
     match std::env::var_os("TSRS_TEST_RESULTS") {
         Some(p) => PathBuf::from(p),
+        None if crate::syntax_only() => compiler_runner::repo_root().join("target/test-results-syntax"),
         None => compiler_runner::repo_root().join("target/test-results"),
     }
 }

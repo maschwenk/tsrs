@@ -451,12 +451,14 @@ fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandL
     errors.extend(program.get_config_file_parsing_diagnostics());
     errors.extend(program.get_program_diagnostics());
     errors.extend(program.get_syntactic_diagnostics(None));
-    errors.extend(program.get_semantic_diagnostics(None));
-    errors.extend(program.get_global_diagnostics());
+    if !crate::syntax_only() {
+        errors.extend(program.get_semantic_diagnostics(None));
+        errors.extend(program.get_global_diagnostics());
+    }
     if harness_options.capture_suggestions {
         todo!("GetSuggestionDiagnostics (captureSuggestions)");
     }
-    if program.options().get_emit_declarations() {
+    if program.options().get_emit_declarations() && !crate::syntax_only() {
         errors.extend(program.get_declaration_diagnostics(None));
     }
     let errors = compiler::sort_and_deduplicate_diagnostics(&errors);
