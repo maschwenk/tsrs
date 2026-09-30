@@ -241,6 +241,10 @@ so it may re-enter it). Hooks are `Rc<dyn Fn(Option<…>, &mut NodeVisitor) -> O
 methods: `visit_node`, `visit_nodes` (NodeList), `visit_modifiers`, `visit_embedded_statement`,
 `visit_slice`, `visit_each_child`, `visit_source_file`; `new_node_visitor(visit, Option<NodeFactory>, hooks)`.
 The visitor owns a factory handle: to share an existing factory (Go passes the same pointer), pass `Some(f.clone())`.
+`NodeVisitor` is `Clone` (it carries no state besides the callback, factory and hooks, so a copy behaves like Go's
+shared pointer). When a visitor returns nil for a non-optional child, Go's `VisitEachChild` stores the nil; the Rust
+`visit_each_child` keeps the original child (`required_child`), which only matters for traversals whose result is
+discarded (the declaration transformer's side-effect visitors).
 
 ## Symbols
 

@@ -10,7 +10,7 @@ use crate::kind::Kind;
 use crate::nodeflags::NodeFlags;
 use crate::symbol::{Symbol, SymbolTable};
 use crate::tokenflags::TokenFlags;
-use crate::visitor::{same_map_nodes, NodeVisitor};
+use crate::visitor::{required_child, same_map_nodes, NodeVisitor};
 
 // ── Base structs ──────────────────────────────────────────────────────────
 
@@ -11934,8 +11934,8 @@ impl QualifiedName {
 
 impl QualifiedName {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let left_ = v.visit_node_hooked(Some(self.left())).expect("visitor removed a required child");
-        let right_ = v.visit_node_hooked(Some(self.right())).expect("visitor removed a required child");
+        let left_ = required_child(v.visit_node_hooked(Some(self.left())), self.left());
+        let right_ = required_child(v.visit_node_hooked(Some(self.right())), self.right());
         v.factory.update_qualified_name(node, left_, right_)
     }
 }
@@ -11954,7 +11954,7 @@ impl ComputedPropertyName {
 
 impl ComputedPropertyName {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_computed_property_name(node, expression_)
     }
 }
@@ -11973,7 +11973,7 @@ impl Decorator {
 
 impl Decorator {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_decorator(node, expression_)
     }
 }
@@ -12000,8 +12000,8 @@ impl IfStatement {
 
 impl IfStatement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
-        let then_statement_ = v.visit_embedded_statement_hooked(Some(self.then_statement())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
+        let then_statement_ = required_child(v.visit_embedded_statement_hooked(Some(self.then_statement())), self.then_statement());
         let else_statement_ = v.visit_embedded_statement_hooked(self.else_statement());
         v.factory.update_if_statement(node, expression_, then_statement_, else_statement_)
     }
@@ -12022,8 +12022,8 @@ impl DoStatement {
 
 impl DoStatement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let statement_ = v.visit_iteration_body_hooked(Some(self.statement())).expect("visitor removed a required child");
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let statement_ = required_child(v.visit_iteration_body_hooked(Some(self.statement())), self.statement());
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_do_statement(node, statement_, expression_)
     }
 }
@@ -12043,8 +12043,8 @@ impl WhileStatement {
 
 impl WhileStatement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
-        let statement_ = v.visit_iteration_body_hooked(Some(self.statement())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
+        let statement_ = required_child(v.visit_iteration_body_hooked(Some(self.statement())), self.statement());
         v.factory.update_while_statement(node, expression_, statement_)
     }
 }
@@ -12069,7 +12069,7 @@ impl ForStatement {
         let initializer_ = v.visit_node_hooked(self.initializer());
         let condition_ = v.visit_node_hooked(self.condition());
         let incrementor_ = v.visit_node_hooked(self.incrementor());
-        let statement_ = v.visit_iteration_body_hooked(Some(self.statement())).expect("visitor removed a required child");
+        let statement_ = required_child(v.visit_iteration_body_hooked(Some(self.statement())), self.statement());
         v.factory.update_for_statement(node, initializer_, condition_, incrementor_, statement_)
     }
 }
@@ -12092,9 +12092,9 @@ impl ForInOrOfStatement {
 impl ForInOrOfStatement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let await_modifier_ = v.visit_node_hooked(self.await_modifier());
-        let initializer_ = v.visit_node_hooked(Some(self.initializer())).expect("visitor removed a required child");
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
-        let statement_ = v.visit_iteration_body_hooked(Some(self.statement())).expect("visitor removed a required child");
+        let initializer_ = required_child(v.visit_node_hooked(Some(self.initializer())), self.initializer());
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
+        let statement_ = required_child(v.visit_iteration_body_hooked(Some(self.statement())), self.statement());
         v.factory.update_for_in_or_of_statement(node, await_modifier_, initializer_, expression_, statement_)
     }
 }
@@ -12171,8 +12171,8 @@ impl WithStatement {
 
 impl WithStatement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
-        let statement_ = v.visit_embedded_statement_hooked(Some(self.statement())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
+        let statement_ = required_child(v.visit_embedded_statement_hooked(Some(self.statement())), self.statement());
         v.factory.update_with_statement(node, expression_, statement_)
     }
 }
@@ -12192,8 +12192,8 @@ impl SwitchStatement {
 
 impl SwitchStatement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
-        let case_block_ = v.visit_node_hooked(Some(self.case_block())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
+        let case_block_ = required_child(v.visit_node_hooked(Some(self.case_block())), self.case_block());
         v.factory.update_switch_statement(node, expression_, case_block_)
     }
 }
@@ -12212,7 +12212,7 @@ impl CaseBlock {
 
 impl CaseBlock {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let clauses_ = v.visit_nodes_hooked(Some(self.clauses())).expect("visitor removed a required child");
+        let clauses_ = required_child(v.visit_nodes_hooked(Some(self.clauses())), self.clauses());
         v.factory.update_case_block(node, clauses_)
     }
 }
@@ -12233,7 +12233,7 @@ impl CaseOrDefaultClause {
 impl CaseOrDefaultClause {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let expression_ = v.visit_node_hooked(self.expression());
-        let statements_ = v.visit_nodes_hooked(Some(self.statements())).expect("visitor removed a required child");
+        let statements_ = required_child(v.visit_nodes_hooked(Some(self.statements())), self.statements());
         v.factory.update_case_or_default_clause(node, expression_, statements_)
     }
 }
@@ -12252,7 +12252,7 @@ impl ThrowStatement {
 
 impl ThrowStatement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_throw_statement(node, expression_)
     }
 }
@@ -12273,7 +12273,7 @@ impl TryStatement {
 
 impl TryStatement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let try_block_ = v.visit_node_hooked(Some(self.try_block())).expect("visitor removed a required child");
+        let try_block_ = required_child(v.visit_node_hooked(Some(self.try_block())), self.try_block());
         let catch_clause_ = v.visit_node_hooked(self.catch_clause());
         let finally_block_ = v.visit_node_hooked(self.finally_block());
         v.factory.update_try_statement(node, try_block_, catch_clause_, finally_block_)
@@ -12296,7 +12296,7 @@ impl CatchClause {
 impl CatchClause {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let variable_declaration_ = v.visit_node_hooked(self.variable_declaration());
-        let block_ = v.visit_node_hooked(Some(self.block())).expect("visitor removed a required child");
+        let block_ = required_child(v.visit_node_hooked(Some(self.block())), self.block());
         v.factory.update_catch_clause(node, variable_declaration_, block_)
     }
 }
@@ -12322,8 +12322,8 @@ impl LabeledStatement {
 
 impl LabeledStatement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let label_ = v.visit_node_hooked(Some(self.label())).expect("visitor removed a required child");
-        let statement_ = v.visit_embedded_statement_hooked(Some(self.statement())).expect("visitor removed a required child");
+        let label_ = required_child(v.visit_node_hooked(Some(self.label())), self.label());
+        let statement_ = required_child(v.visit_embedded_statement_hooked(Some(self.statement())), self.statement());
         v.factory.update_labeled_statement(node, label_, statement_)
     }
 }
@@ -12342,7 +12342,7 @@ impl ExpressionStatement {
 
 impl ExpressionStatement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_expression_statement(node, expression_)
     }
 }
@@ -12361,7 +12361,7 @@ impl Block {
 
 impl Block {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let statements_ = v.visit_nodes_hooked(Some(self.statements())).expect("visitor removed a required child");
+        let statements_ = required_child(v.visit_nodes_hooked(Some(self.statements())), self.statements());
         v.factory.update_block(node, statements_, self.multi_line())
     }
 }
@@ -12382,7 +12382,7 @@ impl VariableStatement {
 impl VariableStatement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let declaration_list_ = v.visit_node_hooked(Some(self.declaration_list())).expect("visitor removed a required child");
+        let declaration_list_ = required_child(v.visit_node_hooked(Some(self.declaration_list())), self.declaration_list());
         v.factory.update_variable_statement(node, modifiers_, declaration_list_)
     }
 }
@@ -12404,7 +12404,7 @@ impl VariableDeclaration {
 
 impl VariableDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let exclamation_token_ = v.visit_node_hooked(self.exclamation_token());
         let type_node_ = v.visit_node_hooked(self.type_());
         let initializer_ = v.visit_node_hooked(self.initializer());
@@ -12426,7 +12426,7 @@ impl VariableDeclarationList {
 
 impl VariableDeclarationList {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let declarations_ = v.visit_nodes_hooked(Some(self.declarations())).expect("visitor removed a required child");
+        let declarations_ = required_child(v.visit_nodes_hooked(Some(self.declarations())), self.declarations());
         v.factory.update_variable_declaration_list(node, declarations_, node.flags.get())
     }
 }
@@ -12445,7 +12445,7 @@ impl BindingPattern {
 
 impl BindingPattern {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let elements_ = v.visit_nodes_hooked(Some(self.elements())).expect("visitor removed a required child");
+        let elements_ = required_child(v.visit_nodes_hooked(Some(self.elements())), self.elements());
         v.factory.update_binding_pattern(node, elements_)
     }
 }
@@ -12471,7 +12471,7 @@ impl ParameterDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
         let dot_dot_dot_token_ = v.visit_node_hooked(self.dot_dot_dot_token());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let question_token_ = v.visit_node_hooked(self.question_token());
         let type_node_ = v.visit_node_hooked(self.type_());
         let initializer_ = v.visit_node_hooked(self.initializer());
@@ -12578,7 +12578,7 @@ impl ClassDeclaration {
         let name_ = v.visit_node_hooked(self.name());
         let type_parameters_ = v.visit_nodes_hooked(self.type_parameters());
         let heritage_clauses_ = v.visit_nodes_hooked(self.heritage_clauses());
-        let members_ = v.visit_nodes_hooked(Some(self.members())).expect("visitor removed a required child");
+        let members_ = required_child(v.visit_nodes_hooked(Some(self.members())), self.members());
         v.factory.update_class_declaration(node, modifiers_, name_, type_parameters_, heritage_clauses_, members_)
     }
 }
@@ -12605,7 +12605,7 @@ impl ClassExpression {
         let name_ = v.visit_node_hooked(self.name());
         let type_parameters_ = v.visit_nodes_hooked(self.type_parameters());
         let heritage_clauses_ = v.visit_nodes_hooked(self.heritage_clauses());
-        let members_ = v.visit_nodes_hooked(Some(self.members())).expect("visitor removed a required child");
+        let members_ = required_child(v.visit_nodes_hooked(Some(self.members())), self.members());
         v.factory.update_class_expression(node, modifiers_, name_, type_parameters_, heritage_clauses_, members_)
     }
 }
@@ -12624,7 +12624,7 @@ impl HeritageClause {
 
 impl HeritageClause {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let types_ = v.visit_nodes_hooked(Some(self.types())).expect("visitor removed a required child");
+        let types_ = required_child(v.visit_nodes_hooked(Some(self.types())), self.types());
         v.factory.update_heritage_clause(node, self.token(), types_)
     }
 }
@@ -12648,10 +12648,10 @@ impl InterfaceDeclaration {
 impl InterfaceDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let type_parameters_ = v.visit_nodes_hooked(self.type_parameters());
         let heritage_clauses_ = v.visit_nodes_hooked(self.heritage_clauses());
-        let members_ = v.visit_nodes_hooked(Some(self.members())).expect("visitor removed a required child");
+        let members_ = required_child(v.visit_nodes_hooked(Some(self.members())), self.members());
         v.factory.update_interface_declaration(node, modifiers_, name_, type_parameters_, heritage_clauses_, members_)
     }
 }
@@ -12674,7 +12674,7 @@ impl TypeAliasDeclaration {
 impl TypeAliasDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let type_parameters_ = v.visit_nodes_hooked(self.type_parameters());
         let type_node_ = v.visit_node_hooked(self.type_());
         v.factory.update_type_alias_declaration(node, modifiers_, name_, type_parameters_, type_node_)
@@ -12701,7 +12701,7 @@ impl EnumMember {
 
 impl EnumMember {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let initializer_ = v.visit_node_hooked(self.initializer());
         v.factory.update_enum_member(node, name_, initializer_)
     }
@@ -12724,8 +12724,8 @@ impl EnumDeclaration {
 impl EnumDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
-        let members_ = v.visit_nodes_hooked(Some(self.members())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
+        let members_ = required_child(v.visit_nodes_hooked(Some(self.members())), self.members());
         v.factory.update_enum_declaration(node, modifiers_, name_, members_)
     }
 }
@@ -12744,7 +12744,7 @@ impl ModuleBlock {
 
 impl ModuleBlock {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let statements_ = v.visit_nodes_hooked(Some(self.statements())).expect("visitor removed a required child");
+        let statements_ = required_child(v.visit_nodes_hooked(Some(self.statements())), self.statements());
         v.factory.update_module_block(node, statements_)
     }
 }
@@ -12780,7 +12780,7 @@ impl ImportDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
         let import_clause_ = v.visit_node_hooked(self.import_clause());
-        let module_specifier_ = v.visit_node_hooked(Some(self.module_specifier())).expect("visitor removed a required child");
+        let module_specifier_ = required_child(v.visit_node_hooked(Some(self.module_specifier())), self.module_specifier());
         let attributes_ = v.visit_node_hooked(self.attributes());
         v.factory.update_import_declaration(node, modifiers_, import_clause_, module_specifier_, attributes_)
     }
@@ -12805,7 +12805,7 @@ impl ExternalModuleReference {
 
 impl ExternalModuleReference {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_external_module_reference(node, expression_)
     }
 }
@@ -12824,7 +12824,7 @@ impl NamespaceImport {
 
 impl NamespaceImport {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         v.factory.update_namespace_import(node, name_)
     }
 }
@@ -12843,7 +12843,7 @@ impl NamedImports {
 
 impl NamedImports {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let elements_ = v.visit_nodes_hooked(Some(self.elements())).expect("visitor removed a required child");
+        let elements_ = required_child(v.visit_nodes_hooked(Some(self.elements())), self.elements());
         v.factory.update_named_imports(node, elements_)
     }
 }
@@ -12866,7 +12866,7 @@ impl ExportAssignment {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
         let type_node_ = v.visit_node_hooked(self.type_());
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_export_assignment(node, modifiers_, self.is_export_equals(), type_node_, expression_)
     }
 }
@@ -12887,7 +12887,7 @@ impl NamespaceExportDeclaration {
 impl NamespaceExportDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         v.factory.update_namespace_export_declaration(node, modifiers_, name_)
     }
 }
@@ -12906,7 +12906,7 @@ impl NamespaceExport {
 
 impl NamespaceExport {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         v.factory.update_namespace_export(node, name_)
     }
 }
@@ -12925,7 +12925,7 @@ impl NamedExports {
 
 impl NamedExports {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let elements_ = v.visit_nodes_hooked(Some(self.elements())).expect("visitor removed a required child");
+        let elements_ = required_child(v.visit_nodes_hooked(Some(self.elements())), self.elements());
         v.factory.update_named_exports(node, elements_)
     }
 }
@@ -12946,7 +12946,7 @@ impl ExportSpecifier {
 impl ExportSpecifier {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let property_name_ = v.visit_node_hooked(self.property_name());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         v.factory.update_export_specifier(node, self.is_type_only(), property_name_, name_)
     }
 }
@@ -13047,7 +13047,7 @@ impl GetAccessorDeclaration {
 impl GetAccessorDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let type_parameters_ = v.visit_nodes_hooked(self.type_parameters());
         let parameters_ = v.visit_parameters_hooked(self.parameters());
         let type_node_ = v.visit_node_hooked(self.type_());
@@ -13078,7 +13078,7 @@ impl SetAccessorDeclaration {
 impl SetAccessorDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let type_parameters_ = v.visit_nodes_hooked(self.type_parameters());
         let parameters_ = v.visit_parameters_hooked(self.parameters());
         let type_node_ = v.visit_node_hooked(self.type_());
@@ -13131,7 +13131,7 @@ impl MethodSignatureDeclaration {
 impl MethodSignatureDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let postfix_token_ = v.visit_node_hooked(self.postfix_token());
         let type_parameters_ = v.visit_nodes_hooked(self.type_parameters());
         let parameters_ = v.visit_nodes_hooked(self.parameters());
@@ -13164,7 +13164,7 @@ impl MethodDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
         let asterisk_token_ = v.visit_node_hooked(self.asterisk_token());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let postfix_token_ = v.visit_node_hooked(self.postfix_token());
         let type_parameters_ = v.visit_nodes_hooked(self.type_parameters());
         let parameters_ = v.visit_parameters_hooked(self.parameters());
@@ -13194,7 +13194,7 @@ impl PropertySignatureDeclaration {
 impl PropertySignatureDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let postfix_token_ = v.visit_node_hooked(self.postfix_token());
         let type_node_ = v.visit_node_hooked(self.type_());
         let initializer_ = v.visit_node_hooked(self.initializer());
@@ -13221,7 +13221,7 @@ impl PropertyDeclaration {
 impl PropertyDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let postfix_token_ = v.visit_node_hooked(self.postfix_token());
         let type_node_ = v.visit_node_hooked(self.type_());
         let initializer_ = v.visit_node_hooked(self.initializer());
@@ -13251,7 +13251,7 @@ impl ClassStaticBlockDeclaration {
 impl ClassStaticBlockDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let body_ = v.visit_node_hooked(Some(self.body())).expect("visitor removed a required child");
+        let body_ = required_child(v.visit_node_hooked(Some(self.body())), self.body());
         v.factory.update_class_static_block_declaration(node, modifiers_, body_)
     }
 }
@@ -13317,10 +13317,10 @@ impl BinaryExpression {
 impl BinaryExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let left_ = v.visit_node_hooked(Some(self.left())).expect("visitor removed a required child");
+        let left_ = required_child(v.visit_node_hooked(Some(self.left())), self.left());
         let type_node_ = v.visit_node_hooked(self.type_());
-        let operator_token_ = v.visit_node_hooked(Some(self.operator_token())).expect("visitor removed a required child");
-        let right_ = v.visit_node_hooked(Some(self.right())).expect("visitor removed a required child");
+        let operator_token_ = required_child(v.visit_node_hooked(Some(self.operator_token())), self.operator_token());
+        let right_ = required_child(v.visit_node_hooked(Some(self.right())), self.right());
         v.factory.update_binary_expression(node, modifiers_, left_, type_node_, operator_token_, right_)
     }
 }
@@ -13339,7 +13339,7 @@ impl PrefixUnaryExpression {
 
 impl PrefixUnaryExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let operand_ = v.visit_node_hooked(Some(self.operand())).expect("visitor removed a required child");
+        let operand_ = required_child(v.visit_node_hooked(Some(self.operand())), self.operand());
         v.factory.update_prefix_unary_expression(node, self.operator(), operand_)
     }
 }
@@ -13358,7 +13358,7 @@ impl PostfixUnaryExpression {
 
 impl PostfixUnaryExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let operand_ = v.visit_node_hooked(Some(self.operand())).expect("visitor removed a required child");
+        let operand_ = required_child(v.visit_node_hooked(Some(self.operand())), self.operand());
         v.factory.update_postfix_unary_expression(node, operand_, self.operator())
     }
 }
@@ -13463,8 +13463,8 @@ impl AsExpression {
 
 impl AsExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_as_expression(node, expression_, type_node_)
     }
 }
@@ -13484,8 +13484,8 @@ impl SatisfiesExpression {
 
 impl SatisfiesExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_satisfies_expression(node, expression_, type_node_)
     }
 }
@@ -13508,11 +13508,11 @@ impl ConditionalExpression {
 
 impl ConditionalExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let condition_ = v.visit_node_hooked(Some(self.condition())).expect("visitor removed a required child");
-        let question_token_ = v.visit_node_hooked(Some(self.question_token())).expect("visitor removed a required child");
-        let when_true_ = v.visit_node_hooked(Some(self.when_true())).expect("visitor removed a required child");
-        let colon_token_ = v.visit_node_hooked(Some(self.colon_token())).expect("visitor removed a required child");
-        let when_false_ = v.visit_node_hooked(Some(self.when_false())).expect("visitor removed a required child");
+        let condition_ = required_child(v.visit_node_hooked(Some(self.condition())), self.condition());
+        let question_token_ = required_child(v.visit_node_hooked(Some(self.question_token())), self.question_token());
+        let when_true_ = required_child(v.visit_node_hooked(Some(self.when_true())), self.when_true());
+        let colon_token_ = required_child(v.visit_node_hooked(Some(self.colon_token())), self.colon_token());
+        let when_false_ = required_child(v.visit_node_hooked(Some(self.when_false())), self.when_false());
         v.factory.update_conditional_expression(node, condition_, question_token_, when_true_, colon_token_, when_false_)
     }
 }
@@ -13533,9 +13533,9 @@ impl PropertyAccessExpression {
 
 impl PropertyAccessExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         let question_dot_token_ = v.visit_node_hooked(self.question_dot_token());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         v.factory.update_property_access_expression(node, expression_, question_dot_token_, name_, node.flags.get())
     }
 }
@@ -13556,9 +13556,9 @@ impl ElementAccessExpression {
 
 impl ElementAccessExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         let question_dot_token_ = v.visit_node_hooked(self.question_dot_token());
-        let argument_expression_ = v.visit_node_hooked(Some(self.argument_expression())).expect("visitor removed a required child");
+        let argument_expression_ = required_child(v.visit_node_hooked(Some(self.argument_expression())), self.argument_expression());
         v.factory.update_element_access_expression(node, expression_, question_dot_token_, argument_expression_, node.flags.get())
     }
 }
@@ -13580,10 +13580,10 @@ impl CallExpression {
 
 impl CallExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         let question_dot_token_ = v.visit_node_hooked(self.question_dot_token());
         let type_arguments_ = v.visit_nodes_hooked(self.type_arguments());
-        let arguments_ = v.visit_nodes_hooked(Some(self.arguments())).expect("visitor removed a required child");
+        let arguments_ = required_child(v.visit_nodes_hooked(Some(self.arguments())), self.arguments());
         v.factory.update_call_expression(node, expression_, question_dot_token_, type_arguments_, arguments_, node.flags.get())
     }
 }
@@ -13604,7 +13604,7 @@ impl NewExpression {
 
 impl NewExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         let type_arguments_ = v.visit_nodes_hooked(self.type_arguments());
         let arguments_ = v.visit_nodes_hooked(self.arguments());
         v.factory.update_new_expression(node, expression_, type_arguments_, arguments_)
@@ -13625,7 +13625,7 @@ impl MetaProperty {
 
 impl MetaProperty {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         v.factory.update_meta_property(node, self.keyword_token(), name_)
     }
 }
@@ -13644,7 +13644,7 @@ impl NonNullExpression {
 
 impl NonNullExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_non_null_expression(node, expression_, node.flags.get())
     }
 }
@@ -13663,7 +13663,7 @@ impl SpreadElement {
 
 impl SpreadElement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_spread_element(node, expression_)
     }
 }
@@ -13683,8 +13683,8 @@ impl TemplateExpression {
 
 impl TemplateExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let head_ = v.visit_node_hooked(Some(self.head())).expect("visitor removed a required child");
-        let template_spans_ = v.visit_nodes_hooked(Some(self.template_spans())).expect("visitor removed a required child");
+        let head_ = required_child(v.visit_node_hooked(Some(self.head())), self.head());
+        let template_spans_ = required_child(v.visit_nodes_hooked(Some(self.template_spans())), self.template_spans());
         v.factory.update_template_expression(node, head_, template_spans_)
     }
 }
@@ -13704,8 +13704,8 @@ impl TemplateSpan {
 
 impl TemplateSpan {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
-        let literal_ = v.visit_node_hooked(Some(self.literal())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
+        let literal_ = required_child(v.visit_node_hooked(Some(self.literal())), self.literal());
         v.factory.update_template_span(node, expression_, literal_)
     }
 }
@@ -13727,10 +13727,10 @@ impl TaggedTemplateExpression {
 
 impl TaggedTemplateExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_ = v.visit_node_hooked(Some(self.tag())).expect("visitor removed a required child");
+        let tag_ = required_child(v.visit_node_hooked(Some(self.tag())), self.tag());
         let question_dot_token_ = v.visit_node_hooked(self.question_dot_token());
         let type_arguments_ = v.visit_nodes_hooked(self.type_arguments());
-        let template_ = v.visit_node_hooked(Some(self.template())).expect("visitor removed a required child");
+        let template_ = required_child(v.visit_node_hooked(Some(self.template())), self.template());
         v.factory.update_tagged_template_expression(node, tag_, question_dot_token_, type_arguments_, template_, node.flags.get())
     }
 }
@@ -13749,7 +13749,7 @@ impl ParenthesizedExpression {
 
 impl ParenthesizedExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_parenthesized_expression(node, expression_)
     }
 }
@@ -13768,7 +13768,7 @@ impl ArrayLiteralExpression {
 
 impl ArrayLiteralExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let elements_ = v.visit_nodes_hooked(Some(self.elements())).expect("visitor removed a required child");
+        let elements_ = required_child(v.visit_nodes_hooked(Some(self.elements())), self.elements());
         v.factory.update_array_literal_expression(node, elements_, self.multi_line())
     }
 }
@@ -13787,7 +13787,7 @@ impl ObjectLiteralExpression {
 
 impl ObjectLiteralExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let properties_ = v.visit_nodes_hooked(Some(self.properties())).expect("visitor removed a required child");
+        let properties_ = required_child(v.visit_nodes_hooked(Some(self.properties())), self.properties());
         v.factory.update_object_literal_expression(node, properties_, self.multi_line())
     }
 }
@@ -13806,7 +13806,7 @@ impl SpreadAssignment {
 
 impl SpreadAssignment {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_spread_assignment(node, expression_)
     }
 }
@@ -13830,10 +13830,10 @@ impl PropertyAssignment {
 impl PropertyAssignment {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let postfix_token_ = v.visit_node_hooked(self.postfix_token());
         let type_node_ = v.visit_node_hooked(self.type_());
-        let initializer_ = v.visit_node_hooked(Some(self.initializer())).expect("visitor removed a required child");
+        let initializer_ = required_child(v.visit_node_hooked(Some(self.initializer())), self.initializer());
         v.factory.update_property_assignment(node, modifiers_, name_, postfix_token_, type_node_, initializer_)
     }
 }
@@ -13858,7 +13858,7 @@ impl ShorthandPropertyAssignment {
 impl ShorthandPropertyAssignment {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let postfix_token_ = v.visit_node_hooked(self.postfix_token());
         let type_node_ = v.visit_node_hooked(self.type_());
         let equals_token_ = v.visit_node_hooked(self.equals_token());
@@ -13881,7 +13881,7 @@ impl DeleteExpression {
 
 impl DeleteExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_delete_expression(node, expression_)
     }
 }
@@ -13900,7 +13900,7 @@ impl TypeOfExpression {
 
 impl TypeOfExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_type_of_expression(node, expression_)
     }
 }
@@ -13919,7 +13919,7 @@ impl VoidExpression {
 
 impl VoidExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_void_expression(node, expression_)
     }
 }
@@ -13938,7 +13938,7 @@ impl AwaitExpression {
 
 impl AwaitExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_await_expression(node, expression_)
     }
 }
@@ -13958,8 +13958,8 @@ impl TypeAssertion {
 
 impl TypeAssertion {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_type_assertion(node, type_node_, expression_)
     }
 }
@@ -13984,7 +13984,7 @@ impl UnionTypeNode {
 
 impl UnionTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let types_ = v.visit_nodes_hooked(Some(self.types())).expect("visitor removed a required child");
+        let types_ = required_child(v.visit_nodes_hooked(Some(self.types())), self.types());
         v.factory.update_union_type_node(node, types_)
     }
 }
@@ -14003,7 +14003,7 @@ impl IntersectionTypeNode {
 
 impl IntersectionTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let types_ = v.visit_nodes_hooked(Some(self.types())).expect("visitor removed a required child");
+        let types_ = required_child(v.visit_nodes_hooked(Some(self.types())), self.types());
         v.factory.update_intersection_type_node(node, types_)
     }
 }
@@ -14025,10 +14025,10 @@ impl ConditionalTypeNode {
 
 impl ConditionalTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let check_type_ = v.visit_node_hooked(Some(self.check_type())).expect("visitor removed a required child");
-        let extends_type_ = v.visit_node_hooked(Some(self.extends_type())).expect("visitor removed a required child");
-        let true_type_ = v.visit_node_hooked(Some(self.true_type())).expect("visitor removed a required child");
-        let false_type_ = v.visit_node_hooked(Some(self.false_type())).expect("visitor removed a required child");
+        let check_type_ = required_child(v.visit_node_hooked(Some(self.check_type())), self.check_type());
+        let extends_type_ = required_child(v.visit_node_hooked(Some(self.extends_type())), self.extends_type());
+        let true_type_ = required_child(v.visit_node_hooked(Some(self.true_type())), self.true_type());
+        let false_type_ = required_child(v.visit_node_hooked(Some(self.false_type())), self.false_type());
         v.factory.update_conditional_type_node(node, check_type_, extends_type_, true_type_, false_type_)
     }
 }
@@ -14047,7 +14047,7 @@ impl TypeOperatorNode {
 
 impl TypeOperatorNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_type_operator_node(node, self.operator(), type_node_)
     }
 }
@@ -14066,7 +14066,7 @@ impl InferTypeNode {
 
 impl InferTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_parameter_ = v.visit_node_hooked(Some(self.type_parameter())).expect("visitor removed a required child");
+        let type_parameter_ = required_child(v.visit_node_hooked(Some(self.type_parameter())), self.type_parameter());
         v.factory.update_infer_type_node(node, type_parameter_)
     }
 }
@@ -14085,7 +14085,7 @@ impl ArrayTypeNode {
 
 impl ArrayTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let element_type_ = v.visit_node_hooked(Some(self.element_type())).expect("visitor removed a required child");
+        let element_type_ = required_child(v.visit_node_hooked(Some(self.element_type())), self.element_type());
         v.factory.update_array_type_node(node, element_type_)
     }
 }
@@ -14105,8 +14105,8 @@ impl IndexedAccessTypeNode {
 
 impl IndexedAccessTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let object_type_ = v.visit_node_hooked(Some(self.object_type())).expect("visitor removed a required child");
-        let index_type_ = v.visit_node_hooked(Some(self.index_type())).expect("visitor removed a required child");
+        let object_type_ = required_child(v.visit_node_hooked(Some(self.object_type())), self.object_type());
+        let index_type_ = required_child(v.visit_node_hooked(Some(self.index_type())), self.index_type());
         v.factory.update_indexed_access_type_node(node, object_type_, index_type_)
     }
 }
@@ -14126,7 +14126,7 @@ impl TypeReferenceNode {
 
 impl TypeReferenceNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_name_ = v.visit_node_hooked(Some(self.type_name())).expect("visitor removed a required child");
+        let type_name_ = required_child(v.visit_node_hooked(Some(self.type_name())), self.type_name());
         let type_arguments_ = v.visit_nodes_hooked(self.type_arguments());
         v.factory.update_type_reference_node(node, type_name_, type_arguments_)
     }
@@ -14147,7 +14147,7 @@ impl ExpressionWithTypeArguments {
 
 impl ExpressionWithTypeArguments {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         let type_arguments_ = v.visit_nodes_hooked(self.type_arguments());
         v.factory.update_expression_with_type_arguments(node, expression_, type_arguments_)
     }
@@ -14167,7 +14167,7 @@ impl LiteralTypeNode {
 
 impl LiteralTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let literal_ = v.visit_node_hooked(Some(self.literal())).expect("visitor removed a required child");
+        let literal_ = required_child(v.visit_node_hooked(Some(self.literal())), self.literal());
         v.factory.update_literal_type_node(node, literal_)
     }
 }
@@ -14195,7 +14195,7 @@ impl TypePredicateNode {
 impl TypePredicateNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let asserts_modifier_ = v.visit_node_hooked(self.asserts_modifier());
-        let parameter_name_ = v.visit_node_hooked(Some(self.parameter_name())).expect("visitor removed a required child");
+        let parameter_name_ = required_child(v.visit_node_hooked(Some(self.parameter_name())), self.parameter_name());
         let type_node_ = v.visit_node_hooked(self.type_());
         v.factory.update_type_predicate_node(node, asserts_modifier_, parameter_name_, type_node_)
     }
@@ -14217,7 +14217,7 @@ impl ImportAttribute {
 impl ImportAttribute {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let name_ = v.visit_node_hooked(self.name());
-        let value_ = v.visit_node_hooked(Some(self.value())).expect("visitor removed a required child");
+        let value_ = required_child(v.visit_node_hooked(Some(self.value())), self.value());
         v.factory.update_import_attribute(node, name_, value_)
     }
 }
@@ -14236,7 +14236,7 @@ impl ImportAttributes {
 
 impl ImportAttributes {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let attributes_ = v.visit_nodes_hooked(Some(self.attributes())).expect("visitor removed a required child");
+        let attributes_ = required_child(v.visit_nodes_hooked(Some(self.attributes())), self.attributes());
         v.factory.update_import_attributes(node, self.token(), attributes_, self.multi_line())
     }
 }
@@ -14256,7 +14256,7 @@ impl TypeQueryNode {
 
 impl TypeQueryNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expr_name_ = v.visit_node_hooked(Some(self.expr_name())).expect("visitor removed a required child");
+        let expr_name_ = required_child(v.visit_node_hooked(Some(self.expr_name())), self.expr_name());
         let type_arguments_ = v.visit_nodes_hooked(self.type_arguments());
         v.factory.update_type_query_node(node, expr_name_, type_arguments_)
     }
@@ -14282,7 +14282,7 @@ impl MappedTypeNode {
 impl MappedTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let readonly_token_ = v.visit_node_hooked(self.readonly_token());
-        let type_parameter_ = v.visit_node_hooked(Some(self.type_parameter())).expect("visitor removed a required child");
+        let type_parameter_ = required_child(v.visit_node_hooked(Some(self.type_parameter())), self.type_parameter());
         let name_type_ = v.visit_node_hooked(self.name_type());
         let question_token_ = v.visit_node_hooked(self.question_token());
         let type_node_ = v.visit_node_hooked(self.type_());
@@ -14305,7 +14305,7 @@ impl TypeLiteralNode {
 
 impl TypeLiteralNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let members_ = v.visit_nodes_hooked(Some(self.members())).expect("visitor removed a required child");
+        let members_ = required_child(v.visit_nodes_hooked(Some(self.members())), self.members());
         v.factory.update_type_literal_node(node, members_)
     }
 }
@@ -14324,7 +14324,7 @@ impl TupleTypeNode {
 
 impl TupleTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let elements_ = v.visit_nodes_hooked(Some(self.elements())).expect("visitor removed a required child");
+        let elements_ = required_child(v.visit_nodes_hooked(Some(self.elements())), self.elements());
         v.factory.update_tuple_type_node(node, elements_)
     }
 }
@@ -14347,9 +14347,9 @@ impl NamedTupleMember {
 impl NamedTupleMember {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let dot_dot_dot_token_ = v.visit_node_hooked(self.dot_dot_dot_token());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let question_token_ = v.visit_node_hooked(self.question_token());
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_named_tuple_member(node, dot_dot_dot_token_, name_, question_token_, type_node_)
     }
 }
@@ -14368,7 +14368,7 @@ impl OptionalTypeNode {
 
 impl OptionalTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_optional_type_node(node, type_node_)
     }
 }
@@ -14387,7 +14387,7 @@ impl RestTypeNode {
 
 impl RestTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_rest_type_node(node, type_node_)
     }
 }
@@ -14406,7 +14406,7 @@ impl ParenthesizedTypeNode {
 
 impl ParenthesizedTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_parenthesized_type_node(node, type_node_)
     }
 }
@@ -14492,8 +14492,8 @@ impl TemplateLiteralTypeNode {
 
 impl TemplateLiteralTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let head_ = v.visit_node_hooked(Some(self.head())).expect("visitor removed a required child");
-        let template_spans_ = v.visit_nodes_hooked(Some(self.template_spans())).expect("visitor removed a required child");
+        let head_ = required_child(v.visit_node_hooked(Some(self.head())), self.head());
+        let template_spans_ = required_child(v.visit_nodes_hooked(Some(self.template_spans())), self.template_spans());
         v.factory.update_template_literal_type_node(node, head_, template_spans_)
     }
 }
@@ -14513,8 +14513,8 @@ impl TemplateLiteralTypeSpan {
 
 impl TemplateLiteralTypeSpan {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
-        let literal_ = v.visit_node_hooked(Some(self.literal())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
+        let literal_ = required_child(v.visit_node_hooked(Some(self.literal())), self.literal());
         v.factory.update_template_literal_type_span(node, type_node_, literal_)
     }
 }
@@ -14552,7 +14552,7 @@ impl PartiallyEmittedExpression {
 
 impl PartiallyEmittedExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_partially_emitted_expression(node, expression_)
     }
 }
@@ -14573,9 +14573,9 @@ impl JsxElement {
 
 impl JsxElement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let opening_element_ = v.visit_node_hooked(Some(self.opening_element())).expect("visitor removed a required child");
-        let children_ = v.visit_nodes_hooked(Some(self.children())).expect("visitor removed a required child");
-        let closing_element_ = v.visit_node_hooked(Some(self.closing_element())).expect("visitor removed a required child");
+        let opening_element_ = required_child(v.visit_node_hooked(Some(self.opening_element())), self.opening_element());
+        let children_ = required_child(v.visit_nodes_hooked(Some(self.children())), self.children());
+        let closing_element_ = required_child(v.visit_node_hooked(Some(self.closing_element())), self.closing_element());
         v.factory.update_jsx_element(node, opening_element_, children_, closing_element_)
     }
 }
@@ -14594,7 +14594,7 @@ impl JsxAttributes {
 
 impl JsxAttributes {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let properties_ = v.visit_nodes_hooked(Some(self.properties())).expect("visitor removed a required child");
+        let properties_ = required_child(v.visit_nodes_hooked(Some(self.properties())), self.properties());
         v.factory.update_jsx_attributes(node, properties_)
     }
 }
@@ -14614,8 +14614,8 @@ impl JsxNamespacedName {
 
 impl JsxNamespacedName {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let namespace_ = v.visit_node_hooked(Some(self.namespace())).expect("visitor removed a required child");
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let namespace_ = required_child(v.visit_node_hooked(Some(self.namespace())), self.namespace());
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         v.factory.update_jsx_namespaced_name(node, namespace_, name_)
     }
 }
@@ -14636,9 +14636,9 @@ impl JsxOpeningElement {
 
 impl JsxOpeningElement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let type_arguments_ = v.visit_nodes_hooked(self.type_arguments());
-        let attributes_ = v.visit_node_hooked(Some(self.attributes())).expect("visitor removed a required child");
+        let attributes_ = required_child(v.visit_node_hooked(Some(self.attributes())), self.attributes());
         v.factory.update_jsx_opening_element(node, tag_name_, type_arguments_, attributes_)
     }
 }
@@ -14659,9 +14659,9 @@ impl JsxSelfClosingElement {
 
 impl JsxSelfClosingElement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let type_arguments_ = v.visit_nodes_hooked(self.type_arguments());
-        let attributes_ = v.visit_node_hooked(Some(self.attributes())).expect("visitor removed a required child");
+        let attributes_ = required_child(v.visit_node_hooked(Some(self.attributes())), self.attributes());
         v.factory.update_jsx_self_closing_element(node, tag_name_, type_arguments_, attributes_)
     }
 }
@@ -14682,9 +14682,9 @@ impl JsxFragment {
 
 impl JsxFragment {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let opening_fragment_ = v.visit_node_hooked(Some(self.opening_fragment())).expect("visitor removed a required child");
-        let children_ = v.visit_nodes_hooked(Some(self.children())).expect("visitor removed a required child");
-        let closing_fragment_ = v.visit_node_hooked(Some(self.closing_fragment())).expect("visitor removed a required child");
+        let opening_fragment_ = required_child(v.visit_node_hooked(Some(self.opening_fragment())), self.opening_fragment());
+        let children_ = required_child(v.visit_nodes_hooked(Some(self.children())), self.children());
+        let closing_fragment_ = required_child(v.visit_node_hooked(Some(self.closing_fragment())), self.closing_fragment());
         v.factory.update_jsx_fragment(node, opening_fragment_, children_, closing_fragment_)
     }
 }
@@ -14716,7 +14716,7 @@ impl JsxAttribute {
 
 impl JsxAttribute {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let initializer_ = v.visit_node_hooked(self.initializer());
         v.factory.update_jsx_attribute(node, name_, initializer_)
     }
@@ -14736,7 +14736,7 @@ impl JsxSpreadAttribute {
 
 impl JsxSpreadAttribute {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
         v.factory.update_jsx_spread_attribute(node, expression_)
     }
 }
@@ -14755,7 +14755,7 @@ impl JsxClosingElement {
 
 impl JsxClosingElement {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         v.factory.update_jsx_closing_element(node, tag_name_)
     }
 }
@@ -14821,7 +14821,7 @@ impl JSDoc {
 
 impl JSDoc {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let comment_ = v.visit_nodes_hooked(Some(self.comment())).expect("visitor removed a required child");
+        let comment_ = required_child(v.visit_nodes_hooked(Some(self.comment())), self.comment());
         let tags_ = v.visit_nodes_hooked(self.tags());
         v.factory.update_jsdoc(node, comment_, tags_)
     }
@@ -14841,7 +14841,7 @@ impl JSDocTypeExpression {
 
 impl JSDocTypeExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_jsdoc_type_expression(node, type_node_)
     }
 }
@@ -14860,7 +14860,7 @@ impl JSDocNonNullableType {
 
 impl JSDocNonNullableType {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_jsdoc_non_nullable_type(node, type_node_)
     }
 }
@@ -14879,7 +14879,7 @@ impl JSDocNullableType {
 
 impl JSDocNullableType {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_jsdoc_nullable_type(node, type_node_)
     }
 }
@@ -14904,7 +14904,7 @@ impl JSDocVariadicType {
 
 impl JSDocVariadicType {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_jsdoc_variadic_type(node, type_node_)
     }
 }
@@ -14923,7 +14923,7 @@ impl JSDocOptionalType {
 
 impl JSDocOptionalType {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let type_node_ = v.visit_node_hooked(Some(self.type_())).expect("visitor removed a required child");
+        let type_node_ = required_child(v.visit_node_hooked(Some(self.type_())), self.type_());
         v.factory.update_jsdoc_optional_type(node, type_node_)
     }
 }
@@ -14944,8 +14944,8 @@ impl JSDocTypeTag {
 
 impl JSDocTypeTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
-        let type_expression_ = v.visit_node_hooked(Some(self.type_expression())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
+        let type_expression_ = required_child(v.visit_node_hooked(Some(self.type_expression())), self.type_expression());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_type_tag(node, tag_name_, type_expression_, comment_)
     }
@@ -14966,7 +14966,7 @@ impl JSDocUnknownTag {
 
 impl JSDocUnknownTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_unknown_tag(node, tag_name_, comment_)
     }
@@ -14989,9 +14989,9 @@ impl JSDocTemplateTag {
 
 impl JSDocTemplateTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let constraint_ = v.visit_node_hooked(self.constraint());
-        let type_parameters_ = v.visit_nodes_hooked(Some(self.type_parameters())).expect("visitor removed a required child");
+        let type_parameters_ = required_child(v.visit_nodes_hooked(Some(self.type_parameters())), self.type_parameters());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_template_tag(node, tag_name_, constraint_, type_parameters_, comment_)
     }
@@ -15013,7 +15013,7 @@ impl JSDocReturnTag {
 
 impl JSDocReturnTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let type_expression_ = v.visit_node_hooked(self.type_expression());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_return_tag(node, tag_name_, type_expression_, comment_)
@@ -15035,7 +15035,7 @@ impl JSDocPublicTag {
 
 impl JSDocPublicTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_public_tag(node, tag_name_, comment_)
     }
@@ -15056,7 +15056,7 @@ impl JSDocPrivateTag {
 
 impl JSDocPrivateTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_private_tag(node, tag_name_, comment_)
     }
@@ -15077,7 +15077,7 @@ impl JSDocProtectedTag {
 
 impl JSDocProtectedTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_protected_tag(node, tag_name_, comment_)
     }
@@ -15098,7 +15098,7 @@ impl JSDocReadonlyTag {
 
 impl JSDocReadonlyTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_readonly_tag(node, tag_name_, comment_)
     }
@@ -15119,7 +15119,7 @@ impl JSDocOverrideTag {
 
 impl JSDocOverrideTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_override_tag(node, tag_name_, comment_)
     }
@@ -15140,7 +15140,7 @@ impl JSDocDeprecatedTag {
 
 impl JSDocDeprecatedTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_deprecated_tag(node, tag_name_, comment_)
     }
@@ -15162,7 +15162,7 @@ impl JSDocSeeTag {
 
 impl JSDocSeeTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let name_expression_ = v.visit_node_hooked(self.name_expression());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_see_tag(node, tag_name_, name_expression_, comment_)
@@ -15185,8 +15185,8 @@ impl JSDocImplementsTag {
 
 impl JSDocImplementsTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
-        let class_name_ = v.visit_node_hooked(Some(self.class_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
+        let class_name_ = required_child(v.visit_node_hooked(Some(self.class_name())), self.class_name());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_implements_tag(node, tag_name_, class_name_, comment_)
     }
@@ -15208,8 +15208,8 @@ impl JSDocAugmentsTag {
 
 impl JSDocAugmentsTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
-        let class_name_ = v.visit_node_hooked(Some(self.class_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
+        let class_name_ = required_child(v.visit_node_hooked(Some(self.class_name())), self.class_name());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_augments_tag(node, tag_name_, class_name_, comment_)
     }
@@ -15231,8 +15231,8 @@ impl JSDocSatisfiesTag {
 
 impl JSDocSatisfiesTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
-        let type_expression_ = v.visit_node_hooked(Some(self.type_expression())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
+        let type_expression_ = required_child(v.visit_node_hooked(Some(self.type_expression())), self.type_expression());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_satisfies_tag(node, tag_name_, type_expression_, comment_)
     }
@@ -15254,7 +15254,7 @@ impl JSDocThrowsTag {
 
 impl JSDocThrowsTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let type_expression_ = v.visit_node_hooked(self.type_expression());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_throws_tag(node, tag_name_, type_expression_, comment_)
@@ -15277,8 +15277,8 @@ impl JSDocThisTag {
 
 impl JSDocThisTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
-        let type_expression_ = v.visit_node_hooked(Some(self.type_expression())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
+        let type_expression_ = required_child(v.visit_node_hooked(Some(self.type_expression())), self.type_expression());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_this_tag(node, tag_name_, type_expression_, comment_)
     }
@@ -15302,9 +15302,9 @@ impl JSDocImportTag {
 
 impl JSDocImportTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let import_clause_ = v.visit_node_hooked(self.import_clause());
-        let module_specifier_ = v.visit_node_hooked(Some(self.module_specifier())).expect("visitor removed a required child");
+        let module_specifier_ = required_child(v.visit_node_hooked(Some(self.module_specifier())), self.module_specifier());
         let attributes_ = v.visit_node_hooked(self.attributes());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_import_tag(node, tag_name_, import_clause_, module_specifier_, attributes_, comment_)
@@ -15328,8 +15328,8 @@ impl JSDocCallbackTag {
 
 impl JSDocCallbackTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
-        let type_expression_ = v.visit_node_hooked(Some(self.type_expression())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
+        let type_expression_ = required_child(v.visit_node_hooked(Some(self.type_expression())), self.type_expression());
         let name_ = v.visit_node_hooked(self.name());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_callback_tag(node, tag_name_, type_expression_, name_, comment_)
@@ -15352,8 +15352,8 @@ impl JSDocOverloadTag {
 
 impl JSDocOverloadTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
-        let type_expression_ = v.visit_node_hooked(Some(self.type_expression())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
+        let type_expression_ = required_child(v.visit_node_hooked(Some(self.type_expression())), self.type_expression());
         let comment_ = v.visit_nodes_hooked(self.comment());
         v.factory.update_jsdoc_overload_tag(node, tag_name_, type_expression_, comment_)
     }
@@ -15376,7 +15376,7 @@ impl JSDocTypedefTag {
 
 impl JSDocTypedefTag {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let tag_name_ = v.visit_node_hooked(Some(self.tag_name())).expect("visitor removed a required child");
+        let tag_name_ = required_child(v.visit_node_hooked(Some(self.tag_name())), self.tag_name());
         let type_expression_ = v.visit_node_hooked(self.type_expression());
         let name_ = v.visit_node_hooked(self.name());
         let comment_ = v.visit_nodes_hooked(self.comment());
@@ -15421,7 +15421,7 @@ impl JSDocNameReference {
 
 impl JSDocNameReference {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         v.factory.update_jsdoc_name_reference(node, name_)
     }
 }
@@ -15444,7 +15444,7 @@ impl ModuleDeclaration {
 impl ModuleDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let attributes_ = v.visit_node_hooked(self.attributes());
         let body_ = v.visit_node_hooked(self.body());
         v.factory.update_module_declaration(node, modifiers_, self.keyword(), name_, attributes_, body_)
@@ -15468,8 +15468,8 @@ impl ImportEqualsDeclaration {
 impl ImportEqualsDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
-        let module_reference_ = v.visit_node_hooked(Some(self.module_reference())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
+        let module_reference_ = required_child(v.visit_node_hooked(Some(self.module_reference())), self.module_reference());
         v.factory.update_import_equals_declaration(node, modifiers_, self.is_type_only(), name_, module_reference_)
     }
 }
@@ -15516,7 +15516,7 @@ impl ImportTypeNode {
 
 impl ImportTypeNode {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let argument_ = v.visit_node_hooked(Some(self.argument())).expect("visitor removed a required child");
+        let argument_ = required_child(v.visit_node_hooked(Some(self.argument())), self.argument());
         let attributes_ = v.visit_node_hooked(self.attributes());
         let qualifier_ = v.visit_node_hooked(self.qualifier());
         let type_arguments_ = v.visit_nodes_hooked(self.type_arguments());
@@ -15561,7 +15561,7 @@ impl ImportSpecifier {
 impl ImportSpecifier {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let property_name_ = v.visit_node_hooked(self.property_name());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         v.factory.update_import_specifier(node, self.is_type_only(), property_name_, name_)
     }
 }
@@ -15648,7 +15648,7 @@ impl TypeParameterDeclaration {
 impl TypeParameterDeclaration {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
         let modifiers_ = v.visit_modifiers_hooked(self.modifiers());
-        let name_ = v.visit_node_hooked(Some(self.name())).expect("visitor removed a required child");
+        let name_ = required_child(v.visit_node_hooked(Some(self.name())), self.name());
         let constraint_ = v.visit_node_hooked(self.constraint());
         let expression_ = v.visit_node_hooked(self.expression());
         let default_type_ = v.visit_node_hooked(self.default_type());
@@ -15671,8 +15671,8 @@ impl SyntheticReferenceExpression {
 
 impl SyntheticReferenceExpression {
     pub fn visit_each_child(&self, node: P<Node>, v: &mut NodeVisitor) -> P<Node> {
-        let expression_ = v.visit_node_hooked(Some(self.expression())).expect("visitor removed a required child");
-        let this_arg_ = v.visit_node_hooked(Some(self.this_arg())).expect("visitor removed a required child");
+        let expression_ = required_child(v.visit_node_hooked(Some(self.expression())), self.expression());
+        let this_arg_ = required_child(v.visit_node_hooked(Some(self.this_arg())), self.this_arg());
         v.factory.update_synthetic_reference_expression(node, expression_, this_arg_)
     }
 }

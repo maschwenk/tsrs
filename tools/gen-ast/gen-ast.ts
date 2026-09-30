@@ -329,7 +329,7 @@ function header() {
     w("use crate::nodeflags::NodeFlags;");
     w("use crate::symbol::{Symbol, SymbolTable};");
     w("use crate::tokenflags::TokenFlags;");
-    w("use crate::visitor::{same_map_nodes, NodeVisitor};");
+    w("use crate::visitor::{required_child, same_map_nodes, NodeVisitor};");
     w();
 }
 
@@ -560,7 +560,7 @@ function genVisitEachChild(node: NodeType) {
         if (m.visit === "modifiers") call = "v.visit_modifiers_hooked";
         const local = `${paramName(m)}_`;
         if (opt) w(`        let ${local} = ${call}(${access});`);
-        else w(`        let ${local} = ${call}(Some(${access})).expect("visitor removed a required child");`);
+        else w(`        let ${local} = required_child(${call}(Some(${access})), ${access});`);
         args.push(local);
     }
     w(`        v.factory.update_${snake(node.name)}(node, ${args.join(", ")})`);

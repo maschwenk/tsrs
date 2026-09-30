@@ -281,6 +281,15 @@ impl NodeVisitor {
 }
 
 /// Go `core.SameMap` over a raw node slice: returns `nodes` itself when `f` maps every element to itself.
+// A child that the Go AST allows to be nil only by accident of construction (a "required" child) is non-optional in the
+// Rust AST. Go's `VisitEachChild` stores whatever the visitor returns, so a visitor that returns nil for such a child
+// produces a node with a nil child. That happens only in traversals whose result is discarded (the declaration
+// transformer's side-effect visitors, e.g. `visitThisPropertyAssignments` returning nil outside its `this`
+// container), so the Rust visitor keeps the original child instead of failing.
+pub fn required_child<T>(visited: Option<T>, original: T) -> T {
+    visited.unwrap_or(original)
+}
+
 pub fn same_map_nodes(nodes: &'static [P<Node>], mut f: impl FnMut(P<Node>) -> P<Node>) -> &'static [P<Node>] {
     for (i, &node) in nodes.iter().enumerate() {
         let mapped = f(node);
