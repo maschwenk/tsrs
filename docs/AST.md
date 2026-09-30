@@ -243,7 +243,8 @@ Free: `get_source_file_of_symbol`, `symbol_name`, `escape_symbol_name`, … `get
 
 `pub struct SymbolTable(RefCell<IndexMap<&'static str, P<Symbol>>>)`, handled as `P<SymbolTable>`
 (`SymbolTable: Default`, `SymbolTable::new()`, `with_capacity(n)`, `clone_table()` = Go `maps.Clone`),
-methods `get(name)`, `set(name, symbol)`, `delete(name)`, `len()`, `is_empty()`, `has(name)`,
+methods `get(name)` (**on a `P<SymbolTable>` receiver `.get(name)` resolves to `P::get` — write
+`table.lookup(name)`, identical semantics**), `set(name, symbol)`, `delete(name)`, `len()`, `is_empty()`, `has(name)`,
 `for_each(FnMut(&'static str, P<Symbol>))`, `entries()`, `keys()`, `values()` (iteration returns a
 snapshot so callers may mutate while iterating). A Go nil table is `None`. Insertion order.
 

@@ -143,8 +143,15 @@ impl SymbolTable {
         P::new(SymbolTable(RefCell::new(self.0.borrow().clone())))
     }
 
+    /// Go `table[name]`. On a `P<SymbolTable>` receiver `table.get(name)` resolves to `P::get`, so use
+    /// `table.lookup(name)` (same thing) there.
     #[inline]
     pub fn get(&self, name: &str) -> Option<P<Symbol>> {
+        self.0.borrow().get(name).copied()
+    }
+
+    #[inline]
+    pub fn lookup(&self, name: &str) -> Option<P<Symbol>> {
         self.0.borrow().get(name).copied()
     }
 

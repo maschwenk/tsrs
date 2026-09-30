@@ -1891,3 +1891,184 @@ pub(crate) fn visit_each_child_jsdoc_parameter_or_property_tag(node: &JSDocParam
 impl NodeFactory {
     pub fn release_arenas(&mut self) {}
 }
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use tsrs_core::{TextRange, P};
+
+    use crate::*;
+
+    fn set_parents(node: P<Node>) {
+        node.for_each_child(&mut |child| {
+            child.parent.set(Some(node));
+            set_parents(child);
+            false
+        });
+    }
+
+    fn children(node: P<Node>) -> Vec<P<Node>> {
+        node.iter_children()
+    }
+
+    #[test]
+    fn build_walk_and_cast() {
+        let mut f = NodeFactory::default();
+        let a = f.new_identifier("a");
+        let plus = f.new_token(Kind::PlusToken);
+        let b = f.new_identifier("b");
+        let bin = f.new_binary_expression(None, a, None, plus, b);
+        let stmt = f.new_expression_statement(bin);
+        let list = f.new_node_list(vec![stmt]);
+        let block = f.new_block(list, false);
+        set_parents(block);
+
+        assert_eq!(f.node_count(), 6);
+        assert!(is_binary_expression(bin));
+        assert!(!is_identifier(bin));
+        assert_eq!(children(bin), vec![a, plus, b]);
+        assert_eq!(children(block), vec![stmt]);
+        assert_eq!(bin.as_binary_expression().left(), a);
+        assert_eq!(bin.as_binary_expression().operator_token.kind, Kind::PlusToken);
+        assert_eq!(stmt.expression(), Some(bin));
+        assert_eq!(block.statements(), &[stmt]);
+        assert_eq!(a.text(), "a");
+        assert_eq!(a.parent(), Some(bin));
+        assert_eq!(bin.parent(), Some(stmt));
+        assert_eq!(stmt.parent(), Some(block));
+        assert!(block.contains(Some(a)));
+        assert!(block.locals_container_data().is_some());
+        assert!(bin.declaration_data().is_some());
+        assert!(a.flow_node_data().is_some());
+        assert!(plus.declaration_data().is_none());
+        assert_eq!(a.loc(), TextRange::new(-1, -1));
+
+        // Stopping early propagates true.
+        let mut seen = 0;
+        assert!(bin.for_each_child(&mut |_| {
+            seen += 1;
+            seen == 2
+        }));
+        assert_eq!(seen, 2);
+    }
+
+    #[test]
+    #[should_panic]
+    fn cast_mismatch_panics() {
+        let mut f = NodeFactory::default();
+        let a = f.new_identifier("a");
+        a.as_binary_expression();
+    }
+
+    #[test]
+    fn source_file_back_pointer() {
+        let mut f = NodeFactory::default();
+        let stmt = f.new_empty_statement();
+        let statements = f.new_node_list(vec![stmt]);
+        let eof = f.new_token(Kind::EndOfFile);
+        let opts = SourceFileParseOptions { file_name: "/a.ts".to_string(), ..Default::default() };
+        let node = f.new_source_file(opts, ";", statements, eof);
+        set_parents(node);
+        let file = node.as_source_file();
+        assert_eq!(file.as_node(), node);
+        assert_eq!(file.file_name(), "/a.ts");
+        assert_eq!(file.text(), ";");
+        assert_eq!(node.statements(), &[stmt]);
+        assert_eq!(children(node), vec![stmt, eof]);
+        assert_eq!(get_source_file_of_node(stmt).map(|f| f.as_node()), Some(node));
+        file.symbol_count.set(3);
+        assert_eq!(file.symbol_count(), 3);
+        assert!(node.declaration_data().is_some());
+        assert!(is_locals_container(node));
+    }
+
+    #[test]
+    fn reparser_mutations() {
+        let mut f = NodeFactory::default();
+        let name = f.new_identifier("x");
+        let decl = f.new_variable_declaration(name, None, None, None);
+        assert_eq!(decl.type_node(), None);
+        let t = f.new_keyword_type_node(Kind::NumberKeyword);
+        decl.as_mutable().set_type(Some(t));
+        assert_eq!(decl.type_node(), Some(t));
+        assert_eq!(decl.as_variable_declaration().type_(), Some(t));
+        assert_eq!(children(decl), vec![name, t]);
+
+        let m = f.new_modifier(Kind::ExportKeyword);
+        decl.set_modifiers(None);
+        let stmt_list = f.new_node_list(vec![decl]);
+        let list = f.new_variable_declaration_list(stmt_list, NodeFlags::Const);
+        assert!(list.flags().contains(NodeFlags::Const));
+        let mods = f.new_modifier_list(vec![m]);
+        let var_stmt = f.new_variable_statement(None, list);
+        var_stmt.set_modifiers(Some(mods));
+        assert_eq!(var_stmt.modifier_flags(), ModifierFlags::Export);
+        assert_eq!(children(var_stmt), vec![m, list]);
+    }
+
+    #[test]
+    fn clone_and_visit_each_child() {
+        let mut f = NodeFactory::default();
+        let a = f.new_identifier("a");
+        let plus = f.new_token(Kind::PlusToken);
+        let b = f.new_identifier("b");
+        let bin = f.new_binary_expression(None, a, None, plus, b);
+        bin.set_loc(TextRange::new(3, 8));
+
+        let copy = bin.clone_node(&mut f);
+        assert_ne!(copy, bin);
+        assert_eq!(copy.loc(), bin.loc());
+        assert_eq!(copy.as_binary_expression().left(), a);
+
+        // Identity visitor: nothing changes.
+        let mut v = new_node_visitor(Some(Rc::new(|_: &mut NodeVisitor, n: P<Node>| Some(n))), None, NodeVisitorHooks::default());
+        assert_eq!(v.visit_each_child(Some(bin)), Some(bin));
+
+        // Replacing a child produces an updated node with the original's location.
+        let c: P<Node> = v.factory.new_identifier("c");
+        let mut v = new_node_visitor(
+            Some(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| if n == a { Some(c) } else { Some(n) })),
+            Some(std::mem::take(&mut f)),
+            NodeVisitorHooks::default(),
+        );
+        let updated = v.visit_each_child(Some(bin)).unwrap();
+        assert_ne!(updated, bin);
+        assert_eq!(updated.loc(), TextRange::new(3, 8));
+        assert_eq!(updated.as_binary_expression().left(), c);
+        assert_eq!(updated.as_binary_expression().right(), b);
+    }
+
+    #[test]
+    fn symbol_table_order_and_snapshot() {
+        let table = SymbolTable::new();
+        let s1 = Symbol::new(SymbolFlags::Variable, "b");
+        let s2 = Symbol::new(SymbolFlags::Function, "a");
+        table.set("b", s1);
+        table.set("a", s2);
+        assert_eq!(table.keys(), vec!["b", "a"]);
+        table.for_each(|name, _| {
+            if name == "b" {
+                table.delete("a");
+            }
+        });
+        assert_eq!(table.len(), 1);
+        assert_eq!(table.lookup("b"), Some(s1));
+        assert!(!table.has("a"));
+        assert!(InternalSymbolNameCall.starts_with(InternalSymbolNamePrefix));
+        assert_eq!(escape_symbol_name(InternalSymbolNameCall), "__call");
+    }
+
+    #[test]
+    fn kinds_and_flags() {
+        assert_eq!(Kind::FirstKeyword, Kind::BreakKeyword);
+        assert_eq!(Kind::LastToken, Kind::DeferKeyword);
+        assert_eq!(Kind::from_i16(Kind::Identifier as i16), Kind::Identifier);
+        assert!(is_keyword_kind(Kind::ClassKeyword));
+        assert!(is_assignment_operator(Kind::PlusEqualsToken));
+        assert_eq!(NodeFlags::BlockScoped, NodeFlags::Let | NodeFlags::Const | NodeFlags::Using);
+        assert!(SymbolFlags::Value.contains(SymbolFlags::Function));
+        assert!(!SymbolFlags::FunctionScopedVariableExcludes.intersects(SymbolFlags::FunctionScopedVariable));
+        assert_eq!(std::mem::size_of::<Node>(), 48);
+    }
+}
