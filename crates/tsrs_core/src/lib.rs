@@ -9,12 +9,15 @@ pub mod stringutil;
 pub mod tspath;
 
 mod compileroptions;
+#[path = "core.rs"]
+mod core_go;
 mod languagevariant;
 mod scriptkind;
 mod text;
 mod tristate;
 
 pub use compileroptions::*;
+pub use core_go::*;
 pub use languagevariant::*;
 pub use scriptkind::*;
 pub use text::*;
