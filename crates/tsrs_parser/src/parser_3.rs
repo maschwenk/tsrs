@@ -8,7 +8,9 @@ use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use tsrs_scanner as scanner;
 
-use crate::*;
+use crate::parser_1::{is_export_modifier, is_missing_node_list, modifier_list_has_async, JsdocScannerInfo, Parser, ParsingContext};
+use crate::types::ParseFlags;
+use crate::utilities::{is_keyword_or_punctuation, token_is_identifier_or_keyword};
 
 impl Parser {
     pub(crate) fn parse_assignment_expression_or_higher(&mut self) -> P<Node> {
@@ -768,6 +770,7 @@ impl Parser {
         let mut list: Vec<P<Node>> = Vec::new();
         loop {
             let current_token = self.scanner.re_scan_jsx_token(true /*allowMultilineJsxText*/);
+            self.report_scan_errors();
             let Some(child) = self.parse_jsx_child(opening_tag, current_token) else {
                 break;
             };
@@ -813,7 +816,7 @@ impl Parser {
 
     pub(crate) fn parse_jsx_text(&mut self) -> P<Node> {
         let pos = self.node_pos();
-        let text = tsrs_core::alloc_str(&self.scanner.token_value());
+        let text = self.scanner.token_value();
         let result = self.factory.new_jsx_text(text, self.token == Kind::JsxTextAllWhiteSpaces);
         self.scan_jsx_text();
         self.finish_node(result, pos)
@@ -846,16 +849,19 @@ impl Parser {
 
     pub(crate) fn scan_jsx_text(&mut self) -> Kind {
         self.token = self.scanner.scan_jsx_token();
+        self.report_scan_errors();
         self.token
     }
 
     pub(crate) fn scan_jsx_identifier(&mut self) -> Kind {
         self.token = self.scanner.scan_jsx_identifier();
+        self.report_scan_errors();
         self.token
     }
 
     pub(crate) fn scan_jsx_attribute_value(&mut self) -> Kind {
         self.token = self.scanner.scan_jsx_attribute_value();
+        self.report_scan_errors();
         self.token
     }
 
@@ -1338,8 +1344,8 @@ impl Parser {
                 // Absorb type arguments into TemplateExpression when preceding expression is ExpressionWithTypeArguments
                 if question_dot_token.is_none() && ast::is_expression_with_type_arguments(expression) {
                     let original = expression.as_expression_with_type_arguments();
-                    expression = self.parse_tagged_template_rest(pos, original.expression, question_dot_token, original.type_arguments);
-                    self.unparse_expression_with_type_arguments(Some(original.expression), original.type_arguments, expression);
+                    expression = self.parse_tagged_template_rest(pos, original.expression, question_dot_token, original.type_arguments.get());
+                    self.unparse_expression_with_type_arguments(Some(original.expression), original.type_arguments.get(), expression);
                 } else {
                     expression = self.parse_tagged_template_rest(pos, expression, question_dot_token, None /*typeArguments*/);
                 }
@@ -1662,7 +1668,7 @@ impl Parser {
         } else {
             self.parse_expected(Kind::ColonToken);
             let initializer = self.do_in_context(NodeFlags::DisallowInContext, false, Parser::parse_assignment_expression_or_higher);
-            node = self.factory.new_property_assignment(modifiers, name, postfix_token, None /*typeNode*/, Some(initializer));
+            node = self.factory.new_property_assignment(modifiers, name, postfix_token, None /*typeNode*/, initializer);
         }
         self.finish_node(node, pos);
         self.with_jsdoc(node, jsdoc);
@@ -1779,7 +1785,7 @@ impl Parser {
 
     pub(crate) fn parse_literal_expression(&mut self) -> P<Node> {
         let pos = self.node_pos();
-        let text = tsrs_core::alloc_str(&self.scanner.token_value());
+        let text = self.scanner.token_value();
         let token_flags = self.scanner.token_flags();
         let result = match self.token {
             Kind::StringLiteral => self.factory.new_string_literal(text, token_flags),
@@ -1836,7 +1842,7 @@ impl Parser {
     pub(crate) fn create_identifier_with_diagnostic(&mut self, is_identifier: bool, diagnostic_message: Option<&'static Message>, private_identifier_diagnostic_message: Option<&'static Message>) -> P<Node> {
         if is_identifier {
             let pos = if self.scanner.has_preceding_jsdoc_leading_asterisks() { self.scanner.token_start() } else { self.node_pos() };
-            let text = tsrs_core::alloc_str(&self.scanner.token_value());
+            let text = self.scanner.token_value();
             self.next_token_without_check();
             let id = self.new_identifier(text);
             return self.finish_node(id, pos);
@@ -2446,7 +2452,7 @@ impl Parser {
         let mut type_reference_directives: Vec<P<ast::FileReference>> = Vec::new();
         let mut lib_reference_directives: Vec<P<ast::FileReference>> = Vec::new();
         // context.AmdDependencies = nil
-        for pragma in context.pragmas() {
+        for pragma in context.pragmas.borrow().iter() {
             match &*pragma.name {
                 "reference" => {
                     let types = pragma.args.get("types");
@@ -2723,7 +2729,7 @@ fn type_has_arrow_function_blocking_parse_error(node: P<Node>) -> bool {
     match node.kind {
         Kind::TypeReference => ast::node_is_missing(Some(node.as_type_reference_node().type_name)),
         Kind::FunctionType | Kind::ConstructorType => {
-            is_missing_node_list(Some(node.function_like_data().unwrap().parameters)) || type_has_arrow_function_blocking_parse_error(node.type_node().unwrap())
+            is_missing_node_list(Some(node.function_like_data().unwrap().parameters.get())) || type_has_arrow_function_blocking_parse_error(node.type_node().unwrap())
         }
         Kind::ParenthesizedType => type_has_arrow_function_blocking_parse_error(node.type_node().unwrap()),
         _ => false,
@@ -2753,9 +2759,9 @@ pub(crate) fn attach_file_to_diagnostics(diagnostics: &[P<ast::Diagnostic>], fil
     diagnostics.to_vec()
 }
 
-pub(crate) fn get_comment_pragmas(f: &mut ast::NodeFactory, source_text: &str) -> Vec<ast::Pragma> {
+pub(crate) fn get_comment_pragmas(f: &mut ast::NodeFactory, source_text: &'static str) -> Vec<ast::Pragma> {
     let mut pragmas = Vec::new();
-    for comment_range in scanner::get_leading_comment_ranges(f, source_text, 0) {
+    for comment_range in scanner::get_leading_comment_ranges(source_text, 0) {
         let comment = &source_text[comment_range.pos() as usize..comment_range.end() as usize];
         pragmas.extend(extract_pragmas(comment_range, comment));
     }
