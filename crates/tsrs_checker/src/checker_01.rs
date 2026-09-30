@@ -960,7 +960,7 @@ impl Checker {
         String::new()
     }
 
-    // SIG: location Option<P<Node>> (was P<Node>): onFailedToResolveSymbol passes a nil errorLocation (getGlobalSymbol).
+    // location Option<P<Node>>: onFailedToResolveSymbol passes a nil errorLocation (getGlobalSymbol).
     // checker.go:1782
     pub(crate) fn get_suggested_symbol_for_nonexistent_symbol(&mut self, location: Option<P<Node>>, outer_name: &str, meaning: SymbolFlags) -> Option<P<Symbol>> {
         self.resolve_name_for_symbol_suggestion(location, outer_name, meaning, None /*nameNotFoundMessage*/, false /*isUse*/, false /*excludeGlobals*/)

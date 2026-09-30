@@ -2388,7 +2388,7 @@ impl Checker {
      */
     // checker.go:8496
     pub(crate) fn check_call_expression(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        // SIG: check_grammar_type_arguments should take Option<P<NodeList>> (Go passes a nil list); with a nil list it
+        // SIG(grammarchecks merge): check_grammar_type_arguments should take Option<P<NodeList>> (Go passes a nil list); with a nil list it
         // returns false without side effects, so skipping the call is equivalent.
         if let Some(type_argument_list) = node.type_argument_list() {
             self.check_grammar_type_arguments(node, type_argument_list);
@@ -2668,7 +2668,7 @@ impl Checker {
     }
 }
 
-// SIG: nodebuilderimpl.go's TryGetModuleSpecifierFromDeclaration is not ported yet (node builder); private copy so this
+// TODO(nodebuilder merge): remove duplicate. nodebuilderimpl.go's TryGetModuleSpecifierFromDeclaration is not ported yet; private copy so this
 // file compiles. Delete once the node-builder port provides `try_get_module_specifier_from_declaration`.
 // nodebuilderimpl.go:1193
 fn try_get_module_specifier_from_declaration(node: P<Node>) -> Option<P<Node>> {

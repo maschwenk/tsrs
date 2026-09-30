@@ -1635,7 +1635,7 @@ impl Checker {
 }
 
 impl WideningContext {
-    // SIG: Go method on *WideningContext; takes the arena handle explicitly (was `&mut self`) because the new child
+    // Go method on *WideningContext; takes the arena handle explicitly because the new child
     // context stores a pointer to its parent.
     // checker.go:18794
     pub(crate) fn get_child_context(w: P<WideningContext>, property_name: &str) -> P<WideningContext> {
@@ -2041,7 +2041,7 @@ impl Checker {
         -1
     }
 
-    // SIG: `r: P<TypeResolution>` -> `r: &TypeResolution` (TypeResolution is a plain value struct stored in
+    // `r: P<TypeResolution>` -> `r: &TypeResolution` (TypeResolution is a plain value struct stored in
     // `type_resolutions`, not an arena object).
     // checker.go:19140
     pub(crate) fn type_resolution_has_property(&mut self, r: &TypeResolution) -> bool {

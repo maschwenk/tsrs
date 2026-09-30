@@ -1105,7 +1105,7 @@ impl Checker {
     }
 
     // jsx.go:1018
-    // SIG: ns is nil-able (getJsxNamespaceAt can return nil and getJsxLibraryManagedAttributes checks it).
+    // ns is nil-able (getJsxNamespaceAt can return nil and getJsxLibraryManagedAttributes checks it).
     pub(crate) fn get_jsx_managed_attributes_from_located_attributes(&mut self, context: P<Node>, ns: Option<P<Symbol>>, attributes_type: P<Type>) -> P<Type> {
         let managed_sym = self.get_jsx_library_managed_attributes(ns);
         if let Some(managed_sym) = managed_sym {
@@ -1172,13 +1172,13 @@ impl Checker {
     // or "" if it has 0 properties (which means every
     //
     //	non-intrinsic elements' attributes type is the element instance type)
-    // SIG: jsx_namespace is nil-able (Go passes getJsxNamespaceAt's result straight through).
+    // jsx_namespace is nil-able (Go passes getJsxNamespaceAt's result straight through).
     pub(crate) fn get_jsx_element_properties_name(&mut self, jsx_namespace: Option<P<Symbol>>) -> String {
         self.get_name_from_jsx_element_attributes_container(JsxNames.element_attributes_property_name_container, jsx_namespace)
     }
 
     // jsx.go:1077
-    // SIG: jsx_namespace is nil-able (Go passes getJsxNamespaceAt's result straight through).
+    // jsx_namespace is nil-able (Go passes getJsxNamespaceAt's result straight through).
     pub(crate) fn get_jsx_element_children_property_name(&mut self, jsx_namespace: Option<P<Symbol>>) -> String {
         if self.compiler_options.jsx == JsxEmit::ReactJSX || self.compiler_options.jsx == JsxEmit::ReactJSXDev {
             // In these JsxEmit modes the children property is fixed to 'children'
@@ -1448,7 +1448,6 @@ impl Checker {
             if let Some(resolved_namespace) = resolved_namespace {
                 let resolved = self.resolve_symbol(resolved_namespace);
                 let exports = self.get_exports_of_symbol(resolved);
-                // SIG: Go's resolveSymbol(nil) returns nil; resolve_symbol takes a non-nil symbol, so map over the Option.
                 let candidate = self.get_symbol(exports, JsxNames.jsx, SymbolFlags::Namespace).map(|s| self.resolve_symbol(s));
                 if let Some(candidate) = candidate {
                     if candidate != self.unknown_symbol {
@@ -1464,7 +1463,6 @@ impl Checker {
             }
         }
         // JSX global fallback
-        // SIG: Go's resolveSymbol(nil) returns nil; resolve_symbol takes a non-nil symbol, so map over the Option.
         let s = self.get_global_symbol(JsxNames.jsx, SymbolFlags::Namespace, None /*diagnostic*/).map(|s| self.resolve_symbol(s));
         if s == Some(self.unknown_symbol) {
             return None;
@@ -1580,7 +1578,7 @@ impl Checker {
     }
 
     // jsx.go:1435
-    // SIG: parser.ParseIsolatedEntityName returns nil for an invalid entity name, so the result is nil-able.
+    // parser.ParseIsolatedEntityName returns nil for an invalid entity name, so the result is nil-able.
     pub(crate) fn parse_isolated_entity_name(&mut self, name: &str) -> Option<P<Node>> {
         let result = tsrs_parser::parse_isolated_entity_name(name);
         if let Some(result) = result {
@@ -1644,7 +1642,7 @@ impl Checker {
     }
 
     // jsx.go:1486
-    // SIG: the specifier is nil when the file has no explicit jsxImportSource pragma node (Program returns Option).
+    // the specifier is nil when the file has no explicit jsxImportSource pragma node (Program returns Option).
     pub(crate) fn get_jsx_runtime_import_specifier(&mut self, file: P<SourceFile>) -> (String, Option<P<Node>>) {
         self.program.get_jsx_runtime_import_specifier(file.path())
     }

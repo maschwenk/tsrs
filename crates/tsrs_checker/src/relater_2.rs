@@ -341,7 +341,7 @@ impl Checker {
 }
 
 // relater.go:2855
-// SIG: container is nil-able (Go only dereferences it after checking prop.ValueDeclaration).
+// container is nil-able (Go only dereferences it after checking prop.ValueDeclaration).
 pub(crate) fn should_check_as_excess_property(prop: P<Symbol>, container: Option<P<Symbol>>) -> bool {
     prop.value_declaration().is_some() && container.unwrap().value_declaration().is_some() && prop.value_declaration().unwrap().parent() == container.unwrap().value_declaration()
 }
@@ -2671,7 +2671,7 @@ impl Relater {
     // Return true if the arguments of the first entry on the error chain match the
     // given arguments (where nil acts as a wildcard).
     // relater.go:4950
-    // SIG: args: &[&dyn Display] -> &[Option<&str>] (Go passes nil as a wildcard; stored chain args are strings).
+    // args: &[&dyn Display] -> &[Option<&str>] (Go passes nil as a wildcard; stored chain args are strings).
     pub(crate) fn chain_args_match(&self, c: &mut Checker, args: &[Option<&str>]) -> bool {
         let chain = self.error_chain.get().unwrap();
         for (i, a) in args.iter().enumerate() {

@@ -1459,7 +1459,7 @@ impl Checker {
         }
     }
 
-    // SIG: node Option<P<Node>> and result Option<P<Type>> (Go takes and returns nil).
+    // node Option<P<Node>> and result Option<P<Type>> (Go takes and returns nil).
     // checker.go:5569
     pub(crate) fn get_type_from_import_attributes(&mut self, node: Option<P<Node>>) -> Option<P<Type>> {
         let node = node?;
@@ -2344,7 +2344,6 @@ impl Checker {
             return Some(self.get_union_type_ex(&types, UnionReduction::Subtype, None, None));
         }
         if use_.intersects(IterationUse::PossiblyOutOfBounds) {
-            // SIG: include_undefined_in_index_signature should take/return Option<P<Type>> (Go returns nil for nil).
             return array_element_type.map(|t| self.include_undefined_in_index_signature(t));
         }
         array_element_type

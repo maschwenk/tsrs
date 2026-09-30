@@ -1709,7 +1709,7 @@ impl Checker {
     // checker.go:10226
     pub(crate) fn check_tagged_template_expression(&mut self, node: P<Node>) -> P<Type> {
         if !self.check_grammar_tagged_template_chain(node) {
-            // SIG: check_grammar_type_arguments should take Option<P<NodeList>> (Go passes a nil list, which
+            // SIG(grammarchecks merge): check_grammar_type_arguments should take Option<P<NodeList>> (Go passes a nil list, which
             // reports nothing); adapted here by skipping the call for a nil list.
             if let Some(type_argument_list) = node.type_argument_list() {
                 self.check_grammar_type_arguments(node, type_argument_list);

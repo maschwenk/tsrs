@@ -956,7 +956,7 @@ impl Checker {
 
     // If the given contextual type contains instantiable types and if a mapper representing
     // return type inferences is available, instantiate those types using that mapper.
-    // SIG: contextual_type and the result are nil-able in Go (P<Type> -> Option<P<Type>>).
+    // contextual_type and the result are nil-able in Go (P<Type> -> Option<P<Type>>).
     // checker.go:31306
     pub(crate) fn instantiate_contextual_type(&mut self, contextual_type: Option<P<Type>>, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
         if let Some(contextual_type) = contextual_type {
@@ -2307,7 +2307,7 @@ impl Checker {
         self.error_type
     }
 
-    // SIG: contextual_type is nil-able in Go (callers pass getApparentTypeOfContextualType's result): P<Type> -> Option<P<Type>>.
+    // contextual_type is nil-able in Go (callers pass getApparentTypeOfContextualType's result): P<Type> -> Option<P<Type>>.
     // checker.go:32535
     pub(crate) fn get_this_type_of_object_literal_from_contextual_type(&mut self, containing_literal: P<Node>, contextual_type: Option<P<Type>>) -> Option<P<Type>> {
         let mut literal = containing_literal;

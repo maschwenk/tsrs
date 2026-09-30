@@ -655,7 +655,7 @@ impl Checker {
         self.ambient_modules.clone()
     }
 
-    // SIG: Go accepts and returns nil (nil in, nil out); callers with an Option map over it.
+    // Go accepts and returns nil (nil in, nil out); callers with an Option map over it.
     // checker.go:15879
     pub(crate) fn resolve_external_module_symbol(&mut self, module_symbol: P<Symbol>, dont_resolve_alias: bool) -> P<Symbol> {
         let export_equals_symbol = module_symbol.exports().and_then(|e| e.lookup(InternalSymbolNameExportEquals));
@@ -1063,7 +1063,7 @@ impl Checker {
         symbol.exports()
     }
 
-    // SIG: returns Option (Go returns a nil table when there are neither early nor late symbols; nil also
+    // returns Option (Go returns a nil table when there are neither early nor late symbols; nil also
     // means "not yet resolved" in the links, so it must not be replaced by an empty table).
     // checker.go:16253
     pub(crate) fn get_resolved_members_or_exports_of_symbol(&mut self, symbol: P<Symbol>, resolution_kind: MembersOrExportsResolutionKind) -> Option<P<SymbolTable>> {

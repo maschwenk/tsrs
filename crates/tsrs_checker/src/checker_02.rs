@@ -908,7 +908,7 @@ impl Checker {
 
     // checker.go:3028
     pub(crate) fn check_type_reference_node(&mut self, node: P<Node>) {
-        // SIG: check_grammar_type_arguments should take Option<P<NodeList>> (Go passes a nil list; both inner checks
+        // SIG(grammarchecks merge): check_grammar_type_arguments should take Option<P<NodeList>> (Go passes a nil list; both inner checks
         // are no-ops for nil), so the nil case is skipped here.
         if let Some(type_argument_list) = node.type_argument_list() {
             self.check_grammar_type_arguments(node, type_argument_list);

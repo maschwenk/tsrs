@@ -1074,7 +1074,7 @@ impl Checker {
     }
 }
 
-// SIG: Go's containsType/insertType call CompareTypes, which needs the checker (Type has no checker back pointer),
+// Go's containsType/insertType call CompareTypes, which needs the checker (Type has no checker back pointer),
 // so they take `c` like `compare_types`.
 // checker.go:27086
 pub(crate) fn contains_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> bool {
@@ -2199,7 +2199,7 @@ impl Checker {
         Some(t)
     }
 
-    // SIG: Go passes nil (e.g. a missing type parameter constraint) and checks `t == nil` here.
+    // Go passes nil (e.g. a missing type parameter constraint) and checks `t == nil` here.
     // checker.go:28063
     pub(crate) fn get_next_base_constraint(&mut self, t: Option<P<Type>>, stack: &[RecursionId]) -> Option<P<Type>> {
         let t = t?;
@@ -2352,7 +2352,7 @@ impl Checker {
         links.reference_kinds.set(links.reference_kinds.get() | SymbolFlags::All);
     }
 
-    // SIG: Go takes `restType *TypeReference` and calls `restType.AsType()`; payload structs have no back pointer to
+    // Go takes `restType *TypeReference` and calls `restType.AsType()`; payload structs have no back pointer to
     // their `Type`, so this takes the `P<Type>`.
     // checker.go:28202
     pub(crate) fn expand_signature_parameters_with_tuple_members(&mut self, signature: P<Signature>, rest_type: P<Type>, rest_index: i32, rest_symbol: P<Symbol>) -> Vec<P<Symbol>> {

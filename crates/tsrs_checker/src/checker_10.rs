@@ -1616,8 +1616,6 @@ impl Checker {
         // Don't compute resolvedReturnType and resolvedTypePredicate now,
         // because using `mapper` now could trigger inferences to become fixed. (See `createInferenceContext`.)
         // See GH#17600.
-        // SIG: instantiateSymbol returns nil for a nil symbol; the generated signature takes P<Symbol>, so the nil
-        // this-parameter is handled here with the identical result.
         let this_parameter = sig.this_parameter.get().map(|s| self.instantiate_symbol(s, Some(m)));
         let parameters = self.instantiate_symbols(sig.parameters.get(), m);
         let result = self.new_signature(

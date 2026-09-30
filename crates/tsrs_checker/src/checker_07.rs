@@ -1442,7 +1442,7 @@ impl Checker {
     }
 
     // checker.go:14194
-    // SIG: Go passes `&c.diagnostics` / `&c.suggestionDiagnostics`; the collections are plain Checker fields, so the
+    // Go passes `&c.diagnostics` / `&c.suggestionDiagnostics`; the collections are plain Checker fields, so the
     // Rust port selects the collection with `suggestions` (true = `c.suggestionDiagnostics`).
     pub(crate) fn get_diagnostics(&mut self, ctx: Context, source_file: P<SourceFile>, suggestions: bool) -> Vec<P<Diagnostic>> {
         self.check_not_canceled();
@@ -1466,8 +1466,8 @@ impl Checker {
     }
 
     // checker.go:14210
-    // SIG: the callback is stored in `deferred_diagnostic_callbacks: Vec<Box<dyn FnOnce(&mut Checker)>>`, so it must be
-    // `FnOnce + 'static` (was `impl FnMut(&mut Checker)`).
+    // the callback is stored in `deferred_diagnostic_callbacks: Vec<Box<dyn FnOnce(&mut Checker)>>`, so it must be
+    // `FnOnce + 'static``).
     pub(crate) fn add_deferred_diagnostic(&mut self, callback: impl FnOnce(&mut Checker) + 'static) {
         self.deferred_diagnostic_callbacks.push(Box::new(callback));
     }
@@ -1936,7 +1936,7 @@ impl Checker {
     }
 
     // checker.go:14612
-    // SIG: returns Option (Go returns nil for a nil symbol; callers test the result against nil).
+    // returns Option (Go returns nil for a nil symbol; callers test the result against nil).
     pub(crate) fn get_export_symbol_of_value_symbol_if_exported(&mut self, symbol: Option<P<Symbol>>) -> Option<P<Symbol>> {
         let mut symbol = symbol;
         if let Some(s) = symbol {
@@ -2018,7 +2018,6 @@ impl Checker {
                 module_reference = ast::get_external_module_import_equals_declaration_expression(node);
             }
             let immediate = self.resolve_external_module_name(node, module_reference.unwrap(), false /*ignoreErrors*/, None /*importAttributesType*/);
-            // SIG: resolve_external_module_symbol should take/return Option (Go passes nil through).
             let resolved = immediate.map(|immediate| self.resolve_external_module_symbol(immediate, true /*dontResolveAlias*/));
             if let Some(resolved) = resolved {
                 if ModuleKind::Node20 <= self.module_kind && self.module_kind <= ModuleKind::NodeNext {
@@ -2078,7 +2077,7 @@ impl Checker {
     }
 
     // checker.go:14723
-    // SIG: `resolved` is Option (Go passes the possibly-nil result of getSymbolOfPartOfRightHandSideOfImportEquals).
+    // `resolved` is Option (Go passes the possibly-nil result of getSymbolOfPartOfRightHandSideOfImportEquals).
     // It is unused, as in Go.
     pub(crate) fn check_and_report_error_for_resolving_import_alias_to_type_only_symbol(&mut self, node: P<Node>, _resolved: Option<P<Symbol>>) {
         let decl = node.as_import_equals_declaration();
@@ -2134,7 +2133,7 @@ impl Checker {
     }
 
     // checker.go:14765
-    // SIG: returns Option (Go returns the possibly-nil exportDefaultSymbol).
+    // returns Option (Go returns the possibly-nil exportDefaultSymbol).
     pub(crate) fn get_target_of_module_default(&mut self, module_symbol: P<Symbol>, node: P<Node>, dont_resolve_alias: bool) -> Option<P<Symbol>> {
         let file = module_symbol.declarations().iter().copied().find(|&d| ast::is_source_file(d));
         let specifier = self.get_module_specifier_for_import_or_export(node);
@@ -2233,7 +2232,7 @@ impl Checker {
     }
 
     // checker.go:14853
-    // SIG: returns Option (Go returns nil when the export does not exist).
+    // returns Option (Go returns nil when the export does not exist).
     pub(crate) fn resolve_export_by_name(&mut self, module_symbol: P<Symbol>, name: &str, source_node: Option<P<Node>>, dont_resolve_alias: bool) -> Option<P<Symbol>> {
         let export_value = lookup_export(module_symbol, InternalSymbolNameExportEquals);
         let export_symbol = if let Some(export_value) = export_value {
@@ -2248,12 +2247,11 @@ impl Checker {
     }
 
     // checker.go:14866
-    // SIG: returns Option (Go returns nil when the module cannot be resolved).
+    // returns Option (Go returns nil when the module cannot be resolved).
     pub(crate) fn get_target_of_namespace_import(&mut self, node: P<Node>) -> Option<P<Symbol>> {
         let module_specifier = self.get_module_specifier_for_import_or_export(node).unwrap();
         let attributes_type = self.get_type_from_import_attributes(ast::get_import_attributes(node.parent().unwrap().parent().unwrap()));
         let immediate = self.resolve_external_module_name(node, module_specifier, false /*ignoreErrors*/, attributes_type);
-        // SIG: resolve_es_module_symbol should take/return Option (Go passes nil through).
         let resolved = immediate.map(|immediate| self.resolve_es_module_symbol(immediate, node, module_specifier));
         self.mark_symbol_of_alias_declaration_if_type_only(Some(node), None);
         resolved
@@ -2265,7 +2263,6 @@ impl Checker {
         if let Some(module_specifier) = module_specifier {
             let attributes_type = self.get_type_from_import_attributes(ast::get_import_attributes(node.parent().unwrap()));
             let immediate = self.resolve_external_module_name(node, module_specifier, false /*ignoreErrors*/, attributes_type);
-            // SIG: resolve_es_module_symbol should take/return Option (Go passes nil through).
             let resolved = immediate.map(|immediate| self.resolve_es_module_symbol(immediate, node, module_specifier));
             self.mark_symbol_of_alias_declaration_if_type_only(Some(node), None);
             return resolved;
@@ -2317,7 +2314,6 @@ impl Checker {
             return None;
         }
         let name_text = name.text();
-        // SIG: resolve_es_module_symbol should take/return Option (Go passes nil through).
         let target_symbol = module_symbol.map(|m| self.resolve_es_module_symbol(m, specifier, module_specifier));
         if let Some(target_symbol) = target_symbol {
             // Note: The empty string is a valid module export name:

@@ -856,7 +856,6 @@ impl Checker {
                 if unchecked_helpers.intersects(helper) {
                     for name in self.get_helper_names(helper) {
                         let exports = self.get_exports_of_module(helpers_module);
-                        // SIG: resolve_symbol takes P<Symbol>; Go's resolveSymbol(nil) returns nil
                         let symbol = self.get_symbol(Some(exports), &name, SymbolFlags::Value).map(|s| self.resolve_symbol(s));
                         match symbol {
                             None => {
@@ -1022,7 +1021,7 @@ impl Checker {
         type_node
     }
 
-    // SIG: node Option<P<Node>> (was P<Node>): Go passes getParameterTypeNodeForDecoratorCheck/Type() results, which can be nil
+    // node Option<P<Node>>: Go passes getParameterTypeNodeForDecoratorCheck/Type() results, which can be nil
     // checker.go:29212
     pub(crate) fn mark_decorator_medata_data_type_node_as_referenced(&mut self, node: Option<P<Node>>) {
         let entity_name = self.get_entity_name_for_decorator_metadata(node);
@@ -1033,7 +1032,7 @@ impl Checker {
         }
     }
 
-    // SIG: node Option<P<Node>> (was P<Node>): Go checks node == nil
+    // node Option<P<Node>>: Go checks node == nil
     // checker.go:29219
     pub(crate) fn get_entity_name_for_decorator_metadata(&mut self, node: Option<P<Node>>) -> Option<P<Node>> {
         let node = node?;
@@ -2382,7 +2381,7 @@ impl Checker {
         self.get_contextual_type_for_object_literal_element(node, context_flags)
     }
 
-    // SIG: t Option<P<Type>> (was P<Type>): Go checks t == nil (getContextualType passes getApparentTypeOfContextualType's result)
+    // t Option<P<Type>>: Go checks t == nil (getContextualType passes getApparentTypeOfContextualType's result)
     // checker.go:30461
     pub(crate) fn get_contextual_type_for_element_expression(&mut self, t: Option<P<Type>>, index: i32, length: i32, first_spread_index: i32, last_spread_index: i32) -> Option<P<Type>> {
         let t = t?;

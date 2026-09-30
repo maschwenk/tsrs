@@ -1429,7 +1429,7 @@ impl Checker {
     }
 
     // inference.go:1258
-    // SIG: n and the result are Option (Go checks n for nil; callers pass getInferenceContext results).
+    // n and the result are Option (Go checks n for nil; callers pass getInferenceContext results).
     pub(crate) fn clone_inference_context(&mut self, n: Option<P<InferenceContext>>, extra_flags: InferenceFlags) -> Option<P<InferenceContext>> {
         let n = n?;
         let inferences: Vec<P<InferenceInfo>> = n.inferences.get().iter().map(|&info| clone_inference_info(info)).collect();
@@ -1623,7 +1623,7 @@ impl Checker {
     }
 
     // inference.go:1414
-    // SIG: n and the result are Option (Go returns nil for a nil context; callers pass nil-able contexts).
+    // n and the result are Option (Go returns nil for a nil context; callers pass nil-able contexts).
     pub(crate) fn get_mapper_from_context(&mut self, n: Option<P<InferenceContext>>) -> Option<P<TypeMapper>> {
         let n = n?;
         n.mapper.get()
