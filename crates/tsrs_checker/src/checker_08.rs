@@ -1652,52 +1652,365 @@ impl Checker {
 
     // checker.go:16777
     pub fn get_type_of_symbol_at_location(&mut self, symbol: P<Symbol>, location: Option<P<Node>>) -> Option<P<Type>> {
-        todo!()
+        let symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(symbol));
+        if let Some(mut location) = location {
+            // If we have an identifier or a property access at the given location, if the location is
+            // an dotted name expression, and if the location is not an assignment target, obtain the type
+            // of the expression (which will reflect control flow analysis). If the expression indeed
+            // resolved to the given symbol, return the narrowed type.
+            if (ast::is_identifier(location) || ast::is_private_identifier(location))
+                && !(ast::is_jsx_tag_name(location) || ast::is_jsx_attribute(location.parent().unwrap()) || ast::is_jsx_namespaced_name(location.parent().unwrap()))
+            {
+                if ast::is_right_side_of_qualified_name_or_property_access(location) {
+                    location = location.parent().unwrap();
+                }
+                if ast::is_expression_node(location) && (!ast::is_assignment_target(location) || ast::is_write_access(location)) {
+                    let t = if ast::is_write_access(location) && location.kind == Kind::PropertyAccessExpression {
+                        self.check_property_access_expression(location, CheckMode::Normal, true /*writeOnly*/)
+                    } else {
+                        self.get_type_of_expression(location)
+                    };
+                    let resolved_symbol = self.symbol_node_links.get(location).resolved_symbol.get();
+                    if self.get_export_symbol_of_value_symbol_if_exported(resolved_symbol) == symbol {
+                        return Some(self.remove_optional_type_marker(t));
+                    }
+                }
+            }
+            if ast::is_declaration_name(location) && ast::is_set_accessor_declaration(location.parent().unwrap()) && self.get_annotated_accessor_type_node(location.parent()).is_some() {
+                return Some(self.get_write_type_of_accessors(location.parent().unwrap().symbol().unwrap()));
+            }
+            // The location isn't a reference to the given symbol, meaning we're being asked
+            // a hypothetical question of what type the symbol would have if there was a reference
+            // to it at the given location. Since we have no control flow information for the
+            // hypothetical reference (control flow information is created and attached by the
+            // binder), we simply return the declared type of the symbol.
+            if is_right_side_of_access_expression(location) && ast::is_write_access(location.parent().unwrap()) {
+                return self.get_write_type_of_symbol(symbol);
+            }
+        }
+        Some(self.get_non_missing_type_of_symbol(symbol))
     }
 
     // checker.go:16816
     pub fn get_type_of_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let check_flags = symbol.check_flags.get();
+        if check_flags.intersects(CheckFlags::DeferredType) {
+            return self.get_type_of_symbol_with_deferred_type(symbol);
+        }
+        if check_flags.intersects(CheckFlags::Instantiated) {
+            return self.get_type_of_instantiated_symbol(symbol);
+        }
+        if check_flags.intersects(CheckFlags::Mapped) {
+            return self.get_type_of_mapped_symbol(symbol);
+        }
+        if check_flags.intersects(CheckFlags::ReverseMapped) {
+            return self.get_type_of_reverse_mapped_symbol(symbol);
+        }
+        let flags = symbol.flags();
+        if flags.intersects(SymbolFlags::Accessor) {
+            return self.get_type_of_accessors(symbol);
+        }
+        if flags.intersects(SymbolFlags::Variable | SymbolFlags::Property) {
+            return self.get_type_of_variable_or_parameter_or_property(symbol);
+        }
+        if flags.intersects(SymbolFlags::Function | SymbolFlags::Method | SymbolFlags::Class | SymbolFlags::Enum | SymbolFlags::ValueModule) {
+            return self.get_type_of_func_class_enum_module(symbol);
+        }
+        if flags.intersects(SymbolFlags::EnumMember) {
+            return self.get_type_of_enum_member(symbol);
+        }
+        if flags.intersects(SymbolFlags::Alias) {
+            return self.get_type_of_alias(symbol);
+        }
+        self.error_type
     }
 
     // checker.go:16847
     pub fn get_non_missing_type_of_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let t = self.get_type_of_symbol(symbol);
+        self.remove_missing_type(t, symbol.flags().intersects(SymbolFlags::Optional))
     }
 
     // checker.go:16851
     pub(crate) fn get_type_of_instantiated_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let links = self.value_symbol_links.get(symbol);
+        if links.resolved_type.get().is_none() {
+            let target_type = self.get_type_of_symbol(links.target.get().unwrap());
+            let t = self.instantiate_type(target_type, links.mapper.get());
+            links.resolved_type.set(Some(t));
+        }
+        links.resolved_type.get().unwrap()
     }
 
     // checker.go:16859
     pub(crate) fn get_write_type_of_instantiated_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let links = self.value_symbol_links.get(symbol);
+        if links.write_type.get().is_none() {
+            let target_type = self.get_write_type_of_symbol(links.target.get().unwrap()).unwrap();
+            let t = self.instantiate_type(target_type, links.mapper.get());
+            links.write_type.set(Some(t));
+        }
+        links.write_type.get().unwrap()
     }
 
     // checker.go:16867
     pub(crate) fn get_type_of_variable_or_parameter_or_property(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let links = self.value_symbol_links.get(symbol);
+        if links.resolved_type.get().is_none() {
+            let t = self.get_type_of_variable_or_parameter_or_property_worker(symbol);
+            // For a contextually typed parameter it is possible that a type has already
+            // been assigned (in assignTypeToParameterAndFixTypeParameters), and we want
+            // to preserve this type. In fact, we need to _prefer_ that type, but it won't
+            // be assigned until contextual typing is complete, so we need to defer in
+            // cases where contextual typing may take place.
+            if links.resolved_type.get().is_none() && !self.is_parameter_of_context_sensitive_signature(symbol) {
+                links.resolved_type.set(Some(t));
+            }
+            return t;
+        }
+        links.resolved_type.get().unwrap()
     }
 
     // checker.go:16887
     pub(crate) fn is_parameter_of_context_sensitive_signature(&mut self, symbol: P<Symbol>) -> bool {
-        todo!()
+        let Some(mut decl) = symbol.value_declaration() else {
+            return false;
+        };
+        if ast::is_binding_element(decl) {
+            decl = ast::walk_up_binding_elements_and_patterns(decl);
+        }
+        if ast::is_parameter_declaration(decl) {
+            return self.is_context_sensitive_function_or_object_literal_method(decl.parent().unwrap());
+        }
+        false
     }
 
     // checker.go:16901
     pub(crate) fn get_type_of_variable_or_parameter_or_property_worker(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        // Handle prototype property
+        if symbol.flags().intersects(SymbolFlags::Prototype) {
+            return self.get_type_of_prototype_property(symbol);
+        }
+        // CommonsJS require and module both have type any.
+        if symbol == self.require_symbol {
+            return self.any_type;
+        }
+        assert!(symbol.value_declaration().is_some());
+        let declaration = symbol.value_declaration().unwrap();
+        if ast::is_source_file(declaration) && ast::is_json_source_file(declaration.as_source_file_p()) {
+            let statements = declaration.statements();
+            if statements.is_empty() {
+                return self.empty_object_type;
+            }
+            let t = self.check_expression(statements[0].expression().unwrap());
+            let t = self.get_widened_literal_type(t);
+            return self.get_widened_type(t);
+        }
+        // Handle variable, parameter or property
+        if !self.push_type_resolution(symbol.into(), TypeSystemPropertyName::Type) {
+            return self.report_circularity_error(symbol);
+        }
+        if symbol.flags().intersects(SymbolFlags::ModuleExports) {
+            if symbol.name() == "exports" {
+                let module_symbol = symbol.value_declaration().unwrap().symbol().unwrap();
+                let resolved = self.resolve_external_module_symbol(module_symbol, false /*dontResolveAlias*/);
+                return self.get_type_of_symbol(resolved);
+            }
+            return self.new_anonymous_type(Some(symbol), symbol.members(), &[], &[], &[]);
+        }
+        let result = match declaration.kind {
+            Kind::Parameter | Kind::PropertyDeclaration | Kind::PropertySignature | Kind::VariableDeclaration | Kind::BindingElement => {
+                let report_errors = !self.is_parameter_of_context_sensitive_signature(symbol);
+                self.get_widened_type_for_variable_like_declaration(declaration, report_errors) // only report diagnostics for context-insensitive parameters - context-sensitive ones may have their type fixed to something else
+            }
+            Kind::PropertyAssignment => self.check_property_assignment(declaration, CheckMode::Normal),
+            Kind::ShorthandPropertyAssignment => self.check_shorthand_property_assignment(declaration, true /*inDestructuringPattern*/, CheckMode::Normal),
+            Kind::MethodDeclaration => self.check_object_literal_method(declaration, CheckMode::Normal),
+            Kind::ExportAssignment => {
+                if let Some(type_node) = declaration.type_node() {
+                    self.get_type_from_type_node(type_node)
+                } else {
+                    let t = self.check_expression_cached(declaration.expression().unwrap());
+                    self.widen_type_for_variable_like_declaration(Some(t), declaration, false /*reportErrors*/)
+                }
+            }
+            Kind::BinaryExpression | Kind::CallExpression => self.get_widened_type_for_assignment_declaration(symbol),
+            Kind::JsxAttribute => self.check_jsx_attribute(declaration, CheckMode::Normal),
+            Kind::EnumMember => self.get_type_of_enum_member(symbol),
+            _ => panic!("Unhandled case in getTypeOfVariableOrParameterOrPropertyWorker: {}", declaration.kind_string()),
+        };
+        if !self.pop_type_resolution() {
+            return self.report_circularity_error(symbol);
+        }
+        result
     }
 
+    // Return the type associated with a variable, parameter, or property declaration. In the simple case this is the type
+    // specified in a type annotation or inferred from an initializer. However, in the case of a destructuring declaration it
+    // is a bit more involved. For example:
+    //
+    //	var [x, s = ""] = [1, "one"];
+    //
+    // Here, the array literal [1, "one"] is contextually typed by the type [any, string], which is the implied type of the
+    // binding pattern [x, s = ""]. Because the contextual type is a tuple type, the resulting type of [1, "one"] is the
+    // tuple type [number, string]. Thus, the type inferred for 'x' is number and the type inferred for 's' is string.
     // checker.go:16970
     pub(crate) fn get_widened_type_for_variable_like_declaration(&mut self, declaration: P<Node>, report_errors: bool) -> P<Type> {
-        todo!()
+        let t = self.get_type_for_variable_like_declaration(declaration, true /*includeOptionality*/, CheckMode::Normal);
+        self.widen_type_for_variable_like_declaration(t, declaration, report_errors)
     }
 
+    // Return the inferred type for a variable, parameter, or property declaration
     // checker.go:16975
     pub(crate) fn get_type_for_variable_like_declaration(&mut self, declaration: P<Node>, include_optionality: bool, check_mode: CheckMode) -> Option<P<Type>> {
-        todo!()
+        // A variable declared in a for..in statement is of type string, or of type keyof T when the
+        // right hand expression is of a type parameter type.
+        if ast::is_variable_declaration(declaration) {
+            let grand_parent = declaration.parent().unwrap().parent().unwrap();
+            match grand_parent.kind {
+                Kind::ForInStatement => {
+                    let t = self.check_expression_ex(grand_parent.expression().unwrap(), check_mode /*checkMode*/);
+                    let t = self.get_non_nullable_type_if_needed(t);
+                    let index_type = self.get_index_type(t);
+                    if index_type.flags().intersects(TypeFlags::TypeParameter | TypeFlags::Index) {
+                        return Some(self.get_extract_string_type(index_type));
+                    }
+                    return Some(self.string_type);
+                }
+                Kind::ForOfStatement => {
+                    // checkRightHandSideOfForOf will return undefined if the for-of expression type was
+                    // missing properties/signatures required to get its iteratedType (like
+                    // [Symbol.iterator] or next). This may be because we accessed properties from anyType,
+                    // or it may have led to an error inside getElementTypeOfIterable.
+                    return Some(self.check_right_hand_side_of_for_of(grand_parent));
+                }
+                _ => {}
+            }
+        } else if ast::is_binding_element(declaration) {
+            return self.get_type_for_binding_element(declaration);
+        }
+        let is_property = ast::is_property_declaration(declaration) && !ast::has_accessor_modifier(declaration) || ast::is_property_signature_declaration(declaration);
+        let is_optional = include_optionality && is_optional_declaration(declaration);
+        // Use type from type annotation if one is present
+        let declared_type = self.try_get_type_from_type_node(declaration);
+        if ast::is_catch_clause_variable_declaration_or_binding_element(declaration) {
+            if let Some(declared_type) = declared_type {
+                // If the catch clause is explicitly annotated with any or unknown, accept it, otherwise error.
+                if declared_type.flags().intersects(TypeFlags::AnyOrUnknown) {
+                    return Some(declared_type);
+                }
+                return Some(self.error_type);
+            }
+            // If the catch clause is not explicitly annotated, treat it as though it were explicitly
+            // annotated with unknown or any, depending on useUnknownInCatchVariables.
+            if self.use_unknown_in_catch_variables {
+                return Some(self.unknown_type);
+            } else {
+                return Some(self.any_type);
+            }
+        }
+        if let Some(declared_type) = declared_type {
+            return Some(self.add_optionality_ex(declared_type, is_property, is_optional));
+        }
+        if self.no_implicit_any
+            && ast::is_variable_declaration(declaration)
+            && !ast::is_binding_pattern(declaration.name().unwrap())
+            && !self.get_combined_modifier_flags_cached(declaration).intersects(ModifierFlags::Export)
+            && !declaration.flags().intersects(NodeFlags::Ambient)
+        {
+            // If --noImplicitAny is on or the declaration is in a Javascript file,
+            // use control flow tracked 'any' type for non-ambient, non-exported var or let variables with no
+            // initializer or a 'null' or 'undefined' initializer.
+            let initializer = declaration.initializer();
+            if !self.get_combined_node_flags_cached(declaration).intersects(NodeFlags::Constant) && (initializer.is_none() || self.is_null_or_undefined(initializer.unwrap())) {
+                return Some(self.auto_type);
+            }
+            // Use control flow tracked 'any[]' type for non-ambient, non-exported variables with an empty array
+            // literal initializer.
+            if initializer.is_some_and(is_empty_array_literal) {
+                return Some(self.auto_array_type);
+            }
+        }
+        if ast::is_parameter_declaration(declaration) {
+            let Some(declaration_symbol) = declaration.symbol() else {
+                // parameters of function types defined in JSDoc in TS files don't have symbols
+                return None;
+            };
+            let fn_ = declaration.parent().unwrap();
+            // For a parameter of a set accessor, use the type of the get accessor if one is present
+            if ast::is_set_accessor_declaration(fn_) && self.has_bindable_name(fn_) {
+                let parent_symbol = self.get_symbol_of_declaration(declaration.parent().unwrap()).unwrap();
+                let getter = ast::get_declaration_of_kind(parent_symbol, Kind::GetAccessor);
+                if let Some(getter) = getter {
+                    let getter_signature = self.get_signature_from_declaration(getter);
+                    let this_parameter = self.get_accessor_this_parameter(fn_);
+                    if this_parameter.is_some() && Some(declaration) == this_parameter {
+                        // Use the type from the *getter*
+                        assert!(this_parameter.unwrap().type_node().is_none());
+                        return Some(self.get_type_of_symbol(getter_signature.this_parameter.get().unwrap()));
+                    }
+                    return Some(self.get_return_type_of_signature(getter_signature));
+                }
+            }
+            if let Some(t) = self.get_parameter_type_of_full_signature(fn_, declaration) {
+                return Some(t);
+            }
+            // Use contextual parameter type if one is available
+            let t = if declaration_symbol.name() == InternalSymbolNameThis {
+                self.get_contextual_this_parameter_type(fn_)
+            } else {
+                self.get_contextually_typed_parameter_type(declaration)
+            };
+            if let Some(t) = t {
+                return Some(self.add_optionality_ex(t, false /*isProperty*/, is_optional));
+            }
+        }
+        // Use the type of the initializer expression if one is present and the declaration is
+        // not a parameter of a contextually typed function
+        if declaration.initializer().is_some() {
+            let initializer_type = self.check_declaration_initializer(declaration, check_mode, None /*contextualType*/);
+            let t = self.widen_type_inferred_from_initializer(declaration, initializer_type);
+            return Some(self.add_optionality_ex(t, is_property, is_optional));
+        }
+        if self.no_implicit_any && ast::is_property_declaration(declaration) {
+            // We have a property declaration with no type annotation or initializer, in noImplicitAny mode or a .js file.
+            // Use control flow analysis of this.xxx assignments in the constructor or static block to determine the type of the property.
+            if !ast::has_static_modifier(declaration) {
+                let constructor = ast::find_constructor_declaration(declaration.parent().unwrap());
+                let t = if let Some(constructor) = constructor {
+                    self.get_flow_type_in_constructor(declaration.symbol().unwrap(), constructor)
+                } else if declaration.modifier_flags().intersects(ModifierFlags::Ambient) {
+                    self.get_type_of_property_in_base_class(declaration.symbol().unwrap())
+                } else {
+                    None
+                };
+                let t = t?;
+                return Some(self.add_optionality_ex(t, true /*isProperty*/, is_optional));
+            } else {
+                let static_blocks: Vec<P<Node>> = declaration.parent().unwrap().members().iter().copied().filter(|m| ast::is_class_static_block_declaration(*m)).collect();
+                let t = if !static_blocks.is_empty() {
+                    self.get_flow_type_in_static_blocks(declaration.symbol().unwrap(), &static_blocks)
+                } else if declaration.modifier_flags().intersects(ModifierFlags::Ambient) {
+                    self.get_type_of_property_in_base_class(declaration.symbol().unwrap())
+                } else {
+                    None
+                };
+                let t = t?;
+                return Some(self.add_optionality_ex(t, true /*isProperty*/, is_optional));
+            }
+        }
+        if ast::is_jsx_attribute(declaration) {
+            // if JSX attribute doesn't have initializer, by default the attribute will have boolean value of true.
+            // I.e <Elem attr /> is sugar for <Elem attr={true} />
+            return Some(self.true_type);
+        }
+        // If the declaration specifies a binding pattern and is not a parameter of a contextually
+        // typed function, use the type implied by the binding pattern
+        if ast::is_binding_pattern(declaration.name().unwrap()) {
+            return Some(self.get_type_from_binding_pattern(declaration.name().unwrap(), false /*includePatternInType*/, true /*reportErrors*/));
+        }
+        // No type specified and nothing can be inferred
+        None
     }
 
     // checker.go:17120
