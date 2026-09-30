@@ -2068,18 +2068,8 @@ impl Checker {
             }
             (TypeSystemPropertyName::WriteType, TypeSystemEntity::Symbol(s)) => self.value_symbol_links.get(s).write_type.get().is_some(),
             (TypeSystemPropertyName::AliasTarget, TypeSystemEntity::Symbol(s)) => self.alias_symbol_links.get(s).alias_target.get().is_some(),
-            (TypeSystemPropertyName::Type, _)
-            | (TypeSystemPropertyName::DeclaredType, _)
-            | (TypeSystemPropertyName::ResolvedTypeArguments, _)
-            | (TypeSystemPropertyName::ResolvedBaseTypes, _)
-            | (TypeSystemPropertyName::ResolvedBaseConstructorType, _)
-            | (TypeSystemPropertyName::ResolvedReturnType, _)
-            | (TypeSystemPropertyName::ResolvedBaseConstraint, _)
-            | (TypeSystemPropertyName::InitializerIsUndefined, _)
-            | (TypeSystemPropertyName::WriteType, _)
-            | (TypeSystemPropertyName::AliasTarget, _) => panic!("interface conversion: unexpected TypeSystemEntity in typeResolutionHasProperty"),
-            #[allow(unreachable_patterns)]
-            _ => panic!("Unhandled case in typeResolutionHasProperty"),
+            // Go: a failed type assertion on r.target
+            _ => panic!("interface conversion: unexpected TypeSystemEntity in typeResolutionHasProperty"),
         }
     }
 
@@ -2242,98 +2232,358 @@ impl Checker {
 
     // checker.go:19303
     pub fn get_signatures_of_type(&mut self, t: P<Type>, kind: SignatureKind) -> Vec<P<Signature>> {
-        todo!()
+        let t = self.get_reduced_apparent_type(t);
+        self.get_signatures_of_structured_type(t, kind)
     }
 
     // checker.go:19307
     pub(crate) fn get_signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> Vec<P<Signature>> {
-        todo!()
+        if !t.flags().intersects(TypeFlags::StructuredType) {
+            return Vec::new();
+        }
+        let resolved = self.resolve_structured_type_members(t).unwrap();
+        if kind == SignatureKind::Call {
+            return resolved.call_signatures().to_vec();
+        }
+        resolved.construct_signatures().to_vec()
     }
 
     // checker.go:19318
     pub fn get_index_infos_of_type(&mut self, t: P<Type>) -> Vec<P<IndexInfo>> {
-        todo!()
+        let t = self.get_reduced_apparent_type(t);
+        self.get_index_infos_of_structured_type(t)
     }
 
     // checker.go:19322
     pub(crate) fn get_index_infos_of_structured_type(&mut self, t: P<Type>) -> Vec<P<IndexInfo>> {
-        todo!()
+        if t.flags().intersects(TypeFlags::StructuredType) {
+            return self.resolve_structured_type_members(t).unwrap().index_infos.get().to_vec();
+        }
+        Vec::new()
     }
 
+    // Return the indexing info of the given kind in the given type. Creates synthetic union index types when necessary and
+    // maps primitive types and type parameters are to their apparent types.
     // checker.go:19331
     pub fn get_index_info_of_type(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<IndexInfo>> {
-        todo!()
+        let index_infos = self.get_index_infos_of_type(t);
+        find_index_info(&index_infos, key_type)
     }
 
+    // Return the index type of the given kind in the given type. Creates synthetic union index types when necessary and
+    // maps primitive types and type parameters are to their apparent types.
     // checker.go:19337
     pub fn get_index_type_of_type(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<Type>> {
-        todo!()
+        let info = self.get_index_info_of_type(t, key_type);
+        if let Some(info) = info {
+            return info.value_type.get();
+        }
+        None
     }
 
     // checker.go:19345
     pub(crate) fn get_index_type_of_type_ex(&mut self, t: P<Type>, key_type: P<Type>, default_type: P<Type>) -> P<Type> {
-        todo!()
+        if let Some(result) = self.get_index_type_of_type(t, key_type) {
+            return result;
+        }
+        default_type
     }
 
     // checker.go:19352
     pub(crate) fn get_applicable_index_info(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<IndexInfo>> {
-        todo!()
+        let index_infos = self.get_index_infos_of_type(t);
+        self.find_applicable_index_info(&index_infos, key_type)
     }
 
     // checker.go:19356
     pub(crate) fn get_applicable_index_info_for_name(&mut self, t: P<Type>, name: &str) -> Option<P<IndexInfo>> {
-        todo!()
+        if is_late_bound_name(name) {
+            return self.get_applicable_index_info(t, self.es_symbol_type);
+        }
+        let key_type = self.get_string_literal_type(name);
+        self.get_applicable_index_info(t, key_type)
     }
 
     // checker.go:19363
     pub(crate) fn find_applicable_index_info(&mut self, index_infos: &[P<IndexInfo>], key_type: P<Type>) -> Option<P<IndexInfo>> {
-        todo!()
+        // Index signatures for type 'string' are considered only when no other index signatures apply.
+        let mut string_index_info: Option<P<IndexInfo>> = None;
+        let mut applicable_infos: Vec<P<IndexInfo>> = Vec::with_capacity(8);
+        for &info in index_infos {
+            if info.key_type.get() == Some(self.string_type) {
+                string_index_info = Some(info);
+            } else if self.is_applicable_index_type(key_type, info.key_type()) {
+                applicable_infos.push(info);
+            }
+        }
+        // When more than one index signature is applicable we create a synthetic IndexInfo. Instead of computing
+        // the intersected key type, we just use unknownType for the key type as nothing actually depends on the
+        // keyType property of the returned IndexInfo.
+        match applicable_infos.len() {
+            0 => {
+                if let Some(string_index_info) = string_index_info {
+                    if self.is_applicable_index_type(key_type, self.string_type) {
+                        return Some(string_index_info);
+                    }
+                }
+                None
+            }
+            1 => Some(applicable_infos[0]),
+            _ => {
+                let mut is_readonly = true;
+                let mut types: Vec<P<Type>> = Vec::with_capacity(applicable_infos.len());
+                for info in &applicable_infos {
+                    types.push(info.value_type());
+                    if !info.is_readonly() {
+                        is_readonly = false;
+                    }
+                }
+                let value_type = self.get_intersection_type(&types);
+                Some(self.new_index_info(self.unknown_type, value_type, is_readonly, None, &[]))
+            }
+        }
     }
 
     // checker.go:19398
     pub(crate) fn is_applicable_index_type(&mut self, source: P<Type>, target: P<Type>) -> bool {
-        todo!()
+        // A 'string' index signature applies to types assignable to 'string' or 'number', and a 'number' index
+        // signature applies to types assignable to 'number', `${number}` and numeric string literal types.
+        self.is_type_assignable_to(source, target)
+            || target == self.string_type && self.is_type_assignable_to(source, self.number_type)
+            || target == self.number_type
+                && (source == self.numeric_string_type
+                    || source.flags().intersects(TypeFlags::StringLiteral) && is_numeric_literal_name(&get_string_literal_value(source)))
     }
 
     // checker.go:19406
     pub(crate) fn resolve_structured_type_members(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
-        todo!()
+        if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            if t.flags().intersects(TypeFlags::Object) {
+                if t.object_flags().intersects(ObjectFlags::Reference) {
+                    self.resolve_type_reference_members(t);
+                } else if t.object_flags().intersects(ObjectFlags::ClassOrInterface) {
+                    self.resolve_class_or_interface_members(t);
+                } else if t.object_flags().intersects(ObjectFlags::ReverseMapped) {
+                    self.resolve_reverse_mapped_type_members(t);
+                } else if t.object_flags().intersects(ObjectFlags::Anonymous) {
+                    self.resolve_anonymous_type_members(t);
+                } else if t.object_flags().intersects(ObjectFlags::Mapped) {
+                    self.resolve_mapped_type_members(t);
+                } else {
+                    panic!("Unhandled case in resolveStructuredTypeMembers");
+                }
+            } else if t.flags().intersects(TypeFlags::Union) {
+                self.resolve_union_type_members(t);
+            } else if t.flags().intersects(TypeFlags::Intersection) {
+                self.resolve_intersection_type_members(t);
+            } else {
+                panic!("Unhandled case in resolveStructuredTypeMembers");
+            }
+        }
+        Some(t.as_structured_type())
     }
 
     // checker.go:19435
     pub(crate) fn resolve_class_or_interface_members(&mut self, t: P<Type>) {
-        todo!()
+        self.resolve_object_type_members(t, t, &[], &[]);
     }
 
     // checker.go:19439
     pub(crate) fn resolve_type_reference_members(&mut self, t: P<Type>) {
-        todo!()
+        let source = t.target().unwrap();
+        let type_parameters = source.as_interface_type().all_type_parameters.get();
+        let mut padded_type_arguments = self.get_type_arguments(t);
+        if padded_type_arguments.len() + 1 == type_parameters.len() {
+            padded_type_arguments.push(t);
+        }
+        self.resolve_object_type_members(t, source, type_parameters, &padded_type_arguments);
     }
 
     // checker.go:19450
     pub(crate) fn resolve_object_type_members(&mut self, t: P<Type>, source: P<Type>, type_parameters: &[P<Type>], type_arguments: &[P<Type>]) {
-        todo!()
+        let mut mapper: Option<P<TypeMapper>> = None;
+        let mut members: Option<P<SymbolTable>>;
+        let mut call_signatures: Vec<P<Signature>>;
+        let mut construct_signatures: Vec<P<Signature>>;
+        let mut index_infos: Vec<P<IndexInfo>>;
+        let mut instantiated = false;
+        let resolved = self.resolve_declared_members(source).unwrap();
+        if type_parameters == type_arguments {
+            members = resolved.declared_members.get();
+            call_signatures = resolved.declared_call_signatures.get().to_vec();
+            construct_signatures = resolved.declared_construct_signatures.get().to_vec();
+            index_infos = resolved.declared_index_infos.get().to_vec();
+        } else {
+            instantiated = true;
+            let m = new_type_mapper(alloc_slice(type_parameters), alloc_slice(type_arguments));
+            mapper = Some(m);
+            members = self.instantiate_symbol_table(resolved.declared_members.get(), m);
+            call_signatures = self.instantiate_signatures(resolved.declared_call_signatures.get(), m);
+            construct_signatures = self.instantiate_signatures(resolved.declared_construct_signatures.get(), m);
+            index_infos = self.instantiate_index_infos(resolved.declared_index_infos.get(), m);
+        }
+        let base_types = self.get_base_types(source);
+        if !base_types.is_empty() {
+            if !instantiated {
+                members = members.map(|m| m.clone_table());
+            }
+            let this_argument = type_arguments.last().copied();
+            for base_type in base_types {
+                let mut instantiated_base_type = base_type;
+                if this_argument.is_some() {
+                    let inst = self.instantiate_type(base_type, mapper);
+                    instantiated_base_type = self.get_type_with_this_argument(inst, this_argument, false /*needsApparentType*/);
+                }
+                let base_properties = self.get_properties_of_type(instantiated_base_type);
+                members = self.add_inherited_members(members, &base_properties);
+                let sigs = self.get_signatures_of_type(instantiated_base_type, SignatureKind::Call);
+                call_signatures.extend(sigs);
+                let sigs = self.get_signatures_of_type(instantiated_base_type, SignatureKind::Construct);
+                construct_signatures.extend(sigs);
+                let inherited_index_infos: Vec<P<IndexInfo>> = if instantiated_base_type != self.any_type {
+                    self.get_index_infos_of_type(instantiated_base_type)
+                } else {
+                    vec![self.any_base_type_index_info]
+                };
+                let filtered: Vec<P<IndexInfo>> =
+                    inherited_index_infos.into_iter().filter(|info| find_index_info(&index_infos, info.key_type()).is_none()).collect();
+                index_infos.extend(filtered);
+            }
+        }
+        self.set_structured_type_members(t, members, &call_signatures, &construct_signatures, &index_infos);
     }
 }
 
 // checker.go:19499
 pub(crate) fn find_index_info(index_infos: &[P<IndexInfo>], key_type: P<Type>) -> Option<P<IndexInfo>> {
-    todo!()
+    for &info in index_infos {
+        if info.key_type.get() == Some(key_type) {
+            return Some(info);
+        }
+    }
+    None
 }
 
 impl Checker {
     // checker.go:19508
     pub fn get_base_types(&mut self, t: P<Type>) -> Vec<P<Type>> {
-        todo!()
+        if !t.object_flags().intersects(ObjectFlags::ClassOrInterface | ObjectFlags::Tuple) {
+            return Vec::new();
+        }
+        let data = t.as_interface_type();
+        if !data.base_types_resolved.get() {
+            if !self.push_type_resolution(t.into(), TypeSystemPropertyName::ResolvedBaseTypes) {
+                return data.resolved_base_types.get().to_vec();
+            }
+            let symbol = t.symbol();
+            if t.object_flags().intersects(ObjectFlags::Tuple) {
+                let base = self.get_tuple_base_type(t);
+                data.resolved_base_types.set(alloc_vec(vec![base]));
+            } else if symbol.unwrap().flags().intersects(SymbolFlags::Class | SymbolFlags::Interface) {
+                let symbol = symbol.unwrap();
+                if symbol.flags().intersects(SymbolFlags::Class) {
+                    self.resolve_base_types_of_class(t);
+                }
+                if symbol.flags().intersects(SymbolFlags::Interface) {
+                    self.resolve_base_types_of_interface(t);
+                }
+            } else {
+                panic!("Unhandled case in getBaseTypes");
+            }
+            // Go: `t.symbol.Declarations != nil`; a nil and an empty declaration list both iterate nothing.
+            if !self.pop_type_resolution() {
+                let declarations = t.symbol().unwrap().declarations().clone();
+                for declaration in declarations {
+                    if is_class_declaration(declaration) || is_interface_declaration(declaration) {
+                        self.report_circular_base_type(declaration, t);
+                    }
+                }
+            }
+            // In general, base type resolution always precedes member resolution. However, it is possible
+            // for resolution of type parameter defaults to cause circularity errors, possibly leaving
+            // members partially resolved. Here we ensure any such partial resolution is reset.
+            // See https://github.com/microsoft/TypeScript/issues/16861 for an example.
+            t.object_flags.set(t.object_flags.get() & !ObjectFlags::MembersResolved);
+            data.base_types_resolved.set(true);
+        }
+        data.resolved_base_types.get().to_vec()
     }
 
     // checker.go:19547
     pub(crate) fn get_tuple_base_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        let type_parameters = t.as_tuple_type().type_parameters();
+        let element_infos = t.as_tuple_type().element_infos.get();
+        let mut element_types: Vec<P<Type>> = Vec::with_capacity(type_parameters.len());
+        for (i, &tp) in type_parameters.iter().enumerate() {
+            if element_infos[i].flags.intersects(ElementFlags::Variadic) {
+                element_types.push(self.get_indexed_access_type(tp, self.number_type));
+            } else {
+                element_types.push(tp);
+            }
+        }
+        let u = self.get_union_type(&element_types);
+        self.create_array_type_ex(u, t.as_tuple_type().readonly.get())
     }
 
     // checker.go:19561
     pub(crate) fn resolve_base_types_of_class(&mut self, t: P<Type>) {
-        todo!()
+        let base_constructor = self.get_base_constructor_type_of_class(t);
+        let base_constructor_type = self.get_apparent_type(base_constructor);
+        if !base_constructor_type.flags().intersects(TypeFlags::Object | TypeFlags::Intersection | TypeFlags::Any) {
+            return;
+        }
+        let base_type_node = get_base_type_node_of_class(t).unwrap();
+        let base_type: P<Type>;
+        let mut original_base_type: Option<P<Type>> = None;
+        if let Some(symbol) = base_constructor_type.symbol() {
+            original_base_type = Some(self.get_declared_type_of_symbol(symbol));
+        }
+        if base_constructor_type.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::Class))
+            && self.are_all_outer_type_parameters_applied(original_base_type.unwrap())
+        {
+            // When base constructor type is a class with no captured type arguments we know that the constructors all have the same type parameters as the
+            // class and all return the instance type of the class. There is no need for further checks and we can apply the
+            // type arguments in the same manner as a type reference to get the same error reporting experience.
+            base_type = self.get_type_from_class_or_interface_reference(base_type_node, base_constructor_type.symbol().unwrap());
+        } else if base_constructor_type.flags().intersects(TypeFlags::Any) {
+            base_type = base_constructor_type;
+        } else {
+            // The class derives from a "class-like" constructor function, check that we have at least one construct signature
+            // with a matching number of type parameters and use the return type of the first instantiated signature. Elsewhere
+            // we check that all instantiated signatures return the same type.
+            let constructors = self.get_instantiated_constructors_for_type_arguments(base_constructor_type, base_type_node.type_arguments(), base_type_node);
+            if constructors.is_empty() {
+                self.error(base_type_node.expression(), &diagnostics::No_base_constructor_has_the_specified_number_of_type_arguments, &[]);
+                return;
+            }
+            base_type = self.get_return_type_of_signature(constructors[0]);
+        }
+        if self.is_error_type(base_type) {
+            return;
+        }
+        let reduced_base_type = self.get_reduced_type(base_type);
+        if !self.is_valid_base_type(reduced_base_type) {
+            let error_node = base_type_node.expression().unwrap();
+            let diagnostic = self.elaborate_never_intersection(None, error_node, base_type);
+            let type_string = self.type_to_string(reduced_base_type, None);
+            let diagnostic = new_diagnostic_chain_for_node(
+                diagnostic,
+                error_node,
+                Some(&diagnostics::Base_constructor_return_type_0_is_not_an_object_type_or_intersection_of_object_types_with_statically_known_members),
+                &[&type_string],
+            );
+            self.add_diagnostic(diagnostic);
+            return;
+        }
+        if t == reduced_base_type || self.has_base_type(reduced_base_type, t) {
+            let type_string = self.type_to_string(t, None);
+            self.error(
+                t.symbol().unwrap().value_declaration(),
+                &diagnostics::Type_0_recursively_references_itself_as_a_base_type,
+                &[&type_string],
+            );
+            return;
+        }
+        t.as_interface_type().resolved_base_types.set(alloc_vec(vec![reduced_base_type]));
     }
 }
