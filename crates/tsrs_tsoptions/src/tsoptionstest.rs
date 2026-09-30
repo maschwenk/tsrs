@@ -36,13 +36,13 @@ fn fix_root(path: &str) -> &str {
 }
 
 pub struct VfsParseConfigHost {
-    pub vfs: Box<dyn FS>,
+    pub vfs: &'static dyn FS,
     pub current_directory: String,
 }
 
 impl ParseConfigHost for VfsParseConfigHost {
     fn fs(&self) -> &dyn FS {
-        &*self.vfs
+        self.vfs
     }
 
     fn get_current_directory(&self) -> &str {
@@ -57,7 +57,7 @@ pub fn new_vfs_parse_config_host(
     use_case_sensitive_file_names: bool,
 ) -> &'static VfsParseConfigHost {
     P::new(VfsParseConfigHost {
-        vfs: Box::new(vfstest::from_map(files.iter().map(|(k, v)| (*k, v.to_string())), use_case_sensitive_file_names)),
+        vfs: P::new(vfstest::from_map(files.iter().map(|(k, v)| (*k, v.to_string())), use_case_sensitive_file_names)).get(),
         current_directory: current_directory.to_string(),
     })
     .get()

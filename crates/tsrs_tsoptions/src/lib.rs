@@ -22,6 +22,8 @@ pub mod tsoptionstest;
 mod testutil;
 #[cfg(test)]
 mod commandlineparser_test;
+#[cfg(test)]
+mod tsconfigparsing_test;
 
 pub use commandlineoption::*;
 pub use commandlineparser::*;
