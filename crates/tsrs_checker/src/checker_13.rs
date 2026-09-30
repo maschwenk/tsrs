@@ -2072,6 +2072,7 @@ impl Checker {
                 let error_node = self.get_constraint_declaration(t);
                 if let Some(error_node) = error_node {
                     let type_string = self.type_to_string_exported(t);
+                    if std::env::var("TSRS_DBG").is_ok() { eprintln!("CIRC cur={:?} {}", self.current_node.map(|n| n.kind), std::backtrace::Backtrace::force_capture()); }
                     let diagnostic = self.error(Some(error_node), &diagnostics::Type_parameter_0_has_a_circular_constraint, &[&type_string]);
                     if let Some(current_node) = self.current_node {
                         if !crate::is_node_descendant_of(Some(error_node), current_node) && !crate::is_node_descendant_of(Some(current_node), error_node) {
