@@ -347,7 +347,8 @@ def run_batch_dir(outdir, muts):
 def cmd_batch(a):
     rng = random.Random(a.seed)
     files = choose_files(rng, a.count, set() if a.allow_reuse else used_files(), a.heavy, a.tests)
-    muts = make_mutations(a.seed, files)
+    weights = dict((k, float(v)) for k, v in (x.split("=") for x in a.weights.split(","))) if a.weights else None
+    muts = make_mutations(a.seed, files, weights)
     outdir = os.path.join(OUT, f"batch-{a.seed:03d}")
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "mutations.json"), "w") as f:
@@ -474,6 +475,7 @@ def main():
     b.add_argument("--heavy", type=float, default=0.45)
     b.add_argument("--tests", type=float, default=0.15)
     b.add_argument("--allow-reuse", action="store_true")
+    b.add_argument("--weights", help="mutator weights, e.g. drop_type_args=3,remove_nullish=2 (default 1)")
     b.set_defaults(fn=cmd_batch)
     r = sub.add_parser("rerun")
     r.add_argument("batch")

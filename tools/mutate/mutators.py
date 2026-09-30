@@ -573,6 +573,38 @@ def m_generic_arg(ctx):
     return res
 
 
+def m_drop_type_args(ctx):
+    """`f<T>(...)` -> `f(...)`: the call now infers its type arguments."""
+    res = []
+    for lt, gt, _args in generic_lists(ctx):
+        if not ctx.is_punct(gt + 1, "("):
+            continue
+        s, e = ctx.toks[lt].start, ctx.toks[gt].end
+        res.append(Edit("drop_type_args", s, e, "", f"{ctx.tx(lt - 1)}{ctx.src[s:e][:60]}( -> {ctx.tx(lt - 1)}("))
+    return res
+
+
+def m_remove_nullish(ctx):
+    """`a ?? b` -> `a` for a one-token (or empty bracket pair) right operand."""
+    res = []
+    for i, t in enumerate(ctx.toks):
+        if not (t.kind == "punct" and t.text == "??"):
+            continue
+        j = i + 1
+        nt = ctx.t(j)
+        if ctx.is_punct(j, "[", "{", "(") and ctx.match[j] == j + 1:
+            last = j + 1
+        elif nt is not None and nt.kind in ("id", "str", "num") and not ctx.is_punct(j + 1, ".", "(", "[", "?.", "<"):
+            last = j
+        else:
+            continue
+        after = ctx.t(last + 1)
+        if not ctx.is_punct(last + 1, ",", ";", ")", "}", "]") and not (after is not None and after.nl_before):
+            continue
+        res.append(Edit("remove_nullish", ctx.toks[i - 1].end, ctx.toks[last].end, "", f"drop ?? {ctx.text(j, last)}"))
+    return res
+
+
 def m_flip_optchain(ctx):
     res = []
     for i, t in enumerate(ctx.toks):
@@ -863,6 +895,8 @@ MUTATORS = {
     "prop_type_change": m_prop_type_change,
     "optional_toggle": m_optional_toggle,
     "remove_async": m_remove_async,
+    "drop_type_args": m_drop_type_args,
+    "remove_nullish": m_remove_nullish,
 }
 
 
