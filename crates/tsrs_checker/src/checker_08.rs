@@ -1273,77 +1273,381 @@ impl Checker {
      */
     // checker.go:16447
     pub(crate) fn get_members_of_symbol(&mut self, symbol: P<Symbol>) -> Option<P<SymbolTable>> {
-        todo!()
+        if symbol.flags().intersects(SymbolFlags::LateBindingContainer) {
+            return self.get_resolved_members_or_exports_of_symbol(symbol, MembersOrExportsResolutionKind::ResolvedMembers);
+        }
+        symbol.members()
     }
 
     // checker.go:16454
     pub(crate) fn get_exports_of_module(&mut self, module_symbol: P<Symbol>) -> P<SymbolTable> {
-        todo!()
+        let links = self.module_symbol_links.get(module_symbol);
+        if links.resolved_exports.get().is_none() {
+            let (exports, type_only_export_star_map) = self.get_exports_of_module_worker(Some(module_symbol));
+            links.resolved_exports.set(Some(exports));
+            links.type_only_export_star_map.assign(type_only_export_star_map);
+        }
+        links.resolved_exports.get().unwrap()
     }
 
     // checker.go:16471
     pub(crate) fn get_exports_of_module_worker(&mut self, module_symbol: Option<P<Symbol>>) -> (P<SymbolTable>, FxHashMap<String, P<Node>>) {
-        todo!()
+        struct VisitState {
+            visited_symbols: Vec<P<Symbol>>,
+            non_type_only_names: collections::Set<String>,
+            type_only_export_star_map: Option<FxHashMap<String, P<Node>>>,
+        }
+        // The ES6 spec permits export * declarations in a module to circularly reference the module itself. For example,
+        // module 'a' can 'export * from "b"' and 'b' can 'export * from "a"' without error.
+        fn visit(c: &mut Checker, st: &mut VisitState, symbol: Option<P<Symbol>>, export_star: Option<P<Node>>, is_type_only: bool) -> Option<P<SymbolTable>> {
+            if !is_type_only {
+                if let Some(symbol) = symbol {
+                    // Add non-type-only names before checking if we've visited this module,
+                    // because we might have visited it via an 'export type *', and visiting
+                    // again with 'export *' will override the type-onlyness of its exports.
+                    if let Some(exports) = symbol.exports() {
+                        for name in exports.keys() {
+                            st.non_type_only_names.add(name.to_string());
+                        }
+                    }
+                }
+            }
+            let symbol = symbol?;
+            let symbol_exports = symbol.exports()?;
+            if st.visited_symbols.contains(&symbol) {
+                return None;
+            }
+            st.visited_symbols.push(symbol);
+            let symbols = symbol_exports.clone_table();
+            // All export * declarations are collected in an __export symbol by the binder
+            let export_stars = symbol_exports.lookup(InternalSymbolNameExportStar);
+            if let Some(export_stars) = export_stars {
+                let nested_symbols = SymbolTable::new();
+                let mut lookup_table: ExportCollisionTable = FxHashMap::default();
+                let declarations = export_stars.declarations().clone();
+                for node in declarations {
+                    let import_attributes_type = ast::get_import_attributes(node).map(|a| c.get_type_from_import_attributes(a));
+                    let resolved_module = c.resolve_external_module_name(node, node.module_specifier().unwrap(), false /*ignoreErrors*/, import_attributes_type);
+                    let exported_symbols = visit(c, st, resolved_module, Some(node), is_type_only || node.is_type_only());
+                    c.extend_export_symbols(nested_symbols, exported_symbols, Some(&mut lookup_table), Some(node));
+                }
+                for (id, s) in lookup_table.iter() {
+                    // It's not an error if the file with multiple `export *`s with duplicate names exports a member with that name itself
+                    if id == InternalSymbolNameExportEquals || s.exports_with_duplicate.borrow().is_empty() || symbols.lookup(id).is_some() {
+                        continue;
+                    }
+                    let nodes = s.exports_with_duplicate.borrow().clone();
+                    let specifier_text = s.specifier_text.borrow().clone();
+                    for node in nodes {
+                        c.add_diagnostic(create_diagnostic_for_node(Some(node), &diagnostics::Module_0_has_already_exported_a_member_named_1_Consider_explicitly_re_exporting_to_resolve_the_ambiguity, &[&specifier_text, id]));
+                    }
+                }
+                c.extend_export_symbols(symbols, Some(nested_symbols), None, None);
+            }
+            if let Some(export_star) = export_star {
+                if export_star.is_type_only() {
+                    let m = st.type_only_export_star_map.get_or_insert_with(FxHashMap::default);
+                    for name in symbols.keys() {
+                        m.insert(name.to_string(), export_star);
+                    }
+                }
+            }
+            Some(symbols)
+        }
+
+        let mut st = VisitState {
+            visited_symbols: Vec::new(),
+            non_type_only_names: collections::new_set_with_size_hint(module_symbol.and_then(|m| m.exports()).map_or(0, |e| e.len())),
+            type_only_export_star_map: None,
+        };
+        let mut original_module: Option<P<Symbol>> = None;
+        if let Some(module_symbol) = module_symbol {
+            let export_equals = module_symbol.exports().and_then(|e| e.lookup(InternalSymbolNameExportEquals));
+            if export_equals.map(|s| self.resolve_symbol_ex(s, false /*dontResolveAlias*/)).is_some() {
+                original_module = Some(module_symbol);
+            }
+        }
+        // A module defined by an 'export=' consists of one export that needs to be resolved
+        let module_symbol = module_symbol.map(|m| self.resolve_external_module_symbol(m, false /*dontResolveAlias*/));
+        let exports = visit(self, &mut st, module_symbol, None, false).unwrap_or_else(SymbolTable::new);
+        // A CommonJS module defined by an 'export=' might also export typedefs, stored on the original module
+        if let Some(original_module) = original_module {
+            let original_exports = original_module.exports().unwrap();
+            if original_exports.len() > 1 {
+                for symbol in original_exports.values() {
+                    if symbol.name() == InternalSymbolNameExportEquals || symbol.name() == InternalSymbolNameExportStar {
+                        continue;
+                    }
+                    let flags = self.get_symbol_flags(symbol);
+                    if flags.intersects(SymbolFlags::Type | SymbolFlags::Namespace) && !flags.intersects(SymbolFlags::Value) && exports.lookup(symbol.name()).is_none() {
+                        exports.set(symbol.name(), symbol);
+                    }
+                }
+            }
+        }
+        let mut type_only_export_star_map = st.type_only_export_star_map.unwrap_or_default();
+        for name in st.non_type_only_names.keys() {
+            type_only_export_star_map.remove(name);
+        }
+        (exports, type_only_export_star_map)
     }
 
+    /**
+     * Extends one symbol table with another while collecting information on name collisions for error message generation into the `lookupTable` argument
+     * Not passing `lookupTable` and `exportNode` disables this collection, and just extends the tables
+     */
     // checker.go:16558
     pub(crate) fn extend_export_symbols(&mut self, target: P<SymbolTable>, source: Option<P<SymbolTable>>, lookup_table: Option<&mut FxHashMap<String, P<ExportCollision>>>, export_node: Option<P<Node>>) {
-        todo!()
+        let Some(source) = source else { return };
+        let mut lookup_table = lookup_table;
+        for (id, source_symbol) in source.entries() {
+            if id == InternalSymbolNameDefault {
+                continue;
+            }
+            let target_symbol = target.lookup(id);
+            match target_symbol {
+                None => {
+                    target.set(id, source_symbol);
+                    if let (Some(lookup_table), Some(export_node)) = (lookup_table.as_deref_mut(), export_node) {
+                        lookup_table.insert(
+                            id.to_string(),
+                            P::new(ExportCollision {
+                                specifier_text: std::cell::RefCell::new(tsrs_scanner::get_text_of_node(export_node.module_specifier().unwrap())),
+                                ..Default::default()
+                            }),
+                        );
+                    }
+                }
+                Some(target_symbol) => {
+                    if lookup_table.is_some() && export_node.is_some() && self.resolve_symbol(target_symbol) != self.resolve_symbol(source_symbol) {
+                        let s = *lookup_table.as_deref_mut().unwrap().get(id).unwrap();
+                        s.exports_with_duplicate.borrow_mut().push(export_node.unwrap());
+                    }
+                }
+            }
+        }
     }
 
     // checker.go:16578
     pub fn resolve_alias_exported(&mut self, symbol: Option<P<Symbol>>) -> (Option<P<Symbol>>, bool) {
-        todo!()
+        let Some(symbol) = symbol else {
+            return (None, false);
+        };
+        let resolved = self.resolve_alias(symbol);
+        (Some(resolved), resolved != self.unknown_symbol)
     }
 
+    // Resolve an alias symbol to the first target symbol in the resolution chain that includes some other
+    // meaning. Pure aliases are eagerly resolved and any type-only markers are back-propagated to the original
+    // symbol. The function panics if the argument is not a symbol with an alias meaning.
     // checker.go:16589
     pub(crate) fn resolve_alias(&mut self, symbol: P<Symbol>) -> P<Symbol> {
-        todo!()
+        if !symbol.flags().intersects(SymbolFlags::Alias) {
+            panic!("Should only get alias here");
+        }
+        let links = self.alias_symbol_links.get(symbol);
+        if links.alias_target.get().is_none() {
+            if !self.push_type_resolution(symbol.into(), TypeSystemPropertyName::AliasTarget) {
+                return self.unknown_symbol;
+            }
+            let node = match self.get_declaration_of_alias_symbol(symbol) {
+                Some(n) => n,
+                None => panic!("Unexpected nil in resolveAlias for symbol: {}", self.symbol_to_string(symbol)),
+            };
+            let mut target = self.get_target_of_alias_declaration(node);
+            if ast::is_non_local_alias(target, SymbolFlags::Value | SymbolFlags::Type | SymbolFlags::Namespace) {
+                // When the target is a pure alias, we transitively resolve and propagate any typeOnlyDeclaration
+                target = Some(self.resolve_indirection_alias(symbol, target.unwrap()));
+            }
+            links.alias_target.set(Some(target.unwrap_or(self.unknown_symbol)));
+            if !self.pop_type_resolution() {
+                let name = self.symbol_to_string(symbol);
+                self.error(Some(node), &diagnostics::Circular_definition_of_import_alias_0, &[&name]);
+                links.alias_target.set(Some(self.unknown_symbol));
+            }
+        }
+        links.alias_target.get().unwrap()
     }
 
     // checker.go:16616
     pub(crate) fn resolve_indirection_alias(&mut self, source: P<Symbol>, target: P<Symbol>) -> P<Symbol> {
-        todo!()
+        let resolved = self.resolve_alias(target);
+        let result = self.get_merged_symbol(resolved);
+        let target_links = self.alias_symbol_links.get(target);
+        if let Some(type_only_declaration) = target_links.type_only_declaration.get() {
+            let source_links = self.alias_symbol_links.get(source);
+            if source_links.type_only_declaration.get().is_none() {
+                source_links.type_only_declaration.set(Some(type_only_declaration));
+            }
+        }
+        result
     }
 
     // checker.go:16626
     pub(crate) fn try_resolve_alias(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> {
-        todo!()
+        let links = self.alias_symbol_links.get(symbol);
+        if links.alias_target.get().is_some() || self.find_resolution_cycle_start_index(symbol.into(), TypeSystemPropertyName::AliasTarget) < 0 {
+            return Some(self.resolve_alias(symbol));
+        }
+        None
     }
 
     // checker.go:16634
     pub(crate) fn resolve_alias_with_deprecation_check(&mut self, symbol: P<Symbol>, location: P<Node>) -> P<Symbol> {
-        todo!()
+        if !symbol.flags().intersects(SymbolFlags::Alias) || self.is_deprecated_symbol(symbol) || self.get_declaration_of_alias_symbol(symbol).is_none() {
+            return symbol;
+        }
+        let mut symbol = symbol;
+        let target_symbol = self.resolve_alias(symbol);
+        if target_symbol == self.unknown_symbol {
+            return target_symbol;
+        }
+        while symbol.flags().intersects(SymbolFlags::Alias) {
+            let target = self.get_immediate_aliased_symbol(symbol);
+            if let Some(target) = target {
+                if target == target_symbol {
+                    break;
+                }
+                if !target.declarations().is_empty() {
+                    if self.is_deprecated_symbol(target) {
+                        let declarations = target.declarations().clone();
+                        self.add_deprecated_suggestion(location, &declarations, target.name());
+                        break;
+                    } else {
+                        if symbol == target_symbol {
+                            break;
+                        }
+                        symbol = target;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        target_symbol
     }
 
+    /**
+     * Gets combined flags of a `symbol` and all alias targets it resolves to. `resolveAlias`
+     * is typically recursive over chains of aliases, but stops mid-chain if an alias is merged
+     * with another exported symbol, e.g.
+     * ```ts
+     * // a.ts
+     * export const a = 0;
+     * // b.ts
+     * export { a } from "./a";
+     * export type a = number;
+     * // c.ts
+     * import { a } from "./b";
+     * ```
+     * Calling `resolveAlias` on the `a` in c.ts would stop at the merged symbol exported
+     * from b.ts, even though there is still more alias to resolve. Consequently, if we were
+     * trying to determine if the `a` in c.ts has a value meaning, looking at the flags on
+     * the local symbol and on the symbol returned by `resolveAlias` is not enough.
+     * @returns SymbolFlags.All if `symbol` is an alias that ultimately resolves to `unknown`;
+     * combined flags of all alias targets otherwise.
+     */
     // checker.go:16686
     pub fn get_symbol_flags(&mut self, symbol: P<Symbol>) -> SymbolFlags {
-        todo!()
+        self.get_symbol_flags_ex(symbol, false /*excludeTypeOnlyMeanings*/, false /*excludeLocalMeanings*/)
     }
 
     // checker.go:16690
     pub(crate) fn get_symbol_flags_ex(&mut self, symbol: P<Symbol>, exclude_type_only_meanings: bool, exclude_local_meanings: bool) -> SymbolFlags {
-        todo!()
+        let mut seen_symbols: collections::Set<P<Symbol>> = collections::Set::new();
+        let mut symbol = symbol;
+        let mut flags = SymbolFlags::None;
+        if !exclude_local_meanings {
+            flags = symbol.flags();
+        }
+        while symbol.flags().intersects(SymbolFlags::Alias) {
+            if exclude_type_only_meanings && self.get_type_only_alias_declaration(symbol).is_some() {
+                break;
+            }
+            let resolved = self.resolve_alias(symbol);
+            let target = self.get_export_symbol_of_value_symbol_if_exported(Some(resolved));
+            if target == self.unknown_symbol {
+                return SymbolFlags::All;
+            }
+            if target.flags().intersects(SymbolFlags::Alias) {
+                // Optimization - try to avoid creating or adding to `seenSymbols` if possible
+                if target == symbol || seen_symbols.has(&target) {
+                    break;
+                }
+                if seen_symbols.len() == 0 {
+                    seen_symbols.add(symbol);
+                }
+                seen_symbols.add(target);
+            }
+            flags |= target.flags();
+            symbol = target;
+        }
+        flags
     }
 
     // checker.go:16720
     pub(crate) fn get_declaration_of_alias_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Node>> {
-        todo!()
+        symbol.declarations().iter().rev().copied().find(|d| ast::is_alias_symbol_declaration(*d))
     }
 
     // checker.go:16724
     pub(crate) fn get_type_of_symbol_with_deferred_type(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let links = self.value_symbol_links.get(symbol);
+        if links.resolved_type.get().is_none() {
+            let deferred = self.deferred_symbol_links.get(symbol);
+            let t = if deferred.parent.get().unwrap().flags().intersects(TypeFlags::Union) {
+                self.get_union_type(deferred.constituents.get())
+            } else {
+                self.get_intersection_type(deferred.constituents.get())
+            };
+            links.resolved_type.set(Some(t));
+        }
+        links.resolved_type.get().unwrap()
     }
 
     // checker.go:16737
     pub(crate) fn get_write_type_of_symbol_with_deferred_type(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let links = self.value_symbol_links.get(symbol);
+        if links.write_type.get().is_none() {
+            let deferred = self.deferred_symbol_links.get(symbol);
+            let t = if !deferred.write_constituents.get().is_empty() {
+                if deferred.parent.get().unwrap().flags().intersects(TypeFlags::Union) {
+                    self.get_union_type(deferred.write_constituents.get())
+                } else {
+                    self.get_intersection_type(deferred.write_constituents.get())
+                }
+            } else {
+                self.get_type_of_symbol_with_deferred_type(symbol)
+            };
+            links.write_type.set(Some(t));
+        }
+        links.write_type.get().unwrap()
     }
 
+    // Distinct write types come only from set accessors, but synthetic union and intersection
+    // properties deriving from set accessors will either pre-compute or defer the union or
+    // intersection of the writeTypes of their constituents.
     // checker.go:16757
     pub(crate) fn get_write_type_of_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Type>> {
-        todo!()
+        let check_flags = symbol.check_flags.get();
+        if check_flags.intersects(CheckFlags::SyntheticProperty) {
+            if check_flags.intersects(CheckFlags::DeferredType) {
+                return Some(self.get_write_type_of_symbol_with_deferred_type(symbol));
+            }
+            let links = self.value_symbol_links.get(symbol);
+            return links.write_type.get().or(links.resolved_type.get());
+        }
+        if symbol.flags().intersects(SymbolFlags::Property) {
+            let t = self.get_type_of_symbol(symbol);
+            return Some(self.remove_missing_type(t, symbol.flags().intersects(SymbolFlags::Optional)));
+        }
+        if symbol.flags().intersects(SymbolFlags::Accessor) {
+            if check_flags.intersects(CheckFlags::Instantiated) {
+                return Some(self.get_write_type_of_instantiated_symbol(symbol));
+            }
+            return Some(self.get_write_type_of_accessors(symbol));
+        }
+        Some(self.get_type_of_symbol(symbol))
     }
 
     // checker.go:16777
