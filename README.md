@@ -11,3 +11,16 @@ the bundled `lib.*.d.ts` files and the structure of the code come from that proj
 - `docs/AST.md`, `docs/CHECKER.md` — crate contracts
 - `crates/` — the port, one crate per Go package group
 - `tools/` — generators and Go oracle programs used to compare against the reference implementation
+
+## Usage
+
+```sh
+cargo build --release -p tsrs_cli -p tsrs_testrunner
+./target/release/tsrs -p path/to/project            # like `tsc --noEmit`; 4 checker threads by default
+./target/release/tsrs -p path/to/project --singleThreaded --extendedDiagnostics
+./target/release/tsrs-test run --suite all           # TypeScript conformance suite, error baselines
+./target/release/tsrs-test run --suite all --baselines types,symbols
+```
+
+`docs/STATUS.md` has the current conformance numbers and the comparison against the reference compiler on a
+38k-file production project; `docs/DEBUGGING.md` describes the fix workflow and the oracles under `tools/oracle/`.
