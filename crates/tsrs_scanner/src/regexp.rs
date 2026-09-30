@@ -746,12 +746,12 @@ impl RegExpParser {
         }
         let mut start = self.pos();
         let mut operand: Cow<'static, str> = Cow::Borrowed("");
-        let mut two_chars = "";
+        let mut two_chars: &[u8] = b"";
         if self.pos() + 1 < self.end {
-            two_chars = &self.text()[self.pos() as usize..(self.pos() + 2) as usize];
+            two_chars = &self.text().as_bytes()[self.pos() as usize..(self.pos() + 2) as usize];
         }
         match two_chars {
-            "--" | "&&" => {
+            b"--" | b"&&" => {
                 self.error(&diagnostics::Expected_a_class_set_operand, self.pos(), 0, &[]);
                 self.may_contain_strings = false;
             }
@@ -882,12 +882,12 @@ impl RegExpParser {
                 break;
             }
             start = self.pos();
-            two_chars = "";
+            two_chars = b"";
             if self.pos() + 1 < self.end {
-                two_chars = &self.text()[self.pos() as usize..(self.pos() + 2) as usize];
+                two_chars = &self.text().as_bytes()[self.pos() as usize..(self.pos() + 2) as usize];
             }
             match two_chars {
-                "--" | "&&" => {
+                b"--" | b"&&" => {
                     self.error(
                         &diagnostics::Operators_must_not_be_mixed_within_a_character_class_Wrap_it_in_a_nested_class_instead,
                         self.pos(),

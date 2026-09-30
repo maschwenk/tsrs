@@ -255,14 +255,14 @@ fn text_to_token() -> &'static FxHashMap<&'static str, Kind> {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ScannerState {
-    pos: i32,                             // Current position in text (and ending position of current token)
-    full_start_pos: i32,                  // Starting position of current token including preceding whitespace
-    token_start: i32,                     // Starting position of non-whitespace part of current token
-    token: Kind,                          // Kind of current token
-    token_value: &'static str,            // Parsed value of current token
-    token_flags: TokenFlags,              // Flags for current token
-    comment_directives_len: usize,        // Go keeps the directives slice itself in the state; see rewind
-    skip_jsdoc_leading_asterisks: i32,    // Leading asterisks to skip when scanning types inside JSDoc. Should be 0 outside JSDoc
+    pub(crate) pos: i32,                             // Current position in text (and ending position of current token)
+    pub(crate) full_start_pos: i32,                  // Starting position of current token including preceding whitespace
+    pub(crate) token_start: i32,                     // Starting position of non-whitespace part of current token
+    pub(crate) token: Kind,                          // Kind of current token
+    pub(crate) token_value: &'static str,            // Parsed value of current token
+    pub(crate) token_flags: TokenFlags,              // Flags for current token
+    pub(crate) comment_directives_len: usize,        // Go keeps the directives slice itself in the state; see rewind
+    pub(crate) skip_jsdoc_leading_asterisks: i32,    // Leading asterisks to skip when scanning types inside JSDoc. Should be 0 outside JSDoc
 }
 
 #[derive(Default)]
@@ -667,7 +667,7 @@ impl Scanner {
     pub fn scan(&mut self) -> Kind {
         self.state.full_start_pos = self.state.pos;
         self.state.token_flags = TokenFlags::None;
-        loop {
+        'scan: loop {
             let ch = self.char();
             self.state.token_start = self.state.pos;
 
@@ -675,7 +675,7 @@ impl Scanner {
                 0x09 | 0x0B | 0x0C | 0x20 => {
                     self.state.pos += 1;
                     if self.skip_trivia {
-                        continue;
+                        continue 'scan;
                     }
                     loop {
                         let (ch, size) = self.char_and_size();
@@ -691,7 +691,7 @@ impl Scanner {
                     if self.skip_trivia {
                         self.state.pos += 1;
                         self.scan_ascii_while(|b| b == b' ' || (b'\t'..=b'\r').contains(&b));
-                        continue;
+                        continue 'scan;
                     }
                     if ch == '\r' as i32 && self.char_at(1) == '\n' as i32 {
                         self.state.pos += 2;
@@ -776,7 +776,7 @@ impl Scanner {
                             && self.state.token_flags.intersects(TokenFlags::PrecedingLineBreak)
                         {
                             self.state.token_flags |= TokenFlags::PrecedingJSDocLeadingAsterisks;
-                            continue;
+                            continue 'scan;
                         }
                         self.state.token = Kind::AsteriskToken;
                     }
@@ -840,7 +840,7 @@ impl Scanner {
                         self.process_comment_directive(self.state.token_start, self.state.pos, false);
 
                         if self.skip_trivia {
-                            continue;
+                            continue 'scan;
                         }
                         self.state.token = Kind::SingleLineCommentTrivia;
                         return self.state.token;
@@ -885,7 +885,7 @@ impl Scanner {
                         }
 
                         if self.skip_trivia {
-                            continue;
+                            continue 'scan;
                         }
 
                         if !comment_closed {
@@ -966,7 +966,7 @@ impl Scanner {
                     if self.char_at(1) == '<' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
                         self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
                         if self.skip_trivia {
-                            continue;
+                            continue 'scan;
                         } else {
                             self.state.token = Kind::ConflictMarkerTrivia;
                             return self.state.token;
@@ -995,7 +995,7 @@ impl Scanner {
                     if self.char_at(1) == '=' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
                         self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
                         if self.skip_trivia {
-                            continue;
+                            continue 'scan;
                         } else {
                             self.state.token = Kind::ConflictMarkerTrivia;
                             return self.state.token;
@@ -1021,7 +1021,7 @@ impl Scanner {
                     if self.char_at(1) == '>' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
                         self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
                         if self.skip_trivia {
-                            continue;
+                            continue 'scan;
                         } else {
                             self.state.token = Kind::ConflictMarkerTrivia;
                             return self.state.token;
@@ -1072,7 +1072,7 @@ impl Scanner {
                     if self.char_at(1) == '|' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
                         self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
                         if self.skip_trivia {
-                            continue;
+                            continue 'scan;
                         } else {
                             self.state.token = Kind::ConflictMarkerTrivia;
                             return self.state.token;
@@ -1122,7 +1122,7 @@ impl Scanner {
                                 self.state.pos += size;
                                 (ch, size) = self.char_and_size();
                             }
-                            continue;
+                            continue 'scan;
                         }
                         self.error_at(&diagnostics::X_can_only_be_used_at_the_start_of_a_file, self.state.pos, 2, &[]);
                         self.state.pos += 2;
@@ -1157,7 +1157,7 @@ impl Scanner {
                         // If we get here and it's not 0x0085 (nextLine), then we're handling non-ASCII whitespace.
                         // Handle skipTrivia like we do in the space case above.
                         if ch == 0x0085 || self.skip_trivia {
-                            continue;
+                            continue 'scan;
                         }
 
                         loop {
@@ -1173,7 +1173,7 @@ impl Scanner {
                     if stringutil::is_line_break(ch) {
                         self.state.token_flags |= TokenFlags::PrecedingLineBreak;
                         self.state.pos += size;
-                        continue;
+                        continue 'scan;
                     }
                     self.scan_invalid_character();
                 }

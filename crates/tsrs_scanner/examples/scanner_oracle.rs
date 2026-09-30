@@ -70,12 +70,15 @@ fn pass(sb: &mut String, text: &'static str, variant: LanguageVariant, mode: i32
     s.set_text(text);
     s.set_language_variant(variant);
     s.set_skip_trivia(mode != 2);
+    if mode == 4 {
+        s.set_script_target(tsrs_core::ScriptTarget::ES5);
+    }
     s.set_on_error(true);
     let mut prev = Kind::Unknown;
     let mut stack: Vec<bool> = Vec::new();
     loop {
         let mut tok = s.scan();
-        if mode == 3 {
+        if mode >= 3 {
             match tok {
                 Kind::SlashToken | Kind::SlashEqualsToken => {
                     if is_regex_context(prev) {
@@ -125,7 +128,7 @@ fn dump(path: &str) -> Result<String, String> {
     let text: &'static str = Box::leak(text.into_boxed_str());
     let variant = if path.ends_with(".tsx") || path.ends_with(".jsx") { LanguageVariant::JSX } else { LanguageVariant::Standard };
     let mut sb = String::new();
-    for mode in 1..=3 {
+    for mode in 1..=4 {
         pass(&mut sb, text, variant, mode);
     }
     Ok(sb)

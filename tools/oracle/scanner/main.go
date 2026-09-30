@@ -8,6 +8,7 @@
 //   1: plain Scan() loop, skipTrivia=true (the parser's mode)
 //   2: plain Scan() loop, skipTrivia=false (trivia tokens)
 //   3: Scan() loop with parser-like rescans (regex with reportErrors, template continuation, '>' combos)
+//   4: as 3, with target ES5 (regex feature availability errors)
 // Every token prints "kind pos end flags value"; every scanner error prints "E code start length args".
 // Keep this file in sync with crates/tsrs_scanner/examples/scanner_oracle.rs.
 package main
@@ -55,6 +56,9 @@ func pass(sb *strings.Builder, text string, variant core.LanguageVariant, mode i
 	s.SetText(text)
 	s.SetLanguageVariant(variant)
 	s.SetSkipTrivia(mode != 2)
+	if mode == 4 {
+		s.SetScriptTarget(core.ScriptTargetES5)
+	}
 	s.SetOnError(func(diag *diagnostics.Message, start, length int, args ...any) {
 		fmt.Fprintf(sb, "E %d %d %d", diag.Code(), start, length)
 		for _, a := range args {
@@ -68,7 +72,7 @@ func pass(sb *strings.Builder, text string, variant core.LanguageVariant, mode i
 	var stack []bool
 	for {
 		tok := s.Scan()
-		if mode == 3 {
+		if mode >= 3 {
 			switch tok {
 			case ast.KindSlashToken, ast.KindSlashEqualsToken:
 				if isRegexContext(prev) {
@@ -120,7 +124,7 @@ func dump(path string) (string, error) {
 		variant = core.LanguageVariantJSX
 	}
 	var sb strings.Builder
-	for mode := 1; mode <= 3; mode++ {
+	for mode := 1; mode <= 4; mode++ {
 		pass(&sb, text, variant, mode)
 	}
 	return sb.String(), nil
