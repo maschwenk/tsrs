@@ -325,6 +325,11 @@ fn test_lib_folder_map() -> Vec<(String, String)> {
     out
 }
 
+enum Compiled {
+    Result(CompilationResult),
+    Unsupported(String),
+}
+
 pub struct CompilationResult {
     pub diagnostics: Vec<P<Diagnostic>>,
     pub options: &'static CompilerOptions,
@@ -339,7 +344,7 @@ fn compile_files(
     tsconfig: Option<P<ParsedCommandLine>>,
     current_directory: &str,
     symlinks: &BTreeMap<String, String>,
-) -> Result<CompilationResult, String> {
+) -> Result<Compiled, String> {
     let mut compiler_options: CompilerOptions = tsconfig.and_then(|t| t.compiler_options()).map(|o| (*o).clone()).unwrap_or_default();
     // Set default options for tests
     if compiler_options.new_line == NewLineKind::None {
@@ -355,8 +360,11 @@ fn compile_files(
     if let Some(test_config) = test_config {
         set_options_from_test_config(test_config, &mut compiler_options, &mut harness_options, current_directory)?;
     }
+    if let Some(reason) = unsupported_reason(&compiler_options) {
+        return Ok(Compiled::Unsupported(reason));
+    }
 
-    compile_files_ex(input_files, other_files, &harness_options, compiler_options, current_directory, symlinks, tsconfig)
+    compile_files_ex(input_files, other_files, &harness_options, compiler_options, current_directory, symlinks, tsconfig).map(Compiled::Result)
 }
 
 fn compile_files_ex(
@@ -520,16 +528,15 @@ pub fn run(item: &TestItem, table: &OptionTable) -> Outcome {
     let compiler_runner::SplitUnits { current_directory, ts_config_files, to_be_compiled, other_files } = split;
 
     let result = match compile_files(&to_be_compiled, &other_files, Some(&harness_config), ts_config, &current_directory, &payload.symlinks) {
-        Ok(r) => r,
+        Ok(Compiled::Result(r)) => r,
+        // Go checks SkipUnsupportedCompilerOptions after compiling; checking first keeps crashes in
+        // unsupported configurations (which have no reference baselines) out of the results.
+        Ok(Compiled::Unsupported(reason)) => match reason.strip_prefix("fatal: ") {
+            Some(fatal) => return Outcome::Error(fatal.to_string()),
+            None => return Outcome::Skip(reason),
+        },
         Err(e) => return Outcome::Error(e),
     };
-
-    if let Some(reason) = unsupported_reason(result.options) {
-        if let Some(fatal) = reason.strip_prefix("fatal: ") {
-            return Outcome::Error(fatal.to_string());
-        }
-        return Outcome::Skip(reason);
-    }
 
     let files: Vec<TestFile> = ts_config_files.into_iter().chain(to_be_compiled).chain(other_files).collect();
     let diags = convert_diagnostics(&result.diagnostics);
