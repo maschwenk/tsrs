@@ -1314,236 +1314,1168 @@ pub(crate) fn is_zero_big_int(t: P<Type>) -> bool {
 impl Checker {
     // checker.go:31629
     pub(crate) fn is_function_object_type(&mut self, t: P<Type>) -> bool {
-        todo!()
+        if t.object_flags().intersects(ObjectFlags::EvolvingArray) {
+            return false;
+        }
+        // We do a quick check for a "bind" property before performing the more expensive subtype
+        // check. This gives us a quicker out in the common case where an object type is not a function.
+        let resolved = self.resolve_structured_type_members(t).unwrap();
+        if !resolved.signatures.get().is_empty() {
+            return true;
+        }
+        let global_function_type = self.global_function_type;
+        resolved.members.get().is_some_and(|m| m.lookup("bind").is_some()) && self.is_type_subtype_of(t, global_function_type)
     }
 
     // checker.go:31639
     pub(crate) fn get_type_with_facts(&mut self, t: P<Type>, include: TypeFacts) -> P<Type> {
-        todo!()
+        self.filter_type(t, |c, t| c.has_type_facts(t, include))
     }
 
+    // This function is similar to getTypeWithFacts, except that in strictNullChecks mode it replaces type
+    // unknown with the union {} | null | undefined (and reduces that accordingly), and it intersects remaining
+    // instantiable types with {}, {} | null, or {} | undefined in order to remove null and/or undefined.
     // checker.go:31648
     pub(crate) fn get_adjusted_type_with_facts(&mut self, t: P<Type>, facts: TypeFacts) -> P<Type> {
-        todo!()
+        let source = if self.strict_null_checks && t.flags().intersects(TypeFlags::Unknown) { self.unknown_union_type } else { t };
+        let with_facts = self.get_type_with_facts(source, facts);
+        let reduced = self.recombine_unknown_type(with_facts);
+        if self.strict_null_checks {
+            if facts == TypeFacts::NEUndefined {
+                let null_type = self.null_type;
+                return self.remove_nullable_by_intersection(reduced, TypeFacts::EQUndefined, TypeFacts::EQNull, TypeFacts::IsNull, null_type);
+            } else if facts == TypeFacts::NENull {
+                let undefined_type = self.undefined_type;
+                return self.remove_nullable_by_intersection(reduced, TypeFacts::EQNull, TypeFacts::EQUndefined, TypeFacts::IsUndefined, undefined_type);
+            } else if facts == TypeFacts::NEUndefinedOrNull || facts == TypeFacts::Truthy {
+                return self
+                    .map_type(reduced, |c, t| {
+                        if c.has_type_facts(t, TypeFacts::EQUndefinedOrNull) {
+                            return Some(c.get_global_non_nullable_type_instantiation(t));
+                        }
+                        Some(t)
+                    })
+                    .unwrap();
+            }
+        }
+        reduced
     }
 
     // checker.go:31668
     pub(crate) fn remove_nullable_by_intersection(&mut self, t: P<Type>, target_facts: TypeFacts, other_facts: TypeFacts, other_includes_facts: TypeFacts, other_type: P<Type>) -> P<Type> {
-        todo!()
+        let facts = self.get_type_facts(t, TypeFacts::EQUndefined | TypeFacts::EQNull | TypeFacts::IsUndefined | TypeFacts::IsNull);
+        // Simply return the type if it never compares equal to the target nullable.
+        if !facts.intersects(target_facts) {
+            return t;
+        }
+        // By default we intersect with a union of {} and the opposite nullable.
+        let empty_object_type = self.empty_object_type;
+        let empty_and_other_union = self.get_union_type(&[empty_object_type, other_type]);
+        // For each constituent type that can compare equal to the target nullable, intersect with the above union
+        // if the type doesn't already include the opposite nullable and the constituent can compare equal to the
+        // opposite nullable; otherwise, just intersect with {}.
+        self.map_type(t, |c, t| {
+            if c.has_type_facts(t, target_facts) {
+                if !facts.intersects(other_includes_facts) && c.has_type_facts(t, other_facts) {
+                    return Some(c.get_intersection_type(&[t, empty_and_other_union]));
+                }
+                let empty_object_type = c.empty_object_type;
+                return Some(c.get_intersection_type(&[t, empty_object_type]));
+            }
+            Some(t)
+        })
+        .unwrap()
     }
 
     // checker.go:31690
     pub(crate) fn recombine_unknown_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        if t == self.unknown_union_type {
+            return self.unknown_type;
+        }
+        t
     }
 
     // checker.go:31697
     pub(crate) fn get_global_non_nullable_type_instantiation(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        let alias = self.get_global_non_nullable_type_alias_or_nil();
+        if let Some(alias) = alias {
+            return self.get_type_alias_instantiation(alias, &[t], None);
+        }
+        let empty_object_type = self.empty_object_type;
+        self.get_intersection_type(&[t, empty_object_type])
     }
 
     // checker.go:31705
     pub(crate) fn convert_auto_to_any(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        if t == self.auto_type {
+            return self.any_type;
+        } else if t == self.auto_array_type {
+            return self.any_array_type;
+        }
+        t
     }
 
+    // Gets the "awaited type" of a type.
+    // @param type The type to await.
+    // @param withAlias When `true`, wraps the "awaited type" in `Awaited<T>` if needed.
+    // @remarks The "awaited type" of an expression is its "promised type" if the expression is a
+    // Promise-like type; otherwise, it is the type of the expression. This is used to reflect
+    // The runtime behavior of the `await` keyword.
     // checker.go:31721
     pub(crate) fn check_awaited_type(&mut self, t: P<Type>, with_alias: bool, error_node: P<Node>, diagnostic_message: &'static Message) -> P<Type> {
-        todo!()
+        let awaited_type = if with_alias {
+            self.get_awaited_type_ex(t, Some(error_node), Some(diagnostic_message), &[])
+        } else {
+            self.get_awaited_type_no_alias_ex(t, Some(error_node), Some(diagnostic_message), &[])
+        };
+        if let Some(awaited_type) = awaited_type {
+            return awaited_type;
+        }
+        self.error_type
     }
 
+    // Gets the "awaited type" of a type.
+    //
+    // The "awaited type" of an expression is its "promised type" if the expression is a
+    // Promise-like type; otherwise, it is the type of the expression. If the "promised
+    // type" is itself a Promise-like, the "promised type" is recursively unwrapped until a
+    // non-promise type is found.
+    //
+    // This is used to reflect the runtime behavior of the `await` keyword.
     // checker.go:31742
     pub fn get_awaited_type(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        self.get_awaited_type_ex(t, None, None, &[])
     }
 
     // checker.go:31746
     pub(crate) fn get_awaited_type_ex(&mut self, t: P<Type>, error_node: Option<P<Node>>, diagnostic_message: Option<&'static Message>, args: &[&dyn Display]) -> Option<P<Type>> {
-        todo!()
+        let awaited_type = self.get_awaited_type_no_alias_ex(t, error_node, diagnostic_message, args);
+        if let Some(awaited_type) = awaited_type {
+            return Some(self.create_awaited_type_if_needed(awaited_type));
+        }
+        None
     }
 
+    // Gets the "awaited type" of a type without introducing an `Awaited<T>` wrapper.
     // checker.go:31755
     pub(crate) fn get_awaited_type_no_alias(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        self.get_awaited_type_no_alias_ex(t, None, None, &[])
     }
 
     // checker.go:31759
     pub(crate) fn get_awaited_type_no_alias_ex(&mut self, t: P<Type>, error_node: Option<P<Node>>, diagnostic_message: Option<&'static Message>, args: &[&dyn Display]) -> Option<P<Type>> {
-        todo!()
+        if is_type_any(Some(t)) {
+            return Some(t);
+        }
+        // If this is already an `Awaited<T>`, just return it. This avoids `Awaited<Awaited<T>>` in higher-order
+        if self.is_awaited_type_instantiation(t) {
+            return Some(t);
+        }
+        // If we've already cached an awaited type, return a possible `Awaited<T>` for it.
+        let key = CachedTypeKey { kind: CachedTypeKind::AwaitedType, type_id: t.id };
+        if let Some(&awaited_type) = self.cached_types.get(&key) {
+            return Some(awaited_type);
+        }
+        // For a union, get a union of the awaited types of each constituent.
+        if t.flags().intersects(TypeFlags::Union) {
+            if self.awaited_type_stack.contains(&t) {
+                if error_node.is_some() {
+                    self.error(error_node, &diagnostics::Type_is_referenced_directly_or_indirectly_in_the_fulfillment_callback_of_its_own_then_method, &[]);
+                }
+                return None;
+            }
+            self.awaited_type_stack.push(t);
+            let mapped = self.map_type(t, |c, t| c.get_awaited_type_no_alias_ex(t, error_node, diagnostic_message, args));
+            self.awaited_type_stack.pop();
+            // Go stores the (possibly nil) result; a nil map entry reads back as a cache miss.
+            match mapped {
+                Some(mapped) => {
+                    self.cached_types.insert(key, mapped);
+                }
+                None => {
+                    self.cached_types.remove(&key);
+                }
+            }
+            return mapped;
+        }
+        // If `type` is generic and should be wrapped in `Awaited<T>`, return it.
+        if self.is_awaited_type_needed(t) {
+            self.cached_types.insert(key, t);
+            return Some(t);
+        }
+        // SIG: getPromisedTypeOfPromiseEx's out parameter should be `Option<&mut Option<P<Type>>>` (Go `**Type`
+        // starting at nil). The callee only ever writes a non-nil this-type, so the error type serves as the
+        // "not written" sentinel here.
+        let mut this_type_for_error_out = self.error_type;
+        let promised_type = self.get_promised_type_of_promise_ex(t, None /*errorNode*/, Some(&mut this_type_for_error_out));
+        let this_type_for_error = if this_type_for_error_out == self.error_type { None } else { Some(this_type_for_error_out) };
+        if let Some(promised_type) = promised_type {
+            if t == promised_type || self.awaited_type_stack.contains(&promised_type) {
+                // Verify that we don't have a bad actor in the form of a promise whose
+                // promised type is the same as the promise type, or a mutually recursive
+                // promise. If so, we return undefined as we cannot guess the shape. If this
+                // were the actual case in the JavaScript, this Promise would never resolve.
+                //
+                // An example of a bad actor with a singly-recursive promise type might
+                // be:
+                //
+                //  interface BadPromise {
+                //      then(
+                //          onfulfilled: (value: BadPromise) => any,
+                //          onrejected: (error: any) => any): BadPromise;
+                //  }
+                //
+                // The above interface will pass the PromiseLike check, and return a
+                // promised type of `BadPromise`. Since this is a self reference, we
+                // don't want to keep recursing ad infinitum.
+                //
+                // An example of a bad actor in the form of a mutually-recursive
+                // promise type might be:
+                //
+                //  interface BadPromiseA {
+                //      then(
+                //          onfulfilled: (value: BadPromiseB) => any,
+                //          onrejected: (error: any) => any): BadPromiseB;
+                //  }
+                //
+                //  interface BadPromiseB {
+                //      then(
+                //          onfulfilled: (value: BadPromiseA) => any,
+                //          onrejected: (error: any) => any): BadPromiseA;
+                //  }
+                //
+                if error_node.is_some() {
+                    self.error(error_node, &diagnostics::Type_is_referenced_directly_or_indirectly_in_the_fulfillment_callback_of_its_own_then_method, &[]);
+                }
+                return None;
+            }
+            // Keep track of the type we're about to unwrap to avoid bad recursive promise types.
+            // See the comments above for more information.
+            self.awaited_type_stack.push(t);
+            let awaited_type = self.get_awaited_type_no_alias_ex(promised_type, error_node, diagnostic_message, args);
+            self.awaited_type_stack.pop();
+            let Some(awaited_type) = awaited_type else {
+                return None;
+            };
+            self.cached_types.insert(key, awaited_type);
+            return Some(awaited_type);
+        }
+        // The type was not a promise, so it could not be unwrapped any further.
+        // As long as the type does not have a callable "then" property, it is
+        // safe to return the type; otherwise, an error is reported and we return
+        // undefined.
+        //
+        // An example of a non-promise "thenable" might be:
+        //
+        //  await { then(): void {} }
+        //
+        // The "thenable" does not match the minimal definition for a promise. When
+        // a Promise/A+-compatible or ES6 promise tries to adopt this value, the promise
+        // will never settle. We treat this as an error to help flag an early indicator
+        // of a runtime problem. If the user wants to return this value from an async
+        // function, they would need to wrap it in some other value. If they want it to
+        // be treated as a promise, they can cast to <any>.
+        if self.is_thenable_type(t) {
+            if let Some(error_node) = error_node {
+                let mut diagnostic = None;
+                if let Some(this_type_for_error) = this_type_for_error {
+                    let t_str = self.type_to_string_exported(t);
+                    let this_str = self.type_to_string_exported(this_type_for_error);
+                    diagnostic = Some(new_diagnostic_for_node(Some(error_node), Some(&diagnostics::The_this_context_of_type_0_is_not_assignable_to_method_s_this_of_type_1), &[&t_str, &this_str]));
+                }
+                self.add_diagnostic(new_diagnostic_chain_for_node(diagnostic, error_node, diagnostic_message, args));
+            }
+            return None;
+        }
+        self.cached_types.insert(key, t);
+        Some(t)
     }
 
     // checker.go:31873
     pub(crate) fn is_awaited_type_instantiation(&mut self, t: P<Type>) -> bool {
-        todo!()
+        if t.flags().intersects(TypeFlags::Conditional) {
+            let awaited_symbol = self.get_global_awaited_symbol_or_nil();
+            return awaited_symbol.is_some() && t.alias().is_some_and(|alias| alias.symbol.get() == awaited_symbol && alias.type_arguments.get().len() == 1);
+        }
+        false
     }
 
     // checker.go:31881
     pub(crate) fn is_awaited_type_needed(&mut self, t: P<Type>) -> bool {
-        todo!()
+        // If this is already an `Awaited<T>`, we shouldn't wrap it. This helps to avoid `Awaited<Awaited<T>>` in higher-order.
+        if is_type_any(Some(t)) || self.is_awaited_type_instantiation(t) {
+            return false;
+        }
+        // We only need `Awaited<T>` if `T` contains possibly non-primitive types.
+        if self.is_generic_object_type(t) {
+            let base_constraint = self.get_base_constraint_of_type(t);
+            // We only need `Awaited<T>` if `T` is a type variable that has no base constraint, or the base constraint of `T` is `any`, `unknown`, `{}`, `object`,
+            // or is promise-like.
+            if let Some(base_constraint) = base_constraint {
+                return base_constraint.flags().intersects(TypeFlags::AnyOrUnknown) || self.is_empty_object_type(base_constraint) || some_type(base_constraint, |t| self.is_thenable_type(t));
+            }
+            return self.maybe_type_of_kind(t, TypeFlags::TypeVariable);
+        }
+        false
     }
 
     // checker.go:31899
     pub(crate) fn create_awaited_type_if_needed(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        // We wrap type `T` in `Awaited<T>` based on the following conditions:
+        // - `T` is not already an `Awaited<U>`, and
+        // - `T` is generic, and
+        // - One of the following applies:
+        //   - `T` has no base constraint, or
+        //   - The base constraint of `T` is `any`, `unknown`, `object`, or `{}`, or
+        //   - The base constraint of `T` is an object type with a callable `then` method.
+        if self.is_awaited_type_needed(t) {
+            let awaited_type = self.try_create_awaited_type(t);
+            if let Some(awaited_type) = awaited_type {
+                return awaited_type;
+            }
+        }
+        t
     }
 
     // checker.go:31916
     pub(crate) fn try_create_awaited_type(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        // Nothing to do if `Awaited<T>` doesn't exist
+        let awaited_symbol = self.get_global_awaited_symbol();
+        if let Some(awaited_symbol) = awaited_symbol {
+            // Unwrap unions that may contain `Awaited<T>`, otherwise its possible to manufacture an `Awaited<Awaited<T> | U>` where
+            // an `Awaited<T | U>` would suffice.
+            let unwrapped = self.unwrap_awaited_type(t);
+            return Some(self.get_type_alias_instantiation(awaited_symbol, &[unwrapped], None));
+        }
+        None
     }
 
+    // For a generic `Awaited<T>`, gets `T`.
     // checker.go:31928
     pub(crate) fn unwrap_awaited_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        if t.flags().intersects(TypeFlags::Union) {
+            return self.map_type(t, |c, t| Some(c.unwrap_awaited_type(t))).unwrap();
+        } else if self.is_awaited_type_instantiation(t) {
+            return t.alias().unwrap().type_arguments.get()[0];
+        }
+        t
     }
 
     // checker.go:31938
     pub(crate) fn is_thenable_type(&mut self, t: P<Type>) -> bool {
-        todo!()
+        let constraint = self.get_base_constraint_or_type(t);
+        if self.all_types_assignable_to_kind(constraint, TypeFlags::Primitive | TypeFlags::Never) {
+            // primitive types cannot be considered "thenable" since they are not objects.
+            return false;
+        }
+        let then_function = self.get_type_of_property_of_type(t, "then");
+        let Some(then_function) = then_function else {
+            return false;
+        };
+        let then_type = self.get_type_with_facts(then_function, TypeFacts::NEUndefinedOrNull);
+        !self.get_signatures_of_type(then_type, SignatureKind::Call).is_empty()
     }
 
     // checker.go:31947
     pub(crate) fn get_awaited_type_of_promise(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        self.get_awaited_type_of_promise_ex(t, None, None, &[])
     }
 
     // checker.go:31951
     pub(crate) fn get_awaited_type_of_promise_ex(&mut self, t: P<Type>, error_node: Option<P<Node>>, diagnostic_message: Option<&'static Message>, args: &[&dyn Display]) -> Option<P<Type>> {
-        todo!()
+        let promised_type = self.get_promised_type_of_promise_ex(t, error_node, None);
+        if let Some(promised_type) = promised_type {
+            return self.get_awaited_type_ex(promised_type, error_node, diagnostic_message, args);
+        }
+        None
     }
 
+    // Check if a parameter or catch variable (or their bindings elements) is assigned anywhere
     // checker.go:31960
     pub(crate) fn is_some_symbol_assigned(&mut self, root_declaration: P<Node>) -> bool {
-        todo!()
+        self.is_some_symbol_assigned_worker(root_declaration.name().unwrap())
     }
 
     // checker.go:31964
     pub(crate) fn is_some_symbol_assigned_worker(&mut self, node: P<Node>) -> bool {
-        todo!()
+        if node.kind == Kind::Identifier {
+            let symbol = self.get_symbol_of_declaration(node.parent().unwrap()).unwrap();
+            return self.is_symbol_assigned(symbol);
+        }
+        node.elements().iter().any(|&e| e.name().is_some() && self.is_some_symbol_assigned_worker(e.name().unwrap()))
     }
 
     // checker.go:31973
     pub(crate) fn get_target_type(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        if t.object_flags().intersects(ObjectFlags::Reference) {
+            return t.as_type_reference().target.get();
+        }
+        Some(t)
     }
 
     // checker.go:31980
     pub(crate) fn get_narrowable_type_for_reference(&mut self, t: P<Type>, reference: P<Node>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        let mut t = t;
+        if self.is_no_infer_type(t) {
+            t = t.as_substitution_type().base_type.get().unwrap();
+        }
+        // When the type of a reference is or contains an instantiable type with a union type constraint, and
+        // when the reference is in a constraint position (where it is known we'll obtain the apparent type) or
+        // has a contextual type containing no top-level instantiables (meaning constraints will determine
+        // assignability), we substitute constraints for all instantiables in the type of the reference to give
+        // control flow analysis an opportunity to narrow it further. For example, for a reference of a type
+        // parameter type 'T extends string | undefined' with a contextual type 'string', we substitute
+        // 'string | undefined' to give control flow analysis the opportunity to narrow to type 'string'.
+        let substitute_constraints = !check_mode.intersects(CheckMode::Inferential)
+            && some_type(t, |t| self.is_generic_type_with_union_constraint(t))
+            && (self.is_constraint_position(t, reference) || self.has_contextual_type_with_no_generic_types(reference, check_mode));
+        if substitute_constraints {
+            return self.map_type(t, |c, t| Some(c.get_base_constraint_or_type(t))).unwrap();
+        }
+        t
     }
 
     // checker.go:31998
     pub(crate) fn is_constraint_position(&mut self, t: P<Type>, node: P<Node>) -> bool {
-        todo!()
+        let parent = node.parent().unwrap();
+        // In an element access obj[x], we consider obj to be in a constraint position, except when obj is of
+        // a generic type without a nullable constraint and x is a generic type. This is because when both obj
+        // and x are of generic types T and K, we want the resulting type to be T[K].
+        ast::is_property_access_expression(parent)
+            || ast::is_qualified_name(parent)
+            || (ast::is_call_expression(parent) || ast::is_new_expression(parent)) && parent.expression() == Some(node)
+            || ast::is_element_access_expression(parent) && parent.expression() == Some(node) && !(some_type(t, |t| self.is_generic_type_without_nullable_constraint(t)) && {
+                let index_type = self.get_type_of_expression(parent.as_element_access_expression().argument_expression);
+                self.is_generic_index_type(index_type)
+            })
     }
 
     // checker.go:32008
     pub(crate) fn is_generic_type_with_union_constraint(&mut self, t: P<Type>) -> bool {
-        todo!()
+        if t.flags().intersects(TypeFlags::Intersection) {
+            return t.types().iter().any(|&t| self.is_generic_type_with_union_constraint(t));
+        }
+        t.flags().intersects(TypeFlags::Instantiable) && self.get_base_constraint_or_type(t).flags().intersects(TypeFlags::Nullable | TypeFlags::Union)
     }
 
     // checker.go:32015
     pub(crate) fn is_generic_type_without_nullable_constraint(&mut self, t: P<Type>) -> bool {
-        todo!()
+        if t.flags().intersects(TypeFlags::Intersection) {
+            return t.types().iter().any(|&t| self.is_generic_type_without_nullable_constraint(t));
+        }
+        t.flags().intersects(TypeFlags::Instantiable) && {
+            let constraint = self.get_base_constraint_or_type(t);
+            !self.maybe_type_of_kind(constraint, TypeFlags::Nullable)
+        }
     }
 
     // checker.go:32022
     pub(crate) fn has_contextual_type_with_no_generic_types(&mut self, node: P<Node>, check_mode: CheckMode) -> bool {
-        todo!()
+        // Computing the contextual type for a child of a JSX element involves resolving the type of the
+        // element's tag name, so we exclude that here to avoid circularities.
+        // If check mode has `CheckMode.RestBindingElement`, we skip binding pattern contextual types,
+        // as we want the type of a rest element to be generic when possible.
+        let parent = node.parent().unwrap();
+        if (ast::is_identifier(node) || ast::is_property_access_expression(node) || ast::is_element_access_expression(node))
+            && !((ast::is_jsx_opening_element(parent) || ast::is_jsx_self_closing_element(parent)) && parent.tag_name() == node)
+        {
+            let context_flags = if check_mode.intersects(CheckMode::RestBindingElement) { ContextFlags::SkipBindingPatterns } else { ContextFlags::None };
+            let contextual_type = self.get_contextual_type(node, context_flags);
+            if let Some(contextual_type) = contextual_type {
+                return !self.is_generic_type(contextual_type);
+            }
+        }
+        false
     }
 
     // checker.go:32037
     pub(crate) fn get_non_undefined_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        let mut type_or_constraint = t;
+        if some_type(t, |t| self.is_generic_type_with_undefined_constraint(t)) {
+            type_or_constraint = self
+                .map_type(t, |c, t| {
+                    if t.flags().intersects(TypeFlags::Instantiable) {
+                        return Some(c.get_base_constraint_or_type(t));
+                    }
+                    Some(t)
+                })
+                .unwrap();
+        }
+        self.get_type_with_facts(type_or_constraint, TypeFacts::NEUndefined)
     }
 
     // checker.go:32050
     pub(crate) fn is_generic_type_with_undefined_constraint(&mut self, t: P<Type>) -> bool {
-        todo!()
+        if t.flags().intersects(TypeFlags::Instantiable) {
+            let constraint = self.get_base_constraint_of_type(t);
+            if let Some(constraint) = constraint {
+                return self.maybe_type_of_kind(constraint, TypeFlags::Undefined);
+            }
+        }
+        false
     }
 
     // checker.go:32060
     pub(crate) fn get_actual_type_variable(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        if t.flags().intersects(TypeFlags::Substitution) {
+            return self.get_actual_type_variable(t.as_substitution_type().base_type.get().unwrap());
+        }
+        if t.flags().intersects(TypeFlags::IndexedAccess) {
+            let indexed_access = t.as_indexed_access_type();
+            let object_type = self.get_actual_type_variable(indexed_access.object_type.get().unwrap());
+            let index_type = self.get_actual_type_variable(indexed_access.index_type.get().unwrap());
+            if object_type != indexed_access.object_type.get() || index_type != indexed_access.index_type.get() {
+                return Some(self.get_indexed_access_type(object_type.unwrap(), index_type.unwrap()));
+            }
+        }
+        get_non_distributed_type_parameter(t)
     }
 
     // checker.go:32074
     pub fn get_symbol_at_location_exported(&mut self, node: P<Node>) -> Option<P<Symbol>> {
-        todo!()
+        // !!!
+        // const node = getParseTreeNode(nodeIn);
+
+        // set ignoreErrors: true because any lookups invoked by the API shouldn't cause any new errors
+        self.get_symbol_at_location(ast::get_reparsed_node_for_node(node).unwrap(), true /*ignoreErrors*/)
     }
 
+    // Returns the symbol associated with a given AST node. Do *not* use this function in the checker itself! It should
+    // be used only by the language service and external tools. The semantics of the function are deliberately "fuzzy"
+    // and aim to just return *some* symbol for the node. To obtain the symbol associated with a node for type checking
+    // purposes, use appropriate function for the context, e.g. `getResolvedSymbol` for an expression identifier,
+    // `getSymbolOfDeclaration` for a declaration, etc.
     // checker.go:32087
     pub(crate) fn get_symbol_at_location(&mut self, node: P<Node>, ignore_errors: bool) -> Option<P<Symbol>> {
-        todo!()
+        if ast::is_source_file(node) {
+            if ast::is_external_or_common_js_module(node.as_source_file_p()) {
+                return Some(self.get_merged_symbol(node.symbol().unwrap()));
+            }
+            return None;
+        }
+        let parent = node.parent().unwrap();
+        let grand_parent = parent.parent();
+
+        if node.flags().intersects(NodeFlags::InWithStatement) {
+            // We cannot answer semantic questions within a with block, do not proceed any further
+            return None;
+        }
+
+        if ast::is_declaration_name_or_import_property_name(node) {
+            // This is a declaration, call getSymbolOfNode
+            let parent_symbol = self.get_symbol_of_declaration(parent);
+            if ast::is_import_or_export_specifier(parent) && parent.property_name() == Some(node) {
+                return self.get_immediate_aliased_symbol(parent_symbol.unwrap());
+            }
+            return parent_symbol;
+        } else if ast::is_literal_computed_property_declaration_name(node) {
+            return self.get_symbol_of_declaration(grand_parent.unwrap());
+        }
+
+        if ast::is_identifier(node) {
+            if is_in_right_side_of_import_or_export_assignment(node) {
+                return self.get_symbol_of_name_or_property_access_expression(node);
+            } else if ast::is_binding_element(parent) && ast::is_object_binding_pattern(grand_parent.unwrap()) && Some(node) == parent.property_name() {
+                let type_of_pattern = self.get_type_of_node(grand_parent.unwrap());
+                if let Some(property_declaration) = self.get_property_of_type(type_of_pattern, node.text()) {
+                    return Some(property_declaration);
+                }
+            } else if ast::is_meta_property(parent) && parent.name() == Some(node) {
+                let meta_prop = parent.as_meta_property();
+                if meta_prop.keyword_token == Kind::NewKeyword && node.text() == "target" {
+                    // `target` in `new.target`
+                    return self.check_new_target_meta_property(parent).symbol();
+                }
+                // The `meta` in `import.meta` could be given `getTypeOfNode(parent).symbol` (the `ImportMeta` interface symbol), but
+                // we have a fake expression type made for other reasons already, whose transient `meta`
+                // member should more exactly be the kind of (declarationless) symbol we want.
+                // (See #44364 and #45031 for relevant implementation PRs)
+                if meta_prop.keyword_token == Kind::ImportKeyword && node.text() == "meta" {
+                    let import_meta_type = self.get_global_import_meta_expression_type();
+                    return import_meta_type.as_object_type().members.get().and_then(|m| m.lookup("meta"));
+                }
+                // no other meta properties are valid syntax, thus no others should have symbols
+                return None;
+            } else if ast::is_jsdoc_parameter_tag(parent) && parent.name() == Some(node) {
+                let func = ast::get_node_at_position(ast::get_source_file_of_node(node).unwrap(), node.pos(), false);
+                if ast::is_function_like(func) {
+                    for &param in func.parameters() {
+                        if ast::is_identifier(param.name().unwrap()) && param.name().unwrap().text() == node.text() {
+                            return self.get_symbol_of_node(param);
+                        }
+                    }
+                }
+            }
+        }
+
+        match node.kind {
+            Kind::Identifier | Kind::PrivateIdentifier | Kind::PropertyAccessExpression | Kind::QualifiedName | Kind::ThisKeyword | Kind::ThisType => {
+                if node.kind != Kind::ThisKeyword && node.kind != Kind::ThisType && !ast::is_this_in_type_query(node) {
+                    return self.get_symbol_of_name_or_property_access_expression(node);
+                }
+                // fallthrough (case ast.KindThisKeyword)
+                if node.kind != Kind::ThisType {
+                    let container = self.get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
+                    if ast::is_function_like(container) {
+                        let sig = self.get_signature_from_declaration(container.unwrap());
+                        if sig.this_parameter.get().is_some() {
+                            return sig.this_parameter.get();
+                        }
+                    }
+                    if ast::is_in_expression_context(node) {
+                        return self.check_expression(node).symbol();
+                    }
+                }
+                // fallthrough (case ast.KindThisType)
+                self.get_type_from_this_type_node(node).symbol()
+            }
+            Kind::SuperKeyword => self.check_expression(node).symbol(),
+            Kind::ConstructorKeyword => {
+                // constructor keyword for an overload, should take us to the definition if it exist
+                let constructor_declaration = parent;
+                if constructor_declaration.kind == Kind::Constructor {
+                    return constructor_declaration.parent().unwrap().symbol();
+                }
+                None
+            }
+            Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::NumericLiteral => {
+                if node.kind != Kind::NumericLiteral {
+                    // 1). import x = require("./mo/*gotToDefinitionHere*/d")
+                    // 2). External module name in an import declaration
+                    // 3). Require in Javascript
+                    // 4). type A = import("./f/*gotToDefinitionHere*/oo")
+                    let gp_is = |f: fn(P<Node>) -> bool| grand_parent.is_some_and(f);
+                    if (gp_is(ast::is_external_module_import_equals_declaration) && ast::get_external_module_import_equals_declaration_expression(grand_parent.unwrap()) == Some(node))
+                        || ((parent.kind == Kind::ImportDeclaration || parent.kind == Kind::JSImportDeclaration || parent.kind == Kind::ExportDeclaration) && ast::get_external_module_name(parent) == Some(node))
+                        || gp_is(ast::is_variable_declaration_initialized_to_require)
+                        || ast::is_import_call(parent)
+                        || (ast::is_literal_type_node(parent) && gp_is(ast::is_literal_import_type_node) && grand_parent.unwrap().as_import_type_node().argument == parent)
+                    {
+                        let import_attributes_type = self.get_import_attributes_type_for_module_specifier(node);
+                        return self.resolve_external_module_name(node, node, ignore_errors, import_attributes_type);
+                    }
+                    if ast::is_call_expression(parent) && ast::is_bindable_object_define_property_call(parent) && parent.arguments()[1] == node {
+                        return self.get_symbol_of_declaration(parent);
+                    }
+                }
+                // fallthrough (case ast.KindNumericLiteral)
+                // index access
+                let mut object_type = None;
+                if ast::is_element_access_expression(parent) {
+                    if parent.as_element_access_expression().argument_expression == node {
+                        object_type = Some(self.get_type_of_expression(parent.expression().unwrap()));
+                    }
+                } else if ast::is_literal_type_node(parent) && grand_parent.is_some_and(ast::is_indexed_access_type_node) {
+                    object_type = Some(self.get_type_from_type_node(grand_parent.unwrap().as_indexed_access_type_node().object_type));
+                }
+
+                if let Some(object_type) = object_type {
+                    return self.get_property_of_type(object_type, node.text());
+                }
+                None
+            }
+            Kind::DefaultKeyword | Kind::FunctionKeyword | Kind::EqualsGreaterThanToken | Kind::ClassKeyword => self.get_symbol_of_node(parent),
+            Kind::ImportType => {
+                if ast::is_literal_import_type_node(node) {
+                    return self.get_symbol_at_location(node.as_import_type_node().argument.as_literal_type_node().literal, ignore_errors);
+                }
+                None
+            }
+            Kind::ExportKeyword => {
+                if ast::is_export_assignment(parent) {
+                    if parent.symbol().is_none() {
+                        panic!("Symbol should be defined");
+                    }
+                    return parent.symbol();
+                }
+                None
+            }
+            Kind::ImportKeyword | Kind::NewKeyword => {
+                if node.kind == Kind::ImportKeyword && ast::is_meta_property(parent) && parent.text() == "defer" {
+                    return None;
+                }
+                // fallthrough (case ast.KindNewKeyword)
+                if ast::is_meta_property(parent) {
+                    return self.check_meta_property_keyword(parent).symbol();
+                }
+                None
+            }
+            Kind::InstanceOfKeyword => {
+                if ast::is_binary_expression(parent) {
+                    let t = self.get_type_of_expression(parent.as_binary_expression().right());
+                    let has_instance_method_type = self.get_symbol_has_instance_method_of_object_type(t);
+                    if let Some(has_instance_method_type) = has_instance_method_type {
+                        if has_instance_method_type.symbol().is_some() {
+                            return has_instance_method_type.symbol();
+                        }
+                    }
+                    return t.symbol();
+                }
+                None
+            }
+            Kind::MetaProperty => self.check_expression(node).symbol(),
+            Kind::JsxNamespacedName => {
+                if ast::is_jsx_tag_name(node) && is_jsx_intrinsic_tag_name(node) {
+                    let symbol = self.get_intrinsic_tag_symbol(parent);
+                    if symbol == Some(self.unknown_symbol) {
+                        return None;
+                    }
+                    return symbol;
+                }
+                // fallthrough (default)
+                None
+            }
+            _ => None,
+        }
     }
 
     // checker.go:32257
     pub fn get_index_signatures_at_location(&mut self, node: P<Node>) -> Vec<P<Node>> {
-        todo!()
+        let mut signatures = Vec::new();
+        if ast::is_identifier(node) && ast::is_property_access_expression(node.parent().unwrap()) && node.parent().unwrap().name() == Some(node) {
+            let key_type = self.get_literal_type_from_property_name(node);
+            let object_type = self.get_type_of_expression(node.parent().unwrap().expression().unwrap());
+            for t in object_type.distributed() {
+                for info in self.get_applicable_index_infos(t, key_type) {
+                    if let Some(declaration) = info.declaration.get() {
+                        append_if_unique(&mut signatures, declaration);
+                    }
+                }
+            }
+        }
+        signatures
     }
 
     // checker.go:32273
     pub(crate) fn get_symbol_of_name_or_property_access_expression(&mut self, name: P<Node>) -> Option<P<Symbol>> {
-        todo!()
+        let mut name = name;
+        if ast::is_declaration_name(name) {
+            return self.get_symbol_of_node(name.parent().unwrap());
+        }
+        if name.parent().unwrap().kind == Kind::ExportAssignment && ast::is_entity_name_expression(name) {
+            // Even an entity name expression that doesn't resolve as an entityname may still typecheck as a property access expression
+            let success = self.resolve_entity_name(
+                name,
+                /*all meanings*/ SymbolFlags::Value | SymbolFlags::Type | SymbolFlags::Namespace | SymbolFlags::Alias,
+                true,  /*ignoreErrors*/
+                false, /*dontResolveAlias*/
+                None,  /*location*/
+            );
+            if success.is_some() && success != Some(self.unknown_symbol) {
+                return success;
+            }
+        } else if ast::is_entity_name(name) && is_in_right_side_of_import_or_export_assignment(name) {
+            // Since we already checked for ExportAssignment, this really could only be an Import
+            let import_equals_declaration = ast::find_ancestor_kind(name, Kind::ImportEqualsDeclaration);
+            if import_equals_declaration.is_none() {
+                panic!("ImportEqualsDeclaration should be defined");
+            }
+            return self.get_symbol_of_part_of_right_hand_side_of_import_equals(name);
+        }
+
+        if ast::is_entity_name(name) {
+            let possible_import_node = is_import_type_qualifier_part(name);
+            if let Some(possible_import_node) = possible_import_node {
+                self.get_type_from_type_node(possible_import_node);
+                let sym = self.get_resolved_symbol_or_nil(name);
+                return if sym == Some(self.unknown_symbol) { None } else { sym };
+            }
+        }
+
+        while ast::is_right_side_of_qualified_name_or_property_access(name) {
+            name = name.parent().unwrap();
+        }
+
+        if is_in_name_of_expression_with_type_arguments_or_heritage_type_reference(name) {
+            let mut meaning;
+            let name_parent = name.parent().unwrap();
+            if name_parent.kind == Kind::ExpressionWithTypeArguments || name_parent.kind == Kind::TypeReference {
+                // A heritage element name may appear in type space, value space, or both;
+                // ensure the meaning matches its context.
+                meaning = if ast::is_part_of_type_node(name) { SymbolFlags::Type } else { SymbolFlags::Value };
+
+                // In a class 'extends' clause we are also looking for a value.
+                if ast::is_expression_with_type_arguments_in_class_extends_clause(name_parent) {
+                    meaning = meaning | SymbolFlags::Value;
+                }
+            } else {
+                meaning = SymbolFlags::Namespace;
+            }
+
+            meaning = meaning | SymbolFlags::Alias;
+            let mut entity_name_symbol = None;
+            if ast::is_entity_name_expression(name) {
+                entity_name_symbol = self.resolve_entity_name(name, meaning, true /*ignoreErrors*/, false /*dontResolveAlias*/, None /*location*/);
+            }
+            if entity_name_symbol.is_some() {
+                return entity_name_symbol;
+            }
+        }
+
+        if ast::is_expression_node(name) {
+            if ast::node_is_missing(name) {
+                // Missing entity name.
+                return None;
+            }
+            let is_jsdoc = ast::is_jsdoc_name_reference_context(name);
+            if ast::is_identifier(name) {
+                if ast::is_jsx_tag_name(name) && is_jsx_intrinsic_tag_name(name) {
+                    let symbol = self.get_intrinsic_tag_symbol(name.parent().unwrap());
+                    return if symbol == Some(self.unknown_symbol) { None } else { symbol };
+                }
+                let meaning = if is_jsdoc { SymbolFlags::Value | SymbolFlags::Type | SymbolFlags::Namespace } else { SymbolFlags::Value };
+                let mut location = None;
+                if is_jsdoc {
+                    location = ast::get_host_signature_from_jsdoc(name);
+                }
+                let mut result = self.resolve_entity_name(name, meaning, true /*ignoreErrors*/, true /*dontResolveAlias*/, location);
+                if result.is_none() && is_jsdoc {
+                    if let Some(container) = ast::find_ancestor(name, ast::is_class_or_interface_like) {
+                        let symbol = self.get_symbol_of_declaration(container).unwrap();
+                        // Handle unqualified references to class static members and class or interface instance members
+                        let exports = self.get_exports_of_symbol(symbol);
+                        let found = self.get_symbol(exports, name.text(), meaning);
+                        result = found.map(|s| self.get_merged_symbol(s));
+                        if result.is_none() {
+                            let declared_type = self.get_declared_type_of_symbol(symbol);
+                            result = self.get_property_of_type(declared_type, name.text());
+                        }
+                    }
+                }
+                return result;
+            } else if ast::is_private_identifier(name) {
+                return self.get_symbol_for_private_identifier_expression(name);
+            } else if ast::is_property_access_expression(name) || ast::is_qualified_name(name) {
+                let links = self.symbol_node_links.get(name);
+                if links.resolved_symbol.get().is_some() {
+                    return links.resolved_symbol.get();
+                }
+                if ast::is_property_access_expression(name) {
+                    self.check_property_access_expression(name, CheckMode::Normal, false /*writeOnly*/);
+                    if links.resolved_symbol.get().is_none() && !ast::is_private_identifier(name.name().unwrap()) {
+                        let expression_type = self.check_expression_cached(name.expression().unwrap());
+                        let key_type = self.get_literal_type_from_property_name(name.name().unwrap());
+                        let symbol = self.get_applicable_index_symbol(expression_type, key_type);
+                        links.resolved_symbol.set(symbol);
+                    }
+                } else {
+                    self.check_qualified_name(name, CheckMode::Normal);
+                }
+                if links.resolved_symbol.get().is_none() && is_jsdoc && ast::is_qualified_name(name) {
+                    return self.resolve_jsdoc_member_name(Some(name));
+                }
+                return links.resolved_symbol.get();
+            }
+        } else if ast::is_entity_name(name) && is_type_reference_identifier(name) {
+            let meaning = if name.parent().unwrap().kind == Kind::TypeReference { SymbolFlags::Type } else { SymbolFlags::Namespace };
+            let symbol = self.resolve_entity_name(name, meaning, true /*ignoreErrors*/, true /*dontResolveAlias*/, None /*location*/);
+            if symbol.is_some() && symbol != Some(self.unknown_symbol) {
+                return symbol;
+            }
+            if ast::is_name_of_heritage_clause_type_reference(name) {
+                return None;
+            }
+            return Some(self.get_unresolved_symbol_for_entity_name(name));
+        }
+
+        if name.parent().unwrap().kind == Kind::TypePredicate {
+            return self.resolve_entity_name(
+                name,
+                SymbolFlags::FunctionScopedVariable, /*meaning*/
+                true,                                /*ignoreErrors*/
+                false,                               /*dontResolveAlias*/
+                None,                                /*location*/
+            );
+        }
+        None
     }
 
     // checker.go:32408
     pub(crate) fn is_this_property_and_this_typed(&mut self, node: P<Node>) -> bool {
-        todo!()
+        if node.expression().unwrap().kind == Kind::ThisKeyword {
+            let container = self.get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
+            if ast::is_function_like(container) {
+                let containing_literal = get_containing_object_literal(container.unwrap());
+                if let Some(containing_literal) = containing_literal {
+                    let contextual_type = self.get_apparent_type_of_contextual_type(containing_literal, ContextFlags::None);
+                    let t = self.get_this_type_of_object_literal_from_contextual_type(containing_literal, contextual_type);
+                    return t.is_some() && !is_type_any(t);
+                }
+            }
+        }
+        false
     }
 
     // checker.go:32423
     pub(crate) fn get_type_of_node(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        if ast::is_source_file(node) && !ast::is_external_or_common_js_module(node.as_source_file_p()) {
+            return self.error_type;
+        }
+
+        if node.flags().intersects(NodeFlags::InWithStatement) {
+            // We cannot answer semantic questions within a with block, do not proceed any further
+            return self.error_type;
+        }
+
+        let (class_decl, is_implements) = ast::try_get_class_implementing_or_extending_heritage_clause_element(node);
+        let mut class_type = None;
+        if let Some(class_decl) = class_decl {
+            let symbol = self.get_symbol_of_declaration(class_decl).unwrap();
+            class_type = Some(self.get_declared_type_of_class_or_interface(symbol));
+        }
+
+        if ast::is_part_of_type_node(node) {
+            let type_from_type_node = self.get_type_from_type_node(node);
+            if let Some(class_type) = class_type {
+                return self.get_type_with_this_argument(type_from_type_node, class_type.as_interface_type().this_type.get(), false /*needApparentType*/);
+            }
+
+            return type_from_type_node;
+        }
+
+        if ast::is_expression_node(node) {
+            return self.get_regular_type_of_expression(node);
+        }
+
+        if let Some(class_type) = class_type {
+            if !is_implements {
+                // A SyntaxKind.ExpressionWithTypeArguments is considered a type node, except when it occurs in the
+                // extends clause of a class. We handle that case here.
+                let base_type = first_or_nil(&self.get_base_types(class_type));
+                if let Some(base_type) = base_type {
+                    return self.get_type_with_this_argument(base_type, class_type.as_interface_type().this_type.get(), false /*needApparentType*/);
+                }
+                return self.error_type;
+            }
+        }
+
+        if ast::is_type_declaration(node) {
+            // In this case, we call getSymbolOfDeclaration instead of getSymbolAtLocation because it is a declaration
+            let symbol = self.get_symbol_of_declaration(node).unwrap();
+            return self.get_declared_type_of_symbol(symbol);
+        }
+
+        if ast::is_type_declaration_name(node) {
+            let symbol = self.get_symbol_at_location(node, false /*ignoreErrors*/);
+            if let Some(symbol) = symbol {
+                return self.get_declared_type_of_symbol(symbol);
+            }
+            return self.error_type;
+        }
+
+        if ast::is_binding_element(node) {
+            let t = self.get_type_for_variable_like_declaration(node, true /*includeOptionality*/, CheckMode::Normal);
+            if let Some(t) = t {
+                return t;
+            }
+            return self.error_type;
+        }
+
+        if ast::is_declaration(node) {
+            // In this case, we call getSymbolOfDeclaration instead of getSymbolLAtocation because it is a declaration
+            let symbol = self.get_symbol_of_declaration(node);
+            if let Some(symbol) = symbol {
+                return self.get_type_of_symbol(symbol);
+            }
+            return self.error_type;
+        }
+
+        if ast::is_declaration_name_or_import_property_name(node) {
+            let symbol = self.get_symbol_at_location(node, false /*ignoreErrors*/);
+            if let Some(symbol) = symbol {
+                return self.get_type_of_symbol(symbol);
+            }
+            return self.error_type;
+        }
+
+        if ast::is_binding_pattern(node) {
+            let t = self.get_type_for_variable_like_declaration(node.parent().unwrap(), true /*includeOptionality*/, CheckMode::Normal);
+            if let Some(t) = t {
+                return t;
+            }
+            return self.error_type;
+        }
+
+        if is_in_right_side_of_import_or_export_assignment(node) {
+            let symbol = self.get_symbol_at_location(node, false /*ignoreErrors*/);
+            if let Some(symbol) = symbol {
+                let declared_type = self.get_declared_type_of_symbol(symbol);
+                if !self.is_error_type(declared_type) {
+                    return declared_type;
+                }
+                return self.get_type_of_symbol(symbol);
+            }
+        }
+
+        let parent = node.parent().unwrap();
+        if ast::is_meta_property(parent) && parent.as_meta_property().keyword_token == node.kind {
+            return self.check_meta_property_keyword(parent);
+        }
+
+        if ast::is_import_attributes(node) {
+            return self.check_import_attributes_expression(node);
+        }
+
+        self.error_type
     }
 
+    // SIG: contextual_type is nil-able in Go (callers pass getApparentTypeOfContextualType's result): P<Type> -> Option<P<Type>>.
     // checker.go:32535
-    pub(crate) fn get_this_type_of_object_literal_from_contextual_type(&mut self, containing_literal: P<Node>, contextual_type: P<Type>) -> Option<P<Type>> {
-        todo!()
+    pub(crate) fn get_this_type_of_object_literal_from_contextual_type(&mut self, containing_literal: P<Node>, contextual_type: Option<P<Type>>) -> Option<P<Type>> {
+        let mut literal = containing_literal;
+        let mut t = contextual_type;
+        while let Some(current) = t {
+            let this_type = self.get_this_type_from_contextual_type(current);
+            if this_type.is_some() {
+                return this_type;
+            }
+            if literal.parent().unwrap().kind != Kind::PropertyAssignment {
+                break;
+            }
+            literal = literal.parent().unwrap().parent().unwrap();
+            t = self.get_apparent_type_of_contextual_type(literal, ContextFlags::None);
+        }
+        None
     }
 
     // checker.go:32552
     pub(crate) fn get_this_type_from_contextual_type(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        self.map_type(t, |c, t| {
+            if t.flags().intersects(TypeFlags::Intersection) {
+                for &t in t.types() {
+                    let type_arg = c.get_this_type_argument(t);
+                    if type_arg.is_some() {
+                        return type_arg;
+                    }
+                }
+                None
+            } else {
+                c.get_this_type_argument(t)
+            }
+        })
     }
 
     // checker.go:32568
     pub(crate) fn get_this_type_argument(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        if t.object_flags().intersects(ObjectFlags::Reference) && t.as_type_reference().target.get() == Some(self.global_this_type) {
+            return Some(self.get_type_arguments(t)[0]);
+        }
+        None
     }
 
     // checker.go:32575
     pub(crate) fn get_applicable_index_infos(&mut self, t: P<Type>, key_type: P<Type>) -> Vec<P<IndexInfo>> {
-        todo!()
+        let index_infos = self.get_index_infos_of_type(t);
+        let mut result = Vec::new();
+        for info in index_infos {
+            if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) {
+                result.push(info);
+            }
+        }
+        result
     }
 
     // checker.go:32579
     pub(crate) fn get_applicable_index_symbol(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<Symbol>> {
-        todo!()
+        if let Some(info) = self.get_applicable_index_info(t, key_type) {
+            if info != self.any_base_type_index_info {
+                if info.index_symbol.get().is_none() {
+                    let mut declarations = Vec::new();
+                    if let Some(declaration) = info.declaration.get() {
+                        declarations = vec![declaration];
+                    } else {
+                        for info in self.get_index_infos_of_type(t) {
+                            if let Some(declaration) = info.declaration.get() {
+                                if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) {
+                                    declarations.push(declaration);
+                                }
+                            }
+                        }
+                    }
+                    if !declarations.is_empty() {
+                        let symbol = self.new_symbol(SymbolFlags::Property, InternalSymbolNameIndex);
+                        symbol.check_flags.set(symbol.check_flags.get() | CheckFlags::IndexSymbol);
+                        symbol.value_declaration.set(Some(declarations[0]));
+                        *symbol.declarations.borrow_mut() = declarations;
+                        symbol.parent.set(t.symbol());
+                        let links = self.value_symbol_links.get(symbol);
+                        links.resolved_type.set(info.value_type.get());
+                        info.index_symbol.set(Some(symbol));
+                    }
+                }
+                return info.index_symbol.get();
+            }
+        }
+        None
     }
 
     // checker.go:32608
     pub(crate) fn get_regular_type_of_expression(&mut self, expr: P<Node>) -> P<Type> {
-        todo!()
+        let mut expr = expr;
+        if ast::is_right_side_of_qualified_name_or_property_access(expr) {
+            expr = expr.parent().unwrap();
+        }
+        let t = self.get_type_of_expression(expr);
+        self.get_regular_type_of_literal_type(t)
     }
 
     // checker.go:32615
     pub(crate) fn contains_arguments_reference(&mut self, node: P<Node>) -> bool {
-        todo!()
+        let Some(body) = node.body() else {
+            return false;
+        };
+
+        if let Some(&contains_arguments) = self.cached_arguments_referenced.get(&node) {
+            return contains_arguments;
+        }
+
+        fn visit(c: &mut Checker, node: Option<P<Node>>) -> bool {
+            let Some(node) = node else {
+                return false;
+            };
+            match node.kind {
+                Kind::Identifier => {
+                    // Go: c.IsArgumentsSymbol(symbol) is `symbol == c.argumentsSymbol` (services.go).
+                    return node.text() == c.arguments_symbol.name() && c.get_resolved_symbol(node) == c.arguments_symbol;
+                }
+                Kind::PropertyDeclaration | Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => {
+                    if ast::is_computed_property_name(node.name().unwrap()) {
+                        return visit(c, node.name());
+                    }
+                }
+                Kind::PropertyAccessExpression | Kind::ElementAccessExpression => {
+                    return visit(c, node.expression());
+                }
+                Kind::PropertyAssignment => {
+                    return visit(c, node.initializer());
+                }
+                _ => {}
+            }
+            if node_starts_new_lexical_environment(node) || ast::is_part_of_type_node(node) {
+                return false;
+            }
+            node.for_each_child(&mut |child| visit(c, Some(child)))
+        }
+
+        let contains_arguments = visit(self, Some(body));
+        self.cached_arguments_referenced.insert(node, contains_arguments);
+        contains_arguments
     }
 
     // checker.go:32652
     pub fn get_type_at_location(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        self.get_type_of_node(ast::get_reparsed_node_for_node(node).unwrap())
     }
 
+    // The emit resolver (emitresolver.go) is not ported: this returns the placeholder type so that callers
+    // compile. Go memoizes one resolver per checker via emitResolverOnce.
     // checker.go:32656
     pub fn get_emit_resolver(&mut self) -> P<EmitResolver> {
-        todo!()
+        P::new(EmitResolver {})
     }
 
     // checker.go:32664
     pub fn get_aliased_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol> {
-        todo!()
+        self.resolve_alias(symbol)
     }
 }
