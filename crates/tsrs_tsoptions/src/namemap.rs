@@ -4,13 +4,13 @@ use rustc_hash::FxHashMap;
 use tsrs_core::collections::{OrderedMap, OrderedMapExt};
 
 use crate::commandlineoption::CommandLineOption;
-use crate::declsbuild::BuildOpts;
-use crate::declscompiler::OptionsDeclarations;
-use crate::declswatch::OptionsForWatch;
+use crate::declsbuild::BUILD_OPTS;
+use crate::declscompiler::OPTIONS_DECLARATIONS;
+use crate::declswatch::OPTIONS_FOR_WATCH;
 
-pub static CompilerNameMap: LazyLock<NameMap> = LazyLock::new(|| get_name_map_from_list(&OptionsDeclarations));
-pub static BuildNameMap: LazyLock<NameMap> = LazyLock::new(|| get_name_map_from_list(&BuildOpts));
-pub static WatchNameMap: LazyLock<NameMap> = LazyLock::new(|| get_name_map_from_list(&OptionsForWatch));
+pub static COMPILER_NAME_MAP: LazyLock<NameMap> = LazyLock::new(|| get_name_map_from_list(&OPTIONS_DECLARATIONS));
+pub static BUILD_NAME_MAP: LazyLock<NameMap> = LazyLock::new(|| get_name_map_from_list(&BUILD_OPTS));
+pub static WATCH_NAME_MAP: LazyLock<NameMap> = LazyLock::new(|| get_name_map_from_list(&OPTIONS_FOR_WATCH));
 
 pub fn get_name_map_from_list(opt_decls: &[&'static CommandLineOption]) -> NameMap {
     let mut options_names = OrderedMap::with_capacity_and_hasher(opt_decls.len(), Default::default());

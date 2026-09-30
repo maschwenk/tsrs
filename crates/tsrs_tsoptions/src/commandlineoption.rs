@@ -9,8 +9,8 @@ use tsrs_core::{
 use tsrs_diagnostics::Message;
 
 use crate::enummaps::{
-    fallbackEnumMap, jsxOptionMap, moduleDetectionOptionMap, moduleOptionMap, moduleResolutionOptionMap, newLineOptionMap,
-    targetOptionMap, watchDirectoryEnumMap, watchFileEnumMap, LibMap,
+    FALLBACK_ENUM_MAP, JSX_OPTION_MAP, MODULE_DETECTION_OPTION_MAP, MODULE_OPTION_MAP, MODULE_RESOLUTION_OPTION_MAP, NEW_LINE_OPTION_MAP,
+    TARGET_OPTION_MAP, WATCH_DIRECTORY_ENUM_MAP, WATCH_FILE_ENUM_MAP, LIB_MAP,
 };
 use crate::tsconfigparsing::CommandLineOptionNameMap;
 
@@ -108,7 +108,7 @@ pub struct CommandLineOption {
 
     // used for CommandLineOptionTypeList
     pub(crate) list_preserve_falsy_values: bool,
-    // used for compilerOptionsDeclaration
+    // used for COMPILER_OPTIONS_DECLARATION
     pub element_options: Option<CommandLineOptionNameMap>,
 }
 
@@ -153,21 +153,24 @@ impl CommandLineOption {
         if self.kind != CommandLineOptionKind::Enum {
             return None;
         }
-        commandLineOptionDeprecated.get(self.name)
+        COMMAND_LINE_OPTION_DEPRECATED.get(self.name)
     }
 
     pub fn enum_map(&self) -> Option<&'static OrderedMap<&'static str, CompilerOptionsValue>> {
         if self.kind != CommandLineOptionKind::Enum {
             return None;
         }
-        commandLineOptionEnumMap.get(self.name).map(|m| &**m)
+        COMMAND_LINE_OPTION_ENUM_MAP.get(self.name).map(|m| {
+            let m: &'static LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = m;
+            &**m
+        })
     }
 
     pub fn elements(&self) -> Option<&'static CommandLineOption> {
         if self.kind != CommandLineOptionKind::List && self.kind != CommandLineOptionKind::ListOrElement {
             return None;
         }
-        commandLineOptionElements.get(self.name)
+        COMMAND_LINE_OPTION_ELEMENTS.get(self.name)
     }
 
     pub fn disallow_null_or_undefined(&self) -> bool {
@@ -176,7 +179,7 @@ impl CommandLineOption {
 }
 
 // CommandLineOption.Elements()
-pub(crate) static commandLineOptionElements: LazyLock<FxHashMap<&'static str, CommandLineOption>> = LazyLock::new(|| {
+pub(crate) static COMMAND_LINE_OPTION_ELEMENTS: LazyLock<FxHashMap<&'static str, CommandLineOption>> = LazyLock::new(|| {
     let mut m = FxHashMap::default();
     m.insert(
         "lib",
@@ -255,25 +258,25 @@ pub(crate) static commandLineOptionElements: LazyLock<FxHashMap<&'static str, Co
 });
 
 // CommandLineOption.EnumMap()
-pub(crate) static commandLineOptionEnumMap: LazyLock<
+pub(crate) static COMMAND_LINE_OPTION_ENUM_MAP: LazyLock<
     FxHashMap<&'static str, &'static LazyLock<OrderedMap<&'static str, CompilerOptionsValue>>>,
 > = LazyLock::new(|| {
     let mut m: FxHashMap<&'static str, &'static LazyLock<OrderedMap<&'static str, CompilerOptionsValue>>> = FxHashMap::default();
-    m.insert("lib", &LibMap);
-    m.insert("moduleResolution", &moduleResolutionOptionMap);
-    m.insert("module", &moduleOptionMap);
-    m.insert("target", &targetOptionMap);
-    m.insert("moduleDetection", &moduleDetectionOptionMap);
-    m.insert("jsx", &jsxOptionMap);
-    m.insert("newLine", &newLineOptionMap);
-    m.insert("watchFile", &watchFileEnumMap);
-    m.insert("watchDirectory", &watchDirectoryEnumMap);
-    m.insert("fallbackPolling", &fallbackEnumMap);
+    m.insert("lib", &LIB_MAP);
+    m.insert("moduleResolution", &MODULE_RESOLUTION_OPTION_MAP);
+    m.insert("module", &MODULE_OPTION_MAP);
+    m.insert("target", &TARGET_OPTION_MAP);
+    m.insert("moduleDetection", &MODULE_DETECTION_OPTION_MAP);
+    m.insert("jsx", &JSX_OPTION_MAP);
+    m.insert("newLine", &NEW_LINE_OPTION_MAP);
+    m.insert("watchFile", &WATCH_FILE_ENUM_MAP);
+    m.insert("watchDirectory", &WATCH_DIRECTORY_ENUM_MAP);
+    m.insert("fallbackPolling", &FALLBACK_ENUM_MAP);
     m
 });
 
 // CommandLineOption.DeprecatedKeys()
-pub(crate) static commandLineOptionDeprecated: LazyLock<FxHashMap<&'static str, FxHashSet<&'static str>>> = LazyLock::new(|| {
+pub(crate) static COMMAND_LINE_OPTION_DEPRECATED: LazyLock<FxHashMap<&'static str, FxHashSet<&'static str>>> = LazyLock::new(|| {
     let mut m = FxHashMap::default();
     m.insert("module", ["none", "amd", "system", "umd"].into_iter().collect());
     m.insert("moduleResolution", ["node", "classic", "node10"].into_iter().collect());

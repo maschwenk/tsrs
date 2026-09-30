@@ -3,15 +3,15 @@ use std::sync::LazyLock;
 use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, DefaultValueDescription};
 use crate::tsconfigparsing::command_line_options_to_map;
 
-pub(crate) static typeAcquisitionDeclaration: LazyLock<CommandLineOption> = LazyLock::new(|| CommandLineOption {
+pub(crate) static TYPE_ACQUISITION_DECLARATION: LazyLock<CommandLineOption> = LazyLock::new(|| CommandLineOption {
     name: "typeAcquisition",
     kind: CommandLineOptionKind::Object,
-    element_options: Some(command_line_options_to_map(&typeAcquisitionDecls)),
+    element_options: Some(command_line_options_to_map(&TYPE_ACQUISITION_DECLS)),
     ..CommandLineOption::DEFAULT
 });
 
 // Do not delete this without updating the website's tsconfig generation.
-pub(crate) static typeAcquisitionDecls_items: [CommandLineOption; 4] = [
+pub(crate) static TYPE_ACQUISITION_DECLS_ITEMS: [CommandLineOption; 4] = [
     CommandLineOption {
         name: "enable",
         kind: CommandLineOptionKind::Boolean,
@@ -28,5 +28,5 @@ pub(crate) static typeAcquisitionDecls_items: [CommandLineOption; 4] = [
     },
 ];
 
-pub(crate) static typeAcquisitionDecls: LazyLock<Vec<&'static CommandLineOption>> =
-    LazyLock::new(|| typeAcquisitionDecls_items.iter().collect());
+pub(crate) static TYPE_ACQUISITION_DECLS: LazyLock<Vec<&'static CommandLineOption>> =
+    LazyLock::new(|| TYPE_ACQUISITION_DECLS_ITEMS.iter().collect());

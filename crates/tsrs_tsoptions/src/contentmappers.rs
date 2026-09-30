@@ -39,7 +39,7 @@ pub struct Mapper {
 // Content mappers only run with --runExternalCode, which executes third-party programs; this port does not
 // support them (only their tsconfig validation is ported).
 pub(crate) fn resolve_content_mapper_manifest(
-    host: &dyn ParseConfigHost,
+    host: &'static dyn ParseConfigHost,
     containing_file: &str,
     package_name: &str,
 ) -> (Manifest, String, Option<P<Diagnostic>>) {

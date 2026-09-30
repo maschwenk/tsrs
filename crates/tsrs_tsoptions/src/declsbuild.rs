@@ -5,10 +5,10 @@ use tsrs_diagnostics as diagnostics;
 
 use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, DefaultValueDescription, ExtraValidation};
 
-use crate::declscompiler::commonOptionsWithBuild;
+use crate::declscompiler::COMMON_OPTIONS_WITH_BUILD;
 
 // BEGIN GENERATED
-pub static TscBuildOption: CommandLineOption = CommandLineOption {
+pub static TSC_BUILD_OPTION: CommandLineOption = CommandLineOption {
     name: "build",
     kind: CommandLineOptionKind::Boolean,
     short_name: "b",
@@ -19,7 +19,7 @@ pub static TscBuildOption: CommandLineOption = CommandLineOption {
     ..CommandLineOption::DEFAULT
 };
 
-static OptionsForBuild_items: [CommandLineOption; 6] = [
+static OPTIONS_FOR_BUILD_ITEMS: [CommandLineOption; 6] = [
     CommandLineOption {
         name: "verbose",
         short_name: "v",
@@ -74,18 +74,18 @@ static OptionsForBuild_items: [CommandLineOption; 6] = [
     },
 ];
 
-pub static OptionsForBuild: LazyLock<Vec<&'static CommandLineOption>> = LazyLock::new(|| {
+pub static OPTIONS_FOR_BUILD: LazyLock<Vec<&'static CommandLineOption>> = LazyLock::new(|| {
     vec![
-        &TscBuildOption,
-        &OptionsForBuild_items[0],
-        &OptionsForBuild_items[1],
-        &OptionsForBuild_items[2],
-        &OptionsForBuild_items[3],
-        &OptionsForBuild_items[4],
-        &OptionsForBuild_items[5],
+        &TSC_BUILD_OPTION,
+        &OPTIONS_FOR_BUILD_ITEMS[0],
+        &OPTIONS_FOR_BUILD_ITEMS[1],
+        &OPTIONS_FOR_BUILD_ITEMS[2],
+        &OPTIONS_FOR_BUILD_ITEMS[3],
+        &OPTIONS_FOR_BUILD_ITEMS[4],
+        &OPTIONS_FOR_BUILD_ITEMS[5],
     ]
 });
 // END GENERATED
 
-pub static BuildOpts: LazyLock<Vec<&'static CommandLineOption>> =
-    LazyLock::new(|| commonOptionsWithBuild.iter().chain(OptionsForBuild.iter()).copied().collect());
+pub static BUILD_OPTS: LazyLock<Vec<&'static CommandLineOption>> =
+    LazyLock::new(|| COMMON_OPTIONS_WITH_BUILD.iter().chain(OPTIONS_FOR_BUILD.iter()).copied().collect());

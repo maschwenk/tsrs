@@ -18,7 +18,7 @@ fn new_map(entries: &[(&'static str, CompilerOptionsValue)]) -> OrderedMap<&'sta
     m
 }
 
-pub static LibMap: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
+pub static LIB_MAP: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
     new_map(&[
         // JavaScript only
         ("es5", CompilerOptionsValue::String("lib.es5.d.ts".to_string())),
@@ -144,21 +144,21 @@ pub static LibMap: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = La
     ])
 });
 
-pub static Libs: LazyLock<Vec<&'static str>> = LazyLock::new(|| LibMap.keys().copied().collect());
-pub static LibFilesSet: LazyLock<FxHashSet<String>> =
-    LazyLock::new(|| LibMap.values().map(|s| s.as_str().unwrap().to_string()).collect());
+pub static LIBS: LazyLock<Vec<&'static str>> = LazyLock::new(|| LIB_MAP.keys().copied().collect());
+pub static LIB_FILES_SET: LazyLock<FxHashSet<String>> =
+    LazyLock::new(|| LIB_MAP.values().map(|s| s.as_str().unwrap().to_string()).collect());
 
 pub fn get_lib_file_name(lib_name: &str) -> Option<String> {
     // checks if the libName is a valid lib name or file name and converts the lib name to the filename if needed
     let lib_name = tspath::to_file_name_lower_case(lib_name);
-    if LibFilesSet.contains(lib_name.as_str()) {
+    if LIB_FILES_SET.contains(lib_name.as_str()) {
         return Some(lib_name.to_string());
     }
-    let lib = LibMap.get(lib_name.as_str())?;
+    let lib = LIB_MAP.get(lib_name.as_str())?;
     Some(lib.as_str().unwrap().to_string())
 }
 
-pub(crate) static moduleResolutionOptionMap: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
+pub(crate) static MODULE_RESOLUTION_OPTION_MAP: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
     new_map(&[
         ("node16", CompilerOptionsValue::ModuleResolutionKind(ModuleResolutionKind::Node16)),
         ("nodenext", CompilerOptionsValue::ModuleResolutionKind(ModuleResolutionKind::NodeNext)),
@@ -169,7 +169,7 @@ pub(crate) static moduleResolutionOptionMap: LazyLock<OrderedMap<&'static str, C
     ])
 });
 
-pub(crate) static targetOptionMap: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
+pub(crate) static TARGET_OPTION_MAP: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
     new_map(&[
         ("es5", CompilerOptionsValue::ScriptTarget(ScriptTarget::ES5)),
         ("es6", CompilerOptionsValue::ScriptTarget(ScriptTarget::ES2015)),
@@ -189,7 +189,7 @@ pub(crate) static targetOptionMap: LazyLock<OrderedMap<&'static str, CompilerOpt
     ])
 });
 
-pub(crate) static moduleOptionMap: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
+pub(crate) static MODULE_OPTION_MAP: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
     new_map(&[
         ("commonjs", CompilerOptionsValue::ModuleKind(ModuleKind::CommonJS)),
         ("amd", CompilerOptionsValue::ModuleKind(ModuleKind::AMD)),
@@ -208,7 +208,7 @@ pub(crate) static moduleOptionMap: LazyLock<OrderedMap<&'static str, CompilerOpt
     ])
 });
 
-pub(crate) static moduleDetectionOptionMap: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
+pub(crate) static MODULE_DETECTION_OPTION_MAP: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
     new_map(&[
         ("auto", CompilerOptionsValue::ModuleDetectionKind(ModuleDetectionKind::Auto)),
         ("legacy", CompilerOptionsValue::ModuleDetectionKind(ModuleDetectionKind::Legacy)),
@@ -216,7 +216,7 @@ pub(crate) static moduleDetectionOptionMap: LazyLock<OrderedMap<&'static str, Co
     ])
 });
 
-pub(crate) static jsxOptionMap: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
+pub(crate) static JSX_OPTION_MAP: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
     new_map(&[
         ("preserve", CompilerOptionsValue::JsxEmit(JsxEmit::Preserve)),
         ("react-native", CompilerOptionsValue::JsxEmit(JsxEmit::ReactNative)),
@@ -226,14 +226,14 @@ pub(crate) static jsxOptionMap: LazyLock<OrderedMap<&'static str, CompilerOption
     ])
 });
 
-pub(crate) static newLineOptionMap: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
+pub(crate) static NEW_LINE_OPTION_MAP: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
     new_map(&[
         ("crlf", CompilerOptionsValue::NewLineKind(NewLineKind::CRLF)),
         ("lf", CompilerOptionsValue::NewLineKind(NewLineKind::LF)),
     ])
 });
 
-pub(crate) static targetToLibMap: LazyLock<FxHashMap<ScriptTarget, &'static str>> = LazyLock::new(|| {
+pub(crate) static TARGET_TO_LIB_MAP: LazyLock<FxHashMap<ScriptTarget, &'static str>> = LazyLock::new(|| {
     let mut m = FxHashMap::default();
     m.insert(ScriptTarget::ESNext, "lib.esnext.full.d.ts");
     m.insert(ScriptTarget::ES2026, "lib.es2026.full.d.ts");
@@ -252,17 +252,17 @@ pub(crate) static targetToLibMap: LazyLock<FxHashMap<ScriptTarget, &'static str>
 });
 
 pub fn target_to_lib_map() -> &'static FxHashMap<ScriptTarget, &'static str> {
-    &targetToLibMap
+    &TARGET_TO_LIB_MAP
 }
 
 pub fn get_default_lib_file_name(options: &CompilerOptions) -> &'static str {
-    match targetToLibMap.get(&options.get_emit_script_target()) {
+    match TARGET_TO_LIB_MAP.get(&options.get_emit_script_target()) {
         Some(name) => name,
         None => "lib.d.ts",
     }
 }
 
-pub(crate) static watchFileEnumMap: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
+pub(crate) static WATCH_FILE_ENUM_MAP: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
     new_map(&[
         ("fixedpollinginterval", CompilerOptionsValue::WatchFileKind(WatchFileKind::FixedPollingInterval)),
         ("prioritypollinginterval", CompilerOptionsValue::WatchFileKind(WatchFileKind::PriorityPollingInterval)),
@@ -273,7 +273,7 @@ pub(crate) static watchFileEnumMap: LazyLock<OrderedMap<&'static str, CompilerOp
     ])
 });
 
-pub(crate) static watchDirectoryEnumMap: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
+pub(crate) static WATCH_DIRECTORY_ENUM_MAP: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
     new_map(&[
         ("usefsevents", CompilerOptionsValue::WatchDirectoryKind(WatchDirectoryKind::UseFsEvents)),
         ("fixedpollinginterval", CompilerOptionsValue::WatchDirectoryKind(WatchDirectoryKind::FixedPollingInterval)),
@@ -282,7 +282,7 @@ pub(crate) static watchDirectoryEnumMap: LazyLock<OrderedMap<&'static str, Compi
     ])
 });
 
-pub(crate) static fallbackEnumMap: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
+pub(crate) static FALLBACK_ENUM_MAP: LazyLock<OrderedMap<&'static str, CompilerOptionsValue>> = LazyLock::new(|| {
     new_map(&[
         ("fixedinterval", CompilerOptionsValue::PollingKind(PollingKind::FixedInterval)),
         ("priorityinterval", CompilerOptionsValue::PollingKind(PollingKind::PriorityInterval)),

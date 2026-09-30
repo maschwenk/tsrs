@@ -101,6 +101,12 @@ def convert_literal(body, indent):
     return out
 
 
+def scream(n):
+    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", n)
+    s = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s)
+    return s.upper()
+
+
 def main():
     go = open(sys.argv[1]).read()
     out = []
@@ -108,10 +114,12 @@ def main():
     for m in re.finditer(r"^var (\w+) = CommandLineOption\{\n(.*?)\n\}", go, re.S | re.M):
         name, body = m.group(1), m.group(2)
         vis = "pub " if name[0].isupper() else "pub(crate) "
+        name = scream(name)
         out.append(f"{vis}static {name}: CommandLineOption = {convert_literal(body, 0)};\n")
     for m in re.finditer(r"^var (\w+) = \[\]\*CommandLineOption\{\n(.*?)\n\}\n", go, re.S | re.M):
         name, body = m.group(1), m.group(2)
         vis = "pub " if name[0].isupper() else "pub(crate) "
+        name = scream(name)
         items = []
         # split top-level elements
         depth = 0
@@ -140,7 +148,7 @@ def main():
         lits = [i for i in items if i[0] == "lit"]
         # Literal elements go into a static array (stable addresses); the list itself is a
         # LazyLock<Vec<&'static CommandLineOption>> preserving the Go order, including &Named refs.
-        arr = f"{name}_items"
+        arr = f"{name}_ITEMS"
         s = f"static {arr}: [CommandLineOption; {len(lits)}] = [\n"
         for _, body in lits:
             s += "    " + convert_literal(body, 4) + ",\n"
@@ -150,7 +158,7 @@ def main():
         li = 0
         for kind, v in items:
             if kind == "ref":
-                s += f"        &{v},\n"
+                s += f"        &{scream(v)},\n"
             else:
                 s += f"        &{arr}[{li}],\n"
                 li += 1

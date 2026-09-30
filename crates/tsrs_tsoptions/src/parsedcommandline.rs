@@ -15,8 +15,8 @@ use crate::parsedoptions::ParsedOptions;
 use crate::tsconfigparsing::{get_file_names_from_config_specs, TsConfigSourceFile};
 use crate::wildcarddirectories::get_wildcard_directories;
 
-const fileGlobPattern: &str = "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json}";
-const recursiveFileGlobPattern: &str = "**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json}";
+const FILE_GLOB_PATTERN: &str = "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json}";
+const RECURSIVE_FILE_GLOB_PATTERN: &str = "**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json}";
 
 impl ParsedCommandLine {
     // fileGlobPatterns returns the include file glob patterns for this command line, augmenting the
@@ -25,7 +25,7 @@ impl ParsedCommandLine {
     pub(crate) fn file_glob_patterns(&self) -> (String, String) {
         let mapper_extensions = self.content_mapper_extensions();
         if mapper_extensions.is_empty() {
-            return (fileGlobPattern.to_string(), recursiveFileGlobPattern.to_string());
+            return (FILE_GLOB_PATTERN.to_string(), RECURSIVE_FILE_GLOB_PATTERN.to_string());
         }
         let mut extensions: Vec<&str> = Vec::with_capacity(9 + mapper_extensions.len());
         extensions.extend(["js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts", "json"]);
@@ -121,7 +121,7 @@ impl ParsedCommandLine {
     pub fn config_name(&self) -> &str {
         match self.config_file {
             None => "",
-            Some(config_file) => config_file.source_file.file_name(),
+            Some(config_file) => config_file.get().source_file.get().file_name(),
         }
     }
 

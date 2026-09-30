@@ -9,19 +9,19 @@ use tsrs_diagnostics::Message;
 use tsrs_vfs::FS;
 
 use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, CompilerOptionsValue};
-use crate::declsbuild::TscBuildOption;
+use crate::declsbuild::TSC_BUILD_OPTION;
 use crate::diagnostics::{
-    buildOptionsDidYouMeanDiagnostics, watchOptionsDidYouMeanDiagnostics, AlternateModeDiagnostics,
-    CompilerOptionsDidYouMeanDiagnostics, ParseCommandLineWorkerDiagnostics,
+    BUILD_OPTIONS_DID_YOU_MEAN_DIAGNOSTICS, WATCH_OPTIONS_DID_YOU_MEAN_DIAGNOSTICS, AlternateModeDiagnostics,
+    COMPILER_OPTIONS_DID_YOU_MEAN_DIAGNOSTICS, ParseCommandLineWorkerDiagnostics,
 };
 use crate::errors::{create_diagnostic_for_invalid_enum_type, get_compiler_option_value_type_string};
-use crate::namemap::{get_name_map_from_list, BuildNameMap, CompilerNameMap, NameMap, WatchNameMap};
+use crate::namemap::{get_name_map_from_list, BUILD_NAME_MAP, COMPILER_NAME_MAP, NameMap, WATCH_NAME_MAP};
 use crate::parsedbuildcommandline::ParsedBuildCommandLine;
 use crate::parsedcommandline::{new_parsed_command_line, ParsedCommandLine};
 use crate::parsinghelpers::{
     convert_to_options_with_absolute_paths, parse_compiler_options, BuildOptionsParser, CompilerOptionsParser, WatchOptionsParser,
 };
-use crate::tsconfigparsing::{convert_map_to_options, validate_json_option_value, CommandLineCompilerOptionsMap, ParseConfigHost};
+use crate::tsconfigparsing::{convert_map_to_options, validate_json_option_value, COMMAND_LINE_COMPILER_OPTIONS_MAP, ParseConfigHost};
 
 impl CommandLineParser {
     pub(crate) fn alternate_mode(&self) -> Option<&'static AlternateModeDiagnostics> {
@@ -52,12 +52,12 @@ pub(crate) struct CommandLineParser {
     pub(crate) response_file_stack: FxHashSet<Path>,
 }
 
-pub fn parse_command_line(command_line: &[String], host: &dyn ParseConfigHost) -> ParsedCommandLine {
+pub fn parse_command_line(command_line: &[String], host: &'static dyn ParseConfigHost) -> ParsedCommandLine {
     let parser =
-        parse_command_line_worker(&CompilerOptionsDidYouMeanDiagnostics, command_line, Some(host.fs()), host.get_current_directory());
+        parse_command_line_worker(&COMPILER_OPTIONS_DID_YOU_MEAN_DIAGNOSTICS, command_line, Some(host.fs()), host.get_current_directory());
     let options = convert_to_options_with_absolute_paths(
         parser.options.clone(),
-        &CommandLineCompilerOptionsMap,
+        &COMMAND_LINE_COMPILER_OPTIONS_MAP,
         host.get_current_directory(),
     );
     let compiler_options = convert_map_to_options(&options, CompilerOptionsParser(CompilerOptions::default())).0;
@@ -77,14 +77,14 @@ pub fn parse_command_line(command_line: &[String], host: &dyn ParseConfigHost) -
     result
 }
 
-pub fn parse_build_command_line(command_line: &[String], host: &dyn ParseConfigHost) -> ParsedBuildCommandLine {
+pub fn parse_build_command_line(command_line: &[String], host: &'static dyn ParseConfigHost) -> ParsedBuildCommandLine {
     let parser =
-        parse_command_line_worker(&buildOptionsDidYouMeanDiagnostics, command_line, Some(host.fs()), host.get_current_directory());
+        parse_command_line_worker(&BUILD_OPTIONS_DID_YOU_MEAN_DIAGNOSTICS, command_line, Some(host.fs()), host.get_current_directory());
     let mut compiler_options = CompilerOptions::default();
     for (key, value) in parser.options.iter() {
-        let build_option = BuildNameMap.get(key);
-        let is_tsc_build_option = build_option.is_some_and(|o| std::ptr::eq(o, &TscBuildOption));
-        let same_as_compiler_option = match (build_option, CompilerNameMap.get(key)) {
+        let build_option = BUILD_NAME_MAP.get(key);
+        let is_tsc_build_option = build_option.is_some_and(|o| std::ptr::eq(o, &TSC_BUILD_OPTION));
+        let same_as_compiler_option = match (build_option, COMPILER_NAME_MAP.get(key)) {
             (Some(a), Some(b)) => std::ptr::eq(a, b),
             (None, None) => true,
             _ => false,
@@ -169,13 +169,13 @@ impl CommandLineParser {
                     if let Some(opt) = opt {
                         i = self.parse_option_value(args, i, opt, self.worker_diagnostics.option_type_mismatch_diagnostic);
                     } else {
-                        let watch_opt = WatchNameMap.get_option_declaration_from_name(input_option_name, true /*allowShort*/);
+                        let watch_opt = WATCH_NAME_MAP.get_option_declaration_from_name(input_option_name, true /*allowShort*/);
                         if let Some(watch_opt) = watch_opt {
                             i = self.parse_option_value(
                                 args,
                                 i,
                                 watch_opt,
-                                watchOptionsDidYouMeanDiagnostics.option_type_mismatch_diagnostic,
+                                WATCH_OPTIONS_DID_YOU_MEAN_DIAGNOSTICS.option_type_mismatch_diagnostic,
                             );
                         } else {
                             let err = self.create_unknown_option_error(input_option_name, s, None, None);

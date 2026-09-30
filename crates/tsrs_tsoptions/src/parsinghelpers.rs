@@ -12,12 +12,12 @@ use tsrs_diagnostics::Message;
 use crate::commandlineoption::{CommandLineOptionKind, CompilerOptionsValue};
 use crate::contentmappers::Mapper;
 use crate::enummaps::{
-    fallbackEnumMap, jsxOptionMap, moduleDetectionOptionMap, moduleOptionMap, moduleResolutionOptionMap, newLineOptionMap,
-    targetOptionMap, watchDirectoryEnumMap, watchFileEnumMap,
+    FALLBACK_ENUM_MAP, JSX_OPTION_MAP, MODULE_DETECTION_OPTION_MAP, MODULE_OPTION_MAP, MODULE_RESOLUTION_OPTION_MAP, NEW_LINE_OPTION_MAP,
+    TARGET_OPTION_MAP, WATCH_DIRECTORY_ENUM_MAP, WATCH_FILE_ENUM_MAP,
 };
 use crate::errors::{extra_key_diagnostics, extra_key_did_you_mean_diagnostics};
-use crate::namemap::BuildNameMap;
-use crate::tsconfigparsing::{CommandLineCompilerOptionsMap, CommandLineOptionNameMap};
+use crate::namemap::BUILD_NAME_MAP;
+use crate::tsconfigparsing::{COMMAND_LINE_COMPILER_OPTIONS_MAP, CommandLineOptionNameMap};
 use tsrs_ast::new_compiler_diagnostic;
 
 pub fn parse_tristate(value: &CompilerOptionsValue) -> Tristate {
@@ -289,7 +289,7 @@ pub fn parse_compiler_options(key: &str, value: &CompilerOptionsValue, all_optio
 
 // Go `parseCompilerOptions`.
 pub(crate) fn parse_compiler_options_worker(key: &str, value: &CompilerOptionsValue, all_options: &mut CompilerOptions) -> bool {
-    let option = CommandLineCompilerOptionsMap.get(key);
+    let option = COMMAND_LINE_COMPILER_OPTIONS_MAP.get(key);
     let key = match option {
         Some(option) => option.name,
         None => key,
@@ -388,8 +388,11 @@ pub(crate) fn parse_compiler_options_worker(key: &str, value: &CompilerOptionsVa
         "paths" => all_options.paths = parse_string_map(value),
         "plugins" => {
             // Native TypeScript does not load plugins; retain them only so tools can report the incompatibility.
+            if let CompilerOptionsValue::NilArray = value {
+                all_options.plugins = None;
+            }
             if let CompilerOptionsValue::Array(plugins) = value {
-                all_options.plugins = plugins
+                all_options.plugins = Some(plugins
                     .iter()
                     .map(|plugin| {
                         if let CompilerOptionsValue::Object(plugin_map) = plugin {
@@ -399,7 +402,7 @@ pub(crate) fn parse_compiler_options_worker(key: &str, value: &CompilerOptionsVa
                         }
                         PluginImport::default()
                     })
-                    .collect();
+                    .collect());
             }
         }
         "preserveWatchOutput" => all_options.preserve_watch_output = parse_tristate(value),
@@ -485,12 +488,12 @@ macro_rules! float_or_int32_to_flag {
     };
 }
 
-float_or_int32_to_flag!(float_or_int32_to_jsx_emit, JsxEmit, jsxOptionMap);
-float_or_int32_to_flag!(float_or_int32_to_module_kind, ModuleKind, moduleOptionMap);
-float_or_int32_to_flag!(float_or_int32_to_module_detection_kind, ModuleDetectionKind, moduleDetectionOptionMap);
-float_or_int32_to_flag!(float_or_int32_to_module_resolution_kind, ModuleResolutionKind, moduleResolutionOptionMap);
-float_or_int32_to_flag!(float_or_int32_to_script_target, ScriptTarget, targetOptionMap);
-float_or_int32_to_flag!(float_or_int32_to_new_line_kind, NewLineKind, newLineOptionMap);
+float_or_int32_to_flag!(float_or_int32_to_jsx_emit, JsxEmit, JSX_OPTION_MAP);
+float_or_int32_to_flag!(float_or_int32_to_module_kind, ModuleKind, MODULE_OPTION_MAP);
+float_or_int32_to_flag!(float_or_int32_to_module_detection_kind, ModuleDetectionKind, MODULE_DETECTION_OPTION_MAP);
+float_or_int32_to_flag!(float_or_int32_to_module_resolution_kind, ModuleResolutionKind, MODULE_RESOLUTION_OPTION_MAP);
+float_or_int32_to_flag!(float_or_int32_to_script_target, ScriptTarget, TARGET_OPTION_MAP);
+float_or_int32_to_flag!(float_or_int32_to_new_line_kind, NewLineKind, NEW_LINE_OPTION_MAP);
 
 pub fn parse_watch_options(key: &str, value: &CompilerOptionsValue, all_options: &mut WatchOptions) -> Vec<P<Diagnostic>> {
     match key {
@@ -539,7 +542,7 @@ pub fn parse_build_options(key: &str, value: &CompilerOptionsValue, all_options:
     if value.is_null() {
         return Vec::new();
     }
-    let option = BuildNameMap.get(key);
+    let option = BUILD_NAME_MAP.get(key);
     let key = match option {
         Some(option) => option.name,
         None => key,

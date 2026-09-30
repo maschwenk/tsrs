@@ -6,7 +6,7 @@ use tsrs_diagnostics as diagnostics;
 use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, DefaultValueDescription, ExtraValidation};
 
 // BEGIN GENERATED
-static OptionsForWatch_items: [CommandLineOption; 7] = [
+static OPTIONS_FOR_WATCH_ITEMS: [CommandLineOption; 7] = [
     CommandLineOption {
         name: "watchInterval",
         kind: CommandLineOptionKind::Number,
@@ -63,15 +63,15 @@ static OptionsForWatch_items: [CommandLineOption; 7] = [
     },
 ];
 
-pub static OptionsForWatch: LazyLock<Vec<&'static CommandLineOption>> = LazyLock::new(|| {
+pub static OPTIONS_FOR_WATCH: LazyLock<Vec<&'static CommandLineOption>> = LazyLock::new(|| {
     vec![
-        &OptionsForWatch_items[0],
-        &OptionsForWatch_items[1],
-        &OptionsForWatch_items[2],
-        &OptionsForWatch_items[3],
-        &OptionsForWatch_items[4],
-        &OptionsForWatch_items[5],
-        &OptionsForWatch_items[6],
+        &OPTIONS_FOR_WATCH_ITEMS[0],
+        &OPTIONS_FOR_WATCH_ITEMS[1],
+        &OPTIONS_FOR_WATCH_ITEMS[2],
+        &OPTIONS_FOR_WATCH_ITEMS[3],
+        &OPTIONS_FOR_WATCH_ITEMS[4],
+        &OPTIONS_FOR_WATCH_ITEMS[5],
+        &OPTIONS_FOR_WATCH_ITEMS[6],
     ]
 });
 // END GENERATED
