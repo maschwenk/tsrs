@@ -416,7 +416,7 @@ impl filesParser {
         }
         let host = loader.host.clone();
         let parsed: Vec<(TaskId, Option<P<SourceFile>>)> =
-            jobs.into_par_iter().map(|(t, opts)| (t, host.get_source_file(opts))).collect();
+            crate::program::worker_pool().install(|| jobs.into_par_iter().map(|(t, opts)| (t, host.get_source_file(opts))).collect());
         for (t, file) in parsed {
             // A missing file stays None; load() asks the host again and records it as missing.
             loader.tasks[t].file = file;
@@ -659,7 +659,7 @@ impl filesParser {
 
         processedFiles {
             finished_processing: true,
-            files: all_files,
+            files: tsrs_core::alloc_vec(all_files),
             files_by_path,
             project_reference_file_mapper: Some(loader.project_references.take_mapper()),
             resolved_modules,

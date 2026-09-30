@@ -342,7 +342,7 @@ impl checkerPool {
         if self.single_threaded {
             (0..state.checkers.len()).for_each(run);
         } else {
-            (0..state.checkers.len()).into_par_iter().for_each(run);
+            crate::program::worker_pool().install(|| (0..state.checkers.len()).into_par_iter().for_each(run));
         }
     }
 
@@ -378,7 +378,7 @@ impl checkerPool {
         if single_threaded || self.single_threaded {
             (0..state.checkers.len()).for_each(run);
         } else {
-            (0..state.checkers.len()).into_par_iter().for_each(run);
+            crate::program::worker_pool().install(|| (0..state.checkers.len()).into_par_iter().for_each(run));
         }
     }
 }

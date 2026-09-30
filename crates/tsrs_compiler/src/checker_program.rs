@@ -2,20 +2,20 @@
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::{Node, SourceFile, SourceFileMetaData};
+use tsrs_checker::{ProjectReferenceCommandLine, SourceOutputAndProjectReference};
 use tsrs_core::tspath::Path;
 use tsrs_core::{CompilerOptions, ModuleKind, ResolutionMode, P};
-use tsrs_module::{ModeAwareCache, ResolvedModule};
-use tsrs_tsoptions::{ParsedCommandLine, SourceOutputAndProjectReference};
+use tsrs_module::{ModeAwareCacheKey, ResolvedModule};
 
 use crate::program::Program;
 
 impl tsrs_checker::Program for Program {
-    fn options(&self) -> &'static CompilerOptions {
+    fn options(&self) -> P<CompilerOptions> {
         Program::options(self)
     }
 
-    fn source_files(&self) -> &[P<SourceFile>] {
-        Program::source_files(self)
+    fn source_files(&self) -> &'static [P<SourceFile>] {
+        self.files
     }
 
     fn bind_source_files(&self) {
@@ -50,7 +50,7 @@ impl tsrs_checker::Program for Program {
         Program::get_resolved_module(self, current_source_file, module_reference, mode)
     }
 
-    fn get_resolved_modules(&self) -> &FxHashMap<Path, ModeAwareCache<P<ResolvedModule>>> {
+    fn get_resolved_modules(&self) -> &FxHashMap<Path, FxHashMap<ModeAwareCacheKey, P<ResolvedModule>>> {
         Program::get_resolved_modules(self)
     }
 
@@ -78,54 +78,31 @@ impl tsrs_checker::Program for Program {
         Program::is_source_file_default_library(self, path)
     }
 
-    fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
-        Program::get_project_reference_from_output_dts(self, path)
+    // Project references are not ported: there are never output-dts mappings or redirects.
+    fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference> {
+        let _ = Program::get_project_reference_from_output_dts(self, path);
+        None
     }
 
-    fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<P<ParsedCommandLine>> {
-        Program::get_redirect_for_resolution(self, file)
+    fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<&'static dyn ProjectReferenceCommandLine> {
+        let _ = Program::get_redirect_for_resolution(self, file);
+        None
     }
 
-    fn common_source_directory(&self) -> &str {
-        Program::common_source_directory(self)
-    }
-
-    // modulespecifiers.ModuleSpecifierGenerationHost
-
-    fn get_global_typings_cache_location(&self) -> &str {
-        Program::get_global_typings_cache_location(self)
+    fn common_source_directory(&self) -> String {
+        Program::common_source_directory(self).to_string()
     }
 
     fn use_case_sensitive_file_names(&self) -> bool {
         Program::use_case_sensitive_file_names(self)
     }
 
-    fn get_current_directory(&self) -> &str {
-        Program::get_current_directory(self)
-    }
-
-    fn get_project_reference_from_source(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
-        Program::get_project_reference_from_source(self, path)
-    }
-
-    fn get_redirect_targets(&self, path: &Path) -> &[String] {
-        Program::get_redirect_targets(self, path)
-    }
-
-    fn get_source_of_project_reference_if_output_included(&self, file: P<SourceFile>) -> String {
-        Program::get_source_of_project_reference_if_output_included(self, file.file_name(), &file.path())
-    }
-
-    fn get_nearest_ancestor_directory_with_package_json(&self, dirname: &str) -> String {
-        Program::get_nearest_ancestor_directory_with_package_json(self, dirname)
+    fn get_current_directory(&self) -> String {
+        Program::get_current_directory(self).to_string()
     }
 
     fn get_default_resolution_mode_for_file(&self, file: P<SourceFile>) -> ResolutionMode {
         Program::get_default_resolution_mode_for_file(self, file)
-    }
-
-    fn get_resolved_module_from_module_specifier(&self, file: P<SourceFile>, module_specifier: P<Node>) -> Option<P<ResolvedModule>> {
-        Program::get_resolved_module_from_module_specifier(self, file, module_specifier)
     }
 
     fn get_mode_for_usage_location(&self, file: P<SourceFile>, module_specifier: P<Node>) -> ResolutionMode {

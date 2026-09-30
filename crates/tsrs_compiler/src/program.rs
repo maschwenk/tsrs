@@ -232,6 +232,13 @@ impl Program {
     }
 }
 
+// Parsing and binding recurse deeply on large files; Go's goroutine stacks grow on demand, so the
+// worker threads get large stacks.
+pub(crate) fn worker_pool() -> &'static rayon::ThreadPool {
+    static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
+    POOL.get_or_init(|| rayon::ThreadPoolBuilder::new().stack_size(256 << 20).build().unwrap())
+}
+
 pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let single_threaded = opts.single_threaded.default_if_unknown(opts.config.compiler_options().unwrap().single_threaded).is_true();
     let (mut processed, resolution_data, module_resolution_error) = process_all_program_files(&opts, single_threaded);
@@ -318,7 +325,7 @@ impl Program {
         if self.single_threaded() {
             unbound.into_iter().for_each(tsrs_binder::bind_source_file);
         } else {
-            unbound.into_par_iter().for_each(tsrs_binder::bind_source_file);
+            worker_pool().install(|| unbound.into_par_iter().for_each(tsrs_binder::bind_source_file));
         }
     }
 

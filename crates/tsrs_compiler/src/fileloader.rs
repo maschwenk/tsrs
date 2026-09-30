@@ -69,7 +69,7 @@ pub(crate) struct redirectsFile {
 
 #[derive(Default)]
 pub struct processedFiles {
-    pub(crate) files: Vec<P<SourceFile>>,
+    pub(crate) files: &'static [P<SourceFile>],
     pub(crate) files_by_path: FxHashMap<Path, P<SourceFile>>,
     pub(crate) project_reference_file_mapper: Option<projectReferenceFileMapper>,
     pub(crate) missing_files: Vec<String>,
