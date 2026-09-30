@@ -476,7 +476,7 @@ pub struct SymbolNodeLinks {
 #[derive(Default)]
 pub struct TypeNodeLinks {
     pub resolved_type: Cell<Option<P<Type>>>, // Resolved type associated with node
-    pub outer_type_parameters: Cell<&'static [P<Type>]>, // Outer type parameters of anonymous object type
+    pub outer_type_parameters: Cell<Option<&'static [P<Type>]>>, // Outer type parameters of anonymous object type (Go distinguishes nil = not computed)
 }
 
 #[derive(Default)]
