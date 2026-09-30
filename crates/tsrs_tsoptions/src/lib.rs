@@ -16,6 +16,13 @@ mod parsinghelpers;
 mod tsconfigparsing;
 mod wildcarddirectories;
 
+pub mod tsoptionstest;
+
+#[cfg(test)]
+mod testutil;
+#[cfg(test)]
+mod commandlineparser_test;
+
 pub use commandlineoption::*;
 pub use commandlineparser::*;
 pub use contentmappers::*;
