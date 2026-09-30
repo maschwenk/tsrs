@@ -848,10 +848,9 @@ impl NodeBuilderImpl {
         };
         let save_enclosing_declaration = self.ctx().enclosing_declaration.get();
         self.ctx().enclosing_declaration.set(None);
-        let declarations: Vec<P<Node>> = property_symbol.declarations().clone();
         if is_late_bound_name(property_symbol.name()) {
-            if !declarations.is_empty() {
-                let decl = declarations[0];
+            let first_declaration = property_symbol.declarations().first().copied();
+            if let Some(decl) = first_declaration {
                 if c.has_late_bindable_name(decl) {
                     if ast::is_binary_expression(decl) {
                         let name = ast::get_name_of_declaration(decl);
@@ -869,8 +868,8 @@ impl NodeBuilderImpl {
         }
         if let Some(value_declaration) = property_symbol.value_declaration() {
             self.ctx().enclosing_declaration.set(Some(value_declaration));
-        } else if !declarations.is_empty() {
-            self.ctx().enclosing_declaration.set(Some(declarations[0]));
+        } else if let Some(first_declaration) = property_symbol.declarations().first().copied() {
+            self.ctx().enclosing_declaration.set(Some(first_declaration));
         } else {
             self.ctx().enclosing_declaration.set(save_enclosing_declaration);
         }
