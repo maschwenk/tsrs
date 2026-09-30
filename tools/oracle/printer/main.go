@@ -6,7 +6,11 @@
 //	tsrs-oracle-printer hash MODE < list          print "hash path" for every "path[\tFLAGS]" line on stdin
 //
 // MODE selects the PrinterOptions: "default" (PrinterOptions{}, what `createPrinterWithDefaults` uses) or
-// "nocomments" (RemoveComments, what `createPrinterWithRemoveComments` uses for type printing). Files are read and
+// "nocomments" (RemoveComments, what `createPrinterWithRemoveComments` uses for type printing). The "synth" modes
+// exercise the paths the checker's node builder hits: every top-level statement is deep-cloned through an EmitContext
+// factory (synthesized nodes, no positions, original pointers) and written without a source file; "synth" uses a
+// TextWriter("\n"), "synthflags" additionally sets EFSingleLine|EFNoAsciiEscaping on every cloned node and writes to
+// the single-line string writer, "synthmulti" sets EFMultiLine|EFStartOnNewLine|EFIndented. Files are read and
 // parsed like tools/oracle/ast does (osvfs, script kind from the file name, FLAGS = external module indicator options).
 // Files with parse diagnostics are reported as "SKIP" (hash mode) since the comparison only covers files that parse
 // cleanly; a printer panic is reported as "PANIC".
@@ -68,8 +72,45 @@ func printFile(mode string, path string, flags string) (text string, status stri
 			status = "PANIC"
 		}
 	}()
+	if strings.HasPrefix(mode, "synth") {
+		return printSynthesized(mode, file), ""
+	}
 	p := printer.NewPrinter(options(mode), printer.PrintHandlers{}, nil)
 	return p.EmitSourceFile(file), ""
+}
+
+func setFlagsRecursive(ec *printer.EmitContext, node *ast.Node, flags printer.EmitFlags) {
+	ec.AddEmitFlags(node, flags)
+	node.ForEachChild(func(child *ast.Node) bool {
+		setFlagsRecursive(ec, child, flags)
+		return false
+	})
+}
+
+func printSynthesized(mode string, file *ast.SourceFile) string {
+	ec := printer.NewEmitContext()
+	p := printer.NewPrinter(printer.PrinterOptions{RemoveComments: true}, printer.PrintHandlers{}, ec)
+	var sb strings.Builder
+	for _, stmt := range file.Statements.Nodes {
+		clone := ec.Factory.DeepCloneNode(stmt)
+		var w printer.EmitTextWriter
+		switch mode {
+		case "synth":
+			w = printer.NewTextWriter("\n", 0)
+		case "synthflags":
+			setFlagsRecursive(ec, clone, printer.EFSingleLine|printer.EFNoAsciiEscaping)
+			w, _ = printer.GetSingleLineStringWriter()
+		case "synthmulti":
+			setFlagsRecursive(ec, clone, printer.EFMultiLine|printer.EFStartOnNewLine|printer.EFIndented)
+			w = printer.NewTextWriter("\n", 0)
+		default:
+			panic("unknown mode " + mode)
+		}
+		p.Write(clone, nil, w, nil)
+		sb.WriteString(w.String())
+		sb.WriteString("\n---\n")
+	}
+	return sb.String()
 }
 
 func main() {

@@ -7,7 +7,9 @@ use std::io::{BufRead, Write as _};
 
 use tsrs_ast::{ExternalModuleIndicatorOptions, SourceFileParseOptions};
 use tsrs_core::tspath::Path;
-use tsrs_printer::{new_printer, PrintHandlers, PrinterOptions};
+use tsrs_ast::{Node, SourceFile};
+use tsrs_core::P;
+use tsrs_printer::{get_single_line_string_writer, new_emit_context, new_printer, new_text_writer, EmitContext, EmitFlags, EmitTextWriter, PrintHandlers, PrinterOptions};
 
 fn parse_flags(flags: &str) -> ExternalModuleIndicatorOptions {
     ExternalModuleIndicatorOptions { jsx: flags.contains('j'), force: flags.contains('f') }
@@ -38,10 +40,46 @@ fn print_file(mode: &str, path: &str, flags: &str) -> Result<String, &'static st
     }
     let mode = mode.to_string();
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+        if mode.starts_with("synth") {
+            return print_synthesized(&mode, file);
+        }
         let mut p = new_printer(options(&mode), PrintHandlers::default(), None);
         p.emit_source_file(file)
     }))
     .map_err(|_| "PANIC")
+}
+
+fn set_flags_recursive(ec: P<EmitContext>, node: P<Node>, flags: EmitFlags) {
+    ec.add_emit_flags(node, flags);
+    node.for_each_child(&mut |child| {
+        set_flags_recursive(ec, child, flags);
+        false
+    });
+}
+
+fn print_synthesized(mode: &str, file: P<SourceFile>) -> String {
+    let ec = new_emit_context();
+    let mut p = new_printer(PrinterOptions { remove_comments: true, ..Default::default() }, PrintHandlers::default(), Some(ec));
+    let mut sb = String::new();
+    for &stmt in file.statements.nodes {
+        let clone = ec.factory.borrow_mut().deep_clone_node(Some(stmt)).unwrap();
+        let mut w: Box<dyn EmitTextWriter> = match mode {
+            "synth" => new_text_writer("\n", 0),
+            "synthflags" => {
+                set_flags_recursive(ec, clone, EmitFlags::SingleLine | EmitFlags::NoAsciiEscaping);
+                get_single_line_string_writer().0
+            }
+            "synthmulti" => {
+                set_flags_recursive(ec, clone, EmitFlags::MultiLine | EmitFlags::StartOnNewLine | EmitFlags::Indented);
+                new_text_writer("\n", 0)
+            }
+            other => panic!("unknown mode {}", other),
+        };
+        p.write(clone, None, &mut w, None);
+        sb.push_str(&w.string());
+        sb.push_str("\n---\n");
+    }
+    sb
 }
 
 fn fnv64a(data: &[u8]) -> u64 {

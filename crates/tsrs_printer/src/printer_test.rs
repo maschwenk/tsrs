@@ -770,3 +770,36 @@ fn test_writers_used_by_checker() {
     assert_eq!(writer.string(), "string | number");
     put_writer();
 }
+
+#[test]
+fn test_synthetic_comments_with_source_file() {
+    // nodebuilderimpl.go attaches "/*unresolved*/" and "/*elided*/" comments; they print only with comments enabled and
+    // a current source file (checker printer.go uses the default printer for the unresolved type).
+    let ec = new_emit_context();
+    let file = parse_type_script("let x;", false);
+    let any = {
+        let mut f = ec.factory.borrow_mut();
+        f.new_keyword_type_node(Kind::AnyKeyword)
+    };
+    ec.add_synthetic_leading_comment(any, Kind::MultiLineCommentTrivia, "unresolved", false /*hasTrailingNewLine*/);
+    let mut p = new_printer(PrinterOptions::default(), PrintHandlers::default(), Some(ec));
+    let mut writer = new_text_writer("", 0);
+    p.write(any, Some(file), &mut writer, None);
+    assert_eq!(writer.string(), "/*unresolved*/ any");
+    p.write(any, None, &mut writer, None);
+    assert_eq!(writer.string(), "any");
+
+    let literal = {
+        let mut f = ec.factory.borrow_mut();
+        let name = f.new_identifier("a");
+        let type_node = f.new_keyword_type_node(Kind::StringKeyword);
+        let member = f.new_property_signature_declaration(None, name, None, Some(type_node), None);
+        let members = f.new_node_list(vec![member]);
+        f.new_type_literal_node(members)
+    };
+    let member = literal.as_type_literal_node().members.nodes[0];
+    ec.add_synthetic_trailing_comment(member, Kind::MultiLineCommentTrivia, "elided", false /*hasTrailingNewLine*/);
+    ec.set_emit_flags(literal, EmitFlags::SingleLine);
+    p.write(literal, Some(file), &mut writer, None);
+    assert_eq!(writer.string(), "{ a: string; /*elided*/ }");
+}
