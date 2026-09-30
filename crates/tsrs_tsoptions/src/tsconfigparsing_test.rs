@@ -1501,3 +1501,28 @@ fn test_custom_conditions_null_override() {
     let custom_conditions = parsed_config.unwrap().compiler_options().unwrap().custom_conditions.clone();
     assert!(custom_conditions.is_none(), "customConditions should be nil after override, got: {custom_conditions:?}");
 }
+
+// Real-world smoke test: TSRS_TSOPTIONS_SMOKE_DIR=<project dir> cargo test -p tsrs_tsoptions -- --ignored smoke
+// Writes the root file names (one per line) to TSRS_TSOPTIONS_SMOKE_OUT when set.
+#[test]
+#[ignore]
+fn smoke_parse_project_from_env() {
+    let Ok(dir) = std::env::var("TSRS_TSOPTIONS_SMOKE_DIR") else {
+        return;
+    };
+    let dir = tspath::normalize_slashes(&dir);
+    let fs = tsrs_vfs::osvfs::fs();
+    let host: &'static VfsParseConfigHost = P::new(VfsParseConfigHost { vfs: fs, current_directory: dir.clone() }).get();
+    let start = std::time::Instant::now();
+    let (parsed, errors) = get_parsed_command_line_of_config_file(&tspath::combine_paths(&dir, &["tsconfig.json"]), None, None, host, None);
+    assert!(errors.is_empty(), "{errors:?}");
+    let parsed = parsed.unwrap();
+    eprintln!("parsed in {:?}", start.elapsed());
+    for e in parsed.get_config_file_parsing_diagnostics() {
+        eprintln!("error TS{}: {}", e.code(), e.localize());
+    }
+    eprintln!("files: {} extended: {:?}", parsed.file_names().len(), parsed.extended_source_files());
+    if let Ok(out) = std::env::var("TSRS_TSOPTIONS_SMOKE_OUT") {
+        std::fs::write(out, parsed.file_names().join("\n") + "\n").unwrap();
+    }
+}
