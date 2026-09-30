@@ -184,3 +184,20 @@ code is truly unreachable for type checking.
   `ts-ref/tsc/testdata/baselines/reference/` (`*.errors.txt`, `*.types`, `*.symbols`). Lib files:
   `ts-ref/tsc/internal/bundled/libs/*.d.ts`.
 - Scratch files go in `target/scratch/<agent-name>/` (git-ignored), never in the source tree.
+
+## `tsrs_core` as landed (read before guessing names)
+
+- Constants/statics are SCREAMING_CASE: `tspath::EXTENSION_TS`, `SUPPORTED_TS_EXTENSIONS_FLAT`, `RESOLUTION_MODE_ESM`, `EMPTY_COMPILER_OPTIONS`.
+- Enum variants keep Go casing: `ScriptKind::JS`, `ModuleKind::CommonJS`, `ModuleKind::ESM`, `JsxEmit::ReactJSX`, `ScriptTarget::Latest`.
+  `ResolutionMode` is an alias of `ModuleKind`.
+- `CompilerOptions`: every Go field, snake_case. `[]string` -> `Option<Vec<String>>`, `*int` -> `Option<i32>`,
+  `paths` -> `Option<OrderedMap<String, Vec<String>>>`.
+- `tspath::Path` is `Path(pub String)` (derefs to `str`). Pure-slicing functions return `&str`; allocating ones return `String`.
+- `for_each_ancestor_directory` callback returns `Option<T>` (`Some` stops). Go zero-value-or-found helpers return `Option<T>`.
+- Identity-preserving helpers (`filter`, `same_map`, `concatenate`, `deduplicate`) return `Cow` (borrowed when unchanged).
+- stringutil: predicates take `impl AsRune`; `Rune = i32`; Go stdlib equivalents `equal_fold`, `decode_rune`, `push_rune`, …
+- `collections::{OrderedMap, OrderedSet}` = IndexMap/IndexSet (Fx) with Go-named methods via `OrderedMapExt`/`OrderedSetExt`
+  (`set`, `has`, `delete`, `size`, `entry_at`).
+- `LinkStore<K, V>` keyed by `P<K>`; `get`/`try_get`/`has` take `&self`, return `P<V>`.
+- Go `String()` methods are `string()` + `Display`. `get_spelling_suggestion_for_strings` is at the crate root.
+- json: `tsrs_core::json::Value` with `marshal*`/`unmarshal` (key order preserved).
