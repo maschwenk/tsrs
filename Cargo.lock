@@ -256,6 +256,7 @@ dependencies = [
  "tsrs_core",
  "tsrs_diagnostics",
  "tsrs_module",
+ "tsrs_parser",
  "tsrs_scanner",
  "xxhash-rust",
 ]

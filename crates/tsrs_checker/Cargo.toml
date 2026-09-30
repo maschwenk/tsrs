@@ -12,6 +12,7 @@ tsrs_core.workspace = true
 tsrs_diagnostics.workspace = true
 tsrs_ast.workspace = true
 tsrs_scanner.workspace = true
+tsrs_parser.workspace = true
 tsrs_binder.workspace = true
 tsrs_module.workspace = true
 rustc-hash.workspace = true
