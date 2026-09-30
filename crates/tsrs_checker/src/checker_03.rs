@@ -2230,36 +2230,275 @@ impl Checker {
 
     // checker.go:6265
     pub(crate) fn check_iterated_type_or_element_type(&mut self, use_: IterationUse, input_type: P<Type>, sent_type: P<Type>, error_node: Option<P<Node>>) -> P<Type> {
-        todo!()
+        if is_type_any(Some(input_type)) {
+            return input_type;
+        }
+        let t = self.get_iterated_type_or_element_type(use_, input_type, sent_type, error_node, true /*checkAssignability*/);
+        if let Some(t) = t {
+            return t;
+        }
+        self.any_type
     }
 
     // checker.go:6276
     pub(crate) fn get_iterated_type_or_element_type(&mut self, use_: IterationUse, input_type: P<Type>, sent_type: P<Type>, error_node: Option<P<Node>>, check_assignability: bool) -> Option<P<Type>> {
-        todo!()
+        let allow_async_iterables = use_.intersects(IterationUse::AllowsAsyncIterablesFlag);
+        if input_type == self.never_type {
+            if let Some(error_node) = error_node {
+                self.report_type_not_iterable_error(error_node, input_type, allow_async_iterables);
+            }
+            return None;
+        }
+        let iterable_exists = self.get_global_iterable_type() != self.empty_generic_type;
+        let possible_out_of_bounds = self.compiler_options.no_unchecked_indexed_access == Tristate::True && use_.intersects(IterationUse::PossiblyOutOfBounds);
+        if iterable_exists || allow_async_iterables {
+            let iteration_types = self.get_iteration_types_of_iterable(input_type, use_, if iterable_exists { error_node } else { None });
+            if check_assignability {
+                if let Some(next_type) = iteration_types.next_type {
+                    let mut diagnostic: Option<&'static Message> = None;
+                    if use_.intersects(IterationUse::ForOfFlag) {
+                        diagnostic = Some(&diagnostics::Cannot_iterate_value_because_the_next_method_of_its_iterator_expects_type_1_but_for_of_will_always_send_0);
+                    } else if use_.intersects(IterationUse::SpreadFlag) {
+                        diagnostic = Some(&diagnostics::Cannot_iterate_value_because_the_next_method_of_its_iterator_expects_type_1_but_array_spread_will_always_send_0);
+                    } else if use_.intersects(IterationUse::DestructuringFlag) {
+                        diagnostic = Some(&diagnostics::Cannot_iterate_value_because_the_next_method_of_its_iterator_expects_type_1_but_array_destructuring_will_always_send_0);
+                    } else if use_.intersects(IterationUse::YieldStarFlag) {
+                        diagnostic = Some(&diagnostics::Cannot_delegate_iteration_to_value_because_the_next_method_of_its_iterator_expects_type_1_but_the_containing_generator_will_always_send_0);
+                    }
+                    if diagnostic.is_some() {
+                        self.check_type_assignable_to(sent_type, next_type, error_node, diagnostic);
+                    }
+                }
+            }
+            if iteration_types.yield_type.is_some() || iterable_exists {
+                let yield_type = iteration_types.yield_type?;
+                if possible_out_of_bounds {
+                    return Some(self.include_undefined_in_index_signature(yield_type));
+                }
+                return Some(yield_type);
+            }
+        }
+        let mut array_type = input_type;
+        let mut has_string_constituent = false;
+        // If strings are permitted, remove any string-like constituents from the array type.
+        // This allows us to find other non-string element types from an array unioned with
+        // a string.
+        if use_.intersects(IterationUse::AllowsStringInputFlag) {
+            if array_type.flags().intersects(TypeFlags::Union) {
+                // After we remove all types that are StringLike, we will know if there was a string constituent
+                // based on whether the result of filter is a new array.
+                let array_types = input_type.types();
+                let filtered_types: Vec<P<Type>> = array_types.iter().copied().filter(|t| !t.flags().intersects(TypeFlags::StringLike)).collect();
+                if filtered_types.len() != array_types.len() {
+                    array_type = self.get_union_type_ex(&filtered_types, UnionReduction::Subtype, None, None);
+                }
+            } else if array_type.flags().intersects(TypeFlags::StringLike) {
+                array_type = self.never_type;
+            }
+            has_string_constituent = array_type != input_type;
+            if has_string_constituent {
+                // Now that we've removed all the StringLike types, if no constituents remain, then the entire
+                // arrayOrStringType was a string.
+                if array_type.flags().intersects(TypeFlags::Never) {
+                    if possible_out_of_bounds {
+                        let string_type = self.string_type;
+                        return Some(self.include_undefined_in_index_signature(string_type));
+                    }
+                    return Some(self.string_type);
+                }
+            }
+        }
+        if !self.is_array_like_type(array_type) {
+            if error_node.is_some() {
+                // Which error we report depends on whether we allow strings or if there was a
+                // string constituent. For example, if the input type is number | string, we
+                // want to say that number is not an array type. But if the input was just
+                // number and string input is allowed, we want to say that number is not an
+                // array type or a string type.
+                let allows_strings = use_.intersects(IterationUse::AllowsStringInputFlag) && !has_string_constituent;
+                let (default_diagnostic, maybe_missing_await) = self.get_iteration_diagnostic_details(use_, input_type, allows_strings);
+                let maybe_missing_await = maybe_missing_await && self.get_awaited_type_of_promise(array_type).is_some();
+                let a0 = self.type_to_string(array_type, None);
+                self.error_and_maybe_suggest_await(error_node, maybe_missing_await, default_diagnostic, &[&a0]);
+            }
+            if has_string_constituent {
+                if possible_out_of_bounds {
+                    let string_type = self.string_type;
+                    return Some(self.include_undefined_in_index_signature(string_type));
+                }
+                return Some(self.string_type);
+            }
+            return None;
+        }
+        let number_type = self.number_type;
+        let array_element_type = self.get_index_type_of_type(array_type, number_type);
+        if let Some(array_element_type) = array_element_type.filter(|_| has_string_constituent) {
+            // This is just an optimization for the case where arrayOrStringType is string | string[]
+            if array_element_type.flags().intersects(TypeFlags::StringLike) && self.compiler_options.no_unchecked_indexed_access != Tristate::True {
+                return Some(self.string_type);
+            }
+            if possible_out_of_bounds {
+                let types = [array_element_type, self.string_type, self.undefined_type];
+                return Some(self.get_union_type_ex(&types, UnionReduction::Subtype, None, None));
+            }
+            let types = [array_element_type, self.string_type];
+            return Some(self.get_union_type_ex(&types, UnionReduction::Subtype, None, None));
+        }
+        if use_.intersects(IterationUse::PossiblyOutOfBounds) {
+            // SIG: include_undefined_in_index_signature should take/return Option<P<Type>> (Go returns nil for nil).
+            return array_element_type.map(|t| self.include_undefined_in_index_signature(t));
+        }
+        array_element_type
     }
 
+    // Gets the requested "iteration type" from a type that is either `Iterable`-like, `Iterator`-like,
+    // `IterableIterator`-like, or `Generator`-like (for a non-async generator); or `AsyncIterable`-like,
+    // `AsyncIterator`-like, `AsyncIterableIterator`-like, or `AsyncGenerator`-like (for an async generator).
     // checker.go:6386
     pub(crate) fn get_iteration_type_of_generator_function_return_type(&mut self, type_kind: IterationTypeKind, return_type: P<Type>, is_async_generator: bool) -> Option<P<Type>> {
-        todo!()
+        if is_type_any(Some(return_type)) {
+            return None;
+        }
+        let iteration_types = self.get_iteration_types_of_generator_function_return_type(return_type, is_async_generator);
+        iteration_types.get_type(type_kind)
     }
 
     // checker.go:6394
     pub(crate) fn get_iteration_types_of_generator_function_return_type(&mut self, t: P<Type>, is_async_generator: bool) -> IterationTypes {
-        todo!()
+        if is_type_any(Some(t)) {
+            return IterationTypes { yield_type: Some(self.any_type), return_type: Some(self.any_type), next_type: Some(self.any_type) };
+        }
+        let use_ = if is_async_generator { IterationUse::AsyncGeneratorReturnType } else { IterationUse::GeneratorReturnType };
+        let resolver = if is_async_generator { self.async_iteration_types_resolver } else { self.sync_iteration_types_resolver };
+        let result = self.get_iteration_types_of_iterable(t, use_, None /*errorNode*/);
+        if result.has_types() {
+            return result;
+        }
+        self.get_iteration_types_of_iterator(t, resolver, None /*errorNode*/, None /*diagnosticOutput*/)
     }
 
+    // Gets the requested "iteration type" from an `Iterable`-like or `AsyncIterable`-like type.
     // checker.go:6408
     pub(crate) fn get_iteration_type_of_iterable(&mut self, use_: IterationUse, type_kind: IterationTypeKind, input_type: P<Type>, error_node: Option<P<Node>>) -> Option<P<Type>> {
-        todo!()
+        if is_type_any(Some(input_type)) {
+            return None;
+        }
+        let iteration_types = self.get_iteration_types_of_iterable(input_type, use_, error_node);
+        iteration_types.get_type(type_kind)
     }
 
+    // Gets the *yield*, *return*, and *next* types from an `Iterable`-like or `AsyncIterable`-like type.
+    //
+    // At every level that involves analyzing return types of signatures, we union the return types of all the signatures.
+    //
+    // Another thing to note is that at any step of this process, we could run into a dead end,
+    // meaning either the property is missing, or we run into the anyType. If either of these things
+    // happens, we return a default `IterationTypes{}` to signal that we could not find the iteration type.
+    // If a property is missing, and the previous step did not result in `any`, then we also give an error
+    // if the caller requested it. Then the caller can decide what to do in the case where there is no
+    // iterated type.
+    //
+    // For a **for-of** statement, `yield*` (in a normal generator), spread, array
+    // destructuring, or normal generator we will only ever look for a `[Symbol.iterator]()`
+    // method.
+    //
+    // For an async generator we will only ever look at the `[Symbol.asyncIterator]()` method.
+    //
+    // For a **for-await-of** statement or a `yield*` in an async generator we will look for
+    // the `[Symbol.asyncIterator]()` method first, and then the `[Symbol.iterator]()` method.
     // checker.go:6435
     pub(crate) fn get_iteration_types_of_iterable(&mut self, t: P<Type>, use_: IterationUse, error_node: Option<P<Node>>) -> IterationTypes {
-        todo!()
+        let t = self.get_reduced_type(t);
+        if is_type_any(Some(t)) {
+            return IterationTypes { yield_type: Some(self.any_type), return_type: Some(self.any_type), next_type: Some(self.any_type) };
+        }
+        let key = IterationTypesKey { type_id: t.id, use_: use_ & IterationUse::CacheFlags };
+        // If we are reporting errors and encounter a cached `noIterationTypes`, we should ignore the cached value and continue as if nothing was cached.
+        // In addition, we should not cache any new results for this call.
+        let mut no_cache = false;
+        if let Some(&cached) = self.iteration_types_cache.get(&key) {
+            if error_node.is_none() || cached.has_types() {
+                return cached;
+            }
+            no_cache = true;
+        }
+        let result = self.get_iteration_types_of_iterable_worker(t, use_, error_node, no_cache);
+        if !no_cache {
+            self.iteration_types_cache.insert(key, result);
+        }
+        result
     }
 
     // checker.go:6457
     pub(crate) fn get_iteration_types_of_iterable_worker(&mut self, t: P<Type>, use_: IterationUse, error_node: Option<P<Node>>, no_cache: bool) -> IterationTypes {
-        todo!()
+        if t.flags().intersects(TypeFlags::Union) {
+            let mut all_iteration_types: Vec<IterationTypes> = Vec::with_capacity(t.types().len());
+            for &constituent in t.types() {
+                let iteration_types = self.get_iteration_types_of_iterable_worker(constituent, use_, None, no_cache);
+                if !iteration_types.has_types() {
+                    if let Some(error_node) = error_node {
+                        self.add_deferred_diagnostic(move |c| {
+                            c.report_type_not_iterable_error(error_node, t, use_.intersects(IterationUse::AllowsAsyncIterablesFlag));
+                        });
+                    }
+                    return IterationTypes::default();
+                }
+                all_iteration_types.push(iteration_types);
+            }
+            return self.combine_iteration_types(&all_iteration_types);
+        }
+        let mut diags: Vec<P<Diagnostic>> = Vec::new();
+        if use_.intersects(IterationUse::AllowsAsyncIterablesFlag) {
+            let resolver = self.async_iteration_types_resolver;
+            let iteration_types = self.get_iteration_types_of_iterable_fast(t, resolver);
+            if iteration_types.has_types() {
+                if use_.intersects(IterationUse::ForOfFlag) {
+                    return self.get_async_from_sync_iteration_types(iteration_types, error_node);
+                }
+                return iteration_types;
+            }
+            let iteration_types = self.get_iteration_types_of_iterable_slow(t, resolver, error_node, &mut diags);
+            if iteration_types.has_types() {
+                if !diags.is_empty() {
+                    for &d in &diags {
+                        self.add_diagnostic(d);
+                    }
+                }
+                return iteration_types;
+            }
+        }
+        if use_.intersects(IterationUse::AllowsSyncIterablesFlag) {
+            let resolver = self.sync_iteration_types_resolver;
+            let iteration_types = self.get_iteration_types_of_iterable_fast(t, resolver);
+            if iteration_types.has_types() {
+                if use_.intersects(IterationUse::AllowsAsyncIterablesFlag) {
+                    return self.get_async_from_sync_iteration_types(iteration_types, error_node);
+                }
+                return iteration_types;
+            }
+            let iteration_types = self.get_iteration_types_of_iterable_slow(t, resolver, error_node, &mut diags);
+            if iteration_types.has_types() {
+                if !diags.is_empty() {
+                    for &d in &diags {
+                        self.add_diagnostic(d);
+                    }
+                }
+                if use_.intersects(IterationUse::AllowsAsyncIterablesFlag) {
+                    return self.get_async_from_sync_iteration_types(iteration_types, error_node);
+                }
+                return iteration_types;
+            }
+        }
+        if let Some(error_node) = error_node {
+            // We defer the diagnostic because TypeToString may attempt to resolve symbols that are already being
+            // resolved, possibly causing circularities.
+            self.add_deferred_diagnostic(move |c| {
+                let diagnostic = c.report_type_not_iterable_error(error_node, t, use_.intersects(IterationUse::AllowsAsyncIterablesFlag));
+                for &d in &diags {
+                    diagnostic.add_related_info(d);
+                }
+            });
+        }
+        IterationTypes::default()
     }
 }
