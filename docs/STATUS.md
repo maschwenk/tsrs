@@ -105,3 +105,26 @@ Of the 12,779 variants that produce these baselines (the rest are harness-skippe
 the internal-symbol-name prefix). The remaining `.types` mismatch, `declarationEmitObjectAssignedDefaultExport`, follows
 from its missing declaration-emit diagnostic (Go's walker prints `any` differently when the test has errors). No
 checker divergence surfaced. Details: `notes/fix-types-baseline.md`.
+
+## 2026-09-30 (later): declaration diagnostics
+
+The declaration-emit pipeline that `tsc --noEmit` runs for its diagnostics when `declaration`/`composite` is on is
+ported: crate `tsrs_declarations` (transformers/declarations: transform.go, diagnostics.go, tracker.go, util.go,
+supplementalreferences.go, plus the `transformers.Transformer` base; ~4.4k Rust lines), the rest of
+`checker/emitresolver.go` (`emitresolver.rs`, all 63 functions), `binder/referenceresolver.go`, the EmitContext
+environment tracking and visitor hooks in `tsrs_printer`, and the compiler glue (`Program::get_declaration_diagnostics`
+with Go's per-file cache, `emithost.rs`, `emitter::get_declaration_diagnostics`). The harness and the CLI already
+called it at Go's points (harness: after semantic/global/suggestion diagnostics when `GetEmitDeclarations()`; CLI:
+`GetDiagnosticsOfAnyProgram` under `--noEmit`, only when no earlier diagnostics were found). Design notes:
+`crates/tsrs_declarations/src/lib.rs`, `resolver.rs` (the checker is lent to the transformer through a `CheckerSlot`;
+Go's `checkerMu`-locking resolver methods borrow it per call), `notes/fix-decl-diagnostics.md`.
+
+Conformance: **13,458 pass / 2 codes / 2 fail / 0 timeout / 0 crash** (was 13,398 / 2 / 62; all 60 declaration-
+diagnostic fails pass, no previous pass lost; same with `TS_TEST_PROGRAM_SINGLE_THREADED=false`). `.types` now
+12,779 / 12,779 (`declarationEmitObjectAssignedDefaultExport` fixed with its diagnostic). The remaining 2 fails and
+2 codes are the known Go-harness emit-order artifacts.
+
+Project (`declaration: false`, so the pipeline does not run): 0 errors, counters unchanged (39,704,001 symbols /
+16,200,921 types / 89,981,648 instantiations with 4 checkers). Wall times versus main measured back to back on a
+loaded machine (load average ~14) were within noise in both directions (4 checkers: 22.3/27.0 s main vs 39.4/34.2 s;
+single-threaded: 58.9/56.3 s main vs 43.9/46.7 s).

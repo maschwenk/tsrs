@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Regenerate docs/sigs/{checker,pseudochecker,modulespecifiers}.txt from the Rust sources of tsrs_checker,
-tsrs_pseudochecker and tsrs_modulespecifiers.
+"""Regenerate docs/sigs/{checker,pseudochecker,modulespecifiers,declarations}.txt from the Rust sources of tsrs_checker,
+tsrs_pseudochecker, tsrs_modulespecifiers and tsrs_declarations.
 
 Scans crates/<crate>/src/*.rs for free `fn` items and `fn` items of inherent `impl` blocks (trait impls and
 functions nested in function bodies are skipped) and writes one line per function:
@@ -214,6 +214,7 @@ CRATES = [
     ("tsrs_checker", "checker.txt"),
     ("tsrs_pseudochecker", "pseudochecker.txt"),
     ("tsrs_modulespecifiers", "modulespecifiers.txt"),
+    ("tsrs_declarations", "declarations.txt"),
 ]
 
 

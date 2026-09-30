@@ -4,7 +4,8 @@
 `ts-ref/tsc/internal/`, a symlink to a checkout of microsoft/TypeScript at commit
 b85298b6a81f, = nightly 7.1.0-dev.20260929) to Rust. Scope: everything needed to
 **type-check** a project from the command line. No emit, no language service, no
-declaration emit, no build mode, no watch mode.
+build mode, no watch mode. Declaration emit is ported only as far as its diagnostics go (`tsc --noEmit` reports
+them when `declaration`/`composite` is on): crate `tsrs_declarations`; no `.d.ts` text is printed.
 
 The port is **mechanical and faithful**: same algorithms, same function decomposition,
 same order of operations, same diagnostics (code, position, message, order). Behavior
@@ -29,6 +30,7 @@ personally choose differently.
 | module, packagejson, symlinks                                           | `tsrs_module`     |
 | tsoptions                                                               | `tsrs_tsoptions`  |
 | checker, evaluator                                                      | `tsrs_checker`    |
+| transformers/declarations (+ the `transformers` base it uses)           | `tsrs_declarations` |
 | compiler                                                                | `tsrs_compiler`   |
 | execute (type-check-only subset)                                        | `tsrs_cli` (binary `tsrs`) |
 | testrunner, testutil/harnessutil, testutil/baseline (subset)            | `tsrs_testrunner` (binary `tsrs-test`) |
@@ -182,7 +184,8 @@ callback, even when the closure does not need it.
 
 ## What not to port
 
-Emit, transformers, printer and node builder (except what diagnostics need), declaration emit,
+Emit, transformers, printer and node builder (except what diagnostics need; the declaration transformer is
+ported for its diagnostics),
 language service, LSP, API/IPC, build mode (`-b`), incremental/tsbuildinfo, watch, tracing,
 pprof, source maps, localization of messages (English only), JS-file/JSDoc type support is
 **lower priority** but the parser must still parse `.js`/JSX files. If a function only serves an
