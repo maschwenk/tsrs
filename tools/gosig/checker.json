@@ -1,0 +1,277 @@
+{
+  "moduleDir": "../../ts-ref/tsc",
+  "package": "github.com/microsoft/TypeScript/tsc/internal/checker",
+  "resultOnlyPackages": [
+    "github.com/microsoft/TypeScript/tsc/internal/ast",
+    "github.com/microsoft/TypeScript/tsc/internal/core",
+    "github.com/microsoft/TypeScript/tsc/internal/binder"
+  ],
+  "outDir": "../../crates/tsrs_checker/src",
+  "sigsFile": "../../docs/sigs/checker.txt",
+  "advisorySigsFile": "../../docs/sigs/checker_advisory.txt",
+  "prelude": "use crate::*;\nuse tsrs_ast::*;\nuse tsrs_core::*;\nuse tsrs_ast as ast;\nuse tsrs_diagnostics as diagnostics;\nuse tsrs_diagnostics::Message;\nuse rustc_hash::FxHashMap;\nuse std::fmt::Display;\n",
+  "checkerType": "Checker",
+  "fieldsFile": "checker_fields.rs",
+  "files": [
+    {
+      "go": "checker.go",
+      "declsNote": "hand-ported by checker-foundation",
+      "chunks": [
+        {
+          "rust": "checker_01.rs",
+          "from": 1,
+          "to": 2172
+        },
+        {
+          "rust": "checker_02.rs",
+          "from": 2173,
+          "to": 4320
+        },
+        {
+          "rust": "checker_03.rs",
+          "from": 4321,
+          "to": 6526
+        },
+        {
+          "rust": "checker_04.rs",
+          "from": 6527,
+          "to": 8748
+        },
+        {
+          "rust": "checker_05.rs",
+          "from": 8749,
+          "to": 10856
+        },
+        {
+          "rust": "checker_06.rs",
+          "from": 10857,
+          "to": 13068
+        },
+        {
+          "rust": "checker_07.rs",
+          "from": 13069,
+          "to": 15238
+        },
+        {
+          "rust": "checker_08.rs",
+          "from": 15239,
+          "to": 17432
+        },
+        {
+          "rust": "checker_09.rs",
+          "from": 17433,
+          "to": 19607
+        },
+        {
+          "rust": "checker_10.rs",
+          "from": 19608,
+          "to": 21763
+        },
+        {
+          "rust": "checker_11.rs",
+          "from": 21764,
+          "to": 23953
+        },
+        {
+          "rust": "checker_12.rs",
+          "from": 23954,
+          "to": 26122
+        },
+        {
+          "rust": "checker_13.rs",
+          "from": 26123,
+          "to": 28299
+        },
+        {
+          "rust": "checker_14.rs",
+          "from": 28300,
+          "to": 30509
+        },
+        {
+          "rust": "checker_15.rs",
+          "from": 30510,
+          "to": 99999
+        }
+      ]
+    },
+    {
+      "go": "relater.go",
+      "declsNote": "not generated; port by hand in this file",
+      "chunks": [
+        {
+          "rust": "relater_1.rs",
+          "from": 1,
+          "to": 2579
+        },
+        {
+          "rust": "relater_2.rs",
+          "from": 2580,
+          "to": 99999
+        }
+      ]
+    },
+    {
+      "go": "flow.go",
+      "rust": "flow.rs",
+      "declsNote": "not generated; port by hand in this file"
+    },
+    {
+      "go": "inference.go",
+      "rust": "inference.rs",
+      "declsNote": "not generated; port by hand in this file"
+    },
+    {
+      "go": "grammarchecks.go",
+      "rust": "grammarchecks.rs",
+      "declsNote": "not generated; port by hand in this file"
+    },
+    {
+      "go": "utilities.go",
+      "rust": "utilities.rs",
+      "declsNote": "not generated; port by hand in this file"
+    },
+    {
+      "go": "jsx.go",
+      "rust": "jsx.rs",
+      "declsNote": "not generated; port by hand in this file"
+    },
+    {
+      "go": "exports.go",
+      "rust": "exports.rs",
+      "declsNote": "not generated; port by hand in this file"
+    },
+    {
+      "go": "jsdoc.go",
+      "rust": "jsdoc.rs",
+      "declsNote": "not generated; port by hand in this file"
+    },
+    {
+      "go": "printer.go",
+      "rust": "printer.rs",
+      "declsNote": "not generated; port by hand in this file"
+    },
+    {
+      "go": "symbolaccessibility.go",
+      "rust": "printer.rs",
+      "declsNote": "not generated; port by hand in this file"
+    },
+    {
+      "go": "symboltracker.go",
+      "rust": "printer.rs",
+      "declsNote": "not generated; port by hand in this file"
+    }
+  ],
+  "notPorted": [
+    "emitresolver.go",
+    "services.go",
+    "nodecopy.go",
+    "pseudotypenodebuilder.go",
+    "nodebuilder_hover.go",
+    "tracer.go",
+    "stringer_generated.go"
+  ],
+  "skipFuncs": [
+    "NewChecker",
+    "Checker.getGlobalClassAccessorDecoratorContxtType"
+  ],
+  "checkerHolderStyle": "param",
+  "checkerHolders": {
+    "Relater": "",
+    "TypeDiscriminator": "impl<'a> TypeDiscriminator<'a>",
+    "ObjectLiteralDiscriminator": "",
+    "TupleNormalizer": "",
+    "NodeBuilderImpl": ""
+  },
+  "droppedCheckerFields": ["Type.checker"],
+  "notCheckerHolders": ["CompositeTypeMapper", "InferenceTypeMapper", "EmitResolver", "tracedTypeAdapter"],
+  "arenaTypes": [
+    "Type",
+    "Signature",
+    "TypeMapper",
+    "IndexInfo",
+    "TypePredicate",
+    "TypeAlias",
+    "InferenceContext",
+    "InferenceInfo",
+    "IterationTypes",
+    "TupleElementInfo",
+    "ConditionalRoot",
+    "FlowType",
+    "Relation",
+    "Relater",
+    "FlowState",
+    "InferenceState"
+  ],
+  "typeMap": {
+    "*ast.Node": "P<Node>",
+    "*ast.Symbol": "P<Symbol>",
+    "*ast.SourceFile": "P<SourceFile>",
+    "*ast.NodeList": "P<NodeList>",
+    "*ast.ModifierList": "P<ModifierList>",
+    "*ast.Diagnostic": "P<Diagnostic>",
+    "ast.SymbolTable": "P<SymbolTable>",
+    "ast.HasFileName": "P<SourceFile>",
+    "*diagnostics.Message": "&'static Message",
+    "core.Tristate": "Tristate",
+    "*Checker": "&mut Checker",
+    "Program": "&'static dyn Program",
+    "*CallState": "&mut CallState",
+    "*binder.NameResolver": "P<NameResolver<Checker>>",
+    "context.Context": "Context",
+    "TypeSystemEntity": "TypeSystemEntity",
+    "Discriminator": "&mut dyn Discriminator",
+    "nodebuilder.SymbolTracker": "&'static dyn SymbolTracker",
+    "ErrorReporter": "ErrorReporter<'_>",
+    "*keyBuilder": "&mut keyBuilder",
+    "TypeData": "TypeData",
+    "evaluator.Result": "evaluator::Result",
+    "iter.Seq": "Vec<$0>",
+    "iter.Seq@param": "&[$0]"
+  },
+  "dataInterfaces": [
+    {"iface": "ast.nodeData", "rust": "P<Node>", "except": ["SourceFile"]},
+    {"iface": "TypeData", "rust": "&'static {T}", "except": ["Type"]}
+  ],
+  "paramTypes": {
+    "Checker.newLiteralType.value": "LiteralValue",
+    "Checker.getEnumLiteralType.value": "LiteralValue",
+    "Checker.valueToString.value": "LiteralValue",
+    "ValueToString.value": "LiteralValue",
+    "getPropertyNameArg.arg": "&str"
+  },
+  "constraintMap": {
+    "any": "",
+    "comparable": "Copy + Eq + std::hash::Hash",
+    "cmp.Ordered": "Copy + Ord"
+  },
+  "wordReplacements": {
+    "JSDoc": "Jsdoc",
+    "NaN": "Nan",
+    "IDs": "Ids",
+    "URLs": "Urls"
+  },
+  "zeroValueGenerics": [
+    "core.Find",
+    "core.FindLast",
+    "core.FirstOrNil",
+    "core.LastOrNil",
+    "core.ElementOrNil",
+    "core.FirstOrNilSeq",
+    "core.FindBestPatternMatch",
+    "core.GetSpellingSuggestion"
+  ],
+  "coalesceGenerics": ["core.OrElse", "core.Coalesce", "core.FirstNonZero"],
+  "funcPassthrough": ["core.Memoize"],
+  "nilTolerantParams": ["ast.SymbolTable"],
+  "nilTransparent": true,
+  "callbackConditionalNil": ["mapType", "mapTypeEx"],
+  "paramForwarding": "forward",
+  "overrides": {
+    "Checker.inferToMultipleTypes#nakedTypeVariable": "nonnil",
+    "Checker.symbolToString.p0": "P",
+    "Checker.areAllOuterTypeParametersApplied.p0": "P",
+    "Checker.grammarErrorOnNode.p0": "P",
+    "Checker.grammarErrorOnFirstToken.p0": "P",
+    "Checker.onSuccessfullyResolvedSymbol.p1": "P"
+  }
+}
