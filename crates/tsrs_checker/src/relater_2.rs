@@ -818,7 +818,6 @@ impl Relater {
 
     // The `relateVariances` closure of structuredTypeRelatedToWorker; the variables it captures by reference are passed
     // as `&mut` parameters.
-    #[allow(clippy::too_many_arguments)]
     fn relate_variances(
         &self,
         c: &mut Checker,
