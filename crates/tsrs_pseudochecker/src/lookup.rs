@@ -160,7 +160,7 @@ impl PseudoChecker {
     // lookup.go:146
     pub(crate) fn type_from_accessor(&self, accessor: P<Node>) -> Option<P<PseudoType>> {
         let accessor_declarations = {
-            let decls = accessor.declaration_data().unwrap().symbol().unwrap().declarations().clone();
+            let decls = accessor.declaration_data().unwrap().symbol().unwrap().declarations();
             get_all_accessor_declarations_for_declaration(accessor, &decls)
         };
         let accessor_type = self.get_type_annotation_from_all_accessor_declarations(accessor, accessor_declarations);
@@ -398,7 +398,7 @@ impl PseudoChecker {
     // roughly analogous to typeFromObjectLiteralAccessor in strada
     pub(crate) fn get_accessor_member(&self, accessor: P<Node>, name: P<Node>) -> Option<P<PseudoObjectElement>> {
         let all_accessors = {
-            let decls = accessor.symbol().unwrap().declarations().clone();
+            let decls = accessor.symbol().unwrap().declarations();
             get_all_accessor_declarations_for_declaration(accessor, &decls) // TODO: node preservation for late-bound accessor pairs?
         };
 

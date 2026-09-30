@@ -514,7 +514,7 @@ pub(crate) fn get_qualified_left_meaning(right_meaning: SymbolFlags) -> SymbolFl
 impl Checker {
     // symbolaccessibility.go:117
     pub(crate) fn get_with_alternative_containers(&mut self, container: P<Symbol>, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> Vec<P<Symbol>> {
-        let container_declarations = container.declarations().clone();
+        let container_declarations = container.declarations().to_vec();
         let mut additional_containers = Vec::new();
         for &d in &container_declarations {
             if let Some(s) = self.get_file_symbol_if_file_symbol_export_equals_container(d, container) {
@@ -697,7 +697,7 @@ impl Checker {
             }
         }
         let mut candidates: Vec<P<Symbol>> = Vec::new();
-        let declarations = symbol.declarations().clone();
+        let declarations = symbol.declarations().to_vec();
         for d in declarations {
             if !ast::is_ambient_module(d) {
                 if let Some(parent) = d.parent() {
@@ -986,7 +986,7 @@ impl Checker {
         // Iterate only alias symbols from the table (cached per tableId).
         // This avoids iterating thousands of non-alias symbols in large tables like globals.
         for symbol_from_symbol_table in self.get_symbol_table_aliases(symbols, table_id) {
-            let declarations = symbol_from_symbol_table.declarations().clone();
+            let declarations = symbol_from_symbol_table.declarations().to_vec();
             // for every non-default, non-export= alias symbol in scope, check if it refers to or can chain to the target symbol
             if symbol_from_symbol_table.name() != InternalSymbolNameExportEquals
                 && symbol_from_symbol_table.name() != InternalSymbolNameDefault
@@ -1289,7 +1289,7 @@ impl Checker {
 
             // This could be a symbol that is not exported in the external module
             // or it could be a symbol from different external module that is not aliased and hence cannot be named
-            let declarations = symbol.declarations().clone();
+            let declarations = symbol.declarations().to_vec();
             let symbol_external_module = first_non_nil(&declarations, |&d| self.get_external_module_container(d));
             if let Some(symbol_external_module) = symbol_external_module {
                 let enclosing_external_module = self.get_external_module_container(enclosing);

@@ -98,8 +98,8 @@ pub fn get_module_specifiers_for_file_with_info(
 
 // specifiers.go:112
 pub(crate) fn try_get_module_name_from_ambient_module(module_symbol: P<Symbol>, checker: &mut dyn CheckerShape) -> ambientModuleInfo {
-    let declarations = module_symbol.declarations().clone();
-    for &decl in &declarations {
+    let declarations = module_symbol.declarations();
+    for &decl in declarations {
         if ast::is_module_with_string_literal_name(decl)
             && (!ast::is_module_augmentation_external(decl) || !tspath::is_external_module_name_relative(decl.name().unwrap().text()))
         {
@@ -117,7 +117,7 @@ pub(crate) fn try_get_module_name_from_ambient_module(module_symbol: P<Symbol>, 
      * }
      */
     // `import {c} from "m";` is valid, in which case, `moduleSymbol` is "ns", but the module name should be "m"
-    for &d in &declarations {
+    for &d in declarations {
         if !ast::is_module_declaration(d) {
             continue;
         }

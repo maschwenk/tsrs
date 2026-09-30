@@ -728,7 +728,7 @@ impl NodeBuilderImpl {
                 return self.f.deep_clone_node(decl_name);
             }
         }
-        let declarations: Vec<P<Node>> = symbol.declarations().clone();
+        let declarations: Vec<P<Node>> = symbol.declarations().to_vec();
         let string_named = !declarations.is_empty() && declarations.iter().all(|&d| self.is_string_named(c, d));
         let single_quote = !declarations.is_empty() && declarations.iter().all(|&d| self.is_single_quoted_string_named(c, d));
         let is_method = symbol.flags().intersects(SymbolFlags::Method);
@@ -1083,7 +1083,7 @@ pub(crate) fn get_type_alias_for_type_literal(c: &mut Checker, t: P<Type>) -> Op
 impl NodeBuilderImpl {
     // nodebuilderimpl.go:2852
     pub(crate) fn should_write_type_of_function_symbol(&self, c: &mut Checker, symbol: P<Symbol>, type_id: TypeId) -> (bool, Option<P<Symbol>>) {
-        let declarations: Vec<P<Node>> = symbol.declarations().clone();
+        let declarations: Vec<P<Node>> = symbol.declarations().to_vec();
         // `typeof C.name` can only be written when the member name is a valid identifier
         let is_static_method_symbol = symbol.flags().intersects(SymbolFlags::Method)
             && tsrs_scanner::is_identifier_text(symbol.name(), LanguageVariant::Standard)

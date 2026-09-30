@@ -114,7 +114,7 @@ impl Checker {
         let Some(symbol) = symbol else {
             return false;
         };
-        let declarations = symbol.declarations().clone();
+        let declarations = symbol.declarations().to_vec();
         for decl in declarations {
             let sf = ast::get_source_file_of_node(decl);
             if let Some(sf) = sf {

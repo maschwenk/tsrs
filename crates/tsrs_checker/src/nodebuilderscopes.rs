@@ -110,7 +110,7 @@ impl NodeBuilderImpl {
                                 add(original_param.name(), original_param);
                             }
                         } else {
-                            let declarations = param.declarations().clone();
+                            let declarations = param.declarations().to_vec();
                             let bound = declarations.iter().any(|&d| {
                                 if ast::is_parameter_declaration(d) && d.name().is_some() && ast::is_binding_pattern(d.name().unwrap()) {
                                     bind_pattern(b, c, d.name().unwrap(), add);

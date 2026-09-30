@@ -307,7 +307,7 @@ impl EmitResolver {
                 Box::new(noop_add_visible_alias)
             };
 
-            let declarations = symbol.declarations().clone();
+            let declarations = symbol.declarations().to_vec();
             for declaration in declarations {
                 if ast::is_identifier(declaration) {
                     continue;

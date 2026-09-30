@@ -793,7 +793,7 @@ impl NodeBuilderImpl {
 
         if symbol_name.is_empty() {
             let mut name: Option<P<Node>> = None;
-            let declarations = symbol.declarations().clone();
+            let declarations = symbol.declarations().to_vec();
             for d in declarations {
                 name = get_name_of_declaration(d);
                 if name.is_some() {
@@ -1009,7 +1009,7 @@ impl NodeBuilderImpl {
         {
             return "default".to_string();
         }
-        let declarations = symbol.declarations().clone();
+        let declarations = symbol.declarations().to_vec();
         if !declarations.is_empty() {
             let name = first_non_nil(&declarations, |&d| get_name_of_declaration(d)); // Try using a declaration with a name, first
             if let Some(name) = name {
@@ -1289,7 +1289,7 @@ impl NodeBuilderImpl {
 
         let mut file = get_declaration_of_kind(symbol, Kind::SourceFile);
         if file.is_none() {
-            let declarations = symbol.declarations().clone();
+            let declarations = symbol.declarations().to_vec();
             let equivalent_symbol = first_non_nil(&declarations, |&d| c.get_file_symbol_if_file_symbol_export_equals_container(d, symbol));
             if let Some(equivalent_symbol) = equivalent_symbol {
                 file = get_declaration_of_kind(equivalent_symbol, Kind::SourceFile);
