@@ -116,9 +116,6 @@ Error messages render types, symbols and signatures through Go's pipeline: `c.ty
 `NodeBuilder` entry point (nodebuilder.rs) -> `NodeBuilderImpl` builds synthetic type nodes (nodebuilderimpl_*.rs,
 nodebuilderscopes.rs; symbol chains via symbolaccessibility.go in printer.rs) -> `tsrs_printer::Printer` prints them.
 Baselines compare the text byte for byte, so all of it is ported faithfully.
-Until the pipeline works end to end, the String-returning entry points in printer.rs (`type_to_string*`,
-`symbol_to_string*`, `signature_to_string*`, `type_predicate_to_string`, …) keep their `// TEMPORARY placeholder`
-bodies (`type#<id>`, bare symbol name, `?`) so conformance runs do not hit `todo!()`; replace them last.
 
 **Handles and receivers.** Everything is re-entrant (a diagnostic reported during lazy resolution formats a type with
 the *same* cached builder, which pushes a new context), so the node builder objects are arena handles like `Relater`:

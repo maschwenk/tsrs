@@ -68,3 +68,22 @@ Project (release, 18-core machine shared with other agents, one run each unless 
 
 0 errors in every run (5 consecutive default runs, identical counters). With 4 checkers the per-checker check times
 are 9.4-12.7 s (Go's assignment); config + parse + bind take ~2 s.
+
+## 2026-09-30 (later): node builder live (real type/symbol/signature printing)
+
+The node-builder wave (`body/nb-1..6`, merged via `nb-integrate`) replaced the placeholder printer: `typeToString` & co.
+now run Go's pipeline (printer.go -> NodeBuilder -> nodecopy/pseudo type node builder/symbol accessibility/module
+specifiers -> `tsrs_printer`).
+
+Conformance: **13,398 pass / 2 codes / 62 fail / 0 timeout / 0 crash** (was 10,519 / 2,876 / 67; no previous pass
+lost). The 62 fails are the declaration-emit diagnostics (TS4xxx/TS9xxx/TS7056/TS2883, pipeline not ported) plus a few
+checker cases listed in `notes/fix-nb-integrate.md`.
+
+Project (release, 0 errors): counters now equal the reference exactly.
+
+| | symbols | types | instantiations | check time | wall | peak memory |
+| --- | --- | --- | --- | --- | --- | --- |
+| tsrs `--singleThreaded` | 25,973,354 | 9,639,962 | 44,884,281 | 26.4 s | 34.0 s | 19.5 GB |
+| tsgo-ref `--singleThreaded` | 25,973,354 | 9,639,962 | 44,884,281 | 38.8 s | 45.7 s | 16.7 GB |
+| tsrs default (4 checkers) | 39,704,001 | 16,200,921 | 89,981,648 | 13.2 s | 18.1 s | 28.3 GB |
+| tsgo-ref default (4 checkers) | 39,704,001 | 16,200,921 | | 21.8 s | 26.5 s | 24.4 GB |
