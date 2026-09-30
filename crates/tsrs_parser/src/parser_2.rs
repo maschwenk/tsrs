@@ -1,4 +1,4 @@
-use tsrs_ast::{self as ast, Kind, ModifierList, Node, NodeFlags, NodeList, TokenFlags};
+use tsrs_ast::{self as ast, DiagnosticExt, Kind, ModifierList, Node, NodeFlags, NodeList, TokenFlags};
 use tsrs_core::{TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_scanner as scanner;
@@ -859,7 +859,8 @@ impl Parser {
             self.parse_error_at_current_token(&diagnostics::Identifier_or_string_literal_expected, &[]);
         }
         let value = self.parse_assignment_expression_or_higher();
-        let node = self.factory.new_import_attribute(name, value);
+        // FIXME(ast): Go passes a nil name here; ImportAttribute.name must become nilable in tsrs_ast.
+        let node = self.factory.new_import_attribute(name.unwrap(), value);
         self.finish_node(node, pos)
     }
 
@@ -949,7 +950,7 @@ impl Parser {
         let members = self.parse_list(ParsingContext::TypeMembers, Parser::parse_type_member);
         self.parse_expected(Kind::CloseBraceToken);
         let node =
-            self.factory.new_mapped_type_node(readonly_token, type_parameter, name_type, question_token, type_node, members);
+            self.factory.new_mapped_type_node(readonly_token, type_parameter, name_type, question_token, type_node, Some(members));
         self.finish_node(node, pos)
     }
 
@@ -1007,9 +1008,9 @@ impl Parser {
         self.parse_type_member_semicolon();
         let result;
         if kind == Kind::CallSignature {
-            result = self.factory.new_call_signature_declaration(type_parameters, parameters, type_node);
+            result = self.factory.new_call_signature_declaration(type_parameters, Some(parameters), type_node);
         } else {
-            result = self.factory.new_construct_signature_declaration(type_parameters, parameters, type_node);
+            result = self.factory.new_construct_signature_declaration(type_parameters, Some(parameters), type_node);
         }
         self.finish_node(result, pos);
         self.with_jsdoc(result, jsdoc);
@@ -1277,7 +1278,7 @@ impl Parser {
                 modifiers,
                 name,
                 type_parameters,
-                parameters,
+                Some(parameters),
                 return_type,
                 None, /*fullSignature*/
                 body,
@@ -1287,7 +1288,7 @@ impl Parser {
                 modifiers,
                 name,
                 type_parameters,
-                parameters,
+                Some(parameters),
                 return_type,
                 None, /*fullSignature*/
                 body,
@@ -1437,7 +1438,7 @@ impl Parser {
             .unwrap();
         let type_node = self.parse_type_annotation();
         self.parse_type_member_semicolon();
-        let node = self.factory.new_index_signature_declaration(modifiers, parameters, type_node);
+        let node = self.factory.new_index_signature_declaration(modifiers, Some(parameters), type_node);
         let result = self.finish_node(node, pos);
         self.with_jsdoc(result, jsdoc);
         result
@@ -1463,7 +1464,7 @@ impl Parser {
                 name,
                 question_token,
                 type_parameters,
-                parameters,
+                Some(parameters),
                 return_type,
             );
         } else {
@@ -1715,9 +1716,9 @@ impl Parser {
         let return_type = self.parse_return_type(Kind::EqualsGreaterThanToken, false /*isType*/);
         let result;
         if is_constructor_type {
-            result = self.factory.new_constructor_type_node(modifiers, type_parameters, parameters, return_type);
+            result = self.factory.new_constructor_type_node(modifiers, type_parameters, Some(parameters), return_type);
         } else {
-            result = self.factory.new_function_type_node(type_parameters, parameters, return_type);
+            result = self.factory.new_function_type_node(type_parameters, Some(parameters), return_type);
         }
         self.finish_node(result, pos);
         self.with_jsdoc(result, jsdoc);
