@@ -361,7 +361,7 @@ impl Checker {
     pub(crate) fn is_type_subset_of_union(&mut self, source: P<Type>, target: P<Type>) -> bool {
         if source.flags().intersects(TypeFlags::Union) {
             for &t in source.types() {
-                if !contains_type(target.types(), t) {
+                if !contains_type(self, target.types(), t) {
                     return false;
                 }
             }
@@ -370,7 +370,7 @@ impl Checker {
         if source.flags().intersects(TypeFlags::EnumLike) && self.get_base_type_of_enum_like_type(source) == target {
             return true;
         }
-        contains_type(target.types(), source)
+        contains_type(self, target.types(), source)
     }
 }
 
@@ -462,7 +462,7 @@ impl Relater {
     // relater.go:2951
     pub(crate) fn some_type_related_to_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         let source_types = source.types();
-        if source.flags().intersects(TypeFlags::Union) && contains_type(source_types, target) {
+        if source.flags().intersects(TypeFlags::Union) && contains_type(c, source_types, target) {
             return Ternary::True;
         }
         for (i, &t) in source_types.iter().enumerate() {
@@ -523,7 +523,7 @@ impl Relater {
     pub(crate) fn type_related_to_some_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         let target_types = target.types();
         if target.flags().intersects(TypeFlags::Union) {
-            if contains_type(target_types, source) {
+            if contains_type(c, target_types, source) {
                 return Ternary::True;
             }
             if self.rel() != c.comparable_relation
@@ -551,7 +551,7 @@ impl Relater {
                 } else if source.flags().intersects(TypeFlags::BigIntLiteral) {
                     primitive = Some(c.bigint_type);
                 }
-                if primitive.is_some_and(|p| contains_type(target_types, p)) || alternate_form.is_some_and(|a| contains_type(target_types, a)) {
+                if primitive.is_some_and(|p| contains_type(c, target_types, p)) || alternate_form.is_some_and(|a| contains_type(c, target_types, a)) {
                     return Ternary::True;
                 }
                 return Ternary::False;

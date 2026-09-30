@@ -1439,8 +1439,8 @@ impl Checker {
         // literals always preserve their literal types (otherwise they might widen during type inference). An alternative
         // here would be to not mark contextually typed literals as fresh in the first place.
         if self.maybe_type_of_kind(t, TypeFlags::Literal) && {
-            let instantiated = self.instantiate_contextual_type(contextual_type, node, ContextFlags::None);
-            self.is_literal_of_contextual_type(t, Some(instantiated))
+            let instantiated = self.instantiate_contextual_type(Some(contextual_type), node, ContextFlags::None);
+            self.is_literal_of_contextual_type(t, instantiated)
         } {
             t = self.get_regular_type_of_literal_type(t);
         }

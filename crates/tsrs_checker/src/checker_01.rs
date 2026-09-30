@@ -552,7 +552,7 @@ impl Checker {
                         // We may need to merge the module augmentation's exports into the target symbols of the resolved exports
                         let resolved_exports = self.get_resolved_members_or_exports_of_symbol(main_module, MembersOrExportsResolutionKind::ResolvedExports);
                         for (key, value) in augmentation_exports.unwrap().entries() {
-                            if let Some(resolved) = resolved_exports.lookup(key) {
+                            if let Some(resolved) = resolved_exports.and_then(|resolved_exports| resolved_exports.lookup(key)) {
                                 if main_module.exports().and_then(|exports| exports.lookup(key)).is_none() {
                                     self.merge_symbol(resolved, value, false /*unidirectional*/);
                                 }
@@ -1056,7 +1056,7 @@ impl Checker {
             if meaning.intersects(SymbolFlags::BlockScopedVariable)
                 || meaning.intersects(SymbolFlags::Class | SymbolFlags::Enum) && meaning & SymbolFlags::Value == SymbolFlags::Value
             {
-                let export_or_local_symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(result));
+                let export_or_local_symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(result)).unwrap();
                 if export_or_local_symbol.flags().intersects(SymbolFlags::BlockScopedVariable | SymbolFlags::Class | SymbolFlags::Enum) {
                     self.check_resolved_block_scoped_variable(export_or_local_symbol, error_location);
                 }

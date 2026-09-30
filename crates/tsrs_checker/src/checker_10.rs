@@ -1125,7 +1125,7 @@ impl Checker {
                     }
                     Some(cs) => {
                         let cs_return_type = self.get_return_type_of_signature(cs);
-                        contextual_type = Some(self.instantiate_contextual_type(cs_return_type, fn_, ContextFlags::None));
+                        contextual_type = self.instantiate_contextual_type(Some(cs_return_type), fn_, ContextFlags::None);
                     }
                 }
                 if is_generator {

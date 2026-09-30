@@ -745,7 +745,9 @@ impl Checker {
         if is_identifier(id) {
             let resolved = self.resolve_entity_name(id, SymbolFlags::All, true /*ignoreErrors*/, true /*dontResolveAlias*/, Some(location));
             let sym = self.get_export_symbol_of_value_symbol_if_exported(resolved);
-            self.mark_alias_referenced(sym, id);
+            if let Some(sym) = sym {
+                self.mark_alias_referenced(sym, id);
+            }
         }
     }
 
@@ -1094,7 +1096,7 @@ impl Checker {
                 // (because the const enum value will not be inlined), or if (2) the alias is an export
                 // of a const enum declaration that will be preserved.
                 if self.compiler_options.get_isolated_modules() || self.compiler_options.should_preserve_const_enums() && is_export_or_export_expression(location) || {
-                    let export_symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(target));
+                    let export_symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(target)).unwrap();
                     !is_const_enum_or_const_enum_only_module(export_symbol)
                 } {
                     self.mark_alias_symbol_as_referenced(symbol);
@@ -2239,7 +2241,7 @@ impl Checker {
             match expr.kind {
                 Kind::Identifier => {
                     let resolved = self.get_resolved_symbol(expr);
-                    let symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(resolved));
+                    let symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(resolved)).unwrap();
                     if symbol.flags().intersects(SymbolFlags::ModuleExports) {
                         // No contextual type for an expression of the form 'module.exports = expr'.
                         return None;

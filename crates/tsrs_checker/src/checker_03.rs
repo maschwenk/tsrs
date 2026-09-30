@@ -1695,8 +1695,7 @@ impl Checker {
         if is_identifier(node.expression().unwrap()) {
             let id = node.expression().unwrap();
             let resolved = self.resolve_entity_name(id, SymbolFlags::All, true /*ignoreErrors*/, true /*dontResolveAlias*/, Some(node));
-            // SIG: get_export_symbol_of_value_symbol_if_exported should return Option<P<Symbol>> (Go returns nil for a nil symbol).
-            let sym = if resolved.is_some() { Some(self.get_export_symbol_of_value_symbol_if_exported(resolved)) } else { None };
+            let sym = self.get_export_symbol_of_value_symbol_if_exported(resolved);
             if let Some(sym) = sym {
                 self.mark_linked_references(node, ReferenceHint::ExportAssignment, None, None);
                 let type_only_declaration = self.get_type_only_alias_declaration_ex(sym, SymbolFlags::Value);

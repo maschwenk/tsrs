@@ -159,8 +159,7 @@ impl Checker {
         }
         let mut import_attributes_type: Option<P<Type>> = None;
         if ast::has_import_attributes(declaration) {
-            // SIG: get_type_from_import_attributes should take and return Option (Go returns nil for a nil node)
-            import_attributes_type = ast::get_import_attributes(declaration).map(|a| self.get_type_from_import_attributes(a));
+            import_attributes_type = self.get_type_from_import_attributes(ast::get_import_attributes(declaration));
         }
         // This is only used by emit and type printing, after checking has already reported any
         // resolution errors for this specifier. Resolve with ignoreErrors so that these queries
@@ -868,7 +867,7 @@ impl Checker {
         match node.kind {
             Kind::ImportEqualsDeclaration | Kind::VariableDeclaration => self.get_target_of_import_equals_declaration(node),
             Kind::ImportClause => self.get_target_of_import_clause(node),
-            Kind::NamespaceImport => Some(self.get_target_of_namespace_import(node)),
+            Kind::NamespaceImport => self.get_target_of_namespace_import(node),
             Kind::NamespaceExport => self.get_target_of_namespace_export(node),
             Kind::ImportSpecifier | Kind::BindingElement => self.get_target_of_import_specifier(node),
             Kind::ExportSpecifier => self.get_target_of_export_specifier(node, SymbolFlags::Value | SymbolFlags::Type | SymbolFlags::Namespace, true /*dontRecursivelyResolve*/),
@@ -1326,7 +1325,7 @@ impl Checker {
                 let mut lookup_table: ExportCollisionTable = FxHashMap::default();
                 let declarations = export_stars.declarations().clone();
                 for node in declarations {
-                    let import_attributes_type = ast::get_import_attributes(node).map(|a| c.get_type_from_import_attributes(a));
+                    let import_attributes_type = c.get_type_from_import_attributes(ast::get_import_attributes(node));
                     let resolved_module = c.resolve_external_module_name(node, node.module_specifier().unwrap(), false /*ignoreErrors*/, import_attributes_type);
                     let exported_symbols = visit(c, st, resolved_module, Some(node), is_type_only || node.is_type_only());
                     c.extend_export_symbols(nested_symbols, exported_symbols, Some(&mut lookup_table), Some(node));
@@ -1565,7 +1564,7 @@ impl Checker {
                 break;
             }
             let resolved = self.resolve_alias(symbol);
-            let target = self.get_export_symbol_of_value_symbol_if_exported(Some(resolved));
+            let target = self.get_export_symbol_of_value_symbol_if_exported(Some(resolved)).unwrap();
             if target == self.unknown_symbol {
                 return SymbolFlags::All;
             }
@@ -1652,7 +1651,7 @@ impl Checker {
 
     // checker.go:16777
     pub fn get_type_of_symbol_at_location(&mut self, symbol: P<Symbol>, location: Option<P<Node>>) -> Option<P<Type>> {
-        let symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(symbol));
+        let symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(symbol)).unwrap();
         if let Some(mut location) = location {
             // If we have an identifier or a property access at the given location, if the location is
             // an dotted name expression, and if the location is not an assignment target, obtain the type
@@ -1671,7 +1670,7 @@ impl Checker {
                         self.get_type_of_expression(location)
                     };
                     let resolved_symbol = self.symbol_node_links.get(location).resolved_symbol.get();
-                    if self.get_export_symbol_of_value_symbol_if_exported(resolved_symbol) == symbol {
+                    if self.get_export_symbol_of_value_symbol_if_exported(resolved_symbol) == Some(symbol) {
                         return Some(self.remove_optional_type_marker(t));
                     }
                 }

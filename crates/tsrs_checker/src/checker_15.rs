@@ -981,7 +981,7 @@ impl Checker {
                         // literals actually end up widening to 'boolean' (see #48363).
                         let t = self.instantiate_instantiable_types(contextual_type, return_mapper);
                         if !t.flags().intersects(TypeFlags::AnyOrUnknown) {
-                            if t.flags().intersects(TypeFlags::Union) && contains_type(t.types(), self.regular_false_type) && contains_type(t.types(), self.regular_true_type) {
+                            if t.flags().intersects(TypeFlags::Union) && contains_type(self, t.types(), self.regular_false_type) && contains_type(self, t.types(), self.regular_true_type) {
                                 return Some(self.filter_type(t, |c, t| t != c.regular_false_type && t != c.regular_true_type));
                             }
                             return Some(t);

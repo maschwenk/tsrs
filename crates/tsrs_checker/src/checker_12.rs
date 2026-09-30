@@ -1162,8 +1162,7 @@ impl Checker {
             if alias.is_some() {
                 result.alias.set(alias);
             } else {
-                // SIG: instantiate_type_alias should take/return Option<P<TypeAlias>> (Go returns nil for a nil alias)
-                let instantiated_alias = root.alias.get().map(|a| self.instantiate_type_alias(a, mapper));
+                let instantiated_alias = self.instantiate_type_alias(root.alias.get(), mapper);
                 result.alias.set(instantiated_alias);
             }
             break;
@@ -1351,8 +1350,7 @@ impl Checker {
             }
             let target_meaning = if n.is_type_of { SymbolFlags::Value } else { SymbolFlags::Type };
             // TODO: Future work: support unions/generics/whatever via a deferred import-type
-            // SIG: get_type_from_import_attributes should take/return Option (Go returns nil for a nil node)
-            let import_attributes_type = ast::get_import_attributes(node).map(|attributes| self.get_type_from_import_attributes(attributes));
+            let import_attributes_type = self.get_type_from_import_attributes(ast::get_import_attributes(node));
             let inner_module_symbol = self.resolve_external_module_name(node, n.argument.as_literal_type_node().literal, false /*ignoreErrors*/, import_attributes_type);
             let Some(inner_module_symbol) = inner_module_symbol else {
                 self.symbol_node_links.get(node).resolved_symbol.set(Some(self.unknown_symbol));

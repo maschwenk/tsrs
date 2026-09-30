@@ -191,10 +191,8 @@ impl Checker {
             self.error(Some(expr), &diagnostics::The_operand_of_a_delete_operator_cannot_be_a_private_identifier, &[]);
         }
         let resolved = self.get_resolved_symbol_or_nil(expr);
-        // SIG: getExportSymbolOfValueSymbolIfExported returns nil for a nil symbol in Go (result should be
-        // Option<P<Symbol>>); the nil case is handled here without calling it.
-        if resolved.is_some() {
-            let symbol = self.get_export_symbol_of_value_symbol_if_exported(resolved);
+        let symbol = self.get_export_symbol_of_value_symbol_if_exported(resolved);
+        if let Some(symbol) = symbol {
             if self.is_readonly_symbol(symbol) {
                 self.error(Some(expr), &diagnostics::The_operand_of_a_delete_operator_cannot_be_a_read_only_property, &[]);
             } else {
@@ -498,7 +496,7 @@ impl Checker {
         if should_mark_identifier_alias_referenced(node) {
             self.mark_linked_references(node, ReferenceHint::Identifier, None /*propSymbol*/, None /*parentType*/);
         }
-        let local_or_export_symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(symbol));
+        let local_or_export_symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(symbol)).unwrap();
         let target_symbol = self.resolve_alias_with_deprecation_check(local_or_export_symbol, node);
         let has_declarations = !target_symbol.declarations.borrow().is_empty();
         if has_declarations && self.is_deprecated_symbol(target_symbol) && self.is_uncalled_function_reference(node, target_symbol) {
@@ -1723,16 +1721,10 @@ impl Checker {
                 // that includes a ThisType<T>. If so, T is the contextual type for 'this'. We continue looking in
                 // any directly enclosing object literals.
                 let contextual_type = self.get_apparent_type_of_contextual_type(containing_literal, ContextFlags::None);
-                // SIG: getThisTypeOfObjectLiteralFromContextualType's contextualType should be Option<P<Type>>; with nil
-                // it returns nil without doing anything.
-                let mut this_type = match contextual_type {
-                    Some(contextual_type) => self.get_this_type_of_object_literal_from_contextual_type(containing_literal, contextual_type),
-                    None => None,
-                };
+                let mut this_type = self.get_this_type_of_object_literal_from_contextual_type(containing_literal, contextual_type);
                 if let Some(tt) = this_type {
                     let inference_context = self.get_inference_context(containing_literal);
-                    // SIG: getMapperFromContext takes a nil-able *InferenceContext in Go (returns nil for nil).
-                    let mapper = inference_context.map(|n| self.get_mapper_from_context(n));
+                    let mapper = self.get_mapper_from_context(inference_context);
                     return Some(self.instantiate_type(tt, mapper));
                 }
                 // There was no contextual ThisType<T> for the containing object literal, so the contextual type

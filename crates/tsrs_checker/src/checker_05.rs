@@ -953,15 +953,8 @@ impl Checker {
                         // We clone the inference context to avoid disturbing a resolution in progress for an
                         // outer call expression. Effectively we just want a snapshot of whatever has been
                         // inferred for any outer call expression so far.
-                        // SIG: clone_inference_context/get_mapper_from_context should take Option (Go passes nil
-                        // and gets nil back); adapted here with equivalent nil handling.
-                        let outer_mapper = match outer_context {
-                            Some(outer_context) => {
-                                let cloned = self.clone_inference_context(outer_context, InferenceFlags::NoDefault);
-                                Some(self.get_mapper_from_context(cloned))
-                            }
-                            None => None,
-                        };
+                        let cloned = self.clone_inference_context(outer_context, InferenceFlags::NoDefault);
+                        let outer_mapper = self.get_mapper_from_context(cloned);
                         let instantiated_type = self.instantiate_type(contextual_type, outer_mapper);
                         // If the contextual type is a generic function type with a single call signature, we
                         // instantiate the type with its own type parameters and type arguments. This ensures that
@@ -997,11 +990,8 @@ impl Checker {
                     let return_source_type = self.instantiate_type(contextual_type, outer_return_mapper);
                     self.infer_types(return_context.inferences.get(), return_source_type, inference_target_type, InferencePriority::None, false);
                     if return_context.inferences.get().iter().any(|&info| has_inference_candidates(info)) {
-                        // SIG: get_mapper_from_context should take Option (Go passes nil and gets nil back).
-                        let return_mapper = match self.clone_inferred_part_of_context(return_context) {
-                            Some(cloned) => Some(self.get_mapper_from_context(cloned)),
-                            None => None,
-                        };
+                        let cloned = self.clone_inferred_part_of_context(return_context);
+                        let return_mapper = self.get_mapper_from_context(cloned);
                         context.return_mapper.set(return_mapper);
                     } else {
                         context.return_mapper.set(None);

@@ -1333,8 +1333,7 @@ impl Checker {
             t
         } else {
             let contextual_type = self.get_contextual_type(node, ContextFlags::None);
-            // SIG: instantiate_contextual_type should take/return Option<P<Type>> (Go passes and returns nil).
-            let instantiated = contextual_type.map(|ct| self.instantiate_contextual_type(ct, node, ContextFlags::None));
+            let instantiated = self.instantiate_contextual_type(contextual_type, node, ContextFlags::None);
             self.get_widened_literal_like_type_for_contextual_type(t, instantiated)
         }
     }
@@ -2126,8 +2125,7 @@ impl Checker {
     // checker.go:14757
     pub(crate) fn get_target_of_import_clause(&mut self, node: P<Node>) -> Option<P<Symbol>> {
         let module_specifier = get_module_specifier_from_node(node.parent().unwrap()).unwrap();
-        // SIG: get_type_from_import_attributes should take/return Option (Go passes nil and gets nil back).
-        let import_attributes_type = ast::get_import_attributes(node.parent().unwrap()).map(|a| self.get_type_from_import_attributes(a));
+        let import_attributes_type = self.get_type_from_import_attributes(ast::get_import_attributes(node.parent().unwrap()));
         let module_symbol = self.resolve_external_module_name(node, module_specifier, false /*ignoreErrors*/, import_attributes_type);
         if let Some(module_symbol) = module_symbol {
             return self.get_target_of_module_default(module_symbol, node, true /*dontResolveAlias*/);
@@ -2177,8 +2175,7 @@ impl Checker {
         } else if ast::is_export_specifier(node) {
             attributes = ast::get_import_attributes(node.parent().unwrap().parent().unwrap());
         }
-        // SIG: get_type_from_import_attributes should take/return Option (Go passes nil and gets nil back).
-        let attributes_type = attributes.map(|a| self.get_type_from_import_attributes(a));
+        let attributes_type = self.get_type_from_import_attributes(attributes);
         let has_default_only = self.is_only_importable_as_default(specifier, Some(module_symbol), attributes_type);
         let has_synthetic_default = self.can_have_synthetic_default(file, module_symbol, dont_resolve_alias, specifier);
         if export_default_symbol.is_none() && !has_synthetic_default && !has_default_only {
@@ -2221,8 +2218,7 @@ impl Checker {
                     if !(ast::is_export_declaration(decl) && decl.module_specifier().is_some()) {
                         continue;
                     }
-                    // SIG: get_type_from_import_attributes should take/return Option (Go passes nil and gets nil back).
-                    let attributes_type = ast::get_import_attributes(decl).map(|a| self.get_type_from_import_attributes(a));
+                    let attributes_type = self.get_type_from_import_attributes(ast::get_import_attributes(decl));
                     let resolved_external_module_name = self.resolve_external_module_name(decl, decl.module_specifier().unwrap(), false /*ignoreErrors*/, attributes_type);
                     if resolved_external_module_name.is_some_and(|m| lookup_export(m, InternalSymbolNameDefault).is_some()) {
                         default_export = Some(decl);
@@ -2255,8 +2251,7 @@ impl Checker {
     // SIG: returns Option (Go returns nil when the module cannot be resolved).
     pub(crate) fn get_target_of_namespace_import(&mut self, node: P<Node>) -> Option<P<Symbol>> {
         let module_specifier = self.get_module_specifier_for_import_or_export(node).unwrap();
-        // SIG: get_type_from_import_attributes should take/return Option (Go passes nil and gets nil back).
-        let attributes_type = ast::get_import_attributes(node.parent().unwrap().parent().unwrap()).map(|a| self.get_type_from_import_attributes(a));
+        let attributes_type = self.get_type_from_import_attributes(ast::get_import_attributes(node.parent().unwrap().parent().unwrap()));
         let immediate = self.resolve_external_module_name(node, module_specifier, false /*ignoreErrors*/, attributes_type);
         // SIG: resolve_es_module_symbol should take/return Option (Go passes nil through).
         let resolved = immediate.map(|immediate| self.resolve_es_module_symbol(immediate, node, module_specifier));
@@ -2268,8 +2263,7 @@ impl Checker {
     pub(crate) fn get_target_of_namespace_export(&mut self, node: P<Node>) -> Option<P<Symbol>> {
         let module_specifier = self.get_module_specifier_for_import_or_export(node);
         if let Some(module_specifier) = module_specifier {
-            // SIG: get_type_from_import_attributes should take/return Option (Go passes nil and gets nil back).
-            let attributes_type = ast::get_import_attributes(node.parent().unwrap()).map(|a| self.get_type_from_import_attributes(a));
+            let attributes_type = self.get_type_from_import_attributes(ast::get_import_attributes(node.parent().unwrap()));
             let immediate = self.resolve_external_module_name(node, module_specifier, false /*ignoreErrors*/, attributes_type);
             // SIG: resolve_es_module_symbol should take/return Option (Go passes nil through).
             let resolved = immediate.map(|immediate| self.resolve_es_module_symbol(immediate, node, module_specifier));
@@ -2285,9 +2279,8 @@ impl Checker {
         if ast::is_import_specifier(node) && ast::module_export_name_is_default(name) {
             let specifier = self.get_module_specifier_for_import_or_export(node);
             if let Some(specifier) = specifier {
-                // SIG: get_type_from_import_attributes should take/return Option (Go passes nil and gets nil back).
                 let attributes_type =
-                    ast::get_import_attributes(node.parent().unwrap().parent().unwrap().parent().unwrap()).map(|a| self.get_type_from_import_attributes(a));
+                    self.get_type_from_import_attributes(ast::get_import_attributes(node.parent().unwrap().parent().unwrap().parent().unwrap()));
                 let module_symbol = self.resolve_external_module_name(node, specifier, false /*ignoreErrors*/, attributes_type);
                 if let Some(module_symbol) = module_symbol {
                     return self.get_target_of_module_default(module_symbol, node, true /*dontResolveAlias*/);
@@ -2316,8 +2309,7 @@ impl Checker {
         if ast::has_import_attributes(node) {
             attributes = ast::get_import_attributes(node);
         }
-        // SIG: get_type_from_import_attributes should take/return Option (Go passes nil and gets nil back).
-        let import_attributes_type = attributes.map(|a| self.get_type_from_import_attributes(a));
+        let import_attributes_type = self.get_type_from_import_attributes(attributes);
         let module_symbol = self.resolve_external_module_name(node, module_specifier, false /*ignoreErrors*/, import_attributes_type);
         let name = if !ast::is_property_access_expression(specifier) { specifier.property_name_or_name() } else { specifier.name() };
         let name = name.unwrap();
@@ -2643,8 +2635,7 @@ impl Checker {
         if ast::module_export_name_is_default(name) {
             let specifier = self.get_module_specifier_for_import_or_export(node);
             if let Some(specifier) = specifier {
-                // SIG: get_type_from_import_attributes should take/return Option (Go passes nil and gets nil back).
-                let attributes_type = ast::get_import_attributes(node.parent().unwrap().parent().unwrap()).map(|a| self.get_type_from_import_attributes(a));
+                let attributes_type = self.get_type_from_import_attributes(ast::get_import_attributes(node.parent().unwrap().parent().unwrap()));
                 let module_symbol = self.resolve_external_module_name(node, specifier, false /*ignoreErrors*/, attributes_type);
                 if let Some(module_symbol) = module_symbol {
                     return self.get_target_of_module_default(module_symbol, node, dont_resolve_alias);

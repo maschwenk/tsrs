@@ -1629,7 +1629,7 @@ impl Checker {
             // parameter declared in the same parameter list is a candidate.
             if ast::is_identifier(expr) {
                 let symbol = self.get_resolved_symbol(expr);
-                let declaration = self.get_export_symbol_of_value_symbol_if_exported(Some(symbol)).value_declaration();
+                let declaration = self.get_export_symbol_of_value_symbol_if_exported(Some(symbol)).unwrap().value_declaration();
                 if let Some(declaration) = declaration {
                     if (ast::is_binding_element(declaration) || ast::is_parameter_declaration(declaration))
                         && Some(reference) == declaration.parent()
@@ -1828,7 +1828,7 @@ impl Checker {
                 }
                 if ast::is_variable_declaration(target) || ast::is_binding_element(target) {
                     let source_symbol = self.get_resolved_symbol(source);
-                    let export_symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(source_symbol));
+                    let export_symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(source_symbol)).unwrap();
                     return Some(export_symbol) == self.get_symbol_of_declaration(target);
                 }
                 return false;
@@ -2423,7 +2423,7 @@ impl Checker {
             match node.kind {
                 Kind::Identifier => {
                     let resolved = self.get_resolved_symbol(node);
-                    let symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(resolved));
+                    let symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(resolved)).unwrap();
                     return self.get_explicit_type_of_symbol(symbol, diagnostic);
                 }
                 Kind::ThisKeyword => {
@@ -2774,7 +2774,7 @@ impl Checker {
             return self.is_type_assignable_to(source, target);
         }
         // Quick exit when source union contains the target type
-        if contains_type(source.types(), target) {
+        if contains_type(self, source.types(), target) {
             return true;
         }
         // Otherwise, check if any constituent type of the source union is assignable to the target type
