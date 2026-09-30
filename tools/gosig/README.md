@@ -39,13 +39,15 @@ Paths are relative to the config file.
 | --- | --- |
 | `moduleDir`, `package` | Go module root and the import path to generate |
 | `resultOnlyPackages` | extra in-module packages whose bodies are analyzed only so their *results* are known (`ast` accessors, `core`, `binder`) |
-| `outDir`, `sigsFile`, `advisorySigsFile` | stub directory; grep file for generated signatures; grep file for functions that are ported by hand or later (e.g. `types.go`, `nodebuilder*.go`) |
+| `outDir`, `sigsFile`, `advisorySigsFile` | stub directory; grep file for generated signatures; grep file for functions that are ported by hand or later (e.g. `types.go`, `nodebuilder*.go`). A stub is never emitted when a hand-written file in `outDir` (one without the stub marker) already defines a function of that name on the same receiver; such functions are listed in the stub file's comments and kept in `sigsFile` |
 | `prelude` | text at the top of every generated file |
 | `files` | emitted Go files in output order: `{go, rust}` or `{go, chunks: [{rust, from, to}]}` (a declaration goes to the chunk holding its first line); `declsNote` labels the comment block that lists the file's non-function declarations. Several Go files may share a Rust file |
 | `notPorted` | Go files (globs) that are ignored completely: no call sites, no reserved names |
-| `skipFuncs` | functions never emitted (`NewChecker`, the pool helpers `Checker.getRelater`…); listed in the chunk's comment block |
-| `checkerType`, `fieldsFile` | the state-machine type; its function-typed fields become methods in `fieldsFile` |
-| `checkerHolders` / `notCheckerHolders` | helper structs holding `c *Checker` that become `impl<'c> Name<'c>` / that do not (the tool warns about unlisted ones) |
+| `skipFuncs` | functions (and `Checker` fields) never emitted, e.g. `NewChecker`; listed in the chunk's comment block |
+| `checkerType`, `fieldsFile` | the state-machine type; its function-typed fields become methods in `fieldsFile` (not written when all of them are hand-written, as now) |
+| `checkerHolders`, `checkerHolderStyle` | helper structs holding `c *Checker` -> impl header (`""` = default). Style `param` (docs/CHECKER.md): the field is dropped and every method takes `c: &mut Checker` after the receiver (`&self` for arena types such as `Relater`, else `&mut self`). Style `lifetime`: `impl<'c> Name<'c>` |
+| `notCheckerHolders` | structs that hold `*Checker` in Go but are not holders (mapper data); the tool warns about unlisted ones |
+| `droppedCheckerFields` | back-pointers Rust drops (`Type.checker`): non-checker functions that use them, directly or through callees, get a leading `c: &mut Checker` |
 | `arenaTypes` | receivers whose methods take `&self` |
 | `typeMap` | Go type string -> Rust type. Keys use package names (`*ast.Node`, `ast.SymbolTable`, `*diagnostics.Message`) and are unqualified for the target package (`*Checker`, `TypeData`). A generic named type maps by template: `"iter.Seq": "Vec<$0>"`, with an optional `"iter.Seq@param": "&[$0]"` for parameters |
 | `dataInterfaces` | `*T` where `T` implements the interface maps by template: `ast.nodeData` -> `P<Node>` (except `SourceFile`), `TypeData` -> `&'static {T}` |
@@ -55,6 +57,7 @@ Paths are relative to the config file.
 | `zeroValueGenerics`, `coalesceGenerics`, `funcPassthrough` | generic helpers whose nil behavior the analysis must know: return the zero value on a miss (`core.Find`), return the first non-nil argument (`core.OrElse`), return their func argument (`core.Memoize`) |
 | `callbackConditionalNil` | functions that return nil only when their callback does (`mapType`): each call site is judged by the callback it passes |
 | `nilTransparent` | treat nil-in/nil-out parameters as non-nil (below) |
+| `nilTolerantParams` | parameter types Go code passes as nil because a nil map reads as empty (`ast.SymbolTable`): `Option` unless the function writes through them |
 | `paramForwarding` | `forward` (default), `reverse`, `both`, `off` (below) |
 | `overrides` | manual corrections applied before the fixpoint: `"Checker.goName.p0": "P"` or `"Option"`, `".r0"` for results, `"Checker.goName#local": "nonnil"` for a local whose zero value never escapes |
 
@@ -67,8 +70,9 @@ Paths are relative to the config file.
   unexported first, then by config file order and line. An exported function that only forwards
   to the colliding function with an identical signature is **merged** (not emitted; the winner
   becomes `pub`); any other loser gets `_exported` (or `_2`, …). Both lists are printed.
-- Receivers: `Checker` and checker holders `&mut self`; arena types `&self`; value receivers
-  `self`; other types `&mut self` if the method (transitively) writes through the receiver.
+- Receivers: `Checker` `&mut self`; checker holders per `checkerHolderStyle`; arena types `&self`;
+  value receivers `self`; other types `&mut self` if the method (transitively) writes through
+  the receiver.
 - Types: `int` -> `i32`; `string` -> `&str` / `String` (result); `[]T` -> `&[T]` / `Vec<T>`
   (`&mut [T]` when written through); maps -> `&FxHashMap` / `FxHashMap` (`&mut` when written);
   `*T` struct -> `P<T>`, `*Checker` -> `&mut Checker`, pointer to non-struct -> `&mut T`;
@@ -84,7 +88,7 @@ Nil-able positions are pointers, interfaces, funcs, table maps (`ast.SymbolTable
 parameters. The whole package is analyzed (bodies in `notPorted` files are ignored) together
 with the result-only packages.
 
-**Parameters** are `Option` iff:
+**Parameters** are `Option` iff (besides `overrides` and `nilTolerantParams`):
 
 1. (a) some call site passes literal `nil` (also through `core.IfElse(c, x, nil)`), or
 2. (b) the body compares the parameter with `nil` before any textual reassignment of it
