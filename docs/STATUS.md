@@ -91,3 +91,17 @@ Project (release, 0 errors): counters now equal the reference exactly; peak memo
 | tsgo-ref `--singleThreaded` | 25,973,354 | 9,639,962 | 44,884,281 | 38.8 s | 45.7 s | 16.7 GB |
 | tsrs default (4 checkers) | 39,704,001 | 16,200,921 | 89,981,648 | 13.2 s | 18.1 s | 28.3 GB |
 | tsgo-ref default (4 checkers) | 39,704,001 | 16,200,921 | | 21.8 s | 26.5 s | 24.4 GB |
+
+## 2026-09-30 (later): `.types` / `.symbols` baselines
+
+The harness now also generates and compares the reference `.types` (printed type of every expression/declaration)
+and `.symbols` (resolved symbol + declaration locations of every identifier) baselines, ported from Go's
+`type_symbol_baseline.go`: `tsrs-test run --baselines types,symbols` (lists `types-<class>.txt` /
+`symbols-<class>.txt`, artifacts `<name>.{types,symbols}.{actual,diff}`), `tsrs-test show <name> --types`,
+`tools/cluster-diffs.py --baseline types`. The default run (errors only) is unchanged.
+
+Of the 12,779 variants that produce these baselines (the rest are harness-skipped or `@noTypesAndSymbols`):
+**types 12,778 / symbols 12,779 byte-identical** (first run: 12,776 / 12,779; the fix was the printer's escaping of
+the internal-symbol-name prefix). The remaining `.types` mismatch, `declarationEmitObjectAssignedDefaultExport`, follows
+from its missing declaration-emit diagnostic (Go's walker prints `any` differently when the test has errors). No
+checker divergence surfaced. Details: `notes/fix-types-baseline.md`.

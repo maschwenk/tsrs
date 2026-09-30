@@ -766,8 +766,95 @@ pub fn is_block_scope(node: P<Node>, parent_node: Option<P<Node>>) -> bool {
     }
 }
 
+bitflags::bitflags! {
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+    pub struct SemanticMeaning: i32 {
+        const None = 0;
+        const Value = 1 << 0;
+        const Type = 1 << 1;
+        const Namespace = 1 << 2;
+        const All = Self::Value.bits() | Self::Type.bits() | Self::Namespace.bits();
+    }
+}
+
+// utilities.go:2250
+pub fn get_meaning_from_declaration(node: P<Node>) -> SemanticMeaning {
+    match node.kind {
+        Kind::VariableDeclaration => SemanticMeaning::Value,
+        Kind::Parameter
+        | Kind::BindingElement
+        | Kind::PropertyDeclaration
+        | Kind::PropertySignature
+        | Kind::PropertyAssignment
+        | Kind::ShorthandPropertyAssignment
+        | Kind::MethodDeclaration
+        | Kind::MethodSignature
+        | Kind::Constructor
+        | Kind::GetAccessor
+        | Kind::SetAccessor
+        | Kind::FunctionDeclaration
+        | Kind::FunctionExpression
+        | Kind::ArrowFunction
+        | Kind::CatchClause
+        | Kind::JsxAttribute => SemanticMeaning::Value,
+        Kind::TypeParameter | Kind::InterfaceDeclaration | Kind::TypeAliasDeclaration | Kind::JSTypeAliasDeclaration | Kind::TypeLiteral => {
+            SemanticMeaning::Type
+        }
+        Kind::EnumMember | Kind::ClassDeclaration => SemanticMeaning::Value | SemanticMeaning::Type,
+        Kind::ModuleDeclaration => {
+            if is_ambient_module(node) {
+                SemanticMeaning::Namespace | SemanticMeaning::Value
+            } else if get_module_instance_state(node) == ModuleInstanceState::Instantiated {
+                SemanticMeaning::Namespace | SemanticMeaning::Value
+            } else {
+                SemanticMeaning::Namespace
+            }
+        }
+        Kind::EnumDeclaration
+        | Kind::NamedImports
+        | Kind::ImportSpecifier
+        | Kind::ImportEqualsDeclaration
+        | Kind::ImportDeclaration
+        | Kind::JSImportDeclaration
+        | Kind::ExportAssignment
+        | Kind::ExportDeclaration => SemanticMeaning::All,
+        // An external module can be a Value
+        Kind::SourceFile => SemanticMeaning::Namespace | SemanticMeaning::Value,
+        _ => SemanticMeaning::All,
+    }
+}
+
 pub fn is_property_access_or_qualified_name(node: P<Node>) -> bool {
     node.kind == Kind::PropertyAccessExpression || node.kind == Kind::QualifiedName
+}
+
+// utilities.go:2312
+pub fn is_label_name(node: P<Node>) -> bool {
+    is_label_of_labeled_statement(node) || is_jump_statement_target(node)
+}
+
+pub fn is_label_of_labeled_statement(node: P<Node>) -> bool {
+    if !is_identifier(node) {
+        return false;
+    }
+    if !is_labeled_statement(node.parent().unwrap()) {
+        return false;
+    }
+    Some(node) == node.parent().unwrap().label()
+}
+
+pub fn is_jump_statement_target(node: P<Node>) -> bool {
+    if !is_identifier(node) {
+        return false;
+    }
+    if !is_break_or_continue_statement(node.parent().unwrap()) {
+        return false;
+    }
+    Some(node) == node.parent().unwrap().label()
+}
+
+pub fn is_break_or_continue_statement(node: P<Node>) -> bool {
+    node.kind == Kind::BreakStatement || node.kind == Kind::ContinueStatement
 }
 
 // GetModuleInstanceState is used during binding as well as in transformations and tests, and therefore may be invoked

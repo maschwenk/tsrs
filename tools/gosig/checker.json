@@ -207,7 +207,7 @@
     },
     {
       "go": "services.go",
-      "rust": "services_subset.rs",
+      "rust": "services.rs",
       "declsNote": "only the functions the node builder reaches are generated"
     }
   ],
@@ -295,14 +295,6 @@
     "Checker.runWithInferenceBlockedFromSourceNode",
     "GetResolvedSignatureForSignatureHelp",
     "Checker.runWithoutResolvedSignatureCaching",
-    "Checker.SkipAlias",
-    "Checker.GetRootSymbols",
-    "Checker.GetMappedTypeSymbolOfProperty",
-    "Checker.getImmediateRootSymbols",
-    "Checker.tryGetTarget",
-    "Checker.GetExportSymbolOfSymbol",
-    "Checker.GetExportSpecifierLocalTargetSymbol",
-    "Checker.GetShorthandAssignmentValueSymbol",
     "Checker.GetSymbolsOfParameterPropertyDeclaration",
     "Checker.IsDeclarationUsed",
     "Checker.IsSymbolReferencedInFile",

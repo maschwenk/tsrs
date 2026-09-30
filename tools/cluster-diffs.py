@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Cluster conformance failures by the shape of their first differing line pair.
 
-  tools/cluster-diffs.py [--class codes|fail] [--results DIR] [--top N] [--examples K]
+  tools/cluster-diffs.py [--class codes|fail] [--baseline errors|types|symbols] [--results DIR] [--top N] [--examples K]
+
+With `--baseline types|symbols` (after `tsrs-test run --baselines types,symbols`) it clusters the `.types`/`.symbols`
+mismatches instead: names from `<results>/<baseline>-<class>.txt` (class defaults to `fail`), diffs from
+`<suite>/<name>.<baseline>.diff`. Their `>expr : type` lines are normalized like quoted text.
 
 Reads `<results>/<class>.txt` and each test's `<suite>/<name>.diff` written by `tsrs-test run`, takes the first
 removed (`-`, expected) and added (`+`, actual) line of the first hunk, and normalizes both: quoted text ('...',
@@ -49,6 +53,17 @@ def normalize(line):
     return line
 
 
+def normalize_types_line(line):
+    """`>source text : type-or-Symbol(...)` from a .types/.symbols diff: the source text is dropped, the type keeps
+    its skeleton, and `Decl(file, line, col)` positions are placeholders."""
+    line = line[1:] if line[:1] in "+-" else line
+    if line.startswith(">") and " : " in line:
+        _, _, rhs = line.partition(" : ")
+        rhs = re.sub(r"Decl\([^)]*\)", "Decl(F)", rhs)
+        return "> : " + skeleton(rhs)
+    return skeleton(line.strip())
+
+
 def first_pair(diff_path):
     """(expected, actual) of the first hunk's first -/+ lines; either may be None (pure addition/removal)."""
     minus = plus = None
@@ -74,13 +89,19 @@ def first_pair(diff_path):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--class", dest="klass", default="codes")
+    ap.add_argument("--class", dest="klass", default=None)
+    ap.add_argument("--baseline", default="errors", choices=["errors", "types", "symbols"])
     ap.add_argument("--results", default=os.path.join(ROOT, "target", "test-results"))
     ap.add_argument("--top", type=int, default=40)
     ap.add_argument("--examples", type=int, default=3)
     args = ap.parse_args()
+    extra = args.baseline != "errors"
+    if args.klass is None:
+        args.klass = "fail" if extra else "codes"
 
-    names_file = os.path.join(args.results, args.klass + ".txt")
+    list_name = f"{args.baseline}-{args.klass}" if extra else args.klass
+    diff_suffix = f".{args.baseline}.diff" if extra else ".diff"
+    names_file = os.path.join(args.results, list_name + ".txt")
     if not os.path.exists(names_file):
         sys.exit(f"no {names_file}; run `tsrs-test run` first")
     with open(names_file) as f:
@@ -88,16 +109,17 @@ def main():
 
     clusters = collections.defaultdict(list)
     for test_id in ids:
-        diff_path = os.path.join(args.results, test_id + ".diff")
+        diff_path = os.path.join(args.results, test_id + diff_suffix)
         if not os.path.exists(diff_path):
             clusters[("<no diff file>", "")].append(test_id)
             continue
         minus, plus = first_pair(diff_path)
-        key = (normalize(minus) if minus else "<none>", normalize(plus) if plus else "<none>")
+        norm = normalize_types_line if extra else normalize
+        key = (norm(minus) if minus else "<none>", norm(plus) if plus else "<none>")
         clusters[key].append(test_id)
 
     ranked = sorted(clusters.items(), key=lambda kv: (-len(kv[1]), kv[0]))
-    print(f"{len(ids)} tests in class '{args.klass}', {len(clusters)} clusters\n")
+    print(f"{len(ids)} tests in class '{list_name}', {len(clusters)} clusters\n")
     for (exp, act), tests in ranked[: args.top]:
         print(f"{len(tests):5d}  - {exp}")
         print(f"       + {act}")

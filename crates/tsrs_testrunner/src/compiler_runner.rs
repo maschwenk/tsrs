@@ -85,6 +85,12 @@ pub fn read_reference_baseline(suite: &str, name: &str) -> Option<String> {
     std::fs::read(reference_baseline_path(suite, name)).ok().map(|b| String::from_utf8_lossy(&b).into_owned())
 }
 
+// The reference `.types` / `.symbols` baseline (`ext` = "types" | "symbols").
+pub fn read_reference_extra_baseline(suite: &str, name: &str, ext: &str) -> Option<String> {
+    let path = testdata_path().join("baselines/reference").join(suite).join(format!("{name}.{ext}"));
+    std::fs::read(path).ok().map(|b| String::from_utf8_lossy(&b).into_owned())
+}
+
 pub fn enumerate_test_files(suite: &str) -> Vec<String> {
     harnessutil::enumerate_files(&testdata_path().join("tests/cases").join(suite), &COMPILER_BASELINE_REGEX, true)
         .unwrap_or_else(|e| panic!("Could not read compiler test files: {e}"))
@@ -174,12 +180,19 @@ pub fn find_configuration(content: &str, table: &OptionTable, config: &str) -> R
 
 // What running one variant produced.
 pub enum Outcome {
-    // The generated error baseline text (baseline.NoContent when there were no diagnostics).
-    Baseline(String),
+    // The generated error baseline text (baseline.NoContent when there were no diagnostics), and the
+    // `.types`/`.symbols` baselines when they were requested and the test does not set @noTypesAndSymbols.
+    Baseline(String, Option<TypesAndSymbols>),
     // SkipUnsupportedCompilerOptions
     Skip(String),
     // A harness-level failure that is not a panic (t.Fatalf in Go).
     Error(String),
+}
+
+// The generated `.types` and `.symbols` baselines; `Err` holds the panic message of a walk that panicked.
+pub struct TypesAndSymbols {
+    pub types: Result<String, String>,
+    pub symbols: Result<String, String>,
 }
 
 fn create_harness_test_file(unit: &TestUnit, current_directory: &str) -> TestFile {

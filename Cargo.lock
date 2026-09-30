@@ -403,10 +403,12 @@ dependencies = [
  "serde_json",
  "similar",
  "tsrs_ast",
+ "tsrs_checker",
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
  "tsrs_parser",
+ "tsrs_scanner",
  "tsrs_tsoptions",
  "tsrs_vfs",
 ]

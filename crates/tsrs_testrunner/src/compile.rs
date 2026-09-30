@@ -94,6 +94,7 @@ pub struct CompilationResult {
     pub diagnostics: Vec<P<Diagnostic>>,
     pub options: &'static CompilerOptions,
     pub program: &'static compiler::Program,
+    pub harness_options: HarnessOptions,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -203,6 +204,7 @@ fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandL
         opts.single_threaded = Tristate::True;
     }
     let program = compiler::new_program(opts);
+    let harness_options = harness_options.clone();
     let mut errors = Vec::new();
     errors.extend(program.get_config_file_parsing_diagnostics());
     errors.extend(program.get_program_diagnostics());
@@ -218,7 +220,7 @@ fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandL
         errors.extend(program.get_declaration_diagnostics(None));
     }
     let errors = compiler::sort_and_deduplicate_diagnostics(&errors);
-    CompilationResult { diagnostics: errors, options: program.options().get(), program }
+    CompilationResult { diagnostics: errors, options: program.options().get(), program, harness_options }
 }
 
 // newCompilerTest + verifyDiagnostics
@@ -249,9 +251,39 @@ pub fn run(item: &TestItem, table: &OptionTable) -> Outcome {
         Err(e) => return Outcome::Error(e),
     };
 
-    let files: Vec<TestFile> = ts_config_files.into_iter().chain(to_be_compiled).chain(other_files).collect();
     let diags = convert_diagnostics(&result.diagnostics);
-    Outcome::Baseline(tsbaseline::do_error_baseline(&files, &diags, result.options.pretty.is_true()))
+    let files: Vec<TestFile> = ts_config_files.iter().chain(&to_be_compiled).chain(&other_files).cloned().collect();
+    let errors = tsbaseline::do_error_baseline(&files, &diags, result.options.pretty.is_true());
+    let types_and_symbols = verify_types_and_symbols(item, &result, &to_be_compiled, &other_files);
+    Outcome::Baseline(errors, types_and_symbols)
+}
+
+// verifyTypesAndSymbols (compiler_runner.go). Go runs the JS emit (verifyJavaScriptOutput) between the error
+// baseline and this; emit is not ported, so checker work the emitter would do first does not happen here.
+#[cfg(feature = "checker")]
+fn verify_types_and_symbols(
+    item: &TestItem,
+    result: &CompilationResult,
+    to_be_compiled: &[TestFile],
+    other_files: &[TestFile],
+) -> Option<compiler_runner::TypesAndSymbols> {
+    if crate::syntax_only() || crate::extra_baselines() == 0 || result.harness_options.no_types_and_symbols {
+        return None;
+    }
+    let program = result.program;
+    let all_files: Vec<TestFile> =
+        to_be_compiled.iter().chain(other_files).filter(|f| program.get_source_file(&f.unit_name).is_some()).cloned().collect();
+    let header_components =
+        tspath::get_path_components_relative_to(&compiler_runner::testdata_path().to_string_lossy(), &item.path, &ComparePathsOptions::default());
+    let header = tspath::get_path_from_path_components(&header_components);
+    let (types, symbols) =
+        crate::type_symbol_baseline::do_type_and_symbol_baseline(&header, program, &all_files, !result.diagnostics.is_empty());
+    Some(compiler_runner::TypesAndSymbols { types, symbols })
+}
+
+#[cfg(not(feature = "checker"))]
+fn verify_types_and_symbols(_: &TestItem, _: &CompilationResult, _: &[TestFile], _: &[TestFile]) -> Option<compiler_runner::TypesAndSymbols> {
+    None
 }
 
 pub fn convert_diagnostics(diagnostics: &[P<Diagnostic>]) -> Vec<Diag> {

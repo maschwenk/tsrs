@@ -116,5 +116,9 @@ mod emitresolver_subset;
 pub(crate) use emitresolver_subset::*;
 mod nodebuilder_hover;
 pub(crate) use nodebuilder_hover::*;
-mod services_subset;
-pub(crate) use services_subset::*;
+mod services;
+pub(crate) use services::*;
+
+// Exported Go functions the conformance harness's `.types`/`.symbols` baseline writer calls (tsrs_testrunner).
+pub use nodebuilder::new_node_builder;
+pub use utilities::is_type_any;

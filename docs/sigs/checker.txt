@@ -965,6 +965,8 @@ get_explicit_this_type | pub(crate) fn get_explicit_this_type(&mut self, node: P
 get_explicit_type_of_symbol | pub(crate) fn get_explicit_type_of_symbol(&mut self, symbol: P<Symbol>, diagnostic: Option<P<Diagnostic>>) -> Option<P<Type>> | flow.go:2155 | Checker
 get_explicit_type_of_symbol_worker | fn get_explicit_type_of_symbol_worker(&mut self, symbol: P<Symbol>, diagnostic: Option<P<Diagnostic>>) -> Option<P<Type>> | rust:flow.rs:2474 | Checker
 get_export_of_module | pub(crate) fn get_export_of_module(&mut self, symbol: P<Symbol>, name_text: &str, specifier: P<Node>, dont_resolve_alias: bool) -> Option<P<Symbol>> | checker.go:15032 | Checker
+get_export_specifier_local_target_symbol | pub fn get_export_specifier_local_target_symbol(&mut self, node: P<Node>) -> Option<P<Symbol>> | services.go:476 | Checker
+get_export_symbol_of_symbol | pub fn get_export_symbol_of_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol> | services.go:472 | Checker
 get_export_symbol_of_value_symbol_if_exported | pub(crate) fn get_export_symbol_of_value_symbol_if_exported(&mut self, symbol: Option<P<Symbol>>) -> Option<P<Symbol>> | checker.go:14612 | Checker
 get_exports_of_module | pub(crate) fn get_exports_of_module(&mut self, module_symbol: P<Symbol>) -> P<SymbolTable> | checker.go:16454 | Checker
 get_exports_of_module_worker | pub(crate) fn get_exports_of_module_worker(&mut self, module_symbol: Option<P<Symbol>>) -> (P<SymbolTable>, FxHashMap<String, P<Node>>) | checker.go:16471 | Checker
@@ -1075,6 +1077,7 @@ get_homomorphic_type_variable | pub(crate) fn get_homomorphic_type_variable(&mut
 get_identifier_chain | pub(crate) fn get_identifier_chain(&mut self, node: P<Node>) -> Vec<P<Node>> | checker.go:25120 | Checker
 get_identifier_from_entity_name_expression | pub(crate) fn get_identifier_from_entity_name_expression(node: P<Node>) -> Option<P<Node>> | grammarchecks.go:58 | -
 get_immediate_aliased_symbol | pub fn get_immediate_aliased_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> | checker.go:2196 | Checker
+get_immediate_root_symbols | pub(crate) fn get_immediate_root_symbols(&mut self, symbol: P<Symbol>) -> Vec<P<Symbol>> | services.go:422 | Checker
 get_implied_constraint | pub(crate) fn get_implied_constraint(&mut self, t: P<Type>, check_node: P<Node>, extends_node: P<Node>) -> Option<P<Type>> | checker.go:25459 | Checker
 get_import_attributes_type_for_module_specifier | pub(crate) fn get_import_attributes_type_for_module_specifier(&mut self, module_specifier: P<Node>) -> Option<P<Type>> | checker.go:5596 | Checker
 get_index_info_of_type | pub fn get_index_info_of_type(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<IndexInfo>> | checker.go:19331 | Checker
@@ -1185,6 +1188,7 @@ get_mapped_type | pub(crate) fn get_mapped_type(&mut self, t: P<Type>, mapper: P
 get_mapped_type_modifiers | pub(crate) fn get_mapped_type_modifiers(t: P<Type>) -> MappedTypeModifiers | checker.go:29482 | -
 get_mapped_type_name_type_kind | pub(crate) fn get_mapped_type_name_type_kind(&mut self, t: P<Type>) -> MappedTypeNameTypeKind | checker.go:27312 | Checker
 get_mapped_type_optionality | pub(crate) fn get_mapped_type_optionality(t: P<Type>) -> i32 | checker.go:29496 | -
+get_mapped_type_symbol_of_property | pub fn get_mapped_type_symbol_of_property(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> | services.go:415 | Checker
 get_mapper_from_context | pub(crate) fn get_mapper_from_context(&mut self, n: Option<P<InferenceContext>>) -> Option<P<TypeMapper>> | inference.go:1414 | Checker
 get_matching_union_constituent_for_object_literal | pub(crate) fn get_matching_union_constituent_for_object_literal(&mut self, union_type: P<Type>, node: P<Node>) -> Option<P<Type>> | checker.go:31274 | Checker
 get_matching_union_constituent_for_type | pub(crate) fn get_matching_union_constituent_for_type(&mut self, union_type: P<Type>, t: P<Type>) -> Option<P<Type>> | relater.go:1096 | Checker
@@ -1326,8 +1330,10 @@ get_return_type_of_full_signature | pub(crate) fn get_return_type_of_full_signat
 get_return_type_of_signature | pub fn get_return_type_of_signature(&mut self, sig: P<Signature>) -> P<Type> | checker.go:20342 | Checker
 get_return_type_of_single_non_generic_signature | pub(crate) fn get_return_type_of_single_non_generic_signature(&mut self, func_type: P<Type>, kind: SignatureKind) -> Option<P<Type>> | checker.go:7559 | Checker
 get_return_type_of_single_non_generic_signature_of_call_chain | pub(crate) fn get_return_type_of_single_non_generic_signature_of_call_chain(&mut self, expr: P<Node>) -> Option<P<Type>> | checker.go:7567 | Checker
+get_root_symbols | pub fn get_root_symbols(&mut self, symbol: P<Symbol>) -> Vec<P<Symbol>> | services.go:403 | Checker
 get_selected_modifier_flags | pub(crate) fn get_selected_modifier_flags(node: P<Node>, flags: ModifierFlags) -> ModifierFlags | utilities.go:63 | -
 get_set_accessor_value_parameter | pub fn get_set_accessor_value_parameter(accessor: P<Node>) -> Option<P<Node>> | utilities.go:1914 | -
+get_shorthand_assignment_value_symbol | pub fn get_shorthand_assignment_value_symbol(&mut self, location: Option<P<Node>>) -> Option<P<Symbol>> | services.go:495 | Checker
 get_siblings_of_context | pub(crate) fn get_siblings_of_context(&mut self, context: P<WideningContext>) -> Vec<P<Type>> | checker.go:18821 | Checker
 get_signature_from_declaration | pub(crate) fn get_signature_from_declaration(&mut self, declaration: P<Node>) -> P<Signature> | checker.go:20177 | Checker
 get_signature_instantiation | pub(crate) fn get_signature_instantiation(&mut self, sig: P<Signature>, type_arguments: &[P<Type>], is_java_script: bool, inferred_type_parameters: &[P<Type>]) -> P<Signature> | checker.go:19634 | Checker
@@ -2175,7 +2181,7 @@ is_unreferenced_variable_declaration | pub(crate) fn is_unreferenced_variable_de
 is_untyped_function_call | pub(crate) fn is_untyped_function_call(&mut self, func_type: P<Type>, apparent_func_type: P<Type>, num_call_signatures: i32, num_construct_signatures: i32) -> bool | checker.go:10125 | Checker
 is_unwrapped_return_type_undefined_void_or_any | pub(crate) fn is_unwrapped_return_type_undefined_void_or_any(&mut self, fn_: P<Node>, return_type: P<Type>) -> bool | checker.go:3808 | Checker
 is_used_in_function_or_instance_property | pub(crate) fn is_used_in_function_or_instance_property(&mut self, usage: P<Node>, declaration: P<Node>, decl_container: P<Node>) -> bool | checker.go:2052 | Checker
-is_used_in_function_or_instance_property_callback | fn is_used_in_function_or_instance_property_callback(&mut self, current: P<Node>, usage: P<Node>, declaration: P<Node>, decl_container: P<Node>) -> ast::FindAncestorResult | rust:checker_01.rs:1319 | Checker
+is_used_in_function_or_instance_property_callback | fn is_used_in_function_or_instance_property_callback(&mut self, current: P<Node>, usage: P<Node>, declaration: P<Node>, decl_container: P<Node>) -> ast::FindAncestorResult | rust:checker_01.rs:1318 | Checker
 is_valid_base_type | pub(crate) fn is_valid_base_type(&mut self, t: P<Type>) -> bool | checker.go:19878 | Checker
 is_valid_big_int_string | pub(crate) fn is_valid_big_int_string(s: &str, round_trip_only: bool) -> bool | utilities.go:978 | -
 is_valid_const_assertion_argument | pub(crate) fn is_valid_const_assertion_argument(&mut self, node: P<Node>) -> bool | checker.go:13858 | Checker
@@ -2627,6 +2633,7 @@ simplify_class_declaration | pub(crate) fn simplify_class_declaration(f: &NodeFa
 simplify_modifiers | pub(crate) fn simplify_modifiers(f: &NodeFactory, new_decl: P<Node>, is_decl_kind: impl FnMut(P<Node>) -> bool, symbol: P<Symbol>) -> P<Node> | nodebuilder.go:212 | -
 size | pub(crate) fn size(&self) -> i32 | relater.go:113 | Relation
 skip_alias | pub fn skip_alias(symbol: P<Symbol>, checker: &mut Checker) -> P<Symbol> | utilities.go:1700 | -
+skip_alias | pub fn skip_alias(&mut self, symbol: P<Symbol>) -> P<Symbol> | services.go:396 | Checker
 skipped_generic_function | pub(crate) fn skipped_generic_function(&mut self, node: P<Node>, check_mode: CheckMode) | checker.go:10217 | Checker
 slice_tuple_type | pub(crate) fn slice_tuple_type(&mut self, t: P<Type>, index: i32, end_skip_count: i32) -> P<Type> | relater.go:1915 | Checker
 some_property_reduces_to_never | pub(crate) fn some_property_reduces_to_never(&mut self, t: P<Type>) -> bool | checker.go:22220 | Checker
@@ -2724,6 +2731,7 @@ try_get_property_access_or_identifier_to_string | pub(crate) fn try_get_property
 try_get_qualified_name_as_value | pub(crate) fn try_get_qualified_name_as_value(&mut self, node: P<Node>) -> Option<P<Symbol>> | checker.go:16214 | Checker
 try_get_resolved_symbol_from_type_node | pub(crate) fn try_get_resolved_symbol_from_type_node(&self, c: &mut Checker, node: P<Node>) -> Option<P<Symbol>> | nodebuilderimpl.go:511 | NodeBuilderImpl
 try_get_rest_type_of_signature | pub(crate) fn try_get_rest_type_of_signature(&mut self, signature: P<Signature>) -> Option<P<Type>> | checker.go:9827 | Checker
+try_get_target | pub(crate) fn try_get_target(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> | services.go:453 | Checker
 try_get_this_parameter_declaration | pub(crate) fn try_get_this_parameter_declaration(&self, c: &mut Checker, signature: P<Signature>) -> Option<P<Node>> | nodebuilderimpl.go:2072 | NodeBuilderImpl
 try_get_this_type_at | pub(crate) fn try_get_this_type_at(&mut self, node: P<Node>) -> Option<P<Type>> | checker.go:12337 | Checker
 try_get_this_type_at_ex | pub(crate) fn try_get_this_type_at_ex(&mut self, node: P<Node>, include_global_this: bool, container: Option<P<Node>>) -> Option<P<Type>> | checker.go:12349 | Checker

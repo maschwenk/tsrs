@@ -122,6 +122,22 @@ pub fn unified_diff(expected: Option<&str>, actual: &str, name: &str) -> String 
     diff.unified_diff().context_radius(3).header(&format!("expected/{name}"), &format!("actual/{name}")).to_string()
 }
 
+// The file header and first `@@` hunk of a unified diff.
+pub fn first_hunk(diff: &str) -> String {
+    let mut out = String::new();
+    let mut hunks = 0;
+    for line in diff.split_inclusive('\n') {
+        if line.starts_with("@@") {
+            hunks += 1;
+            if hunks > 1 {
+                break;
+            }
+        }
+        out.push_str(line);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

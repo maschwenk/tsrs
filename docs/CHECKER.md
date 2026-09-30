@@ -17,7 +17,7 @@ The `checker-foundation` agent implements the data model and keeps this file acc
 | `printer.go`, `symbolaccessibility.go`, `symboltracker.go` | `printer.rs` — type/symbol/signature -> string for messages |
 | `nodebuilder.go`, `nodebuilderimpl.go`, `nodebuilderscopes.go` | `nodebuilder.rs`, `nodebuilderimpl_1.rs` (1–1850), `nodebuilderimpl_2.rs` (1851–end), `nodebuilderscopes.rs`; data model in `nodebuilder_types.rs` + `printer_types.rs` (section "Node builder") |
 | `nodecopy.go`, `pseudotypenodebuilder.go`, `nodebuilder_hover.go` | `nodecopy.rs`, `pseudotypenodebuilder.rs`, `nodebuilder_hover.rs` (node builder, same conventions) |
-| `emitresolver.go`, `services.go` | only what the node builder / symbol accessibility reach: `emitresolver_subset.rs`, `services_subset.rs` (the rest is in `skipFuncs`) |
+| `emitresolver.go`, `services.go` | only what the node builder / symbol accessibility and the `.types`/`.symbols` baseline writer reach: `emitresolver_subset.rs`, `services.rs` (the rest is in `skipFuncs`) |
 | `tracer.go` | not ported |
 | `../pseudochecker/*.go`, `../modulespecifiers/*.go` | crates `tsrs_pseudochecker`, `tsrs_modulespecifiers` (section "Node builder") |
 | `../evaluator/evaluator.go` | `evaluator.rs` (foundation) |

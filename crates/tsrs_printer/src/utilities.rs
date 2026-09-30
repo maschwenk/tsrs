@@ -76,7 +76,15 @@ pub(crate) fn escape_string_worker(s: &str, quote_char: QuoteChar, flags: getLit
     let mut pos = 0;
     let mut i = 0;
     while i < bytes.len() {
-        let (mut ch, mut size) = stringutil::decode_js_string_rune_bytes(&bytes[i..]);
+        let (mut ch, mut size) = if i == 0 && bytes.len() > 1 && bytes[0] == InternalSymbolNamePrefixByte {
+            // An internal symbol name (a symbol name that the node builder put into a string literal, e.g.
+            // `(typeof E)["�missing"]`): the port's prefix U+007F stands in for Go's invalid byte 0xFE, which
+            // Go decodes as a stray RuneError. Internal names start with the prefix and have a non-empty rest; a
+            // U+007F anywhere else is user text (`"\177"`), which Go leaves unescaped.
+            (0xFFFD, 1)
+        } else {
+            stringutil::decode_js_string_rune_bytes(&bytes[i..])
+        };
 
         let mut escape = false;
         if ch >= 0xD800 && ch <= 0xDFFF {

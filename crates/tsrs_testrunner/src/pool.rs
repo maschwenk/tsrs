@@ -33,6 +33,15 @@ pub struct TestResult {
     pub panic: String,
     pub loc: String,
     pub skip: String,
+    // `.types` / `.symbols` results (class, first difference) when those baselines were requested.
+    pub types: Option<(Class, String)>,
+    pub symbols: Option<(Class, String)>,
+}
+
+impl TestResult {
+    pub fn harness(class: Class, ms: u64, panic: String) -> TestResult {
+        TestResult { class, ms, diff: String::new(), panic, loc: String::new(), skip: String::new(), types: None, symbols: None }
+    }
 }
 
 enum Event {
@@ -118,6 +127,8 @@ fn parse_result(v: &Value) -> TestResult {
         panic: s("panic"),
         loc: s("loc"),
         skip: s("skip"),
+        types: v["types"].as_str().and_then(Class::parse).map(|c| (c, s("types_diff"))),
+        symbols: v["symbols"].as_str().and_then(Class::parse).map(|c| (c, s("symbols_diff"))),
     }
 }
 
@@ -186,8 +197,7 @@ pub fn run_pool(items: &[TestItem], opts: &PoolOptions) -> Vec<Option<TestResult
                     } else {
                         format!("worker died ({status_text}): {tail}")
                     };
-                    results[crashed] =
-                        Some(TestResult { class: Class::Crash, ms: 0, diff: String::new(), panic: message, loc: String::new(), skip: String::new() });
+                    results[crashed] = Some(TestResult::harness(Class::Crash, 0, message));
                     completed += 1;
                     for &rest in w.batch[w.done + 1..].iter().rev() {
                         queue.push_front(rest);
@@ -206,14 +216,7 @@ pub fn run_pool(items: &[TestItem], opts: &PoolOptions) -> Vec<Option<TestResult
                     w.alive = false;
                     active -= 1;
                     let idx = w.batch[i];
-                    results[idx] = Some(TestResult {
-                        class: Class::Timeout,
-                        ms: opts.timeout.as_millis() as u64,
-                        diff: String::new(),
-                        panic: String::new(),
-                        loc: String::new(),
-                        skip: String::new(),
-                    });
+                    results[idx] = Some(TestResult::harness(Class::Timeout, opts.timeout.as_millis() as u64, String::new()));
                     completed += 1;
                     for &rest in w.batch[i + 1..].iter().rev() {
                         queue.push_front(rest);
@@ -239,14 +242,7 @@ pub fn run_pool(items: &[TestItem], opts: &PoolOptions) -> Vec<Option<TestResult
                 let _ = w.child.wait();
                 w.alive = false;
                 active -= 1;
-                results[w.batch[running]] = Some(TestResult {
-                    class: Class::Crash,
-                    ms: 0,
-                    diff: String::new(),
-                    panic: format!("memory limit exceeded ({mb} MB)"),
-                    loc: String::new(),
-                    skip: String::new(),
-                });
+                results[w.batch[running]] = Some(TestResult::harness(Class::Crash, 0, format!("memory limit exceeded ({mb} MB)")));
                 completed += 1;
                 for &rest in w.batch[running + 1..].iter().rev() {
                     queue.push_front(rest);

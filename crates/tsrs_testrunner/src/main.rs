@@ -11,6 +11,8 @@ mod pool;
 mod report;
 mod test_case_parser;
 mod tsbaseline;
+#[cfg(feature = "checker")]
+mod type_symbol_baseline;
 mod worker;
 
 use std::path::PathBuf;
@@ -27,7 +29,11 @@ use crate::harnessutil::OptionTable;
 const USAGE: &str = "usage:
   tsrs-test run [--suite compiler|conformance|all] [--filter <substr|regex>] [--list <file>]
                 [--jobs N] [--timeout S] [--recycle N] [--mem-limit MB] [--json <path>] [--panic-summary]
-  tsrs-test show <name> [--full]      expected vs actual for one test (id, variant stem or file name)
+                [--baselines types,symbols | --types --symbols]   also compare .types/.symbols baselines
+                  (results: <suite>/<name>.{types,symbols}.{actual,diff}, lists types-<class>.txt, symbols-<class>.txt)
+  tsrs-test show <name> [--full] [--types] [--symbols]
+                                      expected vs actual for one test (id, variant stem or file name); with
+                                      --types/--symbols: the first differing hunk of those baselines (--full: whole diff)
   tsrs-test crashes [--top N] [--examples N] [--json <path>]
   tsrs-test list [--suite ..] [--filter ..] [--list <file>]
   --syntax-only (any command): no checker; only config/program/syntactic diagnostics; results in target/test-results-syntax
@@ -41,6 +47,33 @@ pub static SYNTAX_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::Atomi
 
 pub fn syntax_only() -> bool {
     SYNTAX_ONLY.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+// Which extra baselines to generate and compare besides `.errors.txt` (bit set of EXTRA_TYPES / EXTRA_SYMBOLS).
+// Asking for either runs both walks (Go runs the type walk before the symbol walk in the same program).
+pub static EXTRA_BASELINES: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+pub const EXTRA_TYPES: u8 = 1;
+pub const EXTRA_SYMBOLS: u8 = 2;
+
+pub fn extra_baselines() -> u8 {
+    EXTRA_BASELINES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn parse_baselines(v: &str) -> u8 {
+    let mut bits = 0;
+    for part in v.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        bits |= match part {
+            "errors" => 0,
+            "types" => EXTRA_TYPES,
+            "symbols" => EXTRA_SYMBOLS,
+            "all" => EXTRA_TYPES | EXTRA_SYMBOLS,
+            _ => {
+                eprintln!("--baselines: unknown baseline kind {part} (errors, types, symbols, all)");
+                std::process::exit(2)
+            }
+        };
+    }
+    bits
 }
 
 #[derive(Clone, Default)]
@@ -60,6 +93,16 @@ impl BackendSpec {
         }
         if syntax_only() {
             v.push("--syntax-only".to_string());
+        }
+        if extra_baselines() != 0 {
+            let mut kinds = Vec::new();
+            if extra_baselines() & EXTRA_TYPES != 0 {
+                kinds.push("types");
+            }
+            if extra_baselines() & EXTRA_SYMBOLS != 0 {
+                kinds.push("symbols");
+            }
+            v.extend(["--baselines".to_string(), kinds.join(",")]);
         }
         v
     }
@@ -227,18 +270,31 @@ fn cmd_run(mut args: Args, spec: BackendSpec) {
 
     let dir = worker::results_dir();
     let json_path = json_path.unwrap_or_else(|| dir.join("summary.json"));
-    let mut summary = if sel.is_partial() { report::load_summary(&json_path) } else { report::Summary::new() };
+    let previous = report::load_summary(&json_path);
+    let mut summary = if sel.is_partial() { previous.clone() } else { report::Summary::new() };
     let mut this_run = report::Summary::new();
     for (item, r) in items.iter().zip(&results) {
-        let r = r.clone().unwrap_or(pool::TestResult {
-            class: Class::Crash,
-            ms: 0,
-            diff: String::new(),
-            panic: "no result from worker".to_string(),
-            loc: String::new(),
-            skip: String::new(),
-        });
-        summary.insert(item.id(), report::Entry::from(&r));
+        let mut r = r.clone().unwrap_or(pool::TestResult::harness(Class::Crash, 0, "no result from worker".to_string()));
+        // A worker that died or timed out produced no `.types`/`.symbols` result: they share the item's fate.
+        if matches!(r.class, Class::Crash | Class::Timeout) {
+            if extra_baselines() & EXTRA_TYPES != 0 && r.types.is_none() {
+                r.types = Some((r.class, r.panic.clone()));
+            }
+            if extra_baselines() & EXTRA_SYMBOLS != 0 && r.symbols.is_none() {
+                r.symbols = Some((r.class, r.panic.clone()));
+            }
+        }
+        let mut entry = report::Entry::from(&r);
+        // An errors-only (or types-only) run keeps the other baselines' previous results.
+        if let Some(old) = previous.get(&item.id()) {
+            if entry.types.is_none() {
+                entry.types = old.types.clone();
+            }
+            if entry.symbols.is_none() {
+                entry.symbols = old.symbols.clone();
+            }
+        }
+        summary.insert(item.id(), entry);
         this_run.insert(item.id(), report::Entry::from(&r));
     }
     report::write_summary(&dir, &json_path, &summary);
@@ -324,6 +380,21 @@ fn cmd_show(mut args: Args, spec: BackendSpec) {
                 if r.class != Class::Pass && r.actual.is_none() && !r.diff.is_empty() {
                     println!("{}", r.diff);
                 }
+                for (ext, _) in worker::EXTRA_KINDS {
+                    let Some(e) = worker::extra_result(&r, ext) else { continue };
+                    println!("-- .{ext}: {}", e.class.as_str());
+                    if let Some(actual) = &e.actual {
+                        if e.class != Class::Pass {
+                            let diff = baseline::unified_diff(e.expected.as_deref(), actual, &format!("{}.{ext}", item.name));
+                            print!("{}", if full { diff } else { baseline::first_hunk(&diff) });
+                        }
+                    } else if !e.diff.is_empty() {
+                        println!("{}", e.diff);
+                    }
+                }
+                if extra_baselines() != 0 && !full {
+                    continue;
+                }
                 if let Some(actual) = &r.actual {
                     if full {
                         println!("-- expected:\n{}", r.expected.as_deref().unwrap_or(baseline::NO_CONTENT).replace("\r\n", "\n"));
@@ -364,6 +435,14 @@ fn main() {
     if args.flag("--syntax-only") || cfg!(not(feature = "checker")) {
         SYNTAX_ONLY.store(true, std::sync::atomic::Ordering::Relaxed);
     }
+    let mut extra = args.value("--baselines").map_or(0, |v| parse_baselines(&v));
+    if args.flag("--types") {
+        extra |= EXTRA_TYPES;
+    }
+    if args.flag("--symbols") {
+        extra |= EXTRA_SYMBOLS;
+    }
+    EXTRA_BASELINES.store(extra, std::sync::atomic::Ordering::Relaxed);
     match cmd.as_str() {
         "run" => cmd_run(args, spec),
         "show" => cmd_show(args, spec),

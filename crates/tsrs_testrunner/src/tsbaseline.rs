@@ -260,7 +260,7 @@ pub fn remove_test_path_prefixes(text: &str, retain_trailing_directory_separator
     replace_all(text, TEST_PATH_PREFIXES)
 }
 
-fn is_default_library_file(file_path: &str) -> bool {
+pub(crate) fn is_default_library_file(file_path: &str) -> bool {
     let file_name = tspath::get_base_file_name(file_path);
     file_name.starts_with("lib.") && file_name.ends_with(tspath::EXTENSION_DTS)
 }
