@@ -138,7 +138,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:681
-    pub fn is_symbol_accessible(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: P<Node>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult {
+    pub(crate) fn is_symbol_accessible(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: P<Node>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult {
         todo!()
     }
 }

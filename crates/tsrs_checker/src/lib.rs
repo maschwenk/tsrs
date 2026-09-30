@@ -115,3 +115,7 @@ mod pseudotypenodebuilder;
 pub(crate) use pseudotypenodebuilder::*;
 mod emitresolver_subset;
 pub(crate) use emitresolver_subset::*;
+mod nodebuilder_hover;
+pub(crate) use nodebuilder_hover::*;
+mod services_subset;
+pub(crate) use services_subset::*;

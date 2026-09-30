@@ -529,6 +529,9 @@ func (g *Gen) assignNames() {
 		if fn.IsField && g.emitFile[fn] == "" {
 			continue
 		}
+		if !fn.IsField && contains(g.cfg.SkipFuncs, g.funcKey(fn)) {
+			continue // skipped functions reserve no name and are never merge targets/sources
+		}
 		ns := ""
 		if fn.RecvType != nil {
 			ns = fn.RecvType.Name()
