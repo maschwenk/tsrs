@@ -17,9 +17,12 @@ tsrs_binder.workspace = true
 tsrs_vfs.workspace = true
 tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
-tsrs_checker.workspace = true
-tsrs_compiler.workspace = true
+tsrs_compiler = { path = "../tsrs_compiler", default-features = false }
 rustc-hash.workspace = true
+[features]
+default = ["checker"]
+checker = ["tsrs_compiler/checker"]
+
 [[bin]]
 name = "tsrs"
 path = "src/main.rs"
