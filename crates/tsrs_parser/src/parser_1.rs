@@ -298,7 +298,7 @@ impl Parser {
             }
             Kind::PrefixUnaryExpression => {
                 let prefix = value_expression.as_prefix_unary_expression();
-                if !(prefix.operator != Kind::MinusToken || prefix.operand.kind != Kind::NumericLiteral) {
+                if !(prefix.operator() != Kind::MinusToken || prefix.operand().kind != Kind::NumericLiteral) {
                     return;
                 }
                 // not valid JSON syntax
@@ -331,7 +331,7 @@ pub(crate) fn is_double_quoted_string(node: P<Node>) -> bool {
 impl Parser {
     // validateJsonObjectLiteral validates properties of a JSON object literal.
     pub(crate) fn validate_json_object_literal(&mut self, source_file: P<SourceFile>, node: P<Node>) {
-        for element in node.as_object_literal_expression().properties.nodes {
+        for element in node.as_object_literal_expression().properties().nodes {
             let element = *element;
             if element.kind != Kind::PropertyAssignment {
                 self.diagnostics.push(ast::new_diagnostic(
@@ -2012,7 +2012,7 @@ impl Parser {
             if let Some(heritage_clauses) = heritage_clauses {
                 for clause in heritage_clauses.nodes {
                     let clause = clause.as_heritage_clause();
-                    if clause.token == Kind::ExtendsKeyword {
+                    if clause.token() == Kind::ExtendsKeyword {
                         for expr in clause.types().nodes {
                             self.check_js_syntax(*expr);
                         }
@@ -2086,10 +2086,10 @@ impl Parser {
         let pos = self.node_pos();
         let node = self.parse_expression_with_type_arguments();
         let expression_with_type_arguments = node.as_expression_with_type_arguments();
-        if !is_valid_heritage_type_reference_expression(expression_with_type_arguments.expression) {
+        if !is_valid_heritage_type_reference_expression(expression_with_type_arguments.expression()) {
             return node;
         }
-        let type_name = self.convert_entity_name_expression_to_entity_name(expression_with_type_arguments.expression);
+        let type_name = self.convert_entity_name_expression_to_entity_name(expression_with_type_arguments.expression());
         let result = self.factory.new_type_reference_node(type_name, expression_with_type_arguments.type_arguments());
         self.finish_node(result, pos)
     }
@@ -2111,7 +2111,7 @@ impl Parser {
             return node;
         }
         let property_access = node.as_property_access_expression();
-        let left = self.convert_entity_name_expression_to_entity_name(property_access.expression);
+        let left = self.convert_entity_name_expression_to_entity_name(property_access.expression());
         let result = self.factory.new_qualified_name(left, property_access.name());
         self.finish_node_with_end(result, node.pos(), node.end())
     }
@@ -2332,7 +2332,7 @@ impl Parser {
         //   module `M1` {
         //   ^^^^^^^^^^^ This block is parsed as a template literal like module`M1`.
         if node.kind == Kind::TaggedTemplateExpression {
-            let loc = self.skip_range_trivia(node.as_tagged_template_expression().template.loc());
+            let loc = self.skip_range_trivia(node.as_tagged_template_expression().template().loc());
             self.parse_error_at_range(loc, &diagnostics::Module_declaration_names_may_only_use_or_quoted_strings, &[]);
             return;
         }
