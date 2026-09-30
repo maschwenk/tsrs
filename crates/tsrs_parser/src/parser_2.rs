@@ -3,9 +3,7 @@ use tsrs_core::{alloc_str, TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_scanner as scanner;
 
-use crate::parser_1::{JsdocScannerInfo, Parser, ParsingContext};
-use crate::types::ParseFlags;
-use crate::utilities::{token_is_identifier_or_keyword, token_is_identifier_or_keyword_or_greater_than};
+use crate::*;
 
 impl Parser {
     pub(crate) fn parse_namespace_import(&mut self) -> P<Node> {
@@ -347,7 +345,8 @@ impl Parser {
             while self.parse_optional(operator) {
                 types.push(self.parse_function_or_constructor_type_to_error(is_union_type, parse_constituent_type));
             }
-            let list = self.new_node_list(TextRange::new(pos, self.node_pos()), types);
+            let end = self.node_pos();
+            let list = self.new_node_list(TextRange::new(pos, end), &types);
             type_node = self.create_union_or_intersection_type_node(operator, list);
             self.finish_node(type_node, pos);
         }
@@ -1624,7 +1623,8 @@ impl Parser {
                 break;
             }
         }
-        self.new_node_list(TextRange::new(pos, self.node_pos()), list)
+        let end = self.node_pos();
+        self.new_node_list(TextRange::new(pos, end), &list)
     }
 
     pub(crate) fn parse_template_type_span(&mut self) -> P<Node> {
@@ -1728,7 +1728,7 @@ impl Parser {
             let modifier = self.factory.new_modifier(self.token);
             self.next_token();
             self.finish_node(modifier, pos);
-            return Some(self.new_modifier_list(modifier.loc(), vec![modifier]));
+            return Some(self.new_modifier_list(modifier.loc(), &[modifier]));
         }
         None
     }
@@ -1830,7 +1830,8 @@ impl Parser {
             }
         }
         if !list.is_empty() {
-            return Some(self.new_modifier_list(TextRange::new(pos, self.node_pos()), list));
+            let end = self.node_pos();
+            return Some(self.new_modifier_list(TextRange::new(pos, end), &list));
         }
         None
     }
