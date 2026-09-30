@@ -61,8 +61,8 @@ def main():
         if not (os.path.exists(gp) and os.path.exists(rp)):
             missing += 1
             continue
-        gl = open(gp, encoding="utf-8", errors="surrogateescape").read().split("\r\n")
-        rl = open(rp, encoding="utf-8", errors="surrogateescape").read().split("\r\n")
+        gl = open(gp, encoding="utf-8", errors="surrogateescape", newline="").read().split("\r\n")
+        rl = open(rp, encoding="utf-8", errors="surrogateescape", newline="").read().split("\r\n")
         n = 0
         for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, gl, rl, autojunk=False).get_opcodes():
             if op == "equal":
