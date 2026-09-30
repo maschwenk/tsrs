@@ -495,9 +495,9 @@ impl Checker {
     }
 
     // relater.go:424
-    pub(crate) fn check_type_assignable_to_and_optionally_elaborate(&mut self, source: P<Type>, target: P<Type>, error_node: P<Node>, expr: P<Node>, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
+    pub(crate) fn check_type_assignable_to_and_optionally_elaborate(&mut self, source: P<Type>, target: P<Type>, error_node: Option<P<Node>>, expr: Option<P<Node>>, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
         let relation = self.assignable_relation;
-        self.check_type_related_to_and_optionally_elaborate(source, target, relation, Some(error_node), Some(expr), head_message, diagnostic_output)
+        self.check_type_related_to_and_optionally_elaborate(source, target, relation, error_node, expr, head_message, diagnostic_output)
     }
 
     // relater.go:428
@@ -682,7 +682,7 @@ impl Checker {
             return false;
         }
         if !self.is_tuple_like_type(source) {
-            self.push_contextual_type(node, target, false /*isCache*/);
+            self.push_contextual_type(node, Some(target), false /*isCache*/);
             source = self.check_array_literal(node, CheckMode::Contextual | CheckMode::ForceTuple);
             self.pop_contextual_type();
             if !self.is_tuple_like_type(source) {
@@ -845,7 +845,7 @@ impl Checker {
 
     // relater.go:632
     pub(crate) fn check_expression_for_mutable_location_with_contextual_type(&mut self, next: P<Node>, source_prop_type: P<Type>) -> P<Type> {
-        self.push_contextual_type(next, source_prop_type, false /*isCache*/);
+        self.push_contextual_type(next, Some(source_prop_type), false /*isCache*/);
         let result = self.check_expression_for_mutable_location(next, CheckMode::Contextual);
         self.pop_contextual_type();
         result

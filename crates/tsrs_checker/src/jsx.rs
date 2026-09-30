@@ -685,7 +685,7 @@ impl Checker {
                 let attributes = node.attributes().unwrap();
                 let contextual_type = self.get_effective_first_argument_for_jsx_signature(fake_signature, node).unwrap();
                 let attributes_type = self.check_expression_with_contextual_type(attributes, contextual_type, None /*inferenceContext*/, CheckMode::Normal);
-                self.check_type_assignable_to_and_optionally_elaborate(attributes_type, result, node.tag_name(), attributes, None, None);
+                self.check_type_assignable_to_and_optionally_elaborate(attributes_type, result, Some(node.tag_name()), Some(attributes), None, None);
                 let type_arguments = node.type_arguments();
                 if !type_arguments.is_empty() {
                     self.check_source_elements(type_arguments);

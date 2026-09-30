@@ -1084,7 +1084,7 @@ impl Checker {
         let initializer_type = self.check_expression_for_mutable_location(node.initializer().unwrap(), check_mode);
         if let Some(type_node) = node.type_node() {
             let t = self.get_type_from_type_node(type_node);
-            self.check_type_assignable_to_and_optionally_elaborate(initializer_type, t, node, node.initializer().unwrap(), None /*headMessage*/, None);
+            self.check_type_assignable_to_and_optionally_elaborate(initializer_type, t, Some(node), Some(node.initializer().unwrap()), None /*headMessage*/, None);
             return t;
         }
         initializer_type
@@ -1103,7 +1103,7 @@ impl Checker {
         let expression_type = self.check_expression_for_mutable_location(expr, check_mode);
         if let Some(type_node) = node.type_node() {
             let t = self.get_type_from_type_node(type_node);
-            self.check_type_assignable_to_and_optionally_elaborate(expression_type, t, node, expr, None /*headMessage*/, None);
+            self.check_type_assignable_to_and_optionally_elaborate(expression_type, t, Some(node), Some(expr), None /*headMessage*/, None);
             return t;
         }
         expression_type

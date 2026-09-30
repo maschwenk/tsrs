@@ -782,7 +782,7 @@ impl Checker {
                             literal_members.push(name);
                         }
                     }
-                    t = self.get_rest_type(parent_type, &literal_members, declaration.symbol().unwrap());
+                    t = self.get_rest_type(parent_type, &literal_members, declaration.symbol());
                 } else {
                     // Use explicitly specified property name ({ p: xxx } form), or otherwise the implied name ({ p } form)
                     let name = declaration.property_name_or_name().unwrap();
@@ -852,7 +852,7 @@ impl Checker {
     }
 
     // checker.go:18132
-    pub(crate) fn get_rest_type(&mut self, source: P<Type>, properties: &[P<Node>], symbol: P<Symbol>) -> P<Type> {
+    pub(crate) fn get_rest_type(&mut self, source: P<Type>, properties: &[P<Node>], symbol: Option<P<Symbol>>) -> P<Type> {
         let source = self.filter_type(source, |_, t| !t.flags().intersects(TypeFlags::Nullable));
         if source.flags().intersects(TypeFlags::Never) {
             return self.empty_object_type;
@@ -899,7 +899,7 @@ impl Checker {
             members.set(prop.name(), s);
         }
         let index_infos = self.get_index_infos_of_type(source);
-        let result = self.new_anonymous_type(Some(symbol), Some(members), &[], &[], &index_infos);
+        let result = self.new_anonymous_type(symbol, Some(members), &[], &[], &index_infos);
         result.object_flags.set(result.object_flags.get() | ObjectFlags::ObjectRestType);
         result
     }
@@ -1724,13 +1724,12 @@ impl Checker {
             let accessor = symbol.declarations().iter().copied().find(|&d| is_auto_accessor_property_declaration(d));
             // We try to resolve a getter type annotation, a setter type annotation, or a getter function
             // body return type inference, in that order.
-            // SIG: getAnnotatedAccessorType accepts a nil accessor in Go (returns nil); its Rust signature takes P<Node>.
-            let mut t = getter.and_then(|n| self.get_annotated_accessor_type(n));
+            let mut t = self.get_annotated_accessor_type(getter);
             if t.is_none() {
-                t = setter.and_then(|n| self.get_annotated_accessor_type(n));
+                t = self.get_annotated_accessor_type(setter);
             }
             if t.is_none() {
-                t = accessor.and_then(|n| self.get_annotated_accessor_type(n));
+                t = self.get_annotated_accessor_type(accessor);
             }
             if t.is_none() {
                 if let Some(getter) = getter {
@@ -1810,8 +1809,7 @@ impl Checker {
                     }
                 }
             }
-            // SIG: getAnnotatedAccessorType accepts a nil accessor in Go (returns nil); its Rust signature takes P<Node>.
-            let mut write_type = setter.and_then(|n| self.get_annotated_accessor_type(n));
+            let mut write_type = self.get_annotated_accessor_type(setter);
             if !self.pop_type_resolution() {
                 if self.get_annotated_accessor_type_node(setter).is_some() {
                     let s = self.symbol_to_string(symbol);
@@ -1841,8 +1839,7 @@ impl Checker {
             }
             let target_symbol = self.resolve_alias(symbol);
             let alias_declaration = self.get_declaration_of_alias_symbol(symbol);
-            // SIG: getTargetOfAliasDeclaration accepts a nil node in Go (returns nil); its Rust signature takes P<Node>.
-            let export_symbol = alias_declaration.and_then(|d| self.get_target_of_alias_declaration(d));
+            let export_symbol = self.get_target_of_alias_declaration(alias_declaration);
             // It only makes sense to get the type of a value symbol. If the result of resolving
             // the alias is not a value, then it has no type. To get the type associated with a
             // type symbol, call getDeclaredTypeOfSymbol.
@@ -2572,7 +2569,7 @@ impl Checker {
             self.add_diagnostic(diagnostic);
             return;
         }
-        if t == reduced_base_type || self.has_base_type(reduced_base_type, t) {
+        if t == reduced_base_type || self.has_base_type(reduced_base_type, Some(t)) {
             let type_string = self.type_to_string(t, None);
             self.error(
                 t.symbol().unwrap().value_declaration(),

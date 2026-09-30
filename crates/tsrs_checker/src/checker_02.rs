@@ -45,7 +45,7 @@ impl Checker {
             let Some(node) = node else {
                 panic!("Unexpected nil in getImmediateAliasedSymbol");
             };
-            let target = self.get_target_of_alias_declaration(node);
+            let target = self.get_target_of_alias_declaration(Some(node));
             links.immediate_target.set(target);
         }
         links.immediate_target.get()
@@ -2168,7 +2168,7 @@ impl Checker {
                 // because we accessed properties from anyType, or it may have led to an error inside
                 // getElementTypeOfIterable.
                 // (Go's `iteratedType != nil` guard is always true, see above.)
-                self.check_type_assignable_to_and_optionally_elaborate(iterated_type, left_type, var_expr, data.expression, None, None);
+                self.check_type_assignable_to_and_optionally_elaborate(iterated_type, left_type, Some(var_expr), Some(data.expression), None, None);
             }
         }
         self.check_source_element(Some(data.statement));
@@ -2216,7 +2216,7 @@ impl Checker {
                 }
             } else if ast::is_constructor_declaration(container) {
                 if let Some(expr_node) = expr_node {
-                    if !self.check_type_assignable_to_and_optionally_elaborate(expr_type, return_type, node, expr_node, None, None) {
+                    if !self.check_type_assignable_to_and_optionally_elaborate(expr_type, return_type, Some(node), Some(expr_node), None, None) {
                         self.error(Some(node), &diagnostics::Return_type_of_constructor_signature_must_be_assignable_to_the_instance_type_of_the_class, &[]);
                     }
                 }
@@ -2265,10 +2265,7 @@ impl Checker {
             effective_expr = self.get_effective_check_node(expr);
         }
         let error_node = if_else(in_return_statement && !in_conditional_expression, Some(node), effective_expr);
-        // SIG: check_type_assignable_to_and_optionally_elaborate should take `error_node: Option<P<Node>>` and
-        // `expr: Option<P<Node>>` (Go passes nil here for `return;`); inlined to its one-line Go body instead.
-        let assignable_relation = self.assignable_relation;
-        self.check_type_related_to_and_optionally_elaborate(unwrapped_expr_type, unwrapped_return_type, assignable_relation, error_node, effective_expr, None, None);
+        self.check_type_assignable_to_and_optionally_elaborate(unwrapped_expr_type, unwrapped_return_type, error_node, effective_expr, None, None);
     }
 
     // checker.go:4184

@@ -1212,7 +1212,7 @@ impl Checker {
     // @param type The type of the promise.
     // @remarks The "promised type" of a type is the type of the "value" parameter of the "onfulfilled" callback.
     // checker.go:29396
-    pub(crate) fn get_promised_type_of_promise_ex(&mut self, t: P<Type>, error_node: Option<P<Node>>, this_type_for_error_out: Option<&mut P<Type>>) -> Option<P<Type>> {
+    pub(crate) fn get_promised_type_of_promise_ex(&mut self, t: P<Type>, error_node: Option<P<Node>>, this_type_for_error_out: Option<&mut Option<P<Type>>>) -> Option<P<Type>> {
         //  { // type
         //      then( // thenFunction
         //          onfulfilled: ( // onfulfilledParameterType
@@ -1270,7 +1270,7 @@ impl Checker {
             assert!(this_type_for_error.is_some());
             let this_type_for_error = this_type_for_error.unwrap();
             if let Some(out) = this_type_for_error_out {
-                *out = this_type_for_error;
+                *out = Some(this_type_for_error);
             }
             if error_node.is_some() {
                 let t_str = self.type_to_string(t, None);

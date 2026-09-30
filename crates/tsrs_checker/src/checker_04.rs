@@ -1422,7 +1422,7 @@ impl Checker {
     // checker.go:7656
     pub(crate) fn check_expression_with_contextual_type(&mut self, node: P<Node>, contextual_type: P<Type>, inference_context: Option<P<InferenceContext>>, check_mode: CheckMode) -> P<Type> {
         let context_node = self.get_context_node(node).unwrap();
-        self.push_contextual_type(context_node, contextual_type, false /*isCache*/);
+        self.push_contextual_type(context_node, Some(contextual_type), false /*isCache*/);
         self.push_inference_context(context_node, inference_context);
         let mut t = self.check_expression_ex(
             node,
@@ -1494,7 +1494,7 @@ impl Checker {
             return cached;
         }
         let any_type = self.any_type;
-        self.push_contextual_type(node, any_type, false /*isCache*/);
+        self.push_contextual_type(node, Some(any_type), false /*isCache*/);
         let t = self.check_expression_ex(node, CheckMode::SkipContextSensitive);
         self.context_free_types.insert(node, t);
         self.pop_contextual_type();

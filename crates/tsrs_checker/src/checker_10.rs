@@ -295,7 +295,7 @@ impl Checker {
                     let base_type = self.get_reduced_type(type_from_node);
                     if !self.is_error_type(base_type) {
                         if self.is_valid_base_type(base_type) {
-                            if t != base_type && !self.has_base_type(base_type, t) {
+                            if t != base_type && !self.has_base_type(base_type, Some(t)) {
                                 let mut resolved = data.resolved_base_types.get().to_vec();
                                 resolved.push(base_type);
                                 data.resolved_base_types.set(alloc_vec(resolved));
@@ -347,15 +347,15 @@ impl Checker {
 
     // TODO: GH#18217 If `checkBase` is undefined, we should not call this because this will always return false.
     // checker.go:19892
-    pub(crate) fn has_base_type(&mut self, t: P<Type>, check_base: P<Type>) -> bool {
+    pub(crate) fn has_base_type(&mut self, t: P<Type>, check_base: Option<P<Type>>) -> bool {
         has_base_type_check(self, t, check_base)
     }
 }
 
-fn has_base_type_check(c: &mut Checker, t: P<Type>, check_base: P<Type>) -> bool {
+fn has_base_type_check(c: &mut Checker, t: P<Type>, check_base: Option<P<Type>>) -> bool {
     if t.object_flags().intersects(ObjectFlags::ClassOrInterface | ObjectFlags::Reference) {
         let target = get_target_type(t);
-        if target == Some(check_base) {
+        if target == check_base {
             return true;
         }
         let base_types = c.get_base_types(target.unwrap());
@@ -956,12 +956,7 @@ impl Checker {
         }
         if ast::is_get_accessor_declaration(declaration) && self.has_bindable_name(declaration) {
             let symbol = self.get_symbol_of_declaration(declaration).unwrap();
-            // SIG: getAnnotatedAccessorType accepts a nil accessor in Go (it returns nil); the generated signature
-            // takes P<Node>, so the nil case is handled here with the identical result.
-            return match ast::get_declaration_of_kind(symbol, Kind::SetAccessor) {
-                Some(accessor) => self.get_annotated_accessor_type(accessor),
-                None => None,
-            };
+            return self.get_annotated_accessor_type(ast::get_declaration_of_kind(symbol, Kind::SetAccessor));
         }
         self.get_return_type_of_full_signature(declaration)
     }
@@ -1000,8 +995,8 @@ impl Checker {
     }
 
     // checker.go:20439
-    pub(crate) fn get_annotated_accessor_type(&mut self, accessor: P<Node>) -> Option<P<Type>> {
-        let node = self.get_annotated_accessor_type_node(Some(accessor));
+    pub(crate) fn get_annotated_accessor_type(&mut self, accessor: Option<P<Node>>) -> Option<P<Type>> {
+        let node = self.get_annotated_accessor_type_node(accessor);
         if let Some(node) = node {
             return Some(self.get_type_from_type_node(node));
         }

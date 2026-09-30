@@ -113,7 +113,7 @@ impl Checker {
         if self.is_error_type(target_type) {
             return target_type;
         }
-        self.check_type_assignable_to_and_optionally_elaborate(expr_type, target_type, node, node.expression().unwrap(), Some(&diagnostics::Type_0_does_not_satisfy_the_expected_type_1), None);
+        self.check_type_assignable_to_and_optionally_elaborate(expr_type, target_type, Some(node), Some(node.expression().unwrap()), Some(&diagnostics::Type_0_does_not_satisfy_the_expected_type_1), None);
         expr_type
     }
 
@@ -404,19 +404,7 @@ impl Checker {
         let yielded_type = self.get_yielded_type_of_yield_expression(node, yield_expression_type, signature_next_type, is_async);
         if let (Some(_), Some(yielded_type)) = (return_type, yielded_type) {
             let error_node = node.expression().unwrap_or(node);
-            match node.expression() {
-                Some(expr) => {
-                    self.check_type_assignable_to_and_optionally_elaborate(yielded_type, signature_yield_type, error_node, expr, None, None);
-                }
-                None => {
-                    // SIG: checkTypeAssignableToAndOptionallyElaborate `expr` should be Option<P<Node>> (Go passes nil here);
-                    // with a nil expr elaborateError returns false, so this is the equivalent expansion.
-                    let assignable_relation = self.assignable_relation;
-                    if !self.is_type_related_to(yielded_type, signature_yield_type, assignable_relation) {
-                        self.check_type_related_to_ex(yielded_type, signature_yield_type, assignable_relation, Some(error_node), None, None);
-                    }
-                }
-            }
+            self.check_type_assignable_to_and_optionally_elaborate(yielded_type, signature_yield_type, Some(error_node), node.expression(), None, None);
         }
         if node.as_yield_expression().asterisk_token.is_some() {
             let use_ = if is_async { IterationUse::AsyncYieldStar } else { IterationUse::YieldStar };
@@ -1242,27 +1230,6 @@ pub(crate) fn has_common_dom_type_name(t: P<Type>) -> bool {
     name == "EventTarget" || name == "Node" || name == "Element" || name.starts_with("HTML") && name.ends_with("Element")
 }
 
-// Go's hasBaseType with a nil checkBase (see the SIG note at the call sites).
-fn has_base_type_with_nil_check_base(c: &mut Checker, t: P<Type>) -> bool {
-    if t.object_flags().intersects(ObjectFlags::ClassOrInterface | ObjectFlags::Reference) {
-        let target = get_target_type(t).unwrap();
-        let base_types = c.get_base_types(target);
-        return base_types.iter().any(|&b| has_base_type_with_nil_check_base(c, b));
-    }
-    if t.flags().intersects(TypeFlags::Intersection) {
-        return t.types().iter().any(|&t| has_base_type_with_nil_check_base(c, t));
-    }
-    false
-}
-
-// SIG: hasBaseType's checkBase should be Option<P<Type>> (Go passes the nil result of getDeclaringClass).
-fn has_base_type_or_nil(c: &mut Checker, t: P<Type>, check_base: Option<P<Type>>) -> bool {
-    match check_base {
-        Some(check_base) => c.has_base_type(t, check_base),
-        None => has_base_type_with_nil_check_base(c, t),
-    }
-}
-
 impl Checker {
     // checker.go:11867
     pub(crate) fn check_and_report_error_for_extending_interface(&mut self, error_location: P<Node>) -> bool {
@@ -1533,7 +1500,7 @@ impl Checker {
             }
         }
         let enclosing_class = enclosing_class.unwrap();
-        if containing_type.is_none() || !self.has_base_type(containing_type.unwrap(), enclosing_class) {
+        if containing_type.is_none() || !self.has_base_type(containing_type.unwrap(), Some(enclosing_class)) {
             if let (Some(error_node), Some(containing_type)) = (error_node, containing_type) {
                 let prop_string = self.symbol_to_string(prop);
                 let enclosing_string = self.type_to_string_exported(enclosing_class);
@@ -1606,7 +1573,7 @@ impl Checker {
         self.for_each_property(prop, |c, sp| {
             let source_class = c.get_declaring_class(sp);
             if let Some(source_class) = source_class {
-                return has_base_type_or_nil(c, source_class, base_class);
+                return c.has_base_type(source_class, base_class);
             }
             false
         })
@@ -1651,7 +1618,7 @@ impl Checker {
         !self.for_each_property(prop, |c, p| {
             if get_declaration_modifier_flags_from_symbol_ex(p, writing).intersects(ModifierFlags::Protected) {
                 let declaring_class = c.get_declaring_class(p);
-                return !has_base_type_or_nil(c, check_class, declaring_class);
+                return !c.has_base_type(check_class, declaring_class);
             }
             false
         })
@@ -2440,14 +2407,11 @@ impl Checker {
             if let Some(all_properties) = all_properties {
                 for &other_property in all_properties.nodes {
                     if !ast::is_spread_assignment(other_property) {
-                        // SIG: Go appends otherProperty.Name() (never nil for non-spread object literal members).
                         non_rest_names.push(other_property.name().unwrap());
                     }
                 }
             }
-            // SIG: getRestType's symbol parameter should be Option<P<Symbol>> (Go passes objectLiteralType.symbol, which
-            // can be nil); this unwrap panics where Go would pass nil.
-            let t = self.get_rest_type(object_literal_type, &non_rest_names, object_literal_type.symbol().unwrap());
+            let t = self.get_rest_type(object_literal_type, &non_rest_names, object_literal_type.symbol());
             self.check_grammar_for_disallowed_trailing_comma(all_properties, &diagnostics::A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma);
             return Some(self.check_destructuring_assignment(property.expression().unwrap(), t, CheckMode::Normal, false));
         }
@@ -2534,7 +2498,7 @@ impl Checker {
             &diagnostics::The_left_hand_side_of_an_assignment_expression_may_not_be_an_optional_property_access
         };
         if self.check_reference_expression(target, message, optional_message) {
-            self.check_type_assignable_to_and_optionally_elaborate(source_type, target_type, target, target, None, None);
+            self.check_type_assignable_to_and_optionally_elaborate(source_type, target_type, Some(target), Some(target), None, None);
         }
         source_type
     }
@@ -2620,7 +2584,7 @@ impl Checker {
                     }
                 }
                 // to avoid cascading errors check assignability only if 'isReference' check succeeded and no errors were reported
-                self.check_type_assignable_to_and_optionally_elaborate(right_type, left_type, left, right, head_message, None);
+                self.check_type_assignable_to_and_optionally_elaborate(right_type, left_type, Some(left), Some(right), head_message, None);
             }
         }
     }

@@ -1015,17 +1015,11 @@ impl Checker {
     // checker.go:31361
     pub(crate) fn push_cached_contextual_type(&mut self, node: P<Node>) {
         let t = self.get_contextual_type(node, ContextFlags::None);
-        self.push_contextual_type_worker(node, t, true /*isCache*/);
+        self.push_contextual_type(node, t, true /*isCache*/);
     }
 
     // checker.go:31365
-    pub(crate) fn push_contextual_type(&mut self, node: P<Node>, t: P<Type>, is_cache: bool) {
-        self.push_contextual_type_worker(node, Some(t), is_cache);
-    }
-
-    // Go's pushContextualType accepts a nil type (pushCachedContextualType passes the possibly-nil result of
-    // getContextualType); the generated signature takes a non-nil type, so the body lives here.
-    fn push_contextual_type_worker(&mut self, node: P<Node>, t: Option<P<Type>>, is_cache: bool) {
+    pub(crate) fn push_contextual_type(&mut self, node: P<Node>, t: Option<P<Type>>, is_cache: bool) {
         self.contextual_infos.push(ContextualInfo { node, t, is_cache });
     }
 
@@ -1501,12 +1495,8 @@ impl Checker {
             self.cached_types.insert(key, t);
             return Some(t);
         }
-        // SIG: getPromisedTypeOfPromiseEx's out parameter should be `Option<&mut Option<P<Type>>>` (Go `**Type`
-        // starting at nil). The callee only ever writes a non-nil this-type, so the error type serves as the
-        // "not written" sentinel here.
-        let mut this_type_for_error_out = self.error_type;
-        let promised_type = self.get_promised_type_of_promise_ex(t, None /*errorNode*/, Some(&mut this_type_for_error_out));
-        let this_type_for_error = if this_type_for_error_out == self.error_type { None } else { Some(this_type_for_error_out) };
+        let mut this_type_for_error: Option<P<Type>> = None;
+        let promised_type = self.get_promised_type_of_promise_ex(t, None /*errorNode*/, Some(&mut this_type_for_error));
         if let Some(promised_type) = promised_type {
             if t == promised_type || self.awaited_type_stack.contains(&promised_type) {
                 // Verify that we don't have a bad actor in the form of a promise whose

@@ -1761,7 +1761,7 @@ impl Checker {
         self.check_external_module_exports(container);
         if let Some(type_node) = node.type_node().filter(|_| node.kind == Kind::ExportAssignment) {
             let t = self.get_type_from_type_node(type_node);
-            self.check_type_assignable_to_and_optionally_elaborate(expr_type, t, node.expression().unwrap(), node.expression().unwrap(), None /*headMessage*/, None);
+            self.check_type_assignable_to_and_optionally_elaborate(expr_type, t, node.expression(), node.expression(), None /*headMessage*/, None);
         }
         if node.flags().intersects(NodeFlags::Ambient) && !is_entity_name_expression(node.expression().unwrap()) {
             self.grammar_error_on_node(node.expression().unwrap(), &diagnostics::The_expression_of_an_export_assignment_must_be_an_identifier_or_qualified_name_in_an_ambient_context, &[]);
@@ -1995,7 +1995,7 @@ impl Checker {
                         self.check_non_null_non_void_type(initializer_type, node);
                     } else {
                         let target = self.get_widened_type_for_variable_like_declaration(node, false);
-                        self.check_type_assignable_to_and_optionally_elaborate(initializer_type, target, node, initializer, None, None);
+                        self.check_type_assignable_to_and_optionally_elaborate(initializer_type, target, Some(node), Some(initializer), None, None);
                     }
                 }
                 // check the binding pattern with empty elements
@@ -2026,7 +2026,7 @@ impl Checker {
             // Don't validate for-in initializer as it is already an error
             if let Some(initializer) = initializer.filter(|_| !is_for_in_statement(node.parent().unwrap().parent().unwrap())) {
                 let initializer_type = self.check_expression_cached(initializer);
-                self.check_type_assignable_to_and_optionally_elaborate(initializer_type, t, node, initializer, None /*headMessage*/, None);
+                self.check_type_assignable_to_and_optionally_elaborate(initializer_type, t, Some(node), Some(initializer), None /*headMessage*/, None);
                 let block_scope_kind = self.get_combined_node_flags_cached(node) & NodeFlags::BlockScoped;
                 if block_scope_kind == NodeFlags::AwaitUsing {
                     let global_async_disposable_type = self.get_global_async_disposable_type();
@@ -2063,7 +2063,7 @@ impl Checker {
             }
             if let Some(initializer) = initializer {
                 let initializer_type = self.check_expression_cached(initializer);
-                self.check_type_assignable_to_and_optionally_elaborate(initializer_type, declaration_type, node, initializer, None /*headMessage*/, None);
+                self.check_type_assignable_to_and_optionally_elaborate(initializer_type, declaration_type, Some(node), Some(initializer), None /*headMessage*/, None);
             }
             if let Some(value_declaration) = symbol.value_declaration() {
                 if !self.are_declaration_flags_identical(node, value_declaration) {

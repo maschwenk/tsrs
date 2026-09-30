@@ -2763,7 +2763,7 @@ impl Checker {
             source.flags().intersects(TypeFlags::Object) && self.is_function_object_type(source)
         } else {
             let target_type = self.get_target_type(target).unwrap();
-            self.has_base_type(source, target_type) || (self.is_array_type(target) && !self.is_readonly_array_type(target) && self.is_type_derived_from(source, self.global_readonly_array_type))
+            self.has_base_type(source, Some(target_type)) || (self.is_array_type(target) && !self.is_readonly_array_type(target) && self.is_type_derived_from(source, self.global_readonly_array_type))
         }
     }
 

@@ -863,7 +863,8 @@ impl Checker {
     }
 
     // checker.go:16059
-    pub(crate) fn get_target_of_alias_declaration(&mut self, node: P<Node>) -> Option<P<Symbol>> {
+    pub(crate) fn get_target_of_alias_declaration(&mut self, node: Option<P<Node>>) -> Option<P<Symbol>> {
+        let node = node?;
         match node.kind {
             Kind::ImportEqualsDeclaration | Kind::VariableDeclaration => self.get_target_of_import_equals_declaration(node),
             Kind::ImportClause => self.get_target_of_import_clause(node),
@@ -1453,7 +1454,7 @@ impl Checker {
                 Some(n) => n,
                 None => panic!("Unexpected nil in resolveAlias for symbol: {}", self.symbol_to_string(symbol)),
             };
-            let mut target = self.get_target_of_alias_declaration(node);
+            let mut target = self.get_target_of_alias_declaration(Some(node));
             if ast::is_non_local_alias(target, SymbolFlags::Value | SymbolFlags::Type | SymbolFlags::Namespace) {
                 // When the target is a pure alias, we transitively resolve and propagate any typeOnlyDeclaration
                 target = Some(self.resolve_indirection_alias(symbol, target.unwrap()));
