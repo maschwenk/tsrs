@@ -80,18 +80,18 @@ impl Parser {
                 let innermost = self.get_innermost_name_of_jsdoc_namespace(full_name);
                 let checked = self.check_non_identifier_name(innermost);
                 let name = self.add_deep_clone_reparse(checked).unwrap();
-                // Go constructs the alias with nil TypeParameters/Type and assigns them afterwards; the
-                // Rust constructor needs the type up front, so both are computed first (same side-effect order).
+                let type_alias = self.factory.new_js_type_alias_declaration(modifiers, name, None, None);
                 let type_parameters = self.gather_type_parameters(js_doc, true /*typedefOrCallback*/);
+                type_alias.as_type_alias_declaration().type_parameters.set(type_parameters);
                 let t = match type_expression.kind {
-                    Kind::JSDocTypeExpression => self.add_deep_clone_reparse(type_expression.type_node()).unwrap(),
-                    Kind::JSDocTypeLiteral => self.reparse_jsdoc_type_literal(Some(type_expression)).unwrap(),
+                    Kind::JSDocTypeExpression => self.add_deep_clone_reparse(type_expression.type_node()),
+                    Kind::JSDocTypeLiteral => self.reparse_jsdoc_type_literal(Some(type_expression)),
                     _ => panic!(
                         "typedef tag type expression should be a name reference or a type expression{:?}",
                         type_expression.kind
                     ),
                 };
-                let type_alias = self.factory.new_js_type_alias_declaration(modifiers, name, type_parameters, t);
+                type_alias.as_type_alias_declaration().type_.set(t);
                 self.finish_reparsed_node(type_alias, tag);
                 self.jsdoc_infos.push(JSDocInfo { parent: type_alias, js_docs: alloc_slice(&[js_doc]) });
                 type_alias.set_flags(type_alias.flags() | NodeFlags::HasJSDoc);
@@ -111,9 +111,9 @@ impl Parser {
                 let function_type = self.reparse_jsdoc_signature(type_expression, tag, js_doc, tag, None);
                 let innermost = self.get_innermost_name_of_jsdoc_namespace(full_name);
                 let name = self.add_deep_clone_reparse(innermost).unwrap();
-                let type_alias = self.factory.new_js_type_alias_declaration(modifiers, name, None, function_type);
+                let type_alias = self.factory.new_js_type_alias_declaration(modifiers, name, None, Some(function_type));
                 let type_parameters = self.gather_type_parameters(js_doc, true /*typedefOrCallback*/);
-                type_alias.as_type_alias_declaration().set_type_parameters(type_parameters);
+                type_alias.as_type_alias_declaration().type_parameters.set(type_parameters);
                 self.finish_reparsed_node(type_alias, tag);
                 self.jsdoc_infos.push(JSDocInfo { parent: type_alias, js_docs: alloc_slice(&[js_doc]) });
                 type_alias.set_flags(type_alias.flags() | NodeFlags::HasJSDoc);
@@ -162,19 +162,28 @@ impl Parser {
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {
         let cloned_modifiers = self.factory.deep_clone_reparse_modifiers(modifiers);
-        // Go constructs the signature with nil parameters and assigns TypeParameters, Parameters and Type
-        // afterwards. The Rust constructors require the parameter list, so the pieces are computed first,
-        // in Go's side-effect order (name check, type parameters, parameters, return type), and the
-        // signature is constructed at the end.
-        let mut name = None;
-        if fun.kind == Kind::FunctionDeclaration || fun.kind == Kind::MethodDeclaration {
-            let checked = self.check_non_identifier_name(fun.name());
-            name = self.factory.deep_clone_reparse(checked);
-        }
+        let signature = match fun.kind {
+            Kind::FunctionDeclaration => {
+                let checked = self.check_non_identifier_name(fun.name());
+                let name = self.factory.deep_clone_reparse(checked);
+                self.factory.new_function_declaration(cloned_modifiers, None, name, None, None, None, None, None)
+            }
+            Kind::MethodDeclaration => {
+                let checked = self.check_non_identifier_name(fun.name());
+                let name = self.factory.deep_clone_reparse(checked).unwrap();
+                self.factory.new_method_declaration(cloned_modifiers, None, name, None, None, None, None, None, None)
+            }
+            Kind::Constructor => self.factory.new_constructor_declaration(cloned_modifiers, None, None, None, None, None),
+            Kind::JSDocCallbackTag => {
+                let any = self.factory.new_keyword_type_node(Kind::AnyKeyword);
+                self.factory.new_function_type_node(None, None, Some(any))
+            }
+            _ => panic!("Unexpected kind {:?}", fun.kind),
+        };
 
-        let mut type_parameters = None;
         if tag.kind != Kind::JSDocCallbackTag {
-            type_parameters = self.gather_type_parameters(js_doc, false /*typedefOrCallback*/);
+            let type_parameters = self.gather_type_parameters(js_doc, false /*typedefOrCallback*/);
+            signature.function_like_data().unwrap().type_parameters.set(type_parameters);
         }
         let mut parameters: Vec<P<Node>> = Vec::new();
         for (pi, &param) in js_signature.parameters().iter().enumerate() {
@@ -248,46 +257,16 @@ impl Parser {
             parameters.push(parameter);
             self.reparse_jsdoc_comment(parameter, param);
         }
-        let parameter_list_loc = js_signature.parameter_list().loc();
+        let parameter_list_loc = js_signature.as_jsdoc_signature().function_like_base.parameters.get().unwrap().loc();
         let parameter_list = self.new_node_list(parameter_list_loc, &parameters);
+        signature.function_like_data().unwrap().parameters.set(Some(parameter_list));
 
-        let mut return_type = None;
         if let Some(return_tag) = js_signature.type_node() {
             if let Some(type_expression) = return_tag.type_expression() {
-                return_type = self.add_deep_clone_reparse(type_expression.type_node());
+                let t = self.add_deep_clone_reparse(type_expression.type_node());
+                signature.function_like_data().unwrap().type_.set(t);
             }
         }
-        let signature = match fun.kind {
-            Kind::FunctionDeclaration => self.factory.new_function_declaration(
-                cloned_modifiers,
-                None,
-                name,
-                type_parameters,
-                parameter_list,
-                return_type,
-                None,
-                None,
-            ),
-            Kind::MethodDeclaration => self.factory.new_method_declaration(
-                cloned_modifiers,
-                None,
-                name.unwrap(),
-                None,
-                type_parameters,
-                parameter_list,
-                return_type,
-                None,
-                None,
-            ),
-            Kind::Constructor => {
-                self.factory.new_constructor_declaration(cloned_modifiers, type_parameters, parameter_list, return_type, None, None)
-            }
-            Kind::JSDocCallbackTag => {
-                let any = self.factory.new_keyword_type_node(Kind::AnyKeyword);
-                self.factory.new_function_type_node(None, parameter_list, Some(return_type.unwrap_or(any)))
-            }
-            _ => panic!("Unexpected kind {:?}", fun.kind),
-        };
         let mut loc = js_signature;
         if tag.kind == Kind::JSDocOverloadTag {
             loc = tag.tag_name();
@@ -591,9 +570,9 @@ impl Parser {
                         new_params.push(this_param);
                         new_params.extend_from_slice(params);
 
-                        let loc = fun.parameter_list().loc.get();
+                        let loc = fun.parameter_list().unwrap().loc();
                         let parameter_list = self.new_node_list(loc, &new_params);
-                        fun.function_like_data().unwrap().parameters.set(parameter_list);
+                        fun.function_like_data().unwrap().parameters.set(Some(parameter_list));
                         self.finish_mutated_node(fun);
                     }
                 }
@@ -646,7 +625,7 @@ impl Parser {
                             let mut n = parent.modifier_nodes().to_vec();
                             n.push(modifier);
                             nodes = n;
-                            loc = modifiers.loc.get();
+                            loc = modifiers.loc();
                         }
                     }
                     let modifier_list = self.new_modifier_list(loc, &nodes);
@@ -708,7 +687,7 @@ impl Parser {
                                 let target = target_node.as_expression_with_type_arguments();
                                 let source = tag.class_name().as_expression_with_type_arguments();
                                 if ast::has_same_property_access_name(target.expression, source.expression) {
-                                    if let (None, Some(source_type_arguments)) = (target.type_arguments.get(), source.type_arguments) {
+                                    if let (None, Some(source_type_arguments)) = (target.type_arguments.get(), source.type_arguments.get()) {
                                         let mut new_arguments: Vec<P<Node>> = Vec::with_capacity(source_type_arguments.nodes().len());
                                         for &arg in source_type_arguments.nodes() {
                                             new_arguments.push(self.add_deep_clone_reparse(Some(arg)).unwrap());

@@ -134,7 +134,7 @@ impl Parser {
         let full_start = self.scanner.token_full_start();
         self.scanner.reset_pos(full_start);
         self.next_token_jsdoc();
-        let node = self.factory.new_jsdoc_name_reference(entity_name);
+        let node = self.factory.new_jsdoc_name_reference(entity_name.unwrap());
         self.finish_node(node, pos)
     }
 
@@ -1230,7 +1230,7 @@ impl Parser {
         if return_tag.is_none() {
             self.rewind(state);
         }
-        let node = self.factory.new_jsdoc_signature(None, parameters, return_tag);
+        let node = self.factory.new_jsdoc_signature(None, Some(parameters), return_tag);
         self.finish_node(node, start)
     }
 
@@ -1507,7 +1507,7 @@ fn is_object_or_object_array_type_reference(node: P<Node>) -> bool {
         _ => {
             if ast::is_type_reference_node(node) {
                 let ref_ = node.as_type_reference_node();
-                return ast::is_identifier(ref_.type_name) && ref_.type_name.text() == "Object" && ref_.type_arguments.is_none();
+                return ast::is_identifier(ref_.type_name) && ref_.type_name.text() == "Object" && ref_.type_arguments().is_none();
             }
             false
         }
