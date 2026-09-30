@@ -16,126 +16,481 @@ use std::fmt::Display;
 impl Checker {
     // checker.go:6527
     pub(crate) fn get_iteration_types_of_iterable_fast(&mut self, t: P<Type>, r: P<IterationTypesResolver>) -> IterationTypes {
-        todo!()
+        // As an optimization, if the type is an instantiation of the following global type, then
+        // just grab its related type arguments:
+        // - `Iterable<T, TReturn, TNext>` or `AsyncIterable<T, TReturn, TNext>`
+        // - `IteratorObject<T, TReturn, TNext>` or `AsyncIteratorObject<T, TReturn, TNext>`
+        // - `IterableIterator<T, TReturn, TNext>` or `AsyncIterableIterator<T, TReturn, TNext>`
+        // - `Generator<T, TReturn, TNext>` or `AsyncGenerator<T, TReturn, TNext>`
+        if {
+            let g = r.get_global_iterable_type(self);
+            self.is_reference_to_type(Some(t), g)
+        } || {
+            let g = r.get_global_iterator_object_type(self);
+            self.is_reference_to_type(Some(t), g)
+        } || {
+            let g = r.get_global_iterable_iterator_type(self);
+            self.is_reference_to_type(Some(t), g)
+        } || {
+            let g = r.get_global_generator_type(self);
+            self.is_reference_to_type(Some(t), g)
+        } {
+            let type_arguments = self.get_type_arguments(t);
+            return r.get_resolved_iteration_types(self, type_arguments[0], type_arguments[1], type_arguments[2]);
+        }
+        // As an optimization, if the type is an instantiation of one of the following global types, then
+        // just grab the related type argument:
+        // - `ArrayIterator<T>`
+        // - `MapIterator<T>`
+        // - `SetIterator<T>`
+        // - `StringIterator<T>`
+        // - `ReadableStreamAsyncIterator<T>`
+        let builtin = r.get_global_builtin_iterator_types(self);
+        if self.is_reference_to_some_type(Some(t), builtin) {
+            let yield_type = self.get_type_arguments(t)[0];
+            let return_type = self.get_builtin_iterator_return_type();
+            let unknown_type = self.unknown_type;
+            return r.get_resolved_iteration_types(self, yield_type, return_type, unknown_type);
+        }
+        IterationTypes::default()
     }
 }
 
 impl IterationTypesResolver {
     // checker.go:6554
-    pub(crate) fn get_resolved_iteration_types(&self, yield_type: P<Type>, return_type: P<Type>, next_type: P<Type>) -> IterationTypes {
-        todo!()
+    pub(crate) fn get_resolved_iteration_types(&self, c: &mut Checker, yield_type: P<Type>, return_type: P<Type>, next_type: P<Type>) -> IterationTypes {
+        IterationTypes {
+            yield_type: Some(self.resolve_iteration_type(c, yield_type, None /*errorNode*/).unwrap_or(yield_type)),
+            return_type: Some(self.resolve_iteration_type(c, return_type, None /*errorNode*/).unwrap_or(return_type)),
+            next_type: Some(next_type),
+        }
     }
 }
 
 impl Checker {
     // checker.go:6562
     pub(crate) fn is_reference_to_type(&mut self, t: Option<P<Type>>, target: P<Type>) -> bool {
-        todo!()
+        match t {
+            Some(t) => t.object_flags().intersects(ObjectFlags::Reference) && t.target() == Some(target),
+            None => false,
+        }
     }
 
     // checker.go:6566
     pub(crate) fn is_reference_to_some_type(&mut self, t: Option<P<Type>>, targets: &[P<Type>]) -> bool {
-        todo!()
+        match t {
+            Some(t) => {
+                t.object_flags().intersects(ObjectFlags::Reference) && t.target().is_some_and(|target| targets.contains(&target))
+            }
+            None => false,
+        }
     }
 
     // checker.go:6570
     pub(crate) fn get_builtin_iterator_return_type(&mut self) -> P<Type> {
-        todo!()
+        if self.strict_builtin_iterator_return { self.undefined_type } else { self.any_type }
     }
 }
 
 impl IterationTypes {
     // checker.go:6574
     pub(crate) fn has_types(&self) -> bool {
-        todo!()
+        self.yield_type.is_some() || self.return_type.is_some() || self.next_type.is_some()
     }
 
     // checker.go:6578
     pub(crate) fn get_type(&self, type_kind: IterationTypeKind) -> Option<P<Type>> {
-        todo!()
+        match type_kind {
+            IterationTypeKind::Yield => self.yield_type,
+            IterationTypeKind::Return => self.return_type,
+            IterationTypeKind::Next => self.next_type,
+        }
     }
 }
 
 impl Checker {
     // checker.go:6590
     pub(crate) fn combine_iteration_types(&mut self, iteration_types: &[IterationTypes]) -> IterationTypes {
-        todo!()
+        IterationTypes {
+            yield_type: self.get_iteration_type_union(iteration_types, |_, t| t.yield_type),
+            return_type: self.get_iteration_type_union(iteration_types, |_, t| t.return_type),
+            next_type: self.get_iteration_type_union(iteration_types, |_, t| t.next_type),
+        }
     }
 
     // checker.go:6598
-    pub(crate) fn get_iteration_type_union(&mut self, iteration_types: &[IterationTypes], f: impl FnMut(&mut Checker, IterationTypes) -> Option<P<Type>>) -> Option<P<Type>> {
-        todo!()
+    pub(crate) fn get_iteration_type_union(&mut self, iteration_types: &[IterationTypes], mut f: impl FnMut(&mut Checker, IterationTypes) -> Option<P<Type>>) -> Option<P<Type>> {
+        let mut types: Vec<P<Type>> = Vec::new();
+        for &it in iteration_types {
+            if let Some(t) = f(self, it) {
+                types.push(t);
+            }
+        }
+        if types.is_empty() {
+            return None;
+        }
+        Some(self.get_union_type(&types))
     }
 
     // checker.go:6606
     pub(crate) fn get_async_from_sync_iteration_types(&mut self, iteration_types: IterationTypes, error_node: Option<P<Node>>) -> IterationTypes {
-        todo!()
+        if !iteration_types.has_types()
+            || iteration_types.yield_type == Some(self.any_type)
+                && iteration_types.return_type == Some(self.any_type)
+                && iteration_types.next_type == Some(self.any_type)
+        {
+            return iteration_types;
+        }
+        // if we're requesting diagnostics, report errors for a missing `Awaited<T>`.
+        if error_node.is_some() {
+            self.get_global_awaited_symbol();
+        }
+        let yield_type = self.get_awaited_type_ex(iteration_types.yield_type.unwrap(), error_node, None, &[]).unwrap_or(self.any_type);
+        let return_type = self.get_awaited_type_ex(iteration_types.return_type.unwrap(), error_node, None, &[]).unwrap_or(self.any_type);
+        IterationTypes { yield_type: Some(yield_type), return_type: Some(return_type), next_type: iteration_types.next_type }
     }
 
+    // Gets the *yield*, *return*, and *next* types of an `Iterable`-like or `AsyncIterable`-like
+    // type from its members.
+    //
+    // If we successfully found the *yield*, *return*, and *next* types, an `IterationTypes` with non-nil
+    // members is returned. Otherwise, a default `IterationTypes{}` is returned.
+    //
+    // NOTE: You probably don't want to call this directly and should be calling
+    // `getIterationTypesOfIterable` instead.
     // checker.go:6630
     pub(crate) fn get_iteration_types_of_iterable_slow(&mut self, t: P<Type>, r: P<IterationTypesResolver>, error_node: Option<P<Node>>, diagnostic_output: &mut Vec<P<Diagnostic>>) -> IterationTypes {
-        todo!()
+        let name = self.get_property_name_for_known_symbol_name(r.iterator_symbol_name);
+        if let Some(method) = self.get_property_of_type(t, &name) {
+            if !method.flags().intersects(SymbolFlags::Optional) {
+                let method_type = self.get_type_of_symbol(method);
+                if is_type_any(Some(method_type)) {
+                    return IterationTypes { yield_type: Some(self.any_type), return_type: Some(self.any_type), next_type: Some(self.any_type) };
+                }
+                let all_signatures = self.get_signatures_of_type(method_type, SignatureKind::Call);
+                let mut valid_signatures: Vec<P<Signature>> = Vec::new();
+                for &sig in &all_signatures {
+                    if self.get_min_argument_count(sig) == 0 {
+                        valid_signatures.push(sig);
+                    }
+                }
+                if !valid_signatures.is_empty() {
+                    let return_types: Vec<P<Type>> = valid_signatures.iter().map(|&sig| self.get_return_type_of_signature(sig)).collect();
+                    let iterator_type = self.get_intersection_type(&return_types);
+                    return self.get_iteration_types_of_iterator_worker(iterator_type, r, error_node, Some(diagnostic_output));
+                }
+                if error_node.is_some() && !all_signatures.is_empty() {
+                    let target = r.get_global_iterable_type_checked(self);
+                    self.check_type_assignable_to_ex(t, target, error_node, None, diagnostic_output);
+                }
+            }
+        }
+        IterationTypes::default()
     }
 
+    // Gets the *yield*, *return*, and *next* types from an `Iterator`-like or `AsyncIterator`-like type.
+    //
+    // If we successfully found the *yield*, *return*, and *next* types, an `IterationTypes` with non-nil
+    // members is returned. Otherwise, a default `IterationTypes{}` is returned.
     // checker.go:6655
     pub(crate) fn get_iteration_types_of_iterator(&mut self, t: P<Type>, r: P<IterationTypesResolver>, error_node: Option<P<Node>>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> IterationTypes {
-        todo!()
+        self.get_iteration_types_of_iterator_worker(t, r, error_node, diagnostic_output)
     }
 
+    // Gets the *yield*, *return*, and *next* types from an `Iterator`-like or `AsyncIterator`-like type.
+    //
+    // If we successfully found the *yield*, *return*, and *next* types, an `IterationTypes` with non-nil
+    // members is returned. Otherwise, a default `IterationTypes{}` is returned.
+    //
+    // NOTE: You probably don't want to call this directly and should be calling `getIterationTypesOfIterator` instead.
     // checker.go:6665
     pub(crate) fn get_iteration_types_of_iterator_worker(&mut self, t: P<Type>, r: P<IterationTypesResolver>, error_node: Option<P<Node>>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> IterationTypes {
-        todo!()
+        if is_type_any(Some(t)) {
+            return IterationTypes { yield_type: Some(self.any_type), return_type: Some(self.any_type), next_type: Some(self.any_type) };
+        }
+        let iteration_types = self.get_iteration_types_of_iterator_fast(t, r);
+        if iteration_types.has_types() {
+            return iteration_types;
+        }
+        self.get_iteration_types_of_iterator_slow(t, r, error_node, diagnostic_output)
     }
 
     // checker.go:6676
     pub(crate) fn get_iteration_types_of_iterator_fast(&mut self, t: P<Type>, r: P<IterationTypesResolver>) -> IterationTypes {
-        todo!()
+        // As an optimization, if the type is an instantiation of the following global type, then
+        // just grab its related type arguments:
+        // - `Iterable<T, TReturn, TNext>` or `AsyncIterable<T, TReturn, TNext>`
+        // - `IteratorObject<T, TReturn, TNext>` or `AsyncIteratorObject<T, TReturn, TNext>`
+        // - `IterableIterator<T, TReturn, TNext>` or `AsyncIterableIterator<T, TReturn, TNext>`
+        // - `Generator<T, TReturn, TNext>` or `AsyncGenerator<T, TReturn, TNext>`
+        if {
+            let g = r.get_global_iterator_type(self);
+            self.is_reference_to_type(Some(t), g)
+        } || {
+            let g = r.get_global_iterator_object_type(self);
+            self.is_reference_to_type(Some(t), g)
+        } || {
+            let g = r.get_global_iterable_iterator_type(self);
+            self.is_reference_to_type(Some(t), g)
+        } || {
+            let g = r.get_global_generator_type(self);
+            self.is_reference_to_type(Some(t), g)
+        } {
+            let type_arguments = self.get_type_arguments(t);
+            return r.get_resolved_iteration_types(self, type_arguments[0], type_arguments[1], type_arguments[2]);
+        }
+        // As an optimization, if the type is an instantiation of one of the following global types, then
+        // just grab the related type argument:
+        // - `ArrayIterator<T>`
+        // - `MapIterator<T>`
+        // - `SetIterator<T>`
+        // - `StringIterator<T>`
+        // - `ReadableStreamAsyncIterator<T>`
+        let builtin = r.get_global_builtin_iterator_types(self);
+        if self.is_reference_to_some_type(Some(t), builtin) {
+            let yield_type = self.get_type_arguments(t)[0];
+            let return_type = self.get_builtin_iterator_return_type();
+            let unknown_type = self.unknown_type;
+            return r.get_resolved_iteration_types(self, yield_type, return_type, unknown_type);
+        }
+        IterationTypes::default()
     }
 
     // checker.go:6703
-    pub(crate) fn get_iteration_types_of_iterator_slow(&mut self, t: P<Type>, r: P<IterationTypesResolver>, error_node: Option<P<Node>>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> IterationTypes {
-        todo!()
+    pub(crate) fn get_iteration_types_of_iterator_slow(&mut self, t: P<Type>, r: P<IterationTypesResolver>, error_node: Option<P<Node>>, mut diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> IterationTypes {
+        let next = self.get_iteration_types_of_method(t, r, "next", error_node, diagnostic_output.as_deref_mut());
+        let return_ = self.get_iteration_types_of_method(t, r, "return", error_node, diagnostic_output.as_deref_mut());
+        let throw = self.get_iteration_types_of_method(t, r, "throw", error_node, diagnostic_output.as_deref_mut());
+        self.combine_iteration_types(&[next, return_, throw])
     }
 
     // checker.go:6711
-    pub(crate) fn get_iteration_types_of_method(&mut self, t: P<Type>, resolver: P<IterationTypesResolver>, method_name: &str, error_node: Option<P<Node>>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> IterationTypes {
-        todo!()
+    pub(crate) fn get_iteration_types_of_method(&mut self, t: P<Type>, resolver: P<IterationTypesResolver>, method_name: &str, error_node: Option<P<Node>>, mut diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> IterationTypes {
+        let method = self.get_property_of_type(t, method_name);
+        // Ignore 'return' or 'throw' if they are missing.
+        if method.is_none() && method_name != "next" {
+            return IterationTypes::default();
+        }
+        let mut method_type: Option<P<Type>> = None;
+        if let Some(method) = method {
+            if !(method_name == "next" && method.flags().intersects(SymbolFlags::Optional)) {
+                if method_name == "next" {
+                    method_type = Some(self.get_type_of_symbol(method));
+                } else {
+                    let ty = self.get_type_of_symbol(method);
+                    method_type = Some(self.get_type_with_facts(ty, TypeFacts::NEUndefinedOrNull));
+                }
+            }
+        }
+        if is_type_any(method_type) {
+            return IterationTypes { yield_type: Some(self.any_type), return_type: Some(self.any_type), next_type: Some(self.any_type) };
+        }
+        // Both async and non-async iterators *must* have a `next` method.
+        let mut method_signatures: Vec<P<Signature>> = Vec::new();
+        if let Some(method_type) = method_type {
+            method_signatures = self.get_signatures_of_type(method_type, SignatureKind::Call);
+        }
+        if method_signatures.is_empty() {
+            if error_node.is_some() {
+                let diagnostic = if method_name == "next" { resolver.must_have_a_next_method_diagnostic } else { resolver.must_be_a_method_diagnostic };
+                self.report_diagnostic(Some(new_diagnostic_for_node(error_node, Some(diagnostic), &[&method_name])), diagnostic_output);
+            }
+            return IterationTypes::default();
+        }
+        let method_type = method_type.unwrap();
+        // If the method signature comes exclusively from the global iterator or generator type,
+        // create iteration types from its type arguments like `getIterationTypesOfIteratorFast`
+        // does (so as to remove `undefined` from the next and return types). We arrive here when
+        // a contextual type for a generator was not a direct reference to one of those global types,
+        // but looking up `methodType` referred to one of them (and nothing else). E.g., in
+        // `interface SpecialIterator extends Iterator<number> {}`, `SpecialIterator` is not a
+        // reference to `Iterator`, but its `next` member derives exclusively from `Iterator`.
+        if method_signatures.len() == 1 && method_type.symbol().is_some() {
+            let global_generator_type = resolver.get_global_generator_type(self);
+            let global_iterator_type = resolver.get_global_iterator_type(self);
+            let is_generator_method = global_generator_type.symbol().is_some_and(|s| {
+                s.members().and_then(|m| m.lookup(method_name)) == method_type.symbol()
+            });
+            let is_iterator_method = !is_generator_method
+                && global_iterator_type.symbol().is_some_and(|s| {
+                    s.members().and_then(|m| m.lookup(method_name)) == method_type.symbol()
+                });
+            if is_generator_method || is_iterator_method {
+                let type_parameters = if is_generator_method { global_generator_type } else { global_iterator_type }.as_interface_type().type_parameters();
+                let mapper = method_type.mapper().unwrap();
+                let mut next_type: Option<P<Type>> = None;
+                if method_name == "next" {
+                    next_type = Some(self.get_mapped_type(type_parameters[2], mapper));
+                }
+                let yield_type = self.get_mapped_type(type_parameters[0], mapper);
+                let return_type = self.get_mapped_type(type_parameters[1], mapper);
+                return IterationTypes { yield_type: Some(yield_type), return_type: Some(return_type), next_type };
+            }
+        }
+        // Extract the first parameter and return type of each signature.
+        let mut method_parameter_types: Option<Vec<P<Type>>> = None;
+        let mut method_return_types: Option<Vec<P<Type>>> = None;
+        for &signature in &method_signatures {
+            if method_name != "throw" && !signature.parameters().is_empty() {
+                let ty = self.get_type_at_position(signature, 0);
+                method_parameter_types.get_or_insert_with(Vec::new).push(ty);
+            }
+            let ty = self.get_return_type_of_signature(signature);
+            method_return_types.get_or_insert_with(Vec::new).push(ty);
+        }
+        // Resolve the *next* or *return* type from the first parameter of a `next()` or
+        // `return()` method, respectively.
+        let mut return_types: Vec<P<Type>> = Vec::new();
+        let mut next_type: Option<P<Type>> = None;
+        if method_name != "throw" {
+            let method_parameter_type = if let Some(method_parameter_types) = &method_parameter_types {
+                self.get_union_type(method_parameter_types)
+            } else {
+                self.unknown_type
+            };
+            if method_name == "next" {
+                // The value of `next(value)` is *not* awaited by async generators
+                next_type = Some(method_parameter_type);
+            } else if method_name == "return" {
+                // The value of `return(value)` *is* awaited by async generators
+                let resolved_method_parameter_type = resolver.resolve_iteration_type(self, method_parameter_type, error_node).unwrap_or(self.any_type);
+                return_types.push(resolved_method_parameter_type);
+            }
+        }
+        // Resolve the *yield* and *return* types from the return type of the method (i.e. `IteratorResult`)
+        let yield_type: Option<P<Type>>;
+        let method_return_type = if let Some(method_return_types) = &method_return_types {
+            self.get_intersection_type(method_return_types)
+        } else {
+            self.never_type
+        };
+        let resolved_method_return_type = resolver.resolve_iteration_type(self, method_return_type, error_node).unwrap_or(self.any_type);
+        let iteration_types = self.get_iteration_types_of_iterator_result(resolved_method_return_type);
+        if !iteration_types.has_types() {
+            if error_node.is_some() {
+                self.report_diagnostic(
+                    Some(new_diagnostic_for_node(error_node, Some(resolver.must_have_a_value_diagnostic), &[&method_name])),
+                    diagnostic_output.as_deref_mut(),
+                );
+            }
+            yield_type = Some(self.any_type);
+            return_types.push(self.any_type);
+        } else {
+            yield_type = iteration_types.yield_type;
+            return_types.push(iteration_types.return_type.unwrap());
+        }
+        let return_type = self.get_union_type(&return_types);
+        IterationTypes { yield_type, return_type: Some(return_type), next_type }
     }
 
+    // Gets the *yield* and *return* types of an `IteratorResult`-like type.
+    //
+    // If we are unable to determine a *yield* or a *return* type, `noIterationTypes` is
+    // returned to indicate to the caller that it should handle the error. Otherwise, an
+    // `IterationTypes` record is returned.
     // checker.go:6819
     pub(crate) fn get_iteration_types_of_iterator_result(&mut self, t: P<Type>) -> IterationTypes {
-        todo!()
+        if is_type_any(Some(t)) {
+            return IterationTypes { yield_type: Some(self.any_type), return_type: Some(self.any_type), next_type: Some(self.any_type) };
+        }
+        // As an optimization, if the type is an instantiation of one of the global `IteratorYieldResult<T>`
+        // or `IteratorReturnResult<TReturn>` types, then just grab its type argument.
+        let yield_result_type = self.get_global_iterator_yield_result_type();
+        if self.is_reference_to_type(Some(t), yield_result_type) {
+            return IterationTypes { yield_type: Some(self.get_type_arguments(t)[0]), return_type: None, next_type: None };
+        }
+        let return_result_type = self.get_global_iterator_return_result_type();
+        if self.is_reference_to_type(Some(t), return_result_type) {
+            return IterationTypes { yield_type: None, return_type: Some(self.get_type_arguments(t)[0]), next_type: None };
+        }
+        // Choose any constituents that can produce the requested iteration type.
+        let yield_iterator_result = self.filter_type(t, |c, t| c.is_yield_iterator_result(t));
+        let mut yield_type: Option<P<Type>> = None;
+        if yield_iterator_result != self.never_type {
+            yield_type = self.get_type_of_property_of_type(yield_iterator_result, "value" /* as __String */);
+        }
+        let return_iterator_result = self.filter_type(t, |c, t| c.is_return_iterator_result(t));
+        let mut return_type: Option<P<Type>> = None;
+        if return_iterator_result != self.never_type {
+            return_type = self.get_type_of_property_of_type(return_iterator_result, "value" /* as __String */);
+        }
+        if yield_type.is_none() && return_type.is_none() {
+            return IterationTypes::default();
+        }
+        // From https://tc39.github.io/ecma262/#sec-iteratorresult-interface
+        // > ... If the iterator does not have a return value, `value` is `undefined`. In that case, the
+        // > `value` property may be absent from the conforming object if it does not inherit an explicit
+        // > `value` property.
+        IterationTypes { yield_type, return_type: Some(return_type.unwrap_or(self.void_type)), next_type: None }
     }
 
     // checker.go:6852
     pub(crate) fn is_yield_iterator_result(&mut self, t: P<Type>) -> bool {
-        todo!()
+        self.is_iterator_result(t, IterationTypeKind::Yield)
     }
 
     // checker.go:6856
     pub(crate) fn is_return_iterator_result(&mut self, t: P<Type>) -> bool {
-        todo!()
+        self.is_iterator_result(t, IterationTypeKind::Return)
     }
 
     // checker.go:6860
     pub(crate) fn is_iterator_result(&mut self, t: P<Type>, kind: IterationTypeKind) -> bool {
-        todo!()
+        // From https://tc39.github.io/ecma262/#sec-iteratorresult-interface:
+        // > [done] is the result status of an iterator `next` method call. If the end of the iterator was reached `done` is `true`.
+        // > If the end was not reached `done` is `false` and a value is available.
+        // > If a `done` property (either own or inherited) does not exist, it is consider to have the value `false`.
+        let done_type = self.get_type_of_property_of_type(t, "done").unwrap_or(self.false_type);
+        let source = if kind == IterationTypeKind::Yield { self.false_type } else { self.true_type };
+        self.is_type_assignable_to(source, done_type)
     }
 
     // checker.go:6869
     pub(crate) fn report_type_not_iterable_error(&mut self, error_node: P<Node>, t: P<Type>, allow_async_iterables: bool) -> P<Diagnostic> {
-        todo!()
+        let message: &'static Message = if allow_async_iterables {
+            &diagnostics::Type_0_must_have_a_Symbol_asyncIterator_method_that_returns_an_async_iterator
+        } else {
+            &diagnostics::Type_0_must_have_a_Symbol_iterator_method_that_returns_an_iterator
+        };
+        let suggest_await = self.get_awaited_type_of_promise(t).is_some()
+            || (!allow_async_iterables
+                && is_for_of_statement(error_node.parent().unwrap())
+                && error_node.parent().unwrap().expression() == Some(error_node)
+                && self.get_global_async_iterable_type() != self.empty_generic_type
+                && {
+                    let global_async_iterable_type = self.get_global_async_iterable_type();
+                    let any_type = self.any_type;
+                    let target = self.create_type_from_generic_global_type(global_async_iterable_type, &[any_type, any_type, any_type]);
+                    self.is_type_assignable_to(t, target)
+                });
+        let type_string = self.type_to_string(t, None);
+        self.error_and_maybe_suggest_await(Some(error_node), suggest_await, message, &[&type_string])
     }
 
     // checker.go:6884
     pub(crate) fn get_iteration_diagnostic_details(&mut self, use_: IterationUse, input_type: P<Type>, allows_strings: bool) -> (&'static Message, bool) {
-        todo!()
+        let yield_type = self.get_iteration_type_of_iterable(use_, IterationTypeKind::Yield, input_type, None /*errorNode*/);
+        if yield_type.is_some() {
+            return (&diagnostics::Type_0_can_only_be_iterated_through_when_using_the_downlevelIteration_flag_or_with_a_target_of_es2015_or_higher, false);
+        }
+        if let Some(symbol) = input_type.symbol() {
+            if is_es2015_or_later_iterable(symbol.name()) {
+                return (&diagnostics::Type_0_can_only_be_iterated_through_when_using_the_downlevelIteration_flag_or_with_a_target_of_es2015_or_higher, true);
+            }
+        }
+        if allows_strings {
+            return (&diagnostics::Type_0_is_not_an_array_type_or_a_string_type, true);
+        }
+        (&diagnostics::Type_0_is_not_an_array_type, true)
     }
 }
 
 // checker.go:6898
 pub(crate) fn is_es2015_or_later_iterable(n: &str) -> bool {
-    todo!()
+    matches!(
+        n,
+        "Float32Array" | "Float64Array" | "Int16Array" | "Int32Array" | "Int8Array" | "NodeList" | "Uint16Array" | "Uint32Array" | "Uint8Array" | "Uint8ClampedArray"
+    )
 }
 
 impl Checker {
