@@ -2388,11 +2388,7 @@ impl Checker {
      */
     // checker.go:8496
     pub(crate) fn check_call_expression(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        // SIG(grammarchecks merge): check_grammar_type_arguments should take Option<P<NodeList>> (Go passes a nil list); with a nil list it
-        // returns false without side effects, so skipping the call is equivalent.
-        if let Some(type_argument_list) = node.type_argument_list() {
-            self.check_grammar_type_arguments(node, type_argument_list);
-        }
+        self.check_grammar_type_arguments(node, node.type_argument_list());
         let signature = self.get_resolved_signature(node, None /*candidatesOutArray*/, check_mode);
         if signature == self.resolving_signature {
             // CheckMode.SkipGenericFunctions is enabled and this is a call to a generic function that
