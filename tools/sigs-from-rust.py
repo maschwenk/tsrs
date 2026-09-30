@@ -223,7 +223,7 @@ def main():
         src_dir = os.path.join(root, "crates", crate, "src")
         rows = []
         for fname in sorted(os.listdir(src_dir)):
-            if fname.endswith(".rs"):
+            if fname.endswith(".rs") and not fname.endswith("_test.rs"):
                 rows.extend(scan_file(os.path.join(src_dir, fname), fname))
         rows.sort(key=lambda r: (r[0], r[3], r[2]))
         out_path = os.path.join(root, "docs", "sigs", out_name)

@@ -1384,13 +1384,14 @@ pub(crate) fn try_get_module_name_from_exports_or_imports(
 // one currently being produced; the latter to the one being imported). We need an implementation file
 // just to get its `impliedNodeFormat` and to detect certain preferences from existing import module
 // specifiers.
+// `importing_source_file`: !!! | FutureSourceFile. `old_import_specifier`: used only in updatingModuleSpecifier.
 // specifiers.go:1333
 pub fn get_module_specifier(
     compiler_options: &CompilerOptions,
     host: &dyn ModuleSpecifierGenerationHost,
-    importing_source_file: P<SourceFile>, // !!! | FutureSourceFile
+    importing_source_file: P<SourceFile>,
     importing_source_file_name: &str,
-    old_import_specifier: &str, // used only in updatingModuleSpecifier
+    old_import_specifier: &str,
     to_file_name: &str,
     options: ModuleSpecifierOptions,
 ) -> String {
@@ -1429,13 +1430,14 @@ pub fn update_module_specifier(
     )
 }
 
+// `importing_source_file`: !!! | FutureSourceFile. `old_import_specifier`: used only in updatingModuleSpecifier.
 // specifiers.go:1376
 pub(crate) fn get_module_specifier_with_preferences(
     compiler_options: &CompilerOptions,
     host: &dyn ModuleSpecifierGenerationHost,
-    importing_source_file: P<SourceFile>, // !!! | FutureSourceFile
+    importing_source_file: P<SourceFile>,
     importing_source_file_name: &str,
-    old_import_specifier: &str, // used only in updatingModuleSpecifier
+    old_import_specifier: &str,
     to_file_name: &str,
     user_preferences: &UserPreferences,
     options: ModuleSpecifierOptions,
