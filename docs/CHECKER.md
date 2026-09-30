@@ -9,12 +9,14 @@ The `checker-foundation` agent implements the data model and keeps this file acc
 | Go file | Rust |
 | --- | --- |
 | `types.go`, `links.go`, `mapper.go`, top of `checker.go` (declarations, `Checker` struct, `NewChecker`, global init) | `types.rs`, `links.rs`, `mapper.rs`, `checker.rs` (foundation) |
+| non-function declarations (types/consts/vars) of `relater.go`, `flow.go`, `inference.go`, `jsx.go`, `utilities.go` | `relater_types.rs`, `flow_types.rs`, `inference_types.rs`, `jsx_types.rs`, `utilities_types.rs` (foundation; `grammarchecks.go`/`exports.go` have none) |
+| `Program` interface | `program.rs` (foundation) |
 | `checker.go` (32.6k lines) | `checker_01.rs` … `checker_15.rs` by Go line range (table below), all `impl Checker` |
 | `relater.go` | `relater_1.rs` (1–2579), `relater_2.rs` (2580–end) |
 | `flow.go`, `inference.go`, `grammarchecks.go`, `utilities.go`, `jsx.go`, `exports.go`, `jsdoc.go` | same name `.rs` |
 | `printer.go`, `nodebuilder*.go`, `symbolaccessibility.go`, `symboltracker.go` | `printer.rs` (+ later a faithful node-builder port) — type/symbol/signature -> string for messages |
 | `emitresolver.go`, `services.go`, `nodecopy.go`, `pseudotypenodebuilder.go`, `nodebuilder_hover.go`, `tracer.go` | not ported |
-| `../evaluator/evaluator.go` | `evaluator.rs` |
+| `../evaluator/evaluator.go` | `evaluator.rs` (foundation) |
 
 `checker.go` line ranges: 01: 1–2172, 02: 2173–4320, 03: 4321–6526, 04: 6527–8748, 05: 8749–10856,
 06: 10857–13068, 07: 13069–15238, 08: 15239–17432, 09: 17433–19607, 10: 19608–21763, 11: 21764–23953,
@@ -23,22 +25,75 @@ range contains its first line.
 
 ## Checker
 
-`pub struct Checker` has every Go field (snake_case), plain (non-`Cell`) types; all methods take `&mut self`.
-Go `c.foo(x)` -> `self.foo(x)`.
+`pub struct Checker` (checker.rs) has every Go field (snake_case: `TypeCount` -> `type_count`,
+`ReverseMappedSymbolLinks` -> `reverse_mapped_symbol_links`), plain (non-`Cell`) types; all methods take `&mut self`.
+Go `c.foo(x)` -> `self.foo(x)`. `new_checker(program: &'static dyn Program) -> Box<Checker>` is Go `NewChecker`
+(tracer and mutex dropped). Before Go assigns them, pointer fields hold placeholder objects (never observable after
+`new_checker` returns).
 
-- **Function-valued fields** (`resolveName`, `getGlobalPromiseType`, `isPrimitiveOrObjectOrEmptyType`, `compareSymbols`, …)
-  are *methods* in Rust with the snake_case name and the same arguments: `c.getGlobalPromiseType()` ->
-  `self.get_global_promise_type()`. Their caches live in ordinary fields. When Go passes one as a value, pass a closure
-  `|c, t| c.is_primitive_or_object_or_empty_type(t)`.
+- **Function-valued fields** are methods with the snake_case name and the same arguments, all implemented in checker.rs
+  (none are generated): `compare_symbols`, `compare_symbol_chains`, `resolve_name`, `resolve_name_for_symbol_suggestion`
+  (backed by the fields `name_resolver` / `name_resolver_for_suggestion: P<NameResolver<Checker>>`), `evaluate`,
+  `is_primitive_or_object_or_empty_type`, `contains_missing_type`, `could_contain_type_variables`,
+  `is_string_index_signature_only_type`, `mark_node_assignments`, `compare_types_assignable`, and every lazily resolved
+  global: `get_global_es_symbol_type`, `get_global_big_int_type`, `get_global_import_meta_type`,
+  `get_global_import_attributes_type[_checked]`, `get_global_non_nullable_type_alias_or_nil`, `get_global_extract_symbol`,
+  `get_global_disposable_type`, `get_global_async_disposable_type`, `get_global_awaited_symbol[_or_nil]`,
+  `get_global_nan_symbol_or_nil`, `get_global_record_symbol`, `get_global_template_strings_array_type`,
+  `get_global_es_symbol_constructor_symbol_or_nil`, `get_global_es_symbol_constructor_type_symbol_or_nil`,
+  `get_global_import_call_options_type[_checked]`, `get_global_promise_type[_checked]`, `get_global_promise_like_type`,
+  `get_global_promise_constructor_symbol[_or_nil]`, `get_global_omit_symbol`, `get_global_no_infer_symbol_or_nil`,
+  `get_global_{iterator,iterable,iterable_iterator,iterator_object,generator}_type` (+ `_checked` variants as in Go),
+  the `get_global_async_*` counterparts, `get_global_iterator_{yield,return}_result_type`,
+  `get_global_typed_property_descriptor_type`, `get_global_class_{,method_,getter_,setter_,accessor_,field_}decorator_context_type`,
+  `get_global_class_accessor_decorator_{target,result}_type`. Type getters return `P<Type>`, symbol getters
+  `Option<P<Symbol>>`; each caches in a `<name>_cache` field (Go `core.Memoize`, nil results cached too).
+  `get_global_types(names, arity, report_errors)` is Go's `getGlobalTypesResolver` closure body.
+  When Go passes one as a value, pass a closure `|c, t| c.is_primitive_or_object_or_empty_type(t)`;
+  `c.compareTypesAssignable` as a `TypeComparer` value is `self.compare_types_assignable_comparer()`.
+- `IterationTypesResolver` (`P<…>`, fields `sync_iteration_types_resolver` / `async_iteration_types_resolver`): its Go
+  function fields are methods taking the checker: `resolver.getGlobalIterableType()` -> `resolver.get_global_iterable_type(self)`,
+  `resolver.resolveIterationType(t, n)` -> `resolver.resolve_iteration_type(self, t, n)`, `get_global_builtin_iterator_types(self)`.
 - **Callbacks** passed to checker methods take the checker as first parameter (PORTING.md rule):
   `impl FnMut(&mut Checker, P<Type>) -> bool`. Closures never capture `self`.
 - **Deferred work**: `[]func()` fields are `Vec<Box<dyn FnOnce(&mut Checker)>>`.
-- **Program**: `pub trait Program: Send + Sync` (in `program.rs`) mirrors the Go `checker.Program` interface with
-  snake_case method names; the checker holds `program: &'static dyn Program`. `ast.HasFileName` parameters are `P<SourceFile>`.
-- Arena objects never point back to the checker (Go's `Type.checker` field is dropped).
-- Short-lived Go helper structs that hold `c *Checker` (`Relater`, inference state, `typeFacts` walkers, iteration helpers …)
-  become `struct Relater<'c> { c: &'c mut Checker, … }`, constructed for the duration of the operation. This is the one
-  place lifetimes appear. Inside them, Go `r.c.foo()` -> `self.c.foo()`. Go's free-list pooling of these is dropped.
+- **Program**: `pub trait Program: Send + Sync` (program.rs) with the Go `checker.Program` methods the checker uses plus
+  the four host methods it calls (`use_case_sensitive_file_names`, `get_current_directory`,
+  `get_default_resolution_mode_for_file`, `get_mode_for_usage_location`). The checker holds `program: &'static dyn Program`.
+  `ast.HasFileName` parameters are `P<SourceFile>`, `tspath.Path` parameters `&Path`. Project-reference results use a
+  placeholder: `SourceOutputAndProjectReference { source, output_dts, resolved: &'static dyn ProjectReferenceCommandLine }`
+  (`compiler_options()`, `common_source_directory()`) instead of `*tsoptions.ParsedCommandLine`.
+- Arena objects never point back to the checker (Go's `Type.checker` field is dropped; Go `t.checker.foo()` becomes a
+  call on the checker you already have, e.g. `keyBuilder::write_generic_type_references` needs a `c` argument).
+- **Helper structs that hold `c *Checker`** (`Relater`, `TypeDiscriminator`, `ObjectLiteralDiscriminator`,
+  `TupleNormalizer`) drop the `c` field; every method takes `c: &mut Checker` as the first parameter after the receiver,
+  and Go `r.c.foo()` -> `c.foo()`. `Relater` is an arena handle: `P<Relater>` with `Cell`/`RefCell` fields, `&self`
+  methods, pooled via `Checker::free_relater` exactly like Go's `getRelater`/`putRelater`. This is required because Go
+  stores relater methods as values (`newInferenceContext(..., r.isRelatedToWorker)`, `findMatchingDiscriminantType(s, t,
+  r.isRelatedToSimple)`): in Rust that is `|c, s, t| r.is_related_to_simple(c, s, t)` with `r: P<Relater>` copied into
+  the closure. `trait Discriminator { len, name, matches }` — all `(&mut self, c: &mut Checker, …)`; a Go
+  `Discriminator` parameter is `&mut dyn Discriminator`. `TypeDiscriminator<'a>` holds
+  `is_related_to: &'a mut dyn FnMut(&mut Checker, P<Type>, P<Type>) -> Ternary`.
+- `FlowState` and `InferenceState` are arena handles (`P<…>`, `Cell` fields) pooled via `free_flow_state` /
+  `freeinference_state` like Go. `CallState` is a plain struct passed as `&mut CallState`.
+- **Named func types**: `TypeComparer` = `&'static dyn Fn(&mut Checker, P<Type>, P<Type>, bool) -> Ternary` (Copy; build
+  with `type_comparer(|c, s, t, report_errors| …)`); `ErrorReporter<'a>` = `&'a mut dyn FnMut(&mut Checker, &'static Message,
+  &[&dyn Display])` (usually `Option<ErrorReporter>`).
+- Dropped Go fields: `symbolArena`/`signatureArena`/`indexInfoArena` (use `P::new`), `tracer` (all tracing blocks are
+  dropped), `ctx` (`isCanceled` is `false`; `was_canceled` kept), `mu`, `emitResolver`/`emitResolverOnce`,
+  `typeToStringNodebuilder`, and the never-assigned `getGlobalClassAccessorDecoratorContxtType`.
+  `ambientModulesOnce` is a `bool`; nil-able maps that Go resets or tests for nil are `Option<FxHashMap>`
+  (`flow_type_cache`, `packages_map`). Go `map[string]V` fields use `String` keys (the generator maps `map[string]V`
+  the same way); `collections.Set[T]` is `tsrs_core::collections::Set<T>`.
+- Package-level vars: `typeofNEFacts` / `intrinsicTypeKinds` are `LazyLock<FxHashMap<&str, _>>` (`typeofNEFacts.get(text)`),
+  `JsxNames.intrinsic_elements` / `ReactNames.fragment` (snake_case fields), `LanguageFeatureMinimumTarget.class_fields`,
+  `primitive_type_alias_suggestions()` and `get_feature_map()` are functions, `SignatureKeyErased` & co. and
+  `nonDottedNameCacheKey` are `const CacheHashKey`. Go-named lowercase types keep their Go names (`keyBuilder`,
+  `errorState`, `orderedSet`, `thisAssignmentDeclarationKind` with variants `None/Typed/Constructor/Method`).
+  `symbolTableID` (a `u64` alias) is declared in checker.rs; the `stKind*` constants belong to printer.rs.
+- `evaluator.go` is ported as `evaluator.rs`: `evaluator::Result { value: LiteralValue, … }` (always written with the
+  module path; it would shadow `std::result::Result`), `evaluator::evaluate(host, evaluate_entity, outer_kinds, expr,
+  location)`, `evaluator::any_to_string`, `evaluator::is_truthy`. The checker calls `self.evaluate(expr, location)`.
 
 ## Types
 
@@ -51,35 +106,64 @@ pub struct Type {
     pub alias: Cell<Option<P<TypeAlias>>>,
     pub data: TypeData,
 }
-pub enum TypeData { Intrinsic(IntrinsicType), Literal(LiteralType), Object(ObjectType), TypeReference(TypeReference),
-                    Interface(InterfaceType), Tuple(TupleType), Mapped(MappedType), Union(UnionType), … }
+#[derive(Clone, Copy)]
+pub enum TypeData { Intrinsic(&'static IntrinsicType), Literal(&'static LiteralType), UniqueESSymbol(..),
+                    Object(&'static ObjectType) /* anonymous */, TypeReference(..), Interface(..), Tuple(..),
+                    InstantiationExpression(..), Mapped(..), ReverseMapped(..), EvolvingArray(..), Union(..),
+                    Intersection(..), TypeParameter(..), Index(..), IndexedAccess(..), TemplateLiteral(..),
+                    StringMapping(..), Substitution(..), Conditional(..) }
 ```
 
-Types are always handled as `P<Type>`. `t.flags()`/`t.object_flags()` getters return the value.
+Types are always handled as `P<Type>`; the payload is a separate arena allocation (`TypeData::Tuple(alloc(TupleType::default()))`)
+so `Type` stays small. `t.flags()`/`t.object_flags()`/`t.symbol()`/`t.alias()` getters return the value. Go's `TypeBase`
+(which embeds the header) has no Rust counterpart; header fields are only on `Type`.
 
 Go models the type hierarchy by struct embedding (`TupleType` ⊃ `InterfaceType` ⊃ `TypeReference` ⊃ `ObjectType` ⊃
-`StructuredType` ⊃ `ConstrainedType`). Rust keeps the same structs, each holding its Go-embedded parent as its first
-field and implementing `Deref` to it, so promoted fields and methods resolve exactly like Go:
-`t.as_interface_type().resolved_type_arguments.get()`, `t.as_object_type().target.get()`,
+`StructuredType` ⊃ `ConstrainedType`; `UnionType`/`IntersectionType` ⊃ `UnionOrIntersectionType` ⊃ `StructuredType`;
+the other instantiable kinds ⊃ `ConstrainedType`). Rust keeps the same structs, each holding its Go-embedded parent as its
+first field, named after the parent in snake_case (`constrained_type`, `structured_type`, `object_type`, `type_reference`,
+`interface_type`, `union_or_intersection_type`), and implementing `Deref` to it, so promoted fields and methods resolve
+exactly like Go: `t.as_interface_type().resolved_type_arguments.get()`, `t.as_object_type().target.get()`,
 `t.as_structured_type().properties.get()`.
 
-- `as_<struct>()` accessors (`as_object_type`, `as_type_reference`, `as_interface_type`, `as_tuple_type`, `as_union_type`,
-  `as_structured_type`, `as_constrained_type`, `as_literal_type`, `as_type_parameter`, `as_conditional_type`, …) return
-  `&'static <Struct>` and panic when the type is not of that shape — except the ones Go implements on `TypeData` that
-  return nil for other shapes (`AsConstrainedType`, `AsStructuredType`, `AsObjectType`, `AsTypeReference`,
-  `AsInterfaceType`, `AsUnionOrIntersectionType`), which also exist as `try_as_…() -> Option<&'static …>`.
-- Every field that Go assigns after the type is created (nearly all of them: resolved members, targets, caches) is a
-  `Cell`/`RefCell` named like the Go field. Read with `.get()`, write with `.set()`.
-  Slices: `Cell<&'static [P<Type>]>`. Maps: `RefCell<FxHashMap<…>>`.
-- `LiteralType.value` (Go `any`) is `enum LiteralValue { None, String(&'static str), Number(jsnum::Number), Boolean(bool), BigInt(PseudoBigInt) }`.
-- `Signature`, `IndexInfo`, `TypePredicate`, `TypeAlias`, `TypeMapper`, `InferenceContext`, `InferenceInfo`, `TupleElementInfo`,
-  `ConditionalRoot`, flow/iteration helper records … are arena structs handled as `P<…>` with `Cell` fields where Go mutates.
-  Small Go value structs passed by value stay `Copy` structs.
-- `TypeMapper`: `enum`-backed struct; Go `m.Map(t)` -> `m.map(c, t)` (`fn map(&self, c: &mut Checker, t: P<Type>) -> P<Type>`):
-  mappers that Go implements with captured closures or a stored checker get the checker passed in instead.
-  Function mappers are `fn(&mut Checker, P<Type>) -> P<Type>` pointers or enum variants carrying their captured data.
-- Hash keys (`CacheHashKey`, xxh3-based in Go) keep Go's construction order and width (`u128`); use the `xxhash-rust` crate
-  (`xxh3` feature) and mirror Go's key-building helpers exactly.
+- `as_<struct>()` accessors return `&'static <Struct>` and panic on a shape mismatch. The six Go returns-nil casts
+  (`AsConstrainedType`, `AsStructuredType`, `AsObjectType`, `AsTypeReference`, `AsInterfaceType`, `AsUnionOrIntersectionType`)
+  also exist as `try_as_…() -> Option<&'static …>` (on `Type` and on `TypeData` as `as_…`).
+- **Uniform mutability rule**: every field of every arena struct from types.go/checker.go (type payloads, `Signature`,
+  `IndexInfo`, `TypePredicate`, `TypeAlias`, `ConditionalRoot`, `CompositeSignature`, `InferenceContext`, `InferenceInfo`,
+  `WideningContext`, `Relater`, `FlowState`, `InferenceState`) and of every links struct is a `Cell` (Copy data, slices
+  `Cell<&'static [T]>`, strings `Cell<&'static str>`), a `RefCell<Vec<…>>` (slices Go appends to), or a `GoMap` —
+  even fields Go only sets at construction, because Go creates them empty and assigns afterwards. All derive `Default`,
+  so construct with `Signature { flags: Cell::new(f), ..Default::default() }` or `default()` + `.set()`.
+  Exceptions: `Type.id`/`Type.data` (plain), and value structs (`TupleElementInfo`, `IterationTypes`, `FlowType`, keys…)
+  which are plain `Copy` structs. Go nil-vs-empty slices that matter are `Option<&'static [T]>`
+  (`VarianceLinks.variances`, `WideningContext.siblings`, `ContainingSymbolLinks.extended_containers`).
+- **`GoMap<K, V>`** (types.rs): a Go map field — pointer-sized, nil until `make()`/`set()`. `get(&k) -> Option<V>`,
+  `has`, `set(k, v)` (creates the map if nil), `delete`, `len`, `is_nil`, `make`, `clear`, `entries()` snapshot,
+  `assign(map)` for `x.m = freshMap`, `get_ref`/`set_ref` for aliasing. Used for `instantiations`, `constituent_map`,
+  `TypeAliasLinks.instantiations`, `ConditionalRoot.instantiations`, `InferenceState.visited`, … `ast.SymbolTable` fields
+  are `Cell<Option<P<SymbolTable>>>`.
+- `LiteralType.value` (Go `any`) is `Cell<LiteralValue>`, `enum LiteralValue { None, String(&'static str),
+  Number(Number), Boolean(bool), BigInt(PseudoBigInt) }` (Copy, Eq, Hash). Other Go `any` literal values
+  (`EnumLiteralKey.value`, `evaluator.Result.Value`) use it too.
+- `Ternary` is a Copy newtype over `i8` with `Ternary::{False, Unknown, Maybe, True}` and `&`, `|`, `&=`, `|=`.
+- Go methods on types.go structs exist with snake_case names (`call_signatures()`, `type_parameters()`,
+  `outer_type_parameters()`, `element_flags()`, `type_()` for `TypePredicate.Type()`, …). `t.Distributed()` is
+  `t.distributed()` via `trait TypeExt` on `P<Type>`; Go's nil-receiver `alias.Symbol()` works on
+  `Option<P<TypeAlias>>` via `TypeAliasOptExt`. `TypeFlags`/`VarianceFlags` implement `Display` (Go `String()`),
+  `format_type_flags(flags)`.
+- `TypeMapper { data: TypeMapperData }` with `enum TypeMapperData { Simple, Array, ArrayToSingle, Deferred { targets:
+  Vec<Box<dyn Fn(&mut Checker) -> P<Type>>> }, Function { f: fn(&mut Checker, P<Type>) -> P<Type> }, Merged, Composite,
+  Inference { n, fixing } }`. Go `m.Map(t)` -> `m.map(c, t)`, `m.Kind()`, `m.MapsThisOnly()`. mapper.go free functions
+  keep their names (`new_simple_type_mapper`, `new_array_type_mapper`, `new_array_to_single_type_mapper`,
+  `new_deferred_type_mapper`, `new_function_type_mapper(|c, t| c.x(t))`, `new_merged_type_mapper`,
+  `new_composite_type_mapper`, `new_type_mapper`, `merge_type_mappers`, `prepend_type_mapping`, `append_type_mapping`);
+  `getMappedType(t, m)` needs the checker and is the method `self.get_mapped_type(t, m)`; `combine_type_mappers`,
+  `map_type_with_composite_mapper`, `new_backreference_mapper`, `new_inference_type_mapper` are checker methods as in Go.
+- Hash keys: `CacheHashKey { hi: u64, lo: u64 }` (Go `xxh3.Uint128`, xxh3-128 via `xxhash-rust`):
+  `CacheHashKey::hash_128(bytes)` = Go `xxh3.Hash128`, `CacheHashKey::hash_string_128(s)` = `xxh3.HashString128` (const fn),
+  `is_zero()`. `keyBuilder` (struct in checker.rs, methods ported in checker_09.rs) keeps Go's byte layout
+  (little-endian widths, 192-byte inline buffer, `overflow_buffer: Option<Vec<u8>>`).
 
 ## Links
 
@@ -95,7 +179,9 @@ if links.resolved_type.get().is_none() {
 }
 ```
 
-All link stores use one generic `LinkStore<K, V>` keyed by `P<K>` (`FxHashMap<P<K>, P<V>>`), whatever store flavor Go uses.
+All link stores use one generic `LinkStore<K, V>` keyed by `P<K>` (`FxHashMap<P<K>, P<V>>`), whatever store flavor Go
+uses (`LinkStore<Node, NodeLinks>`, `LinkStore<Symbol, ValueSymbolLinks>`, `LinkStore<SourceFile, SourceFileLinks>`).
+`MembersAndExportsLinks` derefs to `[Cell<Option<P<SymbolTable>>>; 2]`: `links[kind as usize].get()`.
 
 ## Diagnostics
 
