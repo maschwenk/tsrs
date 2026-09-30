@@ -2999,26 +2999,22 @@ impl Checker {
             }
             remaining_end_text
         };
-        macro_rules! add_match {
-            ($s:expr, $p:expr) => {{
-                let s: usize = $s;
-                let p: usize = $p;
-                let match_type;
-                if s == seg {
-                    let text = combine_surrogate_pairs(&get_source_text(s)[pos..p]);
-                    match_type = self.get_string_literal_type(&text);
-                } else {
-                    let mut match_texts: Vec<&str> = Vec::with_capacity(s - seg + 1);
-                    match_texts.push(&source_texts[seg][pos..]);
-                    match_texts.extend_from_slice(&source_texts[seg + 1..s]);
-                    match_texts.push(&get_source_text(s)[..p]);
-                    match_type = self.get_template_literal_type(&match_texts, &source_types[seg..s]);
-                }
-                matches.push(match_type);
-                seg = s;
-                pos = p;
-            }};
-        }
+        let add_match = |c: &mut Checker, s: usize, p: usize, seg: &mut usize, pos: &mut usize, matches: &mut Vec<P<Type>>| {
+            let match_type;
+            if s == *seg {
+                let text = stringutil::combine_surrogate_pairs(&get_source_text(s)[*pos..p]);
+                match_type = c.get_string_literal_type(&text);
+            } else {
+                let mut match_texts: Vec<&str> = Vec::with_capacity(s - *seg + 1);
+                match_texts.push(&source_texts[*seg][*pos..]);
+                match_texts.extend_from_slice(&source_texts[*seg + 1..s]);
+                match_texts.push(&get_source_text(s)[..p]);
+                match_type = c.get_template_literal_type(&match_texts, &source_types[*seg..s]);
+            }
+            matches.push(match_type);
+            *seg = s;
+            *pos = p;
+        };
         for i in 1..last_target_index {
             let delim = target_texts[i];
             if !delim.is_empty() {
@@ -3035,7 +3031,7 @@ impl Checker {
                     }
                     p = 0;
                 }
-                add_match!(s, p);
+                add_match(self, s, p, &mut seg, &mut pos, &mut matches);
                 pos += delim.len();
             } else if pos < get_source_text(seg).len() {
                 let source_text = get_source_text(seg);
@@ -3055,15 +3051,15 @@ impl Checker {
                 // helper (the inverse of CombineSurrogatePairs) and decode by code
                 // unit here; the CombineSurrogatePairs call in addMatch already
                 // recombines captured halves back into canonical form.
-                let (_, size) = decode_js_string_rune(&source_text[pos..]);
-                add_match!(seg, pos + size);
+                let (_, size) = stringutil::decode_js_string_rune(&source_text[pos..]);
+                add_match(self, seg, pos + size, &mut seg, &mut pos, &mut matches);
             } else if seg < last_source_index {
-                add_match!(seg + 1, 0);
+                add_match(self, seg + 1, 0, &mut seg, &mut pos, &mut matches);
             } else {
                 return Vec::new();
             }
         }
-        add_match!(last_source_index, get_source_text(last_source_index).len());
+        add_match(self, last_source_index, get_source_text(last_source_index).len(), &mut seg, &mut pos, &mut matches);
         matches
     }
 
