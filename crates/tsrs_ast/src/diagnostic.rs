@@ -1,0 +1,614 @@
+use std::cell::Cell;
+use std::cmp::Ordering;
+use std::fmt;
+
+use rustc_hash::{FxHashMap, FxHashSet};
+use tsrs_core::tspath::Path;
+use tsrs_core::{alloc_slice, alloc_str, undefined_text_range, ResolutionMode, TextRange, P};
+use tsrs_diagnostics::{self as diagnostics, Category, Key, Message};
+
+use crate::SourceFile;
+
+// RepopulateDiagnosticKind indicates the kind of repopulation for a diagnostic chain entry.
+#[repr(i32)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum RepopulateDiagnosticKind {
+    ModeMismatch = 1,
+    ModuleNotFound = 2,
+}
+
+// RepopulateDiagnosticInfo stores information needed to recompute a diagnostic chain entry
+// during incremental builds when the program state may have changed.
+#[derive(Clone, Debug)]
+pub struct RepopulateDiagnosticInfo {
+    pub kind: RepopulateDiagnosticKind,
+    pub module_reference: String,
+    pub mode: ResolutionMode,
+    pub package_name: String,
+}
+
+// Diagnostic
+
+pub struct Diagnostic {
+    file: Cell<Option<P<SourceFile>>>,
+    loc: Cell<TextRange>,
+    code: i32,
+    category: Cell<Category>,
+    // source, when non-empty, is a custom prefix (e.g. a content mapper's name) shown instead of "TS"
+    // before the code. It marks the diagnostic as coming from an external source whose ranges point
+    // into the file's original, untransformed text.
+    source: Cell<&'static str>,
+    // Original message; may be nil.
+    message: Option<&'static Message>,
+    // messageText is an already-localized message used when message is nil, e.g. a diagnostic
+    // deserialized from an external process that owns its own localization.
+    message_text: Cell<&'static str>,
+    message_key: Key,
+    message_args: Vec<String>,
+    message_chain: Cell<&'static [P<Diagnostic>]>,
+    related_information: Cell<&'static [P<Diagnostic>]>,
+    reports_unnecessary: bool,
+    reports_deprecated: bool,
+    skipped_on_no_emit: Cell<bool>,
+    repopulate_info: Cell<Option<&'static RepopulateDiagnosticInfo>>,
+}
+
+impl Diagnostic {
+    pub fn file(&self) -> Option<P<SourceFile>> {
+        self.file.get()
+    }
+    pub fn pos(&self) -> i32 {
+        self.loc.get().pos()
+    }
+    pub fn end(&self) -> i32 {
+        self.loc.get().end()
+    }
+    pub fn len(&self) -> i32 {
+        self.loc.get().len()
+    }
+    pub fn loc(&self) -> TextRange {
+        self.loc.get()
+    }
+    pub fn code(&self) -> i32 {
+        self.code
+    }
+    pub fn category(&self) -> Category {
+        self.category.get()
+    }
+    pub fn source(&self) -> &'static str {
+        self.source.get()
+    }
+    pub fn message(&self) -> Option<&'static Message> {
+        self.message
+    }
+    pub fn message_text(&self) -> &'static str {
+        self.message_text.get()
+    }
+    pub fn message_key(&self) -> Key {
+        self.message_key
+    }
+    pub fn message_args(&self) -> &[String] {
+        &self.message_args
+    }
+    pub fn message_chain(&self) -> &'static [P<Diagnostic>] {
+        self.message_chain.get()
+    }
+    pub fn related_information(&self) -> &'static [P<Diagnostic>] {
+        self.related_information.get()
+    }
+    pub fn reports_unnecessary(&self) -> bool {
+        self.reports_unnecessary
+    }
+    pub fn reports_deprecated(&self) -> bool {
+        self.reports_deprecated
+    }
+    pub fn skipped_on_no_emit(&self) -> bool {
+        self.skipped_on_no_emit.get()
+    }
+    pub fn repopulate_info(&self) -> Option<&'static RepopulateDiagnosticInfo> {
+        self.repopulate_info.get()
+    }
+
+    pub fn set_file(&self, file: Option<P<SourceFile>>) {
+        self.file.set(file)
+    }
+    pub fn set_location(&self, loc: TextRange) {
+        self.loc.set(loc)
+    }
+    pub fn set_category(&self, category: Category) {
+        self.category.set(category)
+    }
+    pub fn set_skipped_on_no_emit(&self) {
+        self.skipped_on_no_emit.set(true)
+    }
+    pub fn set_repopulate_info(&self, info: RepopulateDiagnosticInfo) {
+        self.repopulate_info.set(Some(tsrs_core::alloc(info)))
+    }
+}
+
+// Go's chaining setters return the *Diagnostic; `P` is a foreign type, so they live on an extension trait.
+pub trait DiagnosticExt {
+    fn set_external_data(self, source: &str, message_text: &str) -> P<Diagnostic>;
+    fn set_message_chain(self, message_chain: &[P<Diagnostic>]) -> P<Diagnostic>;
+    fn add_message_chain(self, message_chain: impl Into<Option<P<Diagnostic>>>) -> P<Diagnostic>;
+    fn set_related_info(self, related_information: &[P<Diagnostic>]) -> P<Diagnostic>;
+    fn add_related_info(self, related_information: impl Into<Option<P<Diagnostic>>>) -> P<Diagnostic>;
+    fn clone_diagnostic(self) -> P<Diagnostic>;
+}
+
+impl DiagnosticExt for P<Diagnostic> {
+    fn set_external_data(self, source: &str, message_text: &str) -> P<Diagnostic> {
+        self.source.set(alloc_str(source));
+        self.message_text.set(alloc_str(message_text));
+        self
+    }
+
+    fn set_message_chain(self, message_chain: &[P<Diagnostic>]) -> P<Diagnostic> {
+        self.message_chain.set(alloc_slice(message_chain));
+        self
+    }
+
+    fn add_message_chain(self, message_chain: impl Into<Option<P<Diagnostic>>>) -> P<Diagnostic> {
+        if let Some(message_chain) = message_chain.into() {
+            let mut chain = self.message_chain.get().to_vec();
+            chain.push(message_chain);
+            self.message_chain.set(alloc_slice(&chain));
+        }
+        self
+    }
+
+    fn set_related_info(self, related_information: &[P<Diagnostic>]) -> P<Diagnostic> {
+        self.related_information.set(alloc_slice(related_information));
+        self
+    }
+
+    fn add_related_info(self, related_information: impl Into<Option<P<Diagnostic>>>) -> P<Diagnostic> {
+        if let Some(related_information) = related_information.into() {
+            let mut related = self.related_information.get().to_vec();
+            related.push(related_information);
+            self.related_information.set(alloc_slice(&related));
+        }
+        self
+    }
+
+    fn clone_diagnostic(self) -> P<Diagnostic> {
+        P::new(Diagnostic {
+            file: Cell::new(self.file.get()),
+            loc: Cell::new(self.loc.get()),
+            code: self.code,
+            category: Cell::new(self.category.get()),
+            source: Cell::new(self.source.get()),
+            message: self.message,
+            message_text: Cell::new(self.message_text.get()),
+            message_key: self.message_key,
+            message_args: self.message_args.clone(),
+            message_chain: Cell::new(self.message_chain.get()),
+            related_information: Cell::new(self.related_information.get()),
+            reports_unnecessary: self.reports_unnecessary,
+            reports_deprecated: self.reports_deprecated,
+            skipped_on_no_emit: Cell::new(self.skipped_on_no_emit.get()),
+            repopulate_info: Cell::new(self.repopulate_info.get()),
+        })
+    }
+}
+
+impl Diagnostic {
+    // Go `Localize(locale)`; only English messages are ported.
+    pub fn localize(&self) -> String {
+        if self.message.is_none() && !self.message_text.get().is_empty() {
+            return self.message_text.get().to_string();
+        }
+        diagnostics::localize(self.message, self.message_key, self.display_message_args())
+    }
+
+    // Go substitutes the original text for a content-mapper alias span here; content mappers
+    // (virtual file span maps) are not ported, so the stored arguments are always displayed.
+    fn display_message_args(&self) -> &[String] {
+        &self.message_args
+    }
+}
+
+// For debugging only.
+impl fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.localize())
+    }
+}
+
+impl fmt::Debug for Diagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Diagnostic({}, {:?}, {})", self.code, self.loc.get(), self.localize())
+    }
+}
+
+pub fn new_diagnostic(file: Option<P<SourceFile>>, loc: TextRange, message: &'static Message, args: &[&dyn fmt::Display]) -> P<Diagnostic> {
+    P::new(Diagnostic {
+        file: Cell::new(file),
+        loc: Cell::new(loc),
+        code: message.code(),
+        category: Cell::new(message.category()),
+        source: Cell::new(""),
+        message: Some(message),
+        message_text: Cell::new(""),
+        message_key: message.key(),
+        message_args: diagnostics::stringify_args(args),
+        message_chain: Cell::new(&[]),
+        related_information: Cell::new(&[]),
+        reports_unnecessary: message.reports_unnecessary(),
+        reports_deprecated: message.reports_deprecated(),
+        skipped_on_no_emit: Cell::new(false),
+        repopulate_info: Cell::new(None),
+    })
+}
+
+pub fn new_diagnostic_chain(chain: impl Into<Option<P<Diagnostic>>>, message: &'static Message, args: &[&dyn fmt::Display]) -> P<Diagnostic> {
+    if let Some(chain) = chain.into() {
+        return new_diagnostic(chain.file.get(), chain.loc.get(), message, args)
+            .add_message_chain(chain)
+            .set_related_info(chain.related_information.get());
+    }
+    new_diagnostic(None, TextRange::default(), message, args)
+}
+
+pub fn new_compiler_diagnostic(message: &'static Message, args: &[&dyn fmt::Display]) -> P<Diagnostic> {
+    new_diagnostic(None, undefined_text_range(), message, args)
+}
+
+// NewExternalDiagnostic creates a diagnostic reported by an external source such as a content mapper.
+// The message text is already localized (the external source owns localization) and the code is shown
+// with the given source prefix (e.g. "vue") instead of "TS". The location refers to the file's original,
+// untransformed content.
+pub fn new_external_diagnostic(
+    file: Option<P<SourceFile>>,
+    loc: TextRange,
+    source: &str,
+    category: Category,
+    code: i32,
+    message_text: &str,
+) -> P<Diagnostic> {
+    P::new(Diagnostic {
+        file: Cell::new(file),
+        loc: Cell::new(loc),
+        code,
+        category: Cell::new(category),
+        source: Cell::new(alloc_str(source)),
+        message: None,
+        message_text: Cell::new(alloc_str(message_text)),
+        message_key: Key::default(),
+        message_args: Vec::new(),
+        message_chain: Cell::new(&[]),
+        related_information: Cell::new(&[]),
+        reports_unnecessary: false,
+        reports_deprecated: false,
+        skipped_on_no_emit: Cell::new(false),
+        repopulate_info: Cell::new(None),
+    })
+}
+
+// Go guards this with a mutex; in the port each owner holds the collection mutably.
+#[derive(Default)]
+pub struct DiagnosticsCollection {
+    count: usize,
+    file_diagnostics: FxHashMap<Path, Vec<P<Diagnostic>>>,
+    file_diagnostics_sorted: FxHashSet<Path>,
+    non_file_diagnostics: Vec<P<Diagnostic>>,
+    non_file_diagnostics_sorted: bool,
+    diagnostic_index: FxHashMap<DiagnosticLocationKey, P<Diagnostic>>,
+    diagnostic_collisions: FxHashMap<DiagnosticLocationKey, Vec<P<Diagnostic>>>,
+}
+
+impl DiagnosticsCollection {
+    pub fn add(&mut self, diagnostic: P<Diagnostic>) -> P<Diagnostic> {
+        let key = get_diagnostic_location_key(diagnostic);
+        if let Some(&existing) = self.diagnostic_index.get(&key) {
+            if equal_diagnostics(existing, diagnostic) {
+                return existing;
+            }
+            if let Some(collisions) = self.diagnostic_collisions.get(&key) {
+                for &collision in collisions {
+                    if equal_diagnostics(collision, diagnostic) {
+                        return collision;
+                    }
+                }
+            }
+        }
+        if !self.diagnostic_index.contains_key(&key) {
+            self.diagnostic_index.insert(key, diagnostic);
+        } else {
+            self.diagnostic_collisions.entry(key).or_default().push(diagnostic);
+        }
+
+        self.count += 1;
+
+        if let Some(file) = diagnostic.file() {
+            let path = file.path();
+            self.file_diagnostics.entry(path.clone()).or_default().push(diagnostic);
+            self.file_diagnostics_sorted.remove(&path);
+        } else {
+            self.non_file_diagnostics.push(diagnostic);
+            self.non_file_diagnostics_sorted = false;
+        }
+        diagnostic
+    }
+
+    pub fn lookup(&mut self, diagnostic: P<Diagnostic>) -> Option<P<Diagnostic>> {
+        let diagnostics = if let Some(file) = diagnostic.file() {
+            self.get_diagnostics_for_file_locked(file)
+        } else {
+            self.get_global_diagnostics_locked()
+        };
+        let (i, ok) = crate::binary_search_func(&diagnostics, diagnostic, compare_diagnostics);
+        if ok {
+            return Some(diagnostics[i]);
+        }
+        None
+    }
+
+    pub fn get_global_diagnostics(&mut self) -> Vec<P<Diagnostic>> {
+        self.get_global_diagnostics_locked()
+    }
+
+    fn get_global_diagnostics_locked(&mut self) -> Vec<P<Diagnostic>> {
+        if !self.non_file_diagnostics_sorted {
+            self.non_file_diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
+            self.non_file_diagnostics_sorted = true;
+        }
+        self.non_file_diagnostics.clone()
+    }
+
+    pub fn get_diagnostics_for_file(&mut self, file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+        self.get_diagnostics_for_file_locked(file)
+    }
+
+    fn get_diagnostics_for_file_locked(&mut self, file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+        let path = file.path();
+        if !self.file_diagnostics_sorted.contains(&path) {
+            if let Some(diagnostics) = self.file_diagnostics.get_mut(&path) {
+                diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
+            }
+            self.file_diagnostics_sorted.insert(path.clone());
+        }
+        self.file_diagnostics.get(&path).cloned().unwrap_or_default()
+    }
+
+    pub fn get_diagnostics(&self) -> Vec<P<Diagnostic>> {
+        let mut diagnostics = Vec::with_capacity(self.count);
+        diagnostics.extend_from_slice(&self.non_file_diagnostics);
+        for diags in self.file_diagnostics.values() {
+            diagnostics.extend_from_slice(diags);
+        }
+        diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
+        diagnostics
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct DiagnosticLocationKey {
+    path: Option<Path>,
+    loc: TextRange,
+    code: i32,
+}
+
+fn get_diagnostic_location_key(diagnostic: P<Diagnostic>) -> DiagnosticLocationKey {
+    DiagnosticLocationKey {
+        path: diagnostic.file().map(|file| file.path()),
+        loc: diagnostic.loc(),
+        code: diagnostic.code(),
+    }
+}
+
+fn get_diagnostic_path(d: P<Diagnostic>) -> &'static str {
+    match d.file() {
+        Some(file) => file.file_name(),
+        None => "",
+    }
+}
+
+pub fn equal_diagnostics(d1: P<Diagnostic>, d2: P<Diagnostic>) -> bool {
+    if d1 == d2 {
+        return true;
+    }
+    equal_diagnostics_no_related_info(d1, d2) && slices_equal_func(d1.related_information(), d2.related_information(), equal_diagnostics)
+}
+
+pub fn equal_diagnostics_no_related_info(d1: P<Diagnostic>, d2: P<Diagnostic>) -> bool {
+    if d1 == d2 {
+        return true;
+    }
+    get_diagnostic_path(d1) == get_diagnostic_path(d2)
+        && d1.loc() == d2.loc()
+        && d1.code() == d2.code()
+        && d1.category() == d2.category()
+        && d1.source() == d2.source()
+        && get_diagnostic_message_identity(d1) == get_diagnostic_message_identity(d2)
+        && d1.message_args() == d2.message_args()
+        && slices_equal_func(d1.message_chain(), d2.message_chain(), equal_message_chain)
+}
+
+fn slices_equal_func(a: &[P<Diagnostic>], b: &[P<Diagnostic>], eq: fn(P<Diagnostic>, P<Diagnostic>) -> bool) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| eq(*x, *y))
+}
+
+fn get_diagnostic_message_identity(diagnostic: P<Diagnostic>) -> &'static str {
+    if !diagnostic.message_text().is_empty() {
+        return diagnostic.message_text();
+    }
+    if let Some(message) = diagnostic.message {
+        if diagnostic.code() == -1 {
+            return message.text();
+        }
+    }
+    diagnostic.message_key().as_str()
+}
+
+fn equal_message_chain(c1: P<Diagnostic>, c2: P<Diagnostic>) -> bool {
+    if c1 == c2 {
+        return true;
+    }
+    c1.code() == c2.code()
+        && c1.message_args() == c2.message_args()
+        && slices_equal_func(c1.message_chain(), c2.message_chain(), equal_message_chain)
+}
+
+fn compare_strings(a: &str, b: &str) -> i32 {
+    match a.cmp(b) {
+        Ordering::Less => -1,
+        Ordering::Equal => 0,
+        Ordering::Greater => 1,
+    }
+}
+
+// Go `slices.Compare` over []string.
+fn compare_string_slices(a: &[String], b: &[String]) -> i32 {
+    match a.cmp(b) {
+        Ordering::Less => -1,
+        Ordering::Equal => 0,
+        Ordering::Greater => 1,
+    }
+}
+
+fn compare_message_chain_size(c1: &[P<Diagnostic>], c2: &[P<Diagnostic>]) -> i32 {
+    let c = c2.len() as i32 - c1.len() as i32;
+    if c != 0 {
+        return c;
+    }
+    for i in 0..c1.len() {
+        let c = compare_message_chain_size(c1[i].message_chain(), c2[i].message_chain());
+        if c != 0 {
+            return c;
+        }
+    }
+    0
+}
+
+fn compare_message_chain_content(c1: &[P<Diagnostic>], c2: &[P<Diagnostic>]) -> i32 {
+    for i in 0..c1.len() {
+        let c = compare_string_slices(c1[i].message_args(), c2[i].message_args());
+        if c != 0 {
+            return c;
+        }
+        if !c1[i].message_chain().is_empty() {
+            let c = compare_message_chain_content(c1[i].message_chain(), c2[i].message_chain());
+            if c != 0 {
+                return c;
+            }
+        }
+    }
+    0
+}
+
+fn compare_related_info(r1: &[P<Diagnostic>], r2: &[P<Diagnostic>]) -> i32 {
+    let c = r2.len() as i32 - r1.len() as i32;
+    if c != 0 {
+        return c;
+    }
+    for i in 0..r1.len() {
+        let c = compare_diagnostics(r1[i], r2[i]);
+        if c != 0 {
+            return c;
+        }
+    }
+    0
+}
+
+pub fn compare_diagnostics(d1: P<Diagnostic>, d2: P<Diagnostic>) -> i32 {
+    if d1 == d2 {
+        return 0;
+    }
+    let mut c = compare_strings(get_diagnostic_path(d1), get_diagnostic_path(d2));
+    if c != 0 {
+        return c;
+    }
+    c = d1.loc().pos() - d2.loc().pos();
+    if c != 0 {
+        return c;
+    }
+    c = d1.loc().end() - d2.loc().end();
+    if c != 0 {
+        return c;
+    }
+    c = d1.code() - d2.code();
+    if c != 0 {
+        return c;
+    }
+    c = d1.category() as i32 - d2.category() as i32;
+    if c != 0 {
+        return c;
+    }
+    c = compare_strings(d1.source(), d2.source());
+    if c != 0 {
+        return c;
+    }
+    c = compare_strings(get_diagnostic_message_identity(d1), get_diagnostic_message_identity(d2));
+    if c != 0 {
+        return c;
+    }
+    c = compare_string_slices(d1.message_args(), d2.message_args());
+    if c != 0 {
+        return c;
+    }
+    c = compare_message_chain_size(d1.message_chain(), d2.message_chain());
+    if c != 0 {
+        return c;
+    }
+    c = compare_message_chain_content(d1.message_chain(), d2.message_chain());
+    if c != 0 {
+        return c;
+    }
+    compare_related_info(d1.related_information(), d2.related_information())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn diagnostics_collection_deduplicates_exact_diagnostics_on_add() {
+        let mut collection = DiagnosticsCollection::default();
+        let first = new_compiler_diagnostic(&diagnostics::Cannot_find_name_0, &[&"x"])
+            .add_related_info(Some(new_compiler_diagnostic(&diagnostics::X_0_is_declared_here, &[&"first"])));
+        let second = new_compiler_diagnostic(&diagnostics::Cannot_find_name_0, &[&"x"])
+            .add_related_info(Some(new_compiler_diagnostic(&diagnostics::X_0_is_declared_here, &[&"first"])));
+        let different = new_compiler_diagnostic(&diagnostics::Cannot_find_name_0, &[&"x"])
+            .add_related_info(Some(new_compiler_diagnostic(&diagnostics::X_0_is_declared_here, &[&"second"])));
+
+        assert_eq!(collection.add(first), first);
+        let canonical = collection.add(second);
+        assert_eq!(canonical, first);
+        assert_eq!(collection.add(different), different);
+
+        canonical.add_related_info(Some(new_compiler_diagnostic(&diagnostics::X_0_is_declared_here, &[&"third"])));
+        let collected = collection.get_global_diagnostics();
+        assert_eq!(collected.len(), 2);
+        assert_eq!(first.related_information().len(), 2);
+    }
+
+    #[test]
+    fn diagnostics_collection_preserves_distinct_ad_hoc_messages() {
+        let mut collection = DiagnosticsCollection::default();
+        let first = new_compiler_diagnostic(diagnostics::new_ad_hoc_message("first"), &[]);
+        let second = new_compiler_diagnostic(diagnostics::new_ad_hoc_message("second"), &[]);
+        collection.add(first);
+        collection.add(second);
+        assert_eq!(collection.get_global_diagnostics().len(), 2);
+    }
+
+    #[test]
+    fn external_diagnostic_identity() {
+        let loc = TextRange::new(1, 2);
+        let first = new_external_diagnostic(None, loc, "mapper-a", Category::Error, 0, "first");
+        let all = [
+            first,
+            new_external_diagnostic(None, loc, "mapper-a", Category::Error, 0, "second"),
+            new_external_diagnostic(None, loc, "mapper-b", Category::Error, 0, "first"),
+            new_external_diagnostic(None, loc, "mapper-a", Category::Warning, 0, "first"),
+        ];
+        let mut collection = DiagnosticsCollection::default();
+        for &diagnostic in &all {
+            assert!(!equal_diagnostics_no_related_info(first, diagnostic) || diagnostic == first);
+            assert!(compare_diagnostics(first, diagnostic) != 0 || diagnostic == first);
+            collection.add(diagnostic);
+        }
+        assert_eq!(collection.get_diagnostics().len(), all.len());
+    }
+}
