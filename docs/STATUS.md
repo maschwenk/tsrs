@@ -76,10 +76,14 @@ now run Go's pipeline (printer.go -> NodeBuilder -> nodecopy/pseudo type node bu
 specifiers -> `tsrs_printer`).
 
 Conformance: **13,398 pass / 2 codes / 62 fail / 0 timeout / 0 crash** (was 10,519 / 2,876 / 67; no previous pass
-lost). The 62 fails are the declaration-emit diagnostics (TS4xxx/TS9xxx/TS7056/TS2883, pipeline not ported) plus a few
-checker cases listed in `notes/fix-nb-integrate.md`.
+lost). 60 of the 62 fails are declaration-emit diagnostics (TS4xxx/TS9xxx/TS7056/TS2883…, pipeline not ported). The
+other 2 fails (`mutuallyRecursiveInference`, `recursiveMappedTypes`) and both codes tests are harness artifacts: the Go
+harness runs JS emit, whose const-enum inliner type-checks every property access, before collecting diagnostics, so
+errors are first reported from a different current node; the `tsgo` CLI reports what we report. Details and the
+clustering tool (`tools/cluster-diffs.py`): `notes/fix-nb-integrate.md`.
 
-Project (release, 0 errors): counters now equal the reference exactly.
+Project (release, 0 errors): counters now equal the reference exactly; peak memory unchanged versus main (19.5 vs
+19.4 GB single-threaded, measured back to back).
 
 | | symbols | types | instantiations | check time | wall | peak memory |
 | --- | --- | --- | --- | --- | --- | --- |
