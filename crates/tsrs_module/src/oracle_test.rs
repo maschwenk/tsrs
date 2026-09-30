@@ -1,7 +1,8 @@
 // Differential test against the Go resolver (tools/oracle/module). Generate the inputs with
 //   python3 tools/oracle/module/gen.py > target/scratch/module/scenarios.jsonl
 //   bin/tsrs-oracle-module < target/scratch/module/scenarios.jsonl > target/scratch/module/expected.jsonl
-// and run `cargo test -p tsrs_module oracle -- --ignored`.
+// and run `cargo test -p tsrs_module oracle -- --ignored`. `testdata/oracle` holds the handcrafted subset
+// (`grep handcrafted`) of both files.
 
 use tsrs_core::collections::{new_ordered_map_with_size_hint, OrderedMapExt};
 use tsrs_core::{CompilerOptions, JsxEmit, ModuleKind, ModuleResolutionKind, Tristate, P};
@@ -233,10 +234,21 @@ fn run(scenario: &Json) -> Vec<(String, String, String)> {
     mismatches
 }
 
+// The hand-written scenarios from gen.py, with the Go results checked in.
+#[test]
+fn oracle_handcrafted() {
+    run_oracle_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/oracle"));
+}
+
+// The full corpus-derived set, generated locally (see the top of this file).
 #[test]
 #[ignore]
 fn oracle_scenarios() {
     let dir = std::env::var("TSRS_MODULE_ORACLE_DIR").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/scratch/module").to_string());
+    run_oracle_dir(&dir);
+}
+
+fn run_oracle_dir(dir: &str) {
     let scenarios = std::fs::read_to_string(format!("{dir}/scenarios.jsonl")).expect("scenarios.jsonl");
     let expected = std::fs::read_to_string(format!("{dir}/expected.jsonl")).expect("expected.jsonl");
     let mut failed = 0;
