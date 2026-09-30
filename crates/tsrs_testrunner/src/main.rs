@@ -13,6 +13,8 @@ mod test_case_parser;
 mod tsbaseline;
 #[cfg(feature = "checker")]
 mod type_symbol_baseline;
+#[cfg(feature = "checker")]
+mod types_dump;
 mod worker;
 
 use std::path::PathBuf;
@@ -36,6 +38,10 @@ const USAGE: &str = "usage:
                                       --types/--symbols: the first differing hunk of those baselines (--full: whole diff)
   tsrs-test crashes [--top N] [--examples N] [--json <path>]
   tsrs-test list [--suite ..] [--filter ..] [--list <file>]
+  tsrs-test types-dump -p <tsconfig|dir> --out <dir> [--mode types|symbols|both] [--text all|none|<list file>]
+                                      the .types/.symbols walk over every non-node_modules, non-lib file of a project
+                                      (single-threaded, like tools/oracle/project-types): <out>/manifest.<kind>
+                                      (hash, lines, path per file) and <out>/<kind>/<path>.<kind>
   --syntax-only (any command): no checker; only config/program/syntactic diagnostics; results in target/test-results-syntax
                 (implied when built without the `checker` feature)
 dev options (any command): --oracle <diags.jsonl> render Go-captured diagnostics instead of compiling;
@@ -423,6 +429,25 @@ fn cmd_crashes(mut args: Args) {
     report::print_crashes(&summary, top, examples);
 }
 
+#[cfg(feature = "checker")]
+fn cmd_types_dump(mut args: Args) {
+    let project = args.value("-p").or_else(|| args.value("--project")).unwrap_or_else(|| ".".to_string());
+    let out = PathBuf::from(args.value("--out").unwrap_or_else(|| {
+        eprintln!("types-dump: --out <dir> is required");
+        std::process::exit(2)
+    }));
+    let mode = args.value("--mode").unwrap_or_else(|| "types".to_string());
+    let text = args.value("--text").unwrap_or_else(|| "all".to_string());
+    check_no_extra(&args);
+    let dump = types_dump::DumpArgs { project, out, mode, text };
+    std::thread::Builder::new()
+        .stack_size(1 << 30)
+        .spawn(move || types_dump::run(dump))
+        .unwrap()
+        .join()
+        .unwrap_or_else(|_| std::process::exit(101));
+}
+
 fn main() {
     let mut argv: Vec<String> = std::env::args().skip(1).collect();
     if argv.is_empty() {
@@ -448,6 +473,8 @@ fn main() {
         "show" => cmd_show(args, spec),
         "crashes" => cmd_crashes(args),
         "list" => cmd_list(args, spec),
+        #[cfg(feature = "checker")]
+        "types-dump" => cmd_types_dump(args),
         "__worker" => worker::worker_main(spec),
         "-h" | "--help" | "help" => println!("{USAGE}"),
         _ => {

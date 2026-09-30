@@ -62,61 +62,77 @@ fn iterate_baseline(all_files: &[TestFile], full_walker: &mut TypeWriterWalker, 
     let mut baselines = Vec::new();
 
     for file in all_files {
-        let unit_name = &file.unit_name;
-        let mut type_lines = String::new();
-        type_lines.push_str("=== ");
-        type_lines.push_str(unit_name);
-        type_lines.push_str(" ===\r\n");
-        let code_lines: Vec<&str> = CODE_LINES_REGEXP.split(&file.content).collect();
-        let results = if is_symbol_baseline { full_walker.get_symbols(unit_name) } else { full_walker.get_types(unit_name) };
-        let mut last_index_written: i64 = -1;
-        let is_blank_or_bracket = |i: usize| i < code_lines.len() && (BRACKET_LINE_REGEX.is_match(code_lines[i]) || code_lines[i].trim().is_empty());
-        for result in &results {
-            if is_symbol_baseline && result.symbol.is_empty() {
-                return baselines;
-            }
-            if last_index_written == -1 {
-                type_lines.push_str(&code_lines[..result.line + 1].join("\r\n"));
-                type_lines.push_str("\r\n");
-            } else if last_index_written != result.line as i64 {
-                if !is_blank_or_bracket((last_index_written + 1) as usize) {
-                    type_lines.push_str("\r\n");
-                }
-                type_lines.push_str(&code_lines[(last_index_written + 1) as usize..result.line + 1].join("\r\n"));
-                type_lines.push_str("\r\n");
-            }
-            last_index_written = result.line as i64;
-            let type_or_symbol_string = if is_symbol_baseline { &result.symbol } else { &result.typ };
-            let line_text = LINE_DELIMITER.replace_all(&result.source_text, "");
-            type_lines.push('>');
-            type_lines.push_str(&format!("{line_text} : {type_or_symbol_string}"));
-            type_lines.push_str("\r\n");
-            if !result.underline.is_empty() {
-                type_lines.push('>');
-                for _ in 0..line_text.len() {
-                    type_lines.push(' ');
-                }
-                type_lines.push_str(" : ");
-                type_lines.push_str(&result.underline);
-                type_lines.push_str("\r\n");
-            }
+        let results = if is_symbol_baseline { full_walker.get_symbols(&file.unit_name) } else { full_walker.get_types(&file.unit_name) };
+        match file_baseline(&file.unit_name, &file.content, &results, is_symbol_baseline) {
+            Some(text) => baselines.push(text),
+            None => return baselines,
         }
-
-        if ((last_index_written + 1) as usize) < code_lines.len() {
-            if !is_blank_or_bracket((last_index_written + 1) as usize) {
-                type_lines.push_str("\r\n");
-            }
-            type_lines.push_str(&code_lines[(last_index_written + 1) as usize..].join("\r\n"));
-        }
-        type_lines.push_str("\r\n");
-
-        baselines.push(remove_test_path_prefixes(&type_lines, false /*retainTrailingDirectorySeparator*/));
     }
 
     baselines
 }
 
-struct TypeWriterWalker {
+// The body of iterateBaseline's per-file loop; `None` is Go's early `return baselines` (a symbol result without
+// a symbol, which the walker never produces).
+fn file_baseline(unit_name: &str, content: &str, results: &[TypeWriterResult], is_symbol_baseline: bool) -> Option<String> {
+    let mut type_lines = String::new();
+    type_lines.push_str("=== ");
+    type_lines.push_str(unit_name);
+    type_lines.push_str(" ===\r\n");
+    let code_lines: Vec<&str> = CODE_LINES_REGEXP.split(content).collect();
+    let mut last_index_written: i64 = -1;
+    let is_blank_or_bracket = |i: usize| i < code_lines.len() && (BRACKET_LINE_REGEX.is_match(code_lines[i]) || code_lines[i].trim().is_empty());
+    for result in results {
+        if is_symbol_baseline && result.symbol.is_empty() {
+            return None;
+        }
+        if last_index_written == -1 {
+            type_lines.push_str(&code_lines[..result.line + 1].join("\r\n"));
+            type_lines.push_str("\r\n");
+        } else if last_index_written != result.line as i64 {
+            if !is_blank_or_bracket((last_index_written + 1) as usize) {
+                type_lines.push_str("\r\n");
+            }
+            type_lines.push_str(&code_lines[(last_index_written + 1) as usize..result.line + 1].join("\r\n"));
+            type_lines.push_str("\r\n");
+        }
+        last_index_written = result.line as i64;
+        let type_or_symbol_string = if is_symbol_baseline { &result.symbol } else { &result.typ };
+        let line_text = LINE_DELIMITER.replace_all(&result.source_text, "");
+        type_lines.push('>');
+        type_lines.push_str(&format!("{line_text} : {type_or_symbol_string}"));
+        type_lines.push_str("\r\n");
+        if !result.underline.is_empty() {
+            type_lines.push('>');
+            for _ in 0..line_text.len() {
+                type_lines.push(' ');
+            }
+            type_lines.push_str(" : ");
+            type_lines.push_str(&result.underline);
+            type_lines.push_str("\r\n");
+        }
+    }
+
+    if ((last_index_written + 1) as usize) < code_lines.len() {
+        if !is_blank_or_bracket((last_index_written + 1) as usize) {
+            type_lines.push_str("\r\n");
+        }
+        type_lines.push_str(&code_lines[(last_index_written + 1) as usize..].join("\r\n"));
+    }
+    type_lines.push_str("\r\n");
+
+    Some(remove_test_path_prefixes(&type_lines, false /*retainTrailingDirectorySeparator*/))
+}
+
+// One file's section of the `.types` (or `.symbols`) baseline for a whole project (tsrs-test types-dump): the
+// walk of `source_file` under `unit_name`, without the `//// [header] ////` prefix.
+pub(crate) fn project_file_baseline(walker: &mut TypeWriterWalker, source_file: P<SourceFile>, unit_name: &str, is_symbol_baseline: bool) -> String {
+    walker.current_source_file = Some(source_file);
+    let results = walker.visit_node(source_file.as_node(), is_symbol_baseline);
+    file_baseline(unit_name, source_file.text(), &results, is_symbol_baseline).unwrap_or_default()
+}
+
+pub(crate) struct TypeWriterWalker {
     program: &'static Program,
     had_error_baseline: bool,
     current_source_file: Option<P<SourceFile>>,
@@ -133,7 +149,7 @@ struct TypeWriterResult {
 }
 
 impl TypeWriterWalker {
-    fn new(program: &'static Program, had_error_baseline: bool) -> TypeWriterWalker {
+    pub(crate) fn new(program: &'static Program, had_error_baseline: bool) -> TypeWriterWalker {
         TypeWriterWalker { program, had_error_baseline, current_source_file: None, emit_context: checker::new_emit_context() }
     }
 
