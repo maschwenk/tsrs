@@ -486,12 +486,14 @@ impl Parser {
             Kind::AsteriskEqualsToken => {
                 // If there is '*=', treat it as * followed by postfix =
                 self.scanner.re_scan_asterisk_equals_token();
+                self.report_scan_errors();
                 self.parse_jsdoc_all_type()
             }
             Kind::AsteriskToken => self.parse_jsdoc_all_type(),
             Kind::QuestionQuestionToken => {
                 // If there is '??', treat it as prefix-'?' in JSDoc type.
                 self.scanner.re_scan_question_token();
+                self.report_scan_errors();
                 self.parse_jsdoc_nullable_type()
             }
             Kind::QuestionToken => self.parse_jsdoc_nullable_type(),
@@ -750,21 +752,25 @@ impl Parser {
 
     pub(crate) fn re_scan_less_than_token(&mut self) -> Kind {
         self.token = self.scanner.re_scan_less_than_token();
+        self.report_scan_errors();
         self.token
     }
 
     pub(crate) fn re_scan_greater_than_token(&mut self) -> Kind {
         self.token = self.scanner.re_scan_greater_than_token();
+        self.report_scan_errors();
         self.token
     }
 
     pub(crate) fn re_scan_slash_token(&mut self) -> Kind {
         self.token = self.scanner.re_scan_slash_token(false);
+        self.report_scan_errors();
         self.token
     }
 
     pub(crate) fn re_scan_template_token(&mut self, is_tagged_template: bool) -> Kind {
         self.token = self.scanner.re_scan_template_token(is_tagged_template);
+        self.report_scan_errors();
         self.token
     }
 
