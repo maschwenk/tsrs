@@ -285,5 +285,85 @@ out.append(scenario("json-and-arbitrary", {
     req("/project/src/a.ts", "/project/src/styles.d.css.ts"),
 ]))
 
+# pnpm layout: realpaths under node_modules/.pnpm are ignored paths, the symlink is preferred.
+out.append(scenario("pnpm", {
+    "/project/tsconfig.json": tsconfig(module="nodenext"),
+    "/project/package.json": json.dumps({"name": "app", "type": "module", "dependencies": {"pkg": "1.0.0"}}),
+    "/project/src/main.ts": "import 'pkg';",
+    "/project/node_modules/.pnpm/pkg@1.0.0/node_modules/pkg/package.json": json.dumps({"name": "pkg", "version": "1.0.0", "exports": {".": "./index.js", "./feature": "./feature.js"}}),
+    "/project/node_modules/.pnpm/pkg@1.0.0/node_modules/pkg/index.d.ts": "export declare const p: number;",
+    "/project/node_modules/.pnpm/pkg@1.0.0/node_modules/pkg/feature.d.ts": "export declare const f: number;",
+    "/project/node_modules/.pnpm/pkg@1.0.0/node_modules/pkg/internal.d.ts": "export declare const i: number;",
+}, [
+    req("/project/src/main.ts", "/project/node_modules/.pnpm/pkg@1.0.0/node_modules/pkg/index.d.ts"),
+    req("/project/src/main.ts", "/project/node_modules/.pnpm/pkg@1.0.0/node_modules/pkg/feature.d.ts"),
+    req("/project/src/main.ts", "/project/node_modules/.pnpm/pkg@1.0.0/node_modules/pkg/internal.d.ts"),
+], symlinks={
+    "/project/node_modules/pkg": "/project/node_modules/.pnpm/pkg@1.0.0/node_modules/pkg",
+}))
+
+# Duplicate packages (same name@version) in two places: redirect targets.
+dup_pkg = json.dumps({"name": "dup", "version": "1.2.3", "types": "index.d.ts"})
+out.append(scenario("duplicate-packages", {
+    "/project/tsconfig.json": tsconfig(strict=True),
+    "/project/src/main.ts": "import 'a'; import 'b';",
+    "/project/node_modules/a/package.json": json.dumps({"name": "a", "types": "index.d.ts"}),
+    "/project/node_modules/a/index.d.ts": "export * from 'dup';",
+    "/project/node_modules/a/node_modules/dup/package.json": dup_pkg,
+    "/project/node_modules/a/node_modules/dup/index.d.ts": "export declare class D { private x; }",
+    "/project/node_modules/b/package.json": json.dumps({"name": "b", "types": "index.d.ts"}),
+    "/project/node_modules/b/index.d.ts": "export * from 'dup';",
+    "/project/node_modules/b/node_modules/dup/package.json": dup_pkg,
+    "/project/node_modules/b/node_modules/dup/index.d.ts": "export declare class D { private x; }",
+}, [
+    req("/project/src/main.ts", "/project/node_modules/a/node_modules/dup/index.d.ts"),
+    req("/project/src/main.ts", "/project/node_modules/b/node_modules/dup/index.d.ts"),
+    req("/project/node_modules/a/index.d.ts", "/project/node_modules/a/node_modules/dup/index.d.ts"),
+]))
+
+# More exports shapes: directory mapping, arrays, versioned types, custom conditions, self-reference.
+out.append(scenario("exports-shapes", {
+    "/project/tsconfig.json": tsconfig(module="nodenext", customConditions=["custom"]),
+    "/project/package.json": json.dumps({"name": "self", "type": "module", "exports": {"./lib/*": "./src/lib/*.ts"}}),
+    "/project/src/main.ts": "import 'dirs';",
+    "/project/src/lib/x.ts": "export const x = 1;",
+    "/project/node_modules/dirs/package.json": json.dumps({"name": "dirs", "exports": {
+        ".": [{"types@>=4.0": "./ts4/index.d.ts"}, "./fallback.d.ts"],
+        "./d/": "./dist/d/",
+        "./c": {"custom": "./custom.d.ts", "default": "./c.d.ts"},
+        "./arr": ["./nope.d.ts", {"types": "./arr.d.ts"}],
+    }}),
+    "/project/node_modules/dirs/ts4/index.d.ts": "export declare const a: number;",
+    "/project/node_modules/dirs/fallback.d.ts": "export declare const f: number;",
+    "/project/node_modules/dirs/dist/d/deep/file.d.ts": "export declare const d: number;",
+    "/project/node_modules/dirs/custom.d.ts": "export declare const c: number;",
+    "/project/node_modules/dirs/c.d.ts": "export declare const c: number;",
+    "/project/node_modules/dirs/arr.d.ts": "export declare const r: number;",
+}, [
+    req("/project/src/main.ts", "/project/node_modules/dirs/ts4/index.d.ts"),
+    req("/project/src/main.ts", "/project/node_modules/dirs/fallback.d.ts"),
+    req("/project/src/main.ts", "/project/node_modules/dirs/dist/d/deep/file.d.ts"),
+    req("/project/src/main.ts", "/project/node_modules/dirs/custom.d.ts"),
+    req("/project/src/main.ts", "/project/node_modules/dirs/c.d.ts"),
+    req("/project/src/main.ts", "/project/node_modules/dirs/arr.d.ts"),
+    *all_prefs("/project/src/main.ts", "/project/src/lib/x.ts"),
+]))
+
+# Symlinked package importing from itself through its own symlink must stay relative.
+out.append(scenario("symlink-own-package", {
+    "/project/tsconfig.json": json.dumps({"compilerOptions": {"module": "commonjs"}, "include": ["packages/**/*"]}),
+    "/project/packages/app/src/a.ts": "import 'lib';",
+    "/project/packages/lib/package.json": json.dumps({"name": "lib", "types": "index.ts"}),
+    "/project/packages/lib/index.ts": "export * from './src/b';",
+    "/project/packages/lib/src/b.ts": "export const b = 1;",
+    "/project/packages/lib/src/c.ts": "export const c = 1;",
+}, [
+    req("/project/packages/lib/src/b.ts", "/project/packages/lib/src/c.ts"),
+    req("/project/packages/app/src/a.ts", "/project/packages/lib/src/c.ts"),
+    req("/project/packages/app/src/a.ts", "/project/packages/lib/index.ts"),
+], symlinks={
+    "/project/packages/app/node_modules/lib": "/project/packages/lib",
+}))
+
 for s in out:
     print(json.dumps(s))
