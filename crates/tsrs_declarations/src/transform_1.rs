@@ -615,7 +615,7 @@ impl DeclarationTransformer {
             Kind::ConstructorType => Some(self.transform_constructor_type_node(input)),
             Kind::ImportType => Some(self.transform_import_type_node(input)),
             Kind::TypeQuery => {
-                self.check_entity_name_visibility(input.as_type_query_node().expr_name, self.enclosing_declaration.get().unwrap());
+                self.check_entity_name_visibility(input.as_type_query_node().expr_name, self.enclosing_declaration.get());
                 self.visitor().visit_each_child(Some(input))
             }
             Kind::QualifiedName => {
@@ -664,7 +664,7 @@ impl DeclarationTransformer {
         self.state.error_name_node.set(node.name());
         assert!(ast::has_dynamic_name(node)); // Should only be called with dynamic names
         let entity_name = node.name().unwrap().expression().unwrap();
-        self.check_entity_name_visibility(entity_name, self.enclosing_declaration.get().unwrap());
+        self.check_entity_name_visibility(entity_name, self.enclosing_declaration.get());
         if !self.suppress_new_diagnostic_contexts.get() {
             *self.state.get_symbol_accessibility_diagnostic.borrow_mut() = old_diag;
         }
@@ -723,7 +723,7 @@ impl DeclarationTransformer {
         self.factory().update_import_type_node(
             input,
             import_type.is_type_of,
-            self.factory().update_literal_type_node(import_type.argument, self.rewrite_module_specifier(input, import_type.argument.as_literal_type_node().literal)),
+            self.factory().update_literal_type_node(import_type.argument, self.rewrite_module_specifier(input, Some(import_type.argument.as_literal_type_node().literal)).unwrap()),
             import_type.attributes,
             import_type.qualifier,
             self.visitor().visit_nodes(input.type_argument_list()),
@@ -767,7 +767,7 @@ impl DeclarationTransformer {
 
     // transform.go:815
     pub(crate) fn transform_type_reference(&self, input: P<Node>) -> Option<P<Node>> {
-        self.check_entity_name_visibility(input.as_type_reference_node().type_name, self.enclosing_declaration.get().unwrap());
+        self.check_entity_name_visibility(input.as_type_reference_node().type_name, self.enclosing_declaration.get());
         self.visitor().visit_each_child(Some(input))
     }
 
@@ -775,7 +775,7 @@ impl DeclarationTransformer {
     pub(crate) fn transform_expression_with_type_arguments(&self, input: P<Node>) -> Option<P<Node>> {
         let expression = input.as_expression_with_type_arguments().expression;
         if ast::is_entity_name(expression) || ast::is_entity_name_expression(expression) {
-            self.check_entity_name_visibility(expression, self.enclosing_declaration.get().unwrap());
+            self.check_entity_name_visibility(expression, self.enclosing_declaration.get());
         }
         self.visitor().visit_each_child(Some(input))
     }
@@ -831,7 +831,7 @@ pub(crate) fn has_any_binding_initializers(binding_pattern: P<Node>) -> bool {
 impl DeclarationTransformer {
     // transform.go:875
     pub(crate) fn transform_cjs_require_variable_declaration(&self, input: P<Node>) -> Option<P<Node>> {
-        let specifier = self.rewrite_module_specifier(input, input.initializer().unwrap().arguments()[0]);
+        let specifier = self.rewrite_module_specifier(input, Some(input.initializer().unwrap().arguments()[0])).unwrap();
         let name = input.name().unwrap();
         if ast::is_identifier(name) {
             // `const x = require("something")` -> `import x = require("something")`
@@ -1123,9 +1123,7 @@ impl DeclarationTransformer {
                 self.result_has_scope_marker.set(true);
                 let export_declaration = input.as_export_declaration();
                 // Rewrite external module names if necessary
-                // SIG: rewrite_module_specifier should take/return Option<P<Node>> (Go returns nil for a nil input before any
-                // side effect); mapping over the Option here is equivalent.
-                let module_specifier = input.module_specifier().map(|m| self.rewrite_module_specifier(input, m));
+                let module_specifier = self.rewrite_module_specifier(input, input.module_specifier());
                 Some(self.factory().update_export_declaration(input, input.modifiers(), input.is_type_only(), export_declaration.export_clause, module_specifier, export_declaration.attributes))
             }
             Kind::ExportAssignment => Some(self.transform_export_assignment(input, input, input.expression().unwrap(), input.as_export_assignment().is_export_equals)),

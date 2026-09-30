@@ -143,7 +143,7 @@ impl DeclarationTransformer {
             Kind::BindingElement => {
                 if let Some(property_name) = node.property_name() {
                     if ast::is_computed_property_name(property_name) && ast::is_entity_name_expression(property_name.expression().unwrap()) {
-                        self.check_entity_name_visibility(property_name.expression().unwrap(), self.enclosing_declaration.get().unwrap());
+                        self.check_entity_name_visibility(property_name.expression().unwrap(), self.enclosing_declaration.get());
                     }
                 }
                 let elem = node.as_binding_element();
@@ -167,12 +167,12 @@ impl DeclarationTransformer {
                 decl.modifiers(),
                 import_equals.is_type_only,
                 import_equals.name,
-                self.factory().update_external_module_reference(import_equals.module_reference, self.rewrite_module_specifier(decl, specifier.unwrap())),
+                self.factory().update_external_module_reference(import_equals.module_reference, self.rewrite_module_specifier(decl, specifier).unwrap()),
             ))
         } else {
             let old_diag = self.state.get_symbol_accessibility_diagnostic.borrow().clone();
             *self.state.get_symbol_accessibility_diagnostic.borrow_mut() = create_get_symbol_accessibility_diagnostic_for_node(decl);
-            self.check_entity_name_visibility(import_equals.module_reference, self.enclosing_declaration.get().unwrap());
+            self.check_entity_name_visibility(import_equals.module_reference, self.enclosing_declaration.get());
             *self.state.get_symbol_accessibility_diagnostic.borrow_mut() = old_diag;
             Some(decl)
         }
@@ -187,7 +187,7 @@ impl DeclarationTransformer {
                 decl,
                 decl.modifiers(),
                 import_decl.import_clause,
-                self.rewrite_module_specifier(decl, import_decl.module_specifier),
+                self.rewrite_module_specifier(decl, Some(import_decl.module_specifier)).unwrap(),
                 import_decl.attributes,
             ));
         };
@@ -208,7 +208,7 @@ impl DeclarationTransformer {
                 decl,
                 decl.modifiers(),
                 Some(self.factory().update_import_clause(import_clause, phase_modifier, visible_default_binding, None /*namedBindings*/)),
-                self.rewrite_module_specifier(decl, import_decl.module_specifier),
+                self.rewrite_module_specifier(decl, Some(import_decl.module_specifier)).unwrap(),
                 import_decl.attributes,
             ));
         };
@@ -225,7 +225,7 @@ impl DeclarationTransformer {
                 decl,
                 decl.modifiers(),
                 Some(self.factory().update_import_clause(import_clause, phase_modifier, visible_default_binding, named_bindings_result)),
-                self.rewrite_module_specifier(decl, import_decl.module_specifier),
+                self.rewrite_module_specifier(decl, Some(import_decl.module_specifier)).unwrap(),
                 import_decl.attributes,
             ));
         }
@@ -240,7 +240,7 @@ impl DeclarationTransformer {
                 decl,
                 decl.modifiers(),
                 Some(self.factory().update_import_clause(import_clause, phase_modifier, visible_default_binding, named_imports)),
-                self.rewrite_module_specifier(decl, import_decl.module_specifier),
+                self.rewrite_module_specifier(decl, Some(import_decl.module_specifier)).unwrap(),
                 import_decl.attributes,
             ));
         }
@@ -253,7 +253,7 @@ impl DeclarationTransformer {
                 decl,
                 decl.modifiers(),
                 None, /*importClause*/
-                self.rewrite_module_specifier(decl, import_decl.module_specifier),
+                self.rewrite_module_specifier(decl, Some(import_decl.module_specifier)).unwrap(),
                 import_decl.attributes,
             ));
         }
@@ -368,8 +368,7 @@ impl DeclarationTransformer {
         let (_, mut cleanup_diagnostic_context) = self.setup_diagnostic_context(expression);
         if ast::get_assignment_declaration_kind(expression) == JSDeclarationKind::ModuleExports {
             if self.state.current_source_file.get().unwrap().common_js_module_indicator().is_some() {
-                // SIG: Go `transformExportAssignment` returns a nil-able *ast.Node; `.into()` accepts either form.
-                let result: Option<P<Node>> = self.transform_export_assignment(expression.parent().unwrap(), expression, expression.as_binary_expression().right(), true /*isExportEquals*/).into();
+                let result = Some(self.transform_export_assignment(expression.parent().unwrap(), expression, expression.as_binary_expression().right(), true /*isExportEquals*/));
                 if let Some(result) = result {
                     self.cjs_export_assignment.set(Some(result));
                     self.result_has_scope_marker.set(true);
@@ -392,11 +391,7 @@ impl DeclarationTransformer {
             }
             JSDeclarationKind::ExportsProperty => {
                 if self.state.current_source_file.get().unwrap().common_js_module_indicator().is_some() {
-                    // SIG: Go `transformCommonJSExport` returns nil when the worker does; the transform_2.rs stub
-                    // returns `P<Node>`, it should be `Option<P<Node>>`. `.into()` accepts either form.
-                    let result: Option<P<Node>> = self
-                        .transform_common_js_export(expression, self.get_name_expression_preferring_identifier(ast::get_element_or_property_access_name(expression.as_binary_expression().left).unwrap()))
-                        .into();
+                    let result = self.transform_common_js_export(expression, self.get_name_expression_preferring_identifier(ast::get_element_or_property_access_name(expression.as_binary_expression().left).unwrap()));
                     if let Some(result) = result {
                         self.cjs_export_members.borrow_mut().push(result);
                     }
@@ -404,8 +399,7 @@ impl DeclarationTransformer {
             }
             JSDeclarationKind::ObjectDefinePropertyExports => {
                 if self.state.current_source_file.get().unwrap().common_js_module_indicator().is_some() {
-                    // SIG: see above.
-                    let result: Option<P<Node>> = self.transform_common_js_export(expression, self.get_name_expression_preferring_identifier(expression.arguments()[1])).into();
+                    let result = self.transform_common_js_export(expression, self.get_name_expression_preferring_identifier(expression.arguments()[1]));
                     if let Some(result) = result {
                         self.cjs_export_members.borrow_mut().push(result);
                     }

@@ -248,8 +248,7 @@ impl DeclarationTransformer {
             extra_members = self.collect_this_property_assignments(class_expr);
         }
         let members = self.build_class_members(class_expr, &extra_members);
-        // SIG: ensure_type_params should take `params: Option<P<NodeList>>` (Go passes a nil TypeParameters list).
-        let type_parameters = self.ensure_type_params(class_expr, class_expr.as_class_expression().type_parameters().unwrap());
+        let type_parameters = self.ensure_type_params(class_expr, class_expr.as_class_expression().type_parameters());
         let heritage_clauses = self.visitor().visit_nodes(class_expr.as_class_expression().heritage_clauses());
 
         let result = self.factory().new_class_declaration(Some(modifiers), Some(class_name), type_parameters, heritage_clauses, members);
@@ -481,8 +480,7 @@ impl DeclarationTransformer {
             self.resolver.lock(|c| (self.state.report_expando_function_errors.get().unwrap())(c, input));
         }
         let modifiers = self.ensure_modifiers(input);
-        // SIG: ensure_type_params should take `params: Option<P<NodeList>>` (Go passes a nil TypeParameters list).
-        let type_parameters = self.ensure_type_params(input, input.type_parameter_list().unwrap());
+        let type_parameters = self.ensure_type_params(input, input.type_parameter_list());
         self.factory().update_function_declaration(
             input,
             modifiers,
@@ -639,8 +637,7 @@ impl DeclarationTransformer {
             let f = self.factory();
             let decl = input.as_class_declaration();
             let modifiers = self.ensure_modifiers(input);
-            // SIG: ensure_type_params should take `params: Option<P<NodeList>>` (Go passes a nil TypeParameters list).
-            let type_parameters = self.ensure_type_params(input, decl.type_parameters().unwrap());
+                let type_parameters = self.ensure_type_params(input, decl.type_parameters());
 
             // Collect this.x property assignments from constructors and static blocks in JS files
             let mut extra_members = Vec::new();
