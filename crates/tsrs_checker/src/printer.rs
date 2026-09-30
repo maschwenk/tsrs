@@ -406,8 +406,8 @@ impl Checker {
     }
 
     // symbolaccessibility.go:16
-    pub fn is_value_symbol_accessible(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>) -> bool {
-        let access = self.is_symbol_accessible_worker(Some(symbol), enclosing_declaration, SymbolFlags::Value /*shouldComputeAliasesToMakeVisible*/, false /*allowModules*/, true);
+    pub fn is_value_symbol_accessible(&mut self, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>) -> bool {
+        let access = self.is_symbol_accessible_worker(symbol, enclosing_declaration, SymbolFlags::Value, false /*shouldComputeAliasesToMakeVisible*/, true /*allowModules*/);
         access.accessibility == SymbolAccessibility::Accessible
     }
 

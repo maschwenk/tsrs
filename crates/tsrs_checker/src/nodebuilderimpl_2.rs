@@ -1082,8 +1082,7 @@ pub(crate) fn get_type_alias_for_type_literal(c: &mut Checker, t: P<Type>) -> Op
 
 impl NodeBuilderImpl {
     // nodebuilderimpl.go:2852
-    pub(crate) fn should_write_type_of_function_symbol(&self, c: &mut Checker, symbol: P<Symbol>, type_id: TypeId) -> (bool, P<Symbol>) {
-        let mut symbol = symbol;
+    pub(crate) fn should_write_type_of_function_symbol(&self, c: &mut Checker, symbol: P<Symbol>, type_id: TypeId) -> (bool, Option<P<Symbol>>) {
         let declarations: Vec<P<Node>> = symbol.declarations().clone();
         // `typeof C.name` can only be written when the member name is a valid identifier
         let is_static_method_symbol = symbol.flags().intersects(SymbolFlags::Method)
@@ -1116,15 +1115,18 @@ impl NodeBuilderImpl {
             }
         }
         if is_static_method_symbol || is_non_local_function_symbol {
-            if is_function_expression_symbol && symbol.value_declaration().is_some() && symbol.value_declaration().unwrap().parent().is_some() && symbol.value_declaration().unwrap().parent() != self.ctx().enclosing_declaration.get() {
-                symbol = c.get_merged_symbol(symbol.value_declaration().unwrap().parent().unwrap().symbol().unwrap());
+            let mut symbol = Some(symbol);
+            let vd = symbol.unwrap().value_declaration();
+            if is_function_expression_symbol && vd.is_some() && vd.unwrap().parent().is_some() && vd.unwrap().parent() != self.ctx().enclosing_declaration.get() {
+                // Go: `getMergedSymbol` of a nil parent symbol is nil
+                symbol = vd.unwrap().parent().unwrap().symbol().map(|s| c.get_merged_symbol(s));
             }
             // typeof is allowed only for static/non local functions
             let result = (self.ctx().flags.get().intersects(Flags::UseTypeOfFunction) || self.ctx().visited_types.borrow().has(&type_id)) // it is type of the symbol uses itself recursively
                 && (!self.ctx().flags.get().intersects(Flags::UseStructuralFallback) || c.is_value_symbol_accessible(symbol, self.ctx().enclosing_declaration.get())); // And the build is going to succeed without visibility error or there is no structural fallback allowed
             return (result, symbol);
         }
-        (false, symbol)
+        (false, Some(symbol))
     }
 
     // nodebuilderimpl.go:2890
@@ -1133,9 +1135,9 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:2894
-    pub(crate) fn should_emit_type_of_symbol(&self, c: &mut Checker, force_expansion: bool, force_class_expansion: bool, is_instance_type: SymbolFlags, symbol: P<Symbol>, type_id: TypeId) -> (bool, P<Symbol>) {
+    pub(crate) fn should_emit_type_of_symbol(&self, c: &mut Checker, force_expansion: bool, force_class_expansion: bool, is_instance_type: SymbolFlags, symbol: P<Symbol>, type_id: TypeId) -> (bool, Option<P<Symbol>>) {
         if force_expansion {
-            return (false, symbol);
+            return (false, Some(symbol));
         }
         let non_function_result = symbol.flags().intersects(SymbolFlags::Class)
             && !force_class_expansion
@@ -1146,7 +1148,7 @@ impl NodeBuilderImpl {
                 && (!ast::is_class_declaration(symbol.value_declaration().unwrap()) || c.is_symbol_accessible(Some(symbol), self.ctx().enclosing_declaration.get(), is_instance_type, false /*shouldComputeAliasesToMakeVisible*/).accessibility != SymbolAccessibility::Accessible))
             || symbol.flags().intersects(SymbolFlags::Enum | SymbolFlags::ValueModule);
         if non_function_result {
-            return (true, symbol);
+            return (true, Some(symbol));
         }
         self.should_write_type_of_function_symbol(c, symbol, type_id)
     }
@@ -1195,12 +1197,11 @@ impl NodeBuilderImpl {
             // 	// Instance and static types share the same symbol; only add 'typeof' for the static side.
             // 	return b.symbolToTypeNode(symbol, isInstanceType, nil)
             // } else
-            let (ok, symbol) = self.should_emit_type_of_symbol(c, force_expansion, force_class_expansion, is_instance_type, symbol, type_id);
-            if ok {
+            if let (true, symbol) = self.should_emit_type_of_symbol(c, force_expansion, force_class_expansion, is_instance_type, symbol, type_id) {
                 if self.should_expand_type(c, t, false /*isAlias*/) {
                     self.ctx().depth.set(self.ctx().depth.get() + 1);
                 } else {
-                    return self.symbol_to_type_node(c, symbol, is_instance_type, None);
+                    return self.symbol_to_type_node(c, symbol.unwrap(), is_instance_type, None);
                 }
             }
             if self.ctx().visited_types.borrow().has(&type_id) {
@@ -1404,7 +1405,7 @@ impl NodeBuilderImpl {
         } else if self.ctx().flags.get().intersects(Flags::WriteClassExpressionAsTypeLiteral)
             && t.symbol().unwrap().value_declaration().is_some()
             && ast::is_class_like(t.symbol().unwrap().value_declaration().unwrap())
-            && !c.is_value_symbol_accessible(t.symbol().unwrap(), self.ctx().enclosing_declaration.get())
+            && !c.is_value_symbol_accessible(t.symbol(), self.ctx().enclosing_declaration.get())
         {
             self.create_anonymous_type_node(c, t)
         } else {
@@ -1713,7 +1714,7 @@ impl NodeBuilderImpl {
         }
         if t.flags().intersects(TypeFlags::UniqueESSymbol) {
             if !self.ctx().flags.get().intersects(Flags::AllowUniqueESSymbolType) {
-                if c.is_value_symbol_accessible(t.symbol().unwrap(), self.ctx().enclosing_declaration.get()) {
+                if c.is_value_symbol_accessible(t.symbol(), self.ctx().enclosing_declaration.get()) {
                     add_approximate_length(self, 6);
                     return self.symbol_to_type_node(c, t.symbol().unwrap(), SymbolFlags::Value, None);
                 }
