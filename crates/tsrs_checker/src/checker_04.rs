@@ -377,7 +377,13 @@ impl Checker {
             return_types.push(self.any_type);
         } else {
             yield_type = iteration_types.yield_type;
-            return_types.push(iteration_types.return_type.unwrap());
+            // Go appends a possibly-nil returnType (the `IteratorYieldResult<T>` fast path); getUnionType of a
+            // single-element slice returns that element, nil included.
+            match iteration_types.return_type {
+                Some(t) => return_types.push(t),
+                None if return_types.is_empty() => return IterationTypes { yield_type, return_type: None, next_type },
+                None => panic!("nil return type in getIterationTypesOfMethod"),
+            }
         }
         let return_type = self.get_union_type(&return_types);
         IterationTypes { yield_type, return_type: Some(return_type), next_type }
@@ -2361,7 +2367,7 @@ impl Checker {
         let module_symbol = self.resolve_external_module_name(node, specifier, false /*ignoreErrors*/, import_attributes_type);
         if let Some(module_symbol) = module_symbol {
             let es_module_symbol = self.resolve_external_module_symbol(module_symbol, true /*dontResolveAlias*/);
-            // SIG: Go checks esModuleSymbol for nil; resolve_external_module_symbol returns P<Symbol> (never nil there).
+            // Go checks esModuleSymbol for nil; resolveExternalModuleSymbol never returns nil for a non-nil module symbol.
             let es_module_type = self.get_type_of_symbol(es_module_symbol);
             let mut synthetic_type =
                 self.get_type_with_synthetic_default_only(Some(es_module_type), es_module_symbol, module_symbol, specifier, import_attributes_type);
@@ -2449,8 +2455,6 @@ impl Checker {
                 let suggestion_node = self.get_deprecated_suggestion_node(node);
                 let name = try_get_property_access_or_identifier_to_string(get_invoked_expression(node));
                 let signature_string = self.signature_to_string(sig);
-                // SIG: Go passes a possibly-nil suggestion node through to NewDiagnosticForNode; add_deprecated_suggestion_with_signature
-                // takes P<Node>. getDeprecatedSuggestionNode returns a node for every call-like node reaching here.
                 self.add_deprecated_suggestion_with_signature(suggestion_node.unwrap(), declaration, &name, &signature_string);
             }
         }
