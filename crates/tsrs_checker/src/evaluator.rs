@@ -4,13 +4,13 @@ use crate::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub struct Result {
-    pub value: LiteralValue,
+    pub value: Option<LiteralValue>,
     pub is_syntactically_string: bool,
     pub resolved_other_files: bool,
     pub has_external_references: bool,
 }
 
-pub fn new_result(value: LiteralValue, is_syntactically_string: bool, resolved_other_files: bool, has_external_references: bool) -> Result {
+pub fn new_result(value: Option<LiteralValue>, is_syntactically_string: bool, resolved_other_files: bool, has_external_references: bool) -> Result {
     Result { value, is_syntactically_string, resolved_other_files, has_external_references }
 }
 
@@ -41,16 +41,16 @@ pub fn evaluate<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expression
             let result = evaluate(host, evaluate_entity, outer_expressions_to_skip, expr.as_prefix_unary_expression().operand(), location);
             resolved_other_files = result.resolved_other_files;
             has_external_references = result.has_external_references;
-            if let LiteralValue::Number(value) = result.value {
+            if let Some(LiteralValue::Number(value)) = result.value {
                 match expr.as_prefix_unary_expression().operator() {
                     Kind::PlusToken => {
-                        return Result { value: LiteralValue::Number(value), is_syntactically_string, resolved_other_files, has_external_references };
+                        return Result { value: Some(LiteralValue::Number(value)), is_syntactically_string, resolved_other_files, has_external_references };
                     }
                     Kind::MinusToken => {
-                        return Result { value: LiteralValue::Number(-value), is_syntactically_string, resolved_other_files, has_external_references };
+                        return Result { value: Some(LiteralValue::Number(-value)), is_syntactically_string, resolved_other_files, has_external_references };
                     }
                     Kind::TildeToken => {
-                        return Result { value: LiteralValue::Number(value.bitwise_not()), is_syntactically_string, resolved_other_files, has_external_references };
+                        return Result { value: Some(LiteralValue::Number(value.bitwise_not())), is_syntactically_string, resolved_other_files, has_external_references };
                     }
                     _ => {}
                 }
@@ -64,8 +64,8 @@ pub fn evaluate<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expression
             is_syntactically_string = (left.is_syntactically_string || right.is_syntactically_string) && bin.operator_token().kind == Kind::PlusToken;
             resolved_other_files = left.resolved_other_files || right.resolved_other_files;
             has_external_references = left.has_external_references || right.has_external_references;
-            let left_num = if let LiteralValue::Number(n) = left.value { Some(n) } else { None };
-            let right_num = if let LiteralValue::Number(n) = right.value { Some(n) } else { None };
+            let left_num = if let Some(LiteralValue::Number(n)) = left.value { Some(n) } else { None };
+            let right_num = if let Some(LiteralValue::Number(n)) = right.value { Some(n) } else { None };
             if let (Some(left_num), Some(right_num)) = (left_num, right_num) {
                 let value = match operator {
                     Kind::BarToken => Some(left_num.bitwise_or(right_num)),
@@ -83,11 +83,11 @@ pub fn evaluate<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expression
                     _ => None,
                 };
                 if let Some(value) = value {
-                    return Result { value: LiteralValue::Number(value), is_syntactically_string, resolved_other_files, has_external_references };
+                    return Result { value: Some(LiteralValue::Number(value)), is_syntactically_string, resolved_other_files, has_external_references };
                 }
             }
-            let left_str = if let LiteralValue::String(s) = left.value { Some(s) } else { None };
-            let right_str = if let LiteralValue::String(s) = right.value { Some(s) } else { None };
+            let left_str = if let Some(LiteralValue::String(s)) = left.value { Some(s) } else { None };
+            let right_str = if let Some(LiteralValue::String(s)) = right.value { Some(s) } else { None };
             if (left_str.is_some() || left_num.is_some()) && (right_str.is_some() || right_num.is_some()) && operator == Kind::PlusToken {
                 let mut s = match left_num {
                     Some(n) => n.string(),
@@ -97,17 +97,17 @@ pub fn evaluate<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expression
                     Some(n) => s.push_str(&n.string()),
                     None => s.push_str(right_str.unwrap()),
                 }
-                return Result { value: LiteralValue::String(alloc_str(&s)), is_syntactically_string, resolved_other_files, has_external_references };
+                return Result { value: Some(LiteralValue::String(alloc_str(&s))), is_syntactically_string, resolved_other_files, has_external_references };
             }
         }
         Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral => {
-            return Result { value: LiteralValue::String(expr.text()), is_syntactically_string: true, resolved_other_files: false, has_external_references: false };
+            return Result { value: Some(LiteralValue::String(expr.text())), is_syntactically_string: true, resolved_other_files: false, has_external_references: false };
         }
         Kind::TemplateExpression => {
             return evaluate_template_expression(host, evaluate_entity, outer_expressions_to_skip, expr, location);
         }
         Kind::NumericLiteral => {
-            return Result { value: LiteralValue::Number(jsnum::from_string(expr.text())), is_syntactically_string: false, resolved_other_files: false, has_external_references: false };
+            return Result { value: Some(LiteralValue::Number(jsnum::from_string(expr.text()))), is_syntactically_string: false, resolved_other_files: false, has_external_references: false };
         }
         Kind::Identifier => {
             return evaluate_entity(host, expr, location);
@@ -119,7 +119,7 @@ pub fn evaluate<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expression
         }
         _ => {}
     }
-    Result { value: LiteralValue::None, is_syntactically_string, resolved_other_files, has_external_references }
+    Result { value: None, is_syntactically_string, resolved_other_files, has_external_references }
 }
 
 fn evaluate_template_expression<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expressions_to_skip: ast::OuterExpressionKinds, expr: P<Node>, location: P<Node>) -> Result {
@@ -130,15 +130,15 @@ fn evaluate_template_expression<H>(host: &mut H, evaluate_entity: Evaluator<H>, 
     let mut has_external_references = false;
     for span in template.template_spans().nodes.iter() {
         let span_result = evaluate(host, evaluate_entity, outer_expressions_to_skip, span.as_template_span().expression(), location);
-        if span_result.value == LiteralValue::None {
-            return Result { value: LiteralValue::None, is_syntactically_string: true, resolved_other_files: false, has_external_references: false };
+        if span_result.value.is_none() {
+            return Result { value: None, is_syntactically_string: true, resolved_other_files: false, has_external_references: false };
         }
-        sb.push_str(&any_to_string(span_result.value));
+        sb.push_str(&any_to_string(span_result.value.unwrap()));
         sb.push_str(span.as_template_span().literal().text());
         resolved_other_files = resolved_other_files || span_result.resolved_other_files;
         has_external_references = has_external_references || span_result.has_external_references;
     }
-    Result { value: LiteralValue::String(alloc_str(&sb)), is_syntactically_string: true, resolved_other_files, has_external_references }
+    Result { value: Some(LiteralValue::String(alloc_str(&sb))), is_syntactically_string: true, resolved_other_files, has_external_references }
 }
 
 pub fn any_to_string(v: LiteralValue) -> String {
@@ -147,7 +147,6 @@ pub fn any_to_string(v: LiteralValue) -> String {
         LiteralValue::Number(n) => n.string(),
         LiteralValue::Boolean(b) => (if b { "true" } else { "false" }).to_string(),
         LiteralValue::BigInt(b) => b.string(),
-        LiteralValue::None => panic!("Unhandled case in AnyToString"),
     }
 }
 
@@ -157,6 +156,5 @@ pub fn is_truthy(v: LiteralValue) -> bool {
         LiteralValue::Number(n) => n.0 != 0.0 && !n.is_nan(),
         LiteralValue::Boolean(b) => b,
         LiteralValue::BigInt(b) => b != jsnum::PseudoBigInt::default(),
-        LiteralValue::None => panic!("Unhandled case in IsTruthy"),
     }
 }

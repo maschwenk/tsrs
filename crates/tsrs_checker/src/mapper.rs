@@ -72,7 +72,7 @@ impl TypeMapper {
             TypeMapperData::Composite { m1, m2 } => {
                 let t1 = m1.map(c, t);
                 if t1 != t {
-                    return c.instantiate_type(t1, Some(*m2));
+                    return c.instantiate_type(Some(t1), Some(*m2)).unwrap();
                 }
                 m2.map(c, t)
             }
@@ -87,7 +87,7 @@ impl TypeMapper {
                             clear_cached_inferences(n.inferences.get());
                             inference.is_fixed.set(true);
                         }
-                        return c.get_inferred_type(*n, i as i32);
+                        return c.get_inferred_type(Some(*n), i as i32).unwrap();
                     }
                 }
                 t
@@ -106,10 +106,10 @@ impl TypeMapper {
 
     pub fn maps_this_only(&self) -> bool {
         match &self.data {
-            TypeMapperData::Simple { source, .. } => is_this_type_parameter(*source),
+            TypeMapperData::Simple { source, .. } => is_this_type_parameter(Some(*source)),
             TypeMapperData::Array { sources, .. }
             | TypeMapperData::ArrayToSingle { sources, .. }
-            | TypeMapperData::Deferred { sources, .. } => sources.len() == 1 && is_this_type_parameter(sources[0]),
+            | TypeMapperData::Deferred { sources, .. } => sources.len() == 1 && is_this_type_parameter(Some(sources[0])),
             _ => false,
         }
     }
@@ -120,7 +120,7 @@ impl TypeMapper {
 impl Checker {
     /// Go free function `getMappedType(t, mapper)`; a method because mapping may need the checker.
     pub(crate) fn get_mapped_type(&mut self, t: P<Type>, mapper: P<TypeMapper>) -> P<Type> {
-        mapper.map(self, get_non_distributed_type_parameter(t))
+        mapper.map(self, get_non_distributed_type_parameter(Some(t)).unwrap())
     }
 
     pub(crate) fn combine_type_mappers(&mut self, m1: Option<P<TypeMapper>>, m2: P<TypeMapper>) -> P<TypeMapper> {
@@ -136,7 +136,7 @@ impl Checker {
         };
         let t1 = self.get_mapped_type(t, m1);
         if t1 != t {
-            return self.instantiate_type(t1, Some(m2));
+            return self.instantiate_type(Some(t1), Some(m2)).unwrap();
         }
         self.get_mapped_type(t, m2)
     }
@@ -170,16 +170,16 @@ pub(crate) fn merge_type_mappers(m1: Option<P<TypeMapper>>, m2: P<TypeMapper>) -
 
 pub(crate) fn prepend_type_mapping(source: P<Type>, target: P<Type>, mapper: Option<P<TypeMapper>>) -> P<TypeMapper> {
     let Some(mapper) = mapper else {
-        return new_simple_type_mapper(get_non_distributed_type_parameter(source), target);
+        return new_simple_type_mapper(get_non_distributed_type_parameter(Some(source)).unwrap(), target);
     };
-    new_merged_type_mapper(new_simple_type_mapper(get_non_distributed_type_parameter(source), target), mapper)
+    new_merged_type_mapper(new_simple_type_mapper(get_non_distributed_type_parameter(Some(source)).unwrap(), target), mapper)
 }
 
 pub(crate) fn append_type_mapping(mapper: Option<P<TypeMapper>>, source: P<Type>, target: P<Type>) -> P<TypeMapper> {
     let Some(mapper) = mapper else {
-        return new_simple_type_mapper(get_non_distributed_type_parameter(source), target);
+        return new_simple_type_mapper(get_non_distributed_type_parameter(Some(source)).unwrap(), target);
     };
-    new_merged_type_mapper(mapper, new_simple_type_mapper(get_non_distributed_type_parameter(source), target))
+    new_merged_type_mapper(mapper, new_simple_type_mapper(get_non_distributed_type_parameter(Some(source)).unwrap(), target))
 }
 
 pub(crate) fn new_simple_type_mapper(source: P<Type>, target: P<Type>) -> P<TypeMapper> {

@@ -91,6 +91,11 @@ Go `c.foo(x)` -> `self.foo(x)`. `new_checker(program: &'static dyn Program) -> B
   `nonDottedNameCacheKey` are `const CacheHashKey`. Go-named lowercase types keep their Go names (`keyBuilder`,
   `errorState`, `orderedSet`, `thisAssignmentDeclarationKind` with variants `None/Typed/Constructor/Method`).
   `symbolTableID` (a `u64` alias) is declared in checker.rs; the `stKind*` constants belong to printer.rs.
+- printer_types.rs (foundation) holds what printer.rs signatures need from unported packages: `nodebuilder.Flags` /
+  `InternalFlags` (real), `trait SymbolTracker`, `SymbolAccessibility(Result)` (from `printer`), `VerbosityContext`,
+  `accessibleSymbolChainContext`, `SymbolTrackerImpl`, and empty placeholders `NodeBuilderContext`, `EmitContext`,
+  `Printer`, `EmitResolver`. Go `context.Context` parameters are the unit struct `Context`; `iter.Seq[T]` is
+  `Seq<T> = Vec<T>`.
 - `evaluator.go` is ported as `evaluator.rs`: `evaluator::Result { value: LiteralValue, … }` (always written with the
   module path; it would shadow `std::result::Result`), `evaluator::evaluate(host, evaluate_entity, outer_kinds, expr,
   location)`, `evaluator::any_to_string`, `evaluator::is_truthy`. The checker calls `self.evaluate(expr, location)`.
@@ -143,9 +148,11 @@ exactly like Go: `t.as_interface_type().resolved_type_arguments.get()`, `t.as_ob
   `assign(map)` for `x.m = freshMap`, `get_ref`/`set_ref` for aliasing. Used for `instantiations`, `constituent_map`,
   `TypeAliasLinks.instantiations`, `ConditionalRoot.instantiations`, `InferenceState.visited`, … `ast.SymbolTable` fields
   are `Cell<Option<P<SymbolTable>>>`.
-- `LiteralType.value` (Go `any`) is `Cell<LiteralValue>`, `enum LiteralValue { None, String(&'static str),
-  Number(Number), Boolean(bool), BigInt(PseudoBigInt) }` (Copy, Eq, Hash). Other Go `any` literal values
-  (`EnumLiteralKey.value`, `evaluator.Result.Value`) use it too.
+- Go `any` literal values are `LiteralValue { String(&'static str), Number(Number), Boolean(bool), BigInt(PseudoBigInt) }`
+  (Copy, Eq, Hash); Go's nil is `Option::None`, so a nil-able `any` is `Option<LiteralValue>` (the generator's usual
+  pointer rule): `LiteralType.value: Cell<Option<LiteralValue>>`, `evaluator::Result.value: Option<LiteralValue>`,
+  `EnumLiteralKey.value: LiteralValue`. Stored diagnostic arguments (Go `[]any` in `ErrorChain.args`,
+  `DiagnosticAndArguments`, `DiagnosticDetails`) are pre-formatted `Vec<String>`.
 - `Ternary` is a Copy newtype over `i8` with `Ternary::{False, Unknown, Maybe, True}` and `&`, `|`, `&=`, `|=`.
 - Go methods on types.go structs exist with snake_case names (`call_signatures()`, `type_parameters()`,
   `outer_type_parameters()`, `element_flags()`, `type_()` for `TypePredicate.Type()`, …). `t.Distributed()` is

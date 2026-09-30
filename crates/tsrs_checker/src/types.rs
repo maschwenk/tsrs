@@ -1226,11 +1226,10 @@ impl IntrinsicType {
 
 // LiteralTypeData
 
-/// Go `any` value of a literal type: `string | jsnum.Number | bool | PseudoBigInt | nil (computed enum)`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+/// Go `any` value of a literal type: `string | jsnum.Number | bool | PseudoBigInt`. Go's nil is `Option::None`
+/// (`Option<LiteralValue>`), matching how the generated signatures map a nil-able `any`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum LiteralValue {
-    #[default]
-    None,
     String(&'static str),
     Number(jsnum::Number),
     Boolean(bool),
@@ -1239,13 +1238,13 @@ pub enum LiteralValue {
 
 #[derive(Default)]
 pub struct LiteralType {
-    pub value: Cell<LiteralValue>, // string | jsnum.Number | bool | PseudoBigInt | nil (computed enum)
+    pub value: Cell<Option<LiteralValue>>, // string | jsnum.Number | bool | PseudoBigInt | nil (computed enum)
     pub fresh_type: Cell<Option<P<Type>>>, // Fresh version of type
     pub regular_type: Cell<Option<P<Type>>>, // Regular version of type
 }
 
 impl LiteralType {
-    pub fn value(&self) -> LiteralValue {
+    pub fn value(&self) -> Option<LiteralValue> {
         self.value.get()
     }
     pub fn fresh_type(&self) -> Option<P<Type>> {
@@ -1495,10 +1494,10 @@ impl MappedType {
         self.template_type.get()
     }
     pub fn resolve_components(&self, c: &mut Checker, typ: P<Type>) {
-        c.get_type_parameter_from_mapped_type(typ);
-        c.get_constraint_type_from_mapped_type(typ);
-        c.get_name_type_from_mapped_type(typ);
-        c.get_template_type_from_mapped_type(typ);
+        c.get_type_parameter_from_mapped_type(Some(typ));
+        c.get_constraint_type_from_mapped_type(Some(typ));
+        c.get_name_type_from_mapped_type(Some(typ));
+        c.get_template_type_from_mapped_type(Some(typ));
     }
 }
 

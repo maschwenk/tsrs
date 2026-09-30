@@ -615,7 +615,7 @@ impl IterationTypesResolver {
     pub fn resolve_iteration_type(&self, c: &mut Checker, t: P<Type>, error_node: Option<P<Node>>) -> Option<P<Type>> {
         if self.is_async {
             return c.get_awaited_type_ex(
-                t,
+                Some(t),
                 error_node,
                 Some(&diagnostics::Type_of_await_operand_must_either_be_a_valid_promise_or_must_not_contain_a_callable_then_member),
                 &[],
@@ -1323,12 +1323,12 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.string_type = c.new_intrinsic_type(TypeFlags::String, "string");
     c.number_type = c.new_intrinsic_type(TypeFlags::Number, "number");
     c.bigint_type = c.new_intrinsic_type(TypeFlags::BigInt, "bigint");
-    c.regular_false_type = c.new_literal_type(TypeFlags::BooleanLiteral, LiteralValue::Boolean(false), None);
-    c.false_type = c.new_literal_type(TypeFlags::BooleanLiteral, LiteralValue::Boolean(false), Some(c.regular_false_type));
+    c.regular_false_type = c.new_literal_type(TypeFlags::BooleanLiteral, Some(LiteralValue::Boolean(false)), None);
+    c.false_type = c.new_literal_type(TypeFlags::BooleanLiteral, Some(LiteralValue::Boolean(false)), Some(c.regular_false_type));
     c.regular_false_type.as_literal_type().fresh_type.set(Some(c.false_type));
     c.false_type.as_literal_type().fresh_type.set(Some(c.false_type));
-    c.regular_true_type = c.new_literal_type(TypeFlags::BooleanLiteral, LiteralValue::Boolean(true), None);
-    c.true_type = c.new_literal_type(TypeFlags::BooleanLiteral, LiteralValue::Boolean(true), Some(c.regular_true_type));
+    c.regular_true_type = c.new_literal_type(TypeFlags::BooleanLiteral, Some(LiteralValue::Boolean(true)), None);
+    c.true_type = c.new_literal_type(TypeFlags::BooleanLiteral, Some(LiteralValue::Boolean(true)), Some(c.regular_true_type));
     c.regular_true_type.as_literal_type().fresh_type.set(Some(c.true_type));
     c.true_type.as_literal_type().fresh_type.set(Some(c.true_type));
     c.boolean_type = c.get_union_type(&[c.regular_false_type, c.regular_true_type]);
@@ -1342,7 +1342,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.string_or_number_type = c.get_union_type(&[c.string_type, c.number_type]);
     c.string_number_symbol_type = c.get_union_type(&[c.string_type, c.number_type, c.es_symbol_type]);
     c.number_or_big_int_type = c.get_union_type(&[c.number_type, c.bigint_type]);
-    c.numeric_string_type = c.get_template_literal_type(&["", ""], &[c.number_type]); // The `${number}` type
+    c.numeric_string_type = c.get_template_literal_type(&["", ""], &[c.number_type]).unwrap(); // The `${number}` type
     c.template_constraint_type = c.get_union_type(&[c.string_type, c.number_type, c.boolean_type, c.bigint_type, c.null_type, c.undefined_type]);
     c.unique_literal_type = c.new_intrinsic_type(TypeFlags::Never, "never"); // Special `never` flagged by union reduction to behave as a literal
     c.unique_literal_mapper = new_function_type_mapper(|c, t| c.get_unique_literal_type_for_type_parameter(t));
@@ -1423,8 +1423,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
 // Methods for Go's function-valued Checker fields.
 
 impl Checker {
-    pub(crate) fn compare_symbols(&mut self, s1: Option<P<Symbol>>, s2: Option<P<Symbol>>) -> i32 {
-        self.compare_symbols_worker(s1, s2)
+    pub(crate) fn compare_symbols(&mut self, s1: P<Symbol>, s2: P<Symbol>) -> i32 {
+        self.compare_symbols_worker(Some(s1), Some(s2))
     }
 
     pub(crate) fn compare_symbol_chains(&mut self, a: &[P<Symbol>], b: &[P<Symbol>]) -> i32 {
@@ -1459,11 +1459,11 @@ impl Checker {
 
     /// Go `c.evaluate = evaluator.NewEvaluator(c.evaluateEntity, ast.OEKParentheses)`.
     pub(crate) fn evaluate(&mut self, expr: P<Node>, location: P<Node>) -> evaluator::Result {
-        evaluator::evaluate(self, |c, expr, location| c.evaluate_entity(expr, location), ast::OuterExpressionKinds::Parentheses, expr, location)
+        evaluator::evaluate(self, |c, expr, location| c.evaluate_entity(expr, Some(location)), ast::OuterExpressionKinds::Parentheses, expr, location)
     }
 
     pub(crate) fn is_primitive_or_object_or_empty_type(&mut self, t: P<Type>) -> bool {
-        t.flags().intersects(TypeFlags::Primitive | TypeFlags::NonPrimitive) || self.is_empty_anonymous_object_type(t)
+        t.flags().intersects(TypeFlags::Primitive | TypeFlags::NonPrimitive) || self.is_empty_anonymous_object_type(Some(t))
     }
 
     pub(crate) fn contains_missing_type(&mut self, t: P<Type>) -> bool {
@@ -1471,11 +1471,11 @@ impl Checker {
     }
 
     pub(crate) fn could_contain_type_variables(&mut self, t: P<Type>) -> bool {
-        self.could_contain_type_variables_worker(t)
+        self.could_contain_type_variables_worker(Some(t))
     }
 
     pub(crate) fn is_string_index_signature_only_type(&mut self, t: P<Type>) -> bool {
-        self.is_string_index_signature_only_type_worker(t)
+        self.is_string_index_signature_only_type_worker(Some(t))
     }
 
     pub(crate) fn mark_node_assignments(&mut self, node: P<Node>) -> bool {
@@ -2042,9 +2042,6 @@ impl CacheHashKey {
     /// Go `xxh3.HashString128(s)` (usable in constants).
     pub const fn hash_string_128(s: &str) -> CacheHashKey {
         CacheHashKey::from_u128(xxhash_rust::const_xxh3::xxh3_128(s.as_bytes()))
-    }
-    pub fn is_zero(self) -> bool {
-        self.hi == 0 && self.lo == 0
     }
 }
 
