@@ -1174,8 +1174,66 @@ impl Program {
 
         // !!! The below needs filesByName, which is not equivalent to p.filesByPath.
 
-        // If the emit is enabled make sure that every output file is unique and not overwriting any of the input files.
-        // Emit is not ported: output path verification (outputpaths.ForEachEmittedFile) is skipped.
+        // If the emit is enabled make sure that every output file is unique and not overwriting any of the input files
+        if !options.no_emit.is_true() && !options.suppress_output_path_check.is_true() {
+            let mut emit_files_seen: FxHashSet<String> = FxHashSet::default();
+            let mut emit_file_names: Vec<String> = Vec::new();
+            tsoptions::outputpaths::for_each_emitted_file(
+                &*self,
+                &options,
+                |paths, _| {
+                    emit_file_names.push(paths.js_file_path().to_string());
+                    emit_file_names.push(paths.source_map_file_path().to_string());
+                    emit_file_names.push(paths.declaration_file_path().to_string());
+                    emit_file_names.push(paths.declaration_map_path().to_string());
+                    false
+                },
+                &self.get_source_files_to_emit(None, false, false),
+                false,
+            );
+            emit_file_names.push(self.opts.config.get_build_info_file_name());
+
+            // Verify that all the emit files are unique and don't overwrite input files
+            for emit_file_name in &emit_file_names {
+                if emit_file_name.is_empty() {
+                    continue;
+                }
+                let emit_file_path = self.to_path(emit_file_name);
+                // Report error if the output overwrites input file
+                if self.files_by_path().contains_key(&emit_file_path) {
+                    let diag = new_compiler_diagnostic(&diagnostics::Cannot_write_file_0_because_it_would_overwrite_input_file, &[emit_file_name]);
+                    if config_file_path.is_empty() {
+                        // The program is from either an inferred project or an external project
+                        diag.add_message_chain(new_compiler_diagnostic(
+                            &diagnostics::Adding_a_tsconfig_json_file_will_help_organize_projects_that_contain_both_TypeScript_and_JavaScript_files_Learn_more_at_https_Colon_Slash_Slashaka_ms_Slashtsconfig,
+                            &[],
+                        ));
+                    }
+                    self.block_emitting_of_file(emit_file_name, diag);
+                }
+
+                let emit_file_key = if !self.host().fs().use_case_sensitive_file_names() {
+                    tspath::to_file_name_lower_case(&emit_file_path)
+                } else {
+                    emit_file_path.0.clone()
+                };
+
+                // Report error if multiple files write into same file
+                if emit_files_seen.contains(&emit_file_key) {
+                    // Already seen the same emit file - report error
+                    self.block_emitting_of_file(
+                        emit_file_name,
+                        new_compiler_diagnostic(&diagnostics::Cannot_write_file_0_because_it_would_be_overwritten_by_multiple_input_files, &[emit_file_name]),
+                    );
+                } else {
+                    emit_files_seen.insert(emit_file_key);
+                }
+            }
+        }
+    }
+
+    fn get_source_files_to_emit(&self, target_source_files: Option<&[P<SourceFile>]>, force_dts_emit: bool, force_js_emit: bool) -> Vec<P<SourceFile>> {
+        crate::emitter::get_source_files_to_emit(self, target_source_files, force_dts_emit, force_js_emit)
     }
 
     fn block_emitting_of_file(&mut self, emit_file_name: &str, diag: P<Diagnostic>) {
@@ -1887,4 +1945,22 @@ fn plain_js_errors() -> &'static FxHashSet<i32> {
         .map(|m| m.code())
         .collect()
     })
+}
+
+impl tsoptions::outputpaths::OutputPathsHost for Program {
+    fn common_source_directory(&self) -> String {
+        Program::common_source_directory(self).to_string()
+    }
+
+    fn content_mapper_extensions(&self) -> Vec<String> {
+        self.opts.config.content_mapper_extensions()
+    }
+
+    fn get_current_directory(&self) -> &str {
+        Program::get_current_directory(self)
+    }
+
+    fn use_case_sensitive_file_names(&self) -> bool {
+        Program::use_case_sensitive_file_names(self)
+    }
 }

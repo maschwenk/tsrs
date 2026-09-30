@@ -364,7 +364,7 @@ impl Checker {
                         // Searches other base types for a declaration that would satisfy the inherited abstract member.
                         // (The class may have more than one base type via declaration merging with an interface with the
                         // same name.)
-                        for other_base_type in self.get_base_types(t) {
+                        for &other_base_type in self.get_base_types(t) {
                             if other_base_type == base_type {
                                 continue;
                             }
@@ -726,7 +726,7 @@ impl Checker {
             let mut error_node = local_prop_declaration.or(local_index_declaration);
             if error_node.is_none() && interface_declaration.is_some() {
                 let mut some = false;
-                for base in self.get_base_types(t) {
+                for &base in self.get_base_types(t) {
                     if self.get_property_of_object_type(base, prop.name()).is_some() && self.get_index_type_of_type(base, info.key_type()).is_some() {
                         some = true;
                         break;
@@ -788,7 +788,7 @@ impl Checker {
             let mut error_node = local_check_declaration.or(local_index_declaration);
             if error_node.is_none() && interface_declaration.is_some() {
                 let mut some = false;
-                for base in self.get_base_types(t) {
+                for &base in self.get_base_types(t) {
                     if self.get_index_info_of_type(base, check_info.key_type()).is_some() && self.get_index_type_of_type(base, info.key_type()).is_some() {
                         some = true;
                         break;
@@ -943,7 +943,7 @@ impl Checker {
             let type_with_this = self.get_type_with_this_argument(t, None, false);
             // run subsequent checks only if first set succeeded
             if self.check_inherited_properties_are_identical(t, node.name().unwrap()) {
-                for base_type in self.get_base_types(t) {
+                for &base_type in self.get_base_types(t) {
                     let base_with_this = self.get_type_with_this_argument(base_type, t.as_interface_type().this_type.get(), false);
                     self.check_type_assignable_to(type_with_this, base_with_this, node.name(), Some(&diagnostics::Interface_0_incorrectly_extends_interface_1));
                 }
@@ -981,7 +981,7 @@ impl Checker {
             }
         }
         let mut identical = true;
-        for base in base_types {
+        for &base in base_types {
             let base_with_this = self.get_type_with_this_argument(base, t.as_interface_type().this_type.get(), false);
             let properties = self.get_properties_of_type(base_with_this);
             for prop in properties {

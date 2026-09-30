@@ -80,3 +80,13 @@ pub(crate) fn source_file_may_be_emitted(source_file: P<SourceFile>, host: &Prog
 
     true
 }
+
+pub(crate) fn get_source_files_to_emit(
+    host: &Program,
+    target_source_files: Option<&[P<SourceFile>]>,
+    force_dts_emit: bool,
+    force_js_emit: bool,
+) -> Vec<P<SourceFile>> {
+    let target_source_files = target_source_files.unwrap_or_else(|| host.source_files());
+    target_source_files.iter().copied().filter(|&f| source_file_may_be_emitted(f, host, force_dts_emit, force_js_emit)).collect()
+}
