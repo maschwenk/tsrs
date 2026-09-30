@@ -909,7 +909,7 @@ impl Checker {
                 let links = self.value_symbol_links.get(children_prop_symbol);
                 if child_types.len() == 1 {
                     links.resolved_type.set(Some(child_types[0]));
-                } else if children_contextual_type.is_some() && some_type(children_contextual_type.unwrap(), |t| self.is_tuple_like_type(t)) {
+                } else if children_contextual_type.is_some() && some_type(self, children_contextual_type.unwrap(), |c, t| c.is_tuple_like_type(t)) {
                     let t = self.create_tuple_type(&child_types);
                     links.resolved_type.set(Some(t));
                 } else {

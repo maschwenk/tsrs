@@ -1924,7 +1924,7 @@ impl Checker {
             types.push(t);
             infos.push(info);
         }
-        let readonly = in_const_context && !some_type(rest_type, |t| self.is_mutable_array_like_type(t));
+        let readonly = in_const_context && !some_type(self, rest_type, |c, t| c.is_mutable_array_like_type(t));
         self.create_tuple_type_ex(&types, &infos, readonly)
     }
 

@@ -301,7 +301,7 @@ impl Checker {
             // If every constituent in the type variable's constraint is covered by an intersection of the type
             // variable and that constituent, remove those intersections and substitute the type variable.
             let constraint = self.get_base_constraint_of_type(type_variable).unwrap();
-            if every_type(constraint, |t| contains_type(self, &primitives, t)) {
+            if every_type(self, constraint, |c, t| contains_type(c, &primitives, t)) {
                 let mut i = types.len();
                 while i > 0 {
                     i -= 1;
@@ -536,13 +536,13 @@ impl Checker {
                 // We have an intersection T & P or P & T, where T is a type variable and P is a primitive type, the object type, or {}.
                 let constraint = self.get_base_constraint_of_type(type_variable);
                 // Check that T's constraint is similarly composed of primitive types, the object type, or {}.
-                if let Some(constraint) = constraint.filter(|&constraint| every_type(constraint, |t| self.is_primitive_or_object_or_empty_type(t))) {
+                if let Some(constraint) = constraint.filter(|&constraint| every_type(self, constraint, |c, t| c.is_primitive_or_object_or_empty_type(t))) {
                     // If T's constraint is a subtype of P, simply return T. For example, given `T extends "a" | "b"`,
                     // the intersection `T & string` reduces to just T.
                     if self.is_type_strict_subtype_of(constraint, primitive_type) {
                         return type_variable;
                     }
-                    if !(constraint.flags().intersects(TypeFlags::Union) && some_type(constraint, |n| self.is_type_strict_subtype_of(n, primitive_type))) {
+                    if !(constraint.flags().intersects(TypeFlags::Union) && some_type(self, constraint, |c, n| c.is_type_strict_subtype_of(n, primitive_type))) {
                         // No constituent of T's constraint is a subtype of P. If P is also not a subtype of T's constraint,
                         // then the constraint and P are unrelated, and the intersection reduces to never. For example, given
                         // `T extends "a" | "b"`, the intersection `T & number` reduces to never.
@@ -976,38 +976,40 @@ impl Checker {
 }
 
 // checker.go:26997
-pub(crate) fn for_each_type(t: P<Type>, mut f: impl FnMut(P<Type>)) {
+// The callbacks of these Go free functions receive the checker (PORTING.md callback rule) so that callers never
+// capture `self`; `c` is only passed through.
+pub(crate) fn for_each_type(c: &mut Checker, t: P<Type>, mut f: impl FnMut(&mut Checker, P<Type>)) {
     if t.flags().intersects(TypeFlags::Union) {
         for &u in t.types() {
-            f(u);
+            f(c, u);
         }
     } else {
-        f(t);
+        f(c, t);
     }
 }
 
 // checker.go:27007
-pub(crate) fn some_type(t: P<Type>, mut f: impl FnMut(P<Type>) -> bool) -> bool {
+pub(crate) fn some_type(c: &mut Checker, t: P<Type>, mut f: impl FnMut(&mut Checker, P<Type>) -> bool) -> bool {
     if t.flags().intersects(TypeFlags::Union) {
-        return t.types().iter().any(|&t| f(t));
+        return t.types().iter().any(|&t| f(c, t));
     }
-    f(t)
+    f(c, t)
 }
 
 // checker.go:27014
-pub(crate) fn every_type(t: P<Type>, mut f: impl FnMut(P<Type>) -> bool) -> bool {
+pub(crate) fn every_type(c: &mut Checker, t: P<Type>, mut f: impl FnMut(&mut Checker, P<Type>) -> bool) -> bool {
     if t.flags().intersects(TypeFlags::Union) {
-        return t.types().iter().all(|&t| f(t));
+        return t.types().iter().all(|&t| f(c, t));
     }
-    f(t)
+    f(c, t)
 }
 
 // checker.go:27021
-pub(crate) fn every_contained_type(t: P<Type>, mut f: impl FnMut(P<Type>) -> bool) -> bool {
+pub(crate) fn every_contained_type(c: &mut Checker, t: P<Type>, mut f: impl FnMut(&mut Checker, P<Type>) -> bool) -> bool {
     if t.flags().intersects(TypeFlags::UnionOrIntersection) {
-        return t.types().iter().all(|&t| f(t));
+        return t.types().iter().all(|&t| f(c, t));
     }
-    f(t)
+    f(c, t)
 }
 
 impl Checker {
@@ -1397,7 +1399,7 @@ impl Checker {
                 return self.get_index_type_for_generic_type(t, index_flags);
             }
             // Include the generic component in the resulting type.
-            for_each_type(constraint_type, |key_type| add_member_for_key_type(self, &mut key_types, t, name_type, type_parameter, key_type));
+            for_each_type(self, constraint_type, |c, key_type| add_member_for_key_type(c, &mut key_types, t, name_type, type_parameter, key_type));
         } else if self.is_mapped_type_with_keyof_constraint_declaration(t) {
             let modifiers = self.get_modifiers_type_from_mapped_type(t);
             let modifiers_type = self.get_apparent_type(modifiers);
@@ -1410,7 +1412,7 @@ impl Checker {
             );
         } else {
             let lower_bound = self.get_lower_bound_of_key_type(constraint_type);
-            for_each_type(lower_bound, |key_type| add_member_for_key_type(self, &mut key_types, t, name_type, type_parameter, key_type));
+            for_each_type(self, lower_bound, |c, key_type| add_member_for_key_type(c, &mut key_types, t, name_type, type_parameter, key_type));
         }
         // We had to pick apart the constraintType to potentially map/filter it - compare the final resulting list with the
         // original constraintType, so we can return the union that preserves aliases/origin data if possible.
@@ -1585,9 +1587,9 @@ impl Checker {
                     return Some(prop_type);
                 }
             }
-            if every_type(object_type, is_tuple_type) && is_numeric_literal_name(&prop_name) {
+            if every_type(self, object_type, |_, t| is_tuple_type(t)) && is_numeric_literal_name(&prop_name) {
                 let index = jsnum::from_string(&prop_name);
-                if access_node.is_some() && every_type(object_type, |t| !t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)) && !access_flags.intersects(AccessFlags::AllowMissing) {
+                if access_node.is_some() && every_type(self, object_type, |c, t| !t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)) && !access_flags.intersects(AccessFlags::AllowMissing) {
                     let index_node = get_index_node_for_access_expression(access_node.unwrap());
                     if is_tuple_type(object_type) {
                         if index < jsnum::Number(0.0) {
@@ -1958,16 +1960,16 @@ impl Checker {
             return true;
         }
         if access_node.is_some_and(|n| !is_indexed_access_type_node(n)) {
-            return self.is_generic_tuple_type(object_type) && !index_type_less_than(index_type, get_total_fixed_element_count(object_type.target_tuple_type()));
+            return self.is_generic_tuple_type(object_type) && !index_type_less_than(self, index_type, get_total_fixed_element_count(object_type.target_tuple_type()));
         }
-        self.is_generic_object_type(object_type) && !(is_tuple_type(object_type) && index_type_less_than(index_type, get_total_fixed_element_count(object_type.target_tuple_type())))
+        self.is_generic_object_type(object_type) && !(is_tuple_type(object_type) && index_type_less_than(self, index_type, get_total_fixed_element_count(object_type.target_tuple_type())))
             || self.is_generic_reducible_type(object_type)
     }
 }
 
 // checker.go:27851
-pub(crate) fn index_type_less_than(index_type: P<Type>, limit: i32) -> bool {
-    every_type(index_type, |t| {
+pub(crate) fn index_type_less_than(c: &mut Checker, index_type: P<Type>, limit: i32) -> bool {
+    every_type(c, index_type, |_, t| {
         if t.flags().intersects(TypeFlags::StringOrNumberLiteral) {
             let prop_name = get_property_name_from_type(t);
             if is_numeric_literal_name(&prop_name) {
@@ -2187,7 +2189,7 @@ impl Checker {
                 if v.flags().intersects(TypeFlags::TypeParameter) && element_infos[i].flags.intersects(ElementFlags::Variadic) {
                     let constraint = self.get_next_base_constraint(Some(v), stack);
                     if let Some(constraint) = constraint {
-                        if constraint != v && every_type(constraint, |n| self.is_array_or_tuple_type(n) && !self.is_generic_tuple_type(n)) {
+                        if constraint != v && every_type(self, constraint, |c, n| c.is_array_or_tuple_type(n) && !c.is_generic_tuple_type(n)) {
                             new_element = constraint;
                         }
                     }

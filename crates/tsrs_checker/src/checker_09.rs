@@ -814,7 +814,7 @@ impl Checker {
                             Some(t)
                         })
                         .unwrap();
-                    if every_type(base_constraint, is_tuple_type) {
+                    if every_type(self, base_constraint, |_, t| is_tuple_type(t)) {
                         t = self.map_type(base_constraint, |c, t| Some(c.slice_tuple_type(t, index, 0))).unwrap();
                     } else {
                         t = self.create_array_type(element_type);

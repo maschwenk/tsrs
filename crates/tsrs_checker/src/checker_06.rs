@@ -1216,7 +1216,7 @@ impl Checker {
     // checker.go:11855
     pub(crate) fn container_seems_to_be_empty_dom_element(&mut self, containing_type: P<Type>) -> bool {
         !self.compiler_options.lib.as_ref().is_some_and(|lib| lib.iter().any(|l| l == "lib.dom.d.ts"))
-            && every_contained_type(containing_type, has_common_dom_type_name)
+            && every_contained_type(self, containing_type, |_, t| has_common_dom_type_name(t))
             && self.is_empty_object_type(containing_type)
     }
 }
@@ -2471,7 +2471,7 @@ impl Checker {
                     self.error(Some(rest_expression.as_binary_expression().operator_token), &diagnostics::A_rest_element_cannot_have_an_initializer, &[]);
                 } else {
                     self.check_grammar_for_disallowed_trailing_comma(Some(elements), &diagnostics::A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma);
-                    let t = if every_type(source_type, is_tuple_type) {
+                    let t = if every_type(self, source_type, |_, t| is_tuple_type(t)) {
                         self.map_type(source_type, |c, t| Some(c.slice_tuple_type(t, element_index, 0))).unwrap()
                     } else {
                         self.create_array_type(element_type)

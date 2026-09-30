@@ -1991,7 +1991,7 @@ impl Checker {
         }
         if self.is_const_context(node) || self.is_template_literal_context(node) || {
             let contextual_type = self.get_contextual_type(node, ContextFlags::None).unwrap_or(self.unknown_type);
-            some_type(contextual_type, |t| self.is_template_literal_contextual_type(t))
+            some_type(self, contextual_type, |c, t| c.is_template_literal_contextual_type(t))
         } {
             return self.get_template_literal_type(&texts, &types);
         }
@@ -2035,11 +2035,11 @@ impl Checker {
         let contextual_type = self.get_apparent_type_of_contextual_type(node, ContextFlags::None);
         let in_tuple_context = is_spread_into_call_or_new(node)
             || contextual_type.is_some_and(|contextual_type| {
-                some_type(contextual_type, |t| {
-                    self.is_tuple_like_type(t)
-                        || self.is_generic_mapped_type(t) && t.as_mapped_type().name_type.get().is_none() && {
+                some_type(self, contextual_type, |c, t| {
+                    c.is_tuple_like_type(t)
+                        || c.is_generic_mapped_type(t) && t.as_mapped_type().name_type.get().is_none() && {
                             let target = t.as_mapped_type().target.get().unwrap_or(t);
-                            self.get_homomorphic_type_variable(target).is_some()
+                            c.get_homomorphic_type_variable(target).is_some()
                         }
                 })
             });
@@ -2105,7 +2105,7 @@ impl Checker {
             return self.create_tuple_type_ex(&element_types, &element_infos, false);
         }
         if check_mode.intersects(CheckMode::ForceTuple) || in_const_context || in_tuple_context {
-            let readonly = in_const_context && !contextual_type.is_some_and(|contextual_type| some_type(contextual_type, |t| self.is_mutable_array_like_type(t)));
+            let readonly = in_const_context && !contextual_type.is_some_and(|contextual_type| some_type(self, contextual_type, |c, t| c.is_mutable_array_like_type(t)));
             let tuple = self.create_tuple_type_ex(&element_types, &element_infos, readonly /*readonly*/);
             return self.create_array_literal_type(tuple);
         }
@@ -2280,7 +2280,7 @@ impl Checker {
         };
         let number_type = self.number_type;
         let has_number_index_info = self.get_index_info_of_type(object_type, number_type).is_some();
-        if every_type(index_type, |t| self.is_type_assignable_to(t, object_index_type) || has_number_index_info && self.is_applicable_index_type(t, number_type)) {
+        if every_type(self, index_type, |c, t| c.is_type_assignable_to(t, object_index_type) || has_number_index_info && c.is_applicable_index_type(t, number_type)) {
             if access_node.kind == Kind::ElementAccessExpression
                 && is_assignment_target(access_node)
                 && object_type.object_flags().intersects(ObjectFlags::Mapped)

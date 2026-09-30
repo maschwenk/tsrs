@@ -866,10 +866,10 @@ impl Checker {
             return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_parameter_must_have_a_type_annotation, &[]);
         };
         let t = self.get_type_from_type_node(type_node);
-        if some_type(t, |t| t.flags().intersects(TypeFlags::StringOrNumberLiteralOrUnique)) || self.is_generic_type(t) {
+        if some_type(self, t, |c, t| t.flags().intersects(TypeFlags::StringOrNumberLiteralOrUnique)) || self.is_generic_type(t) {
             return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_parameter_type_cannot_be_a_literal_type_or_generic_type_Consider_using_a_mapped_object_type_instead, &[]);
         }
-        if !every_type(t, |t| self.is_valid_index_key_type(t)) {
+        if !every_type(self, t, |c, t| c.is_valid_index_key_type(t)) {
             return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_parameter_type_must_be_string_number_symbol_or_a_template_literal_type, &[]);
         }
         if index_signature.function_like_base.type_.get().is_none() {

@@ -476,9 +476,9 @@ impl Checker {
                             value_type = self.get_type_from_type_node(return_type_node);
                         }
                         let key_types = self.get_type_from_type_node(type_node);
-                        for_each_type(key_types, |key_type| {
-                            if self.is_valid_index_key_type(key_type) && find_index_info(&index_infos, key_type).is_none() {
-                                let index_info = self.new_index_info(key_type, value_type, ast::has_modifier(declaration, ModifierFlags::Readonly), Some(declaration), &[]);
+                        for_each_type(self, key_types, |c, key_type| {
+                            if c.is_valid_index_key_type(key_type) && find_index_info(&index_infos, key_type).is_none() {
+                                let index_info = c.new_index_info(key_type, value_type, ast::has_modifier(declaration, ModifierFlags::Readonly), Some(declaration), &[]);
                                 index_infos.push(index_info);
                             }
                         });
@@ -1081,7 +1081,7 @@ impl Checker {
                 let contextual_return_type = self.get_contextual_return_type(fn_, ContextFlags::None);
                 let return_type = if contextual_return_type.is_some() && {
                     let unwrapped = self.unwrap_return_type(contextual_return_type.unwrap(), function_flags).unwrap_or(self.void_type);
-                    some_type(unwrapped, |t| t.flags().intersects(TypeFlags::Undefined))
+                    some_type(self, unwrapped, |c, t| t.flags().intersects(TypeFlags::Undefined))
                 } {
                     self.undefined_type
                 } else {
@@ -1968,7 +1968,7 @@ impl Checker {
             });
         } else {
             let lower_bound = self.get_lower_bound_of_key_type(constraint_type);
-            for_each_type(lower_bound, |key_type| mapped_type_add_member_for_key_type(self, &mut state, key_type));
+            for_each_type(self, lower_bound, |c, key_type| mapped_type_add_member_for_key_type(c, &mut state, key_type));
         }
         let index_infos = std::mem::take(&mut state.index_infos);
         self.set_structured_type_members(t, Some(members), &[], &[], &index_infos);
@@ -2063,7 +2063,7 @@ fn mapped_type_add_member_for_key_type(c: &mut Checker, st: &mut MappedTypeMembe
     if let Some(name_type) = st.name_type {
         prop_name_type = c.instantiate_type(name_type, Some(append_type_mapping(st.t.as_mapped_type().mapper.get(), st.type_parameter, key_type)));
     }
-    for_each_type(prop_name_type, |t| mapped_type_add_member_for_key_type_worker(c, st, key_type, t));
+    for_each_type(c, prop_name_type, |c, t| mapped_type_add_member_for_key_type_worker(c, st, key_type, t));
 }
 
 impl Checker {
@@ -2198,7 +2198,7 @@ impl Checker {
                 Some(c.get_mapped_type(global.as_interface_type().type_parameters()[0], t.mapper().unwrap()))
             })
             .unwrap();
-        let readonly = some_type(t, |t| self.is_readonly_array_symbol(t.symbol().unwrap().parent()));
+        let readonly = some_type(self, t, |c, t| c.is_readonly_array_symbol(t.symbol().unwrap().parent()));
         let array_type = self.create_array_type_ex(array_arg, readonly);
         let member_type = self.get_type_of_property_of_type(array_type, member_name).unwrap();
         self.get_signatures_of_type(member_type, SignatureKind::Call)

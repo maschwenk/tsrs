@@ -365,7 +365,7 @@ impl Checker {
                     }
                     if self.strict_null_checks
                         && self.optional_chain_contains_reference(predicate_argument, f.ref_node())
-                        && (assume_true && !self.has_type_facts(predicate_type, TypeFacts::EQUndefined) || !assume_true && every_type(predicate_type, |t| self.is_nullable_type(t)))
+                        && (assume_true && !self.has_type_facts(predicate_type, TypeFacts::EQUndefined) || !assume_true && every_type(self, predicate_type, |c, t| c.is_nullable_type(t)))
                     {
                         t = self.get_adjusted_type_with_facts(t, TypeFacts::NEUndefinedOrNull);
                     }
@@ -673,7 +673,7 @@ impl Checker {
             return self.get_adjusted_type_with_facts(t, facts);
         }
         if assume_true {
-            if !double_equals && (t.flags().intersects(TypeFlags::Unknown) || some_type(t, |t| self.is_empty_anonymous_object_type(t))) {
+            if !double_equals && (t.flags().intersects(TypeFlags::Unknown) || some_type(self, t, |c, t| c.is_empty_anonymous_object_type(t))) {
                 if value_type.flags().intersects(TypeFlags::Primitive | TypeFlags::NonPrimitive) || self.is_empty_anonymous_object_type(value_type) {
                     return value_type;
                 }
@@ -1110,7 +1110,7 @@ impl Checker {
     // flow.go:1001
     pub(crate) fn narrow_type_by_in_keyword(&mut self, f: P<FlowState>, t: P<Type>, name_type: P<Type>, assume_true: bool) -> P<Type> {
         let name = get_property_name_from_type(name_type);
-        let is_known_property = some_type(t, |t| self.is_type_presence_possible(t, &name, true /*assumeTrue*/));
+        let is_known_property = some_type(self, t, |c, t| c.is_type_presence_possible(t, &name, true /*assumeTrue*/));
         if is_known_property {
             // If the check is for a known property (i.e. a property declared in some constituent of
             // the target type), we filter the target type by presence of absence of the property.
@@ -1157,8 +1157,8 @@ impl Checker {
         };
         let value_type = self.get_type_of_expression(value);
         // Note that we include any and unknown in the exclusion test because their domain includes null and undefined.
-        let remove_nullable = equals_operator != assume_true && every_type(value_type, |t| t.flags().intersects(nullable_flags))
-            || equals_operator == assume_true && every_type(value_type, |t| !t.flags().intersects(TypeFlags::AnyOrUnknown | nullable_flags));
+        let remove_nullable = equals_operator != assume_true && every_type(self, value_type, |c, t| t.flags().intersects(nullable_flags))
+            || equals_operator == assume_true && every_type(self, value_type, |c, t| !t.flags().intersects(TypeFlags::AnyOrUnknown | nullable_flags));
         if remove_nullable {
             return self.get_adjusted_type_with_facts(t, TypeFacts::NEUndefinedOrNull);
         }
@@ -2242,7 +2242,7 @@ impl Checker {
                 return TypeFacts::AllTypeofNE & not_equal_facts == TypeFacts::AllTypeofNE;
             }
             // A missing not-equal flag indicates that the type wasn't handled by some case.
-            return !some_type(operand_constraint, |t| self.get_type_facts(t, not_equal_facts) == not_equal_facts);
+            return !some_type(self, operand_constraint, |c, t| c.get_type_facts(t, not_equal_facts) == not_equal_facts);
         }
         let expression_type = self.check_expression_cached(expression);
         let t = self.get_base_constraint_or_type(expression_type);
@@ -2654,7 +2654,7 @@ impl Checker {
 
     // flow.go:2327
     pub(crate) fn get_type_of_destructured_array_element(&mut self, t: P<Type>, index: i32) -> P<Type> {
-        if every_type(t, |t| self.is_tuple_like_type(t)) {
+        if every_type(self, t, |c, t| c.is_tuple_like_type(t)) {
             if let Some(element_type) = self.get_tuple_element_type(t, index) {
                 return element_type;
             }
@@ -2824,7 +2824,7 @@ impl Checker {
             self.error(symbol.value_declaration(), &diagnostics::Member_0_implicitly_has_an_1_type, &[&symbol_string, &type_string]);
         }
         // We don't infer a type if assignments are only null or undefined.
-        if every_type(flow_type, |t| self.is_nullable_type(t)) {
+        if every_type(self, flow_type, |c, t| c.is_nullable_type(t)) {
             return None;
         }
         Some(self.convert_auto_to_any(flow_type))
@@ -2852,7 +2852,7 @@ impl Checker {
                 self.error(symbol.value_declaration(), &diagnostics::Member_0_implicitly_has_an_1_type, &[&symbol_string, &type_string]);
             }
             // We don't infer a type if assignments are only null or undefined.
-            if every_type(flow_type, |t| self.is_nullable_type(t)) {
+            if every_type(self, flow_type, |c, t| c.is_nullable_type(t)) {
                 continue;
             }
             return Some(self.convert_auto_to_any(flow_type));

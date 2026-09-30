@@ -409,7 +409,7 @@ impl Checker {
                     self.get_base_constraint_of_type(modifiers_type)
                 };
                 if let Some(base_constraint) = base_constraint {
-                    if every_type(base_constraint, |t| self.is_array_or_tuple_type(t) || self.is_array_or_tuple_or_intersection(t)) {
+                    if every_type(self, base_constraint, |c, t| c.is_array_or_tuple_type(t) || c.is_array_or_tuple_or_intersection(t)) {
                         let mapper = prepend_type_mapping(type_variable, base_constraint, t.as_mapped_type().mapper.get());
                         return self.instantiate_type(target, Some(mapper));
                     }
@@ -1426,7 +1426,7 @@ impl Checker {
     pub(crate) fn has_array_or_type_type_constraint(&mut self, type_variable: P<Type>) -> bool {
         let constraint = self.get_constraint_of_type_parameter(type_variable);
         match constraint {
-            Some(constraint) => every_type(constraint, |t| self.is_array_or_tuple_type(t)),
+            Some(constraint) => every_type(self, constraint, |c, t| c.is_array_or_tuple_type(t)),
             None => false,
         }
     }

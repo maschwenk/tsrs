@@ -396,10 +396,10 @@ impl Checker {
 
     // checker.go:13319
     pub(crate) fn has_empty_object_intersection(&mut self, t: P<Type>) -> bool {
-        some_type(t, |t| {
-            t == self.unknown_empty_object_type || t.flags().intersects(TypeFlags::Intersection) && {
-                let c = self.get_base_constraint_or_type(t);
-                self.is_empty_anonymous_object_type(c)
+        some_type(self, t, |c, t| {
+            t == c.unknown_empty_object_type || t.flags().intersects(TypeFlags::Intersection) && {
+                let base = c.get_base_constraint_or_type(t);
+                c.is_empty_anonymous_object_type(base)
             }
         })
     }
@@ -1253,7 +1253,7 @@ impl Checker {
                             let instantiated = self.instantiate_type(rest_param_type, mapper);
                             let rest_type = self.get_reduced_apparent_type(instantiated);
                             if rest_type.flags().intersects(TypeFlags::Union)
-                                && every_type(rest_type, is_tuple_type)
+                                && every_type(self, rest_type, |_, t| is_tuple_type(t))
                                 && !fn_.parameters().iter().any(|&p| self.is_some_symbol_assigned(p))
                             {
                                 let narrowed_type = self.get_flow_type_of_reference_ex(fn_, rest_type, rest_type, None /*flowContainer*/, get_flow_node_of_node(location));

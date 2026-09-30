@@ -972,7 +972,7 @@ impl Checker {
             callback(self, s, t);
         }
         if let Some(target_rest_type) = target_rest_type {
-            let readonly = self.is_const_type_variable(Some(target_rest_type), 0) && !some_type(target_rest_type, |t| self.is_mutable_array_like_type(t));
+            let readonly = self.is_const_type_variable(Some(target_rest_type), 0) && !some_type(self, target_rest_type, |c, t| c.is_mutable_array_like_type(t));
             let rest_type = self.get_rest_type_at_position(source, param_count, readonly);
             callback(self, rest_type, target_rest_type);
         }

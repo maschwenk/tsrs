@@ -83,7 +83,7 @@ impl Checker {
         }
         if self.is_array_like_type(t) {
             if let Some(length_type) = self.get_type_of_property_of_type(t, "length") {
-                return every_type(length_type, |t| t.flags().intersects(TypeFlags::NumberLiteral));
+                return every_type(self, length_type, |c, t| t.flags().intersects(TypeFlags::NumberLiteral));
             }
         }
         false
@@ -105,7 +105,7 @@ impl Checker {
         if prop_type.is_some() {
             return prop_type;
         }
-        if every_type(t, is_tuple_type) {
+        if every_type(self, t, |_, t| is_tuple_type(t)) {
             let undefined_like_type = if self.compiler_options.no_unchecked_indexed_access == Tristate::True { Some(self.undefined_type) } else { None };
             return Some(self.get_tuple_element_type_out_of_start_count(t, Number(index as f64), undefined_like_type));
         }
@@ -1093,16 +1093,10 @@ impl Checker {
                     // and avoids false positives of a non-empty intersection check.
                     if check_type.flags().intersects(TypeFlags::Any)
                         || for_constraint && !inferred_extends_type.flags().intersects(TypeFlags::Never) && {
-                            // someType(c.getPermissiveInstantiation(inferredExtendsType), ...)
                             let permissive_extends_type = self.get_permissive_instantiation(inferred_extends_type);
-                            let types = if permissive_extends_type.flags().intersects(TypeFlags::Union) {
-                                permissive_extends_type.types().to_vec()
-                            } else {
-                                vec![permissive_extends_type]
-                            };
-                            types.into_iter().any(|t| {
-                                let permissive_check_type = self.get_permissive_instantiation(check_type);
-                                self.is_type_assignable_to(t, permissive_check_type)
+                            some_type(self, permissive_extends_type, |c, t| {
+                                let permissive_check_type = c.get_permissive_instantiation(check_type);
+                                c.is_type_assignable_to(t, permissive_check_type)
                             })
                         }
                     {
@@ -1809,13 +1803,7 @@ impl Checker {
                     if let Some(type_parameter) = type_parameter {
                         let constraint = self.get_constraint_of_type_parameter(type_parameter);
                         if let Some(constraint) = constraint {
-                            // everyType(constraint, c.isArrayOrTupleType)
-                            let every = if constraint.flags().intersects(TypeFlags::Union) {
-                                constraint.types().iter().all(|&t| self.is_array_or_tuple_type(t))
-                            } else {
-                                self.is_array_or_tuple_type(constraint)
-                            };
-                            if every {
+                            if every_type(self, constraint, |c, t| c.is_array_or_tuple_type(t)) {
                                 constraints.push(self.get_union_type(&[self.number_type, self.numeric_string_type]));
                             }
                         }

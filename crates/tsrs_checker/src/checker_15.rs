@@ -1600,7 +1600,7 @@ impl Checker {
             // We only need `Awaited<T>` if `T` is a type variable that has no base constraint, or the base constraint of `T` is `any`, `unknown`, `{}`, `object`,
             // or is promise-like.
             if let Some(base_constraint) = base_constraint {
-                return base_constraint.flags().intersects(TypeFlags::AnyOrUnknown) || self.is_empty_object_type(base_constraint) || some_type(base_constraint, |t| self.is_thenable_type(t));
+                return base_constraint.flags().intersects(TypeFlags::AnyOrUnknown) || self.is_empty_object_type(base_constraint) || some_type(self, base_constraint, |c, t| c.is_thenable_type(t));
             }
             return self.maybe_type_of_kind(t, TypeFlags::TypeVariable);
         }
@@ -1715,7 +1715,7 @@ impl Checker {
         // parameter type 'T extends string | undefined' with a contextual type 'string', we substitute
         // 'string | undefined' to give control flow analysis the opportunity to narrow to type 'string'.
         let substitute_constraints = !check_mode.intersects(CheckMode::Inferential)
-            && some_type(t, |t| self.is_generic_type_with_union_constraint(t))
+            && some_type(self, t, |c, t| c.is_generic_type_with_union_constraint(t))
             && (self.is_constraint_position(t, reference) || self.has_contextual_type_with_no_generic_types(reference, check_mode));
         if substitute_constraints {
             return self.map_type(t, |c, t| Some(c.get_base_constraint_or_type(t))).unwrap();
@@ -1732,7 +1732,7 @@ impl Checker {
         ast::is_property_access_expression(parent)
             || ast::is_qualified_name(parent)
             || (ast::is_call_expression(parent) || ast::is_new_expression(parent)) && parent.expression() == Some(node)
-            || ast::is_element_access_expression(parent) && parent.expression() == Some(node) && !(some_type(t, |t| self.is_generic_type_without_nullable_constraint(t)) && {
+            || ast::is_element_access_expression(parent) && parent.expression() == Some(node) && !(some_type(self, t, |c, t| c.is_generic_type_without_nullable_constraint(t)) && {
                 let index_type = self.get_type_of_expression(parent.as_element_access_expression().argument_expression);
                 self.is_generic_index_type(index_type)
             })
@@ -1779,7 +1779,7 @@ impl Checker {
     // checker.go:32037
     pub(crate) fn get_non_undefined_type(&mut self, t: P<Type>) -> P<Type> {
         let mut type_or_constraint = t;
-        if some_type(t, |t| self.is_generic_type_with_undefined_constraint(t)) {
+        if some_type(self, t, |c, t| c.is_generic_type_with_undefined_constraint(t)) {
             type_or_constraint = self
                 .map_type(t, |c, t| {
                     if t.flags().intersects(TypeFlags::Instantiable) {

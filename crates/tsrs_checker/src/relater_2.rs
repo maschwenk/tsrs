@@ -767,7 +767,7 @@ impl Relater {
                 let source_types: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Intersection) { source.types().to_vec() } else { vec![source] };
                 let constraint = c.get_effective_constraint_of_intersection(&source_types, target.flags().intersects(TypeFlags::Union));
                 if let Some(constraint) = constraint {
-                    if every_type(constraint, |t| t != source) {
+                    if every_type(c, constraint, |c, t| t != source) {
                         // TODO: Stack errors so we get a pyramid for the "normal" comparison above, _and_ a second for this
                         result = self.is_related_to_ex(c, constraint, target, RecursionFlags::Source, false /*reportErrors*/, None /*headMessage*/, intersection_state);
                     }
@@ -1032,7 +1032,7 @@ impl Relater {
                 // This is a carve-out in comparability to essentially forbid comparing a type parameter with another type parameter
                 // unless one extends the other. (Remember: comparability is mostly bidirectional!)
                 if let Some(constraint) = c.get_constraint_of_type_parameter(source) {
-                    if some_type(constraint, |t| t.flags().intersects(TypeFlags::TypeParameter)) {
+                    if some_type(c, constraint, |c, t| t.flags().intersects(TypeFlags::TypeParameter)) {
                         return self.is_related_to(c, constraint, target, RecursionFlags::Source, false /*reportErrors*/);
                     }
                 }
@@ -1483,7 +1483,7 @@ impl Relater {
                 if ok {
                     return variance_result;
                 }
-            } else if c.is_array_type(target) && (c.is_readonly_array_type(target) && every_type(source, |t| c.is_array_or_tuple_type(t)) || every_type(source, is_mutable_tuple_type)) {
+            } else if c.is_array_type(target) && (c.is_readonly_array_type(target) && every_type(c, source, |c, t| c.is_array_or_tuple_type(t)) || every_type(c, source, |_, t| is_mutable_tuple_type(t))) {
                 if self.rel() != c.identity_relation {
                     let source_index_type = c.get_index_type_of_type_ex(source, c.number_type, c.any_type);
                     let target_index_type = c.get_index_type_of_type_ex(target, c.number_type, c.any_type);
