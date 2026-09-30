@@ -69,6 +69,8 @@ const CELL_EXPLICIT = new Set([
     "ImportClause.PhaseModifier",
     "ExpressionWithTypeArguments.TypeArguments",
     "HeritageClause.Types",
+    // Written by the checker's node builder (nodecopy.go: `c.AsStringLiteral().TokenFlags ^= ast.TokenFlagsSingleQuote` on a clone).
+    "LiteralLikeNodeBase.TokenFlags",
 ]);
 
 // Fields that exist in Go but carry no data in a type-check-only port.

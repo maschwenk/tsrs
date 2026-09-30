@@ -544,7 +544,7 @@ pub fn compare_node_positions(n1: P<Node>, n2: P<Node>) -> i32 {
 }
 
 pub fn is_unterminated_literal(node: P<Node>) -> bool {
-    is_literal_kind(node.kind) && node.literal_like_data().unwrap().token_flags.intersects(TokenFlags::Unterminated)
+    is_literal_kind(node.kind) && node.literal_like_data().unwrap().token_flags().intersects(TokenFlags::Unterminated)
         || is_template_literal_kind(node.kind) && node.template_literal_like_data().unwrap().template_flags.intersects(TokenFlags::Unterminated)
 }
 

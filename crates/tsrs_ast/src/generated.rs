@@ -285,7 +285,7 @@ impl ClassLikeBase {
 
 pub struct LiteralLikeNodeBase {
     pub text: &'static str,
-    pub token_flags: TokenFlags,
+    pub token_flags: Cell<TokenFlags>,
 }
 
 impl LiteralLikeNodeBase {
@@ -295,7 +295,11 @@ impl LiteralLikeNodeBase {
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
-        self.token_flags
+        self.token_flags.get()
+    }
+    #[inline]
+    pub fn set_token_flags(&self, value: TokenFlags) {
+        self.token_flags.set(value)
     }
 }
 
@@ -320,7 +324,11 @@ impl TemplateLiteralLikeNodeBase {
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
-        self.literal_like_node_base.token_flags
+        self.literal_like_node_base.token_flags.get()
+    }
+    #[inline]
+    pub fn set_token_flags(&self, value: TokenFlags) {
+        self.literal_like_node_base.token_flags.set(value)
     }
 }
 
@@ -3000,7 +3008,11 @@ impl StringLiteral {
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
-        self.literal_like_node_base.token_flags
+        self.literal_like_node_base.token_flags.get()
+    }
+    #[inline]
+    pub fn set_token_flags(&self, value: TokenFlags) {
+        self.literal_like_node_base.token_flags.set(value)
     }
 }
 
@@ -3015,7 +3027,11 @@ impl NumericLiteral {
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
-        self.literal_like_node_base.token_flags
+        self.literal_like_node_base.token_flags.get()
+    }
+    #[inline]
+    pub fn set_token_flags(&self, value: TokenFlags) {
+        self.literal_like_node_base.token_flags.set(value)
     }
 }
 
@@ -3030,7 +3046,11 @@ impl BigIntLiteral {
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
-        self.literal_like_node_base.token_flags
+        self.literal_like_node_base.token_flags.get()
+    }
+    #[inline]
+    pub fn set_token_flags(&self, value: TokenFlags) {
+        self.literal_like_node_base.token_flags.set(value)
     }
 }
 
@@ -3045,7 +3065,11 @@ impl RegularExpressionLiteral {
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
-        self.literal_like_node_base.token_flags
+        self.literal_like_node_base.token_flags.get()
+    }
+    #[inline]
+    pub fn set_token_flags(&self, value: TokenFlags) {
+        self.literal_like_node_base.token_flags.set(value)
     }
 }
 
@@ -3069,7 +3093,11 @@ impl NoSubstitutionTemplateLiteral {
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
-        self.template_literal_like_node_base.literal_like_node_base.token_flags
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.get()
+    }
+    #[inline]
+    pub fn set_token_flags(&self, value: TokenFlags) {
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value)
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -4493,7 +4521,11 @@ impl TemplateHead {
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
-        self.template_literal_like_node_base.literal_like_node_base.token_flags
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.get()
+    }
+    #[inline]
+    pub fn set_token_flags(&self, value: TokenFlags) {
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value)
     }
 }
 
@@ -4516,7 +4548,11 @@ impl TemplateMiddle {
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
-        self.template_literal_like_node_base.literal_like_node_base.token_flags
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.get()
+    }
+    #[inline]
+    pub fn set_token_flags(&self, value: TokenFlags) {
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value)
     }
 }
 
@@ -4539,7 +4575,11 @@ impl TemplateTail {
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
-        self.template_literal_like_node_base.literal_like_node_base.token_flags
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.get()
+    }
+    #[inline]
+    pub fn set_token_flags(&self, value: TokenFlags) {
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value)
     }
 }
 
@@ -4819,7 +4859,11 @@ impl JsxText {
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
-        self.literal_like_node_base.token_flags
+        self.literal_like_node_base.token_flags.get()
+    }
+    #[inline]
+    pub fn set_token_flags(&self, value: TokenFlags) {
+        self.literal_like_node_base.token_flags.set(value)
     }
 }
 
@@ -9771,7 +9815,7 @@ impl NodeFactory {
         self.new_node(Kind::StringLiteral, NodeData::StringLiteral(alloc(StringLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
-                token_flags: token_flags & TokenFlags::StringLiteralFlags,
+                token_flags: Cell::new(token_flags & TokenFlags::StringLiteralFlags),
             },
         })))
     }
@@ -9781,7 +9825,7 @@ impl NodeFactory {
         self.new_node(Kind::NumericLiteral, NodeData::NumericLiteral(alloc(NumericLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
-                token_flags: token_flags & TokenFlags::NumericLiteralFlags,
+                token_flags: Cell::new(token_flags & TokenFlags::NumericLiteralFlags),
             },
         })))
     }
@@ -9791,7 +9835,7 @@ impl NodeFactory {
         self.new_node(Kind::BigIntLiteral, NodeData::BigIntLiteral(alloc(BigIntLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
-                token_flags: token_flags & TokenFlags::NumericLiteralFlags,
+                token_flags: Cell::new(token_flags & TokenFlags::NumericLiteralFlags),
             },
         })))
     }
@@ -9801,7 +9845,7 @@ impl NodeFactory {
         self.new_node(Kind::RegularExpressionLiteral, NodeData::RegularExpressionLiteral(alloc(RegularExpressionLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
-                token_flags: token_flags & TokenFlags::RegularExpressionLiteralFlags,
+                token_flags: Cell::new(token_flags & TokenFlags::RegularExpressionLiteralFlags),
             },
         })))
     }
@@ -9812,7 +9856,7 @@ impl NodeFactory {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
                     text: text,
-                    token_flags: TokenFlags::None,
+                    token_flags: Cell::new(TokenFlags::None),
                 },
                 raw_text: "",
                 template_flags: template_flags & TokenFlags::TemplateLiteralLikeFlags,
@@ -10791,7 +10835,7 @@ impl NodeFactory {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
                     text: text,
-                    token_flags: TokenFlags::None,
+                    token_flags: Cell::new(TokenFlags::None),
                 },
                 raw_text: raw_text,
                 template_flags: template_flags & TokenFlags::TemplateLiteralLikeFlags,
@@ -10805,7 +10849,7 @@ impl NodeFactory {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
                     text: text,
-                    token_flags: TokenFlags::None,
+                    token_flags: Cell::new(TokenFlags::None),
                 },
                 raw_text: raw_text,
                 template_flags: template_flags & TokenFlags::TemplateLiteralLikeFlags,
@@ -10819,7 +10863,7 @@ impl NodeFactory {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
                     text: text,
-                    token_flags: TokenFlags::None,
+                    token_flags: Cell::new(TokenFlags::None),
                 },
                 raw_text: raw_text,
                 template_flags: template_flags & TokenFlags::TemplateLiteralLikeFlags,
@@ -11060,7 +11104,7 @@ impl NodeFactory {
         self.new_node(Kind::JsxText, NodeData::JsxText(alloc(JsxText {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
-                token_flags: TokenFlags::None,
+                token_flags: Cell::new(TokenFlags::None),
             },
             contains_only_trivia_white_spaces: contains_only_trivia_white_spaces,
         })))

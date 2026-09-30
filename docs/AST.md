@@ -133,7 +133,8 @@ writes after construction are `Cell`s (everything else is a plain immutable fiel
 `ShorthandPropertyAssignment.{type_, object_assignment_initializer}`; `ExportAssignment.{type_, expression}`;
 `ReturnStatement.expression`; `ParenthesizedExpression.expression`; `BinaryExpression.{type_, right}`;
 `TypeAliasDeclaration.{type_parameters, type_}`; `ImportClause.phase_modifier`;
-`ExpressionWithTypeArguments.type_arguments`, `HeritageClause.types`.
+`ExpressionWithTypeArguments.type_arguments`, `HeritageClause.types`; and `LiteralLikeNodeBase.token_flags`
+(the checker's node builder flips `SingleQuote` on a cloned string literal).
 `NodeList.nodes` is immutable. Where Go appends to an existing list in place (reparser.go `@implements`:
 `implementsClause.AsHeritageClause().Types.Nodes = append(...)` and `class.HeritageClauses.Nodes = append(...)`),
 the reparser builds a new list with the old list's `loc` and stores it in the owning Cell
