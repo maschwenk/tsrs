@@ -129,7 +129,7 @@ pub trait Discriminator {
     fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool; // True if index-th discriminator matches the given type
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct errorState {
     pub error_chain: Option<P<ErrorChain>>,
     pub related_info: Vec<P<Diagnostic>>,
@@ -160,6 +160,15 @@ pub struct Relater {
     pub overflow: Cell<bool>,
     pub relation_count: Cell<i32>,
     pub next: Cell<Option<P<Relater>>>,
+}
+
+impl Relater {
+    /// The arena handle of this relater, for closures that must be `'static` (`TypeComparer`), where Go passes
+    /// `r.isRelatedToWorker` & co. as values.
+    pub fn as_p(&self) -> P<Relater> {
+        // SAFETY: relaters are only created with `P::new` (`Checker::get_relater`) and never freed or moved.
+        P::from_static(unsafe { &*(self as *const Relater) })
+    }
 }
 
 // The Go `Discriminator` implementations; the method bodies are the inherent methods in relater_1.rs / checker_15.rs.
