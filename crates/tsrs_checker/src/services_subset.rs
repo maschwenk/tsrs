@@ -78,16 +78,66 @@ use std::fmt::Display;
 impl Checker {
     // services.go:870
     pub fn get_constant_value(&mut self, node: P<Node>) -> Option<LiteralValue> {
-        todo!()
+        if node.kind == Kind::EnumMember {
+            return self.get_enum_member_value(node).value;
+        }
+
+        if self.symbol_node_links.get(node).resolved_symbol.get().is_none() {
+            self.check_expression_cached(node); // ensure cached resolved symbol is set
+        }
+        let mut symbol = self.symbol_node_links.get(node).resolved_symbol.get();
+        if symbol.is_none() && ast::is_entity_name_expression(node) {
+            symbol = self.resolve_entity_name(
+                node,
+                SymbolFlags::Value,
+                true,  /*ignoreErrors*/
+                false, /*dontResolveAlias*/
+                None,  /*location*/
+            );
+        }
+        if let Some(symbol) = symbol {
+            if symbol.flags().intersects(SymbolFlags::EnumMember) {
+                // inline property\index accesses only for const enums
+                let member = symbol.value_declaration().unwrap();
+                if ast::is_enum_const(member.parent().unwrap()) {
+                    return self.get_enum_member_value(member).value;
+                }
+            }
+        }
+
+        None
     }
 
     // services.go:1125
+    // IsLibSymbolForHoverVerbosity returns true if a symbol is declared in a lib file.
     pub fn is_lib_symbol_for_hover_verbosity(&mut self, symbol: Option<P<Symbol>>) -> bool {
-        todo!()
+        let Some(symbol) = symbol else {
+            return false;
+        };
+        let declarations = symbol.declarations().clone();
+        for decl in declarations {
+            let sf = ast::get_source_file_of_node(decl);
+            if let Some(sf) = sf {
+                if self.program.is_source_file_default_library(sf.path()) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     // services.go:1140
+    // IsLibTypeForHoverVerbosity returns true if a type is declared in a lib file.
+    // Don't expand types like Array or Promise, instead treating them as opaque.
     pub fn is_lib_type_for_hover_verbosity(&mut self, t: P<Type>) -> bool {
-        todo!()
+        let symbol = if t.object_flags().intersects(ObjectFlags::Reference) {
+            t.target().unwrap().symbol()
+        } else {
+            t.symbol()
+        };
+        if self.is_lib_symbol_for_hover_verbosity(symbol) {
+            return true;
+        }
+        is_tuple_type(t)
     }
 }

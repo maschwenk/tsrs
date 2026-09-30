@@ -75,70 +75,400 @@ pub(crate) fn new_emit_resolver(checker: &mut Checker) -> P<EmitResolver> {
 impl EmitResolver {
     // emitresolver.go:111
     pub(crate) fn is_declaration_visible(&self, c: &mut Checker, node: Option<P<Node>>) -> bool {
-        todo!()
+        // node = r.emitContext.ParseNode(node)
+        let Some(node) = node else {
+            return false;
+        };
+        if !ast::is_parse_tree_node(node) {
+            return false;
+        }
+
+        let links = self.declaration_links.get(node);
+        if links.is_visible.get() == Tristate::Unknown {
+            if self.determine_if_declaration_is_visible(c, node) {
+                links.is_visible.set(Tristate::True);
+            } else {
+                links.is_visible.set(Tristate::False);
+            }
+        }
+        links.is_visible.get() == Tristate::True
     }
 
     // emitresolver.go:131
     pub(crate) fn determine_if_declaration_is_visible(&self, c: &mut Checker, node: P<Node>) -> bool {
-        todo!()
+        match node.kind {
+            Kind::JSDocCallbackTag
+            // | Kind::JSDocEnumTag // !!! TODO: JSDoc @enum support?
+            | Kind::JSDocTypedefTag => {
+                // Top-level jsdoc type aliases are considered exported
+                // First parent is comment node, second is hosting declaration or token; we only care about those tokens or declarations whose parent is a source file
+                match node.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+                    Some(p) => ast::is_source_file(p),
+                    None => false,
+                }
+            }
+            Kind::BindingElement => self.is_declaration_visible(c, node.parent().unwrap().parent()),
+            Kind::VariableDeclaration
+            | Kind::ModuleDeclaration
+            | Kind::ClassDeclaration
+            | Kind::InterfaceDeclaration
+            | Kind::TypeAliasDeclaration
+            | Kind::JSTypeAliasDeclaration
+            | Kind::FunctionDeclaration
+            | Kind::EnumDeclaration
+            | Kind::ImportEqualsDeclaration => {
+                if ast::is_variable_declaration(node) {
+                    let name = node.name().unwrap();
+                    if ast::is_binding_pattern(name) && name.elements().is_empty() {
+                        // If the binding pattern is empty, this variable declaration is not visible
+                        return false;
+                    }
+                    // falls through
+                }
+                // External module augmentation is always visible
+                // A @typedef at top-level in an external module is always visible
+                if ast::is_external_module_augmentation(node) || ast::is_implicitly_exported_jsdoc_declaration(node) {
+                    return true;
+                }
+                let parent = ast::get_declaration_container(node).unwrap();
+                // If the node is not exported or it is not ambient module element (except import declaration)
+                if !c.get_combined_modifier_flags_cached(node).intersects(ModifierFlags::Export)
+                    && !(node.kind != Kind::ImportEqualsDeclaration
+                        && parent.kind != Kind::SourceFile
+                        && parent.flags().intersects(NodeFlags::Ambient))
+                {
+                    return ast::is_global_source_file(parent);
+                }
+                // Exported members/ambient module elements (exception import declaration) are visible if parent is visible
+                self.is_declaration_visible(c, Some(parent))
+            }
+
+            Kind::PropertyDeclaration
+            | Kind::PropertySignature
+            | Kind::GetAccessor
+            | Kind::SetAccessor
+            | Kind::MethodDeclaration
+            | Kind::MethodSignature => {
+                if c.get_effective_declaration_flags(node, ModifierFlags::Private | ModifierFlags::Protected) != ModifierFlags::None {
+                    // Private/protected properties/methods are not visible
+                    return false;
+                }
+                // Public properties/methods are visible if its parents are visible, so:
+                self.is_declaration_visible(c, node.parent())
+            }
+
+            Kind::Constructor
+            | Kind::ConstructSignature
+            | Kind::CallSignature
+            | Kind::IndexSignature
+            | Kind::Parameter
+            | Kind::ModuleBlock
+            | Kind::FunctionType
+            | Kind::ConstructorType
+            | Kind::TypeLiteral
+            | Kind::TypeReference
+            | Kind::ArrayType
+            | Kind::TupleType
+            | Kind::UnionType
+            | Kind::IntersectionType
+            | Kind::ParenthesizedType
+            | Kind::NamedTupleMember => self.is_declaration_visible(c, node.parent()),
+
+            // Default binding, import specifier and namespace import is visible
+            // only on demand so by default it is not visible
+            Kind::ImportClause | Kind::NamespaceImport | Kind::ImportSpecifier => false,
+
+            // Type parameters are always visible
+            Kind::TypeParameter => true,
+            // Source file and namespace export are always visible
+            Kind::SourceFile | Kind::NamespaceExportDeclaration => true,
+
+            // Export assignments do not create name bindings outside the module
+            Kind::ExportAssignment => false,
+
+            // An `export {X}` (without a module specifier) is itself a visible re-export of
+            // the named binding; it contributes to the symbol's external visibility.
+            Kind::ExportSpecifier => {
+                let export_decl = node.parent().unwrap().parent().unwrap();
+                if ast::is_export_declaration(export_decl) && export_decl.as_export_declaration().module_specifier.is_none() {
+                    return self.is_declaration_visible(c, export_decl.parent());
+                }
+                false
+            }
+
+            _ => false,
+        }
     }
 }
 
 // emitresolver.go:311
 pub(crate) fn get_meaning_of_entity_name_reference(entity_name: P<Node>) -> SymbolFlags {
-    todo!()
+    let parent = entity_name.parent().unwrap();
+    // get symbol of the first identifier of the entityName
+    if parent.kind == Kind::TypeQuery
+        || parent.kind == Kind::ExpressionWithTypeArguments && !ast::is_part_of_type_node(parent)
+        || parent.kind == Kind::ComputedPropertyName
+        || parent.kind == Kind::TypePredicate && parent.as_type_predicate_node().parameter_name == entity_name
+        || parent.kind == Kind::BinaryExpression
+    {
+        // Typeof value
+        return SymbolFlags::Value | SymbolFlags::ExportValue;
+    }
+    if entity_name.kind == Kind::QualifiedName
+        || entity_name.kind == Kind::PropertyAccessExpression
+        || parent.kind == Kind::ImportEqualsDeclaration
+        || (parent.kind == Kind::QualifiedName && parent.as_qualified_name().left == entity_name)
+        || (parent.kind == Kind::PropertyAccessExpression && parent.expression() == Some(entity_name))
+        || (parent.kind == Kind::ElementAccessExpression && parent.expression() == Some(entity_name))
+    {
+        // Left identifier from type reference or TypeAlias
+        // Entity name of the import declaration
+        return SymbolFlags::Namespace;
+    }
+    // Type Reference or TypeAlias entity = Identifier
+    SymbolFlags::Type
 }
 
 impl EmitResolver {
     // emitresolver.go:340
-    pub(crate) fn is_entity_name_visible(&self, c: &mut Checker, entity_name: P<Node>, enclosing_declaration: P<Node>, should_compute_alias_to_make_visible: bool) -> SymbolAccessibilityResult {
-        todo!()
+    pub(crate) fn is_entity_name_visible(&self, c: &mut Checker, entity_name: P<Node>, enclosing_declaration: Option<P<Node>>, should_compute_alias_to_make_visible: bool) -> SymbolAccessibilityResult {
+        // node = r.emitContext.ParseNode(entityName)
+        if !ast::is_parse_tree_node(entity_name) {
+            return SymbolAccessibilityResult { accessibility: SymbolAccessibility::NotAccessible, ..Default::default() };
+        }
+
+        let meaning = get_meaning_of_entity_name_reference(entity_name);
+        let first_identifier = ast::get_first_identifier(entity_name);
+
+        let symbol = c.resolve_name(enclosing_declaration, first_identifier.text(), meaning, None, false, false);
+
+        if let Some(symbol) = symbol {
+            if symbol.flags().intersects(SymbolFlags::TypeParameter) && meaning.intersects(SymbolFlags::Type) {
+                return SymbolAccessibilityResult { accessibility: SymbolAccessibility::Accessible, ..Default::default() };
+            }
+        }
+
+        if symbol.is_none() && ast::is_this_identifier(first_identifier) {
+            let this_container = c.get_this_container(first_identifier, false, false).unwrap();
+            let sym = c.get_symbol_of_declaration(this_container);
+            if self.is_symbol_accessible(c, sym, enclosing_declaration, meaning, false).accessibility == SymbolAccessibility::Accessible {
+                return SymbolAccessibilityResult { accessibility: SymbolAccessibility::Accessible, ..Default::default() };
+            }
+        }
+
+        let Some(symbol) = symbol else {
+            return SymbolAccessibilityResult {
+                accessibility: SymbolAccessibility::NotResolved,
+                error_symbol_name: first_identifier.text().to_string(),
+                error_node: Some(first_identifier),
+                ..Default::default()
+            };
+        };
+
+        let visible = self.has_visible_declarations(c, symbol, should_compute_alias_to_make_visible);
+        if let Some(visible) = visible {
+            return (*visible).clone();
+        }
+
+        SymbolAccessibilityResult {
+            accessibility: SymbolAccessibility::NotAccessible,
+            error_symbol_name: first_identifier.text().to_string(),
+            error_node: Some(first_identifier),
+            ..Default::default()
+        }
     }
 }
 
 // emitresolver.go:382
 pub(crate) fn noop_add_visible_alias(declaration: P<Node>, aliasing_statement: P<Node>) {
-    todo!()
+    let _ = (declaration, aliasing_statement);
 }
 
 impl EmitResolver {
     // emitresolver.go:384
     pub(crate) fn has_visible_declarations(&self, c: &mut Checker, symbol: P<Symbol>, should_compute_alias_to_make_visible: bool) -> Option<P<SymbolAccessibilityResult>> {
-        todo!()
+        // Go collects into a map[NodeId]*Node and returns its values in (random) map order; this keeps
+        // first-insertion order, overwriting the value on a repeated key like the map assignment does.
+        let mut aliases_to_make_visible_set: Option<Vec<(NodeId, P<Node>)>> = None;
+
+        {
+            let mut add_visible_alias: Box<dyn FnMut(P<Node>, P<Node>) + '_> = if should_compute_alias_to_make_visible {
+                let aliases_to_make_visible_set = &mut aliases_to_make_visible_set;
+                Box::new(move |declaration: P<Node>, aliasing_statement: P<Node>| {
+                    self.declaration_links.get(declaration).is_visible.set(Tristate::True);
+                    let set = aliases_to_make_visible_set.get_or_insert_with(Vec::new);
+                    let id = ast::get_node_id(declaration);
+                    match set.iter_mut().find(|(k, _)| *k == id) {
+                        Some(entry) => entry.1 = aliasing_statement,
+                        None => set.push((id, aliasing_statement)),
+                    }
+                })
+            } else {
+                Box::new(noop_add_visible_alias)
+            };
+
+            let declarations = symbol.declarations().clone();
+            for declaration in declarations {
+                if ast::is_identifier(declaration) {
+                    continue;
+                }
+                if !self.is_declaration_visible(c, Some(declaration)) {
+                    // Mark the unexported alias as visible if its parent is visible
+                    // because these kind of aliases can be used to name types in declaration file
+                    let any_import_syntax = get_any_import_syntax(declaration);
+                    if let Some(any_import_syntax) = any_import_syntax {
+                        if !ast::has_syntactic_modifier(any_import_syntax, ModifierFlags::Export) && // import clause without export
+                            self.is_declaration_visible(c, any_import_syntax.parent())
+                        {
+                            add_visible_alias(declaration, any_import_syntax);
+                            continue;
+                        }
+                    }
+                    if ast::is_variable_declaration(declaration) {
+                        let variable_statement = declaration.parent().unwrap().parent().unwrap();
+                        if ast::is_variable_statement(variable_statement)
+                            && !ast::has_syntactic_modifier(variable_statement, ModifierFlags::Export) // unexported variable statement
+                            && self.is_declaration_visible(c, variable_statement.parent())
+                        {
+                            add_visible_alias(declaration, variable_statement);
+                            continue;
+                        }
+                    }
+                    if ast::is_late_visibility_painted_statement(declaration) // unexported top-level statement
+                        && !ast::has_syntactic_modifier(declaration, ModifierFlags::Export)
+                        && self.is_declaration_visible(c, declaration.parent())
+                    {
+                        add_visible_alias(declaration, declaration);
+                        continue;
+                    }
+                    if ast::is_binding_element(declaration) {
+                        if symbol.flags().intersects(SymbolFlags::Alias) && ast::is_in_js_file(declaration) {
+                            // exported import-like top-level JS require statement
+                            let p2 = declaration.parent().and_then(|p| p.parent());
+                            if let Some(p2) = p2 {
+                                if ast::is_variable_declaration(p2) {
+                                    let p4 = p2.parent().unwrap().parent();
+                                    if let Some(p4) = p4 {
+                                        if ast::is_variable_statement(p4) && !ast::has_syntactic_modifier(p4, ModifierFlags::Export) {
+                                            // check if the thing containing the variable statement is visible (ie, the file)
+                                            let p5 = p4.parent();
+                                            if p5.is_some() && self.is_declaration_visible(c, p5) {
+                                                add_visible_alias(declaration, p4);
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if symbol.flags().intersects(SymbolFlags::BlockScopedVariable) {
+                            let root_declaration = ast::walk_up_binding_elements_and_patterns(declaration);
+                            if ast::is_parameter_declaration(root_declaration) {
+                                return None;
+                            }
+                            let variable_statement = root_declaration.parent().unwrap().parent().unwrap();
+                            if !ast::is_variable_statement(variable_statement) {
+                                return None;
+                            }
+                            if ast::has_syntactic_modifier(variable_statement, ModifierFlags::Export) {
+                                continue; // no alias to add, already exported
+                            }
+                            if !self.is_declaration_visible(c, variable_statement.parent()) {
+                                return None; // not visible
+                            }
+                            add_visible_alias(declaration, variable_statement);
+                            continue;
+                        }
+                    }
+
+                    // Declaration is not visible
+                    return None;
+                }
+            }
+        }
+
+        Some(P::new(SymbolAccessibilityResult {
+            accessibility: SymbolAccessibility::Accessible,
+            aliases_to_make_visible: aliases_to_make_visible_set.unwrap_or_default().into_iter().map(|(_, n)| n).collect(),
+            ..Default::default()
+        }))
     }
 
     // emitresolver.go:585
-    pub(crate) fn requires_adding_implicit_undefined(&self, c: &mut Checker, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: P<Node>) -> bool {
-        todo!()
+    pub(crate) fn requires_adding_implicit_undefined(&self, c: &mut Checker, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>) -> bool {
+        // node = r.emitContext.ParseNode(node)
+        if !ast::is_parse_tree_node(declaration) {
+            return false;
+        }
+        match declaration.kind {
+            Kind::PropertyDeclaration | Kind::PropertySignature | Kind::JSDocPropertyTag => {
+                let symbol = match symbol {
+                    Some(s) => s,
+                    None => c.get_symbol_of_declaration(declaration).unwrap(),
+                };
+                let t = c.get_type_of_symbol(symbol);
+                let _ = c.mapped_symbol_links.has(symbol);
+                symbol.flags().intersects(SymbolFlags::Property)
+                    && symbol.flags().intersects(SymbolFlags::Optional)
+                    && is_optional_declaration(declaration)
+                    && c.reverse_mapped_symbol_links.has(symbol)
+                    && c.reverse_mapped_symbol_links.get(symbol).mapped_type.get().is_some()
+                    && contains_non_missing_undefined_type(c, t)
+            }
+            Kind::Parameter | Kind::JSDocParameterTag => self.requires_adding_implicit_undefined_worker(c, declaration, enclosing_declaration),
+            _ => panic!("Node cannot possibly require adding undefined"),
+        }
     }
 
     // emitresolver.go:605
-    pub(crate) fn requires_adding_implicit_undefined_worker(&self, c: &mut Checker, parameter: P<Node>, enclosing_declaration: P<Node>) -> bool {
-        todo!()
+    pub(crate) fn requires_adding_implicit_undefined_worker(&self, c: &mut Checker, parameter: P<Node>, enclosing_declaration: Option<P<Node>>) -> bool {
+        (self.is_required_initialized_parameter(c, parameter, enclosing_declaration) || self.is_optional_uninitialized_parameter_property(c, parameter))
+            && !self.declared_parameter_type_contains_undefined(c, parameter)
     }
 
     // emitresolver.go:609
     pub(crate) fn declared_parameter_type_contains_undefined(&self, c: &mut Checker, parameter: P<Node>) -> bool {
-        todo!()
+        // typeNode := getNonlocalEffectiveTypeAnnotationNode(parameter); // !!! JSDoc Support
+        let Some(type_node) = parameter.type_node() else {
+            return false;
+        };
+        let t = c.get_type_from_type_node(type_node);
+        // allow error type here to avoid confusing errors that the annotation has to contain undefined when it does in cases like this:
+        //
+        // export function fn(x?: Unresolved | undefined): void {}
+        c.is_error_type(t) || c.contains_undefined_type(t)
     }
 
     // emitresolver.go:622
     pub(crate) fn is_optional_uninitialized_parameter_property(&self, c: &mut Checker, parameter: P<Node>) -> bool {
-        todo!()
+        c.strict_null_checks
+            && self.is_optional_parameter(c, parameter)
+            && ( /*isJSDocParameterTag(parameter) ||*/parameter.initializer().is_none()) // !!! TODO: JSDoc support
+            && ast::has_syntactic_modifier(parameter, ModifierFlags::ParameterPropertyModifier)
     }
 
     // emitresolver.go:629
     pub(crate) fn is_required_initialized_parameter(&self, c: &mut Checker, parameter: P<Node>, enclosing_declaration: Option<P<Node>>) -> bool {
-        todo!()
+        if !c.strict_null_checks || self.is_optional_parameter(c, parameter) || /*isJSDocParameterTag(parameter) ||*/ parameter.initializer().is_none() {
+            // !!! TODO: JSDoc Support
+            return false;
+        }
+        if ast::has_syntactic_modifier(parameter, ModifierFlags::ParameterPropertyModifier) {
+            return enclosing_declaration.is_some() && ast::is_function_like_declaration(enclosing_declaration);
+        }
+        true
     }
 
     // emitresolver.go:639
     pub(crate) fn is_optional_parameter(&self, c: &mut Checker, node: P<Node>) -> bool {
-        todo!()
+        c.is_optional_parameter(node)
     }
 
     // emitresolver.go:681
-    pub(crate) fn is_symbol_accessible(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: P<Node>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult {
-        todo!()
+    pub(crate) fn is_symbol_accessible(&self, c: &mut Checker, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult {
+        // SIG: Go calls `r.checker.IsSymbolAccessible(symbol, enclosingDeclaration, ...)`, which accepts nil for both
+        // (it is `isSymbolAccessibleWorker(..., true /*allowModules*/)`); `Checker::is_symbol_accessible` should take
+        // `Option<P<Symbol>>` / `Option<P<Node>>`. Until then, call its body directly.
+        c.is_symbol_accessible_worker(symbol, enclosing_declaration, meaning, should_compute_alias_to_mark_visible, true /*allowModules*/)
     }
 }

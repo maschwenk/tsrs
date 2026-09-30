@@ -449,6 +449,23 @@ pub fn replace_modifiers(factory: &NodeFactory, node: P<Node>, modifier_array: O
     panic!("Node that does not have modifiers tried to have modifier replaced: {}", node.kind as i16)
 }
 
+pub fn is_late_visibility_painted_statement(node: P<Node>) -> bool {
+    matches!(
+        node.kind,
+        Kind::ImportDeclaration
+            | Kind::JSImportDeclaration
+            | Kind::ImportEqualsDeclaration
+            | Kind::VariableStatement
+            | Kind::ClassDeclaration
+            | Kind::FunctionDeclaration
+            | Kind::ModuleDeclaration
+            | Kind::TypeAliasDeclaration
+            | Kind::JSTypeAliasDeclaration
+            | Kind::InterfaceDeclaration
+            | Kind::EnumDeclaration
+    )
+}
+
 pub fn is_external_module_augmentation(node: P<Node>) -> bool {
     is_ambient_module(node) && is_module_augmentation_external(node)
 }
