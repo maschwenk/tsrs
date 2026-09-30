@@ -1467,3 +1467,7 @@ pub(crate) fn get_module_specifier_with_preferences(
 
     get_local_module_specifier(to_file_name, &info, compiler_options, host, resolution_mode, &preferences, false)
 }
+
+#[cfg(test)]
+#[path = "specifiers_test.rs"]
+mod specifiers_test;
