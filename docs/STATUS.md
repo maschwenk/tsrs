@@ -32,3 +32,17 @@ Project (`tsrs -p apps/project`, release build, single checker thread, placehold
 
 Counter differences (<0.03%) are expected while the node builder is a placeholder (Go creates a few types while
 printing speculative error messages).
+
+## 2026-09-30 (later): compiler-level fixes, node-builder skeleton merged
+
+Conformance on main: **10,519 pass / 2,876 codes / 67 fail / 0 timeout / 0 crash** (suite wall time ~11 s).
+
+Of the 67 fails: 59 are declaration diagnostics (TS2883/TS4xxx/TS9xxx… from the declaration-emit pipeline, not ported:
+~7k Go lines in `transformers/declarations`, `emitresolver.go`, isolatedDeclarations); 6 are placeholder-printer effects;
+2 (`mutuallyRecursiveInference`, `recursiveMappedTypes`) depend on the Go test harness running JS emit before collecting
+diagnostics (the `tsgo` CLI itself reports what we report).
+
+Project error injection (same 15 errors appended to 3 files in a clone): identical (file, line, col, code) sets and
+exit code versus the reference. A mutation-testing campaign is in progress (`tools/mutate`, `notes/fix-project.md`).
+
+In flight: node-builder body wave (branches `body/nb-1..6`) replacing the placeholder type printer.
