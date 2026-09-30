@@ -1,4 +1,6 @@
 mod baseline;
+#[cfg(feature = "compiler")]
+mod compile;
 mod compiler_runner;
 mod diagnosticwriter;
 mod harnessutil;
@@ -54,10 +56,12 @@ pub struct Backend {
 }
 
 pub fn option_table(spec: &BackendSpec) -> OptionTable {
-    let path = spec
-        .options
-        .clone()
-        .or_else(|| std::env::var("TSRS_TEST_OPTIONS").ok())
+    let path = spec.options.clone().or_else(|| std::env::var("TSRS_TEST_OPTIONS").ok());
+    #[cfg(feature = "compiler")]
+    if path.is_none() {
+        return compile::tsoptions_option_table();
+    }
+    let path = path
         .unwrap_or_else(|| compiler_runner::repo_root().join("target/scratch/testrunner/options.json").to_string_lossy().into_owned());
     oracle::load_option_table(&path).unwrap_or_else(|e| panic!("option table: {e}"))
 }
@@ -71,8 +75,10 @@ impl Backend {
         if let Some(o) = &self.oracle {
             return o.run(item);
         }
-        let _ = &self.table;
-        Outcome::Error("tsrs_compiler is not wired into the harness yet".to_string())
+        #[cfg(feature = "compiler")]
+        return compile::run(item, &self.table);
+        #[cfg(not(feature = "compiler"))]
+        Outcome::Error("built without the `compiler` feature".to_string())
     }
 }
 
