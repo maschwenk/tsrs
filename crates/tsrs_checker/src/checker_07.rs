@@ -2140,7 +2140,7 @@ impl Checker {
     pub(crate) fn get_target_of_module_default(&mut self, module_symbol: P<Symbol>, node: P<Node>, dont_resolve_alias: bool) -> Option<P<Symbol>> {
         let file = module_symbol.declarations().iter().copied().find(|&d| ast::is_source_file(d));
         let specifier = self.get_module_specifier_for_import_or_export(node);
-        let mut export_default_symbol: Option<P<Symbol>> = None;
+        let export_default_symbol: Option<P<Symbol>>;
         let mut export_module_dot_exports_symbol: Option<P<Symbol>> = None;
         if is_shorthand_ambient_module_symbol(module_symbol) {
             // !!! exportDefaultSymbol = moduleSymbol
