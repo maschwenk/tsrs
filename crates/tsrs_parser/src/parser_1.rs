@@ -4,11 +4,12 @@ use std::sync::LazyLock;
 
 use bitflags::bitflags;
 use rustc_hash::{FxHashMap, FxHashSet};
-use tsrs_ast::{self as ast, CommentRange, Diagnostic, Kind, ModifierFlags, ModifierList, Node, NodeFactory, NodeFlags, NodeList, SourceFile, SourceFileParseOptions, TokenFlags};
+use tsrs_ast::{self as ast, CommentRange, Diagnostic, DiagnosticExt, Kind, ModifierFlags, ModifierList, Node, NodeFactory, NodeFlags, NodeList, SourceFile, SourceFileParseOptions, TokenFlags};
 use tsrs_core::{alloc_slice, alloc_str, new_text_range, tspath, LanguageVariant, ScriptKind, TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_scanner::{self as scanner, Scanner, ScannerState};
 
+use crate::parser_3::{attach_file_to_diagnostics, get_comment_pragmas};
 use crate::references::collect_external_module_references;
 use crate::types::ParseFlags;
 use crate::utilities::{get_language_variant, is_keyword_or_punctuation, token_is_identifier_or_keyword};
