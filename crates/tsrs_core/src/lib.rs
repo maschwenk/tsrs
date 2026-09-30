@@ -2,6 +2,9 @@ pub mod ptr;
 pub use ptr::{alloc, alloc_slice, alloc_str, alloc_vec, P};
 
 pub mod collections;
+pub mod glob;
+pub mod jsnum;
+pub mod semver;
 pub mod stringutil;
 
 mod languagevariant;
