@@ -768,7 +768,6 @@ impl GlobVisitor {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn match_files(
     path: &str,
     extensions: &[impl AsRef<str>],
@@ -852,3 +851,7 @@ pub fn new_spec_matcher(specs: &[impl AsRef<str>], base_path: &str, usage: Usage
     }
     Some(SpecMatcher { patterns })
 }
+
+#[cfg(test)]
+#[path = "vfsmatch_test.rs"]
+mod vfsmatch_test;
