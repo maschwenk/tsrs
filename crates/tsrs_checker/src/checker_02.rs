@@ -1855,116 +1855,587 @@ impl Checker {
 
     // checker.go:3830
     pub(crate) fn check_if_statement(&mut self, node: P<Node>) {
-        todo!()
+        self.check_grammar_statement_in_ambient_context(node);
+        let t = self.check_truthiness_expression(node.expression().unwrap(), CheckMode::Normal);
+        let data = node.as_if_statement();
+        self.check_testing_known_truthy_callable_or_awaitable_or_enum_member_type(node.expression().unwrap(), t, Some(data.then_statement));
+        self.check_source_element(Some(data.then_statement));
+        if ast::is_empty_statement(data.then_statement) {
+            self.error(Some(data.then_statement), &diagnostics::The_body_of_an_if_statement_cannot_be_the_empty_statement, &[]);
+        }
+        self.check_source_element(data.else_statement);
     }
 
     // checker.go:3842
     pub(crate) fn check_testing_known_truthy_callable_or_awaitable_or_enum_member_type(&mut self, cond_expr: P<Node>, cond_type: P<Type>, body: Option<P<Node>>) {
-        todo!()
+        if !self.strict_null_checks {
+            return;
+        }
+        self.check_testing_known_truthy_types(cond_expr, cond_type, body);
     }
 
     // checker.go:3849
     pub(crate) fn check_testing_known_truthy_types(&mut self, cond_expr: P<Node>, cond_type: P<Type>, body: Option<P<Node>>) {
-        todo!()
+        let mut cond_expr = ast::skip_parentheses(cond_expr);
+        self.check_testing_known_truthy_type(cond_expr, cond_type, body);
+        while ast::is_binary_expression(cond_expr)
+            && (cond_expr.as_binary_expression().operator_token.kind == Kind::BarBarToken
+                || cond_expr.as_binary_expression().operator_token.kind == Kind::QuestionQuestionToken)
+        {
+            cond_expr = ast::skip_parentheses(cond_expr.as_binary_expression().left);
+            self.check_testing_known_truthy_type(cond_expr, cond_type, body);
+        }
     }
 
     // checker.go:3858
     pub(crate) fn check_testing_known_truthy_type(&mut self, cond_expr: P<Node>, cond_type: P<Type>, body: Option<P<Node>>) {
-        todo!()
+        let mut location = cond_expr;
+        if ast::is_logical_or_coalescing_binary_expression(cond_expr) {
+            location = ast::skip_parentheses(cond_expr.as_binary_expression().right());
+        }
+        if ast::is_module_exports_access_expression(location) {
+            return;
+        }
+        if ast::is_logical_or_coalescing_binary_expression(location) {
+            self.check_testing_known_truthy_types(location, cond_type, body);
+            return;
+        }
+        let mut t = cond_type;
+        if location != cond_expr {
+            t = self.check_expression(location);
+        }
+        if t.flags().intersects(TypeFlags::EnumLiteral)
+            && ast::is_property_access_expression(location)
+            && self.get_resolved_symbol_or_nil(location.expression().unwrap()).unwrap_or(self.unknown_symbol).flags().intersects(SymbolFlags::Enum)
+        {
+            // EnumLiteral type at condition with known value is always truthy or always falsy, likely an error
+            let value = if_else(evaluator::is_truthy(t.as_literal_type().value.get().unwrap()), "true", "false");
+            self.error(Some(location), &diagnostics::This_condition_will_always_return_0, &[&value]);
+            return;
+        }
+        let is_property_expression_cast = ast::is_property_access_expression(location) && crate::is_type_assertion(location.expression().unwrap());
+        if !self.has_type_facts(t, TypeFacts::Truthy) || is_property_expression_cast {
+            return;
+        }
+        // While it technically should be invalid for any known-truthy value
+        // to be tested, we de-scope to functions and Promises unreferenced in
+        // the block as a heuristic to identify the most common bugs. There
+        // are too many false positives for values sourced from type
+        // definitions without strictNullChecks otherwise.
+        let call_signatures = self.get_signatures_of_type(t, SignatureKind::Call);
+        let is_promise = self.get_awaited_type_of_promise(t).is_some();
+        if call_signatures.is_empty() && !is_promise {
+            return;
+        }
+        let mut tested_node: Option<P<Node>> = None;
+        if ast::is_identifier(location) {
+            tested_node = Some(location);
+        } else if ast::is_property_access_expression(location) {
+            tested_node = location.name();
+        }
+        let mut tested_symbol: Option<P<Symbol>> = None;
+        if let Some(tested_node) = tested_node {
+            tested_symbol = self.get_symbol_at_location(tested_node, false);
+        }
+        if tested_symbol.is_none() && !is_promise {
+            return;
+        }
+        let is_used = tested_symbol.is_some_and(|tested_symbol| {
+            let parent = cond_expr.parent().unwrap();
+            ast::is_binary_expression(parent) && self.is_symbol_used_in_binary_expression_chain(parent, tested_symbol)
+        }) || tested_symbol.is_some_and(|tested_symbol| body.is_some_and(|body| self.is_symbol_used_in_condition_body(cond_expr, body, tested_node, tested_symbol)));
+        if !is_used {
+            if is_promise {
+                let s = self.get_type_name_for_error_display(t);
+                self.error_and_maybe_suggest_await(Some(location), true, &diagnostics::This_condition_will_always_return_true_since_this_0_is_always_defined, &[&s]);
+            } else {
+                self.error(
+                    Some(location),
+                    &diagnostics::This_condition_will_always_return_true_since_this_function_is_always_defined_Did_you_mean_to_call_it_instead,
+                    &[],
+                );
+            }
+        }
     }
 
     // checker.go:3918
     pub(crate) fn is_symbol_used_in_binary_expression_chain(&mut self, node: P<Node>, tested_symbol: P<Symbol>) -> bool {
-        todo!()
+        fn visit(c: &mut Checker, child: P<Node>, tested_symbol: P<Symbol>) -> bool {
+            if ast::is_identifier(child) {
+                let symbol = c.get_symbol_at_location(child, false);
+                if symbol.is_some() && symbol == Some(tested_symbol) {
+                    return true;
+                }
+            }
+            child.for_each_child(&mut |n| visit(c, n, tested_symbol))
+        }
+        let mut node = node;
+        while ast::is_binary_expression(node) && node.as_binary_expression().operator_token.kind == Kind::AmpersandAmpersandToken {
+            let is_used = node.as_binary_expression().right().for_each_child(&mut |n| visit(self, n, tested_symbol));
+            if is_used {
+                return true;
+            }
+            node = node.parent().unwrap();
+        }
+        false
     }
 
     // checker.go:3939
     pub(crate) fn is_symbol_used_in_condition_body(&mut self, expr: P<Node>, body: P<Node>, tested_node: Option<P<Node>>, tested_symbol: P<Symbol>) -> bool {
-        todo!()
+        fn visit(c: &mut Checker, child_node: P<Node>, expr: P<Node>, tested_node: Option<P<Node>>, tested_symbol: P<Symbol>) -> bool {
+            if ast::is_identifier(child_node) {
+                let child_symbol = c.get_symbol_at_location(child_node, false);
+                if child_symbol.is_some() && child_symbol == Some(tested_symbol) {
+                    // If the test was a simple identifier, the above check is sufficient
+                    let tested = tested_node.unwrap();
+                    if ast::is_identifier(expr) || ast::is_identifier(tested) && ast::is_binary_expression(tested.parent().unwrap()) {
+                        return true;
+                    }
+                    // Otherwise we need to ensure the symbol is called on the same target
+                    let mut tested_expression = tested.parent();
+                    let mut child_expression = child_node.parent();
+                    while let (Some(te), Some(ce)) = (tested_expression, child_expression) {
+                        if ast::is_identifier(te) && ast::is_identifier(ce) || te.kind == Kind::ThisKeyword && ce.kind == Kind::ThisKeyword {
+                            return c.get_symbol_at_location(te, false) == c.get_symbol_at_location(ce, false);
+                        } else if ast::is_property_access_expression(te) && ast::is_property_access_expression(ce) {
+                            if c.get_symbol_at_location(te.name().unwrap(), false) != c.get_symbol_at_location(ce.name().unwrap(), false) {
+                                return false;
+                            }
+                            child_expression = ce.expression();
+                            tested_expression = te.expression();
+                        } else if ast::is_call_expression(te) && ast::is_call_expression(ce) {
+                            child_expression = ce.expression();
+                            tested_expression = te.expression();
+                        } else {
+                            return false;
+                        }
+                    }
+                }
+            }
+            child_node.for_each_child(&mut |n| visit(c, n, expr, tested_node, tested_symbol))
+        }
+        body.for_each_child(&mut |n| visit(self, n, expr, tested_node, tested_symbol))
     }
 
     // checker.go:3975
     pub(crate) fn check_do_statement(&mut self, node: P<Node>) {
-        todo!()
+        self.check_grammar_statement_in_ambient_context(node);
+        self.check_source_element(Some(node.statement()));
+        self.check_truthiness_expression(node.expression().unwrap(), CheckMode::Normal);
     }
 
     // checker.go:3981
     pub(crate) fn check_while_statement(&mut self, node: P<Node>) {
-        todo!()
+        self.check_grammar_statement_in_ambient_context(node);
+        self.check_truthiness_expression(node.expression().unwrap(), CheckMode::Normal);
+        self.check_source_element(Some(node.statement()));
     }
 
     // checker.go:3987
     pub(crate) fn check_for_statement(&mut self, node: P<Node>) {
-        todo!()
+        if !self.check_grammar_statement_in_ambient_context(node) {
+            if let Some(init) = node.initializer() {
+                if init.kind == Kind::VariableDeclarationList {
+                    self.check_grammar_variable_declaration_list(init);
+                }
+            }
+        }
+        let data = node.as_for_statement();
+        if let Some(initializer) = data.initializer {
+            if ast::is_variable_declaration_list(initializer) {
+                self.check_variable_declaration_list(initializer);
+            } else {
+                self.check_expression(initializer);
+            }
+        }
+        if let Some(condition) = data.condition {
+            self.check_truthiness_expression(condition, CheckMode::Normal);
+        }
+        if let Some(incrementor) = data.incrementor {
+            self.check_expression(incrementor);
+        }
+        self.check_source_element(Some(node.statement()));
+        if node.locals().is_some() {
+            self.register_for_unused_identifiers_check(node);
+        }
     }
 
     // checker.go:4013
     pub(crate) fn check_for_in_statement(&mut self, node: P<Node>) {
-        todo!()
+        let data = node.as_for_in_or_of_statement();
+        self.check_grammar_for_in_or_for_of_statement(node);
+        let expression_type = self.check_expression(data.expression);
+        let right_type = self.get_non_nullable_type_if_needed(expression_type);
+        // TypeScript 1.0 spec (April 2014): 5.4
+        // In a 'for-in' statement of the form
+        // for (let VarDecl in Expr) Statement
+        //   VarDecl must be a variable declaration without a type annotation that declares a variable of type Any,
+        //   and Expr must be an expression of type Any, an object type, or a type parameter type.
+        if ast::is_variable_declaration_list(data.initializer) {
+            let declarations = data.initializer.as_variable_declaration_list().declarations.nodes();
+            if !declarations.is_empty() && ast::is_binding_pattern(declarations[0].name().unwrap()) {
+                self.error(declarations[0].name(), &diagnostics::The_left_hand_side_of_a_for_in_statement_cannot_be_a_destructuring_pattern, &[]);
+            }
+            self.check_variable_declaration_list(data.initializer);
+        } else {
+            // In a 'for-in' statement of the form
+            // for (Var in Expr) Statement
+            //   Var must be an expression classified as a reference of type Any or the String primitive type,
+            //   and Expr must be an expression of type Any, an object type, or a type parameter type.
+            let var_expr = data.initializer;
+            let left_type = self.check_expression(var_expr);
+            if ast::is_array_literal_expression(var_expr) || ast::is_object_literal_expression(var_expr) {
+                self.error(Some(var_expr), &diagnostics::The_left_hand_side_of_a_for_in_statement_cannot_be_a_destructuring_pattern, &[]);
+            } else if {
+                let index_type = self.get_index_type_or_string(right_type);
+                !self.is_type_assignable_to(index_type, left_type)
+            } {
+                self.error(Some(var_expr), &diagnostics::The_left_hand_side_of_a_for_in_statement_must_be_of_type_string_or_any, &[]);
+            } else {
+                // run check only former check succeeded to avoid cascading errors
+                self.check_reference_expression(
+                    var_expr,
+                    &diagnostics::The_left_hand_side_of_a_for_in_statement_must_be_a_variable_or_a_property_access,
+                    &diagnostics::The_left_hand_side_of_a_for_in_statement_may_not_be_an_optional_property_access,
+                );
+            }
+        }
+        // unknownType is returned i.e. if node.expression is identifier whose name cannot be resolved
+        // in this case error about missing name is already reported - do not report extra one
+        if right_type == self.never_type || !self.is_type_assignable_to_kind(right_type, TypeFlags::NonPrimitive | TypeFlags::InstantiableNonPrimitive) {
+            let s = self.type_to_string_exported(right_type);
+            self.error(
+                Some(data.expression),
+                &diagnostics::The_right_hand_side_of_a_for_in_statement_must_be_of_type_any_an_object_type_or_a_type_parameter_but_here_has_type_0,
+                &[&s],
+            );
+        }
+        self.check_source_element(Some(data.statement));
+        if node.locals().is_some() {
+            self.register_for_unused_identifiers_check(node);
+        }
     }
 
     // checker.go:4055
     pub(crate) fn get_index_type_or_string(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        let index_type = self.get_index_type(t);
+        let index_type = self.get_extract_string_type(index_type);
+        if_else(index_type.flags().intersects(TypeFlags::Never), self.string_type, index_type)
     }
 
     // checker.go:4060
     pub(crate) fn check_for_of_statement(&mut self, node: P<Node>) {
-        todo!()
+        let data = node.as_for_in_or_of_statement();
+        self.check_grammar_for_in_or_for_of_statement(node);
+        let container = get_containing_function_or_class_static_block(node);
+        if let Some(await_modifier) = data.await_modifier {
+            if container.is_some_and(|container| ast::is_class_static_block_declaration(container)) {
+                self.grammar_error_on_node(await_modifier, &diagnostics::X_for_await_loops_cannot_be_used_inside_a_class_static_block, &[]);
+            } else {
+                let function_flags = ast::get_function_flags(container);
+                if (function_flags & (FunctionFlags::Invalid | FunctionFlags::Async)) == FunctionFlags::Async && self.language_version < LanguageFeatureMinimumTarget.for_await_of {
+                    // for..await..of in an async function or async generator function prior to ESNext requires the __asyncValues helper
+                    self.check_external_emit_helpers(node, ExternalEmitHelpers::ForAwaitOfIncludes);
+                }
+            }
+        } // Check the LHS and RHS
+        // If the LHS is a declaration, just check it as a variable declaration, which will in turn check the RHS
+        // via checkRightHandSideOfForOf.
+        // If the LHS is an expression, check the LHS, as a destructuring assignment or as a reference.
+        // Then check that the RHS is assignable to it.
+        if ast::is_variable_declaration_list(data.initializer) {
+            self.check_variable_declaration_list(data.initializer);
+        } else {
+            let var_expr = data.initializer;
+            let iterated_type = self.check_right_hand_side_of_for_of(node);
+            // There may be a destructuring assignment on the left side
+            if ast::is_array_literal_expression(var_expr) || ast::is_object_literal_expression(var_expr) {
+                // iteratedType may be undefined. In this case, we still want to check the structure of
+                // varExpr, in particular making sure it's a valid LeftHandSideExpression. But we'd like
+                // to short circuit the type relation checking as much as possible, so we pass the unknownType.
+                // checkRightHandSideOfForOf never returns nil (checkIteratedTypeOrElementType falls back to
+                // anyType), so Go's `core.OrElse(iteratedType, c.errorType)` is the identity here.
+                self.check_destructuring_assignment(var_expr, iterated_type, CheckMode::Normal, false);
+            } else {
+                let left_type = self.check_expression(var_expr);
+                self.check_reference_expression(
+                    var_expr,
+                    &diagnostics::The_left_hand_side_of_a_for_of_statement_must_be_a_variable_or_a_property_access,
+                    &diagnostics::The_left_hand_side_of_a_for_of_statement_may_not_be_an_optional_property_access,
+                );
+                // iteratedType will be undefined if the rightType was missing properties/signatures
+                // required to get its iteratedType (like [Symbol.iterator] or next). This may be
+                // because we accessed properties from anyType, or it may have led to an error inside
+                // getElementTypeOfIterable.
+                // (Go's `iteratedType != nil` guard is always true, see above.)
+                self.check_type_assignable_to_and_optionally_elaborate(iterated_type, left_type, var_expr, data.expression, None, None);
+            }
+        }
+        self.check_source_element(Some(data.statement));
+        if node.locals().is_some() {
+            self.register_for_unused_identifiers_check(node);
+        }
     }
 
     // checker.go:4108
     pub(crate) fn check_break_or_continue_statement(&mut self, node: P<Node>) {
-        todo!()
+        if !self.check_grammar_statement_in_ambient_context(node) {
+            self.check_grammar_break_or_continue_statement(node);
+        }
     }
 
     // checker.go:4114
     pub(crate) fn check_return_statement(&mut self, node: P<Node>) {
-        todo!()
+        // Always check the return expression so its identifiers are resolved even when the
+        // return statement is misplaced (grammar error), keeping diagnostics stable
+        // regardless of traversal order.
+        let expr_node = node.expression();
+        let mut expr_type = self.undefined_type;
+        if let Some(expr_node) = expr_node {
+            expr_type = self.check_expression_cached(expr_node);
+        }
+        if self.check_grammar_statement_in_ambient_context(node) {
+            return;
+        }
+        let container = get_containing_function_or_class_static_block(node);
+        if container.is_some_and(|container| ast::is_class_static_block_declaration(container)) {
+            self.grammar_error_on_first_token(node, &diagnostics::A_return_statement_cannot_be_used_inside_a_class_static_block, &[]);
+            return;
+        }
+        let Some(container) = container else {
+            self.grammar_error_on_first_token(node, &diagnostics::A_return_statement_can_only_be_used_within_a_function_body, &[]);
+            return;
+        };
+        let signature = self.get_signature_from_declaration(container);
+        let return_type = self.get_return_type_of_signature(signature);
+        let function_flags = ast::get_function_flags(Some(container));
+        if self.strict_null_checks || expr_node.is_some() || return_type.flags().intersects(TypeFlags::Never) {
+            if ast::is_set_accessor_declaration(container) {
+                if expr_node.is_some() {
+                    self.error(Some(node), &diagnostics::Setters_cannot_return_a_value, &[]);
+                }
+            } else if ast::is_constructor_declaration(container) {
+                if let Some(expr_node) = expr_node {
+                    if !self.check_type_assignable_to_and_optionally_elaborate(expr_type, return_type, node, expr_node, None, None) {
+                        self.error(Some(node), &diagnostics::Return_type_of_constructor_signature_must_be_assignable_to_the_instance_type_of_the_class, &[]);
+                    }
+                }
+            } else if self.get_return_type_from_annotation(container).is_some() {
+                let unwrapped_return_type = self.unwrap_return_type(return_type, function_flags).unwrap_or(return_type);
+                self.check_return_expression(container, unwrapped_return_type, node, node.expression(), expr_type, false);
+            }
+        } else if !ast::is_constructor_declaration(container)
+            && self.compiler_options.no_implicit_returns.is_true()
+            && !self.is_unwrapped_return_type_undefined_void_or_any(container, return_type)
+        {
+            // The function has a return type, but the return statement doesn't have an expression.
+            self.error(Some(node), &diagnostics::Not_all_code_paths_return_a_value, &[]);
+        }
     }
 
+    // When checking an arrow expression such as `(x) => exp`, then `node` is the expression `exp`.
+    // Otherwise, `node` is a return statement.
     // checker.go:4159
     pub(crate) fn check_return_expression(&mut self, container: P<Node>, unwrapped_return_type: P<Type>, node: P<Node>, expr: Option<P<Node>>, expr_type: P<Type>, in_conditional_expression: bool) {
-        todo!()
+        let mut unwrapped_expr_type = expr_type;
+        let function_flags = ast::get_function_flags(Some(container));
+        if let Some(expr) = expr {
+            let unwrapped_expr = ast::skip_parentheses(expr);
+            if ast::is_conditional_expression(unwrapped_expr) {
+                let when_true = unwrapped_expr.as_conditional_expression().when_true;
+                let when_false = unwrapped_expr.as_conditional_expression().when_false;
+                let when_true_type = self.check_expression(when_true);
+                self.check_return_expression(container, unwrapped_return_type, node, Some(when_true), when_true_type, true /*inConditionalExpression*/);
+                let when_false_type = self.check_expression(when_false);
+                self.check_return_expression(container, unwrapped_return_type, node, Some(when_false), when_false_type, true /*inConditionalExpression*/);
+                return;
+            }
+        }
+        let in_return_statement = node.kind == Kind::ReturnStatement;
+        if function_flags.intersects(FunctionFlags::Async) {
+            unwrapped_expr_type = self.check_awaited_type(
+                expr_type,
+                false, /*withAlias*/
+                node,
+                &diagnostics::The_return_type_of_an_async_function_must_either_be_a_valid_promise_or_must_not_contain_a_callable_then_member,
+            );
+        }
+        let mut effective_expr = expr; // The effective expression for diagnostics purposes.
+        if let Some(expr) = expr {
+            effective_expr = self.get_effective_check_node(expr);
+        }
+        let error_node = if_else(in_return_statement && !in_conditional_expression, Some(node), effective_expr);
+        // SIG: check_type_assignable_to_and_optionally_elaborate should take `error_node: Option<P<Node>>` and
+        // `expr: Option<P<Node>>` (Go passes nil here for `return;`); inlined to its one-line Go body instead.
+        let assignable_relation = self.assignable_relation;
+        self.check_type_related_to_and_optionally_elaborate(unwrapped_expr_type, unwrapped_return_type, assignable_relation, error_node, effective_expr, None, None);
     }
 
     // checker.go:4184
     pub(crate) fn check_with_statement(&mut self, node: P<Node>) {
-        todo!()
+        if !self.check_grammar_statement_in_ambient_context(node) {
+            if node.flags().intersects(NodeFlags::AwaitContext) {
+                self.grammar_error_on_first_token(node, &diagnostics::X_with_statements_are_not_allowed_in_an_async_function_block, &[]);
+            }
+        }
+        self.check_expression(node.expression().unwrap());
+        let source_file = ast::get_source_file_of_node(node).unwrap();
+        if !self.has_parse_diagnostics(source_file) {
+            let start = tsrs_scanner::skip_trivia(source_file.text(), node.pos());
+            let end = node.statement().pos();
+            self.grammar_error_at_pos(
+                source_file.as_node(),
+                start,
+                end - start,
+                &diagnostics::The_with_statement_is_not_supported_All_symbols_in_a_with_block_will_have_type_any,
+                &[],
+            );
+        }
     }
 
     // checker.go:4199
     pub(crate) fn check_switch_statement(&mut self, node: P<Node>) {
-        todo!()
+        // Grammar checking
+        self.check_grammar_statement_in_ambient_context(node);
+        let mut first_default_clause: Option<P<Node>> = None;
+        let mut has_duplicate_default_clause = false;
+        let expression_type = self.check_expression(node.expression().unwrap());
+        let case_block = node.as_switch_statement().case_block;
+        for &clause in case_block.as_case_block().clauses.nodes() {
+            // Grammar check for duplicate default clauses, skip if we already report duplicate default clause
+            if ast::is_default_clause(clause) && !has_duplicate_default_clause {
+                if first_default_clause.is_none() {
+                    first_default_clause = Some(clause);
+                } else {
+                    self.grammar_error_on_node(clause, &diagnostics::A_default_clause_cannot_appear_more_than_once_in_a_switch_statement, &[]);
+                    has_duplicate_default_clause = true;
+                }
+            }
+            if ast::is_case_clause(clause) {
+                let case_type = self.check_expression(clause.expression().unwrap());
+                if !self.is_type_equality_comparable_to(expression_type, case_type) {
+                    // expressionType is not comparable to caseType, try the reversed check and report errors if it fails
+                    self.check_type_comparable_to(case_type, expression_type, clause.expression().unwrap(), None /*headMessage*/);
+                }
+            }
+            self.check_source_elements(clause.statements());
+            if self.compiler_options.no_fallthrough_cases_in_switch.is_true() {
+                if let Some(flow_node) = clause.as_case_or_default_clause().fallthrough_flow_node.get() {
+                    if self.is_reachable_flow_node(flow_node) {
+                        self.error(Some(clause), &diagnostics::Fallthrough_case_in_switch, &[]);
+                    }
+                }
+            }
+        }
+        if case_block.locals().is_some() {
+            self.register_for_unused_identifiers_check(case_block);
+        }
     }
 
     // checker.go:4235
     pub(crate) fn check_labeled_statement(&mut self, node: P<Node>) {
-        todo!()
+        let labeled_statement = node.as_labeled_statement();
+        let label_node = labeled_statement.label;
+        let label_text = label_node.text();
+        if !self.check_grammar_statement_in_ambient_context(node) {
+            let mut current = node.parent();
+            while let Some(cur) = current {
+                if ast::is_function_like(cur) {
+                    break;
+                }
+                if ast::is_labeled_statement(cur) && cur.label().unwrap().text() == label_text {
+                    self.grammar_error_on_node(label_node, &diagnostics::Duplicate_label_0, &[&label_text]);
+                    break;
+                }
+                current = cur.parent();
+            }
+        }
+        if label_node.flags().intersects(NodeFlags::Unreachable) && self.compiler_options.allow_unused_labels != Tristate::True {
+            self.error_or_suggestion(self.compiler_options.allow_unused_labels == Tristate::False, Some(label_node), &diagnostics::Unused_label, &[]);
+        }
+        self.check_source_element(Some(labeled_statement.statement));
     }
 
     // checker.go:4253
     pub(crate) fn check_throw_statement(&mut self, node: P<Node>) {
-        todo!()
+        let throw_expr = node.expression().unwrap();
+        if !self.check_grammar_statement_in_ambient_context(node) {
+            if ast::is_identifier(throw_expr) && throw_expr.text().is_empty() {
+                self.grammar_error_at_pos(node, throw_expr.pos(), 0 /*length*/, &diagnostics::Line_break_not_permitted_here, &[]);
+            }
+        }
+        self.check_expression(throw_expr);
     }
 
     // checker.go:4263
     pub(crate) fn check_try_statement(&mut self, node: P<Node>) {
-        todo!()
+        self.check_grammar_statement_in_ambient_context(node);
+        let data = node.as_try_statement();
+        self.check_block(data.try_block);
+        if let Some(catch_clause) = data.catch_clause {
+            self.check_catch_clause(catch_clause);
+        }
+        if let Some(finally_block) = data.finally_block {
+            self.check_block(finally_block);
+        }
     }
 
     // checker.go:4275
     pub(crate) fn check_catch_clause(&mut self, node: P<Node>) {
-        todo!()
+        let declaration = node.as_catch_clause().variable_declaration;
+        if let Some(declaration) = declaration {
+            self.check_variable_like_declaration(declaration);
+            let type_node = declaration.type_node();
+            if let Some(type_node) = type_node {
+                let t = self.get_type_from_type_node(type_node);
+                if !t.flags().intersects(TypeFlags::AnyOrUnknown) {
+                    self.grammar_error_on_first_token(type_node, &diagnostics::Catch_clause_variable_type_annotation_must_be_any_or_unknown_if_specified, &[]);
+                }
+            } else if let Some(initializer) = declaration.initializer() {
+                self.grammar_error_on_first_token(initializer, &diagnostics::Catch_clause_variable_cannot_have_an_initializer, &[]);
+            } else {
+                let block_locals = node.as_catch_clause().block.locals();
+                if let Some(block_locals) = block_locals {
+                    let caught_names: Vec<&'static str> = node.locals().map(|locals| locals.keys()).unwrap_or_default();
+                    for caught_name in caught_names {
+                        if let Some(block_local) = block_locals.lookup(caught_name) {
+                            if let Some(value_declaration) = block_local.value_declaration() {
+                                if block_local.flags().intersects(SymbolFlags::BlockScopedVariable) {
+                                    self.grammar_error_on_node(value_declaration, &diagnostics::Cannot_redeclare_identifier_0_in_catch_clause, &[&caught_name]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        self.check_block(node.as_catch_clause().block);
     }
 
     // checker.go:4301
     pub(crate) fn check_binding_element(&mut self, node: P<Node>) {
-        todo!()
+        self.check_grammar_binding_element(node);
+        self.check_variable_like_declaration(node);
     }
 
     // checker.go:4306
     pub(crate) fn check_class_declaration(&mut self, node: P<Node>) {
-        todo!()
+        let first_decorator = node.modifier_nodes().iter().copied().find(|&m| ast::is_decorator(m));
+        if self.legacy_decorators
+            && first_decorator.is_some()
+            && node.members().iter().any(|&p| ast::has_static_modifier(p) && ast::is_private_identifier_class_element_declaration(p))
+        {
+            self.grammar_error_on_node(
+                first_decorator.unwrap(),
+                &diagnostics::Class_decorators_can_t_be_used_with_static_private_identifier_Consider_removing_the_experimental_decorator,
+                &[],
+            );
+        }
+        if node.name().is_none() && !ast::has_syntactic_modifier(node, ModifierFlags::Default) {
+            self.grammar_error_on_first_token(node, &diagnostics::A_class_declaration_without_the_default_modifier_must_have_a_name, &[]);
+        }
+        self.check_class_like_declaration(node);
+        self.check_source_elements(node.members());
+        self.register_for_unused_identifiers_check(node);
     }
 }
