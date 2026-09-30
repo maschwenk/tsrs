@@ -331,6 +331,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_modulespecifiers"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_core",
+ "tsrs_module",
+ "tsrs_tsoptions",
+]
+
+[[package]]
 name = "tsrs_parser"
 version = "0.1.0"
 dependencies = [

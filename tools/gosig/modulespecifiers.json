@@ -1,0 +1,104 @@
+{
+  "moduleDir": "../../ts-ref/tsc",
+  "package": "github.com/microsoft/TypeScript/tsc/internal/modulespecifiers",
+  "resultOnlyPackages": [
+    "github.com/microsoft/TypeScript/tsc/internal/ast",
+    "github.com/microsoft/TypeScript/tsc/internal/core",
+    "github.com/microsoft/TypeScript/tsc/internal/tspath",
+    "github.com/microsoft/TypeScript/tsc/internal/module",
+    "github.com/microsoft/TypeScript/tsc/internal/packagejson"
+  ],
+  "outDir": "../../crates/tsrs_modulespecifiers/src",
+  "sigsFile": "../../docs/sigs/modulespecifiers.txt",
+  "advisorySigsFile": "../../docs/sigs/modulespecifiers_advisory.txt",
+  "prelude": "use crate::*;\nuse tsrs_ast::*;\nuse tsrs_core::*;\nuse tsrs_ast as ast;\nuse tsrs_core::tspath::{self, Path};\nuse tsrs_module::packagejson;\nuse rustc_hash::FxHashMap;\n",
+  "checkerType": "noCheckerTypeInThisPackage",
+  "files": [
+    {
+      "go": "compare.go",
+      "rust": "compare.rs"
+    },
+    {
+      "go": "preferences.go",
+      "rust": "preferences.rs",
+      "declsNote": "hand-ported in types.rs"
+    },
+    {
+      "go": "specifiers.go",
+      "rust": "specifiers.rs",
+      "declsNote": "hand-ported in types.rs"
+    },
+    {
+      "go": "util.go",
+      "rust": "util.rs",
+      "declsNote": "hand-ported in types.rs"
+    }
+  ],
+  "notPorted": [],
+  "skipFuncs": [
+    "ProcessEntrypointEnding"
+  ],
+  "arenaTypes": [],
+  "typeMap": {
+    "*ast.Node": "P<Node>",
+    "*ast.Symbol": "P<Symbol>",
+    "*ast.SourceFile": "P<SourceFile>",
+    "*ast.NodeList": "P<NodeList>",
+    "ast.SymbolTable": "P<SymbolTable>",
+    "ast.HasFileName": "P<SourceFile>",
+    "core.Tristate": "Tristate",
+    "SourceFileForSpecifierGeneration": "P<SourceFile>",
+    "ModuleSpecifierGenerationHost": "&dyn ModuleSpecifierGenerationHost",
+    "CheckerShape": "&mut dyn CheckerShape",
+    "*core.CompilerOptions": "&CompilerOptions",
+    "*symlinks.KnownSymlinks": "P<KnownSymlinks>",
+    "*packagejson.InfoCacheEntry": "P<packagejson::InfoCacheEntry>",
+    "*packagejson.PackageJson": "P<packagejson::PackageJson>",
+    "packagejson.ExportsOrImports": "&packagejson::ExportsOrImports",
+    "*module.ResolvedModule": "P<ResolvedModule>",
+    "*tsoptions.SourceOutputAndProjectReference": "P<SourceOutputAndProjectReference>",
+    "*regexp.Regexp": "P<regex::Regex>",
+    "tspath.ComparePathsOptions": "tspath::ComparePathsOptions"
+  },
+  "dataInterfaces": [
+    {
+      "iface": "ast.nodeData",
+      "rust": "P<Node>",
+      "except": [
+        "SourceFile"
+      ]
+    }
+  ],
+  "constraintMap": {
+    "any": "",
+    "comparable": "Copy + Eq + std::hash::Hash",
+    "cmp.Ordered": "Copy + Ord"
+  },
+  "wordReplacements": {
+    "JSDoc": "Jsdoc",
+    "NaN": "Nan",
+    "IDs": "Ids",
+    "JSExtension": "JsExtension"
+  },
+  "zeroValueGenerics": [
+    "core.Find",
+    "core.FindLast",
+    "core.FirstOrNil",
+    "core.LastOrNil"
+  ],
+  "coalesceGenerics": [
+    "core.OrElse",
+    "core.Coalesce",
+    "core.FirstNonZero"
+  ],
+  "nilTolerantParams": [
+    "ast.SymbolTable"
+  ],
+  "nilTransparent": true,
+  "paramForwarding": "forward",
+  "overrides": {},
+  "paramTypes": {
+    "allKeysStartWithDot.obj": "&OrderedMap<String, packagejson::ExportsOrImports>",
+    "tryGetModuleNameFromPaths.paths": "&OrderedMap<String, Vec<String>>"
+  }
+}
