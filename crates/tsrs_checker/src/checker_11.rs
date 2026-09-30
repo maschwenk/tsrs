@@ -1773,7 +1773,7 @@ impl Checker {
         let container = ast::get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
         if let Some(parent) = container.parent() {
             if is_class_like(parent) || is_interface_declaration(parent) {
-                if !ast::is_static(container) && (!is_constructor_declaration(container) || crate::is_node_descendant_of(Some(node), container.body().unwrap())) {
+                if !ast::is_static(container) && (!is_constructor_declaration(container) || container.body().is_some_and(|body| crate::is_node_descendant_of(Some(node), body))) {
                     let symbol = self.get_symbol_of_declaration(parent).unwrap();
                     let declared = self.get_declared_type_of_class_or_interface(symbol);
                     return declared.as_interface_type().this_type().unwrap_or(self.error_type);
