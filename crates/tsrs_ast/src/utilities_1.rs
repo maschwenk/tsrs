@@ -102,7 +102,7 @@ pub fn is_assignment_expression(node: P<Node>, exclude_compound_assignment: bool
 
 pub fn get_right_most_assigned_expression(mut node: P<Node>) -> P<Node> {
     while is_assignment_expression(node, false /*excludeCompoundAssignment*/) {
-        node = node.as_binary_expression().right;
+        node = node.as_binary_expression().right();
     }
     node
 }
@@ -423,7 +423,7 @@ pub fn is_comma_sequence(node: P<Node>) -> bool {
 pub fn is_iteration_statement(node: P<Node>, look_in_labeled_statements: bool) -> bool {
     match node.kind {
         Kind::ForStatement | Kind::ForInStatement | Kind::ForOfStatement | Kind::DoStatement | Kind::WhileStatement => true,
-        Kind::LabeledStatement => look_in_labeled_statements && is_iteration_statement(node.statement().unwrap(), look_in_labeled_statements),
+        Kind::LabeledStatement => look_in_labeled_statements && is_iteration_statement(node.statement(), look_in_labeled_statements),
         _ => false,
     }
 }
@@ -738,7 +738,7 @@ pub fn is_outer_expression(node: P<Node>, kinds: OuterExpressionKinds) -> bool {
 pub fn skip_outer_expressions(mut node: P<Node>, kinds: OuterExpressionKinds) -> P<Node> {
     while is_outer_expression(node, kinds) {
         if is_binary_expression(node) {
-            node = node.as_binary_expression().right;
+            node = node.as_binary_expression().right();
         } else {
             node = node.expression().unwrap();
         }
@@ -1215,6 +1215,13 @@ pub fn is_var_const_like(node: P<Node>) -> bool {
     flags == NodeFlags::Const || flags == NodeFlags::Using || flags == NodeFlags::AwaitUsing
 }
 
+pub fn is_import_meta(node: P<Node>) -> bool {
+    if node.kind == Kind::MetaProperty {
+        return node.as_meta_property().keyword_token == Kind::ImportKeyword && node.name().unwrap().text() == "meta";
+    }
+    false
+}
+
 pub fn walk_up_binding_elements_and_patterns(binding: P<Node>) -> P<Node> {
     let mut node = binding.parent().unwrap();
     while is_binding_element(node.parent().unwrap()) {
@@ -1278,7 +1285,7 @@ pub fn is_literal_import_type_node(node: P<Node>) -> bool {
 pub fn is_jsx_tag_name(node: P<Node>) -> bool {
     let parent = node.parent().unwrap();
     match parent.kind {
-        Kind::JsxOpeningElement | Kind::JsxClosingElement | Kind::JsxSelfClosingElement => parent.tag_name() == Some(node),
+        Kind::JsxOpeningElement | Kind::JsxClosingElement | Kind::JsxSelfClosingElement => parent.tag_name() == node,
         _ => false,
     }
 }
@@ -1430,7 +1437,7 @@ pub fn get_assigned_name(node: P<Node>) -> Option<P<Node>> {
             Kind::PropertyAssignment => return parent.name(),
             Kind::BindingElement => return parent.name(),
             Kind::BinaryExpression => {
-                if node == parent.as_binary_expression().right {
+                if node == parent.as_binary_expression().right() {
                     let left = parent.as_binary_expression().left;
                     match left.kind {
                         Kind::Identifier => return Some(left),

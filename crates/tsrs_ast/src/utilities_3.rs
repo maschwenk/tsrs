@@ -155,7 +155,7 @@ pub fn has_resolution_mode_override(node: impl Into<Option<P<Node>>>) -> bool {
         _ => None,
     };
     if let Some(attributes) = attributes {
-        return attributes.get_resolution_mode_override(None).is_some();
+        return ImportAttributes::get_resolution_mode_override(Some(attributes), None).is_some();
     }
     false
 }
@@ -246,8 +246,8 @@ pub fn is_jsx_opening_like_element(node: P<Node>) -> bool {
 pub fn get_invoked_expression(node: P<Node>) -> P<Node> {
     match node.kind {
         Kind::TaggedTemplateExpression => node.as_tagged_template_expression().tag,
-        Kind::JsxOpeningElement | Kind::JsxSelfClosingElement => node.tag_name().unwrap(),
-        Kind::BinaryExpression => node.as_binary_expression().right,
+        Kind::JsxOpeningElement | Kind::JsxSelfClosingElement => node.tag_name(),
+        Kind::BinaryExpression => node.as_binary_expression().right(),
         Kind::JsxOpeningFragment => node,
         _ => node.expression().unwrap(),
     }
@@ -276,8 +276,8 @@ pub fn compare_node_positions(n1: P<Node>, n2: P<Node>) -> i32 {
 }
 
 pub fn is_unterminated_literal(node: P<Node>) -> bool {
-    is_literal_kind(node.kind) && node.literal_like_data().unwrap().token_flags.get().intersects(TokenFlags::Unterminated)
-        || is_template_literal_kind(node.kind) && node.template_literal_like_data().unwrap().template_flags.get().intersects(TokenFlags::Unterminated)
+    is_literal_kind(node.kind) && node.literal_like_data().unwrap().token_flags.intersects(TokenFlags::Unterminated)
+        || is_template_literal_kind(node.kind) && node.template_literal_like_data().unwrap().template_flags.intersects(TokenFlags::Unterminated)
 }
 
 // Gets a value indicating whether a class element is either a static or an instance property declaration with an initializer.
@@ -287,6 +287,25 @@ pub fn is_initialized_property(member: P<Node>) -> bool {
 
 pub fn has_decorators(node: P<Node>) -> bool {
     has_syntactic_modifier(node, ModifierFlags::Decorator)
+}
+
+pub struct HasFileNameImpl {
+    file_name: String,
+    path: tsrs_core::tspath::Path,
+}
+
+pub fn new_has_file_name(file_name: &str, path: tsrs_core::tspath::Path) -> HasFileNameImpl {
+    HasFileNameImpl { file_name: file_name.to_string(), path }
+}
+
+impl HasFileName for HasFileNameImpl {
+    fn file_name(&self) -> &str {
+        &self.file_name
+    }
+
+    fn path(&self) -> &tsrs_core::tspath::Path {
+        &self.path
+    }
 }
 
 pub fn get_semantic_jsx_children(children: &[P<Node>]) -> Vec<P<Node>> {
@@ -499,7 +518,7 @@ pub fn is_implicitly_exported_jsdoc_declaration(node: P<Node>) -> bool {
 
 pub fn has_context_sensitive_parameters(node: P<Node>) -> bool {
     // Functions with type parameters are not context sensitive.
-    if node.type_parameters().is_none() {
+    if node.type_parameter_list().is_none() {
         // Functions with any parameters that lack type annotations are context sensitive.
         if node.parameters().iter().any(|p| p.type_node().is_none()) {
             return true;
@@ -706,7 +725,7 @@ pub fn is_async_function(node: P<Node>) -> bool {
     match node.kind {
         Kind::FunctionDeclaration | Kind::FunctionExpression | Kind::ArrowFunction | Kind::MethodDeclaration => {
             let data = node.body_data().unwrap();
-            data.body.get().is_some() && data.asterisk_token.is_none() && has_syntactic_modifier(node, ModifierFlags::Async)
+            data.body.is_some() && data.asterisk_token.is_none() && has_syntactic_modifier(node, ModifierFlags::Async)
         }
         _ => false,
     }
@@ -726,7 +745,7 @@ pub fn get_rest_parameter_element_type(node: impl Into<Option<P<Node>>>) -> Opti
         return Some(node.as_array_type_node().element_type);
     }
     if node.kind == Kind::TypeReference {
-        if let Some(type_arguments) = node.as_type_reference_node().type_arguments {
+        if let Some(type_arguments) = node.as_type_reference_node().type_arguments() {
             return type_arguments.nodes.first().copied();
         }
     }
@@ -752,7 +771,7 @@ pub fn tag_names_are_equivalent(lhs: P<Node>, rhs: P<Node>) -> bool {
 }
 
 pub fn is_tag_name(node: P<Node>) -> bool {
-    node.parent().is_some_and(|parent| is_jsdoc_tag(parent) && parent.tag_name() == Some(node))
+    node.parent().is_some_and(|parent| is_jsdoc_tag(parent) && parent.tag_name() == node)
 }
 
 // We want to store any numbers/strings if they were a name that could be
@@ -830,7 +849,7 @@ pub fn is_super_property(node: P<Node>) -> bool {
 pub fn is_named_evaluation_source(node: P<Node>) -> bool {
     match node.kind {
         Kind::PropertyAssignment => !is_proto_setter(node.name().unwrap()),
-        Kind::ShorthandPropertyAssignment => node.as_shorthand_property_assignment().object_assignment_initializer.is_some(),
+        Kind::ShorthandPropertyAssignment => node.as_shorthand_property_assignment().object_assignment_initializer().is_some(),
         Kind::VariableDeclaration => is_identifier(node.name().unwrap()) && node.initializer().is_some(),
         Kind::Parameter => {
             is_identifier(node.name().unwrap()) && node.initializer().is_some() && node.as_parameter_declaration().dot_dot_dot_token.is_none()

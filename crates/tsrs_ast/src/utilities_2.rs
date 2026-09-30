@@ -33,7 +33,7 @@ pub fn get_assignment_declaration_kind(node: P<Node>) -> JSDeclarationKind {
             let bin = node.as_binary_expression();
             if bin.operator_token.kind == Kind::EqualsToken && is_access_expression(bin.left) {
                 if is_in_js_file(bin.left) {
-                    if is_module_exports_access_expression(bin.left) && !is_exports_identifier(bin.right) {
+                    if is_module_exports_access_expression(bin.left) && !is_exports_identifier(bin.right()) {
                         return JSDeclarationKind::ModuleExports;
                     }
                     let left_expression = bin.left.expression().unwrap();
@@ -260,9 +260,9 @@ pub fn get_heritage_clause(node: P<Node>, kind: Kind) -> Option<P<Node>> {
 
 pub(crate) fn get_heritage_clauses(node: P<Node>) -> Option<P<NodeList>> {
     match node.kind {
-        Kind::ClassDeclaration => node.as_class_declaration().heritage_clauses,
-        Kind::ClassExpression => node.as_class_expression().heritage_clauses,
-        Kind::InterfaceDeclaration => node.as_interface_declaration().heritage_clauses,
+        Kind::ClassDeclaration => node.as_class_declaration().heritage_clauses(),
+        Kind::ClassExpression => node.as_class_expression().heritage_clauses(),
+        Kind::InterfaceDeclaration => node.as_interface_declaration().heritage_clauses(),
         _ => None,
     }
 }
@@ -556,7 +556,7 @@ pub fn is_in_expression_context(node: P<Node>) -> bool {
         }
         Kind::Decorator | Kind::JsxExpression | Kind::JsxSpreadAttribute | Kind::SpreadAssignment => true,
         Kind::ExpressionWithTypeArguments => parent.expression() == Some(node) && !is_part_of_type_node(parent),
-        Kind::ShorthandPropertyAssignment => parent.as_shorthand_property_assignment().object_assignment_initializer == Some(node),
+        Kind::ShorthandPropertyAssignment => parent.as_shorthand_property_assignment().object_assignment_initializer() == Some(node),
         _ => is_expression_node(parent),
     }
 }
@@ -817,7 +817,7 @@ pub(crate) fn get_module_instance_state_ex(
     visited: &mut FxHashMap<NodeId, ModuleInstanceState>,
 ) -> ModuleInstanceState {
     let module = node.as_module_declaration();
-    if let Some(body) = module.body {
+    if let Some(body) = module.body() {
         get_module_instance_state_cached(body, &push_ancestor(ancestors, node), visited)
     } else {
         ModuleInstanceState::Instantiated
@@ -914,7 +914,7 @@ pub(crate) fn get_module_instance_state_for_alias_target(
     ancestors: &[P<Node>],
     visited: &mut FxHashMap<NodeId, ModuleInstanceState>,
 ) -> ModuleInstanceState {
-    let name = node.property_name_or_name();
+    let name = node.property_name_or_name().unwrap();
     if name.kind != Kind::Identifier {
         // Skip for invalid syntax like this: export { "x" }
         return ModuleInstanceState::Instantiated;
@@ -1037,13 +1037,13 @@ pub fn module_export_name_is_default(node: P<Node>) -> bool {
 
 pub fn get_implied_node_format_for_file(path: &str, package_json_type: &str) -> ModuleKind {
     let mut implied_node_format = ResolutionMode::None;
-    if tspath::file_extension_is_one_of(path, &[tspath::ExtensionDmts, tspath::ExtensionMts, tspath::ExtensionMjs]) {
+    if tspath::file_extension_is_one_of(path, &[tspath::EXTENSION_DMTS, tspath::EXTENSION_MTS, tspath::EXTENSION_MJS]) {
         implied_node_format = ResolutionMode::ESM;
-    } else if tspath::file_extension_is_one_of(path, &[tspath::ExtensionDcts, tspath::ExtensionCts, tspath::ExtensionCjs]) {
+    } else if tspath::file_extension_is_one_of(path, &[tspath::EXTENSION_DCTS, tspath::EXTENSION_CTS, tspath::EXTENSION_CJS]) {
         implied_node_format = ResolutionMode::CommonJS;
     } else if tspath::file_extension_is_one_of(
         path,
-        &[tspath::ExtensionDts, tspath::ExtensionTs, tspath::ExtensionTsx, tspath::ExtensionJs, tspath::ExtensionJsx],
+        &[tspath::EXTENSION_DTS, tspath::EXTENSION_TS, tspath::EXTENSION_TSX, tspath::EXTENSION_JS, tspath::EXTENSION_JSX],
     ) {
         implied_node_format = if package_json_type == "module" { ResolutionMode::ESM } else { ResolutionMode::CommonJS };
     }
@@ -1069,13 +1069,13 @@ pub fn get_implied_node_format_for_emit_worker(
     }
     if source_file_meta_data.implied_node_format == ModuleKind::CommonJS
         && (source_file_meta_data.package_json_type == "commonjs"
-            || tspath::file_extension_is_one_of(file_name, &[tspath::ExtensionCjs, tspath::ExtensionCts]))
+            || tspath::file_extension_is_one_of(file_name, &[tspath::EXTENSION_CJS, tspath::EXTENSION_CTS]))
     {
         return ModuleKind::CommonJS;
     }
     if source_file_meta_data.implied_node_format == ModuleKind::ESNext
         && (source_file_meta_data.package_json_type == "module"
-            || tspath::file_extension_is_one_of(file_name, &[tspath::ExtensionMjs, tspath::ExtensionMts]))
+            || tspath::file_extension_is_one_of(file_name, &[tspath::EXTENSION_MJS, tspath::EXTENSION_MTS]))
     {
         return ModuleKind::ESNext;
     }
@@ -1135,7 +1135,7 @@ pub fn is_alias_symbol_declaration(node: P<Node>) -> bool {
         Kind::ExportAssignment => expression_is_alias(node.expression().unwrap()),
         Kind::VariableDeclaration | Kind::BindingElement => is_variable_declaration_initialized_to_require(node),
         Kind::BinaryExpression => match get_assignment_declaration_kind(node) {
-            JSDeclarationKind::ModuleExports | JSDeclarationKind::ExportsProperty => expression_is_alias(node.as_binary_expression().right),
+            JSDeclarationKind::ModuleExports | JSDeclarationKind::ExportsProperty => expression_is_alias(node.as_binary_expression().right()),
             _ => false,
         },
         _ => false,
@@ -1148,7 +1148,7 @@ pub fn get_node_at_position(file: P<SourceFile>, position: i32, include_jsdoc: b
     loop {
         let mut child: Option<P<Node>> = None;
         if include_jsdoc {
-            for &jsdoc in current.jsdoc(Some(file)) {
+            for &jsdoc in current.jsdoc(Some(file.get())) {
                 if node_contains_position(jsdoc, position) {
                     child = Some(jsdoc);
                     break;
@@ -1288,10 +1288,10 @@ pub fn get_pragma_from_source_file(file: Option<P<SourceFile>>, name: &str) -> O
     result
 }
 
-pub fn get_pragma_argument(pragma: Option<&Pragma>, name: &str) -> &'static str {
+pub fn get_pragma_argument(pragma: Option<&'static Pragma>, name: &str) -> &'static str {
     if let Some(pragma) = pragma {
         if let Some(arg) = pragma.args.get(name) {
-            return arg.value;
+            return arg.value.as_str();
         }
     }
     ""

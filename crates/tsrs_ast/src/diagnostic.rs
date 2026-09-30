@@ -321,7 +321,7 @@ impl DiagnosticsCollection {
         self.count += 1;
 
         if let Some(file) = diagnostic.file() {
-            let path = file.path();
+            let path = file.path().clone();
             self.file_diagnostics.entry(path.clone()).or_default().push(diagnostic);
             self.file_diagnostics_sorted.remove(&path);
         } else {
@@ -361,7 +361,7 @@ impl DiagnosticsCollection {
     }
 
     fn get_diagnostics_for_file_locked(&mut self, file: P<SourceFile>) -> Vec<P<Diagnostic>> {
-        let path = file.path();
+        let path = file.path().clone();
         if !self.file_diagnostics_sorted.contains(&path) {
             if let Some(diagnostics) = self.file_diagnostics.get_mut(&path) {
                 diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
@@ -391,7 +391,7 @@ struct DiagnosticLocationKey {
 
 fn get_diagnostic_location_key(diagnostic: P<Diagnostic>) -> DiagnosticLocationKey {
     DiagnosticLocationKey {
-        path: diagnostic.file().map(|file| file.path()),
+        path: diagnostic.file().map(|file| file.path().clone()),
         loc: diagnostic.loc(),
         code: diagnostic.code(),
     }
@@ -399,7 +399,7 @@ fn get_diagnostic_location_key(diagnostic: P<Diagnostic>) -> DiagnosticLocationK
 
 fn get_diagnostic_path(d: P<Diagnostic>) -> &'static str {
     match d.file() {
-        Some(file) => file.file_name(),
+        Some(file) => file.get().file_name(),
         None => "",
     }
 }
