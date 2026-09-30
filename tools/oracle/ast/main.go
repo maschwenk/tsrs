@@ -14,7 +14,7 @@
 //
 // The dump lists every node in ForEachChild pre-order ("N"), with the JSDoc nodes Node.JSDoc(file)
 // returns for it printed before its children ("J", which triggers lazy JSDoc parsing in TS files): depth,
-// kind, pos, end, node flags, the non-child fields of the node struct (fields_gen.go, generated from the
+// kind, pos, end, node flags, subtree facts, the non-child fields of the node struct (fields_gen.go, generated from the
 // AST schema), and the actual parent when it differs from the traversal parent. Then the SourceFile
 // results: parse/JS/JSDoc diagnostics, imports, module augmentations, ambient module names, comment
 // directives, reparsed clones, pragmas, referenced files, type reference and lib directives, the checkJs
@@ -172,7 +172,7 @@ func (d *dumper) fields(n *ast.Node) {
 
 func (d *dumper) node(n *ast.Node, depth int, parent *ast.Node, tag byte) {
 	d.sb.WriteByte(tag)
-	fmt.Fprintf(&d.sb, "%d %s %d %d %x", depth, kindName(n.Kind), n.Pos(), n.End(), uint32(n.Flags))
+	fmt.Fprintf(&d.sb, "%d %s %d %d %x sf=%x", depth, kindName(n.Kind), n.Pos(), n.End(), uint32(n.Flags), uint32(n.SubtreeFacts()))
 	d.fields(n)
 	if n.Parent != parent {
 		d.sb.WriteString(" P!" + d.nodeRef(n.Parent))

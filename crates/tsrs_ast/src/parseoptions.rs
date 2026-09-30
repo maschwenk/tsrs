@@ -126,13 +126,13 @@ fn is_file_module_from_using_jsx_tag(file: &SourceFile) -> Option<P<Node>> {
 // This is a somewhat unavoidable full tree walk to locate a JSX tag - `import.meta` requires the same,
 // but we avoid that walk (or parts of it) if at all possible using the `PossiblyContainsImportMeta` node flag.
 // Unfortunately, there's no `NodeFlag` space to do the same for JSX.
-//
-// Go prunes subtrees whose SubtreeFacts lack SubtreeContainsJsx; subtree facts are not ported, so this walks
-// the whole tree (same result).
 fn walk_tree_for_jsx_tags(node: P<Node>) -> Option<P<Node>> {
     fn visitor(node: P<Node>, found: &mut Option<P<Node>>) -> bool {
         if found.is_some() {
             return true;
+        }
+        if !node.subtree_facts().intersects(SubtreeFacts::ContainsJsx) {
+            return false;
         }
         if is_jsx_opening_like_element(node) || is_jsx_fragment(node) {
             *found = Some(node);

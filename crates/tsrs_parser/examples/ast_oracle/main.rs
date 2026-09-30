@@ -133,7 +133,7 @@ impl Dumper {
 
     fn node(&mut self, n: P<Node>, depth: usize, parent: Option<P<Node>>, tag: char) {
         self.sb.push(tag);
-        let _ = write!(self.sb, "{} {} {} {} {:x}", depth, kind_name(n.kind), n.pos(), n.end(), n.flags().bits());
+        let _ = write!(self.sb, "{} {} {} {} {:x} sf={:x}", depth, kind_name(n.kind), n.pos(), n.end(), n.flags().bits(), n.subtree_facts().bits());
         fields::dump_fields(&n, self);
         if n.parent() != parent {
             let r = self.node_ref(n.parent());
@@ -345,7 +345,9 @@ fn run() {
 }
 
 fn main() {
-    let child = std::thread::Builder::new().stack_size(4 << 30).spawn(run).unwrap();
+    // TSRS_ORACLE_STACK_MB overrides the stack size, to measure the parser's stack use per nesting level.
+    let stack_mb: usize = std::env::var("TSRS_ORACLE_STACK_MB").ok().and_then(|s| s.parse().ok()).unwrap_or(4096);
+    let child = std::thread::Builder::new().stack_size(stack_mb << 20).spawn(run).unwrap();
     if child.join().is_err() {
         std::process::exit(101);
     }
