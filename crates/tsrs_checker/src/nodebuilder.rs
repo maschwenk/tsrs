@@ -16,7 +16,7 @@ use std::fmt::Display;
 impl NodeBuilder {
     // nodebuilder.go:29
     pub fn emit_context(&self) -> P<EmitContext> {
-        todo!()
+        self.impl_.e
     }
 
     // nodebuilder.go:33
@@ -144,12 +144,13 @@ impl NodeBuilder {
 
 // nodebuilder.go:279
 pub fn new_node_builder(ch: &mut Checker, e: P<EmitContext>) -> P<NodeBuilder> {
-    todo!()
+    new_node_builder_ex(ch, e, None /*idToSymbol*/)
 }
 
 // nodebuilder.go:283
 pub fn new_node_builder_ex(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> P<NodeBuilder> {
-    todo!()
+    let impl_ = new_node_builder_impl(ch, e, id_to_symbol);
+    P::new(NodeBuilder { impl_, ctx_stack: RefCell::new(Vec::with_capacity(1)), host: ch.program, verbosity: Cell::new(None) })
 }
 
 impl Checker {

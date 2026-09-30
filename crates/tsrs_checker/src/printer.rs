@@ -351,7 +351,17 @@ impl Checker {
 
 // symboltracker.go:14
 pub fn new_symbol_tracker_impl(context: P<NodeBuilderContext>, tracker: Option<&'static dyn SymbolTracker>) -> P<SymbolTrackerImpl> {
-    todo!()
+    let mut tracker = tracker;
+    if tracker.is_some() {
+        loop {
+            let Some(t) = tracker.and_then(|t| t.as_symbol_tracker_impl()) else {
+                break;
+            };
+            tracker = t.inner;
+        }
+    }
+
+    P::new(SymbolTrackerImpl { context, inner: tracker, disable_track_symbol: Cell::new(false) })
 }
 
 impl SymbolTrackerImpl {

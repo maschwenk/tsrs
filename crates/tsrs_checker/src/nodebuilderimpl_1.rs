@@ -24,7 +24,23 @@ use std::fmt::Display;
 
 // nodebuilderimpl.go:125
 pub(crate) fn new_node_builder_impl(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> P<NodeBuilderImpl> {
-    todo!()
+    // Go shares the caller's map (language service inlay hints read it back); the checker never passes one.
+    let id_to_symbol = match id_to_symbol {
+        Some(id_to_symbol) => id_to_symbol.clone(),
+        None => FxHashMap::default(),
+    };
+    // Go also creates `b.cloneBindingNameVisitor = ast.NewNodeVisitor(b.cloneBindingName, b.f, ast.NodeVisitorHooks{})`
+    // here; see NodeBuilderImpl.clone_binding_name_visitor.
+    P::new(NodeBuilderImpl {
+        f: e.factory.as_node_factory().clone(),
+        e,
+        pc: new_pseudo_checker(ch.strict_null_checks, ch.exact_optional_property_types),
+        links: crate::LinkStore::default(),
+        symbol_links: crate::LinkStore::default(),
+        ctx: Cell::new(None),
+        clone_binding_name_visitor: RefCell::new(None),
+        id_to_symbol: RefCell::new(id_to_symbol),
+    })
 }
 
 impl NodeBuilderImpl {

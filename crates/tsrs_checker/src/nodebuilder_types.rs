@@ -3,7 +3,6 @@
 
 use tsrs_ast::{NodeFactory, NodeVisitor};
 use tsrs_core::collections::{CopyOnWriteMap, CopyOnWriteSet};
-use tsrs_core::LinkStore;
 use tsrs_module::ModeAwareCacheKey;
 
 use crate::*;
