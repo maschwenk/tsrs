@@ -35,6 +35,12 @@ impl Oracle {
         let Some(rec) = self.records.get(&item.id()) else {
             return Outcome::Error(format!("no oracle record for {}", item.id()));
         };
+        render_record(rec)
+    }
+}
+
+pub fn render_record(rec: &Value) -> Outcome {
+    {
         if let Some(e) = rec["error"].as_str() {
             return Outcome::Error(format!("oracle: {e}"));
         }
@@ -134,4 +140,17 @@ pub fn load_option_table(path: &str) -> Result<OptionTable, String> {
         decls.push(OptionDecl { name, kind });
     }
     Ok(OptionTable { decls, vary_by })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn renders_like_go() {
+        // Go-captured diagnostics (message chains, related information, two files) and Go's own rendering.
+        let rec: Value = serde_json::from_str(include_str!("../testdata/importTag23.oracle.json")).unwrap();
+        let Outcome::Baseline(actual) = render_record(&rec) else { panic!("expected a baseline") };
+        assert_eq!(actual, rec["baseline"].as_str().unwrap());
+    }
 }
