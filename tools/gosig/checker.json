@@ -159,6 +159,32 @@
       "go": "symboltracker.go",
       "rust": "printer.rs",
       "declsNote": "not generated; port by hand in this file"
+    },
+    {
+      "go": "nodebuilder.go",
+      "rust": "nodebuilder.rs",
+      "declsNote": "hand-ported by printer-foundation in printer_types.rs / nodebuilder_types.rs"
+    },
+    {
+      "go": "nodebuilderimpl.go",
+      "declsNote": "hand-ported by printer-foundation in nodebuilder_types.rs",
+      "chunks": [
+        {
+          "rust": "nodebuilderimpl_1.rs",
+          "from": 1,
+          "to": 1850
+        },
+        {
+          "rust": "nodebuilderimpl_2.rs",
+          "from": 1851,
+          "to": 99999
+        }
+      ]
+    },
+    {
+      "go": "nodebuilderscopes.go",
+      "rust": "nodebuilderscopes.rs",
+      "declsNote": "hand-ported by printer-foundation in nodebuilder_types.rs"
     }
   ],
   "notPorted": [
@@ -182,8 +208,16 @@
     "TupleNormalizer": "",
     "NodeBuilderImpl": ""
   },
-  "droppedCheckerFields": ["Type.checker"],
-  "notCheckerHolders": ["CompositeTypeMapper", "InferenceTypeMapper", "EmitResolver", "tracedTypeAdapter"],
+  "droppedCheckerFields": [
+    "Type.checker",
+    "NodeBuilderImpl.ch"
+  ],
+  "notCheckerHolders": [
+    "CompositeTypeMapper",
+    "InferenceTypeMapper",
+    "EmitResolver",
+    "tracedTypeAdapter"
+  ],
   "arenaTypes": [
     "Type",
     "Signature",
@@ -200,7 +234,11 @@
     "Relation",
     "Relater",
     "FlowState",
-    "InferenceState"
+    "InferenceState",
+    "NodeBuilderImpl",
+    "NodeBuilder",
+    "NodeBuilderContext",
+    "SymbolTrackerImpl"
   ],
   "typeMap": {
     "*ast.Node": "P<Node>",
@@ -227,11 +265,25 @@
     "evaluator.Result": "evaluator::Result",
     "[]any": "Vec<String>",
     "iter.Seq": "Vec<$0>",
-    "iter.Seq@param": "&[$0]"
+    "iter.Seq@param": "&[$0]",
+    "*printer.Printer": "Printer",
+    "*ast.NodeFactory": "&NodeFactory"
   },
   "dataInterfaces": [
-    {"iface": "ast.nodeData", "rust": "P<Node>", "except": ["SourceFile"]},
-    {"iface": "TypeData", "rust": "&'static {T}", "except": ["Type"]}
+    {
+      "iface": "ast.nodeData",
+      "rust": "P<Node>",
+      "except": [
+        "SourceFile"
+      ]
+    },
+    {
+      "iface": "TypeData",
+      "rust": "&'static {T}",
+      "except": [
+        "Type"
+      ]
+    }
   ],
   "paramTypes": {
     "Checker.newLiteralType.value": "LiteralValue",
@@ -261,11 +313,22 @@
     "core.FindBestPatternMatch",
     "core.GetSpellingSuggestion"
   ],
-  "coalesceGenerics": ["core.OrElse", "core.Coalesce", "core.FirstNonZero"],
-  "funcPassthrough": ["core.Memoize"],
-  "nilTolerantParams": ["ast.SymbolTable"],
+  "coalesceGenerics": [
+    "core.OrElse",
+    "core.Coalesce",
+    "core.FirstNonZero"
+  ],
+  "funcPassthrough": [
+    "core.Memoize"
+  ],
+  "nilTolerantParams": [
+    "ast.SymbolTable"
+  ],
   "nilTransparent": true,
-  "callbackConditionalNil": ["mapType", "mapTypeEx"],
+  "callbackConditionalNil": [
+    "mapType",
+    "mapTypeEx"
+  ],
   "paramForwarding": "forward",
   "overrides": {
     "Checker.inferToMultipleTypes#nakedTypeVariable": "nonnil",
@@ -273,6 +336,8 @@
     "Checker.areAllOuterTypeParametersApplied.p0": "P",
     "Checker.grammarErrorOnNode.p0": "P",
     "Checker.grammarErrorOnFirstToken.p0": "P",
-    "Checker.onSuccessfullyResolvedSymbol.p1": "P"
+    "Checker.onSuccessfullyResolvedSymbol.p1": "P",
+    "SymbolTrackerImpl.TrackSymbol.p1": "Option",
+    "SymbolTrackerImpl.PushErrorFallbackNode.p0": "Option"
   }
 }
