@@ -84,6 +84,11 @@ impl tsrs_checker::Program for Program {
         None
     }
 
+    fn get_project_reference_from_source(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference> {
+        let _ = Program::get_project_reference_from_source(self, path);
+        None
+    }
+
     fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<&'static dyn ProjectReferenceCommandLine> {
         let _ = Program::get_redirect_for_resolution(self, file);
         None

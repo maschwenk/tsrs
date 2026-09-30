@@ -39,6 +39,8 @@ pub trait Program: Send + Sync {
     fn source_file_may_be_emitted(&self, source_file: P<SourceFile>, force_dts_emit: bool) -> bool;
     fn is_source_file_default_library(&self, path: &Path) -> bool;
     fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference>;
+    /// Go `modulespecifiers.ModuleSpecifierGenerationHost.GetProjectReferenceFromSource`.
+    fn get_project_reference_from_source(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference>;
     fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<&'static dyn ProjectReferenceCommandLine>;
     fn common_source_directory(&self) -> String;
 
