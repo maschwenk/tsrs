@@ -3,7 +3,8 @@ use std::fmt::Display;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_core::{stringutil, ScriptTarget};
-use tsrs_diagnostics::{diagnostics, Message};
+use tsrs_diagnostics as diagnostics;
+use tsrs_diagnostics::Message;
 
 use crate::scanner::{decode_rune, is_identifier_part, is_word_character, rune_string, EscapeSequenceScanningFlags, IdentifierVariant, Scanner, RUNE_ERROR};
 use crate::unicodeproperties::{

@@ -36,7 +36,8 @@ use rustc_hash::FxHashMap;
 use tsrs_ast as ast;
 use tsrs_ast::{CommentDirective, CommentDirectiveKind, CommentRange, Kind, Node, NodeFlags, SourceFile, SourceFileLike, TokenFlags};
 use tsrs_core::{alloc_str, jsnum, stringutil, LanguageVariant, ScriptTarget, TextPos, TextRange, UTF16Offset, P};
-use tsrs_diagnostics::{diagnostics, Message};
+use tsrs_diagnostics as diagnostics;
+use tsrs_diagnostics::Message;
 
 use crate::regexp::{char_code_to_reg_exp_flag, RegExpParser, RegularExpressionFlags};
 use crate::utilities::token_is_identifier_or_keyword;
