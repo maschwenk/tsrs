@@ -256,7 +256,7 @@ impl Parser {
         }
         let node = self.factory.new_source_file(self.opts.clone(), self.source_text, statements, eof);
         let node = self.finish_node(node, pos);
-        let result = P::from_static(node.as_source_file());
+        let result = node.as_source_file();
         if !result.statements.nodes.is_empty() {
             let value = result.statements.nodes[0].expression();
             self.validate_json_value(result, value);
@@ -323,7 +323,7 @@ impl Parser {
 }
 
 pub(crate) fn is_double_quoted_string(node: P<Node>) -> bool {
-    ast::is_string_literal(node) && !node.as_string_literal().token_flags.intersects(TokenFlags::SingleQuote)
+    ast::is_string_literal(node) && !node.as_string_literal().token_flags().intersects(TokenFlags::SingleQuote)
 }
 
 impl Parser {
@@ -350,7 +350,7 @@ impl Parser {
                     ));
                 }
             }
-            self.validate_json_value(source_file, element.as_property_assignment().initializer);
+            self.validate_json_value(source_file, Some(element.as_property_assignment().initializer()));
         }
     }
 }
@@ -542,13 +542,13 @@ impl Parser {
         let statement_list = self.new_node_list(new_text_range(pos, end), &statements);
         let node = self.factory.new_source_file(self.opts.clone(), self.source_text, statement_list, eof);
         let node = self.finish_node(node, pos);
-        let mut result = P::from_static(node.as_source_file());
+        let mut result = node.as_source_file();
         self.finish_source_file(result, is_declaration_file);
         if !result.is_declaration_file.get() && result.external_module_indicator.get().is_some() && !self.possible_await_spans.is_empty() {
             let reparse = self.reparse_top_level_await(result);
             let reparse = self.finish_node(reparse, pos);
             if node != reparse {
-                result = P::from_static(reparse.as_source_file());
+                result = reparse.as_source_file();
                 self.finish_source_file(result, is_declaration_file);
             }
         }
@@ -1500,12 +1500,12 @@ impl Parser {
             let expression = self.do_in_context(NodeFlags::DisallowInContext, false, Parser::parse_assignment_expression_or_higher);
             self.parse_expected(Kind::CloseParenToken);
             let statement = self.parse_statement();
-            result = self.factory.new_for_in_or_of_statement(Kind::ForOfStatement, await_token, initializer, expression, statement);
+            result = self.factory.new_for_in_or_of_statement(Kind::ForOfStatement, await_token, initializer.unwrap(), expression, statement);
         } else if self.parse_optional(Kind::InKeyword) {
             let expression = self.parse_expression_allow_in();
             self.parse_expected(Kind::CloseParenToken);
             let statement = self.parse_statement();
-            result = self.factory.new_for_in_or_of_statement(Kind::ForInStatement, None /*awaitToken*/, initializer, expression, statement);
+            result = self.factory.new_for_in_or_of_statement(Kind::ForInStatement, None /*awaitToken*/, initializer.unwrap(), expression, statement);
         } else {
             self.parse_expected(Kind::SemicolonToken);
             let mut condition = None;
@@ -2086,7 +2086,7 @@ impl Parser {
             return node;
         }
         let type_name = self.convert_entity_name_expression_to_entity_name(expression_with_type_arguments.expression);
-        let result = self.factory.new_type_reference_node(type_name, expression_with_type_arguments.type_arguments);
+        let result = self.factory.new_type_reference_node(type_name, expression_with_type_arguments.type_arguments());
         self.finish_node(result, pos)
     }
 }
