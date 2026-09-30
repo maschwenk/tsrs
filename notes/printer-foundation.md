@@ -45,25 +45,42 @@ Foundation for the node builder (type/symbol/signature -> text). Data model desc
 - New: `nodebuilder_types.rs` (data model), `printer_standin.rs` (STAND-IN for tsrs_printer), lib.rs module lines.
 - docs/CHECKER.md ("Node builder" section, file table, dropped-fields and printer_types bullets), docs/AST.md (NodeFactory).
 
-## Needs from others
+## Wave 2 (coordinator: port all unported dependencies)
 
-- `tsrs_printer` (printer-pkg) API assumed — see CHECKER.md "The tsrs_printer seam"; at merge delete
-  printer_standin.rs and re-export from `tsrs_printer` in printer_types.rs. `SymbolAccessibility`/
-  `SymbolAccessibilityResult` (Go printer/emitresolver.go) live in printer_types.rs today; if tsrs_printer also
-  exports them, keep one.
-- Not ported but called by the node builder / symbolaccessibility (lead decision needed): EmitResolver
-  `hasVisibleDeclarations` (affects every `isSymbolAccessible` -> symbol chains in messages), `isEntityNameVisible`,
-  `requiresAddingImplicitUndefined`; nodecopy.go `tryReuseExistingNodeHelper`, `reuseNode`, `tryJSTypeNodeToTypeNode`;
-  pseudotypenodebuilder.go + `internal/pseudochecker`; `internal/modulespecifiers` (`GetModuleSpecifiers`,
-  `CountPathComponents`) for `import("…")` type names.
-- `Program` trait: Go `Host` = `modulespecifiers.ModuleSpecifierGenerationHost`; `NodeBuilder.host` /
-  `NodeBuilderContext.host` are `&'static dyn Program`, which may need those host methods once modulespecifiers is ported.
+- nodecopy.go -> `nodecopy.rs`, pseudotypenodebuilder.go -> `pseudotypenodebuilder.rs`, nodebuilder_hover.go ->
+  `nodebuilder_hover.rs` (stubs); emitresolver.go -> `emitresolver_subset.rs` and services.go -> `services_subset.rs`
+  (only reachable functions; the others are `skipFuncs`). Un-notPorting these files changed no existing signature
+  (verified: docs/sigs/checker.txt has only additions, all existing stub files byte-identical).
+- New crates: `tsrs_pseudochecker` (no checker dependency; tools/gosig/pseudochecker.json), `tsrs_modulespecifiers`
+  (depends on tsrs_module, tsrs_tsoptions, regex; tools/gosig/modulespecifiers.json). `ProcessEntrypointEnding` not
+  ported (LS auto-imports only; needs unported `module.ResolvedEntrypoint`).
+- gosig changes: tolerate packages without a state-machine type; skipped functions reserve no names (a skipped
+  exported forwarder in services.go had made `get_element_type_of_array_type` `pub`); `paramTypes` `"Recv.fn.r0"` result
+  override (`GetConstantValue -> Option<LiteralValue>`); `*ast.NodeVisitor` -> `NodeVisitor` by value; `EmitResolver`,
+  `recoveryBoundary`, `wrappingTracker` arena types.
+- Shared-file edits (additive): `Program::as_module_specifier_generation_host()` (program.rs) + `todo!()` impl in
+  tsrs_compiler/src/checker_program.rs (compiler must implement `ModuleSpecifierGenerationHost` + `OutputPathsHost` for
+  its Program); `Checker.emit_resolver`; tsrs_ast `LiteralLikeNodeBase.token_flags` is now a `Cell` (nodecopy.go writes
+  it; one `.token_flags` field read in utilities_3.rs became `.token_flags()`); workspace Cargo.toml entries.
+- cloneBindingName / existing-node visitors: `CheckerSlot` (the one `unsafe` block, dynamically checked like RefCell);
+  see CHECKER.md "Visitors that need the checker".
+
+## Merge notes (main has moved on)
+
+- main's `checker_15.rs` `get_emit_resolver` returns `P::new(EmitResolver {})`: replace with the memoized Go port
+  (`if self.emit_resolver.is_none() { self.emit_resolver = Some(new_emit_resolver(self)); } self.emit_resolver.unwrap()`),
+  and drop main's placeholder `EmitResolver {}` in printer_types.rs (now in nodebuilder_types.rs).
+- main's exports.rs `unimplemented!("emit resolver")` (exports.go:383): replace with Go's `RequiresAddingImplicitUndefined`
+  wrapper: `if !ast::is_parse_tree_node(node) { return false }` then
+  `let r = self.get_emit_resolver(); r.requires_adding_implicit_undefined(self, node, symbol, enclosing_declaration)`.
+- main regenerates docs/sigs/checker.txt from the Rust sources (tools/sigs-from-rust.py): rerun it after merging instead
+  of merging this branch's generated sigs file.
+- Stand-ins to replace at merge: printer_standin.rs (tsrs_printer), compiler `as_module_specifier_generation_host`.
 
 ## Doubts
 
-- `clone_binding_name_visitor` left `None`: Go's reusable visitor calls `b.cloneBindingName` (needs the checker); a
-  `'static` `VisitFn` cannot capture `&mut Checker`. The body port must pick a strategy (e.g. a per-call visitor with a
-  documented raw checker pointer, or an equivalent manual child rebuild).
+- `CheckerSlot` uses one `unsafe` deref (NonNull from the lent `&mut Checker`); soundness relies on the dynamic
+  `in_use` check and on callbacks re-lending before re-entering a visitor.
 - `id_to_symbol` is copied from the caller's map (Go shares it; only language-service inlay hints read it back).
 - tsrs_compiler does not compile at the base commit (`get_diagnostics` is private, program.rs:1233) — unrelated,
   pre-existing.
