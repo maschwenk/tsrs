@@ -697,7 +697,7 @@ pub struct Checker {
     pub string_mapping_types: FxHashMap<StringMappingKey, P<Type>>,
     pub unique_es_symbol_types: FxHashMap<P<Symbol>, P<Type>>,
     pub this_expando_kinds: FxHashMap<P<Symbol>, thisAssignmentDeclarationKind>,
-    pub this_expando_locations: FxHashMap<P<Symbol>, P<Node>>,
+    pub this_expando_locations: FxHashMap<P<Symbol>, Option<P<Node>>>,
     pub subtype_reduction_cache: FxHashMap<CacheHashKey, &'static [P<Type>]>,
     pub cached_types: FxHashMap<CachedTypeKey, P<Type>>,
     pub cached_signatures: FxHashMap<CachedSignatureKey, P<Signature>>,

@@ -30,7 +30,7 @@ pub(crate) fn as_recursion_id<T: Into<RecursionId>>(value: T) -> RecursionId {
 
 impl Relation {
     // relater.go:102
-    pub(crate) fn get(&self, key: CacheHashKey) -> RelationComparisonResult {
+    pub(crate) fn lookup(&self, key: CacheHashKey) -> RelationComparisonResult {
         self.results.borrow().get(&key).copied().unwrap_or(RelationComparisonResult::None)
     }
 
@@ -153,7 +153,7 @@ impl Checker {
         if source.flags().intersects(TypeFlags::Object) && target.flags().intersects(TypeFlags::Object) {
             let is_identity = relation == self.identity_relation;
             let (id, _) = get_relation_key(self, source, target, IntersectionState::None, is_identity, false);
-            let related = (*relation).get(id);
+            let related = relation.lookup(id);
             if related != RelationComparisonResult::None {
                 return related.intersects(RelationComparisonResult::Succeeded);
             }

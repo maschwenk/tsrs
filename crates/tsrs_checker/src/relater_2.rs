@@ -622,7 +622,7 @@ impl Relater {
         }
         let is_identity = self.rel() == c.identity_relation;
         let (id, constrained) = get_relation_key(c, source, target, intersection_state, is_identity, false /*ignoreConstraints*/);
-        let entry = Relation::get(&self.rel(), id);
+        let entry = self.rel().lookup(id);
         if entry != RelationComparisonResult::None {
             if report_errors && entry.intersects(RelationComparisonResult::Failed) && !entry.intersects(RelationComparisonResult::Overflow) {
                 // We are elaborating errors and the cached result is a failure not due to a comparison overflow,

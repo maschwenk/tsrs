@@ -1295,9 +1295,9 @@ impl Checker {
             _ => return (thisAssignmentDeclarationKind::None, None),
         }
         if let Some(&kind) = self.this_expando_kinds.get(&symbol) {
-            // Go stores a nil location in the map; the Rust map (FxHashMap<P<Symbol>, P<Node>>) cannot, so a missing
-            // entry stands for nil here.
-            let location = self.this_expando_locations.get(&symbol).copied();
+            let Some(&location) = self.this_expando_locations.get(&symbol) else {
+                panic!("location should be cached whenever this expando symbol is cached");
+            };
             return (kind, location);
         }
         let mut all_this = true;
@@ -1333,14 +1333,7 @@ impl Checker {
             }
         }
         self.this_expando_kinds.insert(symbol, kind);
-        match location {
-            Some(location) => {
-                self.this_expando_locations.insert(symbol, location);
-            }
-            None => {
-                self.this_expando_locations.remove(&symbol);
-            }
-        }
+        self.this_expando_locations.insert(symbol, location);
         (kind, location)
     }
 
