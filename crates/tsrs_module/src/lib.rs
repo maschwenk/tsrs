@@ -12,4 +12,6 @@ pub use types::*;
 pub use util::*;
 
 #[cfg(test)]
+mod oracle_test;
+#[cfg(test)]
 mod resolver_test;

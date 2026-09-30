@@ -141,7 +141,7 @@ pub fn get_resolution_diagnostic(options: &CompilerOptions, resolved_module: &Re
     };
 
     let need_allow_arbitrary_extensions = || -> Option<&'static Message> {
-        if file.is_declaration_file || options.allow_arbitrary_extensions.is_true() {
+        if file.is_declaration_file.get() || options.allow_arbitrary_extensions.is_true() {
             return None;
         }
         Some(&diagnostics::Module_0_was_resolved_to_1_but_allowArbitraryExtensions_is_not_set)
