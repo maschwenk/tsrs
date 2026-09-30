@@ -225,6 +225,10 @@ pub fn is_property_name_literal(node: P<Node>) -> bool {
     matches!(node.kind, Kind::Identifier | Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::NumericLiteral)
 }
 
+pub fn is_member_name(node: P<Node>) -> bool {
+    node.kind == Kind::Identifier || node.kind == Kind::PrivateIdentifier
+}
+
 pub fn is_entity_name(node: P<Node>) -> bool {
     node.kind == Kind::Identifier || node.kind == Kind::QualifiedName
 }
@@ -551,6 +555,24 @@ pub fn is_parameter_property_declaration(node: P<Node>, parent: P<Node>) -> bool
     is_parameter_declaration(node) && has_syntactic_modifier(node, ModifierFlags::ParameterPropertyModifier) && parent.kind == Kind::Constructor
 }
 
+pub fn is_type_element(node: P<Node>) -> bool {
+    matches!(
+        node.kind,
+        Kind::ConstructSignature
+            | Kind::CallSignature
+            | Kind::PropertySignature
+            | Kind::MethodSignature
+            | Kind::IndexSignature
+            | Kind::GetAccessor
+            | Kind::SetAccessor
+            | Kind::NotEmittedTypeElement
+    )
+}
+
+pub fn is_jsx_child(node: P<Node>) -> bool {
+    matches!(node.kind, Kind::JsxElement | Kind::JsxExpression | Kind::JsxSelfClosingElement | Kind::JsxText | Kind::JsxFragment)
+}
+
 pub fn is_jsx_attribute_like(node: P<Node>) -> bool {
     is_jsx_attribute(node) || is_jsx_spread_attribute(node)
 }
@@ -674,6 +696,10 @@ pub fn is_type_node_kind(kind: Kind) -> bool {
 
 pub fn is_type_node(node: P<Node>) -> bool {
     is_type_node_kind(node.kind)
+}
+
+pub fn is_jsdoc_kind(kind: Kind) -> bool {
+    Kind::FirstJSDocNode <= kind && kind <= Kind::LastJSDocNode
 }
 
 pub fn is_jsdoc_type_assertion(node: impl Into<Option<P<Node>>>) -> bool {
@@ -1203,6 +1229,15 @@ pub fn is_deprecated_declaration_with_cached_flags(declaration: P<Node>, combine
     false
 }
 
+pub fn is_var_await_using(node: P<Node>) -> bool {
+    get_combined_node_flags(node) & NodeFlags::BlockScoped == NodeFlags::AwaitUsing
+}
+
+// Gets whether a bound `VariableDeclaration` or `VariableDeclarationList` is part of a `using` declaration.
+pub fn is_var_using(node: P<Node>) -> bool {
+    get_combined_node_flags(node) & NodeFlags::BlockScoped == NodeFlags::Using
+}
+
 // Gets whether a bound `VariableDeclaration` or `VariableDeclarationList` is part of a `const` declaration.
 pub fn is_var_const(node: P<Node>) -> bool {
     get_combined_node_flags(node) & NodeFlags::BlockScoped == NodeFlags::Const
@@ -1212,6 +1247,10 @@ pub fn is_var_const(node: P<Node>) -> bool {
 pub fn is_var_const_like(node: P<Node>) -> bool {
     let flags = get_combined_node_flags(node) & NodeFlags::BlockScoped;
     flags == NodeFlags::Const || flags == NodeFlags::Using || flags == NodeFlags::AwaitUsing
+}
+
+pub fn is_var_let(node: P<Node>) -> bool {
+    get_combined_node_flags(node) & NodeFlags::BlockScoped == NodeFlags::Let
 }
 
 pub fn is_import_meta(node: P<Node>) -> bool {

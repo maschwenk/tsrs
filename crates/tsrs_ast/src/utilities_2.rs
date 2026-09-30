@@ -1142,6 +1142,10 @@ pub fn is_alias_symbol_declaration(node: P<Node>) -> bool {
     }
 }
 
+pub fn is_parse_tree_node(node: P<Node>) -> bool {
+    !node.flags.get().intersects(NodeFlags::Synthesized)
+}
+
 // Returns a token if position is in [start-of-leading-trivia, end), includes JSDoc only if requested
 pub fn get_node_at_position(file: P<SourceFile>, position: i32, include_jsdoc: bool) -> P<Node> {
     let mut current = file.as_node();

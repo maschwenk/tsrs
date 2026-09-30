@@ -344,6 +344,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_printer"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "indexmap",
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_core",
+ "tsrs_parser",
+ "tsrs_scanner",
+ "tsrs_vfs",
+]
+
+[[package]]
 name = "tsrs_scanner"
 version = "0.1.0"
 dependencies = [

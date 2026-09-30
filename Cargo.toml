@@ -26,6 +26,7 @@ tsrs_module = { path = "crates/tsrs_module" }
 tsrs_tsoptions = { path = "crates/tsrs_tsoptions" }
 tsrs_checker = { path = "crates/tsrs_checker" }
 tsrs_compiler = { path = "crates/tsrs_compiler" }
+tsrs_printer = { path = "crates/tsrs_printer" }
 
 [profile.dev]
 opt-level = 1
