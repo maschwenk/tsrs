@@ -4,7 +4,8 @@
 //   tsrs-oracle-binder dump FILE        print the binder dump of FILE
 //   tsrs-oracle-binder hash < filelist  print "hash path" for every file named on stdin
 //
-// Each test file is parsed as one source file named /oracle/<basename> and bound. The dump lists, in
+// Each test file is split into units at `// @filename: NAME` lines (the text before the first such line
+// is a unit named after the test file); every unit is parsed as /oracle/NAME and bound. The dump lists, in
 // ForEachChild pre-order, every node that carries binder output: binder-set node flags, its declared
 // symbol (name, flags, declaration count, value declaration position, sorted exports/members), local
 // symbol, sorted locals table, and references to flow nodes. Flow nodes are numbered in discovery order
@@ -185,14 +186,56 @@ func (d *dumper) flowNode(id int, f *ast.FlowNode) {
 	fmt.Fprintf(&d.sb, " %s %s\n", d.flowRef(f.Antecedent), d.flowList(f.Antecedents))
 }
 
+func fileNameDirective(line string) (string, bool) {
+	line = strings.TrimRight(line, "\r\n")
+	line = strings.TrimLeft(line, " \t")
+	if !strings.HasPrefix(line, "//") {
+		return "", false
+	}
+	line = strings.TrimLeft(line[2:], " \t")
+	if len(line) < 9 || strings.ToLower(line[:9]) != "@filename" {
+		return "", false
+	}
+	line = strings.TrimLeft(line[9:], " \t")
+	if !strings.HasPrefix(line, ":") {
+		return "", false
+	}
+	return strings.Trim(line[1:], " \t"), true
+}
+
 func dump(path string) (string, error) {
 	text, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
-	fileName := "/oracle/" + filepath.Base(path)
+	var sb strings.Builder
+	name := filepath.Base(path)
+	var unit strings.Builder
+	for _, line := range strings.SplitAfter(string(text), "\n") {
+		if next, ok := fileNameDirective(line); ok {
+			dumpUnit(&sb, name, unit.String())
+			name = next
+			unit.Reset()
+			continue
+		}
+		unit.WriteString(line)
+	}
+	dumpUnit(&sb, name, unit.String())
+	return sb.String(), nil
+}
+
+func dumpUnit(out *strings.Builder, name string, text string) {
+	fileName := tspath.NormalizePath("/oracle/" + strings.TrimLeft(name, "/"))
+	out.WriteString("U ")
+	escape(out, fileName)
+	out.WriteByte('\n')
+	scriptKind := core.GetScriptKindFromFileName(fileName)
+	if scriptKind == core.ScriptKindUnknown {
+		out.WriteString("skipped\n")
+		return
+	}
 	opts := ast.SourceFileParseOptions{FileName: fileName, Path: tspath.Path(fileName)}
-	file := parser.ParseSourceFile(opts, string(text), core.GetScriptKindFromFileName(fileName))
+	file := parser.ParseSourceFile(opts, text, scriptKind)
 	binder.BindSourceFile(file)
 	d := &dumper{ids: make(map[*ast.FlowNode]int)}
 	d.visit(file.AsNode())
@@ -209,7 +252,17 @@ func dump(path string) (string, error) {
 		d.sb.WriteByte('\n')
 	}
 	fmt.Fprintf(&d.sb, "C %d %d\n", file.SymbolCount, len(file.PatternAmbientModules))
-	return d.sb.String(), nil
+	out.WriteString(d.sb.String())
+}
+
+func safeDump(path string) (out string, err error, panicked bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+		}
+	}()
+	out, err = dump(path)
+	return out, err, false
 }
 
 func main() {
@@ -227,7 +280,11 @@ func main() {
 		defer w.Flush()
 		for in.Scan() {
 			path := in.Text()
-			out, err := dump(path)
+			out, err, panicked := safeDump(path)
+			if panicked {
+				fmt.Fprintf(w, "PANIC %s\n", path)
+				continue
+			}
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				continue

@@ -171,13 +171,49 @@ impl Dumper {
     }
 }
 
+fn file_name_directive(line: &str) -> Option<String> {
+    let line = line.trim_end_matches(['\r', '\n']).trim_start_matches([' ', '\t']);
+    let line = line.strip_prefix("//")?.trim_start_matches([' ', '\t']);
+    if line.len() < 9 || !line.is_char_boundary(9) || line[..9].to_ascii_lowercase() != "@filename" {
+        return None;
+    }
+    let line = line[9..].trim_start_matches([' ', '\t']);
+    let line = line.strip_prefix(':')?;
+    Some(line.trim_matches([' ', '\t']).to_string())
+}
+
+// Invalid UTF-8 input bytes become U+FFFD here (Go keeps them), so a handful of binary-ish test files differ.
 fn dump(path: &str) -> Result<String, String> {
     let text = std::fs::read(path).map_err(|e| format!("{}: {}", path, e))?;
     let text = String::from_utf8_lossy(&text).into_owned();
-    let base = std::path::Path::new(path).file_name().unwrap().to_string_lossy().into_owned();
-    let file_name = format!("/oracle/{}", base);
+    let mut out = String::new();
+    let mut name = std::path::Path::new(path).file_name().unwrap().to_string_lossy().into_owned();
+    let mut unit = String::new();
+    for line in text.split_inclusive('\n') {
+        if let Some(next) = file_name_directive(line) {
+            dump_unit(&mut out, &name, &unit);
+            name = next;
+            unit.clear();
+            continue;
+        }
+        unit.push_str(line);
+    }
+    dump_unit(&mut out, &name, &unit);
+    Ok(out)
+}
+
+fn dump_unit(out: &mut String, name: &str, text: &str) {
+    let file_name = tsrs_core::tspath::normalize_path(&format!("/oracle/{}", name.trim_start_matches('/')));
+    out.push_str("U ");
+    escape(out, &file_name);
+    out.push('\n');
+    let script_kind = tsrs_core::get_script_kind_from_file_name(&file_name);
+    if script_kind == tsrs_core::ScriptKind::Unknown {
+        out.push_str("skipped\n");
+        return;
+    }
     let opts = SourceFileParseOptions { file_name: file_name.clone(), path: Path::new(file_name.clone()), external_module_indicator_options: Default::default() };
-    let file = tsrs_parser::parse_source_file(opts, &text, tsrs_core::get_script_kind_from_file_name(&file_name));
+    let file = tsrs_parser::parse_source_file(opts, text, script_kind);
     tsrs_binder::bind_source_file(file);
     let mut d = Dumper::default();
     d.visit(file.as_node());
@@ -197,7 +233,7 @@ fn dump(path: &str) -> Result<String, String> {
         d.sb.push('\n');
     }
     let _ = writeln!(d.sb, "C {} {}", file.symbol_count.get(), file.pattern_ambient_modules.get().len());
-    Ok(d.sb)
+    out.push_str(&d.sb);
 }
 
 fn fnv64a(data: &[u8]) -> u64 {
