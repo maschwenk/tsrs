@@ -1,0 +1,47 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+bumpalo = "3"
+rustc-hash = "2"
+indexmap = "2"
+bitflags = "2"
+rayon = "1"
+memchr = "2"
+unicode-ident = "1"
+tsrs_core = { path = "crates/tsrs_core" }
+tsrs_diagnostics = { path = "crates/tsrs_diagnostics" }
+tsrs_ast = { path = "crates/tsrs_ast" }
+tsrs_scanner = { path = "crates/tsrs_scanner" }
+tsrs_parser = { path = "crates/tsrs_parser" }
+tsrs_binder = { path = "crates/tsrs_binder" }
+tsrs_vfs = { path = "crates/tsrs_vfs" }
+tsrs_module = { path = "crates/tsrs_module" }
+tsrs_tsoptions = { path = "crates/tsrs_tsoptions" }
+tsrs_checker = { path = "crates/tsrs_checker" }
+tsrs_compiler = { path = "crates/tsrs_compiler" }
+
+[profile.dev]
+opt-level = 1
+debug = "line-tables-only"
+
+[profile.release]
+opt-level = 3
+debug = "line-tables-only"
+panic = "unwind"
+
+[workspace.lints.rust]
+dead_code = "allow"
+unused_variables = "allow"
+unused_imports = "allow"
+unused_mut = "allow"
+non_upper_case_globals = "allow"
+
+[workspace.lints.clippy]
+all = "allow"

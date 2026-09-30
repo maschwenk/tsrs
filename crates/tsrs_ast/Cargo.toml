@@ -1,0 +1,15 @@
+[package]
+name = "tsrs_ast"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tsrs_core.workspace = true
+tsrs_diagnostics.workspace = true
+rustc-hash.workspace = true
+indexmap.workspace = true
+bitflags.workspace = true
