@@ -1,6 +1,9 @@
 pub mod ptr;
 pub use ptr::{alloc, alloc_slice, alloc_str, alloc_vec, P};
 
+mod frozen;
+pub use frozen::{FrozenCell, FrozenRef, FrozenRefMut};
+
 pub mod collections;
 pub mod debug;
 pub mod glob;

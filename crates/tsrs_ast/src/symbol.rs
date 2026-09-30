@@ -1,9 +1,9 @@
-use std::cell::{Cell, Ref, RefCell};
+use std::cell::Cell;
 use std::sync::atomic::AtomicU64;
 
 use indexmap::IndexMap;
 use rustc_hash::FxBuildHasher;
-use tsrs_core::P;
+use tsrs_core::{FrozenCell, FrozenRef, P};
 
 use crate::ast::{Node, SourceFile};
 use crate::checkflags::CheckFlags;
@@ -18,7 +18,7 @@ pub struct Symbol {
     pub flags: Cell<SymbolFlags>,
     pub check_flags: Cell<CheckFlags>, // Non-zero only in transient symbols created by Checker
     pub name: Cell<&'static str>,
-    pub declarations: RefCell<Vec<P<Node>>>,
+    pub declarations: FrozenCell<Vec<P<Node>>>,
     pub value_declaration: Cell<Option<P<Node>>>,
     pub members: Cell<Option<P<SymbolTable>>>,
     pub exports: Cell<Option<P<SymbolTable>>>,
@@ -51,7 +51,7 @@ impl Symbol {
     }
     /// Borrow of the declarations list; do not hold it across calls that may push declarations.
     #[inline]
-    pub fn declarations(&self) -> Ref<'_, Vec<P<Node>>> {
+    pub fn declarations(&self) -> FrozenRef<'_, Vec<P<Node>>> {
         self.declarations.borrow()
     }
     #[inline]
@@ -125,7 +125,7 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
 // a Go nil table is `None`. Iteration is in insertion order and returns snapshots.
 
 #[derive(Default)]
-pub struct SymbolTable(RefCell<IndexMap<&'static str, P<Symbol>, FxBuildHasher>>);
+pub struct SymbolTable(FrozenCell<IndexMap<&'static str, P<Symbol>, FxBuildHasher>>);
 
 impl SymbolTable {
     /// Go `make(ast.SymbolTable)`.
@@ -135,12 +135,12 @@ impl SymbolTable {
 
     /// Go `make(ast.SymbolTable, n)`.
     pub fn with_capacity(n: usize) -> P<SymbolTable> {
-        P::new(SymbolTable(RefCell::new(IndexMap::with_capacity_and_hasher(n, FxBuildHasher))))
+        P::new(SymbolTable(FrozenCell::new(IndexMap::with_capacity_and_hasher(n, FxBuildHasher))))
     }
 
     /// Go `maps.Clone(table)` for a non-nil table.
     pub fn clone_table(&self) -> P<SymbolTable> {
-        P::new(SymbolTable(RefCell::new(self.0.borrow().clone())))
+        P::new(SymbolTable(FrozenCell::new(self.0.borrow().clone())))
     }
 
     /// Go `table[name]`. On a `P<SymbolTable>` receiver `table.get(name)` resolves to `P::get`, so use
