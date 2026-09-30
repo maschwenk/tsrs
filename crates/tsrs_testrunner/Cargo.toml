@@ -8,7 +8,7 @@ license.workspace = true
 workspace = true
 
 [features]
-default = ["compiler"]
+default = ["compiler", "checker"]
 # The Rust compiler backend (program creation, parse/bind, syntactic diagnostics).
 compiler = ["tsoptions", "dep:tsrs_compiler"]
 # Semantic diagnostics through tsrs_checker. Without it every run is --syntax-only.
