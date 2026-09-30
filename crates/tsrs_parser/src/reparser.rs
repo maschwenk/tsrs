@@ -458,7 +458,7 @@ impl Parser {
                         if parent.expression().is_some() && tag.type_expression().is_some() {
                             let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node()).unwrap();
                             let cast = self.make_new_cast(t, parent.expression().unwrap(), true /*isAssertion*/);
-                            parent.as_mutable().set_expression(Some(cast));
+                            parent.as_mutable().set_expression(cast);
                             self.finish_mutated_node(parent);
                             return;
                         }
@@ -481,7 +481,7 @@ impl Parser {
                             if declaration.initializer().is_some() && tag.type_expression().is_some() {
                                 let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node()).unwrap();
                                 let cast = self.make_new_cast(t, declaration.initializer().unwrap(), false /*isAssertion*/);
-                                declaration.as_mutable().set_initializer(Some(cast));
+                                declaration.as_mutable().set_initializer(cast);
                                 self.finish_mutated_node(declaration);
                                 break;
                             }
@@ -492,7 +492,7 @@ impl Parser {
                     if parent.initializer().is_some() && tag.type_expression().is_some() {
                         let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node()).unwrap();
                         let cast = self.make_new_cast(t, parent.initializer().unwrap(), false /*isAssertion*/);
-                        parent.as_mutable().set_initializer(Some(cast));
+                        parent.as_mutable().set_initializer(cast);
                         self.finish_mutated_node(parent);
                     }
                 }
@@ -511,7 +511,7 @@ impl Parser {
                     if parent.expression().is_some() && tag.type_expression().is_some() {
                         let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node()).unwrap();
                         let cast = self.make_new_cast(t, parent.expression().unwrap(), false /*isAssertion*/);
-                        parent.as_mutable().set_expression(Some(cast));
+                        parent.as_mutable().set_expression(cast);
                         self.finish_mutated_node(parent);
                     }
                 }
@@ -570,7 +570,7 @@ impl Parser {
                 if let Some(fun) = get_function_like_host(parent) {
                     let params = fun.parameters();
                     if params.is_empty()
-                        || (params[0].name().unwrap().kind != Kind::ThisKeyword && !ast::is_this_identifier(params[0].name()))
+                        || (params[0].name().unwrap().kind != Kind::ThisKeyword && !ast::is_this_identifier(params[0].name().unwrap()))
                     {
                         let this_identifier = self.factory.new_identifier("this");
                         let this_param = self.factory.new_parameter_declaration(
@@ -859,7 +859,7 @@ fn get_function_like_host(host: P<Node>) -> Option<P<Node>> {
             fun = host.expression();
         }
         Kind::ExpressionStatement => {
-            fun = ast::get_right_most_assigned_expression(host.expression().unwrap());
+            fun = Some(ast::get_right_most_assigned_expression(host.expression().unwrap()));
         }
         _ => {}
     }

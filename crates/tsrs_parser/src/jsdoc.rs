@@ -1,5 +1,5 @@
 use bitflags::bitflags;
-use tsrs_ast::{self as ast, Diagnostic, Kind, ModifierList, Node, NodeFlags, NodeList, SourceFile};
+use tsrs_ast::{self as ast, Diagnostic, DiagnosticExt, Kind, ModifierList, Node, NodeFlags, NodeList, SourceFile};
 use tsrs_core::{alloc_slice, alloc_str, alloc_vec, stringutil, TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 
@@ -17,9 +17,9 @@ pub(crate) fn init() {
 
 // parseJSDocForNode lazily parses JSDoc for a node in a TS file.
 // Called on first access to Node.JSDoc() for non-JS source files.
-fn parse_jsdoc_for_node(source_file: P<SourceFile>, node: P<Node>) -> Vec<P<Node>> {
+fn parse_jsdoc_for_node(source_file: &'static SourceFile, node: P<Node>) -> Vec<P<Node>> {
     let mut p = new_parser();
-    p.initialize_state(source_file.parse_options(), source_file.text(), source_file.script_kind());
+    p.initialize_state(source_file.parse_options().clone(), source_file.text(), source_file.script_kind());
     let ranges = get_jsdoc_comment_ranges(&mut p.factory, &[], node, source_file.text());
     if ranges.is_empty() {
         return Vec::new();

@@ -1,5 +1,5 @@
 use tsrs_ast::{self as ast, ModifierFlags, Node, NodeFlags, SourceFile};
-use tsrs_core::{self as core, tspath, Tristate, P};
+use tsrs_core::{self as core, alloc_vec, tspath, Tristate, P};
 
 pub(crate) fn collect_external_module_references(file: P<SourceFile>) {
     for &node in file.statements().nodes() {
@@ -11,10 +11,10 @@ pub(crate) fn collect_external_module_references(file: P<SourceFile>) {
             file,
             true, /*includeTypeSpaceImports*/
             true, /*requireStringLiteralLikeArgument*/
-            &mut |_node: P<Node>, module_specifier: P<Node>| {
+            |_node: P<Node>, module_specifier: P<Node>| {
                 let mut imports = file.imports().to_vec();
                 imports.push(module_specifier);
-                ast::set_imports_of_source_file(file, imports);
+                set_imports_of_source_file(file, imports);
                 false
             },
         );
@@ -32,14 +32,14 @@ pub(crate) fn collect_module_references(file: P<SourceFile>, node: P<Node>, in_a
             if !module_name.is_empty() && (!in_ambient_module || !tspath::is_external_module_name_relative(module_name)) {
                 let mut imports = file.imports().to_vec();
                 imports.push(module_name_expr);
-                ast::set_imports_of_source_file(file, imports);
+                set_imports_of_source_file(file, imports);
                 // !!! removed `&& p.currentNodeModulesDepth == 0`
-                if file.uses_uri_style_node_core_modules.get() != Tristate::True && !file.is_declaration_file.get() {
-                    if module_name.starts_with("node:") && !core::ExclusivelyPrefixedNodeCoreModules.contains(module_name) {
+                if file.uses_uri_style_node_core_modules() != Tristate::True && !file.is_declaration_file() {
+                    if module_name.starts_with("node:") && !core::is_exclusively_prefixed_node_core_module(module_name) {
                         // Presence of `node:` prefix takes precedence over unprefixed node core modules
                         file.uses_uri_style_node_core_modules.set(Tristate::True);
-                    } else if file.uses_uri_style_node_core_modules.get() == Tristate::Unknown
-                        && core::UnprefixedNodeCoreModules.contains(module_name)
+                    } else if file.uses_uri_style_node_core_modules() == Tristate::Unknown
+                        && core::is_unprefixed_node_core_module(module_name)
                     {
                         // Avoid `unprefixedNodeCoreModules.has` for every import
                         file.uses_uri_style_node_core_modules.set(Tristate::False);
@@ -51,7 +51,7 @@ pub(crate) fn collect_module_references(file: P<SourceFile>, node: P<Node>, in_a
     }
     if ast::is_module_declaration(node)
         && ast::is_ambient_module(node)
-        && (in_ambient_module || ast::has_syntactic_modifier(node, ModifierFlags::Ambient) || file.is_declaration_file.get())
+        && (in_ambient_module || ast::has_syntactic_modifier(node, ModifierFlags::Ambient) || file.is_declaration_file())
     {
         let name_text = node.as_module_declaration().name().text();
         // Ambient module declarations can be interpreted as augmentations for some existing external modules.
@@ -60,9 +60,13 @@ pub(crate) fn collect_module_references(file: P<SourceFile>, node: P<Node>, in_a
         // - if current file is not external module then module augmentation is an ambient module declaration with non-relative module name
         //   immediately nested in top level ambient module declaration .
         if ast::is_external_module(file) || (in_ambient_module && !tspath::is_external_module_name_relative(name_text)) {
-            file.module_augmentations.borrow_mut().push(node.as_module_declaration().name());
+            let mut module_augmentations = file.module_augmentations().to_vec();
+            module_augmentations.push(node.as_module_declaration().name());
+            file.module_augmentations.set(alloc_vec(module_augmentations));
         } else if !in_ambient_module {
-            file.ambient_module_names.borrow_mut().push(name_text);
+            let mut ambient_module_names = file.ambient_module_names().to_vec();
+            ambient_module_names.push(name_text);
+            file.ambient_module_names.set(alloc_vec(ambient_module_names));
             // An AmbientExternalModuleDeclaration declares an external module.
             // This type of declaration is permitted only in the global module.
             // The StringLiteral must specify a top - level external module name.
@@ -75,4 +79,9 @@ pub(crate) fn collect_module_references(file: P<SourceFile>, node: P<Node>, in_a
             }
         }
     }
+}
+
+// Go ast.SetImportsOfSourceFile.
+fn set_imports_of_source_file(file: P<SourceFile>, imports: Vec<P<Node>>) {
+    file.imports.set(alloc_vec(imports));
 }
