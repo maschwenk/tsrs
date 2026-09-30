@@ -1216,3 +1216,21 @@ pub fn clone_as_import_declaration(node: P<Node>, f: &NodeFactory) -> P<Node> {
     let updated = f.new_import_declaration(d.modifiers(), d.import_clause(), d.module_specifier(), d.attributes());
     crate::ast::clone_node(updated, node, &f.hooks)
 }
+
+// utilities.go:3028
+pub fn is_contextual_keyword(token: Kind) -> bool {
+    Kind::FirstContextualKeyword <= token && token <= Kind::LastContextualKeyword
+}
+
+// utilities.go:4170
+pub fn is_non_contextual_keyword(token: Kind) -> bool {
+    is_keyword(token) && !is_contextual_keyword(token)
+}
+
+impl SourceFile {
+    // ast.go:2659 SupplementalSourceFiles returns the additional outputs produced from this canonical source file.
+    // Content mappers are not ported, so there are none (Go: `contentMapperInfo == nil`).
+    pub fn supplemental_source_files(&self) -> &'static [P<SourceFile>] {
+        &[]
+    }
+}
