@@ -1,8 +1,8 @@
-// Go package `outputpaths` (the parts that do not need an emitted SourceFile): ParsedCommandLine uses
-// it to map project-reference sources to their output declaration files.
+// Go package `outputpaths`.
 
+use tsrs_ast::{self as ast, SourceFile};
 use tsrs_core::tspath::{self, ComparePathsOptions};
-use tsrs_core::{CompilerOptions, JsxEmit};
+use tsrs_core::{CompilerOptions, JsxEmit, P};
 
 // commonsourcedirectory.go
 
@@ -100,6 +100,87 @@ pub trait OutputPathsHost {
     fn content_mapper_extensions(&self) -> Vec<String>;
     fn get_current_directory(&self) -> &str;
     fn use_case_sensitive_file_names(&self) -> bool;
+}
+
+#[derive(Default)]
+pub struct OutputPaths {
+    js_file_path: String,
+    source_map_file_path: String,
+    declaration_file_path: String,
+    declaration_map_path: String,
+}
+
+impl OutputPaths {
+    pub fn declaration_file_path(&self) -> &str {
+        &self.declaration_file_path
+    }
+
+    pub fn js_file_path(&self) -> &str {
+        &self.js_file_path
+    }
+
+    pub fn source_map_file_path(&self) -> &str {
+        &self.source_map_file_path
+    }
+
+    pub fn declaration_map_path(&self) -> &str {
+        &self.declaration_map_path
+    }
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct ForceEmitPaths {
+    pub dts: bool,
+    pub js: bool,
+    pub declaration_map: bool,
+}
+
+pub fn get_output_paths_for(source_file: P<SourceFile>, options: &CompilerOptions, host: &dyn OutputPathsHost, force: ForceEmitPaths) -> OutputPaths {
+    let own_output_file_path =
+        get_own_emit_output_file_path(source_file.file_name(), options, host, get_output_extension(source_file.file_name(), options.jsx));
+    let is_json_file = ast::is_json_source_file(source_file);
+    // If json file emits to the same location skip writing it, if emitDeclarationOnly skip writing it
+    let is_json_emitted_to_same_location = is_json_file
+        && tspath::compare_paths(
+            source_file.file_name(),
+            &own_output_file_path,
+            &ComparePathsOptions {
+                current_directory: host.get_current_directory().to_string(),
+                use_case_sensitive_file_names: host.use_case_sensitive_file_names(),
+            },
+        ) == 0;
+    let mut paths = OutputPaths::default();
+    if source_file.content_mapper().is_empty()
+        && (force.js || options.emit_declaration_only != tsrs_core::Tristate::True)
+        && !is_json_emitted_to_same_location
+    {
+        paths.js_file_path = own_output_file_path;
+        if !ast::is_json_source_file(source_file) {
+            paths.source_map_file_path = get_source_map_file_path(&paths.js_file_path, options);
+        }
+    }
+    if force.dts || options.get_emit_declarations() && !is_json_file {
+        paths.declaration_file_path = get_declaration_emit_output_file_path(source_file.file_name(), options, host);
+        if options.get_are_declaration_maps_enabled() || force.declaration_map && options.declaration_map.is_true() {
+            paths.declaration_map_path = format!("{}.map", paths.declaration_file_path);
+        }
+    }
+    paths
+}
+
+pub fn for_each_emitted_file(
+    host: &dyn OutputPathsHost,
+    options: &CompilerOptions,
+    mut action: impl FnMut(&OutputPaths, P<SourceFile>) -> bool,
+    source_files: &[P<SourceFile>],
+    force_dts_emit: bool,
+) -> bool {
+    for &source_file in source_files {
+        if action(&get_output_paths_for(source_file, options, host, ForceEmitPaths { dts: force_dts_emit, ..Default::default() }), source_file) {
+            return true;
+        }
+    }
+    false
 }
 
 fn extension_refs(extensions: &[String]) -> Vec<&str> {
