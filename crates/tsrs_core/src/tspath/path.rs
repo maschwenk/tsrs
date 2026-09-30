@@ -1270,3 +1270,7 @@ pub fn starts_with_directory(file_name: &str, directory_name: &str, use_case_sen
 pub fn compare_number_of_directory_separators(path1: &str, path2: &str) -> i32 {
     cmp_to_i32(memchr::memchr_iter(b'/', path1.as_bytes()).count().cmp(&memchr::memchr_iter(b'/', path2.as_bytes()).count()))
 }
+
+#[cfg(test)]
+#[path = "path_test.rs"]
+mod path_test;
