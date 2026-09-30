@@ -30,6 +30,7 @@ range contains its first line.
 Go `c.foo(x)` -> `self.foo(x)`. `new_checker(program: &'static dyn Program) -> Box<Checker>` is Go `NewChecker`
 (tracer and mutex dropped). Before Go assigns them, pointer fields hold placeholder objects (never observable after
 `new_checker` returns).
+Where Go tests such a field against nil (`c.globalObjectType != nil`), compare with `self.unassigned_type` (the placeholder).
 
 - **Function-valued fields** are methods with the snake_case name and the same arguments, all implemented in checker.rs
   (none are generated): `compare_symbols`, `compare_symbol_chains`, `resolve_name`, `resolve_name_for_symbol_suggestion`
@@ -54,7 +55,10 @@ Go `c.foo(x)` -> `self.foo(x)`. `new_checker(program: &'static dyn Program) -> B
 - `IterationTypesResolver` (`P<…>`, fields `sync_iteration_types_resolver` / `async_iteration_types_resolver`): its Go
   function fields are methods taking the checker: `resolver.getGlobalIterableType()` -> `resolver.get_global_iterable_type(self)`,
   `resolver.resolveIterationType(t, n)` -> `resolver.resolve_iteration_type(self, t, n)`, `get_global_builtin_iterator_types(self)`.
-- **Callbacks** passed to checker methods take the checker as first parameter (PORTING.md rule):
+- **Callbacks** passed to checker methods take the checker as first parameter (PORTING.md rule). The Go free functions
+  `forEachType`/`someType`/`everyType`/`everyContainedType` take the checker too: `some_type(self, t, |c, t| c.is_x(t))`.
+  Synthetic expressions: `create_synthetic_expression` writes the type, `synthetic_expression_type(node)` reads it.
+  Callback rule details:
   `impl FnMut(&mut Checker, P<Type>) -> bool`. Closures never capture `self`.
 - **Deferred work**: `[]func()` fields are `Vec<Box<dyn FnOnce(&mut Checker)>>`.
 - **Program**: `pub trait Program: Send + Sync` (program.rs) with the Go `checker.Program` methods the checker uses plus
@@ -142,7 +146,9 @@ exactly like Go: `t.as_interface_type().resolved_type_arguments.get()`, `t.as_ob
   so construct with `Signature { flags: Cell::new(f), ..Default::default() }` or `default()` + `.set()`.
   Exceptions: `Type.id`/`Type.data` (plain), and value structs (`TupleElementInfo`, `IterationTypes`, `FlowType`, keys…)
   which are plain `Copy` structs. Go nil-vs-empty slices that matter are `Option<&'static [T]>`
-  (`VarianceLinks.variances`, `WideningContext.siblings`, `ContainingSymbolLinks.extended_containers`).
+  (`VarianceLinks.variances`, `WideningContext.siblings`/`resolved_properties`, `ContainingSymbolLinks.extended_containers`,
+  `TypeReference.resolved_type_arguments`, `UnionOrIntersectionType.resolved_properties`, `TypeNodeLinks.outer_type_parameters`,
+  `SwitchStatementLinks.witnesses`).
 - **`GoMap<K, V>`** (types.rs): a Go map field — pointer-sized, nil until `make()`/`set()`. `get(&k) -> Option<V>`,
   `has`, `set(k, v)` (creates the map if nil), `delete`, `len`, `is_nil`, `make`, `clear`, `entries()` snapshot,
   `assign(map)` for `x.m = freshMap`, `get_ref`/`set_ref` for aliasing. Used for `instantiations`, `constituent_map`,
@@ -218,6 +224,8 @@ wrong; if you must, change it in your file, fix what you can see, and list it in
 
 Function signatures for the whole checker package are generated mechanically from the Go source into stub files
 (`todo!()` bodies) before bodies are ported, so every callee signature can be looked up (`docs/sigs/checker.txt` or grep).
+Since the bodies were integrated, `docs/sigs/checker.txt` is regenerated from the Rust sources with
+`tools/sigs-from-rust.py` (run it after changing signatures); the generated stubs are no longer the reference.
 Mapping used by the generator (deviations from PORTING.md are deliberate, for determinism):
 
 - Go `int` -> `i32` always (cast at use sites: `x as usize`, `v.len() as i32`).
