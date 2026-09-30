@@ -2415,7 +2415,7 @@ impl Checker {
                 members = members.map(|m| m.clone_table());
             }
             let this_argument = type_arguments.last().copied();
-            for base_type in base_types {
+            for &base_type in base_types {
                 let mut instantiated_base_type = base_type;
                 if this_argument.is_some() {
                     let inst = self.instantiate_type(base_type, mapper);
@@ -2453,14 +2453,14 @@ pub(crate) fn find_index_info(index_infos: &[P<IndexInfo>], key_type: P<Type>) -
 
 impl Checker {
     // checker.go:19508
-    pub fn get_base_types(&mut self, t: P<Type>) -> Vec<P<Type>> {
+    pub fn get_base_types(&mut self, t: P<Type>) -> &'static [P<Type>] {
         if !t.object_flags().intersects(ObjectFlags::ClassOrInterface | ObjectFlags::Tuple) {
-            return Vec::new();
+            return &[];
         }
         let data = t.as_interface_type();
         if !data.base_types_resolved.get() {
             if !self.push_type_resolution(t.into(), TypeSystemPropertyName::ResolvedBaseTypes) {
-                return data.resolved_base_types.get().to_vec();
+                return data.resolved_base_types.get();
             }
             let symbol = t.symbol();
             if t.object_flags().intersects(ObjectFlags::Tuple) {
@@ -2493,7 +2493,7 @@ impl Checker {
             t.object_flags.set(t.object_flags.get() & !ObjectFlags::MembersResolved);
             data.base_types_resolved.set(true);
         }
-        data.resolved_base_types.get().to_vec()
+        data.resolved_base_types.get()
     }
 
     // checker.go:19547
