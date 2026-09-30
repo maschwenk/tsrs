@@ -14,8 +14,9 @@ The `checker-foundation` agent implements the data model and keeps this file acc
 | `checker.go` (32.6k lines) | `checker_01.rs` … `checker_15.rs` by Go line range (table below), all `impl Checker` |
 | `relater.go` | `relater_1.rs` (1–2579), `relater_2.rs` (2580–end) |
 | `flow.go`, `inference.go`, `grammarchecks.go`, `utilities.go`, `jsx.go`, `exports.go`, `jsdoc.go` | same name `.rs` |
-| `printer.go`, `nodebuilder*.go`, `symbolaccessibility.go`, `symboltracker.go` | `printer.rs` (+ later a faithful node-builder port) — type/symbol/signature -> string for messages |
-| `emitresolver.go`, `services.go`, `nodecopy.go`, `pseudotypenodebuilder.go`, `nodebuilder_hover.go`, `tracer.go` | not ported |
+| `printer.go`, `symbolaccessibility.go`, `symboltracker.go` | `printer.rs` — type/symbol/signature -> string for messages |
+| `nodebuilder.go`, `nodebuilderimpl.go`, `nodebuilderscopes.go` | `nodebuilder.rs`, `nodebuilderimpl_1.rs` (1–1850), `nodebuilderimpl_2.rs` (1851–end), `nodebuilderscopes.rs`; data model in `nodebuilder_types.rs` + `printer_types.rs` (section "Node builder") |
+| `emitresolver.go`, `services.go`, `nodecopy.go`, `pseudotypenodebuilder.go`, `nodebuilder_hover.go`, `tracer.go` | not ported (but see "Node builder" for the few callees the node builder needs) |
 | `../evaluator/evaluator.go` | `evaluator.rs` (foundation) |
 
 `checker.go` line ranges: 01: 1–2172, 02: 2173–4320, 03: 4321–6526, 04: 6527–8748, 05: 8749–10856,
@@ -81,7 +82,8 @@ Go `c.foo(x)` -> `self.foo(x)`. `new_checker(program: &'static dyn Program) -> B
   &[&dyn Display])` (usually `Option<ErrorReporter>`).
 - Dropped Go fields: `symbolArena`/`signatureArena`/`indexInfoArena` (use `P::new`), `tracer` (all tracing blocks are
   dropped), `ctx` (`isCanceled` is `false`; `was_canceled` kept), `mu`, `emitResolver`/`emitResolverOnce`,
-  `typeToStringNodebuilder`, and the never-assigned `getGlobalClassAccessorDecoratorContxtType`.
+  and the never-assigned `getGlobalClassAccessorDecoratorContxtType`. (`typeToStringNodebuilder` is kept:
+  `type_to_string_nodebuilder: Option<P<NodeBuilder>>`.)
   `ambientModulesOnce` is a `bool`; nil-able maps that Go resets or tests for nil are `Option<FxHashMap>`
   (`flow_type_cache`, `packages_map`). Go `map[string]V` fields use `String` keys (the generator maps `map[string]V`
   the same way); `collections.Set[T]` is `tsrs_core::collections::Set<T>`.
@@ -91,14 +93,88 @@ Go `c.foo(x)` -> `self.foo(x)`. `new_checker(program: &'static dyn Program) -> B
   `nonDottedNameCacheKey` are `const CacheHashKey`. Go-named lowercase types keep their Go names (`keyBuilder`,
   `errorState`, `orderedSet`, `thisAssignmentDeclarationKind` with variants `None/Typed/Constructor/Method`).
   `symbolTableID` (a `u64` alias) is declared in checker.rs; the `stKind*` constants belong to printer.rs.
-- printer_types.rs (foundation) holds what printer.rs signatures need from unported packages: `nodebuilder.Flags` /
-  `InternalFlags` (real), `trait SymbolTracker`, `SymbolAccessibility(Result)` (from `printer`), `VerbosityContext`,
-  `accessibleSymbolChainContext`, `SymbolTrackerImpl`, and empty placeholders `NodeBuilderContext`, `EmitContext`,
-  `Printer`, `EmitResolver`. Go `context.Context` parameters are the unit struct `Context`; `iter.Seq[T]` is
+- printer_types.rs holds what printer.rs signatures need from other packages: `nodebuilder.Flags` / `InternalFlags`,
+  `trait SymbolTracker`, `SymbolAccessibility(Result)` (from `printer`), `VerbosityContext`,
+  `accessibleSymbolChainContext`, `SymbolTrackerImpl`, the `tsrs_printer` seam (section "Node builder") and the empty
+  placeholder `EmitResolver`. Go `context.Context` parameters are the unit struct `Context`; `iter.Seq[T]` is
   `Seq<T> = Vec<T>`.
 - `evaluator.go` is ported as `evaluator.rs`: `evaluator::Result { value: LiteralValue, … }` (always written with the
   module path; it would shadow `std::result::Result`), `evaluator::evaluate(host, evaluate_entity, outer_kinds, expr,
   location)`, `evaluator::any_to_string`, `evaluator::is_truthy`. The checker calls `self.evaluate(expr, location)`.
+
+## Node builder
+
+Error messages render types, symbols and signatures through Go's pipeline: `c.typeToString` & co. (printer.rs) ->
+`NodeBuilder` entry point (nodebuilder.rs) -> `NodeBuilderImpl` builds synthetic type nodes (nodebuilderimpl_*.rs,
+nodebuilderscopes.rs; symbol chains via symbolaccessibility.go in printer.rs) -> `tsrs_printer::Printer` prints them.
+Baselines compare the text byte for byte, so all of it is ported faithfully.
+
+**Handles and receivers.** Everything is re-entrant (a diagnostic reported during lazy resolution formats a type with
+the *same* cached builder, which pushes a new context), so the node builder objects are arena handles like `Relater`:
+
+| Go | Rust | methods |
+| --- | --- | --- |
+| `*NodeBuilder` | `P<NodeBuilder>` { `ctx_stack: RefCell<Vec<Option<P<NodeBuilderContext>>>>`, `host`, `impl_: P<NodeBuilderImpl>`, `verbosity: Cell<Option<P<VerbosityContext>>>` } | `&self`; entry points that reach the checker take `c: &mut Checker` (`b.impl_.type_to_type_node(c, t)`) |
+| `*NodeBuilderImpl` | `P<NodeBuilderImpl>` { `f`, `e`, `pc`, `links`, `symbol_links`, `ctx: Cell<Option<P<NodeBuilderContext>>>`, `clone_binding_name_visitor`, `id_to_symbol: RefCell<FxHashMap<P<Node>, P<Symbol>>>` } | `&self, c: &mut Checker` (Go `b.ch.foo()` -> `c.foo()`) |
+| `*NodeBuilderContext` | `P<NodeBuilderContext>`, every field `Cell`/`RefCell` | — |
+| `*SymbolTrackerImpl` | `P<SymbolTrackerImpl>`, used as `&'static dyn SymbolTracker` (`p.get()`) | `&self` |
+| `*VerbosityContext` | `Option<P<VerbosityContext>>`, `Cell` fields (`vc.truncated.set(true)`) | — |
+
+- `b.ctx` is `b.ctx()` (unwraps; Go never reads it while nil); save/restore/swap with `b.ctx.get()`/`b.ctx.set(..)`.
+  Fields: `b.ctx().flags.get()`, `ctx.approximate_length.set(ctx.approximate_length.get() + 3)`,
+  `ctx.type_stack.borrow_mut().push(Some(t))`. Never hold a `borrow()` of a context collection across a call back
+  into the builder or the checker (copy out or clone the small Vec first).
+- `NodeBuilderContext::new(host)` is the Go zero value; `enterContext` builds
+  `P::new(NodeBuilderContext { flags: Cell::new(flags), …, ..NodeBuilderContext::new(b.host) })`.
+- Field types (nodebuilder_types.rs): `tracker: Cell<Option<&'static dyn SymbolTracker>>` (Some after `enter_context`),
+  `type_stack: RefCell<Vec<Option<P<Type>>>>` (hover pushes a nil sentinel), `infer_type_parameters: Cell<&'static [P<Type>]>`
+  (Go assigns `t.root.inferTypeParameters`), `visited_types: RefCell<Set<TypeId>>`, `symbol_depth`,
+  `enclosing_symbol_types`, `remapped_symbol_references` (`RefCell<FxHashMap<…>>`), `tracked_symbols:
+  RefCell<Vec<P<TrackedSymbolArgs>>>` (Go's `= nil` + restore is `mem::take` + put back), the four per-scope
+  `CopyOnWriteMap`/`CopyOnWriteSet` (`tsrs_core::collections`, `enter_scope()` returns a scope token for
+  `exit_scope(token)`; `cloneNodeBuilderContext` returns a `Box<dyn FnMut()>` that restores all four).
+- Caches: `b.links: LinkStore<Node, NodeBuilderLinks>` (`serialized_types: GoMap<CompositeTypeCacheIdentity,
+  P<SerializedTypeEntry>>`, `fake_scope_for_signature_declaration: Cell<Option<&'static str>>`), `b.symbol_links:
+  LinkStore<Symbol, NodeBuilderSymbolLinks>` (`specifier_cache: GoMap<ModeAwareCacheKey, moduleSpecifierResult>`,
+  `moduleSpecifierResult { specifier: &'static str, import_attributes_type }` is `Copy`). In stub files write
+  `crate::LinkStore` if you need the type name (`tsrs_core::LinkStore` is also glob-imported).
+- Returned cleanup funcs (`saveRestoreFlags`, `enterNewScope`, `addSymbolTypeToContext`) are
+  `Box<dyn FnMut(&mut Checker)>`; call them as `cleanup(c)`. `b.ctx()` captured by value (`P`) inside them is fine.
+- Constructors are ported: `new_node_builder[_ex](c, e[, id_to_symbol])`, `new_node_builder_impl`,
+  `new_symbol_tracker_impl` (Go's `tracker.(*SymbolTrackerImpl)` is `tracker.as_symbol_tracker_impl()`), and
+  `NodeBuilder::emit_context()`. `Checker::get_node_builder` caches in `self.type_to_string_nodebuilder`.
+
+**Factory and emit context.** `b.f` is a `tsrs_ast::NodeFactory` handle sharing the emit context's factory (its
+`on_create` hook marks nodes `Synthesized`, which `ast.NodeIsSynthesized`-style checks rely on). All factory methods
+take `&self`, so Go's nested calls port as written: `b.f.new_type_reference_node(b.f.new_identifier(n), None)`,
+`b.f.new_node_list(vec![…])`, `node.clone_node(&b.f)`, `b.f.deep_clone_node(Some(n))`. `ast.ReplaceModifiers(f, …)`
+is `replace_modifiers(&b.f, node, modifiers)`, `ast.CreateModifiersFromModifierFlags(flags, f.NewModifier)` is
+`create_modifiers_from_modifier_flags(flags, |k| b.f.new_modifier(k))`. `b.e` is `P<EmitContext>`; its methods take
+`&self`: `b.e.add_emit_flags(node, EmitFlags::NoAsciiEscaping)`, `set_emit_flags`, `original(node) -> Option`,
+`most_original(Option<P<Node>>) -> Option<P<Node>>` (Go nil in, nil out), `set_original_ex(node, original, allow_overwrite)`,
+`assign_comment_range(to, from)`, `add_synthetic_leading_comment(node, kind, text, has_trailing_new_line) -> P<Node>`
+(and `_trailing_`). `printer.EFSingleLine` -> `EmitFlags::SingleLine`.
+
+**The `tsrs_printer` seam.** The checker names the printer crate only through the re-exports at the top of
+printer_types.rs: `EmitContext`, `EmitFlags`, `EmitTextWriter`, `Printer`, `PrinterOptions`, `PrintHandlers`,
+`new_emit_context()`, `new_printer(options, handlers, Some(emit_context)) -> Printer`, `new_text_writer(new_line,
+indent) -> Box<dyn EmitTextWriter>`, `get_single_line_string_writer() -> Box<dyn EmitTextWriter>` (Go's pool release
+func dropped), `Printer::write(&mut self, node, source_file: Option<P<SourceFile>>, writer: &mut dyn EmitTextWriter)`
+(source-map argument dropped), `Printer::emit(&mut self, node, source_file) -> String`, `writer.string()` (Go
+`String()`). Until `tsrs_printer` merges they come from printer_standin.rs (`// STAND-IN`, placeholder bodies).
+`printer::NodeFactory` is reached as `e.factory` (it derefs to `ast::NodeFactory`) and is not re-exported.
+
+**Known gaps (callees outside the ported files).** The node builder calls into files and packages that are not
+ported; body agents must keep the call structure and list these in their notes rather than invent behavior:
+`GetEmitResolver().hasVisibleDeclarations` (symbolaccessibility `isAnySymbolAccessible`), `.isEntityNameVisible`,
+`.requiresAddingImplicitUndefined` (emitresolver.go); `tryReuseExistingNodeHelper`, `reuseNode`,
+`tryJSTypeNodeToTypeNode` (nodecopy.go); `pseudoTypeEquivalentToType`, `pseudoTypeToType`,
+`pseudoTypeToNodeWithCheckerFallback`, `pseudoReturnTypeMatchesPredicate` (pseudotypenodebuilder.go) and the
+`internal/pseudochecker` package (`b.pc` is a placeholder `P<PseudoChecker>`); `modulespecifiers.GetModuleSpecifiers` /
+`CountPathComponents` (not ported); hover-only `expandSymbolForHover`, `IsLib{Symbol,Type}ForHoverVerbosity`.
+`clone_binding_name_visitor`: Go's visitor calls `b.cloneBindingName`, which needs `c`; a `'static` `VisitFn` cannot
+capture `&mut Checker`, so `new_node_builder_impl` leaves it `None` and the `clone_binding_name` port must choose a
+visiting strategy (flag it in your notes).
 
 ## Types
 

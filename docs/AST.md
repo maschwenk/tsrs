@@ -84,7 +84,7 @@ Methods on `Node` (all `&self`), hand-written in `ast.rs` unless noted:
 - `for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool` — same contract as Go
   `ForEachChild` (returning `true` stops and propagates `true`). Recursion:
   `fn walk(n: P<Node>) -> bool { … n.for_each_child(&mut |c| walk(c)) }`.
-- `visit_each_child(&self, v: &mut NodeVisitor) -> P<Node>`, `clone_node(&self, f: &mut NodeFactory) -> P<Node>`
+- `visit_each_child(&self, v: &mut NodeVisitor) -> P<Node>`, `clone_node(&self, f: &NodeFactory) -> P<Node>`
   (Go `Clone`; named `clone_node` because `clone` collides with `Clone::clone` on `P`).
 
 Free functions mirror Go (generated): `is_<struct>(node: P<Node>) -> bool` for single-kind structs
@@ -208,7 +208,7 @@ Content mappers are not ported (`is_content_mapped()` is always false, `original
 
 ## NodeFactory
 
-`NodeFactory` (`Default`, `new(hooks)`) methods mirror Go one-to-one, `&mut self`, same parameter order:
+`NodeFactory` (`Default`, `new(hooks)`) methods mirror Go one-to-one, `&self`, same parameter order:
 `new_binary_expression(modifiers, left, type_node, operator_token, right) -> P<Node>`,
 `new_token(kind)`, `new_modifier(kind)`, `new_identifier(text: &'static str)`,
 `new_for_in_or_of_statement(kind, await_modifier, initializer, expression, statement)`,
@@ -222,7 +222,14 @@ set `node.flags`; raw-list params are `&'static [T]` (allocate with `alloc_slice
 params are masked like Go. Where Go constructs a node with nil for a non-nil-able field and assigns it right
 after (reparser: `NewFunctionDeclaration(..., nil params, ...)`), pass a placeholder and set it.
 `update_<struct>(node: P<Node>, …same params…)` exists for every node with children (needed by deep clone).
-`node_count()`, `text_count()`.
+`node_count()`, `text_count()`, `deep_clone_node(Option<P<Node>>)`, `deep_clone_reparse*`.
+
+A `NodeFactory` value is a **handle**, like Go's `*ast.NodeFactory`: every method takes `&self`, and `clone()`
+returns another handle to the same factory (hooks `NodeFactoryHooks { on_create, on_update, on_clone }` are
+`Rc<dyn Fn>`, the counters are shared). So factory calls nest (`f.new_type_reference_node(f.new_identifier("T"), None)`)
+and one factory can be shared by a visitor, the node builder and a printer emit context (Go passes the same pointer).
+Node-builder helpers: `create_modifiers_from_modifier_flags(flags, |k| f.new_modifier(k))`,
+`replace_modifiers(&f, node, modifiers)`, `has_inferred_type(node)`.
 
 ## Visitor (visitor.go)
 
@@ -231,7 +238,7 @@ after (reparser: `NewFunctionDeclaration(..., nil params, ...)`), pass a placeho
 so it may re-enter it). Hooks are `Rc<dyn Fn(Option<…>, &mut NodeVisitor) -> Option<…>>`. Exported Go
 methods: `visit_node`, `visit_nodes` (NodeList), `visit_modifiers`, `visit_embedded_statement`,
 `visit_slice`, `visit_each_child`, `visit_source_file`; `new_node_visitor(visit, Option<NodeFactory>, hooks)`.
-The visitor owns its factory: to use an existing one, `std::mem::take` it in and move it back after.
+The visitor owns a factory handle: to share an existing factory (Go passes the same pointer), pass `Some(f.clone())`.
 
 ## Symbols
 
