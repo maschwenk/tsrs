@@ -1474,10 +1474,9 @@ impl Checker {
                         error_reported = self.report_widening_errors_in_type(s);
                         if !error_reported {
                             // we need to account for property types coming from object literal type normalization in unions
-                            let t_value_declaration = t.symbol().unwrap().value_declaration();
                             let value_declaration = p.declarations().iter().copied().find(|d| {
                                 let value_declaration = d.symbol().unwrap().value_declaration();
-                                value_declaration.is_some_and(|vd| vd.parent() == t_value_declaration)
+                                value_declaration.is_some_and(|vd| vd.parent() == t.symbol().unwrap().value_declaration())
                             });
                             if let Some(value_declaration) = value_declaration {
                                 let p_name = self.symbol_to_string(p);
