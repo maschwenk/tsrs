@@ -13,331 +13,1302 @@ use std::fmt::Display;
 //   type ObjectLiteralDiscriminator (checker.go:31202)
 
 impl Checker {
+    // In a contextually typed conditional expression, the true/false expressions are contextually typed by the same type.
     // checker.go:30511
     pub(crate) fn get_contextual_type_for_conditional_operand(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        let parent = node.parent().unwrap();
+        let conditional = parent.as_conditional_expression();
+        if node == conditional.when_true || node == conditional.when_false {
+            return self.get_contextual_type(parent, context_flags);
+        }
+        None
     }
 
     // checker.go:30519
     pub(crate) fn get_contextual_type_for_substitution_expression(&mut self, template: P<Node>, substitution_expression: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let parent = template.parent().unwrap();
+        if ast::is_tagged_template_expression(parent) {
+            return self.get_contextual_type_for_argument(parent, substitution_expression);
+        }
+        None
     }
 
     // checker.go:30526
     pub(crate) fn get_contextual_import_attribute_type(&mut self, node: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let t = self.get_global_import_attributes_type();
+        self.get_type_of_property_of_contextual_type(t, node.name().unwrap().text())
     }
 
+    // Returns the effective arguments for an expression that works like a function invocation.
     // checker.go:30531
     pub(crate) fn get_effective_call_arguments(&mut self, node: P<Node>) -> Vec<P<Node>> {
-        todo!()
+        if ast::is_jsx_opening_fragment(node) {
+            // This attributes Type does not include a children property yet, the same way a fragment created with <React.Fragment> does not at this stage
+            let t = self.empty_fresh_jsx_object_type;
+            return vec![self.create_synthetic_expression(node, t, false, None)];
+        } else if ast::is_tagged_template_expression(node) {
+            let template = node.as_tagged_template_expression().template;
+            let t = self.get_global_template_strings_array_type();
+            let first_arg = self.create_synthetic_expression(template, t, false, None);
+            if !ast::is_template_expression(template) {
+                return vec![first_arg];
+            }
+            let spans = template.as_template_expression().template_spans.nodes;
+            let mut args = Vec::with_capacity(spans.len() + 1);
+            args.push(first_arg);
+            for span in spans {
+                args.push(span.expression().unwrap());
+            }
+            return args;
+        } else if ast::is_decorator(node) {
+            return self.get_effective_decorator_arguments(node);
+        } else if ast::is_binary_expression(node) {
+            // Handles instanceof operator
+            return vec![node.as_binary_expression().left];
+        } else if ast::is_jsx_opening_like_element(node) {
+            if !node.attributes().unwrap().properties().is_empty() || (ast::is_jsx_opening_element(node) && !node.parent().unwrap().children().nodes.is_empty()) {
+                return vec![node.attributes().unwrap()];
+            }
+            return Vec::new();
+        }
+        let args = node.arguments();
+        let spread_index = self.get_spread_argument_index(args);
+        if spread_index >= 0 {
+            // Create synthetic arguments from spreads of tuple types.
+            let mut effective_args = args[..spread_index as usize].to_vec();
+            for i in spread_index as usize..args.len() {
+                let arg = args[i];
+                let mut spread_type = None;
+                // We can call checkExpressionCached because spread expressions never have a contextual type.
+                if ast::is_spread_element(arg) {
+                    if !self.flow_loop_stack.is_empty() {
+                        spread_type = Some(self.check_expression(arg.expression().unwrap()));
+                    } else {
+                        spread_type = Some(self.check_expression_cached(arg.expression().unwrap()));
+                    }
+                }
+                if let Some(spread_type) = spread_type.filter(|&t| is_tuple_type(t)) {
+                    for (i, t) in self.get_element_types(spread_type).into_iter().enumerate() {
+                        let element_infos = spread_type.target_tuple_type().element_infos();
+                        let flags = element_infos[i].flags;
+                        let mut synthetic_type = t;
+                        if flags.intersects(ElementFlags::Rest) {
+                            synthetic_type = self.create_array_type(t);
+                        }
+                        let synthetic_arg = self.create_synthetic_expression(arg, synthetic_type, flags.intersects(ElementFlags::Variable), element_infos[i].labeled_declaration);
+                        effective_args.push(synthetic_arg);
+                    }
+                } else {
+                    effective_args.push(arg);
+                }
+            }
+            return effective_args;
+        }
+        args.to_vec()
     }
 
     // checker.go:30597
     pub(crate) fn get_spread_argument_index(&mut self, args: &[P<Node>]) -> i32 {
-        todo!()
+        find_index(args, |&arg| is_spread_argument(arg))
     }
 }
 
 // checker.go:30601
 pub(crate) fn is_spread_argument(arg: P<Node>) -> bool {
-    todo!()
+    ast::is_spread_element(arg) || ast::is_synthetic_expression(arg) && arg.as_synthetic_expression().is_spread
 }
 
 impl Checker {
+    // The synthetic expression's Go `any` type field holds the checker type as a `&'static P<Type>`
+    // (read it back with `downcast_ref::<P<Type>>()`).
     // checker.go:30605
     pub(crate) fn create_synthetic_expression(&mut self, parent: P<Node>, t: P<Type>, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
-        todo!()
+        let result = self.factory.new_synthetic_expression(alloc(t), is_spread, tuple_name_source);
+        result.set_loc(parent.loc());
+        result.set_parent(Some(parent));
+        result
     }
 
     // checker.go:30612
     pub(crate) fn get_spread_indices(&mut self, node: P<Node>) -> (i32, i32) {
-        todo!()
+        let links = self.array_literal_links.get(node);
+        if !links.indices_computed.get() {
+            let (mut first, mut last) = (-1, -1);
+            for (i, &element) in node.elements().iter().enumerate() {
+                if ast::is_spread_element(element) {
+                    if first < 0 {
+                        first = i as i32;
+                    }
+                    last = i as i32;
+                }
+            }
+            links.first_spread_index.set(first);
+            links.last_spread_index.set(last);
+            links.indices_computed.set(true);
+        }
+        (links.first_spread_index.get(), links.last_spread_index.get())
     }
 
+    // Returns the synthetic argument list for a decorator invocation.
     // checker.go:30631
     pub(crate) fn get_effective_decorator_arguments(&mut self, node: P<Node>) -> Vec<P<Node>> {
-        todo!()
+        let expr = node.expression().unwrap();
+        let signature = self.get_decorator_call_signature(node);
+        if let Some(signature) = signature {
+            let params = signature.parameters.get();
+            let mut args = Vec::with_capacity(params.len());
+            for &param in params {
+                let t = self.get_type_of_symbol(param);
+                args.push(self.create_synthetic_expression(expr, t, false, None));
+            }
+            return args;
+        }
+        panic!("Decorator signature not found")
     }
 
     // checker.go:30644
     pub(crate) fn get_decorator_call_signature(&mut self, decorator: P<Node>) -> Option<P<Signature>> {
-        todo!()
+        if self.legacy_decorators {
+            return self.get_legacy_decorator_call_signature(decorator);
+        }
+        self.get_es_decorator_call_signature(decorator)
     }
 
     // checker.go:30651
     pub(crate) fn get_legacy_decorator_call_signature(&mut self, decorator: P<Node>) -> Option<P<Signature>> {
-        todo!()
+        let node = decorator.parent().unwrap();
+        let links = self.signature_links.get(node);
+        if links.decorator_signature.get().is_none() {
+            links.decorator_signature.set(Some(self.any_signature));
+            match node.kind {
+                Kind::ClassDeclaration | Kind::ClassExpression => {
+                    // For a class decorator, the `target` is the type of the class (e.g. the
+                    // "static" or "constructor" side of the class).
+                    let sym = self.get_symbol_of_declaration(node).unwrap();
+                    let target_type = self.get_type_of_symbol(sym);
+                    let target_param = self.new_parameter("target", target_type);
+                    let void_type = self.void_type;
+                    let return_type = self.get_union_type(&[target_type, void_type]);
+                    let sig = self.new_call_signature(&[], None, &[target_param], return_type);
+                    links.decorator_signature.set(Some(sig));
+                }
+                Kind::Parameter => 'case: {
+                    let parent = node.parent().unwrap();
+                    if !ast::is_constructor_declaration(parent) && !(ast::is_method_declaration(parent) || ast::is_set_accessor_declaration(parent) && ast::is_class_like(parent.parent().unwrap())) {
+                        break 'case;
+                    }
+                    if ast::get_this_parameter(parent) == Some(node) {
+                        break 'case;
+                    }
+                    let index = parent.parameters().iter().position(|&p| p == node).map_or(-1, |i| i as i32) - if ast::get_this_parameter(parent).is_some() { 1 } else { 0 };
+                    assert!(index >= 0);
+                    // A parameter declaration decorator will have three arguments (see `ParameterDecorator` in
+                    // core.d.ts).
+                    let target_type;
+                    let key_type;
+                    if ast::is_constructor_declaration(parent) {
+                        let sym = self.get_symbol_of_declaration(parent.parent().unwrap()).unwrap();
+                        target_type = self.get_type_of_symbol(sym);
+                        key_type = self.undefined_type;
+                    } else {
+                        target_type = self.get_parent_type_of_class_element(parent);
+                        key_type = self.get_class_element_property_key_type(parent);
+                    }
+                    let index_type = self.get_number_literal_type(jsnum::Number(index as f64));
+                    let target_param = self.new_parameter("target", target_type);
+                    let key_param = self.new_parameter("propertyKey", key_type);
+                    let index_param = self.new_parameter("parameterIndex", index_type);
+                    let void_type = self.void_type;
+                    let sig = self.new_call_signature(&[], None, &[target_param, key_param, index_param], void_type);
+                    links.decorator_signature.set(Some(sig));
+                }
+                Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor | Kind::PropertyDeclaration => 'case: {
+                    if !ast::is_class_like(node.parent().unwrap()) {
+                        break 'case;
+                    }
+                    // A method or accessor declaration decorator will have either two or three arguments (see
+                    // `PropertyDecorator` and `MethodDecorator` in core.d.ts).
+                    let target_type = self.get_parent_type_of_class_element(node);
+                    let target_param = self.new_parameter("target", target_type);
+                    let key_type = self.get_class_element_property_key_type(node);
+                    let key_param = self.new_parameter("propertyKey", key_type);
+                    let mut return_type = self.void_type;
+                    if !ast::is_property_declaration(node) {
+                        let t = self.get_type_of_node(node);
+                        return_type = self.new_typed_property_descriptor_type(t);
+                    }
+                    let has_prop_desc = !ast::is_property_declaration(node) || ast::has_accessor_modifier(node);
+                    if has_prop_desc {
+                        let t = self.get_type_of_node(node);
+                        let descriptor_type = self.new_typed_property_descriptor_type(t);
+                        let descriptor_param = self.new_parameter("descriptor", descriptor_type);
+                        let void_type = self.void_type;
+                        let union = self.get_union_type(&[return_type, void_type]);
+                        let sig = self.new_call_signature(&[], None, &[target_param, key_param, descriptor_param], union);
+                        links.decorator_signature.set(Some(sig));
+                    } else {
+                        let void_type = self.void_type;
+                        let union = self.get_union_type(&[return_type, void_type]);
+                        let sig = self.new_call_signature(&[], None, &[target_param, key_param], union);
+                        links.decorator_signature.set(Some(sig));
+                    }
+                }
+                _ => {}
+            }
+        }
+        if links.decorator_signature.get() == Some(self.any_signature) {
+            return None;
+        }
+        links.decorator_signature.get()
     }
 
     // checker.go:30718
     pub(crate) fn get_es_decorator_call_signature(&mut self, decorator: P<Node>) -> Option<P<Signature>> {
-        todo!()
+        // We are considering a future change that would allow the type of a decorator to affect the type of the
+        // class and its members, such as a `@Stringify` decorator changing the type of a `number` field to `string`, or
+        // a `@Callable` decorator adding a call signature to a `class`. The type arguments for the various context
+        // types may eventually change to reflect such mutations.
+        //
+        // In some cases we describe such potential mutations as coming from a "prior decorator application". It is
+        // important to note that, while decorators are *evaluated* left to right, they are *applied* right to left
+        // to preserve f ৹ g -> f(g(x)) application order. In these cases, a "prior" decorator usually means the
+        // next decorator following this one in document order.
+        //
+        // The "original type" of a class or member is the type it was declared as, or the type we infer from
+        // initializers, before _any_ decorators are applied.
+        //
+        // The type of a class or member that is a result of a prior decorator application represents the
+        // "current type", i.e., the type for the declaration at the time the decorator is _applied_.
+        //
+        // The type of a class or member that is the result of the application of *all* relevant decorators is the
+        // "final type".
+        //
+        // Any decorator that allows mutation or replacement will also refer to an "input type" and an
+        // "output type". The "input type" corresponds to the "current type" of the declaration, while the
+        // "output type" will become either the "input type/current type" for a subsequent decorator application,
+        // or the "final type" for the decorated declaration.
+        //
+        // It is important to understand decorator application order as it relates to how the "current", "input",
+        // "output", and "final" types will be determined:
+        //
+        //  @E2 @E1 class SomeClass {
+        //      @A2 @A1 static f() {}
+        //      @B2 @B1 g() {}
+        //      @C2 @C1 static x;
+        //      @D2 @D1 y;
+        //  }
+        //
+        // Per [the specification][1], decorators are applied in the following order:
+        //
+        // 1. For each static method (incl. get/set methods and `accessor` fields), in document order:
+        //    a. Apply each decorator for that method, in reverse order (`A1`, `A2`).
+        // 2. For each instance method (incl. get/set methods and `accessor` fields), in document order:
+        //    a. Apply each decorator for that method, in reverse order (`B1`, `B2`).
+        // 3. For each static field (excl. auto-accessors), in document order:
+        //    a. Apply each decorator for that field, in reverse order (`C1`, `C2`).
+        // 4. For each instance field (excl. auto-accessors), in document order:
+        //    a. Apply each decorator for that field, in reverse order (`D1`, `D2`).
+        // 5. Apply each decorator for the class, in reverse order (`E1`, `E2`).
+        //
+        // As a result, "current" types at each decorator application are as follows:
+        // - For `A1`, the "current" types of the class and method are their "original" types.
+        // - For `A2`, the "current type" of the method is the "output type" of `A1`, and the "current type" of the
+        //   class is the type of `SomeClass` where `f` is the "output type" of `A1`. This becomes the "final type"
+        //   of `f`.
+        // - For `B1`, the "current type" of the method is its "original type", and the "current type" of the class
+        //   is the type of `SomeClass` where `f` now has its "final type".
+        // - etc.
+        //
+        // [1]: https://arai-a.github.io/ecma262-compare/?pr=2417&id=sec-runtime-semantics-classdefinitionevaluation
+        //
+        // This seems complicated at first glance, but is not unlike our existing inference for functions:
+        //
+        //  declare function pipe<Original, A1, A2, B1, B2, C1, C2, D1, D2, E1, E2>(
+        //      original: Original,
+        //      a1: (input: Original, context: Context<E2>) => A1,
+        //      a2: (input: A1, context: Context<E2>) => A2,
+        //      b1: (input: A2, context: Context<E2>) => B1,
+        //      b2: (input: B1, context: Context<E2>) => B2,
+        //      c1: (input: B2, context: Context<E2>) => C1,
+        //      c2: (input: C1, context: Context<E2>) => C2,
+        //      d1: (input: C2, context: Context<E2>) => D1,
+        //      d2: (input: D1, context: Context<E2>) => D2,
+        //      e1: (input: D2, context: Context<E2>) => E1,
+        //      e2: (input: E1, context: Context<E2>) => E2,
+        //  ): E2;
+
+        // When a decorator is applied, it is passed two arguments: "target", which is a value representing the
+        // thing being decorated (constructors for classes, functions for methods/accessors, `undefined` for fields,
+        // and a `{ get, set }` object for auto-accessors), and "context", which is an object that provides
+        // reflection information about the decorated element, as well as the ability to add additional "extra"
+        // initializers. In most cases, the "target" argument corresponds to the "input type" in some way, and the
+        // return value similarly corresponds to the "output type" (though if the "output type" is `void` or
+        // `undefined` then the "output type" is the "input type").
+        let node = decorator.parent().unwrap();
+        let links = self.signature_links.get(node);
+        if links.decorator_signature.get().is_none() {
+            links.decorator_signature.set(Some(self.any_signature));
+            match node.kind {
+                Kind::ClassDeclaration | Kind::ClassExpression => {
+                    // Class decorators have a `context` of `ClassDecoratorContext<Class>`, where the `Class` type
+                    // argument will be the "final type" of the class after all decorators are applied.
+                    let sym = self.get_symbol_of_declaration(node).unwrap();
+                    let target_type = self.get_type_of_symbol(sym);
+                    let context_type = self.new_class_decorator_context_type(target_type);
+                    let sig = self.new_es_decorator_call_signature(target_type, context_type, target_type);
+                    links.decorator_signature.set(Some(sig));
+                }
+                Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => 'case: {
+                    if !ast::is_class_like(node.parent().unwrap()) {
+                        break 'case;
+                    }
+                    // Method decorators have a `context` of `ClassMethodDecoratorContext<This, Value>`, where the
+                    // `Value` type argument corresponds to the "final type" of the method.
+                    //
+                    // Getter decorators have a `context` of `ClassGetterDecoratorContext<This, Value>`, where the
+                    // `Value` type argument corresponds to the "final type" of the value returned by the getter.
+                    //
+                    // Setter decorators have a `context` of `ClassSetterDecoratorContext<This, Value>`, where the
+                    // `Value` type argument corresponds to the "final type" of the parameter of the setter.
+                    //
+                    // In all three cases, the `This` type argument is the "final type" of either the class or
+                    // instance, depending on whether the member was `static`.
+                    let value_type;
+                    if ast::is_method_declaration(node) {
+                        let sig = self.get_signature_from_declaration(node);
+                        value_type = self.get_or_create_type_from_signature(sig);
+                    } else {
+                        value_type = self.get_type_of_node(node);
+                    }
+                    let this_type;
+                    let class_symbol = self.get_symbol_of_declaration(node.parent().unwrap()).unwrap();
+                    if ast::has_static_modifier(node) {
+                        this_type = self.get_type_of_symbol(class_symbol);
+                    } else {
+                        this_type = self.get_declared_type_of_class_or_interface(class_symbol);
+                    }
+                    // We wrap the "input type", if necessary, to match the decoration target. For getters this is
+                    // something like `() => inputType`, for setters it's `(value: inputType) => void` and for
+                    // methods it is just the input type.
+                    let target_type = if ast::is_get_accessor_declaration(node) {
+                        self.new_getter_function_type(value_type)
+                    } else if ast::is_set_accessor_declaration(node) {
+                        self.new_setter_function_type(value_type)
+                    } else {
+                        value_type
+                    };
+                    let context_type = self.new_class_member_decorator_context_type_for_node(node, this_type, value_type);
+                    let sig = self.new_es_decorator_call_signature(target_type, context_type, target_type);
+                    links.decorator_signature.set(Some(sig));
+                }
+                Kind::PropertyDeclaration => 'case: {
+                    if !ast::is_class_like(node.parent().unwrap()) {
+                        break 'case;
+                    }
+                    // Field decorators have a `context` of `ClassFieldDecoratorContext<This, Value>` and
+                    // auto-accessor decorators have a `context` of `ClassAccessorDecoratorContext<This, Value>. In
+                    // both cases, the `This` type argument is the "final type" of either the class or instance,
+                    // depending on whether the member was `static`, and the `Value` type argument corresponds to
+                    // the "final type" of the value stored in the field.
+                    let value_type = self.get_type_of_node(node);
+                    let this_type;
+                    let class_symbol = self.get_symbol_of_declaration(node.parent().unwrap()).unwrap();
+                    if ast::has_static_modifier(node) {
+                        this_type = self.get_type_of_symbol(class_symbol);
+                    } else {
+                        this_type = self.get_declared_type_of_class_or_interface(class_symbol);
+                    }
+                    // The `target` of an auto-accessor decorator is a `{ get, set }` object, representing the
+                    // runtime-generated getter and setter that are added to the class/prototype. The `target` of a
+                    // regular field decorator is always `undefined` as it isn't installed until it is initialized.
+                    let target_type = if ast::has_accessor_modifier(node) {
+                        self.new_class_accessor_decorator_target_type(this_type, value_type)
+                    } else {
+                        self.undefined_type
+                    };
+                    // We wrap the "output type" depending on the declaration. For auto-accessors, we wrap the
+                    // "output type" in a `ClassAccessorDecoratorResult<This, In, Out>` type, which allows for
+                    // mutation of the runtime-generated getter and setter, as well as the injection of an
+                    // initializer mutator. For regular fields, we wrap the "output type" in an initializer mutator.
+                    let return_type = if ast::has_accessor_modifier(node) {
+                        self.new_class_accessor_decorator_result_type(this_type, value_type)
+                    } else {
+                        self.new_class_field_decorator_initializer_mutator_type(this_type, value_type)
+                    };
+                    let context_type = self.new_class_member_decorator_context_type_for_node(node, this_type, value_type);
+                    let sig = self.new_es_decorator_call_signature(target_type, context_type, return_type);
+                    links.decorator_signature.set(Some(sig));
+                }
+                _ => {}
+            }
+        }
+        if links.decorator_signature.get() == Some(self.any_signature) {
+            return None;
+        }
+        links.decorator_signature.get()
     }
 
     // checker.go:30896
     pub(crate) fn new_class_decorator_context_type(&mut self, class_type: P<Type>) -> P<Type> {
-        todo!()
+        let target = self.get_global_class_decorator_context_type();
+        self.try_create_type_reference(target, &[class_type])
     }
 
     // checker.go:30900
     pub(crate) fn new_class_method_decorator_context_type(&mut self, class_type: P<Type>, value_type: P<Type>) -> P<Type> {
-        todo!()
+        let target = self.get_global_class_method_decorator_context_type();
+        self.try_create_type_reference(target, &[class_type, value_type])
     }
 
     // checker.go:30904
     pub(crate) fn new_class_getter_decorator_context_type(&mut self, class_type: P<Type>, value_type: P<Type>) -> P<Type> {
-        todo!()
+        let target = self.get_global_class_getter_decorator_context_type();
+        self.try_create_type_reference(target, &[class_type, value_type])
     }
 
     // checker.go:30908
     pub(crate) fn new_class_setter_decorator_context_type(&mut self, class_type: P<Type>, value_type: P<Type>) -> P<Type> {
-        todo!()
+        let target = self.get_global_class_setter_decorator_context_type();
+        self.try_create_type_reference(target, &[class_type, value_type])
     }
 
     // checker.go:30912
     pub(crate) fn new_class_accessor_decorator_context_type(&mut self, this_type: P<Type>, value_type: P<Type>) -> P<Type> {
-        todo!()
+        let target = self.get_global_class_accessor_decorator_context_type();
+        self.try_create_type_reference(target, &[this_type, value_type])
     }
 
     // checker.go:30916
     pub(crate) fn new_class_field_decorator_context_type(&mut self, this_type: P<Type>, value_type: P<Type>) -> P<Type> {
-        todo!()
+        let target = self.get_global_class_field_decorator_context_type();
+        self.try_create_type_reference(target, &[this_type, value_type])
     }
 
+    // Gets a type like `{ name: "foo", private: false, static: true }` that is used to provided member-specific
+    // details that will be intersected with a decorator context type.
     // checker.go:30922
     pub(crate) fn get_class_member_decorator_context_override_type(&mut self, name_type: P<Type>, is_private: bool, is_static: bool) -> P<Type> {
-        todo!()
+        let kind = if is_private {
+            if is_static { CachedTypeKind::DecoratorContextPrivateStatic } else { CachedTypeKind::DecoratorContextPrivate }
+        } else if is_static {
+            CachedTypeKind::DecoratorContextStatic
+        } else {
+            CachedTypeKind::DecoratorContext
+        };
+        let key = CachedTypeKey { kind, type_id: name_type.id };
+        if let Some(&override_type) = self.cached_types.get(&key) {
+            return override_type;
+        }
+        let members = SymbolTable::new();
+        let name_prop = self.new_property("name", name_type);
+        members.set("name", name_prop);
+        let private_type = if is_private { self.true_type } else { self.false_type };
+        let private_prop = self.new_property("private", private_type);
+        members.set("private", private_prop);
+        let static_type = if is_static { self.true_type } else { self.false_type };
+        let static_prop = self.new_property("static", static_type);
+        members.set("static", static_prop);
+        let override_type = self.new_anonymous_type(None, Some(members), &[], &[], &[]);
+        self.cached_types.insert(key, override_type);
+        override_type
     }
 
     // checker.go:30941
     pub(crate) fn new_class_member_decorator_context_type_for_node(&mut self, node: P<Node>, this_type: P<Type>, value_type: P<Type>) -> P<Type> {
-        todo!()
+        let is_static = ast::has_static_modifier(node);
+        let name = node.name().unwrap();
+        let is_private = ast::is_private_identifier(name);
+        let name_type = if is_private {
+            self.get_string_literal_type(name.text())
+        } else {
+            self.get_literal_type_from_property_name(name)
+        };
+        let context_type = if ast::is_method_declaration(node) {
+            self.new_class_method_decorator_context_type(this_type, value_type)
+        } else if ast::is_get_accessor_declaration(node) {
+            self.new_class_getter_decorator_context_type(this_type, value_type)
+        } else if ast::is_set_accessor_declaration(node) {
+            self.new_class_setter_decorator_context_type(this_type, value_type)
+        } else if ast::is_auto_accessor_property_declaration(node) {
+            self.new_class_accessor_decorator_context_type(this_type, value_type)
+        } else if ast::is_property_declaration(node) {
+            self.new_class_field_decorator_context_type(this_type, value_type)
+        } else {
+            panic!("Unhandled case in createClassMemberDecoratorContextTypeForNode")
+        };
+        let override_type = self.get_class_member_decorator_context_override_type(name_type, is_private, is_static);
+        self.get_intersection_type(&[context_type, override_type])
     }
 
     // checker.go:30969
     pub(crate) fn new_class_accessor_decorator_target_type(&mut self, this_type: P<Type>, value_type: P<Type>) -> P<Type> {
-        todo!()
+        let target = self.get_global_class_accessor_decorator_target_type();
+        self.try_create_type_reference(target, &[this_type, value_type])
     }
 
     // checker.go:30973
     pub(crate) fn new_class_accessor_decorator_result_type(&mut self, this_type: P<Type>, value_type: P<Type>) -> P<Type> {
-        todo!()
+        let target = self.get_global_class_accessor_decorator_result_type();
+        self.try_create_type_reference(target, &[this_type, value_type])
     }
 
     // checker.go:30977
     pub(crate) fn new_class_field_decorator_initializer_mutator_type(&mut self, this_type: P<Type>, value_type: P<Type>) -> P<Type> {
-        todo!()
+        let this_param = self.new_parameter("this", this_type);
+        let value_param = self.new_parameter("value", value_type);
+        self.new_function_type(&[], Some(this_param), &[value_param], value_type)
     }
 
+    // Creates a call signature for an ES Decorator. This method is used by the semantics of
+    // `getESDecoratorCallSignature`, which you should probably be using instead.
     // checker.go:30985
     pub(crate) fn new_es_decorator_call_signature(&mut self, target_type: P<Type>, context_type: P<Type>, non_optional_return_type: P<Type>) -> P<Signature> {
-        todo!()
+        let target_param = self.new_parameter("target", target_type);
+        let context_param = self.new_parameter("context", context_type);
+        let void_type = self.void_type;
+        let return_type = self.get_union_type(&[non_optional_return_type, void_type]);
+        self.new_call_signature(&[], None /*thisParameter*/, &[target_param, context_param], return_type)
     }
 
+    // Creates a synthetic `FunctionType`
     // checker.go:30993
     pub(crate) fn new_function_type(&mut self, type_parameters: &[P<Type>], this_parameter: Option<P<Symbol>>, parameters: &[P<Symbol>], return_type: P<Type>) -> P<Type> {
-        todo!()
+        let signature = self.new_call_signature(type_parameters, this_parameter, parameters, return_type);
+        self.get_or_create_type_from_signature(signature)
     }
 
     // checker.go:30998
     pub(crate) fn new_getter_function_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        self.new_function_type(&[], None /*thisParameter*/, &[], t)
     }
 
     // checker.go:31002
     pub(crate) fn new_setter_function_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        let value_param = self.new_parameter("value", t);
+        let void_type = self.void_type;
+        self.new_function_type(&[], None /*thisParameter*/, &[value_param], void_type)
     }
 
+    // Creates a synthetic `Signature` corresponding to a call signature.
     // checker.go:31008
     pub(crate) fn new_call_signature(&mut self, type_parameters: &[P<Type>], this_parameter: Option<P<Symbol>>, parameters: &[P<Symbol>], return_type: P<Type>) -> P<Signature> {
-        todo!()
+        let any_keyword = self.factory.new_keyword_type_node(Kind::AnyKeyword);
+        let decl = self.factory.new_function_type_node(None, None, Some(any_keyword));
+        self.new_signature(SignatureFlags::None, Some(decl), type_parameters, this_parameter, parameters, Some(return_type), None, parameters.len() as i32)
     }
 
     // checker.go:31013
     pub(crate) fn new_typed_property_descriptor_type(&mut self, property_type: P<Type>) -> P<Type> {
-        todo!()
+        let global = self.get_global_typed_property_descriptor_type();
+        self.create_type_from_generic_global_type(global, &[property_type])
     }
 
     // checker.go:31017
     pub(crate) fn get_parent_type_of_class_element(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let class_symbol = self.get_symbol_of_node(node.parent().unwrap()).unwrap();
+        if ast::is_static(node) {
+            return self.get_type_of_symbol(class_symbol);
+        }
+        self.get_declared_type_of_symbol(class_symbol)
     }
 
     // checker.go:31025
     pub(crate) fn get_class_element_property_key_type(&mut self, element: P<Node>) -> P<Type> {
-        todo!()
+        let name = element.name().unwrap();
+        match name.kind {
+            Kind::Identifier | Kind::NumericLiteral | Kind::StringLiteral => {
+                return self.get_string_literal_type(name.text());
+            }
+            Kind::ComputedPropertyName => {
+                let name_type = self.check_computed_property_name(name);
+                if self.is_type_assignable_to_kind(name_type, TypeFlags::ESSymbolLike) {
+                    return name_type;
+                }
+                return self.string_type;
+            }
+            _ => {}
+        }
+        self.error_type
     }
 
     // checker.go:31040
     pub fn get_type_of_property_of_contextual_type(&mut self, t: P<Type>, name: &str) -> Option<P<Type>> {
-        todo!()
+        self.get_type_of_property_of_contextual_type_ex(t, name, None)
     }
 
     // checker.go:31044
     pub(crate) fn get_type_of_property_of_contextual_type_ex(&mut self, t: P<Type>, name: &str, name_type: Option<P<Type>>) -> Option<P<Type>> {
-        todo!()
+        self.map_type_ex(
+            t,
+            |c, t| {
+                if t.flags().intersects(TypeFlags::Intersection) {
+                    let mut types: Vec<P<Type>> = Vec::new();
+                    let mut index_info_candidates: Vec<P<Type>> = Vec::new();
+                    let mut ignore_index_infos = false;
+                    for &constituent_type in t.types() {
+                        if !constituent_type.flags().intersects(TypeFlags::Object) {
+                            continue;
+                        }
+                        if c.is_generic_mapped_type(constituent_type) && c.get_mapped_type_name_type_kind(constituent_type) != MappedTypeNameTypeKind::Remapping {
+                            let substituted_type = c.get_indexed_mapped_type_substituted_type_of_contextual_type(constituent_type, name, name_type);
+                            types = c.append_contextual_property_type_constituent(&types, substituted_type);
+                            continue;
+                        }
+                        let property_type = c.get_type_of_concrete_property_of_contextual_type(constituent_type, name);
+                        if property_type.is_none() {
+                            if !ignore_index_infos {
+                                index_info_candidates.push(constituent_type);
+                            }
+                            continue;
+                        }
+                        ignore_index_infos = true;
+                        index_info_candidates = Vec::new();
+                        types = c.append_contextual_property_type_constituent(&types, property_type);
+                    }
+                    for candidate in index_info_candidates {
+                        let index_info_type = c.get_type_from_index_infos_of_contextual_type(candidate, name, name_type);
+                        types = c.append_contextual_property_type_constituent(&types, index_info_type);
+                    }
+                    if types.is_empty() {
+                        return None;
+                    }
+                    if types.len() == 1 {
+                        return Some(types[0]);
+                    }
+                    return Some(c.get_intersection_type(&types));
+                }
+                if !t.flags().intersects(TypeFlags::Object) {
+                    return None;
+                }
+                if c.is_generic_mapped_type(t) && c.get_mapped_type_name_type_kind(t) != MappedTypeNameTypeKind::Remapping {
+                    return c.get_indexed_mapped_type_substituted_type_of_contextual_type(t, name, name_type);
+                }
+                let result = c.get_type_of_concrete_property_of_contextual_type(t, name);
+                if result.is_some() {
+                    return result;
+                }
+                c.get_type_from_index_infos_of_contextual_type(t, name, name_type)
+            },
+            true, /*noReductions*/
+        )
     }
 
     // checker.go:31096
     pub(crate) fn get_indexed_mapped_type_substituted_type_of_contextual_type(&mut self, t: P<Type>, name: &str, name_type: Option<P<Type>>) -> Option<P<Type>> {
-        todo!()
+        let property_name_type = match name_type {
+            Some(name_type) => name_type,
+            None => self.get_string_literal_type(name),
+        };
+        let constraint = self.get_constraint_type_from_mapped_type(t);
+        // special case for conditional types pretending to be negated types
+        let mapped_name_type = t.as_mapped_type().name_type.get();
+        if mapped_name_type.is_some() && self.is_excluded_mapped_property_name(mapped_name_type.unwrap(), property_name_type) || self.is_excluded_mapped_property_name(constraint, property_name_type) {
+            return None;
+        }
+        let constraint_of_constraint = self.get_base_constraint_or_type(constraint);
+        if !self.is_type_assignable_to(property_name_type, constraint_of_constraint) {
+            return None;
+        }
+        Some(self.substitute_indexed_mapped_type(t, property_name_type))
     }
 
     // checker.go:31113
     pub(crate) fn is_excluded_mapped_property_name(&mut self, t: P<Type>, property_name_type: P<Type>) -> bool {
-        todo!()
+        if t.flags().intersects(TypeFlags::Conditional) {
+            let true_type = self.get_true_type_from_conditional_type(t);
+            if !self.get_reduced_type(true_type).flags().intersects(TypeFlags::Never) {
+                return false;
+            }
+            let false_type = self.get_false_type_from_conditional_type(t);
+            let a = self.get_actual_type_variable(false_type);
+            let check_type = t.as_conditional_type().check_type.get().unwrap();
+            let b = self.get_actual_type_variable(check_type);
+            return a == b && self.is_type_assignable_to(property_name_type, t.as_conditional_type().extends_type.get().unwrap());
+        }
+        if t.flags().intersects(TypeFlags::Intersection) {
+            return t.types().iter().any(|&t| self.is_excluded_mapped_property_name(t, property_name_type));
+        }
+        false
     }
 
     // checker.go:31127
     pub(crate) fn get_type_of_concrete_property_of_contextual_type(&mut self, t: P<Type>, name: &str) -> Option<P<Type>> {
-        todo!()
+        let prop = self.get_property_of_type(t, name);
+        let Some(prop) = prop else {
+            return None;
+        };
+        if self.is_circular_mapped_property(prop) {
+            return None;
+        }
+        let prop_type = self.get_type_of_symbol(prop);
+        Some(self.remove_missing_type(prop_type, prop.flags().intersects(SymbolFlags::Optional)))
     }
 
     // checker.go:31135
     pub(crate) fn get_type_from_index_infos_of_contextual_type(&mut self, t: P<Type>, name: &str, name_type: Option<P<Type>>) -> Option<P<Type>> {
-        todo!()
+        if is_tuple_type(t) && is_numeric_literal_name(name) && jsnum::from_string(name).0 >= 0.0 {
+            let rest_type = self.get_element_type_of_slice_of_tuple_type(t, t.target_tuple_type().fixed_length.get(), 0 /*endSkipCount*/, false /*writing*/, true /*noReductions*/);
+            if rest_type.is_some() {
+                return rest_type;
+            }
+        }
+        let name_type = match name_type {
+            Some(name_type) => name_type,
+            None => self.get_string_literal_type(name),
+        };
+        let index_infos = self.get_index_infos_of_structured_type(t);
+        let index_info = self.find_applicable_index_info(&index_infos, name_type);
+        let Some(index_info) = index_info else {
+            return None;
+        };
+        index_info.value_type.get()
     }
 
     // checker.go:31152
     pub(crate) fn is_circular_mapped_property(&mut self, symbol: P<Symbol>) -> bool {
-        todo!()
+        if symbol.check_flags.get().intersects(CheckFlags::Mapped) {
+            let links = self.value_symbol_links.get(symbol);
+            return links.resolved_type.get().is_none() && self.find_resolution_cycle_start_index(TypeSystemEntity::Symbol(symbol), TypeSystemPropertyName::Type) >= 0;
+        }
+        false
     }
 
     // checker.go:31160
     pub(crate) fn append_contextual_property_type_constituent(&mut self, types: &[P<Type>], t: Option<P<Type>>) -> Vec<P<Type>> {
-        todo!()
+        // any doesn't provide any contextual information but could spoil the overall result by nullifying contextual information
+        // provided by other intersection constituents so it gets replaced with `unknown` as `T & unknown` is just `T` and all
+        // types computed based on the contextual information provided by other constituens are still assignable to any
+        let Some(t) = t else {
+            return types.to_vec();
+        };
+        let mut result = types.to_vec();
+        if t.flags().intersects(TypeFlags::Any) {
+            result.push(self.unknown_type);
+            return result;
+        }
+        result.push(t);
+        result
     }
 
+    // Return the contextual type for a given expression node. During overload resolution, a contextual type may temporarily
+    // be "pushed" onto a node using the contextualType property.
     // checker.go:31175
     pub(crate) fn get_apparent_type_of_contextual_type(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        let contextual_type = if ast::is_object_literal_method(node) {
+            self.get_contextual_type_for_object_literal_method(node, context_flags)
+        } else {
+            self.get_contextual_type(node, context_flags)
+        };
+        let instantiated_type = self.instantiate_contextual_type(contextual_type, node, context_flags);
+        if let Some(instantiated_type) = instantiated_type {
+            if !(context_flags.intersects(ContextFlags::NoConstraints) && instantiated_type.flags().intersects(TypeFlags::TypeVariable)) {
+                let apparent_type = self
+                    .map_type_ex(
+                        instantiated_type,
+                        |c, t| {
+                            if t.object_flags().intersects(ObjectFlags::Mapped) {
+                                return Some(t);
+                            }
+                            Some(c.get_apparent_type(t))
+                        },
+                        true,
+                    )
+                    .unwrap();
+                if apparent_type.flags().intersects(TypeFlags::Union) && ast::is_object_literal_expression(node) {
+                    return Some(self.discriminate_contextual_type_by_object_members(node, apparent_type));
+                } else if apparent_type.flags().intersects(TypeFlags::Union) && ast::is_jsx_attributes(node) {
+                    return Some(self.discriminate_contextual_type_by_jsx_attributes(node, apparent_type));
+                } else {
+                    return Some(apparent_type);
+                }
+            }
+        }
+        None
     }
 }
 
 impl ObjectLiteralDiscriminator {
     // checker.go:31208
     pub(crate) fn len(&mut self, c: &mut Checker) -> i32 {
-        todo!()
+        let _ = c;
+        (self.props.len() + self.members.len()) as i32
     }
 
     // checker.go:31212
     pub(crate) fn name(&mut self, c: &mut Checker, index: i32) -> String {
-        todo!()
+        let _ = c;
+        let index = index as usize;
+        if index < self.props.len() {
+            return self.props[index].symbol().unwrap().name().to_string();
+        }
+        self.members[index - self.props.len()].name().to_string()
     }
 
     // checker.go:31219
     pub(crate) fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool {
-        todo!()
+        let index = index as usize;
+        let prop_type;
+        if index < self.props.len() {
+            let prop = self.props[index];
+            if ast::is_property_assignment(prop) || ast::is_jsx_attribute(prop) {
+                let initializer = prop.initializer();
+                if initializer.is_some() {
+                    prop_type = c.get_context_free_type_of_expression(prop.initializer().unwrap());
+                } else {
+                    prop_type = c.true_type; // JsxAttribute without initializer is always true
+                }
+            } else {
+                prop_type = c.get_context_free_type_of_expression(prop.name().unwrap());
+            }
+        } else {
+            prop_type = c.undefined_type;
+        }
+        for s in prop_type.distributed() {
+            if c.is_type_assignable_to(s, t) {
+                return true;
+            }
+        }
+        false
     }
 }
 
 impl Checker {
     // checker.go:31244
     pub(crate) fn discriminate_contextual_type_by_object_members(&mut self, node: P<Node>, contextual_type: P<Type>) -> P<Type> {
-        todo!()
+        let key = DiscriminatedContextualTypeKey { node_id: get_node_id(node), type_id: contextual_type.id };
+        if let Some(&discriminated) = self.discriminated_contextual_types.get(&key) {
+            return discriminated;
+        }
+        let discriminated = self.get_matching_union_constituent_for_object_literal(contextual_type, node);
+        let discriminated = match discriminated {
+            Some(discriminated) => discriminated,
+            None => {
+                let mut discriminant_properties = Vec::new();
+                for &p in node.properties() {
+                    let keep = 'keep: {
+                        let Some(symbol) = p.symbol() else {
+                            break 'keep false;
+                        };
+                        if ast::is_property_assignment(p) {
+                            break 'keep self.is_possibly_discriminant_value(p.initializer().unwrap()) && self.is_discriminant_property(Some(contextual_type), symbol.name());
+                        }
+                        if ast::is_shorthand_property_assignment(p) {
+                            break 'keep self.is_discriminant_property(Some(contextual_type), symbol.name());
+                        }
+                        false
+                    };
+                    if keep {
+                        discriminant_properties.push(p);
+                    }
+                }
+                let mut discriminant_members = Vec::new();
+                for s in self.get_properties_of_type(contextual_type) {
+                    let node_members = node.symbol().unwrap().members();
+                    if s.flags().intersects(SymbolFlags::Optional) && node_members.map_or(true, |m| m.lookup(s.name()).is_none()) && self.is_discriminant_property(Some(contextual_type), s.name()) {
+                        discriminant_members.push(s);
+                    }
+                }
+                let mut discriminator = ObjectLiteralDiscriminator { props: discriminant_properties, members: discriminant_members };
+                self.discriminate_type_by_discriminable_items(contextual_type, &mut discriminator)
+            }
+        };
+        self.discriminated_contextual_types.insert(key, discriminated);
+        discriminated
     }
 
     // checker.go:31274
     pub(crate) fn get_matching_union_constituent_for_object_literal(&mut self, union_type: P<Type>, node: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let key_property_name = self.get_key_property_name(union_type);
+        if !key_property_name.is_empty() {
+            let mut prop_node = None;
+            for &p in node.properties() {
+                if p.symbol().is_some() && ast::is_property_assignment(p) && p.symbol().unwrap().name() == key_property_name && self.is_possibly_discriminant_value(p.initializer().unwrap()) {
+                    prop_node = Some(p);
+                    break;
+                }
+            }
+            if let Some(prop_node) = prop_node {
+                let prop_type = self.get_context_free_type_of_expression(prop_node.initializer().unwrap());
+                return self.get_constituent_type_for_key_type(union_type, prop_type);
+            }
+        }
+        None
     }
 
+    // Return true if the given expression is possibly a discriminant value. We limit the kinds of
+    // expressions we check to those that don't depend on their contextual type in order not to cause
+    // recursive (and possibly infinite) invocations of getContextualType.
     // checker.go:31291
     pub(crate) fn is_possibly_discriminant_value(&mut self, node: P<Node>) -> bool {
-        todo!()
+        match node.kind {
+            Kind::StringLiteral | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::TemplateExpression
+            | Kind::TrueKeyword | Kind::FalseKeyword | Kind::NullKeyword | Kind::Identifier | Kind::UndefinedKeyword => {
+                return true;
+            }
+            Kind::PropertyAccessExpression | Kind::ParenthesizedExpression => {
+                return self.is_possibly_discriminant_value(node.expression().unwrap());
+            }
+            Kind::JsxExpression => {
+                return node.expression().is_none() || self.is_possibly_discriminant_value(node.expression().unwrap());
+            }
+            _ => {}
+        }
+        false
     }
 
+    // If the given contextual type contains instantiable types and if a mapper representing
+    // return type inferences is available, instantiate those types using that mapper.
+    // SIG: contextual_type and the result are nil-able in Go (P<Type> -> Option<P<Type>>).
     // checker.go:31306
-    pub(crate) fn instantiate_contextual_type(&mut self, contextual_type: P<Type>, node: P<Node>, context_flags: ContextFlags) -> P<Type> {
-        todo!()
+    pub(crate) fn instantiate_contextual_type(&mut self, contextual_type: Option<P<Type>>, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
+        if let Some(contextual_type) = contextual_type {
+            if self.maybe_type_of_kind(contextual_type, TypeFlags::Instantiable) {
+                let inference_context = self.get_inference_context(node);
+                // If no inferences have been made, and none of the type parameters for which we are inferring
+                // specify default types, nothing is gained from instantiating as type parameters would just be
+                // replaced with their constraints similar to the apparent type.
+                if let Some(inference_context) = inference_context {
+                    if context_flags.intersects(ContextFlags::Signature) && inference_context.inferences.get().iter().any(|&info| has_inference_candidates_or_default(info)) {
+                        // For contextual signatures we incorporate all inferences made so far, e.g. from return
+                        // types as well as arguments to the left in a function call.
+                        let t = self.instantiate_instantiable_types(contextual_type, inference_context.non_fixing_mapper.get().unwrap());
+                        if !t.flags().intersects(TypeFlags::AnyOrUnknown) {
+                            return Some(t);
+                        }
+                    }
+                    if let Some(return_mapper) = inference_context.return_mapper.get() {
+                        // For other purposes (e.g. determining whether to produce literal types) we only
+                        // incorporate inferences made from the return type in a function call. We remove
+                        // the 'boolean' type from the contextual type such that contextually typed boolean
+                        // literals actually end up widening to 'boolean' (see #48363).
+                        let t = self.instantiate_instantiable_types(contextual_type, return_mapper);
+                        if !t.flags().intersects(TypeFlags::AnyOrUnknown) {
+                            if t.flags().intersects(TypeFlags::Union) && contains_type(t.types(), self.regular_false_type) && contains_type(t.types(), self.regular_true_type) {
+                                return Some(self.filter_type(t, |c, t| t != c.regular_false_type && t != c.regular_true_type));
+                            }
+                            return Some(t);
+                        }
+                    }
+                }
+            }
+        }
+        contextual_type
     }
 
+    // This function is similar to instantiateType, except that (a) it only instantiates types that
+    // are classified as instantiable (i.e. it doesn't instantiate object types), and (b) it performs
+    // no reductions on instantiated union types.
     // checker.go:31344
     pub(crate) fn instantiate_instantiable_types(&mut self, t: P<Type>, mapper: P<TypeMapper>) -> P<Type> {
-        todo!()
+        if t.flags().intersects(TypeFlags::Instantiable) {
+            return self.instantiate_type(t, Some(mapper));
+        }
+        if t.flags().intersects(TypeFlags::Union) {
+            let types: Vec<P<Type>> = t.types().iter().map(|&t| self.instantiate_instantiable_types(t, mapper)).collect();
+            return self.get_union_type_ex(&types, UnionReduction::None, None, None);
+        }
+        if t.flags().intersects(TypeFlags::Intersection) {
+            let types: Vec<P<Type>> = t.types().iter().map(|&t| self.instantiate_instantiable_types(t, mapper)).collect();
+            return self.get_intersection_type(&types);
+        }
+        t
     }
 
     // checker.go:31361
     pub(crate) fn push_cached_contextual_type(&mut self, node: P<Node>) {
-        todo!()
+        let t = self.get_contextual_type(node, ContextFlags::None);
+        self.push_contextual_type_worker(node, t, true /*isCache*/);
     }
 
     // checker.go:31365
     pub(crate) fn push_contextual_type(&mut self, node: P<Node>, t: P<Type>, is_cache: bool) {
-        todo!()
+        self.push_contextual_type_worker(node, Some(t), is_cache);
+    }
+
+    // Go's pushContextualType accepts a nil type (pushCachedContextualType passes the possibly-nil result of
+    // getContextualType); the generated signature takes a non-nil type, so the body lives here.
+    fn push_contextual_type_worker(&mut self, node: P<Node>, t: Option<P<Type>>, is_cache: bool) {
+        self.contextual_infos.push(ContextualInfo { node, t, is_cache });
     }
 
     // checker.go:31369
     pub(crate) fn pop_contextual_type(&mut self) {
-        todo!()
+        self.contextual_infos.pop();
     }
 
     // checker.go:31375
     pub(crate) fn find_contextual_node(&mut self, node: P<Node>, include_caches: bool) -> i32 {
-        todo!()
+        for (i, info) in self.contextual_infos.iter().enumerate() {
+            if node == info.node && (include_caches || !info.is_cache) {
+                return i as i32;
+            }
+        }
+        -1
     }
 
+    // Returns true if the given expression contains (at any level of nesting) a function or arrow expression
+    // that is subject to contextual typing.
     // checker.go:31386
     pub fn is_context_sensitive(&mut self, node: P<Node>) -> bool {
-        todo!()
+        match node.kind {
+            Kind::FunctionExpression | Kind::ArrowFunction | Kind::MethodDeclaration | Kind::FunctionDeclaration => {
+                return self.is_context_sensitive_function_like_declaration(node);
+            }
+            Kind::ObjectLiteralExpression => {
+                return node.properties().iter().any(|&p| self.is_context_sensitive(p));
+            }
+            Kind::ArrayLiteralExpression => {
+                return node.elements().iter().any(|&e| self.is_context_sensitive(e));
+            }
+            Kind::ConditionalExpression => {
+                let conditional = node.as_conditional_expression();
+                return self.is_context_sensitive(conditional.when_true) || self.is_context_sensitive(conditional.when_false);
+            }
+            Kind::BinaryExpression => {
+                let binary = node.as_binary_expression();
+                return ast::node_kind_is(binary.operator_token, &[Kind::BarBarToken, Kind::QuestionQuestionToken]) && (self.is_context_sensitive(binary.left) || self.is_context_sensitive(binary.right()));
+            }
+            Kind::PropertyAssignment => {
+                return self.is_context_sensitive(node.initializer().unwrap());
+            }
+            Kind::ParenthesizedExpression => {
+                return self.is_context_sensitive(node.expression().unwrap());
+            }
+            Kind::JsxAttributes => {
+                return node.properties().iter().any(|&p| self.is_context_sensitive(p))
+                    || ast::is_jsx_opening_element(node.parent().unwrap()) && node.parent().unwrap().parent().unwrap().children().nodes.iter().any(|&c| self.is_context_sensitive(c));
+            }
+            Kind::JsxAttribute => {
+                // If there is no initializer, JSX attribute has a boolean value of true which is not context sensitive.
+                let initializer = node.initializer();
+                return initializer.is_some() && self.is_context_sensitive(initializer.unwrap());
+            }
+            Kind::JsxExpression => {
+                // It is possible to that node.expression is undefined (e.g <div x={} />)
+                let expression = node.expression();
+                return expression.is_some() && self.is_context_sensitive(expression.unwrap());
+            }
+            Kind::YieldExpression => {
+                let expression = node.expression();
+                return expression.is_some() && self.is_context_sensitive(expression.unwrap());
+            }
+            _ => {}
+        }
+        false
     }
 
     // checker.go:31420
     pub(crate) fn is_context_sensitive_function_like_declaration(&mut self, node: P<Node>) -> bool {
-        todo!()
+        ast::has_context_sensitive_parameters(node) || self.has_context_sensitive_return_expression(node) || self.has_context_sensitive_yield_expression(node)
     }
 
     // checker.go:31424
     pub(crate) fn has_context_sensitive_return_expression(&mut self, node: P<Node>) -> bool {
-        todo!()
+        if node.type_parameter_list().is_some() || node.type_node().is_some() {
+            return false;
+        }
+        let Some(body) = node.body() else {
+            return false;
+        };
+        if !ast::is_block(body) {
+            return self.is_context_sensitive(body);
+        }
+        ast::for_each_return_statement(body, |statement| statement.expression().is_some() && self.is_context_sensitive(statement.expression().unwrap()))
     }
 
     // checker.go:31440
     pub(crate) fn has_context_sensitive_yield_expression(&mut self, node: P<Node>) -> bool {
-        todo!()
+        ast::get_function_flags(Some(node)).intersects(FunctionFlags::Generator) && node.body().is_some() && for_each_yield_expression(node.body().unwrap(), |n| self.is_context_sensitive(n))
     }
 
     // checker.go:31444
     pub(crate) fn push_inference_context(&mut self, node: P<Node>, context: Option<P<InferenceContext>>) {
-        todo!()
+        self.inference_context_infos.push(InferenceContextInfo { node, context });
     }
 
     // checker.go:31448
     pub(crate) fn pop_inference_context(&mut self) {
-        todo!()
+        self.inference_context_infos.pop();
     }
 
     // checker.go:31454
     pub(crate) fn get_inference_context(&mut self, node: P<Node>) -> Option<P<InferenceContext>> {
-        todo!()
+        for v in self.inference_context_infos.iter().rev() {
+            if crate::is_node_descendant_of(Some(node), v.node) {
+                return v.context;
+            }
+        }
+        None
     }
 
     // checker.go:31463
     pub(crate) fn get_type_facts(&mut self, t: P<Type>, mask: TypeFacts) -> TypeFacts {
-        todo!()
+        self.get_type_facts_worker(t, mask) & mask
     }
 
     // checker.go:31467
     pub(crate) fn has_type_facts(&mut self, t: P<Type>, mask: TypeFacts) -> bool {
-        todo!()
+        self.get_type_facts(t, mask) != TypeFacts::None
     }
 
     // checker.go:31471
     pub(crate) fn get_type_facts_worker(&mut self, t: P<Type>, caller_only_needs: TypeFacts) -> TypeFacts {
-        todo!()
+        let mut t = t;
+        if t.flags().intersects(TypeFlags::Intersection | TypeFlags::Instantiable) {
+            t = match self.get_base_constraint_of_type(t) {
+                Some(t) => t,
+                None => self.unknown_type,
+            };
+        }
+        let flags = t.flags();
+        if flags.intersects(TypeFlags::String | TypeFlags::StringMapping) {
+            if self.strict_null_checks {
+                return TypeFacts::StringStrictFacts;
+            }
+            return TypeFacts::StringFacts;
+        } else if flags.intersects(TypeFlags::StringLiteral | TypeFlags::TemplateLiteral) {
+            let is_empty = flags.intersects(TypeFlags::StringLiteral) && get_string_literal_value(t).is_empty();
+            if self.strict_null_checks {
+                if is_empty {
+                    return TypeFacts::EmptyStringStrictFacts;
+                }
+                return TypeFacts::NonEmptyStringStrictFacts;
+            }
+            if is_empty {
+                return TypeFacts::EmptyStringFacts;
+            }
+            return TypeFacts::NonEmptyStringFacts;
+        } else if flags.intersects(TypeFlags::Number | TypeFlags::Enum) {
+            if self.strict_null_checks {
+                return TypeFacts::NumberStrictFacts;
+            }
+            return TypeFacts::NumberFacts;
+        } else if flags.intersects(TypeFlags::NumberLiteral) {
+            let is_zero = get_number_literal_value(t).0 == 0.0;
+            if self.strict_null_checks {
+                if is_zero {
+                    return TypeFacts::ZeroNumberStrictFacts;
+                }
+                return TypeFacts::NonZeroNumberStrictFacts;
+            }
+            if is_zero {
+                return TypeFacts::ZeroNumberFacts;
+            }
+            return TypeFacts::NonZeroNumberFacts;
+        } else if flags.intersects(TypeFlags::BigInt) {
+            if self.strict_null_checks {
+                return TypeFacts::BigIntStrictFacts;
+            }
+            return TypeFacts::BigIntFacts;
+        } else if flags.intersects(TypeFlags::BigIntLiteral) {
+            let is_zero = is_zero_big_int(t);
+            if self.strict_null_checks {
+                if is_zero {
+                    return TypeFacts::ZeroBigIntStrictFacts;
+                }
+                return TypeFacts::NonZeroBigIntStrictFacts;
+            }
+            if is_zero {
+                return TypeFacts::ZeroBigIntFacts;
+            }
+            return TypeFacts::NonZeroBigIntFacts;
+        } else if flags.intersects(TypeFlags::Boolean) {
+            if self.strict_null_checks {
+                return TypeFacts::BooleanStrictFacts;
+            }
+            return TypeFacts::BooleanFacts;
+        } else if flags.intersects(TypeFlags::BooleanLike) {
+            let is_false = t == self.false_type || t == self.regular_false_type;
+            if self.strict_null_checks {
+                if is_false {
+                    return TypeFacts::FalseStrictFacts;
+                }
+                return TypeFacts::TrueStrictFacts;
+            }
+            if is_false {
+                return TypeFacts::FalseFacts;
+            }
+            return TypeFacts::TrueFacts;
+        } else if flags.intersects(TypeFlags::Object) {
+            let possible_facts = if self.strict_null_checks {
+                TypeFacts::EmptyObjectStrictFacts | TypeFacts::FunctionStrictFacts | TypeFacts::ObjectStrictFacts
+            } else {
+                TypeFacts::EmptyObjectFacts | TypeFacts::FunctionFacts | TypeFacts::ObjectFacts
+            };
+            if (caller_only_needs & possible_facts) == TypeFacts::None {
+                // If the caller doesn't care about any of the facts that we could possibly produce,
+                // return zero so we can skip resolving members.
+                return TypeFacts::None;
+            }
+            if t.object_flags().intersects(ObjectFlags::Anonymous) && self.is_empty_object_type(t) {
+                if self.strict_null_checks {
+                    return TypeFacts::EmptyObjectStrictFacts;
+                }
+                return TypeFacts::EmptyObjectFacts;
+            } else if self.is_function_object_type(t) {
+                if self.strict_null_checks {
+                    return TypeFacts::FunctionStrictFacts;
+                }
+                return TypeFacts::FunctionFacts;
+            } else if self.strict_null_checks {
+                return TypeFacts::ObjectStrictFacts;
+            }
+            return TypeFacts::ObjectFacts;
+        } else if flags.intersects(TypeFlags::Void) {
+            return TypeFacts::VoidFacts;
+        } else if flags.intersects(TypeFlags::Undefined) {
+            return TypeFacts::UndefinedFacts;
+        } else if flags.intersects(TypeFlags::Null) {
+            return TypeFacts::NullFacts;
+        } else if flags.intersects(TypeFlags::ESSymbolLike) {
+            if self.strict_null_checks {
+                return TypeFacts::SymbolStrictFacts;
+            } else {
+                return TypeFacts::SymbolFacts;
+            }
+        } else if flags.intersects(TypeFlags::NonPrimitive) {
+            if self.strict_null_checks {
+                return TypeFacts::ObjectStrictFacts;
+            } else {
+                return TypeFacts::ObjectFacts;
+            }
+        } else if flags.intersects(TypeFlags::Never) {
+            return TypeFacts::None;
+        } else if flags.intersects(TypeFlags::Union) {
+            let mut facts = TypeFacts::None;
+            for &t in t.types() {
+                facts |= self.get_type_facts_worker(t, caller_only_needs);
+            }
+            return facts;
+        } else if flags.intersects(TypeFlags::Intersection) {
+            return self.get_intersection_type_facts(t, caller_only_needs);
+        }
+        TypeFacts::UnknownFacts
     }
 
     // checker.go:31607
     pub(crate) fn get_intersection_type_facts(&mut self, t: P<Type>, caller_only_needs: TypeFacts) -> TypeFacts {
-        todo!()
+        // When an intersection contains a primitive type we ignore object type constituents as they are
+        // presumably type tags. For example, in string & { __kind__: "name" } we ignore the object type.
+        let ignore_objects = self.maybe_type_of_kind(t, TypeFlags::Primitive);
+        // When computing the type facts of an intersection type, certain type facts are computed as `and`
+        // and others are computed as `or`.
+        let mut ored_facts = TypeFacts::None;
+        let mut anded_facts = TypeFacts::All;
+        for &t in t.types() {
+            if !(ignore_objects && t.flags().intersects(TypeFlags::Object)) {
+                let f = self.get_type_facts_worker(t, caller_only_needs);
+                ored_facts |= f;
+                anded_facts &= f;
+            }
+        }
+        ored_facts & TypeFacts::OrFactsMask | anded_facts & TypeFacts::AndFactsMask
     }
 }
 
 // checker.go:31625
 pub(crate) fn is_zero_big_int(t: P<Type>) -> bool {
-    todo!()
+    get_big_int_literal_value(t) == jsnum::PseudoBigInt::default()
 }
 
 impl Checker {
