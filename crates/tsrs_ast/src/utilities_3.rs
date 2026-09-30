@@ -1208,3 +1208,11 @@ pub fn is_proto_setter(node: P<Node>) -> bool {
 pub fn is_string_literal_like_type(node: P<Node>) -> bool {
     node.kind == Kind::LiteralType && is_string_literal_like(node.as_literal_type_node().literal)
 }
+
+// Go `res := node.Clone(f); res.Kind = ast.KindImportDeclaration` (declarations transformTopLevelDeclaration, for a
+// JSImportDeclaration): `Node::kind` is immutable in Rust, so the clone is created with the target kind directly.
+pub fn clone_as_import_declaration(node: P<Node>, f: &NodeFactory) -> P<Node> {
+    let d = node.as_import_declaration();
+    let updated = f.new_import_declaration(d.modifiers(), d.import_clause(), d.module_specifier(), d.attributes());
+    crate::ast::clone_node(updated, node, &f.hooks)
+}
