@@ -11,9 +11,9 @@ workspace = true
 default = ["tsoptions"]
 # The Rust compiler backend. Off until tsrs_ast/tsrs_compiler build; the harness otherwise runs against
 # Go-captured diagnostics (--oracle).
-compiler = ["tsoptions", "dep:tsrs_ast", "dep:tsrs_parser", "dep:tsrs_vfs", "dep:tsrs_compiler"]
+compiler = ["tsoptions", "dep:tsrs_compiler"]
 # Option declarations from tsrs_tsoptions (instead of the oracle's options.json).
-tsoptions = ["dep:tsrs_tsoptions"]
+tsoptions = ["dep:tsrs_tsoptions", "dep:tsrs_ast", "dep:tsrs_parser", "dep:tsrs_vfs"]
 
 [dependencies]
 tsrs_core.workspace = true
