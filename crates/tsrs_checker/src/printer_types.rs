@@ -1,11 +1,19 @@
 //! Declarations that printer.rs / symbolaccessibility / symboltracker signatures reference: the node-builder and printer
-//! types from other Go packages (`nodebuilder`, `printer`) plus the non-function declarations of
-//! `symbolaccessibility.go` and `symboltracker.go`. The node builder itself is not ported yet: types that only it
-//! uses are placeholders (marked below) that the printer/node-builder port replaces.
+//! types from other Go packages (`nodebuilder`, `printer`), the non-function declarations of `symbolaccessibility.go`
+//! and `symboltracker.go`, and the seam to the `tsrs_printer` crate. The node builder's own data model is in
+//! nodebuilder_types.rs.
 
 use bitflags::bitflags;
 
 use crate::*;
+
+// Seam to `tsrs_printer` (Go `internal/printer`): every use of the printer crate by the checker goes through these
+// names. `printer::NodeFactory` is deliberately not re-exported (it would clash with `tsrs_ast::NodeFactory` in the stub
+// files' glob imports); reach it as `e.factory`.
+pub use tsrs_printer::{
+    get_single_line_string_writer, new_emit_context, new_printer, new_text_writer, EmitContext, EmitFlags,
+    EmitTextWriter, PrintHandlers, Printer, PrinterOptions,
+};
 
 // nodebuilder/types.go
 
@@ -23,6 +31,11 @@ pub trait SymbolTracker {
     fn report_inference_fallback(&self, node: P<Node>);
     fn push_error_fallback_node(&self, node: Option<P<Node>>);
     fn pop_error_fallback_node(&self);
+
+    /// Go's type assertion `tracker.(*SymbolTrackerImpl)` (in `NewSymbolTrackerImpl`).
+    fn as_symbol_tracker_impl(&self) -> Option<&SymbolTrackerImpl> {
+        None
+    }
 }
 
 bitflags! {
@@ -104,29 +117,14 @@ pub struct SymbolAccessibilityResult {
 
 // checker/nodebuilder.go
 
-#[derive(Clone, Copy, Debug, Default)]
+/// Go `VerbosityContext`, passed as `Option<P<VerbosityContext>>`; the node builder writes the output fields.
+#[derive(Debug, Default)]
 pub struct VerbosityContext {
-    pub level: i32, // 0 = default (no expansion), 1+ = expansion depth
-    pub max_truncation_length: i32, // 0 = use default
-    pub can_increase_verbosity: bool, // output: whether increasing Level would reveal more
-    pub truncated: bool, // output: whether output was truncated
+    pub level: Cell<i32>, // 0 = default (no expansion), 1+ = expansion depth
+    pub max_truncation_length: Cell<i32>, // 0 = use default
+    pub can_increase_verbosity: Cell<bool>, // output: whether increasing Level would reveal more
+    pub truncated: Cell<bool>, // output: whether output was truncated
 }
-
-/// Placeholder for Go `NodeBuilderContext` (nodebuilderimpl.go, not ported yet).
-#[derive(Default)]
-pub struct NodeBuilderContext {}
-
-/// Placeholder for Go `printer.EmitContext` (emit is not ported).
-#[derive(Default)]
-pub struct EmitContext {}
-
-/// Placeholder for Go `printer.Printer` (emit is not ported).
-#[derive(Default)]
-pub struct Printer {}
-
-/// Placeholder for Go `EmitResolver` (emitresolver.go is not ported).
-#[derive(Default)]
-pub struct EmitResolver {}
 
 // checker/symbolaccessibility.go
 
@@ -140,10 +138,54 @@ pub struct accessibleSymbolChainContext {
 
 // checker/symboltracker.go
 
+/// Go `SymbolTrackerImpl`, handled as `P<SymbolTrackerImpl>` and passed on as `&'static dyn SymbolTracker`
+/// (`p.get()`); the inherent methods (printer.rs) take `&self`.
 pub struct SymbolTrackerImpl {
     pub context: P<NodeBuilderContext>,
     pub inner: Option<&'static dyn SymbolTracker>,
-    pub disable_track_symbol: bool,
+    pub disable_track_symbol: Cell<bool>,
+}
+
+impl SymbolTracker for SymbolTrackerImpl {
+    fn track_symbol(&self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
+        SymbolTrackerImpl::track_symbol(self, symbol, enclosing_declaration, meaning)
+    }
+    fn report_inaccessible_this_error(&self) {
+        SymbolTrackerImpl::report_inaccessible_this_error(self)
+    }
+    fn report_private_in_base_of_class_expression(&self, property_name: &str) {
+        SymbolTrackerImpl::report_private_in_base_of_class_expression(self, property_name)
+    }
+    fn report_inaccessible_unique_symbol_error(&self) {
+        SymbolTrackerImpl::report_inaccessible_unique_symbol_error(self)
+    }
+    fn report_cyclic_structure_error(&self) {
+        SymbolTrackerImpl::report_cyclic_structure_error(self)
+    }
+    fn report_likely_unsafe_import_required_error(&self, specifier: &str, symbol_name: &str) {
+        SymbolTrackerImpl::report_likely_unsafe_import_required_error(self, specifier, symbol_name)
+    }
+    fn report_truncation_error(&self) {
+        SymbolTrackerImpl::report_truncation_error(self)
+    }
+    fn report_nonlocal_augmentation(&self, containing_file: P<SourceFile>, parent_symbol: P<Symbol>, augmenting_symbol: P<Symbol>) {
+        SymbolTrackerImpl::report_nonlocal_augmentation(self, containing_file, parent_symbol, augmenting_symbol)
+    }
+    fn report_non_serializable_property(&self, property_name: &str) {
+        SymbolTrackerImpl::report_non_serializable_property(self, property_name)
+    }
+    fn report_inference_fallback(&self, node: P<Node>) {
+        SymbolTrackerImpl::report_inference_fallback(self, node)
+    }
+    fn push_error_fallback_node(&self, node: Option<P<Node>>) {
+        SymbolTrackerImpl::push_error_fallback_node(self, node)
+    }
+    fn pop_error_fallback_node(&self) {
+        SymbolTrackerImpl::pop_error_fallback_node(self)
+    }
+    fn as_symbol_tracker_impl(&self) -> Option<&SymbolTrackerImpl> {
+        Some(self)
+    }
 }
 
 /// Go `context.Context` parameters (cancellation is not ported; pass `Context`).

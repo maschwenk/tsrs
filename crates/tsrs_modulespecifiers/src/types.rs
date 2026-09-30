@@ -1,0 +1,224 @@
+//! Non-function declarations of the modulespecifiers package (types.go, plus those of preferences.go, specifiers.go
+//! and util.go).
+
+use std::sync::{LazyLock, RwLock};
+
+use rustc_hash::FxHashMap;
+use tsrs_ast::{Node, SourceFile, Symbol};
+use tsrs_core::tspath::Path;
+use tsrs_core::{ResolutionMode, P};
+use tsrs_module::packagejson;
+
+use crate::*;
+
+// types.go
+
+// Go `SourceFileForSpecifierGeneration` (Path, FileName, Imports, IsJS) is implemented by `*ast.SourceFile` in the
+// type checker; parameters of that type are `P<SourceFile>`.
+
+/// Go `CheckerShape` (implemented by the checker).
+pub trait CheckerShape {
+    fn get_symbol_at_location(&mut self, node: P<Node>) -> Option<P<Symbol>>;
+    fn get_aliased_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol>;
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
+pub enum ResultKind {
+    #[default]
+    None,
+    NodeModules,
+    Paths,
+    Redirect,
+    Relative,
+    Ambient,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ModuleSpecifiersResult {
+    pub specifiers: Vec<String>,
+    pub kind: ResultKind,
+    pub ambient_module_symbol: Option<P<Symbol>>, // used to construct an import attributes node, if one is needed
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ModulePath {
+    pub file_name: String,
+    pub is_in_node_modules: bool,
+    pub is_redirect: bool,
+}
+
+/// Go `ModuleSpecifierGenerationHost`. `CommonSourceDirectory`, `ContentMapperExtensions`, `GetCurrentDirectory` and
+/// `UseCaseSensitiveFileNames` come from the supertrait `outputpaths.OutputPathsHost` (Go passes the host to
+/// `outputpaths` functions). `ast.HasFileName` parameters are `P<SourceFile>`.
+pub trait ModuleSpecifierGenerationHost: OutputPathsHost {
+    // GetModuleResolutionCache() any // !!! TODO: adapt new resolution cache model
+    fn get_symlink_cache(&self) -> P<KnownSymlinks>;
+    // GetFileIncludeReasons() any // !!! TODO: adapt new resolution cache model
+    fn get_global_typings_cache_location(&self) -> String;
+
+    fn get_project_reference_from_source(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>>;
+    fn get_redirect_targets(&self, path: &Path) -> Vec<String>;
+    fn get_source_of_project_reference_if_output_included(&self, file: P<SourceFile>) -> String;
+
+    fn file_exists(&self, path: &str) -> bool;
+
+    fn get_nearest_ancestor_directory_with_package_json(&self, dirname: &str) -> String;
+    fn get_package_json_info(&self, pkg_json_path: &str) -> Option<P<packagejson::InfoCacheEntry>>;
+    fn get_default_resolution_mode_for_file(&self, file: P<SourceFile>) -> ResolutionMode;
+    fn get_resolved_module_from_module_specifier(&self, file: P<SourceFile>, module_specifier: P<Node>) -> Option<P<ResolvedModule>>;
+    fn get_mode_for_usage_location(&self, file: P<SourceFile>, module_specifier: P<Node>) -> ResolutionMode;
+}
+
+/// Go `ImportModuleSpecifierPreference` (a string type; `as_str()` is the Go value).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum ImportModuleSpecifierPreference {
+    #[default]
+    None, // "" !!!
+    Shortest,
+    ProjectRelative,
+    Relative,
+    NonRelative,
+}
+
+impl ImportModuleSpecifierPreference {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ImportModuleSpecifierPreference::None => "",
+            ImportModuleSpecifierPreference::Shortest => "shortest",
+            ImportModuleSpecifierPreference::ProjectRelative => "project-relative",
+            ImportModuleSpecifierPreference::Relative => "relative",
+            ImportModuleSpecifierPreference::NonRelative => "non-relative",
+        }
+    }
+}
+
+/// Go `ImportModuleSpecifierEndingPreference` (a string type; `as_str()` is the Go value).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum ImportModuleSpecifierEndingPreference {
+    #[default]
+    None, // "" !!!
+    Auto,
+    Minimal,
+    Index,
+    Js,
+}
+
+impl ImportModuleSpecifierEndingPreference {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ImportModuleSpecifierEndingPreference::None => "",
+            ImportModuleSpecifierEndingPreference::Auto => "auto",
+            ImportModuleSpecifierEndingPreference::Minimal => "minimal",
+            ImportModuleSpecifierEndingPreference::Index => "index",
+            ImportModuleSpecifierEndingPreference::Js => "js",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct UserPreferences {
+    pub import_module_specifier_preference: ImportModuleSpecifierPreference,
+    pub import_module_specifier_ending: ImportModuleSpecifierEndingPreference,
+    pub auto_import_specifier_exclude_regexes: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ModuleSpecifierOptions {
+    pub override_import_mode: ResolutionMode,
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
+pub enum RelativePreferenceKind {
+    #[default]
+    Relative,
+    NonRelative,
+    Shortest,
+    ExternalNonRelative,
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
+pub enum ModuleSpecifierEnding {
+    #[default]
+    Minimal,
+    Index,
+    JsExtension,
+    TsExtension,
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
+pub enum MatchingMode {
+    #[default]
+    Exact,
+    Directory,
+    Pattern,
+}
+
+// preferences.go
+
+pub struct ModuleSpecifierPreferences {
+    pub relative_preference: RelativePreferenceKind,
+    pub get_allowed_endings_in_preferred_order: Box<dyn Fn(ResolutionMode) -> Vec<ModuleSpecifierEnding>>,
+    pub exclude_regexes: Vec<String>,
+}
+
+// util.go
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct regexPatternCacheKey {
+    pub pattern: String,
+    pub case_insensitive: bool,
+}
+
+/// Go `regexPatternCache` guarded by `regexPatternCacheMu` (one `RwLock`).
+pub(crate) static regexPatternCache: LazyLock<RwLock<FxHashMap<regexPatternCacheKey, Option<P<regex::Regex>>>>> =
+    LazyLock::new(|| RwLock::new(FxHashMap::default()));
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NodeModulePathParts {
+    pub top_level_node_modules_index: i32,
+    pub top_level_package_name_index: i32,
+    pub package_root_index: i32,
+    pub file_name_index: i32,
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum nodeModulesPathParseState {
+    BeforeNodeModules,
+    NodeModules,
+    Scope,
+    PackageContent,
+}
+
+// specifiers.go
+
+#[derive(Clone, Debug, Default)]
+pub struct ambientModuleInfo {
+    pub name: String,
+    pub symbol: Option<P<Symbol>>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Info {
+    pub use_case_sensitive_file_names: bool,
+    pub importing_source_file_name: String,
+    pub source_directory: String,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct pkgJsonDirAttemptResult {
+    pub module_file_to_try: String,
+    pub package_root_path: String,
+    pub blocked_by_exports: bool,
+    pub verbatim_from_exports: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct specPair {
+    pub ending: ModuleSpecifierEnding,
+    pub value: String,
+}

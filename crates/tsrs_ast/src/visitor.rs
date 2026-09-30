@@ -9,9 +9,9 @@ use crate::kind::Kind;
 //
 // Go stores plain func values that close over the visitor itself. In Rust the callbacks are shared
 // `Rc<dyn Fn>` values that receive the visitor back as an argument, so a callback may re-enter the
-// visitor (e.g. `v.visit_each_child(node)` from inside `visit`). The visitor owns its factory; to
-// run a visitor with an existing factory, move it in with `std::mem::take` and move it back out
-// afterwards.
+// visitor (e.g. `v.visit_each_child(node)` from inside `visit`). The visitor owns a factory handle;
+// to run a visitor with an existing factory (Go passes the same `*NodeFactory`), pass `f.clone()`,
+// which shares hooks and counters.
 
 pub type VisitFn = Rc<dyn Fn(&mut NodeVisitor, P<Node>) -> Option<P<Node>>>;
 pub type VisitNodeHook = Rc<dyn Fn(Option<P<Node>>, &mut NodeVisitor) -> Option<P<Node>>>;

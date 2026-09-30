@@ -1,0 +1,42 @@
+{
+  "moduleDir": "../../ts-ref/tsc",
+  "package": "github.com/microsoft/TypeScript/tsc/internal/pseudochecker",
+  "resultOnlyPackages": [
+    "github.com/microsoft/TypeScript/tsc/internal/ast",
+    "github.com/microsoft/TypeScript/tsc/internal/core"
+  ],
+  "outDir": "../../crates/tsrs_pseudochecker/src",
+  "sigsFile": "../../docs/sigs/pseudochecker.txt",
+  "advisorySigsFile": "../../docs/sigs/pseudochecker_advisory.txt",
+  "prelude": "use crate::*;\nuse tsrs_ast::*;\nuse tsrs_core::*;\nuse tsrs_ast as ast;\n",
+  "checkerType": "noCheckerTypeInThisPackage",
+  "files": [
+    {
+      "go": "lookup.go",
+      "rust": "lookup.rs"
+    }
+  ],
+  "notPorted": [],
+  "skipFuncs": [],
+  "arenaTypes": ["PseudoChecker", "PseudoType", "PseudoObjectElement", "PseudoParameter"],
+  "typeMap": {
+    "*ast.Node": "P<Node>",
+    "*ast.Symbol": "P<Symbol>",
+    "*ast.SourceFile": "P<SourceFile>",
+    "*ast.NodeList": "P<NodeList>",
+    "*ast.ModifierList": "P<ModifierList>",
+    "ast.SymbolTable": "P<SymbolTable>",
+    "core.Tristate": "Tristate"
+  },
+  "dataInterfaces": [
+    {"iface": "ast.nodeData", "rust": "P<Node>", "except": ["SourceFile"]}
+  ],
+  "constraintMap": {"any": "", "comparable": "Copy + Eq + std::hash::Hash", "cmp.Ordered": "Copy + Ord"},
+  "wordReplacements": {"JSDoc": "Jsdoc", "NaN": "Nan", "IDs": "Ids"},
+  "zeroValueGenerics": ["core.Find", "core.FindLast", "core.FirstOrNil", "core.LastOrNil"],
+  "coalesceGenerics": ["core.OrElse", "core.Coalesce", "core.FirstNonZero"],
+  "nilTolerantParams": ["ast.SymbolTable"],
+  "nilTransparent": true,
+  "paramForwarding": "forward",
+  "overrides": {}
+}

@@ -14,8 +14,12 @@ The `checker-foundation` agent implements the data model and keeps this file acc
 | `checker.go` (32.6k lines) | `checker_01.rs` … `checker_15.rs` by Go line range (table below), all `impl Checker` |
 | `relater.go` | `relater_1.rs` (1–2579), `relater_2.rs` (2580–end) |
 | `flow.go`, `inference.go`, `grammarchecks.go`, `utilities.go`, `jsx.go`, `exports.go`, `jsdoc.go` | same name `.rs` |
-| `printer.go`, `nodebuilder*.go`, `symbolaccessibility.go`, `symboltracker.go` | `printer.rs` (+ later a faithful node-builder port) — type/symbol/signature -> string for messages |
-| `emitresolver.go`, `services.go`, `nodecopy.go`, `pseudotypenodebuilder.go`, `nodebuilder_hover.go`, `tracer.go` | not ported |
+| `printer.go`, `symbolaccessibility.go`, `symboltracker.go` | `printer.rs` — type/symbol/signature -> string for messages |
+| `nodebuilder.go`, `nodebuilderimpl.go`, `nodebuilderscopes.go` | `nodebuilder.rs`, `nodebuilderimpl_1.rs` (1–1850), `nodebuilderimpl_2.rs` (1851–end), `nodebuilderscopes.rs`; data model in `nodebuilder_types.rs` + `printer_types.rs` (section "Node builder") |
+| `nodecopy.go`, `pseudotypenodebuilder.go`, `nodebuilder_hover.go` | `nodecopy.rs`, `pseudotypenodebuilder.rs`, `nodebuilder_hover.rs` (node builder, same conventions) |
+| `emitresolver.go`, `services.go` | only what the node builder / symbol accessibility reach: `emitresolver_subset.rs`, `services_subset.rs` (the rest is in `skipFuncs`) |
+| `tracer.go` | not ported |
+| `../pseudochecker/*.go`, `../modulespecifiers/*.go` | crates `tsrs_pseudochecker`, `tsrs_modulespecifiers` (section "Node builder") |
 | `../evaluator/evaluator.go` | `evaluator.rs` (foundation) |
 
 `checker.go` line ranges: 01: 1–2172, 02: 2173–4320, 03: 4321–6526, 04: 6527–8748, 05: 8749–10856,
@@ -84,8 +88,10 @@ Where Go tests such a field against nil (`c.globalObjectType != nil`), compare w
   with `type_comparer(|c, s, t, report_errors| …)`); `ErrorReporter<'a>` = `&'a mut dyn FnMut(&mut Checker, &'static Message,
   &[&dyn Display])` (usually `Option<ErrorReporter>`).
 - Dropped Go fields: `symbolArena`/`signatureArena`/`indexInfoArena` (use `P::new`), `tracer` (all tracing blocks are
-  dropped), `ctx` (`isCanceled` is `false`; `was_canceled` kept), `mu`, `emitResolver`/`emitResolverOnce`,
-  `typeToStringNodebuilder`, and the never-assigned `getGlobalClassAccessorDecoratorContxtType`.
+  dropped), `ctx` (`isCanceled` is `false`; `was_canceled` kept), `mu`,
+  and the never-assigned `getGlobalClassAccessorDecoratorContxtType`. (Kept for the node builder:
+  `type_to_string_nodebuilder: Option<P<NodeBuilder>>`, and `emit_resolver: Option<P<EmitResolver>>` for
+  `emitResolver` + `emitResolverOnce`: `get_emit_resolver` creates it with `new_emit_resolver(self)` on first use.)
   `ambientModulesOnce` is a `bool`; nil-able maps that Go resets or tests for nil are `Option<FxHashMap>`
   (`flow_type_cache`, `packages_map`). Go `map[string]V` fields use `String` keys (the generator maps `map[string]V`
   the same way); `collections.Set[T]` is `tsrs_core::collections::Set<T>`.
@@ -95,14 +101,136 @@ Where Go tests such a field against nil (`c.globalObjectType != nil`), compare w
   `nonDottedNameCacheKey` are `const CacheHashKey`. Go-named lowercase types keep their Go names (`keyBuilder`,
   `errorState`, `orderedSet`, `thisAssignmentDeclarationKind` with variants `None/Typed/Constructor/Method`).
   `symbolTableID` (a `u64` alias) is declared in checker.rs; the `stKind*` constants belong to printer.rs.
-- printer_types.rs (foundation) holds what printer.rs signatures need from unported packages: `nodebuilder.Flags` /
-  `InternalFlags` (real), `trait SymbolTracker`, `SymbolAccessibility(Result)` (from `printer`), `VerbosityContext`,
-  `accessibleSymbolChainContext`, `SymbolTrackerImpl`, and empty placeholders `NodeBuilderContext`, `EmitContext`,
-  `Printer`, `EmitResolver`. Go `context.Context` parameters are the unit struct `Context`; `iter.Seq[T]` is
+- printer_types.rs holds what printer.rs signatures need from other packages: `nodebuilder.Flags` / `InternalFlags`,
+  `trait SymbolTracker`, `SymbolAccessibility(Result)` (from `printer`), `VerbosityContext`,
+  `accessibleSymbolChainContext`, `SymbolTrackerImpl` and the `tsrs_printer` seam (section "Node builder"); `EmitResolver`
+  is in nodebuilder_types.rs. Go `context.Context` parameters are the unit struct `Context`; `iter.Seq[T]` is
   `Seq<T> = Vec<T>`.
 - `evaluator.go` is ported as `evaluator.rs`: `evaluator::Result { value: LiteralValue, … }` (always written with the
   module path; it would shadow `std::result::Result`), `evaluator::evaluate(host, evaluate_entity, outer_kinds, expr,
   location)`, `evaluator::any_to_string`, `evaluator::is_truthy`. The checker calls `self.evaluate(expr, location)`.
+
+## Node builder
+
+Error messages render types, symbols and signatures through Go's pipeline: `c.typeToString` & co. (printer.rs) ->
+`NodeBuilder` entry point (nodebuilder.rs) -> `NodeBuilderImpl` builds synthetic type nodes (nodebuilderimpl_*.rs,
+nodebuilderscopes.rs; symbol chains via symbolaccessibility.go in printer.rs) -> `tsrs_printer::Printer` prints them.
+Baselines compare the text byte for byte, so all of it is ported faithfully.
+Until the pipeline works end to end, the String-returning entry points in printer.rs (`type_to_string*`,
+`symbol_to_string*`, `signature_to_string*`, `type_predicate_to_string`, …) keep their `// TEMPORARY placeholder`
+bodies (`type#<id>`, bare symbol name, `?`) so conformance runs do not hit `todo!()`; replace them last.
+
+**Handles and receivers.** Everything is re-entrant (a diagnostic reported during lazy resolution formats a type with
+the *same* cached builder, which pushes a new context), so the node builder objects are arena handles like `Relater`:
+
+| Go | Rust | methods |
+| --- | --- | --- |
+| `*NodeBuilder` | `P<NodeBuilder>` { `ctx_stack: RefCell<Vec<Option<P<NodeBuilderContext>>>>`, `host`, `impl_: P<NodeBuilderImpl>`, `verbosity: Cell<Option<P<VerbosityContext>>>` } | `&self`; entry points that reach the checker take `c: &mut Checker` (`b.impl_.type_to_type_node(c, t)`) |
+| `*NodeBuilderImpl` | `P<NodeBuilderImpl>` { `f`, `e`, `pc: P<PseudoChecker>`, `links`, `symbol_links`, `ctx: Cell<Option<P<NodeBuilderContext>>>`, `clone_binding_name_visitor: OnceCell<VisitFn>`, `id_to_symbol: RefCell<FxHashMap<P<Node>, P<Symbol>>>`, Rust-only `checker_slot: P<CheckerSlot>`, `this` (`b.as_p()`) } | `&self, c: &mut Checker` (Go `b.ch.foo()` -> `c.foo()`) |
+| `*NodeBuilderContext` | `P<NodeBuilderContext>`, every field `Cell`/`RefCell` | — |
+| `*SymbolTrackerImpl` | `P<SymbolTrackerImpl>`, used as `&'static dyn SymbolTracker` (`p.get()`) | `&self` |
+| `*VerbosityContext` | `Option<P<VerbosityContext>>`, `Cell` fields (`vc.truncated.set(true)`) | — |
+
+- `b.ctx` is `b.ctx()` (unwraps; Go never reads it while nil); save/restore/swap with `b.ctx.get()`/`b.ctx.set(..)`.
+  Fields: `b.ctx().flags.get()`, `ctx.approximate_length.set(ctx.approximate_length.get() + 3)`,
+  `ctx.type_stack.borrow_mut().push(Some(t))`. Never hold a `borrow()` of a context collection across a call back
+  into the builder or the checker (copy out or clone the small Vec first).
+- `NodeBuilderContext::new(host)` is the Go zero value; `enterContext` builds
+  `P::new(NodeBuilderContext { flags: Cell::new(flags), …, ..NodeBuilderContext::new(b.host) })`.
+- Field types (nodebuilder_types.rs): `tracker: Cell<Option<&'static dyn SymbolTracker>>` (Some after `enter_context`),
+  `type_stack: RefCell<Vec<Option<P<Type>>>>` (hover pushes a nil sentinel), `infer_type_parameters: Cell<&'static [P<Type>]>`
+  (Go assigns `t.root.inferTypeParameters`), `visited_types: RefCell<Set<TypeId>>`, `symbol_depth`,
+  `enclosing_symbol_types`, `remapped_symbol_references` (`RefCell<FxHashMap<…>>`), `tracked_symbols:
+  RefCell<Vec<P<TrackedSymbolArgs>>>` (Go's `= nil` + restore is `mem::take` + put back), the four per-scope
+  `CopyOnWriteMap`/`CopyOnWriteSet` (`tsrs_core::collections`, `enter_scope()` returns a scope token for
+  `exit_scope(token)`; `cloneNodeBuilderContext` returns a `Box<dyn FnMut()>` that restores all four).
+- Caches: `b.links: tsrs_core::LinkStore<Node, NodeBuilderLinks>` (`serialized_types: GoMap<CompositeTypeCacheIdentity,
+  P<SerializedTypeEntry>>`, `fake_scope_for_signature_declaration: Cell<Option<&'static str>>`), `b.symbol_links:
+  tsrs_core::LinkStore<Symbol, NodeBuilderSymbolLinks>` (`specifier_cache: GoMap<ModeAwareCacheKey, moduleSpecifierResult>`,
+  `moduleSpecifierResult { specifier: &'static str, import_attributes_type }` is `Copy`). These (and `EmitResolver`'s
+  link stores) are `tsrs_core::LinkStore` (`get(&self)`), not the checker's `LinkStore` (links.rs, `get(&mut self)`),
+  because they live in arena objects.
+- Returned cleanup funcs (`saveRestoreFlags`, `enterNewScope`, `addSymbolTypeToContext`) are
+  `Box<dyn FnMut(&mut Checker)>`; call them as `cleanup(c)`. `b.ctx()` captured by value (`P`) inside them is fine.
+- Constructors are ported: `new_node_builder[_ex](c, e[, id_to_symbol])`, `new_node_builder_impl`,
+  `new_symbol_tracker_impl` (Go's `tracker.(*SymbolTrackerImpl)` is `tracker.as_symbol_tracker_impl()`), and
+  `NodeBuilder::emit_context()`. `Checker::get_node_builder` caches in `self.type_to_string_nodebuilder`.
+
+**Factory and emit context.** `b.f` is a `tsrs_ast::NodeFactory` handle sharing the emit context's factory (its
+`on_create` hook marks nodes `Synthesized`, which `ast.NodeIsSynthesized`-style checks rely on). All factory methods
+take `&self`, so Go's nested calls port as written: `b.f.new_type_reference_node(b.f.new_identifier(n), None)`,
+`b.f.new_node_list(vec![…])`, `node.clone_node(&b.f)`, `b.f.deep_clone_node(Some(n))`. `ast.ReplaceModifiers(f, …)`
+is `replace_modifiers(&b.f, node, modifiers)`, `ast.CreateModifiersFromModifierFlags(flags, f.NewModifier)` is
+`create_modifiers_from_modifier_flags(flags, |k| b.f.new_modifier(k))`. `b.e` is `P<EmitContext>`; its methods take
+`&self`: `b.e.add_emit_flags(node, EmitFlags::NoAsciiEscaping)`, `set_emit_flags`, `original(node) -> Option`,
+`most_original(Option<P<Node>>) -> Option<P<Node>>` (Go nil in, nil out), `set_original_ex(node, original, allow_overwrite)`,
+`assign_comment_range(to, from)`, `add_synthetic_leading_comment(node, kind, text, has_trailing_new_line) -> P<Node>`
+(and `_trailing_`). `printer.EFSingleLine` -> `EmitFlags::SingleLine`.
+
+**The `tsrs_printer` seam.** The checker names the printer crate (API documented at the top of
+`crates/tsrs_printer/src/lib.rs`) only through the re-exports at the top of printer_types.rs: `EmitContext`,
+`EmitFlags`, `EmitTextWriter`, `Printer`, `PrinterOptions` (all Go fields), `PrintHandlers`, `new_emit_context()`,
+`new_printer(options, handlers, Some(emit_context)) -> Printer`, `new_text_writer(new_line: &str, indent_size: usize)
+-> Box<dyn EmitTextWriter>`, `get_single_line_string_writer() -> (Box<dyn EmitTextWriter>, impl FnOnce())` (Go's
+writer + pool release func: `let (mut writer, put_writer) = get_single_line_string_writer(); …; put_writer();`),
+`Printer::write(&mut self, node, source_file: Option<P<SourceFile>>, writer: &mut (dyn EmitTextWriter + 'static),
+source_map_generator)` (always pass `None` for the source map; a `Box` writer is passed as `&mut *writer`),
+`Printer::emit(&mut self, node, source_file) -> String`, `writer.string()` (Go `String()`). `printer::NodeFactory` is
+reached as `e.factory` (a handle like `ast::NodeFactory`, `&self` methods, derefs to it) and is not re-exported.
+
+**Visitors that need the checker (`CheckerSlot`).** Go's `cloneBindingNameVisitor` and `getExistingNodeTreeVisitor`
+(nodecopy.go, including its inner `attachSymbolToLeftmostIdentifier` visitor) are `ast.NodeVisitor`s whose callbacks
+close over `b.ch`. A Rust `VisitFn` is a `'static` `Rc<dyn Fn(&mut NodeVisitor, P<Node>) -> Option<P<Node>>>` and
+cannot capture `&mut Checker`, so the checker is lent through `b.checker_slot: P<CheckerSlot>` (nodebuilder_types.rs):
+
+```rust
+// starting a visit (the only place that holds `c`):
+let transformed = b.checker_slot.lend(c, || v.visit_node(Some(existing)));
+// inside a callback (captures `b: P<NodeBuilderImpl>` / `slot: P<CheckerSlot>`, both Copy):
+Rc::new(move |v: &mut NodeVisitor, node: P<Node>| slot.with(|c| {
+    let t = c.get_declared_type_of_symbol(sym);          // use the checker
+    slot.lend(c, || v.visit_each_child(Some(node)))       // re-lend before re-entering the visitor
+}))
+```
+
+`with` panics if called outside a `lend` or twice without an intervening `lend` (the dynamic check that keeps the one
+`unsafe` deref in `CheckerSlot::with` sound); so a callback must never hold `c` across a visitor call without `lend`.
+`clone_binding_name_visitor` holds Go's callback (`slot.with(|c| b.clone_binding_name(c, node))`, installed by
+`new_node_builder_impl`); since a `NodeVisitor` carries no other state, `clone_binding_name` builds
+`new_node_visitor(Some(b.clone_binding_name_visitor.get().unwrap().clone()), Some(b.f.clone()), NodeVisitorHooks::default())`
+per call and runs `visit_each_child` under `b.checker_slot.lend(c, ..)`. `get_existing_node_tree_visitor(c, b, bound)`
+returns a `NodeVisitor` by value built the same way (Go builds it per call too); `b` is `self.as_p()`.
+
+**nodecopy.go data** (nodebuilder_types.rs): `recoveryBoundary` (`P<…>`; `had_error: Cell<bool>`,
+`deferred_reports: RefCell<Vec<Box<dyn FnOnce()>>>`, `tracked_symbols`/`old_tracked_symbols: RefCell<Vec<…>>`, the other
+fields plain), `originalRecoveryScopeState` (Copy), `wrappingTracker { wrapped: &'static dyn SymbolTracker, bound }`
+(`P<…>`, implements `SymbolTracker`; `markError(w.wrapped.ReportX)` is
+`self.bound.mark_error(Some(Box::new(move || wrapped.report_x())))` with `let wrapped = self.wrapped;`).
+
+**Emit resolver subset** (emitresolver_subset.rs): `EmitResolver` is `P<EmitResolver>`, a checker holder (`&self,
+c: &mut Checker`, Go `r.checker.foo()` -> `c.foo()`), with `jsx_links`, `declaration_links` (`is_visible: Cell<Tristate>`),
+`declaration_file_links`. Only `isDeclarationVisible`, `determineIfDeclarationIsVisible`, `getMeaningOfEntityNameReference`,
+`isEntityNameVisible`, `noopAddVisibleAlias`, `hasVisibleDeclarations`, `requiresAddingImplicitUndefined[Worker]`,
+`declaredParameterTypeContainsUndefined`, `isOptionalUninitializedParameterProperty`, `isRequiredInitializedParameter`,
+`isOptionalParameter`, `isSymbolAccessible` are generated (their exported locking wrappers are not). Callers:
+`let r = c.get_emit_resolver(); r.has_visible_declarations(c, symbol, compute)`.
+
+**pseudochecker** (crate `tsrs_pseudochecker`, no checker dependency; checker imports it as `pseudochecker::`, with
+`PseudoChecker`, `PseudoType`, `PseudoParameter`, `PseudoObjectElement`, `new_pseudo_checker` at the crate root):
+`P<PseudoType> { kind: PseudoTypeKind, data: PseudoTypeData }` (enum of Go's data structs; `pt.as_pseudo_type_inferred()`
+& co. are Go's casts), the singletons are statics (`*pseudochecker::PseudoTypeUndefined`), constructors keep Go names
+(`pseudochecker::new_pseudo_type_union(&[pt, *pseudochecker::PseudoTypeUndefined])`), slices are `&'static [..]`,
+`PseudoChecker` methods take `&self` (`b.pc.get_type_of_declaration(decl)`). lookup.go is stubs (lookup.rs).
+
+**modulespecifiers** (crate `tsrs_modulespecifiers`, checker imports it as `modulespecifiers::`): types.go etc. in
+types.rs (`UserPreferences { import_module_specifier_preference: ImportModuleSpecifierPreference::ProjectRelative, .. }`,
+`ModuleSpecifierOptions { override_import_mode }`, `ModuleSpecifiersResult`, string enums with `as_str()`), function stubs
+in compare.rs/preferences.rs/specifiers.rs/util.rs. Go `Host` = `trait ModuleSpecifierGenerationHost: OutputPathsHost`;
+`NodeBuilder.host`/`NodeBuilderContext.host` are `&'static dyn ModuleSpecifierGenerationHost`, obtained from the program
+by `Program::as_module_specifier_generation_host()` (Go's implicit interface conversion). `CheckerShape` is implemented
+by `Checker` (so pass `c` where Go passes `b.ch`). `SourceFileForSpecifierGeneration`/`ast.HasFileName` parameters are
+`P<SourceFile>`, `*core.CompilerOptions` is `&CompilerOptions`. `ProcessEntrypointEnding` (language-service only) is not
+ported.
 
 ## Types
 

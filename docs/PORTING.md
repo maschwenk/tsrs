@@ -146,7 +146,7 @@ callback, even when the closure does not need it.
 
 ## What not to port
 
-Emit, transformers, printer (except what diagnostics need), declaration emit, node builder,
+Emit, transformers, printer and node builder (except what diagnostics need), declaration emit,
 language service, LSP, API/IPC, build mode (`-b`), incremental/tsbuildinfo, watch, tracing,
 pprof, source maps, localization of messages (English only), JS-file/JSDoc type support is
 **lower priority** but the parser must still parse `.js`/JSX files. If a function only serves an

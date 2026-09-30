@@ -75,7 +75,7 @@ impl Printer {
         let token = match n.question_dot_token() {
             Some(token) => token,
             None => {
-                let token = self.emit_context.factory.borrow_mut().new_token(Kind::DotToken);
+                let token = self.emit_context.factory.new_token(Kind::DotToken);
                 token.set_loc(TextRange::new(n.expression().end(), n.name().pos()));
                 self.emit_context.add_emit_flags(token, EmitFlags::NoSourceMap);
                 token
@@ -228,7 +228,7 @@ impl Printer {
             // Wrap in ParenthesizedExpression to ensure parens are emitted after any leading
             // PartiallyEmittedExpression comments, matching TypeScript's factory-time wrapping
             // via parenthesizeConciseBodyOfArrowFunction.
-            let paren = self.emit_context.factory.borrow_mut().new_parenthesized_expression(node);
+            let paren = self.emit_context.factory.new_parenthesized_expression(node);
             paren.set_loc(node.loc());
             self.emit_expression(paren, OperatorPrecedence::Lowest);
         } else if is_expression(node) {
@@ -706,67 +706,67 @@ impl Printer {
                         if let Some(parse_node) = parse_node {
                             if is_parenthesized_expression(parse_node) {
                                 // If the original node was a parenthesized expression, restore it to preserve comment and source map emit
-                                let parens = self.emit_context.factory.borrow_mut().new_parenthesized_expression(pee.expression());
+                                let parens = self.emit_context.factory.new_parenthesized_expression(pee.expression());
                                 self.emit_context.set_original(parens, node);
                                 parens.set_loc(parse_node.loc());
                                 return parens;
                             }
                         }
-                        return self.emit_context.factory.borrow_mut().new_parenthesized_expression(node);
+                        return self.emit_context.factory.new_parenthesized_expression(node);
                     }
                     let pee = node.as_partially_emitted_expression();
                     let expression = self.parenthesize_expression_for_no_asi(pee.expression());
-                    return self.emit_context.factory.borrow_mut().update_partially_emitted_expression(node, expression);
+                    return self.emit_context.factory.update_partially_emitted_expression(node, expression);
                 }
                 Kind::PropertyAccessExpression => {
                     let pae = node.as_property_access_expression();
                     let expression = self.parenthesize_expression_for_no_asi(pae.expression());
-                    return self.emit_context.factory.borrow_mut().update_property_access_expression(node, expression, pae.question_dot_token(), pae.name(), node.flags());
+                    return self.emit_context.factory.update_property_access_expression(node, expression, pae.question_dot_token(), pae.name(), node.flags());
                 }
                 Kind::ElementAccessExpression => {
                     let eae = node.as_element_access_expression();
                     let expression = self.parenthesize_expression_for_no_asi(eae.expression());
-                    return self.emit_context.factory.borrow_mut().update_element_access_expression(node, expression, eae.question_dot_token(), eae.argument_expression(), node.flags());
+                    return self.emit_context.factory.update_element_access_expression(node, expression, eae.question_dot_token(), eae.argument_expression(), node.flags());
                 }
                 Kind::CallExpression => {
                     let ce = node.as_call_expression();
                     let expression = self.parenthesize_expression_for_no_asi(ce.expression());
-                    return self.emit_context.factory.borrow_mut().update_call_expression(node, expression, ce.question_dot_token(), ce.type_arguments(), ce.arguments(), node.flags());
+                    return self.emit_context.factory.update_call_expression(node, expression, ce.question_dot_token(), ce.type_arguments(), ce.arguments(), node.flags());
                 }
                 Kind::TaggedTemplateExpression => {
                     let tte = node.as_tagged_template_expression();
                     let tag = self.parenthesize_expression_for_no_asi(tte.tag());
-                    return self.emit_context.factory.borrow_mut().update_tagged_template_expression(node, tag, tte.question_dot_token(), tte.type_arguments(), tte.template(), node.flags());
+                    return self.emit_context.factory.update_tagged_template_expression(node, tag, tte.question_dot_token(), tte.type_arguments(), tte.template(), node.flags());
                 }
                 Kind::PostfixUnaryExpression => {
                     let pue = node.as_postfix_unary_expression();
                     let operand = self.parenthesize_expression_for_no_asi(pue.operand());
-                    return self.emit_context.factory.borrow_mut().update_postfix_unary_expression(node, operand, pue.operator);
+                    return self.emit_context.factory.update_postfix_unary_expression(node, operand, pue.operator);
                 }
                 Kind::BinaryExpression => {
                     let be = node.as_binary_expression();
                     let left = self.parenthesize_expression_for_no_asi(be.left());
-                    return self.emit_context.factory.borrow_mut().update_binary_expression(node, node.modifiers(), left, be.type_(), be.operator_token(), be.right());
+                    return self.emit_context.factory.update_binary_expression(node, node.modifiers(), left, be.type_(), be.operator_token(), be.right());
                 }
                 Kind::ConditionalExpression => {
                     let ce = node.as_conditional_expression();
                     let condition = self.parenthesize_expression_for_no_asi(ce.condition());
-                    return self.emit_context.factory.borrow_mut().update_conditional_expression(node, condition, ce.question_token(), ce.when_true(), ce.colon_token(), ce.when_false());
+                    return self.emit_context.factory.update_conditional_expression(node, condition, ce.question_token(), ce.when_true(), ce.colon_token(), ce.when_false());
                 }
                 Kind::AsExpression => {
                     let ae = node.as_as_expression();
                     let expression = self.parenthesize_expression_for_no_asi(ae.expression());
-                    return self.emit_context.factory.borrow_mut().update_as_expression(node, expression, ae.type_());
+                    return self.emit_context.factory.update_as_expression(node, expression, ae.type_());
                 }
                 Kind::SatisfiesExpression => {
                     let se = node.as_satisfies_expression();
                     let expression = self.parenthesize_expression_for_no_asi(se.expression());
-                    return self.emit_context.factory.borrow_mut().update_satisfies_expression(node, expression, se.type_());
+                    return self.emit_context.factory.update_satisfies_expression(node, expression, se.type_());
                 }
                 Kind::NonNullExpression => {
                     let nne = node.as_non_null_expression();
                     let expression = self.parenthesize_expression_for_no_asi(nne.expression());
-                    return self.emit_context.factory.borrow_mut().update_non_null_expression(node, expression, node.flags());
+                    return self.emit_context.factory.update_non_null_expression(node, expression, node.flags());
                 }
                 _ => {}
             }

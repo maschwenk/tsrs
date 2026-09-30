@@ -4,7 +4,8 @@
   "resultOnlyPackages": [
     "github.com/microsoft/TypeScript/tsc/internal/ast",
     "github.com/microsoft/TypeScript/tsc/internal/core",
-    "github.com/microsoft/TypeScript/tsc/internal/binder"
+    "github.com/microsoft/TypeScript/tsc/internal/binder",
+    "github.com/microsoft/TypeScript/tsc/internal/pseudochecker"
   ],
   "outDir": "../../crates/tsrs_checker/src",
   "sigsFile": "../../docs/sigs/checker.txt",
@@ -159,20 +160,177 @@
       "go": "symboltracker.go",
       "rust": "printer.rs",
       "declsNote": "not generated; port by hand in this file"
+    },
+    {
+      "go": "nodebuilder.go",
+      "rust": "nodebuilder.rs",
+      "declsNote": "hand-ported by printer-foundation in printer_types.rs / nodebuilder_types.rs"
+    },
+    {
+      "go": "nodebuilderimpl.go",
+      "declsNote": "hand-ported by printer-foundation in nodebuilder_types.rs",
+      "chunks": [
+        {
+          "rust": "nodebuilderimpl_1.rs",
+          "from": 1,
+          "to": 1850
+        },
+        {
+          "rust": "nodebuilderimpl_2.rs",
+          "from": 1851,
+          "to": 99999
+        }
+      ]
+    },
+    {
+      "go": "nodebuilderscopes.go",
+      "rust": "nodebuilderscopes.rs",
+      "declsNote": "hand-ported by printer-foundation in nodebuilder_types.rs"
+    },
+    {
+      "go": "nodecopy.go",
+      "rust": "nodecopy.rs",
+      "declsNote": "hand-ported by printer-foundation in nodebuilder_types.rs"
+    },
+    {
+      "go": "pseudotypenodebuilder.go",
+      "rust": "pseudotypenodebuilder.rs"
+    },
+    {
+      "go": "emitresolver.go",
+      "rust": "emitresolver_subset.rs",
+      "declsNote": "hand-ported by printer-foundation in nodebuilder_types.rs; only the functions the node builder / symbol accessibility reach are generated"
+    },
+    {
+      "go": "nodebuilder_hover.go",
+      "rust": "nodebuilder_hover.rs"
+    },
+    {
+      "go": "services.go",
+      "rust": "services_subset.rs",
+      "declsNote": "only the functions the node builder reaches are generated"
     }
   ],
   "notPorted": [
-    "emitresolver.go",
-    "services.go",
-    "nodecopy.go",
-    "pseudotypenodebuilder.go",
-    "nodebuilder_hover.go",
     "tracer.go",
     "stringer_generated.go"
   ],
   "skipFuncs": [
     "NewChecker",
-    "Checker.getGlobalClassAccessorDecoratorContxtType"
+    "Checker.getGlobalClassAccessorDecoratorContxtType",
+    "EmitResolver.GetJsxFactoryEntity",
+    "EmitResolver.GetJsxFragmentFactoryEntity",
+    "EmitResolver.IsOptionalParameter",
+    "EmitResolver.IsLateBound",
+    "EmitResolver.GetEnumMemberValue",
+    "EmitResolver.IsDeclarationVisible",
+    "EmitResolver.PrecalculateDeclarationEmitVisibility",
+    "isCommonJSModuleExports",
+    "EmitResolver.aliasMarkingVisitorWorker",
+    "EmitResolver.markLinkedAliases",
+    "EmitResolver.IsEntityNameVisible",
+    "EmitResolver.IsImplementationOfOverload",
+    "EmitResolver.IsImportRequiredByAugmentation",
+    "EmitResolver.IsDefinitelyReferenceToGlobalSymbolObject",
+    "EmitResolver.RequiresAddingImplicitUndefined",
+    "EmitResolver.RequiresAddingImplicitUndefinedUnsafe",
+    "EmitResolver.IsLiteralConstDeclaration",
+    "EmitResolver.IsExpandoFunctionDeclarationUnsafe",
+    "EmitResolver.IsExpandoFunctionDeclaration",
+    "EmitResolver.IsSymbolAccessible",
+    "isConstEnumOrConstEnumOnlyModule",
+    "EmitResolver.IsReferencedAliasDeclaration",
+    "EmitResolver.IsValueAliasDeclaration",
+    "EmitResolver.isValueAliasDeclarationWorker",
+    "EmitResolver.isAliasResolvedToValue",
+    "EmitResolver.IsTopLevelValueImportEqualsWithEntityName",
+    "EmitResolver.MarkLinkedReferencesRecursively",
+    "EmitResolver.GetExternalModuleFileFromDeclaration",
+    "EmitResolver.getReferenceResolver",
+    "EmitResolver.GetReferencedExportContainer",
+    "EmitResolver.SetReferencedImportDeclaration",
+    "EmitResolver.GetReferencedImportDeclaration",
+    "EmitResolver.GetReferencedValueDeclaration",
+    "EmitResolver.GetReferencedValueDeclarationUnsafe",
+    "EmitResolver.GetReferencedValueDeclarations",
+    "EmitResolver.IsNameResolvable",
+    "EmitResolver.GetElementAccessExpressionName",
+    "EmitResolver.GetReferencedMemberValueDeclaration",
+    "EmitResolver.CreateReturnTypeOfSignatureDeclaration",
+    "EmitResolver.CreateTypeParametersOfSignatureDeclaration",
+    "EmitResolver.CreateTypeOfDeclaration",
+    "EmitResolver.CreateLiteralConstValue",
+    "EmitResolver.CreateTypeOfExpression",
+    "EmitResolver.CreateLateBoundIndexSignatures",
+    "EmitResolver.GetEffectiveDeclarationFlags",
+    "EmitResolver.GetConstantValue",
+    "EmitResolver.GetTypeReferenceSerializationKind",
+    "EmitResolver.GetPropertiesOfContainerFunction",
+    "EmitResolver.TryJSTypeNodeToTypeNode",
+    "EmitResolver.IsThisPropertyAssignmentDeclarationRedundant",
+    "Checker.GetSymbolsInScope",
+    "Checker.getSymbolsInScope",
+    "Checker.GetExportsOfModule",
+    "Checker.ForEachExportAndPropertyOfModule",
+    "Checker.IsValidPropertyAccess",
+    "Checker.isValidPropertyAccess",
+    "Checker.isValidPropertyAccessWithType",
+    "Checker.IsValidPropertyAccessForCompletions",
+    "Checker.GetAllPossiblePropertiesOfTypes",
+    "Checker.IsUnknownSymbol",
+    "Checker.IsUndefinedSymbol",
+    "Checker.IsArgumentsSymbol",
+    "Checker.GetNonOptionalType",
+    "Checker.GetStringIndexType",
+    "Checker.GetNumberIndexType",
+    "Checker.GetElementTypeOfArrayType",
+    "Checker.GetCallSignatures",
+    "Checker.GetConstructSignatures",
+    "Checker.GetApparentProperties",
+    "Checker.getAugmentedPropertiesOfType",
+    "Checker.TryGetMemberInModuleExportsAndProperties",
+    "Checker.TryGetMemberInModuleExports",
+    "Checker.shouldTreatPropertiesOfExternalModuleAsExports",
+    "Checker.GetContextualType",
+    "Checker.runWithInferenceBlockedFromSourceNode",
+    "GetResolvedSignatureForSignatureHelp",
+    "Checker.runWithoutResolvedSignatureCaching",
+    "Checker.SkipAlias",
+    "Checker.GetRootSymbols",
+    "Checker.GetMappedTypeSymbolOfProperty",
+    "Checker.getImmediateRootSymbols",
+    "Checker.tryGetTarget",
+    "Checker.GetExportSymbolOfSymbol",
+    "Checker.GetExportSpecifierLocalTargetSymbol",
+    "Checker.GetShorthandAssignmentValueSymbol",
+    "Checker.GetSymbolsOfParameterPropertyDeclaration",
+    "Checker.IsDeclarationUsed",
+    "Checker.IsSymbolReferencedInFile",
+    "Checker.GetReferencesToSymbolInFile",
+    "Checker.getLocalSymbolForExportSpecifier",
+    "isExportSpecifierAlias",
+    "getPossibleSymbolReferenceNodes",
+    "getPossibleSymbolReferencePositions",
+    "Checker.GetTypeArgumentConstraint",
+    "Checker.getUninstantiatedSignatures",
+    "Checker.getTypeParameterConstraintForPositionAcrossSignatures",
+    "Checker.getTypeArgumentConstraint",
+    "Checker.IsTypeInvalidDueToUnionDiscriminant",
+    "Checker.GetExportsAndPropertiesOfModule",
+    "Checker.getExportsOfModuleAsArray",
+    "Checker.GetJsxIntrinsicTagNamesAt",
+    "Checker.GetContextualTypeForJsxAttribute",
+    "Checker.getResolvedSignatureWorker",
+    "Checker.GetCandidateSignaturesForStringLiteralCompletions",
+    "Checker.GetTypeAtPosition",
+    "Checker.GetTypeParameterAtPosition",
+    "Checker.GetContextualTypeForArrayLiteralAtPosition",
+    "isKnownGenericTypeName",
+    "Checker.GetFirstTypeArgumentFromKnownType",
+    "Checker.GetPropertySymbolsFromContextualType",
+    "Checker.GetPropertySymbolOfDestructuringAssignment",
+    "Checker.getTypeOfAssignmentPattern",
+    "Checker.GetSignatureFromDeclaration"
   ],
   "checkerHolderStyle": "param",
   "checkerHolders": {
@@ -180,10 +338,18 @@
     "TypeDiscriminator": "impl<'a> TypeDiscriminator<'a>",
     "ObjectLiteralDiscriminator": "",
     "TupleNormalizer": "",
-    "NodeBuilderImpl": ""
+    "NodeBuilderImpl": "",
+    "EmitResolver": ""
   },
-  "droppedCheckerFields": ["Type.checker"],
-  "notCheckerHolders": ["CompositeTypeMapper", "InferenceTypeMapper", "EmitResolver", "tracedTypeAdapter"],
+  "droppedCheckerFields": [
+    "Type.checker",
+    "NodeBuilderImpl.ch"
+  ],
+  "notCheckerHolders": [
+    "CompositeTypeMapper",
+    "InferenceTypeMapper",
+    "tracedTypeAdapter"
+  ],
   "arenaTypes": [
     "Type",
     "Signature",
@@ -200,7 +366,14 @@
     "Relation",
     "Relater",
     "FlowState",
-    "InferenceState"
+    "InferenceState",
+    "NodeBuilderImpl",
+    "NodeBuilder",
+    "NodeBuilderContext",
+    "SymbolTrackerImpl",
+    "EmitResolver",
+    "recoveryBoundary",
+    "wrappingTracker"
   ],
   "typeMap": {
     "*ast.Node": "P<Node>",
@@ -227,18 +400,35 @@
     "evaluator.Result": "evaluator::Result",
     "[]any": "Vec<String>",
     "iter.Seq": "Vec<$0>",
-    "iter.Seq@param": "&[$0]"
+    "iter.Seq@param": "&[$0]",
+    "*printer.Printer": "Printer",
+    "*ast.NodeFactory": "&NodeFactory",
+    "*ast.NodeVisitor": "NodeVisitor"
   },
   "dataInterfaces": [
-    {"iface": "ast.nodeData", "rust": "P<Node>", "except": ["SourceFile"]},
-    {"iface": "TypeData", "rust": "&'static {T}", "except": ["Type"]}
+    {
+      "iface": "ast.nodeData",
+      "rust": "P<Node>",
+      "except": [
+        "SourceFile"
+      ]
+    },
+    {
+      "iface": "TypeData",
+      "rust": "&'static {T}",
+      "except": [
+        "Type"
+      ]
+    }
   ],
   "paramTypes": {
     "Checker.newLiteralType.value": "LiteralValue",
     "Checker.getEnumLiteralType.value": "LiteralValue",
     "Checker.valueToString.value": "LiteralValue",
     "ValueToString.value": "LiteralValue",
-    "getPropertyNameArg.arg": "&str"
+    "getPropertyNameArg.arg": "&str",
+    "recoveryBoundary.markError.f": "Box<dyn FnOnce()>",
+    "Checker.GetConstantValue.r0": "Option<LiteralValue>"
   },
   "constraintMap": {
     "any": "",
@@ -261,11 +451,22 @@
     "core.FindBestPatternMatch",
     "core.GetSpellingSuggestion"
   ],
-  "coalesceGenerics": ["core.OrElse", "core.Coalesce", "core.FirstNonZero"],
-  "funcPassthrough": ["core.Memoize"],
-  "nilTolerantParams": ["ast.SymbolTable"],
+  "coalesceGenerics": [
+    "core.OrElse",
+    "core.Coalesce",
+    "core.FirstNonZero"
+  ],
+  "funcPassthrough": [
+    "core.Memoize"
+  ],
+  "nilTolerantParams": [
+    "ast.SymbolTable"
+  ],
   "nilTransparent": true,
-  "callbackConditionalNil": ["mapType", "mapTypeEx"],
+  "callbackConditionalNil": [
+    "mapType",
+    "mapTypeEx"
+  ],
   "paramForwarding": "forward",
   "overrides": {
     "Checker.inferToMultipleTypes#nakedTypeVariable": "nonnil",
@@ -273,6 +474,10 @@
     "Checker.areAllOuterTypeParametersApplied.p0": "P",
     "Checker.grammarErrorOnNode.p0": "P",
     "Checker.grammarErrorOnFirstToken.p0": "P",
-    "Checker.onSuccessfullyResolvedSymbol.p1": "P"
+    "Checker.onSuccessfullyResolvedSymbol.p1": "P",
+    "SymbolTrackerImpl.TrackSymbol.p1": "Option",
+    "SymbolTrackerImpl.PushErrorFallbackNode.p0": "Option",
+    "wrappingTracker.TrackSymbol.p1": "Option",
+    "wrappingTracker.PushErrorFallbackNode.p0": "Option"
   }
 }

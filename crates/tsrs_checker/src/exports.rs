@@ -218,7 +218,7 @@ impl Checker {
     // exports.go:374
     pub fn requires_adding_implicit_undefined(&mut self, node: P<Node>) -> bool {
         let enclosing_declaration = ast::find_ancestor(node, ast::is_declaration);
-        let _enclosing_declaration = match enclosing_declaration {
+        let enclosing_declaration = match enclosing_declaration {
             Some(d) => d,
             None => ast::get_source_file_of_node(node).unwrap().as_node(),
         };
@@ -226,9 +226,12 @@ impl Checker {
         if symbol.is_none() {
             return false;
         }
-        // The emit resolver (emitresolver.go) is not ported; only declaration emit and the language
-        // service call this wrapper.
-        unimplemented!("emit resolver")
+        // EmitResolver.RequiresAddingImplicitUndefined (emitresolver.go:568), the exported locking wrapper.
+        if !ast::is_parse_tree_node(node) {
+            return false;
+        }
+        let r = self.get_emit_resolver();
+        r.requires_adding_implicit_undefined(self, node, symbol, enclosing_declaration)
     }
 
     // exports.go:394

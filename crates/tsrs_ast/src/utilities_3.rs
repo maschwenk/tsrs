@@ -169,6 +169,56 @@ pub fn get_external_module_import_equals_declaration_expression(node: P<Node>) -
     node.as_import_equals_declaration().module_reference.expression()
 }
 
+pub fn create_modifiers_from_modifier_flags(flags: ModifierFlags, mut create_modifier: impl FnMut(Kind) -> P<Node>) -> Vec<P<Node>> {
+    let mut result = Vec::new();
+    if flags.intersects(ModifierFlags::Export) {
+        result.push(create_modifier(Kind::ExportKeyword));
+    }
+    if flags.intersects(ModifierFlags::Ambient) {
+        result.push(create_modifier(Kind::DeclareKeyword));
+    }
+    if flags.intersects(ModifierFlags::Default) {
+        result.push(create_modifier(Kind::DefaultKeyword));
+    }
+    if flags.intersects(ModifierFlags::Const) {
+        result.push(create_modifier(Kind::ConstKeyword));
+    }
+    if flags.intersects(ModifierFlags::Public) {
+        result.push(create_modifier(Kind::PublicKeyword));
+    }
+    if flags.intersects(ModifierFlags::Private) {
+        result.push(create_modifier(Kind::PrivateKeyword));
+    }
+    if flags.intersects(ModifierFlags::Protected) {
+        result.push(create_modifier(Kind::ProtectedKeyword));
+    }
+    if flags.intersects(ModifierFlags::Abstract) {
+        result.push(create_modifier(Kind::AbstractKeyword));
+    }
+    if flags.intersects(ModifierFlags::Static) {
+        result.push(create_modifier(Kind::StaticKeyword));
+    }
+    if flags.intersects(ModifierFlags::Override) {
+        result.push(create_modifier(Kind::OverrideKeyword));
+    }
+    if flags.intersects(ModifierFlags::Readonly) {
+        result.push(create_modifier(Kind::ReadonlyKeyword));
+    }
+    if flags.intersects(ModifierFlags::Accessor) {
+        result.push(create_modifier(Kind::AccessorKeyword));
+    }
+    if flags.intersects(ModifierFlags::Async) {
+        result.push(create_modifier(Kind::AsyncKeyword));
+    }
+    if flags.intersects(ModifierFlags::In) {
+        result.push(create_modifier(Kind::InKeyword));
+    }
+    if flags.intersects(ModifierFlags::Out) {
+        result.push(create_modifier(Kind::OutKeyword));
+    }
+    result
+}
+
 pub fn get_this_parameter(signature: P<Node>) -> Option<P<Node>> {
     // callback tags do not currently support this parameters
     let parameters = signature.parameters();
@@ -179,6 +229,224 @@ pub fn get_this_parameter(signature: P<Node>) -> Option<P<Node>> {
         }
     }
     None
+}
+
+pub fn replace_modifiers(factory: &NodeFactory, node: P<Node>, modifier_array: Option<P<ModifierList>>) -> P<Node> {
+    match node.kind {
+        Kind::TypeParameter => {
+            let d = node.as_type_parameter_declaration();
+            return factory.update_type_parameter_declaration(node, modifier_array, node.name().unwrap(), d.constraint, d.expression, d.default_type);
+        }
+        Kind::Parameter => {
+            return factory.update_parameter_declaration(
+                node,
+                modifier_array,
+                node.as_parameter_declaration().dot_dot_dot_token,
+                node.name().unwrap(),
+                node.question_token(),
+                node.type_node(),
+                node.initializer(),
+            );
+        }
+        Kind::ConstructorType => {
+            return factory.update_constructor_type_node(node, modifier_array, node.type_parameter_list(), node.parameter_list(), node.type_node());
+        }
+        Kind::PropertySignature => {
+            return factory.update_property_signature_declaration(node, modifier_array, node.name().unwrap(), node.postfix_token(), node.type_node(), node.initializer());
+        }
+        Kind::PropertyDeclaration => {
+            return factory.update_property_declaration(node, modifier_array, node.name().unwrap(), node.postfix_token(), node.type_node(), node.initializer());
+        }
+        Kind::MethodSignature => {
+            return factory.update_method_signature_declaration(
+                node,
+                modifier_array,
+                node.name().unwrap(),
+                node.postfix_token(),
+                node.type_parameter_list(),
+                node.parameter_list(),
+                node.type_node(),
+            );
+        }
+        Kind::MethodDeclaration => {
+            let d = node.as_method_declaration();
+            return factory.update_method_declaration(
+                node,
+                modifier_array,
+                d.asterisk_token(),
+                node.name().unwrap(),
+                node.postfix_token(),
+                node.type_parameter_list(),
+                node.parameter_list(),
+                node.type_node(),
+                d.full_signature(),
+                node.body(),
+            );
+        }
+        Kind::Constructor => {
+            return factory.update_constructor_declaration(
+                node,
+                modifier_array,
+                node.type_parameter_list(),
+                node.parameter_list(),
+                node.type_node(),
+                node.as_constructor_declaration().full_signature(),
+                node.body(),
+            );
+        }
+        Kind::GetAccessor => {
+            return factory.update_get_accessor_declaration(
+                node,
+                modifier_array,
+                node.name().unwrap(),
+                node.type_parameter_list(),
+                node.parameter_list(),
+                node.type_node(),
+                node.as_get_accessor_declaration().full_signature(),
+                node.body(),
+            );
+        }
+        Kind::SetAccessor => {
+            return factory.update_set_accessor_declaration(
+                node,
+                modifier_array,
+                node.name().unwrap(),
+                node.type_parameter_list(),
+                node.parameter_list(),
+                node.type_node(),
+                node.as_set_accessor_declaration().full_signature(),
+                node.body(),
+            );
+        }
+        Kind::IndexSignature => {
+            return factory.update_index_signature_declaration(node, modifier_array, node.parameter_list(), node.type_node());
+        }
+        Kind::FunctionExpression => {
+            let d = node.as_function_expression();
+            return factory.update_function_expression(
+                node,
+                modifier_array,
+                d.asterisk_token(),
+                node.name(),
+                node.type_parameter_list(),
+                node.parameter_list(),
+                node.type_node(),
+                d.full_signature(),
+                node.body(),
+            );
+        }
+        Kind::ArrowFunction => {
+            let d = node.as_arrow_function();
+            return factory.update_arrow_function(
+                node,
+                modifier_array,
+                node.type_parameter_list(),
+                node.parameter_list(),
+                node.type_node(),
+                d.full_signature(),
+                d.equals_greater_than_token,
+                node.body(),
+            );
+        }
+        Kind::ClassExpression => {
+            return factory.update_class_expression(
+                node,
+                modifier_array,
+                node.name(),
+                node.type_parameter_list(),
+                node.as_class_expression().heritage_clauses(),
+                node.member_list().unwrap(),
+            );
+        }
+        Kind::VariableStatement => {
+            return factory.update_variable_statement(node, modifier_array, node.as_variable_statement().declaration_list);
+        }
+        Kind::FunctionDeclaration => {
+            let d = node.as_function_declaration();
+            return factory.update_function_declaration(
+                node,
+                modifier_array,
+                d.asterisk_token(),
+                node.name(),
+                node.type_parameter_list(),
+                node.parameter_list(),
+                node.type_node(),
+                d.full_signature(),
+                node.body(),
+            );
+        }
+        Kind::ClassDeclaration => {
+            return factory.update_class_declaration(
+                node,
+                modifier_array,
+                node.name(),
+                node.type_parameter_list(),
+                node.as_class_declaration().heritage_clauses(),
+                node.member_list().unwrap(),
+            );
+        }
+        Kind::InterfaceDeclaration => {
+            return factory.update_interface_declaration(
+                node,
+                modifier_array,
+                node.name().unwrap(),
+                node.type_parameter_list(),
+                node.as_interface_declaration().heritage_clauses(),
+                node.member_list().unwrap(),
+            );
+        }
+        Kind::TypeAliasDeclaration => {
+            return factory.update_type_alias_declaration(node, modifier_array, node.name().unwrap(), node.type_parameter_list(), node.type_node());
+        }
+        Kind::EnumDeclaration => {
+            return factory.update_enum_declaration(node, modifier_array, node.name().unwrap(), node.member_list().unwrap());
+        }
+        Kind::ModuleDeclaration => {
+            return factory.update_module_declaration(
+                node,
+                modifier_array,
+                node.as_module_declaration().keyword,
+                node.name().unwrap(),
+                node.attributes(),
+                node.body(),
+            );
+        }
+        Kind::ImportEqualsDeclaration => {
+            return factory.update_import_equals_declaration(
+                node,
+                modifier_array,
+                node.is_type_only(),
+                node.name().unwrap(),
+                node.as_import_equals_declaration().module_reference,
+            );
+        }
+        Kind::ImportDeclaration => {
+            return factory.update_import_declaration(
+                node,
+                modifier_array,
+                node.import_clause(),
+                node.module_specifier().unwrap(),
+                node.as_import_declaration().attributes,
+            );
+        }
+        Kind::ExportAssignment => {
+            let d = node.as_export_assignment();
+            return factory.update_export_assignment(node, modifier_array, d.is_export_equals, node.type_node(), node.expression().unwrap());
+        }
+        Kind::ExportDeclaration => {
+            let d = node.as_export_declaration();
+            return factory.update_export_declaration(
+                node,
+                modifier_array,
+                node.is_type_only(),
+                d.export_clause,
+                node.module_specifier(),
+                d.attributes,
+            );
+        }
+        _ => {}
+    }
+    panic!("Node that does not have modifiers tried to have modifier replaced: {}", node.kind as i16)
 }
 
 pub fn is_external_module_augmentation(node: P<Node>) -> bool {
@@ -276,7 +544,7 @@ pub fn compare_node_positions(n1: P<Node>, n2: P<Node>) -> i32 {
 }
 
 pub fn is_unterminated_literal(node: P<Node>) -> bool {
-    is_literal_kind(node.kind) && node.literal_like_data().unwrap().token_flags.intersects(TokenFlags::Unterminated)
+    is_literal_kind(node.kind) && node.literal_like_data().unwrap().token_flags().intersects(TokenFlags::Unterminated)
         || is_template_literal_kind(node.kind) && node.template_literal_like_data().unwrap().template_flags.intersects(TokenFlags::Unterminated)
 }
 
@@ -475,6 +743,28 @@ pub fn get_next_jsdoc_comment_location(node: P<Node>) -> Option<P<Node>> {
 
 pub fn is_import_or_import_equals_declaration(node: P<Node>) -> bool {
     is_import_declaration(node) || is_import_equals_declaration(node)
+}
+
+pub fn has_inferred_type(node: P<Node>) -> bool {
+    // Debug.type<HasInferredType>(node); // !!!
+    match node.kind {
+        Kind::Parameter
+        | Kind::PropertySignature
+        | Kind::PropertyDeclaration
+        | Kind::BindingElement
+        | Kind::PropertyAccessExpression
+        | Kind::ElementAccessExpression
+        | Kind::BinaryExpression
+        | Kind::CallExpression
+        | Kind::VariableDeclaration
+        | Kind::ExportAssignment
+        | Kind::PropertyAssignment
+        | Kind::ShorthandPropertyAssignment
+        | Kind::JSDocParameterTag
+        | Kind::JSDocPropertyTag => true,
+        // assertType<never>(node); // !!!
+        _ => false,
+    }
 }
 
 pub fn is_keyword(token: Kind) -> bool {

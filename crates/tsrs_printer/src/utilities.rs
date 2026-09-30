@@ -405,8 +405,8 @@ pub(crate) fn sibling_node_positions_are_comparable(emit_context: P<EmitContext>
         return false;
     }
 
-    let previous_node = emit_context.most_original(previous_node);
-    let next_node = emit_context.most_original(next_node);
+    let previous_node = emit_context.most_original(Some(previous_node)).unwrap();
+    let next_node = emit_context.most_original(Some(next_node)).unwrap();
     let parent = previous_node.parent();
     if parent.is_none() || parent != next_node.parent() {
         return false;
@@ -544,11 +544,11 @@ pub(crate) fn can_have_decorators(node: P<Node>) -> bool {
 }
 
 pub(crate) fn original_nodes_have_same_parent(emit_context: P<EmitContext>, node_a: P<Node>, node_b: P<Node>) -> bool {
-    let node_a = emit_context.most_original(node_a);
+    let node_a = emit_context.most_original(Some(node_a)).unwrap();
     if node_a.parent().is_some() {
         // For performance, do not call `MostOriginal` for `nodeB` if `nodeA` doesn't even
         // have a parent node.
-        let node_b = emit_context.most_original(node_b);
+        let node_b = emit_context.most_original(Some(node_b)).unwrap();
         return node_a.parent() == node_b.parent();
     }
     false

@@ -2225,7 +2225,7 @@ impl Checker {
         // We should test against `getTextOfNode(node)` rather than `node.text`, because `node.text` for large numeric literals can contain "."
         // e.g. `node.text` for numeric literal `1100000000000000000000` is `1.1e21`.
         let is_fractional = node_text.contains('.');
-        let is_scientific = numeric_literal.literal_like_node_base.token_flags.intersects(TokenFlags::Scientific);
+        let is_scientific = numeric_literal.literal_like_node_base.token_flags.get().intersects(TokenFlags::Scientific);
 
         // Scientific notation (e.g. 2e54 and 1e00000000010) can't be converted to bigint
         // Fractional numbers (e.g. 9000000000000000.001) are inherently imprecise anyway

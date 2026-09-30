@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Regenerate docs/sigs/checker.txt from the Rust sources of tsrs_checker.
+"""Regenerate docs/sigs/{checker,pseudochecker,modulespecifiers}.txt from the Rust sources of tsrs_checker,
+tsrs_pseudochecker and tsrs_modulespecifiers.
 
-Scans crates/tsrs_checker/src/*.rs for free `fn` items and `fn` items of inherent `impl` blocks (trait impls and
+Scans crates/<crate>/src/*.rs for free `fn` items and `fn` items of inherent `impl` blocks (trait impls and
 functions nested in function bodies are skipped) and writes one line per function:
 
     rust_name | signature | origin | receiver
@@ -209,20 +210,28 @@ def scan_file(path, rel):
     return results
 
 
+CRATES = [
+    ("tsrs_checker", "checker.txt"),
+    ("tsrs_pseudochecker", "pseudochecker.txt"),
+    ("tsrs_modulespecifiers", "modulespecifiers.txt"),
+]
+
+
 def main():
     root = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    src_dir = os.path.join(root, "crates", "tsrs_checker", "src")
-    rows = []
-    for fname in sorted(os.listdir(src_dir)):
-        if fname.endswith(".rs"):
-            rows.extend(scan_file(os.path.join(src_dir, fname), fname))
-    rows.sort(key=lambda r: (r[0], r[3], r[2]))
-    out_path = os.path.join(root, "docs", "sigs", "checker.txt")
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write("# rust_name | signature | origin | receiver  (generated from the Rust sources by tools/sigs-from-rust.py)\n")
-        for r in rows:
-            f.write(" | ".join(r) + "\n")
-    print("wrote %d signatures to %s" % (len(rows), out_path))
+    for crate, out_name in CRATES:
+        src_dir = os.path.join(root, "crates", crate, "src")
+        rows = []
+        for fname in sorted(os.listdir(src_dir)):
+            if fname.endswith(".rs"):
+                rows.extend(scan_file(os.path.join(src_dir, fname), fname))
+        rows.sort(key=lambda r: (r[0], r[3], r[2]))
+        out_path = os.path.join(root, "docs", "sigs", out_name)
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write("# rust_name | signature | origin | receiver  (generated from the Rust sources by tools/sigs-from-rust.py)\n")
+            for r in rows:
+                f.write(" | ".join(r) + "\n")
+        print("wrote %d signatures to %s" % (len(rows), out_path))
 
 
 if __name__ == "__main__":

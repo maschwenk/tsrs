@@ -21,12 +21,13 @@
 //!   `get_default_indent_size() -> usize`.
 //! - `EmitContext`, always handled as `P<EmitContext>` (interior mutability, `&self` methods):
 //!   `new_emit_context() -> P<EmitContext>` / `EmitContext::new()`, `get_emit_context() -> (P<EmitContext>, impl FnOnce())`,
-//!   field `factory: RefCell<NodeFactory>` (Go `Factory`; `NodeFactory` derefs to `tsrs_ast::NodeFactory`, and
-//!   `as_node_factory()` returns it; created nodes get `NodeFlags::Synthesized`, updates/clones record `original`.
-//!   Do not hold a `borrow_mut()` across another factory call), `emit_flags(node) -> EmitFlags`,
+//!   field `factory: NodeFactory` (Go `Factory`; a handle like `tsrs_ast::NodeFactory`: `&self` methods, `clone()`
+//!   shares it, so `e.factory.new_x(e.factory.new_y())` works; derefs to `tsrs_ast::NodeFactory`, and
+//!   `as_node_factory()` returns it; created nodes get `NodeFlags::Synthesized`, updates/clones record `original`),
+//!   `emit_flags(node) -> EmitFlags`,
 //!   `set_emit_flags(node, EmitFlags)`, `add_emit_flags(node, EmitFlags)`, `set_original(node, original)`,
 //!   `set_original_ex(node, original, allow_overwrite)`, `unset_original`, `original(node) -> Option<P<Node>>`,
-//!   `most_original(node) -> P<Node>`, `parse_node(Option<P<Node>>) -> Option<P<Node>>`, `comment_range`,
+//!   `most_original(Option<P<Node>>) -> Option<P<Node>>` (nil in, nil out), `parse_node(Option<P<Node>>) -> Option<P<Node>>`, `comment_range`,
 //!   `set_comment_range(node, TextRange)`, `assign_comment_range(to, from)`, `source_map_range`/`set_source_map_range`/
 //!   `assign_source_map_range`/`assign_comment_and_source_map_ranges`, `add_synthetic_leading_comment(node, kind: Kind,
 //!   text: &str, has_trailing_new_line: bool) -> P<Node>`, `add_synthetic_trailing_comment(..)`, `set_/get_synthetic_*_comments`

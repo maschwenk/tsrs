@@ -5,7 +5,8 @@ use tsrs_ast::{Node, SourceFile, SourceFileMetaData};
 use tsrs_checker::{ProjectReferenceCommandLine, SourceOutputAndProjectReference};
 use tsrs_core::tspath::Path;
 use tsrs_core::{CompilerOptions, ModuleKind, ResolutionMode, P};
-use tsrs_module::{ModeAwareCacheKey, ResolvedModule};
+use tsrs_module::symlinks::KnownSymlinks;
+use tsrs_module::{packagejson, ModeAwareCacheKey, ResolvedModule};
 
 use crate::program::Program;
 
@@ -108,6 +109,80 @@ impl tsrs_checker::Program for Program {
 
     fn get_default_resolution_mode_for_file(&self, file: P<SourceFile>) -> ResolutionMode {
         Program::get_default_resolution_mode_for_file(self, file)
+    }
+
+    fn get_mode_for_usage_location(&self, file: P<SourceFile>, module_specifier: P<Node>) -> ResolutionMode {
+        Program::get_mode_for_usage_location(self, file, module_specifier)
+    }
+
+    fn as_module_specifier_generation_host(&self) -> &dyn tsrs_modulespecifiers::ModuleSpecifierGenerationHost {
+        self
+    }
+}
+
+// Go `*compiler.Program` satisfies `outputpaths.OutputPathsHost` and `modulespecifiers.ModuleSpecifierGenerationHost`
+// structurally; the node builder reaches them through `checker::Program::as_module_specifier_generation_host`.
+impl tsrs_tsoptions::outputpaths::OutputPathsHost for Program {
+    fn common_source_directory(&self) -> String {
+        Program::common_source_directory(self).to_string()
+    }
+
+    fn content_mapper_extensions(&self) -> Vec<String> {
+        self.opts.config.content_mapper_extensions()
+    }
+
+    fn get_current_directory(&self) -> &str {
+        Program::get_current_directory(self)
+    }
+
+    fn use_case_sensitive_file_names(&self) -> bool {
+        Program::use_case_sensitive_file_names(self)
+    }
+}
+
+impl tsrs_modulespecifiers::ModuleSpecifierGenerationHost for Program {
+    fn get_symlink_cache(&self) -> P<KnownSymlinks> {
+        // Go `Program.GetSymlinkCache` (program.go:2309, memoized KnownSymlinks built from resolutions and package.json
+        // dependencies) is not ported yet.
+        todo!("compiler: Program.GetSymlinkCache")
+    }
+
+    fn get_global_typings_cache_location(&self) -> String {
+        Program::get_global_typings_cache_location(self).to_string()
+    }
+
+    fn get_project_reference_from_source(&self, path: &Path) -> Option<P<tsrs_tsoptions::SourceOutputAndProjectReference>> {
+        // Project references are not ported: the compiler's mapper never returns one, and its placeholder
+        // `SourceOutputAndProjectReference` cannot be converted to the tsoptions struct the host interface uses.
+        Program::get_project_reference_from_source(self, path).map(|_| todo!("compiler: project references"))
+    }
+
+    fn get_redirect_targets(&self, path: &Path) -> Vec<String> {
+        Program::get_redirect_targets(self, path).to_vec()
+    }
+
+    fn get_source_of_project_reference_if_output_included(&self, file: P<SourceFile>) -> String {
+        Program::get_source_of_project_reference_if_output_included(self, file.file_name(), &file.path())
+    }
+
+    fn file_exists(&self, path: &str) -> bool {
+        Program::file_exists(self, path)
+    }
+
+    fn get_nearest_ancestor_directory_with_package_json(&self, dirname: &str) -> String {
+        Program::get_nearest_ancestor_directory_with_package_json(self, dirname)
+    }
+
+    fn get_package_json_info(&self, pkg_json_path: &str) -> Option<P<packagejson::InfoCacheEntry>> {
+        Program::get_package_json_info(self, pkg_json_path)
+    }
+
+    fn get_default_resolution_mode_for_file(&self, file: P<SourceFile>) -> ResolutionMode {
+        Program::get_default_resolution_mode_for_file(self, file)
+    }
+
+    fn get_resolved_module_from_module_specifier(&self, file: P<SourceFile>, module_specifier: P<Node>) -> Option<P<ResolvedModule>> {
+        Program::get_resolved_module_from_module_specifier(self, file, module_specifier)
     }
 
     fn get_mode_for_usage_location(&self, file: P<SourceFile>, module_specifier: P<Node>) -> ResolutionMode {

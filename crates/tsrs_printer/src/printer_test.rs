@@ -33,7 +33,7 @@ fn check_emit(emit_context: Option<P<EmitContext>>, file: P<SourceFile>, expecte
     Ok(())
 }
 
-fn synthetic_source_file(f: &mut NodeFactory, statements: Vec<P<Node>>) -> P<SourceFile> {
+fn synthetic_source_file(f: &NodeFactory, statements: Vec<P<Node>>) -> P<SourceFile> {
     let statements = f.new_node_list(statements);
     let eof = f.new_token(Kind::EndOfFile);
     f.new_source_file(SourceFileParseOptions { file_name: "/file.ts".to_string(), path: Path::new("/file.ts".to_string()), external_module_indicator_options: Default::default() }, "", statements, eof)
@@ -615,7 +615,7 @@ fn test_emit() {
 
 #[test]
 fn test_parenthesize_decorator() {
-    let mut f = NodeFactory::default();
+    let f = NodeFactory::default();
     let a = f.new_identifier("a");
     let plus = f.new_token(Kind::PlusToken);
     let b = f.new_identifier("b");
@@ -625,13 +625,13 @@ fn test_parenthesize_decorator() {
     let name = f.new_identifier("C");
     let members = f.new_node_list(vec![]);
     let class = f.new_class_declaration(Some(modifiers), Some(name), None, None, members);
-    let file = synthetic_source_file(&mut f, vec![class]);
+    let file = synthetic_source_file(&f, vec![class]);
     check_emit(None, file, "@(a + b)\nclass C {\n}").unwrap();
 }
 
 #[test]
 fn test_parenthesize_computed_property_name() {
-    let mut f = NodeFactory::default();
+    let f = NodeFactory::default();
     let a = f.new_identifier("a");
     let comma = f.new_token(Kind::CommaToken);
     let b = f.new_identifier("b");
@@ -642,13 +642,13 @@ fn test_parenthesize_computed_property_name() {
     let members = f.new_node_list(vec![property]);
     let name = f.new_identifier("C");
     let class = f.new_class_declaration(None, Some(name), None, None, members);
-    let file = synthetic_source_file(&mut f, vec![class]);
+    let file = synthetic_source_file(&f, vec![class]);
     check_emit(None, file, "class C {\n    [(a, b)];\n}").unwrap();
 }
 
 #[test]
 fn test_parenthesize_array_literal() {
-    let mut f = NodeFactory::default();
+    let f = NodeFactory::default();
     let a = f.new_identifier("a");
     let comma = f.new_token(Kind::CommaToken);
     let b = f.new_identifier("b");
@@ -657,7 +657,7 @@ fn test_parenthesize_array_literal() {
     let elements = f.new_node_list(vec![bin]);
     let array = f.new_array_literal_expression(elements, false /*multiLine*/);
     let statement = f.new_expression_statement(array);
-    let file = synthetic_source_file(&mut f, vec![statement]);
+    let file = synthetic_source_file(&f, vec![statement]);
     check_emit(None, file, "[(a, b)];").unwrap();
 }
 
@@ -678,7 +678,7 @@ fn test_parenthesize_binary_expression_mixing_nullish_coalescing() {
         ("QuestionQuestionWithRightAmpersandAmpersand", Kind::AmpersandAmpersandToken, Kind::QuestionQuestionToken, "right", "a ?? (b && c);"),
     ];
     for &(title, inner_op, outer_op, side, output) in tests {
-        let mut f = NodeFactory::default();
+        let f = NodeFactory::default();
         let outer_expr = if side == "left" {
             let a = f.new_identifier("a");
             let inner_token = f.new_token(inner_op);
@@ -698,7 +698,7 @@ fn test_parenthesize_binary_expression_mixing_nullish_coalescing() {
             f.new_binary_expression(None, a, None, outer_token, inner_expr /*right: (b innerOp c)*/)
         };
         let statement = f.new_expression_statement(outer_expr);
-        let file = synthetic_source_file(&mut f, vec![statement]);
+        let file = synthetic_source_file(&f, vec![statement]);
         if let Err(e) = check_emit(None, file, output) {
             panic!("{}: {}", title, e);
         }
@@ -709,7 +709,7 @@ fn test_parenthesize_binary_expression_mixing_nullish_coalescing() {
 fn test_name_generation() {
     let ec = new_emit_context();
     let file = {
-        let mut f = ec.factory.borrow_mut();
+        let f = &ec.factory;
         let temp1 = f.new_temp_variable();
         let decl1 = f.new_variable_declaration(temp1, None, None, None);
         let decls1 = f.new_node_list(vec![decl1]);
@@ -732,7 +732,7 @@ fn test_name_generation() {
 
 #[test]
 fn test_omit_trailing_semicolon() {
-    let mut f = NodeFactory::default();
+    let f = NodeFactory::default();
     let name = f.new_identifier("m");
     let parameters = f.new_node_list(vec![]);
     let void = f.new_keyword_type_node(Kind::VoidKeyword);
@@ -755,7 +755,7 @@ fn test_writers_used_by_checker() {
     // The checker prints type nodes through `new_text_writer("", 0)` and `get_single_line_string_writer()`.
     let ec = new_emit_context();
     let node = {
-        let mut f = ec.factory.borrow_mut();
+        let f = &ec.factory;
         let a = f.new_keyword_type_node(Kind::StringKeyword);
         let b = f.new_keyword_type_node(Kind::NumberKeyword);
         let types = f.new_node_list(vec![a, b]);
@@ -778,7 +778,7 @@ fn test_synthetic_comments_with_source_file() {
     let ec = new_emit_context();
     let file = parse_type_script("let x;", false);
     let any = {
-        let mut f = ec.factory.borrow_mut();
+        let f = &ec.factory;
         f.new_keyword_type_node(Kind::AnyKeyword)
     };
     ec.add_synthetic_leading_comment(any, Kind::MultiLineCommentTrivia, "unresolved", false /*hasTrailingNewLine*/);
@@ -790,7 +790,7 @@ fn test_synthetic_comments_with_source_file() {
     assert_eq!(writer.string(), "any");
 
     let literal = {
-        let mut f = ec.factory.borrow_mut();
+        let f = &ec.factory;
         let name = f.new_identifier("a");
         let type_node = f.new_keyword_type_node(Kind::StringKeyword);
         let member = f.new_property_signature_declaration(None, name, None, Some(type_node), None);

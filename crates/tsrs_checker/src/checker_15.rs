@@ -2459,11 +2459,12 @@ impl Checker {
         self.get_type_of_node(ast::get_reparsed_node_for_node(node).unwrap())
     }
 
-    // The emit resolver (emitresolver.go) is not ported: this returns the placeholder type so that callers
-    // compile. Go memoizes one resolver per checker via emitResolverOnce.
     // checker.go:32656
     pub fn get_emit_resolver(&mut self) -> P<EmitResolver> {
-        P::new(EmitResolver {})
+        if self.emit_resolver.is_none() {
+            self.emit_resolver = Some(new_emit_resolver(self));
+        }
+        self.emit_resolver.unwrap()
     }
 
     // checker.go:32664

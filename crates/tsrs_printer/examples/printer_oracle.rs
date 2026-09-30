@@ -71,7 +71,7 @@ fn print_synthesized(mode: &str, file: P<SourceFile>) -> String {
     let mut p = new_printer(PrinterOptions { remove_comments: true, ..Default::default() }, PrintHandlers::default(), Some(ec));
     let mut sb = String::new();
     for &stmt in file.statements.nodes {
-        let clone = ec.factory.borrow_mut().deep_clone_node(Some(stmt)).unwrap();
+        let clone = ec.factory.deep_clone_node(Some(stmt)).unwrap();
         let mut w: Box<dyn EmitTextWriter> = match mode {
             "synth" => new_text_writer("\n", 0),
             "synthflags" => {

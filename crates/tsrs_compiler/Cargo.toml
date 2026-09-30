@@ -17,6 +17,7 @@ tsrs_binder.workspace = true
 tsrs_vfs.workspace = true
 tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
+tsrs_modulespecifiers.workspace = true
 tsrs_checker = { workspace = true, optional = true }
 rustc-hash.workspace = true
 indexmap.workspace = true

@@ -101,7 +101,7 @@ impl Printer {
             return false;
         }
 
-        let original_parent = self.emit_context.most_original(parent_node);
+        let original_parent = self.emit_context.most_original(Some(parent_node)).unwrap();
         if original_parent == parent_node {
             // if this node is the original node, we can trust the result
             return true;
@@ -452,7 +452,7 @@ impl Printer {
         self.unique_helper_names = None;
         self.external_helpers_module_name = None;
         if let Some(source_file) = source_file {
-            if self.emit_context.emit_flags(self.emit_context.most_original(source_file.as_node())).intersects(EmitFlags::ExternalHelpers) {
+            if self.emit_context.emit_flags(self.emit_context.most_original(Some(source_file.as_node())).unwrap()).intersects(EmitFlags::ExternalHelpers) {
                 self.unique_helper_names = Some(FxHashMap::default());
             }
             self.external_helpers_module_name = self.emit_context.get_external_helpers_module_name(source_file);

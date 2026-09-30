@@ -7,7 +7,7 @@ use tsrs_core::collections::OrderedSet;
 use tsrs_core::*;
 
 use crate::*;
-use crate::factory::{new_node_factory, NodeFactory};
+use crate::factory::{new_node_factory_for_context, NodeFactory};
 
 // Stores side-table information used during transformation that can be read by the printer to customize emit
 //
@@ -17,7 +17,7 @@ use crate::factory::{new_node_factory, NodeFactory};
 // all state is interior-mutable. The transform-only parts (variable/lexical environments, visitor hooks) are not
 // ported.
 pub struct EmitContext {
-    pub factory: RefCell<NodeFactory>, // Required. The NodeFactory to use to create new nodes
+    pub factory: NodeFactory, // Required. The NodeFactory to use to create new nodes
     auto_generate: RefCell<FxHashMap<P<Node>, AutoGenerateInfo>>,
     text_source: RefCell<FxHashMap<P<Node>, P<Node>>>,
     original: RefCell<FxHashMap<P<Node>, P<Node>>>,
@@ -29,7 +29,7 @@ pub struct EmitContext {
 
 pub fn new_emit_context() -> P<EmitContext> {
     let c = P::new(EmitContext {
-        factory: RefCell::new(NodeFactory::default()),
+        factory: new_node_factory_for_context(),
         auto_generate: RefCell::default(),
         text_source: RefCell::default(),
         original: RefCell::default(),
@@ -38,7 +38,7 @@ pub fn new_emit_context() -> P<EmitContext> {
         class_this: RefCell::default(),
         emit_helpers: RefCell::default(),
     });
-    *c.factory.borrow_mut() = new_node_factory(c);
+    c.factory.set_emit_context(c);
     c
 }
 
@@ -186,12 +186,14 @@ impl EmitContext {
     //
     // NOTE: This method is analogous to `getOriginalNode` in the old compiler, but the name has changed to avoid accidental
     // conflation with `SetOriginal`/`Original`
-    pub fn most_original(&self, node: P<Node>) -> P<Node> {
+    pub fn most_original(&self, node: Option<P<Node>>) -> Option<P<Node>> {
         let mut node = node;
-        let mut original = self.original(node);
-        while let Some(o) = original {
-            node = o;
-            original = self.original(node);
+        if let Some(n) = node {
+            let mut original = self.original(n);
+            while let Some(o) = original {
+                node = Some(o);
+                original = self.original(o);
+            }
         }
         node
     }
@@ -200,7 +202,7 @@ impl EmitContext {
     //
     // NOTE: This is the equivalent to `getParseTreeNode` in Strada.
     pub fn parse_node(&self, node: Option<P<Node>>) -> Option<P<Node>> {
-        let node = self.most_original(node?);
+        let node = self.most_original(node)?;
         if is_parse_tree_node(node) {
             return Some(node);
         }
@@ -213,7 +215,7 @@ impl EmitContext {
                 return false;
             }
         }
-        let source_file = self.most_original(source_file.as_node()).as_source_file();
+        let source_file = self.most_original(Some(source_file.as_node())).unwrap().as_source_file();
         !source_file.has_identifier(name)
     }
 
@@ -475,7 +477,7 @@ impl EmitContext {
     }
 
     pub fn new_not_emitted_statement(&self, node: P<Node>) -> P<Node> {
-        let statement = self.factory.borrow_mut().new_not_emitted_statement();
+        let statement = self.factory.new_not_emitted_statement();
         statement.set_loc(node.loc());
         self.set_original(statement, node);
         self.assign_comment_range(statement, node);

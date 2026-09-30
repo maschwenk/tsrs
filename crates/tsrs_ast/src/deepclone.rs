@@ -55,20 +55,18 @@ fn get_deep_clone_visitor(f: NodeFactory, synthetic_location: bool) -> NodeVisit
     )
 }
 
-// The visitor owns its factory, so these move `self` into it for the duration of the clone.
+// The visitor owns a handle to this factory (`NodeFactory::clone` shares hooks and counters).
 impl NodeFactory {
-    fn with_deep_clone_visitor<R>(&mut self, synthetic_location: bool, f: impl FnOnce(&mut NodeVisitor) -> R) -> R {
-        let mut visitor = get_deep_clone_visitor(std::mem::take(self), synthetic_location);
-        let result = f(&mut visitor);
-        *self = std::mem::take(&mut visitor.factory);
-        result
+    fn with_deep_clone_visitor<R>(&self, synthetic_location: bool, f: impl FnOnce(&mut NodeVisitor) -> R) -> R {
+        let mut visitor = get_deep_clone_visitor(self.clone(), synthetic_location);
+        f(&mut visitor)
     }
 
-    pub fn deep_clone_node(&mut self, node: Option<P<Node>>) -> Option<P<Node>> {
+    pub fn deep_clone_node(&self, node: Option<P<Node>>) -> Option<P<Node>> {
         self.with_deep_clone_visitor(true /*syntheticLocation*/, |v| v.visit_node(node))
     }
 
-    pub fn deep_clone_reparse(&mut self, node: Option<P<Node>>) -> Option<P<Node>> {
+    pub fn deep_clone_reparse(&self, node: Option<P<Node>>) -> Option<P<Node>> {
         let node = node?;
         let node = self.with_deep_clone_visitor(false /*syntheticLocation*/, |v| v.visit_node(Some(node))).unwrap();
         set_parent_in_children(node);
@@ -76,7 +74,7 @@ impl NodeFactory {
         Some(node)
     }
 
-    pub fn deep_clone_reparse_modifiers(&mut self, modifiers: Option<P<ModifierList>>) -> Option<P<ModifierList>> {
+    pub fn deep_clone_reparse_modifiers(&self, modifiers: Option<P<ModifierList>>) -> Option<P<ModifierList>> {
         self.with_deep_clone_visitor(false /*syntheticLocation*/, |v| v.visit_modifiers(modifiers))
     }
 }

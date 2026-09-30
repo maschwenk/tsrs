@@ -33,7 +33,11 @@ type Gen struct {
 var (
 	implRe = regexp.MustCompile(`^impl(?:<[^>]*>)?\s+(?:[A-Za-z_][A-Za-z0-9_:<>, ']*\s+for\s+)?([A-Za-z_][A-Za-z0-9_]*)`)
 	fnRe   = regexp.MustCompile(`^(\s*)(?:pub(?:\([a-z]+\))?\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)`)
+
+	traitImplRe = regexp.MustCompile(`^impl(?:<[^>]*>)?\s+[A-Za-z_][A-Za-z0-9_:<>, ']*\s+for\s+`)
 )
+
+const traitImpl = "\x00trait"
 
 // scanHandWritten records functions defined in the output directory's hand-written files
 // (files without the generated-stub marker), so stubs never duplicate them.
@@ -55,13 +59,16 @@ func (g *Gen) scanHandWritten() {
 		for _, line := range strings.Split(string(data), "\n") {
 			if m := implRe.FindStringSubmatch(line); m != nil {
 				impl = m[1]
+				if traitImplRe.MatchString(line) {
+					impl = traitImpl // trait methods do not stand in for inherent (Go) methods
+				}
 				continue
 			}
 			if strings.HasPrefix(line, "}") {
 				impl = ""
 				continue
 			}
-			if m := fnRe.FindStringSubmatch(line); m != nil {
+			if m := fnRe.FindStringSubmatch(line); m != nil && !(impl == traitImpl && m[1] != "") {
 				recv := impl
 				if m[1] == "" {
 					recv = ""
@@ -343,10 +350,10 @@ func (g *Gen) recvKind(fn *Func) string {
 			return "&self"
 		}
 		return "&mut self"
+	case g.isArena(fn.RecvType):
+		return "&self" // also for Go value receivers (NodeBuilder.SymbolToParameterDeclaration): arena objects are never moved
 	case !fn.RecvPtr:
 		return "self"
-	case g.isArena(fn.RecvType):
-		return "&self"
 	case g.mutRecv[fn]:
 		return "&mut self"
 	}
@@ -468,6 +475,9 @@ func (g *Gen) signature(fn *Func, name, vis string) string {
 	}
 	generics := g.tm.typeParams(fn.Sig.TypeParams())
 	res := g.tm.results(fn.Sig, cb, fn.Slots)
+	if rt, ok := g.cfg.ParamTypes[g.funcKey(fn)+".r0"]; ok && fn.Sig.Results().Len() == 1 {
+		res = " -> " + rt // paramTypes "Recv.goName.r0": the Rust result type, as written
+	}
 	return fmt.Sprintf("%s fn %s%s(%s)%s", vis, name, generics, strings.Join(params, ", "), res)
 }
 
@@ -521,6 +531,9 @@ func (g *Gen) assignNames() {
 		}
 		if fn.IsField && g.emitFile[fn] == "" {
 			continue
+		}
+		if !fn.IsField && contains(g.cfg.SkipFuncs, g.funcKey(fn)) {
+			continue // skipped functions reserve no name and are never merge targets/sources
 		}
 		ns := ""
 		if fn.RecvType != nil {

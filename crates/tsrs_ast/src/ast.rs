@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Mutex, OnceLock};
 
@@ -70,25 +71,28 @@ pub fn same_slice<T>(a: &[T], b: &[T]) -> bool {
 
 // NodeFactory
 
-pub type NodeHook = Box<dyn Fn(P<Node>)>;
-pub type NodeUpdateHook = Box<dyn Fn(P<Node>, P<Node>)>;
+pub type NodeHook = Rc<dyn Fn(P<Node>)>;
+pub type NodeUpdateHook = Rc<dyn Fn(P<Node>, P<Node>)>;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct NodeFactoryHooks {
     pub on_create: Option<NodeHook>,       // Hooks the creation of a node.
     pub on_update: Option<NodeUpdateHook>, // Hooks the updating of a node.
     pub on_clone: Option<NodeUpdateHook>,  // Hooks the cloning of a node.
 }
 
-#[derive(Default)]
+/// Go `*ast.NodeFactory`. A handle: every method takes `&self`, and `clone()` yields another handle to the same
+/// factory (shared hooks and counters), like copying the Go pointer. So `f.new_x(f.new_y())` works and a factory can
+/// be shared by a visitor, the node builder and an emit context.
+#[derive(Default, Clone)]
 pub struct NodeFactory {
     pub(crate) hooks: NodeFactoryHooks,
-    pub(crate) node_count: usize,
-    pub(crate) text_count: usize,
+    pub(crate) node_count: Rc<Cell<usize>>,
+    pub(crate) text_count: Rc<Cell<usize>>,
 }
 
 pub fn new_node_factory(hooks: NodeFactoryHooks) -> NodeFactory {
-    NodeFactory { hooks, node_count: 0, text_count: 0 }
+    NodeFactory { hooks, node_count: Rc::default(), text_count: Rc::default() }
 }
 
 pub(crate) fn new_node(kind: Kind, data: NodeData, hooks: &NodeFactoryHooks) -> P<Node> {
@@ -112,20 +116,20 @@ impl NodeFactory {
     }
 
     #[inline]
-    pub(crate) fn new_node(&mut self, kind: Kind, data: NodeData) -> P<Node> {
-        self.node_count += 1;
+    pub(crate) fn new_node(&self, kind: Kind, data: NodeData) -> P<Node> {
+        self.node_count.set(self.node_count.get() + 1);
         new_node(kind, data, &self.hooks)
     }
 
     pub fn node_count(&self) -> usize {
-        self.node_count
+        self.node_count.get()
     }
 
     pub fn text_count(&self) -> usize {
-        self.text_count
+        self.text_count.get()
     }
 
-    pub fn as_node_factory(&mut self) -> &mut NodeFactory {
+    pub fn as_node_factory(&self) -> &NodeFactory {
         self
     }
 }
@@ -159,16 +163,16 @@ pub struct NodeList {
 }
 
 impl NodeFactory {
-    pub fn new_node_list(&mut self, nodes: Vec<P<Node>>) -> P<NodeList> {
+    pub fn new_node_list(&self, nodes: Vec<P<Node>>) -> P<NodeList> {
         self.new_node_list_from_static(alloc_vec(nodes))
     }
 
-    pub fn new_node_list_from_slice(&mut self, nodes: &[P<Node>]) -> P<NodeList> {
+    pub fn new_node_list_from_slice(&self, nodes: &[P<Node>]) -> P<NodeList> {
         self.new_node_list_from_static(alloc_slice(nodes))
     }
 
     /// Stores `nodes` without copying (keeps slice identity, e.g. for sentinel slices).
-    pub fn new_node_list_from_static(&mut self, nodes: &'static [P<Node>]) -> P<NodeList> {
+    pub fn new_node_list_from_static(&self, nodes: &'static [P<Node>]) -> P<NodeList> {
         P::new(NodeList { loc: Cell::new(undefined_text_range()), nodes })
     }
 }
@@ -198,7 +202,7 @@ impl NodeList {
         last.end() < self.end()
     }
 
-    pub fn clone_list(&self, f: &mut NodeFactory) -> P<NodeList> {
+    pub fn clone_list(&self, f: &NodeFactory) -> P<NodeList> {
         let result = f.new_node_list_from_static(self.nodes);
         result.loc.set(self.loc.get());
         result
@@ -213,7 +217,7 @@ pub struct ModifierList {
 }
 
 impl NodeFactory {
-    pub fn new_modifier_list(&mut self, nodes: Vec<P<Node>>) -> P<ModifierList> {
+    pub fn new_modifier_list(&self, nodes: Vec<P<Node>>) -> P<ModifierList> {
         let nodes = alloc_vec(nodes);
         P::new(ModifierList {
             list: NodeList { loc: Cell::new(undefined_text_range()), nodes },
@@ -244,7 +248,7 @@ impl ModifierList {
         self.list.has_trailing_comma()
     }
 
-    pub fn clone_list(&self, f: &mut NodeFactory) -> P<ModifierList> {
+    pub fn clone_list(&self, f: &NodeFactory) -> P<ModifierList> {
         P::new(ModifierList {
             list: NodeList { loc: Cell::new(self.list.loc.get()), nodes: self.list.nodes },
             modifier_flags: self.modifier_flags,
@@ -1271,7 +1275,7 @@ pub fn is_any_export_assignment(node: P<Node>) -> bool {
 }
 
 impl NodeFactory {
-    pub fn new_modifier(&mut self, kind: Kind) -> P<Node> {
+    pub fn new_modifier(&self, kind: Kind) -> P<Node> {
         self.new_token(kind)
     }
 }
@@ -1411,7 +1415,7 @@ pub struct SourceFile {
 
 impl NodeFactory {
     pub fn new_source_file(
-        &mut self,
+        &self,
         opts: SourceFileParseOptions,
         text: &'static str,
         statements: P<NodeList>,
@@ -1624,7 +1628,7 @@ impl SourceFile {
         node.flags.set(node.flags.get() | other.as_node().flags.get());
     }
 
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         let updated = f.new_source_file(self.parse_options.clone(), self.text, self.statements, self.end_of_file_token);
         let new_file = updated.as_source_file();
         new_file.copy_from(self);
@@ -1769,7 +1773,7 @@ fn collect_identifiers_for_source_file(source_file: &SourceFile) -> Set<&'static
 }
 
 impl NodeFactory {
-    pub fn update_source_file(&mut self, node: P<Node>, statements: P<NodeList>, end_of_file_token: P<Node>) -> P<Node> {
+    pub fn update_source_file(&self, node: P<Node>, statements: P<NodeList>, end_of_file_token: P<Node>) -> P<Node> {
         let file = node.as_source_file();
         if statements != file.statements || end_of_file_token != file.end_of_file_token {
             let updated = self.new_source_file(file.parse_options.clone(), file.text, statements, end_of_file_token);
@@ -1813,7 +1817,7 @@ impl CommentRange {
 }
 
 impl NodeFactory {
-    pub fn new_comment_range(&mut self, kind: Kind, pos: i32, end: i32, has_trailing_new_line: bool) -> CommentRange {
+    pub fn new_comment_range(&self, kind: Kind, pos: i32, end: i32, has_trailing_new_line: bool) -> CommentRange {
         CommentRange { text_range: TextRange::new(pos, end), kind, has_trailing_new_line }
     }
 }
@@ -1898,7 +1902,7 @@ pub(crate) fn visit_each_child_jsdoc_parameter_or_property_tag(node: &JSDocParam
 }
 
 impl NodeFactory {
-    pub fn release_arenas(&mut self) {}
+    pub fn release_arenas(&self) {}
 }
 
 #[cfg(test)]

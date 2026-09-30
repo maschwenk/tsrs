@@ -256,7 +256,10 @@ dependencies = [
  "tsrs_core",
  "tsrs_diagnostics",
  "tsrs_module",
+ "tsrs_modulespecifiers",
  "tsrs_parser",
+ "tsrs_printer",
+ "tsrs_pseudochecker",
  "tsrs_scanner",
  "xxhash-rust",
 ]
@@ -292,6 +295,7 @@ dependencies = [
  "tsrs_core",
  "tsrs_diagnostics",
  "tsrs_module",
+ "tsrs_modulespecifiers",
  "tsrs_parser",
  "tsrs_scanner",
  "tsrs_tsoptions",
@@ -331,6 +335,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_modulespecifiers"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_core",
+ "tsrs_module",
+ "tsrs_tsoptions",
+]
+
+[[package]]
 name = "tsrs_parser"
 version = "0.1.0"
 dependencies = [
@@ -355,6 +371,14 @@ dependencies = [
  "tsrs_parser",
  "tsrs_scanner",
  "tsrs_vfs",
+]
+
+[[package]]
+name = "tsrs_pseudochecker"
+version = "0.1.0"
+dependencies = [
+ "tsrs_ast",
+ "tsrs_core",
 ]
 
 [[package]]

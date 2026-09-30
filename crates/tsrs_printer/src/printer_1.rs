@@ -229,7 +229,7 @@ pub(crate) fn get_text_of_node_worker(g: &mut NameGenerator, s: &printerTextStat
 
     match node.kind {
         Kind::Identifier | Kind::PrivateIdentifier | Kind::JsxNamespacedName => {
-            if !can_use_source_file || get_source_file_of_node(node).map(|f| f.as_node()) != Some(s.emit_context.most_original(current_source_file.unwrap().as_node())) {
+            if !can_use_source_file || get_source_file_of_node(node).map(|f| f.as_node()) != Some(s.emit_context.most_original(Some(current_source_file.unwrap().as_node())).unwrap()) {
                 return node.text().to_string();
             }
         }
@@ -1141,14 +1141,12 @@ impl Printer {
             None => {
                 let helper_name = self
                     .emit_context
-                    .factory
-                    .borrow_mut()
-                    .new_unique_name_ex(name, AutoGenerateOptions { flags: GeneratedIdentifierFlags::FileLevel | GeneratedIdentifierFlags::Optimistic, ..Default::default() });
+                    .factory.new_unique_name_ex(name, AutoGenerateOptions { flags: GeneratedIdentifierFlags::FileLevel | GeneratedIdentifierFlags::Optimistic, ..Default::default() });
                 self.generate_name(helper_name);
                 self.unique_helper_names.as_mut().unwrap().insert(name.to_string(), helper_name);
                 helper_name
             }
-            Some(helper_name) => helper_name.clone_node(&mut self.emit_context.factory.borrow_mut()),
+            Some(helper_name) => helper_name.clone_node(&self.emit_context.factory),
         }
     }
 
@@ -1158,9 +1156,9 @@ impl Printer {
             if let Some(external_helpers_module_name) = self.external_helpers_module_name {
                 // Substitute `__helper` with `tslib_1.__helper`
                 let helper = {
-                    let mut f = self.emit_context.factory.borrow_mut();
-                    let module_name = external_helpers_module_name.clone_node(&mut f);
-                    let name = node.clone_node(&mut f);
+                    let f = &self.emit_context.factory;
+                    let module_name = external_helpers_module_name.clone_node(f);
+                    let name = node.clone_node(f);
                     f.new_property_access_expression(module_name, None /*questionDotToken*/, name, NodeFlags::None)
                 };
                 self.emit_context.assign_comment_and_source_map_ranges(helper, node);
