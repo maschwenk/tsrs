@@ -209,7 +209,8 @@ fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandL
         errors.extend(program.get_semantic_diagnostics(None));
         errors.extend(program.get_global_diagnostics());
     }
-    if harness_options.capture_suggestions {
+    if harness_options.capture_suggestions && !crate::syntax_only() {
+        // Program.GetSuggestionDiagnostics is not ported (tsrs_compiler); these come from the checker.
         todo!("GetSuggestionDiagnostics (captureSuggestions)");
     }
     if program.options().get_emit_declarations() && !crate::syntax_only() {

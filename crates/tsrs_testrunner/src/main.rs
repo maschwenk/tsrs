@@ -31,6 +31,7 @@ const USAGE: &str = "usage:
   tsrs-test crashes [--top N] [--examples N] [--json <path>]
   tsrs-test list [--suite ..] [--filter ..] [--list <file>]
   --syntax-only (any command): no checker; only config/program/syntactic diagnostics; results in target/test-results-syntax
+                (implied when built without the `checker` feature)
 dev options (any command): --oracle <diags.jsonl> render Go-captured diagnostics instead of compiling;
                            --options <options.json> option table dumped by tools/oracle/testrunner";
 
@@ -218,7 +219,8 @@ fn cmd_run(mut args: Args, spec: BackendSpec) {
         return;
     }
     if !quiet {
-        eprintln!("running {} test variants with {jobs} workers", items.len());
+        let mode = if syntax_only() { " (syntax-only)" } else { "" };
+        eprintln!("running {} test variants with {jobs} workers{mode}", items.len());
     }
     let opts = pool::PoolOptions { jobs: jobs.min(items.len()), timeout, recycle, worker_args: spec.args(), progress: !quiet, mem_limit_mb };
     let results = pool::run_pool(&items, &opts);
@@ -359,7 +361,7 @@ fn main() {
     let cmd = argv.remove(0);
     let mut args = Args { rest: argv };
     let spec = BackendSpec { oracle: args.value("--oracle"), options: args.value("--options") };
-    if args.flag("--syntax-only") {
+    if args.flag("--syntax-only") || cfg!(not(feature = "checker")) {
         SYNTAX_ONLY.store(true, std::sync::atomic::Ordering::Relaxed);
     }
     match cmd.as_str() {
