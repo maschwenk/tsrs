@@ -112,7 +112,7 @@ Field types:
   whole test corpus + lib files, parsed as .ts/.tsx/.js; input file `tools/gen-ast/nilable-fields.json`),
   or it is constructed nil by the reparser/checker. Fields widened this way (not optional in ast.json):
   `CaseOrDefaultClause.expression`, `ExportAssignment.type_`, `FunctionLikeBase.parameters`,
-  `JSDocSeeTag.name_expression`, `JSDocTemplateTag.constraint`, `PropertyAssignment.type_`,
+  `ImportAttribute.name`, `JSDocSeeTag.name_expression`, `JSDocTemplateTag.constraint`, `PropertyAssignment.type_`,
   `PropertySignatureDeclaration.{type_, initializer}`, `ShorthandPropertyAssignment.type_`,
   `TaggedTemplateExpression.question_dot_token`, `TypeAliasDeclaration.type_`.
 - Child list: `P<NodeList>` / `Option<P<NodeList>>`. Modifiers: `Option<P<ModifierList>>`.
@@ -133,13 +133,12 @@ writes after construction are `Cell`s (everything else is a plain immutable fiel
 `ShorthandPropertyAssignment.{type_, object_assignment_initializer}`; `ExportAssignment.{type_, expression}`;
 `ReturnStatement.expression`; `ParenthesizedExpression.expression`; `BinaryExpression.{type_, right}`;
 `TypeAliasDeclaration.{type_parameters, type_}`; `ImportClause.phase_modifier`;
-`ExpressionWithTypeArguments.type_arguments`.
-`NodeList.nodes` is immutable. Where Go appends to an existing list in place (reparser.go:589
-`class.HeritageClauses.Nodes = append(...)`), build a new list with the same `loc` and store it in the owning
-Cell (`class.set_heritage_clauses(...)`). For reparser.go:575 (`implementsClause.AsHeritageClause().Types.Nodes =
-append(...)`), `HeritageClause.types` is not a Cell: build a new HeritageClause (same token, new types list with
-the old list's `loc`, same `loc`/flags as the old clause), put it in place of the old one in a new heritage
-clause list installed with `set_heritage_clauses`, and finish/parent it as Go finishes the mutated clause.
+`ExpressionWithTypeArguments.type_arguments`, `HeritageClause.types`.
+`NodeList.nodes` is immutable. Where Go appends to an existing list in place (reparser.go `@implements`:
+`implementsClause.AsHeritageClause().Types.Nodes = append(...)` and `class.HeritageClauses.Nodes = append(...)`),
+the reparser builds a new list with the old list's `loc` and stores it in the owning Cell
+(`heritage_clause.set_types(...)`, `class.heritage_clauses.set(...)`). A Go `*NodeList` is only ever held by its
+owning node, so nothing else can observe the difference.
 
 **Getter methods — prefer these.** Every data struct (and every base struct) has one getter per Go
 field it has, *including fields promoted from embedded bases* (Go-style: `decl.body()` works on
@@ -167,7 +166,16 @@ Bases without Rust data are transparent (their own bases are inlined into the no
 other expression bases, `TypeNodeBase`, `TypeSyntaxBase`, `JSDocTypeBase`, `CompositeBase`,
 `FunctionLikeWithBodyBase` (nodes embed `function_like_base` and `body_base` directly),
 `AccessorDeclarationBase`, `FunctionOrConstructorTypeNodeBase`, `TypeElementBase`, `ClassElementBase`,
-`ObjectLiteralElementBase`, `LiteralExpressionBase`. Subtree facts are not ported.
+`ObjectLiteralElementBase`, `LiteralExpressionBase`.
+
+**Subtree facts** (`subtreefacts.rs`, Go `subtreefacts.go` + every `computeSubtreeFacts`/`propagateSubtreeFacts`):
+`SubtreeFacts` bitflags with Go's names minus the `Subtree` prefix (`SubtreeContainsJsx` -> `SubtreeFacts::ContainsJsx`,
+`SubtreeExclusionsFunction` -> `SubtreeFacts::ExclusionsFunction`, `SubtreeFactsComputed` -> `SubtreeFacts::Computed`),
+`node.subtree_facts()` (Go `Node.SubtreeFacts()`), `contains_object_rest_or_spread(node)`. Go caches the facts of
+composite nodes in `CompositeBase`; the port recomputes them on every call (they are a pure function of the finished
+subtree), so calling `subtree_facts()` on every node of a deep tree is quadratic. Go uses them to prune the
+JSX module-indicator walk (`parseoptions.rs`) and the JS parameter-decorator walk in the compiler; both prune
+exactly like Go (the pruning is observable: e.g. a function without a body reports only `ContainsTypeScript`).
 
 ```rust
 pub struct NodeList { pub loc: Cell<TextRange>, pub nodes: &'static [P<Node>] }   // P<NodeList>; .nodes(), .pos(), .end(), .has_trailing_comma(), .clone_list(f)
@@ -282,7 +290,7 @@ bitflags/enums per PORTING.md (`XxxFlags::None` is the empty set). `NodeId(pub u
 `SourceFileMetaData` are plain structs as in Go (embedded `core.TextRange` becomes a `text_range` field
 plus `pos()`/`end()`).
 
-Not ported (language service / emit / API only): subtree facts, content mappers, `SourceFileDataKey`,
+Not ported (language service / emit / API only): content mappers, `SourceFileDataKey`,
 the token cache (`GetOrCreateToken`), `GetNameTable`, `GetDeclarationMap`, `Hash`.
 
 ## Diagnostics
