@@ -225,6 +225,7 @@
     "*keyBuilder": "&mut keyBuilder",
     "TypeData": "TypeData",
     "evaluator.Result": "evaluator::Result",
+    "[]any": "Vec<String>",
     "iter.Seq": "Vec<$0>",
     "iter.Seq@param": "&[$0]"
   },

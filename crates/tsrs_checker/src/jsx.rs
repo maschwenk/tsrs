@@ -107,12 +107,12 @@ impl Checker {
     }
 
     // jsx.go:376
-    pub(crate) fn generate_jsx_children(&mut self, node: P<Node>, get_invalid_text_diagnostic: impl FnMut(&mut Checker) -> (&'static Message, Vec<&dyn std::any::Any /*?*/>)) -> Vec<JsxElaborationElement> {
+    pub(crate) fn generate_jsx_children(&mut self, node: P<Node>, get_invalid_text_diagnostic: impl FnMut(&mut Checker) -> (&'static Message, Vec<String>)) -> Vec<JsxElaborationElement> {
         todo!()
     }
 
     // jsx.go:393
-    pub(crate) fn get_elaboration_element_for_jsx_child(&mut self, child: P<Node>, name_type: P<Type>, get_invalid_text_diagnostic: impl FnMut(&mut Checker) -> (&'static Message, Vec<&dyn std::any::Any /*?*/>)) -> JsxElaborationElement {
+    pub(crate) fn get_elaboration_element_for_jsx_child(&mut self, child: P<Node>, name_type: P<Type>, get_invalid_text_diagnostic: impl FnMut(&mut Checker) -> (&'static Message, Vec<String>)) -> JsxElaborationElement {
         todo!()
     }
 

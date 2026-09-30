@@ -594,7 +594,7 @@ for_each_type | pub(crate) fn for_each_type(t: P<Type>, f: impl FnMut(P<Type>)) 
 for_each_yield_expression | pub(crate) fn for_each_yield_expression(body: P<Node>, visitor: impl FnMut(P<Node>) -> bool) -> bool | utilities.go:1264 | -
 format_union_types | pub(crate) fn format_union_types(&mut self, types: &[P<Type>], expanding_enum: bool) -> Vec<P<Type>> | printer.go:253 | Checker
 function_has_implicit_return | pub(crate) fn function_has_implicit_return(&mut self, fn_: P<Node>) -> bool | checker.go:20648 | Checker
-generate_jsx_children | pub(crate) fn generate_jsx_children(&mut self, node: P<Node>, get_invalid_text_diagnostic: impl FnMut(&mut Checker) -> (&'static Message, Vec<&dyn std::any::Any /*?*/>)) -> Vec<JsxElaborationElement> | jsx.go:376 | Checker
+generate_jsx_children | pub(crate) fn generate_jsx_children(&mut self, node: P<Node>, get_invalid_text_diagnostic: impl FnMut(&mut Checker) -> (&'static Message, Vec<String>)) -> Vec<JsxElaborationElement> | jsx.go:376 | Checker
 get | pub(crate) fn get(&self, key: CacheHashKey) -> RelationComparisonResult | relater.go:102 | Relation
 get_accessed_property_name | pub(crate) fn get_accessed_property_name(&mut self, access: P<Node>) -> (String, bool) | flow.go:1727 | Checker
 get_accessible_symbol_chain | pub fn get_accessible_symbol_chain(&mut self, symbol: P<Symbol>, enclosing_declaration: P<Node>, meaning: SymbolFlags, use_only_external_aliasing: bool) -> Vec<P<Symbol>> | symbolaccessibility.go:373 | Checker
@@ -803,7 +803,7 @@ get_effective_set_accessor_type_annotation_node | pub(crate) fn get_effective_se
 get_effective_type_argument_at_index | pub(crate) fn get_effective_type_argument_at_index(&mut self, node: P<Node>, type_parameters: &[P<Type>], index: i32) -> P<Type> | checker.go:17536 | Checker
 get_effective_type_arguments | pub(crate) fn get_effective_type_arguments(&mut self, node: P<Node>, type_parameters: &[P<Type>]) -> Vec<P<Type>> | checker.go:22329 | Checker
 get_effects_signature | pub(crate) fn get_effects_signature(&mut self, node: P<Node>) -> Option<P<Signature>> | flow.go:2047 | Checker
-get_elaboration_element_for_jsx_child | pub(crate) fn get_elaboration_element_for_jsx_child(&mut self, child: P<Node>, name_type: P<Type>, get_invalid_text_diagnostic: impl FnMut(&mut Checker) -> (&'static Message, Vec<&dyn std::any::Any /*?*/>)) -> JsxElaborationElement | jsx.go:393 | Checker
+get_elaboration_element_for_jsx_child | pub(crate) fn get_elaboration_element_for_jsx_child(&mut self, child: P<Node>, name_type: P<Type>, get_invalid_text_diagnostic: impl FnMut(&mut Checker) -> (&'static Message, Vec<String>)) -> JsxElaborationElement | jsx.go:393 | Checker
 get_element_type_of_array_type | pub(crate) fn get_element_type_of_array_type(&mut self, t: P<Type>) -> Option<P<Type>> | checker.go:23974 | Checker
 get_element_type_of_evolving_array_type | pub(crate) fn get_element_type_of_evolving_array_type(&mut self, t: P<Type>) -> P<Type> | flow.go:1520 | Checker
 get_element_type_of_slice_of_tuple_type | pub(crate) fn get_element_type_of_slice_of_tuple_type(&mut self, t: P<Type>, index: i32, end_skip_count: i32, writing: bool, no_reductions: bool) -> Option<P<Type>> | checker.go:25300 | Checker
