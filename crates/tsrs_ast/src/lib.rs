@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod checkflags;
+pub mod deepclone;
 pub mod diagnostic;
 pub mod flow;
 pub mod functionflags;
