@@ -1691,123 +1691,755 @@ impl Checker {
         None
     }
 
+    /**
+     * Whoa! Do you really want to use this function?
+     *
+     * Unless you're trying to get the *non-apparent* type for a
+     * value-literal type or you're authoring relevant portions of this algorithm,
+     * you probably meant to use 'getApparentTypeOfContextualType'.
+     * Otherwise this may not be very useful.
+     *
+     * In cases where you *are* working on this function, you should understand
+     * when it is appropriate to use 'getContextualType' and 'getApparentTypeOfContextualType'.
+     *
+     *   - Use 'getContextualType' when you are simply going to propagate the result to the expression.
+     *   - Use 'getApparentTypeOfContextualType' when you're going to need the members of the type.
+     *
+     * @param node the expression whose contextual type will be returned.
+     * @returns the contextual type of an expression.
+     */
     // checker.go:29832
     pub(crate) fn get_contextual_type(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        if node.flags().intersects(NodeFlags::InWithStatement) {
+            // We cannot answer semantic questions within a with block, do not proceed any further
+            return None;
+        }
+        // Cached contextual types are obtained with no ContextFlags, so we can only consult them for
+        // requests with no ContextFlags.
+        let index = self.find_contextual_node(node, context_flags == ContextFlags::None /*includeCaches*/);
+        if index >= 0 {
+            return self.contextual_infos[index as usize].t;
+        }
+        let parent = node.parent().unwrap();
+        match parent.kind {
+            Kind::VariableDeclaration | Kind::Parameter | Kind::PropertyDeclaration | Kind::PropertySignature | Kind::BindingElement => self.get_contextual_type_for_initializer_expression(node, context_flags),
+            Kind::ArrowFunction | Kind::ReturnStatement => self.get_contextual_type_for_return_expression(node, context_flags),
+            Kind::YieldExpression => self.get_contextual_type_for_yield_operand(parent, context_flags),
+            Kind::AwaitExpression => self.get_contextual_type_for_await_operand(parent, context_flags),
+            Kind::CallExpression | Kind::NewExpression => self.get_contextual_type_for_argument(parent, node),
+            Kind::Decorator => self.get_contextual_type_for_decorator(parent),
+            Kind::TypeAssertionExpression | Kind::AsExpression => {
+                if is_const_assertion(parent) {
+                    return self.get_contextual_type(parent, context_flags);
+                }
+                Some(self.get_type_from_type_node(parent.type_node().unwrap()))
+            }
+            Kind::BinaryExpression => self.get_contextual_type_for_binary_operand(node, context_flags),
+            Kind::PropertyAssignment | Kind::ShorthandPropertyAssignment => self.get_contextual_type_for_object_literal_element(parent, context_flags),
+            Kind::SpreadAssignment => self.get_contextual_type(parent.parent().unwrap(), context_flags),
+            Kind::ArrayLiteralExpression => {
+                let t = self.get_apparent_type_of_contextual_type(parent, context_flags);
+                let element_index = index_of_node(parent.elements(), node);
+                if element_index < 0 {
+                    return None;
+                }
+                let (first_spread_index, last_spread_index) = self.get_spread_indices(parent);
+                self.get_contextual_type_for_element_expression(t, element_index, parent.elements().len() as i32, first_spread_index, last_spread_index)
+            }
+            Kind::ConditionalExpression => self.get_contextual_type_for_conditional_operand(node, context_flags),
+            Kind::TemplateSpan => self.get_contextual_type_for_substitution_expression(parent.parent().unwrap(), node),
+            Kind::ParenthesizedExpression => self.get_contextual_type(parent, context_flags),
+            Kind::NonNullExpression => self.get_contextual_type(parent, context_flags),
+            Kind::SatisfiesExpression => Some(self.get_type_from_type_node(parent.type_node().unwrap())),
+            Kind::ExportAssignment => self.try_get_type_from_type_node(parent),
+            Kind::JsxExpression => self.get_contextual_type_for_jsx_expression(parent, context_flags),
+            Kind::JsxAttribute | Kind::JsxSpreadAttribute => self.get_contextual_type_for_jsx_attribute(parent, context_flags),
+            Kind::JsxOpeningElement | Kind::JsxSelfClosingElement => self.get_contextual_jsx_element_attributes_type(parent, context_flags),
+            Kind::ImportAttribute => self.get_contextual_import_attribute_type(parent),
+            _ => None,
+        }
     }
 
+    // In a variable, parameter or property declaration with a type annotation,
+    // the contextual type of an initializer expression is the type of the variable, parameter or property.
+    //
+    // Otherwise, in a parameter declaration of a contextually typed function expression,
+    // the contextual type of an initializer expression is the contextual type of the parameter.
+    //
+    // Otherwise, in a variable or parameter declaration with a binding pattern name,
+    // the contextual type of an initializer expression is the type implied by the binding pattern.
+    //
+    // Otherwise, in a binding pattern inside a variable or parameter declaration,
+    // the contextual type of an initializer expression is the type annotation of the containing declaration, if present.
     // checker.go:29912
     pub(crate) fn get_contextual_type_for_initializer_expression(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        let declaration = node.parent().unwrap();
+        let initializer = declaration.initializer();
+        if Some(node) == initializer {
+            let result = self.get_contextual_type_for_variable_like_declaration(declaration, context_flags);
+            if result.is_some() {
+                return result;
+            }
+            if !context_flags.intersects(ContextFlags::SkipBindingPatterns) && is_binding_pattern(declaration.name().unwrap()) && !declaration.name().unwrap().elements().is_empty() {
+                return Some(self.get_type_from_binding_pattern(declaration.name().unwrap(), true /*includePatternInType*/, false /*reportErrors*/));
+            }
+        }
+        None
     }
 
     // checker.go:29927
     pub(crate) fn get_contextual_type_for_variable_like_declaration(&mut self, declaration: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        if let Some(type_node) = declaration.type_node() {
+            return Some(self.get_type_from_type_node(type_node));
+        }
+        match declaration.kind {
+            Kind::Parameter => return self.get_contextually_typed_parameter_type(declaration),
+            Kind::BindingElement => return self.get_contextual_type_for_binding_element(declaration, context_flags),
+            Kind::PropertyDeclaration => {
+                if is_static(declaration) {
+                    return self.get_contextual_type_for_static_property_declaration(declaration, context_flags);
+                }
+            }
+            _ => {}
+        }
+        // By default, do nothing and return nil - only the above cases have context implied by a parent
+        None
     }
 
+    // Return contextual type of parameter or undefined if no contextual type is available
     // checker.go:29947
     pub(crate) fn get_contextually_typed_parameter_type(&mut self, parameter: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let fn_ = parameter.parent().unwrap();
+        if !self.is_context_sensitive_function_or_object_literal_method(fn_) {
+            return None;
+        }
+        let iife = get_immediately_invoked_function_expression(fn_);
+        if let Some(iife) = iife {
+            let args = self.get_effective_call_arguments(iife);
+            let index_of_parameter = fn_.parameters().iter().position(|&p| p == parameter).map_or(-1, |i| i as i32);
+            if has_dot_dot_dot_token(parameter) {
+                let any_type = self.any_type;
+                return Some(self.get_spread_argument_type(&args, index_of_parameter, args.len() as i32, any_type, None /*context*/, CheckMode::Normal));
+            }
+            let links = self.signature_links.get(iife);
+            let cached = links.resolved_signature.get();
+            links.resolved_signature.set(Some(self.any_signature));
+            let t: Option<P<Type>>;
+            if index_of_parameter < args.len() as i32 {
+                let arg_type = self.check_expression(args[index_of_parameter as usize]);
+                t = Some(self.get_widened_literal_type(arg_type));
+            } else if parameter.initializer().is_some() {
+                t = None;
+            } else {
+                t = Some(self.undefined_widening_type);
+            }
+            links.resolved_signature.set(cached);
+            return t;
+        }
+        let contextual_signature = self.get_contextual_signature(fn_);
+        if let Some(contextual_signature) = contextual_signature {
+            let index = fn_.parameters().iter().position(|&p| p == parameter).map_or(-1, |i| i as i32) - if_else(get_this_parameter(fn_).is_some(), 1, 0);
+            if has_dot_dot_dot_token(parameter) && last_or_nil(fn_.parameters()) == Some(parameter) {
+                return Some(self.get_rest_type_at_position(contextual_signature, index, false));
+            }
+            return self.try_get_type_at_position(contextual_signature, index);
+        }
+        None
     }
 
     // checker.go:29985
     pub(crate) fn is_context_sensitive_function_or_object_literal_method(&mut self, fn_: P<Node>) -> bool {
-        todo!()
+        (is_function_expression_or_arrow_function(fn_) || is_object_literal_method(fn_)) && self.is_context_sensitive_function_like_declaration(fn_)
     }
 
     // checker.go:29989
     pub(crate) fn get_spread_argument_type(&mut self, args: &[P<Node>], index: i32, arg_count: i32, rest_type: P<Type>, context: Option<P<InferenceContext>>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        let in_const_context = self.is_const_type_variable(Some(rest_type), 0);
+        if arg_count > 0 && index >= arg_count - 1 {
+            let mut arg = args[(arg_count - 1) as usize];
+            if is_spread_argument(arg) {
+                // We are inferring from a spread expression in the last argument position, i.e. both the parameter
+                // and the argument are ...x forms.
+                let spread_type = if is_synthetic_expression(arg) {
+                    synthetic_expression_type(arg)
+                } else {
+                    self.check_expression_with_contextual_type(arg.expression().unwrap(), rest_type, context, check_mode)
+                };
+                if self.is_array_like_type(spread_type) {
+                    return self.get_mutable_array_or_tuple_type(spread_type);
+                }
+                if is_spread_element(arg) {
+                    arg = arg.expression().unwrap();
+                }
+                let undefined_type = self.undefined_type;
+                let element_type = self.check_iterated_type_or_element_type(IterationUse::Spread, spread_type, undefined_type, Some(arg));
+                return self.create_array_type_ex(element_type, in_const_context);
+            }
+        }
+        let mut types: Vec<P<Type>> = Vec::new();
+        let mut infos: Vec<TupleElementInfo> = Vec::new();
+        for i in index..arg_count {
+            let arg = args[i as usize];
+            let t: P<Type>;
+            let mut info = TupleElementInfo::default();
+            if is_spread_argument(arg) {
+                let spread_type = if is_synthetic_expression(arg) { synthetic_expression_type(arg) } else { self.check_expression(arg.expression().unwrap()) };
+                if self.is_array_like_type(spread_type) {
+                    t = spread_type;
+                    info.flags = ElementFlags::Variadic;
+                } else {
+                    let undefined_type = self.undefined_type;
+                    if is_spread_element(arg) {
+                        t = self.check_iterated_type_or_element_type(IterationUse::Spread, spread_type, undefined_type, arg.expression());
+                    } else {
+                        t = self.check_iterated_type_or_element_type(IterationUse::Spread, spread_type, undefined_type, Some(arg));
+                    }
+                    info.flags = ElementFlags::Rest;
+                }
+            } else {
+                let contextual_type = if is_tuple_type(rest_type) {
+                    match self.get_contextual_type_for_element_expression(Some(rest_type), i - index, arg_count - index, -1, -1) {
+                        Some(t) => t,
+                        None => self.unknown_type,
+                    }
+                } else {
+                    let index_type = self.get_number_literal_type(jsnum::Number((i - index) as f64));
+                    self.get_indexed_access_type_ex(rest_type, index_type, AccessFlags::Contextual, None, None)
+                };
+                let arg_type = self.check_expression_with_contextual_type(arg, contextual_type, context, check_mode);
+                let has_primitive_contextual_type = in_const_context || self.maybe_type_of_kind(contextual_type, TypeFlags::Primitive | TypeFlags::Index | TypeFlags::TemplateLiteral | TypeFlags::StringMapping);
+                if has_primitive_contextual_type {
+                    t = self.get_regular_type_of_literal_type(arg_type);
+                } else {
+                    t = self.get_widened_literal_type(arg_type);
+                }
+                info.flags = ElementFlags::Required;
+            }
+            if is_synthetic_expression(arg) {
+                if let Some(tuple_name_source) = arg.as_synthetic_expression().tuple_name_source {
+                    info.labeled_declaration = Some(tuple_name_source);
+                }
+            }
+            types.push(t);
+            infos.push(info);
+        }
+        let readonly = in_const_context && !some_type(rest_type, |t| self.is_mutable_array_like_type(t));
+        self.create_tuple_type_ex(&types, &infos, readonly)
     }
 
     // checker.go:30060
     pub(crate) fn get_mutable_array_or_tuple_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        if t.flags().intersects(TypeFlags::Union) {
+            return self.map_type(t, |c, t| Some(c.get_mutable_array_or_tuple_type(t))).unwrap();
+        }
+        if t.flags().intersects(TypeFlags::Any) || {
+            let base = self.get_base_constraint_or_type(t);
+            self.is_mutable_array_or_tuple(base)
+        } {
+            return t;
+        }
+        if is_tuple_type(t) {
+            let element_types = self.get_element_types(t);
+            return self.create_tuple_type_ex(&element_types, t.target_tuple_type().element_infos.get(), false /*readonly*/);
+        }
+        self.create_tuple_type_ex(&[t], &[TupleElementInfo { flags: ElementFlags::Variadic, labeled_declaration: None }], false)
     }
 
     // checker.go:30072
     pub(crate) fn get_contextual_type_for_binding_element(&mut self, declaration: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        let name = declaration.property_name_or_name().unwrap();
+        if is_binding_pattern(name) || is_computed_non_literal_name(name) {
+            return None;
+        }
+        let parent = declaration.parent().unwrap().parent().unwrap();
+        let mut parent_type = self.get_contextual_type_for_variable_like_declaration(parent, context_flags);
+        if parent_type.is_none() {
+            if !is_binding_element(parent) && parent.initializer().is_some() {
+                parent_type = Some(self.check_declaration_initializer(parent, if_else(has_dot_dot_dot_token(declaration), CheckMode::RestBindingElement, CheckMode::Normal), None));
+            }
+        }
+        let parent_type = parent_type?;
+        if is_array_binding_pattern(parent.name().unwrap()) {
+            let index = declaration.parent().unwrap().elements().iter().position(|&e| e == declaration);
+            let Some(index) = index else {
+                return None;
+            };
+            return self.get_contextual_type_for_element_expression(Some(parent_type), index as i32, -1, -1, -1);
+        }
+        let name_type = self.get_literal_type_from_property_name(name);
+        if is_type_usable_as_property_name(name_type) {
+            return self.get_type_of_property_of_type(parent_type, &get_property_name_from_type(name_type));
+        }
+        None
     }
 
     // checker.go:30101
     pub(crate) fn get_contextual_type_for_static_property_declaration(&mut self, declaration: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        let decl_parent = declaration.parent().unwrap();
+        if is_expression(decl_parent) {
+            if let Some(parent_type) = self.get_contextual_type(decl_parent, context_flags) {
+                let name = self.get_symbol_of_declaration(declaration).unwrap().name();
+                return self.get_type_of_property_of_contextual_type(parent_type, name);
+            }
+        }
+        None
     }
 
     // checker.go:30110
     pub(crate) fn get_contextual_type_for_return_expression(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        let fn_ = get_containing_function(node);
+        if let Some(fn_) = fn_ {
+            let contextual_return_type = self.get_contextual_return_type(fn_, context_flags);
+            if let Some(mut contextual_return_type) = contextual_return_type {
+                let function_flags = get_function_flags(Some(fn_));
+                if function_flags.intersects(FunctionFlags::Generator) {
+                    let is_async_generator = function_flags.intersects(FunctionFlags::Async);
+                    if contextual_return_type.flags().intersects(TypeFlags::Union) {
+                        contextual_return_type = self.filter_type(contextual_return_type, |c, t| c.get_iteration_type_of_generator_function_return_type(IterationTypeKind::Return, t, is_async_generator).is_some());
+                    }
+                    let iteration_return_type = self.get_iteration_type_of_generator_function_return_type(IterationTypeKind::Return, contextual_return_type, function_flags.intersects(FunctionFlags::Async));
+                    let Some(iteration_return_type) = iteration_return_type else {
+                        return None;
+                    };
+                    contextual_return_type = iteration_return_type;
+                    // falls through to unwrap Promise for AsyncGenerators
+                }
+                if function_flags.intersects(FunctionFlags::Async) {
+                    // Get the awaited type without the `Awaited<T>` alias
+                    let contextual_awaited_type = self.map_type(contextual_return_type, |c, t| c.get_awaited_type_no_alias(t));
+                    let Some(contextual_awaited_type) = contextual_awaited_type else {
+                        return None;
+                    };
+                    let promise_like = self.create_promise_like_type(contextual_awaited_type);
+                    return Some(self.get_union_type(&[contextual_awaited_type, promise_like]));
+                }
+                // Regular function or Generator function
+                return Some(contextual_return_type);
+            }
+        }
+        None
     }
 
     // checker.go:30145
     pub(crate) fn get_contextual_iteration_type(&mut self, kind: IterationTypeKind, function_decl: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let is_async = get_function_flags(Some(function_decl)).intersects(FunctionFlags::Async);
+        let contextual_return_type = self.get_contextual_return_type(function_decl, ContextFlags::None);
+        if let Some(contextual_return_type) = contextual_return_type {
+            return self.get_iteration_type_of_generator_function_return_type(kind, contextual_return_type, is_async);
+        }
+        None
     }
 
     // checker.go:30154
     pub(crate) fn get_contextual_return_type(&mut self, function_decl: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        // If the containing function has a return type annotation, is a constructor, or is a get accessor whose
+        // corresponding set accessor has a type annotation, return statements in the function are contextually typed
+        let return_type = self.get_return_type_from_annotation(function_decl);
+        if return_type.is_some() {
+            return return_type;
+        }
+        // Otherwise, if the containing function is contextually typed by a function type with exactly one call signature
+        // and that call signature is non-generic, return statements are contextually typed by the return type of the signature
+        let signature = self.get_contextual_signature_for_function_like_declaration(function_decl);
+        if let Some(signature) = signature {
+            if !self.is_resolving_return_type_of_signature(signature) {
+                let return_type = self.get_return_type_of_signature(signature);
+                let function_flags = get_function_flags(Some(function_decl));
+                if function_flags.intersects(FunctionFlags::Generator) {
+                    return Some(self.filter_type(return_type, |c, t| {
+                        t.flags().intersects(TypeFlags::AnyOrUnknown | TypeFlags::Void | TypeFlags::InstantiableNonPrimitive) || c.check_generator_instantiation_assignability_to_return_type(t, function_flags, None /*errorNode*/)
+                    }));
+                }
+                if function_flags.intersects(FunctionFlags::Async) {
+                    return Some(self.filter_type(return_type, |c, t| t.flags().intersects(TypeFlags::AnyOrUnknown | TypeFlags::Void | TypeFlags::InstantiableNonPrimitive) || c.get_awaited_type_of_promise(t).is_some()));
+                }
+                return Some(return_type);
+            }
+        }
+        let iife = get_immediately_invoked_function_expression(function_decl);
+        if let Some(iife) = iife {
+            return self.get_contextual_type(iife, context_flags);
+        }
+        None
     }
 
     // checker.go:30186
     pub(crate) fn check_generator_instantiation_assignability_to_return_type(&mut self, return_type: P<Type>, function_flags: FunctionFlags, error_node: Option<P<Node>>) -> bool {
-        todo!()
+        // Naively, one could check that Generator<any, any, any> is assignable to the return type annotation.
+        // However, that would not catch the error in the following case.
+        //
+        //    interface BadGenerator extends Iterable<number>, Iterator<string> { }
+        //    function* g(): BadGenerator { } // Iterable and Iterator have different types!
+        //
+        let is_async = function_flags.intersects(FunctionFlags::Async);
+        let generator_yield_type = match self.get_iteration_type_of_generator_function_return_type(IterationTypeKind::Yield, return_type, is_async) {
+            Some(t) => t,
+            None => self.any_type,
+        };
+        let generator_return_type = self.get_iteration_type_of_generator_function_return_type(IterationTypeKind::Return, return_type, is_async).unwrap_or(generator_yield_type);
+        let generator_next_type = match self.get_iteration_type_of_generator_function_return_type(IterationTypeKind::Next, return_type, is_async) {
+            Some(t) => t,
+            None => self.unknown_type,
+        };
+        let generator_instantiation = self.create_generator_type(generator_yield_type, generator_return_type, generator_next_type, is_async);
+        self.check_type_assignable_to(generator_instantiation, return_type, error_node, None)
     }
 
     // checker.go:30200
     pub(crate) fn get_contextual_signature_for_function_like_declaration(&mut self, node: P<Node>) -> Option<P<Signature>> {
-        todo!()
+        // Only function expressions, arrow functions, and object literal methods are contextually typed.
+        if is_function_expression_or_arrow_function(node) || is_object_literal_method(node) {
+            return self.get_contextual_signature(node);
+        }
+        None
     }
 
     // checker.go:30208
     pub(crate) fn get_contextual_type_for_yield_operand(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        let fn_ = get_containing_function(node);
+        if let Some(fn_) = fn_ {
+            let function_flags = get_function_flags(Some(fn_));
+            let contextual_return_type = self.get_contextual_return_type(fn_, context_flags);
+            if let Some(mut contextual_return_type) = contextual_return_type {
+                let is_async_generator = function_flags.intersects(FunctionFlags::Async);
+                let is_yield_star = node.as_yield_expression().asterisk_token.is_some();
+                if !is_yield_star && contextual_return_type.flags().intersects(TypeFlags::Union) {
+                    contextual_return_type = self.filter_type(contextual_return_type, |c, t| c.get_iteration_type_of_generator_function_return_type(IterationTypeKind::Return, t, is_async_generator).is_some());
+                }
+                if is_yield_star {
+                    let iteration_types = self.get_iteration_types_of_generator_function_return_type(contextual_return_type, is_async_generator);
+                    let yield_type = iteration_types.yield_type.unwrap_or(self.silent_never_type);
+                    let return_type = match self.get_contextual_type(node, context_flags) {
+                        Some(t) => t,
+                        None => self.silent_never_type,
+                    };
+                    let next_type = iteration_types.next_type.unwrap_or(self.unknown_type);
+                    let generator_type = self.create_generator_type(yield_type, return_type, next_type, false /*isAsyncGenerator*/);
+                    if is_async_generator {
+                        let async_generator_type = self.create_generator_type(yield_type, return_type, next_type, true /*isAsyncGenerator*/);
+                        return Some(self.get_union_type(&[generator_type, async_generator_type]));
+                    }
+                    return Some(generator_type);
+                }
+                return self.get_iteration_type_of_generator_function_return_type(IterationTypeKind::Yield, contextual_return_type, is_async_generator);
+            }
+        }
+        None
     }
 
     // checker.go:30239
     pub(crate) fn get_contextual_type_for_await_operand(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        let contextual_type = self.get_contextual_type(node, context_flags);
+        if let Some(contextual_type) = contextual_type {
+            let contextual_awaited_type = self.get_awaited_type_no_alias(contextual_type);
+            if let Some(contextual_awaited_type) = contextual_awaited_type {
+                let promise_like = self.create_promise_like_type(contextual_awaited_type);
+                return Some(self.get_union_type(&[contextual_awaited_type, promise_like]));
+            }
+        }
+        None
     }
 
+    // In a typed function call, an argument or substitution expression is contextually typed by the type of the corresponding parameter.
     // checker.go:30251
     pub(crate) fn get_contextual_type_for_argument(&mut self, call_target: P<Node>, arg: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let args = self.get_effective_call_arguments(call_target);
+        let arg_index = args.iter().position(|&a| a == arg);
+        // -1 for e.g. the expression of a CallExpression, or the tag of a TaggedTemplateExpression
+        let Some(arg_index) = arg_index else {
+            return None;
+        };
+        self.get_contextual_type_for_argument_at_index(call_target, arg_index as i32)
     }
 
     // checker.go:30261
     pub(crate) fn get_contextual_type_for_argument_at_index(&mut self, call_target: P<Node>, arg_index: i32) -> Option<P<Type>> {
-        todo!()
+        if is_import_call(call_target) {
+            return if arg_index == 0 {
+                Some(self.string_type)
+            } else if arg_index == 1 {
+                Some(self.get_global_import_call_options_type())
+            } else {
+                Some(self.any_type)
+            };
+        }
+        // If we're already in the process of resolving the given signature, don't resolve again as
+        // that could cause infinite recursion. Instead, return anySignature.
+        let signature = if self.signature_links.get(call_target).resolved_signature.get() == Some(self.resolving_signature) {
+            self.resolving_signature
+        } else {
+            self.get_resolved_signature(call_target, None, CheckMode::Normal)
+        };
+        if is_jsx_opening_like_element(call_target) && arg_index == 0 {
+            return self.get_effective_first_argument_for_jsx_signature(signature, call_target);
+        }
+        let rest_index = signature.parameters.get().len() as i32 - 1;
+        if signature_has_rest_parameter(signature) && arg_index >= rest_index {
+            let rest_type = self.get_type_of_symbol(signature.parameters.get()[rest_index as usize]);
+            let index_type = self.get_number_literal_type(jsnum::Number((arg_index - rest_index) as f64));
+            return Some(self.get_indexed_access_type_ex(rest_type, index_type, AccessFlags::Contextual, None, None));
+        }
+        Some(self.get_type_at_position(signature, arg_index))
     }
 
     // checker.go:30290
     pub(crate) fn get_contextual_type_for_decorator(&mut self, decorator: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let signature = self.get_decorator_call_signature(decorator);
+        if let Some(signature) = signature {
+            return Some(self.get_or_create_type_from_signature(signature));
+        }
+        None
     }
 
     // checker.go:30298
     pub(crate) fn get_contextual_type_for_binary_operand(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        let binary_node = node.parent().unwrap();
+        let binary = binary_node.as_binary_expression();
+        if let Some(t) = binary.type_.get() {
+            return Some(self.get_type_from_type_node(t));
+        }
+        match binary.operator_token.kind {
+            Kind::EqualsToken | Kind::AmpersandAmpersandEqualsToken | Kind::BarBarEqualsToken | Kind::QuestionQuestionEqualsToken => {
+                // In an assignment expression, the right operand is contextually typed by the type of the left operand
+                // unless it's an assignment declaration.
+                if node == binary.right.get() {
+                    let target = get_leftmost_expression(binary.left, false);
+                    if !(is_identifier(target) && self.get_resolved_symbol(target).flags().intersects(SymbolFlags::ModuleExports)) {
+                        return self.get_contextual_type_for_assignment_expression(binary_node);
+                    }
+                }
+            }
+            Kind::BarBarToken | Kind::QuestionQuestionToken => {
+                // When an || expression has a contextual type, the operands are contextually typed by that type, except
+                // when that type originates in a binding pattern, the right operand is contextually typed by the type of
+                // the left operand. When an || expression has no contextual type, the right operand is contextually typed
+                // by the type of the left operand, except for the special case of Javascript declarations of the form
+                // `namespace.prop = namespace.prop || {}`.
+                let t = self.get_contextual_type(binary_node, context_flags);
+                if node == binary.right.get() && (t.is_none() || self.pattern_for_type.contains_key(&t.unwrap())) {
+                    return Some(self.get_type_of_expression(binary.left));
+                }
+                return t;
+            }
+            Kind::AmpersandAmpersandToken | Kind::CommaToken => {
+                if node == binary.right.get() {
+                    return self.get_contextual_type(binary_node, context_flags);
+                }
+            }
+            _ => {}
+        }
+        None
     }
 
     // checker.go:30332
     pub(crate) fn get_contextual_type_for_assignment_expression(&mut self, binary: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let left = binary.as_binary_expression().left;
+        if is_access_expression(left) {
+            let expr = left.expression().unwrap();
+            match expr.kind {
+                Kind::Identifier => {
+                    let resolved = self.get_resolved_symbol(expr);
+                    let symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(resolved));
+                    if symbol.flags().intersects(SymbolFlags::ModuleExports) {
+                        // No contextual type for an expression of the form 'module.exports = expr'.
+                        return None;
+                    }
+                    if binary.symbol().is_some() {
+                        // We have an assignment declaration (a binary expression with a symbol assigned by the binder) of the form
+                        // 'F.id = expr' or 'F[xxx] = expr'. If 'F' is declared as a variable with a type annotation, we can obtain a
+                        // contextual type from the annotated type without triggering a circularity. Otherwise, the assignment
+                        // declaration has no contextual type.
+                        if let Some(value_declaration) = symbol.value_declaration().filter(|&d| is_variable_declaration(d)) {
+                            if let Some(type_node) = value_declaration.type_node() {
+                                if is_property_access_expression(left) {
+                                    let t = self.get_type_from_type_node(type_node);
+                                    return self.get_type_of_property_of_contextual_type(t, left.name().unwrap().text());
+                                }
+                                let name_type = self.check_expression_cached(left.as_element_access_expression().argument_expression);
+                                if is_type_usable_as_property_name(name_type) {
+                                    let t = self.get_type_from_type_node(type_node);
+                                    return self.get_type_of_property_of_contextual_type_ex(t, &get_property_name_from_type(name_type), Some(name_type));
+                                }
+                                return Some(self.get_type_of_expression(left));
+                            }
+                        }
+                        return None;
+                    }
+                }
+                Kind::PropertyAccessExpression | Kind::ElementAccessExpression => {
+                    if binary.symbol().is_some() {
+                        return None;
+                    }
+                }
+                Kind::ThisKeyword => {
+                    let mut symbol: Option<P<Symbol>> = None;
+                    let this_type = self.get_type_of_expression(expr);
+                    if is_property_access_expression(left) {
+                        let name = left.name().unwrap();
+                        if is_private_identifier(name) {
+                            if let Some(this_symbol) = this_type.symbol() {
+                                symbol = self.get_property_of_type(this_type, &tsrs_binder::get_symbol_name_for_private_identifier(this_symbol, name.text()));
+                            }
+                        } else {
+                            symbol = self.get_property_of_type(this_type, name.text());
+                        }
+                    } else {
+                        let prop_type = self.check_expression_cached(left.as_element_access_expression().argument_expression);
+                        if is_type_usable_as_property_name(prop_type) {
+                            symbol = self.get_property_of_type(this_type, &get_property_name_from_type(prop_type));
+                        }
+                    }
+                    if let Some(symbol) = symbol {
+                        if let Some(d) = symbol.value_declaration() {
+                            if (is_property_declaration(d) || is_property_signature_declaration(d)) && d.type_node().is_none() && d.initializer().is_none() {
+                                // No contextual type for 'this.xxx = expr', where xxx is declared as a property with no type annotation or initializer.
+                                return None;
+                            }
+                        }
+                    }
+                    if let Some(binary_symbol) = binary.symbol() {
+                        if binary_symbol.value_declaration().is_some_and(|d| d.type_node().is_none()) {
+                            // We have an assignment declaration 'this.xxx = expr' with no (synthetic) type annotation
+                            let this_container = self.get_this_container(expr, false, false);
+                            if !is_object_literal_method(this_container) {
+                                return None;
+                            }
+                            // and now for one single case of object literal methods
+                            let name = get_element_or_property_access_name(left);
+                            if name.is_none() {
+                                return None;
+                            } else {
+                                // !!! contextual typing for `this` in object literals
+                                return None;
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Some(self.get_type_of_expression(left))
     }
 
     // checker.go:30409
     pub fn get_contextual_type_for_object_literal_element(&mut self, element: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        if let Some(t) = element.type_node() {
+            if !is_object_literal_method(element) {
+                return Some(self.get_type_from_type_node(t));
+            }
+        }
+        let object_literal = element.parent().unwrap();
+        let t = self.get_apparent_type_of_contextual_type(object_literal, context_flags);
+        if let Some(t) = t {
+            if self.has_bindable_name(element) {
+                // For a (non-symbol) computed property, there is no reason to look up the name
+                // in the type. It will just be "__computed", which does not appear in any
+                // SymbolTable.
+                let symbol = self.get_symbol_of_declaration(element).unwrap();
+                let name_type = self.value_symbol_links.get(symbol).name_type.get();
+                return self.get_type_of_property_of_contextual_type_ex(t, symbol.name(), name_type);
+            }
+            if has_dynamic_name(element) {
+                let name = get_name_of_declaration(element);
+                if let Some(name) = name.filter(|&n| is_computed_property_name(n)) {
+                    let expr_type = self.check_expression(name.expression().unwrap());
+                    if is_type_usable_as_property_name(expr_type) {
+                        let prop_type = self.get_type_of_property_of_contextual_type(t, &get_property_name_from_type(expr_type));
+                        if prop_type.is_some() {
+                            return prop_type;
+                        }
+                    }
+                }
+            }
+            if let Some(element_name) = element.name() {
+                let name_type = self.get_literal_type_from_property_name(element_name);
+                // We avoid calling getApplicableIndexInfo here because it performs potentially expensive intersection reduction.
+                return self.map_type_ex(
+                    t,
+                    |c, t| {
+                        let index_infos = c.get_index_infos_of_structured_type(t);
+                        let index_info = c.find_applicable_index_info(&index_infos, name_type);
+                        index_info.map(|info| info.value_type())
+                    },
+                    true, /*noReductions*/
+                );
+            }
+        }
+        None
     }
 
+    // In an object literal contextually typed by a type T, the contextual type of a property assignment is the type of
+    // the matching property in T, if one exists. Otherwise, it is the type of the numeric index signature in T, if one
+    // exists. Otherwise, it is the type of the string index signature in T, if one exists.
     // checker.go:30453
     pub(crate) fn get_contextual_type_for_object_literal_method(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        todo!()
+        if node.flags().intersects(NodeFlags::InWithStatement) {
+            // We cannot answer semantic questions within a with block, do not proceed any further
+            return None;
+        }
+        self.get_contextual_type_for_object_literal_element(node, context_flags)
     }
 
+    // SIG: t Option<P<Type>> (was P<Type>): Go checks t == nil (getContextualType passes getApparentTypeOfContextualType's result)
     // checker.go:30461
-    pub(crate) fn get_contextual_type_for_element_expression(&mut self, t: P<Type>, index: i32, length: i32, first_spread_index: i32, last_spread_index: i32) -> Option<P<Type>> {
-        todo!()
+    pub(crate) fn get_contextual_type_for_element_expression(&mut self, t: Option<P<Type>>, index: i32, length: i32, first_spread_index: i32, last_spread_index: i32) -> Option<P<Type>> {
+        let t = t?;
+        self.map_type_ex(
+            t,
+            |c, t| {
+                if is_tuple_type(t) {
+                    let tuple = t.target_tuple_type();
+                    // If index is before any spread element and within the fixed part of the contextual tuple type, return
+                    // the type of the contextual tuple element.
+                    if (first_spread_index < 0 || index < first_spread_index) && index < tuple.fixed_length.get() {
+                        let type_argument = c.get_type_arguments(t)[index as usize];
+                        return Some(c.remove_missing_type(type_argument, tuple.element_infos.get()[index as usize].flags.intersects(ElementFlags::Optional)));
+                    }
+                    // When the length is known and the index is after all spread elements we compute the offset from the element
+                    // to the end and the number of ending fixed elements in the contextual tuple type.
+                    let mut offset = 0;
+                    if length >= 0 && (last_spread_index < 0 || index > last_spread_index) {
+                        offset = length - index;
+                    }
+                    let mut fixed_end_length = 0;
+                    if offset > 0 && tuple.combined_flags.get().intersects(ElementFlags::Variable) {
+                        fixed_end_length = get_end_element_count(tuple, ElementFlags::Fixed);
+                    }
+                    // If the offset is within the ending fixed part of the contextual tuple type, return the type of the contextual
+                    // tuple element.
+                    if offset > 0 && offset <= fixed_end_length {
+                        let arity = c.get_type_reference_arity(t);
+                        return Some(c.get_type_arguments(t)[(arity - offset) as usize]);
+                    }
+                    // Return a union of the possible contextual element types with no subtype reduction.
+                    let mut tuple_index = tuple.fixed_length.get();
+                    if first_spread_index >= 0 {
+                        tuple_index = tuple_index.min(first_spread_index);
+                    }
+                    let mut end_skip_count = fixed_end_length;
+                    if length >= 0 && last_spread_index >= 0 {
+                        end_skip_count = fixed_end_length.min(length - last_spread_index);
+                    }
+                    return c.get_element_type_of_slice_of_tuple_type(t, tuple_index, end_skip_count, false /*writing*/, true /*noReductions*/);
+                }
+                // If element index is known and a contextual property with that name exists, return it. Otherwise return the
+                // iterated or element type of the contextual type.
+                if first_spread_index < 0 || index < first_spread_index {
+                    let prop_type = c.get_type_of_property_of_contextual_type(t, &index.to_string());
+                    if prop_type.is_some() {
+                        return prop_type;
+                    }
+                }
+                let undefined_type = c.undefined_type;
+                c.get_iterated_type_or_element_type(IterationUse::Element, t, undefined_type, None /*errorNode*/, false /*checkAssignability*/)
+            },
+            true, /*noReductions*/
+        )
     }
+}
+
+// Go `arg.AsSyntheticExpression().Type.(*Type)`: synthetic expressions store their checker type as a `P<Type>`
+// behind `&'static dyn Any` (created with `alloc(t)`).
+fn synthetic_expression_type(arg: P<Node>) -> P<Type> {
+    *arg.as_synthetic_expression().type_.downcast_ref::<P<Type>>().expect("SyntheticExpression.type_ is not a *Type")
 }
