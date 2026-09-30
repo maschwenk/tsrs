@@ -175,7 +175,7 @@ impl<H: 'static> NameResolver<H> {
                         {
                             // It's an external module. First see if the module has an export default and if the local
                             // name of that export default matches.
-                            result = module_exports.and_then(|e| e.get(ast::InternalSymbolNameDefault));
+                            result = module_exports.and_then(|e| (*e).get(ast::InternalSymbolNameDefault));
                             if let Some(res) = result {
                                 let local_symbol = get_local_symbol_for_export_default(res);
                                 if let Some(local_symbol) = local_symbol {
@@ -196,7 +196,7 @@ impl<H: 'static> NameResolver<H> {
                             //     2. We check === SymbolFlags.Alias in order to check that the symbol is *purely*
                             //        an alias. If we used &, we'd be throwing out symbols that have non alias aspects,
                             //        which is not the desired behavior.
-                            let module_export = module_exports.and_then(|e| e.get(name));
+                            let module_export = module_exports.and_then(|e| (*e).get(name));
                             if let Some(module_export) = module_export {
                                 if module_export.flags.get() == SymbolFlags::Alias
                                     && (ast::get_declaration_of_kind(module_export, Kind::ExportSpecifier).is_some()
@@ -589,7 +589,7 @@ impl<H: 'static> NameResolver<H> {
         }
         // Default implementation does not support following aliases or merged symbols
         if !meaning.is_empty() {
-            if let Some(symbol) = symbols.and_then(|s| s.get(name)) {
+            if let Some(symbol) = symbols.and_then(|s| (*s).get(name)) {
                 if symbol.flags.get().intersects(meaning) {
                     return Some(symbol);
                 }

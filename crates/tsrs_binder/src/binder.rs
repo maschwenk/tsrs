@@ -4,7 +4,7 @@ use bitflags::bitflags;
 use rustc_hash::FxHashSet;
 use tsrs_ast as ast;
 use tsrs_ast::{
-    Diagnostic, FlowFlags, FlowList, FlowNode, Kind, ModifierFlags, Node, NodeFlags, NodeList, SourceFile, Symbol,
+    Diagnostic, DiagnosticExt, FlowFlags, FlowList, FlowNode, Kind, ModifierFlags, Node, NodeFlags, NodeList, SourceFile, Symbol,
     SymbolFlags, SymbolTable,
 };
 use tsrs_core::{alloc_str, tspath, P};
@@ -232,7 +232,7 @@ impl Binder {
             // Otherwise, we'll be merging into a compatible existing symbol (for example when
             // you have multiple 'vars' with the same name in the same container).  In this case
             // just add this node into the declarations list of the symbol.
-            match symbol_table.get(name) {
+            match (*symbol_table).get(name) {
                 None => {
                     symbol = self.new_symbol(SymbolFlags::None, name);
                     symbol_table.set(name, symbol);
@@ -376,7 +376,7 @@ impl Binder {
                             "{}\"{}\"pattern@{}",
                             ast::InternalSymbolNamePrefix,
                             module_name,
-                            ast::get_node_id(attributes)
+                            ast::get_node_id(attributes).0
                         ));
                     }
                 }
@@ -436,7 +436,7 @@ impl Binder {
 }
 
 pub fn get_symbol_name_for_private_identifier(containing_class_symbol: P<Symbol>, description: &str) -> String {
-    format!("{}#{}@{}", ast::InternalSymbolNamePrefix, ast::get_symbol_id(containing_class_symbol), description)
+    format!("{}#{}@{}", ast::InternalSymbolNamePrefix, ast::get_symbol_id(containing_class_symbol).0, description)
 }
 
 impl Binder {
@@ -1094,7 +1094,7 @@ impl Binder {
         // module might have an exported variable called 'prototype'.  We can't allow that as
         // that would clash with the built-in 'prototype' for the class.
         let prototype_symbol = self.new_symbol(SymbolFlags::Property | SymbolFlags::Prototype, "prototype");
-        let symbol_export = ast::get_exports(symbol).get(prototype_symbol.name.get());
+        let symbol_export = (*ast::get_exports(symbol)).get(prototype_symbol.name.get());
         if let Some(symbol_export) = symbol_export {
             let first_declaration = symbol_export.declarations.borrow()[0];
             self.error_on_node(first_declaration, &diagnostics::Duplicate_identifier_0, &[&ast::symbol_name(prototype_symbol)]);
@@ -1136,7 +1136,7 @@ impl Binder {
 
     pub(crate) fn add_late_bound_assignment_declaration_to_symbol(&mut self, node: P<Node>, symbol: P<Symbol>) {
         let exports = ast::get_exports(symbol);
-        let assignment_symbol = match exports.get(ast::InternalSymbolNameAssignmentDeclaration) {
+        let assignment_symbol = match (*exports).get(ast::InternalSymbolNameAssignmentDeclaration) {
             Some(s) => s,
             None => {
                 let s = self.new_symbol(SymbolFlags::None, ast::InternalSymbolNameAssignmentDeclaration);
@@ -1182,7 +1182,7 @@ impl Binder {
         let Some(module_exports) = module_symbol.exports.get() else {
             return;
         };
-        if let Some(export_equals) = module_exports.get(ast::InternalSymbolNameExportEquals) {
+        if let Some(export_equals) = (*module_exports).get(ast::InternalSymbolNameExportEquals) {
             for symbol in module_exports.values() {
                 if symbol.name.get() != ast::InternalSymbolNameExportEquals && symbol.flags.get().intersects(SymbolFlags::Type | SymbolFlags::Namespace) {
                     ast::get_exports(export_equals).set(symbol.name.get(), symbol);
@@ -1205,7 +1205,7 @@ impl Binder {
             } else {
                 // We declare expandos only when there are no non-expando declarations for that name.
                 let exports = ast::get_exports(symbol);
-                let existing = exports.get(self.get_declaration_name(node));
+                let existing = (*exports).get(self.get_declaration_name(node));
                 if existing.is_none() || existing.unwrap().flags.get().intersects(SymbolFlags::Assignment) {
                     self.declare_symbol(exports, Some(symbol), node, SymbolFlags::Property | SymbolFlags::Assignment, SymbolFlags::PropertyExcludes);
                 }
@@ -1460,7 +1460,7 @@ impl Binder {
             let (_, symbol_table) = self.get_this_class_and_symbol_table();
             if let Some(symbol_table) = symbol_table {
                 if let Some(name) = ast::get_element_or_property_access_name(node) {
-                    return symbol_table.get(name.text());
+                    return (*symbol_table).get(name.text());
                 }
             }
             return None;
@@ -1468,7 +1468,7 @@ impl Binder {
         if let Some(symbol) = get_initializer_symbol(self.lookup_entity(node.expression().unwrap(), container)) {
             if let Some(exports) = symbol.exports.get() {
                 if let Some(name) = ast::get_element_or_property_access_name(node) {
-                    return exports.get(name.text());
+                    return (*exports).get(name.text());
                 }
             }
         }
@@ -1478,14 +1478,14 @@ impl Binder {
     pub(crate) fn lookup_name(&self, name: &str, container: P<Node>) -> Option<P<Symbol>> {
         if let Some(locals_container) = container.locals_container_data() {
             if let Some(locals) = locals_container.locals.get() {
-                if let Some(local) = locals.get(name) {
+                if let Some(local) = (*locals).get(name) {
                     return Some(local.export_symbol.get().unwrap_or(local));
                 }
             }
         }
         if let Some(declaration) = container.declaration_data() {
             if let Some(symbol) = declaration.symbol.get() {
-                return symbol.exports.get().and_then(|exports| exports.get(name));
+                return symbol.exports.get().and_then(|exports| (*exports).get(name));
             }
         }
         None
@@ -1839,7 +1839,7 @@ impl Binder {
 
     pub(crate) fn declare_common_js_variable(&mut self, name: &'static str) {
         let locals = ast::get_locals(self.file.as_node());
-        if locals.get(name).is_none() {
+        if (*locals).get(name).is_none() {
             let symbol = self.new_symbol(SymbolFlags::FunctionScopedVariable | SymbolFlags::ModuleExports, name);
             *symbol.declarations.borrow_mut() = vec![self.file.as_node()];
             symbol.value_declaration.set(Some(self.file.as_node()));
@@ -2361,7 +2361,7 @@ impl Binder {
             self.bind(clause);
             fallthrough_flow = self.current_flow();
             if !self.current_flow().flags.get().intersects(FlowFlags::Unreachable) && i != clauses.len() - 1 {
-                clause.as_case_or_default_clause().fallthrough_flow_node().set(self.current_flow);
+                clause.as_case_or_default_clause().set_fallthrough_flow_node(self.current_flow);
             }
             i += 1;
         }
@@ -2745,16 +2745,16 @@ impl Binder {
 
 pub(crate) fn set_flow_node(node: P<Node>, flow_node: Option<P<FlowNode>>) {
     if let Some(data) = node.flow_node_data() {
-        data.flow_node().set(flow_node);
+        data.set_flow_node(flow_node);
     }
 }
 
 pub(crate) fn set_return_flow_node(node: P<Node>, return_flow_node: Option<P<FlowNode>>) {
     match node.kind {
-        Kind::Constructor => node.as_constructor_declaration().return_flow_node().set(return_flow_node),
-        Kind::FunctionDeclaration => node.as_function_declaration().return_flow_node().set(return_flow_node),
-        Kind::FunctionExpression => node.as_function_expression().return_flow_node().set(return_flow_node),
-        Kind::ClassStaticBlockDeclaration => node.as_class_static_block_declaration().return_flow_node().set(return_flow_node),
+        Kind::Constructor => node.as_constructor_declaration().set_return_flow_node(return_flow_node),
+        Kind::FunctionDeclaration => node.as_function_declaration().set_return_flow_node(return_flow_node),
+        Kind::FunctionExpression => node.as_function_expression().set_return_flow_node(return_flow_node),
+        Kind::ClassStaticBlockDeclaration => node.as_class_static_block_declaration().set_return_flow_node(return_flow_node),
         _ => {}
     }
 }
