@@ -159,10 +159,16 @@ pub enum MatchingMode {
 
 // preferences.go
 
+/// Go's `getAllowedEndingsInPreferredOrder` func field closes over `(prefs, host, compilerOptions,
+/// importingSourceFile, oldImportSpecifier)`; a `'static` boxed closure cannot capture the borrowed host and options,
+/// so the owned captures are stored here and `get_allowed_endings_in_preferred_order(host, compiler_options, mode)`
+/// (preferences.rs) takes the other two from the caller, which always holds the same ones Go captured.
 pub struct ModuleSpecifierPreferences {
     pub relative_preference: RelativePreferenceKind,
-    pub get_allowed_endings_in_preferred_order: Box<dyn Fn(ResolutionMode) -> Vec<ModuleSpecifierEnding>>,
     pub exclude_regexes: Vec<String>,
+    pub(crate) prefs: UserPreferences,
+    pub(crate) importing_source_file: P<SourceFile>,
+    pub(crate) old_import_specifier: String,
 }
 
 // util.go
