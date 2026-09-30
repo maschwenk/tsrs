@@ -190,6 +190,15 @@ All link stores use one generic `LinkStore<K, V>` keyed by `P<K>` (`FxHashMap<P<
 uses (`LinkStore<Node, NodeLinks>`, `LinkStore<Symbol, ValueSymbolLinks>`, `LinkStore<SourceFile, SourceFileLinks>`).
 `MembersAndExportsLinks` derefs to `[Cell<Option<P<SymbolTable>>>; 2]`: `links[kind as usize].get()`.
 
+## Name resolution in module files
+
+Every stub file starts with `use crate::*; use tsrs_ast::*; use tsrs_core::*;` plus explicit `use tsrs_ast as ast;` and
+`use tsrs_diagnostics as diagnostics;`. lib.rs re-exports the data model and every stub module (`pub(crate) use
+checker_01::*` …), so free functions of other checker files resolve unqualified. A few checker free functions have the
+same name as a tsrs_ast function (`is_binary_operator`, `is_assignment_operator_or_higher`, `is_type_assertion`,
+`entity_name_to_string`, `is_node_descendant_of`, `is_instantiated_module`, …); an unqualified call from another file is
+ambiguous (E0659): write `crate::name(..)` for the checker's (what Go's unqualified call means) or `ast::name(..)`.
+
 ## Diagnostics
 
 `self.error(node, &diagnostics::X, &[&a, &b]) -> P<Diagnostic>`; same pattern for `error_or_suggestion`,
