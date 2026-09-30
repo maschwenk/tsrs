@@ -682,7 +682,8 @@ impl DeclarationTransformer {
         self.factory().update_mapped_type_node(
             input,
             mapped.readonly_token,
-            self.visit_fn(Some(mapped.type_parameter)).unwrap(),
+            // Go stores a nil child here; see ast::required_child.
+            ast::required_child(self.visit_fn(Some(mapped.type_parameter)), mapped.type_parameter),
             self.visit_fn(mapped.name_type),
             mapped.question_token,
             type_node,
@@ -762,7 +763,14 @@ impl DeclarationTransformer {
         self.enclosing_declaration.set(old_enclosing_decl);
         let false_type = self.visit_fn(Some(conditional.false_type));
 
-        self.factory().update_conditional_type_node(input, check_type.unwrap(), extends_type.unwrap(), true_type.unwrap(), false_type.unwrap())
+        // Go stores nil children here; see ast::required_child.
+        self.factory().update_conditional_type_node(
+            input,
+            ast::required_child(check_type, conditional.check_type),
+            ast::required_child(extends_type, conditional.extends_type),
+            ast::required_child(true_type, conditional.true_type),
+            ast::required_child(false_type, conditional.false_type),
+        )
     }
 
     // transform.go:815
