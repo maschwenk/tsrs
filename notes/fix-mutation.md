@@ -21,7 +21,8 @@ Goal: show that `tsrs` reports the same diagnostics as `tsgo-ref` on *wrong* cod
 
 Batches 1-12 were first compared on keys with the placeholder printer (origin/main), then all 15 were compared on full
 message text with `nb-integrate` at add8ff4 + its uncommitted printer wiring (same base as main d1170eb), frozen copy.
-Batches 13-15 used `--heavy 0.7` and weights favoring the rarer mutators.
+Batches 13-15 used `--heavy 0.7` and weights favoring the rarer mutators. Batch 16 ran main after parallel checking
+became the default (4 checkers) to cover the checker-pool path.
 
 | batch | sites | files | ref diags | key diffs (placeholder printer) | full-text diffs (node-builder build) |
 | --- | --- | --- | --- | --- | --- |
@@ -40,7 +41,8 @@ Batches 13-15 used `--heavy 0.7` and weights favoring the rarer mutators.
 | 13 | 263 | 263 | 643 | - | 0 |
 | 14 | 265 | 265 | 414 | - | 0 |
 | 15 | 264 | 264 | 698 | - | 0 |
-| total | 4,117 | 4,117 distinct | 10,373 (73 distinct codes) | 7 / 8, 2 causes | 0 |
+| 16 | 262 | 262 | 695 | 2 / 2 (cause 1; main 8a148e0, 4 parallel checkers) | 0 |
+| total | 4,379 | 4,379 distinct | 11,068 | 9 / 10, 2 causes | 0 |
 
 Mutator mix: rename_import_use 420, add_arg 335, bad_method 325, remove_arg 318, str_change 313, prop_rename 277,
 prop_drop 275, remove_async 250, remove_await 206, generic_arg 197, swap_args 173, num_to_str 159, delete_return 149,
