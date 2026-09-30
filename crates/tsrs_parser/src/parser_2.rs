@@ -1,8 +1,10 @@
 use tsrs_ast::{self as ast, Kind, ModifierList, Node, NodeFlags, NodeList, TokenFlags};
-use tsrs_core::{alloc_str, TextRange, P};
+use tsrs_core::{TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_scanner as scanner;
 
+use crate::parser_1::JsdocScannerInfo;
+use crate::utilities::{token_is_identifier_or_keyword, token_is_identifier_or_keyword_or_greater_than};
 use crate::*;
 
 impl Parser {
@@ -25,7 +27,7 @@ impl Parser {
         //  { ImportsList, }
         let imports = self
             .parse_bracketed_list(
-                ParsingContext::PCImportOrExportSpecifiers,
+                ParsingContext::ImportOrExportSpecifiers,
                 Parser::parse_import_specifier,
                 Kind::OpenBraceToken,
                 Kind::CloseBraceToken,
@@ -266,7 +268,7 @@ impl Parser {
         //  { ImportsList, }
         let exports = self
             .parse_bracketed_list(
-                ParsingContext::PCImportOrExportSpecifiers,
+                ParsingContext::ImportOrExportSpecifiers,
                 Parser::parse_export_specifier,
                 Kind::OpenBraceToken,
                 Kind::CloseBraceToken,
@@ -723,9 +725,9 @@ impl Parser {
         id
     }
 
-    pub(crate) fn new_identifier(&mut self, text: &str) -> P<Node> {
+    pub(crate) fn new_identifier(&mut self, text: &'static str) -> P<Node> {
         self.identifier_count += 1;
-        let id = self.factory.new_identifier(alloc_str(text));
+        let id = self.factory.new_identifier(text);
         if text == "await" {
             self.statement_has_await_identifier = true;
         }
@@ -740,7 +742,7 @@ impl Parser {
 
     pub(crate) fn parse_private_identifier(&mut self) -> P<Node> {
         let pos = self.node_pos();
-        let text = alloc_str(&self.scanner.token_value());
+        let text = self.scanner.token_value();
         self.next_token();
         let node = self.factory.new_private_identifier(text);
         self.finish_node(node, pos)
@@ -757,7 +759,7 @@ impl Parser {
     }
 
     pub(crate) fn re_scan_slash_token(&mut self) -> Kind {
-        self.token = self.scanner.re_scan_slash_token();
+        self.token = self.scanner.re_scan_slash_token(false);
         self.token
     }
 
@@ -776,7 +778,7 @@ impl Parser {
     pub(crate) fn parse_type_arguments(&mut self) -> Option<P<NodeList>> {
         if self.token == Kind::LessThanToken {
             return self.parse_bracketed_list(
-                ParsingContext::PCTypeArguments,
+                ParsingContext::TypeArguments,
                 Parser::parse_type,
                 Kind::LessThanToken,
                 Kind::GreaterThanToken,
@@ -871,7 +873,7 @@ impl Parser {
         let open_brace_position = self.scanner.token_start();
         if self.parse_expected(Kind::OpenBraceToken) {
             multi_line = self.has_preceding_line_break();
-            elements = self.parse_delimited_list(ParsingContext::PCImportAttributes, Parser::parse_import_attribute);
+            elements = self.parse_delimited_list(ParsingContext::ImportAttributes, Parser::parse_import_attribute);
             if !self.parse_expected(Kind::CloseBraceToken) {
                 if let Some(&last_diagnostic) = self.diagnostics.last() {
                     if last_diagnostic.code() == diagnostics::X_0_expected.code() {
@@ -944,7 +946,7 @@ impl Parser {
         }
         let type_node = self.parse_type_annotation();
         self.parse_semicolon();
-        let members = self.parse_list(ParsingContext::PCTypeMembers, Parser::parse_type_member);
+        let members = self.parse_list(ParsingContext::TypeMembers, Parser::parse_type_member);
         self.parse_expected(Kind::CloseBraceToken);
         let node =
             self.factory.new_mapped_type_node(readonly_token, type_parameter, name_type, question_token, type_node, members);
@@ -1017,7 +1019,7 @@ impl Parser {
     pub(crate) fn parse_type_parameters(&mut self) -> Option<P<NodeList>> {
         if self.token == Kind::LessThanToken {
             return self.parse_bracketed_list(
-                ParsingContext::PCTypeParameters,
+                ParsingContext::TypeParameters,
                 Parser::parse_type_parameter,
                 Kind::LessThanToken,
                 Kind::GreaterThanToken,
@@ -1103,7 +1105,7 @@ impl Parser {
         let save_context_flags = self.context_flags;
         self.set_context_flags(NodeFlags::YieldContext, flags.intersects(ParseFlags::Yield));
         self.set_context_flags(NodeFlags::AwaitContext, flags.intersects(ParseFlags::Await));
-        let parameters = self.parse_delimited_list(ParsingContext::PCParameters, move |p: &mut Parser| {
+        let parameters = self.parse_delimited_list(ParsingContext::Parameters, move |p: &mut Parser| {
             let parameter = p.parse_parameter_ex(in_await_context, allow_ambiguity);
             if let Some(parameter) = parameter {
                 if !flags.intersects(ParseFlags::Type) {
@@ -1427,7 +1429,7 @@ impl Parser {
     ) -> P<Node> {
         let parameters = self
             .parse_bracketed_list(
-                ParsingContext::PCParameters,
+                ParsingContext::Parameters,
                 Parser::parse_parameter,
                 Kind::OpenBracketToken,
                 Kind::CloseBracketToken,
@@ -1490,7 +1492,7 @@ impl Parser {
 
     pub(crate) fn parse_object_type_members(&mut self) -> P<NodeList> {
         if self.parse_expected(Kind::OpenBraceToken) {
-            let members = self.parse_list(ParsingContext::PCTypeMembers, Parser::parse_type_member);
+            let members = self.parse_list(ParsingContext::TypeMembers, Parser::parse_type_member);
             self.parse_expected(Kind::CloseBraceToken);
             return members;
         }
@@ -1501,7 +1503,7 @@ impl Parser {
         let pos = self.node_pos();
         let elements = self
             .parse_bracketed_list(
-                ParsingContext::PCTupleElementTypes,
+                ParsingContext::TupleElementTypes,
                 Parser::parse_tuple_element_name_or_tuple_element_type,
                 Kind::OpenBracketToken,
                 Kind::CloseBracketToken,
@@ -1597,7 +1599,7 @@ impl Parser {
             self.re_scan_template_token(false /*isTaggedTemplate*/);
         }
         let pos = self.node_pos();
-        let text = alloc_str(&self.scanner.token_value());
+        let text = self.scanner.token_value();
         let raw_text = self.get_template_literal_raw_text(2 /*endLength*/);
         let result = self.factory.new_template_head(text, raw_text, self.scanner.token_flags());
         self.next_token();
@@ -1610,7 +1612,7 @@ impl Parser {
         if self.scanner.token_flags().intersects(TokenFlags::Unterminated) {
             end_length = 0;
         }
-        alloc_str(&token_text[1..token_text.len() - end_length])
+        &token_text[1..token_text.len() - end_length]
     }
 
     pub(crate) fn parse_template_type_spans(&mut self) -> P<NodeList> {
@@ -1650,11 +1652,11 @@ impl Parser {
         let pos = self.node_pos();
         let result;
         if self.token == Kind::TemplateMiddle {
-            let text = alloc_str(&self.scanner.token_value());
+            let text = self.scanner.token_value();
             let raw_text = self.get_template_literal_raw_text(2 /*endLength*/);
             result = self.factory.new_template_middle(text, raw_text, self.scanner.token_flags());
         } else {
-            let text = alloc_str(&self.scanner.token_value());
+            let text = self.scanner.token_value();
             let raw_text = self.get_template_literal_raw_text(1 /*endLength*/);
             result = self.factory.new_template_tail(text, raw_text, self.scanner.token_flags());
         }
