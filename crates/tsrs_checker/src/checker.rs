@@ -959,6 +959,7 @@ pub struct Checker {
     pub non_existent_properties: Set<NonExistentPropertyKey>,
     pub deferred_diagnostic_callbacks: Vec<Box<dyn FnOnce(&mut Checker)>>,
     pub type_to_string_nodebuilder: Option<P<NodeBuilder>>,
+    pub emit_resolver: Option<P<EmitResolver>>, // Go `emitResolver` + `emitResolverOnce`: None until `get_emit_resolver`
 }
 
 /// Go `NewChecker(program, tracer)`. The tracer and the returned mutex are not ported.
@@ -1296,6 +1297,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         non_existent_properties: Set::new(),
         deferred_diagnostic_callbacks: Vec::new(),
         type_to_string_nodebuilder: None,
+        emit_resolver: None,
     });
     c.undefined_symbol = c.new_symbol(SymbolFlags::Property, "undefined");
     c.arguments_symbol = c.new_symbol(SymbolFlags::Property, "arguments");

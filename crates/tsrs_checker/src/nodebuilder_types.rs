@@ -1,7 +1,9 @@
 //! Non-function declarations of nodebuilder.go, nodebuilderimpl.go and nodebuilderscopes.go (the node builder data
 //! model). See docs/CHECKER.md, "Node builder".
 
-use tsrs_ast::{NodeFactory, NodeVisitor};
+use std::cell::OnceCell;
+
+use tsrs_ast::{NodeFactory, VisitFn};
 use tsrs_core::collections::{CopyOnWriteMap, CopyOnWriteSet};
 use tsrs_module::ModeAwareCacheKey;
 
@@ -158,20 +160,27 @@ pub struct NodeBuilderImpl {
     pub pc: P<PseudoChecker>,
 
     // cache
-    pub links: LinkStore<Node, NodeBuilderLinks>,
-    pub symbol_links: LinkStore<Symbol, NodeBuilderSymbolLinks>,
+    pub links: tsrs_core::LinkStore<Node, NodeBuilderLinks>,
+    pub symbol_links: tsrs_core::LinkStore<Symbol, NodeBuilderSymbolLinks>,
 
     // state
     pub ctx: Cell<Option<P<NodeBuilderContext>>>,
 
     // reusable visitor
-    /// Go builds it once with `b.cloneBindingName` as the visit callback. A Rust `VisitFn` is a `'static` closure and
-    /// cannot capture the `&mut Checker` that `clone_binding_name` needs; `new_node_builder_impl` leaves it `None`
-    /// and `clone_binding_name` decides how to visit (see docs/CHECKER.md, "Node builder").
-    pub clone_binding_name_visitor: RefCell<Option<NodeVisitor>>,
+    /// Go's `cloneBindingNameVisitor` (visit callback `b.cloneBindingName`), kept as its callback: a `NodeVisitor`
+    /// holds nothing but the callback, the factory and hooks, and a visit re-enters it, so `clone_binding_name` builds
+    /// `new_node_visitor(Some(visit.clone()), Some(b.f.clone()), NodeVisitorHooks::default())` per call and runs it
+    /// under `b.checker_slot.lend(c, ..)`. Set by `new_node_builder_impl`.
+    pub clone_binding_name_visitor: OnceCell<VisitFn>,
 
     // symbols for synthesized identifiers, needed for e.g. inlay hints
     pub id_to_symbol: RefCell<FxHashMap<P<Node>, P<Symbol>>>,
+
+    /// Rust only: lends the checker to visitor callbacks (`cloneBindingName`, `getExistingNodeTreeVisitor`), which
+    /// Go writes as closures over `b.ch`. See `CheckerSlot`.
+    pub checker_slot: P<CheckerSlot>,
+    /// Rust only: this builder's own handle, for closures that capture `b` (`b.as_p()`). Set by `new_node_builder_impl`.
+    pub this: OnceCell<P<NodeBuilderImpl>>,
 }
 
 impl NodeBuilderImpl {
@@ -179,6 +188,48 @@ impl NodeBuilderImpl {
     #[inline]
     pub fn ctx(&self) -> P<NodeBuilderContext> {
         self.ctx.get().unwrap()
+    }
+
+    /// `b` as a copyable handle, for closures (Go captures the `*NodeBuilderImpl`).
+    #[inline]
+    pub fn as_p(&self) -> P<NodeBuilderImpl> {
+        *self.this.get().unwrap()
+    }
+}
+
+/// Rust only: gives `ast::NodeVisitor` callbacks access to the checker. Go's visitor callbacks are closures over
+/// `b.ch`; a Rust `VisitFn` is a `'static` `Rc<dyn Fn(&mut NodeVisitor, P<Node>)>` and cannot capture `&mut Checker`.
+/// The code that starts a visit lends its checker for the duration (`slot.lend(c, || v.visit_node(n))`); a callback
+/// borrows it back with `slot.with(|c| ..)`, and must `lend` its own `c` again before re-entering the visitor
+/// (`slot.with(|c| { ..; slot.lend(c, || v.visit_each_child(Some(n))) })`), so every checker reference is derived from
+/// the one live above it. Like a `RefCell`, a second `with` without an intervening `lend` panics, and so does `with`
+/// outside any `lend`.
+#[derive(Default)]
+pub struct CheckerSlot {
+    ptr: Cell<Option<std::ptr::NonNull<Checker>>>,
+    in_use: Cell<bool>,
+}
+
+impl CheckerSlot {
+    /// Makes `c` available to `with` while `f` runs (nests; the previous state is restored afterwards).
+    pub fn lend<R>(&self, c: &mut Checker, f: impl FnOnce() -> R) -> R {
+        let saved = (self.ptr.replace(Some(std::ptr::NonNull::from(c))), self.in_use.replace(false));
+        let result = f();
+        self.ptr.set(saved.0);
+        self.in_use.set(saved.1);
+        result
+    }
+
+    /// Calls `f` with the checker lent by the innermost `lend`.
+    pub fn with<R>(&self, f: impl FnOnce(&mut Checker) -> R) -> R {
+        let mut ptr = self.ptr.get().expect("CheckerSlot::with outside CheckerSlot::lend");
+        assert!(!self.in_use.replace(true), "CheckerSlot::with re-entered without CheckerSlot::lend");
+        // SAFETY: `ptr` comes from the `&mut Checker` passed to the innermost active `lend`, which is borrowed for
+        // the whole `lend` call and not otherwise usable while `f` runs; `in_use` guarantees that at most one
+        // reference derived from it is live (a nested `with` needs a nested `lend`, which derives from this one).
+        let result = f(unsafe { ptr.as_mut() });
+        self.in_use.set(false);
+        result
     }
 }
 
@@ -215,4 +266,104 @@ pub enum propertyNameNodeKind {
 pub struct localsRecord {
     pub name: String,
     pub old_symbol: P<Symbol>,
+}
+
+// nodecopy.go
+
+/// Go `recoveryBoundary`, handled as `P<recoveryBoundary>` (the wrapping tracker holds it). Fields Go sets at
+/// construction and only reads are plain; the rest are `Cell`/`RefCell`.
+pub struct recoveryBoundary {
+    pub ctx: P<NodeBuilderContext>,
+    pub had_error: Cell<bool>,
+    pub deferred_reports: RefCell<Vec<Box<dyn FnOnce()>>>,
+    pub old_tracker: Option<&'static dyn SymbolTracker>,
+    /// `finalizeBoundary` moves it back into the context (`take()`).
+    pub old_tracked_symbols: RefCell<Vec<P<TrackedSymbolArgs>>>,
+    pub tracked_symbols: RefCell<Vec<P<TrackedSymbolArgs>>>,
+    pub old_encountered_error: bool,
+    pub old_approximate_length: i32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct originalRecoveryScopeState {
+    pub tracked_symbols_top: i32,
+    pub unreported_errors_top: i32,
+    pub had_error: bool,
+}
+
+/// Go `wrappingTracker`, handled as `P<wrappingTracker>` and used as `&'static dyn SymbolTracker`; the inherent
+/// methods are in nodecopy.rs. `markError(w.wrapped.ReportX)` passes `Some(Box::new(move || wrapped.report_x()))`
+/// with `let wrapped = self.wrapped;`.
+pub struct wrappingTracker {
+    pub wrapped: &'static dyn SymbolTracker,
+    pub bound: P<recoveryBoundary>,
+}
+
+impl SymbolTracker for wrappingTracker {
+    fn track_symbol(&self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
+        wrappingTracker::track_symbol(self, symbol, enclosing_declaration, meaning)
+    }
+    fn report_inaccessible_this_error(&self) {
+        wrappingTracker::report_inaccessible_this_error(self)
+    }
+    fn report_private_in_base_of_class_expression(&self, property_name: &str) {
+        wrappingTracker::report_private_in_base_of_class_expression(self, property_name)
+    }
+    fn report_inaccessible_unique_symbol_error(&self) {
+        wrappingTracker::report_inaccessible_unique_symbol_error(self)
+    }
+    fn report_cyclic_structure_error(&self) {
+        wrappingTracker::report_cyclic_structure_error(self)
+    }
+    fn report_likely_unsafe_import_required_error(&self, specifier: &str, symbol_name: &str) {
+        wrappingTracker::report_likely_unsafe_import_required_error(self, specifier, symbol_name)
+    }
+    fn report_truncation_error(&self) {
+        wrappingTracker::report_truncation_error(self)
+    }
+    fn report_nonlocal_augmentation(&self, containing_file: P<SourceFile>, parent_symbol: P<Symbol>, augmenting_symbol: P<Symbol>) {
+        wrappingTracker::report_nonlocal_augmentation(self, containing_file, parent_symbol, augmenting_symbol)
+    }
+    fn report_non_serializable_property(&self, property_name: &str) {
+        wrappingTracker::report_non_serializable_property(self, property_name)
+    }
+    fn report_inference_fallback(&self, node: P<Node>) {
+        wrappingTracker::report_inference_fallback(self, node)
+    }
+    fn push_error_fallback_node(&self, node: Option<P<Node>>) {
+        wrappingTracker::push_error_fallback_node(self, node)
+    }
+    fn pop_error_fallback_node(&self) {
+        wrappingTracker::pop_error_fallback_node(self)
+    }
+}
+
+// emitresolver.go (only the part the node builder and symbol accessibility use; see emitresolver_subset.rs)
+
+// Links for jsx
+#[derive(Default)]
+pub struct JSXLinks {
+    pub import_ref: Cell<Option<P<Node>>>,
+}
+
+// Links for declarations
+
+#[derive(Default)]
+pub struct DeclarationLinks {
+    pub is_visible: Cell<Tristate>, // if declaration is depended upon by exported declarations
+}
+
+#[derive(Default)]
+pub struct DeclarationFileLinks {
+    pub aliases_marked: Cell<bool>, // if file has had alias visibility marked
+}
+
+/// Go `EmitResolver`, handled as `P<EmitResolver>`, a checker holder (`&self, c: &mut Checker`). Go's `checker`
+/// field is dropped; `checkerMu` (locking wrappers are not ported), `isValueAliasDeclaration`, `aliasMarkingVisitor`
+/// and `referenceResolver` serve only the emit-side functions, which are not ported.
+#[derive(Default)]
+pub struct EmitResolver {
+    pub jsx_links: tsrs_core::LinkStore<Node, JSXLinks>,
+    pub declaration_links: tsrs_core::LinkStore<Node, DeclarationLinks>,
+    pub declaration_file_links: tsrs_core::LinkStore<Node, DeclarationFileLinks>,
 }

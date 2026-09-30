@@ -127,10 +127,6 @@ pub struct VerbosityContext {
     pub truncated: Cell<bool>, // output: whether output was truncated
 }
 
-/// Placeholder for Go `EmitResolver` (emitresolver.go is not ported).
-#[derive(Default)]
-pub struct EmitResolver {}
-
 // checker/symbolaccessibility.go
 
 pub struct accessibleSymbolChainContext {
