@@ -2145,87 +2145,522 @@ pub(crate) fn is_spread_into_call_or_new(node: P<Node>) -> bool {
 impl Checker {
     // checker.go:8294
     pub(crate) fn check_qualified_name(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        let left = node.as_qualified_name().left;
+        let left_type = if is_part_of_type_query(node) && is_this_identifier(left) {
+            let t = self.check_this_expression(left);
+            self.check_non_null_type(t, left)
+        } else {
+            self.check_non_null_expression(left)
+        };
+        self.check_property_access_expression_or_qualified_name(node, left, left_type, node.as_qualified_name().right, check_mode, false)
     }
 
     // checker.go:8305
     pub(crate) fn check_indexed_access(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        if node.flags().intersects(NodeFlags::OptionalChain) {
+            return self.check_element_access_chain(node, check_mode);
+        }
+        let expr_type = self.check_non_null_expression(node.expression().unwrap());
+        self.check_element_access_expression(node, expr_type, check_mode)
     }
 
     // checker.go:8312
     pub(crate) fn check_element_access_chain(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        let expression = node.expression().unwrap();
+        let expr_type = self.check_expression(expression);
+        let non_optional_type = self.get_optional_expression_type(expr_type, expression);
+        let non_null_type = self.check_non_null_type(non_optional_type, expression);
+        let t = self.check_element_access_expression(node, non_null_type, check_mode);
+        self.propagate_optional_type_marker(t, node, non_optional_type != expr_type)
     }
 
     // checker.go:8318
     pub(crate) fn check_element_access_expression(&mut self, node: P<Node>, expr_type: P<Type>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        let mut object_type = expr_type;
+        if get_assignment_target_kind(node) != AssignmentKind::None || self.is_method_access_for_call(node) {
+            object_type = self.get_widened_type(object_type);
+        }
+        let index_expression = node.as_element_access_expression().argument_expression;
+        let index_type = self.check_expression(index_expression);
+        if self.is_error_type(object_type) || object_type == self.silent_never_type {
+            return object_type;
+        }
+        if is_const_enum_object_type(object_type) && !is_string_literal_like(index_expression) {
+            self.error(Some(index_expression), &diagnostics::A_const_enum_member_can_only_be_accessed_using_a_string_literal, &[]);
+            return self.error_type;
+        }
+        let mut effective_index_type = index_type;
+        if self.is_for_in_variable_for_numeric_property_names(index_expression) {
+            effective_index_type = self.number_type;
+        }
+        let assignment_target_kind = get_assignment_target_kind(node);
+        let access_flags = if assignment_target_kind == AssignmentKind::None {
+            AccessFlags::ExpressionPosition
+        } else {
+            AccessFlags::Writing
+                | (if assignment_target_kind == AssignmentKind::Compound { AccessFlags::ExpressionPosition } else { AccessFlags::None })
+                | (if self.is_generic_object_type(object_type) && !is_this_type_parameter(object_type) { AccessFlags::NoIndexSignatures } else { AccessFlags::None })
+        };
+        let indexed_access_type =
+            self.get_indexed_access_type_or_undefined(object_type, effective_index_type, access_flags, Some(node), None).unwrap_or(self.error_type);
+        let resolved_symbol = self.get_resolved_symbol_or_nil(node);
+        let flow_type = self.get_flow_type_of_access_expression(node, resolved_symbol, indexed_access_type, index_expression, check_mode);
+        self.check_indexed_access_index_type(flow_type, node)
     }
 
+    // Return true if given node is an expression consisting of an identifier (possibly parenthesized)
+    // that references a for-in variable for an object with numeric property names.
     // checker.go:8351
     pub(crate) fn is_for_in_variable_for_numeric_property_names(&mut self, expr: P<Node>) -> bool {
-        todo!()
+        let e = skip_parentheses(expr);
+        if is_identifier(e) {
+            let symbol = self.get_resolved_symbol(e);
+            if symbol.flags().intersects(SymbolFlags::Variable) {
+                let mut child = expr;
+                let mut node = expr.parent();
+                while let Some(n) = node {
+                    if is_for_in_statement(n) && child == n.as_for_in_or_of_statement().statement && self.get_for_in_variable_symbol(n) == Some(symbol) && {
+                        let t = self.get_type_of_expression(n.expression().unwrap());
+                        self.has_numeric_property_names(t)
+                    } {
+                        return true;
+                    }
+                    child = n;
+                    node = n.parent();
+                }
+            }
+        }
+        false
     }
 
+    // Return the symbol of the for-in variable declared or referenced by the given for-in statement.
     // checker.go:8371
     pub(crate) fn get_for_in_variable_symbol(&mut self, node: P<Node>) -> Option<P<Symbol>> {
-        todo!()
+        let initializer = node.initializer().unwrap();
+        if is_variable_declaration_list(initializer) {
+            let declarations = initializer.as_variable_declaration_list().declarations.nodes;
+            if !declarations.is_empty() {
+                let variable = declarations[0];
+                if !is_binding_pattern(variable.name().unwrap()) {
+                    return self.get_symbol_of_declaration(variable);
+                }
+            }
+        } else if is_identifier(initializer) {
+            return Some(self.get_resolved_symbol(initializer));
+        }
+        None
     }
 
+    // Return true if the given type is considered to have numeric property names.
     // checker.go:8388
     pub(crate) fn has_numeric_property_names(&mut self, t: P<Type>) -> bool {
-        todo!()
+        let number_type = self.number_type;
+        self.get_index_infos_of_type(t).len() == 1 && self.get_index_info_of_type(t, number_type).is_some()
     }
 
     // checker.go:8392
     pub(crate) fn check_indexed_access_index_type(&mut self, t: P<Type>, access_node: P<Node>) -> P<Type> {
-        todo!()
+        if !t.flags().intersects(TypeFlags::IndexedAccess) {
+            return t;
+        }
+        // Check if the index type is assignable to 'keyof T' for the object type.
+        let object_type = t.as_indexed_access_type().object_type.get().unwrap();
+        let index_type = t.as_indexed_access_type().index_type.get().unwrap();
+        // skip index type deferral on remapping mapped types
+        let object_index_type = if self.is_generic_mapped_type(object_type) && self.get_mapped_type_name_type_kind(object_type) == MappedTypeNameTypeKind::Remapping {
+            self.get_index_type_for_mapped_type(object_type, IndexFlags::None)
+        } else {
+            self.get_index_type_ex(object_type, IndexFlags::None)
+        };
+        let number_type = self.number_type;
+        let has_number_index_info = self.get_index_info_of_type(object_type, number_type).is_some();
+        if every_type(index_type, |t| self.is_type_assignable_to(t, object_index_type) || has_number_index_info && self.is_applicable_index_type(t, number_type)) {
+            if access_node.kind == Kind::ElementAccessExpression
+                && is_assignment_target(access_node)
+                && object_type.object_flags().intersects(ObjectFlags::Mapped)
+                && get_mapped_type_modifiers(object_type).intersects(MappedTypeModifiers::IncludeReadonly)
+            {
+                let type_string = self.type_to_string(object_type, None);
+                self.error(Some(access_node), &diagnostics::Index_signature_in_type_0_only_permits_reading, &[&type_string]);
+            }
+            return t;
+        }
+        if self.is_generic_object_type(object_type) {
+            let property_name = self.get_property_name_from_index(index_type, Some(access_node));
+            if property_name != InternalSymbolNameMissing {
+                let property_symbol = self.get_constituent_property(object_type, &property_name);
+                if let Some(property_symbol) = property_symbol {
+                    if get_declaration_modifier_flags_from_symbol(property_symbol).intersects(ModifierFlags::NonPublicAccessibilityModifier) {
+                        self.error(Some(access_node), &diagnostics::Private_or_protected_member_0_cannot_be_accessed_on_a_type_parameter, &[&property_name]);
+                        return self.error_type;
+                    }
+                }
+            }
+        }
+        let index_string = self.type_to_string(index_type, None);
+        let object_string = self.type_to_string(object_type, None);
+        self.error(Some(access_node), &diagnostics::Type_0_cannot_be_used_to_index_type_1, &[&index_string, &object_string]);
+        self.error_type
     }
 
     // checker.go:8429
     pub(crate) fn get_constituent_property(&mut self, object_type: P<Type>, property_name: &str) -> Option<P<Symbol>> {
-        todo!()
+        let apparent_type = self.get_apparent_type(object_type);
+        for t in apparent_type.distributed() {
+            let prop = self.get_property_of_type(t, property_name);
+            if prop.is_some() {
+                return prop;
+            }
+        }
+        None
     }
 
     // checker.go:8439
     pub(crate) fn check_import_call_expression(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        // Check grammar of dynamic import
+        self.check_grammar_import_call_expression(node);
+        let args = node.arguments();
+        if args.is_empty() {
+            // No call arguments exist, so there are no child expressions to check.
+            let any_type = self.any_type;
+            return self.create_promise_return_type(node, any_type);
+        }
+        let specifier = args[0];
+        let specifier_type = self.check_expression_cached(specifier);
+        let mut options_type: Option<P<Type>> = None;
+        if args.len() > 1 {
+            options_type = Some(self.check_expression_cached(args[1]));
+        }
+        // Even though multiple arguments is grammatically incorrect, type-check extra arguments for completion
+        for &arg in &args[2.min(args.len())..] {
+            self.check_expression_cached(arg);
+        }
+        let string_type = self.string_type;
+        if specifier_type.flags().intersects(TypeFlags::Nullable) || !self.is_type_assignable_to(specifier_type, string_type) {
+            let type_string = self.type_to_string(specifier_type, None);
+            self.error(Some(specifier), &diagnostics::Dynamic_import_s_specifier_must_be_of_type_string_but_here_has_type_0, &[&type_string]);
+        }
+        let mut import_attributes_type: Option<P<Type>> = None;
+        if let Some(options_type) = options_type {
+            let import_call_options_type = self.get_global_import_call_options_type_checked();
+            if import_call_options_type != self.empty_object_type {
+                let target = self.get_nullable_type(import_call_options_type, TypeFlags::Undefined);
+                self.check_type_assignable_to(options_type, target, Some(args[1]), None);
+            }
+            if is_object_literal_expression(args[1]) {
+                for &prop in args[1].as_object_literal_expression().properties.nodes {
+                    if is_property_assignment(prop) && is_identifier(prop.name().unwrap()) && prop.name().unwrap().text() == "assert" {
+                        self.error(prop.name(), &diagnostics::Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert, &[]);
+                        break;
+                    }
+                }
+            }
+            import_attributes_type = self.get_type_of_property_of_type(options_type, "with");
+        }
+        // resolveExternalModuleName will return undefined if the moduleReferenceExpression is not a string literal
+        let module_symbol = self.resolve_external_module_name(node, specifier, false /*ignoreErrors*/, import_attributes_type);
+        if let Some(module_symbol) = module_symbol {
+            let es_module_symbol = self.resolve_external_module_symbol(module_symbol, true /*dontResolveAlias*/);
+            // SIG: Go checks esModuleSymbol for nil; resolve_external_module_symbol returns P<Symbol> (never nil there).
+            let es_module_type = self.get_type_of_symbol(es_module_symbol);
+            let mut synthetic_type =
+                self.get_type_with_synthetic_default_only(Some(es_module_type), es_module_symbol, module_symbol, specifier, import_attributes_type);
+            if synthetic_type.is_none() {
+                let es_module_type = self.get_type_of_symbol(es_module_symbol);
+                synthetic_type = Some(self.get_type_with_synthetic_default_import_type(es_module_type, es_module_symbol, module_symbol, specifier));
+            }
+            return self.create_promise_return_type(node, synthetic_type.unwrap());
+        }
+        let any_type = self.any_type;
+        self.create_promise_return_type(node, any_type)
     }
 
+    /**
+     * Syntactically and semantically checks a call or new expression.
+     * @param node The call/new expression to be checked.
+     * @returns On success, the expression's signature's return type. On failure, anyType.
+     */
     // checker.go:8496
     pub(crate) fn check_call_expression(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        todo!()
+        // SIG: check_grammar_type_arguments should take Option<P<NodeList>> (Go passes a nil list); with a nil list it
+        // returns false without side effects, so skipping the call is equivalent.
+        if let Some(type_argument_list) = node.type_argument_list() {
+            self.check_grammar_type_arguments(node, type_argument_list);
+        }
+        let signature = self.get_resolved_signature(node, None /*candidatesOutArray*/, check_mode);
+        if signature == self.resolving_signature {
+            // CheckMode.SkipGenericFunctions is enabled and this is a call to a generic function that
+            // returns a function type. We defer checking and return silentNeverType.
+            return self.silent_never_type;
+        }
+        self.check_deprecated_signature(signature, node);
+        if node.expression().unwrap().kind == Kind::SuperKeyword {
+            return self.void_type;
+        }
+        if is_new_expression(node) {
+            let declaration = signature.declaration();
+            if let Some(declaration) = declaration {
+                if !is_constructor_declaration(declaration) && !is_construct_signature_declaration(declaration) && !is_constructor_type_node(declaration) {
+                    // When resolved signature is a call signature (and not a construct signature) the result type is any
+                    if self.no_implicit_any {
+                        self.error(Some(node), &diagnostics::X_new_expression_whose_target_lacks_a_construct_signature_implicitly_has_an_any_type, &[]);
+                    }
+                    return self.any_type;
+                }
+            }
+        }
+        if is_in_js_file(node) && self.is_common_js_require(node) {
+            return self.resolve_external_module_type_by_literal(node.arguments()[0]);
+        }
+        let return_type = self.get_return_type_of_signature(signature);
+        // Treat any call to the global 'Symbol' function that is part of a const variable or readonly property
+        // as a fresh unique symbol literal type.
+        if return_type.flags().intersects(TypeFlags::ESSymbolLike) && self.is_symbol_or_symbol_for_call(node) {
+            return self.get_es_symbol_like_type_for_node(walk_up_parenthesized_expressions(node.parent()).unwrap());
+        }
+        if is_call_expression(node)
+            && node.question_dot_token().is_none()
+            && is_expression_statement(node.parent().unwrap())
+            && return_type.flags().intersects(TypeFlags::Void)
+            && self.get_type_predicate_of_signature(signature).is_some()
+        {
+            let expression = node.expression().unwrap();
+            if !is_dotted_name(expression) {
+                self.error(Some(expression), &diagnostics::Assertions_require_the_call_target_to_be_an_identifier_or_qualified_name, &[]);
+            } else if self.get_effects_signature(node).is_none() {
+                let diagnostic = self.error(
+                    Some(expression),
+                    &diagnostics::Assertions_require_every_name_in_the_call_target_to_be_declared_with_an_explicit_type_annotation,
+                    &[],
+                );
+                self.get_type_of_dotted_name(expression, Some(diagnostic));
+            }
+        }
+        return_type
     }
 
     // checker.go:8538
     pub(crate) fn check_deprecated_signature(&mut self, sig: P<Signature>, node: P<Node>) {
-        todo!()
+        if sig.flags().intersects(SignatureFlags::IsSignatureCandidateForOverloadFailure) {
+            return;
+        }
+        if let Some(declaration) = sig.declaration() {
+            if self.is_deprecated_declaration(declaration) {
+                let suggestion_node = self.get_deprecated_suggestion_node(node);
+                let name = try_get_property_access_or_identifier_to_string(get_invoked_expression(node));
+                let signature_string = self.signature_to_string(sig);
+                // SIG: Go passes a possibly-nil suggestion node through to NewDiagnosticForNode; add_deprecated_suggestion_with_signature
+                // takes P<Node>. getDeprecatedSuggestionNode returns a node for every call-like node reaching here.
+                self.add_deprecated_suggestion_with_signature(suggestion_node.unwrap(), declaration, &name, &signature_string);
+            }
+        }
     }
 
     // checker.go:8549
     pub(crate) fn add_deprecated_suggestion_with_signature(&mut self, location: P<Node>, declaration: P<Node>, deprecated_entity: &str, signature_string: &str) -> P<Diagnostic> {
-        todo!()
+        let message: &'static Message = if !deprecated_entity.is_empty() { &diagnostics::The_signature_0_of_1_is_deprecated } else { &diagnostics::X_0_is_deprecated };
+        let diagnostic = new_diagnostic_for_node(Some(location), Some(message), &[&signature_string, &deprecated_entity]);
+        self.add_deprecated_suggestion_worker(&[declaration], diagnostic)
     }
 
     // checker.go:8555
     pub(crate) fn is_symbol_or_symbol_for_call(&mut self, node: P<Node>) -> bool {
-        todo!()
+        if !is_call_expression(node) {
+            return false;
+        }
+        let mut left = node.expression().unwrap();
+        if is_property_access_expression(left) && left.name().unwrap().text() == "for" {
+            left = left.expression().unwrap();
+        }
+        if !is_identifier(left) || left.text() != "Symbol" {
+            return false;
+        }
+        // make sure `Symbol` is the global symbol
+        let Some(global_es_symbol) = self.get_global_es_symbol_constructor_symbol_or_nil() else {
+            return false;
+        };
+        Some(global_es_symbol) == self.resolve_name(Some(left), "Symbol", SymbolFlags::Value, None /*nameNotFoundMessage*/, false /*isUse*/, false)
     }
 
+    /**
+     * Resolve a signature of a given call-like expression.
+     * @param node a call-like expression to try resolve a signature for
+     * @param candidatesOutArray an array of signature to be filled in by the function. It is passed by signature help in the language service;
+     *    the function will fill it up with appropriate candidate signatures
+     * @return a signature of the call-like expression or undefined if one can't be found
+     */
     // checker.go:8581
     pub(crate) fn get_resolved_signature(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
-        todo!()
+        let links = self.signature_links.get(node);
+        // If getResolvedSignature has already been called, we will have cached the resolvedSignature.
+        // However, it is possible that either candidatesOutArray was not passed in the first time,
+        // or that a different candidatesOutArray was passed in. Therefore, we need to redo the work
+        // to correctly fill the candidatesOutArray.
+        let cached = links.resolved_signature.get();
+        if let Some(cached) = cached {
+            if cached != self.resolving_signature && candidates_out_array.is_none() {
+                return cached;
+            }
+        }
+        let save_resolution_start = self.resolution_start;
+        if cached.is_none() {
+            // If we haven't already done so, temporarily reset the resolution stack. This allows us to
+            // handle "inverted" situations where, for example, an API client asks for the type of a symbol
+            // containined in a function call argument whose contextual type depends on the symbol itself
+            // through resolution of the containing function call. By resetting the resolution stack we'll
+            // retry the symbol type resolution with the resolvingSignature marker in place to suppress
+            // the contextual type circularity.
+            self.resolution_start = self.type_resolutions.len() as i32;
+        }
+        links.resolved_signature.set(Some(self.resolving_signature));
+        let mut result = self.resolve_signature(node, candidates_out_array, check_mode);
+        self.resolution_start = save_resolution_start;
+        // When CheckMode.SkipGenericFunctions is set we use resolvingSignature to indicate that call
+        // resolution should be deferred.
+        if result != self.resolving_signature {
+            // if the signature resolution originated on a node that itself depends on the contextual type
+            // then it's possible that the resolved signature might not be the same as the one that would be computed in source order
+            // since resolving such signature leads to resolving the potential outer signature, its arguments and thus the very same signature
+            // it's possible that this inner resolution sets the resolvedSignature first.
+            // In such a case we ignore the local result and reuse the correct one that was cached.
+            if links.resolved_signature.get() != Some(self.resolving_signature) {
+                result = links.resolved_signature.get().unwrap();
+            }
+            // If signature resolution originated in control flow type analysis (for example to compute the
+            // assigned type in a flow assignment) we don't cache the result as it may be based on temporary
+            // types from the control flow analysis.
+            if self.flow_loop_stack.is_empty() {
+                links.resolved_signature.set(Some(result));
+            } else {
+                links.resolved_signature.set(cached);
+            }
+        }
+        result
     }
 
     // checker.go:8627
     pub(crate) fn resolve_signature(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
-        todo!()
+        match node.kind {
+            Kind::CallExpression => self.resolve_call_expression(node, candidates_out_array, check_mode),
+            Kind::NewExpression => self.resolve_new_expression(node, candidates_out_array, check_mode),
+            Kind::TaggedTemplateExpression => self.resolve_tagged_template_expression(node, candidates_out_array, check_mode),
+            Kind::Decorator => self.resolve_decorator(node, candidates_out_array, check_mode),
+            Kind::JsxOpeningFragment | Kind::JsxOpeningElement | Kind::JsxSelfClosingElement => {
+                self.resolve_jsx_opening_like_element(node, candidates_out_array, check_mode)
+            }
+            Kind::BinaryExpression => self.resolve_instanceof_expression(node, candidates_out_array, check_mode),
+            _ => panic!("Unhandled case in resolveSignature"),
+        }
     }
 
     // checker.go:8645
     pub(crate) fn resolve_call_expression(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
-        todo!()
+        let expression = node.expression().unwrap();
+        if expression.kind == Kind::SuperKeyword {
+            let super_type = self.check_super_expression(expression);
+            if is_type_any(Some(super_type)) {
+                for &arg in node.arguments() {
+                    // Still visit arguments so they get marked for visibility, etc
+                    self.check_expression(arg);
+                }
+                return self.any_signature;
+            }
+            if !self.is_error_type(super_type) {
+                // In super call, the candidate signatures are the matching arity signatures of the base constructor function instantiated
+                // with the type arguments specified in the extends clause.
+                let base_type_node = get_class_extends_heritage_element(get_containing_class(node).unwrap());
+                if let Some(base_type_node) = base_type_node {
+                    let base_constructors = self.get_instantiated_constructors_for_type_arguments(super_type, base_type_node.type_arguments(), base_type_node);
+                    return self.resolve_call(node, &base_constructors, candidates_out_array, check_mode, SignatureFlags::None, None);
+                }
+            }
+            return self.resolve_untyped_call(node);
+        }
+        if is_import_call(node) {
+            return self.resolve_untyped_call(node);
+        }
+        let call_chain_flags: SignatureFlags;
+        let mut func_type = self.check_expression(expression);
+        if is_call_chain(node) {
+            let non_optional_type = self.get_optional_expression_type(func_type, expression);
+            call_chain_flags = if non_optional_type == func_type {
+                SignatureFlags::None
+            } else if is_outermost_optional_chain(node) {
+                SignatureFlags::IsOuterCallChain
+            } else {
+                SignatureFlags::IsInnerCallChain
+            };
+            func_type = non_optional_type;
+        } else {
+            call_chain_flags = SignatureFlags::None;
+        }
+        func_type = self.check_non_null_type_with_reporter(func_type, expression, |c, node, facts| c.report_cannot_invoke_possibly_null_or_undefined_error(node, facts));
+        if func_type == self.silent_never_type {
+            return self.silent_never_signature;
+        }
+        let apparent_type = self.get_apparent_type(func_type);
+        if self.is_error_type(apparent_type) {
+            // Another error has already been reported
+            return self.resolve_error_call(node);
+        }
+        // Technically, this signatures list may be incomplete. We are taking the apparent type,
+        // but we are not including call signatures that may have been added to the Object or
+        // Function interface, since they have none by default. This is a bit of a leap of faith
+        // that the user will not add any.
+        let call_signatures = self.get_signatures_of_type(apparent_type, SignatureKind::Call);
+        let num_construct_signatures = self.get_signatures_of_type(apparent_type, SignatureKind::Construct).len();
+        // TS 1.0 Spec: 4.12
+        // In an untyped function call no TypeArgs are permitted, Args can be any argument list, no contextual
+        // types are provided for the argument expressions, and the result is always of type Any.
+        if self.is_untyped_function_call(func_type, apparent_type, call_signatures.len() as i32, num_construct_signatures as i32) {
+            // The unknownType indicates that an error already occurred (and was reported).  No
+            // need to report another error in this case.
+            if !self.is_error_type(func_type) && node.type_argument_list().is_some() {
+                self.error(Some(node), &diagnostics::Untyped_function_calls_may_not_accept_type_arguments, &[]);
+            }
+            return self.resolve_untyped_call(node);
+        }
+        // If FuncExpr's apparent type(section 3.8.1) is a function type, the call is a typed function call.
+        // TypeScript employs overload resolution in typed function calls in order to support functions
+        // with multiple call signatures.
+        if call_signatures.is_empty() {
+            if num_construct_signatures != 0 {
+                let type_string = self.type_to_string(func_type, None);
+                self.error(Some(node), &diagnostics::Value_of_type_0_is_not_callable_Did_you_mean_to_include_new, &[&type_string]);
+            } else {
+                let mut related_information: Option<P<Diagnostic>> = None;
+                if node.arguments().len() == 1 {
+                    let text = get_source_file_of_node(node).unwrap().text();
+                    let options = tsrs_scanner::SkipTriviaOptions { stop_after_line_break: true, ..Default::default() };
+                    let pos = tsrs_scanner::skip_trivia_ex(text, expression.end(), Some(&options));
+                    if stringutil::is_line_break(text.as_bytes()[(pos - 1) as usize]) {
+                        related_information = Some(create_diagnostic_for_node(Some(expression), &diagnostics::Are_you_missing_a_semicolon, &[]));
+                    }
+                }
+                self.invocation_error(expression, apparent_type, SignatureKind::Call, related_information);
+            }
+            return self.resolve_error_call(node);
+        }
+        // When a call to a generic function is an argument to an outer call to a generic function for which
+        // inference is in process, we have a choice to make. If the inner call relies on inferences made from
+        // its contextual type to its return type, deferring the inner call processing allows the best possible
+        // contextual type to accumulate. But if the outer call relies on inferences made from the return type of
+        // the inner call, the inner call should be processed early. There's no sure way to know which choice is
+        // right (only a full unification algorithm can determine that), so we resort to the following heuristic:
+        // If no type arguments are specified in the inner call and at least one call signature is generic and
+        // returns a function type, we choose to defer processing. This narrowly permits function composition
+        // operators to flow inferences through return types, but otherwise processes calls right away. We
+        // use the resolvingSignature singleton to indicate that we deferred processing. This result will be
+        // propagated out and eventually turned into silentNeverType (a type that is assignable to anything and
+        // from which we never make inferences).
+        if check_mode.intersects(CheckMode::SkipGenericFunctions)
+            && node.type_arguments().is_empty()
+            && call_signatures.iter().any(|&sig| self.is_generic_function_returning_function(sig))
+        {
+            self.skipped_generic_function(node, check_mode);
+            return self.resolving_signature;
+        }
+        self.resolve_call(node, &call_signatures, candidates_out_array, check_mode, call_chain_flags, None)
     }
 }
 
