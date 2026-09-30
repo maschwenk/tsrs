@@ -1272,14 +1272,14 @@ impl RegExpParser {
     }
 
     fn get_spelling_suggestion_for_unicode_property_name(&self, name: &str) -> String {
-        tsrs_core::get_spelling_suggestion_for_strings(name, NON_BINARY_UNICODE_PROPERTIES.iter().map(|&(k, _)| k)).to_string()
+        tsrs_core::get_spelling_suggestion_for_strings(name, NON_BINARY_UNICODE_PROPERTIES.iter().map(|&(k, _)| k)).map(|s| s.to_string()).unwrap_or_default()
     }
 
     fn get_spelling_suggestion_for_unicode_property_value(&self, property_name: &str, value: &str) -> String {
         let Some(values) = crate::unicodeproperties::values_list_of_non_binary_unicode_properties(property_name) else {
             return String::new();
         };
-        tsrs_core::get_spelling_suggestion_for_strings(value, values.iter().copied()).to_string()
+        tsrs_core::get_spelling_suggestion_for_strings(value, values.iter().copied()).map(|s| s.to_string()).unwrap_or_default()
     }
 
     fn get_spelling_suggestion_for_unicode_property_name_or_value(&self, name: &str) -> String {
@@ -1287,7 +1287,8 @@ impl RegExpParser {
             name,
             GENERAL_CATEGORY_VALUES.iter().copied().chain(BINARY_UNICODE_PROPERTIES.iter().copied()).chain(BINARY_UNICODE_PROPERTIES_OF_STRINGS.iter().copied()),
         )
-        .to_string()
+        .map(|s| s.to_string())
+        .unwrap_or_default()
     }
 
     fn scan_word_characters(&mut self) -> &'static str {
@@ -1386,7 +1387,9 @@ impl RegExpParser {
                 );
                 if !self.group_specifiers.is_empty() {
                     let suggestion =
-                        tsrs_core::get_spelling_suggestion_for_strings(reference.name, self.group_specifiers_order.iter().copied()).to_string();
+                        tsrs_core::get_spelling_suggestion_for_strings(reference.name, self.group_specifiers_order.iter().copied())
+                            .map(|s| s.to_string())
+                            .unwrap_or_default();
                     if !suggestion.is_empty() {
                         self.error(&diagnostics::Did_you_mean_0, reference.pos, reference.end - reference.pos, &[&suggestion]);
                     }
