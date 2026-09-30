@@ -11,7 +11,8 @@ use crate::*;
 // Go embeds `ast.NodeFactory`; here it is the `node_factory` field, reachable through Deref so that
 // `factory.new_identifier(..)` works like the promoted Go methods. Like `ast::NodeFactory` it is a handle: all methods
 // take `&self` and `clone()` shares the factory, so nested calls (`f.new_x(f.new_y())`) port as written. Only the parts
-// the printer and the checker's node builder use are ported (generated names, string literals from nodes); the
+// the printer, the checker's node builder and the EmitContext environment/visitor hooks use are ported (generated
+// names, string literals from nodes, assignment/strict-equality/void-zero/type-check expressions); the other
 // transform helpers are emit-only.
 #[derive(Default, Clone)]
 pub struct NodeFactory {
@@ -202,5 +203,39 @@ impl NodeFactory {
         let node = self.new_string_literal(text, TokenFlags::None);
         self.emit_context().set_text_source(node, text_source_node);
         node
+    }
+
+    //
+    // Common Operators
+    //
+
+    // factory.go:213
+    pub fn new_assignment_expression(&self, left: P<Node>, right: P<Node>) -> P<Node> {
+        self.new_binary_expression(None /*modifiers*/, left, None /*typeNode*/, self.new_token(Kind::EqualsToken), right)
+    }
+
+    // factory.go:229
+    pub fn new_strict_equality_expression(&self, left: P<Node>, right: P<Node>) -> P<Node> {
+        self.new_binary_expression(None /*modifiers*/, left, None /*typeNode*/, self.new_token(Kind::EqualsEqualsEqualsToken), right)
+    }
+
+    //
+    // Compound Nodes
+    //
+
+    // factory.go:241
+    pub fn new_void_zero_expression(&self) -> P<Node> {
+        self.new_void_expression(self.new_numeric_literal("0", TokenFlags::None))
+    }
+
+    // factory.go:345
+    pub fn new_type_check(&self, value: P<Node>, tag: &str) -> P<Node> {
+        if tag == "null" {
+            self.new_strict_equality_expression(value, self.new_keyword_expression(Kind::NullKeyword))
+        } else if tag == "undefined" {
+            self.new_strict_equality_expression(value, self.new_void_zero_expression())
+        } else {
+            self.new_strict_equality_expression(self.new_type_of_expression(value), self.new_string_literal(alloc_str(tag), TokenFlags::None))
+        }
     }
 }

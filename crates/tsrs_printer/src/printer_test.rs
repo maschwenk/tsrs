@@ -803,3 +803,24 @@ fn test_synthetic_comments_with_source_file() {
     p.write(literal, Some(file), &mut writer, None);
     assert_eq!(writer.string(), "{ a: string; /*elided*/ }");
 }
+
+#[test]
+fn test_node_visitor_environment_hooks() {
+    // Regression: the EmitContext visitor hooks (emitcontext.go VisitParameters/VisitFunctionBody) must move parameter
+    // initializers and binding patterns into the body when a temp is hoisted while visiting the parameter list, and the
+    // hooks must be re-entrant (a RefCell borrow held across the visit callback panics here).
+    let ec = new_emit_context();
+    let file = parse_type_script("function f(a = 1, { b } = {}) {\n    return a;\n}", false);
+    let visit: VisitFn = std::rc::Rc::new(move |v, n| {
+        if n.kind == Kind::NumericLiteral {
+            ec.add_variable_declaration(ec.factory.new_temp_variable());
+            return Some(n);
+        }
+        v.visit_each_child(Some(n))
+    });
+    let mut visitor = ec.new_node_visitor(visit);
+    let visited = visitor.visit_source_file(file.as_node());
+    let mut printer = new_printer(PrinterOptions { new_line: NewLineKind::LF, ..Default::default() }, PrintHandlers::default(), Some(ec));
+    let text = printer.emit_source_file(visited.as_source_file_p());
+    assert_eq!(text, "function f(a, _a) {\n    var _b;\n    if (a === void 0) { a = 1; }\n    var { b } = _a === void 0 ? {} : _a;\n    return a;\n}\n");
+}

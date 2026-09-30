@@ -35,16 +35,25 @@
 //!   auto-generated names (`has_auto_generate_info`, `get_auto_generate_info`, `get_node_for_generated_name`),
 //!   `is_file_level_unique_name`, helpers bookkeeping (`get_emit_helpers`, `has_recorded_external_helpers`, …),
 //!   `new_not_emitted_statement`, `reset`.
+//!   Transform support: `new_node_visitor(visit: VisitFn) -> NodeVisitor` (Go `NewNodeVisitor`: shares `factory`,
+//!   installs the environment hooks below), environments (`start_/end_variable_environment`,
+//!   `start_/end_lexical_environment`, `end_and_merge_{variable,lexical}_environment(&[P<Node>]) -> Vec<P<Node>>` and
+//!   `_list(Option<P<NodeList>>)`, `add_variable_declaration`, `add_hoisted_function_declaration`,
+//!   `add_lexical_declaration`, `add_initialization_statement`, `merge_environment(_list)`), and the visitor hooks
+//!   `visit_variable_environment`, `visit_parameters`, `visit_function_body`, `visit_iteration_body`,
+//!   `visit_embedded_statement(Option<P<…>>, &mut NodeVisitor)`, `convert_to_function_block`.
 //! - `NodeFactory` extras: `new_temp_variable(_ex)`, `new_loop_variable(_ex)`, `new_unique_name(_ex)`,
-//!   `new_generated_name_for_node(_ex)`, private-name variants, `new_string_literal_from_node`; `AutoGenerateOptions`.
+//!   `new_generated_name_for_node(_ex)`, private-name variants, `new_string_literal_from_node`,
+//!   `new_assignment_expression`, `new_strict_equality_expression`, `new_void_zero_expression`, `new_type_check`;
+//!   `AutoGenerateOptions`.
 //! - Flags/enums: `EmitFlags::SingleLine`, `EmitFlags::NoAsciiEscaping`, … (Go `EF*`), `ListFormat::*` (Go `LF*`),
 //!   `GeneratedIdentifierFlags::*`, `WriteKind`, `QuoteChar::{SingleQuote, DoubleQuote, Backtick}`.
 //! - Utilities: `escape_string(s: &str, quote_char: QuoteChar) -> String`, `range_is_on_single_line`,
 //!   `range_start_positions_are_on_same_line`, `positions_are_on_same_line`, `get_lines_between_positions`,
 //!   `is_recognized_triple_slash_comment`, `is_pinned_comment`, `format_generated_name`, `NameGenerator`.
 //!
-//! Not ported: source map emit (guards kept, generator paths unreachable), the transform-only parts of EmitContext
-//! (variable/lexical environments, visitor hooks), the transform helpers of `factory.go`, the helper definitions of
+//! Not ported: source map emit (guards kept, generator paths unreachable), the transform helpers of `factory.go`
+//! other than the four listed above, the helper definitions of
 //! `helpers.go` (only `EmitHelper` and its ordering), `changetrackerwriter.go`, `syntheticfile.go`, `emithost.go`,
 //! `emitresolver.go`, JSDoc emit (`emitJSDocNode` panics like Go).
 

@@ -1,7 +1,8 @@
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::*;
 use tsrs_core::collections::OrderedSet;
 use tsrs_core::*;
@@ -13,9 +14,9 @@ use crate::factory::{new_node_factory_for_context, NodeFactory};
 //
 // NOTE: EmitContext is not guaranteed to be thread-safe.
 //
-// Handled as `P<EmitContext>` (shared by the node builder and the printers it feeds, like Go's `*EmitContext`), so
-// all state is interior-mutable. The transform-only parts (variable/lexical environments, visitor hooks) are not
-// ported.
+// Handled as `P<EmitContext>` (shared by the node builder, the transformers and the printers they feed, like Go's
+// `*EmitContext`), so all state is interior-mutable. The environment scopes are `Rc<RefCell<varScope>>` (Go
+// `*varScope`, mutated through `Peek()`); borrows are never held across a visitor call.
 pub struct EmitContext {
     pub factory: NodeFactory, // Required. The NodeFactory to use to create new nodes
     auto_generate: RefCell<FxHashMap<P<Node>, AutoGenerateInfo>>,
@@ -24,7 +25,26 @@ pub struct EmitContext {
     emit_nodes: RefCell<FxHashMap<P<Node>, emitNode>>,
     assigned_name: RefCell<FxHashMap<P<Node>, P<Node>>>,
     class_this: RefCell<FxHashMap<P<Node>, P<Node>>>,
+    var_scope_stack: RefCell<Stack<Rc<RefCell<varScope>>>>,
+    let_scope_stack: RefCell<Stack<Rc<RefCell<varScope>>>>,
     emit_helpers: RefCell<OrderedSet<P<EmitHelper>>>,
+}
+
+bitflags::bitflags! {
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+    pub(crate) struct environmentFlags: i32 {
+        const None = 0;
+        const InParameters = 1 << 0; // currently visiting a parameter list
+        const VariablesHoistedInParameters = 1 << 1; // a temp variable was hoisted while visiting a parameter list
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct varScope {
+    variables: Vec<P<Node>>,
+    functions: Vec<P<Node>>,
+    flags: environmentFlags,
+    initialization_statements: Vec<P<Node>>,
 }
 
 pub fn new_emit_context() -> P<EmitContext> {
@@ -36,6 +56,8 @@ pub fn new_emit_context() -> P<EmitContext> {
         emit_nodes: RefCell::default(),
         assigned_name: RefCell::default(),
         class_this: RefCell::default(),
+        var_scope_stack: RefCell::default(),
+        let_scope_stack: RefCell::default(),
         emit_helpers: RefCell::default(),
     });
     c.factory.set_emit_context(c);
@@ -60,15 +82,314 @@ impl EmitContext {
         self.emit_nodes.borrow_mut().clear();
         self.assigned_name.borrow_mut().clear();
         self.class_this.borrow_mut().clear();
+        *self.var_scope_stack.borrow_mut() = Stack::default();
+        *self.let_scope_stack.borrow_mut() = Stack::default();
         self.emit_helpers.borrow_mut().clear();
     }
 
     // emitcontext.go:90
-    // Go `NewNodeVisitor`: a visitor over `self.factory` with the environment-tracking hooks (VisitParameters,
-    // VisitFunctionBody, VisitIterationBody, VisitTopLevelStatements = VisitVariableEnvironment,
-    // VisitEmbeddedStatement). The hooks capture this context (`P::from_static`; contexts are arena-allocated).
+    // Creates a new NodeVisitor attached to this EmitContext
     pub fn new_node_visitor(&self, visit: VisitFn) -> NodeVisitor {
-        todo!()
+        // SAFETY: an EmitContext is only ever created by `new_emit_context`, which allocates it in the process-lifetime
+        // arena (`P::new`), so `self` is `'static`.
+        let c: P<EmitContext> = P::from_static(unsafe { &*(self as *const EmitContext) });
+        tsrs_ast::new_node_visitor(
+            Some(visit),
+            Some(self.factory.as_node_factory().clone()),
+            NodeVisitorHooks {
+                visit_parameters: Some(Rc::new(move |nodes, visitor| c.visit_parameters(nodes, visitor))),
+                visit_function_body: Some(Rc::new(move |node, visitor| c.visit_function_body(node, visitor))),
+                visit_iteration_body: Some(Rc::new(move |body, visitor| c.visit_iteration_body(body, visitor))),
+                visit_top_level_statements: Some(Rc::new(move |nodes, visitor| c.visit_variable_environment(nodes, visitor))),
+                visit_embedded_statement: Some(Rc::new(move |node, visitor| c.visit_embedded_statement(node, visitor))),
+                ..Default::default()
+            },
+        )
+    }
+
+    //
+    // Environment tracking
+    //
+
+    // Starts a new VariableEnvironment used to track hoisted `var` statements and function declarations.
+    //
+    // see: https://tc39.es/ecma262/#table-additional-state-components-for-ecmascript-code-execution-contexts
+    //
+    // NOTE: This is the equivalent of `transformContext.startLexicalEnvironment` in Strada.
+    pub fn start_variable_environment(&self) {
+        self.var_scope_stack.borrow_mut().push(Rc::default());
+        self.start_lexical_environment();
+    }
+
+    // Ends the current VariableEnvironment, returning a list of statements that should be emitted at the start of the current scope.
+    //
+    // NOTE: This is the equivalent of `transformContext.endLexicalEnvironment` in Strada.
+    pub fn end_variable_environment(&self) -> Vec<P<Node>> {
+        let scope = self.var_scope_stack.borrow_mut().pop();
+        let (functions, variables, initialization_statements) = {
+            let scope = scope.borrow();
+            (scope.functions.clone(), scope.variables.clone(), scope.initialization_statements.clone())
+        };
+        let mut statements: Vec<P<Node>> = Vec::new();
+        if !functions.is_empty() {
+            statements = functions;
+        }
+        if !variables.is_empty() {
+            let var_decl_list = self.factory.new_variable_declaration_list(self.factory.new_node_list(variables), NodeFlags::None);
+            let var_statement = self.factory.new_variable_statement(None /*modifiers*/, var_decl_list);
+            self.set_emit_flags(var_statement, EmitFlags::CustomPrologue);
+            statements.push(var_statement);
+        }
+        if !initialization_statements.is_empty() {
+            statements.extend(initialization_statements);
+        }
+        statements.extend(self.end_lexical_environment());
+        statements
+    }
+
+    // Invokes c.EndVariableEnvironment() and merges the results into `statements`
+    pub fn end_and_merge_variable_environment_list(&self, statements: Option<P<NodeList>>) -> Option<P<NodeList>> {
+        let nodes: &[P<Node>] = match statements {
+            Some(statements) => statements.nodes,
+            None => &[],
+        };
+
+        let (result, changed) = self.end_and_merge_variable_environment_worker(nodes);
+        if changed {
+            let list = self.factory.new_node_list(result);
+            // Go reads `statements.Loc` here, which panics when `statements` is nil.
+            list.loc.set(statements.unwrap().loc.get());
+            return Some(list);
+        }
+
+        statements
+    }
+
+    // Invokes c.EndVariableEnvironment() and merges the results into `statements`
+    pub fn end_and_merge_variable_environment(&self, statements: &[P<Node>]) -> Vec<P<Node>> {
+        let (result, _) = self.end_and_merge_variable_environment_worker(statements);
+        result
+    }
+
+    // Go's unexported `endAndMergeVariableEnvironment` (renamed: collides with the exported method after snake-casing).
+    pub(crate) fn end_and_merge_variable_environment_worker(&self, statements: &[P<Node>]) -> (Vec<P<Node>>, bool) {
+        let declarations = self.end_variable_environment();
+        self.merge_environment_worker(statements, &declarations)
+    }
+
+    // Adds a `var` declaration to the current VariableEnvironment
+    //
+    // NOTE: This is the equivalent of `transformContext.hoistVariableDeclaration` in Strada.
+    pub fn add_variable_declaration(&self, name: P<Node>) {
+        let var_decl = self.factory.new_variable_declaration(name, None /*exclamationToken*/, None /*typeNode*/, None /*initializer*/);
+        self.set_emit_flags(var_decl, EmitFlags::NoNestedSourceMaps);
+        let scope = self.var_scope_stack.borrow().peek().clone();
+        let mut scope = scope.borrow_mut();
+        scope.variables.push(var_decl);
+        if scope.flags.intersects(environmentFlags::InParameters) {
+            scope.flags |= environmentFlags::VariablesHoistedInParameters;
+        }
+    }
+
+    // Adds a hoisted function declaration to the current VariableEnvironment
+    //
+    // NOTE: This is the equivalent of `transformContext.hoistFunctionDeclaration` in Strada.
+    pub fn add_hoisted_function_declaration(&self, node: P<Node>) {
+        self.set_emit_flags(node, EmitFlags::CustomPrologue);
+        let scope = self.var_scope_stack.borrow().peek().clone();
+        scope.borrow_mut().functions.push(node);
+    }
+
+    // Starts a new LexicalEnvironment used to track block-scoped `let`, `const`, and `using` declarations.
+    //
+    // see: https://tc39.es/ecma262/#table-additional-state-components-for-ecmascript-code-execution-contexts
+    //
+    // NOTE: This is the equivalent of `transformContext.startBlockScope` in Strada.
+    // NOTE: This is *not* the same as `startLexicalEnvironment` in Strada as that method is incorrectly named.
+    pub fn start_lexical_environment(&self) {
+        self.let_scope_stack.borrow_mut().push(Rc::default());
+    }
+
+    // Ends the current EndLexicalEnvironment, returning a list of statements that should be emitted at the start of the current scope.
+    //
+    // NOTE: This is the equivalent of `transformContext.endLexicalEnvironment` in Strada.
+    // NOTE: This is *not* the same as `endLexicalEnvironment` in Strada as that method is incorrectly named.
+    pub fn end_lexical_environment(&self) -> Vec<P<Node>> {
+        let scope = self.let_scope_stack.borrow_mut().pop();
+        let variables = scope.borrow().variables.clone();
+        let mut statements: Vec<P<Node>> = Vec::new();
+        if !variables.is_empty() {
+            let var_decl_list = self.factory.new_variable_declaration_list(self.factory.new_node_list(variables), NodeFlags::Let);
+            let var_statement = self.factory.new_variable_statement(None /*modifiers*/, var_decl_list);
+            self.set_emit_flags(var_statement, EmitFlags::CustomPrologue);
+            statements.push(var_statement);
+        }
+        statements
+    }
+
+    // Invokes c.EndLexicalEnvironment() and merges the results into `statements`
+    pub fn end_and_merge_lexical_environment_list(&self, statements: Option<P<NodeList>>) -> Option<P<NodeList>> {
+        let nodes: &[P<Node>] = match statements {
+            Some(statements) => statements.nodes,
+            None => &[],
+        };
+
+        let (result, changed) = self.end_and_merge_lexical_environment_worker(nodes);
+        if changed {
+            let list = self.factory.new_node_list(result);
+            // Go reads `statements.Loc` here, which panics when `statements` is nil.
+            list.loc.set(statements.unwrap().loc.get());
+            return Some(list);
+        }
+
+        statements
+    }
+
+    // Invokes c.EndLexicalEnvironment() and merges the results into `statements`
+    pub fn end_and_merge_lexical_environment(&self, statements: &[P<Node>]) -> Vec<P<Node>> {
+        let (result, _) = self.end_and_merge_lexical_environment_worker(statements);
+        result
+    }
+
+    // Invokes c.EndLexicalEnvironment() and merges the results into `statements`
+    //
+    // Go's unexported `endAndMergeLexicalEnvironment` (renamed: collides with the exported method after snake-casing).
+    pub(crate) fn end_and_merge_lexical_environment_worker(&self, statements: &[P<Node>]) -> (Vec<P<Node>>, bool) {
+        let declarations = self.end_lexical_environment();
+        self.merge_environment_worker(statements, &declarations)
+    }
+
+    // Adds a `let` declaration to the current LexicalEnvironment.
+    pub fn add_lexical_declaration(&self, name: P<Node>) {
+        let var_decl = self.factory.new_variable_declaration(name, None /*exclamationToken*/, None /*typeNode*/, None /*initializer*/);
+        self.set_emit_flags(var_decl, EmitFlags::NoNestedSourceMaps);
+        let scope = self.let_scope_stack.borrow().peek().clone();
+        scope.borrow_mut().variables.push(var_decl);
+    }
+
+    // Merges declarations produced by c.EndVariableEnvironment() or c.EndLexicalEnvironment() into a statement list
+    pub fn merge_environment_list(&self, statements: P<NodeList>, declarations: &[P<Node>]) -> P<NodeList> {
+        let (result, changed) = self.merge_environment_worker(statements.nodes, declarations);
+        if changed {
+            let list = self.factory.new_node_list(result);
+            list.loc.set(statements.loc.get());
+            return list;
+        }
+        statements
+    }
+
+    // Merges declarations produced by c.EndVariableEnvironment() or c.EndLexicalEnvironment() into a slice of statements
+    pub fn merge_environment(&self, statements: &[P<Node>], declarations: &[P<Node>]) -> Vec<P<Node>> {
+        let (result, _) = self.merge_environment_worker(statements, declarations);
+        result
+    }
+
+    // Go's unexported `mergeEnvironment` (renamed: collides with the exported method after snake-casing).
+    pub(crate) fn merge_environment_worker(&self, statements: &[P<Node>], declarations: &[P<Node>]) -> (Vec<P<Node>>, bool) {
+        if declarations.is_empty() {
+            return (statements.to_vec(), false);
+        }
+
+        // When we merge new lexical statements into an existing statement list, we merge them in the following manner:
+        //
+        // Given:
+        //
+        // | Left                               | Right                               |
+        // |------------------------------------|-------------------------------------|
+        // | [standard prologues (left)]        | [standard prologues (right)]        |
+        // | [hoisted functions (left)]         | [hoisted functions (right)]         |
+        // | [hoisted variables (left)]         | [hoisted variables (right)]         |
+        // | [lexical init statements (left)]   | [lexical init statements (right)]   |
+        // | [other statements (left)]          |                                     |
+        //
+        // The resulting statement list will be:
+        //
+        // | Result                              |
+        // |-------------------------------------|
+        // | [standard prologues (right)]        |
+        // | [standard prologues (left)]         |
+        // | [hoisted functions (right)]         |
+        // | [hoisted functions (left)]          |
+        // | [hoisted variables (right)]         |
+        // | [hoisted variables (left)]          |
+        // | [lexical init statements (right)]   |
+        // | [lexical init statements (left)]    |
+        // | [other statements (left)]           |
+        //
+        // NOTE: It is expected that new lexical init statements must be evaluated before existing lexical init statements,
+        // as the prior transformation may depend on the evaluation of the lexical init statements to be in the correct state.
+
+        let mut changed = false;
+
+        // find standard prologues on left in the following order: standard directives, hoisted functions, hoisted variables, other custom
+        let left_standard_prologue_end = find_span_end(statements, is_prologue_directive, 0);
+        let left_hoisted_functions_end = find_span_end_with_emit_context(self, statements, EmitContext::is_hoisted_function, left_standard_prologue_end);
+        let left_hoisted_variables_end = find_span_end_with_emit_context(self, statements, EmitContext::is_hoisted_variable_statement, left_hoisted_functions_end);
+
+        // find standard prologues on right in the following order: standard directives, hoisted functions, hoisted variables, other custom
+        let right_standard_prologue_end = find_span_end(declarations, is_prologue_directive, 0);
+        let right_hoisted_functions_end = find_span_end_with_emit_context(self, declarations, EmitContext::is_hoisted_function, right_standard_prologue_end);
+        let right_hoisted_variables_end = find_span_end_with_emit_context(self, declarations, EmitContext::is_hoisted_variable_statement, right_hoisted_functions_end);
+        let right_custom_prologue_end = find_span_end_with_emit_context(self, declarations, EmitContext::is_custom_prologue, right_hoisted_variables_end);
+        if right_custom_prologue_end != declarations.len() {
+            panic!("Expected declarations to be valid standard or custom prologues");
+        }
+
+        let mut left: Vec<P<Node>> = statements.to_vec();
+
+        // splice other custom prologues from right into left
+        if right_custom_prologue_end > right_hoisted_variables_end {
+            left = splice(&left, left_hoisted_variables_end as i32, 0, &declarations[right_hoisted_variables_end..right_custom_prologue_end]).into_owned();
+            changed = true;
+        }
+
+        // splice hoisted variables from right into left
+        if right_hoisted_variables_end > right_hoisted_functions_end {
+            left = splice(&left, left_hoisted_functions_end as i32, 0, &declarations[right_hoisted_functions_end..right_hoisted_variables_end]).into_owned();
+            changed = true;
+        }
+
+        // splice hoisted functions from right into left
+        if right_hoisted_functions_end > right_standard_prologue_end {
+            left = splice(&left, left_standard_prologue_end as i32, 0, &declarations[right_standard_prologue_end..right_hoisted_functions_end]).into_owned();
+            changed = true;
+        }
+
+        // splice standard prologues from right into left (that are not already in left)
+        if right_standard_prologue_end > 0 {
+            if left_standard_prologue_end == 0 {
+                left = splice(&left, 0, 0, &declarations[..right_standard_prologue_end]).into_owned();
+                changed = true;
+            } else {
+                let mut left_prologues: FxHashSet<&'static str> = FxHashSet::default();
+                for &left_prologue in &statements[..left_standard_prologue_end] {
+                    left_prologues.insert(left_prologue.expression().unwrap().text());
+                }
+                for i in (0..right_standard_prologue_end).rev() {
+                    let right_prologue = declarations[i];
+                    if !left_prologues.contains(right_prologue.expression().unwrap().text()) {
+                        left = concatenate(&[right_prologue], &left).into_owned();
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        (left, changed)
+    }
+
+    pub(crate) fn is_custom_prologue(&self, node: P<Node>) -> bool {
+        self.emit_flags(node).intersects(EmitFlags::CustomPrologue)
+    }
+
+    pub(crate) fn is_hoisted_function(&self, node: P<Node>) -> bool {
+        self.is_custom_prologue(node) && is_function_declaration(node)
+    }
+
+    pub(crate) fn is_hoisted_variable_statement(&self, node: P<Node>) -> bool {
+        self.is_custom_prologue(node)
+            && is_variable_statement(node)
+            && every(node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes, |&n| is_hoisted_variable(n))
     }
 
     pub(crate) fn on_create(&self, node: P<Node>) {
@@ -424,6 +745,207 @@ impl EmitContext {
             && first_segment.expression().unwrap().text() == helper_name
     }
 
+    //
+    // Visitor Hooks
+    //
+
+    pub fn visit_variable_environment(&self, nodes: Option<P<NodeList>>, visitor: &mut NodeVisitor) -> Option<P<NodeList>> {
+        self.start_variable_environment();
+        let visited = visitor.visit_nodes(nodes);
+        self.end_and_merge_variable_environment_list(visited)
+    }
+
+    pub fn visit_parameters(&self, nodes: Option<P<NodeList>>, visitor: &mut NodeVisitor) -> Option<P<NodeList>> {
+        self.start_variable_environment();
+        let scope = self.var_scope_stack.borrow().peek().clone();
+        let old_flags = scope.borrow().flags;
+        scope.borrow_mut().flags |= environmentFlags::InParameters;
+        let mut nodes = visitor.visit_nodes(nodes);
+
+        // As of ES2015, any runtime execution of that occurs in for a parameter (such as evaluating an
+        // initializer or a binding pattern), occurs in its own lexical scope. As a result, any expression
+        // that we might transform that introduces a temporary variable would fail as the temporary variable
+        // exists in a different lexical scope. To address this, we move any binding patterns and initializers
+        // in a parameter list to the body if we detect a variable being hoisted while visiting a parameter list
+        // when the emit target is greater than ES2015. (Which is now all targets.)
+        let flags = scope.borrow().flags;
+        if flags.intersects(environmentFlags::VariablesHoistedInParameters) {
+            nodes = self.add_default_value_assignments_if_needed(nodes);
+        }
+        scope.borrow_mut().flags = old_flags;
+        // !!! c.suspendVariableEnvironment()
+        nodes
+    }
+
+    pub(crate) fn add_default_value_assignments_if_needed(&self, node_list: Option<P<NodeList>>) -> Option<P<NodeList>> {
+        let Some(node_list) = node_list else {
+            return node_list;
+        };
+        let mut result: Option<Vec<P<Node>>> = None;
+        let nodes = node_list.nodes;
+        for (i, &parameter) in nodes.iter().enumerate() {
+            let updated = self.add_default_value_assignment_if_needed(parameter);
+            if updated != parameter {
+                result.get_or_insert_with(|| nodes.to_vec())[i] = updated;
+            }
+        }
+        if let Some(result) = result {
+            let res = self.factory.new_node_list(result);
+            res.loc.set(node_list.loc.get());
+            return Some(res);
+        }
+        Some(node_list)
+    }
+
+    pub(crate) fn add_default_value_assignment_if_needed(&self, parameter: P<Node>) -> P<Node> {
+        let p = parameter.as_parameter_declaration();
+        // A rest parameter cannot have a binding pattern or an initializer,
+        // so let's just ignore it.
+        if p.dot_dot_dot_token.is_some() {
+            parameter
+        } else if is_binding_pattern(p.name()) {
+            self.add_default_value_assignment_for_binding_pattern(parameter)
+        } else if let Some(initializer) = p.initializer() {
+            self.add_default_value_assignment_for_initializer(parameter, p.name(), initializer)
+        } else {
+            parameter
+        }
+    }
+
+    pub(crate) fn add_default_value_assignment_for_binding_pattern(&self, parameter: P<Node>) -> P<Node> {
+        let p = parameter.as_parameter_declaration();
+        let init_node = if let Some(initializer) = p.initializer() {
+            self.factory.new_conditional_expression(
+                self.factory.new_strict_equality_expression(self.factory.new_generated_name_for_node(parameter), self.factory.new_void_zero_expression()),
+                self.factory.new_token(Kind::QuestionToken),
+                initializer,
+                self.factory.new_token(Kind::ColonToken),
+                self.factory.new_generated_name_for_node(parameter),
+            )
+        } else {
+            self.factory.new_generated_name_for_node(parameter)
+        };
+        self.add_initialization_statement(self.factory.new_variable_statement(
+            None,
+            self.factory.new_variable_declaration_list(
+                self.factory.new_node_list(vec![self.factory.new_variable_declaration(p.name(), None, p.type_(), Some(init_node))]),
+                NodeFlags::None,
+            ),
+        ));
+        self.factory.update_parameter_declaration(
+            parameter,
+            parameter.modifiers(),
+            p.dot_dot_dot_token,
+            self.factory.new_generated_name_for_node(parameter),
+            p.question_token(),
+            p.type_(),
+            None,
+        )
+    }
+
+    pub(crate) fn add_default_value_assignment_for_initializer(&self, parameter: P<Node>, name: P<Node>, initializer: P<Node>) -> P<Node> {
+        let p = parameter.as_parameter_declaration();
+        self.add_emit_flags(initializer, EmitFlags::NoSourceMap | EmitFlags::NoComments);
+        let name_clone = name.clone_node(&self.factory);
+        self.add_emit_flags(name_clone, EmitFlags::NoSourceMap);
+        let init_assignment = self.factory.new_assignment_expression(name_clone, initializer);
+        init_assignment.set_loc(parameter.loc());
+        self.add_emit_flags(init_assignment, EmitFlags::NoComments);
+        let init_block = self.factory.new_block(self.factory.new_node_list(vec![self.factory.new_expression_statement(init_assignment)]), false);
+        init_block.set_loc(parameter.loc());
+        self.add_emit_flags(init_block, EmitFlags::SingleLine | EmitFlags::NoTrailingSourceMap | EmitFlags::NoTokenSourceMaps | EmitFlags::NoComments);
+        self.add_initialization_statement(self.factory.new_if_statement(self.factory.new_type_check(name.clone_node(&self.factory), "undefined"), init_block, None));
+        self.factory.update_parameter_declaration(parameter, parameter.modifiers(), p.dot_dot_dot_token, p.name(), p.question_token(), p.type_(), None)
+    }
+
+    pub fn add_initialization_statement(&self, node: P<Node>) {
+        // Go's `Peek()` panics on an empty stack before the nil check below can fire.
+        let scope = self.var_scope_stack.borrow().peek().clone();
+        self.add_emit_flags(node, EmitFlags::CustomPrologue);
+        scope.borrow_mut().initialization_statements.push(node);
+    }
+
+    pub fn convert_to_function_block(&self, node: P<Node>, multi_line: bool) -> P<Node> {
+        if is_block(node) {
+            return node;
+        }
+        let return_statement = self.factory.new_return_statement(Some(node));
+        return_statement.set_loc(node.loc());
+        let statements = self.factory.new_node_list(vec![return_statement]);
+        statements.loc.set(node.loc());
+        let block = self.factory.new_block(statements, multi_line);
+        block.set_loc(node.loc());
+        block
+    }
+
+    pub fn visit_function_body(&self, node: Option<P<Node>>, visitor: &mut NodeVisitor) -> Option<P<Node>> {
+        // !!! c.resumeVariableEnvironment()
+        let updated = visitor.visit_node(node);
+        let declarations = self.end_variable_environment();
+        if declarations.is_empty() {
+            return updated;
+        }
+
+        let Some(updated) = updated else {
+            return Some(self.factory.new_block(self.factory.new_node_list(declarations), true /*multiLine*/));
+        };
+
+        if !is_block(updated) {
+            self.add_emit_flags(updated, EmitFlags::NoComments);
+            let block = self.convert_to_function_block(updated, false /*multiLine*/);
+            return Some(self.factory.update_block(
+                block,
+                self.merge_environment_list(block.statement_list().unwrap(), &declarations),
+                block.as_block().multi_line,
+            ));
+        }
+
+        Some(self.factory.update_block(
+            updated,
+            self.merge_environment_list(updated.statement_list().unwrap(), &declarations),
+            updated.as_block().multi_line,
+        ))
+    }
+
+    pub fn visit_iteration_body(&self, body: Option<P<Node>>, visitor: &mut NodeVisitor) -> Option<P<Node>> {
+        body?;
+
+        self.start_lexical_environment();
+        let updated = self.visit_embedded_statement(body, visitor);
+        let Some(updated) = updated else {
+            panic!("Expected visitor to return a statement.");
+        };
+
+        let mut statements = self.end_lexical_environment();
+        if !statements.is_empty() {
+            if is_block(updated) {
+                statements.extend_from_slice(updated.statements());
+                let statements_list = self.factory.new_node_list(statements);
+                statements_list.loc.set(updated.statement_list().unwrap().loc.get());
+                return Some(self.factory.update_block(updated, statements_list, updated.as_block().multi_line));
+            }
+            statements.push(updated);
+            return Some(self.factory.new_block(self.factory.new_node_list(statements), true /*multiLine*/));
+        }
+
+        Some(updated)
+    }
+
+    pub fn visit_embedded_statement(&self, node: Option<P<Node>>, visitor: &mut NodeVisitor) -> Option<P<Node>> {
+        let node = node?;
+        let embedded_statement = visitor.visit_embedded_statement(Some(node));
+        match embedded_statement {
+            Some(embedded_statement) if !is_not_emitted_statement(embedded_statement) => Some(embedded_statement),
+            _ => {
+                let empty_statement = visitor.factory.new_empty_statement();
+                empty_statement.set_loc(node.loc());
+                self.set_original(empty_statement, node);
+                self.assign_comment_range(empty_statement, node);
+                Some(empty_statement)
+            }
+        }
+    }
+
     pub fn set_synthetic_leading_comments(&self, node: P<Node>, comments: Vec<SynthesizedComment>) -> P<Node> {
         self.emit_nodes.borrow_mut().entry(node).or_default().leading_comments = comments;
         node
@@ -491,6 +1013,11 @@ impl EmitContext {
         self.assign_comment_range(statement, node);
         statement
     }
+}
+
+// emitcontext.go:362 (package-level; used by `EmitContext::is_hoisted_variable_statement`)
+pub(crate) fn is_hoisted_variable(node: P<Node>) -> bool {
+    is_identifier(node.name().unwrap()) && node.initializer().is_none()
 }
 
 #[derive(Clone, Copy, Debug, Default)]

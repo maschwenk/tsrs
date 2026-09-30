@@ -702,6 +702,24 @@ pub(crate) fn make_identifier_from_module_name(module_name: &str) -> String {
     builder
 }
 
+// utilities.go:706
+pub(crate) fn find_span_end_with_emit_context<T: Copy>(c: &EmitContext, array: &[T], test: impl Fn(&EmitContext, T) -> bool, start: usize) -> usize {
+    let mut i = start;
+    while i < array.len() && test(c, array[i]) {
+        i += 1;
+    }
+    i
+}
+
+// utilities.go:714
+pub(crate) fn find_span_end<T: Copy>(array: &[T], test: impl Fn(T) -> bool, start: usize) -> usize {
+    let mut i = start;
+    while i < array.len() && test(array[i]) {
+        i += 1;
+    }
+    i
+}
+
 fn skip_white_space_single_line(text: &str, pos: &mut usize) {
     while *pos < text.len() {
         let (ch, size) = stringutil::decode_rune(&text.as_bytes()[*pos..]);
