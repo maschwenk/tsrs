@@ -15,6 +15,7 @@ tsrs_scanner.workspace = true
 tsrs_binder.workspace = true
 tsrs_module.workspace = true
 tsrs_pseudochecker.workspace = true
+tsrs_modulespecifiers.workspace = true
 rustc-hash.workspace = true
 indexmap.workspace = true
 bitflags.workspace = true

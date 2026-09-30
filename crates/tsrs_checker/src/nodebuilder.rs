@@ -150,7 +150,7 @@ pub fn new_node_builder(ch: &mut Checker, e: P<EmitContext>) -> P<NodeBuilder> {
 // nodebuilder.go:283
 pub fn new_node_builder_ex(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> P<NodeBuilder> {
     let impl_ = new_node_builder_impl(ch, e, id_to_symbol);
-    P::new(NodeBuilder { impl_, ctx_stack: RefCell::new(Vec::with_capacity(1)), host: ch.program, verbosity: Cell::new(None) })
+    P::new(NodeBuilder { impl_, ctx_stack: RefCell::new(Vec::with_capacity(1)), host: ch.program.as_module_specifier_generation_host(), verbosity: Cell::new(None) })
 }
 
 impl Checker {

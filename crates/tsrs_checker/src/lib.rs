@@ -17,6 +17,8 @@ pub(crate) use tsrs_diagnostics::{self as diagnostics, Message};
 pub(crate) use tsrs_module::ResolvedModule;
 pub(crate) use tsrs_scanner::Scanner;
 pub(crate) use tsrs_pseudochecker as pseudochecker;
+pub(crate) use tsrs_modulespecifiers as modulespecifiers;
+pub(crate) use tsrs_modulespecifiers::ModuleSpecifierGenerationHost;
 pub(crate) use tsrs_pseudochecker::{new_pseudo_checker, PseudoChecker, PseudoObjectElement, PseudoParameter, PseudoType};
 
 // Data model (checker-foundation).

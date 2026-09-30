@@ -108,4 +108,10 @@ impl tsrs_checker::Program for Program {
     fn get_mode_for_usage_location(&self, file: P<SourceFile>, module_specifier: P<Node>) -> ResolutionMode {
         Program::get_mode_for_usage_location(self, file, module_specifier)
     }
+
+    fn as_module_specifier_generation_host(&self) -> &dyn tsrs_modulespecifiers::ModuleSpecifierGenerationHost {
+        // TODO(compiler): implement tsrs_modulespecifiers::ModuleSpecifierGenerationHost (+ OutputPathsHost) for Program
+        // (Go compiler.Program implements it) and return `self`.
+        todo!("ModuleSpecifierGenerationHost for compiler::Program")
+    }
 }

@@ -47,4 +47,8 @@ pub trait Program: Send + Sync {
     fn get_current_directory(&self) -> String;
     fn get_default_resolution_mode_for_file(&self, file: P<SourceFile>) -> ResolutionMode;
     fn get_mode_for_usage_location(&self, file: P<SourceFile>, module_specifier: P<Node>) -> ResolutionMode;
+
+    /// Go's implicit conversion of the program to the checker's `Host` (= `modulespecifiers.ModuleSpecifierGenerationHost`),
+    /// done by `NewNodeBuilderEx` (`host: ch.program`). The program type implements that trait separately.
+    fn as_module_specifier_generation_host(&self) -> &dyn ModuleSpecifierGenerationHost;
 }

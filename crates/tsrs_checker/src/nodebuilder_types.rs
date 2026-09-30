@@ -18,7 +18,7 @@ use crate::*;
 pub struct NodeBuilder {
     /// Go pushes `b.impl.ctx`, which is nil for the outermost call.
     pub ctx_stack: RefCell<Vec<Option<P<NodeBuilderContext>>>>,
-    pub host: &'static dyn Program,
+    pub host: &'static dyn ModuleSpecifierGenerationHost, // Go `Host`
     pub impl_: P<NodeBuilderImpl>,
     pub verbosity: Cell<Option<P<VerbosityContext>>>, // nil for non-hover callers
 }
@@ -76,7 +76,7 @@ pub struct moduleSpecifierResult {
 /// (Go swaps `b.impl.ctx` pointers, `SymbolTrackerImpl` and the `cloneNodeBuilderContext` restore closure hold it);
 /// every field Go assigns is a `Cell`/`RefCell`. Build with `NodeBuilderContext { …, ..NodeBuilderContext::new(host) }`.
 pub struct NodeBuilderContext {
-    pub host: &'static dyn Program,
+    pub host: &'static dyn ModuleSpecifierGenerationHost, // Go `Host`
     pub tracker: Cell<Option<&'static dyn SymbolTracker>>, // never None after NodeBuilder::enter_context
     pub approximate_length: Cell<i32>,
     pub max_truncation_length: Cell<i32>,
@@ -114,7 +114,7 @@ pub struct NodeBuilderContext {
 
 impl NodeBuilderContext {
     /// The Go zero value (with the one field that has no zero value).
-    pub fn new(host: &'static dyn Program) -> NodeBuilderContext {
+    pub fn new(host: &'static dyn ModuleSpecifierGenerationHost) -> NodeBuilderContext {
         NodeBuilderContext {
             host,
             tracker: Cell::new(None),
@@ -266,6 +266,17 @@ pub enum propertyNameNodeKind {
 pub struct localsRecord {
     pub name: String,
     pub old_symbol: P<Symbol>,
+}
+
+/// `modulespecifiers.CheckerShape` is implemented by `*Checker` in Go (exported `GetSymbolAtLocation` /
+/// `GetAliasedSymbol`).
+impl modulespecifiers::CheckerShape for Checker {
+    fn get_symbol_at_location(&mut self, node: P<Node>) -> Option<P<Symbol>> {
+        self.get_symbol_at_location_exported(node)
+    }
+    fn get_aliased_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol> {
+        Checker::get_aliased_symbol(self, symbol)
+    }
 }
 
 // nodecopy.go
