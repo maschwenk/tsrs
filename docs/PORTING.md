@@ -201,3 +201,10 @@ code is truly unreachable for type checking.
 - `LinkStore<K, V>` keyed by `P<K>`; `get`/`try_get`/`has` take `&self`, return `P<V>`.
 - Go `String()` methods are `string()` + `Display`. `get_spelling_suggestion_for_strings` is at the crate root.
 - json: `tsrs_core::json::Value` with `marshal*`/`unmarshal` (key order preserved).
+
+## `P::get` shadows `T::get`
+
+`P<T>` has an inherent `get(self) -> &'static T`. Method lookup finds it before any `get` defined on `T`, so
+`p.get(key)` on a `P<SymbolTable>`/`P<Relation>`-like value does not compile. Arena types therefore do not name
+methods `get`: use `lookup` (`SymbolTable::lookup(name)`), or call through the deref explicitly: `(*p).get(key)`.
+Field access is unaffected (`p.field.get()` is `Cell::get`).
