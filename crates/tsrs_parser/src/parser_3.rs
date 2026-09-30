@@ -375,7 +375,7 @@ impl Parser {
                 return None;
             }
         }
-        let node = self.factory.new_arrow_function(modifiers, type_parameters, Some(parameters), return_type, None /*fullSignature*/, equals_greater_than_token, Some(body));
+        let node = self.factory.new_arrow_function(modifiers, type_parameters, Some(parameters), return_type, None /*fullSignature*/, Some(equals_greater_than_token), Some(body));
         let result = self.finish_node(node, pos);
         self.with_jsdoc(result, jsdoc);
         self.check_js_syntax(result);
@@ -479,7 +479,7 @@ impl Parser {
         let parameters = self.new_node_list(parameter.loc(), &[parameter]);
         let equals_greater_than_token = self.parse_expected_token(Kind::EqualsGreaterThanToken);
         let body = self.parse_arrow_function_expression_body(async_modifier.is_some() /*isAsync*/, allow_return_type_in_arrow_function);
-        let node = self.factory.new_arrow_function(async_modifier, None /*typeParameters*/, Some(parameters), None /*returnType*/, None /*fullSignature*/, equals_greater_than_token, Some(body));
+        let node = self.factory.new_arrow_function(async_modifier, None /*typeParameters*/, Some(parameters), None /*returnType*/, None /*fullSignature*/, Some(equals_greater_than_token), Some(body));
         let result = self.finish_node(node, pos);
         self.with_jsdoc(result, jsdoc);
         result

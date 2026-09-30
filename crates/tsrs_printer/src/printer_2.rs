@@ -249,7 +249,7 @@ impl Printer {
         self.emit_parameters_for_arrow(node, n.parameters());
         self.emit_type_annotation(n.type_());
         self.write_space();
-        self.emit_token_node(Some(n.equals_greater_than_token()));
+        self.emit_token_node(n.equals_greater_than_token());
         self.write_space();
         self.emit_concise_body(n.body().unwrap());
         self.pop_name_generation_scope(Some(node));

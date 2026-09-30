@@ -3214,12 +3214,12 @@ pub struct ArrowFunction {
     pub function_like_base: FunctionLikeBase,
     pub body_base: BodyBase,
     pub flow_node_base: FlowNodeBase,
-    pub equals_greater_than_token: P<Node>,
+    pub equals_greater_than_token: Option<P<Node>>,
 }
 
 impl ArrowFunction {
     #[inline]
-    pub fn equals_greater_than_token(&self) -> P<Node> {
+    pub fn equals_greater_than_token(&self) -> Option<P<Node>> {
         self.equals_greater_than_token
     }
     #[inline]
@@ -9934,7 +9934,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_arrow_function(&self, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, equals_greater_than_token: P<Node>, body: Option<P<Node>>) -> P<Node> {
+    pub fn new_arrow_function(&self, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, equals_greater_than_token: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::ArrowFunction, NodeData::ArrowFunction(alloc(ArrowFunction {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
@@ -9964,7 +9964,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_arrow_function(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, equals_greater_than_token: P<Node>, body: Option<P<Node>>) -> P<Node> {
+    pub fn update_arrow_function(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, equals_greater_than_token: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         let data = node.as_arrow_function();
         if modifiers != data.modifiers() || type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() || full_signature != data.full_signature() || equals_greater_than_token != data.equals_greater_than_token() || body != data.body() {
             return update_node(self.new_arrow_function(modifiers, type_parameters, parameters, type_node, full_signature, equals_greater_than_token, body), node, &self.hooks);
@@ -13397,7 +13397,7 @@ impl ArrowFunction {
             || visit_node_list(v, self.parameters())
             || visit(v, self.type_())
             || visit(v, self.full_signature())
-            || v(self.equals_greater_than_token())
+            || visit(v, self.equals_greater_than_token())
             || visit(v, self.body())
     }
 }
@@ -13409,7 +13409,7 @@ impl ArrowFunction {
         let parameters_ = v.visit_parameters_hooked(self.parameters());
         let type_node_ = v.visit_node_hooked(self.type_());
         let full_signature_ = v.visit_node_hooked(self.full_signature());
-        let equals_greater_than_token_ = v.visit_node_hooked(Some(self.equals_greater_than_token())).expect("visitor removed a required child");
+        let equals_greater_than_token_ = v.visit_node_hooked(self.equals_greater_than_token());
         let body_ = v.visit_function_body_hooked(self.body());
         v.factory.update_arrow_function(node, modifiers_, type_parameters_, parameters_, type_node_, full_signature_, equals_greater_than_token_, body_)
     }

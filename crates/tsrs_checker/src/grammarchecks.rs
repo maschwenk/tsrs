@@ -828,7 +828,7 @@ impl Checker {
             }
         }
 
-        let equals_greater_than_token = arrow_func.equals_greater_than_token;
+        let equals_greater_than_token = arrow_func.equals_greater_than_token.unwrap();
         let arrow_full_text = &file.text()[equals_greater_than_token.pos() as usize..equals_greater_than_token.end() as usize];
         arrow_full_text.chars().any(stringutil::is_line_break) && self.grammar_error_on_node(equals_greater_than_token, &diagnostics::Line_terminator_not_permitted_before_arrow, &[])
     }

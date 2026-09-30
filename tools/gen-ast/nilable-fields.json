@@ -1,4 +1,5 @@
 [
+ "ArrowFunction.EqualsGreaterThanToken",
  "BinaryExpression.Type",
  "BindingElement.DotDotDotToken",
  "BindingElement.Initializer",

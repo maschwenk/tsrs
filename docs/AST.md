@@ -111,7 +111,7 @@ Field types:
   optional, **or** the Go parser was observed to leave it nil (oracle `tools/oracle/nilfields` over the
   whole test corpus + lib files, parsed as .ts/.tsx/.js; input file `tools/gen-ast/nilable-fields.json`),
   or it is constructed nil by the reparser/checker. Fields widened this way (not optional in ast.json):
-  `CaseOrDefaultClause.expression`, `ExportAssignment.type_`, `FunctionLikeBase.parameters`,
+  `ArrowFunction.equals_greater_than_token` (the node builder passes nil), `CaseOrDefaultClause.expression`, `ExportAssignment.type_`, `FunctionLikeBase.parameters`,
   `ImportAttribute.name`, `JSDocSeeTag.name_expression`, `JSDocTemplateTag.constraint`, `PropertyAssignment.type_`,
   `PropertySignatureDeclaration.{type_, initializer}`, `ShorthandPropertyAssignment.type_`,
   `TaggedTemplateExpression.question_dot_token`, `TypeAliasDeclaration.type_`.

@@ -134,7 +134,7 @@ impl NodeBuilderImpl {
             }
             Kind::ArrowFunction => {
                 // Go passes a nil equalsGreaterThanToken, which the Rust factory cannot represent.
-                self.f.new_arrow_function(modifier_list, type_param_list, Some(param_list), return_type_node, None /*fullSignature*/, self.f.new_token(Kind::EqualsGreaterThanToken), Some(self.f.new_block(self.f.new_node_list(vec![]), false)))
+                self.f.new_arrow_function(modifier_list, type_param_list, Some(param_list), return_type_node, None /*fullSignature*/, None /*equalsGreaterThanToken*/, Some(self.f.new_block(self.f.new_node_list(vec![]), false)))
             }
             _ => panic!("Unhandled kind in signatureToSignatureDeclarationHelper"),
         };
