@@ -19,298 +19,1119 @@ use std::fmt::Display;
 impl Checker {
     // checker.go:17433
     pub(crate) fn get_constraint_or_unknown_from_type_parameter(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        let result = self.get_constraint_from_type_parameter(t);
+        result.unwrap_or(self.unknown_type)
     }
 
     // checker.go:17438
     pub(crate) fn get_inferred_type_parameter_constraint(&mut self, t: P<Type>, omit_type_references: bool) -> Option<P<Type>> {
-        todo!()
+        let mut inferences: Vec<P<Type>> = Vec::new();
+        if let Some(symbol) = t.symbol() {
+            if !symbol.declarations().is_empty() {
+                let declarations = symbol.declarations().clone();
+                for declaration in declarations {
+                    let declaration_parent = declaration.parent().unwrap();
+                    if is_infer_type_node(declaration_parent) {
+                        // When an 'infer T' declaration is immediately contained in a type reference node
+                        // (such as 'Foo<infer T>'), T's constraint is inferred from the constraint of the
+                        // corresponding type parameter in 'Foo'. When multiple 'infer T' declarations are
+                        // present, we form an intersection of the inferred constraint types.
+                        let mut child = declaration_parent;
+                        let mut parent = child.parent();
+                        while let Some(p) = parent {
+                            if !is_parenthesized_type_node(p) {
+                                break;
+                            }
+                            child = p;
+                            parent = child.parent();
+                        }
+                        let parent = parent.unwrap();
+                        if is_type_reference_node(parent) && !omit_type_references {
+                            let type_parameters = self.get_type_parameters_for_type_reference_or_import(parent);
+                            if !type_parameters.is_empty() {
+                                let index = parent.type_arguments().iter().position(|&n| n == child);
+                                if let Some(index) = index {
+                                    if index < type_parameters.len() {
+                                        let declared_constraint = self.get_constraint_of_type_parameter(type_parameters[index]);
+                                        if let Some(declared_constraint) = declared_constraint {
+                                            // Type parameter constraints can reference other type parameters so
+                                            // constraints need to be instantiated. If instantiation produces the
+                                            // type parameter itself, we discard that inference. For example, in
+                                            //   type Foo<T extends string, U extends T> = [T, U];
+                                            //   type Bar<T> = T extends Foo<infer X, infer X> ? Foo<X, X> : T;
+                                            // the instantiated constraint for U is X, so we discard that inference.
+                                            let type_parameters: &'static [P<Type>] = alloc_vec(type_parameters);
+                                            let targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>> = (0..type_parameters.len())
+                                                .map(|index| {
+                                                    let f: Box<dyn Fn(&mut Checker) -> P<Type>> = Box::new(move |c: &mut Checker| {
+                                                        c.get_effective_type_argument_at_index(parent, type_parameters, index as i32)
+                                                    });
+                                                    f
+                                                })
+                                                .collect();
+                                            let mapper = new_deferred_type_mapper(type_parameters, targets);
+                                            let constraint = self.instantiate_type(declared_constraint, Some(mapper));
+                                            if constraint != t {
+                                                inferences.push(constraint);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if is_parameter_declaration(parent) && parent.as_parameter_declaration().dot_dot_dot_token.is_some()
+                            || is_rest_type_node(parent)
+                            || is_named_tuple_member(parent) && parent.as_named_tuple_member().dot_dot_dot_token.is_some()
+                        {
+                            let t = self.create_array_type(self.unknown_type);
+                            inferences.push(t);
+                        } else if is_template_literal_type_span(parent) {
+                            inferences.push(self.string_type);
+                        } else if is_type_parameter_declaration(parent) && is_mapped_type_node(parent.parent().unwrap()) {
+                            inferences.push(self.string_number_symbol_type);
+                        } else if is_mapped_type_node(parent)
+                            && parent.type_node().is_some()
+                            && skip_parentheses(parent.type_node().unwrap()) == declaration_parent
+                            && is_conditional_type_node(parent.parent().unwrap())
+                            && parent.parent().unwrap().as_conditional_type_node().extends_type == parent
+                            && is_mapped_type_node(parent.parent().unwrap().as_conditional_type_node().check_type)
+                            && parent.parent().unwrap().as_conditional_type_node().check_type.type_node().is_some()
+                        {
+                            let check_mapped_type = parent.parent().unwrap().as_conditional_type_node().check_type;
+                            let node_type = self.get_type_from_type_node(check_mapped_type.type_node().unwrap());
+                            let check_mapped_type_parameter = check_mapped_type.as_mapped_type_node().type_parameter;
+                            let tp_symbol = self.get_symbol_of_declaration(check_mapped_type_parameter).unwrap();
+                            let source = self.get_declared_type_of_type_parameter(tp_symbol);
+                            let target = match check_mapped_type_parameter.as_type_parameter_declaration().constraint {
+                                Some(constraint) => self.get_type_from_type_node(constraint),
+                                None => self.string_number_symbol_type,
+                            };
+                            let mapper = new_simple_type_mapper(source, target);
+                            let t = self.instantiate_type(node_type, Some(mapper));
+                            inferences.push(t);
+                        }
+                    }
+                }
+            }
+        }
+        if !inferences.is_empty() {
+            return Some(self.get_intersection_type(&inferences));
+        }
+        None
     }
 
     // checker.go:17511
     pub(crate) fn get_type_parameters_for_type_reference_or_import(&mut self, node: P<Node>) -> Vec<P<Type>> {
-        todo!()
+        let t = self.get_type_from_type_node(node);
+        if !self.is_error_type(t) {
+            let symbol = self.get_resolved_symbol_or_nil(node);
+            if let Some(symbol) = symbol {
+                return self.get_type_parameters_for_type_and_symbol(t, symbol);
+            }
+        }
+        Vec::new()
     }
 
     // checker.go:17522
     pub(crate) fn get_type_parameters_for_type_and_symbol(&mut self, t: P<Type>, symbol: P<Symbol>) -> Vec<P<Type>> {
-        todo!()
+        if !self.is_error_type(t) {
+            if symbol.flags().intersects(SymbolFlags::TypeAlias) {
+                let type_parameters = self.type_alias_links.get(symbol).type_parameters.get();
+                if !type_parameters.is_empty() {
+                    return type_parameters.to_vec();
+                }
+            }
+            if t.object_flags().intersects(ObjectFlags::Reference) {
+                return t.target().unwrap().as_interface_type().local_type_parameters().to_vec();
+            }
+        }
+        Vec::new()
     }
 
     // checker.go:17536
     pub(crate) fn get_effective_type_argument_at_index(&mut self, node: P<Node>, type_parameters: &[P<Type>], index: i32) -> P<Type> {
-        todo!()
+        let type_arguments = node.type_arguments();
+        if (index as usize) < type_arguments.len() {
+            return self.get_type_from_type_node(type_arguments[index as usize]);
+        }
+        self.get_effective_type_arguments(node, type_parameters)[index as usize]
     }
 
     // checker.go:17544
     pub(crate) fn get_constraint_of_indexed_access(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        if self.has_non_circular_base_constraint(t) {
+            return self.get_constraint_from_indexed_access(t);
+        }
+        None
     }
 
     // checker.go:17551
     pub(crate) fn get_constraint_from_indexed_access(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        let d = t.as_indexed_access_type();
+        let object_type = d.object_type.get().unwrap();
+        let index_type = d.index_type.get().unwrap();
+        let access_flags = d.access_flags.get();
+        if self.is_mapped_type_generic_indexed_access(t) {
+            // For indexed access types of the form { [P in K]: E }[X], where K is non-generic and X is generic,
+            // we substitute an instantiation of E where P is replaced with X.
+            return Some(self.substitute_indexed_mapped_type(object_type, index_type));
+        }
+        let index_constraint = self.get_simplified_type_or_constraint(index_type);
+        if let Some(index_constraint) = index_constraint {
+            if index_constraint != index_type {
+                let indexed_access = self.get_indexed_access_type_or_undefined(object_type, index_constraint, access_flags, None, None);
+                if indexed_access.is_some() {
+                    return indexed_access;
+                }
+            }
+        }
+        let object_constraint = self.get_simplified_type_or_constraint(object_type);
+        if let Some(object_constraint) = object_constraint {
+            if object_constraint != object_type {
+                return self.get_indexed_access_type_or_undefined(object_constraint, index_type, access_flags, None, None);
+            }
+        }
+        None
     }
 
     // checker.go:17572
     pub(crate) fn get_constraint_of_conditional_type(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        if self.has_non_circular_base_constraint(t) {
+            return Some(self.get_constraint_from_conditional_type(t));
+        }
+        None
     }
 
     // checker.go:17579
     pub(crate) fn get_constraint_from_conditional_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        let constraint = self.get_constraint_of_distributive_conditional_type(t);
+        if let Some(constraint) = constraint {
+            return constraint;
+        }
+        self.get_default_constraint_of_conditional_type(t)
     }
 
     // checker.go:17587
     pub(crate) fn get_default_constraint_of_conditional_type(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        let d = t.as_conditional_type();
+        if d.resolved_default_constraint.get().is_none() {
+            // An `any` branch of a conditional type would normally be viral - specifically, without special handling here,
+            // a conditional type with a single branch of type `any` would be assignable to anything, since it's constraint would simplify to
+            // just `any`. This result is _usually_ unwanted - so instead here we elide an `any` branch from the constraint type,
+            // in effect treating `any` like `never` rather than `unknown` in this location.
+            let true_constraint = self.get_inferred_true_type_from_conditional_type(t);
+            let false_constraint = self.get_false_type_from_conditional_type(t);
+            if is_type_any(Some(true_constraint)) {
+                d.resolved_default_constraint.set(Some(false_constraint));
+            } else if is_type_any(Some(false_constraint)) {
+                d.resolved_default_constraint.set(Some(true_constraint));
+            } else {
+                let u = self.get_union_type(&[true_constraint, false_constraint]);
+                d.resolved_default_constraint.set(Some(u));
+            }
+        }
+        d.resolved_default_constraint.get().unwrap()
     }
 
     // checker.go:17608
     pub(crate) fn get_constraint_of_distributive_conditional_type(&mut self, t: P<Type>) -> Option<P<Type>> {
-        todo!()
+        let d = t.as_conditional_type();
+        if d.resolved_constraint_of_distributive.get().is_none() {
+            // Check if we have a conditional type of the form 'T extends U ? X : Y', where T is a constrained
+            // type parameter. If so, create an instantiation of the conditional type where T is replaced
+            // with its constraint. We do this because if the constraint is a union type it will be distributed
+            // over the conditional type and possibly reduced. For example, 'T extends undefined ? never : T'
+            // removes 'undefined' from T.
+            // We skip returning a distributive constraint for a restrictive instantiation of a conditional type
+            // as the constraint for all type params (check type included) have been replace with `unknown`, which
+            // is going to produce even more false positive/negative results than the distribute constraint already does.
+            // Please note: the distributive constraint is a kludge for emulating what a negated type could to do filter
+            // a union - once negated types exist and are applied to the conditional false branch, this "constraint"
+            // likely doesn't need to exist.
+            let root = d.root.get().unwrap();
+            if root.is_distributive.get()
+                && self.cached_types.get(&CachedTypeKey { kind: CachedTypeKind::RestrictiveInstantiation, type_id: t.id }).copied() != Some(t)
+            {
+                let check_type = d.check_type.get().unwrap();
+                let mut constraint = Some(self.get_simplified_type(check_type, false /*writing*/));
+                if constraint == Some(check_type) {
+                    constraint = self.get_constraint_of_type(constraint.unwrap());
+                }
+                if let Some(constraint) = constraint {
+                    if constraint != check_type {
+                        let mapper = prepend_type_mapping(root.check_type.get().unwrap(), constraint, d.mapper.get());
+                        let instantiated = self.get_conditional_type_instantiation(t, mapper, true /*forConstraint*/, None);
+                        if !instantiated.flags().intersects(TypeFlags::Never) {
+                            d.resolved_constraint_of_distributive.set(Some(instantiated));
+                            return Some(instantiated);
+                        }
+                    }
+                }
+            }
+            d.resolved_constraint_of_distributive.set(Some(self.no_constraint_type));
+        }
+        if d.resolved_constraint_of_distributive.get() != Some(self.no_constraint_type) {
+            return d.resolved_constraint_of_distributive.get();
+        }
+        None
     }
 
     // checker.go:17643
     pub(crate) fn get_declared_type_of_class_or_interface(&mut self, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let links = self.declared_type_links.get(symbol);
+        if links.declared_type.get().is_none() {
+            let kind = if symbol.flags().intersects(SymbolFlags::Class) { ObjectFlags::Class } else { ObjectFlags::Interface };
+            let t = self.new_object_type(kind, Some(symbol));
+            links.declared_type.set(Some(t));
+            let outer_type_parameters = self.get_outer_type_parameters_of_class_or_interface(symbol);
+            let outer_type_parameter_count = outer_type_parameters.len();
+            let mut type_parameters = self.append_local_type_parameters_of_class_or_interface_or_type_alias(&outer_type_parameters, symbol);
+            // A class or interface is generic if it has type parameters or a "this" type. We always give classes a "this" type
+            // because it is not feasible to analyze all members to determine if the "this" type escapes the class (in particular,
+            // property types inferred from initializers and method return types inferred from return statements are very hard
+            // to exhaustively analyze). We give interfaces a "this" type if we can't definitely determine that they are free of
+            // "this" references.
+            if !type_parameters.is_empty() || kind == ObjectFlags::Class || !self.is_thisless_interface(symbol) {
+                t.object_flags.set(t.object_flags.get() | ObjectFlags::Reference);
+                let d = t.as_interface_type();
+                let this_type = self.new_type_parameter(Some(symbol));
+                d.this_type.set(Some(this_type));
+                this_type.as_type_parameter().is_this_type.set(true);
+                this_type.as_type_parameter().constraint.set(Some(t));
+                type_parameters.push(this_type);
+                d.all_type_parameters.set(alloc_vec(type_parameters));
+                d.outer_type_parameter_count.set(outer_type_parameter_count as i32);
+                d.resolved_type_arguments.set(d.type_parameters());
+                d.instantiations.make();
+                d.instantiations.set(get_type_list_key(d.resolved_type_arguments.get()), t);
+                d.target.set(Some(t));
+            }
+        }
+        links.declared_type.get().unwrap()
     }
 
+    // Returns true if the interface given by the symbol is free of "this" references.
+    //
+    // Specifically, the result is true if the interface itself contains no references
+    // to "this" in its body, if all base types are interfaces,
+    // and if none of the base interfaces have a "this" type.
     // checker.go:17680
     pub(crate) fn is_thisless_interface(&mut self, symbol: P<Symbol>) -> bool {
-        todo!()
+        let declarations = symbol.declarations().clone();
+        for declaration in declarations {
+            if is_interface_declaration(declaration) {
+                if declaration.flags().intersects(NodeFlags::ContainsThis) {
+                    return false;
+                }
+                let base_type_nodes = get_extends_heritage_clause_elements(declaration);
+                for &node in base_type_nodes {
+                    let name = get_heritage_clause_element_name(node);
+                    if is_entity_name(name) || is_entity_name_expression(name) {
+                        let base_symbol = self.resolve_entity_name(name, SymbolFlags::Type, true /*ignoreErrors*/, false, None);
+                        match base_symbol {
+                            None => return false,
+                            Some(base_symbol) => {
+                                if !base_symbol.flags().intersects(SymbolFlags::Interface)
+                                    || self.get_declared_type_of_class_or_interface(base_symbol).as_interface_type().this_type.get().is_some()
+                                {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        true
     }
 }
 
 impl CacheHashKey {
     // checker.go:17703
     pub fn is_zero(self) -> bool {
-        todo!()
+        self == CacheHashKey::default()
     }
 }
 
 impl keyBuilder {
     // checker.go:17713
     pub(crate) fn hash(&self) -> CacheHashKey {
-        todo!()
+        match &self.overflow_buffer {
+            None => CacheHashKey::hash_128(&self.inline_buffer[..self.inline_length as usize]),
+            Some(overflow) => {
+                let mut buf = overflow.clone();
+                buf.extend_from_slice(&self.inline_buffer[..self.inline_length as usize]);
+                CacheHashKey::hash_128(&buf)
+            }
+        }
     }
 
+    // spill moves the buffered bytes onto the end of overflowBuffer, so the key's byte
+    // stream stays overflowBuffer followed by inlineBuffer.
     // checker.go:17722
     pub(crate) fn spill(&mut self) {
-        todo!()
+        let n = self.inline_length as usize;
+        let inline = self.inline_buffer;
+        self.overflow_buffer.get_or_insert_with(Vec::new).extend_from_slice(&inline[..n]);
+        self.inline_length = 0;
     }
 
     // checker.go:17727
     pub(crate) fn write_byte(&mut self, c: u8) {
-        todo!()
+        if self.inline_length as usize == self.inline_buffer.len() {
+            self.spill();
+        }
+        self.inline_buffer[self.inline_length as usize] = c;
+        self.inline_length += 1;
     }
 
     // checker.go:17735
     pub(crate) fn write_string(&mut self, s: &str) {
-        todo!()
+        if self.inline_length as usize + s.len() > self.inline_buffer.len() {
+            self.spill();
+            if s.len() > self.inline_buffer.len() {
+                self.overflow_buffer.get_or_insert_with(Vec::new).extend_from_slice(s.as_bytes());
+                return;
+            }
+        }
+        let start = self.inline_length as usize;
+        self.inline_buffer[start..start + s.len()].copy_from_slice(s.as_bytes());
+        self.inline_length += s.len() as i32;
     }
 
     // checker.go:17746
     pub(crate) fn write_uint32(&mut self, v: u32) {
-        todo!()
+        if self.inline_length as usize + 4 > self.inline_buffer.len() {
+            self.spill();
+        }
+        let start = self.inline_length as usize;
+        self.inline_buffer[start..start + 4].copy_from_slice(&v.to_le_bytes());
+        self.inline_length += 4;
     }
 
     // checker.go:17754
     pub(crate) fn write_uint64(&mut self, v: u64) {
-        todo!()
+        if self.inline_length as usize + 8 > self.inline_buffer.len() {
+            self.spill();
+        }
+        let start = self.inline_length as usize;
+        self.inline_buffer[start..start + 8].copy_from_slice(&v.to_le_bytes());
+        self.inline_length += 8;
     }
 
     // checker.go:17762
     pub(crate) fn write_int(&mut self, value: i32) {
-        todo!()
+        // Go `uint64(value)` of a (64-bit) int: sign-extend
+        self.write_uint64(value as i64 as u64);
     }
 
     // checker.go:17766
     pub(crate) fn write_symbol(&mut self, s: P<Symbol>) {
-        todo!()
+        self.write_uint64(get_symbol_id(s).0);
     }
 
     // checker.go:17770
     pub(crate) fn write_type(&mut self, t: P<Type>) {
-        todo!()
+        self.write_uint32(t.id.0);
     }
 
     // checker.go:17774
     pub(crate) fn write_types(&mut self, types: &[P<Type>]) {
-        todo!()
+        self.write_int(types.len() as i32);
+        for &t in types {
+            self.write_type(t);
+        }
     }
 
     // checker.go:17781
     pub(crate) fn write_alias(&mut self, alias: Option<P<TypeAlias>>) {
-        todo!()
+        if let Some(alias) = alias {
+            self.write_byte(1);
+            self.write_symbol(alias.symbol.get().unwrap());
+            self.write_types(alias.type_arguments.get());
+        } else {
+            self.write_byte(0);
+        }
     }
 
     // checker.go:17791
     pub(crate) fn write_generic_type_references(&mut self, c: &mut Checker, source: P<Type>, target: P<Type>, ignore_constraints: bool) -> bool {
-        todo!()
+        let mut constrained = false;
+        let mut type_parameters: Vec<P<Type>> = Vec::with_capacity(8);
+        fn write_type_reference(
+            b: &mut keyBuilder,
+            c: &mut Checker,
+            ref_: P<Type>,
+            depth: i32,
+            ignore_constraints: bool,
+            type_parameters: &mut Vec<P<Type>>,
+            constrained: &mut bool,
+        ) {
+            b.write_type(ref_.target().unwrap());
+            for &t in ref_.as_type_reference().resolved_type_arguments.get() {
+                if t.flags().intersects(TypeFlags::TypeParameter) {
+                    if ignore_constraints || c.get_constraint_of_type_parameter(t).is_none() {
+                        let index = match type_parameters.iter().position(|&tp| tp == t) {
+                            Some(index) => index,
+                            None => {
+                                let index = type_parameters.len();
+                                type_parameters.push(t);
+                                index
+                            }
+                        };
+                        b.write_byte(b'=');
+                        b.write_int(index as i32);
+                        continue;
+                    }
+                    *constrained = true;
+                } else if depth < 4 && is_type_reference_with_generic_arguments(c, t) {
+                    b.write_byte(b'<');
+                    write_type_reference(b, c, t, depth + 1, ignore_constraints, type_parameters, constrained);
+                    b.write_byte(b'>');
+                    continue;
+                }
+                b.write_byte(b'-');
+                b.write_type(t);
+            }
+        }
+        write_type_reference(self, c, source, 0, ignore_constraints, &mut type_parameters, &mut constrained);
+        self.write_byte(b',');
+        write_type_reference(self, c, target, 0, ignore_constraints, &mut type_parameters, &mut constrained);
+        constrained
     }
 
     // checker.go:17826
     pub(crate) fn write_node_id(&mut self, id: NodeId) {
-        todo!()
+        self.write_uint64(id.0);
     }
 
     // checker.go:17830
     pub(crate) fn write_node(&mut self, node: Option<P<Node>>) {
-        todo!()
+        if let Some(node) = node {
+            self.write_node_id(get_node_id(node));
+        }
     }
 }
 
 // checker.go:17836
 pub(crate) fn get_type_list_key(types: &[P<Type>]) -> CacheHashKey {
-    todo!()
+    let mut b = keyBuilder::default();
+    b.write_types(types);
+    b.hash()
 }
 
 // checker.go:17842
 pub(crate) fn get_alias_key(alias: Option<P<TypeAlias>>) -> CacheHashKey {
-    todo!()
+    let mut b = keyBuilder::default();
+    b.write_alias(alias);
+    b.hash()
 }
 
 // checker.go:17848
 pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: Option<P<TypeAlias>>) -> CacheHashKey {
-    todo!()
+    let mut b = keyBuilder::default();
+    match origin {
+        None => b.write_types(types),
+        Some(origin) if origin.flags().intersects(TypeFlags::Union) => {
+            b.write_byte(b'|');
+            b.write_types(origin.types());
+        }
+        Some(origin) if origin.flags().intersects(TypeFlags::Intersection) => {
+            b.write_byte(b'&');
+            b.write_types(origin.types());
+        }
+        Some(origin) if origin.flags().intersects(TypeFlags::Index) => {
+            // origin type id alone is insufficient, as `keyof x` may resolve to multiple WIP values while `x` is still resolving
+            b.write_byte(b'#');
+            b.write_type(origin);
+            b.write_byte(b'|');
+            b.write_types(types);
+        }
+        _ => panic!("Unhandled case in getUnionKey"),
+    }
+    b.write_alias(alias);
+    b.hash()
 }
 
 // checker.go:17872
 pub(crate) fn get_intersection_key(types: &[P<Type>], flags: IntersectionFlags, alias: Option<P<TypeAlias>>) -> CacheHashKey {
-    todo!()
+    let mut b = keyBuilder::default();
+    b.write_types(types);
+    if !flags.intersects(IntersectionFlags::NoConstraintReduction) {
+        b.write_alias(alias);
+    } else {
+        b.write_byte(b'*');
+    }
+    b.hash()
 }
 
 // checker.go:17883
 pub(crate) fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) -> CacheHashKey {
-    todo!()
+    let mut b = keyBuilder::default();
+    for e in element_infos {
+        if e.flags.intersects(ElementFlags::Required) {
+            b.write_byte(b'#');
+        } else if e.flags.intersects(ElementFlags::Optional) {
+            b.write_byte(b'?');
+        } else if e.flags.intersects(ElementFlags::Rest) {
+            b.write_byte(b'.');
+        } else {
+            b.write_byte(b'*');
+        }
+        if e.labeled_declaration.is_some() {
+            b.write_node(e.labeled_declaration);
+        }
+    }
+    if readonly {
+        b.write_byte(b'!');
+    }
+    b.hash()
 }
 
 // checker.go:17906
 pub(crate) fn get_type_alias_instantiation_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>) -> CacheHashKey {
-    todo!()
+    get_type_instantiation_key(type_arguments, alias, false)
 }
 
 // checker.go:17910
 pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, single_signature: bool) -> CacheHashKey {
-    todo!()
+    let mut b = keyBuilder::default();
+    b.write_types(type_arguments);
+    b.write_alias(alias);
+    if single_signature {
+        b.write_byte(b'!');
+    }
+    b.hash()
 }
 
 // checker.go:17920
 pub(crate) fn get_indexed_access_key(object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, alias: Option<P<TypeAlias>>) -> CacheHashKey {
-    todo!()
+    let mut b = keyBuilder::default();
+    b.write_type(object_type);
+    b.write_type(index_type);
+    b.write_uint32(access_flags.bits());
+    b.write_alias(alias);
+    b.hash()
 }
 
 // checker.go:17929
 pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheHashKey {
-    todo!()
+    let mut b = keyBuilder::default();
+    b.write_types(types);
+    b.write_byte(b'|');
+    for s in texts {
+        b.write_int(s.len() as i32);
+    }
+    b.write_byte(b'|');
+    for s in texts {
+        b.write_string(s);
+    }
+    b.hash()
 }
 
 // checker.go:17943
 pub(crate) fn get_conditional_type_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, for_constraint: bool) -> CacheHashKey {
-    todo!()
+    let mut b = keyBuilder::default();
+    b.write_types(type_arguments);
+    b.write_alias(alias);
+    if for_constraint {
+        b.write_byte(b'!');
+    }
+    b.hash()
 }
 
 // checker.go:17953
 pub(crate) fn get_relation_key(c: &mut Checker, source: P<Type>, target: P<Type>, intersection_state: IntersectionState, is_identity: bool, ignore_constraints: bool) -> (CacheHashKey, bool) {
-    todo!()
+    let (mut source, mut target) = (source, target);
+    if is_identity && source.id > target.id {
+        std::mem::swap(&mut source, &mut target);
+    }
+    let mut b = keyBuilder::default();
+    let constrained;
+    if is_type_reference_with_generic_arguments(c, source) && is_type_reference_with_generic_arguments(c, target) {
+        b.write_byte(b'g');
+        constrained = b.write_generic_type_references(c, source, target, ignore_constraints);
+    } else {
+        b.write_byte(b's');
+        b.write_type(source);
+        b.write_type(target);
+        constrained = false;
+    }
+    b.write_uint32(intersection_state.bits());
+    (b.hash(), constrained)
 }
 
 // checker.go:17971
 pub(crate) fn get_node_list_key(nodes: &[P<Node>]) -> CacheHashKey {
-    todo!()
+    let mut b = keyBuilder::default();
+    b.write_int(nodes.len() as i32);
+    for &n in nodes {
+        b.write_node(Some(n));
+    }
+    b.hash()
 }
 
 // checker.go:17980
 pub(crate) fn is_type_reference_with_generic_arguments(c: &mut Checker, t: P<Type>) -> bool {
-    todo!()
+    is_non_deferred_type_reference(t)
+        && c.get_type_arguments(t).into_iter().any(|t| t.flags().intersects(TypeFlags::TypeParameter) || is_type_reference_with_generic_arguments(c, t))
 }
 
 // checker.go:17986
 pub(crate) fn is_non_deferred_type_reference(t: P<Type>) -> bool {
-    todo!()
+    t.object_flags().intersects(ObjectFlags::Reference) && t.as_type_reference().node.get().is_none()
 }
 
+// Return true if type parameter originates in an unconstrained declaration in a type parameter list
 // checker.go:17991
 pub(crate) fn is_unconstrained_type_parameter(tp: P<Type>) -> bool {
-    todo!()
+    let target = tp.target().unwrap_or(tp);
+    let Some(symbol) = target.symbol() else {
+        return false;
+    };
+    for &d in symbol.declarations().iter() {
+        if is_type_parameter_declaration(d)
+            && (d.as_type_parameter_declaration().constraint.is_some() || is_mapped_type_node(d.parent().unwrap()) || is_infer_type_node(d.parent().unwrap()))
+        {
+            return false;
+        }
+    }
+    true
 }
 
 impl Checker {
     // checker.go:18007
     pub(crate) fn is_null_or_undefined(&mut self, node: P<Node>) -> bool {
-        todo!()
+        let expr = skip_parentheses(node);
+        match expr.kind {
+            Kind::NullKeyword => return true,
+            Kind::Identifier => return self.get_resolved_symbol(expr) == self.undefined_symbol,
+            _ => {}
+        }
+        false
     }
 
     // checker.go:18018
     pub(crate) fn check_right_hand_side_of_for_of(&mut self, statement: P<Node>) -> P<Type> {
-        todo!()
+        let use_ = if statement.as_for_in_or_of_statement().await_modifier.is_some() { IterationUse::ForAwaitOf } else { IterationUse::ForOf };
+        let expression = statement.expression().unwrap();
+        let t = self.check_non_null_expression(expression);
+        self.check_iterated_type_or_element_type(use_, t, self.undefined_type, Some(expression))
     }
 
+    // Return the inferred type for a binding element
     // checker.go:18024
     pub(crate) fn get_type_for_binding_element(&mut self, declaration: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let check_mode = if has_dot_dot_dot_token(declaration) { CheckMode::RestBindingElement } else { CheckMode::Normal };
+        let parent_type = self.get_type_for_binding_element_parent(declaration.parent().unwrap().parent().unwrap(), check_mode);
+        if let Some(parent_type) = parent_type {
+            return Some(self.get_binding_element_type_from_parent_type(declaration, parent_type, false /*noTupleBoundsCheck*/));
+        }
+        None
     }
 
+    // Return the type of a binding element parent. We check SymbolLinks first to see if a type has been
+    // assigned by contextual typing.
     // checker.go:18035
     pub(crate) fn get_type_for_binding_element_parent(&mut self, node: P<Node>, check_mode: CheckMode) -> Option<P<Type>> {
-        todo!()
+        if check_mode == CheckMode::Normal {
+            // We can use a cached resolved type if no optionality was included in that type.
+            if let Some(symbol) = self.get_symbol_of_declaration(node) {
+                if let Some(resolved_type) = self.value_symbol_links.get(symbol).resolved_type.get() {
+                    if !(self.strict_null_checks && is_optional_declaration(node)) {
+                        return Some(resolved_type);
+                    }
+                }
+            }
+        }
+        self.get_type_for_variable_like_declaration(node, false /*includeOptionality*/, check_mode)
     }
 
     // checker.go:18047
     pub(crate) fn get_binding_element_type_from_parent_type(&mut self, declaration: P<Node>, parent_type: P<Type>, no_tuple_bounds_check: bool) -> P<Type> {
-        todo!()
+        let mut parent_type = parent_type;
+        // If an any type was inferred for parent, infer that for the binding element
+        if is_type_any(Some(parent_type)) {
+            return parent_type;
+        }
+        let pattern = declaration.parent().unwrap();
+        // Relax null check on ambient destructuring parameters, since the parameters have no implementation and are just documentation
+        if self.strict_null_checks && declaration.flags().intersects(NodeFlags::Ambient) && is_part_of_parameter_declaration(declaration) {
+            parent_type = self.get_non_nullable_type(parent_type);
+        } else if self.strict_null_checks && pattern.parent().unwrap().initializer().is_some() && {
+            let init_type = self.get_type_of_initializer(pattern.parent().unwrap().initializer().unwrap());
+            !self.has_type_facts(init_type, TypeFacts::EQUndefined)
+        } {
+            parent_type = self.get_type_with_facts(parent_type, TypeFacts::NEUndefined);
+        }
+        let access_flags = AccessFlags::ExpressionPosition
+            | if no_tuple_bounds_check || self.has_default_value(declaration) { AccessFlags::AllowMissing } else { AccessFlags::None };
+        let t: P<Type>;
+        match pattern.kind {
+            Kind::ObjectBindingPattern => {
+                if has_dot_dot_dot_token(declaration) {
+                    parent_type = self.get_reduced_type(parent_type);
+                    if parent_type.flags().intersects(TypeFlags::Unknown) || !self.is_valid_spread_type(parent_type) {
+                        self.error(Some(declaration), &diagnostics::Rest_types_may_only_be_created_from_object_types, &[]);
+                        return self.error_type;
+                    }
+                    let elements = pattern.elements();
+                    let mut literal_members: Vec<P<Node>> = Vec::with_capacity(elements.len());
+                    for &element in elements {
+                        if !has_dot_dot_dot_token(element) {
+                            let name = element.property_name_or_name().unwrap();
+                            literal_members.push(name);
+                        }
+                    }
+                    t = self.get_rest_type(parent_type, &literal_members, declaration.symbol().unwrap());
+                } else {
+                    // Use explicitly specified property name ({ p: xxx } form), or otherwise the implied name ({ p } form)
+                    let name = declaration.property_name_or_name().unwrap();
+                    let index_type = self.get_literal_type_from_property_name(name);
+                    let declared_type = self.get_indexed_access_type_ex(parent_type, index_type, access_flags, Some(name), None);
+                    t = self.get_flow_type_of_destructuring(declaration, declared_type);
+                }
+            }
+            Kind::ArrayBindingPattern => {
+                // This elementType will be used if the specific property corresponding to this index is not
+                // present (aka the tuple element property). This call also checks that the parentType is in
+                // fact an iterable or array (depending on target language).
+                let element_type = self.check_iterated_type_or_element_type(
+                    IterationUse::Destructuring | if has_dot_dot_dot_token(declaration) { IterationUse::empty() } else { IterationUse::PossiblyOutOfBounds },
+                    parent_type,
+                    self.undefined_type,
+                    Some(pattern),
+                );
+                let index = pattern.elements().iter().position(|&e| e == declaration).map_or(-1, |i| i as i32);
+                if has_dot_dot_dot_token(declaration) {
+                    // If the parent is a tuple type, the rest element has a tuple type of the
+                    // remaining tuple element types. Otherwise, the rest element has an array type with same
+                    // element type as the parent type.
+                    let base_constraint = self
+                        .map_type(parent_type, |c, t| {
+                            if t.flags().intersects(TypeFlags::InstantiableNonPrimitive) {
+                                return Some(c.get_base_constraint_or_type(t));
+                            }
+                            Some(t)
+                        })
+                        .unwrap();
+                    if every_type(base_constraint, is_tuple_type) {
+                        t = self.map_type(base_constraint, |c, t| Some(c.slice_tuple_type(t, index, 0))).unwrap();
+                    } else {
+                        t = self.create_array_type(element_type);
+                    }
+                } else if self.is_array_like_type(parent_type) {
+                    let index_type = self.get_number_literal_type(Number(index as f64));
+                    let declared_type = self
+                        .get_indexed_access_type_or_undefined(parent_type, index_type, access_flags, declaration.name(), None)
+                        .unwrap_or(self.error_type);
+                    t = self.get_flow_type_of_destructuring(declaration, declared_type);
+                } else {
+                    t = element_type;
+                }
+            }
+            _ => panic!("Unhandled case in getBindingElementTypeFromParentType"),
+        }
+        if declaration.initializer().is_none() {
+            return t;
+        }
+        if walk_up_binding_elements_and_patterns(declaration).type_node().is_some() {
+            // In strict null checking mode, if a default value of a non-undefined type is specified, remove
+            // undefined from the final type.
+            if self.strict_null_checks && {
+                let init_type = self.check_declaration_initializer(declaration, CheckMode::Normal, None);
+                !self.has_type_facts(init_type, TypeFacts::IsUndefined)
+            } {
+                return self.get_non_undefined_type(t);
+            }
+            return t;
+        }
+        let non_undefined = self.get_non_undefined_type(t);
+        let init_type = self.check_declaration_initializer(declaration, CheckMode::Normal, None);
+        let u = self.get_union_type_ex(&[non_undefined, init_type], UnionReduction::Subtype, None, None);
+        self.widen_type_inferred_from_initializer(declaration, u)
     }
 
     // checker.go:18132
     pub(crate) fn get_rest_type(&mut self, source: P<Type>, properties: &[P<Node>], symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let source = self.filter_type(source, |_, t| !t.flags().intersects(TypeFlags::Nullable));
+        if source.flags().intersects(TypeFlags::Never) {
+            return self.empty_object_type;
+        }
+        if source.flags().intersects(TypeFlags::Union) {
+            return self.map_type(source, |c, t| Some(c.get_rest_type(t, properties, symbol))).unwrap();
+        }
+        let key_types: Vec<P<Type>> = properties.iter().map(|&p| self.get_literal_type_from_property_name(p)).collect();
+        let mut omit_key_type = self.get_union_type(&key_types);
+        let mut spreadable_properties: Vec<P<Symbol>> = Vec::new();
+        let mut unspreadable_to_rest_keys: Vec<P<Type>> = Vec::new();
+        for prop in self.get_properties_of_type(source) {
+            let literal_type_from_property = self.get_literal_type_from_property(prop, TypeFlags::StringOrNumberLiteralOrUnique, false);
+            if !self.is_type_assignable_to(literal_type_from_property, omit_key_type)
+                && !get_declaration_modifier_flags_from_symbol(prop).intersects(ModifierFlags::Private | ModifierFlags::Protected)
+                && self.is_spreadable_property(prop)
+            {
+                spreadable_properties.push(prop);
+            } else {
+                unspreadable_to_rest_keys.push(literal_type_from_property);
+            }
+        }
+        if self.is_generic_object_type(source) || self.is_generic_index_type(omit_key_type) {
+            if !unspreadable_to_rest_keys.is_empty() {
+                // If the type we're spreading from has properties that cannot
+                // be spread into the rest type (e.g. getters, methods), ensure
+                // they are explicitly omitted, as they would in the non-generic case.
+                let mut types = vec![omit_key_type];
+                types.extend(unspreadable_to_rest_keys);
+                omit_key_type = self.get_union_type(&types);
+            }
+            if omit_key_type.flags().intersects(TypeFlags::Never) {
+                return source;
+            }
+            let omit_type_alias = self.get_global_omit_symbol();
+            let Some(omit_type_alias) = omit_type_alias else {
+                return self.error_type;
+            };
+            return self.get_type_alias_instantiation(omit_type_alias, &[source, omit_key_type], None);
+        }
+        let members = SymbolTable::new();
+        for prop in spreadable_properties {
+            let s = self.get_spread_symbol(prop, false /*readonly*/);
+            members.set(prop.name(), s);
+        }
+        let index_infos = self.get_index_infos_of_type(source);
+        let result = self.new_anonymous_type(Some(symbol), Some(members), &[], &[], &index_infos);
+        result.object_flags.set(result.object_flags.get() | ObjectFlags::ObjectRestType);
+        result
     }
 
+    // Determine the control flow type associated with a destructuring declaration or assignment. The following
+    // forms of destructuring are possible:
+    //
+    //	let { x } = obj;  // BindingElement
+    //	let [ x ] = obj;  // BindingElement
+    //	{ x } = obj;      // ShorthandPropertyAssignment
+    //	{ x: v } = obj;   // PropertyAssignment
+    //	[ x ] = obj;      // Expression
+    //
+    // We construct a synthetic element access expression corresponding to 'obj.x' such that the control
+    // flow analyzer doesn't have to handle all the different syntactic forms.
     // checker.go:18189
     pub(crate) fn get_flow_type_of_destructuring(&mut self, node: P<Node>, declared_type: P<Type>) -> P<Type> {
-        todo!()
+        let reference = self.get_synthetic_element_access(node);
+        if let Some(reference) = reference {
+            return self.get_flow_type_of_reference(reference, declared_type);
+        }
+        declared_type
     }
 
     // checker.go:18197
     pub(crate) fn get_synthetic_element_access(&mut self, node: P<Node>) -> Option<P<Node>> {
-        todo!()
+        let parent_access = self.get_parent_element_access(node);
+        if let Some(parent_access) = parent_access {
+            if get_flow_node_of_node(parent_access).is_some() {
+                let (prop_name, ok) = self.get_destructuring_property_name(node);
+                if ok {
+                    let literal = self.factory.new_string_literal(alloc_str(&prop_name), TokenFlags::None);
+                    literal.set_loc(node.loc());
+                    let mut lhs_expr = parent_access;
+                    if !is_left_hand_side_expression(parent_access) {
+                        lhs_expr = self.factory.new_parenthesized_expression(parent_access);
+                        lhs_expr.set_loc(node.loc());
+                    }
+                    let result = self.factory.new_element_access_expression(lhs_expr, None, literal, NodeFlags::None);
+                    result.set_loc(node.loc());
+                    literal.set_parent(Some(result));
+                    result.set_parent(Some(node));
+                    if lhs_expr != parent_access {
+                        lhs_expr.set_parent(Some(result));
+                    }
+                    result.flow_node_data().unwrap().flow_node.set(get_flow_node_of_node(parent_access));
+                    return Some(result);
+                }
+            }
+        }
+        None
     }
 
     // checker.go:18222
     pub(crate) fn get_parent_element_access(&mut self, node: P<Node>) -> Option<P<Node>> {
-        todo!()
+        let ancestor = node.parent().unwrap().parent().unwrap();
+        match ancestor.kind {
+            Kind::BindingElement | Kind::PropertyAssignment => return self.get_synthetic_element_access(ancestor),
+            Kind::ArrayLiteralExpression => return self.get_synthetic_element_access(node.parent().unwrap()),
+            Kind::VariableDeclaration => return ancestor.initializer(),
+            Kind::BinaryExpression => return Some(ancestor.as_binary_expression().right()),
+            _ => {}
+        }
+        None
     }
 
+    // Return the type implied by a binding pattern. This is the type implied purely by the binding pattern itself
+    // and without regard to its context (i.e. without regard any type annotation or initializer associated with the
+    // declaration in which the binding pattern is contained). For example, the implied type of [x, y] is [any, any]
+    // and the implied type of { x, y: z = 1 } is { x: any; y: number; }. The type implied by a binding pattern is
+    // used as the contextual type of an initializer associated with the binding pattern. Also, for a destructuring
+    // parameter with no type annotation or initializer, the type implied by the binding pattern becomes the type of
+    // the parameter.
     // checker.go:18244
     pub(crate) fn get_type_from_binding_pattern(&mut self, pattern: P<Node>, include_pattern_in_type: bool, report_errors: bool) -> P<Type> {
-        todo!()
+        if include_pattern_in_type {
+            self.contextual_binding_patterns.push(pattern);
+        }
+        let result = if is_object_binding_pattern(pattern) {
+            self.get_type_from_object_binding_pattern(pattern, include_pattern_in_type, report_errors)
+        } else {
+            self.get_type_from_array_binding_pattern(pattern, include_pattern_in_type, report_errors)
+        };
+        if include_pattern_in_type {
+            self.contextual_binding_patterns.pop();
+        }
+        result
     }
 
+    // Return the type implied by an object binding pattern
     // checker.go:18261
     pub(crate) fn get_type_from_object_binding_pattern(&mut self, pattern: P<Node>, include_pattern_in_type: bool, report_errors: bool) -> P<Type> {
-        todo!()
+        let members = SymbolTable::new();
+        let mut string_index_info: Option<P<IndexInfo>> = None;
+        let mut object_flags = ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral;
+        for &e in pattern.elements() {
+            let name = e.property_name_or_name();
+            if has_dot_dot_dot_token(e) {
+                string_index_info = Some(self.new_index_info(self.string_type, self.any_type, false /*isReadonly*/, None, &[]));
+                continue;
+            }
+            let expr_type = self.get_literal_type_from_property_name(name.unwrap());
+            if !is_type_usable_as_property_name(expr_type) {
+                // do not include computed properties in the implied type
+                object_flags |= ObjectFlags::ObjectLiteralPatternWithComputedProperties;
+                continue;
+            }
+            let text = get_property_name_from_type(expr_type);
+            let flags = SymbolFlags::Property | if e.initializer().is_some() { SymbolFlags::Optional } else { SymbolFlags::None };
+            let symbol = self.new_symbol(flags, &text);
+            let t = self.get_type_from_binding_element(e, include_pattern_in_type, report_errors);
+            self.value_symbol_links.get(symbol).resolved_type.set(Some(t));
+            members.set(symbol.name(), symbol);
+        }
+        let index_infos: Vec<P<IndexInfo>> = match string_index_info {
+            Some(info) => vec![info],
+            None => Vec::new(),
+        };
+        let result = self.new_anonymous_type(None, Some(members), &[], &[], &index_infos);
+        result.object_flags.set(result.object_flags.get() | object_flags);
+        if include_pattern_in_type {
+            self.pattern_for_type.insert(result, pattern);
+            result.object_flags.set(result.object_flags.get() | ObjectFlags::ContainsObjectOrArrayLiteral);
+        }
+        result
     }
 
+    // Return the type implied by an array binding pattern
     // checker.go:18297
     pub(crate) fn get_type_from_array_binding_pattern(&mut self, pattern: P<Node>, include_pattern_in_type: bool, report_errors: bool) -> P<Type> {
-        todo!()
+        let elements = pattern.elements();
+        let last_element = elements.last().copied();
+        let mut rest_element: Option<P<Node>> = None;
+        if let Some(last_element) = last_element {
+            if is_binding_element(last_element) && has_dot_dot_dot_token(last_element) {
+                rest_element = Some(last_element);
+            }
+        }
+        if elements.is_empty() || elements.len() == 1 && rest_element.is_some() {
+            // TODO: remove ScriptTargetES2015
+            if self.language_version >= ScriptTarget::ES2015 {
+                return self.create_iterable_type(self.any_type);
+            }
+            return self.any_array_type;
+        }
+        let mut min_length: usize = 0;
+        for i in (0..elements.len()).rev() {
+            let e = elements[i];
+            if !(Some(e) == rest_element || e.name().is_none() || self.has_default_value(e)) {
+                min_length = i + 1;
+                break;
+            }
+        }
+        let mut element_types: Vec<P<Type>> = Vec::with_capacity(elements.len());
+        let mut element_infos: Vec<TupleElementInfo> = Vec::with_capacity(elements.len());
+        for (i, &e) in elements.iter().enumerate() {
+            let t = if e.name().is_none() { self.any_type } else { self.get_type_from_binding_element(e, include_pattern_in_type, report_errors) };
+            let flags = if Some(e) == rest_element {
+                ElementFlags::Rest
+            } else if i >= min_length {
+                ElementFlags::Optional
+            } else {
+                ElementFlags::Required
+            };
+            element_types.push(t);
+            element_infos.push(TupleElementInfo { flags, labeled_declaration: None });
+        }
+        let mut result = self.create_tuple_type_ex(&element_types, &element_infos, false);
+        if include_pattern_in_type {
+            result = self.clone_type_reference(result);
+            self.pattern_for_type.insert(result, pattern);
+            result.object_flags.set(result.object_flags.get() | ObjectFlags::ContainsObjectOrArrayLiteral);
+        }
+        result
     }
 
+    // Return the type implied by a binding pattern element. This is the type of the initializer of the element if
+    // one is present. Otherwise, if the element is itself a binding pattern, it is the type implied by the binding
+    // pattern. Otherwise, it is the type any.
     // checker.go:18346
     pub(crate) fn get_type_from_binding_element(&mut self, element: P<Node>, include_pattern_in_type: bool, report_errors: bool) -> P<Type> {
-        todo!()
+        if element.initializer().is_some() {
+            // The type implied by a binding pattern is independent of context, so we check the initializer with no
+            // contextual type or, if the element itself is a binding pattern, with the type implied by that binding
+            // pattern.
+            let mut contextual_type = self.unknown_type;
+            if is_binding_pattern(element.name().unwrap()) {
+                contextual_type = self.get_type_from_binding_pattern(element.name().unwrap(), true /*includePatternInType*/, false /*reportErrors*/);
+            }
+            let init_type = self.check_declaration_initializer(element, CheckMode::Normal, Some(contextual_type));
+            let widened = self.get_widened_literal_type_for_initializer(element, init_type);
+            return self.add_optionality(widened);
+        }
+        if is_binding_pattern(element.name().unwrap()) {
+            return self.get_type_from_binding_pattern(element.name().unwrap(), include_pattern_in_type, report_errors);
+        }
+        if report_errors && !self.declaration_belongs_to_private_ambient_member(element) {
+            self.report_implicit_any(element, self.any_type, WideningKind::Normal);
+        }
+        // When we're including the pattern in the type (an indication we're obtaining a contextual type), we
+        // use a non-inferrable any type. Inference will never directly infer this type, but it is possible
+        // to infer a type that contains it, e.g. for a binding pattern like [foo] or { foo }. In such cases,
+        // widening of the binding pattern type substitutes a regular any for the non-inferrable any.
+        if include_pattern_in_type {
+            return self.non_inferrable_any_type;
+        }
+        self.any_type
     }
 
     // checker.go:18373
     pub(crate) fn declaration_belongs_to_private_ambient_member(&mut self, declaration: P<Node>) -> bool {
-        todo!()
+        let mut member_declaration = get_root_declaration(declaration);
+        if is_parameter_declaration(member_declaration) {
+            member_declaration = member_declaration.parent().unwrap();
+        }
+        is_private_within_ambient(member_declaration)
     }
 
     // checker.go:18381
     pub(crate) fn get_type_of_prototype_property(&mut self, prototype: P<Symbol>) -> P<Type> {
-        todo!()
+        // TypeScript 1.0 spec (April 2014): 8.4
+        // Every class automatically contains a static property member named 'prototype',
+        // the type of which is an instantiation of the class type with type Any supplied as a type argument for each type parameter.
+        // It is an error to explicitly declare a static property member with the name 'prototype'.
+        let parent = self.get_parent_of_symbol(prototype).unwrap();
+        let class_type = self.get_declared_type_of_symbol(parent);
+        let type_parameters = class_type.as_interface_type().type_parameters();
+        if !type_parameters.is_empty() {
+            let any_types: Vec<P<Type>> = type_parameters.iter().map(|_| self.any_type).collect();
+            return self.create_type_reference(class_type, &any_types);
+        }
+        class_type
     }
 
     // checker.go:18403
