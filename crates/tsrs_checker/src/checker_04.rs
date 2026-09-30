@@ -926,99 +926,321 @@ impl Checker {
 
     // checker.go:7256
     pub(crate) fn report_unused_variable(&mut self, location: P<Node>, diagnostic: P<Diagnostic>) {
-        todo!()
+        let mut location = location;
+        while is_binding_element(location) || is_binding_pattern(location) {
+            location = location.parent().unwrap();
+        }
+        let kind = if is_parameter_declaration(location) { UnusedKind::Parameter } else { UnusedKind::Local };
+        self.report_unused(location, kind, diagnostic);
     }
 
     // checker.go:7263
     pub(crate) fn report_unused(&mut self, location: P<Node>, kind: UnusedKind, diagnostic: P<Diagnostic>) {
-        todo!()
+        if !location.flags().intersects(NodeFlags::Ambient | NodeFlags::ThisNodeOrAnySubNodesHasError) {
+            let is_error = self.unused_is_error(kind);
+            if is_error {
+                self.add_diagnostic(diagnostic);
+            } else {
+                let suggestion = diagnostic.clone_diagnostic();
+                suggestion.set_category(diagnostics::Category::Suggestion);
+                self.add_suggestion_diagnostic(suggestion);
+            }
+        }
     }
 
     // checker.go:7276
     pub(crate) fn unused_is_error(&mut self, kind: UnusedKind) -> bool {
-        todo!()
+        match kind {
+            UnusedKind::Local => self.compiler_options.no_unused_locals.is_true(),
+            UnusedKind::Parameter => self.compiler_options.no_unused_parameters.is_true(),
+        }
     }
 
     // checker.go:7287
     pub(crate) fn check_unused_class_members(&mut self, node: P<Node>) {
-        todo!()
+        for &member in node.members() {
+            match member.kind {
+                Kind::MethodDeclaration | Kind::PropertyDeclaration | Kind::GetAccessor | Kind::SetAccessor => {
+                    if is_set_accessor_declaration(member) && member.symbol().unwrap().flags().intersects(SymbolFlags::GetAccessor) {
+                        continue; // Already would have reported an error on the getter.
+                    }
+                    let symbol = self.get_symbol_of_declaration(member).unwrap();
+                    if !self.is_referenced(symbol)
+                        && (has_modifier(member, ModifierFlags::Private) || member.name().is_some_and(is_private_identifier))
+                        && !member.flags().intersects(NodeFlags::Ambient)
+                    {
+                        let symbol_string = self.symbol_to_string(symbol);
+                        self.report_unused(
+                            member,
+                            UnusedKind::Local,
+                            new_diagnostic_for_node(member.name(), Some(&diagnostics::X_0_is_declared_but_its_value_is_never_read), &[&symbol_string]),
+                        );
+                    }
+                }
+                Kind::Constructor => {
+                    for &parameter in member.parameters() {
+                        if !self.is_referenced(parameter.symbol().unwrap()) && has_syntactic_modifier(parameter, ModifierFlags::Private) {
+                            self.report_unused(
+                                parameter,
+                                UnusedKind::Local,
+                                new_diagnostic_for_node(
+                                    parameter.name(),
+                                    Some(&diagnostics::Property_0_is_declared_but_its_value_is_never_read),
+                                    &[&symbol_name(parameter.symbol().unwrap())],
+                                ),
+                            );
+                        }
+                    }
+                }
+                Kind::IndexSignature | Kind::SemicolonClassElement | Kind::ClassStaticBlockDeclaration | Kind::JSTypeAliasDeclaration => {
+                    // Can't be private
+                }
+                _ => panic!("Unhandled case in checkUnusedClassMembers"),
+            }
+        }
     }
 
     // checker.go:7312
     pub(crate) fn check_unused_locals_and_parameters(&mut self, node: P<Node>) {
-        todo!()
+        // Go iterates a map-based set and a map here; insertion-ordered collections keep the port deterministic.
+        let mut variable_parents: OrderedSet<P<Node>> = OrderedSet::default();
+        let mut import_clauses: OrderedMap<P<Node>, Vec<P<Node>>> = OrderedMap::default();
+        let locals = node.locals().map(|l| l.values()).unwrap_or_default();
+        for local in locals {
+            let reference_kinds = self.symbol_reference_links.get(local).reference_kinds.get();
+            if local.flags().intersects(SymbolFlags::TypeParameter)
+                && (!local.flags().intersects(SymbolFlags::Variable) || reference_kinds.intersects(SymbolFlags::Variable))
+                || !local.flags().intersects(SymbolFlags::TypeParameter)
+                    && (!reference_kinds.is_empty() || local.export_symbol().is_some() || local.flags().intersects(SymbolFlags::ModuleExports))
+            {
+                continue;
+            }
+            let declarations = local.declarations().clone();
+            for declaration in declarations {
+                if is_variable_declaration(declaration) || is_parameter_declaration(declaration) || is_binding_element(declaration) {
+                    variable_parents.insert(get_root_declaration(declaration).parent().unwrap());
+                } else if is_import_clause(declaration) || is_import_specifier(declaration) || is_namespace_import(declaration) {
+                    if !is_identifier_that_starts_with_underscore(declaration.name().unwrap()) {
+                        let import_clause = import_clause_from_imported(declaration).unwrap();
+                        import_clauses.entry(import_clause).or_default().push(declaration);
+                    }
+                } else if !is_type_parameter_declaration(declaration) && !is_ambient_module(declaration) {
+                    self.report_unused_local(declaration, symbol_name(local));
+                }
+            }
+        }
+        for declaration in variable_parents {
+            if is_variable_declaration_list(declaration) {
+                self.report_unused_variables(declaration);
+            } else {
+                self.report_unused_parameters(declaration);
+            }
+        }
+        for (declaration, unuseds) in import_clauses {
+            self.report_unused_imports(declaration, &unuseds);
+        }
     }
 
     // checker.go:7353
     pub(crate) fn report_unused_local(&mut self, node: P<Node>, name: &str) {
-        todo!()
+        let message: &'static Message =
+            if is_type_declaration(node) { &diagnostics::X_0_is_declared_but_never_used } else { &diagnostics::X_0_is_declared_but_its_value_is_never_read };
+        self.report_unused(node, UnusedKind::Local, new_diagnostic_for_node(Some(node.name().unwrap_or(node)), Some(message), &[&name]));
     }
 
     // checker.go:7358
     pub(crate) fn report_unused_variables(&mut self, node: P<Node>) {
-        todo!()
+        let declarations = node.as_variable_declaration_list().declarations.nodes;
+        if declarations.len() > 1 && declarations.iter().all(|&d| self.is_unreferenced_variable_declaration(d)) {
+            self.report_unused_variable(node, new_diagnostic_for_node(Some(node), Some(&diagnostics::All_variables_are_unused), &[]));
+        } else {
+            self.report_unused_variable_declarations(declarations);
+        }
     }
 
     // checker.go:7367
     pub(crate) fn report_unused_parameters(&mut self, node: P<Node>) {
-        todo!()
+        self.report_unused_variable_declarations(node.parameters());
     }
 
     // checker.go:7371
     pub(crate) fn report_unused_binding_elements(&mut self, node: P<Node>) {
-        todo!()
+        let declarations = node.elements();
+        if declarations.len() > 1 && declarations.iter().all(|&d| self.is_unreferenced_variable_declaration(d)) {
+            self.report_unused_variable(node, new_diagnostic_for_node(Some(node), Some(&diagnostics::All_destructured_elements_are_unused), &[]));
+        } else {
+            self.report_unused_variable_declarations(declarations);
+        }
     }
 
     // checker.go:7380
     pub(crate) fn report_unused_variable_declarations(&mut self, declarations: &[P<Node>]) {
-        todo!()
+        for &declaration in declarations {
+            let name = declaration.name();
+            if let Some(name) = name {
+                if !is_parameter_property_declaration(declaration, declaration.parent().unwrap()) && !is_this_parameter(declaration) {
+                    if is_binding_pattern(name) {
+                        self.report_unused_binding_elements(name);
+                    } else if self.is_unreferenced_variable_declaration(declaration) {
+                        self.report_unused_variable(
+                            declaration,
+                            new_diagnostic_for_node(Some(name), Some(&diagnostics::X_0_is_declared_but_its_value_is_never_read), &[&name.text()]),
+                        );
+                    }
+                }
+            }
+        }
     }
 
     // checker.go:7393
     pub(crate) fn is_unreferenced_variable_declaration(&mut self, node: P<Node>) -> bool {
-        todo!()
+        let Some(name) = node.name() else {
+            return true;
+        };
+        if is_binding_pattern(name) {
+            return name.elements().iter().all(|&e| self.is_unreferenced_variable_declaration(e));
+        }
+        let symbol = self.get_symbol_of_declaration(node).unwrap();
+        if self.symbol_reference_links.get(symbol).reference_kinds.get().intersects(SymbolFlags::Variable) {
+            return false;
+        }
+        if is_binding_element(node) && is_object_binding_pattern(node.parent().unwrap()) {
+            // In `{ a, ...b }, `a` is considered used since it removes a property from `b`. `b` may still be unused though.
+            let last_element = last_or_nil(node.parent().unwrap().elements());
+            if Some(node) != last_element && has_dot_dot_dot_token(last_element.unwrap()) {
+                return false;
+            }
+        }
+        if (is_parameter_declaration(node)
+            || is_variable_declaration(node)
+                && (is_for_in_or_of_statement(node.parent().unwrap().parent()) || self.get_combined_node_flags_cached(node).intersects(NodeFlags::Using))
+            || is_binding_element(node) && !(is_object_binding_pattern(node.parent().unwrap()) && node.property_name().is_none()))
+            && is_identifier_that_starts_with_underscore(name)
+        {
+            return false;
+        }
+        true
     }
 
     // checker.go:7420
     pub(crate) fn report_unused_imports(&mut self, node: P<Node>, unuseds: &[P<Node>]) {
-        todo!()
+        let mut declaration_count: usize = if node.name().is_some() { 1 } else { 0 };
+        let named_bindings = node.as_import_clause().named_bindings;
+        if let Some(named_bindings) = named_bindings {
+            if is_namespace_import(named_bindings) {
+                declaration_count += 1;
+            } else {
+                declaration_count += named_bindings.elements().len();
+            }
+        }
+        if declaration_count > 1 && declaration_count == unuseds.len() {
+            self.report_unused(
+                node,
+                UnusedKind::Local,
+                new_diagnostic_for_node(node.parent(), Some(&diagnostics::All_imports_in_import_declaration_are_unused), &[]),
+            );
+        } else {
+            for &unused in unuseds {
+                self.report_unused_local(unused, unused.name().unwrap().text());
+            }
+        }
     }
 }
 
 // checker.go:7439
 pub(crate) fn is_identifier_that_starts_with_underscore(node: P<Node>) -> bool {
-    todo!()
+    is_identifier(node) && !node.text().is_empty() && node.text().as_bytes()[0] == b'_'
 }
 
 // checker.go:7443
 pub(crate) fn import_clause_from_imported(node: P<Node>) -> Option<P<Node>> {
-    todo!()
+    match node.kind {
+        Kind::ImportClause => Some(node),
+        Kind::NamespaceImport => node.parent(),
+        _ => node.parent().unwrap().parent(),
+    }
 }
 
 impl Checker {
     // checker.go:7454
     pub(crate) fn check_unused_infer_type_parameter(&mut self, node: P<Node>) {
-        todo!()
+        let type_parameter = node.as_infer_type_node().type_parameter;
+        if self.is_unreferenced_type_parameter(type_parameter) {
+            let name = type_parameter.name().unwrap();
+            self.report_unused(
+                node,
+                UnusedKind::Parameter,
+                new_diagnostic_for_node(Some(name), Some(&diagnostics::X_0_is_declared_but_never_used), &[&name.text()]),
+            );
+        }
     }
 
     // checker.go:7461
     pub(crate) fn check_unused_type_parameters(&mut self, node: P<Node>) {
-        todo!()
+        let symbol = self.get_symbol_of_declaration(node).unwrap();
+        if !all_declarations_in_same_source_file(symbol) {
+            return;
+        }
+        let Some(type_parameter_list) = node.type_parameter_list() else {
+            return;
+        };
+        if type_parameter_list.nodes.len() > 1 && type_parameter_list.nodes.iter().all(|&tp| self.is_unreferenced_type_parameter(tp)) {
+            let file = get_source_file_of_node(node).unwrap();
+            let loc = range_of_type_parameters(file, type_parameter_list);
+            self.report_unused(node, UnusedKind::Parameter, new_diagnostic(Some(file), loc, &diagnostics::All_type_parameters_are_unused, &[]));
+        } else {
+            for &type_parameter in type_parameter_list.nodes {
+                if self.is_unreferenced_type_parameter(type_parameter) {
+                    let name = type_parameter.name().unwrap();
+                    self.report_unused(
+                        node,
+                        UnusedKind::Parameter,
+                        new_diagnostic_for_node(Some(type_parameter), Some(&diagnostics::X_0_is_declared_but_never_used), &[&name.text()]),
+                    );
+                }
+            }
+        }
     }
 
     // checker.go:7482
     pub(crate) fn is_unreferenced_type_parameter(&mut self, type_parameter: P<Node>) -> bool {
-        todo!()
+        let symbol = self.get_merged_symbol(type_parameter.symbol().unwrap());
+        !self.symbol_reference_links.get(symbol).reference_kinds.get().intersects(SymbolFlags::TypeParameter)
+            && !is_identifier_that_starts_with_underscore(type_parameter.name().unwrap())
     }
 
     // checker.go:7486
     pub(crate) fn check_unused_renamed_binding_elements(&mut self) {
-        todo!()
+        let nodes = self.renamed_binding_elements_in_types.clone();
+        for node in nodes {
+            let symbol = self.get_symbol_of_declaration(node).unwrap();
+            if self.symbol_reference_links.get(symbol).reference_kinds.get().is_empty() {
+                let wrapping_declaration = walk_up_binding_elements_and_patterns(node);
+                assert!(is_part_of_parameter_declaration(wrapping_declaration), "Only parameter declaration should be checked here");
+                let diagnostic = new_diagnostic_for_node(
+                    node.name(),
+                    Some(&diagnostics::X_0_is_an_unused_renaming_of_1_Did_you_intend_to_use_it_as_a_type_annotation),
+                    &[&tsrs_scanner::declaration_name_to_string(node.name()), &tsrs_scanner::declaration_name_to_string(node.property_name())],
+                );
+                if wrapping_declaration.type_node().is_none() {
+                    // entire parameter does not have type annotation, suggest adding an annotation
+                    diagnostic.add_related_info(new_diagnostic(
+                        get_source_file_of_node(wrapping_declaration),
+                        TextRange::new(wrapping_declaration.end(), wrapping_declaration.end()),
+                        &diagnostics::We_can_only_write_a_type_for_0_by_adding_a_type_for_the_entire_parameter_here,
+                        &[&tsrs_scanner::declaration_name_to_string(node.property_name())],
+                    ));
+                }
+                self.add_diagnostic(diagnostic);
+            }
+        }
     }
 
     // checker.go:7501
     pub(crate) fn check_expression_statement(&mut self, node: P<Node>) {
-        todo!()
+        // Grammar checking
+        self.check_grammar_statement_in_ambient_context(node);
+        self.check_expression(node.expression().unwrap());
     }
 
     // checker.go:7509
