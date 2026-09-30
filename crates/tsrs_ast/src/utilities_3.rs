@@ -745,6 +745,28 @@ pub fn is_import_or_import_equals_declaration(node: P<Node>) -> bool {
     is_import_declaration(node) || is_import_equals_declaration(node)
 }
 
+pub fn is_variable_parameter_or_property(node: P<Node>) -> bool {
+    matches!(node.kind, Kind::VariableDeclaration | Kind::Parameter | Kind::PropertySignature | Kind::PropertyDeclaration)
+}
+
+pub fn is_primitive_literal_value(node: P<Node>, include_big_int: bool) -> bool {
+    match node.kind {
+        Kind::TrueKeyword | Kind::FalseKeyword | Kind::NumericLiteral | Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral => true,
+        Kind::BigIntLiteral => include_big_int,
+        Kind::PrefixUnaryExpression => {
+            let p = node.as_prefix_unary_expression();
+            if p.operator == Kind::MinusToken {
+                return is_numeric_literal(p.operand) || (include_big_int && is_big_int_literal(p.operand));
+            }
+            if p.operator == Kind::PlusToken {
+                return is_numeric_literal(p.operand);
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
 pub fn has_inferred_type(node: P<Node>) -> bool {
     // Debug.type<HasInferredType>(node); // !!!
     match node.kind {
