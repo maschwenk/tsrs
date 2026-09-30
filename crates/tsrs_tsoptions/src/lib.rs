@@ -26,6 +26,12 @@ mod testutil;
 mod commandlineparser_test;
 #[cfg(test)]
 mod tsconfigparsing_test;
+#[cfg(test)]
+mod wildcarddirectories_test;
+#[cfg(test)]
+mod parsinghelpers_test;
+#[cfg(test)]
+mod decls_test;
 
 pub use commandlineoption::*;
 pub use commandlineparser::*;
