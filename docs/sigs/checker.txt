@@ -748,6 +748,7 @@ get_conditional_flow_type_of_type | pub(crate) fn get_conditional_flow_type_of_t
 get_conditional_type | pub(crate) fn get_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> | checker.go:24770 | Checker
 get_conditional_type_instantiation | pub(crate) fn get_conditional_type_instantiation(&mut self, t: P<Type>, mapper: P<TypeMapper>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> | checker.go:22910 | Checker
 get_conditional_type_key | pub(crate) fn get_conditional_type_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, for_constraint: bool) -> CacheHashKey | checker.go:17943 | -
+get_constant_value | pub fn get_constant_value(&mut self, node: P<Node>) -> Option<LiteralValue> | services.go:870 | Checker
 get_constituent_count | pub(crate) fn get_constituent_count(t: P<Type>) -> i32 | checker.go:26922 | -
 get_constituent_count_of_types | pub(crate) fn get_constituent_count_of_types(types: &[P<Type>]) -> i32 | checker.go:26932 | -
 get_constituent_property | pub(crate) fn get_constituent_property(&mut self, object_type: P<Type>, property_name: &str) -> Option<P<Symbol>> | checker.go:8429 | Checker

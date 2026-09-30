@@ -62,7 +62,6 @@ use std::fmt::Display;
 //   func Checker.getExportsOfModuleAsArray services.go:853 (not generated)
 //   func Checker.GetJsxIntrinsicTagNamesAt services.go:858 (not generated)
 //   func Checker.GetContextualTypeForJsxAttribute services.go:866 (not generated)
-//   func Checker.GetConstantValue services.go:870 (not generated)
 //   func Checker.getResolvedSignatureWorker services.go:899 (not generated)
 //   func Checker.GetCandidateSignaturesForStringLiteralCompletions services.go:911 (not generated)
 //   func Checker.GetTypeAtPosition services.go:936 (not generated)
@@ -77,6 +76,11 @@ use std::fmt::Display;
 //   func Checker.GetSignatureFromDeclaration services.go:1120 (not generated)
 
 impl Checker {
+    // services.go:870
+    pub fn get_constant_value(&mut self, node: P<Node>) -> Option<LiteralValue> {
+        todo!()
+    }
+
     // services.go:1125
     pub fn is_lib_symbol_for_hover_verbosity(&mut self, symbol: Option<P<Symbol>>) -> bool {
         todo!()

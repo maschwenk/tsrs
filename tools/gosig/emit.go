@@ -475,6 +475,9 @@ func (g *Gen) signature(fn *Func, name, vis string) string {
 	}
 	generics := g.tm.typeParams(fn.Sig.TypeParams())
 	res := g.tm.results(fn.Sig, cb, fn.Slots)
+	if rt, ok := g.cfg.ParamTypes[g.funcKey(fn)+".r0"]; ok && fn.Sig.Results().Len() == 1 {
+		res = " -> " + rt // paramTypes "Recv.goName.r0": the Rust result type, as written
+	}
 	return fmt.Sprintf("%s fn %s%s(%s)%s", vis, name, generics, strings.Join(params, ", "), res)
 }
 

@@ -320,7 +320,6 @@
     "Checker.getExportsOfModuleAsArray",
     "Checker.GetJsxIntrinsicTagNamesAt",
     "Checker.GetContextualTypeForJsxAttribute",
-    "Checker.GetConstantValue",
     "Checker.getResolvedSignatureWorker",
     "Checker.GetCandidateSignaturesForStringLiteralCompletions",
     "Checker.GetTypeAtPosition",
@@ -428,7 +427,8 @@
     "Checker.valueToString.value": "LiteralValue",
     "ValueToString.value": "LiteralValue",
     "getPropertyNameArg.arg": "&str",
-    "recoveryBoundary.markError.f": "Box<dyn FnOnce()>"
+    "recoveryBoundary.markError.f": "Box<dyn FnOnce()>",
+    "Checker.GetConstantValue.r0": "Option<LiteralValue>"
   },
   "constraintMap": {
     "any": "",
