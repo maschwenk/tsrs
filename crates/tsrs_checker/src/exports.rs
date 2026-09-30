@@ -231,7 +231,7 @@ impl Checker {
             return false;
         }
         let r = self.get_emit_resolver();
-        r.requires_adding_implicit_undefined(self, node, symbol, enclosing_declaration)
+        r.requires_adding_implicit_undefined(self, node, symbol, Some(enclosing_declaration))
     }
 
     // exports.go:394
