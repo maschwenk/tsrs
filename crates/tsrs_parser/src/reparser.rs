@@ -185,7 +185,7 @@ impl Parser {
                 this_ident.set_loc(param.loc());
                 this_ident.set_flags(self.context_flags | NodeFlags::Reparsed);
                 parameter = self.factory.new_parameter_declaration(None, None, this_ident, None, None, None);
-                if let Some(type_expression) = this_tag.type_expression {
+                if let Some(type_expression) = Some(this_tag.type_expression) {
                     let t = self.add_deep_clone_reparse(type_expression.type_node());
                     parameter.as_parameter_declaration().type_.set(t);
                 }
@@ -409,7 +409,7 @@ impl Parser {
             Kind::JSDocTypeTag => {
                 match parent.kind {
                     Kind::VariableStatement => {
-                        if let Some(declaration_list) = parent.as_variable_statement().declaration_list {
+                        if let Some(declaration_list) = Some(parent.as_variable_statement().declaration_list) {
                             for &declaration in declaration_list.as_variable_declaration_list().declarations.nodes() {
                                 if declaration.type_node().is_none() && tag.type_expression().is_some() {
                                     let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node());
@@ -476,7 +476,7 @@ impl Parser {
             }
             Kind::JSDocSatisfiesTag => match parent.kind {
                 Kind::VariableStatement => {
-                    if let Some(declaration_list) = parent.as_variable_statement().declaration_list {
+                    if let Some(declaration_list) = Some(parent.as_variable_statement().declaration_list) {
                         for &declaration in declaration_list.as_variable_declaration_list().declarations.nodes() {
                             if declaration.initializer().is_some() && tag.type_expression().is_some() {
                                 let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node()).unwrap();
@@ -499,7 +499,7 @@ impl Parser {
                 Kind::ShorthandPropertyAssignment => {
                     let shorthand = parent.as_shorthand_property_assignment();
                     if let (Some(initializer), Some(type_expression)) =
-                        (shorthand.object_assignment_initializer.get(), tag.as_jsdoc_satisfies_tag().type_expression)
+                        (shorthand.object_assignment_initializer.get(), Some(tag.as_jsdoc_satisfies_tag().type_expression))
                     {
                         let t = self.add_deep_clone_reparse(type_expression.type_node()).unwrap();
                         let cast = self.make_new_cast(t, initializer, false /*isAssertion*/);
@@ -581,7 +581,7 @@ impl Parser {
                             None, /* type */
                             None, /* initializer */
                         );
-                        if let Some(type_expression) = tag.as_jsdoc_this_tag().type_expression {
+                        if let Some(type_expression) = Some(tag.as_jsdoc_this_tag().type_expression) {
                             let t = self.add_deep_clone_reparse(type_expression.type_node());
                             this_param.as_parameter_declaration().type_.set(t);
                         }
@@ -847,7 +847,7 @@ fn get_function_like_host(host: P<Node>) -> Option<P<Node>> {
     let mut fun = Some(host);
     match host.kind {
         Kind::VariableStatement => {
-            let nodes = host.as_variable_statement().declaration_list.unwrap().as_variable_declaration_list().declarations.nodes();
+            let nodes = host.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes();
             if !nodes.is_empty() {
                 fun = nodes[0].initializer();
             }

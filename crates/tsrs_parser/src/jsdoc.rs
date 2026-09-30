@@ -1152,7 +1152,7 @@ impl Parser {
                 let is_array_type = type_expression.is_some_and(|t| t.type_node().unwrap().kind == Kind::ArrayType);
                 let first_pos = jsdoc_property_tags.first().map(|t| t.pos());
                 let jsdoc_type_literal = self.factory.new_jsdoc_type_literal(alloc_vec(jsdoc_property_tags), is_array_type);
-                let child_type_expression = child_type_tag.and_then(|t| t.as_jsdoc_type_tag().type_expression);
+                let child_type_expression = child_type_tag.map(|t| t.as_jsdoc_type_tag().type_expression);
                 if let Some(child_type_expression) =
                     child_type_expression.filter(|t| !is_object_or_object_array_type_reference(t.type_node().unwrap()))
                 {
@@ -1479,7 +1479,7 @@ fn remove_leading_newlines(comments: &mut Vec<&'static str>) {
 }
 
 fn trim_end(s: &str) -> &str {
-    s.trim_end_matches(stringutil::is_white_space_like)
+    s.trim_end_matches(|c: char| stringutil::is_white_space_like(c))
 }
 
 fn remove_trailing_whitespace(comments: &mut Vec<&'static str>) {

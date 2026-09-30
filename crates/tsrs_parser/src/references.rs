@@ -35,11 +35,11 @@ pub(crate) fn collect_module_references(file: P<SourceFile>, node: P<Node>, in_a
                 ast::set_imports_of_source_file(file, imports);
                 // !!! removed `&& p.currentNodeModulesDepth == 0`
                 if file.uses_uri_style_node_core_modules.get() != Tristate::True && !file.is_declaration_file.get() {
-                    if module_name.starts_with("node:") && !core::exclusively_prefixed_node_core_modules(module_name) {
+                    if module_name.starts_with("node:") && !core::ExclusivelyPrefixedNodeCoreModules.contains(module_name) {
                         // Presence of `node:` prefix takes precedence over unprefixed node core modules
                         file.uses_uri_style_node_core_modules.set(Tristate::True);
                     } else if file.uses_uri_style_node_core_modules.get() == Tristate::Unknown
-                        && core::unprefixed_node_core_modules(module_name)
+                        && core::UnprefixedNodeCoreModules.contains(module_name)
                     {
                         // Avoid `unprefixedNodeCoreModules.has` for every import
                         file.uses_uri_style_node_core_modules.set(Tristate::False);
