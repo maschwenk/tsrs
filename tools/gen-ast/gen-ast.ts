@@ -417,13 +417,13 @@ function genNewFactory(node: NodeType) {
     const kindMember = params.find(p => p.m.isKindParam());
     const flagsMembers = params.filter(p => isNodeFlagsMember(p.m));
     const emit = (fnName: string, kindName: string) => {
-        w(`    pub fn ${fnName}(&mut self${params.map(p => `, ${p.name}: ${p.ty}`).join("")}) -> P<Node> {`);
+        w(`    pub fn ${fnName}(&self${params.map(p => `, ${p.name}: ${p.ty}`).join("")}) -> P<Node> {`);
         const values = new Map<string, string>();
         for (const p of params) {
             if (p.m.isKindParam() || isNodeFlagsMember(p.m)) continue;
             values.set(p.m.name, p.m.bitmask ? `${p.name} & ${flagConst(p.m.bitmask)}` : p.name);
         }
-        if (hasTextContent(node)) w(`        self.text_count += 1;`);
+        if (hasTextContent(node)) w(`        self.text_count.set(self.text_count.get() + 1);`);
         const kindArg = kindMember ? "kind" : `Kind::${kindName}`;
         const dataExpr = isEmptyLayout(l) ? `NodeData::${node.name}` : `NodeData::${node.name}(alloc(${structLiteral(l, values, "        ")}))`;
         if (flagsMembers.length > 0) {
@@ -463,7 +463,7 @@ function genUpdateFactory(node: NodeType) {
     const updateParams = params.filter(p => !p.m.isKindParam());
     if (updateParams.length === 0) return;
     if (!updateParams.some(p => p.m.isChild())) return;
-    w(`    pub fn update_${snake(node.name)}(&mut self, node: P<Node>${updateParams.map(p => `, ${p.name}: ${p.ty}`).join("")}) -> P<Node> {`);
+    w(`    pub fn update_${snake(node.name)}(&self, node: P<Node>${updateParams.map(p => `, ${p.name}: ${p.ty}`).join("")}) -> P<Node> {`);
     w(`        let data = node.as_${snake(node.name)}();`);
     const cmps = updateParams.map(p => diffExpr(p.ty, p.name, memberValue(l, p.m, "data", "node")));
     w(`        if ${cmps.join(" || ")} {`);
@@ -571,7 +571,7 @@ function genClone(node: NodeType) {
     const params = factoryParams(node);
     const args = params.map(p => memberValue(l, p.m, "self", "node")).join(", ");
     w(`impl ${node.name} {`);
-    w(`    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {`);
+    w(`    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {`);
     if (node.kindAliases.length > 0) {
         w(`        let updated = match node.kind {`);
         w(`            Kind::${node.syntaxKindName} => f.new_${snake(node.name)}(${args}),`);
@@ -688,7 +688,7 @@ function genNodeImpl() {
     w();
 
     // clone_node dispatch
-    w(`    pub fn clone_node(&self, f: &mut NodeFactory) -> P<Node> {`);
+    w(`    pub fn clone_node(&self, f: &NodeFactory) -> P<Node> {`);
     w(`        let node = self.as_p();`);
     w(`        match self.data {`);
     for (const n of nodes) {

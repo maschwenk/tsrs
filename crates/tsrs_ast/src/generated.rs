@@ -7774,7 +7774,7 @@ impl Node {
         }
     }
 
-    pub fn clone_node(&self, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, f: &NodeFactory) -> P<Node> {
         let node = self.as_p();
         match self.data {
             NodeData::Token => Token.clone_node(node, f),
@@ -8335,12 +8335,12 @@ impl Node {
 // ── NodeFactory constructors ─────────────────────────────────────────────
 
 impl NodeFactory {
-    pub fn new_token(&mut self, kind: Kind) -> P<Node> {
+    pub fn new_token(&self, kind: Kind) -> P<Node> {
         self.new_node(kind, NodeData::Token)
     }
 
-    pub fn new_identifier(&mut self, text: &'static str) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_identifier(&self, text: &'static str) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::Identifier, NodeData::Identifier(alloc(Identifier {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8349,14 +8349,14 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_private_identifier(&mut self, text: &'static str) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_private_identifier(&self, text: &'static str) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::PrivateIdentifier, NodeData::PrivateIdentifier(alloc(PrivateIdentifier {
             text: text,
         })))
     }
 
-    pub fn new_qualified_name(&mut self, left: P<Node>, right: P<Node>) -> P<Node> {
+    pub fn new_qualified_name(&self, left: P<Node>, right: P<Node>) -> P<Node> {
         self.new_node(Kind::QualifiedName, NodeData::QualifiedName(alloc(QualifiedName {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8366,7 +8366,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_qualified_name(&mut self, node: P<Node>, left: P<Node>, right: P<Node>) -> P<Node> {
+    pub fn update_qualified_name(&self, node: P<Node>, left: P<Node>, right: P<Node>) -> P<Node> {
         let data = node.as_qualified_name();
         if left != data.left() || right != data.right() {
             return update_node(self.new_qualified_name(left, right), node, &self.hooks);
@@ -8374,13 +8374,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_computed_property_name(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_computed_property_name(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::ComputedPropertyName, NodeData::ComputedPropertyName(alloc(ComputedPropertyName {
             expression: expression,
         })))
     }
 
-    pub fn update_computed_property_name(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_computed_property_name(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_computed_property_name();
         if expression != data.expression() {
             return update_node(self.new_computed_property_name(expression), node, &self.hooks);
@@ -8388,13 +8388,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_decorator(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_decorator(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::Decorator, NodeData::Decorator(alloc(Decorator {
             expression: expression,
         })))
     }
 
-    pub fn update_decorator(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_decorator(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_decorator();
         if expression != data.expression() {
             return update_node(self.new_decorator(expression), node, &self.hooks);
@@ -8402,7 +8402,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_empty_statement(&mut self) -> P<Node> {
+    pub fn new_empty_statement(&self) -> P<Node> {
         self.new_node(Kind::EmptyStatement, NodeData::EmptyStatement(alloc(EmptyStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8410,7 +8410,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_if_statement(&mut self, expression: P<Node>, then_statement: P<Node>, else_statement: Option<P<Node>>) -> P<Node> {
+    pub fn new_if_statement(&self, expression: P<Node>, then_statement: P<Node>, else_statement: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::IfStatement, NodeData::IfStatement(alloc(IfStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8421,7 +8421,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_if_statement(&mut self, node: P<Node>, expression: P<Node>, then_statement: P<Node>, else_statement: Option<P<Node>>) -> P<Node> {
+    pub fn update_if_statement(&self, node: P<Node>, expression: P<Node>, then_statement: P<Node>, else_statement: Option<P<Node>>) -> P<Node> {
         let data = node.as_if_statement();
         if expression != data.expression() || then_statement != data.then_statement() || else_statement != data.else_statement() {
             return update_node(self.new_if_statement(expression, then_statement, else_statement), node, &self.hooks);
@@ -8429,7 +8429,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_do_statement(&mut self, statement: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn new_do_statement(&self, statement: P<Node>, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::DoStatement, NodeData::DoStatement(alloc(DoStatement {
             iteration_statement_base: IterationStatementBase {
                 flow_node_base: FlowNodeBase {
@@ -8441,7 +8441,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_do_statement(&mut self, node: P<Node>, statement: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_do_statement(&self, node: P<Node>, statement: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_do_statement();
         if statement != data.statement() || expression != data.expression() {
             return update_node(self.new_do_statement(statement, expression), node, &self.hooks);
@@ -8449,7 +8449,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_while_statement(&mut self, expression: P<Node>, statement: P<Node>) -> P<Node> {
+    pub fn new_while_statement(&self, expression: P<Node>, statement: P<Node>) -> P<Node> {
         self.new_node(Kind::WhileStatement, NodeData::WhileStatement(alloc(WhileStatement {
             iteration_statement_base: IterationStatementBase {
                 flow_node_base: FlowNodeBase {
@@ -8461,7 +8461,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_while_statement(&mut self, node: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
+    pub fn update_while_statement(&self, node: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
         let data = node.as_while_statement();
         if expression != data.expression() || statement != data.statement() {
             return update_node(self.new_while_statement(expression, statement), node, &self.hooks);
@@ -8469,7 +8469,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_for_statement(&mut self, initializer: Option<P<Node>>, condition: Option<P<Node>>, incrementor: Option<P<Node>>, statement: P<Node>) -> P<Node> {
+    pub fn new_for_statement(&self, initializer: Option<P<Node>>, condition: Option<P<Node>>, incrementor: Option<P<Node>>, statement: P<Node>) -> P<Node> {
         self.new_node(Kind::ForStatement, NodeData::ForStatement(alloc(ForStatement {
             iteration_statement_base: IterationStatementBase {
                 flow_node_base: FlowNodeBase {
@@ -8487,7 +8487,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_for_statement(&mut self, node: P<Node>, initializer: Option<P<Node>>, condition: Option<P<Node>>, incrementor: Option<P<Node>>, statement: P<Node>) -> P<Node> {
+    pub fn update_for_statement(&self, node: P<Node>, initializer: Option<P<Node>>, condition: Option<P<Node>>, incrementor: Option<P<Node>>, statement: P<Node>) -> P<Node> {
         let data = node.as_for_statement();
         if initializer != data.initializer() || condition != data.condition() || incrementor != data.incrementor() || statement != data.statement() {
             return update_node(self.new_for_statement(initializer, condition, incrementor, statement), node, &self.hooks);
@@ -8495,7 +8495,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_for_in_or_of_statement(&mut self, kind: Kind, await_modifier: Option<P<Node>>, initializer: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
+    pub fn new_for_in_or_of_statement(&self, kind: Kind, await_modifier: Option<P<Node>>, initializer: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
         self.new_node(kind, NodeData::ForInOrOfStatement(alloc(ForInOrOfStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8511,7 +8511,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_for_in_or_of_statement(&mut self, node: P<Node>, await_modifier: Option<P<Node>>, initializer: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
+    pub fn update_for_in_or_of_statement(&self, node: P<Node>, await_modifier: Option<P<Node>>, initializer: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
         let data = node.as_for_in_or_of_statement();
         if await_modifier != data.await_modifier() || initializer != data.initializer() || expression != data.expression() || statement != data.statement() {
             return update_node(self.new_for_in_or_of_statement(node.kind, await_modifier, initializer, expression, statement), node, &self.hooks);
@@ -8519,7 +8519,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_break_statement(&mut self, label: Option<P<Node>>) -> P<Node> {
+    pub fn new_break_statement(&self, label: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::BreakStatement, NodeData::BreakStatement(alloc(BreakStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8528,7 +8528,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_break_statement(&mut self, node: P<Node>, label: Option<P<Node>>) -> P<Node> {
+    pub fn update_break_statement(&self, node: P<Node>, label: Option<P<Node>>) -> P<Node> {
         let data = node.as_break_statement();
         if label != data.label() {
             return update_node(self.new_break_statement(label), node, &self.hooks);
@@ -8536,7 +8536,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_continue_statement(&mut self, label: Option<P<Node>>) -> P<Node> {
+    pub fn new_continue_statement(&self, label: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::ContinueStatement, NodeData::ContinueStatement(alloc(ContinueStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8545,7 +8545,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_continue_statement(&mut self, node: P<Node>, label: Option<P<Node>>) -> P<Node> {
+    pub fn update_continue_statement(&self, node: P<Node>, label: Option<P<Node>>) -> P<Node> {
         let data = node.as_continue_statement();
         if label != data.label() {
             return update_node(self.new_continue_statement(label), node, &self.hooks);
@@ -8553,7 +8553,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_return_statement(&mut self, expression: Option<P<Node>>) -> P<Node> {
+    pub fn new_return_statement(&self, expression: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::ReturnStatement, NodeData::ReturnStatement(alloc(ReturnStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8562,7 +8562,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_return_statement(&mut self, node: P<Node>, expression: Option<P<Node>>) -> P<Node> {
+    pub fn update_return_statement(&self, node: P<Node>, expression: Option<P<Node>>) -> P<Node> {
         let data = node.as_return_statement();
         if expression != data.expression() {
             return update_node(self.new_return_statement(expression), node, &self.hooks);
@@ -8570,7 +8570,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_with_statement(&mut self, expression: P<Node>, statement: P<Node>) -> P<Node> {
+    pub fn new_with_statement(&self, expression: P<Node>, statement: P<Node>) -> P<Node> {
         self.new_node(Kind::WithStatement, NodeData::WithStatement(alloc(WithStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8580,7 +8580,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_with_statement(&mut self, node: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
+    pub fn update_with_statement(&self, node: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
         let data = node.as_with_statement();
         if expression != data.expression() || statement != data.statement() {
             return update_node(self.new_with_statement(expression, statement), node, &self.hooks);
@@ -8588,7 +8588,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_switch_statement(&mut self, expression: P<Node>, case_block: P<Node>) -> P<Node> {
+    pub fn new_switch_statement(&self, expression: P<Node>, case_block: P<Node>) -> P<Node> {
         self.new_node(Kind::SwitchStatement, NodeData::SwitchStatement(alloc(SwitchStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8598,7 +8598,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_switch_statement(&mut self, node: P<Node>, expression: P<Node>, case_block: P<Node>) -> P<Node> {
+    pub fn update_switch_statement(&self, node: P<Node>, expression: P<Node>, case_block: P<Node>) -> P<Node> {
         let data = node.as_switch_statement();
         if expression != data.expression() || case_block != data.case_block() {
             return update_node(self.new_switch_statement(expression, case_block), node, &self.hooks);
@@ -8606,7 +8606,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_case_block(&mut self, clauses: P<NodeList>) -> P<Node> {
+    pub fn new_case_block(&self, clauses: P<NodeList>) -> P<Node> {
         self.new_node(Kind::CaseBlock, NodeData::CaseBlock(alloc(CaseBlock {
             locals_container_base: LocalsContainerBase {
                 locals: Cell::new(None),
@@ -8616,7 +8616,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_case_block(&mut self, node: P<Node>, clauses: P<NodeList>) -> P<Node> {
+    pub fn update_case_block(&self, node: P<Node>, clauses: P<NodeList>) -> P<Node> {
         let data = node.as_case_block();
         if clauses != data.clauses() {
             return update_node(self.new_case_block(clauses), node, &self.hooks);
@@ -8624,7 +8624,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_case_or_default_clause(&mut self, kind: Kind, expression: Option<P<Node>>, statements: P<NodeList>) -> P<Node> {
+    pub fn new_case_or_default_clause(&self, kind: Kind, expression: Option<P<Node>>, statements: P<NodeList>) -> P<Node> {
         self.new_node(kind, NodeData::CaseOrDefaultClause(alloc(CaseOrDefaultClause {
             expression: expression,
             statements: statements,
@@ -8632,7 +8632,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_case_or_default_clause(&mut self, node: P<Node>, expression: Option<P<Node>>, statements: P<NodeList>) -> P<Node> {
+    pub fn update_case_or_default_clause(&self, node: P<Node>, expression: Option<P<Node>>, statements: P<NodeList>) -> P<Node> {
         let data = node.as_case_or_default_clause();
         if expression != data.expression() || statements != data.statements() {
             return update_node(self.new_case_or_default_clause(node.kind, expression, statements), node, &self.hooks);
@@ -8640,7 +8640,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_throw_statement(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_throw_statement(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::ThrowStatement, NodeData::ThrowStatement(alloc(ThrowStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8649,7 +8649,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_throw_statement(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_throw_statement(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_throw_statement();
         if expression != data.expression() {
             return update_node(self.new_throw_statement(expression), node, &self.hooks);
@@ -8657,7 +8657,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_try_statement(&mut self, try_block: P<Node>, catch_clause: Option<P<Node>>, finally_block: Option<P<Node>>) -> P<Node> {
+    pub fn new_try_statement(&self, try_block: P<Node>, catch_clause: Option<P<Node>>, finally_block: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::TryStatement, NodeData::TryStatement(alloc(TryStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8668,7 +8668,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_try_statement(&mut self, node: P<Node>, try_block: P<Node>, catch_clause: Option<P<Node>>, finally_block: Option<P<Node>>) -> P<Node> {
+    pub fn update_try_statement(&self, node: P<Node>, try_block: P<Node>, catch_clause: Option<P<Node>>, finally_block: Option<P<Node>>) -> P<Node> {
         let data = node.as_try_statement();
         if try_block != data.try_block() || catch_clause != data.catch_clause() || finally_block != data.finally_block() {
             return update_node(self.new_try_statement(try_block, catch_clause, finally_block), node, &self.hooks);
@@ -8676,7 +8676,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_catch_clause(&mut self, variable_declaration: Option<P<Node>>, block: P<Node>) -> P<Node> {
+    pub fn new_catch_clause(&self, variable_declaration: Option<P<Node>>, block: P<Node>) -> P<Node> {
         self.new_node(Kind::CatchClause, NodeData::CatchClause(alloc(CatchClause {
             locals_container_base: LocalsContainerBase {
                 locals: Cell::new(None),
@@ -8687,7 +8687,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_catch_clause(&mut self, node: P<Node>, variable_declaration: Option<P<Node>>, block: P<Node>) -> P<Node> {
+    pub fn update_catch_clause(&self, node: P<Node>, variable_declaration: Option<P<Node>>, block: P<Node>) -> P<Node> {
         let data = node.as_catch_clause();
         if variable_declaration != data.variable_declaration() || block != data.block() {
             return update_node(self.new_catch_clause(variable_declaration, block), node, &self.hooks);
@@ -8695,7 +8695,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_debugger_statement(&mut self) -> P<Node> {
+    pub fn new_debugger_statement(&self) -> P<Node> {
         self.new_node(Kind::DebuggerStatement, NodeData::DebuggerStatement(alloc(DebuggerStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8703,7 +8703,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_labeled_statement(&mut self, label: P<Node>, statement: P<Node>) -> P<Node> {
+    pub fn new_labeled_statement(&self, label: P<Node>, statement: P<Node>) -> P<Node> {
         self.new_node(Kind::LabeledStatement, NodeData::LabeledStatement(alloc(LabeledStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8713,7 +8713,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_labeled_statement(&mut self, node: P<Node>, label: P<Node>, statement: P<Node>) -> P<Node> {
+    pub fn update_labeled_statement(&self, node: P<Node>, label: P<Node>, statement: P<Node>) -> P<Node> {
         let data = node.as_labeled_statement();
         if label != data.label() || statement != data.statement() {
             return update_node(self.new_labeled_statement(label, statement), node, &self.hooks);
@@ -8721,7 +8721,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_expression_statement(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_expression_statement(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::ExpressionStatement, NodeData::ExpressionStatement(alloc(ExpressionStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8730,7 +8730,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_expression_statement(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_expression_statement(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_expression_statement();
         if expression != data.expression() {
             return update_node(self.new_expression_statement(expression), node, &self.hooks);
@@ -8738,7 +8738,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_block(&mut self, statements: P<NodeList>, multi_line: bool) -> P<Node> {
+    pub fn new_block(&self, statements: P<NodeList>, multi_line: bool) -> P<Node> {
         self.new_node(Kind::Block, NodeData::Block(alloc(Block {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8752,7 +8752,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_block(&mut self, node: P<Node>, statements: P<NodeList>, multi_line: bool) -> P<Node> {
+    pub fn update_block(&self, node: P<Node>, statements: P<NodeList>, multi_line: bool) -> P<Node> {
         let data = node.as_block();
         if statements != data.statements() || multi_line != data.multi_line() {
             return update_node(self.new_block(statements, multi_line), node, &self.hooks);
@@ -8760,7 +8760,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_variable_statement(&mut self, modifiers: Option<P<ModifierList>>, declaration_list: P<Node>) -> P<Node> {
+    pub fn new_variable_statement(&self, modifiers: Option<P<ModifierList>>, declaration_list: P<Node>) -> P<Node> {
         self.new_node(Kind::VariableStatement, NodeData::VariableStatement(alloc(VariableStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8772,7 +8772,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_variable_statement(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, declaration_list: P<Node>) -> P<Node> {
+    pub fn update_variable_statement(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, declaration_list: P<Node>) -> P<Node> {
         let data = node.as_variable_statement();
         if modifiers != data.modifiers() || declaration_list != data.declaration_list() {
             return update_node(self.new_variable_statement(modifiers, declaration_list), node, &self.hooks);
@@ -8780,7 +8780,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_variable_declaration(&mut self, name: P<Node>, exclamation_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn new_variable_declaration(&self, name: P<Node>, exclamation_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::VariableDeclaration, NodeData::VariableDeclaration(alloc(VariableDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -8795,7 +8795,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_variable_declaration(&mut self, node: P<Node>, name: P<Node>, exclamation_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn update_variable_declaration(&self, node: P<Node>, name: P<Node>, exclamation_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
         let data = node.as_variable_declaration();
         if name != data.name() || exclamation_token != data.exclamation_token() || type_node != data.type_() || initializer != data.initializer() {
             return update_node(self.new_variable_declaration(name, exclamation_token, type_node, initializer), node, &self.hooks);
@@ -8803,7 +8803,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_variable_declaration_list(&mut self, declarations: P<NodeList>, flags: NodeFlags) -> P<Node> {
+    pub fn new_variable_declaration_list(&self, declarations: P<NodeList>, flags: NodeFlags) -> P<Node> {
         let node = self.new_node(Kind::VariableDeclarationList, NodeData::VariableDeclarationList(alloc(VariableDeclarationList {
             declarations: declarations,
         })));
@@ -8811,7 +8811,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn update_variable_declaration_list(&mut self, node: P<Node>, declarations: P<NodeList>, flags: NodeFlags) -> P<Node> {
+    pub fn update_variable_declaration_list(&self, node: P<Node>, declarations: P<NodeList>, flags: NodeFlags) -> P<Node> {
         let data = node.as_variable_declaration_list();
         if declarations != data.declarations() || flags != node.flags.get() {
             return update_node(self.new_variable_declaration_list(declarations, flags), node, &self.hooks);
@@ -8819,13 +8819,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_binding_pattern(&mut self, kind: Kind, elements: P<NodeList>) -> P<Node> {
+    pub fn new_binding_pattern(&self, kind: Kind, elements: P<NodeList>) -> P<Node> {
         self.new_node(kind, NodeData::BindingPattern(alloc(BindingPattern {
             elements: elements,
         })))
     }
 
-    pub fn update_binding_pattern(&mut self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
+    pub fn update_binding_pattern(&self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
         let data = node.as_binding_pattern();
         if elements != data.elements() {
             return update_node(self.new_binding_pattern(node.kind, elements), node, &self.hooks);
@@ -8833,7 +8833,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_parameter_declaration(&mut self, modifiers: Option<P<ModifierList>>, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn new_parameter_declaration(&self, modifiers: Option<P<ModifierList>>, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::Parameter, NodeData::ParameterDeclaration(alloc(ParameterDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -8849,7 +8849,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_parameter_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn update_parameter_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
         let data = node.as_parameter_declaration();
         if modifiers != data.modifiers() || dot_dot_dot_token != data.dot_dot_dot_token() || name != data.name() || question_token != data.question_token() || type_node != data.type_() || initializer != data.initializer() {
             return update_node(self.new_parameter_declaration(modifiers, dot_dot_dot_token, name, question_token, type_node, initializer), node, &self.hooks);
@@ -8857,7 +8857,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_binding_element(&mut self, dot_dot_dot_token: Option<P<Node>>, property_name: Option<P<Node>>, name: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn new_binding_element(&self, dot_dot_dot_token: Option<P<Node>>, property_name: Option<P<Node>>, name: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::BindingElement, NodeData::BindingElement(alloc(BindingElement {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -8875,7 +8875,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_binding_element(&mut self, node: P<Node>, dot_dot_dot_token: Option<P<Node>>, property_name: Option<P<Node>>, name: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn update_binding_element(&self, node: P<Node>, dot_dot_dot_token: Option<P<Node>>, property_name: Option<P<Node>>, name: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
         let data = node.as_binding_element();
         if dot_dot_dot_token != data.dot_dot_dot_token() || property_name != data.property_name() || name != data.name() || initializer != data.initializer() {
             return update_node(self.new_binding_element(dot_dot_dot_token, property_name, name, initializer), node, &self.hooks);
@@ -8883,7 +8883,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_missing_declaration(&mut self, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub fn new_missing_declaration(&self, modifiers: Option<P<ModifierList>>) -> P<Node> {
         self.new_node(Kind::MissingDeclaration, NodeData::MissingDeclaration(alloc(MissingDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8897,7 +8897,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_missing_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub fn update_missing_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>) -> P<Node> {
         let data = node.as_missing_declaration();
         if modifiers != data.modifiers() {
             return update_node(self.new_missing_declaration(modifiers), node, &self.hooks);
@@ -8905,7 +8905,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_function_declaration(&mut self, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn new_function_declaration(&self, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::FunctionDeclaration, NodeData::FunctionDeclaration(alloc(FunctionDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8939,7 +8939,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_function_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn update_function_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         let data = node.as_function_declaration();
         if modifiers != data.modifiers() || asterisk_token != data.asterisk_token() || name != data.name() || type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() || full_signature != data.full_signature() || body != data.body() {
             return update_node(self.new_function_declaration(modifiers, asterisk_token, name, type_parameters, parameters, type_node, full_signature, body), node, &self.hooks);
@@ -8947,7 +8947,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_class_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
+    pub fn new_class_declaration(&self, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
         self.new_node(Kind::ClassDeclaration, NodeData::ClassDeclaration(alloc(ClassDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -8974,7 +8974,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_class_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
+    pub fn update_class_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
         let data = node.as_class_declaration();
         if modifiers != data.modifiers() || name != data.name() || type_parameters != data.type_parameters() || heritage_clauses != data.heritage_clauses() || members != data.members() {
             return update_node(self.new_class_declaration(modifiers, name, type_parameters, heritage_clauses, members), node, &self.hooks);
@@ -8982,7 +8982,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_class_expression(&mut self, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
+    pub fn new_class_expression(&self, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
         self.new_node(Kind::ClassExpression, NodeData::ClassExpression(alloc(ClassExpression {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9006,7 +9006,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_class_expression(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
+    pub fn update_class_expression(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
         let data = node.as_class_expression();
         if modifiers != data.modifiers() || name != data.name() || type_parameters != data.type_parameters() || heritage_clauses != data.heritage_clauses() || members != data.members() {
             return update_node(self.new_class_expression(modifiers, name, type_parameters, heritage_clauses, members), node, &self.hooks);
@@ -9014,14 +9014,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_heritage_clause(&mut self, token: Kind, types: P<NodeList>) -> P<Node> {
+    pub fn new_heritage_clause(&self, token: Kind, types: P<NodeList>) -> P<Node> {
         self.new_node(Kind::HeritageClause, NodeData::HeritageClause(alloc(HeritageClause {
             token: token,
             types: Cell::new(types),
         })))
     }
 
-    pub fn update_heritage_clause(&mut self, node: P<Node>, token: Kind, types: P<NodeList>) -> P<Node> {
+    pub fn update_heritage_clause(&self, node: P<Node>, token: Kind, types: P<NodeList>) -> P<Node> {
         let data = node.as_heritage_clause();
         if token != data.token() || types != data.types() {
             return update_node(self.new_heritage_clause(token, types), node, &self.hooks);
@@ -9029,7 +9029,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_interface_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
+    pub fn new_interface_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
         self.new_node(Kind::InterfaceDeclaration, NodeData::InterfaceDeclaration(alloc(InterfaceDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -9050,7 +9050,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_interface_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
+    pub fn update_interface_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
         let data = node.as_interface_declaration();
         if modifiers != data.modifiers() || name != data.name() || type_parameters != data.type_parameters() || heritage_clauses != data.heritage_clauses() || members != data.members() {
             return update_node(self.new_interface_declaration(modifiers, name, type_parameters, heritage_clauses, members), node, &self.hooks);
@@ -9058,7 +9058,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_type_alias_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn new_type_alias_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::TypeAliasDeclaration, NodeData::TypeAliasDeclaration(alloc(TypeAliasDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -9082,7 +9082,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_js_type_alias_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn new_js_type_alias_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::JSTypeAliasDeclaration, NodeData::TypeAliasDeclaration(alloc(TypeAliasDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -9106,7 +9106,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_type_alias_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn update_type_alias_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         let data = node.as_type_alias_declaration();
         if modifiers != data.modifiers() || name != data.name() || type_parameters != data.type_parameters() || type_node != data.type_() {
             let updated = match node.kind {
@@ -9119,7 +9119,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_enum_member(&mut self, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn new_enum_member(&self, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::EnumMember, NodeData::EnumMember(alloc(EnumMember {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9135,7 +9135,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_enum_member(&mut self, node: P<Node>, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn update_enum_member(&self, node: P<Node>, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
         let data = node.as_enum_member();
         if name != data.name() || initializer != data.initializer() {
             return update_node(self.new_enum_member(name, initializer), node, &self.hooks);
@@ -9143,7 +9143,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_enum_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, members: P<NodeList>) -> P<Node> {
+    pub fn new_enum_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, members: P<NodeList>) -> P<Node> {
         self.new_node(Kind::EnumDeclaration, NodeData::EnumDeclaration(alloc(EnumDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -9162,7 +9162,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_enum_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, members: P<NodeList>) -> P<Node> {
+    pub fn update_enum_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, members: P<NodeList>) -> P<Node> {
         let data = node.as_enum_declaration();
         if modifiers != data.modifiers() || name != data.name() || members != data.members() {
             return update_node(self.new_enum_declaration(modifiers, name, members), node, &self.hooks);
@@ -9170,7 +9170,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_module_block(&mut self, statements: P<NodeList>) -> P<Node> {
+    pub fn new_module_block(&self, statements: P<NodeList>) -> P<Node> {
         self.new_node(Kind::ModuleBlock, NodeData::ModuleBlock(alloc(ModuleBlock {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -9179,7 +9179,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_module_block(&mut self, node: P<Node>, statements: P<NodeList>) -> P<Node> {
+    pub fn update_module_block(&self, node: P<Node>, statements: P<NodeList>) -> P<Node> {
         let data = node.as_module_block();
         if statements != data.statements() {
             return update_node(self.new_module_block(statements), node, &self.hooks);
@@ -9187,7 +9187,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_not_emitted_statement(&mut self) -> P<Node> {
+    pub fn new_not_emitted_statement(&self) -> P<Node> {
         self.new_node(Kind::NotEmittedStatement, NodeData::NotEmittedStatement(alloc(NotEmittedStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -9195,7 +9195,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_not_emitted_type_element(&mut self) -> P<Node> {
+    pub fn new_not_emitted_type_element(&self) -> P<Node> {
         self.new_node(Kind::NotEmittedTypeElement, NodeData::NotEmittedTypeElement(alloc(NotEmittedTypeElement {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9203,7 +9203,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_import_declaration(&mut self, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
+    pub fn new_import_declaration(&self, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::ImportDeclaration, NodeData::ImportDeclaration(alloc(ImportDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -9220,7 +9220,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_js_import_declaration(&mut self, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
+    pub fn new_js_import_declaration(&self, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::JSImportDeclaration, NodeData::ImportDeclaration(alloc(ImportDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -9237,7 +9237,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_import_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
+    pub fn update_import_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
         let data = node.as_import_declaration();
         if modifiers != data.modifiers() || import_clause != data.import_clause() || module_specifier != data.module_specifier() || attributes != data.attributes() {
             let updated = match node.kind {
@@ -9250,13 +9250,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_external_module_reference(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_external_module_reference(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::ExternalModuleReference, NodeData::ExternalModuleReference(alloc(ExternalModuleReference {
             expression: expression,
         })))
     }
 
-    pub fn update_external_module_reference(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_external_module_reference(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_external_module_reference();
         if expression != data.expression() {
             return update_node(self.new_external_module_reference(expression), node, &self.hooks);
@@ -9264,7 +9264,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_namespace_import(&mut self, name: P<Node>) -> P<Node> {
+    pub fn new_namespace_import(&self, name: P<Node>) -> P<Node> {
         self.new_node(Kind::NamespaceImport, NodeData::NamespaceImport(alloc(NamespaceImport {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9276,7 +9276,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_namespace_import(&mut self, node: P<Node>, name: P<Node>) -> P<Node> {
+    pub fn update_namespace_import(&self, node: P<Node>, name: P<Node>) -> P<Node> {
         let data = node.as_namespace_import();
         if name != data.name() {
             return update_node(self.new_namespace_import(name), node, &self.hooks);
@@ -9284,13 +9284,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_named_imports(&mut self, elements: P<NodeList>) -> P<Node> {
+    pub fn new_named_imports(&self, elements: P<NodeList>) -> P<Node> {
         self.new_node(Kind::NamedImports, NodeData::NamedImports(alloc(NamedImports {
             elements: elements,
         })))
     }
 
-    pub fn update_named_imports(&mut self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
+    pub fn update_named_imports(&self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
         let data = node.as_named_imports();
         if elements != data.elements() {
             return update_node(self.new_named_imports(elements), node, &self.hooks);
@@ -9298,7 +9298,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_export_assignment(&mut self, modifiers: Option<P<ModifierList>>, is_export_equals: bool, type_node: Option<P<Node>>, expression: P<Node>) -> P<Node> {
+    pub fn new_export_assignment(&self, modifiers: Option<P<ModifierList>>, is_export_equals: bool, type_node: Option<P<Node>>, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::ExportAssignment, NodeData::ExportAssignment(alloc(ExportAssignment {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -9315,7 +9315,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_export_assignment(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, is_export_equals: bool, type_node: Option<P<Node>>, expression: P<Node>) -> P<Node> {
+    pub fn update_export_assignment(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, is_export_equals: bool, type_node: Option<P<Node>>, expression: P<Node>) -> P<Node> {
         let data = node.as_export_assignment();
         if modifiers != data.modifiers() || is_export_equals != data.is_export_equals() || type_node != data.type_() || expression != data.expression() {
             return update_node(self.new_export_assignment(modifiers, is_export_equals, type_node, expression), node, &self.hooks);
@@ -9323,7 +9323,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_namespace_export_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>) -> P<Node> {
+    pub fn new_namespace_export_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>) -> P<Node> {
         self.new_node(Kind::NamespaceExportDeclaration, NodeData::NamespaceExportDeclaration(alloc(NamespaceExportDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -9338,7 +9338,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_namespace_export_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>) -> P<Node> {
+    pub fn update_namespace_export_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>) -> P<Node> {
         let data = node.as_namespace_export_declaration();
         if modifiers != data.modifiers() || name != data.name() {
             return update_node(self.new_namespace_export_declaration(modifiers, name), node, &self.hooks);
@@ -9346,7 +9346,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_namespace_export(&mut self, name: P<Node>) -> P<Node> {
+    pub fn new_namespace_export(&self, name: P<Node>) -> P<Node> {
         self.new_node(Kind::NamespaceExport, NodeData::NamespaceExport(alloc(NamespaceExport {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9355,7 +9355,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_namespace_export(&mut self, node: P<Node>, name: P<Node>) -> P<Node> {
+    pub fn update_namespace_export(&self, node: P<Node>, name: P<Node>) -> P<Node> {
         let data = node.as_namespace_export();
         if name != data.name() {
             return update_node(self.new_namespace_export(name), node, &self.hooks);
@@ -9363,13 +9363,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_named_exports(&mut self, elements: P<NodeList>) -> P<Node> {
+    pub fn new_named_exports(&self, elements: P<NodeList>) -> P<Node> {
         self.new_node(Kind::NamedExports, NodeData::NamedExports(alloc(NamedExports {
             elements: elements,
         })))
     }
 
-    pub fn update_named_exports(&mut self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
+    pub fn update_named_exports(&self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
         let data = node.as_named_exports();
         if elements != data.elements() {
             return update_node(self.new_named_exports(elements), node, &self.hooks);
@@ -9377,7 +9377,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_export_specifier(&mut self, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
+    pub fn new_export_specifier(&self, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
         self.new_node(Kind::ExportSpecifier, NodeData::ExportSpecifier(alloc(ExportSpecifier {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9391,7 +9391,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_export_specifier(&mut self, node: P<Node>, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
+    pub fn update_export_specifier(&self, node: P<Node>, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
         let data = node.as_export_specifier();
         if is_type_only != data.is_type_only() || property_name != data.property_name() || name != data.name() {
             return update_node(self.new_export_specifier(is_type_only, property_name, name), node, &self.hooks);
@@ -9399,7 +9399,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_call_signature_declaration(&mut self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn new_call_signature_declaration(&self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::CallSignature, NodeData::CallSignatureDeclaration(alloc(CallSignatureDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9417,7 +9417,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_call_signature_declaration(&mut self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn update_call_signature_declaration(&self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         let data = node.as_call_signature_declaration();
         if type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() {
             return update_node(self.new_call_signature_declaration(type_parameters, parameters, type_node), node, &self.hooks);
@@ -9425,7 +9425,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_construct_signature_declaration(&mut self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn new_construct_signature_declaration(&self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::ConstructSignature, NodeData::ConstructSignatureDeclaration(alloc(ConstructSignatureDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9443,7 +9443,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_construct_signature_declaration(&mut self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn update_construct_signature_declaration(&self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         let data = node.as_construct_signature_declaration();
         if type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() {
             return update_node(self.new_construct_signature_declaration(type_parameters, parameters, type_node), node, &self.hooks);
@@ -9451,7 +9451,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_constructor_declaration(&mut self, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn new_constructor_declaration(&self, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::Constructor, NodeData::ConstructorDeclaration(alloc(ConstructorDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9478,7 +9478,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_constructor_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn update_constructor_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         let data = node.as_constructor_declaration();
         if modifiers != data.modifiers() || type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() || full_signature != data.full_signature() || body != data.body() {
             return update_node(self.new_constructor_declaration(modifiers, type_parameters, parameters, type_node, full_signature, body), node, &self.hooks);
@@ -9486,7 +9486,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_get_accessor_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn new_get_accessor_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::GetAccessor, NodeData::GetAccessorDeclaration(alloc(GetAccessorDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9519,7 +9519,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_get_accessor_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn update_get_accessor_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         let data = node.as_get_accessor_declaration();
         if modifiers != data.modifiers() || name != data.name() || type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() || full_signature != data.full_signature() || body != data.body() {
             return update_node(self.new_get_accessor_declaration(modifiers, name, type_parameters, parameters, type_node, full_signature, body), node, &self.hooks);
@@ -9527,7 +9527,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_set_accessor_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn new_set_accessor_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::SetAccessor, NodeData::SetAccessorDeclaration(alloc(SetAccessorDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9560,7 +9560,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_set_accessor_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn update_set_accessor_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         let data = node.as_set_accessor_declaration();
         if modifiers != data.modifiers() || name != data.name() || type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() || full_signature != data.full_signature() || body != data.body() {
             return update_node(self.new_set_accessor_declaration(modifiers, name, type_parameters, parameters, type_node, full_signature, body), node, &self.hooks);
@@ -9568,7 +9568,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_index_signature_declaration(&mut self, modifiers: Option<P<ModifierList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn new_index_signature_declaration(&self, modifiers: Option<P<ModifierList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::IndexSignature, NodeData::IndexSignatureDeclaration(alloc(IndexSignatureDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9589,7 +9589,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_index_signature_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn update_index_signature_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         let data = node.as_index_signature_declaration();
         if modifiers != data.modifiers() || parameters != data.parameters() || type_node != data.type_() {
             return update_node(self.new_index_signature_declaration(modifiers, parameters, type_node), node, &self.hooks);
@@ -9597,7 +9597,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_method_signature_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn new_method_signature_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::MethodSignature, NodeData::MethodSignatureDeclaration(alloc(MethodSignatureDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9622,7 +9622,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_method_signature_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn update_method_signature_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         let data = node.as_method_signature_declaration();
         if modifiers != data.modifiers() || name != data.name() || postfix_token != data.postfix_token() || type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() {
             return update_node(self.new_method_signature_declaration(modifiers, name, postfix_token, type_parameters, parameters, type_node), node, &self.hooks);
@@ -9630,7 +9630,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_method_declaration(&mut self, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn new_method_declaration(&self, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::MethodDeclaration, NodeData::MethodDeclaration(alloc(MethodDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9663,7 +9663,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_method_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn update_method_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         let data = node.as_method_declaration();
         if modifiers != data.modifiers() || asterisk_token != data.asterisk_token() || name != data.name() || postfix_token != data.postfix_token() || type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() || full_signature != data.full_signature() || body != data.body() {
             return update_node(self.new_method_declaration(modifiers, asterisk_token, name, postfix_token, type_parameters, parameters, type_node, full_signature, body), node, &self.hooks);
@@ -9671,7 +9671,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_property_signature_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn new_property_signature_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::PropertySignature, NodeData::PropertySignatureDeclaration(alloc(PropertySignatureDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9688,7 +9688,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_property_signature_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn update_property_signature_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
         let data = node.as_property_signature_declaration();
         if modifiers != data.modifiers() || name != data.name() || postfix_token != data.postfix_token() || type_node != data.type_() || initializer != data.initializer() {
             return update_node(self.new_property_signature_declaration(modifiers, name, postfix_token, type_node, initializer), node, &self.hooks);
@@ -9696,7 +9696,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_property_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn new_property_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::PropertyDeclaration, NodeData::PropertyDeclaration(alloc(PropertyDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9713,7 +9713,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_property_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn update_property_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
         let data = node.as_property_declaration();
         if modifiers != data.modifiers() || name != data.name() || postfix_token != data.postfix_token() || type_node != data.type_() || initializer != data.initializer() {
             return update_node(self.new_property_declaration(modifiers, name, postfix_token, type_node, initializer), node, &self.hooks);
@@ -9721,7 +9721,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_semicolon_class_element(&mut self) -> P<Node> {
+    pub fn new_semicolon_class_element(&self) -> P<Node> {
         self.new_node(Kind::SemicolonClassElement, NodeData::SemicolonClassElement(alloc(SemicolonClassElement {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9729,7 +9729,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_class_static_block_declaration(&mut self, modifiers: Option<P<ModifierList>>, body: P<Node>) -> P<Node> {
+    pub fn new_class_static_block_declaration(&self, modifiers: Option<P<ModifierList>>, body: P<Node>) -> P<Node> {
         self.new_node(Kind::ClassStaticBlockDeclaration, NodeData::ClassStaticBlockDeclaration(alloc(ClassStaticBlockDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9746,7 +9746,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_class_static_block_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, body: P<Node>) -> P<Node> {
+    pub fn update_class_static_block_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, body: P<Node>) -> P<Node> {
         let data = node.as_class_static_block_declaration();
         if modifiers != data.modifiers() || body != data.body() {
             return update_node(self.new_class_static_block_declaration(modifiers, body), node, &self.hooks);
@@ -9754,11 +9754,11 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_omitted_expression(&mut self) -> P<Node> {
+    pub fn new_omitted_expression(&self) -> P<Node> {
         self.new_node(Kind::OmittedExpression, NodeData::OmittedExpression)
     }
 
-    pub fn new_keyword_expression(&mut self, kind: Kind) -> P<Node> {
+    pub fn new_keyword_expression(&self, kind: Kind) -> P<Node> {
         self.new_node(kind, NodeData::KeywordExpression(alloc(KeywordExpression {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -9766,8 +9766,8 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_string_literal(&mut self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_string_literal(&self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::StringLiteral, NodeData::StringLiteral(alloc(StringLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
@@ -9776,8 +9776,8 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_numeric_literal(&mut self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_numeric_literal(&self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::NumericLiteral, NodeData::NumericLiteral(alloc(NumericLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
@@ -9786,8 +9786,8 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_big_int_literal(&mut self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_big_int_literal(&self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::BigIntLiteral, NodeData::BigIntLiteral(alloc(BigIntLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
@@ -9796,8 +9796,8 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_regular_expression_literal(&mut self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_regular_expression_literal(&self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::RegularExpressionLiteral, NodeData::RegularExpressionLiteral(alloc(RegularExpressionLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
@@ -9806,8 +9806,8 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_no_substitution_template_literal(&mut self, text: &'static str, template_flags: TokenFlags) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_no_substitution_template_literal(&self, text: &'static str, template_flags: TokenFlags) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::NoSubstitutionTemplateLiteral, NodeData::NoSubstitutionTemplateLiteral(alloc(NoSubstitutionTemplateLiteral {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
@@ -9823,7 +9823,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_binary_expression(&mut self, modifiers: Option<P<ModifierList>>, left: P<Node>, type_node: Option<P<Node>>, operator_token: P<Node>, right: P<Node>) -> P<Node> {
+    pub fn new_binary_expression(&self, modifiers: Option<P<ModifierList>>, left: P<Node>, type_node: Option<P<Node>>, operator_token: P<Node>, right: P<Node>) -> P<Node> {
         self.new_node(Kind::BinaryExpression, NodeData::BinaryExpression(alloc(BinaryExpression {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9838,7 +9838,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_binary_expression(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, left: P<Node>, type_node: Option<P<Node>>, operator_token: P<Node>, right: P<Node>) -> P<Node> {
+    pub fn update_binary_expression(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, left: P<Node>, type_node: Option<P<Node>>, operator_token: P<Node>, right: P<Node>) -> P<Node> {
         let data = node.as_binary_expression();
         if modifiers != data.modifiers() || left != data.left() || type_node != data.type_() || operator_token != data.operator_token() || right != data.right() {
             return update_node(self.new_binary_expression(modifiers, left, type_node, operator_token, right), node, &self.hooks);
@@ -9846,14 +9846,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_prefix_unary_expression(&mut self, operator: Kind, operand: P<Node>) -> P<Node> {
+    pub fn new_prefix_unary_expression(&self, operator: Kind, operand: P<Node>) -> P<Node> {
         self.new_node(Kind::PrefixUnaryExpression, NodeData::PrefixUnaryExpression(alloc(PrefixUnaryExpression {
             operator: operator,
             operand: operand,
         })))
     }
 
-    pub fn update_prefix_unary_expression(&mut self, node: P<Node>, operator: Kind, operand: P<Node>) -> P<Node> {
+    pub fn update_prefix_unary_expression(&self, node: P<Node>, operator: Kind, operand: P<Node>) -> P<Node> {
         let data = node.as_prefix_unary_expression();
         if operator != data.operator() || operand != data.operand() {
             return update_node(self.new_prefix_unary_expression(operator, operand), node, &self.hooks);
@@ -9861,14 +9861,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_postfix_unary_expression(&mut self, operand: P<Node>, operator: Kind) -> P<Node> {
+    pub fn new_postfix_unary_expression(&self, operand: P<Node>, operator: Kind) -> P<Node> {
         self.new_node(Kind::PostfixUnaryExpression, NodeData::PostfixUnaryExpression(alloc(PostfixUnaryExpression {
             operand: operand,
             operator: operator,
         })))
     }
 
-    pub fn update_postfix_unary_expression(&mut self, node: P<Node>, operand: P<Node>, operator: Kind) -> P<Node> {
+    pub fn update_postfix_unary_expression(&self, node: P<Node>, operand: P<Node>, operator: Kind) -> P<Node> {
         let data = node.as_postfix_unary_expression();
         if operand != data.operand() || operator != data.operator() {
             return update_node(self.new_postfix_unary_expression(operand, operator), node, &self.hooks);
@@ -9876,14 +9876,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_yield_expression(&mut self, asterisk_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
+    pub fn new_yield_expression(&self, asterisk_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::YieldExpression, NodeData::YieldExpression(alloc(YieldExpression {
             asterisk_token: asterisk_token,
             expression: expression,
         })))
     }
 
-    pub fn update_yield_expression(&mut self, node: P<Node>, asterisk_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
+    pub fn update_yield_expression(&self, node: P<Node>, asterisk_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
         let data = node.as_yield_expression();
         if asterisk_token != data.asterisk_token() || expression != data.expression() {
             return update_node(self.new_yield_expression(asterisk_token, expression), node, &self.hooks);
@@ -9891,7 +9891,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_arrow_function(&mut self, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, equals_greater_than_token: P<Node>, body: Option<P<Node>>) -> P<Node> {
+    pub fn new_arrow_function(&self, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, equals_greater_than_token: P<Node>, body: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::ArrowFunction, NodeData::ArrowFunction(alloc(ArrowFunction {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9921,7 +9921,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_arrow_function(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, equals_greater_than_token: P<Node>, body: Option<P<Node>>) -> P<Node> {
+    pub fn update_arrow_function(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, equals_greater_than_token: P<Node>, body: Option<P<Node>>) -> P<Node> {
         let data = node.as_arrow_function();
         if modifiers != data.modifiers() || type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() || full_signature != data.full_signature() || equals_greater_than_token != data.equals_greater_than_token() || body != data.body() {
             return update_node(self.new_arrow_function(modifiers, type_parameters, parameters, type_node, full_signature, equals_greater_than_token, body), node, &self.hooks);
@@ -9929,7 +9929,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_function_expression(&mut self, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn new_function_expression(&self, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::FunctionExpression, NodeData::FunctionExpression(alloc(FunctionExpression {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -9960,7 +9960,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_function_expression(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn update_function_expression(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         let data = node.as_function_expression();
         if modifiers != data.modifiers() || asterisk_token != data.asterisk_token() || name != data.name() || type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() || full_signature != data.full_signature() || body != data.body() {
             return update_node(self.new_function_expression(modifiers, asterisk_token, name, type_parameters, parameters, type_node, full_signature, body), node, &self.hooks);
@@ -9968,14 +9968,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_as_expression(&mut self, expression: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn new_as_expression(&self, expression: P<Node>, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::AsExpression, NodeData::AsExpression(alloc(AsExpression {
             expression: expression,
             type_: type_node,
         })))
     }
 
-    pub fn update_as_expression(&mut self, node: P<Node>, expression: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn update_as_expression(&self, node: P<Node>, expression: P<Node>, type_node: P<Node>) -> P<Node> {
         let data = node.as_as_expression();
         if expression != data.expression() || type_node != data.type_() {
             return update_node(self.new_as_expression(expression, type_node), node, &self.hooks);
@@ -9983,14 +9983,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_satisfies_expression(&mut self, expression: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn new_satisfies_expression(&self, expression: P<Node>, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::SatisfiesExpression, NodeData::SatisfiesExpression(alloc(SatisfiesExpression {
             expression: expression,
             type_: type_node,
         })))
     }
 
-    pub fn update_satisfies_expression(&mut self, node: P<Node>, expression: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn update_satisfies_expression(&self, node: P<Node>, expression: P<Node>, type_node: P<Node>) -> P<Node> {
         let data = node.as_satisfies_expression();
         if expression != data.expression() || type_node != data.type_() {
             return update_node(self.new_satisfies_expression(expression, type_node), node, &self.hooks);
@@ -9998,7 +9998,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_conditional_expression(&mut self, condition: P<Node>, question_token: P<Node>, when_true: P<Node>, colon_token: P<Node>, when_false: P<Node>) -> P<Node> {
+    pub fn new_conditional_expression(&self, condition: P<Node>, question_token: P<Node>, when_true: P<Node>, colon_token: P<Node>, when_false: P<Node>) -> P<Node> {
         self.new_node(Kind::ConditionalExpression, NodeData::ConditionalExpression(alloc(ConditionalExpression {
             condition: condition,
             question_token: question_token,
@@ -10008,7 +10008,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_conditional_expression(&mut self, node: P<Node>, condition: P<Node>, question_token: P<Node>, when_true: P<Node>, colon_token: P<Node>, when_false: P<Node>) -> P<Node> {
+    pub fn update_conditional_expression(&self, node: P<Node>, condition: P<Node>, question_token: P<Node>, when_true: P<Node>, colon_token: P<Node>, when_false: P<Node>) -> P<Node> {
         let data = node.as_conditional_expression();
         if condition != data.condition() || question_token != data.question_token() || when_true != data.when_true() || colon_token != data.colon_token() || when_false != data.when_false() {
             return update_node(self.new_conditional_expression(condition, question_token, when_true, colon_token, when_false), node, &self.hooks);
@@ -10016,7 +10016,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_property_access_expression(&mut self, expression: P<Node>, question_dot_token: Option<P<Node>>, name: P<Node>, flags: NodeFlags) -> P<Node> {
+    pub fn new_property_access_expression(&self, expression: P<Node>, question_dot_token: Option<P<Node>>, name: P<Node>, flags: NodeFlags) -> P<Node> {
         let node = self.new_node(Kind::PropertyAccessExpression, NodeData::PropertyAccessExpression(alloc(PropertyAccessExpression {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -10029,7 +10029,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn update_property_access_expression(&mut self, node: P<Node>, expression: P<Node>, question_dot_token: Option<P<Node>>, name: P<Node>, flags: NodeFlags) -> P<Node> {
+    pub fn update_property_access_expression(&self, node: P<Node>, expression: P<Node>, question_dot_token: Option<P<Node>>, name: P<Node>, flags: NodeFlags) -> P<Node> {
         let data = node.as_property_access_expression();
         if expression != data.expression() || question_dot_token != data.question_dot_token() || name != data.name() || flags != node.flags.get() {
             return update_node(self.new_property_access_expression(expression, question_dot_token, name, flags), node, &self.hooks);
@@ -10037,7 +10037,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_element_access_expression(&mut self, expression: P<Node>, question_dot_token: Option<P<Node>>, argument_expression: P<Node>, flags: NodeFlags) -> P<Node> {
+    pub fn new_element_access_expression(&self, expression: P<Node>, question_dot_token: Option<P<Node>>, argument_expression: P<Node>, flags: NodeFlags) -> P<Node> {
         let node = self.new_node(Kind::ElementAccessExpression, NodeData::ElementAccessExpression(alloc(ElementAccessExpression {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -10050,7 +10050,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn update_element_access_expression(&mut self, node: P<Node>, expression: P<Node>, question_dot_token: Option<P<Node>>, argument_expression: P<Node>, flags: NodeFlags) -> P<Node> {
+    pub fn update_element_access_expression(&self, node: P<Node>, expression: P<Node>, question_dot_token: Option<P<Node>>, argument_expression: P<Node>, flags: NodeFlags) -> P<Node> {
         let data = node.as_element_access_expression();
         if expression != data.expression() || question_dot_token != data.question_dot_token() || argument_expression != data.argument_expression() || flags != node.flags.get() {
             return update_node(self.new_element_access_expression(expression, question_dot_token, argument_expression, flags), node, &self.hooks);
@@ -10058,7 +10058,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_call_expression(&mut self, expression: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, arguments: P<NodeList>, flags: NodeFlags) -> P<Node> {
+    pub fn new_call_expression(&self, expression: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, arguments: P<NodeList>, flags: NodeFlags) -> P<Node> {
         let node = self.new_node(Kind::CallExpression, NodeData::CallExpression(alloc(CallExpression {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -10072,7 +10072,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn update_call_expression(&mut self, node: P<Node>, expression: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, arguments: P<NodeList>, flags: NodeFlags) -> P<Node> {
+    pub fn update_call_expression(&self, node: P<Node>, expression: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, arguments: P<NodeList>, flags: NodeFlags) -> P<Node> {
         let data = node.as_call_expression();
         if expression != data.expression() || question_dot_token != data.question_dot_token() || type_arguments != data.type_arguments() || arguments != data.arguments() || flags != node.flags.get() {
             return update_node(self.new_call_expression(expression, question_dot_token, type_arguments, arguments, flags), node, &self.hooks);
@@ -10080,7 +10080,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_new_expression(&mut self, expression: P<Node>, type_arguments: Option<P<NodeList>>, arguments: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_new_expression(&self, expression: P<Node>, type_arguments: Option<P<NodeList>>, arguments: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::NewExpression, NodeData::NewExpression(alloc(NewExpression {
             expression: expression,
             type_arguments: type_arguments,
@@ -10088,7 +10088,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_new_expression(&mut self, node: P<Node>, expression: P<Node>, type_arguments: Option<P<NodeList>>, arguments: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_new_expression(&self, node: P<Node>, expression: P<Node>, type_arguments: Option<P<NodeList>>, arguments: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_new_expression();
         if expression != data.expression() || type_arguments != data.type_arguments() || arguments != data.arguments() {
             return update_node(self.new_new_expression(expression, type_arguments, arguments), node, &self.hooks);
@@ -10096,7 +10096,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_meta_property(&mut self, keyword_token: Kind, name: P<Node>) -> P<Node> {
+    pub fn new_meta_property(&self, keyword_token: Kind, name: P<Node>) -> P<Node> {
         self.new_node(Kind::MetaProperty, NodeData::MetaProperty(alloc(MetaProperty {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -10106,7 +10106,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_meta_property(&mut self, node: P<Node>, keyword_token: Kind, name: P<Node>) -> P<Node> {
+    pub fn update_meta_property(&self, node: P<Node>, keyword_token: Kind, name: P<Node>) -> P<Node> {
         let data = node.as_meta_property();
         if keyword_token != data.keyword_token() || name != data.name() {
             return update_node(self.new_meta_property(keyword_token, name), node, &self.hooks);
@@ -10114,7 +10114,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_non_null_expression(&mut self, expression: P<Node>, flags: NodeFlags) -> P<Node> {
+    pub fn new_non_null_expression(&self, expression: P<Node>, flags: NodeFlags) -> P<Node> {
         let node = self.new_node(Kind::NonNullExpression, NodeData::NonNullExpression(alloc(NonNullExpression {
             expression: expression,
         })));
@@ -10122,7 +10122,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn update_non_null_expression(&mut self, node: P<Node>, expression: P<Node>, flags: NodeFlags) -> P<Node> {
+    pub fn update_non_null_expression(&self, node: P<Node>, expression: P<Node>, flags: NodeFlags) -> P<Node> {
         let data = node.as_non_null_expression();
         if expression != data.expression() || flags != node.flags.get() {
             return update_node(self.new_non_null_expression(expression, flags), node, &self.hooks);
@@ -10130,13 +10130,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_spread_element(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_spread_element(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::SpreadElement, NodeData::SpreadElement(alloc(SpreadElement {
             expression: expression,
         })))
     }
 
-    pub fn update_spread_element(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_spread_element(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_spread_element();
         if expression != data.expression() {
             return update_node(self.new_spread_element(expression), node, &self.hooks);
@@ -10144,14 +10144,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_template_expression(&mut self, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
+    pub fn new_template_expression(&self, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
         self.new_node(Kind::TemplateExpression, NodeData::TemplateExpression(alloc(TemplateExpression {
             head: head,
             template_spans: template_spans,
         })))
     }
 
-    pub fn update_template_expression(&mut self, node: P<Node>, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
+    pub fn update_template_expression(&self, node: P<Node>, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
         let data = node.as_template_expression();
         if head != data.head() || template_spans != data.template_spans() {
             return update_node(self.new_template_expression(head, template_spans), node, &self.hooks);
@@ -10159,14 +10159,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_template_span(&mut self, expression: P<Node>, literal: P<Node>) -> P<Node> {
+    pub fn new_template_span(&self, expression: P<Node>, literal: P<Node>) -> P<Node> {
         self.new_node(Kind::TemplateSpan, NodeData::TemplateSpan(alloc(TemplateSpan {
             expression: expression,
             literal: literal,
         })))
     }
 
-    pub fn update_template_span(&mut self, node: P<Node>, expression: P<Node>, literal: P<Node>) -> P<Node> {
+    pub fn update_template_span(&self, node: P<Node>, expression: P<Node>, literal: P<Node>) -> P<Node> {
         let data = node.as_template_span();
         if expression != data.expression() || literal != data.literal() {
             return update_node(self.new_template_span(expression, literal), node, &self.hooks);
@@ -10174,7 +10174,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_tagged_template_expression(&mut self, tag: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, template: P<Node>, flags: NodeFlags) -> P<Node> {
+    pub fn new_tagged_template_expression(&self, tag: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, template: P<Node>, flags: NodeFlags) -> P<Node> {
         let node = self.new_node(Kind::TaggedTemplateExpression, NodeData::TaggedTemplateExpression(alloc(TaggedTemplateExpression {
             tag: tag,
             question_dot_token: question_dot_token,
@@ -10185,7 +10185,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn update_tagged_template_expression(&mut self, node: P<Node>, tag: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, template: P<Node>, flags: NodeFlags) -> P<Node> {
+    pub fn update_tagged_template_expression(&self, node: P<Node>, tag: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, template: P<Node>, flags: NodeFlags) -> P<Node> {
         let data = node.as_tagged_template_expression();
         if tag != data.tag() || question_dot_token != data.question_dot_token() || type_arguments != data.type_arguments() || template != data.template() || flags != node.flags.get() {
             return update_node(self.new_tagged_template_expression(tag, question_dot_token, type_arguments, template, flags), node, &self.hooks);
@@ -10193,13 +10193,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_parenthesized_expression(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_parenthesized_expression(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::ParenthesizedExpression, NodeData::ParenthesizedExpression(alloc(ParenthesizedExpression {
             expression: Cell::new(expression),
         })))
     }
 
-    pub fn update_parenthesized_expression(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_parenthesized_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_parenthesized_expression();
         if expression != data.expression() {
             return update_node(self.new_parenthesized_expression(expression), node, &self.hooks);
@@ -10207,14 +10207,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_array_literal_expression(&mut self, elements: P<NodeList>, multi_line: bool) -> P<Node> {
+    pub fn new_array_literal_expression(&self, elements: P<NodeList>, multi_line: bool) -> P<Node> {
         self.new_node(Kind::ArrayLiteralExpression, NodeData::ArrayLiteralExpression(alloc(ArrayLiteralExpression {
             elements: elements,
             multi_line: multi_line,
         })))
     }
 
-    pub fn update_array_literal_expression(&mut self, node: P<Node>, elements: P<NodeList>, multi_line: bool) -> P<Node> {
+    pub fn update_array_literal_expression(&self, node: P<Node>, elements: P<NodeList>, multi_line: bool) -> P<Node> {
         let data = node.as_array_literal_expression();
         if elements != data.elements() || multi_line != data.multi_line() {
             return update_node(self.new_array_literal_expression(elements, multi_line), node, &self.hooks);
@@ -10222,7 +10222,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_object_literal_expression(&mut self, properties: P<NodeList>, multi_line: bool) -> P<Node> {
+    pub fn new_object_literal_expression(&self, properties: P<NodeList>, multi_line: bool) -> P<Node> {
         self.new_node(Kind::ObjectLiteralExpression, NodeData::ObjectLiteralExpression(alloc(ObjectLiteralExpression {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -10232,7 +10232,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_object_literal_expression(&mut self, node: P<Node>, properties: P<NodeList>, multi_line: bool) -> P<Node> {
+    pub fn update_object_literal_expression(&self, node: P<Node>, properties: P<NodeList>, multi_line: bool) -> P<Node> {
         let data = node.as_object_literal_expression();
         if properties != data.properties() || multi_line != data.multi_line() {
             return update_node(self.new_object_literal_expression(properties, multi_line), node, &self.hooks);
@@ -10240,7 +10240,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_spread_assignment(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_spread_assignment(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::SpreadAssignment, NodeData::SpreadAssignment(alloc(SpreadAssignment {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -10249,7 +10249,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_spread_assignment(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_spread_assignment(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_spread_assignment();
         if expression != data.expression() {
             return update_node(self.new_spread_assignment(expression), node, &self.hooks);
@@ -10257,7 +10257,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_property_assignment(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: P<Node>) -> P<Node> {
+    pub fn new_property_assignment(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: P<Node>) -> P<Node> {
         self.new_node(Kind::PropertyAssignment, NodeData::PropertyAssignment(alloc(PropertyAssignment {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -10274,7 +10274,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_property_assignment(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: P<Node>) -> P<Node> {
+    pub fn update_property_assignment(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: P<Node>) -> P<Node> {
         let data = node.as_property_assignment();
         if modifiers != data.modifiers() || name != data.name() || postfix_token != data.postfix_token() || type_node != data.type_() || initializer != data.initializer() {
             return update_node(self.new_property_assignment(modifiers, name, postfix_token, type_node, initializer), node, &self.hooks);
@@ -10282,7 +10282,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_shorthand_property_assignment(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, equals_token: Option<P<Node>>, object_assignment_initializer: Option<P<Node>>) -> P<Node> {
+    pub fn new_shorthand_property_assignment(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, equals_token: Option<P<Node>>, object_assignment_initializer: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::ShorthandPropertyAssignment, NodeData::ShorthandPropertyAssignment(alloc(ShorthandPropertyAssignment {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -10300,7 +10300,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_shorthand_property_assignment(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, equals_token: Option<P<Node>>, object_assignment_initializer: Option<P<Node>>) -> P<Node> {
+    pub fn update_shorthand_property_assignment(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, equals_token: Option<P<Node>>, object_assignment_initializer: Option<P<Node>>) -> P<Node> {
         let data = node.as_shorthand_property_assignment();
         if modifiers != data.modifiers() || name != data.name() || postfix_token != data.postfix_token() || type_node != data.type_() || equals_token != data.equals_token() || object_assignment_initializer != data.object_assignment_initializer() {
             return update_node(self.new_shorthand_property_assignment(modifiers, name, postfix_token, type_node, equals_token, object_assignment_initializer), node, &self.hooks);
@@ -10308,13 +10308,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_delete_expression(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_delete_expression(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::DeleteExpression, NodeData::DeleteExpression(alloc(DeleteExpression {
             expression: expression,
         })))
     }
 
-    pub fn update_delete_expression(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_delete_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_delete_expression();
         if expression != data.expression() {
             return update_node(self.new_delete_expression(expression), node, &self.hooks);
@@ -10322,13 +10322,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_type_of_expression(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_type_of_expression(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::TypeOfExpression, NodeData::TypeOfExpression(alloc(TypeOfExpression {
             expression: expression,
         })))
     }
 
-    pub fn update_type_of_expression(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_type_of_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_type_of_expression();
         if expression != data.expression() {
             return update_node(self.new_type_of_expression(expression), node, &self.hooks);
@@ -10336,13 +10336,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_void_expression(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_void_expression(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::VoidExpression, NodeData::VoidExpression(alloc(VoidExpression {
             expression: expression,
         })))
     }
 
-    pub fn update_void_expression(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_void_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_void_expression();
         if expression != data.expression() {
             return update_node(self.new_void_expression(expression), node, &self.hooks);
@@ -10350,13 +10350,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_await_expression(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_await_expression(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::AwaitExpression, NodeData::AwaitExpression(alloc(AwaitExpression {
             expression: expression,
         })))
     }
 
-    pub fn update_await_expression(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_await_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_await_expression();
         if expression != data.expression() {
             return update_node(self.new_await_expression(expression), node, &self.hooks);
@@ -10364,14 +10364,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_type_assertion(&mut self, type_node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn new_type_assertion(&self, type_node: P<Node>, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::TypeAssertionExpression, NodeData::TypeAssertion(alloc(TypeAssertion {
             type_: type_node,
             expression: expression,
         })))
     }
 
-    pub fn update_type_assertion(&mut self, node: P<Node>, type_node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_type_assertion(&self, node: P<Node>, type_node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_type_assertion();
         if type_node != data.type_() || expression != data.expression() {
             return update_node(self.new_type_assertion(type_node, expression), node, &self.hooks);
@@ -10379,11 +10379,11 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_keyword_type_node(&mut self, kind: Kind) -> P<Node> {
+    pub fn new_keyword_type_node(&self, kind: Kind) -> P<Node> {
         self.new_node(kind, NodeData::KeywordTypeNode)
     }
 
-    pub fn new_union_type_node(&mut self, types: P<NodeList>) -> P<Node> {
+    pub fn new_union_type_node(&self, types: P<NodeList>) -> P<Node> {
         self.new_node(Kind::UnionType, NodeData::UnionTypeNode(alloc(UnionTypeNode {
             union_or_intersection_type_node_base: UnionOrIntersectionTypeNodeBase {
                 types: types,
@@ -10391,7 +10391,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_union_type_node(&mut self, node: P<Node>, types: P<NodeList>) -> P<Node> {
+    pub fn update_union_type_node(&self, node: P<Node>, types: P<NodeList>) -> P<Node> {
         let data = node.as_union_type_node();
         if types != data.types() {
             return update_node(self.new_union_type_node(types), node, &self.hooks);
@@ -10399,7 +10399,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_intersection_type_node(&mut self, types: P<NodeList>) -> P<Node> {
+    pub fn new_intersection_type_node(&self, types: P<NodeList>) -> P<Node> {
         self.new_node(Kind::IntersectionType, NodeData::IntersectionTypeNode(alloc(IntersectionTypeNode {
             union_or_intersection_type_node_base: UnionOrIntersectionTypeNodeBase {
                 types: types,
@@ -10407,7 +10407,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_intersection_type_node(&mut self, node: P<Node>, types: P<NodeList>) -> P<Node> {
+    pub fn update_intersection_type_node(&self, node: P<Node>, types: P<NodeList>) -> P<Node> {
         let data = node.as_intersection_type_node();
         if types != data.types() {
             return update_node(self.new_intersection_type_node(types), node, &self.hooks);
@@ -10415,7 +10415,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_conditional_type_node(&mut self, check_type: P<Node>, extends_type: P<Node>, true_type: P<Node>, false_type: P<Node>) -> P<Node> {
+    pub fn new_conditional_type_node(&self, check_type: P<Node>, extends_type: P<Node>, true_type: P<Node>, false_type: P<Node>) -> P<Node> {
         self.new_node(Kind::ConditionalType, NodeData::ConditionalTypeNode(alloc(ConditionalTypeNode {
             locals_container_base: LocalsContainerBase {
                 locals: Cell::new(None),
@@ -10428,7 +10428,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_conditional_type_node(&mut self, node: P<Node>, check_type: P<Node>, extends_type: P<Node>, true_type: P<Node>, false_type: P<Node>) -> P<Node> {
+    pub fn update_conditional_type_node(&self, node: P<Node>, check_type: P<Node>, extends_type: P<Node>, true_type: P<Node>, false_type: P<Node>) -> P<Node> {
         let data = node.as_conditional_type_node();
         if check_type != data.check_type() || extends_type != data.extends_type() || true_type != data.true_type() || false_type != data.false_type() {
             return update_node(self.new_conditional_type_node(check_type, extends_type, true_type, false_type), node, &self.hooks);
@@ -10436,14 +10436,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_type_operator_node(&mut self, operator: Kind, type_node: P<Node>) -> P<Node> {
+    pub fn new_type_operator_node(&self, operator: Kind, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::TypeOperator, NodeData::TypeOperatorNode(alloc(TypeOperatorNode {
             operator: operator,
             type_: type_node,
         })))
     }
 
-    pub fn update_type_operator_node(&mut self, node: P<Node>, operator: Kind, type_node: P<Node>) -> P<Node> {
+    pub fn update_type_operator_node(&self, node: P<Node>, operator: Kind, type_node: P<Node>) -> P<Node> {
         let data = node.as_type_operator_node();
         if operator != data.operator() || type_node != data.type_() {
             return update_node(self.new_type_operator_node(operator, type_node), node, &self.hooks);
@@ -10451,13 +10451,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_infer_type_node(&mut self, type_parameter: P<Node>) -> P<Node> {
+    pub fn new_infer_type_node(&self, type_parameter: P<Node>) -> P<Node> {
         self.new_node(Kind::InferType, NodeData::InferTypeNode(alloc(InferTypeNode {
             type_parameter: type_parameter,
         })))
     }
 
-    pub fn update_infer_type_node(&mut self, node: P<Node>, type_parameter: P<Node>) -> P<Node> {
+    pub fn update_infer_type_node(&self, node: P<Node>, type_parameter: P<Node>) -> P<Node> {
         let data = node.as_infer_type_node();
         if type_parameter != data.type_parameter() {
             return update_node(self.new_infer_type_node(type_parameter), node, &self.hooks);
@@ -10465,13 +10465,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_array_type_node(&mut self, element_type: P<Node>) -> P<Node> {
+    pub fn new_array_type_node(&self, element_type: P<Node>) -> P<Node> {
         self.new_node(Kind::ArrayType, NodeData::ArrayTypeNode(alloc(ArrayTypeNode {
             element_type: element_type,
         })))
     }
 
-    pub fn update_array_type_node(&mut self, node: P<Node>, element_type: P<Node>) -> P<Node> {
+    pub fn update_array_type_node(&self, node: P<Node>, element_type: P<Node>) -> P<Node> {
         let data = node.as_array_type_node();
         if element_type != data.element_type() {
             return update_node(self.new_array_type_node(element_type), node, &self.hooks);
@@ -10479,14 +10479,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_indexed_access_type_node(&mut self, object_type: P<Node>, index_type: P<Node>) -> P<Node> {
+    pub fn new_indexed_access_type_node(&self, object_type: P<Node>, index_type: P<Node>) -> P<Node> {
         self.new_node(Kind::IndexedAccessType, NodeData::IndexedAccessTypeNode(alloc(IndexedAccessTypeNode {
             object_type: object_type,
             index_type: index_type,
         })))
     }
 
-    pub fn update_indexed_access_type_node(&mut self, node: P<Node>, object_type: P<Node>, index_type: P<Node>) -> P<Node> {
+    pub fn update_indexed_access_type_node(&self, node: P<Node>, object_type: P<Node>, index_type: P<Node>) -> P<Node> {
         let data = node.as_indexed_access_type_node();
         if object_type != data.object_type() || index_type != data.index_type() {
             return update_node(self.new_indexed_access_type_node(object_type, index_type), node, &self.hooks);
@@ -10494,7 +10494,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_type_reference_node(&mut self, type_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_type_reference_node(&self, type_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::TypeReference, NodeData::TypeReferenceNode(alloc(TypeReferenceNode {
             node_with_type_arguments_base: NodeWithTypeArgumentsBase {
                 type_arguments: type_arguments,
@@ -10503,7 +10503,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_type_reference_node(&mut self, node: P<Node>, type_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_type_reference_node(&self, node: P<Node>, type_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_type_reference_node();
         if type_name != data.type_name() || type_arguments != data.type_arguments() {
             return update_node(self.new_type_reference_node(type_name, type_arguments), node, &self.hooks);
@@ -10511,14 +10511,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_expression_with_type_arguments(&mut self, expression: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_expression_with_type_arguments(&self, expression: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::ExpressionWithTypeArguments, NodeData::ExpressionWithTypeArguments(alloc(ExpressionWithTypeArguments {
             expression: expression,
             type_arguments: Cell::new(type_arguments),
         })))
     }
 
-    pub fn update_expression_with_type_arguments(&mut self, node: P<Node>, expression: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_expression_with_type_arguments(&self, node: P<Node>, expression: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_expression_with_type_arguments();
         if expression != data.expression() || type_arguments != data.type_arguments() {
             return update_node(self.new_expression_with_type_arguments(expression, type_arguments), node, &self.hooks);
@@ -10526,13 +10526,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_literal_type_node(&mut self, literal: P<Node>) -> P<Node> {
+    pub fn new_literal_type_node(&self, literal: P<Node>) -> P<Node> {
         self.new_node(Kind::LiteralType, NodeData::LiteralTypeNode(alloc(LiteralTypeNode {
             literal: literal,
         })))
     }
 
-    pub fn update_literal_type_node(&mut self, node: P<Node>, literal: P<Node>) -> P<Node> {
+    pub fn update_literal_type_node(&self, node: P<Node>, literal: P<Node>) -> P<Node> {
         let data = node.as_literal_type_node();
         if literal != data.literal() {
             return update_node(self.new_literal_type_node(literal), node, &self.hooks);
@@ -10540,11 +10540,11 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_this_type_node(&mut self) -> P<Node> {
+    pub fn new_this_type_node(&self) -> P<Node> {
         self.new_node(Kind::ThisType, NodeData::ThisTypeNode)
     }
 
-    pub fn new_type_predicate_node(&mut self, asserts_modifier: Option<P<Node>>, parameter_name: P<Node>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn new_type_predicate_node(&self, asserts_modifier: Option<P<Node>>, parameter_name: P<Node>, type_node: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::TypePredicate, NodeData::TypePredicateNode(alloc(TypePredicateNode {
             asserts_modifier: asserts_modifier,
             parameter_name: parameter_name,
@@ -10552,7 +10552,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_type_predicate_node(&mut self, node: P<Node>, asserts_modifier: Option<P<Node>>, parameter_name: P<Node>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn update_type_predicate_node(&self, node: P<Node>, asserts_modifier: Option<P<Node>>, parameter_name: P<Node>, type_node: Option<P<Node>>) -> P<Node> {
         let data = node.as_type_predicate_node();
         if asserts_modifier != data.asserts_modifier() || parameter_name != data.parameter_name() || type_node != data.type_() {
             return update_node(self.new_type_predicate_node(asserts_modifier, parameter_name, type_node), node, &self.hooks);
@@ -10560,14 +10560,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_import_attribute(&mut self, name: Option<P<Node>>, value: P<Node>) -> P<Node> {
+    pub fn new_import_attribute(&self, name: Option<P<Node>>, value: P<Node>) -> P<Node> {
         self.new_node(Kind::ImportAttribute, NodeData::ImportAttribute(alloc(ImportAttribute {
             name: name,
             value: value,
         })))
     }
 
-    pub fn update_import_attribute(&mut self, node: P<Node>, name: Option<P<Node>>, value: P<Node>) -> P<Node> {
+    pub fn update_import_attribute(&self, node: P<Node>, name: Option<P<Node>>, value: P<Node>) -> P<Node> {
         let data = node.as_import_attribute();
         if name != data.name() || value != data.value() {
             return update_node(self.new_import_attribute(name, value), node, &self.hooks);
@@ -10575,7 +10575,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_import_attributes(&mut self, token: Kind, attributes: P<NodeList>, multi_line: bool) -> P<Node> {
+    pub fn new_import_attributes(&self, token: Kind, attributes: P<NodeList>, multi_line: bool) -> P<Node> {
         self.new_node(Kind::ImportAttributes, NodeData::ImportAttributes(alloc(ImportAttributes {
             token: token,
             attributes: attributes,
@@ -10583,7 +10583,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_import_attributes(&mut self, node: P<Node>, token: Kind, attributes: P<NodeList>, multi_line: bool) -> P<Node> {
+    pub fn update_import_attributes(&self, node: P<Node>, token: Kind, attributes: P<NodeList>, multi_line: bool) -> P<Node> {
         let data = node.as_import_attributes();
         if token != data.token() || attributes != data.attributes() || multi_line != data.multi_line() {
             return update_node(self.new_import_attributes(token, attributes, multi_line), node, &self.hooks);
@@ -10591,7 +10591,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_type_query_node(&mut self, expr_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_type_query_node(&self, expr_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::TypeQuery, NodeData::TypeQueryNode(alloc(TypeQueryNode {
             node_with_type_arguments_base: NodeWithTypeArgumentsBase {
                 type_arguments: type_arguments,
@@ -10600,7 +10600,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_type_query_node(&mut self, node: P<Node>, expr_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_type_query_node(&self, node: P<Node>, expr_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_type_query_node();
         if expr_name != data.expr_name() || type_arguments != data.type_arguments() {
             return update_node(self.new_type_query_node(expr_name, type_arguments), node, &self.hooks);
@@ -10608,7 +10608,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_mapped_type_node(&mut self, readonly_token: Option<P<Node>>, type_parameter: P<Node>, name_type: Option<P<Node>>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, members: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_mapped_type_node(&self, readonly_token: Option<P<Node>>, type_parameter: P<Node>, name_type: Option<P<Node>>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, members: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::MappedType, NodeData::MappedTypeNode(alloc(MappedTypeNode {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -10626,7 +10626,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_mapped_type_node(&mut self, node: P<Node>, readonly_token: Option<P<Node>>, type_parameter: P<Node>, name_type: Option<P<Node>>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, members: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_mapped_type_node(&self, node: P<Node>, readonly_token: Option<P<Node>>, type_parameter: P<Node>, name_type: Option<P<Node>>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, members: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_mapped_type_node();
         if readonly_token != data.readonly_token() || type_parameter != data.type_parameter() || name_type != data.name_type() || question_token != data.question_token() || type_node != data.type_() || members != data.members() {
             return update_node(self.new_mapped_type_node(readonly_token, type_parameter, name_type, question_token, type_node, members), node, &self.hooks);
@@ -10634,7 +10634,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_type_literal_node(&mut self, members: P<NodeList>) -> P<Node> {
+    pub fn new_type_literal_node(&self, members: P<NodeList>) -> P<Node> {
         self.new_node(Kind::TypeLiteral, NodeData::TypeLiteralNode(alloc(TypeLiteralNode {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -10643,7 +10643,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_type_literal_node(&mut self, node: P<Node>, members: P<NodeList>) -> P<Node> {
+    pub fn update_type_literal_node(&self, node: P<Node>, members: P<NodeList>) -> P<Node> {
         let data = node.as_type_literal_node();
         if members != data.members() {
             return update_node(self.new_type_literal_node(members), node, &self.hooks);
@@ -10651,13 +10651,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_tuple_type_node(&mut self, elements: P<NodeList>) -> P<Node> {
+    pub fn new_tuple_type_node(&self, elements: P<NodeList>) -> P<Node> {
         self.new_node(Kind::TupleType, NodeData::TupleTypeNode(alloc(TupleTypeNode {
             elements: elements,
         })))
     }
 
-    pub fn update_tuple_type_node(&mut self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
+    pub fn update_tuple_type_node(&self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
         let data = node.as_tuple_type_node();
         if elements != data.elements() {
             return update_node(self.new_tuple_type_node(elements), node, &self.hooks);
@@ -10665,7 +10665,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_named_tuple_member(&mut self, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: P<Node>) -> P<Node> {
+    pub fn new_named_tuple_member(&self, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::NamedTupleMember, NodeData::NamedTupleMember(alloc(NamedTupleMember {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -10677,7 +10677,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_named_tuple_member(&mut self, node: P<Node>, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: P<Node>) -> P<Node> {
+    pub fn update_named_tuple_member(&self, node: P<Node>, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: P<Node>) -> P<Node> {
         let data = node.as_named_tuple_member();
         if dot_dot_dot_token != data.dot_dot_dot_token() || name != data.name() || question_token != data.question_token() || type_node != data.type_() {
             return update_node(self.new_named_tuple_member(dot_dot_dot_token, name, question_token, type_node), node, &self.hooks);
@@ -10685,13 +10685,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_optional_type_node(&mut self, type_node: P<Node>) -> P<Node> {
+    pub fn new_optional_type_node(&self, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::OptionalType, NodeData::OptionalTypeNode(alloc(OptionalTypeNode {
             type_: type_node,
         })))
     }
 
-    pub fn update_optional_type_node(&mut self, node: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn update_optional_type_node(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
         let data = node.as_optional_type_node();
         if type_node != data.type_() {
             return update_node(self.new_optional_type_node(type_node), node, &self.hooks);
@@ -10699,13 +10699,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_rest_type_node(&mut self, type_node: P<Node>) -> P<Node> {
+    pub fn new_rest_type_node(&self, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::RestType, NodeData::RestTypeNode(alloc(RestTypeNode {
             type_: type_node,
         })))
     }
 
-    pub fn update_rest_type_node(&mut self, node: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn update_rest_type_node(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
         let data = node.as_rest_type_node();
         if type_node != data.type_() {
             return update_node(self.new_rest_type_node(type_node), node, &self.hooks);
@@ -10713,13 +10713,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_parenthesized_type_node(&mut self, type_node: P<Node>) -> P<Node> {
+    pub fn new_parenthesized_type_node(&self, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::ParenthesizedType, NodeData::ParenthesizedTypeNode(alloc(ParenthesizedTypeNode {
             type_: type_node,
         })))
     }
 
-    pub fn update_parenthesized_type_node(&mut self, node: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn update_parenthesized_type_node(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
         let data = node.as_parenthesized_type_node();
         if type_node != data.type_() {
             return update_node(self.new_parenthesized_type_node(type_node), node, &self.hooks);
@@ -10727,7 +10727,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_function_type_node(&mut self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn new_function_type_node(&self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::FunctionType, NodeData::FunctionTypeNode(alloc(FunctionTypeNode {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -10748,7 +10748,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_function_type_node(&mut self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn update_function_type_node(&self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         let data = node.as_function_type_node();
         if type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() {
             return update_node(self.new_function_type_node(type_parameters, parameters, type_node), node, &self.hooks);
@@ -10756,7 +10756,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_constructor_type_node(&mut self, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn new_constructor_type_node(&self, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::ConstructorType, NodeData::ConstructorTypeNode(alloc(ConstructorTypeNode {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -10777,7 +10777,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_constructor_type_node(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn update_constructor_type_node(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         let data = node.as_constructor_type_node();
         if modifiers != data.modifiers() || type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() {
             return update_node(self.new_constructor_type_node(modifiers, type_parameters, parameters, type_node), node, &self.hooks);
@@ -10785,8 +10785,8 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_template_head(&mut self, text: &'static str, raw_text: &'static str, template_flags: TokenFlags) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_template_head(&self, text: &'static str, raw_text: &'static str, template_flags: TokenFlags) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::TemplateHead, NodeData::TemplateHead(alloc(TemplateHead {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
@@ -10799,8 +10799,8 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_template_middle(&mut self, text: &'static str, raw_text: &'static str, template_flags: TokenFlags) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_template_middle(&self, text: &'static str, raw_text: &'static str, template_flags: TokenFlags) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::TemplateMiddle, NodeData::TemplateMiddle(alloc(TemplateMiddle {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
@@ -10813,8 +10813,8 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_template_tail(&mut self, text: &'static str, raw_text: &'static str, template_flags: TokenFlags) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_template_tail(&self, text: &'static str, raw_text: &'static str, template_flags: TokenFlags) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::TemplateTail, NodeData::TemplateTail(alloc(TemplateTail {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
@@ -10827,14 +10827,14 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_template_literal_type_node(&mut self, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
+    pub fn new_template_literal_type_node(&self, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
         self.new_node(Kind::TemplateLiteralType, NodeData::TemplateLiteralTypeNode(alloc(TemplateLiteralTypeNode {
             head: head,
             template_spans: template_spans,
         })))
     }
 
-    pub fn update_template_literal_type_node(&mut self, node: P<Node>, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
+    pub fn update_template_literal_type_node(&self, node: P<Node>, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
         let data = node.as_template_literal_type_node();
         if head != data.head() || template_spans != data.template_spans() {
             return update_node(self.new_template_literal_type_node(head, template_spans), node, &self.hooks);
@@ -10842,14 +10842,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_template_literal_type_span(&mut self, type_node: P<Node>, literal: P<Node>) -> P<Node> {
+    pub fn new_template_literal_type_span(&self, type_node: P<Node>, literal: P<Node>) -> P<Node> {
         self.new_node(Kind::TemplateLiteralTypeSpan, NodeData::TemplateLiteralTypeSpan(alloc(TemplateLiteralTypeSpan {
             type_: type_node,
             literal: literal,
         })))
     }
 
-    pub fn update_template_literal_type_span(&mut self, node: P<Node>, type_node: P<Node>, literal: P<Node>) -> P<Node> {
+    pub fn update_template_literal_type_span(&self, node: P<Node>, type_node: P<Node>, literal: P<Node>) -> P<Node> {
         let data = node.as_template_literal_type_span();
         if type_node != data.type_() || literal != data.literal() {
             return update_node(self.new_template_literal_type_span(type_node, literal), node, &self.hooks);
@@ -10857,7 +10857,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_synthetic_expression(&mut self, type_node: &'static dyn Any, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
+    pub fn new_synthetic_expression(&self, type_node: &'static dyn Any, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::SyntheticExpression, NodeData::SyntheticExpression(alloc(SyntheticExpression {
             type_: type_node,
             is_spread: is_spread,
@@ -10865,7 +10865,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_synthetic_expression(&mut self, node: P<Node>, type_node: &'static dyn Any, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
+    pub fn update_synthetic_expression(&self, node: P<Node>, type_node: &'static dyn Any, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
         let data = node.as_synthetic_expression();
         if !std::ptr::addr_eq(type_node as *const dyn Any, data.type_() as *const dyn Any) || is_spread != data.is_spread() || tuple_name_source != data.tuple_name_source() {
             return update_node(self.new_synthetic_expression(type_node, is_spread, tuple_name_source), node, &self.hooks);
@@ -10873,13 +10873,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_partially_emitted_expression(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_partially_emitted_expression(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::PartiallyEmittedExpression, NodeData::PartiallyEmittedExpression(alloc(PartiallyEmittedExpression {
             expression: expression,
         })))
     }
 
-    pub fn update_partially_emitted_expression(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_partially_emitted_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_partially_emitted_expression();
         if expression != data.expression() {
             return update_node(self.new_partially_emitted_expression(expression), node, &self.hooks);
@@ -10887,7 +10887,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsx_element(&mut self, opening_element: P<Node>, children: P<NodeList>, closing_element: P<Node>) -> P<Node> {
+    pub fn new_jsx_element(&self, opening_element: P<Node>, children: P<NodeList>, closing_element: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxElement, NodeData::JsxElement(alloc(JsxElement {
             opening_element: opening_element,
             children: children,
@@ -10895,7 +10895,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsx_element(&mut self, node: P<Node>, opening_element: P<Node>, children: P<NodeList>, closing_element: P<Node>) -> P<Node> {
+    pub fn update_jsx_element(&self, node: P<Node>, opening_element: P<Node>, children: P<NodeList>, closing_element: P<Node>) -> P<Node> {
         let data = node.as_jsx_element();
         if opening_element != data.opening_element() || children != data.children() || closing_element != data.closing_element() {
             return update_node(self.new_jsx_element(opening_element, children, closing_element), node, &self.hooks);
@@ -10903,7 +10903,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsx_attributes(&mut self, properties: P<NodeList>) -> P<Node> {
+    pub fn new_jsx_attributes(&self, properties: P<NodeList>) -> P<Node> {
         self.new_node(Kind::JsxAttributes, NodeData::JsxAttributes(alloc(JsxAttributes {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -10912,7 +10912,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsx_attributes(&mut self, node: P<Node>, properties: P<NodeList>) -> P<Node> {
+    pub fn update_jsx_attributes(&self, node: P<Node>, properties: P<NodeList>) -> P<Node> {
         let data = node.as_jsx_attributes();
         if properties != data.properties() {
             return update_node(self.new_jsx_attributes(properties), node, &self.hooks);
@@ -10920,14 +10920,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsx_namespaced_name(&mut self, namespace: P<Node>, name: P<Node>) -> P<Node> {
+    pub fn new_jsx_namespaced_name(&self, namespace: P<Node>, name: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxNamespacedName, NodeData::JsxNamespacedName(alloc(JsxNamespacedName {
             namespace: namespace,
             name: name,
         })))
     }
 
-    pub fn update_jsx_namespaced_name(&mut self, node: P<Node>, namespace: P<Node>, name: P<Node>) -> P<Node> {
+    pub fn update_jsx_namespaced_name(&self, node: P<Node>, namespace: P<Node>, name: P<Node>) -> P<Node> {
         let data = node.as_jsx_namespaced_name();
         if namespace != data.namespace() || name != data.name() {
             return update_node(self.new_jsx_namespaced_name(namespace, name), node, &self.hooks);
@@ -10935,7 +10935,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsx_opening_element(&mut self, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
+    pub fn new_jsx_opening_element(&self, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxOpeningElement, NodeData::JsxOpeningElement(alloc(JsxOpeningElement {
             tag_name: tag_name,
             type_arguments: type_arguments,
@@ -10943,7 +10943,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsx_opening_element(&mut self, node: P<Node>, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
+    pub fn update_jsx_opening_element(&self, node: P<Node>, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
         let data = node.as_jsx_opening_element();
         if tag_name != data.tag_name() || type_arguments != data.type_arguments() || attributes != data.attributes() {
             return update_node(self.new_jsx_opening_element(tag_name, type_arguments, attributes), node, &self.hooks);
@@ -10951,7 +10951,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsx_self_closing_element(&mut self, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
+    pub fn new_jsx_self_closing_element(&self, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxSelfClosingElement, NodeData::JsxSelfClosingElement(alloc(JsxSelfClosingElement {
             tag_name: tag_name,
             type_arguments: type_arguments,
@@ -10959,7 +10959,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsx_self_closing_element(&mut self, node: P<Node>, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
+    pub fn update_jsx_self_closing_element(&self, node: P<Node>, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
         let data = node.as_jsx_self_closing_element();
         if tag_name != data.tag_name() || type_arguments != data.type_arguments() || attributes != data.attributes() {
             return update_node(self.new_jsx_self_closing_element(tag_name, type_arguments, attributes), node, &self.hooks);
@@ -10967,7 +10967,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsx_fragment(&mut self, opening_fragment: P<Node>, children: P<NodeList>, closing_fragment: P<Node>) -> P<Node> {
+    pub fn new_jsx_fragment(&self, opening_fragment: P<Node>, children: P<NodeList>, closing_fragment: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxFragment, NodeData::JsxFragment(alloc(JsxFragment {
             opening_fragment: opening_fragment,
             children: children,
@@ -10975,7 +10975,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsx_fragment(&mut self, node: P<Node>, opening_fragment: P<Node>, children: P<NodeList>, closing_fragment: P<Node>) -> P<Node> {
+    pub fn update_jsx_fragment(&self, node: P<Node>, opening_fragment: P<Node>, children: P<NodeList>, closing_fragment: P<Node>) -> P<Node> {
         let data = node.as_jsx_fragment();
         if opening_fragment != data.opening_fragment() || children != data.children() || closing_fragment != data.closing_fragment() {
             return update_node(self.new_jsx_fragment(opening_fragment, children, closing_fragment), node, &self.hooks);
@@ -10983,15 +10983,15 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsx_opening_fragment(&mut self) -> P<Node> {
+    pub fn new_jsx_opening_fragment(&self) -> P<Node> {
         self.new_node(Kind::JsxOpeningFragment, NodeData::JsxOpeningFragment)
     }
 
-    pub fn new_jsx_closing_fragment(&mut self) -> P<Node> {
+    pub fn new_jsx_closing_fragment(&self) -> P<Node> {
         self.new_node(Kind::JsxClosingFragment, NodeData::JsxClosingFragment)
     }
 
-    pub fn new_jsx_attribute(&mut self, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn new_jsx_attribute(&self, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::JsxAttribute, NodeData::JsxAttribute(alloc(JsxAttribute {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -11001,7 +11001,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsx_attribute(&mut self, node: P<Node>, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
+    pub fn update_jsx_attribute(&self, node: P<Node>, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
         let data = node.as_jsx_attribute();
         if name != data.name() || initializer != data.initializer() {
             return update_node(self.new_jsx_attribute(name, initializer), node, &self.hooks);
@@ -11009,7 +11009,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsx_spread_attribute(&mut self, expression: P<Node>) -> P<Node> {
+    pub fn new_jsx_spread_attribute(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxSpreadAttribute, NodeData::JsxSpreadAttribute(alloc(JsxSpreadAttribute {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -11018,7 +11018,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsx_spread_attribute(&mut self, node: P<Node>, expression: P<Node>) -> P<Node> {
+    pub fn update_jsx_spread_attribute(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
         let data = node.as_jsx_spread_attribute();
         if expression != data.expression() {
             return update_node(self.new_jsx_spread_attribute(expression), node, &self.hooks);
@@ -11026,13 +11026,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsx_closing_element(&mut self, tag_name: P<Node>) -> P<Node> {
+    pub fn new_jsx_closing_element(&self, tag_name: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxClosingElement, NodeData::JsxClosingElement(alloc(JsxClosingElement {
             tag_name: tag_name,
         })))
     }
 
-    pub fn update_jsx_closing_element(&mut self, node: P<Node>, tag_name: P<Node>) -> P<Node> {
+    pub fn update_jsx_closing_element(&self, node: P<Node>, tag_name: P<Node>) -> P<Node> {
         let data = node.as_jsx_closing_element();
         if tag_name != data.tag_name() {
             return update_node(self.new_jsx_closing_element(tag_name), node, &self.hooks);
@@ -11040,14 +11040,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsx_expression(&mut self, dot_dot_dot_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
+    pub fn new_jsx_expression(&self, dot_dot_dot_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::JsxExpression, NodeData::JsxExpression(alloc(JsxExpression {
             dot_dot_dot_token: dot_dot_dot_token,
             expression: expression,
         })))
     }
 
-    pub fn update_jsx_expression(&mut self, node: P<Node>, dot_dot_dot_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
+    pub fn update_jsx_expression(&self, node: P<Node>, dot_dot_dot_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
         let data = node.as_jsx_expression();
         if dot_dot_dot_token != data.dot_dot_dot_token() || expression != data.expression() {
             return update_node(self.new_jsx_expression(dot_dot_dot_token, expression), node, &self.hooks);
@@ -11055,8 +11055,8 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsx_text(&mut self, text: &'static str, contains_only_trivia_white_spaces: bool) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_jsx_text(&self, text: &'static str, contains_only_trivia_white_spaces: bool) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::JsxText, NodeData::JsxText(alloc(JsxText {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
@@ -11066,13 +11066,13 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_syntax_list(&mut self, children: &'static [P<Node>]) -> P<Node> {
+    pub fn new_syntax_list(&self, children: &'static [P<Node>]) -> P<Node> {
         self.new_node(Kind::SyntaxList, NodeData::SyntaxList(alloc(SyntaxList {
             children: children,
         })))
     }
 
-    pub fn update_syntax_list(&mut self, node: P<Node>, children: &'static [P<Node>]) -> P<Node> {
+    pub fn update_syntax_list(&self, node: P<Node>, children: &'static [P<Node>]) -> P<Node> {
         let data = node.as_syntax_list();
         if !same_slice(children, data.children()) {
             return update_node(self.new_syntax_list(children), node, &self.hooks);
@@ -11080,14 +11080,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc(&mut self, comment: P<NodeList>, tags: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc(&self, comment: P<NodeList>, tags: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDoc, NodeData::JSDoc(alloc(JSDoc {
             comment: comment,
             tags: tags,
         })))
     }
 
-    pub fn update_jsdoc(&mut self, node: P<Node>, comment: P<NodeList>, tags: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc(&self, node: P<Node>, comment: P<NodeList>, tags: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc();
         if comment != data.comment() || tags != data.tags() {
             return update_node(self.new_jsdoc(comment, tags), node, &self.hooks);
@@ -11095,13 +11095,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_type_expression(&mut self, type_node: P<Node>) -> P<Node> {
+    pub fn new_jsdoc_type_expression(&self, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::JSDocTypeExpression, NodeData::JSDocTypeExpression(alloc(JSDocTypeExpression {
             type_: type_node,
         })))
     }
 
-    pub fn update_jsdoc_type_expression(&mut self, node: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn update_jsdoc_type_expression(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
         let data = node.as_jsdoc_type_expression();
         if type_node != data.type_() {
             return update_node(self.new_jsdoc_type_expression(type_node), node, &self.hooks);
@@ -11109,13 +11109,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_non_nullable_type(&mut self, type_node: P<Node>) -> P<Node> {
+    pub fn new_jsdoc_non_nullable_type(&self, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::JSDocNonNullableType, NodeData::JSDocNonNullableType(alloc(JSDocNonNullableType {
             type_: type_node,
         })))
     }
 
-    pub fn update_jsdoc_non_nullable_type(&mut self, node: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn update_jsdoc_non_nullable_type(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
         let data = node.as_jsdoc_non_nullable_type();
         if type_node != data.type_() {
             return update_node(self.new_jsdoc_non_nullable_type(type_node), node, &self.hooks);
@@ -11123,13 +11123,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_nullable_type(&mut self, type_node: P<Node>) -> P<Node> {
+    pub fn new_jsdoc_nullable_type(&self, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::JSDocNullableType, NodeData::JSDocNullableType(alloc(JSDocNullableType {
             type_: type_node,
         })))
     }
 
-    pub fn update_jsdoc_nullable_type(&mut self, node: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn update_jsdoc_nullable_type(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
         let data = node.as_jsdoc_nullable_type();
         if type_node != data.type_() {
             return update_node(self.new_jsdoc_nullable_type(type_node), node, &self.hooks);
@@ -11137,17 +11137,17 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_all_type(&mut self) -> P<Node> {
+    pub fn new_jsdoc_all_type(&self) -> P<Node> {
         self.new_node(Kind::JSDocAllType, NodeData::JSDocAllType)
     }
 
-    pub fn new_jsdoc_variadic_type(&mut self, type_node: P<Node>) -> P<Node> {
+    pub fn new_jsdoc_variadic_type(&self, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::JSDocVariadicType, NodeData::JSDocVariadicType(alloc(JSDocVariadicType {
             type_: type_node,
         })))
     }
 
-    pub fn update_jsdoc_variadic_type(&mut self, node: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn update_jsdoc_variadic_type(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
         let data = node.as_jsdoc_variadic_type();
         if type_node != data.type_() {
             return update_node(self.new_jsdoc_variadic_type(type_node), node, &self.hooks);
@@ -11155,13 +11155,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_optional_type(&mut self, type_node: P<Node>) -> P<Node> {
+    pub fn new_jsdoc_optional_type(&self, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::JSDocOptionalType, NodeData::JSDocOptionalType(alloc(JSDocOptionalType {
             type_: type_node,
         })))
     }
 
-    pub fn update_jsdoc_optional_type(&mut self, node: P<Node>, type_node: P<Node>) -> P<Node> {
+    pub fn update_jsdoc_optional_type(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
         let data = node.as_jsdoc_optional_type();
         if type_node != data.type_() {
             return update_node(self.new_jsdoc_optional_type(type_node), node, &self.hooks);
@@ -11169,7 +11169,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_type_tag(&mut self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_type_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocTypeTag, NodeData::JSDocTypeTag(alloc(JSDocTypeTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11179,7 +11179,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_type_tag(&mut self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_type_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_type_tag();
         if tag_name != data.tag_name() || type_expression != data.type_expression() || comment != data.comment() {
             return update_node(self.new_jsdoc_type_tag(tag_name, type_expression, comment), node, &self.hooks);
@@ -11187,7 +11187,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_unknown_tag(&mut self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_unknown_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocUnknownTag, NodeData::JSDocUnknownTag(alloc(JSDocUnknownTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11196,7 +11196,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_unknown_tag(&mut self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_unknown_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_unknown_tag();
         if tag_name != data.tag_name() || comment != data.comment() {
             return update_node(self.new_jsdoc_unknown_tag(tag_name, comment), node, &self.hooks);
@@ -11204,7 +11204,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_template_tag(&mut self, tag_name: P<Node>, constraint: Option<P<Node>>, type_parameters: P<NodeList>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_template_tag(&self, tag_name: P<Node>, constraint: Option<P<Node>>, type_parameters: P<NodeList>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocTemplateTag, NodeData::JSDocTemplateTag(alloc(JSDocTemplateTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11215,7 +11215,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_template_tag(&mut self, node: P<Node>, tag_name: P<Node>, constraint: Option<P<Node>>, type_parameters: P<NodeList>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_template_tag(&self, node: P<Node>, tag_name: P<Node>, constraint: Option<P<Node>>, type_parameters: P<NodeList>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_template_tag();
         if tag_name != data.tag_name() || constraint != data.constraint() || type_parameters != data.type_parameters() || comment != data.comment() {
             return update_node(self.new_jsdoc_template_tag(tag_name, constraint, type_parameters, comment), node, &self.hooks);
@@ -11223,7 +11223,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_return_tag(&mut self, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_return_tag(&self, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocReturnTag, NodeData::JSDocReturnTag(alloc(JSDocReturnTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11233,7 +11233,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_return_tag(&mut self, node: P<Node>, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_return_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_return_tag();
         if tag_name != data.tag_name() || type_expression != data.type_expression() || comment != data.comment() {
             return update_node(self.new_jsdoc_return_tag(tag_name, type_expression, comment), node, &self.hooks);
@@ -11241,7 +11241,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_public_tag(&mut self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_public_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocPublicTag, NodeData::JSDocPublicTag(alloc(JSDocPublicTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11250,7 +11250,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_public_tag(&mut self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_public_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_public_tag();
         if tag_name != data.tag_name() || comment != data.comment() {
             return update_node(self.new_jsdoc_public_tag(tag_name, comment), node, &self.hooks);
@@ -11258,7 +11258,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_private_tag(&mut self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_private_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocPrivateTag, NodeData::JSDocPrivateTag(alloc(JSDocPrivateTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11267,7 +11267,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_private_tag(&mut self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_private_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_private_tag();
         if tag_name != data.tag_name() || comment != data.comment() {
             return update_node(self.new_jsdoc_private_tag(tag_name, comment), node, &self.hooks);
@@ -11275,7 +11275,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_protected_tag(&mut self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_protected_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocProtectedTag, NodeData::JSDocProtectedTag(alloc(JSDocProtectedTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11284,7 +11284,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_protected_tag(&mut self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_protected_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_protected_tag();
         if tag_name != data.tag_name() || comment != data.comment() {
             return update_node(self.new_jsdoc_protected_tag(tag_name, comment), node, &self.hooks);
@@ -11292,7 +11292,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_readonly_tag(&mut self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_readonly_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocReadonlyTag, NodeData::JSDocReadonlyTag(alloc(JSDocReadonlyTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11301,7 +11301,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_readonly_tag(&mut self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_readonly_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_readonly_tag();
         if tag_name != data.tag_name() || comment != data.comment() {
             return update_node(self.new_jsdoc_readonly_tag(tag_name, comment), node, &self.hooks);
@@ -11309,7 +11309,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_override_tag(&mut self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_override_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocOverrideTag, NodeData::JSDocOverrideTag(alloc(JSDocOverrideTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11318,7 +11318,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_override_tag(&mut self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_override_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_override_tag();
         if tag_name != data.tag_name() || comment != data.comment() {
             return update_node(self.new_jsdoc_override_tag(tag_name, comment), node, &self.hooks);
@@ -11326,7 +11326,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_deprecated_tag(&mut self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_deprecated_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocDeprecatedTag, NodeData::JSDocDeprecatedTag(alloc(JSDocDeprecatedTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11335,7 +11335,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_deprecated_tag(&mut self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_deprecated_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_deprecated_tag();
         if tag_name != data.tag_name() || comment != data.comment() {
             return update_node(self.new_jsdoc_deprecated_tag(tag_name, comment), node, &self.hooks);
@@ -11343,7 +11343,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_see_tag(&mut self, tag_name: P<Node>, name_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_see_tag(&self, tag_name: P<Node>, name_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocSeeTag, NodeData::JSDocSeeTag(alloc(JSDocSeeTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11353,7 +11353,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_see_tag(&mut self, node: P<Node>, tag_name: P<Node>, name_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_see_tag(&self, node: P<Node>, tag_name: P<Node>, name_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_see_tag();
         if tag_name != data.tag_name() || name_expression != data.name_expression() || comment != data.comment() {
             return update_node(self.new_jsdoc_see_tag(tag_name, name_expression, comment), node, &self.hooks);
@@ -11361,7 +11361,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_implements_tag(&mut self, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_implements_tag(&self, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocImplementsTag, NodeData::JSDocImplementsTag(alloc(JSDocImplementsTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11371,7 +11371,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_implements_tag(&mut self, node: P<Node>, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_implements_tag(&self, node: P<Node>, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_implements_tag();
         if tag_name != data.tag_name() || class_name != data.class_name() || comment != data.comment() {
             return update_node(self.new_jsdoc_implements_tag(tag_name, class_name, comment), node, &self.hooks);
@@ -11379,7 +11379,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_augments_tag(&mut self, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_augments_tag(&self, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocAugmentsTag, NodeData::JSDocAugmentsTag(alloc(JSDocAugmentsTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11389,7 +11389,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_augments_tag(&mut self, node: P<Node>, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_augments_tag(&self, node: P<Node>, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_augments_tag();
         if tag_name != data.tag_name() || class_name != data.class_name() || comment != data.comment() {
             return update_node(self.new_jsdoc_augments_tag(tag_name, class_name, comment), node, &self.hooks);
@@ -11397,7 +11397,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_satisfies_tag(&mut self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_satisfies_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocSatisfiesTag, NodeData::JSDocSatisfiesTag(alloc(JSDocSatisfiesTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11407,7 +11407,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_satisfies_tag(&mut self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_satisfies_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_satisfies_tag();
         if tag_name != data.tag_name() || type_expression != data.type_expression() || comment != data.comment() {
             return update_node(self.new_jsdoc_satisfies_tag(tag_name, type_expression, comment), node, &self.hooks);
@@ -11415,7 +11415,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_throws_tag(&mut self, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_throws_tag(&self, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocThrowsTag, NodeData::JSDocThrowsTag(alloc(JSDocThrowsTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11425,7 +11425,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_throws_tag(&mut self, node: P<Node>, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_throws_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_throws_tag();
         if tag_name != data.tag_name() || type_expression != data.type_expression() || comment != data.comment() {
             return update_node(self.new_jsdoc_throws_tag(tag_name, type_expression, comment), node, &self.hooks);
@@ -11433,7 +11433,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_this_tag(&mut self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_this_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocThisTag, NodeData::JSDocThisTag(alloc(JSDocThisTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11443,7 +11443,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_this_tag(&mut self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_this_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_this_tag();
         if tag_name != data.tag_name() || type_expression != data.type_expression() || comment != data.comment() {
             return update_node(self.new_jsdoc_this_tag(tag_name, type_expression, comment), node, &self.hooks);
@@ -11451,7 +11451,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_import_tag(&mut self, tag_name: P<Node>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_import_tag(&self, tag_name: P<Node>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocImportTag, NodeData::JSDocImportTag(alloc(JSDocImportTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11463,7 +11463,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_import_tag(&mut self, node: P<Node>, tag_name: P<Node>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_import_tag(&self, node: P<Node>, tag_name: P<Node>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_import_tag();
         if tag_name != data.tag_name() || import_clause != data.import_clause() || module_specifier != data.module_specifier() || attributes != data.attributes() || comment != data.comment() {
             return update_node(self.new_jsdoc_import_tag(tag_name, import_clause, module_specifier, attributes, comment), node, &self.hooks);
@@ -11471,7 +11471,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_callback_tag(&mut self, tag_name: P<Node>, type_expression: P<Node>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_callback_tag(&self, tag_name: P<Node>, type_expression: P<Node>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocCallbackTag, NodeData::JSDocCallbackTag(alloc(JSDocCallbackTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11482,7 +11482,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_callback_tag(&mut self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_callback_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_callback_tag();
         if tag_name != data.tag_name() || type_expression != data.type_expression() || name != data.name() || comment != data.comment() {
             return update_node(self.new_jsdoc_callback_tag(tag_name, type_expression, name, comment), node, &self.hooks);
@@ -11490,7 +11490,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_overload_tag(&mut self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_overload_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocOverloadTag, NodeData::JSDocOverloadTag(alloc(JSDocOverloadTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11500,7 +11500,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_overload_tag(&mut self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_overload_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_overload_tag();
         if tag_name != data.tag_name() || type_expression != data.type_expression() || comment != data.comment() {
             return update_node(self.new_jsdoc_overload_tag(tag_name, type_expression, comment), node, &self.hooks);
@@ -11508,7 +11508,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_typedef_tag(&mut self, tag_name: P<Node>, type_expression: Option<P<Node>>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_typedef_tag(&self, tag_name: P<Node>, type_expression: Option<P<Node>>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocTypedefTag, NodeData::JSDocTypedefTag(alloc(JSDocTypedefTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11519,7 +11519,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_typedef_tag(&mut self, node: P<Node>, tag_name: P<Node>, type_expression: Option<P<Node>>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_typedef_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: Option<P<Node>>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_typedef_tag();
         if tag_name != data.tag_name() || type_expression != data.type_expression() || name != data.name() || comment != data.comment() {
             return update_node(self.new_jsdoc_typedef_tag(tag_name, type_expression, name, comment), node, &self.hooks);
@@ -11527,7 +11527,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_signature(&mut self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn new_jsdoc_signature(&self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::JSDocSignature, NodeData::JSDocSignature(alloc(JSDocSignature {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -11545,7 +11545,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_signature(&mut self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
+    pub fn update_jsdoc_signature(&self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         let data = node.as_jsdoc_signature();
         if type_parameters != data.type_parameters() || parameters != data.parameters() || type_node != data.type_() {
             return update_node(self.new_jsdoc_signature(type_parameters, parameters, type_node), node, &self.hooks);
@@ -11553,13 +11553,13 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_name_reference(&mut self, name: P<Node>) -> P<Node> {
+    pub fn new_jsdoc_name_reference(&self, name: P<Node>) -> P<Node> {
         self.new_node(Kind::JSDocNameReference, NodeData::JSDocNameReference(alloc(JSDocNameReference {
             name: name,
         })))
     }
 
-    pub fn update_jsdoc_name_reference(&mut self, node: P<Node>, name: P<Node>) -> P<Node> {
+    pub fn update_jsdoc_name_reference(&self, node: P<Node>, name: P<Node>) -> P<Node> {
         let data = node.as_jsdoc_name_reference();
         if name != data.name() {
             return update_node(self.new_jsdoc_name_reference(name), node, &self.hooks);
@@ -11567,7 +11567,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_module_declaration(&mut self, modifiers: Option<P<ModifierList>>, keyword: Kind, name: P<Node>, attributes: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn new_module_declaration(&self, modifiers: Option<P<ModifierList>>, keyword: Kind, name: P<Node>, attributes: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::ModuleDeclaration, NodeData::ModuleDeclaration(alloc(ModuleDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -11596,7 +11596,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_module_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, keyword: Kind, name: P<Node>, attributes: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
+    pub fn update_module_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, keyword: Kind, name: P<Node>, attributes: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
         let data = node.as_module_declaration();
         if modifiers != data.modifiers() || keyword != data.keyword() || name != data.name() || attributes != data.attributes() || body != data.body() {
             return update_node(self.new_module_declaration(modifiers, keyword, name, attributes, body), node, &self.hooks);
@@ -11604,7 +11604,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_import_equals_declaration(&mut self, modifiers: Option<P<ModifierList>>, is_type_only: bool, name: P<Node>, module_reference: P<Node>) -> P<Node> {
+    pub fn new_import_equals_declaration(&self, modifiers: Option<P<ModifierList>>, is_type_only: bool, name: P<Node>, module_reference: P<Node>) -> P<Node> {
         self.new_node(Kind::ImportEqualsDeclaration, NodeData::ImportEqualsDeclaration(alloc(ImportEqualsDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -11624,7 +11624,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_import_equals_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, is_type_only: bool, name: P<Node>, module_reference: P<Node>) -> P<Node> {
+    pub fn update_import_equals_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, is_type_only: bool, name: P<Node>, module_reference: P<Node>) -> P<Node> {
         let data = node.as_import_equals_declaration();
         if modifiers != data.modifiers() || is_type_only != data.is_type_only() || name != data.name() || module_reference != data.module_reference() {
             return update_node(self.new_import_equals_declaration(modifiers, is_type_only, name, module_reference), node, &self.hooks);
@@ -11632,7 +11632,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_export_declaration(&mut self, modifiers: Option<P<ModifierList>>, is_type_only: bool, export_clause: Option<P<Node>>, module_specifier: Option<P<Node>>, attributes: Option<P<Node>>) -> P<Node> {
+    pub fn new_export_declaration(&self, modifiers: Option<P<ModifierList>>, is_type_only: bool, export_clause: Option<P<Node>>, module_specifier: Option<P<Node>>, attributes: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::ExportDeclaration, NodeData::ExportDeclaration(alloc(ExportDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: Cell::new(None),
@@ -11650,7 +11650,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_export_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, is_type_only: bool, export_clause: Option<P<Node>>, module_specifier: Option<P<Node>>, attributes: Option<P<Node>>) -> P<Node> {
+    pub fn update_export_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, is_type_only: bool, export_clause: Option<P<Node>>, module_specifier: Option<P<Node>>, attributes: Option<P<Node>>) -> P<Node> {
         let data = node.as_export_declaration();
         if modifiers != data.modifiers() || is_type_only != data.is_type_only() || export_clause != data.export_clause() || module_specifier != data.module_specifier() || attributes != data.attributes() {
             return update_node(self.new_export_declaration(modifiers, is_type_only, export_clause, module_specifier, attributes), node, &self.hooks);
@@ -11658,7 +11658,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_import_type_node(&mut self, is_type_of: bool, argument: P<Node>, attributes: Option<P<Node>>, qualifier: Option<P<Node>>, type_arguments: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_import_type_node(&self, is_type_of: bool, argument: P<Node>, attributes: Option<P<Node>>, qualifier: Option<P<Node>>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::ImportType, NodeData::ImportTypeNode(alloc(ImportTypeNode {
             node_with_type_arguments_base: NodeWithTypeArgumentsBase {
                 type_arguments: type_arguments,
@@ -11670,7 +11670,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_import_type_node(&mut self, node: P<Node>, is_type_of: bool, argument: P<Node>, attributes: Option<P<Node>>, qualifier: Option<P<Node>>, type_arguments: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_import_type_node(&self, node: P<Node>, is_type_of: bool, argument: P<Node>, attributes: Option<P<Node>>, qualifier: Option<P<Node>>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_import_type_node();
         if is_type_of != data.is_type_of() || argument != data.argument() || attributes != data.attributes() || qualifier != data.qualifier() || type_arguments != data.type_arguments() {
             return update_node(self.new_import_type_node(is_type_of, argument, attributes, qualifier, type_arguments), node, &self.hooks);
@@ -11678,7 +11678,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_import_clause(&mut self, phase_modifier: Kind, name: Option<P<Node>>, named_bindings: Option<P<Node>>) -> P<Node> {
+    pub fn new_import_clause(&self, phase_modifier: Kind, name: Option<P<Node>>, named_bindings: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::ImportClause, NodeData::ImportClause(alloc(ImportClause {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -11692,7 +11692,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_import_clause(&mut self, node: P<Node>, phase_modifier: Kind, name: Option<P<Node>>, named_bindings: Option<P<Node>>) -> P<Node> {
+    pub fn update_import_clause(&self, node: P<Node>, phase_modifier: Kind, name: Option<P<Node>>, named_bindings: Option<P<Node>>) -> P<Node> {
         let data = node.as_import_clause();
         if phase_modifier != data.phase_modifier() || name != data.name() || named_bindings != data.named_bindings() {
             return update_node(self.new_import_clause(phase_modifier, name, named_bindings), node, &self.hooks);
@@ -11700,7 +11700,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_import_specifier(&mut self, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
+    pub fn new_import_specifier(&self, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
         self.new_node(Kind::ImportSpecifier, NodeData::ImportSpecifier(alloc(ImportSpecifier {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -11714,7 +11714,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_import_specifier(&mut self, node: P<Node>, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
+    pub fn update_import_specifier(&self, node: P<Node>, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
         let data = node.as_import_specifier();
         if is_type_only != data.is_type_only() || property_name != data.property_name() || name != data.name() {
             return update_node(self.new_import_specifier(is_type_only, property_name, name), node, &self.hooks);
@@ -11722,8 +11722,8 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_text(&mut self, text: &'static [&'static str]) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_jsdoc_text(&self, text: &'static [&'static str]) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::JSDocText, NodeData::JSDocText(alloc(JSDocText {
             jsdoc_comment_base: JSDocCommentBase {
                 text: text,
@@ -11731,8 +11731,8 @@ impl NodeFactory {
         })))
     }
 
-    pub fn new_jsdoc_link(&mut self, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_jsdoc_link(&self, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::JSDocLink, NodeData::JSDocLink(alloc(JSDocLink {
             jsdoc_comment_base: JSDocCommentBase {
                 text: text,
@@ -11741,7 +11741,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_link(&mut self, node: P<Node>, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
+    pub fn update_jsdoc_link(&self, node: P<Node>, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
         let data = node.as_jsdoc_link();
         if name != data.name() || !same_slice(text, data.text()) {
             return update_node(self.new_jsdoc_link(name, text), node, &self.hooks);
@@ -11749,8 +11749,8 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_link_plain(&mut self, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_jsdoc_link_plain(&self, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::JSDocLinkPlain, NodeData::JSDocLinkPlain(alloc(JSDocLinkPlain {
             jsdoc_comment_base: JSDocCommentBase {
                 text: text,
@@ -11759,7 +11759,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_link_plain(&mut self, node: P<Node>, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
+    pub fn update_jsdoc_link_plain(&self, node: P<Node>, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
         let data = node.as_jsdoc_link_plain();
         if name != data.name() || !same_slice(text, data.text()) {
             return update_node(self.new_jsdoc_link_plain(name, text), node, &self.hooks);
@@ -11767,8 +11767,8 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_link_code(&mut self, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
-        self.text_count += 1;
+    pub fn new_jsdoc_link_code(&self, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
+        self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::JSDocLinkCode, NodeData::JSDocLinkCode(alloc(JSDocLinkCode {
             jsdoc_comment_base: JSDocCommentBase {
                 text: text,
@@ -11777,7 +11777,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_link_code(&mut self, node: P<Node>, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
+    pub fn update_jsdoc_link_code(&self, node: P<Node>, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
         let data = node.as_jsdoc_link_code();
         if name != data.name() || !same_slice(text, data.text()) {
             return update_node(self.new_jsdoc_link_code(name, text), node, &self.hooks);
@@ -11785,7 +11785,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_type_parameter_declaration(&mut self, modifiers: Option<P<ModifierList>>, name: P<Node>, constraint: Option<P<Node>>, expression: Option<P<Node>>, default_type: Option<P<Node>>) -> P<Node> {
+    pub fn new_type_parameter_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, constraint: Option<P<Node>>, expression: Option<P<Node>>, default_type: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::TypeParameter, NodeData::TypeParameterDeclaration(alloc(TypeParameterDeclaration {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -11800,7 +11800,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_type_parameter_declaration(&mut self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, constraint: Option<P<Node>>, expression: Option<P<Node>>, default_type: Option<P<Node>>) -> P<Node> {
+    pub fn update_type_parameter_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, constraint: Option<P<Node>>, expression: Option<P<Node>>, default_type: Option<P<Node>>) -> P<Node> {
         let data = node.as_type_parameter_declaration();
         if modifiers != data.modifiers() || name != data.name() || constraint != data.constraint() || expression != data.expression() || default_type != data.default_type() {
             return update_node(self.new_type_parameter_declaration(modifiers, name, constraint, expression, default_type), node, &self.hooks);
@@ -11808,14 +11808,14 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_synthetic_reference_expression(&mut self, expression: P<Node>, this_arg: P<Node>) -> P<Node> {
+    pub fn new_synthetic_reference_expression(&self, expression: P<Node>, this_arg: P<Node>) -> P<Node> {
         self.new_node(Kind::SyntheticReferenceExpression, NodeData::SyntheticReferenceExpression(alloc(SyntheticReferenceExpression {
             expression: expression,
             this_arg: this_arg,
         })))
     }
 
-    pub fn update_synthetic_reference_expression(&mut self, node: P<Node>, expression: P<Node>, this_arg: P<Node>) -> P<Node> {
+    pub fn update_synthetic_reference_expression(&self, node: P<Node>, expression: P<Node>, this_arg: P<Node>) -> P<Node> {
         let data = node.as_synthetic_reference_expression();
         if expression != data.expression() || this_arg != data.this_arg() {
             return update_node(self.new_synthetic_reference_expression(expression, this_arg), node, &self.hooks);
@@ -11823,7 +11823,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_type_literal(&mut self, jsdoc_property_tags: &'static [P<Node>], is_array_type: bool) -> P<Node> {
+    pub fn new_jsdoc_type_literal(&self, jsdoc_property_tags: &'static [P<Node>], is_array_type: bool) -> P<Node> {
         self.new_node(Kind::JSDocTypeLiteral, NodeData::JSDocTypeLiteral(alloc(JSDocTypeLiteral {
             declaration_base: DeclarationBase {
                 symbol: Cell::new(None),
@@ -11833,7 +11833,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_type_literal(&mut self, node: P<Node>, jsdoc_property_tags: &'static [P<Node>], is_array_type: bool) -> P<Node> {
+    pub fn update_jsdoc_type_literal(&self, node: P<Node>, jsdoc_property_tags: &'static [P<Node>], is_array_type: bool) -> P<Node> {
         let data = node.as_jsdoc_type_literal();
         if !same_slice(jsdoc_property_tags, data.jsdoc_property_tags()) || is_array_type != data.is_array_type() {
             return update_node(self.new_jsdoc_type_literal(jsdoc_property_tags, is_array_type), node, &self.hooks);
@@ -11841,7 +11841,7 @@ impl NodeFactory {
         node
     }
 
-    pub fn new_jsdoc_parameter_or_property_tag(&mut self, kind: Kind, tag_name: P<Node>, name: P<Node>, is_bracketed: bool, type_expression: Option<P<Node>>, is_name_first: bool, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn new_jsdoc_parameter_or_property_tag(&self, kind: Kind, tag_name: P<Node>, name: P<Node>, is_bracketed: bool, type_expression: Option<P<Node>>, is_name_first: bool, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(kind, NodeData::JSDocParameterOrPropertyTag(alloc(JSDocParameterOrPropertyTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
@@ -11854,7 +11854,7 @@ impl NodeFactory {
         })))
     }
 
-    pub fn update_jsdoc_parameter_or_property_tag(&mut self, node: P<Node>, tag_name: P<Node>, name: P<Node>, is_bracketed: bool, type_expression: Option<P<Node>>, is_name_first: bool, comment: Option<P<NodeList>>) -> P<Node> {
+    pub fn update_jsdoc_parameter_or_property_tag(&self, node: P<Node>, tag_name: P<Node>, name: P<Node>, is_bracketed: bool, type_expression: Option<P<Node>>, is_name_first: bool, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_parameter_or_property_tag();
         if tag_name != data.tag_name() || name != data.name() || is_bracketed != data.is_bracketed() || type_expression != data.type_expression() || is_name_first != data.is_name_first() || comment != data.comment() {
             return update_node(self.new_jsdoc_parameter_or_property_tag(node.kind, tag_name, name, is_bracketed, type_expression, is_name_first, comment), node, &self.hooks);
@@ -11865,19 +11865,19 @@ impl NodeFactory {
 }
 
 impl Token {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_token(node.kind), node, &f.hooks)
     }
 }
 
 impl Identifier {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_identifier(self.text()), node, &f.hooks)
     }
 }
 
 impl PrivateIdentifier {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_private_identifier(self.text()), node, &f.hooks)
     }
 }
@@ -11898,7 +11898,7 @@ impl QualifiedName {
 }
 
 impl QualifiedName {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_qualified_name(self.left(), self.right()), node, &f.hooks)
     }
 }
@@ -11917,7 +11917,7 @@ impl ComputedPropertyName {
 }
 
 impl ComputedPropertyName {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_computed_property_name(self.expression()), node, &f.hooks)
     }
 }
@@ -11936,13 +11936,13 @@ impl Decorator {
 }
 
 impl Decorator {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_decorator(self.expression()), node, &f.hooks)
     }
 }
 
 impl EmptyStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_empty_statement(), node, &f.hooks)
     }
 }
@@ -11965,7 +11965,7 @@ impl IfStatement {
 }
 
 impl IfStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_if_statement(self.expression(), self.then_statement(), self.else_statement()), node, &f.hooks)
     }
 }
@@ -11986,7 +11986,7 @@ impl DoStatement {
 }
 
 impl DoStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_do_statement(self.statement(), self.expression()), node, &f.hooks)
     }
 }
@@ -12007,7 +12007,7 @@ impl WhileStatement {
 }
 
 impl WhileStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_while_statement(self.expression(), self.statement()), node, &f.hooks)
     }
 }
@@ -12032,7 +12032,7 @@ impl ForStatement {
 }
 
 impl ForStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_for_statement(self.initializer(), self.condition(), self.incrementor(), self.statement()), node, &f.hooks)
     }
 }
@@ -12057,7 +12057,7 @@ impl ForInOrOfStatement {
 }
 
 impl ForInOrOfStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_for_in_or_of_statement(node.kind, self.await_modifier(), self.initializer(), self.expression(), self.statement()), node, &f.hooks)
     }
 }
@@ -12076,7 +12076,7 @@ impl BreakStatement {
 }
 
 impl BreakStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_break_statement(self.label()), node, &f.hooks)
     }
 }
@@ -12095,7 +12095,7 @@ impl ContinueStatement {
 }
 
 impl ContinueStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_continue_statement(self.label()), node, &f.hooks)
     }
 }
@@ -12114,7 +12114,7 @@ impl ReturnStatement {
 }
 
 impl ReturnStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_return_statement(self.expression()), node, &f.hooks)
     }
 }
@@ -12135,7 +12135,7 @@ impl WithStatement {
 }
 
 impl WithStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_with_statement(self.expression(), self.statement()), node, &f.hooks)
     }
 }
@@ -12156,7 +12156,7 @@ impl SwitchStatement {
 }
 
 impl SwitchStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_switch_statement(self.expression(), self.case_block()), node, &f.hooks)
     }
 }
@@ -12175,7 +12175,7 @@ impl CaseBlock {
 }
 
 impl CaseBlock {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_case_block(self.clauses()), node, &f.hooks)
     }
 }
@@ -12196,7 +12196,7 @@ impl CaseOrDefaultClause {
 }
 
 impl CaseOrDefaultClause {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_case_or_default_clause(node.kind, self.expression(), self.statements()), node, &f.hooks)
     }
 }
@@ -12215,7 +12215,7 @@ impl ThrowStatement {
 }
 
 impl ThrowStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_throw_statement(self.expression()), node, &f.hooks)
     }
 }
@@ -12238,7 +12238,7 @@ impl TryStatement {
 }
 
 impl TryStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_try_statement(self.try_block(), self.catch_clause(), self.finally_block()), node, &f.hooks)
     }
 }
@@ -12259,13 +12259,13 @@ impl CatchClause {
 }
 
 impl CatchClause {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_catch_clause(self.variable_declaration(), self.block()), node, &f.hooks)
     }
 }
 
 impl DebuggerStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_debugger_statement(), node, &f.hooks)
     }
 }
@@ -12286,7 +12286,7 @@ impl LabeledStatement {
 }
 
 impl LabeledStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_labeled_statement(self.label(), self.statement()), node, &f.hooks)
     }
 }
@@ -12305,7 +12305,7 @@ impl ExpressionStatement {
 }
 
 impl ExpressionStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_expression_statement(self.expression()), node, &f.hooks)
     }
 }
@@ -12324,7 +12324,7 @@ impl Block {
 }
 
 impl Block {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_block(self.statements(), self.multi_line()), node, &f.hooks)
     }
 }
@@ -12345,7 +12345,7 @@ impl VariableStatement {
 }
 
 impl VariableStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_variable_statement(self.modifiers(), self.declaration_list()), node, &f.hooks)
     }
 }
@@ -12370,7 +12370,7 @@ impl VariableDeclaration {
 }
 
 impl VariableDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_variable_declaration(self.name(), self.exclamation_token(), self.type_(), self.initializer()), node, &f.hooks)
     }
 }
@@ -12389,7 +12389,7 @@ impl VariableDeclarationList {
 }
 
 impl VariableDeclarationList {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_variable_declaration_list(self.declarations(), node.flags.get()), node, &f.hooks)
     }
 }
@@ -12408,7 +12408,7 @@ impl BindingPattern {
 }
 
 impl BindingPattern {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_binding_pattern(node.kind, self.elements()), node, &f.hooks)
     }
 }
@@ -12437,7 +12437,7 @@ impl ParameterDeclaration {
 }
 
 impl ParameterDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_parameter_declaration(self.modifiers(), self.dot_dot_dot_token(), self.name(), self.question_token(), self.type_(), self.initializer()), node, &f.hooks)
     }
 }
@@ -12462,7 +12462,7 @@ impl BindingElement {
 }
 
 impl BindingElement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_binding_element(self.dot_dot_dot_token(), self.property_name(), self.name(), self.initializer()), node, &f.hooks)
     }
 }
@@ -12481,7 +12481,7 @@ impl MissingDeclaration {
 }
 
 impl MissingDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_missing_declaration(self.modifiers()), node, &f.hooks)
     }
 }
@@ -12514,7 +12514,7 @@ impl FunctionDeclaration {
 }
 
 impl FunctionDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_function_declaration(self.modifiers(), self.asterisk_token(), self.name(), self.type_parameters(), self.parameters(), self.type_(), self.full_signature(), self.body()), node, &f.hooks)
     }
 }
@@ -12541,7 +12541,7 @@ impl ClassDeclaration {
 }
 
 impl ClassDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_class_declaration(self.modifiers(), self.name(), self.type_parameters(), self.heritage_clauses(), self.members()), node, &f.hooks)
     }
 }
@@ -12568,7 +12568,7 @@ impl ClassExpression {
 }
 
 impl ClassExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_class_expression(self.modifiers(), self.name(), self.type_parameters(), self.heritage_clauses(), self.members()), node, &f.hooks)
     }
 }
@@ -12587,7 +12587,7 @@ impl HeritageClause {
 }
 
 impl HeritageClause {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_heritage_clause(self.token(), self.types()), node, &f.hooks)
     }
 }
@@ -12614,7 +12614,7 @@ impl InterfaceDeclaration {
 }
 
 impl InterfaceDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_interface_declaration(self.modifiers(), self.name(), self.type_parameters(), self.heritage_clauses(), self.members()), node, &f.hooks)
     }
 }
@@ -12639,7 +12639,7 @@ impl TypeAliasDeclaration {
 }
 
 impl TypeAliasDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         let updated = match node.kind {
             Kind::TypeAliasDeclaration => f.new_type_alias_declaration(self.modifiers(), self.name(), self.type_parameters(), self.type_()),
             Kind::JSTypeAliasDeclaration => f.new_js_type_alias_declaration(self.modifiers(), self.name(), self.type_parameters(), self.type_()),
@@ -12665,7 +12665,7 @@ impl EnumMember {
 }
 
 impl EnumMember {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_enum_member(self.name(), self.initializer()), node, &f.hooks)
     }
 }
@@ -12688,7 +12688,7 @@ impl EnumDeclaration {
 }
 
 impl EnumDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_enum_declaration(self.modifiers(), self.name(), self.members()), node, &f.hooks)
     }
 }
@@ -12707,19 +12707,19 @@ impl ModuleBlock {
 }
 
 impl ModuleBlock {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_module_block(self.statements()), node, &f.hooks)
     }
 }
 
 impl NotEmittedStatement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_not_emitted_statement(), node, &f.hooks)
     }
 }
 
 impl NotEmittedTypeElement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_not_emitted_type_element(), node, &f.hooks)
     }
 }
@@ -12744,7 +12744,7 @@ impl ImportDeclaration {
 }
 
 impl ImportDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         let updated = match node.kind {
             Kind::ImportDeclaration => f.new_import_declaration(self.modifiers(), self.import_clause(), self.module_specifier(), self.attributes()),
             Kind::JSImportDeclaration => f.new_js_import_declaration(self.modifiers(), self.import_clause(), self.module_specifier(), self.attributes()),
@@ -12768,7 +12768,7 @@ impl ExternalModuleReference {
 }
 
 impl ExternalModuleReference {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_external_module_reference(self.expression()), node, &f.hooks)
     }
 }
@@ -12787,7 +12787,7 @@ impl NamespaceImport {
 }
 
 impl NamespaceImport {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_namespace_import(self.name()), node, &f.hooks)
     }
 }
@@ -12806,7 +12806,7 @@ impl NamedImports {
 }
 
 impl NamedImports {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_named_imports(self.elements()), node, &f.hooks)
     }
 }
@@ -12829,7 +12829,7 @@ impl ExportAssignment {
 }
 
 impl ExportAssignment {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_export_assignment(self.modifiers(), self.is_export_equals(), self.type_(), self.expression()), node, &f.hooks)
     }
 }
@@ -12850,7 +12850,7 @@ impl NamespaceExportDeclaration {
 }
 
 impl NamespaceExportDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_namespace_export_declaration(self.modifiers(), self.name()), node, &f.hooks)
     }
 }
@@ -12869,7 +12869,7 @@ impl NamespaceExport {
 }
 
 impl NamespaceExport {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_namespace_export(self.name()), node, &f.hooks)
     }
 }
@@ -12888,7 +12888,7 @@ impl NamedExports {
 }
 
 impl NamedExports {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_named_exports(self.elements()), node, &f.hooks)
     }
 }
@@ -12909,7 +12909,7 @@ impl ExportSpecifier {
 }
 
 impl ExportSpecifier {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_export_specifier(self.is_type_only(), self.property_name(), self.name()), node, &f.hooks)
     }
 }
@@ -12932,7 +12932,7 @@ impl CallSignatureDeclaration {
 }
 
 impl CallSignatureDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_call_signature_declaration(self.type_parameters(), self.parameters(), self.type_()), node, &f.hooks)
     }
 }
@@ -12955,7 +12955,7 @@ impl ConstructSignatureDeclaration {
 }
 
 impl ConstructSignatureDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_construct_signature_declaration(self.type_parameters(), self.parameters(), self.type_()), node, &f.hooks)
     }
 }
@@ -12984,7 +12984,7 @@ impl ConstructorDeclaration {
 }
 
 impl ConstructorDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_constructor_declaration(self.modifiers(), self.type_parameters(), self.parameters(), self.type_(), self.full_signature(), self.body()), node, &f.hooks)
     }
 }
@@ -13015,7 +13015,7 @@ impl GetAccessorDeclaration {
 }
 
 impl GetAccessorDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_get_accessor_declaration(self.modifiers(), self.name(), self.type_parameters(), self.parameters(), self.type_(), self.full_signature(), self.body()), node, &f.hooks)
     }
 }
@@ -13046,7 +13046,7 @@ impl SetAccessorDeclaration {
 }
 
 impl SetAccessorDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_set_accessor_declaration(self.modifiers(), self.name(), self.type_parameters(), self.parameters(), self.type_(), self.full_signature(), self.body()), node, &f.hooks)
     }
 }
@@ -13069,7 +13069,7 @@ impl IndexSignatureDeclaration {
 }
 
 impl IndexSignatureDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_index_signature_declaration(self.modifiers(), self.parameters(), self.type_()), node, &f.hooks)
     }
 }
@@ -13098,7 +13098,7 @@ impl MethodSignatureDeclaration {
 }
 
 impl MethodSignatureDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_method_signature_declaration(self.modifiers(), self.name(), self.postfix_token(), self.type_parameters(), self.parameters(), self.type_()), node, &f.hooks)
     }
 }
@@ -13133,7 +13133,7 @@ impl MethodDeclaration {
 }
 
 impl MethodDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_method_declaration(self.modifiers(), self.asterisk_token(), self.name(), self.postfix_token(), self.type_parameters(), self.parameters(), self.type_(), self.full_signature(), self.body()), node, &f.hooks)
     }
 }
@@ -13160,7 +13160,7 @@ impl PropertySignatureDeclaration {
 }
 
 impl PropertySignatureDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_property_signature_declaration(self.modifiers(), self.name(), self.postfix_token(), self.type_(), self.initializer()), node, &f.hooks)
     }
 }
@@ -13187,13 +13187,13 @@ impl PropertyDeclaration {
 }
 
 impl PropertyDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_property_declaration(self.modifiers(), self.name(), self.postfix_token(), self.type_(), self.initializer()), node, &f.hooks)
     }
 }
 
 impl SemicolonClassElement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_semicolon_class_element(), node, &f.hooks)
     }
 }
@@ -13214,49 +13214,49 @@ impl ClassStaticBlockDeclaration {
 }
 
 impl ClassStaticBlockDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_class_static_block_declaration(self.modifiers(), self.body()), node, &f.hooks)
     }
 }
 
 impl OmittedExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_omitted_expression(), node, &f.hooks)
     }
 }
 
 impl KeywordExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_keyword_expression(node.kind), node, &f.hooks)
     }
 }
 
 impl StringLiteral {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_string_literal(self.text(), self.token_flags()), node, &f.hooks)
     }
 }
 
 impl NumericLiteral {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_numeric_literal(self.text(), self.token_flags()), node, &f.hooks)
     }
 }
 
 impl BigIntLiteral {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_big_int_literal(self.text(), self.token_flags()), node, &f.hooks)
     }
 }
 
 impl RegularExpressionLiteral {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_regular_expression_literal(self.text(), self.token_flags()), node, &f.hooks)
     }
 }
 
 impl NoSubstitutionTemplateLiteral {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_no_substitution_template_literal(self.text(), self.template_flags()), node, &f.hooks)
     }
 }
@@ -13283,7 +13283,7 @@ impl BinaryExpression {
 }
 
 impl BinaryExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_binary_expression(self.modifiers(), self.left(), self.type_(), self.operator_token(), self.right()), node, &f.hooks)
     }
 }
@@ -13302,7 +13302,7 @@ impl PrefixUnaryExpression {
 }
 
 impl PrefixUnaryExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_prefix_unary_expression(self.operator(), self.operand()), node, &f.hooks)
     }
 }
@@ -13321,7 +13321,7 @@ impl PostfixUnaryExpression {
 }
 
 impl PostfixUnaryExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_postfix_unary_expression(self.operand(), self.operator()), node, &f.hooks)
     }
 }
@@ -13342,7 +13342,7 @@ impl YieldExpression {
 }
 
 impl YieldExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_yield_expression(self.asterisk_token(), self.expression()), node, &f.hooks)
     }
 }
@@ -13373,7 +13373,7 @@ impl ArrowFunction {
 }
 
 impl ArrowFunction {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_arrow_function(self.modifiers(), self.type_parameters(), self.parameters(), self.type_(), self.full_signature(), self.equals_greater_than_token(), self.body()), node, &f.hooks)
     }
 }
@@ -13406,7 +13406,7 @@ impl FunctionExpression {
 }
 
 impl FunctionExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_function_expression(self.modifiers(), self.asterisk_token(), self.name(), self.type_parameters(), self.parameters(), self.type_(), self.full_signature(), self.body()), node, &f.hooks)
     }
 }
@@ -13427,7 +13427,7 @@ impl AsExpression {
 }
 
 impl AsExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_as_expression(self.expression(), self.type_()), node, &f.hooks)
     }
 }
@@ -13448,7 +13448,7 @@ impl SatisfiesExpression {
 }
 
 impl SatisfiesExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_satisfies_expression(self.expression(), self.type_()), node, &f.hooks)
     }
 }
@@ -13475,7 +13475,7 @@ impl ConditionalExpression {
 }
 
 impl ConditionalExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_conditional_expression(self.condition(), self.question_token(), self.when_true(), self.colon_token(), self.when_false()), node, &f.hooks)
     }
 }
@@ -13498,7 +13498,7 @@ impl PropertyAccessExpression {
 }
 
 impl PropertyAccessExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_property_access_expression(self.expression(), self.question_dot_token(), self.name(), node.flags.get()), node, &f.hooks)
     }
 }
@@ -13521,7 +13521,7 @@ impl ElementAccessExpression {
 }
 
 impl ElementAccessExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_element_access_expression(self.expression(), self.question_dot_token(), self.argument_expression(), node.flags.get()), node, &f.hooks)
     }
 }
@@ -13546,7 +13546,7 @@ impl CallExpression {
 }
 
 impl CallExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_call_expression(self.expression(), self.question_dot_token(), self.type_arguments(), self.arguments(), node.flags.get()), node, &f.hooks)
     }
 }
@@ -13569,7 +13569,7 @@ impl NewExpression {
 }
 
 impl NewExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_new_expression(self.expression(), self.type_arguments(), self.arguments()), node, &f.hooks)
     }
 }
@@ -13588,7 +13588,7 @@ impl MetaProperty {
 }
 
 impl MetaProperty {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_meta_property(self.keyword_token(), self.name()), node, &f.hooks)
     }
 }
@@ -13607,7 +13607,7 @@ impl NonNullExpression {
 }
 
 impl NonNullExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_non_null_expression(self.expression(), node.flags.get()), node, &f.hooks)
     }
 }
@@ -13626,7 +13626,7 @@ impl SpreadElement {
 }
 
 impl SpreadElement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_spread_element(self.expression()), node, &f.hooks)
     }
 }
@@ -13647,7 +13647,7 @@ impl TemplateExpression {
 }
 
 impl TemplateExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_template_expression(self.head(), self.template_spans()), node, &f.hooks)
     }
 }
@@ -13668,7 +13668,7 @@ impl TemplateSpan {
 }
 
 impl TemplateSpan {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_template_span(self.expression(), self.literal()), node, &f.hooks)
     }
 }
@@ -13693,7 +13693,7 @@ impl TaggedTemplateExpression {
 }
 
 impl TaggedTemplateExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_tagged_template_expression(self.tag(), self.question_dot_token(), self.type_arguments(), self.template(), node.flags.get()), node, &f.hooks)
     }
 }
@@ -13712,7 +13712,7 @@ impl ParenthesizedExpression {
 }
 
 impl ParenthesizedExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_parenthesized_expression(self.expression()), node, &f.hooks)
     }
 }
@@ -13731,7 +13731,7 @@ impl ArrayLiteralExpression {
 }
 
 impl ArrayLiteralExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_array_literal_expression(self.elements(), self.multi_line()), node, &f.hooks)
     }
 }
@@ -13750,7 +13750,7 @@ impl ObjectLiteralExpression {
 }
 
 impl ObjectLiteralExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_object_literal_expression(self.properties(), self.multi_line()), node, &f.hooks)
     }
 }
@@ -13769,7 +13769,7 @@ impl SpreadAssignment {
 }
 
 impl SpreadAssignment {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_spread_assignment(self.expression()), node, &f.hooks)
     }
 }
@@ -13796,7 +13796,7 @@ impl PropertyAssignment {
 }
 
 impl PropertyAssignment {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_property_assignment(self.modifiers(), self.name(), self.postfix_token(), self.type_(), self.initializer()), node, &f.hooks)
     }
 }
@@ -13825,7 +13825,7 @@ impl ShorthandPropertyAssignment {
 }
 
 impl ShorthandPropertyAssignment {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_shorthand_property_assignment(self.modifiers(), self.name(), self.postfix_token(), self.type_(), self.equals_token(), self.object_assignment_initializer()), node, &f.hooks)
     }
 }
@@ -13844,7 +13844,7 @@ impl DeleteExpression {
 }
 
 impl DeleteExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_delete_expression(self.expression()), node, &f.hooks)
     }
 }
@@ -13863,7 +13863,7 @@ impl TypeOfExpression {
 }
 
 impl TypeOfExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_type_of_expression(self.expression()), node, &f.hooks)
     }
 }
@@ -13882,7 +13882,7 @@ impl VoidExpression {
 }
 
 impl VoidExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_void_expression(self.expression()), node, &f.hooks)
     }
 }
@@ -13901,7 +13901,7 @@ impl AwaitExpression {
 }
 
 impl AwaitExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_await_expression(self.expression()), node, &f.hooks)
     }
 }
@@ -13922,13 +13922,13 @@ impl TypeAssertion {
 }
 
 impl TypeAssertion {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_type_assertion(self.type_(), self.expression()), node, &f.hooks)
     }
 }
 
 impl KeywordTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_keyword_type_node(node.kind), node, &f.hooks)
     }
 }
@@ -13947,7 +13947,7 @@ impl UnionTypeNode {
 }
 
 impl UnionTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_union_type_node(self.types()), node, &f.hooks)
     }
 }
@@ -13966,7 +13966,7 @@ impl IntersectionTypeNode {
 }
 
 impl IntersectionTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_intersection_type_node(self.types()), node, &f.hooks)
     }
 }
@@ -13991,7 +13991,7 @@ impl ConditionalTypeNode {
 }
 
 impl ConditionalTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_conditional_type_node(self.check_type(), self.extends_type(), self.true_type(), self.false_type()), node, &f.hooks)
     }
 }
@@ -14010,7 +14010,7 @@ impl TypeOperatorNode {
 }
 
 impl TypeOperatorNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_type_operator_node(self.operator(), self.type_()), node, &f.hooks)
     }
 }
@@ -14029,7 +14029,7 @@ impl InferTypeNode {
 }
 
 impl InferTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_infer_type_node(self.type_parameter()), node, &f.hooks)
     }
 }
@@ -14048,7 +14048,7 @@ impl ArrayTypeNode {
 }
 
 impl ArrayTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_array_type_node(self.element_type()), node, &f.hooks)
     }
 }
@@ -14069,7 +14069,7 @@ impl IndexedAccessTypeNode {
 }
 
 impl IndexedAccessTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_indexed_access_type_node(self.object_type(), self.index_type()), node, &f.hooks)
     }
 }
@@ -14090,7 +14090,7 @@ impl TypeReferenceNode {
 }
 
 impl TypeReferenceNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_type_reference_node(self.type_name(), self.type_arguments()), node, &f.hooks)
     }
 }
@@ -14111,7 +14111,7 @@ impl ExpressionWithTypeArguments {
 }
 
 impl ExpressionWithTypeArguments {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_expression_with_type_arguments(self.expression(), self.type_arguments()), node, &f.hooks)
     }
 }
@@ -14130,13 +14130,13 @@ impl LiteralTypeNode {
 }
 
 impl LiteralTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_literal_type_node(self.literal()), node, &f.hooks)
     }
 }
 
 impl ThisTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_this_type_node(), node, &f.hooks)
     }
 }
@@ -14159,7 +14159,7 @@ impl TypePredicateNode {
 }
 
 impl TypePredicateNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_type_predicate_node(self.asserts_modifier(), self.parameter_name(), self.type_()), node, &f.hooks)
     }
 }
@@ -14180,7 +14180,7 @@ impl ImportAttribute {
 }
 
 impl ImportAttribute {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_import_attribute(self.name(), self.value()), node, &f.hooks)
     }
 }
@@ -14199,7 +14199,7 @@ impl ImportAttributes {
 }
 
 impl ImportAttributes {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_import_attributes(self.token(), self.attributes(), self.multi_line()), node, &f.hooks)
     }
 }
@@ -14220,7 +14220,7 @@ impl TypeQueryNode {
 }
 
 impl TypeQueryNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_type_query_node(self.expr_name(), self.type_arguments()), node, &f.hooks)
     }
 }
@@ -14249,7 +14249,7 @@ impl MappedTypeNode {
 }
 
 impl MappedTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_mapped_type_node(self.readonly_token(), self.type_parameter(), self.name_type(), self.question_token(), self.type_(), self.members()), node, &f.hooks)
     }
 }
@@ -14268,7 +14268,7 @@ impl TypeLiteralNode {
 }
 
 impl TypeLiteralNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_type_literal_node(self.members()), node, &f.hooks)
     }
 }
@@ -14287,7 +14287,7 @@ impl TupleTypeNode {
 }
 
 impl TupleTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_tuple_type_node(self.elements()), node, &f.hooks)
     }
 }
@@ -14312,7 +14312,7 @@ impl NamedTupleMember {
 }
 
 impl NamedTupleMember {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_named_tuple_member(self.dot_dot_dot_token(), self.name(), self.question_token(), self.type_()), node, &f.hooks)
     }
 }
@@ -14331,7 +14331,7 @@ impl OptionalTypeNode {
 }
 
 impl OptionalTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_optional_type_node(self.type_()), node, &f.hooks)
     }
 }
@@ -14350,7 +14350,7 @@ impl RestTypeNode {
 }
 
 impl RestTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_rest_type_node(self.type_()), node, &f.hooks)
     }
 }
@@ -14369,7 +14369,7 @@ impl ParenthesizedTypeNode {
 }
 
 impl ParenthesizedTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_parenthesized_type_node(self.type_()), node, &f.hooks)
     }
 }
@@ -14392,7 +14392,7 @@ impl FunctionTypeNode {
 }
 
 impl FunctionTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_function_type_node(self.type_parameters(), self.parameters(), self.type_()), node, &f.hooks)
     }
 }
@@ -14417,25 +14417,25 @@ impl ConstructorTypeNode {
 }
 
 impl ConstructorTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_constructor_type_node(self.modifiers(), self.type_parameters(), self.parameters(), self.type_()), node, &f.hooks)
     }
 }
 
 impl TemplateHead {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_template_head(self.text(), self.raw_text(), self.template_flags()), node, &f.hooks)
     }
 }
 
 impl TemplateMiddle {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_template_middle(self.text(), self.raw_text(), self.template_flags()), node, &f.hooks)
     }
 }
 
 impl TemplateTail {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_template_tail(self.text(), self.raw_text(), self.template_flags()), node, &f.hooks)
     }
 }
@@ -14456,7 +14456,7 @@ impl TemplateLiteralTypeNode {
 }
 
 impl TemplateLiteralTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_template_literal_type_node(self.head(), self.template_spans()), node, &f.hooks)
     }
 }
@@ -14477,7 +14477,7 @@ impl TemplateLiteralTypeSpan {
 }
 
 impl TemplateLiteralTypeSpan {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_template_literal_type_span(self.type_(), self.literal()), node, &f.hooks)
     }
 }
@@ -14496,7 +14496,7 @@ impl SyntheticExpression {
 }
 
 impl SyntheticExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_synthetic_expression(self.type_(), self.is_spread(), self.tuple_name_source()), node, &f.hooks)
     }
 }
@@ -14515,7 +14515,7 @@ impl PartiallyEmittedExpression {
 }
 
 impl PartiallyEmittedExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_partially_emitted_expression(self.expression()), node, &f.hooks)
     }
 }
@@ -14538,7 +14538,7 @@ impl JsxElement {
 }
 
 impl JsxElement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_element(self.opening_element(), self.children(), self.closing_element()), node, &f.hooks)
     }
 }
@@ -14557,7 +14557,7 @@ impl JsxAttributes {
 }
 
 impl JsxAttributes {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_attributes(self.properties()), node, &f.hooks)
     }
 }
@@ -14578,7 +14578,7 @@ impl JsxNamespacedName {
 }
 
 impl JsxNamespacedName {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_namespaced_name(self.namespace(), self.name()), node, &f.hooks)
     }
 }
@@ -14601,7 +14601,7 @@ impl JsxOpeningElement {
 }
 
 impl JsxOpeningElement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_opening_element(self.tag_name(), self.type_arguments(), self.attributes()), node, &f.hooks)
     }
 }
@@ -14624,7 +14624,7 @@ impl JsxSelfClosingElement {
 }
 
 impl JsxSelfClosingElement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_self_closing_element(self.tag_name(), self.type_arguments(), self.attributes()), node, &f.hooks)
     }
 }
@@ -14647,19 +14647,19 @@ impl JsxFragment {
 }
 
 impl JsxFragment {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_fragment(self.opening_fragment(), self.children(), self.closing_fragment()), node, &f.hooks)
     }
 }
 
 impl JsxOpeningFragment {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_opening_fragment(), node, &f.hooks)
     }
 }
 
 impl JsxClosingFragment {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_closing_fragment(), node, &f.hooks)
     }
 }
@@ -14680,7 +14680,7 @@ impl JsxAttribute {
 }
 
 impl JsxAttribute {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_attribute(self.name(), self.initializer()), node, &f.hooks)
     }
 }
@@ -14699,7 +14699,7 @@ impl JsxSpreadAttribute {
 }
 
 impl JsxSpreadAttribute {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_spread_attribute(self.expression()), node, &f.hooks)
     }
 }
@@ -14718,7 +14718,7 @@ impl JsxClosingElement {
 }
 
 impl JsxClosingElement {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_closing_element(self.tag_name()), node, &f.hooks)
     }
 }
@@ -14739,13 +14739,13 @@ impl JsxExpression {
 }
 
 impl JsxExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_expression(self.dot_dot_dot_token(), self.expression()), node, &f.hooks)
     }
 }
 
 impl JsxText {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_text(self.text(), self.contains_only_trivia_white_spaces()), node, &f.hooks)
     }
 }
@@ -14764,7 +14764,7 @@ impl SyntaxList {
 }
 
 impl SyntaxList {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_syntax_list(self.children()), node, &f.hooks)
     }
 }
@@ -14785,7 +14785,7 @@ impl JSDoc {
 }
 
 impl JSDoc {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc(self.comment(), self.tags()), node, &f.hooks)
     }
 }
@@ -14804,7 +14804,7 @@ impl JSDocTypeExpression {
 }
 
 impl JSDocTypeExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_type_expression(self.type_()), node, &f.hooks)
     }
 }
@@ -14823,7 +14823,7 @@ impl JSDocNonNullableType {
 }
 
 impl JSDocNonNullableType {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_non_nullable_type(self.type_()), node, &f.hooks)
     }
 }
@@ -14842,13 +14842,13 @@ impl JSDocNullableType {
 }
 
 impl JSDocNullableType {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_nullable_type(self.type_()), node, &f.hooks)
     }
 }
 
 impl JSDocAllType {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_all_type(), node, &f.hooks)
     }
 }
@@ -14867,7 +14867,7 @@ impl JSDocVariadicType {
 }
 
 impl JSDocVariadicType {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_variadic_type(self.type_()), node, &f.hooks)
     }
 }
@@ -14886,7 +14886,7 @@ impl JSDocOptionalType {
 }
 
 impl JSDocOptionalType {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_optional_type(self.type_()), node, &f.hooks)
     }
 }
@@ -14909,7 +14909,7 @@ impl JSDocTypeTag {
 }
 
 impl JSDocTypeTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_type_tag(self.tag_name(), self.type_expression(), self.comment()), node, &f.hooks)
     }
 }
@@ -14930,7 +14930,7 @@ impl JSDocUnknownTag {
 }
 
 impl JSDocUnknownTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_unknown_tag(self.tag_name(), self.comment()), node, &f.hooks)
     }
 }
@@ -14955,7 +14955,7 @@ impl JSDocTemplateTag {
 }
 
 impl JSDocTemplateTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_template_tag(self.tag_name(), self.constraint(), self.type_parameters(), self.comment()), node, &f.hooks)
     }
 }
@@ -14978,7 +14978,7 @@ impl JSDocReturnTag {
 }
 
 impl JSDocReturnTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_return_tag(self.tag_name(), self.type_expression(), self.comment()), node, &f.hooks)
     }
 }
@@ -14999,7 +14999,7 @@ impl JSDocPublicTag {
 }
 
 impl JSDocPublicTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_public_tag(self.tag_name(), self.comment()), node, &f.hooks)
     }
 }
@@ -15020,7 +15020,7 @@ impl JSDocPrivateTag {
 }
 
 impl JSDocPrivateTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_private_tag(self.tag_name(), self.comment()), node, &f.hooks)
     }
 }
@@ -15041,7 +15041,7 @@ impl JSDocProtectedTag {
 }
 
 impl JSDocProtectedTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_protected_tag(self.tag_name(), self.comment()), node, &f.hooks)
     }
 }
@@ -15062,7 +15062,7 @@ impl JSDocReadonlyTag {
 }
 
 impl JSDocReadonlyTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_readonly_tag(self.tag_name(), self.comment()), node, &f.hooks)
     }
 }
@@ -15083,7 +15083,7 @@ impl JSDocOverrideTag {
 }
 
 impl JSDocOverrideTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_override_tag(self.tag_name(), self.comment()), node, &f.hooks)
     }
 }
@@ -15104,7 +15104,7 @@ impl JSDocDeprecatedTag {
 }
 
 impl JSDocDeprecatedTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_deprecated_tag(self.tag_name(), self.comment()), node, &f.hooks)
     }
 }
@@ -15127,7 +15127,7 @@ impl JSDocSeeTag {
 }
 
 impl JSDocSeeTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_see_tag(self.tag_name(), self.name_expression(), self.comment()), node, &f.hooks)
     }
 }
@@ -15150,7 +15150,7 @@ impl JSDocImplementsTag {
 }
 
 impl JSDocImplementsTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_implements_tag(self.tag_name(), self.class_name(), self.comment()), node, &f.hooks)
     }
 }
@@ -15173,7 +15173,7 @@ impl JSDocAugmentsTag {
 }
 
 impl JSDocAugmentsTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_augments_tag(self.tag_name(), self.class_name(), self.comment()), node, &f.hooks)
     }
 }
@@ -15196,7 +15196,7 @@ impl JSDocSatisfiesTag {
 }
 
 impl JSDocSatisfiesTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_satisfies_tag(self.tag_name(), self.type_expression(), self.comment()), node, &f.hooks)
     }
 }
@@ -15219,7 +15219,7 @@ impl JSDocThrowsTag {
 }
 
 impl JSDocThrowsTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_throws_tag(self.tag_name(), self.type_expression(), self.comment()), node, &f.hooks)
     }
 }
@@ -15242,7 +15242,7 @@ impl JSDocThisTag {
 }
 
 impl JSDocThisTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_this_tag(self.tag_name(), self.type_expression(), self.comment()), node, &f.hooks)
     }
 }
@@ -15269,7 +15269,7 @@ impl JSDocImportTag {
 }
 
 impl JSDocImportTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_import_tag(self.tag_name(), self.import_clause(), self.module_specifier(), self.attributes(), self.comment()), node, &f.hooks)
     }
 }
@@ -15294,7 +15294,7 @@ impl JSDocCallbackTag {
 }
 
 impl JSDocCallbackTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_callback_tag(self.tag_name(), self.type_expression(), self.name(), self.comment()), node, &f.hooks)
     }
 }
@@ -15317,7 +15317,7 @@ impl JSDocOverloadTag {
 }
 
 impl JSDocOverloadTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_overload_tag(self.tag_name(), self.type_expression(), self.comment()), node, &f.hooks)
     }
 }
@@ -15342,7 +15342,7 @@ impl JSDocTypedefTag {
 }
 
 impl JSDocTypedefTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_typedef_tag(self.tag_name(), self.type_expression(), self.name(), self.comment()), node, &f.hooks)
     }
 }
@@ -15365,7 +15365,7 @@ impl JSDocSignature {
 }
 
 impl JSDocSignature {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_signature(self.type_parameters(), self.parameters(), self.type_()), node, &f.hooks)
     }
 }
@@ -15384,7 +15384,7 @@ impl JSDocNameReference {
 }
 
 impl JSDocNameReference {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_name_reference(self.name()), node, &f.hooks)
     }
 }
@@ -15409,7 +15409,7 @@ impl ModuleDeclaration {
 }
 
 impl ModuleDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_module_declaration(self.modifiers(), self.keyword(), self.name(), self.attributes(), self.body()), node, &f.hooks)
     }
 }
@@ -15432,7 +15432,7 @@ impl ImportEqualsDeclaration {
 }
 
 impl ImportEqualsDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_import_equals_declaration(self.modifiers(), self.is_type_only(), self.name(), self.module_reference()), node, &f.hooks)
     }
 }
@@ -15457,7 +15457,7 @@ impl ExportDeclaration {
 }
 
 impl ExportDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_export_declaration(self.modifiers(), self.is_type_only(), self.export_clause(), self.module_specifier(), self.attributes()), node, &f.hooks)
     }
 }
@@ -15482,7 +15482,7 @@ impl ImportTypeNode {
 }
 
 impl ImportTypeNode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_import_type_node(self.is_type_of(), self.argument(), self.attributes(), self.qualifier(), self.type_arguments()), node, &f.hooks)
     }
 }
@@ -15503,7 +15503,7 @@ impl ImportClause {
 }
 
 impl ImportClause {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_import_clause(self.phase_modifier(), self.name(), self.named_bindings()), node, &f.hooks)
     }
 }
@@ -15524,13 +15524,13 @@ impl ImportSpecifier {
 }
 
 impl ImportSpecifier {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_import_specifier(self.is_type_only(), self.property_name(), self.name()), node, &f.hooks)
     }
 }
 
 impl JSDocText {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_text(self.text()), node, &f.hooks)
     }
 }
@@ -15549,7 +15549,7 @@ impl JSDocLink {
 }
 
 impl JSDocLink {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_link(self.name(), self.text()), node, &f.hooks)
     }
 }
@@ -15568,7 +15568,7 @@ impl JSDocLinkPlain {
 }
 
 impl JSDocLinkPlain {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_link_plain(self.name(), self.text()), node, &f.hooks)
     }
 }
@@ -15587,7 +15587,7 @@ impl JSDocLinkCode {
 }
 
 impl JSDocLinkCode {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_link_code(self.name(), self.text()), node, &f.hooks)
     }
 }
@@ -15614,7 +15614,7 @@ impl TypeParameterDeclaration {
 }
 
 impl TypeParameterDeclaration {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_type_parameter_declaration(self.modifiers(), self.name(), self.constraint(), self.expression(), self.default_type()), node, &f.hooks)
     }
 }
@@ -15635,7 +15635,7 @@ impl SyntheticReferenceExpression {
 }
 
 impl SyntheticReferenceExpression {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_synthetic_reference_expression(self.expression(), self.this_arg()), node, &f.hooks)
     }
 }
@@ -15654,7 +15654,7 @@ impl JSDocTypeLiteral {
 }
 
 impl JSDocTypeLiteral {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_type_literal(self.jsdoc_property_tags(), self.is_array_type()), node, &f.hooks)
     }
 }
@@ -15672,7 +15672,7 @@ impl JSDocParameterOrPropertyTag {
 }
 
 impl JSDocParameterOrPropertyTag {
-    pub fn clone_node(&self, node: P<Node>, f: &mut NodeFactory) -> P<Node> {
+    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_parameter_or_property_tag(node.kind, self.tag_name(), self.name(), self.is_bracketed(), self.type_expression(), self.is_name_first(), self.comment()), node, &f.hooks)
     }
 }
