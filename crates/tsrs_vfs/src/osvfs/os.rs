@@ -562,3 +562,11 @@ impl IoFS for DirFS {
         fs::read(&full).map_err(io_error)
     }
 }
+
+#[cfg(test)]
+#[path = "os_test.rs"]
+mod os_test;
+
+#[cfg(test)]
+#[path = "realpath_test.rs"]
+mod realpath_test;

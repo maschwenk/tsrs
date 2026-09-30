@@ -186,3 +186,7 @@ impl<T: VFS> VFS for FS<T> {
         self.fs.append_file(path, data)
     }
 }
+
+#[cfg(test)]
+#[path = "cachedvfs_test.rs"]
+mod cachedvfs_test;

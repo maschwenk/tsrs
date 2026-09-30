@@ -11,3 +11,6 @@ pub mod iovfs;
 pub mod osvfs;
 pub mod vfsmatch;
 pub mod vfstest;
+
+#[cfg(test)]
+mod walkdir_test;

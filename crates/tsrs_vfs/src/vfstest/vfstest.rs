@@ -710,3 +710,7 @@ impl WritableFS for MapFS {
         MapFS::chtimes(self, path, a_time, m_time)
     }
 }
+
+#[cfg(test)]
+#[path = "vfstest_test.rs"]
+mod vfstest_test;
