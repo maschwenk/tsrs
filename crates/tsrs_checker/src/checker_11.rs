@@ -1683,209 +1683,794 @@ impl Checker {
 
     // checker.go:23224
     pub(crate) fn try_get_type_from_type_node(&mut self, node: P<Node>) -> Option<P<Type>> {
-        todo!()
+        let type_node = node.type_node();
+        if let Some(type_node) = type_node {
+            return Some(self.get_type_from_type_node(type_node));
+        }
+        None
     }
 
     // checker.go:23232
     pub fn get_type_from_type_node(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let t = self.get_type_from_type_node_worker(node);
+        self.get_conditional_flow_type_of_type(t, Some(node))
     }
 
     // checker.go:23236
     pub(crate) fn get_type_from_type_node_worker(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        match node.kind {
+            Kind::AnyKeyword | Kind::JSDocAllType => self.any_type,
+            Kind::JSDocNonNullableType => self.get_type_from_type_node(node.type_node().unwrap()),
+            Kind::JSDocNullableType => {
+                let t = self.get_type_from_type_node(node.type_node().unwrap());
+                if self.strict_null_checks {
+                    self.get_nullable_type(t, TypeFlags::Null)
+                } else {
+                    t
+                }
+            }
+            Kind::JSDocVariadicType => {
+                let t = self.get_type_from_type_node(node.as_jsdoc_variadic_type().type_);
+                self.create_array_type(t)
+            }
+            Kind::JSDocOptionalType => {
+                let t = self.get_type_from_type_node(node.type_node().unwrap());
+                self.add_optionality(t)
+            }
+            Kind::UnknownKeyword => self.unknown_type,
+            Kind::StringKeyword => self.string_type,
+            Kind::NumberKeyword => self.number_type,
+            Kind::BigIntKeyword => self.bigint_type,
+            Kind::BooleanKeyword => self.boolean_type,
+            Kind::SymbolKeyword => self.es_symbol_type,
+            Kind::VoidKeyword => self.void_type,
+            Kind::UndefinedKeyword => self.undefined_type,
+            Kind::NullKeyword => self.null_type,
+            Kind::NeverKeyword => self.never_type,
+            Kind::ObjectKeyword => self.non_primitive_type,
+            Kind::IntrinsicKeyword => self.intrinsic_marker_type,
+            Kind::ThisType | Kind::ThisKeyword => self.get_type_from_this_type_node(node),
+            Kind::LiteralType => self.get_type_from_literal_type_node(node),
+            Kind::TypeReference | Kind::ExpressionWithTypeArguments => self.get_type_from_type_reference(node),
+            Kind::TypePredicate => {
+                if node.as_type_predicate_node().asserts_modifier.is_some() {
+                    return self.void_type;
+                }
+                self.boolean_type
+            }
+            Kind::TypeQuery => self.get_type_from_type_query_node(node),
+            Kind::ArrayType | Kind::TupleType => self.get_type_from_array_or_tuple_type_node(node),
+            Kind::OptionalType => self.get_type_from_optional_type_node(node),
+            Kind::UnionType => self.get_type_from_union_type_node(node),
+            Kind::IntersectionType => self.get_type_from_intersection_type_node(node),
+            Kind::NamedTupleMember => self.get_type_from_named_tuple_type_node(node),
+            Kind::ParenthesizedType => self.get_type_from_type_node(node.type_node().unwrap()),
+            Kind::RestType => self.get_type_from_rest_type_node(node),
+            Kind::FunctionType | Kind::ConstructorType | Kind::TypeLiteral => self.get_type_from_type_literal_or_function_or_constructor_type_node(node),
+            Kind::TypeOperator => self.get_type_from_type_operator_node(node),
+            Kind::IndexedAccessType => self.get_type_from_indexed_access_type_node(node),
+            Kind::TemplateLiteralType => self.get_type_from_template_type_node(node),
+            Kind::MappedType => self.get_type_from_mapped_type_node(node),
+            Kind::ConditionalType => self.get_type_from_conditional_type_node(node),
+            Kind::InferType => self.get_type_from_infer_type_node(node),
+            Kind::ImportType => self.get_type_from_import_type_node(node),
+            _ => self.error_type,
+        }
     }
 
     // checker.go:23325
     pub(crate) fn get_type_from_this_type_node(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let links = self.type_node_links.get(node);
+        if links.resolved_type.get().is_none() {
+            let t = self.get_this_type(node);
+            links.resolved_type.set(Some(t));
+        }
+        links.resolved_type.get().unwrap()
     }
 
     // checker.go:23333
     pub(crate) fn get_this_type(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let container = ast::get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
+        if let Some(parent) = container.parent() {
+            if is_class_like(parent) || is_interface_declaration(parent) {
+                if !ast::is_static(container) && (!is_constructor_declaration(container) || crate::is_node_descendant_of(Some(node), container.body().unwrap())) {
+                    let symbol = self.get_symbol_of_declaration(parent).unwrap();
+                    let declared = self.get_declared_type_of_class_or_interface(symbol);
+                    return declared.as_interface_type().this_type().unwrap_or(self.error_type);
+                }
+            }
+        }
+        self.error(Some(node), &diagnostics::A_this_type_is_available_only_in_a_non_static_member_of_a_class_or_interface, &[]);
+        self.error_type
     }
 
     // checker.go:23347
     pub(crate) fn get_type_from_literal_type_node(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        if node.as_literal_type_node().literal.kind == Kind::NullKeyword {
+            return self.null_type;
+        }
+        let links = self.type_node_links.get(node);
+        if links.resolved_type.get().is_none() {
+            let t = self.check_expression(node.as_literal_type_node().literal);
+            let regular = self.get_regular_type_of_literal_type(t);
+            links.resolved_type.set(Some(regular));
+        }
+        links.resolved_type.get().unwrap()
     }
 
     // checker.go:23358
     pub(crate) fn get_type_from_type_literal_or_function_or_constructor_type_node(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let links = self.type_node_links.get(node);
+        if links.resolved_type.get().is_none() {
+            // Deferred resolution of members is handled by resolveObjectTypeMembers
+            let alias = self.get_alias_for_type_node(node);
+            let is_empty = match node.symbol() {
+                None => true,
+                Some(sym) => self.get_members_of_symbol(sym).map_or(0, |m| m.len()) == 0 && alias.is_none(),
+            };
+            if is_empty {
+                links.resolved_type.set(Some(self.empty_type_literal_type));
+            } else {
+                let t = self.new_object_type(ObjectFlags::Anonymous, node.symbol());
+                t.alias.set(alias);
+                links.resolved_type.set(Some(t));
+            }
+        }
+        links.resolved_type.get().unwrap()
     }
 
     // checker.go:23374
     pub(crate) fn get_type_from_indexed_access_type_node(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let links = self.type_node_links.get(node);
+        if links.resolved_type.get().is_none() {
+            let object_type = self.get_type_from_type_node(node.as_indexed_access_type_node().object_type);
+            let index_type = self.get_type_from_type_node(node.as_indexed_access_type_node().index_type);
+            let potential_alias = self.get_alias_for_type_node(node);
+            let t = self.get_indexed_access_type_ex(object_type, index_type, AccessFlags::None, Some(node), potential_alias);
+            links.resolved_type.set(Some(t));
+        }
+        links.resolved_type.get().unwrap()
     }
 
     // checker.go:23385
     pub(crate) fn get_type_from_type_operator_node(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let links = self.type_node_links.get(node);
+        if links.resolved_type.get().is_none() {
+            let arg_type = node.type_node().unwrap();
+            match node.as_type_operator_node().operator {
+                Kind::KeyOfKeyword => {
+                    let t = self.get_type_from_type_node(arg_type);
+                    let index_type = self.get_index_type(t);
+                    links.resolved_type.set(Some(index_type));
+                }
+                Kind::UniqueKeyword => {
+                    if arg_type.kind == Kind::SymbolKeyword {
+                        let t = self.get_es_symbol_like_type_for_node(walk_up_parenthesized_types(node.parent()).unwrap());
+                        links.resolved_type.set(Some(t));
+                    } else {
+                        links.resolved_type.set(Some(self.error_type));
+                    }
+                }
+                Kind::ReadonlyKeyword => {
+                    let t = self.get_type_from_type_node(arg_type);
+                    links.resolved_type.set(Some(t));
+                }
+                _ => panic!("Unhandled case in getTypeFromTypeOperatorNode"),
+            }
+        }
+        links.resolved_type.get().unwrap()
     }
 
     // checker.go:23407
     pub(crate) fn get_es_symbol_like_type_for_node(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        if is_valid_es_symbol_declaration(node) {
+            let symbol = self.get_symbol_of_node(node);
+            if let Some(symbol) = symbol {
+                let unique_type = match self.unique_es_symbol_types.get(&symbol).copied() {
+                    Some(unique_type) => unique_type,
+                    None => {
+                        let mut b = String::new();
+                        b.push_str(InternalSymbolNamePrefix);
+                        b.push('@');
+                        b.push_str(symbol.name());
+                        b.push('@');
+                        b.push_str(&get_symbol_id(symbol).0.to_string());
+                        let unique_type = self.new_unique_es_symbol_type(symbol, &b);
+                        self.unique_es_symbol_types.insert(symbol, unique_type);
+                        unique_type
+                    }
+                };
+                return unique_type;
+            }
+        }
+        self.es_symbol_type
     }
 
     // checker.go:23428
     pub(crate) fn get_type_from_type_reference(&mut self, node: P<Node>) -> P<Type> {
-        todo!()
+        let links = self.type_node_links.get(node);
+        if links.resolved_type.get().is_none() {
+            // Cache both the resolved symbol and the resolved type. The resolved symbol is needed when we check the
+            // type reference in checkTypeReferenceNode.
+            // handle LS queries on the `const` in `x as const` by resolving to the type of `x`
+            if is_const_type_reference(node) && is_assertion_expression(node.parent().unwrap()) {
+                let t = self.check_expression_cached(node.parent().unwrap().expression().unwrap());
+                links.resolved_type.set(Some(t));
+            } else if let Some(t) = self.get_intended_type_from_jsdoc_type_reference(node) {
+                links.resolved_type.set(Some(t));
+            } else {
+                let symbol = self.get_symbol_from_type_reference(node);
+                let t = self.get_type_reference_type(node, symbol);
+                let t = self.get_distributed_type_parameter(node, t);
+                links.resolved_type.set(Some(t));
+            }
+        }
+        links.resolved_type.get().unwrap()
     }
 
     // checker.go:23445
     pub(crate) fn get_distributed_type_parameter(&mut self, node: P<Node>, t: P<Type>) -> P<Type> {
-        todo!()
+        if t.flags().intersects(TypeFlags::TypeParameter) && !t.as_type_parameter().is_distributed.get() {
+            let mut n = node.parent();
+            while let Some(nn) = n {
+                if is_statement(nn) {
+                    break;
+                }
+                if is_conditional_type_node(nn) {
+                    let check_type_node = nn.as_conditional_type_node().check_type;
+                    if is_simple_identifier_type_reference(check_type_node) && Some(self.get_symbol_from_type_reference(check_type_node)) == t.symbol() {
+                        // If node is contained in a distributive conditional type for the given type parameter,
+                        // return the distributed form of the type parameter.
+                        return self.get_distributed_type_from_type_parameter(t);
+                    }
+                }
+                n = nn.parent();
+            }
+        }
+        t
     }
 
     // checker.go:23460
     pub(crate) fn get_distributed_type_from_type_parameter(&mut self, t: P<Type>) -> P<Type> {
-        todo!()
+        let tp = t.as_type_parameter();
+        if tp.distributed_type.get().is_none() {
+            let distributed_type = self.new_type_parameter(t.symbol());
+            tp.distributed_type.set(Some(distributed_type));
+            distributed_type.as_type_parameter().is_distributed.set(true);
+            distributed_type.as_type_parameter().constraint.set(Some(t));
+        }
+        tp.distributed_type.get().unwrap()
     }
 }
 
 // checker.go:23470
 pub(crate) fn get_non_distributed_type_parameter(t: P<Type>) -> Option<P<Type>> {
-    todo!()
+    if t.flags().intersects(TypeFlags::TypeParameter) && t.as_type_parameter().is_distributed.get() {
+        return t.as_type_parameter().constraint.get();
+    }
+    Some(t)
 }
 
 // checker.go:23477
 pub(crate) fn is_simple_identifier_type_reference(node: P<Node>) -> bool {
-    todo!()
+    is_type_reference_node(node) && is_identifier(node.as_type_reference_node().type_name) && node.type_argument_list().is_none()
 }
 
 impl Checker {
     // checker.go:23481
     pub(crate) fn get_intended_type_from_jsdoc_type_reference(&mut self, node: P<Node>) -> Option<P<Type>> {
-        todo!()
+        if node.flags().intersects(NodeFlags::JSDoc) && is_type_reference_node(node) {
+            let type_name = node.as_type_reference_node().type_name;
+            if is_identifier(type_name) {
+                let type_args = node.type_arguments();
+                match type_name.text() {
+                    "String" => {
+                        self.check_no_type_arguments(node, None);
+                        return Some(self.string_type);
+                    }
+                    "Number" => {
+                        self.check_no_type_arguments(node, None);
+                        return Some(self.number_type);
+                    }
+                    "BigInt" => {
+                        self.check_no_type_arguments(node, None);
+                        return Some(self.bigint_type);
+                    }
+                    "Boolean" => {
+                        self.check_no_type_arguments(node, None);
+                        return Some(self.boolean_type);
+                    }
+                    "Void" => {
+                        self.check_no_type_arguments(node, None);
+                        return Some(self.void_type);
+                    }
+                    "Undefined" => {
+                        self.check_no_type_arguments(node, None);
+                        return Some(self.undefined_type);
+                    }
+                    "Null" => {
+                        self.check_no_type_arguments(node, None);
+                        return Some(self.null_type);
+                    }
+                    "Function" | "function" => {
+                        self.check_no_type_arguments(node, None);
+                        return Some(self.global_function_type);
+                    }
+                    "array" => {
+                        if type_args.is_empty() && !self.no_implicit_any {
+                            return Some(self.any_array_type);
+                        }
+                    }
+                    "promise" => {
+                        if type_args.is_empty() && !self.no_implicit_any {
+                            return Some(self.create_promise_type(self.any_type));
+                        }
+                    }
+                    "Object" => {
+                        if type_args.len() == 2 {
+                            if let Some(record_symbol) = self.get_global_record_symbol() {
+                                let index_type = self.get_type_from_type_node(type_args[0]);
+                                if self.is_valid_index_key_type(index_type) {
+                                    let value_type = self.get_type_from_type_node(type_args[1]);
+                                    return Some(self.get_type_alias_instantiation(record_symbol, &[index_type, value_type], None));
+                                }
+                            }
+                            return Some(self.any_type);
+                        }
+                        if !self.no_implicit_any {
+                            self.check_no_type_arguments(node, None);
+                            return Some(self.any_type);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        None
     }
 
     // checker.go:23538
     pub(crate) fn get_symbol_from_type_reference(&mut self, node: P<Node>) -> P<Symbol> {
-        todo!()
+        let links = self.symbol_node_links.get(node);
+        if links.resolved_symbol.get().is_none() {
+            // The `const` in a `const` assertion resolves to nothing; resolveName knows not to
+            // report an error for it, so no special-casing is needed here.
+            let symbol = self.resolve_type_reference_name(node, SymbolFlags::Type, false /*ignoreErrors*/);
+            links.resolved_symbol.set(Some(symbol));
+        }
+        links.resolved_symbol.get().unwrap()
     }
 
     // checker.go:23548
     pub(crate) fn resolve_type_reference_name(&mut self, type_reference: P<Node>, meaning: SymbolFlags, ignore_errors: bool) -> P<Symbol> {
-        todo!()
+        let Some(name) = get_type_reference_name(type_reference) else {
+            return self.unknown_symbol;
+        };
+        let symbol = self.resolve_entity_name(name, meaning, ignore_errors, false /*dontResolveAlias*/, None /*location*/);
+        if let Some(symbol) = symbol {
+            if symbol != self.unknown_symbol {
+                return symbol;
+            }
+        }
+        if ignore_errors {
+            return self.unknown_symbol;
+        }
+        self.get_unresolved_symbol_for_entity_name(name)
     }
 
     // checker.go:23563
     pub(crate) fn get_unresolved_symbol_for_entity_name(&mut self, name: P<Node>) -> P<Symbol> {
-        todo!()
+        let identifier = match name.kind {
+            Kind::QualifiedName => name.as_qualified_name().right,
+            Kind::PropertyAccessExpression => name.name().unwrap(),
+            _ => name,
+        };
+        let text = identifier.text();
+        if !text.is_empty() {
+            let parent_symbol: Option<P<Symbol>> = match name.kind {
+                Kind::QualifiedName => Some(self.get_unresolved_symbol_for_entity_name(name.as_qualified_name().left)),
+                Kind::PropertyAccessExpression => Some(self.get_unresolved_symbol_for_entity_name(name.expression().unwrap())),
+                _ => None,
+            };
+            let path = match parent_symbol {
+                Some(parent_symbol) => get_symbol_path(parent_symbol) + "." + text,
+                None => text.to_string(),
+            };
+            let result = match self.unresolved_symbols.get(&path).copied() {
+                Some(result) => result,
+                None => {
+                    let result = self.new_symbol_ex(SymbolFlags::TypeAlias, text, CheckFlags::Unresolved);
+                    self.unresolved_symbols.insert(path, result);
+                    result.parent.set(parent_symbol);
+                    self.type_alias_links.get(result).declared_type.set(Some(self.unresolved_type));
+                    result
+                }
+            };
+            return result;
+        }
+        self.unknown_symbol
     }
 }
 
 // checker.go:23600
 pub(crate) fn get_symbol_path(symbol: P<Symbol>) -> String {
-    todo!()
+    if let Some(parent) = symbol.parent() {
+        return get_symbol_path(parent) + "." + symbol.name();
+    }
+    symbol.name().to_string()
 }
 
 impl Checker {
     // checker.go:23607
     pub(crate) fn get_type_reference_type(&mut self, node: P<Node>, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        if symbol == self.unknown_symbol {
+            return self.error_type;
+        }
+        if symbol.flags().intersects(SymbolFlags::Class | SymbolFlags::Interface) {
+            return self.get_type_from_class_or_interface_reference(node, symbol);
+        }
+        if symbol.flags().intersects(SymbolFlags::TypeAlias) {
+            return self.get_type_from_type_alias_reference(node, symbol);
+        }
+        // Get type from reference to named type that cannot be generic (enum or type parameter)
+        let res = self.try_get_declared_type_of_symbol(symbol);
+        if let Some(res) = res {
+            if self.check_no_type_arguments(node, Some(symbol)) {
+                return self.get_regular_type_of_literal_type(res);
+            }
+        }
+
+        // !!! Resolving values as types for JS
+        self.error_type
     }
 
+    /**
+     * Get type from type-reference that reference to class or interface
+     */
     // checker.go:23630
     pub(crate) fn get_type_from_class_or_interface_reference(&mut self, node: P<Node>, symbol: P<Symbol>) -> P<Type> {
-        todo!()
+        let merged = self.get_merged_symbol(symbol);
+        let t = self.get_declared_type_of_class_or_interface(merged);
+        let d = t.as_interface_type();
+        let type_parameters = d.local_type_parameters();
+        if !type_parameters.is_empty() {
+            let num_type_arguments = node.type_arguments().len() as i32;
+            let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
+            let is_js = ast::is_in_js_file(node);
+            let is_js_implicit_any = !self.no_implicit_any && is_js;
+            if !is_js_implicit_any && (num_type_arguments < min_type_argument_count || num_type_arguments > type_parameters.len() as i32) {
+                let message: &'static Message;
+
+                let missing_augments_tag = is_js && is_expression_with_type_arguments(node) && !is_jsdoc_augments_tag(node.parent().unwrap());
+                if missing_augments_tag {
+                    message = if min_type_argument_count < type_parameters.len() as i32 {
+                        &diagnostics::Expected_0_1_type_arguments_provide_these_with_an_extends_tag
+                    } else {
+                        &diagnostics::Expected_0_type_arguments_provide_these_with_an_extends_tag
+                    };
+                } else {
+                    message = if min_type_argument_count < type_parameters.len() as i32 {
+                        &diagnostics::Generic_type_0_requires_between_1_and_2_type_arguments
+                    } else {
+                        &diagnostics::Generic_type_0_requires_1_type_argument_s
+                    };
+                }
+                let type_str = self.type_to_string_ex(t, None /*enclosingDeclaration*/, TypeFormatFlags::WriteArrayAsGenericType, None);
+                let num_type_parameters = type_parameters.len();
+                self.error(Some(node), message, &[&type_str, &min_type_argument_count, &num_type_parameters]);
+                if !is_js {
+                    // TODO: Adopt same permissive behavior in TS as in JS to reduce follow-on editing experience failures (requires editing fillMissingTypeArguments)
+                    return self.error_type;
+                }
+            }
+            if node.kind == Kind::TypeReference && self.is_deferred_type_reference_node(node, num_type_arguments != type_parameters.len() as i32) {
+                return self.create_deferred_type_reference(t, node, None /*mapper*/, None /*alias*/);
+            }
+            // In a type reference, the outer type parameters of the referenced class or interface are automatically
+            // supplied as type arguments and the type reference only specifies arguments for the local type parameters
+            // of the class or interface.
+            let node_type_arguments = self.get_type_arguments_from_node(node);
+            let local_type_arguments = self.fill_missing_type_arguments(&node_type_arguments, type_parameters, min_type_argument_count, is_js);
+            let mut type_arguments = d.outer_type_parameters().to_vec();
+            type_arguments.extend(local_type_arguments);
+            return self.create_type_reference_ex(t, &type_arguments, ObjectFlags::FromTypeNode);
+        }
+        if self.check_no_type_arguments(node, Some(symbol)) {
+            return t;
+        }
+        self.error_type
     }
 
     // checker.go:23677
     pub(crate) fn get_type_arguments_from_node(&mut self, node: P<Node>) -> Vec<P<Type>> {
-        todo!()
+        node.type_arguments().iter().map(|&n| self.get_type_from_type_node(n)).collect()
     }
 
     // checker.go:23681
     pub(crate) fn check_no_type_arguments(&mut self, node: P<Node>, symbol: Option<P<Symbol>>) -> bool {
-        todo!()
+        if !node.type_arguments().is_empty() {
+            let type_name = match symbol {
+                Some(symbol) => self.symbol_to_string(symbol),
+                None => tsrs_scanner::declaration_name_to_string(Some(node.as_type_reference_node().type_name)),
+            };
+            self.error(Some(node), &diagnostics::Type_0_is_not_generic, &[&type_name]);
+            return false;
+        }
+        true
     }
 
+    // Return true if the given type reference node is directly aliased or if it needs to be deferred
+    // because it is possibly contained in a circular chain of eagerly resolved types.
     // checker.go:23697
     pub(crate) fn is_deferred_type_reference_node(&mut self, node: P<Node>, has_default_type_arguments: bool) -> bool {
-        todo!()
+        if self.get_alias_symbol_for_type_node(node).is_some() {
+            return true;
+        }
+        if self.is_resolved_by_type_alias(node) {
+            match node.kind {
+                Kind::ArrayType => return self.may_resolve_type_alias(node.as_array_type_node().element_type),
+                Kind::TupleType => return node.elements().iter().any(|&e| self.may_resolve_type_alias(e)),
+                Kind::TypeReference => return has_default_type_arguments || node.type_arguments().iter().any(|&a| self.may_resolve_type_alias(a)),
+                _ => {}
+            }
+            panic!("Unhandled case in isDeferredTypeReferenceNode");
+        }
+        false
     }
 
+    // Return true when the given node is transitively contained in type constructs that eagerly
+    // resolve their constituent types. We include SyntaxKind.TypeReference because type arguments
+    // of type aliases are eagerly resolved.
     // checker.go:23718
     pub(crate) fn is_resolved_by_type_alias(&mut self, node: P<Node>) -> bool {
-        todo!()
+        let parent = node.parent().unwrap();
+        match parent.kind {
+            Kind::ParenthesizedType
+            | Kind::NamedTupleMember
+            | Kind::TypeReference
+            | Kind::UnionType
+            | Kind::IntersectionType
+            | Kind::IndexedAccessType
+            | Kind::ConditionalType
+            | Kind::TypeOperator
+            | Kind::ArrayType
+            | Kind::TupleType => self.is_resolved_by_type_alias(parent),
+            Kind::TypeAliasDeclaration | Kind::JSTypeAliasDeclaration => true,
+            _ => false,
+        }
     }
 
+    // Return true if resolving the given node (i.e. getTypeFromTypeNode) possibly causes resolution
+    // of a type alias.
     // checker.go:23732
     pub(crate) fn may_resolve_type_alias(&mut self, node: P<Node>) -> bool {
-        todo!()
+        match node.kind {
+            Kind::TypeReference => self.resolve_type_reference_name(node, SymbolFlags::Type, false).flags().intersects(SymbolFlags::TypeAlias),
+            Kind::TypeQuery => true,
+            Kind::TypeOperator => node.as_type_operator_node().operator != Kind::UniqueKeyword && self.may_resolve_type_alias(node.type_node().unwrap()),
+            Kind::ParenthesizedType | Kind::OptionalType | Kind::NamedTupleMember => self.may_resolve_type_alias(node.type_node().unwrap()),
+            Kind::RestType => {
+                let type_node = node.type_node().unwrap();
+                type_node.kind != Kind::ArrayType || self.may_resolve_type_alias(type_node.as_array_type_node().element_type)
+            }
+            Kind::UnionType => node.as_union_type_node().types.nodes.iter().any(|&t| self.may_resolve_type_alias(t)),
+            Kind::IntersectionType => node.as_intersection_type_node().types.nodes.iter().any(|&t| self.may_resolve_type_alias(t)),
+            Kind::IndexedAccessType => self.may_resolve_type_alias(node.as_indexed_access_type_node().object_type) || self.may_resolve_type_alias(node.as_indexed_access_type_node().index_type),
+            Kind::ConditionalType => {
+                let n = node.as_conditional_type_node();
+                self.may_resolve_type_alias(n.check_type) || self.may_resolve_type_alias(n.extends_type) || self.may_resolve_type_alias(n.true_type) || self.may_resolve_type_alias(n.false_type)
+            }
+            _ => false,
+        }
     }
 
     // checker.go:23757
     pub(crate) fn create_normalized_type_reference(&mut self, target: P<Type>, type_arguments: &[P<Type>]) -> P<Type> {
-        todo!()
+        if target.object_flags().intersects(ObjectFlags::Tuple) {
+            return self.create_normalized_tuple_type(target, type_arguments);
+        }
+        self.create_type_reference(target, type_arguments)
     }
 
     // checker.go:23764
     pub(crate) fn create_normalized_tuple_type_ex(&mut self, target: P<Type>, element_types: &[P<Type>], object_flags: ObjectFlags) -> P<Type> {
-        todo!()
+        let d = target.as_tuple_type();
+        if !d.combined_flags.get().intersects(ElementFlags::NonRequired) {
+            // No need to normalize when we only have regular required elements
+            return self.create_type_reference_ex(target, element_types, object_flags);
+        }
+        let element_infos = d.element_infos();
+        if d.combined_flags.get().intersects(ElementFlags::Variadic) {
+            for (i, &e) in element_types.iter().enumerate() {
+                if i < element_infos.len() && element_infos[i].flags.intersects(ElementFlags::Variadic) && e.flags().intersects(TypeFlags::Never | TypeFlags::Union) {
+                    // Transform [A, ...(X | Y | Z)] into [A, ...X] | [A, ...Y] | [A, ...Z]
+                    let check_types: Vec<P<Type>> = element_types
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &t)| if i < element_infos.len() && element_infos[i].flags.intersects(ElementFlags::Variadic) { t } else { self.unknown_type })
+                        .collect();
+                    if self.check_cross_product_union(&check_types) {
+                        return self
+                            .map_type(e, |c, t| Some(c.create_normalized_tuple_type_ex(target, &replace_element(element_types, i, t), object_flags)))
+                            .unwrap();
+                    }
+                }
+            }
+        }
+        // We have optional, rest, or variadic elements that may need normalizing. Normalization ensures that all variadic
+        // elements are generic and that the tuple type has one of the following layouts, disregarding variadic elements:
+        // (1) Zero or more required elements, followed by zero or more optional elements, followed by zero or one rest element.
+        // (2) Zero or more required elements, followed by a rest element, followed by zero or more required elements.
+        // In either layout, zero or more generic variadic elements may be present at any location.
+        // Note that the element types may contain an extra 'this' type argument that we want to ignore during normalization
+        // and then just append to the normalized element types.
+        let mut n = TupleNormalizer::default();
+        if !n.normalize(self, &element_types[..element_infos.len()], element_infos) {
+            return self.error_type;
+        }
+        if element_types.len() > element_infos.len() {
+            n.types.push(element_types[element_infos.len()]);
+        }
+        let tuple_target = self.get_tuple_target_type(&n.infos, d.readonly.get());
+        if tuple_target == self.empty_generic_type {
+            return self.empty_object_type;
+        } else if !n.types.is_empty() {
+            return self.create_type_reference_ex(tuple_target, &n.types, object_flags);
+        }
+        tuple_target
     }
 
     // checker.go:23812
     pub(crate) fn create_normalized_tuple_type(&mut self, target: P<Type>, element_types: &[P<Type>]) -> P<Type> {
-        todo!()
+        self.create_normalized_tuple_type_ex(target, element_types, ObjectFlags::None)
     }
 }
 
 impl TupleNormalizer {
     // checker.go:23825
     pub(crate) fn normalize(&mut self, c: &mut Checker, element_types: &[P<Type>], element_infos: &[TupleElementInfo]) -> bool {
-        todo!()
+        self.last_required_index = -1;
+        self.first_rest_index = -1;
+        self.last_optional_or_rest_index = -1;
+        for (i, &t) in element_types.iter().enumerate() {
+            let info = element_infos[i];
+            if info.flags.intersects(ElementFlags::Variadic) {
+                if t.flags().intersects(TypeFlags::Any) {
+                    self.add(c, t, TupleElementInfo { flags: ElementFlags::Rest, labeled_declaration: info.labeled_declaration });
+                } else if t.flags().intersects(TypeFlags::InstantiableNonPrimitive) || c.is_generic_mapped_type(t) {
+                    // Generic variadic elements stay as they are.
+                    self.add(c, t, info);
+                } else if is_tuple_type(t) {
+                    let spread_types = c.get_element_types(t);
+                    if spread_types.len() + self.types.len() >= 10_000 {
+                        let message = if c.current_node.is_some_and(is_part_of_type_node) {
+                            &diagnostics::Type_produces_a_tuple_type_that_is_too_large_to_represent
+                        } else {
+                            &diagnostics::Expression_produces_a_tuple_type_that_is_too_large_to_represent
+                        };
+                        c.error(c.current_node, message, &[]);
+                        return false;
+                    }
+                    // Spread variadic elements with tuple types into the resulting tuple.
+                    let spread_infos = t.target_tuple_type().element_infos();
+                    for (j, &s) in spread_types.iter().enumerate() {
+                        self.add(c, s, spread_infos[j]);
+                    }
+                } else {
+                    // Treat everything else as an array type and create a rest element.
+                    let mut s: Option<P<Type>> = None;
+                    if c.is_array_like_type(t) {
+                        s = c.get_index_type_of_type(t, c.number_type);
+                    }
+                    let s = s.unwrap_or(c.error_type);
+                    self.add(c, s, TupleElementInfo { flags: ElementFlags::Rest, labeled_declaration: info.labeled_declaration });
+                }
+            } else {
+                // Copy other element kinds with no change.
+                self.add(c, t, info);
+            }
+        }
+        // Turn optional elements preceding the last required element into required elements
+        for i in 0..self.last_required_index.max(0) as usize {
+            if self.infos[i].flags.intersects(ElementFlags::Optional) {
+                self.infos[i].flags = ElementFlags::Required;
+            }
+        }
+        if self.first_rest_index >= 0 && self.first_rest_index < self.last_optional_or_rest_index {
+            // Turn elements between first rest and last optional/rest into a single rest element
+            let mut types: Vec<P<Type>> = Vec::new();
+            for i in self.first_rest_index as usize..=self.last_optional_or_rest_index as usize {
+                let mut t = self.types[i];
+                if self.infos[i].flags.intersects(ElementFlags::Variadic) {
+                    t = c.get_indexed_access_type(t, c.number_type);
+                }
+                types.push(t);
+            }
+            let first = self.first_rest_index as usize;
+            let last = self.last_optional_or_rest_index as usize;
+            self.types[first] = c.get_union_type(&types);
+            self.types.drain(first + 1..last + 1);
+            self.infos.drain(first + 1..last + 1);
+        }
+        true
     }
 
     // checker.go:23891
     pub(crate) fn add(&mut self, c: &mut Checker, t: P<Type>, info: TupleElementInfo) {
-        todo!()
+        if info.flags.intersects(ElementFlags::Required) {
+            self.last_required_index = self.types.len() as i32;
+        }
+        if info.flags.intersects(ElementFlags::Rest) && self.first_rest_index < 0 {
+            self.first_rest_index = self.types.len() as i32;
+        }
+        if info.flags.intersects(ElementFlags::Optional | ElementFlags::Rest) {
+            self.last_optional_or_rest_index = self.types.len() as i32;
+        }
+        let t = c.add_optionality_ex(t, true /*isProperty*/, info.flags.intersects(ElementFlags::Optional));
+        self.types.push(t);
+        self.infos.push(info);
     }
 }
 
+// Return count of starting consecutive tuple elements of the given kind(s)
 // checker.go:23906
 pub(crate) fn get_start_element_count(t: &'static TupleType, flags: ElementFlags) -> i32 {
-    todo!()
+    for (i, info) in t.element_infos().iter().enumerate() {
+        if !info.flags.intersects(flags) {
+            return i as i32;
+        }
+    }
+    t.element_infos().len() as i32
 }
 
+// Return count of ending consecutive tuple elements of the given kind(s)
 // checker.go:23916
 pub(crate) fn get_end_element_count(t: &'static TupleType, flags: ElementFlags) -> i32 {
-    todo!()
+    let element_infos = t.element_infos();
+    let mut i = element_infos.len();
+    while i > 0 {
+        if !element_infos[i - 1].flags.intersects(flags) {
+            return (element_infos.len() - i) as i32;
+        }
+        i -= 1;
+    }
+    element_infos.len() as i32
 }
 
 // checker.go:23925
 pub(crate) fn get_total_fixed_element_count(t: &'static TupleType) -> i32 {
-    todo!()
+    t.fixed_length() + get_end_element_count(t, ElementFlags::Fixed)
 }
 
 impl Checker {
     // checker.go:23929
     pub(crate) fn get_element_types(&mut self, t: P<Type>) -> Vec<P<Type>> {
-        todo!()
+        let mut type_arguments = self.get_type_arguments(t);
+        let arity = self.get_type_reference_arity(t);
+        if type_arguments.len() as i32 == arity {
+            return type_arguments;
+        }
+        type_arguments.truncate(arity as usize);
+        type_arguments
     }
 
     // checker.go:23938
     pub(crate) fn get_type_reference_arity(&mut self, t: P<Type>) -> i32 {
-        todo!()
+        t.target_interface_type().type_parameters().len() as i32
     }
 
     // checker.go:23942
     pub fn is_array_type(&mut self, t: P<Type>) -> bool {
-        todo!()
+        t.object_flags().intersects(ObjectFlags::Reference) && (t.target() == Some(self.global_array_type) || t.target() == Some(self.global_readonly_array_type))
     }
 
     // checker.go:23946
     pub(crate) fn is_readonly_array_type(&mut self, t: P<Type>) -> bool {
-        todo!()
+        t.object_flags().intersects(ObjectFlags::Reference) && t.target() == Some(self.global_readonly_array_type)
     }
 }
 
 // checker.go:23950
 pub fn is_tuple_type(t: P<Type>) -> bool {
-    todo!()
+    t.object_flags().intersects(ObjectFlags::Reference) && t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple)
 }
