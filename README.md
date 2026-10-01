@@ -38,11 +38,31 @@ A Rust port of the TypeScript 7 type checker (the Go implementation in
 This is a derivative work of TypeScript, which is licensed under Apache-2.0 (see `LICENSE`);
 the bundled `lib.*.d.ts` files and the structure of the code come from that project.
 
+## Provenance
+
+- **Derivative work.** tsrs is a port of microsoft/TypeScript (Copyright Microsoft Corporation), licensed under
+  Apache-2.0 like the original (`LICENSE`, `NOTICE`). The bundled `lib.*.d.ts` files are TypeScript's, unchanged, and
+  the structure and names of the code follow the Go sources. This project is not affiliated with
+  or endorsed by Microsoft.
+- **The Go implementation is the specification.** Functions correspond one to one to Go functions at the pinned commit
+  (`Cargo.toml` `[workspace.metadata.typescript]`); behavior that differs from Go is a bug, including message text
+  and diagnostic order. The only intended deviations are internal (memory layout, lazy member resolution that can be
+  switched off with `--noLazyMembers`), and they must not change any diagnostic.
+- **How it was written.** The port was produced with heavy use of AI coding agents, directed and reviewed by Max
+  Schwenk. Correctness is established by evidence rather than by review alone: the TypeScript conformance suite's
+  reference baselines, Go oracle programs under `tools/oracle/` that compare scanner, parser, binder, module
+  resolution, printer and `.types`/`.symbols` output against the Go code, checker counters that equal the reference
+  exactly, mutation testing on a large private codebase, and the benchmark projects above. `docs/STATUS.md` has the
+  numbers and how each was measured.
+
+## Layout
+
 - `docs/PORTING.md` — porting conventions
 - `docs/AST.md`, `docs/CHECKER.md` — crate contracts
 - `crates/` — the port, one crate per Go package group
 - `tools/` — generators and Go oracle programs used to compare against the reference implementation
 - `npm/` — the npm packages (`@maschwenk/tsrs` + per-platform binaries), versioning and the release workflow
+- `CONTRIBUTING.md` — building, running the suite, and how changes land
 
 ## Usage
 
@@ -57,4 +77,4 @@ cargo build --release -p tsrs_cli -p tsrs_testrunner
 From npm (once published): `pnpm add -D @maschwenk/tsrs`, then `pnpm exec tsrs -p path/to/project`; see `npm/README.md`.
 
 `docs/STATUS.md` has the current conformance numbers and the comparison against the reference compiler on a
-38k-file production project; `docs/DEBUGGING.md` describes the fix workflow and the oracles under `tools/oracle/`.
+38k-file private TypeScript monorepo (5.9M lines); `docs/DEBUGGING.md` describes the fix workflow and the oracles under `tools/oracle/`.

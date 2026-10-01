@@ -1,0 +1,52 @@
+name: Bug report (tsrs differs from tsc)
+description: tsrs reports different diagnostics, crashes, or hangs on input that tsc handles.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        tsrs follows the TypeScript Go implementation (tsgo) at the commit pinned in Cargo.toml. Any difference from
+        that compiler's output is a bug. Please reduce the input to the smallest files that still show it.
+  - type: input
+    id: version
+    attributes:
+      label: tsrs version
+      description: Output of `tsrs --version`.
+    validations:
+      required: true
+  - type: input
+    id: tsc-version
+    attributes:
+      label: Reference compiler and version
+      description: For example `typescript@7.1.0-dev.20260929` (tsgo) or `tsc 7.0.2`.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: The source files and tsconfig.json (inline, or a link to a repository or gist), and the command you ran.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected output (from tsc)
+      description: Output of the reference compiler with `--pretty false`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual output (from tsrs)
+      description: Output of tsrs with `--pretty false`, or the panic message and backtrace (`RUST_BACKTRACE=1`).
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS and architecture, for example macOS arm64 or Linux x64.

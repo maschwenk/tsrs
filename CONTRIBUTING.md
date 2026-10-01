@@ -1,0 +1,61 @@
+# Contributing to tsrs
+
+tsrs is a Rust port of the TypeScript 7 type checker (the Go code in microsoft/TypeScript, `tsc/internal`). Bug
+reports with a small reproduction are the most useful contribution; fixes are welcome too.
+
+## The fidelity rule: Go is the spec
+
+The Go implementation at the commit in `Cargo.toml` (`[workspace.metadata.typescript]`) is the specification.
+
+- A difference from `tsgo` at that commit (diagnostics, their order, message text, exit code) is a tsrs bug, even
+  when the tsrs output looks more reasonable. A fix makes tsrs do what the Go code does, not what seems right.
+- Port the Go function you are fixing; keep its name, structure and control flow (`docs/PORTING.md`). Do not
+  "improve" the algorithm. Internal-only differences (data layout, caching) are fine when no diagnostic changes.
+- If the Go code itself is wrong, report it upstream; tsrs follows it until the pinned commit moves.
+
+## Build
+
+Requirements: a stable Rust toolchain, Node.js (for `npm/build.mjs`) and git.
+
+```sh
+cargo build --release -p tsrs_cli -p tsrs_testrunner
+./target/release/tsrs -p path/to/project          # like `tsc --noEmit`
+cargo check --workspace                           # must be 0 errors, 0 warnings (CI uses -D warnings)
+```
+
+## Run the tests
+
+The conformance suite reads the reference baselines from a checkout of microsoft/TypeScript at the pinned commit in
+`ts-ref/` (git-ignored):
+
+```sh
+commit=$(node npm/build.mjs --print-typescript-commit)
+git clone --filter=blob:none --sparse https://github.com/microsoft/TypeScript ts-ref
+git -C ts-ref sparse-checkout set tsc/testdata && git -C ts-ref checkout "$commit"
+
+./target/release/tsrs-test run --suite all                       # summary table; lists in target/test-results/
+./target/release/tsrs-test run --filter <substring>              # one test or a cluster
+./target/release/tsrs-test show <suite/name>                     # expected vs actual
+.github/scripts/conformance-gate.sh                              # what CI enforces
+cargo test -p tsrs_core -p tsrs_scanner -p tsrs_tsoptions        # unit tests (see .github/workflows/ci.yml)
+```
+
+A change must not lose passing tests: compare `target/test-results/pass.txt` before and after
+(`comm -23 <(sort before.txt) <(sort target/test-results/pass.txt)` must print nothing). `docs/DEBUGGING.md`
+describes the full workflow, the opt-out mode (`TSRS_LAZY_MEMBERS=0`) that must stay reference-identical, and the
+Go oracle programs in `tools/oracle/`.
+
+For a bug outside the suite, add a reproduction under `testdata/regressions/<name>/` (`a.ts`, `tsconfig.json`, and
+`expected.txt` with `tsc --pretty false` output from the reference compiler).
+
+## Landing changes
+
+- External contributors: open a pull request against `main`. CI (`.github/workflows/ci.yml`) must pass. Workflows on
+  pull requests from forks need a maintainer's approval before they run (GitHub's default for outside
+  contributors), and they never get repository secrets.
+- Maintainers land small commits directly on `main` (rebase onto `origin/main`, `cargo check --workspace`, re-run the
+  affected tests and the full suite, then `git push origin HEAD:main`; never force-push). See `docs/DEBUGGING.md`.
+- Commit messages: `<area>: <what and why>`, plus the conformance totals when they change.
+- Contributions are licensed under Apache-2.0 (`LICENSE`, section 5).
+
+By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md). Security issues: see [SECURITY.md](SECURITY.md).

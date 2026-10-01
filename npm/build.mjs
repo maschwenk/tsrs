@@ -154,7 +154,7 @@ function main() {
     const name = template.name;
     const baseName = name.split("/").pop();
     const license = fs.readFileSync(path.join(repoRoot, "LICENSE"));
-    const notice = fs.readFileSync(path.join(npmDir, "NOTICE.txt"));
+    const notice = fs.readFileSync(path.join(repoRoot, "NOTICE"));
 
     fs.rmSync(opts.out, { recursive: true, force: true });
     fs.mkdirSync(opts.out, { recursive: true });

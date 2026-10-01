@@ -1,4 +1,5 @@
 tsrs
+Copyright 2026 Max Schwenk and the tsrs contributors
 
 tsrs is a Rust port of the TypeScript 7 type checker (the Go implementation in microsoft/TypeScript, `tsc/internal`).
 It is a derivative work of TypeScript, Copyright (c) Microsoft Corporation, which is licensed under the Apache

@@ -1,0 +1,39 @@
+name: Performance report
+description: tsrs is slower or uses more memory than tsgo on a project.
+labels: [performance]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: tsrs and tsgo versions
+      description: Output of `tsrs --version` and the TypeScript package version you compared against.
+    validations:
+      required: true
+  - type: textarea
+    id: project
+    attributes:
+      label: Project
+      description: A public repository and commit if possible; otherwise its size (files, lines) and notable dependencies.
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands
+      description: The exact commands for both compilers, for example `-p . --noEmit --incremental false --extendedDiagnostics`, with or without `--singleThreaded`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: numbers
+    attributes:
+      label: Measurements
+      description: Wall time and peak memory for both (for example from `/usr/bin/time -l` or `-v`), how many runs, and the `--extendedDiagnostics` output of each.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: machine
+    attributes:
+      label: Machine
+      description: CPU, cores, memory, OS.
