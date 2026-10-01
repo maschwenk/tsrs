@@ -285,3 +285,22 @@ pay 48 bytes for the tail instead of 32.
 | 4 checkers, before (A8) | 8.247-8.256 (8.251) | 430-431 G |
 | 4 checkers, after | 8.127-8.149 (8.139, -0.11) | 430-431 G |
 | opt-out single / 4 checkers (go assignment), after | 8.08 / 12.45 | 341 / 519 G |
+
+### A10. Pointer-keyed link stores: 12-byte slots, values in chunks
+
+Go's `core.LinkStore` is `map[K]*V`; ours was `FxHashMap<P<K>, P<V>>` with each value a separate arena
+allocation. Sizes at exit on Project single (entries / table slots): signature links 1.47M / 1.84M, mapped-symbol
+links 1.14M / 1.84M, type-node links 0.87M / 0.92M, symbol-reference links 0.68M / 0.92M, members-and-exports
+0.27M, node links 0.24M, alias links 0.20M, 19 smaller stores; 5.1M links. Ids are not an option here (Go assigns
+none for these keys, and node ids are observable). A slot is now the key address plus the value's `u32` index
+(12 bytes, 4-aligned, in a `hashbrown::HashTable`) and the values live in 1024-value arena chunks in first-access
+order (stable addresses, as before); `get` finds or inserts with one hash. A first version that looked up twice on
+a miss and bounds-checked the chunk access retired +0.6% instructions; this one +0.3%.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before (A9) | 6.079-6.082 (6.079) | 316 G |
+| single, after | 6.045-6.057 (6.053, -0.03) | 317 G (+0.3%) |
+| 4 checkers, before (A9) | 8.10-8.14 (8.102) | 430-431 G |
+| 4 checkers, after | 8.05-8.10 (8.096, -0.01) | 431-432 G |
+| opt-out single / 4 checkers (go assignment), after | 8.04 / 12.43 | 341 / 518 G |

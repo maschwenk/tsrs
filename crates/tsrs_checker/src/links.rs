@@ -2,13 +2,69 @@ use crate::*;
 
 /// All Go link stores (`core.LinkStore`, `nodeLinkStore`, `symbolArenaLinkStore`) map to this one type.
 /// Values live in the arena, so `get` hands out a `Copy` pointer whose `Cell` fields are mutated in place.
+///
+/// Keyed by the key's address like Go's `map[K]*V`. A slot is the key address and the value's index (12 bytes,
+/// 4-aligned) instead of two pointers, and the values live in fixed-size arena chunks in first-access order (stable
+/// addresses, as before). 5.1M links in 26 stores on Project single.
 pub struct LinkStore<K: 'static, V: 'static> {
-    entries: FxHashMap<P<K>, P<V>>,
+    slots: hashbrown::HashTable<LinkSlot>,
+    chunks: Vec<&'static [V]>,
+    len: u32,
+    key: std::marker::PhantomData<P<K>>,
 }
+
+#[repr(C, packed(4))]
+#[derive(Clone, Copy)]
+struct LinkSlot {
+    key: usize, // the key's address
+    index: u32, // the value's position in `chunks`
+}
+
+const _: () = assert!(std::mem::size_of::<LinkSlot>() == 12);
+
+const LINK_CHUNK_SHIFT: u32 = 10;
+const LINK_CHUNK: usize = 1 << LINK_CHUNK_SHIFT;
 
 impl<K: 'static, V: 'static> Default for LinkStore<K, V> {
     fn default() -> Self {
-        LinkStore { entries: FxHashMap::default() }
+        LinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData }
+    }
+}
+
+impl<K: 'static, V: 'static> LinkStore<K, V> {
+    #[inline]
+    fn hash(key: usize) -> u64 {
+        use std::hash::BuildHasher;
+        rustc_hash::FxBuildHasher.hash_one(key)
+    }
+
+    #[inline]
+    fn address(key: P<K>) -> usize {
+        (key.get() as *const K).addr()
+    }
+
+    #[inline]
+    fn at(&self, index: u32) -> P<V> {
+        debug_assert!(index < self.len);
+        // SAFETY: every stored index is below `len`, and `chunks` holds `LINK_CHUNK` values per started chunk.
+        let chunk = unsafe { self.chunks.get_unchecked((index >> LINK_CHUNK_SHIFT) as usize) };
+        P::from_static(unsafe { chunk.get_unchecked(index as usize & (LINK_CHUNK - 1)) })
+    }
+
+    #[inline]
+    fn index(&self, key: P<K>) -> Option<u32> {
+        let key = Self::address(key);
+        self.slots.find(Self::hash(key), |slot| ({ slot.key }) == key).map(|slot| slot.index)
+    }
+
+    #[inline]
+    pub fn try_get(&self, key: P<K>) -> Option<P<V>> {
+        self.index(key).map(|index| self.at(index))
+    }
+
+    #[inline]
+    pub fn has(&self, key: P<K>) -> bool {
+        self.index(key).is_some()
     }
 }
 
@@ -17,21 +73,21 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, key: P<K>) -> P<V> {
-        #[cfg(feature = "site-counts")]
-        if !self.entries.contains_key(&key) {
-            tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
-        }
-        *self.entries.entry(key).or_insert_with(|| P::new(V::default()))
-    }
-
-    #[inline]
-    pub fn try_get(&self, key: P<K>) -> Option<P<V>> {
-        self.entries.get(&key).copied()
-    }
-
-    #[inline]
-    pub fn has(&self, key: P<K>) -> bool {
-        self.entries.contains_key(&key)
+        let key = Self::address(key);
+        let index = match self.slots.entry(Self::hash(key), |slot| ({ slot.key }) == key, |slot| Self::hash(slot.key)) {
+            hashbrown::hash_table::Entry::Occupied(slot) => slot.get().index,
+            hashbrown::hash_table::Entry::Vacant(slot) => {
+                tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
+                let index = self.len;
+                slot.insert(LinkSlot { key, index });
+                if index as usize % LINK_CHUNK == 0 {
+                    self.chunks.push(alloc_vec((0..LINK_CHUNK).map(|_| V::default()).collect()));
+                }
+                self.len += 1;
+                index
+            }
+        };
+        self.at(index)
     }
 }
 
