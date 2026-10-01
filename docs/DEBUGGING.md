@@ -41,6 +41,37 @@ understand, read both versions and the Go source; do not blindly take one side.
   as the port). Oracle tools for scanner/parser/binder/module resolution/printer live in `tools/oracle/` with binaries in
   `$TSRS_WORK/bin/`.
 
+## Lazy member resolution (default on) and the opt-out mode
+
+tsrs ports microsoft/TypeScript#64475 + #64526 (lazy member tables, `tsrs_core::lazymembers`, notes/lazy-members.md)
+and runs them **by default**. `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0` turns them off and restores the reference
+behavior exactly (same counters, same baselines). The no-regression check above is therefore run twice before a push:
+`TSRS_LAZY_MEMBERS=0 tsrs-test run --suite all --baselines types,symbols` must match the previous opt-out pass lists
+exactly (that is the reference-equivalence gate), and the default run must not lose passes either. Comparisons
+against `tsgo-ref` counters (symbols/types/instantiations) use the opt-out mode; with the default mode tsrs creates
+fewer symbols, types and instantiations than `tsgo-ref` (it equals tsgo with both PRs applied).
+
+## Project `.types` / `.symbols` equivalence against the cached reference
+
+Running the Go oracle (`tools/oracle/project-types`) takes hours per side. Its output is cached instead:
+`$TSRS_WORK/project-ref-dump/<types|symbols>/manifest.<kind>` (hash, line count, path
+per file, plus the `#counts` line), produced by `tsrs-test types-dump --mode <kind> --text none` in the opt-out
+mode (`TSRS_LAZY_MEMBERS=0`). That mode's `.types` walk was verified identical to the Go oracle on all 28,213 files
+(notes/fix-project-types.md); `.symbols` only on the first 5,558 files (the Go run was stopped). Reference commit b85298b6 (nightly
+7.1.0-dev.20260929); project: the pristine Project checkout
+`$PRIVATE_PROJECT_ROOT/apps/project`
+(read-only; never write there — run `tsgo-ref` on it only with `--incremental false`, or it rewrites
+`dist/tsconfig.tsbuildinfo` and later runs skip checking). If either changes, the cache is stale.
+
+- Quick tier (minutes): `tsrs-test types-dump -p tsconfig.json --out <dir> --mode types --text none --sample
+  <repo>/tools/project-types-sample.txt` (run from the Project directory), then `tools/project-types-compare.py
+  $TSRS_WORK/project-ref-dump/types <dir> --subset`. The sample is ~2,000 files
+  weighted toward zod schemas, ORM entities, workflows and router endpoints (`tools/project-types-sample.py`
+  regenerates it). The checker has fully checked the program before the walk either way, but the walk itself can
+  create types and assign symbol ids, so a file that differs only in a sample run should be confirmed with a full run.
+- Full tier (pre-landing for checker changes that can affect printing; ~40 min, up to ~125 GB peak, one at a time):
+  the same without `--sample` and without `--subset`.
+
 ## How to fix
 
 - The Go source (`ts-ref/tsc/internal/…`) is the specification. Find the Go function behind the wrong behavior, read it

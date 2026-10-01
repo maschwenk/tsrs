@@ -46,10 +46,12 @@ pub fn command_line(sys: &'static dyn System, command_line_args: Vec<String>) ->
 
     // tsrs always behaves like `tsc --noEmit`.
     let mut args = command_line_args;
-    // tsrs-only: opt-in port of the lazy member resolution PRs (tsrs_core::lazymembers).
-    if args.iter().any(|a| a.eq_ignore_ascii_case("--lazyMembers")) {
-        tsrs_core::lazymembers::enable_from_cli();
-        args.retain(|a| !a.eq_ignore_ascii_case("--lazyMembers"));
+    // tsrs-only: `--noLazyMembers` turns off the port of the lazy member resolution PRs (tsrs_core::lazymembers).
+    for (flag, on) in [("--lazyMembers", true), ("--noLazyMembers", false)] {
+        if args.iter().any(|a| a.eq_ignore_ascii_case(flag)) {
+            tsrs_core::lazymembers::set_from_cli(on);
+            args.retain(|a| !a.eq_ignore_ascii_case(flag));
+        }
     }
     if !args.iter().any(|a| a.eq_ignore_ascii_case("--noEmit") || a.eq_ignore_ascii_case("-noEmit")) {
         args.push("--noEmit".to_string());

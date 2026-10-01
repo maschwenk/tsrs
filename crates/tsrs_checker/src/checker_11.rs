@@ -491,10 +491,32 @@ impl Checker {
     // checker.go:22220
     pub(crate) fn some_property_reduces_to_never(&mut self, t: P<Type>) -> bool {
         // Collect declaration counts for each property across all constituent types of the intersection.
+        // A name that occurs in more than one constituent occurs in one other than skipped, so skipped
+        // only needs its members looked up, which may not resolve them.
+        let types = t.types();
+        let skipped = if self.lazy_members {
+            types.iter().position(|&t| {
+                t.object_flags() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) == ObjectFlags::Mapped
+                    || may_have_lazy_members(t) && t.flags().intersects(TypeFlags::Object)
+            })
+        } else {
+            None
+        };
         let mut counts: OrderedMap<&'static str, i32> = OrderedMap::default();
-        for &t in t.types() {
-            for prop in self.get_properties_of_type(t) {
-                *counts.entry(prop.name()).or_insert(0) += 1;
+        for (i, &t) in types.iter().enumerate() {
+            if Some(i) != skipped {
+                for prop in self.get_properties_of_type(t) {
+                    *counts.entry(prop.name()).or_insert(0) += 1;
+                }
+            }
+        }
+        if let Some(skipped) = skipped {
+            self.lazy_member_stats.some_property_skipped_constituents += 1;
+            for i in 0..counts.len() {
+                let prop_name = *counts.get_index(i).unwrap().0;
+                if self.get_property_of_type_ex(types[skipped], prop_name, true /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/).is_some() {
+                    *counts.get_index_mut(i).unwrap().1 += 1;
+                }
             }
         }
         // Check if any property appears in more than one constituent type and reduces to 'never'.

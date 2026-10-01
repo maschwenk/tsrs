@@ -39,9 +39,11 @@ const USAGE: &str = "usage:
   tsrs-test crashes [--top N] [--examples N] [--json <path>]
   tsrs-test list [--suite ..] [--filter ..] [--list <file>]
   tsrs-test types-dump -p <tsconfig|dir> --out <dir> [--mode types|symbols|both] [--text all|none|<list file>]
+                      [--sample <list file>]
                                       the .types/.symbols walk over every non-node_modules, non-lib file of a project
                                       (single-threaded, like tools/oracle/project-types): <out>/manifest.<kind>
-                                      (hash, lines, path per file) and <out>/<kind>/<path>.<kind>
+                                      (hash, lines, path per file) and <out>/<kind>/<path>.<kind>; --sample walks only
+                                      the listed files (e.g. tools/project-types-sample.txt), in program order
   --syntax-only (any command): no checker; only config/program/syntactic diagnostics; results in target/test-results-syntax
                 (implied when built without the `checker` feature)
 dev options (any command): --oracle <diags.jsonl> render Go-captured diagnostics instead of compiling;
@@ -438,8 +440,9 @@ fn cmd_types_dump(mut args: Args) {
     }));
     let mode = args.value("--mode").unwrap_or_else(|| "types".to_string());
     let text = args.value("--text").unwrap_or_else(|| "all".to_string());
+    let sample = args.value("--sample");
     check_no_extra(&args);
-    let dump = types_dump::DumpArgs { project, out, mode, text };
+    let dump = types_dump::DumpArgs { project, out, mode, text, sample };
     std::thread::Builder::new()
         .stack_size(1 << 30)
         .spawn(move || types_dump::run(dump))

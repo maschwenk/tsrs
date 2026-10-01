@@ -1,19 +1,24 @@
-// Opt-in port of microsoft/TypeScript#64475 (lazy member tables of instantiated class/interface references) and
-// #64526 (lazy members of `{ [P in keyof T]: X }` mapped types). Off by default, so the default build behaves
-// exactly like the reference; on with `--lazyMembers` or `TSRS_LAZY_MEMBERS=1`. See notes/lazy-members.md.
+// Port of microsoft/TypeScript#64475 (lazy member tables of instantiated class/interface references) and #64526
+// (lazy members of `{ [P in keyof T]: X }` mapped types). On by default; `--noLazyMembers` or `TSRS_LAZY_MEMBERS=0`
+// turns it off, which restores the reference (tsgo) behavior exactly. See notes/lazy-members.md.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::OnceLock;
 
-static CLI_ENABLED: AtomicBool = AtomicBool::new(false);
+// 0: not given on the command line, 1: `--lazyMembers`, 2: `--noLazyMembers`.
+static CLI: AtomicU8 = AtomicU8::new(0);
 
-pub fn enable_from_cli() {
-    CLI_ENABLED.store(true, Ordering::Relaxed);
+pub fn set_from_cli(on: bool) {
+    CLI.store(if on { 1 } else { 2 }, Ordering::Relaxed);
 }
 
 pub fn enabled() -> bool {
     static ENV: OnceLock<bool> = OnceLock::new();
-    CLI_ENABLED.load(Ordering::Relaxed) || *ENV.get_or_init(|| std::env::var("TSRS_LAZY_MEMBERS").is_ok_and(|v| v == "1"))
+    match CLI.load(Ordering::Relaxed) {
+        1 => true,
+        2 => false,
+        _ => *ENV.get_or_init(|| std::env::var("TSRS_LAZY_MEMBERS").map_or(true, |v| v != "0")),
+    }
 }
 
 /// Per-checker counts of the lazy paths (only incremented when the flag is on).

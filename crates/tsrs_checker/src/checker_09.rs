@@ -2240,6 +2240,13 @@ impl Checker {
             }
             return ready.construct_signatures;
         }
+        if self.lazy_members && t.object_flags().intersects(ObjectFlags::Mapped) {
+            if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+                self.lazy_member_stats.mapped_signature_early_returns += 1;
+            }
+            // Mapped types have no signatures.
+            return &[];
+        }
         let resolved = self.resolve_structured_type_members(t).unwrap();
         if kind == SignatureKind::Call {
             return resolved.call_signatures();
@@ -2264,6 +2271,9 @@ impl Checker {
             if let Some(lm) = self.get_ready_lazy_member_table(t) {
                 self.lazy_member_stats.member_index_info_queries += 1;
                 return lm.ready.get().unwrap().index_infos;
+            }
+            if let Some(lazy) = self.get_lazy_mapped_table(t) {
+                return self.get_lazy_mapped_type_index_infos(t, &lazy);
             }
             return self.resolve_structured_type_members(t).unwrap().index_infos.get();
         }
@@ -2589,7 +2599,7 @@ impl Checker {
             }
             base_types.push(instantiated_base_type);
             let reduced = self.get_reduced_apparent_type(instantiated_base_type);
-            if self.get_ready_lazy_member_table(reduced).is_none() {
+            if !reduced.flags().intersects(TypeFlags::Intersection) && self.get_ready_lazy_member_table(reduced).is_none() {
                 self.get_properties_of_type(instantiated_base_type);
             }
             self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
@@ -2652,6 +2662,13 @@ impl Checker {
     }
 
     pub(crate) fn get_member_of_unresolved_structured_type(&mut self, t: P<Type>, name: &str) -> Option<P<Symbol>> {
+        if t.object_flags().intersects(ObjectFlags::Mapped) && !is_reserved_member_name(name) {
+            if let Some(lazy) = self.get_lazy_mapped_table(t) {
+                if let Some(member) = self.get_lazy_mapped_type_member(t, &lazy, name) {
+                    return member;
+                }
+            }
+        }
         let lm = self.get_ready_lazy_member_table(t);
         let Some(lm) = lm.filter(|_| !is_reserved_member_name(name)) else {
             return self.resolve_structured_type_members(t).unwrap().members.get().and_then(|m| m.lookup(name));

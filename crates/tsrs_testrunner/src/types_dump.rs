@@ -33,6 +33,7 @@ pub struct DumpArgs {
     pub out: PathBuf,
     pub mode: String,
     pub text: String,
+    pub sample: Option<String>,
 }
 
 pub fn run(args: DumpArgs) {
@@ -72,15 +73,13 @@ pub fn run(args: DumpArgs) {
 
     let mut wanted: Option<FxHashSet<String>> = match args.text.as_str() {
         "all" | "none" => None,
-        list => Some(
-            std::fs::read_to_string(list)
-                .unwrap_or_else(|e| panic!("--text {list}: {e}"))
-                .lines()
-                .map(|l| l.trim().to_string())
-                .filter(|l| !l.is_empty())
-                .collect(),
-        ),
+        list => Some(read_list(list)),
     };
+    if let Some(sample) = &args.sample {
+        let sample = read_list(sample);
+        files.retain(|(_, rel)| sample.contains(rel));
+        eprintln!("sample: {} of {} listed files are in the program", files.len(), sample.len());
+    }
 
     let kinds: &[bool] = match args.mode.as_str() {
         "types" => &[false],
@@ -119,6 +118,16 @@ pub fn run(args: DumpArgs) {
         drop(c);
         mw.flush().unwrap();
     }
+}
+
+// One relative path per line; blank lines and `#` comments are ignored.
+fn read_list(path: &str) -> FxHashSet<String> {
+    std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("{path}: {e}"))
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect()
 }
 
 fn rel_name(dir: &str, file_name: &str) -> String {

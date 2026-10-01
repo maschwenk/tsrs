@@ -150,3 +150,14 @@ Project peak footprint is now below the Go reference: 15.35 GB `--singleThreaded
 23.35 GB with 4 checkers (was 28.3; tsgo 24.4), counters and conformance unchanged. The largest item was lazy JSDoc
 parsing copying the whole file text per node (3 GB). Opt-in arena/heap allocation profile:
 `--features tsrs_core/alloc-profile` (+ `TSRS_HEAP_PROFILE=1`). Details: `notes/fix-perf-memory.md`.
+
+## 2026-09-30 (later): lazy member resolution on by default
+
+tsrs now runs ports of microsoft/TypeScript#64475 (lazy member tables of instantiated class/interface references) and
+#64526 (lazy members of `keyof` mapped types) by default; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0` restores the
+reference behavior exactly. **tsrs's default is therefore no longer counter-identical to `tsgo-ref`**: it matches tsgo
+with both PRs applied (Project symbols/types/instantiations equal to that build exactly). The no-regression check of
+DEBUGGING.md applies to the opt-out mode (reference-identical: suite pass lists and artifacts, Project counters) and the
+default mode must not lose passes either. Conformance with the flag on: no output change in any variant (errors,
+`.types`, `.symbols`). Project, medians of 3 (flag off -> on): single-threaded peak 15.34 -> 11.77 GB, check
+26.3 -> 22.9 s; 4 checkers peak 23.32 -> 17.49 GB, check 13.2 -> 11.1 s. Details: `notes/lazy-members.md`.

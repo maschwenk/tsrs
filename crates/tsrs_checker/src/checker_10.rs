@@ -1964,6 +1964,10 @@ impl Checker {
         // The 'T' in 'keyof T'
         let template_modifiers = get_mapped_type_modifiers(t);
         let include = TypeFlags::StringOrNumberLiteralOrUnique;
+        let lazy = self.lazy_mapped_tables.remove(&t);
+        if lazy.is_some() {
+            self.lazy_member_stats.mapped_tables_resolved_in_full += 1;
+        }
         let mut state = MappedTypeMembersState {
             t,
             members,
@@ -1974,6 +1978,7 @@ impl Checker {
             template_type,
             modifiers_type,
             template_modifiers,
+            lazy,
         };
         if self.is_mapped_type_with_keyof_constraint_declaration(t) {
             // We have a { [P in keyof T]: X }
@@ -1984,8 +1989,210 @@ impl Checker {
             let lower_bound = self.get_lower_bound_of_key_type(constraint_type);
             for_each_type(self, lower_bound, |c, key_type| mapped_type_add_member_for_key_type(c, &mut state, key_type));
         }
-        let index_infos = std::mem::take(&mut state.index_infos);
+        let mut index_infos = std::mem::take(&mut state.index_infos);
+        if let Some(lazy) = state.lazy.as_ref().filter(|lazy| lazy.index_infos_ready.get()) {
+            index_infos = lazy.index_infos.get().to_vec();
+        }
         self.set_structured_type_members(t, Some(members), &[], &[], &index_infos);
+    }
+
+    // #64526 (behind `Checker::lazy_members`)
+    pub(crate) fn append_mapped_type_index_info(
+        &mut self,
+        index_infos: Vec<P<IndexInfo>>,
+        t: P<Type>,
+        modifiers_type: P<Type>,
+        type_parameter: P<Type>,
+        template_type: P<Type>,
+        template_modifiers: MappedTypeModifiers,
+        key_type: P<Type>,
+        prop_name_type: P<Type>,
+    ) -> Vec<P<IndexInfo>> {
+        let mut index_infos = index_infos;
+        if !self.is_valid_index_key_type(prop_name_type) && !prop_name_type.flags().intersects(TypeFlags::Any | TypeFlags::Enum) {
+            return index_infos;
+        }
+        let mut index_key_type = prop_name_type;
+        if prop_name_type.flags().intersects(TypeFlags::Any | TypeFlags::String) {
+            index_key_type = self.string_type;
+        } else if prop_name_type.flags().intersects(TypeFlags::Number | TypeFlags::Enum) {
+            index_key_type = self.number_type;
+        }
+        let prop_type = self.instantiate_type(template_type, Some(append_type_mapping(t.as_mapped_type().mapper.get(), type_parameter, key_type)));
+        let modifiers_index_info = self.get_applicable_index_info(modifiers_type, prop_name_type);
+        let is_readonly = template_modifiers.intersects(MappedTypeModifiers::IncludeReadonly)
+            || !template_modifiers.intersects(MappedTypeModifiers::ExcludeReadonly) && modifiers_index_info.is_some_and(|i| i.is_readonly.get());
+        let index_info = self.new_index_info(index_key_type, prop_type, is_readonly, None, &[]);
+        self.append_index_info(&mut index_infos, index_info, true /*union*/)
+    }
+
+    pub(crate) fn new_mapped_type_member(
+        &mut self,
+        t: P<Type>,
+        modifiers_type: P<Type>,
+        template_modifiers: MappedTypeModifiers,
+        should_link_prop_declarations: bool,
+        key_type: P<Type>,
+        prop_name_type: P<Type>,
+        prop_name: &str,
+    ) -> P<Symbol> {
+        let mut modifiers_prop = None;
+        if is_type_usable_as_property_name(key_type) {
+            modifiers_prop = self.get_property_of_type(modifiers_type, &get_property_name_from_type(key_type));
+        }
+        let is_optional = template_modifiers.intersects(MappedTypeModifiers::IncludeOptional)
+            || !template_modifiers.intersects(MappedTypeModifiers::ExcludeOptional) && modifiers_prop.is_some_and(|p| p.flags().intersects(SymbolFlags::Optional));
+        let is_readonly = template_modifiers.intersects(MappedTypeModifiers::IncludeReadonly)
+            || !template_modifiers.intersects(MappedTypeModifiers::ExcludeReadonly) && modifiers_prop.is_some() && self.is_readonly_symbol(modifiers_prop.unwrap());
+        let strip_optional = self.strict_null_checks && !is_optional && modifiers_prop.is_some_and(|p| p.flags().intersects(SymbolFlags::Optional));
+        let mut late_flag = CheckFlags::None;
+        if let Some(modifiers_prop) = modifiers_prop {
+            late_flag = modifiers_prop.check_flags() & CheckFlags::Late;
+        }
+        let prop = self.new_symbol(SymbolFlags::Property | if is_optional { SymbolFlags::Optional } else { SymbolFlags::None }, alloc_str(prop_name));
+        prop.check_flags.set(
+            late_flag
+                | CheckFlags::Mapped
+                | if is_readonly { CheckFlags::Readonly } else { CheckFlags::None }
+                | if strip_optional { CheckFlags::StripOptional } else { CheckFlags::None },
+        );
+        let value_links = self.value_symbol_links.get(prop);
+        value_links.containing_type.set(Some(t));
+        value_links.name_type.set(Some(prop_name_type));
+        let mapped_links = self.mapped_symbol_links.get(prop);
+        mapped_links.key_type.set(Some(key_type));
+        if let Some(modifiers_prop) = modifiers_prop {
+            mapped_links.synthetic_origin.set(Some(modifiers_prop));
+            if should_link_prop_declarations {
+                prop.declarations.set(modifiers_prop.declarations());
+            }
+        }
+        prop
+    }
+}
+
+// Mapped types { [P in keyof T]: X } where T is an object type get a lazy table that creates
+// members and index infos as they are asked for, the way resolveMappedTypeMembers would.
+pub(crate) struct LazyMappedTable {
+    pub(crate) type_parameter: P<Type>,
+    pub(crate) template_type: P<Type>,
+    pub(crate) modifiers_type: P<Type>,
+    pub(crate) template_modifiers: MappedTypeModifiers,
+    pub(crate) should_link_prop_declarations: bool,
+    pub(crate) members: RefCell<FxHashMap<String, Option<P<Symbol>>>>,
+    pub(crate) index_infos: Cell<&'static [P<IndexInfo>]>,
+    pub(crate) index_infos_ready: Cell<bool>,
+    pub(crate) resolving: Cell<bool>,
+}
+
+impl Checker {
+    pub(crate) fn get_lazy_mapped_table(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMappedTable>> {
+        if !self.lazy_members || t.object_flags() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) != ObjectFlags::Mapped {
+            return None;
+        }
+        if let Some(lazy) = self.lazy_mapped_tables.get(&t) {
+            return Some(lazy.clone());
+        }
+        if !self.is_mapped_type_with_keyof_constraint_declaration(t) {
+            return None;
+        }
+        // The same steps as resolveMappedTypeMembers before it creates members.
+        let type_parameter = self.get_type_parameter_from_mapped_type(t);
+        self.get_constraint_type_from_mapped_type(t);
+        let mapped_type = t.as_mapped_type().target.get().unwrap_or(t);
+        if self.get_name_type_from_mapped_type(mapped_type).is_some() {
+            return None;
+        }
+        let should_link_prop_declarations = self.get_mapped_type_name_type_kind(mapped_type) != MappedTypeNameTypeKind::Remapping;
+        let template_type = self.get_template_type_from_mapped_type(mapped_type);
+        let modifiers_type_of_mapped = self.get_modifiers_type_from_mapped_type(t);
+        let modifiers_type = self.get_apparent_type(modifiers_type_of_mapped);
+        if !modifiers_type.flags().intersects(TypeFlags::Object) || t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            return None;
+        }
+        let lazy = std::rc::Rc::new(LazyMappedTable {
+            type_parameter,
+            template_type,
+            modifiers_type,
+            template_modifiers: get_mapped_type_modifiers(t),
+            should_link_prop_declarations,
+            members: RefCell::new(FxHashMap::default()),
+            index_infos: Cell::new(&[]),
+            index_infos_ready: Cell::new(false),
+            resolving: Cell::new(false),
+        });
+        self.lazy_mapped_tables.insert(t, lazy.clone());
+        self.lazy_member_stats.mapped_tables_created += 1;
+        Some(lazy)
+    }
+
+    // Go returns (member, ok); None here is !ok.
+    pub(crate) fn get_lazy_mapped_type_member(&mut self, t: P<Type>, lazy: &std::rc::Rc<LazyMappedTable>, name: &str) -> Option<Option<P<Symbol>>> {
+        let existing = lazy.members.borrow().get(name).copied();
+        if let Some(existing) = existing {
+            self.lazy_member_stats.mapped_member_lookups += 1;
+            return Some(existing);
+        }
+        // Recursive lookups see no member, as they would while resolveMappedTypeMembers runs.
+        lazy.members.borrow_mut().insert(name.to_string(), None);
+        let modifiers_prop = self.get_member_of_structured_type(lazy.modifiers_type, name);
+        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            return Some(t.as_structured_type().members.get().and_then(|m| m.lookup(name)));
+        }
+        let mut member = None;
+        if let Some(modifiers_prop) = modifiers_prop {
+            if self.is_named_member(modifiers_prop, name) {
+                let key_type = self.get_literal_type_from_property(modifiers_prop, TypeFlags::StringOrNumberLiteralOrUnique, false);
+                if !is_type_usable_as_property_name(key_type) || get_property_name_from_type(key_type) != name {
+                    lazy.members.borrow_mut().remove(name);
+                    return None;
+                }
+                self.lazy_member_stats.mapped_members_created += 1;
+                member = Some(self.new_mapped_type_member(
+                    t,
+                    lazy.modifiers_type,
+                    lazy.template_modifiers,
+                    lazy.should_link_prop_declarations,
+                    key_type,
+                    key_type,
+                    name,
+                ));
+            }
+        }
+        lazy.members.borrow_mut().insert(name.to_string(), member);
+        self.lazy_member_stats.mapped_member_lookups += 1;
+        Some(member)
+    }
+
+    pub(crate) fn get_lazy_mapped_type_index_infos(&mut self, t: P<Type>, lazy: &std::rc::Rc<LazyMappedTable>) -> &'static [P<IndexInfo>] {
+        if !lazy.index_infos_ready.get() {
+            if lazy.resolving.get() {
+                // Recursive requests see no index infos, as they would while resolveMappedTypeMembers runs.
+                return &[];
+            }
+            lazy.resolving.set(true);
+            let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
+            for info in self.get_index_infos_of_type(lazy.modifiers_type) {
+                index_infos = self.append_mapped_type_index_info(
+                    index_infos,
+                    t,
+                    lazy.modifiers_type,
+                    lazy.type_parameter,
+                    lazy.template_type,
+                    lazy.template_modifiers,
+                    info.key_type(),
+                    info.key_type(),
+                );
+            }
+            lazy.resolving.set(false);
+            if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+                return t.as_structured_type().index_infos.get();
+            }
+            self.lazy_member_stats.mapped_index_info_queries += 1;
+            lazy.index_infos.set(alloc_vec(index_infos));
+            lazy.index_infos_ready.set(true);
+        }
+        lazy.index_infos.get()
     }
 }
 
@@ -2000,6 +2207,7 @@ struct MappedTypeMembersState {
     template_type: P<Type>,
     modifiers_type: P<Type>,
     template_modifiers: MappedTypeModifiers,
+    lazy: Option<std::rc::Rc<LazyMappedTable>>,
 }
 
 fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTypeMembersState, key_type: P<Type>, prop_name_type: P<Type>) {
@@ -2018,57 +2226,24 @@ fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTy
             let mapped_links = c.mapped_symbol_links.get(existing_prop);
             let key_type_union = c.get_union_type(&[mapped_links.key_type.get().unwrap(), key_type]);
             mapped_links.key_type.set(Some(key_type_union));
+        } else if let Some(member) = st.lazy.as_ref().and_then(|lazy| lazy.members.borrow().get(prop_name.as_str()).copied().flatten()) {
+            st.members.set(member.name(), member);
         } else {
-            let mut modifiers_prop = None;
-            if is_type_usable_as_property_name(key_type) {
-                modifiers_prop = c.get_property_of_type(st.modifiers_type, &get_property_name_from_type(key_type));
-            }
-            let is_optional = st.template_modifiers.intersects(MappedTypeModifiers::IncludeOptional)
-                || !st.template_modifiers.intersects(MappedTypeModifiers::ExcludeOptional)
-                    && modifiers_prop.is_some_and(|p| p.flags().intersects(SymbolFlags::Optional));
-            let is_readonly = st.template_modifiers.intersects(MappedTypeModifiers::IncludeReadonly)
-                || !st.template_modifiers.intersects(MappedTypeModifiers::ExcludeReadonly)
-                    && modifiers_prop.is_some()
-                    && c.is_readonly_symbol(modifiers_prop.unwrap());
-            let strip_optional = c.strict_null_checks && !is_optional && modifiers_prop.is_some_and(|p| p.flags().intersects(SymbolFlags::Optional));
-            let mut late_flag = CheckFlags::None;
-            if let Some(modifiers_prop) = modifiers_prop {
-                late_flag = modifiers_prop.check_flags() & CheckFlags::Late;
-            }
-            let prop = c.new_symbol(SymbolFlags::Property | if is_optional { SymbolFlags::Optional } else { SymbolFlags::None }, alloc_str(&prop_name));
-            prop.check_flags.set(
-                late_flag
-                    | CheckFlags::Mapped
-                    | if is_readonly { CheckFlags::Readonly } else { CheckFlags::None }
-                    | if strip_optional { CheckFlags::StripOptional } else { CheckFlags::None },
-            );
-            let value_links = c.value_symbol_links.get(prop);
-            value_links.containing_type.set(Some(t));
-            value_links.name_type.set(Some(prop_name_type));
-            let mapped_links = c.mapped_symbol_links.get(prop);
-            mapped_links.key_type.set(Some(key_type));
-            if let Some(modifiers_prop) = modifiers_prop {
-                mapped_links.synthetic_origin.set(Some(modifiers_prop));
-                if st.should_link_prop_declarations {
-                    prop.declarations.set(modifiers_prop.declarations());
-                }
-            }
+            let prop = c.new_mapped_type_member(t, st.modifiers_type, st.template_modifiers, st.should_link_prop_declarations, key_type, prop_name_type, &prop_name);
             st.members.set(prop.name(), prop);
         }
-    } else if c.is_valid_index_key_type(prop_name_type) || prop_name_type.flags().intersects(TypeFlags::Any | TypeFlags::Enum) {
-        let mut index_key_type = prop_name_type;
-        if prop_name_type.flags().intersects(TypeFlags::Any | TypeFlags::String) {
-            index_key_type = c.string_type;
-        } else if prop_name_type.flags().intersects(TypeFlags::Number | TypeFlags::Enum) {
-            index_key_type = c.number_type;
-        }
-        let prop_type = c.instantiate_type(st.template_type, Some(append_type_mapping(t.as_mapped_type().mapper.get(), st.type_parameter, key_type)));
-        let modifiers_index_info = c.get_applicable_index_info(st.modifiers_type, prop_name_type);
-        let is_readonly = st.template_modifiers.intersects(MappedTypeModifiers::IncludeReadonly)
-            || !st.template_modifiers.intersects(MappedTypeModifiers::ExcludeReadonly) && modifiers_index_info.is_some_and(|i| i.is_readonly.get());
-        let index_info = c.new_index_info(index_key_type, prop_type, is_readonly, None, &[]);
-        let mut index_infos = std::mem::take(&mut st.index_infos);
-        st.index_infos = c.append_index_info(&mut index_infos, index_info, true /*union*/);
+    } else if st.lazy.as_ref().is_none_or(|lazy| !lazy.index_infos_ready.get()) {
+        let index_infos = std::mem::take(&mut st.index_infos);
+        st.index_infos = c.append_mapped_type_index_info(
+            index_infos,
+            t,
+            st.modifiers_type,
+            st.type_parameter,
+            st.template_type,
+            st.template_modifiers,
+            key_type,
+            prop_name_type,
+        );
     }
 }
 

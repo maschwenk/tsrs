@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Compare two project-wide .types/.symbols dumps (tools/oracle/project-types vs `tsrs-test types-dump`).
 
-  project-types-compare.py <go-out> <rs-out> [--kind types|symbols] [--list <file>] [--show N]
+  project-types-compare.py <go-out> <rs-out> [--kind types|symbols] [--list <file>] [--show N] [--subset]
+
+<go-out> can also be a cached reference dump ($TSRS_WORK/project-ref-dump, see
+docs/DEBUGGING.md). --subset compares only the files in <rs-out>'s manifest (a `types-dump --sample` run); the
+counters then differ by construction (fewer files walked).
 
 Prints matching files / total from the manifests and the checker counters; with --list writes the differing
 relative paths (input for `--text <list>` on a rerun). When both dumps have the text of a differing file, counts
@@ -35,9 +39,13 @@ def main():
     ap.add_argument("--kind", default="types")
     ap.add_argument("--list")
     ap.add_argument("--show", type=int, default=0)
+    ap.add_argument("--subset", action="store_true")
     a = ap.parse_args()
     g, gorder, gc = load(os.path.join(a.go, "manifest." + a.kind))
     r, _, rc = load(os.path.join(a.rs, "manifest." + a.kind))
+    if a.subset:
+        gorder = [p for p in gorder if p in r]
+        g = {p: g[p] for p in gorder}
     only_g = [p for p in gorder if p not in r]
     only_r = [p for p in r if p not in g]
     diff = [p for p in gorder if p in r and g[p][0] != r[p][0]]

@@ -765,7 +765,8 @@ pub struct Checker {
     pub reg_exp_scanner: Option<Box<Scanner>>,
     pub pattern_for_type: FxHashMap<P<Type>, P<Node>>,
     pub(crate) lazy_member_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMemberTable>>,
-    /// `--lazyMembers` / `TSRS_LAZY_MEMBERS=1` (tsrs_core::lazymembers): no lazy table is created when false.
+    pub(crate) lazy_mapped_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>,
+    /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
     pub lazy_members: bool,
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
     pub context_free_types: FxHashMap<P<Node>, P<Type>>,
@@ -1110,6 +1111,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         reg_exp_scanner: None,
         pattern_for_type: FxHashMap::default(),
         lazy_member_tables: FxHashMap::default(),
+        lazy_mapped_tables: FxHashMap::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
         lazy_member_stats: Default::default(),
         context_free_types: FxHashMap::default(),
