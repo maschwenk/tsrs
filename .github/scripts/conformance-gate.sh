@@ -8,7 +8,9 @@ MIN_PASS="${MIN_PASS:-13458}"
 TSRS_TEST="${TSRS_TEST:-target/release/tsrs-test}"
 export TSRS_TEST_RESULTS="${TSRS_TEST_RESULTS:-$PWD/target/test-results}"
 
-"$TSRS_TEST" run --suite all
+# The default 20 s per-test timeout is tuned for a fast dev machine; on 2-core CI runners
+# compiler/intersectionConstructorReductionCrash (~8 s locally) exceeds it.
+"$TSRS_TEST" run --suite all --timeout "${TEST_TIMEOUT:-120}"
 
 pass=$(wc -l < "$TSRS_TEST_RESULTS/pass.txt" | tr -d ' ')
 crash=$(wc -l < "$TSRS_TEST_RESULTS/crash.txt" | tr -d ' ')
