@@ -224,6 +224,11 @@ impl SymbolMap {
             return;
         }
         let i = self.entries.len();
+        if i == self.entries.capacity() && i >= 8 {
+            // Grow by half instead of doubling: most large tables stop growing soon after (member tables,
+            // property caches), and the slack of a doubled Vec is the larger part of their memory.
+            self.entries.reserve_exact(i / 2);
+        }
         self.entries.push((name, symbol));
         let entries = &self.entries;
         match &mut self.index {

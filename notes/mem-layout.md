@@ -239,3 +239,9 @@ iterates it.
 | 4 checkers, before | 7.21-7.22 | 421-422 G | 11.61 |
 | 4 checkers, after | 7.24-7.51 | 421 G | 11.50 (-0.12) |
 | opt-out single / 4 checkers (go assignment), after | | | 11.41 / 17.32 |
+
+### `SymbolTable` entry growth by half past 8 entries
+
+The entry `Vec` grows by `len / 2` (exact) once it has 8 entries instead of doubling; most large tables (member
+tables, union property caches) stop growing soon after, and the doubled slack was the larger part of their memory.
+Single: peak 8.64 -> 8.59-8.62 GB; 4 checkers 11.54 -> 11.46 GB; instructions +0.1%; opt-out 11.40 / 17.29 GB.
