@@ -1840,8 +1840,10 @@ pub(crate) fn is_unary_tuple_type_node(node: P<Node>) -> bool {
 impl Checker {
 
     // checker.go:25473
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_type(&mut self, flags: TypeFlags, object_flags: ObjectFlags, data: TypeData) -> P<Type> {
         self.type_count += 1;
+        tsrs_core::sitecount::hit("type", type_kind_label(flags, object_flags));
         P::new(Type {
             flags: Cell::new(flags),
             object_flags: Cell::new(object_flags & !(ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables | ObjectFlags::MembersResolved)),
@@ -1905,6 +1907,7 @@ impl Checker {
     }
 
     // checker.go:25533
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_object_type(&mut self, object_flags: ObjectFlags, symbol: Option<P<Symbol>>) -> P<Type> {
         let data = if object_flags.intersects(ObjectFlags::ClassOrInterface) {
             TypeData::Interface(alloc(InterfaceType::default()))
@@ -1931,6 +1934,7 @@ impl Checker {
     }
 
     // checker.go:25560
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_anonymous_type(
         &mut self,
         symbol: Option<P<Symbol>>,
@@ -1953,11 +1957,13 @@ impl Checker {
     }
 
     // checker.go:25573
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn create_type_reference(&mut self, target: P<Type>, type_arguments: &[P<Type>]) -> P<Type> {
         self.create_type_reference_ex(target, type_arguments, ObjectFlags::None)
     }
 
     // checker.go:25577
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn create_type_reference_ex(&mut self, target: P<Type>, type_arguments: &[P<Type>], object_flags: ObjectFlags) -> P<Type> {
         let id = get_type_list_key(type_arguments);
         let intf = target.as_interface_type();
@@ -2058,6 +2064,7 @@ impl Checker {
     }
 
     // checker.go:25658
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_union_type(&mut self, object_flags: ObjectFlags, types: &[P<Type>]) -> P<Type> {
         let data = alloc(UnionType::default());
         data.types.set(alloc_slice(types));
@@ -2065,6 +2072,7 @@ impl Checker {
     }
 
     // checker.go:25664
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_intersection_type(&mut self, object_flags: ObjectFlags, types: &[P<Type>]) -> P<Type> {
         let data = alloc(IntersectionType::default());
         data.types.set(alloc_slice(types));
@@ -2125,6 +2133,7 @@ impl Checker {
     }
 
     // checker.go:25717
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_signature(
         &mut self,
         flags: SignatureFlags,
@@ -2137,6 +2146,7 @@ impl Checker {
         min_argument_count: i32,
     ) -> P<Signature> {
         self.signature_count += 1;
+        tsrs_core::sitecount::hit("signature", "");
         let sig = P::new(Signature::default());
         sig.id.set(SignatureId(self.signature_count));
         sig.flags.set(flags);
@@ -2590,5 +2600,48 @@ impl Checker {
             return t.unwrap();
         }
         self.get_union_type_worker(types, union_reduction, alias, origin)
+    }
+}
+
+/// Kind of a type for the creation-site counters (tsrs_core::sitecount).
+pub(crate) fn type_kind_label(flags: TypeFlags, object_flags: ObjectFlags) -> &'static str {
+    if flags.intersects(TypeFlags::Object) {
+        if object_flags.intersects(ObjectFlags::ClassOrInterface) {
+            "object:class/interface"
+        } else if object_flags.intersects(ObjectFlags::Tuple) {
+            "object:tuple"
+        } else if object_flags.intersects(ObjectFlags::Reference) {
+            "object:reference"
+        } else if object_flags.intersects(ObjectFlags::Mapped) {
+            "object:mapped"
+        } else if object_flags.intersects(ObjectFlags::ReverseMapped) {
+            "object:reverse-mapped"
+        } else if object_flags.intersects(ObjectFlags::Instantiated) {
+            "object:anonymous-instantiated"
+        } else {
+            "object:anonymous"
+        }
+    } else if flags.intersects(TypeFlags::Union) {
+        "union"
+    } else if flags.intersects(TypeFlags::Intersection) {
+        "intersection"
+    } else if flags.intersects(TypeFlags::Literal) {
+        "literal"
+    } else if flags.intersects(TypeFlags::TypeParameter) {
+        "type-parameter"
+    } else if flags.intersects(TypeFlags::IndexedAccess) {
+        "indexed-access"
+    } else if flags.intersects(TypeFlags::Conditional) {
+        "conditional"
+    } else if flags.intersects(TypeFlags::Substitution) {
+        "substitution"
+    } else if flags.intersects(TypeFlags::Index) {
+        "index"
+    } else if flags.intersects(TypeFlags::TemplateLiteral) {
+        "template-literal"
+    } else if flags.intersects(TypeFlags::StringMapping) {
+        "string-mapping"
+    } else {
+        "other"
     }
 }

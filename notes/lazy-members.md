@@ -16,6 +16,7 @@ Port of Max's two upstream PRs that make member resolution lazier:
 **On by default.** `--noLazyMembers` (CLI) or `TSRS_LAZY_MEMBERS=0` (any binary: `tsrs`, `tsrs-test`) turns it off;
 the opt-out mode is reference-identical (suite and counters, below). `--lazyMembers` / `TSRS_LAZY_MEMBERS=1` force it
 on. With `--extendedDiagnostics` and the flag on, `tsrs` prints a second table with per-path counts.
+Follow-up candidates (each behind its own switch, effective only with this flag on): notes/mem-lazy.md.
 
 ## Where it lives
 

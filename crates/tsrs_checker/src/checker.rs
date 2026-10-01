@@ -768,6 +768,8 @@ pub struct Checker {
     pub(crate) lazy_mapped_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>,
     /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
     pub lazy_members: bool,
+    /// notes/mem-lazy.md L1: tuple references get lazy member tables too.
+    pub lazy_tuples: bool,
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
     pub context_free_types: FxHashMap<P<Node>, P<Type>>,
     pub any_type: P<Type>,
@@ -1113,6 +1115,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_member_tables: FxHashMap::default(),
         lazy_mapped_tables: FxHashMap::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
+        lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
         lazy_member_stats: Default::default(),
         context_free_types: FxHashMap::default(),
         any_type: dummy_type,

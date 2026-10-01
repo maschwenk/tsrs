@@ -15,6 +15,7 @@ use tsrs_core::collections::{OrderedMap, OrderedSet, OrderedSetExt};
 
 impl Checker {
     // checker.go:21769
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_union_or_intersection_property(&mut self, t: P<Type>, name: &str, skip_object_function_property_augment: bool) -> Option<P<Symbol>> {
         let cache = if skip_object_function_property_augment {
             ast::get_symbol_table(&t.as_union_or_intersection_type().property_cache_without_function_property_augment)
@@ -39,6 +40,7 @@ impl Checker {
     }
 
     // checker.go:21793
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn create_union_or_intersection_property(&mut self, containing_type: P<Type>, name: &str, skip_object_function_property_augment: bool) -> Option<P<Symbol>> {
         let mut prop_flags = SymbolFlags::None;
         let mut single_prop: Option<P<Symbol>> = None;
@@ -908,6 +910,7 @@ impl Checker {
         }
         self.total_instantiation_count += 1;
         self.instantiation_count += 1;
+        tsrs_core::sitecount::hit("instantiation", type_kind_label(t.flags(), t.object_flags()));
         self.instantiation_stack.push(t);
         let result = self.instantiate_type_worker(t, m, alias);
         if index == -1 {
@@ -1673,6 +1676,7 @@ impl Checker {
     }
 
     // checker.go:23200
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn instantiate_signatures(&mut self, signatures: &[P<Signature>], m: P<TypeMapper>) -> Vec<P<Signature>> {
         self.instantiate_list(signatures, Some(m), |c, s, m| c.instantiate_signature(s, m))
     }

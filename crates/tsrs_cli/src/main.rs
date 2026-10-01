@@ -18,6 +18,7 @@ fn main() {
             let result = execute::command_line(sys, args);
             tsc::System::flush(sys);
             tsrs_core::alloc_profile_dump();
+            tsrs_core::sitecount::dump();
             result.status
         })
         .unwrap()

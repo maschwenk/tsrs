@@ -30,3 +30,5 @@ rayon.workspace = true
 # parses and binds files (enough for --listFilesOnly), but has no type checker.
 default = ["checker"]
 checker = ["dep:tsrs_checker", "dep:tsrs_declarations"]
+# Creation-site counters of checker objects (tsrs_core::sitecount).
+site-counts = ["tsrs_checker?/site-counts"]

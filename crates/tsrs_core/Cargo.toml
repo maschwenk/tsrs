@@ -12,6 +12,8 @@ workspace = true
 checked-cells = []
 # Per-call-site arena allocation profile and a counting global allocator (src/alloc_profile.rs).
 alloc-profile = ["dep:mimalloc"]
+# Creation-site counters for checker objects (src/sitecount.rs).
+site-counts = []
 
 [dependencies]
 bumpalo.workspace = true

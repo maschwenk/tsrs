@@ -67,6 +67,7 @@ impl Checker {
     }
 
     // checker.go:19651
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn clone_signature(&mut self, sig: P<Signature>) -> P<Signature> {
         let result = self.new_signature(
             sig.flags.get() & SignatureFlags::PropagatingFlags,
@@ -1594,6 +1595,7 @@ impl Checker {
     }
 
     // checker.go:20956
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn instantiate_signature(&mut self, sig: P<Signature>, m: Option<P<TypeMapper>>) -> P<Signature> {
         let erase_type_parameters = m == Some(self.permissive_mapper);
         // Go passes m through unchanged; instantiateSignatureEx requires a mapper.
@@ -1601,6 +1603,7 @@ impl Checker {
     }
 
     // checker.go:20960
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn instantiate_signature_ex(&mut self, sig: P<Signature>, m: P<TypeMapper>, erase_type_parameters: bool) -> P<Signature> {
         let mut m = m;
         let mut fresh_type_parameters: Vec<P<Type>> = Vec::new();
@@ -1770,6 +1773,7 @@ impl Checker {
     }
 
     // checker.go:21094
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn instantiate_symbol(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> P<Symbol> {
         if self.is_symbol_unaffected_by_instantiation(symbol, m) {
             return symbol;
@@ -1801,6 +1805,7 @@ impl Checker {
         false
     }
 
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_instantiated_symbol(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> P<Symbol> {
         let mut symbol = symbol;
         let mut m = m;

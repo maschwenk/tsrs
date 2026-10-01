@@ -1585,12 +1585,15 @@ impl Checker {
     }
 
     // checker.go:14305
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_symbol(&mut self, flags: SymbolFlags, name: &'static str) -> P<Symbol> {
         self.symbol_count += 1;
+        tsrs_core::sitecount::hit("symbol", "");
         Symbol::new(flags | SymbolFlags::Transient, name)
     }
 
     // checker.go:14313
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_symbol_ex(&mut self, flags: SymbolFlags, name: &'static str, check_flags: CheckFlags) -> P<Symbol> {
         let result = self.new_symbol(flags, name);
         result.check_flags.set(check_flags);
@@ -1598,6 +1601,7 @@ impl Checker {
     }
 
     // checker.go:14319
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_parameter(&mut self, name: &'static str, t: P<Type>) -> P<Symbol> {
         let symbol = self.new_symbol(SymbolFlags::FunctionScopedVariable, name);
         self.value_symbol_links.get(symbol).resolved_type.set(Some(t));
@@ -1605,6 +1609,7 @@ impl Checker {
     }
 
     // checker.go:14325
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_property(&mut self, name: &'static str, t: P<Type>) -> P<Symbol> {
         let symbol = self.new_symbol(SymbolFlags::Property, name);
         self.value_symbol_links.get(symbol).resolved_type.set(Some(t));

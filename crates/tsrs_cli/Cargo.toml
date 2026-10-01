@@ -23,6 +23,8 @@ mimalloc = "0.1.52"
 [features]
 default = ["checker"]
 checker = ["tsrs_compiler/checker"]
+# Creation-site counters of checker objects, printed at exit (tsrs_core::sitecount).
+site-counts = ["tsrs_compiler/site-counts"]
 # Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
 alloc-profile = ["tsrs_core/alloc-profile"]
 

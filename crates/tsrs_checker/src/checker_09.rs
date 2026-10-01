@@ -2095,6 +2095,7 @@ impl Checker {
     }
 
     // checker.go:19190
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get_properties_of_type(&mut self, t: P<Type>) -> Vec<P<Symbol>> {
         let t = self.get_reduced_apparent_type(t);
         if t.flags().intersects(TypeFlags::UnionOrIntersection) {
@@ -2104,6 +2105,7 @@ impl Checker {
     }
 
     // checker.go:19198
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_properties_of_object_type(&mut self, t: P<Type>) -> Vec<P<Symbol>> {
         if t.flags().intersects(TypeFlags::Object) {
             return self.resolve_structured_type_members(t).unwrap().properties.get().to_vec();
@@ -2374,7 +2376,38 @@ impl Checker {
     }
 
     // checker.go:19406
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn resolve_structured_type_members(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
+        #[cfg(feature = "site-counts")]
+        if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            // Exclusive symbol/signature counts created by this resolution, attributed to the code that asked for it.
+            thread_local! { static NESTED: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) }; }
+            let label = if t.object_flags().intersects(ObjectFlags::Reference) && t.target().is_some_and(|s| s.object_flags().intersects(ObjectFlags::Tuple)) {
+                "tuple"
+            } else {
+                type_kind_label(t.flags(), t.object_flags())
+            };
+            let before = self.symbol_count as u64 + self.signature_count as u64;
+            NESTED.with(|n| n.borrow_mut().push(0));
+            let r = self.resolve_structured_type_members_worker(t);
+            let inner = NESTED.with(|n| n.borrow_mut().pop().unwrap());
+            let delta = self.symbol_count as u64 + self.signature_count as u64 - before;
+            NESTED.with(|n| {
+                if let Some(parent) = n.borrow_mut().last_mut() {
+                    *parent += delta;
+                }
+            });
+            tsrs_core::sitecount::hit("first-resolve", label);
+            for _ in 0..(delta - inner) {
+                tsrs_core::sitecount::hit("first-resolve-created", label);
+            }
+            return r;
+        }
+        self.resolve_structured_type_members_worker(t)
+    }
+
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    fn resolve_structured_type_members_worker(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
         if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
             if t.flags().intersects(TypeFlags::Object) {
                 if t.object_flags().intersects(ObjectFlags::Reference) {
@@ -2407,6 +2440,7 @@ impl Checker {
     }
 
     // checker.go:19439
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn resolve_type_reference_members(&mut self, t: P<Type>) {
         if let Some(lm) = self.lazy_member_tables.get(&t).filter(|lm| lm.ready.get().is_some()).cloned() {
             self.resolve_lazy_members(t, &lm);
@@ -2539,7 +2573,8 @@ impl Checker {
             || source.is_none()
             || source == Some(t)
             || !source.unwrap().object_flags().intersects(ObjectFlags::ClassOrInterface)
-            || source.unwrap().object_flags().intersects(ObjectFlags::Tuple)
+                && !(self.lazy_tuples && source.unwrap().object_flags().intersects(ObjectFlags::Tuple))
+            || !self.lazy_tuples && source.unwrap().object_flags().intersects(ObjectFlags::Tuple)
             || t.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::ValueModule))
         {
             return None;
@@ -2559,6 +2594,9 @@ impl Checker {
                 });
                 self.lazy_member_tables.insert(t, lm.clone());
                 self.lazy_member_stats.member_tables_created += 1;
+                if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
+                    self.lazy_member_stats.tuple_tables_created += 1;
+                }
                 self.prepare_lazy_members(t, &lm);
                 lm
             }
@@ -2619,6 +2657,9 @@ impl Checker {
 
     pub(crate) fn resolve_lazy_members(&mut self, t: P<Type>, lm: &std::rc::Rc<LazyMemberTable>) {
         self.lazy_member_stats.member_tables_resolved_in_full += 1;
+        if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
+            self.lazy_member_stats.tuple_tables_resolved_in_full += 1;
+        }
         let resolved = self.resolve_declared_members(t.target().unwrap()).unwrap();
         let mut members: Option<P<SymbolTable>> = None;
         if let Some(declared_members) = resolved.declared_members.get().filter(|m| !m.is_empty()) {

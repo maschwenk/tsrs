@@ -15,7 +15,12 @@ impl<K: 'static, V: 'static> Default for LinkStore<K, V> {
 impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
     /// Returns the links for `key`, creating them on first use.
     #[inline]
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, key: P<K>) -> P<V> {
+        #[cfg(feature = "site-counts")]
+        if !self.entries.contains_key(&key) {
+            tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
+        }
         *self.entries.entry(key).or_insert_with(|| P::new(V::default()))
     }
 
@@ -78,10 +83,12 @@ impl<V: 'static> IdLinkStore<V> {
 
 impl<V: Default + 'static> IdLinkStore<V> {
     #[inline]
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, id: u64) -> P<V> {
         if let Some(slot) = self.slot(id) {
             return self.at(slot);
         }
+        tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
         let slot = self.len;
         if slot as usize % ID_LINK_CHUNK == 0 {
             self.chunks.push(alloc_vec((0..ID_LINK_CHUNK).map(|_| V::default()).collect()));
@@ -110,6 +117,7 @@ impl<V: 'static> Default for NodeLinkStore<V> {
 
 impl<V: Default + 'static> NodeLinkStore<V> {
     #[inline]
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, node: P<Node>) -> P<V> {
         self.store.get(ast::get_node_id(node).0)
     }
@@ -143,6 +151,7 @@ impl<V: 'static> Default for SymbolArenaLinkStore<V> {
 
 impl<V: Default + 'static> SymbolArenaLinkStore<V> {
     #[inline]
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, symbol: P<Symbol>) -> P<V> {
         self.store.get(ast::get_symbol_id(symbol).0)
     }

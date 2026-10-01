@@ -1,6 +1,9 @@
 // Port of microsoft/TypeScript#64475 (lazy member tables of instantiated class/interface references) and #64526
 // (lazy members of `{ [P in keyof T]: X }` mapped types). On by default; `--noLazyMembers` or `TSRS_LAZY_MEMBERS=0`
 // turns it off, which restores the reference (tsgo) behavior exactly. See notes/lazy-members.md.
+//
+// Follow-up candidates (notes/mem-lazy.md) each have their own switch below. A candidate only takes effect when the
+// master switch is on too, so `TSRS_LAZY_MEMBERS=0` stays reference-identical whatever the candidate switches say.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::OnceLock;
@@ -21,70 +24,53 @@ pub fn enabled() -> bool {
     }
 }
 
-/// Per-checker counts of the lazy paths (only incremented when the flag is on).
-#[derive(Clone, Copy, Default, Debug)]
-pub struct LazyMemberStats {
-    pub member_tables_created: u64,
-    pub member_tables_resolved_in_full: u64,
-    pub member_table_declared_members: u64,
-    pub member_table_declared_instantiated: u64,
-    pub member_lookups: u64,
-    pub member_signature_queries: u64,
-    pub member_index_info_queries: u64,
-    pub member_every_property_queries: u64,
-    pub mapped_tables_created: u64,
-    pub mapped_tables_resolved_in_full: u64,
-    pub mapped_members_created: u64,
-    pub mapped_member_lookups: u64,
-    pub mapped_index_info_queries: u64,
-    pub mapped_signature_early_returns: u64,
-    pub some_property_skipped_constituents: u64,
+fn env_flag(cell: &'static OnceLock<bool>, name: &str, default: bool) -> bool {
+    enabled() && *cell.get_or_init(|| std::env::var(name).map_or(default, |v| v != "0"))
 }
 
-impl LazyMemberStats {
-    pub fn add(&mut self, o: &LazyMemberStats) {
-        for (a, b) in self.fields_mut().into_iter().zip(o.rows()) {
-            *a += b.1;
+/// Candidate L1 (notes/mem-lazy.md): tuple references get lazy member tables like class/interface references.
+/// `TSRS_LAZY_TUPLES=0|1`.
+pub fn lazy_tuples() -> bool {
+    static F: OnceLock<bool> = OnceLock::new();
+    env_flag(&F, "TSRS_LAZY_TUPLES", true)
+}
+
+macro_rules! lazy_member_stats {
+    ($($field:ident: $label:literal,)*) => {
+        /// Per-checker counts of the lazy paths (only incremented when the flag is on).
+        #[derive(Clone, Copy, Default, Debug)]
+        pub struct LazyMemberStats {
+            $(pub $field: u64,)*
         }
-    }
 
-    fn fields_mut(&mut self) -> [&mut u64; 15] {
-        [
-            &mut self.member_tables_created,
-            &mut self.member_tables_resolved_in_full,
-            &mut self.member_table_declared_members,
-            &mut self.member_table_declared_instantiated,
-            &mut self.member_lookups,
-            &mut self.member_signature_queries,
-            &mut self.member_index_info_queries,
-            &mut self.member_every_property_queries,
-            &mut self.mapped_tables_created,
-            &mut self.mapped_tables_resolved_in_full,
-            &mut self.mapped_members_created,
-            &mut self.mapped_member_lookups,
-            &mut self.mapped_index_info_queries,
-            &mut self.mapped_signature_early_returns,
-            &mut self.some_property_skipped_constituents,
-        ]
-    }
+        impl LazyMemberStats {
+            pub fn add(&mut self, o: &LazyMemberStats) {
+                $(self.$field += o.$field;)*
+            }
 
-    pub fn rows(&self) -> [(&'static str, u64); 15] {
-        [
-            ("Lazy member tables", self.member_tables_created),
-            ("Lazy member tables resolved in full", self.member_tables_resolved_in_full),
-            ("Lazy table declared members", self.member_table_declared_members),
-            ("Lazy table members instantiated", self.member_table_declared_instantiated),
-            ("Lazy member lookups", self.member_lookups),
-            ("Lazy signature queries", self.member_signature_queries),
-            ("Lazy index info queries", self.member_index_info_queries),
-            ("Lazy every-property queries", self.member_every_property_queries),
-            ("Lazy mapped tables", self.mapped_tables_created),
-            ("Lazy mapped tables resolved in full", self.mapped_tables_resolved_in_full),
-            ("Lazy mapped members created", self.mapped_members_created),
-            ("Lazy mapped member lookups", self.mapped_member_lookups),
-            ("Lazy mapped index info queries", self.mapped_index_info_queries),
-            ("Mapped signature early returns", self.mapped_signature_early_returns),
-            ("somePropertyReducesToNever skips", self.some_property_skipped_constituents),
-        ]
-    }
+            pub fn rows(&self) -> Vec<(&'static str, u64)> {
+                vec![$(($label, self.$field),)*]
+            }
+        }
+    };
+}
+
+lazy_member_stats! {
+    member_tables_created: "Lazy member tables",
+    member_tables_resolved_in_full: "Lazy member tables resolved in full",
+    member_table_declared_members: "Lazy table declared members",
+    member_table_declared_instantiated: "Lazy table members instantiated",
+    member_lookups: "Lazy member lookups",
+    member_signature_queries: "Lazy signature queries",
+    member_index_info_queries: "Lazy index info queries",
+    member_every_property_queries: "Lazy every-property queries",
+    mapped_tables_created: "Lazy mapped tables",
+    mapped_tables_resolved_in_full: "Lazy mapped tables resolved in full",
+    mapped_members_created: "Lazy mapped members created",
+    mapped_member_lookups: "Lazy mapped member lookups",
+    mapped_index_info_queries: "Lazy mapped index info queries",
+    mapped_signature_early_returns: "Mapped signature early returns",
+    some_property_skipped_constituents: "somePropertyReducesToNever skips",
+    tuple_tables_created: "Lazy tuple tables",
+    tuple_tables_resolved_in_full: "Lazy tuple tables resolved in full",
 }

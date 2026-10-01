@@ -137,6 +137,7 @@ impl Checker {
         mapper.map(self, get_non_distributed_type_parameter(t).unwrap())
     }
 
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn combine_type_mappers(&mut self, m1: Option<P<TypeMapper>>, m2: P<TypeMapper>) -> P<TypeMapper> {
         if let Some(m1) = m1 {
             return new_composite_type_mapper(m1, m2);
@@ -157,17 +158,21 @@ impl Checker {
 
     /// Maps forward-references to later types parameters to the empty object type.
     /// This is used during inference when instantiating type parameter defaults.
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_backreference_mapper(&mut self, context: P<InferenceContext>, index: i32) -> P<TypeMapper> {
         let forward_inferences = &context.inferences.get()[index as usize..];
         let type_parameters: Vec<P<Type>> = forward_inferences.iter().map(|i| i.type_parameter.get().unwrap()).collect();
         new_array_to_single_type_mapper(alloc_slice(&type_parameters), self.unknown_type)
     }
 
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_inference_type_mapper(&mut self, n: P<InferenceContext>, fixing: bool) -> P<TypeMapper> {
+        tsrs_core::sitecount::hit("mapper", "inference");
         P::new(TypeMapper { data: TypeMapperData::Inference { n, fixing } })
     }
 }
 
+#[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_type_mapper(sources: &'static [P<Type>], targets: &'static [P<Type>]) -> P<TypeMapper> {
     if sources.len() == 1 {
         return new_simple_type_mapper(sources[0], targets[0]);
@@ -175,6 +180,7 @@ pub(crate) fn new_type_mapper(sources: &'static [P<Type>], targets: &'static [P<
     new_array_type_mapper(sources, targets)
 }
 
+#[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn merge_type_mappers(m1: Option<P<TypeMapper>>, m2: P<TypeMapper>) -> P<TypeMapper> {
     if let Some(m1) = m1 {
         return new_merged_type_mapper(m1, m2);
@@ -182,6 +188,7 @@ pub(crate) fn merge_type_mappers(m1: Option<P<TypeMapper>>, m2: P<TypeMapper>) -
     m2
 }
 
+#[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn prepend_type_mapping(source: P<Type>, target: P<Type>, mapper: Option<P<TypeMapper>>) -> P<TypeMapper> {
     let Some(mapper) = mapper else {
         return new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target);
@@ -189,6 +196,7 @@ pub(crate) fn prepend_type_mapping(source: P<Type>, target: P<Type>, mapper: Opt
     new_merged_type_mapper(new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target), mapper)
 }
 
+#[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn append_type_mapping(mapper: Option<P<TypeMapper>>, source: P<Type>, target: P<Type>) -> P<TypeMapper> {
     let Some(mapper) = mapper else {
         return new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target);
@@ -196,30 +204,44 @@ pub(crate) fn append_type_mapping(mapper: Option<P<TypeMapper>>, source: P<Type>
     new_merged_type_mapper(mapper, new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target))
 }
 
+#[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_simple_type_mapper(source: P<Type>, target: P<Type>) -> P<TypeMapper> {
+    tsrs_core::sitecount::hit("mapper", "simple");
     P::new(TypeMapper { data: TypeMapperData::Simple { source, target } })
 }
 
+#[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_array_type_mapper(sources: &'static [P<Type>], targets: &'static [P<Type>]) -> P<TypeMapper> {
+    tsrs_core::sitecount::hit("mapper", "array");
     P::new(TypeMapper { data: TypeMapperData::Array { sources_targets: SlicePair::new(sources, targets) } })
 }
 
+#[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_array_to_single_type_mapper(sources: &'static [P<Type>], target: P<Type>) -> P<TypeMapper> {
+    tsrs_core::sitecount::hit("mapper", "array_to_single");
     P::new(TypeMapper { data: TypeMapperData::ArrayToSingle { sources, target } })
 }
 
+#[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_deferred_type_mapper(sources: &'static [P<Type>], targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>>) -> P<TypeMapper> {
+    tsrs_core::sitecount::hit("mapper", "deferred");
     P::new(TypeMapper { data: TypeMapperData::Deferred { data: alloc(DeferredTypeMapper { sources, targets }) } })
 }
 
+#[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_function_type_mapper(f: fn(&mut Checker, P<Type>) -> P<Type>) -> P<TypeMapper> {
+    tsrs_core::sitecount::hit("mapper", "function");
     P::new(TypeMapper { data: TypeMapperData::Function { f } })
 }
 
+#[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_merged_type_mapper(m1: P<TypeMapper>, m2: P<TypeMapper>) -> P<TypeMapper> {
+    tsrs_core::sitecount::hit("mapper", "merged");
     P::new(TypeMapper { data: TypeMapperData::Merged { m1, m2 } })
 }
 
+#[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_composite_type_mapper(m1: P<TypeMapper>, m2: P<TypeMapper>) -> P<TypeMapper> {
+    tsrs_core::sitecount::hit("mapper", "composite");
     P::new(TypeMapper { data: TypeMapperData::Composite { m1, m2 } })
 }
