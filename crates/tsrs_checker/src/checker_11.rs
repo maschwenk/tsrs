@@ -27,12 +27,15 @@ impl Checker {
         }
         let prop = self.create_union_or_intersection_property(t, name, skip_object_function_property_augment);
         if let Some(prop) = prop {
-            cache.set(alloc_str(name), prop);
+            // The caches are only looked up by name, so the key can be the property's own name when it is the same
+            // text (it is for every property this creates), and both caches can share one copy otherwise.
+            let key = if prop.name() == name { prop.name() } else { alloc_str(name) };
+            cache.set(key, prop);
             // Propagate an entry from the non-augmented cache to the augmented cache unless the property is partial.
             if skip_object_function_property_augment && !prop.check_flags.get().intersects(CheckFlags::Partial) {
                 let augmented_cache = ast::get_symbol_table(&t.as_union_or_intersection_type().property_cache);
                 if augmented_cache.lookup(name).is_none() {
-                    augmented_cache.set(alloc_str(name), prop);
+                    augmented_cache.set(key, prop);
                 }
             }
         }

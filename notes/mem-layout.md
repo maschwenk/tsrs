@@ -245,3 +245,10 @@ iterates it.
 The entry `Vec` grows by `len / 2` (exact) once it has 8 entries instead of doubling; most large tables (member
 tables, union property caches) stop growing soon after, and the doubled slack was the larger part of their memory.
 Single: peak 8.64 -> 8.59-8.62 GB; 4 checkers 11.54 -> 11.46 GB; instructions +0.1%; opt-out 11.40 / 17.29 GB.
+
+### Union/intersection property cache keys
+
+`get_union_or_intersection_property` copied the name into the arena for the cache key, and again for the
+augmented cache (2.76M + 2.37M copies single). The caches are only looked up by name, so the key is now the
+property's own name when it is the same text (always, for the properties `create_union_or_intersection_property`
+makes) and one shared copy otherwise. Single 8.59 -> 8.55 GB, 4 checkers 11.48 -> 11.41 GB, opt-out 11.33 / 17.19 GB.
