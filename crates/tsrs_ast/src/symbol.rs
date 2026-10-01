@@ -180,11 +180,16 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
 // Go's `SymbolTable` is a map (a reference type). Here it is an arena object handled as `P<SymbolTable>`;
 // a Go nil table is `None`. Iteration is in insertion order and returns snapshots.
 //
-// Representation: the entries in insertion order in a `Vec` (24 bytes each), plus a hash index of entry
-// positions once a table has more than `SYMBOL_TABLE_LINEAR_MAX` entries (most tables are tiny: on Project 82%
-// of the 3.9M tables hold at most 8 entries); smaller tables are searched linearly. Same observable behavior as
-// the insertion-ordered map it replaces (`IndexMap`): `set` of an existing name keeps the entry's position and
-// stored key, `delete` shifts the later entries down.
+// Representation: the entries in insertion order in a `Vec`, plus a hash index of entry positions once a table
+// has more than `SYMBOL_TABLE_LINEAR_MAX` entries (most tables are tiny: on Project 82% of the 3.9M tables hold at
+// most 8 entries); smaller tables are searched linearly. Same observable behavior as the insertion-ordered map it
+// replaces (`IndexMap`): `set` of an existing name keeps the entry's position and stored key, `delete` shifts the
+// later entries down.
+//
+// An entry does not store its key: the key is almost always the symbol's own name (on Project all but 1 of 16.7M
+// inserts; symbol names never change), so an entry is the symbol plus the key's length and a 32-bit hash of it
+// (16 bytes instead of 24), which reject non-matching entries without reading the symbol. A key with other text than its symbol's name is kept in `SymbolMapExtra::odd_keys`. Keys
+// are compared by text, so returning the symbol's name where the caller stored an equal string is unobservable.
 
 #[derive(Default)]
 pub struct SymbolTable(FrozenCell<SymbolMap>);
@@ -193,35 +198,105 @@ const SYMBOL_TABLE_LINEAR_MAX: usize = 8;
 
 #[derive(Default, Clone)]
 struct SymbolMap {
-    entries: Vec<(&'static str, P<Symbol>)>,
-    index: Option<Box<HashTable<u32>>>, // positions in `entries`; present once len > SYMBOL_TABLE_LINEAR_MAX
+    entries: Vec<SymbolMapEntry>,
+    extra: Option<Box<SymbolMapExtra>>,
+}
+
+#[derive(Clone, Copy)]
+struct SymbolMapEntry {
+    symbol: P<Symbol>,
+    hash: u32, // `hash_name(key)`
+    len: u32,  // key length in bytes, | ODD_KEY when the key is in `odd_keys`
+}
+
+const ODD_KEY: u32 = 1 << 31;
+
+const _: () = assert!(std::mem::size_of::<SymbolMapEntry>() == 16);
+
+#[derive(Default, Clone)]
+struct SymbolMapExtra {
+    index: Option<HashTable<u32>>, // positions in `entries`; present once len > SYMBOL_TABLE_LINEAR_MAX
+    odd_keys: Vec<(u32, &'static str)>, // (position, key) of the entries whose key is not their symbol's name
 }
 
 #[inline]
-fn hash_name(name: &str) -> u64 {
-    FxBuildHasher.hash_one(name)
+fn hash_name(name: &str) -> u32 {
+    let h = FxBuildHasher.hash_one(name);
+    (h ^ (h >> 32)) as u32
+}
+
+/// The index's hash of an entry: its 32-bit hash spread over 64 bits (hashbrown takes its tag from the top bits).
+#[inline]
+fn index_hash(hash: u32) -> u64 {
+    (hash as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+}
+
+#[inline]
+fn key_len(name: &str) -> u32 {
+    assert!(name.len() < ODD_KEY as usize, "symbol name longer than 2^31 bytes");
+    name.len() as u32
 }
 
 impl SymbolMap {
     fn with_capacity(n: usize) -> SymbolMap {
-        let index = (n > SYMBOL_TABLE_LINEAR_MAX).then(|| Box::new(HashTable::with_capacity(n)));
-        SymbolMap { entries: Vec::with_capacity(n), index }
+        let extra = (n > SYMBOL_TABLE_LINEAR_MAX)
+            .then(|| Box::new(SymbolMapExtra { index: Some(HashTable::with_capacity(n)), odd_keys: Vec::new() }));
+        SymbolMap { entries: Vec::with_capacity(n), extra }
+    }
+
+    #[inline]
+    fn index(&self) -> Option<&HashTable<u32>> {
+        self.extra.as_ref().and_then(|e| e.index.as_ref())
+    }
+
+    /// The stored key of entry `i`.
+    #[inline]
+    fn key(&self, i: usize) -> &'static str {
+        let e = self.entries[i];
+        if e.len & ODD_KEY == 0 {
+            return e.symbol.name();
+        }
+        let odd_keys = &self.extra.as_ref().unwrap().odd_keys;
+        odd_keys.iter().find(|&&(j, _)| j as usize == i).unwrap().1
+    }
+
+    /// Whether entry `i`'s key is `name` (whose length and hash are `len` and `hash`).
+    #[inline]
+    fn entry_matches(&self, i: usize, name: &str, len: u32, hash: u32) -> bool {
+        let e = self.entries[i];
+        e.len & !ODD_KEY == len && e.hash == hash && self.key(i) == name
     }
 
     #[inline]
     fn position(&self, name: &str) -> Option<usize> {
-        match &self.index {
-            None => self.entries.iter().position(|(k, _)| *k == name),
+        let len = key_len(name);
+        match self.index() {
+            None => {
+                // Hash the name only once an entry of the same length turns up.
+                let mut hash = None;
+                (0..self.entries.len()).find(|&i| {
+                    self.entries[i].len & !ODD_KEY == len && self.entry_matches(i, name, len, *hash.get_or_insert_with(|| hash_name(name)))
+                })
+            }
             Some(index) => {
-                let entries = &self.entries;
-                index.find(hash_name(name), |&i| entries[i as usize].0 == name).map(|&i| i as usize)
+                let hash = hash_name(name);
+                index.find(index_hash(hash), |&i| self.entry_matches(i as usize, name, len, hash)).map(|&i| i as usize)
             }
         }
     }
 
+    fn add_odd_key(&mut self, i: usize, key: &'static str) {
+        self.entries[i].len |= ODD_KEY;
+        self.extra.get_or_insert_with(Default::default).odd_keys.push((i as u32, key));
+    }
+
     fn insert(&mut self, name: &'static str, symbol: P<Symbol>) {
         if let Some(i) = self.position(name) {
-            self.entries[i].1 = symbol;
+            // Go keeps the stored key; it is no longer the new symbol's name when that differs.
+            self.entries[i].symbol = symbol;
+            if self.entries[i].len & ODD_KEY == 0 && symbol.name() != name {
+                self.add_odd_key(i, name);
+            }
             return;
         }
         let i = self.entries.len();
@@ -230,20 +305,20 @@ impl SymbolMap {
             // property caches), and the slack of a doubled Vec is the larger part of their memory.
             self.entries.reserve_exact(i / 2);
         }
-        self.entries.push((name, symbol));
-        let entries = &self.entries;
-        match &mut self.index {
-            Some(index) => {
-                index.insert_unique(hash_name(name), i as u32, |&j| hash_name(entries[j as usize].0));
+        self.entries.push(SymbolMapEntry { symbol, hash: hash_name(name), len: key_len(name) });
+        if symbol.name() != name {
+            self.add_odd_key(i, name);
+        }
+        let len = self.entries.len();
+        let has_index = self.index().is_some();
+        if has_index || len > SYMBOL_TABLE_LINEAR_MAX {
+            let mut index = self.extra.as_mut().and_then(|e| e.index.take()).unwrap_or_else(|| HashTable::with_capacity(len));
+            let entries = &self.entries;
+            let start = if has_index { i } else { 0 };
+            for (j, e) in entries.iter().enumerate().skip(start) {
+                index.insert_unique(index_hash(e.hash), j as u32, |&m| index_hash(entries[m as usize].hash));
             }
-            None if entries.len() > SYMBOL_TABLE_LINEAR_MAX => {
-                let mut index = HashTable::with_capacity(entries.len());
-                for (j, (k, _)) in entries.iter().enumerate() {
-                    index.insert_unique(hash_name(k), j as u32, |&m| hash_name(entries[m as usize].0));
-                }
-                self.index = Some(Box::new(index));
-            }
-            None => {}
+            self.extra.get_or_insert_with(Default::default).index = Some(index);
         }
     }
 
@@ -251,18 +326,29 @@ impl SymbolMap {
         let Some(i) = self.position(name) else {
             return;
         };
-        if let Some(index) = &mut self.index {
-            let entries = &self.entries;
-            if let Ok(entry) = index.find_entry(hash_name(name), |&j| entries[j as usize].0 == name) {
-                entry.remove();
+        if let Some(extra) = &mut self.extra {
+            if let Some(index) = &mut extra.index {
+                if let Ok(entry) = index.find_entry(index_hash(self.entries[i].hash), |&j| j as usize == i) {
+                    entry.remove();
+                }
+                for j in index.iter_mut() {
+                    if *j as usize > i {
+                        *j -= 1;
+                    }
+                }
             }
-            for j in index.iter_mut() {
+            extra.odd_keys.retain(|&(j, _)| j as usize != i);
+            for (j, _) in extra.odd_keys.iter_mut() {
                 if *j as usize > i {
                     *j -= 1;
                 }
             }
         }
         self.entries.remove(i);
+    }
+
+    fn pairs(&self) -> Vec<(&'static str, P<Symbol>)> {
+        (0..self.entries.len()).map(|i| (self.key(i), self.entries[i].symbol)).collect()
     }
 }
 
@@ -292,14 +378,14 @@ impl SymbolTable {
     #[inline]
     pub fn lookup(&self, name: &str) -> Option<P<Symbol>> {
         let m = self.0.borrow();
-        m.position(name).map(|i| m.entries[i].1)
+        m.position(name).map(|i| m.entries[i].symbol)
     }
 
     /// `lookup` that also returns the stored key.
     #[inline]
     pub fn lookup_entry(&self, name: &str) -> Option<(&'static str, P<Symbol>)> {
         let m = self.0.borrow();
-        m.position(name).map(|i| m.entries[i])
+        m.position(name).map(|i| (m.key(i), m.entries[i].symbol))
     }
 
     #[inline]
@@ -334,15 +420,16 @@ impl SymbolTable {
     }
 
     pub fn entries(&self) -> Vec<(&'static str, P<Symbol>)> {
-        self.0.borrow().entries.clone()
+        self.0.borrow().pairs()
     }
 
     pub fn keys(&self) -> Vec<&'static str> {
-        self.0.borrow().entries.iter().map(|(k, _)| *k).collect()
+        let m = self.0.borrow();
+        (0..m.entries.len()).map(|i| m.key(i)).collect()
     }
 
     pub fn values(&self) -> Vec<P<Symbol>> {
-        self.0.borrow().entries.iter().map(|(_, v)| *v).collect()
+        self.0.borrow().entries.iter().map(|e| e.symbol).collect()
     }
 }
 

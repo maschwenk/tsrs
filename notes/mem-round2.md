@@ -48,3 +48,26 @@ changed.
 | single, after | 8.040 (-0.09) | 315-318 G |
 | 4 checkers, before | 10.92-10.97 | 424-429 G |
 | 4 checkers, after | 10.79-10.84 (-0.12) | 424-427 G |
+
+### 2. `SymbolTable` entries 24 -> 16 bytes
+
+Instrumented once: of 16.7M new symbol-table entries on Project single, 16,684,348 store the symbol's own name
+string as the key, 4,399 an equal string at another address, 1 a different text. Symbol names never change after
+`Symbol::new`. So an entry is now (symbol, `u32` hash of the key, `u32` key length) and the key is read from the
+symbol; a key with other text than its symbol's name (an insert, or a `set` that replaces the symbol of an
+existing key) goes to a side list `SymbolMapExtra::odd_keys` (boxed together with the hash index; the table header
+stays 32 bytes). Lookups compare length and hash before reading the symbol (linear tables hash the probe only once
+an entry of the same length turns up). Iteration order, `set`-keeps-key and `delete` shifting are unchanged; the
+unit test covers odd keys across deletes. A variant that stored the key's first four bytes instead of a hash
+(no hashing in linear tables) retired more instructions (more symbols read and compared), so the hash stayed.
+
+| run (2-3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 8.037-8.040 | 315-319 G |
+| single, after | 7.819 (-0.22) | 320-325 G (+1.5%) |
+| 4 checkers, before | 10.80-10.85 | 424-426 G |
+| 4 checkers, after | 10.52-10.56 (-0.30) | 431-433 G |
+| opt-out single / 4 checkers (go assignment), before | 10.89 / 16.80 | |
+| opt-out single / 4 checkers (go assignment), after | 10.31 / 15.92 | |
+
+Check times did not move outside the noise of the shared machine (cycles 97-112 G for both binaries single).

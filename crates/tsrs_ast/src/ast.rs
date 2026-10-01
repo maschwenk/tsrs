@@ -2171,6 +2171,18 @@ mod tests {
         assert_eq!(copy.len(), 20);
         assert_eq!(table.len(), 19);
         assert_eq!(copy.lookup(names[19]), Some(syms[19]));
+        // Keys that are not their symbol's name ("n3" -> n0, "new" -> n1) survive deletes before them.
+        assert_eq!(copy.lookup("new"), Some(syms[1]));
+        copy.delete(names[1]);
+        copy.delete(names[0]);
+        assert_eq!(copy.lookup_entry(names[3]), Some((names[3], syms[0])));
+        assert_eq!(copy.keys().last(), Some(&"new"));
+        assert_eq!(copy.lookup("new"), Some(syms[1]));
+        let small = SymbolTable::new();
+        small.set("alias", syms[2]);
+        small.set(names[4], syms[4]);
+        small.delete("alias");
+        assert_eq!(small.entries(), vec![(names[4], syms[4])]);
     }
 
     #[test]
