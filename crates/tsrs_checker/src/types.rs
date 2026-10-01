@@ -1580,7 +1580,10 @@ pub struct ObjectType {
     pub structured_type: StructuredType,
     pub target: Cell<Option<P<Type>>>, // Target of instantiated type
     pub mapper: Cell<Option<P<TypeMapper>>>, // Type mapper for instantiated type
-    pub instantiations: GoMap<CacheHashKey, P<Type>>, // Map of type instantiations
+    // Go's `instantiations` map is used only by the targets of instantiations: generic interfaces and tuples keep
+    // it in `InterfaceType`, other object types (declared anonymous and mapped types, deferred type references) in
+    // `Checker::object_type_instantiations`, so the millions of instantiated object types and references do not
+    // carry it.
 }
 embeds!(ObjectType, structured_type, StructuredType);
 
@@ -1599,6 +1602,7 @@ embeds!(TypeReference, object_type, ObjectType);
 #[derive(Default)]
 pub struct InterfaceType {
     pub type_reference: TypeReference,
+    pub instantiations: GoMap<CacheHashKey, P<Type>>, // Map of type instantiations (Go: in ObjectType)
     pub all_type_parameters: Cell<&'static [P<Type>]>, // Type parameters (outer + local + thisType)
     pub outer_type_parameter_count: Cell<i32>, // Count of outer type parameters
     pub this_type: Cell<Option<P<Type>>>, // The "this" type (nil if none)

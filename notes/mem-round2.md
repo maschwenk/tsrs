@@ -233,3 +233,20 @@ opt-out mode). Flags, check flags, declarations and id pack into 24 bytes.
 | opt-out single / 4 checkers (go assignment), after | 9.62 / 14.74 | |
 
 (The base is main at 2ec7b64, after upstream 5842054, which moved the single-threaded peak to 7.33 GiB.)
+
+### 11. Instantiation caches only where instantiations start
+
+Go's `ObjectType.instantiations` is read and written only on instantiation targets: generic interfaces and tuples
+(`createTypeReference`) and declared anonymous / mapped types and deferred type references
+(`getObjectTypeInstantiation`; asserted: never an interface there). The field moved to `InterfaceType`, and the
+other targets' maps to `Checker::object_type_instantiations` (keyed by the target; same keys, same initial entry,
+same values). The 5.4M instantiated object types and references single no longer carry it: ObjectType 72 -> 64
+bytes of data, TypeReference 96 -> 88.
+
+| run (2 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 7.162-7.169 | 322-323 G |
+| single, after | 7.130 (-0.035) | 323-324 G |
+| 4 checkers, before | 9.59-9.68 | 435-436 G |
+| 4 checkers, after | 9.55-9.58 (-0.05) | 436-437 G |
+| opt-out single / 4 checkers (go assignment), after | 9.58 / 14.68 | |

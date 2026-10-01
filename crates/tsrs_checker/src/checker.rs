@@ -873,6 +873,8 @@ pub struct Checker {
     pub(crate) object_types_without_abstract_construct_signatures: FxHashMap<P<Type>, P<Type>>,
     // Go `StructuredType.resolvedBaseConstraint` (see `resolved_base_constraint_of`).
     pub(crate) structured_type_base_constraints: FxHashMap<P<Type>, P<Type>>,
+    // Go `ObjectType.instantiations` of object types that are not interfaces or tuples (see `ObjectType`).
+    pub(crate) object_type_instantiations: FxHashMap<P<Type>, FxHashMap<CacheHashKey, P<Type>>>,
     pub(crate) lazy_mapped_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>,
     /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
     pub lazy_members: bool,
@@ -1232,6 +1234,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_member_tables: FxHashMap::default(),
         object_types_without_abstract_construct_signatures: FxHashMap::default(),
         structured_type_base_constraints: FxHashMap::default(),
+        object_type_instantiations: FxHashMap::default(),
         lazy_mapped_tables: FxHashMap::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
         lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
@@ -1506,7 +1509,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.unknown_empty_object_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.unknown_union_type = c.create_unknown_union_type();
     c.empty_generic_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
-    c.empty_generic_type.as_object_type().instantiations.make();
+    c.object_type_instantiations.insert(c.empty_generic_type, FxHashMap::default());
     c.any_function_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.any_function_type.object_flags.set(c.any_function_type.object_flags.get() | ObjectFlags::NonInferrableType);
     c.no_constraint_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);

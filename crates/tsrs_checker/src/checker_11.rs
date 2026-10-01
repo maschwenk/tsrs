@@ -1239,13 +1239,15 @@ impl Checker {
         if new_alias.is_none() {
             new_alias = self.instantiate_type_alias(t.alias(), m);
         }
-        let data = target.as_object_type();
+        // Go `data := target.AsObjectType()`; `data.instantiations` is `self.object_type_instantiations[target]`
+        // (the target is a declared anonymous or mapped type or a deferred reference, never an interface or tuple).
+        assert!(target.try_as_interface_type().is_none(), "object type instantiation of an interface target");
         let key = get_type_instantiation_key(&type_arguments, new_alias, t.object_flags().intersects(ObjectFlags::SingleSignatureType));
-        if data.instantiations.is_nil() {
-            data.instantiations.make();
-            data.instantiations.set(get_type_instantiation_key(type_parameters, target.alias(), false), target);
+        if !self.object_type_instantiations.contains_key(&target) {
+            let initial_key = get_type_instantiation_key(type_parameters, target.alias(), false);
+            self.object_type_instantiations.insert(target, FxHashMap::from_iter([(initial_key, target)]));
         }
-        let mut result = data.instantiations.get(&key);
+        let mut result = self.object_type_instantiations[&target].get(&key).copied();
         if result.is_none() {
             let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
             if target.object_flags().intersects(ObjectFlags::SingleSignatureType) && m.is_some() {
@@ -1258,7 +1260,7 @@ impl Checker {
             } else {
                 self.instantiate_anonymous_type(target, new_mapper, new_alias)
             };
-            data.instantiations.set(key, r);
+            self.object_type_instantiations.get_mut(&target).unwrap().insert(key, r);
             if r.flags().intersects(TypeFlags::ObjectFlagsType) && !r.object_flags().intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
                 // if `result` is one of the object types we tried to make (it may not be, due to how `instantiateMappedType` works), we can carry forward the type variable containment check from the input type arguments
                 let result_could_contain_object_flags = type_arguments.iter().any(|&a| self.could_contain_type_variables(a));
