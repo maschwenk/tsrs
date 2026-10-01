@@ -186,7 +186,7 @@ impl Checker {
         }
         if types.len() >= 2 {
             // Sort and deduplicate types
-            types.sort_by(|a, b| compare_types(self, Some(*a), Some(*b)).cmp(&0));
+            tsrs_core::goslices::sort_stable_func(&mut types, |&a, &b| compare_types(self, Some(a), Some(b)));
             let mut unique = 1;
             for i in 1..types.len() {
                 let t = types[i];
@@ -1073,7 +1073,7 @@ impl Checker {
             }
         }
         let types = t.types();
-        if let Ok(i) = types.binary_search_by(|&probe| compare_types(self, Some(probe), Some(target_type)).cmp(&0)) {
+        if let (i, true) = tsrs_core::goslices::binary_search_func(types, &target_type, |&probe, &target| compare_types(self, Some(probe), Some(target))) {
             if types.len() == 2 {
                 return types[1 - i];
             }
@@ -1090,12 +1090,12 @@ impl Checker {
 // so they take `c` like `compare_types`.
 // checker.go:27086
 pub(crate) fn contains_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> bool {
-    types.binary_search_by(|&probe| compare_types(c, Some(probe), Some(t)).cmp(&0)).is_ok()
+    tsrs_core::goslices::binary_search_func(types, &t, |&probe, &t| compare_types(c, Some(probe), Some(t))).1
 }
 
 // checker.go:27091
 pub(crate) fn insert_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> (Vec<P<Type>>, bool) {
-    if let Err(i) = types.binary_search_by(|&probe| compare_types(c, Some(probe), Some(t)).cmp(&0)) {
+    if let (i, false) = tsrs_core::goslices::binary_search_func(types, &t, |&probe, &t| compare_types(c, Some(probe), Some(t))) {
         let mut result = types.to_vec();
         result.insert(i, t);
         return (result, true);

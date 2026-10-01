@@ -9,6 +9,7 @@ pub use frozen::{FrozenCell, FrozenRef, FrozenRefMut, OwnedCell, OwnedSliceCell,
 pub mod collections;
 pub mod debug;
 pub mod glob;
+pub mod goslices;
 pub mod jsnum;
 pub mod json;
 pub mod lazymembers;
