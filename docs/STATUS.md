@@ -256,3 +256,12 @@ no Actions history); all tags were kept. Commit SHAs from before this date no lo
 ## 2026-10-01: memory census (garbage at exit)
 
 `TSRS_CENSUS=1` (alloc-profile build) marks what is reachable at exit: on the private monorepo with one checker, 661 of 4,572 MB arena and 82 of 1,592 MB live heap are unreachable (~0.7 of 6.3 GiB peak), led by inference contexts (~210 MB), scratch mappers and type lists (~175 MB), and object literal types from overload re-checks (~165 MB). Method, tables and a ranked recycling list: `notes/mem-census.md`.
+
+## 2026-10-01: parse CPU (scanner, parser, AST construction)
+
+Parsing proper, private monorepo (38,789 files, one thread, `ast_oracle bench`): 19.0 -> 14.55 G instructions
+per round (-23.5%), 0.86 -> 0.73 s, heap allocations 11.4 M -> 1.2 M (tsgo: 1.57 s). Node lists built on one
+parser stack, keyword perfect hash, rare paths of per-token functions moved out of line, a monomorphized child
+visitor for the parent pass, `findImportOrRequire` via memmem; AST oracle, suite (both lazy modes) and
+private-monorepo output unchanged. The parallel parse phase on macOS stays kernel-bound (`open`/`read`/`stat`).
+Details: `notes/perf-parse.md`.
