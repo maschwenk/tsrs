@@ -254,6 +254,8 @@ fn perform_compilation(
         report_error_summary,
         compile_times,
     });
+    #[cfg(feature = "alloc-profile")]
+    crate::census::run(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
 
     CommandLineResult { status: result.status }
 }

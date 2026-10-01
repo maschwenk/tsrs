@@ -3,6 +3,8 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+#[cfg(feature = "alloc-profile")]
+mod census;
 mod execute;
 mod sys;
 mod tsc;

@@ -4,7 +4,8 @@
 //! Every leak-arena allocation (`P::new`, `alloc`, `alloc_slice`, `alloc_vec`, `alloc_str`) is recorded per
 //! (call site, element type) through `#[track_caller]`; a counting global allocator (over mimalloc, the
 //! binaries' production allocator) tracks the Rust heap (which includes the arena chunks). `dump()` prints top-N tables to stderr; `TSRS_ALLOC_PROFILE_TOP`
-//! sets N (default 60).
+//! sets N (default 60). `TSRS_CENSUS=1` additionally records every live block and marks what is reachable at the
+//! end of the run (`census`).
 
 use rustc_hash::FxHashMap;
 use mimalloc::MiMalloc as System;
@@ -12,6 +13,8 @@ use std::alloc::{GlobalAlloc, Layout};
 use std::panic::Location;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+
+pub mod census;
 
 struct Counting;
 
@@ -32,6 +35,7 @@ unsafe impl GlobalAlloc for Counting {
             grow(layout.size());
             HEAP_ALLOCS.fetch_add(1, Ordering::Relaxed);
             heap_sample::on_alloc(p, layout.size());
+            census::on_alloc(p, layout.size());
         }
         p
     }
@@ -41,17 +45,34 @@ unsafe impl GlobalAlloc for Counting {
             grow(layout.size());
             HEAP_ALLOCS.fetch_add(1, Ordering::Relaxed);
             heap_sample::on_alloc(p, layout.size());
+            census::on_alloc(p, layout.size());
         }
         p
     }
     unsafe fn dealloc(&self, p: *mut u8, layout: Layout) {
         heap_sample::on_free(p);
+        census::on_free(p);
+        if census::zero_on_free() {
+            std::ptr::write_bytes(p, 0, layout.size());
+        }
         System.dealloc(p, layout);
         HEAP_CURRENT.fetch_sub(layout.size(), Ordering::Relaxed);
     }
     unsafe fn realloc(&self, p: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         heap_sample::on_free(p);
-        let q = System.realloc(p, layout, new_size);
+        census::on_free(p);
+        let q = if census::zero_on_free() {
+            // Move by hand so the old block can be cleared before it is freed (see `census::zero_on_free`).
+            let q = System.alloc(Layout::from_size_align_unchecked(new_size, layout.align()));
+            if !q.is_null() {
+                std::ptr::copy_nonoverlapping(p, q, layout.size().min(new_size));
+                std::ptr::write_bytes(p, 0, layout.size());
+                System.dealloc(p, layout);
+            }
+            q
+        } else {
+            System.realloc(p, layout, new_size)
+        };
         if !q.is_null() {
             if new_size >= layout.size() {
                 grow(new_size - layout.size());
@@ -59,6 +80,7 @@ unsafe impl GlobalAlloc for Counting {
                 HEAP_CURRENT.fetch_sub(layout.size() - new_size, Ordering::Relaxed);
             }
             heap_sample::on_alloc(q, new_size);
+            census::on_alloc(q, new_size);
         }
         q
     }
@@ -295,7 +317,13 @@ struct Entry {
 
 type Key = (usize, usize);
 struct ThreadData {
-    sites: FxHashMap<Key, (&'static Location<'static>, &'static str, Entry)>,
+    index: FxHashMap<Key, u32>,
+    sites: Vec<(&'static Location<'static>, &'static str, Entry)>,
+    /// Census only: every arena block this thread allocated (address, size, index into `sites`), and the raw stack
+    /// of every `census::ARENA_SAMPLE`-th one (address, stack id).
+    blocks: Vec<(u64, u32, u32)>,
+    samples: Vec<(u64, u32)>,
+    countdown: u32,
 }
 type Shared = Arc<Mutex<ThreadData>>;
 
@@ -304,7 +332,13 @@ static ARENAS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 
 thread_local! {
     static LOCAL: Shared = {
-        let data = Arc::new(Mutex::new(ThreadData { sites: FxHashMap::default() }));
+        let data = Arc::new(Mutex::new(ThreadData {
+            index: FxHashMap::default(),
+            sites: Vec::new(),
+            blocks: Vec::new(),
+            samples: Vec::new(),
+            countdown: 0,
+        }));
         THREADS.lock().unwrap().push(data.clone());
         data
     };
@@ -331,13 +365,29 @@ pub(crate) fn register_arena(arena: &'static bumpalo::Bump) {
 }
 
 #[inline(never)]
-pub(crate) fn record(site: &'static Location<'static>, ty: &'static str, bytes: usize) {
+pub(crate) fn record(site: &'static Location<'static>, ty: &'static str, bytes: usize, addr: usize) {
     let _ = LOCAL.try_with(|local| {
         let mut data = local.lock().unwrap();
         let key = (site as *const Location as usize, ty.as_ptr() as usize ^ ty.len());
-        let e = &mut data.sites.entry(key).or_insert((site, ty, Entry::default())).2;
+        let next = data.sites.len() as u32;
+        let idx = *data.index.entry(key).or_insert(next);
+        if idx == next {
+            data.sites.push((site, ty, Entry::default()));
+        }
+        let e = &mut data.sites[idx as usize].2;
         e.count += 1;
         e.bytes += bytes as u64;
+        if bytes != 0 && census::recording() {
+            let size = u32::try_from(bytes).expect("arena block >= 4 GiB");
+            let sample = data.countdown == 0;
+            data.countdown = if sample { census::arena_sample_rate() - 1 } else { data.countdown - 1 };
+            census::with_guard(|| {
+                data.blocks.push((addr as u64, size, idx));
+                if sample {
+                    data.samples.push((addr as u64, census::stack_id()));
+                }
+            });
+        }
     });
 }
 
@@ -345,7 +395,7 @@ fn mb(b: u64) -> String {
     format!("{:.1}", b as f64 / (1024.0 * 1024.0))
 }
 
-fn short_type(ty: &str) -> String {
+pub(crate) fn short_type(ty: &str) -> String {
     // Strip module paths: `tsrs_checker::types::Type` -> `Type`.
     let mut out = String::new();
     let mut seg = String::new();
@@ -366,7 +416,9 @@ pub fn dump() {
     let top: usize = std::env::var("TSRS_ALLOC_PROFILE_TOP").ok().and_then(|s| s.parse().ok()).unwrap_or(60);
     let mut sites: FxHashMap<Key, (&'static Location<'static>, &'static str, Entry)> = FxHashMap::default();
     for t in THREADS.lock().unwrap().iter() {
-        for (k, v) in t.lock().unwrap().sites.iter() {
+        let data = t.lock().unwrap();
+        for (k, &i) in data.index.iter() {
+            let v = &data.sites[i as usize];
             let e = &mut sites.entry(*k).or_insert((v.0, v.1, Entry::default())).2;
             e.count += v.2.count;
             e.bytes += v.2.bytes;

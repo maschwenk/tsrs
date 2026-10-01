@@ -29,9 +29,9 @@ thread_local! {
 }
 
 macro_rules! profile {
-    ($ty:ty, $bytes:expr) => {
+    ($ty:ty, $bytes:expr, $addr:expr) => {
         #[cfg(feature = "alloc-profile")]
-        crate::alloc_profile::record(std::panic::Location::caller(), std::any::type_name::<$ty>(), $bytes);
+        crate::alloc_profile::record(std::panic::Location::caller(), std::any::type_name::<$ty>(), $bytes, $addr);
     };
 }
 
@@ -52,8 +52,9 @@ impl<T> P<T> {
     #[inline]
     #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(value: T) -> P<T> {
-        profile!(T, std::mem::size_of::<T>());
-        with_arena(|a| P(a.alloc(value)))
+        let p = with_arena(|a| P(a.alloc(value)));
+        profile!(T, std::mem::size_of::<T>(), p.addr());
+        p
     }
 }
 
@@ -235,8 +236,8 @@ impl PackedStr {
     fn new_long(s: &str) -> PackedStr {
         let len = u32::try_from(s.len()).expect("string longer than u32::MAX");
         let layout = std::alloc::Layout::from_size_align(4 + s.len(), 4).unwrap();
-        profile!(PackedStr, layout.size());
         let p = with_arena(|a| a.alloc_layout(layout));
+        profile!(PackedStr, layout.size(), p.addr().get());
         // SAFETY: `p` points to `4 + len` fresh bytes, 4-byte aligned.
         unsafe {
             p.cast::<u32>().as_ptr().write(len);
@@ -393,8 +394,9 @@ pub fn alloc_slice<T: Copy>(items: &[T]) -> &'static [T] {
     if items.is_empty() {
         return &[];
     }
-    profile!([T], std::mem::size_of_val(items));
-    with_arena(|a| &*a.alloc_slice_copy(items))
+    let s: &'static [T] = with_arena(|a| &*a.alloc_slice_copy(items));
+    profile!([T], std::mem::size_of_val(items), s.as_ptr() as usize);
+    s
 }
 
 /// Moves a `Vec` of arbitrary (possibly non-`Copy`) items into the arena.
@@ -404,8 +406,10 @@ pub fn alloc_vec<T>(items: Vec<T>) -> &'static [T] {
     if items.is_empty() {
         return &[];
     }
-    profile!([T], std::mem::size_of_val(&items[..]));
-    with_arena(|a| &*a.alloc_slice_fill_iter(items))
+    let bytes = std::mem::size_of_val(&items[..]);
+    let s: &'static [T] = with_arena(|a| &*a.alloc_slice_fill_iter(items));
+    profile!([T], bytes, s.as_ptr() as usize);
+    s
 }
 
 /// Copies a string into the arena.
@@ -415,16 +419,18 @@ pub fn alloc_str(s: &str) -> &'static str {
     if s.is_empty() {
         return "";
     }
-    profile!(str, s.len());
-    with_arena(|a| &*a.alloc_str(s))
+    let r: &'static str = with_arena(|a| &*a.alloc_str(s));
+    profile!(str, s.len(), r.as_ptr() as usize);
+    r
 }
 
 /// Allocates a plain `&'static T` (for values that do not need pointer identity semantics).
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc<T>(value: T) -> &'static T {
-    profile!(T, std::mem::size_of::<T>());
-    with_arena(|a| &*a.alloc(value))
+    let r: &'static T = with_arena(|a| &*a.alloc(value));
+    profile!(T, std::mem::size_of::<T>(), r as *const T as usize);
+    r
 }
 
 /// Prints the allocation profile (no-op unless built with `--features tsrs_core/alloc-profile`).
