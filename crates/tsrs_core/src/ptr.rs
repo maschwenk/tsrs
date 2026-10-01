@@ -314,6 +314,78 @@ impl<T> Default for SliceCell<T> {
     }
 }
 
+#[repr(C, packed(4))]
+struct PackedOptionSlice<T: 'static> {
+    ptr: *const T, // null = None (a slice's data pointer, even an empty one's, is never null)
+    len: u32,
+}
+
+impl<T> Clone for PackedOptionSlice<T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for PackedOptionSlice<T> {}
+
+/// A `Cell<Option<&'static [T]>>` in 12 bytes with 4-byte alignment, like `SliceCell` (for Go slices whose nil
+/// differs from empty).
+pub struct OptionSliceCell<T: 'static>(std::cell::Cell<PackedOptionSlice<T>>);
+
+impl<T> OptionSliceCell<T> {
+    #[inline]
+    pub fn new(s: Option<&'static [T]>) -> Self {
+        OptionSliceCell(std::cell::Cell::new(Self::pack(s)))
+    }
+    #[inline]
+    fn pack(s: Option<&'static [T]>) -> PackedOptionSlice<T> {
+        match s {
+            Some(s) => PackedOptionSlice { ptr: s.as_ptr(), len: u32::try_from(s.len()).expect("slice longer than u32::MAX") },
+            None => PackedOptionSlice { ptr: std::ptr::null(), len: 0 },
+        }
+    }
+    #[inline]
+    pub fn get(&self) -> Option<&'static [T]> {
+        let p = self.0.get();
+        // SAFETY: a non-null pointer was built from a `&'static [T]` of this length.
+        (!p.ptr.is_null()).then(|| unsafe { std::slice::from_raw_parts(p.ptr, p.len as usize) })
+    }
+    #[inline]
+    pub fn set(&self, s: Option<&'static [T]>) {
+        self.0.set(Self::pack(s))
+    }
+}
+
+impl<T> Default for OptionSliceCell<T> {
+    fn default() -> Self {
+        OptionSliceCell::new(None)
+    }
+}
+
+/// A `Cell<&'static str>` in 8 bytes (a `PackedStr`).
+pub struct StrCell(std::cell::Cell<PackedStr>);
+
+impl StrCell {
+    #[inline]
+    pub fn new(s: &'static str) -> Self {
+        StrCell(std::cell::Cell::new(PackedStr::new(s)))
+    }
+    #[inline]
+    pub fn get(&self) -> &'static str {
+        self.0.get().as_str()
+    }
+    #[inline]
+    pub fn set(&self, s: &'static str) {
+        self.0.set(PackedStr::new(s))
+    }
+}
+
+impl Default for StrCell {
+    fn default() -> Self {
+        StrCell::new("")
+    }
+}
+
 /// Copies a slice into the arena. Use for Go slices that are stored in long-lived objects.
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]
@@ -460,6 +532,16 @@ mod tests {
         let v = alloc_vec(vec![String::from("a"), String::from("b")]);
         assert_eq!(v.len(), 2);
         assert_eq!(alloc_str("hello"), "hello");
+    }
+
+    #[test]
+    fn option_slice_cell() {
+        let c: OptionSliceCell<i32> = OptionSliceCell::default();
+        assert_eq!(c.get(), None);
+        c.set(Some(&[]));
+        assert_eq!(c.get(), Some(&[][..]));
+        c.set(Some(alloc_slice(&[1, 2])));
+        assert_eq!(c.get(), Some(&[1, 2][..]));
     }
 
     #[test]

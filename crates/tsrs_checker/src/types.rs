@@ -2,7 +2,7 @@ use std::fmt;
 use std::hash::Hash;
 
 use bitflags::bitflags;
-use tsrs_core::SliceCell;
+use tsrs_core::{OptionSliceCell, SliceCell, StrCell};
 
 use crate::*;
 
@@ -1777,10 +1777,11 @@ embeds!(EvolvingArrayType, object_type, ObjectType);
 #[derive(Default)]
 pub struct UnionOrIntersectionType {
     pub structured_type: StructuredType,
-    pub types: Cell<&'static [P<Type>]>,
+    // Packed slice cells (12 bytes each), as in `StructuredType`.
+    pub types: SliceCell<P<Type>>,
+    pub resolved_properties: OptionSliceCell<P<Symbol>>, // nil = not computed (Go tests against nil)
     pub property_cache: Cell<Option<P<SymbolTable>>>,
     pub property_cache_without_function_property_augment: Cell<Option<P<SymbolTable>>>,
-    pub resolved_properties: Cell<Option<&'static [P<Symbol>]>>, // nil = not computed (Go tests against nil)
 }
 embeds!(UnionOrIntersectionType, structured_type, StructuredType);
 
@@ -1798,10 +1799,12 @@ pub struct UnionType {
     pub resolved_reduced_type: Cell<Option<P<Type>>>,
     pub regular_type: Cell<Option<P<Type>>>,
     pub origin: Cell<Option<P<Type>>>, // Denormalized union, intersection, or index type in which union originates
-    pub key_property_name: Cell<&'static str>, // Property with unique unit type that exists in every object/intersection in union type
+    pub key_property_name: StrCell, // Property with unique unit type that exists in every object/intersection in union type
     pub constituent_map: GoMap<P<Type>, P<Type>>, // Constituents keyed by unit type discriminants
 }
 embeds!(UnionType, union_or_intersection_type, UnionOrIntersectionType);
+
+const _: () = assert!(std::mem::size_of::<UnionType>() == 128);
 
 // IntersectionType
 
@@ -1812,6 +1815,8 @@ pub struct IntersectionType {
     pub unique_literal_filled_instantiation: Cell<Option<P<Type>>>, // Instantiation with type parameters mapped to never type
 }
 embeds!(IntersectionType, union_or_intersection_type, UnionOrIntersectionType);
+
+const _: () = assert!(std::mem::size_of::<IntersectionType>() == 104);
 
 // TypeParameter
 

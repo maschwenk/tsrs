@@ -250,3 +250,18 @@ bytes of data, TypeReference 96 -> 88.
 | 4 checkers, before | 9.59-9.68 | 435-436 G |
 | 4 checkers, after | 9.55-9.58 (-0.05) | 436-437 G |
 | opt-out single / 4 checkers (go assignment), after | 9.58 / 14.68 | |
+
+### 12. Union and intersection types: packed slice cells, packed key-property name
+
+`UnionOrIntersectionType.types` is a `SliceCell` and `resolved_properties` a new `OptionSliceCell` (the same
+12-byte packing with a null pointer for Go's nil slice, which differs from empty here); `UnionType.key_property_name`
+is a `StrCell` (a `Cell` of a `PackedStr`). Same `get` / `set`, no call site changed. UnionType 144 -> 128 bytes
+of data, IntersectionType 112 -> 104 (compile-time asserts); 1.02M unions and 1.13M intersections single.
+
+| run (2 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 7.124-7.126 | 322-323 G |
+| single, after | 7.102-7.106 (-0.02) | 322-323 G |
+| 4 checkers, before | 9.55-9.58 | 435-437 G |
+| 4 checkers, after | 9.51-9.52 (-0.05) | 435 G |
+| opt-out single / 4 checkers (go assignment), after | 9.56 / 14.64 | |
