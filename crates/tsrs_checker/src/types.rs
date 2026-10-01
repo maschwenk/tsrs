@@ -252,37 +252,48 @@ pub struct SymbolReferenceLinks {
 
 // Links for value symbols
 //
-// Go's `ValueSymbolLinks` holds all seven fields inline. Most links only ever get `resolved_type`, `target` and
-// `mapper` (on Project 81% of the 13.6M records set none of the other four), so those four live in a tail
-// allocated on the first write of a non-default value: 32 bytes per record instead of 56. Reads of an absent tail
-// return the zero value, exactly like reading the unset field.
+// Go's `ValueSymbolLinks` holds seven fields inline (56 bytes). Here a record is three words, 24 bytes:
+// `resolved_type` and two words whose meaning depends on the record's mode, kept in the low two bits of `second`
+// (every stored pointer is 8-aligned):
 //
-// Synthetic symbols (union/intersection properties, mapped type members: 2.15M of the 2.5M tails on Project) set
-// `containing_type` and often `name_type` but never `target` or `mapper`. Their record switches to "synthetic" mode
-// (bit 0 of the tail word): the two words that hold `target` and `mapper` hold `containing_type` and `name_type`
-// instead, and no tail is needed for them. A later non-nil `target` or `mapper` write moves the two into the tail
-// and switches back. Every getter returns what was last set either way.
+// - plain (the common case: instantiated symbols and most others): `target`, `mapper`;
+// - synthetic: `containing_type`, `name_type`, for records that set those but never `target` / `mapper` (union and
+//   intersection properties, mapped type members: 2.15M of the 2.5M records on Project that set any of the four
+//   rare fields);
+// - tail: a pointer to `ValueSymbolLinksTail`, which holds all six other fields, for the remaining records (0.35M).
+//
+// A record starts plain and moves to synthetic or tail mode on the first write that its mode cannot hold; it never
+// moves back. Every getter returns what was last set (the zero value if never set), whatever the mode.
 
 #[derive(Default)]
 pub struct ValueSymbolLinks {
     pub resolved_type: Cell<Option<P<Type>>>, // Type of value symbol
-    first: Cell<Option<P<()>>>,  // target (P<Symbol>), or containing_type (P<Type>) in synthetic mode
-    second: Cell<Option<P<()>>>, // mapper (P<TypeMapper>), or name_type (P<Type>) in synthetic mode
-    rare: Cell<Option<P<()>>>,   // P<ValueSymbolLinksRare> or nil, address | SYNTHETIC_MODE in synthetic mode
+    first: Cell<Option<P<()>>>,  // plain: target (P<Symbol>); synthetic: containing_type (P<Type>); tail: P<ValueSymbolLinksTail>
+    second: Cell<Option<P<()>>>, // plain: mapper (P<TypeMapper>); synthetic: name_type (P<Type>) | SYNTHETIC; tail: TAIL
 }
 
 #[derive(Default)]
-struct ValueSymbolLinksRare {
+struct ValueSymbolLinksTail {
+    target: Cell<Option<P<Symbol>>>,
+    mapper: Cell<Option<P<TypeMapper>>>,
     write_type: Cell<Option<P<Type>>>,
     name_type: Cell<Option<P<Type>>>,
     containing_type: Cell<Option<P<Type>>>, // Mapped type for mapped type property, containing union or intersection type for synthetic property
     function_or_constructor_checked: Cell<bool>,
 }
 
-const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 32);
+const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 24);
 
-/// The mode bit in the tail word (`ValueSymbolLinksRare` is 8-aligned, so bit 0 of its address is free).
-const SYNTHETIC_MODE: usize = 1;
+const MODE_MASK: usize = 3;
+const SYNTHETIC: usize = 1;
+const TAIL: usize = 2;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LinksMode {
+    Plain,
+    Synthetic,
+    Tail,
+}
 
 /// A pointer stored in a link word whose type depends on the mode.
 #[inline]
@@ -291,7 +302,7 @@ fn erase<T>(p: Option<P<T>>) -> Option<P<()>> {
     p.map(|p| P::from_static(unsafe { &*(p.get() as *const T).cast::<()>() }))
 }
 
-/// SAFETY: `w` was stored by `erase` from a `P<T>` (arena values are never freed or moved), with any mode bit cleared.
+/// SAFETY: `w` was stored by `erase` from a `P<T>` (arena values are never freed or moved), with the mode bits cleared.
 #[inline]
 unsafe fn restore<T: 'static>(w: Option<P<()>>) -> Option<P<T>> {
     w.map(|w| P::from_static(unsafe { &*(w.get() as *const ()).cast::<T>() }))
@@ -305,149 +316,147 @@ fn map_word(w: Option<P<()>>, f: impl FnOnce(usize) -> usize) -> Option<P<()>> {
     (!ptr.is_null()).then(|| P::from_static(unsafe { &*ptr }))
 }
 
+#[inline]
+fn word_bits(w: Option<P<()>>) -> usize {
+    w.map_or(0, |w| (w.get() as *const ()).addr())
+}
+
 impl ValueSymbolLinks {
     #[inline]
-    fn is_synthetic_mode(&self) -> bool {
-        self.rare.get().is_some_and(|w| (w.get() as *const ()).addr() & SYNTHETIC_MODE != 0)
-    }
-
-    #[inline]
-    fn set_synthetic_mode(&self, on: bool) {
-        self.rare.set(map_word(self.rare.get(), |a| if on { a | SYNTHETIC_MODE } else { a & !SYNTHETIC_MODE }));
-    }
-
-    #[inline]
-    fn rare(&self) -> Option<P<ValueSymbolLinksRare>> {
-        // SAFETY: the tail word is an erased `P<ValueSymbolLinksRare>` (or nil) plus the mode bit.
-        unsafe { restore(map_word(self.rare.get(), |a| a & !SYNTHETIC_MODE)) }
-    }
-
-    #[inline]
-    fn rare_for_write(&self) -> P<ValueSymbolLinksRare> {
-        match self.rare() {
-            Some(rare) => rare,
-            None => {
-                let rare = P::new(ValueSymbolLinksRare::default());
-                let mode = self.is_synthetic_mode();
-                self.rare.set(erase(Some(rare)));
-                self.set_synthetic_mode(mode);
-                rare
-            }
+    fn mode(&self) -> LinksMode {
+        match word_bits(self.second.get()) & MODE_MASK {
+            0 => LinksMode::Plain,
+            SYNTHETIC => LinksMode::Synthetic,
+            _ => LinksMode::Tail,
         }
     }
 
-    /// Leaves synthetic mode: `containing_type` and `name_type` move into the tail.
-    fn leave_synthetic_mode(&self) {
-        let (containing_type, name_type) = (self.containing_type(), self.name_type());
-        let rare = self.rare_for_write();
-        rare.containing_type.set(containing_type);
-        rare.name_type.set(name_type);
-        self.set_synthetic_mode(false);
-        self.first.set(None);
-        self.second.set(None);
+    #[inline]
+    fn tail(&self) -> P<ValueSymbolLinksTail> {
+        debug_assert!(self.mode() == LinksMode::Tail);
+        // SAFETY: in tail mode `first` is an erased `P<ValueSymbolLinksTail>`.
+        unsafe { restore(self.first.get()) }.unwrap()
     }
 
-    /// Whether a `containing_type` / `name_type` write can use the synthetic-mode words: no `target`, no `mapper`, and
-    /// neither field in the tail.
-    fn can_enter_synthetic_mode(&self) -> bool {
-        self.first.get().is_none()
-            && self.second.get().is_none()
-            && self.rare().is_none_or(|r| r.containing_type.get().is_none() && r.name_type.get().is_none())
+    /// The tail, moving the record to tail mode first if needed.
+    fn tail_for_write(&self) -> P<ValueSymbolLinksTail> {
+        if self.mode() == LinksMode::Tail {
+            return self.tail();
+        }
+        let tail = P::new(ValueSymbolLinksTail::default());
+        tail.target.set(self.target());
+        tail.mapper.set(self.mapper());
+        tail.containing_type.set(self.containing_type());
+        tail.name_type.set(self.name_type());
+        self.first.set(erase(Some(tail)));
+        self.second.set(map_word(None, |_| TAIL));
+        tail
+    }
+
+    /// Moves a plain record without target and mapper to synthetic mode, if it is one.
+    fn enter_synthetic_mode(&self) -> bool {
+        if self.mode() == LinksMode::Plain && self.first.get().is_none() && self.second.get().is_none() {
+            self.second.set(map_word(None, |_| SYNTHETIC));
+            return true;
+        }
+        self.mode() == LinksMode::Synthetic
     }
 
     #[inline]
     pub fn target(&self) -> Option<P<Symbol>> {
-        if self.is_synthetic_mode() {
-            return None;
+        match self.mode() {
+            // SAFETY: in plain mode `first` is an erased `P<Symbol>` or nil.
+            LinksMode::Plain => unsafe { restore(self.first.get()) },
+            LinksMode::Synthetic => None,
+            LinksMode::Tail => self.tail().target.get(),
         }
-        // SAFETY: outside synthetic mode `first` is an erased `P<Symbol>` or nil.
-        unsafe { restore(self.first.get()) }
     }
     #[inline]
     pub fn set_target(&self, target: Option<P<Symbol>>) {
-        if self.is_synthetic_mode() {
-            if target.is_none() {
-                return;
-            }
-            self.leave_synthetic_mode();
+        match self.mode() {
+            LinksMode::Plain => self.first.set(erase(target)),
+            LinksMode::Synthetic if target.is_none() => {}
+            _ => self.tail_for_write().target.set(target),
         }
-        self.first.set(erase(target));
     }
     #[inline]
     pub fn mapper(&self) -> Option<P<TypeMapper>> {
-        if self.is_synthetic_mode() {
-            return None;
+        match self.mode() {
+            // SAFETY: in plain mode `second` is an erased `P<TypeMapper>` or nil (no mode bits).
+            LinksMode::Plain => unsafe { restore(self.second.get()) },
+            LinksMode::Synthetic => None,
+            LinksMode::Tail => self.tail().mapper.get(),
         }
-        // SAFETY: outside synthetic mode `second` is an erased `P<TypeMapper>` or nil.
-        unsafe { restore(self.second.get()) }
     }
     #[inline]
     pub fn set_mapper(&self, mapper: Option<P<TypeMapper>>) {
-        if self.is_synthetic_mode() {
-            if mapper.is_none() {
-                return;
-            }
-            self.leave_synthetic_mode();
-        }
-        self.second.set(erase(mapper));
-    }
-
-    #[inline]
-    pub fn write_type(&self) -> Option<P<Type>> {
-        self.rare().and_then(|r| r.write_type.get())
-    }
-    #[inline]
-    pub fn set_write_type(&self, t: Option<P<Type>>) {
-        if t.is_some() || self.rare().is_some() {
-            self.rare_for_write().write_type.set(t);
-        }
-    }
-    #[inline]
-    pub fn name_type(&self) -> Option<P<Type>> {
-        if self.is_synthetic_mode() {
-            // SAFETY: in synthetic mode `second` is an erased `P<Type>` or nil.
-            return unsafe { restore(self.second.get()) };
-        }
-        self.rare().and_then(|r| r.name_type.get())
-    }
-    #[inline]
-    pub fn set_name_type(&self, t: Option<P<Type>>) {
-        if self.is_synthetic_mode() {
-            self.second.set(erase(t));
-        } else if t.is_some() && self.can_enter_synthetic_mode() {
-            self.set_synthetic_mode(true);
-            self.second.set(erase(t));
-        } else if t.is_some() || self.rare().is_some() {
-            self.rare_for_write().name_type.set(t);
+        match self.mode() {
+            LinksMode::Plain => self.second.set(erase(mapper)),
+            LinksMode::Synthetic if mapper.is_none() => {}
+            _ => self.tail_for_write().mapper.set(mapper),
         }
     }
     #[inline]
     pub fn containing_type(&self) -> Option<P<Type>> {
-        if self.is_synthetic_mode() {
+        match self.mode() {
+            LinksMode::Plain => None,
             // SAFETY: in synthetic mode `first` is an erased `P<Type>` or nil.
-            return unsafe { restore(self.first.get()) };
+            LinksMode::Synthetic => unsafe { restore(self.first.get()) },
+            LinksMode::Tail => self.tail().containing_type.get(),
         }
-        self.rare().and_then(|r| r.containing_type.get())
     }
     #[inline]
     pub fn set_containing_type(&self, t: Option<P<Type>>) {
-        if self.is_synthetic_mode() {
+        if t.is_none() && self.mode() == LinksMode::Plain {
+            return;
+        }
+        if self.enter_synthetic_mode() {
             self.first.set(erase(t));
-        } else if t.is_some() && self.can_enter_synthetic_mode() {
-            self.set_synthetic_mode(true);
-            self.first.set(erase(t));
-        } else if t.is_some() || self.rare().is_some() {
-            self.rare_for_write().containing_type.set(t);
+        } else {
+            self.tail_for_write().containing_type.set(t);
+        }
+    }
+    #[inline]
+    pub fn name_type(&self) -> Option<P<Type>> {
+        match self.mode() {
+            LinksMode::Plain => None,
+            // SAFETY: in synthetic mode `second` is an erased `P<Type>` or nil plus the mode bits.
+            LinksMode::Synthetic => unsafe { restore(map_word(self.second.get(), |a| a & !MODE_MASK)) },
+            LinksMode::Tail => self.tail().name_type.get(),
+        }
+    }
+    #[inline]
+    pub fn set_name_type(&self, t: Option<P<Type>>) {
+        if t.is_none() && self.mode() == LinksMode::Plain {
+            return;
+        }
+        if self.enter_synthetic_mode() {
+            self.second.set(map_word(erase(t), |a| a | SYNTHETIC));
+        } else {
+            self.tail_for_write().name_type.set(t);
+        }
+    }
+    #[inline]
+    pub fn write_type(&self) -> Option<P<Type>> {
+        match self.mode() {
+            LinksMode::Tail => self.tail().write_type.get(),
+            _ => None,
+        }
+    }
+    #[inline]
+    pub fn set_write_type(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.mode() == LinksMode::Tail {
+            self.tail_for_write().write_type.set(t);
         }
     }
     #[inline]
     pub fn function_or_constructor_checked(&self) -> bool {
-        self.rare().is_some_and(|r| r.function_or_constructor_checked.get())
+        self.mode() == LinksMode::Tail && self.tail().function_or_constructor_checked.get()
     }
     #[inline]
     pub fn set_function_or_constructor_checked(&self, v: bool) {
-        if v || self.rare().is_some() {
-            self.rare_for_write().function_or_constructor_checked.set(v);
+        if v || self.mode() == LinksMode::Tail {
+            self.tail_for_write().function_or_constructor_checked.set(v);
         }
     }
 }

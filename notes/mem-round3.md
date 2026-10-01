@@ -268,3 +268,20 @@ accessors (`target()`, `set_target(..)`, 18 call sites). A unit test walks the m
 | 4 checkers, before (A7) | 8.28-8.34 (8.321) | 432-433 G |
 | 4 checkers, after | 8.20-8.24 (8.240, -0.08) | 431-432 G |
 | opt-out single / 4 checkers (go assignment), after | 8.25 / 12.71 | 341 / 517 G |
+
+### A9. Value-symbol links in three words
+
+After A8 only 0.35M of the ~10M link records have a tail, so the tail word is almost always nil. The record is
+now `resolved_type` plus two mode-dependent words, the mode in the low two bits of the second (stored pointers are
+8-aligned): plain (`target`, `mapper`), synthetic (`containing_type`, `name_type`; A8) or tail (a pointer to a
+`ValueSymbolLinksTail` holding all six other fields; the second word is just the mode). A record moves to synthetic
+or tail mode on the first write its mode cannot hold and never moves back. 32 -> 24 bytes per record; tail records
+pay 48 bytes for the tail instead of 32.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before (A8) | 6.148-6.158 (6.152) | 315-317 G |
+| single, after | 6.083-6.085 (6.083, -0.07) | 316-317 G |
+| 4 checkers, before (A8) | 8.247-8.256 (8.251) | 430-431 G |
+| 4 checkers, after | 8.127-8.149 (8.139, -0.11) | 430-431 G |
+| opt-out single / 4 checkers (go assignment), after | 8.08 / 12.45 | 341 / 519 G |
