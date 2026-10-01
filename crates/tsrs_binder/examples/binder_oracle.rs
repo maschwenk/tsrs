@@ -89,7 +89,7 @@ impl Dumper {
         let _ = write!(self.sb, " {}(", tag);
         escape(&mut self.sb, s.name.get());
         let _ = write!(self.sb, " {:x} {} {}", s.flags.get().bits(), s.declarations().len(), node_ref(s.value_declaration.get()));
-        if let Some(parent) = s.parent.get() {
+        if let Some(parent) = s.parent() {
             self.sb.push_str(" p=");
             escape(&mut self.sb, parent.name.get());
         }

@@ -554,7 +554,7 @@ impl Checker {
                     }
                 }
                 prop.declarations.set(member_symbol.declarations());
-                prop.parent.set(member_symbol.parent());
+                prop.set_parent(member_symbol.parent());
                 prop.value_declaration.set(member_symbol.value_declaration());
                 links.resolved_type.set(Some(t));
                 links.set_target(Some(member_symbol));
@@ -1662,7 +1662,7 @@ impl Checker {
                 // should be the merged module symbol. But the symbol for `B` has only one declaration, so its parent should
                 // be the module augmentation symbol, which contains its only declaration.
                 if merged.flags().intersects(SymbolFlags::Transient) {
-                    merged.parent.set(merged_parent);
+                    merged.set_parent(merged_parent);
                 }
             }
             target.set(id, merged);
@@ -1899,7 +1899,7 @@ impl Checker {
         let result = self.new_symbol(symbol.flags(), symbol.name());
         // Force reallocation if anything is ever appended to declarations
         result.declarations.set(symbol.declarations());
-        result.parent.set(symbol.parent());
+        result.set_parent(symbol.parent());
         result.value_declaration.set(symbol.value_declaration());
         result.set_members(symbol.members().map(|m| m.clone_table()));
         result.set_exports(symbol.exports().map(|e| e.clone_table()));
@@ -2430,9 +2430,9 @@ impl Checker {
         declarations.extend(type_symbol.declarations().iter().copied());
         declarations.dedup();
         result.set_declarations(&declarations);
-        result.parent.set(value_symbol.parent());
+        result.set_parent(value_symbol.parent());
         if result.parent().is_none() {
-            result.parent.set(type_symbol.parent());
+            result.set_parent(type_symbol.parent());
         }
         result.value_declaration.set(value_symbol.value_declaration());
         result.set_members(type_symbol.members().map(|m| m.clone_table()));

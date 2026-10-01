@@ -2388,7 +2388,7 @@ impl Checker {
                         symbol.check_flags.set(symbol.check_flags.get() | CheckFlags::IndexSymbol);
                         symbol.value_declaration.set(Some(declarations[0]));
                         symbol.set_declarations(&declarations);
-                        symbol.parent.set(t.symbol());
+                        symbol.set_parent(t.symbol());
                         let links = self.value_symbol_links.get(symbol);
                         links.resolved_type.set(info.value_type.get());
                         info.index_symbol.set(Some(symbol));

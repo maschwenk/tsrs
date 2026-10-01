@@ -280,3 +280,8 @@ labels, `infer` / overload inference contexts and scratch mappers (escape bit se
 are reused. Private monorepo peak 6.240 -> 5.892 GiB single (-5.6%), 8.389 -> 7.881 GiB on 4 checkers (-6.1%),
 instructions +0.5%; every freed block proven unreachable by the census (precise walk + strong mark, 0 violations
 on the monorepo and the corpus). Details: `notes/mem-recycle.md`.
+
+## 2026-10-01: small representation items (Symbol, Identifier)
+
+`Symbol` 56 -> 48 bytes (the member/export tail shares a word with `parent`): private monorepo peak -0.08 GiB single,
+-0.14 GiB on 4 checkers, output and counters identical. Details: `notes/mem-small.md`.

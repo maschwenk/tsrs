@@ -1828,7 +1828,7 @@ impl Checker {
                 | symbol.check_flags() & (CheckFlags::Readonly | CheckFlags::Late | CheckFlags::OptionalParameter | CheckFlags::RestParameter),
         );
         result.declarations.set(symbol.declarations());
-        result.parent.set(symbol.parent());
+        result.set_parent(symbol.parent());
         result.value_declaration.set(symbol.value_declaration());
         #[cfg(feature = "site-counts")]
         {

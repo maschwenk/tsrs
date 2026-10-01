@@ -828,7 +828,7 @@ impl Checker {
     pub(crate) fn create_default_property_wrapper_for_module(&mut self, symbol: P<Symbol>, original_symbol: Option<P<Symbol>>, anonymous_symbol: Option<P<Symbol>>) -> P<Type> {
         let member_table = SymbolTable::new();
         let new_symbol = self.new_symbol(SymbolFlags::Alias, InternalSymbolNameDefault);
-        new_symbol.parent.set(original_symbol);
+        new_symbol.set_parent(original_symbol);
         let name_type = self.get_string_literal_type("default");
         self.value_symbol_links.get(new_symbol).set_name_type(Some(name_type));
         let alias_target = self.resolve_symbol(symbol);
@@ -852,7 +852,7 @@ impl Checker {
         result.value_declaration.set(symbol.value_declaration());
         result.set_members(symbol.members().map(|m| m.clone_table()));
         result.set_exports(symbol.exports().map(|e| e.clone_table()));
-        result.parent.set(symbol.parent());
+        result.set_parent(symbol.parent());
         let links = self.export_type_links.get(result);
         links.target.set(Some(symbol));
         links.originating_import.set(Some(reference_parent));
@@ -1192,7 +1192,7 @@ impl Checker {
                 self.value_symbol_links.get(late_symbol).set_name_type(Some(t));
                 self.add_declaration_to_late_bound_symbol(late_symbol, decl, symbol_flags);
                 if late_symbol.parent().is_none() {
-                    late_symbol.parent.set(Some(parent));
+                    late_symbol.set_parent(Some(parent));
                 }
                 links.resolved_symbol.set(Some(late_symbol));
             }

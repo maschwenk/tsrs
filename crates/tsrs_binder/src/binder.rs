@@ -341,8 +341,8 @@ impl Binder {
             }
         }
         self.add_declaration_to_symbol(symbol, node, includes);
-        match symbol.parent.get() {
-            None => symbol.parent.set(parent),
+        match symbol.parent() {
+            None => symbol.set_parent(parent),
             Some(existing_parent) => {
                 if Some(existing_parent) != parent {
                     panic!("Existing symbol parent should match new one");
@@ -1140,7 +1140,7 @@ impl Binder {
             self.error_on_node(first_declaration, &diagnostics::Duplicate_identifier_0, &[&ast::symbol_name(prototype_symbol)]);
         }
         ast::get_exports(symbol).set(prototype_symbol.name.get(), prototype_symbol);
-        prototype_symbol.parent.set(Some(symbol));
+        prototype_symbol.set_parent(Some(symbol));
     }
 
     pub(crate) fn bind_property_or_method_or_accessor(&mut self, node: P<Node>, symbol_flags: SymbolFlags, symbol_excludes: SymbolFlags) {
@@ -1458,7 +1458,7 @@ impl Binder {
     pub(crate) fn bind_anonymous_declaration(&mut self, node: P<Node>, symbol_flags: SymbolFlags, name: &'static str) {
         let symbol = self.new_symbol(symbol_flags, name);
         if symbol_flags.intersects(SymbolFlags::EnumMember | SymbolFlags::ClassMember) {
-            symbol.parent.set(self.container().symbol());
+            symbol.set_parent(self.container().symbol());
         }
         self.add_declaration_to_symbol(symbol, node, symbol_flags);
     }
@@ -1887,7 +1887,7 @@ impl Binder {
                 let exports_property = self.new_symbol(SymbolFlags::ModuleExports | SymbolFlags::Property, "exports");
                 exports_property.declarations.set(symbol.declarations());
                 exports_property.value_declaration.set(symbol.value_declaration.get());
-                exports_property.parent.set(Some(symbol));
+                exports_property.set_parent(Some(symbol));
                 let members = SymbolTable::new();
                 members.set("exports", exports_property);
                 symbol.set_members(Some(members));

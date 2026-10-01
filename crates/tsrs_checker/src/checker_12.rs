@@ -1489,7 +1489,7 @@ impl Checker {
             let symbol = self.new_symbol(SymbolFlags::None, "ImportMetaExpression");
             let import_meta_type = self.get_global_import_meta_type();
             let meta_property_symbol = self.new_symbol_ex(SymbolFlags::Property, "meta", CheckFlags::Readonly);
-            meta_property_symbol.parent.set(Some(symbol));
+            meta_property_symbol.set_parent(Some(symbol));
             self.value_symbol_links.get(meta_property_symbol).resolved_type.set(Some(import_meta_type));
             let members = create_symbol_table(&[meta_property_symbol]);
             symbol.set_members(members);

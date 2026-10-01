@@ -16,10 +16,11 @@ use crate::*;
 //
 // Go's `Symbol` holds `Members`, `Exports` and `ExportSymbol` inline. Few symbols have any of them (on the private monorepo 5%
 // of 15.3M: binder symbols of classes, interfaces, modules and exported locals; almost no transient symbols), so
-// they live in a tail allocated on the first write of a non-nil value (`members()` / `set_members()` & co.):
-// 72 bytes per symbol instead of 88. Reads of an absent tail return nil, like the unset Go field. `name` is a
-// `PackedStr` (pointer and length in one word), `declarations` a 4-byte-aligned (pointer, `u32` length) pair packed
-// with the two flag words and the `u32` id: 56 bytes.
+// they live in a tail allocated on the first write of a non-nil value (`members()` / `set_members()` & co.).
+// Reads of an absent tail return nil, like the unset Go field. The tail pointer shares a word with `parent`
+// (`SymbolParentWord`): the word holds the parent until a tail exists, then the tail (which holds the parent).
+// `name` is a `PackedStr` (pointer and length in one word), `declarations` a 4-byte-aligned (pointer, `u32`
+// length) pair packed with the two flag words and the `u32` id: 48 bytes.
 
 #[derive(Default)]
 pub struct Symbol {
@@ -29,18 +30,63 @@ pub struct Symbol {
     pub declarations: OwnedSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
     pub value_declaration: OwnedCell<Option<P<Node>>>,
     pub(crate) id: AtomicU32, // Go uint64; ids above u32::MAX panic in get_symbol_id
-    pub parent: OwnedCell<Option<P<Symbol>>>,
-    tables: OwnedCell<Option<P<SymbolTables>>>,
+    parent_or_tables: OwnedCell<SymbolParentWord>,
 }
 
 #[derive(Default)]
 struct SymbolTables {
+    parent: OwnedCell<Option<P<Symbol>>>,
     members: OwnedCell<Option<P<SymbolTable>>>,
     exports: OwnedCell<Option<P<SymbolTable>>>,
     export_symbol: OwnedCell<Option<P<Symbol>>>,
 }
 
-const _: () = assert!(std::mem::size_of::<Symbol>() == 56);
+const _: () = assert!(std::mem::size_of::<Symbol>() == 48);
+
+/// `Symbol.parent` or, once the symbol has a `SymbolTables` tail, the tail: an address (provenance exposed when
+/// stored, recovered with `with_exposed_provenance`), with bit 63 set for the tail (user-space addresses are below
+/// 2^48). 0 = no parent and no tail. The address part stays a plain pointer to the start of its block.
+#[derive(Clone, Copy, Default)]
+struct SymbolParentWord(u64);
+
+impl SymbolParentWord {
+    const TABLES: u64 = 1 << 63;
+
+    #[inline]
+    fn parent(p: Option<P<Symbol>>) -> SymbolParentWord {
+        SymbolParentWord(p.map_or(0, |p| Self::addr(p.get() as *const Symbol as *const u8)))
+    }
+
+    #[inline]
+    fn tables(t: P<SymbolTables>) -> SymbolParentWord {
+        SymbolParentWord(Self::addr(t.get() as *const SymbolTables as *const u8) | Self::TABLES)
+    }
+
+    #[inline]
+    fn addr(p: *const u8) -> u64 {
+        let addr = p.expose_provenance() as u64;
+        assert!(addr >> 48 == 0, "symbol address {addr:#x} above 2^48");
+        addr
+    }
+
+    #[inline]
+    fn get_tables(self) -> Option<P<SymbolTables>> {
+        // SAFETY: a tagged word was stored from a live `P<SymbolTables>` (arena objects are never freed or moved),
+        // whose provenance `addr` exposed.
+        (self.0 & Self::TABLES != 0).then(|| {
+            P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<SymbolTables>((self.0 & !Self::TABLES) as usize) })
+        })
+    }
+
+    #[inline]
+    fn get_parent(self) -> Option<P<Symbol>> {
+        match self.get_tables() {
+            Some(t) => t.parent.get(),
+            // SAFETY: a nonzero untagged word was stored from a live `P<Symbol>`, whose provenance `addr` exposed.
+            None => (self.0 != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(self.0 as usize) })),
+        }
+    }
+}
 
 impl Symbol {
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).
@@ -87,47 +133,59 @@ impl Symbol {
         self.value_declaration.get()
     }
     #[inline]
+    fn tables(&self) -> Option<P<SymbolTables>> {
+        self.parent_or_tables.get().get_tables()
+    }
+    #[inline]
     fn tables_for_write(&self) -> P<SymbolTables> {
-        match self.tables.get() {
+        let word = self.parent_or_tables.get();
+        match word.get_tables() {
             Some(tables) => tables,
             None => {
-                let tables = P::new(SymbolTables::default());
-                self.tables.set(Some(tables));
+                let tables = P::new(SymbolTables { parent: OwnedCell::new(word.get_parent()), ..Default::default() });
+                self.parent_or_tables.set(SymbolParentWord::tables(tables));
                 tables
             }
         }
     }
     #[inline]
     pub fn members(&self) -> Option<P<SymbolTable>> {
-        self.tables.get().and_then(|t| t.members.get())
+        self.tables().and_then(|t| t.members.get())
     }
     #[inline]
     pub fn set_members(&self, members: Option<P<SymbolTable>>) {
-        if members.is_some() || self.tables.get().is_some() {
+        if members.is_some() || self.tables().is_some() {
             self.tables_for_write().members.set(members);
         }
     }
     #[inline]
     pub fn exports(&self) -> Option<P<SymbolTable>> {
-        self.tables.get().and_then(|t| t.exports.get())
+        self.tables().and_then(|t| t.exports.get())
     }
     #[inline]
     pub fn set_exports(&self, exports: Option<P<SymbolTable>>) {
-        if exports.is_some() || self.tables.get().is_some() {
+        if exports.is_some() || self.tables().is_some() {
             self.tables_for_write().exports.set(exports);
         }
     }
     #[inline]
     pub fn parent(&self) -> Option<P<Symbol>> {
-        self.parent.get()
+        self.parent_or_tables.get().get_parent()
+    }
+    #[inline]
+    pub fn set_parent(&self, parent: Option<P<Symbol>>) {
+        match self.tables() {
+            Some(tables) => tables.parent.set(parent),
+            None => self.parent_or_tables.set(SymbolParentWord::parent(parent)),
+        }
     }
     #[inline]
     pub fn export_symbol(&self) -> Option<P<Symbol>> {
-        self.tables.get().and_then(|t| t.export_symbol.get())
+        self.tables().and_then(|t| t.export_symbol.get())
     }
     #[inline]
     pub fn set_export_symbol(&self, export_symbol: Option<P<Symbol>>) {
-        if export_symbol.is_some() || self.tables.get().is_some() {
+        if export_symbol.is_some() || self.tables().is_some() {
             self.tables_for_write().export_symbol.set(export_symbol);
         }
     }
@@ -164,7 +222,7 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
     if symbol.declarations.get().is_empty() {
         // A class's implicit prototype has no declaration of its own.
         assert!(symbol.flags.get().intersects(SymbolFlags::Prototype), "File-bound symbol has no declarations");
-        let parent = symbol.parent.get();
+        let parent = symbol.parent();
         assert!(parent.is_some_and(|p| p.flags.get().intersects(SymbolFlags::Class)), "Prototype has no declaring class");
         symbol = parent.unwrap();
         assert!(!symbol.flags.get().intersects(SymbolFlags::Transient), "Prototype parent is not file-bound");

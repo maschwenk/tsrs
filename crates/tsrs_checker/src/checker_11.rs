@@ -226,7 +226,7 @@ impl Checker {
             }
             let clone = self.create_symbol_with_type(single_prop, single_prop_type);
             if let Some(value_declaration) = single_prop.value_declaration() {
-                clone.parent.set(value_declaration.symbol().unwrap().parent());
+                clone.set_parent(value_declaration.symbol().unwrap().parent());
             }
             let links = self.value_symbol_links.get(clone);
             links.set_containing_type(Some(containing_type));
@@ -283,7 +283,7 @@ impl Checker {
             if let Some(first_value_declaration) = first_value_declaration {
                 result.value_declaration.set(Some(first_value_declaration));
                 // Inherit information about parent type.
-                result.parent.set(first_value_declaration.symbol().unwrap().parent());
+                result.set_parent(first_value_declaration.symbol().unwrap().parent());
             }
         }
         let links = self.value_symbol_links.get(result);
@@ -360,7 +360,7 @@ impl Checker {
     pub(crate) fn create_symbol_with_type(&mut self, source: P<Symbol>, t: Option<P<Type>>) -> P<Symbol> {
         let symbol = self.new_symbol_ex(source.flags(), source.name(), source.check_flags.get() & CheckFlags::Readonly);
         symbol.declarations.set(source.declarations());
-        symbol.parent.set(source.parent());
+        symbol.set_parent(source.parent());
         symbol.value_declaration.set(source.value_declaration());
         let links = self.value_symbol_links.get(symbol);
         links.resolved_type.set(t);
@@ -2207,7 +2207,7 @@ impl Checker {
                 None => {
                     let result = self.new_symbol_ex(SymbolFlags::TypeAlias, text, CheckFlags::Unresolved);
                     self.unresolved_symbols.insert(path, result);
-                    result.parent.set(parent_symbol);
+                    result.set_parent(parent_symbol);
                     self.type_alias_links.get(result).declared_type.set(Some(self.unresolved_type));
                     result
                 }

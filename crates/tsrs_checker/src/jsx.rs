@@ -811,7 +811,7 @@ impl Checker {
                     object_flags |= expr_type.object_flags() & ObjectFlags::PropagatingFlags;
                     let attribute_symbol = self.new_symbol(SymbolFlags::Property | member.flags(), member.name());
                     attribute_symbol.declarations.set(member.declarations());
-                    attribute_symbol.parent.set(member.parent());
+                    attribute_symbol.set_parent(member.parent());
                     if member.value_declaration().is_some() {
                         attribute_symbol.value_declaration.set(member.value_declaration());
                     }
