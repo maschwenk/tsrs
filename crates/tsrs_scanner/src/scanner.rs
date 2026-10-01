@@ -74,17 +74,50 @@ pub struct ScanError {
 
 macro_rules! keywords {
     ($($text:literal => $kind:ident,)*) => {
-        pub(crate) static TEXT_TO_KEYWORD: &[(&str, Kind)] = &[$(($text, Kind::$kind),)*];
-
-        /// Go `textToKeyword[s]` (zero value `KindUnknown` when absent).
-        #[inline]
-        pub(crate) fn text_to_keyword(s: &str) -> Kind {
-            match s {
-                $($text => Kind::$kind,)*
-                _ => Kind::Unknown,
-            }
-        }
+        const KEYWORDS: &[(&str, Kind)] = &[$(($text, Kind::$kind),)*];
+        pub(crate) static TEXT_TO_KEYWORD: &[(&str, Kind)] = KEYWORDS;
     };
+}
+
+// Go `textToKeyword` is a map. The port looks keywords up in a perfect hash over the first two bytes, the last
+// byte and the length (every keyword has at least two bytes); KEYWORD_HASH_MUL was searched for the current
+// keyword list, and the table is built at compile time, which fails if two keywords collide.
+const KEYWORD_HASH_MUL: u32 = 0xae8526c7;
+const NO_KEYWORD: u8 = u8::MAX;
+
+#[inline(always)]
+const fn keyword_hash(b: &[u8]) -> usize {
+    let key = b[0] as u32 | (b[1] as u32) << 8 | (b[b.len() - 1] as u32) << 16 | (b.len() as u32) << 24;
+    (key.wrapping_mul(KEYWORD_HASH_MUL) >> 24) as usize
+}
+
+static KEYWORD_TABLE: [u8; 256] = {
+    let mut table = [NO_KEYWORD; 256];
+    let mut i = 0;
+    while i < KEYWORDS.len() {
+        let h = keyword_hash(KEYWORDS[i].0.as_bytes());
+        assert!(table[h] == NO_KEYWORD, "keyword hash collision: search a new KEYWORD_HASH_MUL");
+        table[h] = i as u8;
+        i += 1;
+    }
+    table
+};
+
+/// Go `textToKeyword[s]` (zero value `KindUnknown` when absent).
+#[inline]
+pub(crate) fn text_to_keyword(s: &str) -> Kind {
+    let b = s.as_bytes();
+    if b.len() < 2 {
+        return Kind::Unknown;
+    }
+    let i = KEYWORD_TABLE[keyword_hash(b)];
+    if i != NO_KEYWORD {
+        let (text, kind) = KEYWORDS[i as usize];
+        if text.as_bytes() == b {
+            return kind;
+        }
+    }
+    Kind::Unknown
 }
 
 keywords! {
@@ -282,6 +315,18 @@ pub struct Scanner {
 }
 
 pub(crate) const RUNE_SELF: i32 = 0x80;
+
+/// `[A-Za-z0-9_$]` by byte.
+static ASCII_IDENTIFIER_PART: [bool; 256] = {
+    let mut t = [false; 256];
+    let mut b = 0;
+    while b < 128 {
+        let c = b as u8;
+        t[b] = c.is_ascii_alphanumeric() || c == b'_' || c == b'$';
+        b += 1;
+    }
+    t
+};
 pub(crate) const RUNE_ERROR: i32 = 0xFFFD;
 
 /// Go `utf8.DecodeRuneInString` over raw bytes: `(RuneError, 0)` for empty input,
@@ -670,6 +715,8 @@ impl Scanner {
                 0x09 | 0x0B | 0x0C | 0x20 => {
                     self.state.pos += 1;
                     if self.skip_trivia {
+                        // The next iteration would skip any further single-line whitespace byte the same way.
+                        self.scan_ascii_while(|b| b == b' ' || b == b'\t' || b == 0x0B || b == 0x0C);
                         continue 'scan;
                     }
                     loop {
@@ -1705,7 +1752,7 @@ impl Scanner {
         // Fast path for simple ASCII identifiers
         if variant != IdentifierVariant::JSX && (stringutil::is_ascii_letter(ch) || ch == '_' as i32 || ch == '$' as i32) {
             self.state.pos += 1;
-            self.scan_ascii_while(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'$');
+            self.scan_ascii_while(|b| ASCII_IDENTIFIER_PART[b as usize]);
             let ch = self.char();
             if ch < RUNE_SELF && ch != '\\' as i32 {
                 self.state.token_value = self.slice(start, self.state.pos);
