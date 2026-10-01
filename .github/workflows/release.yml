@@ -103,10 +103,14 @@ jobs:
         if: matrix.target == 'x86_64-apple-darwin'
         run: arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
       # Everything of the PGO steps but the final build lives outside target/, which rust-cache saves.
+      # CFLAGS: cc passes -Cprofile-generate/-use on to clang (macOS) but not to gcc (Linux). Apple clang's profile
+      # format does not match rustc's LLVM (the instrumented mimalloc crashed in __llvm_profile_instrument_target
+      # with rustc 1.99), so the C code (mimalloc) is built without PGO, as on Linux.
       - name: Instrumented build
         shell: bash
         env:
           RUSTFLAGS: -Cprofile-generate=${{ runner.temp }}/pgo/raw
+          CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-generate' || '' }}
           CARGO_TARGET_DIR: ${{ runner.temp }}/pgo/target
         run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner --target ${{ matrix.target }}
       - name: Training run
@@ -128,6 +132,7 @@ jobs:
         shell: bash
         env:
           RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}
+          CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-use' || '' }}
         run: cargo build --profile dist --locked -p tsrs_cli --target ${{ matrix.target }}
       - name: Stage binary
         shell: bash
