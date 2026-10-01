@@ -247,3 +247,8 @@ property types was rejected (-3.7% types but it changes results). The private mo
 interleaved, base dc59d8e): single-threaded peak 7.02 -> 6.02 GiB (-14.2%), 4 checkers 9.38 -> 8.07 GiB
 (-14.0%); opt-out 9.47 -> 8.01 / 14.53 -> 12.35 GiB. Details, per-step numbers and rejected candidates:
 `notes/mem-round3.md`.
+
+## 2026-10-01: repository recreated
+
+The GitHub repository was deleted and recreated from a clean mirror of the rewritten history (no pull-request refs,
+no Actions history); all tags were kept. Commit SHAs from before this date no longer exist.
