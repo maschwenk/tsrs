@@ -252,3 +252,21 @@ Single: peak 8.64 -> 8.59-8.62 GB; 4 checkers 11.54 -> 11.46 GB; instructions +0
 augmented cache (2.76M + 2.37M copies single). The caches are only looked up by name, so the key is now the
 property's own name when it is the same text (always, for the properties `create_union_or_intersection_property`
 makes) and one shared copy otherwise. Single 8.59 -> 8.55 GB, 4 checkers 11.48 -> 11.41 GB, opt-out 11.33 / 17.19 GB.
+
+### Id-keyed link stores paged by id
+
+`IdLinkStore` (value-symbol links, symbol-node links) mapped `u32 id -> u32 slot` in one hash table per store
+(9 bytes per table slot, a 150 MB table for the 11.5M value links single, and a cache miss per lookup). Now, like
+Go's `PagedLinkStore`, the slot is found in a page of 1024 consecutive ids (4 bytes per id, slot + 1, 0 = none)
+reached through a small map keyed by page number (ids are process-wide, so a checker's ids need not start near
+0; ids >= 2^32 keep the side map). Values and their first-access order are unchanged. The earlier note that
+per-checker pages would be dense in every checker holds, but 4 bytes per id over all pages is still smaller than
+the per-checker hash tables, and lookups no longer miss the cache.
+
+| run (2 interleaved rounds) | check s | cycles | peak GB |
+| --- | --- | --- | --- |
+| single, before | 18.14-18.51 | 94.5-95.2 G | 8.55 |
+| single, after | 17.04-17.06 | 88.9-89.3 G | 8.39 (-0.16) |
+| 4 checkers, before | 7.20-7.23 | 146-151 G | 11.42-11.46 |
+| 4 checkers, after | 6.67-6.71 | 138 G | 11.33-11.34 (-0.11) |
+| opt-out single / 4 checkers (go assignment), after | 19.39 / 8.95 | | 11.08 / 17.07 |

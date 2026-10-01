@@ -35,12 +35,12 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
     }
 }
 
-/// Links keyed by a node/symbol id (Go `PagedLinkStore`-backed stores). Go pages by id; ids are process-wide and
-/// shared by all checkers, so per-checker pages would be dense in every checker. This store maps the id to a slot
-/// in fixed-size value chunks instead: 9 bytes per map slot (u32 id -> u32 slot) rather than 17 for a pointer-keyed
-/// map with a separate arena allocation per value.
+/// Links keyed by a node/symbol id (Go `PagedLinkStore`-backed stores). Like Go, the id is looked up in pages of
+/// `ID_PAGE` consecutive ids (4 bytes per id: slot + 1, 0 = no links), found through a small map keyed by page
+/// number (ids are process-wide, so a checker's ids need not start near 0). The values live in fixed-size chunks
+/// in the arena (stable addresses, `P<V>` handed out as before), in first-access order.
 pub struct IdLinkStore<V: 'static> {
-    slots: FxHashMap<u32, u32>,
+    pages: FxHashMap<u32, Box<[u32; ID_PAGE]>>,
     wide_slots: FxHashMap<u64, u32>, // ids >= 2^32 (long-running processes such as the test runner)
     chunks: Vec<&'static [V]>,
     len: u32,
@@ -48,10 +48,12 @@ pub struct IdLinkStore<V: 'static> {
 
 const ID_LINK_CHUNK_SHIFT: u32 = 12;
 const ID_LINK_CHUNK: usize = 1 << ID_LINK_CHUNK_SHIFT;
+const ID_PAGE_SHIFT: u32 = 10;
+const ID_PAGE: usize = 1 << ID_PAGE_SHIFT;
 
 impl<V: 'static> Default for IdLinkStore<V> {
     fn default() -> Self {
-        IdLinkStore { slots: FxHashMap::default(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0 }
+        IdLinkStore { pages: FxHashMap::default(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0 }
     }
 }
 
@@ -64,7 +66,8 @@ impl<V: 'static> IdLinkStore<V> {
     #[inline]
     fn slot(&self, id: u64) -> Option<u32> {
         if id <= u32::MAX as u64 {
-            self.slots.get(&(id as u32)).copied()
+            let page = self.pages.get(&((id >> ID_PAGE_SHIFT) as u32))?;
+            page[id as usize & (ID_PAGE - 1)].checked_sub(1)
         } else {
             self.wide_slots.get(&id).copied()
         }
@@ -95,7 +98,8 @@ impl<V: Default + 'static> IdLinkStore<V> {
         }
         self.len += 1;
         if id <= u32::MAX as u64 {
-            self.slots.insert(id as u32, slot);
+            let page = self.pages.entry((id >> ID_PAGE_SHIFT) as u32).or_insert_with(|| Box::new([0; ID_PAGE]));
+            page[id as usize & (ID_PAGE - 1)] = slot + 1;
         } else {
             self.wide_slots.insert(id, slot);
         }
