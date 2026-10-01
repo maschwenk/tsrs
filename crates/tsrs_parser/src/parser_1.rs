@@ -424,10 +424,15 @@ impl Parser {
     // The scanner buffers what Go reports through its synchronous error callback; this must run
     // right after every scanner call that can report (scan, re_scan_*, scan_jsx_*, scan_jsdoc_*)
     // so scanner errors interleave with parser errors exactly as in Go.
+    #[inline]
     pub(crate) fn report_scan_errors(&mut self) {
-        if !self.scanner.has_errors() {
-            return;
+        if self.scanner.has_errors() {
+            self.report_buffered_scan_errors();
         }
+    }
+
+    #[cold]
+    fn report_buffered_scan_errors(&mut self) {
         for error in self.scanner.take_errors() {
             let args: Vec<&dyn Display> = error.args.iter().map(|arg| arg as &dyn Display).collect();
             self.scan_error(error.message, error.start, error.length, &args);
