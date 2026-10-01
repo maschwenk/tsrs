@@ -5,7 +5,7 @@
   "cpus": 18,
   "cpu": "Apple M5 Max",
   "memory_gb": 128,
-  "label": "Max's Mac, measured locally before the first CI run (Apple M5 Max, 18 cores, 128 GB; shared with other jobs, load average ~27)"
+  "label": "Max's Mac, measured locally before the first CI run (Apple M5 Max, 18 cores, 128 GB, macOS arm64; shared with other jobs, load average ~27)"
  },
  "tsrs": {
   "commit": "b539dd5d628a20db4f836c1ac79d0b11cb20eef9",

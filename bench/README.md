@@ -73,8 +73,21 @@ builds); the tsserver/LSP/startup scenarios (not `tsc` runs). All six included p
 
 ## CI
 
-`bench.yml`: `ubuntu-24.04` (the standard GitHub-hosted runner; larger runners need a GitHub Team/Enterprise
-organization and this repository belongs to a personal account), release build, projects restored from
-`actions/cache` (key = hash of `bench/projects.json`), all projects, 3 reps, then commits `README.md` and
-`bench/results/` as `github-actions[bot]` with `[skip ci]`. Pushes that touch only `README.md` / `bench/results/**`
-do not trigger it; a newer push cancels a running bench. Shared-runner numbers are noisy.
+`bench.yml` runs on one fixed machine spec so runs are comparable: **`depot-ubuntu-24.04-8`** (Depot runner, 8 vCPU,
+32 GB RAM, Linux x86_64). Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on
+an 18-core Mac); 32 GB leaves 4x headroom, and 8 vCPUs cover the 4 checker threads plus parallel parsing. The job
+checks `nproc`/`MemTotal`/arch against that spec and fails otherwise; there is no fallback runner. A `watchdog` job on
+`ubuntu-latest` cancels the run and fails if the bench job has not been picked up after 15 minutes (an unserved
+`runs-on` label would otherwise sit queued for 24 hours).
+
+Steps: release build, projects restored from `actions/cache` (key = hash of `bench/projects.json`; on Depot runners
+the cache is served by Depot's cache backend without changes to the workflow), all projects, 3 reps, then commit
+`README.md` and `bench/results/` as `github-actions[bot]` with `[skip ci]`. Pushes that touch only `README.md` /
+`bench/results/**` do not trigger it; a newer push cancels a running bench.
+
+Status 2026-10-01: Depot did not pick up jobs for this repository. A probe of `depot-ubuntu-24.04-16`, `-24.04-32`,
+`-22.04-8`, `-22.04` and `depot-macos-latest` stayed queued for 9 minutes, and Depot's documentation says its GitHub
+Actions runners only serve repositories owned by a GitHub organization (this one belongs to a personal account). Until
+the repository moves to an organization connected to Depot, every bench run ends with the watchdog error. `ci.yml` and
+`release.yml` stay on GitHub-hosted runners for the same reason. One run on GitHub's standard runner (`ubuntu-24.04`,
+2 vCPU, 7 GB, before the fixed spec was introduced) is in `bench/results/`; it is not comparable with the Depot spec.

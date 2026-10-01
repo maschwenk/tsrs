@@ -190,8 +190,10 @@ def machine_info(local: bool, label: str | None) -> dict:
     if label:
         info["label"] = label
     elif os.environ.get("GITHUB_ACTIONS") == "true" and not local:
-        image = os.environ.get("ImageOS", "")
-        info["label"] = f"GitHub Actions `{os.environ.get('RUNNER_NAME', 'hosted runner')}` ({image}, {info['cpus']} vCPU, {info.get('memory_gb')} GB)"
+        info["ci"] = True
+        runner = os.environ.get("BENCH_RUNNER") or os.environ.get("RUNNER_NAME", "hosted runner")
+        info["label"] = (f"CI runner `{runner}` ({info['cpus']} vCPU, {info.get('memory_gb')} GB, "
+                         f"{platform.machine()}, {info['cpu']})")
     else:
         info["label"] = f"local machine ({info['cpu']}, {info['cpus']} cores, {info.get('memory_gb')} GB)"
     return info
@@ -207,29 +209,37 @@ def fmt_mem(b: float | None) -> str:
     return f"{b / 2**30:.2f} GiB" if b >= 2**30 else f"{b / 2**20:.0f} MiB"
 
 
+def fmt_num(x: float | None) -> str:
+    return "n/a" if x is None else f"{x:.2f}"
+
+
 def fmt_ratio(x: float | None) -> str:
     return "n/a" if x is None else f"{x:.2f}x"
 
 
 def markdown(result: dict) -> str:
     m = result["machine"]
+    tv = result["tsgo"]["version"]
+    commit = result["tsrs"]["commit"][:12]
+    names = ", ".join(result["projects"])
     lines = [
-        f"## Benchmark: tsrs vs tsgo {result['tsgo']['version']}",
+        f"## Benchmark: tsrs vs tsgo {tv}",
         "",
-        f"Benchmarked on {m['label']}, {result['date']}: tsrs `{result['tsrs']['commit'][:12]}` vs tsgo "
-        f"`typescript@{result['tsgo']['version']}`, the projects of "
-        f"[microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking) "
-        f"(`bench/README.md`). Both run `-p <project> --noEmit --incremental false --extendedDiagnostics`; median of "
-        f"{result['reps']} interleaved runs. Wall = process wall clock, peak = max RSS. "
-        + ("Numbers from a shared CI runner are noisy; compare trends, not single runs." if m["label"].startswith("GitHub") else ""),
+        f"tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, \"tsgo\"). Each row type-checks one "
+        f"project from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the "
+        f"suite the TypeScript team benchmarks tsgo on ({names}), with tsgo {tv} (npm `typescript@{tv}`) and with tsrs "
+        f"at commit `{commit}`: `tsc -p <project> --noEmit`, median of {result['reps']} interleaved runs, on "
+        f"{m['label']}.",
         "",
     ]
     drift = False
-    titles = {"default": "Default (both 4 checker threads; tsrs also lazy member resolution)", "single": "`--singleThreaded`"}
+    titles = {"default": "Default mode: 4 checker threads in both (tsrs also resolves members lazily, its default)",
+              "single": "`--singleThreaded`: one checker thread in both"}
     for mode in result["modes"]:
         lines += [f"**{titles[mode]}**", "",
-                  "| project | errors (tsgo/tsrs) | tsgo wall | tsrs wall | speedup | tsgo peak | tsrs peak | memory ratio |",
-                  "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+                  "| project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | "
+                  "tsrs peak memory | memory, tsrs / tsgo |",
+                  "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |"]
         for name, pr in result["projects"].items():
             if mode not in pr:
                 continue
@@ -250,16 +260,21 @@ def markdown(result: dict) -> str:
                 err = f"**{err} (locations differ)**"
             speed = g["wall_s"] / t["wall_s"] if g["wall_s"] and t["wall_s"] else None
             mem = t["peak_rss_bytes"] / g["peak_rss_bytes"] if g["peak_rss_bytes"] and t["peak_rss_bytes"] else None
-            lines.append(f"| {name} | {err} | {fmt_s(g['wall_s'])} | {fmt_s(t['wall_s'])} | {fmt_ratio(speed)} | "
+            lines.append(f"| {name} | {err} | {fmt_num(g['wall_s'])} | {fmt_num(t['wall_s'])} | {fmt_ratio(speed)} | "
                          f"{fmt_mem(g['peak_rss_bytes'])} | {fmt_mem(t['peak_rss_bytes'])} | {fmt_ratio(mem)} |")
         lines.append("")
-    lines.append("speedup = tsgo wall / tsrs wall (higher is faster); memory ratio = tsrs peak / tsgo peak (lower is "
-                 "less memory). An errors cell in bold means the two compilers disagree, which is a correctness bug.")
+    lines.append("errors: the number of type errors each compiler reports on the project; they must be equal (a bold "
+                 "cell is a disagreement, i.e. a correctness bug). wall: process wall-clock time. speedup: tsgo wall / "
+                 "tsrs wall (above 1 = tsrs faster). peak memory: maximum resident set size. memory, tsrs / tsgo: below 1 "
+                 "= tsrs uses less.")
     if drift:
         ref = result["reference"]
-        lines.append(f"(ref N): tsgo 7.0.2 and tsrs disagree, but `typescript@{ref['version']}`, built from the "
-                     f"TypeScript commit tsrs ports (`{ref['commit'][:8]}`), reports exactly tsrs's errors: a "
-                     f"TypeScript 7.0 vs 7.1-dev difference, not a tsrs bug.")
+        lines += ["", f"(ref N): tsgo {tv} and tsrs disagree, but `typescript@{ref['version']}`, built from the "
+                      f"TypeScript commit tsrs ports (`{ref['commit'][:8]}`), reports exactly tsrs's errors: a TypeScript "
+                      f"7.0 vs 7.1-dev difference, not a tsrs bug."]
+    lines += ["", f"Runner: {m['label']}. Date: {result['date']}. tsrs commit: `{commit}`. "
+                  + ("Numbers from shared CI machines are noisy; compare trends, not single runs. " if m.get("ci") else "")
+                  + "How it is measured: [`bench/README.md`](bench/README.md)."]
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -271,8 +286,7 @@ def update_readme(readme: Path, table: str) -> None:
         _, post = rest.split(END, 1)
         text = pre + block + post
     else:
-        title, _, body = text.partition("\n")
-        text = f"{title}\n\n{block}\n{body}"
+        text = f"{block}\n\n{text}"
     readme.write_text(text)
 
 

@@ -21,6 +21,10 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write # the watchdog cancels a run whose bench job is never picked up
+
+# Fixed machine spec so runs are comparable: Depot 8 vCPU / 32 GB / x64 (bench/README.md "CI"). There is deliberately
+# no fallback to another runner; if the label is not served, the watchdog below fails the run.
 
 env:
   CARGO_TERM_COLOR: always
@@ -28,17 +32,23 @@ env:
 
 jobs:
   bench:
-    runs-on: ubuntu-24.04
+    runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 90
+    env:
+      BENCH_RUNNER: depot-ubuntu-24.04-8
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # full history so the results commit can be rebased onto a newer main
 
-      - name: Runner hardware
+      - name: Runner hardware (must match the fixed spec)
         run: |
           nproc; free -g; df -h / | tail -1
           lscpu | grep -E 'Model name|^CPU\(s\)' || true
+          mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1048576}' /proc/meminfo)
+          if [ "$(nproc)" != 8 ] || [ "$mem_gb" -lt 28 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 8 vCPU / 32 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
+          fi
 
       - uses: actions/setup-node@v4
         with:
@@ -94,4 +104,22 @@ jobs:
             git pull -q --rebase origin main && git push -q origin HEAD:main && exit 0
             sleep $((attempt * 5))
           done
+          exit 1
+
+  # A runs-on label nobody serves leaves the job queued for up to 24 hours. Fail visibly instead.
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Require the bench job to start within 15 minutes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in $(seq 1 90); do
+            status=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "bench") | .status')
+            [ -n "$status" ] && [ "$status" != queued ] && { echo "bench job is $status"; exit 0; }
+            sleep 10
+          done
+          echo "::error::the bench job was not picked up by a depot-ubuntu-24.04-8 runner within 15 minutes; cancelling the run"
+          gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" || true
           exit 1
