@@ -537,15 +537,41 @@ impl Checker {
             if !self.has_correct_type_argument_arity(candidate, &type_arguments) || !self.has_correct_arity(node, &args, candidate, s.signature_help_trailing_comma) {
                 continue;
             }
-            let mut check_candidate: P<Signature>;
             let mut inference_context: Option<P<InferenceContext>> = None;
+            let chosen = self.choose_overload_candidate(s, relation, node, &args, &type_arguments, candidate_index, &mut inference_context);
+            // 94% of these contexts are garbage once the candidate is decided (notes/mem-census.md); the inference
+            // context stack entries that referred to it were popped by `inferTypeArguments`.
+            if let Some(ctx) = inference_context {
+                InferenceContext::recycle(ctx);
+            }
+            if chosen.is_some() {
+                return chosen;
+            }
+        }
+        None
+    }
+
+    /// One iteration of `chooseOverload`'s candidate loop (`None` = `continue`).
+    fn choose_overload_candidate(
+        &mut self,
+        s: &mut CallState,
+        relation: P<Relation>,
+        node: P<Node>,
+        args: &[P<Node>],
+        type_arguments: &[P<Node>],
+        candidate_index: usize,
+        inference_context: &mut Option<P<InferenceContext>>,
+    ) -> Option<P<Signature>> {
+        {
+            let candidate = s.candidates[candidate_index];
+            let mut check_candidate: P<Signature>;
             if !candidate.type_parameters().is_empty() {
                 let type_argument_types: Vec<P<Type>>;
                 if !type_arguments.is_empty() {
-                    type_argument_types = self.check_type_arguments(candidate, &type_arguments, false /*reportErrors*/, None);
+                    type_argument_types = self.check_type_arguments(candidate, type_arguments, false /*reportErrors*/, None);
                     if type_argument_types.is_empty() {
                         s.candidate_for_type_argument_error = Some(candidate);
-                        continue;
+                        return None;
                     }
                 } else {
                     // When we are recursively resolving a call with a single candidate, we skip constraints checks during
@@ -553,56 +579,55 @@ impl Checker {
                     let inference_flags = (if s.recursive_resolution && s.candidates.len() == 1 { InferenceFlags::NoConstraintChecks } else { InferenceFlags::None })
                         | (if is_in_js_file(node) { InferenceFlags::AnyDefault } else { InferenceFlags::None });
                     let ctx = self.new_inference_context(candidate.type_parameters(), Some(candidate), inference_flags /*flags*/, None);
-                    inference_context = Some(ctx);
-                    type_argument_types = self.infer_type_arguments(node, candidate, &args, s.arg_check_mode | CheckMode::SkipGenericFunctions, ctx);
+                    *inference_context = Some(ctx);
+                    type_argument_types = self.infer_type_arguments(node, candidate, args, s.arg_check_mode | CheckMode::SkipGenericFunctions, ctx);
                     if ctx.flags.get().intersects(InferenceFlags::SkippedGenericFunction) {
                         s.arg_check_mode |= CheckMode::SkipGenericFunctions;
                     }
                 }
-                let inferred_type_parameters: &[P<Type>] = match inference_context {
+                let inferred_type_parameters: &[P<Type>] = match *inference_context {
                     Some(ctx) => ctx.inferred_type_parameters(),
                     None => &[],
                 };
                 check_candidate = self.get_signature_instantiation(candidate, &type_argument_types, is_in_js_file(candidate.declaration()), inferred_type_parameters);
                 // If the original signature has a generic rest type, instantiation may produce a
                 // signature with different arity and we need to perform another arity check.
-                if self.get_non_array_rest_type(candidate).is_some() && !self.has_correct_arity(node, &args, check_candidate, s.signature_help_trailing_comma) {
+                if self.get_non_array_rest_type(candidate).is_some() && !self.has_correct_arity(node, args, check_candidate, s.signature_help_trailing_comma) {
                     s.candidate_for_argument_arity_error = Some(check_candidate);
-                    continue;
+                    return None;
                 }
             } else {
                 check_candidate = candidate;
             }
-            if !self.is_signature_applicable(node, &args, check_candidate, relation, s.arg_check_mode, false /*reportErrors*/, None /*diagnosticOutput*/) {
+            if !self.is_signature_applicable(node, args, check_candidate, relation, s.arg_check_mode, false /*reportErrors*/, None /*diagnosticOutput*/) {
                 // Give preference to error candidates that have no rest parameters (as they are more specific)
                 s.candidates_for_argument_error.push(check_candidate);
-                continue;
+                return None;
             }
             if !s.arg_check_mode.is_empty() {
                 // If one or more context sensitive arguments were excluded, we start including
                 // them now (and keeping do so for any subsequent candidates) and perform a second
                 // round of type inference and applicability checking for this particular candidate.
                 s.arg_check_mode = CheckMode::Normal;
-                if let Some(ctx) = inference_context {
-                    let type_argument_types = self.infer_type_arguments(node, candidate, &args, s.arg_check_mode, ctx);
+                if let Some(ctx) = *inference_context {
+                    let type_argument_types = self.infer_type_arguments(node, candidate, args, s.arg_check_mode, ctx);
                     check_candidate = self.get_signature_instantiation(candidate, &type_argument_types, is_in_js_file(candidate.declaration()), ctx.inferred_type_parameters());
                     // If the original signature has a generic rest type, instantiation may produce a
                     // signature with different arity and we need to perform another arity check.
-                    if self.get_non_array_rest_type(candidate).is_some() && !self.has_correct_arity(node, &args, check_candidate, s.signature_help_trailing_comma) {
+                    if self.get_non_array_rest_type(candidate).is_some() && !self.has_correct_arity(node, args, check_candidate, s.signature_help_trailing_comma) {
                         s.candidate_for_argument_arity_error = Some(check_candidate);
-                        continue;
+                        return None;
                     }
                 }
-                if !self.is_signature_applicable(node, &args, check_candidate, relation, s.arg_check_mode, false /*reportErrors*/, None /*diagnosticOutput*/) {
+                if !self.is_signature_applicable(node, args, check_candidate, relation, s.arg_check_mode, false /*reportErrors*/, None /*diagnosticOutput*/) {
                     // Give preference to error candidates that have no rest parameters (as they are more specific)
                     s.candidates_for_argument_error.push(check_candidate);
-                    continue;
+                    return None;
                 }
             }
             s.candidates[candidate_index] = check_candidate;
-            return Some(check_candidate);
+            Some(check_candidate)
         }
-        None
     }
 
     // checker.go:9299

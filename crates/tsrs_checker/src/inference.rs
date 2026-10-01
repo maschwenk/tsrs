@@ -25,6 +25,7 @@ impl Checker {
     pub(crate) fn put_inference_state(&mut self, n: P<InferenceState>) {
         n.visited.clear_scratch();
         n.inferences.borrow_mut().clear();
+        tsrs_core::census_scrub_slack(&mut n.inferences.borrow_mut());
         n.original_source.set(None);
         n.original_target.set(None);
         n.priority.set(InferencePriority::None);
@@ -1448,7 +1449,7 @@ impl Checker {
 
     // inference.go:1273
     pub(crate) fn new_inference_context_worker(&mut self, inferences: &[P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> P<InferenceContext> {
-        let n = P::new(InferenceContext::new(alloc_slice(inferences), signature, flags, compare_types));
+        let n = P::new_recycled(InferenceContext::new(tsrs_core::alloc_slice_recycled(inferences), signature, flags, compare_types));
         if !tsrs_core::lazymembers::lazy_inference_mappers() {
             n.mapper();
             n.non_fixing_mapper();
@@ -1556,6 +1557,19 @@ impl Checker {
                         let backreference_mapper = self.new_backreference_mapper(n, index);
                         let mapper = merge_type_mappers(Some(backreference_mapper), n.non_fixing_mapper().unwrap());
                         inferred_type = Some(self.instantiate_type(default_type, Some(mapper)));
+                        // SAFETY: both made here for this one instantiation (the list of the backreference mapper
+                        // is its own, `newBackreferenceMapper`).
+                        unsafe {
+                            if !mapper.escaped() {
+                                tsrs_core::free!(mapper);
+                                if !backreference_mapper.escaped() {
+                                    if let TypeMapperData::ArrayToSingle { sources, .. } = backreference_mapper.data() {
+                                        tsrs_core::free_slice!(sources);
+                                    }
+                                    tsrs_core::free!(backreference_mapper);
+                                }
+                            }
+                        }
                     }
                 }
             } else {
@@ -1869,7 +1883,7 @@ impl Checker {
 
 // inference.go:1626
 pub(crate) fn new_inference_info(type_parameter: P<Type>) -> P<InferenceInfo> {
-    P::new(InferenceInfo {
+    P::new_recycled(InferenceInfo {
         type_parameter: Cell::new(Some(type_parameter)),
         priority: Cell::new(InferencePriority::MaxValue),
         top_level: Cell::new(true),
@@ -1880,7 +1894,7 @@ pub(crate) fn new_inference_info(type_parameter: P<Type>) -> P<InferenceInfo> {
 
 // inference.go:1630
 pub(crate) fn clone_inference_info(info: P<InferenceInfo>) -> P<InferenceInfo> {
-    P::new(InferenceInfo {
+    P::new_recycled(InferenceInfo {
         type_parameter: Cell::new(info.type_parameter.get()),
         candidates: LazyVec::from_vec(info.candidates.to_vec()),
         contra_candidates: LazyVec::from_vec(info.contra_candidates.to_vec()),

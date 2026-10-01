@@ -272,3 +272,11 @@ parser stack, keyword perfect hash, rare paths of per-token functions moved out 
 visitor for the parent pass, `findImportOrRequire` via memmem; AST oracle, suite (both lazy modes) and
 private-monorepo output unchanged. The parallel parse phase on macOS stays kernel-bound (`open`/`read`/`stat`).
 Details: `notes/perf-parse.md`.
+
+## 2026-10-01: recycling provably dead arena memory
+
+Own bump arena with free lists and checkpoints (`tsrs_core::arena`): rolled-back parses are rewound, dropped flow
+labels, `infer` / overload inference contexts and scratch mappers (escape bit set by every store, `MapperCell`)
+are reused. Private monorepo peak 6.240 -> 5.892 GiB single (-5.6%), 8.389 -> 7.881 GiB on 4 checkers (-6.1%),
+instructions +0.5%; every freed block proven unreachable by the census (precise walk + strong mark, 0 violations
+on the monorepo and the corpus). Details: `notes/mem-recycle.md`.

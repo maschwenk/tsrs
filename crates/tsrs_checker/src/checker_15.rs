@@ -1125,6 +1125,7 @@ impl Checker {
     // checker.go:31448
     pub(crate) fn pop_inference_context(&mut self) {
         self.inference_context_infos.pop();
+        tsrs_core::census_scrub_slack(&mut self.inference_context_infos);
     }
 
     // checker.go:31454

@@ -66,8 +66,8 @@ Both must be 0. `TSRS_CENSUS_ASSERT=1` exits with status 3 otherwise.
   list cells, unless the label was ever used as an antecedent or a binder field still holds it.
 
 Census (the private monorepo, single and 4 checkers, both lazy modes): 1.39M blocks / 47.3 MB freed or rewound;
-precise walk 49.9M references, 0 freed; strong mark 0 (re-run with the final census). Conformance corpus (12,758
-files through `tsrs --strict --target esnext`): precise walk 0 in every file.
+precise walk 49.9M references, 0 freed (the strong mark is in step 2's numbers, which include these frees).
+Conformance corpus (12,758 files through `tsrs --strict --target esnext`): precise walk 0 in every file.
 
 | run (3 interleaved rounds) | peak GiB | instructions |
 | --- | --- | --- |
@@ -77,3 +77,81 @@ files through `tsrs --strict --target esnext`): precise walk 0 in every file.
 | 4 checkers, after | 8.326-8.350 (8.336, -0.053) | 411.2-412.4 G |
 
 (The arena swap alone: 6.244 / 8.372 GiB median vs base 6.234 / 8.390, instructions -0.4%.)
+
+## Step 2: inference contexts and scratch mappers (the shared escape bit)
+
+`TypeMapper` keeps an escaped bit in bit 2 of its second word (free in every encoding; the inference mapper's
+`fixing` flag moved to bit 0) and `InferenceContext` one in bit 0 of its tail pointer. Every place that keeps a
+mapper beyond the call that made it goes through a barrier that sets the bit, transitively (children of merged and
+composite mappers; the context of an inference mapper, and from an escaped context every mapper it holds; mappers
+created later for an escaped context are born escaped):
+
+- `MapperCell` replaces `Cell<Option<P<TypeMapper>>>` in every struct field that held a mapper (`ObjectType`,
+  `TypeParameter`, `ConditionalType` x2, `Signature`, the value-symbol links tail, the node builder context), so
+  the compiler found every store; plus `ValueSymbolLinks::set_mapper` (erased word), lazy member tables, and the
+  context's return / outer return mappers. Mappers are never stored in hash maps or closures (deferred mappers
+  capture nodes and lists only); the active-mapper stack is popped before any free.
+- An escaped mapper's children are escaped (children are fixed at construction), so the walk stops early.
+
+Recycling sites (each frees only what it made, only when not escaped):
+
+- `chooseOverload`: the candidate's inference context after each candidate (the loop body became
+  `choose_overload_candidate`): its own inference mappers, infos, candidate lists (heap buffer and cell), info
+  slice and tail. Infos belong to one context (clones copy them; `mergeInferences` takes them from a local list).
+- `getConditionalType`: the `infer` contexts and the composite mappers made for them (`scratch_contexts` /
+  `scratch_mappers`, recycled when the outermost call of a nesting returns; contexts first, since recycling reads
+  their mapper fields). The context's own non-fixing mapper is recycled from the scratch list once
+  `setNonFixingMapper` replaced it.
+- `getConditionalTypeInstantiation` miss path: the type-argument mapper and its list (`alloc_slice_recycled`); a
+  one-type list is unused by the simple mapper and always freed. The distributive `prependTypeMapping` mappers.
+- `appendTypeMapping` in `getTypeOfMappedSymbol`, mapped-type index infos, `resolveMappedTypeMembers` key names and
+  `getIndexTypeForMappedType`.
+- `getInferredType`: the backreference mapper (and its list) and the merged mapper for type parameter defaults.
+
+Census (the private monorepo, all four runs): 15.4M blocks / 351 MB freed single default (16.3M / 364 MB opt-out,
+23.6M / 509 MB and 24.5M / 522 MB on 4 checkers); precise walk 0; strong mark 0 violations. Along the way the
+census needed: pooled vectors scrubbed of stale entries (`census_scrub_slack`: the inference state pool, the
+inference-context and active-mapper stacks, the scratch lists), dangling ZST addresses, and the header / padding
+rules above; each of the strong references it reported was traced to one of those (referrer chains, neighbouring
+words). Conformance corpus (12,758 files): precise walk 0 and strong mark 0 in every file. Suite trees identical
+to the base in all three modes, also with poison; a debug-build suite (free-list poison asserts) passes the same
+tests; private-monorepo output and counters identical in default / opt-out, 1 / 4 checkers, also with poison.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, step 1 | 6.194-6.197 (6.195) | 300.5-303.3 G |
+| single, after | 5.889-5.894 (5.892, -0.303) | 301.6-303.0 G |
+| 4 checkers, step 1 | 8.334-8.343 (8.336) | 410.0-412.4 G |
+| 4 checkers, after | 7.876-7.884 (7.881, -0.455) | 412.3-414.1 G |
+
+## Item 3 (measured only): object literal types of overload re-checks
+
+A measurement-only census mode (local patch, not landed: `census_region_begin/end` around each argument's
+`checkExpressionWithContextualType` + relation check in `isSignatureApplicable` without error reporting, reported
+as would-free) on the private monorepo single: 34.2M blocks / 1,188 MB are allocated inside those regions (this
+includes the mappers and contexts that step 2 already recycles). At exit, 2.11M of them are still referenced
+directly from outside their region (a lower bound: blocks reached only through other region blocks are not
+counted), through: heap tables (union / intersection / instantiation caches, link store tables: symbols 22 MB,
+object types 15, references 14, unions 11, intersections 10, literal types 5 MB), value-symbol link chunks
+(object types 12 MB, intersections 3.5, unions 2.7, mappers 1.9), signature and mapped-symbol links, and
+structured members of cached types. So a region free would need an escape check on every cache insert and every
+link store write (dozens of store kinds), not a few barriers; not attempted, as notes/mem-census.md expected.
+
+## Side question: the 450-950 files parsed and dropped
+
+Counted exactly (temporary instrumentation, not landed): 39,772 files parsed, 38,789 in the program, 983 dropped
+(13.0 MB of text), the same in every run. All 983 are reachable only from the subtasks of the 17 files that
+`getProcessedFiles` deduplicates by package id (`deduplicatePackages`: the same name@version installed at another
+path becomes a redirect to the first copy, and the walk does not descend into the duplicate's imports). The
+loader parses and resolves every subtask before that walk, so those files are parsed for nothing. Go does exactly
+the same (`filesparser.go` `getProcessedFiles`; its comment notes that the duplicate was parsed and acquired
+through the host). Not a race and not a tsrs bug; the run-to-run variation in the census came from its
+conservative mark. Avoiding the parse would mean deduplicating at load time (a change to Go's algorithm).
+
+## Not done / rejected
+
+- More scratch sites (each < 10 MB in the census after step 2): `inferTypeArguments`' own context (5.5 MB) and
+  return-mapper clones (escaped by the conservative return-mapper barrier), `getTailRecursionRoot`'s list and
+  mapper (5 + 5 MB), `getInferredTypes` mappers (5.7 MB), `getObjectTypeInstantiation` miss lists (5.8 MB).
+- Binder: only branch labels; condition flow nodes that end up unreferenced are not provable locally.
+- `KnownSymlinks` path strings, node builder contexts, `ExportCollision` (each < 10 MB).

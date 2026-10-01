@@ -99,7 +99,7 @@ pub struct NodeBuilderContext {
     pub symbol_depth: RefCell<FxHashMap<CompositeSymbolIdentity, i32>>,
     /// Go saves the slice, sets it to nil, and stores/restores it around `visitAndTransformType`.
     pub tracked_symbols: RefCell<Vec<P<TrackedSymbolArgs>>>,
-    pub mapper: Cell<Option<P<TypeMapper>>>,
+    pub mapper: MapperCell,
     pub reverse_mapped_stack: RefCell<Vec<P<Symbol>>>,
     pub enclosing_symbol_types: RefCell<FxHashMap<SymbolId, P<Type>>>,
     pub suppress_report_inference_fallback: Cell<bool>,
@@ -136,7 +136,7 @@ impl NodeBuilderContext {
             visited_types: RefCell::default(),
             symbol_depth: RefCell::default(),
             tracked_symbols: RefCell::default(),
-            mapper: Cell::new(None),
+            mapper: MapperCell::new(None),
             reverse_mapped_stack: RefCell::default(),
             enclosing_symbol_types: RefCell::default(),
             suppress_report_inference_fallback: Cell::new(false),

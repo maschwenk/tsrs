@@ -719,15 +719,27 @@ fn run_frozen(roots: &[usize]) {
 
 /// Offsets (in 4-byte scan steps) of words that overlap struct padding in arena types whose padding showed up as
 /// would-free references: `P::new` copies the value with its padding, so stale stack words land there.
-/// `TypeAlloc<TypeParameter>`: two bools then 6 padding bytes at +80; `TypeAlloc<LiteralType>`: the 24-byte value
-/// enum, whose number / boolean variants leave the last 8 bytes (+48) uninitialized; `TypeAlloc<MappedType>` and
+/// Also the non-pointer header words of types and nodes (ids and text positions that can look like arena
+/// addresses). `TypeAlloc<TypeParameter>`: two bools then 6 padding bytes at +80; `TypeAlloc<LiteralType>`: the 24-byte value
+/// enum, whose number / boolean variants leave bytes after the value uninitialized (+36..+56); `TypeAlloc<MappedType>` and
 /// `Diagnostic`: a trailing bool (+112, +144).
 fn padding_words(c: &Class) -> &'static [usize] {
     match c {
         Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::TypeParameter>") => &[76, 80, 84],
-        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::LiteralType>") => &[44, 48, 52],
+        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::LiteralType>") => &[36, 40, 44, 48, 52],
         Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::MappedType>") => &[108, 112],
         Class::Arena { ty, .. } if ty.ends_with("tsrs_ast::diagnostic::Diagnostic") => &[140, 144],
+        Class::Arena { ty, .. } if ty.ends_with("tsrs_checker::types::ConditionalRoot") => &[68, 72],
+        _ => &[],
+    }
+}
+
+/// Header words that never hold pointers: in types the id, the data tag and 3 padding bytes at +24 (and the
+/// words straddling them); in nodes flags, range and id at +8..+24 (word 0 holds the parent, x8-encoded).
+fn header_words(c: &Class) -> &'static [usize] {
+    match c {
+        Class::Arena { ty, .. } if ty.starts_with("tsrs_checker::types::TypeAlloc<") => &[20, 24, 28],
+        Class::Arena { ty, .. } if ty.starts_with("tsrs_ast::ast::NodeAlloc<") || *ty == "tsrs_ast::ast::Node" => &[4, 8, 12, 16, 20],
         _ => &[],
     }
 }
@@ -802,6 +814,8 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     let is_heap = |c: u32| matches!(&classes[c as usize], Class::Heap { .. });
     let n = table.blocks.len();
     let mut smark = vec![0u64; n / 64 + 1];
+    // Who first reached each block strongly (u32::MAX: a root), to print violation chains.
+    let mut via: Vec<u32> = vec![u32::MAX; n];
     let mut strong: FxHashMap<usize, String> = FxHashMap::default();
     let mut work: Vec<u32> = Vec::new();
     // SAFETY (all reads): inside a recorded live block or a mapped root range; the bytes are only inspected.
@@ -817,7 +831,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
                 (
                     class_is(rb.class, "TypeMapper"),
                     class_is(rb.class, "TypeMapper") || class_is(rb.class, "InferenceContext"),
-                    padding_words(&classes[rb.class as usize]).contains(&off) || empty_slice,
+                    padding_words(&classes[rb.class as usize]).contains(&off) || header_words(&classes[rb.class as usize]).contains(&off) || empty_slice,
                     Some(rb.seq),
                     is_heap(rb.class),
                 )
@@ -856,10 +870,11 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         }
         None
     };
-    let mut visit = |i: usize, why: &dyn Fn() -> String, work: &mut Vec<u32>, smark: &mut Vec<u64>| {
+    let mut visit = |i: usize, from: Option<usize>, why: &dyn Fn() -> String, work: &mut Vec<u32>, smark: &mut Vec<u64>, via: &mut Vec<u32>| {
         let (word, bit) = (i / 64, 1u64 << (i % 64));
         if smark[word] & bit == 0 {
             smark[word] |= bit;
+            via[i] = from.map_or(u32::MAX, |j| j as u32);
             if wf_seq.contains_key(&i) {
                 strong.insert(i, why());
             } else {
@@ -869,7 +884,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     };
     for &r in roots {
         if let Some(i) = table.lookup(r as u64) {
-            visit(i, &|| "explicit root".into(), &mut work, &mut smark);
+            visit(i, None, &|| "explicit root".into(), &mut work, &mut smark, &mut via);
         }
     }
     let marker = 0u64;
@@ -885,7 +900,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             if w != 0 {
                 if let Some(i) = edge(None, 0, w) {
                     let off = p - start;
-                    visit(i, &|| format!("root {name} +{off:#x} [{w:#018x}]"), &mut work, &mut smark);
+                    visit(i, None, &|| format!("root {name} +{off:#x} [{w:#018x}]"), &mut work, &mut smark, &mut via);
                 }
             }
             p += 4;
@@ -906,6 +921,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
                 if let Some(i) = edge(Some(j), off, w) {
                     visit(
                         i,
+                        Some(j),
                         &|| {
                             let around = |o: isize| -> String {
                                 let at = off as isize + o;
@@ -918,6 +934,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
                         },
                         &mut work,
                         &mut smark,
+                        &mut via,
                     );
                 }
             }
@@ -975,6 +992,14 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             r = format!("{r} {{{}}}", f.join(" <- "));
         }
         eprintln!("  STRONG {:#x} ({} bytes, {}) <- {r}", b.start, b.size, class_name(&classes[b.class as usize]));
+        let mut chain: Vec<String> = Vec::new();
+        let mut k = via[i];
+        while k != u32::MAX && chain.len() < 12 {
+            let kb = table.blocks[k as usize];
+            chain.push(format!("{} ({:#x})", class_name(&classes[kb.class as usize]), kb.start));
+            k = via[k as usize];
+        }
+        eprintln!("      reached via: {}", chain.join(" <- "));
     }
     if strong.is_empty() {
         return;

@@ -999,6 +999,7 @@ impl Checker {
     // checker.go:22586
     pub(crate) fn pop_active_mapper(&mut self) {
         self.active_mappers.pop();
+        tsrs_core::census_scrub_slack(&mut self.active_mappers);
         // Go clears the map and leaves it in the list for later reuse.
         let mut cache = self.active_type_mappers_caches.pop().unwrap();
         if cache.capacity() > 64 && cache.capacity() > 4 * cache.len() {
@@ -1421,7 +1422,8 @@ impl Checker {
             let key = get_conditional_type_key(&type_arguments, alias, for_constraint);
             let mut result = root.instantiations.get(&key);
             if result.is_none() {
-                let new_mapper = new_type_mapper(outer_type_parameters, alloc_slice(&type_arguments));
+                let type_argument_list = tsrs_core::alloc_slice_recycled(&type_arguments);
+                let new_mapper = new_type_mapper(outer_type_parameters, type_argument_list);
                 let check_type = root.check_type.get().unwrap();
                 let mut distribution_type: Option<P<Type>> = None;
                 if root.is_distributive.get() {
@@ -1434,13 +1436,30 @@ impl Checker {
                 let r = match distribution_type {
                     Some(distribution_type) if check_type != distribution_type && distribution_type.flags().intersects(TypeFlags::Union | TypeFlags::Never) => self.map_type_with_alias(
                         distribution_type,
-                        |c, t| c.get_conditional_type(root, Some(prepend_type_mapping(check_type, t, Some(new_mapper))), for_constraint, None),
+                        |c, t| {
+                            let m = prepend_type_mapping(check_type, t, Some(new_mapper));
+                            let r = c.get_conditional_type(root, Some(m), for_constraint, None);
+                            // SAFETY: made here for this one call.
+                            unsafe { recycle_mapping(m, false) };
+                            r
+                        },
                         alias,
                     ),
                     _ => self.get_conditional_type(root, Some(new_mapper), for_constraint, alias),
                 };
                 root.instantiations.set(key, r);
                 result = Some(r);
+                // The mapper and its type list are garbage unless the result kept the mapper (79%, notes/mem-census.md).
+                // SAFETY: made above; a single-type mapper does not keep the list, an array mapper keeps it only if
+                // it escaped.
+                unsafe {
+                    if !new_mapper.escaped() {
+                        recycle_mapper(new_mapper);
+                        tsrs_core::free_slice!(type_argument_list);
+                    } else if type_argument_list.len() == 1 {
+                        tsrs_core::free_slice!(type_argument_list);
+                    }
+                }
             }
             return result.unwrap();
         }

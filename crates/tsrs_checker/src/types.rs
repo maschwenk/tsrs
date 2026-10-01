@@ -278,7 +278,7 @@ pub struct ValueSymbolLinks {
 #[derive(Default)]
 struct ValueSymbolLinksTail {
     target: Cell<Option<P<Symbol>>>,
-    mapper: Cell<Option<P<TypeMapper>>>,
+    mapper: MapperCell,
     write_type: Cell<Option<P<Type>>>,
     name_type: Cell<Option<P<Type>>>,
     containing_type: Cell<Option<P<Type>>>, // Mapped type for mapped type property, containing union or intersection type for synthetic property
@@ -393,6 +393,9 @@ impl ValueSymbolLinks {
     }
     #[inline]
     pub fn set_mapper(&self, mapper: Option<P<TypeMapper>>) {
+        if let Some(m) = mapper {
+            escape_mapper(m); // a symbol link outlives the call that made the mapper
+        }
         match self.mode() {
             LinksMode::Plain => self.second.set(erase(mapper)),
             LinksMode::Synthetic if mapper.is_none() => {}
@@ -1847,7 +1850,7 @@ impl StructuredType {
 pub struct ObjectType {
     pub structured_type: StructuredType,
     pub target: Cell<Option<P<Type>>>, // Target of instantiated type
-    pub mapper: Cell<Option<P<TypeMapper>>>, // Type mapper for instantiated type
+    pub mapper: MapperCell, // Type mapper for instantiated type
     // Go's `instantiations` map is used only by the targets of instantiations: generic interfaces and tuples keep
     // it in `InterfaceType`, other object types (declared anonymous and mapped types, deferred type references) in
     // `Checker::object_type_instantiations`, so the millions of instantiated object types and references do not
@@ -2142,7 +2145,7 @@ pub struct TypeParameter {
     pub constrained_type: ConstrainedType,
     pub constraint: Cell<Option<P<Type>>>,
     pub target: Cell<Option<P<Type>>>,
-    pub mapper: Cell<Option<P<TypeMapper>>>,
+    pub mapper: MapperCell,
     pub is_this_type: Cell<bool>,
     pub is_distributed: Cell<bool>,
     pub resolved_default_type: Cell<Option<P<Type>>>,
@@ -2274,8 +2277,8 @@ pub struct ConditionalType {
     pub resolved_inferred_true_type: Cell<Option<P<Type>>>, // The `trueType` instantiated with the `combinedMapper`, if present
     pub resolved_default_constraint: Cell<Option<P<Type>>>,
     pub resolved_constraint_of_distributive: Cell<Option<P<Type>>>,
-    pub mapper: Cell<Option<P<TypeMapper>>>,
-    pub combined_mapper: Cell<Option<P<TypeMapper>>>,
+    pub mapper: MapperCell,
+    pub combined_mapper: MapperCell,
 }
 embeds!(ConditionalType, constrained_type, ConstrainedType);
 
@@ -2327,7 +2330,7 @@ pub struct Signature {
     pub resolved_return_type: Cell<Option<P<Type>>>,
     pub resolved_type_predicate: Cell<Option<P<TypePredicate>>>,
     pub target: Cell<Option<P<Signature>>>,
-    pub mapper: Cell<Option<P<TypeMapper>>>,
+    pub mapper: MapperCell,
     // `thisParameter`, `isolatedSignatureType` and `composite` (few signatures have any) live in a tail allocated on
     // the first non-nil write; `this_parameter()` / `set_this_parameter()` & co. read nil when it is absent.
     rare: Cell<Option<P<SignatureRare>>>,
@@ -2604,3 +2607,4 @@ mod tests {
         assert_eq!(fields(&l), (None, Some(m), Some(t1), Some(t2), None, false));
     }
 }
+

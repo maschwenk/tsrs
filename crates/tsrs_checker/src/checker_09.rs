@@ -2658,7 +2658,11 @@ impl Checker {
                 }
                 let type_arguments = alloc_slice(&type_arguments);
                 let lm = std::rc::Rc::new(LazyMemberTable {
-                    mapper: new_type_mapper(type_parameters, type_arguments),
+                    mapper: {
+                        let m = new_type_mapper(type_parameters, type_arguments);
+                        escape_mapper(m); // kept by the table
+                        m
+                    },
                     type_arguments,
                     ready: std::cell::OnceCell::new(),
                     declared: SymbolTable::default(),

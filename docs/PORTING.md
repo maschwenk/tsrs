@@ -66,7 +66,9 @@ referenced through `tsrs_core::P<T>`:
 - Go `*T` that can be nil -> `Option<P<T>>`. Go `*T` that is never nil -> `P<T>`.
   Decide from the Go code (nil checks, `return nil`). When unsure, use `Option`.
 - There are **no lifetime parameters** anywhere in this codebase. Arena data is `'static`.
-- Nothing is ever freed. That is intentional (batch compiler).
+- Nothing is ever freed. That is intentional (batch compiler). The exceptions are a few recycling sites that
+  prove an object dead (rolled-back parses, dropped flow labels, scratch mappers and inference contexts whose escape
+  bit is clear; `tsrs_core::arena`, notes/mem-recycle.md). A struct field that keeps a mapper must be a `MapperCell`.
 - Fields that are assigned after construction use interior mutability:
   `Cell<T>` for `Copy` data (flags, numbers, `Option<P<T>>`, `&'static [T]`, `&'static str`),
   `RefCell<T>` for growable collections (`Vec`, maps). Fields that are set at construction and

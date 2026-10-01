@@ -2031,7 +2031,10 @@ impl Checker {
         } else if prop_name_type.flags().intersects(TypeFlags::Number | TypeFlags::Enum) {
             index_key_type = self.number_type;
         }
-        let prop_type = self.instantiate_type(template_type, Some(append_type_mapping(t.as_mapped_type().mapper.get(), type_parameter, key_type)));
+        let mapper = append_type_mapping(t.as_mapped_type().mapper.get(), type_parameter, key_type);
+        let prop_type = self.instantiate_type(template_type, Some(mapper));
+        // SAFETY: made here for this one instantiation.
+        unsafe { recycle_mapping(mapper, true) };
         let modifiers_index_info = self.get_applicable_index_info(modifiers_type, prop_name_type);
         let is_readonly = template_modifiers.intersects(MappedTypeModifiers::IncludeReadonly)
             || !template_modifiers.intersects(MappedTypeModifiers::ExcludeReadonly) && modifiers_index_info.is_some_and(|i| i.is_readonly.get());
@@ -2269,7 +2272,10 @@ fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTy
 fn mapped_type_add_member_for_key_type(c: &mut Checker, st: &mut MappedTypeMembersState, key_type: P<Type>) {
     let mut prop_name_type = key_type;
     if let Some(name_type) = st.name_type {
-        prop_name_type = c.instantiate_type(name_type, Some(append_type_mapping(st.t.as_mapped_type().mapper.get(), st.type_parameter, key_type)));
+        let mapper = append_type_mapping(st.t.as_mapped_type().mapper.get(), st.type_parameter, key_type);
+        prop_name_type = c.instantiate_type(name_type, Some(mapper));
+        // SAFETY: made here for this one instantiation.
+        unsafe { recycle_mapping(mapper, true) };
     }
     for_each_type(c, prop_name_type, |c, t| mapped_type_add_member_for_key_type_worker(c, st, key_type, t));
 }
@@ -2289,6 +2295,8 @@ impl Checker {
             let key_type = self.mapped_symbol_links.get(symbol).key_type.get().unwrap();
             let mapper = append_type_mapping(mapped_type.as_mapped_type().mapper.get(), type_parameter, key_type);
             let mut prop_type = self.instantiate_type(template_type, Some(mapper));
+            // SAFETY: made here for this one instantiation.
+            unsafe { recycle_mapping(mapper, true) };
             // When creating an optional property in strictNullChecks mode, if 'undefined' isn't assignable to the
             // type, we include 'undefined' in the type. Similarly, when creating a non-optional property in strictNullChecks
             // mode, if the underlying property is optional we remove 'undefined' from the type.

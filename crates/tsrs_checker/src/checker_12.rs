@@ -996,6 +996,25 @@ impl Checker {
 
     // checker.go:24770
     pub(crate) fn get_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> {
+        let (mappers, contexts) = (self.scratch_mappers.len(), self.scratch_contexts.len());
+        let result = self.get_conditional_type_worker(root, mapper, for_constraint, alias);
+        // The `infer` contexts and the composite mappers made for them are garbage unless one of their mappers was
+        // stored (74% / 61-88% are, notes/mem-census.md). Contexts first: recycling reads their mapper fields.
+        while self.scratch_contexts.len() > contexts {
+            let ctx = self.scratch_contexts.pop().unwrap();
+            InferenceContext::recycle(ctx);
+        }
+        while self.scratch_mappers.len() > mappers {
+            let m = self.scratch_mappers.pop().unwrap();
+            // SAFETY: made by this call (below), which is done; escaped mappers are kept.
+            unsafe { recycle_mapper(m) };
+        }
+        tsrs_core::census_scrub_slack(&mut self.scratch_contexts);
+        tsrs_core::census_scrub_slack(&mut self.scratch_mappers);
+        result
+    }
+
+    fn get_conditional_type_worker(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> {
         let mut root = root;
         let mut mapper = mapper;
         let mut alias = alias;
@@ -1048,9 +1067,14 @@ impl Checker {
                 //    * The original `mapper` used to create this conditional
                 //    * The mapper that maps the infer type parameter to its inference result (`context.mapper`)
                 let context = self.new_inference_context(root.infer_type_parameters.get(), None /*signature*/, InferenceFlags::None, None);
+                self.scratch_contexts.push(context);
                 if let Some(mapper) = mapper {
-                    let non_fixing_mapper = self.combine_type_mappers(context.non_fixing_mapper(), mapper);
+                    let own = context.non_fixing_mapper().unwrap();
+                    let non_fixing_mapper = self.combine_type_mappers(Some(own), mapper);
                     context.set_non_fixing_mapper(non_fixing_mapper);
+                    // The context no longer holds its own non-fixing mapper, so it is recycled from here.
+                    self.scratch_mappers.push(own);
+                    self.scratch_mappers.push(non_fixing_mapper);
                 }
                 if !check_type_deferred {
                     // We don't want inferences from constraints as they may cause us to eagerly resolve the
@@ -1062,7 +1086,9 @@ impl Checker {
                 // those type parameters are used in type references (see getInferredTypeParameterConstraint). For
                 // that reason we need context.mapper to be first in the combined mapper. See #42636 for examples.
                 if let Some(mapper) = mapper {
-                    combined_mapper = Some(self.combine_type_mappers(context.mapper(), mapper));
+                    let combined = self.combine_type_mappers(context.mapper(), mapper);
+                    self.scratch_mappers.push(combined);
+                    combined_mapper = Some(combined);
                 } else {
                     combined_mapper = context.mapper();
                 }

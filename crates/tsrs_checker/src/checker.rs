@@ -318,8 +318,12 @@ pub struct InferenceContext {
     // `non_fixing_mapper()`), see notes/mem-round3.md.
     mapper: Cell<Option<P<TypeMapper>>>,
     non_fixing_mapper: Cell<Option<P<TypeMapper>>>,
-    pub(crate) rare: Cell<Option<P<InferenceContextRare>>>,
+    // The `InferenceContextRare` address (exposed provenance) with the escaped bit (`RARE_ESCAPED`) in bit 0: set
+    // when one of the context's inference mappers escapes (notes/mem-recycle.md), after which it is never recycled.
+    rare: Cell<usize>,
 }
+
+const RARE_ESCAPED: usize = 1;
 
 const _: () = assert!(std::mem::size_of::<InferenceContext>() == 64);
 
@@ -342,17 +346,48 @@ impl InferenceContext {
         }
     }
 
-    /// The arena handle of this context (contexts are only created with `P::new` and never freed or moved).
+    /// The arena handle of this context (contexts are only created in the arena and never moved).
     fn as_p(&self) -> P<InferenceContext> {
         // SAFETY: see above.
         P::from_static(unsafe { &*(self as *const InferenceContext) })
+    }
+
+    fn rare(&self) -> Option<P<InferenceContextRare>> {
+        let a = self.rare.get() & !RARE_ESCAPED;
+        // SAFETY: a non-zero address was stored from a live `P<InferenceContextRare>` (`rare_for_write`).
+        (a != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<InferenceContextRare>(a) }))
+    }
+
+    /// Whether one of the context's inference mappers escaped (it may be used after its creator is done).
+    pub(crate) fn escaped(&self) -> bool {
+        self.rare.get() & RARE_ESCAPED != 0
+    }
+
+    /// Marks the context escaped, with every mapper it holds (an escaped context's mappers may be used through it).
+    pub(crate) fn escape(&self) {
+        if self.escaped() {
+            return;
+        }
+        self.rare.set(self.rare.get() | RARE_ESCAPED);
+        for m in [self.mapper.get(), self.non_fixing_mapper.get(), self.return_mapper(), self.outer_return_mapper()].into_iter().flatten() {
+            escape_mapper(m);
+        }
+    }
+
+    /// The context's own inference mappers, when created (for recycling).
+    pub(crate) fn own_mappers(&self) -> [Option<P<TypeMapper>>; 2] {
+        [self.mapper.get(), self.non_fixing_mapper.get()]
     }
 
     /// Go `context.mapper`, the mapper that fixes inferences. Go creates it with the context; here it may be created
     /// on the first call (candidate B2), once, so every caller gets the same mapper.
     pub fn mapper(&self) -> Option<P<TypeMapper>> {
         if self.mapper.get().is_none() {
-            self.mapper.set(Some(new_inference_type_mapper(self.as_p(), true /*fixing*/)));
+            let m = new_inference_type_mapper(self.as_p(), true /*fixing*/);
+            if self.escaped() {
+                escape_mapper(m);
+            }
+            self.mapper.set(Some(m));
         }
         self.mapper.get()
     }
@@ -360,62 +395,111 @@ impl InferenceContext {
     /// Go `context.nonFixingMapper` (created like `mapper()`).
     pub fn non_fixing_mapper(&self) -> Option<P<TypeMapper>> {
         if self.non_fixing_mapper.get().is_none() {
-            self.non_fixing_mapper.set(Some(new_inference_type_mapper(self.as_p(), false /*fixing*/)));
+            let m = new_inference_type_mapper(self.as_p(), false /*fixing*/);
+            if self.escaped() {
+                escape_mapper(m);
+            }
+            self.non_fixing_mapper.set(Some(m));
         }
         self.non_fixing_mapper.get()
     }
 
     pub fn set_non_fixing_mapper(&self, mapper: P<TypeMapper>) {
+        if self.escaped() {
+            escape_mapper(mapper);
+        }
         self.non_fixing_mapper.set(Some(mapper));
     }
 
     fn rare_for_write(&self) -> P<InferenceContextRare> {
-        match self.rare.get() {
+        match self.rare() {
             Some(rare) => rare,
             None => {
-                let rare = P::new(InferenceContextRare::default());
-                self.rare.set(Some(rare));
+                let rare = P::new_recycled(InferenceContextRare::default());
+                let addr = (rare.get() as *const InferenceContextRare).expose_provenance();
+                self.rare.set(addr | (self.rare.get() & RARE_ESCAPED));
                 rare
             }
         }
     }
     pub fn return_mapper(&self) -> Option<P<TypeMapper>> {
-        self.rare.get().and_then(|r| r.return_mapper.get())
+        self.rare().and_then(|r| r.return_mapper.get())
     }
+    // A return mapper is stored in the context, which can outlive the call that made the mapper: an escape.
     pub fn set_return_mapper(&self, mapper: Option<P<TypeMapper>>) {
-        if mapper.is_some() || self.rare.get().is_some() {
+        if mapper.is_some() || self.rare().is_some() {
+            if let Some(m) = mapper {
+                escape_mapper(m);
+            }
             self.rare_for_write().return_mapper.set(mapper);
         }
     }
     pub fn outer_return_mapper(&self) -> Option<P<TypeMapper>> {
-        self.rare.get().and_then(|r| r.outer_return_mapper.get())
+        self.rare().and_then(|r| r.outer_return_mapper.get())
     }
     pub fn set_outer_return_mapper(&self, mapper: Option<P<TypeMapper>>) {
-        if mapper.is_some() || self.rare.get().is_some() {
+        if mapper.is_some() || self.rare().is_some() {
+            if let Some(m) = mapper {
+                escape_mapper(m);
+            }
             self.rare_for_write().outer_return_mapper.set(mapper);
         }
     }
     pub fn inferred_type_parameters(&self) -> &'static [P<Type>] {
-        self.rare.get().map_or(&[], |r| r.inferred_type_parameters.get())
+        self.rare().map_or(&[], |r| r.inferred_type_parameters.get())
     }
     pub fn set_inferred_type_parameters(&self, type_parameters: &'static [P<Type>]) {
-        if !type_parameters.is_empty() || self.rare.get().is_some() {
+        if !type_parameters.is_empty() || self.rare().is_some() {
             self.rare_for_write().inferred_type_parameters.set(type_parameters);
         }
     }
     pub fn has_intra_expression_inference_sites(&self) -> bool {
-        self.rare.get().is_some_and(|r| !r.intra_expression_inference_sites.borrow().is_empty())
+        self.rare().is_some_and(|r| !r.intra_expression_inference_sites.borrow().is_empty())
     }
     pub fn intra_expression_inference_sites(&self) -> Vec<IntraExpressionInferenceSite> {
-        self.rare.get().map_or_else(Vec::new, |r| r.intra_expression_inference_sites.borrow().clone())
+        self.rare().map_or_else(Vec::new, |r| r.intra_expression_inference_sites.borrow().clone())
     }
     pub fn push_intra_expression_inference_site(&self, site: IntraExpressionInferenceSite) {
         self.rare_for_write().intra_expression_inference_sites.borrow_mut().push(site);
     }
     pub fn clear_intra_expression_inference_sites(&self) {
-        if let Some(rare) = self.rare.get() {
+        if let Some(rare) = self.rare() {
             rare.intra_expression_inference_sites.borrow_mut().clear();
         }
+    }
+
+    /// Gives a context whose mappers never escaped back to the arena when its creator is done with it: the context,
+    /// its own inference mappers, its inference infos and their candidate lists, its info slice and its tail. Its
+    /// creator guarantees that nothing else holds it (no live inference-context stack entry, no clone that shares
+    /// state: clones copy their infos). Contexts that escaped are kept.
+    pub(crate) fn recycle(n: P<InferenceContext>) {
+        if n.escaped() {
+            return;
+        }
+        for m in n.own_mappers().into_iter().flatten() {
+            if matches!(m.data(), TypeMapperData::Inference { n: owner, .. } if owner == n) {
+                debug_assert!(!m.escaped());
+                // SAFETY: an inference mapper of `n` that never escaped is referenced only by `n` and by mappers
+                // that did not escape either (dead with their creators).
+                unsafe { tsrs_core::free!(m) };
+            }
+        }
+        let inferences = n.inferences.get();
+        for &info in inferences {
+            info.candidates.recycle();
+            info.contra_candidates.recycle();
+            // SAFETY: infos belong to exactly one context (clones copy them; merged infos come from a local list).
+            unsafe { tsrs_core::free!(info) };
+        }
+        // SAFETY: the context's own list (`alloc_slice_recycled` in `newInferenceContextWorker`, or the merged copy).
+        unsafe { tsrs_core::free_slice!(inferences) };
+        if let Some(rare) = n.rare() {
+            drop(std::mem::take(&mut *rare.intra_expression_inference_sites.borrow_mut()));
+            // SAFETY: only `n` points to its tail (the type parameter list it holds is not freed).
+            unsafe { tsrs_core::free!(rare) };
+        }
+        // SAFETY: see above.
+        unsafe { tsrs_core::free!(n) };
     }
 }
 
@@ -432,7 +516,7 @@ impl<T> Default for LazyVec<T> {
 
 impl<T: Copy + PartialEq> LazyVec<T> {
     pub fn from_vec(items: Vec<T>) -> Self {
-        LazyVec(Cell::new((!items.is_empty()).then(|| P::new(RefCell::new(items)))))
+        LazyVec(Cell::new((!items.is_empty()).then(|| P::new_recycled(RefCell::new(items)))))
     }
     pub fn is_empty(&self) -> bool {
         self.0.get().is_none_or(|v| v.borrow().is_empty())
@@ -443,7 +527,7 @@ impl<T: Copy + PartialEq> LazyVec<T> {
     pub fn push(&self, item: T) {
         match self.0.get() {
             Some(v) => v.borrow_mut().push(item),
-            None => self.0.set(Some(P::new(RefCell::new(vec![item])))),
+            None => self.0.set(Some(P::new_recycled(RefCell::new(vec![item])))),
         }
     }
     pub fn clear(&self) {
@@ -453,6 +537,14 @@ impl<T: Copy + PartialEq> LazyVec<T> {
     }
     pub fn to_vec(&self) -> Vec<T> {
         self.0.get().map_or_else(Vec::new, |v| v.borrow().clone())
+    }
+    /// Frees the list (heap buffer and arena cell) of a dead owner (`InferenceContext::recycle`).
+    pub(crate) fn recycle(&self) {
+        if let Some(v) = self.0.take() {
+            drop(std::mem::take(&mut *v.borrow_mut()));
+            // SAFETY: a `LazyVec` cell is owned by its one `LazyVec` (`push` / `from_vec` allocate a new one).
+            unsafe { tsrs_core::free!(v) };
+        }
     }
 }
 
@@ -1124,6 +1216,9 @@ pub struct Checker {
     pub packages_map: Option<FxHashMap<String, bool>>, // Go nil map = not computed
     pub active_mappers: Vec<P<TypeMapper>>,
     pub active_type_mappers_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>,
+    // Mappers and inference contexts `getConditionalType` made, recycled when it returns (notes/mem-recycle.md).
+    pub scratch_mappers: Vec<P<TypeMapper>>,
+    pub scratch_contexts: Vec<P<InferenceContext>>,
     pub free_type_mapper_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
     pub ambient_modules_once: bool, // Go sync.Once: true once ambient_modules has been computed
     pub ambient_modules: Vec<P<Symbol>>,
@@ -1476,6 +1571,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         packages_map: None,
         active_mappers: Vec::new(),
         active_type_mappers_caches: Vec::new(),
+        scratch_mappers: Vec::new(),
+        scratch_contexts: Vec::new(),
         free_type_mapper_caches: Vec::new(),
         ambient_modules_once: false,
         ambient_modules: Vec::new(),
@@ -2300,3 +2397,4 @@ pub struct ObjectLiteralDiscriminator {
     pub props: Vec<P<Node>>,
     pub members: Vec<P<Symbol>>,
 }
+

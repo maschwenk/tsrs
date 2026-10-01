@@ -1394,6 +1394,8 @@ impl Checker {
             if let Some(name_type) = name_type {
                 let mapper = append_type_mapping(t.as_mapped_type().mapper.get(), type_parameter, key_type);
                 prop_name_type = c.instantiate_type(name_type, Some(mapper));
+                // SAFETY: made here for this one instantiation.
+                unsafe { recycle_mapping(mapper, true) };
             }
             // `keyof` currently always returns `string | number` for concrete `string` index signatures - the below ternary keeps that behavior for mapped types
             // See `getLiteralTypeFromProperties` where there's a similar ternary to cause the same behavior.
