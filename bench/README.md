@@ -3,7 +3,7 @@
 `bench/run.py` type-checks the projects the TypeScript team benchmarks the Go compiler on
 ([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) with tsrs and
 with tsgo 7.0.2 (npm `typescript@7.0.2`), and reports wall time, peak memory and the error count of each.
-`.github/workflows/bench.yml` runs it on every push to `main` and rewrites the table at the top of `README.md`.
+The Depot CI workflow `.depot/workflows/bench.yml` runs it on every push to `main` and rewrites the table at the top of `README.md`.
 
 ```sh
 cargo build --release -p tsrs_cli
@@ -73,21 +73,36 @@ builds); the tsserver/LSP/startup scenarios (not `tsc` runs). All six included p
 
 ## CI
 
-`bench.yml` runs on one fixed machine spec so runs are comparable: **`depot-ubuntu-24.04-8`** (Depot runner, 8 vCPU,
-32 GB RAM, Linux x86_64). Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on
-an 18-core Mac); 32 GB leaves 4x headroom, and 8 vCPUs cover the 4 checker threads plus parallel parsing. The job
-checks `nproc`/`MemTotal`/arch against that spec and fails otherwise; there is no fallback runner. A `watchdog` job on
-`ubuntu-latest` cancels the run and fails if the bench job has not been picked up after 15 minutes (an unserved
-`runs-on` label would otherwise sit queued for 24 hours).
+The benchmark is a [Depot CI](https://depot.dev/docs/ci/overview) workflow, `.depot/workflows/bench.yml` (this
+repository is connected to Depot CI; Depot's runners for GitHub Actions only serve organization-owned repositories, and
+a probe of `depot-ubuntu-*` / `depot-macos-latest` labels from GitHub Actions stayed queued). It runs on every push to
+`main` except pushes that touch only `README.md` / `bench/results/**`, and on `workflow_dispatch`. Nobody waits on it,
+so it is built for unattended runs: one bench at a time, never cancelled (a push during a run queues the newest
+commit), network steps retried, and the results commit rebased onto the latest `main` before pushing.
 
-Steps: release build, projects restored from `actions/cache` (key = hash of `bench/projects.json`; on Depot runners
-the cache is served by Depot's cache backend without changes to the workflow), all projects, 3 reps, then commit
-`README.md` and `bench/results/` as `github-actions[bot]` with `[skip ci]`. Pushes that touch only `README.md` /
-`bench/results/**` do not trigger it; a newer push cancels a running bench.
+**Fixed machine spec**: `depot-ubuntu-24.04-8`, 8 vCPU, 32 GB RAM, Linux x86_64, for every run, so numbers are
+comparable over time. Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
+18-core Mac, 6.9 GiB on Linux); 32 GB leaves 4x headroom, and 8 vCPUs cover the 4 checker threads plus parallel
+parsing. The first step fails the job if `nproc`/`MemTotal`/arch differ; there is no fallback runner. (On GitHub's
+standard 2 vCPU / 7 GB runner tsgo swapped on vscode: 146 s wall for a 50 s check.)
 
-Status 2026-10-01: Depot did not pick up jobs for this repository. A probe of `depot-ubuntu-24.04-16`, `-24.04-32`,
-`-22.04-8`, `-22.04` and `depot-macos-latest` stayed queued for 9 minutes, and Depot's documentation says its GitHub
-Actions runners only serve repositories owned by a GitHub organization (this one belongs to a personal account). Until
-the repository moves to an organization connected to Depot, every bench run ends with the watchdog error. `ci.yml` and
-`release.yml` stay on GitHub-hosted runners for the same reason. One run on GitHub's standard runner (`ubuntu-24.04`,
-2 vCPU, 7 GB, before the fixed spec was introduced) is in `bench/results/`; it is not comparable with the Depot spec.
+Caching (Depot Cache serves the `actions/cache` API on Depot CI, no special configuration): `Swatinem/rust-cache` for
+`~/.cargo` and the dependency part of `target/` (workspace crates are rebuilt: they are what is being measured); one
+cache for the suite checkout plus the npm-installed compilers (`typescript@7.0.2` and the reference nightly); one cache
+per cloned project (checkout + `node_modules`) keyed on its pinned commit and install command
+(`bench/run.py --print-cache-keys`), so changing one pin re-installs only that project.
+
+Job duration split, 2026-10-01:
+
+| | GitHub-hosted `ubuntu-24.04` (2 vCPU / 7 GB), before | Depot CI `depot-ubuntu-24.04-8`, all caches warm |
+| --- | --- | --- |
+| runner start, toolchain, rust-cache restore | ~20 s | 11 s |
+| `cargo build --release -p tsrs_cli` | 80-134 s | 34 s |
+| restore project caches | 45-85 s (one 5 GB cache) | 14 s (5 caches) |
+| clone + install projects (cold cache only) | 151 s, then 91 s to save the cache | 0 s |
+| measurement (`bench/run.py`, 6 projects x 2 modes x 2 compilers x 3 reps + warm-ups) | never finished: vscode alone took 19 min (tsgo swapped), cancelled | 424 s |
+| commit + push results | | 2 s |
+| total | | 8 min 10 s (measurement 87%) |
+
+The first Depot run (cold caches: clone, install and cache save for all projects) took 11 min 3 s. What is left in
+a warm run is the tsrs build (it changes with every commit) and the measurement.

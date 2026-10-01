@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import platform
@@ -46,6 +47,18 @@ def sh(cmd: str | list[str], cwd: Path | None = None, env: dict | None = None) -
     subprocess.run(cmd, cwd=cwd, shell=shell, check=True, env=env, executable="/bin/bash" if shell else None)
 
 
+def retry(what: str, fn, attempts: int = 3) -> None:
+    """Network steps (clone, package installs) get a few attempts: the CI job runs unattended."""
+    for i in range(1, attempts + 1):
+        try:
+            return fn()
+        except subprocess.CalledProcessError as e:
+            if i == attempts:
+                raise
+            log(f"{what}: attempt {i} failed ({e}); retrying in {10 * i} s")
+            time.sleep(10 * i)
+
+
 def git_checkout(repo: str, commit: str, dest: Path) -> None:
     """Shallow checkout of exactly one commit (GitHub serves fetches by SHA)."""
     if dest.exists():
@@ -70,10 +83,13 @@ def ensure_checkout(name: str, repo: str, commit: str, install: str | None, dest
         return
     log(f"{name}: setting up {repo} @ {commit[:12]}")
     t0 = time.perf_counter()
-    git_checkout(repo, commit, dest)
-    if install:
-        env = dict(os.environ, CI="true", HUSKY="0")
-        sh(install, cwd=dest, env=env)
+
+    def attempt() -> None:
+        git_checkout(repo, commit, dest)
+        if install:
+            sh(install, cwd=dest, env=dict(os.environ, CI="true", HUSKY="0"))
+
+    retry(name, attempt)
     (dest / MARKER).write_text(json.dumps(want))
     log(f"{name}: setup took {time.perf_counter() - t0:.0f} s")
 
@@ -112,7 +128,7 @@ def ensure_tsgo(pkgcfg: dict, work: Path) -> Path:
     if not exe.exists():
         d.mkdir(parents=True, exist_ok=True)
         (d / "package.json").write_text('{"name": "tsgo-bench", "private": true}\n')
-        sh(["npm", "install", "--no-audit", "--no-fund", "--no-save", f"{pkg}@{version}"], cwd=d)
+        retry(f"{pkg}@{version}", lambda: sh(["npm", "install", "--no-audit", "--no-fund", "--no-save", f"{pkg}@{version}"], cwd=d))
     with open(exe, "rb") as f:
         magic = f.read(4)
     if magic not in (b"\x7fELF", b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe"):
@@ -192,7 +208,7 @@ def machine_info(local: bool, label: str | None) -> dict:
     elif os.environ.get("GITHUB_ACTIONS") == "true" and not local:
         info["ci"] = True
         runner = os.environ.get("BENCH_RUNNER") or os.environ.get("RUNNER_NAME", "hosted runner")
-        info["label"] = (f"CI runner `{runner}` ({info['cpus']} vCPU, {info.get('memory_gb')} GB, "
+        info["label"] = (f"{runner} ({info['cpus']} vCPU, {info.get('memory_gb')} GB RAM, {platform.system()} "
                          f"{platform.machine()}, {info['cpu']})")
     else:
         info["label"] = f"local machine ({info['cpu']}, {info['cpus']} cores, {info.get('memory_gb')} GB)"
@@ -302,7 +318,9 @@ def main() -> None:
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--timeout", type=float, default=900, help="per-run timeout in seconds")
     ap.add_argument("--no-warmup", action="store_true")
-    ap.add_argument("--setup-only", action="store_true")
+    ap.add_argument("--setup-only", action="store_true", help="clone and install everything, including the reference compiler")
+    ap.add_argument("--print-cache-keys", action="store_true",
+                    help="print `<name>=<key>` lines (GITHUB_OUTPUT format) for the CI caches of bench/.work")
     ap.add_argument("--out-dir", type=Path, default=BENCH / "results")
     ap.add_argument("--readme", type=Path, help="rewrite the bench block of this README")
     args = ap.parse_args()
@@ -317,6 +335,15 @@ def main() -> None:
         projects = [p for p in projects if p["name"] in want]
     modes = args.modes.split(",")
     work = args.work_dir.resolve()
+    if args.print_cache_keys:
+        digest = lambda x: hashlib.sha256(json.dumps(x, sort_keys=True).encode()).hexdigest()[:16]
+        # bench/.work/{suite,tsgo}: the suite checkout (Compiler, Compiler-Unions) and the npm compilers.
+        print(f"shared={digest([cfg['suite'], cfg['tsgo'], cfg.get('reference'), native_platform()])}")
+        # bench/.work/solutions/<name>: one cache per cloned project, keyed on its commit and install command.
+        for p in projects:
+            if "repo" in p:
+                print(f"{p['name']}={p['commit'][:12]}-{digest([p['repo'], p['commit'], p.get('install')])}")
+        return
 
     tsgo = (args.tsgo or ensure_tsgo(cfg["tsgo"], work)).resolve()
     ref_cfg = cfg.get("reference")
@@ -328,6 +355,8 @@ def main() -> None:
     for p in projects:
         setup_project(cfg, p, work)
     if args.setup_only:
+        if ref_cfg:
+            ensure_tsgo(ref_cfg, work)
         return
 
     tsrs = args.tsrs.resolve()

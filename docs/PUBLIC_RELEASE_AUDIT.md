@@ -89,20 +89,21 @@ returns nothing in the working tree.
 
 ## GitHub Actions
 
-- Every workflow has a top-level `permissions: contents: read`. Elevations: `bench.yml` bench job `contents: write`
-  (pushes the results commit), its watchdog `actions: write` (cancels a stuck run); `release.yml` publish job
+- Every workflow has a top-level `permissions: contents: read`. Elevations: the Depot CI `.depot/workflows/bench.yml` bench
+  job `contents: write` (pushes the results commit); `release.yml` publish job
   `id-token: write` (npm provenance). `NPM_TOKEN` is referenced only in the publish step.
 - All actions pinned to full commit SHAs with the version in a comment; Dependabot (`.github/dependabot.yml`) updates
   `github-actions` and `cargo` weekly, grouped. Note: Dependabot does not scan `.depot/workflows/`.
 - No `pull_request_target`. Fork pull requests run `ci.yml` on GitHub-hosted runners without secrets, after approval.
   The Depot CI job (`.depot/workflows/ci.yml`) skips fork pull requests with
   `if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository`
-  (the plain `head.repo.full_name == github.repository` test would also skip every push). `bench.yml` never runs on
-  pull requests and only in `maschwenk/tsrs`.
+  (the plain `head.repo.full_name == github.repository` test would also skip every push). `.depot/workflows/bench.yml` never
+  runs on pull requests and only in `maschwenk/tsrs`.
 - Concurrency groups on CI, Bench and Release (release never cancels in progress). `release.yml`'s only dispatch input
   defaults to `dry_run: true`.
-- Bench commit-back loop guards: pushed with `GITHUB_TOKEN` (pushes made with it do not trigger workflows), touches
-  only `README.md` and `bench/results/**` (both in `paths-ignore`), and carries `[skip ci]`.
+- Bench commit-back loop guards: the results commit touches only `README.md` and `bench/results/**` (both excluded by
+  the workflow's `paths` filter) and carries `[skip ci]`, which the job's `if` also checks (it is pushed by Depot's
+  GitHub app, so the GitHub rule that `GITHUB_TOKEN` pushes trigger nothing does not apply).
 - `actions/checkout` uses `persist-credentials: false` wherever the job does not push.
 - `actionlint` is clean (`.github/actionlint.yaml` declares the Depot runner labels).
 

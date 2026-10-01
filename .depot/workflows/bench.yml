@@ -1,0 +1,181 @@
+# Depot CI workflow (https://depot.dev/docs/ci/overview). Benchmarks tsrs against tsgo (typescript@7.0.2) on the
+# typescript-benchmarking projects (bench/README.md) and rewrites the table between the bench markers at the top of
+# README.md. Not a GitHub Actions workflow: this repository is connected to Depot CI, and Depot's runners for GitHub
+# Actions only serve organization-owned repositories.
+#
+# Loop guards: the results commit only touches README.md and bench/results/** (excluded by `paths`), and carries
+# [skip ci], which the job's `if` also checks (the commit is pushed by Depot's GitHub app, which may trigger Depot CI).
+
+name: Bench
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**"
+      - "!README.md"
+      - "!bench/results/**"
+  workflow_dispatch:
+
+# One bench at a time. A running bench is not cancelled (main gets pushes every few minutes; with cancelling, every
+# GitHub-hosted run on 2026-10-01 was cancelled before it finished); a push while one runs queues its bench, and a
+# later push replaces that queued one, so the newest commit is always benchmarked next.
+concurrency:
+  group: bench
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# Fixed machine spec so runs are comparable: Depot depot-ubuntu-24.04-8 = 8 vCPU / 32 GB / x86_64 (bench/README.md
+# "CI"). The first step fails the job on any other machine; there is no fallback runner.
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  bench:
+    # Second loop guard: the results commit says [skip ci] (null on workflow_dispatch, which then runs).
+    if: github.repository == 'maschwenk/tsrs' && !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: depot-ubuntu-24.04-8
+    permissions:
+      contents: write # pushes the results commit
+    timeout-minutes: 90
+    env:
+      BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-8`
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # full history so the results commit can be rebased onto a newer main
+
+      - name: Runner hardware (must match the fixed spec)
+        run: |
+          nproc; free -g; df -h / | tail -1
+          lscpu | grep -E 'Model name|^CPU\(s\)' || true
+          mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1048576}' /proc/meminfo)
+          if [ "$(nproc)" != 8 ] || [ "$mem_gb" -lt 28 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 8 vCPU / 32 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: bench-release
+
+      - name: Build tsrs (release)
+        run: cargo build --release --locked -p tsrs_cli
+
+      # On Depot runners every cache action below is served by Depot Cache (no workflow changes needed). One cache for
+      # the suite checkout + the npm compilers, and one per cloned project (checkout + node_modules) keyed on its pinned
+      # commit and install command, so changing one pin re-installs only that project.
+      - name: Cache keys
+        id: keys
+        run: python3 bench/run.py --print-cache-keys | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore suite and compilers
+        id: cache-shared
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.keys.outputs.shared }}
+
+      - name: Restore vscode
+        id: cache-vscode
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/vscode
+          key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs['vscode'] }}
+
+      - name: Restore xstate-main
+        id: cache-xstate
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.keys.outputs['xstate-main'] }}
+
+      - name: Restore webpack
+        id: cache-webpack
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.keys.outputs['webpack'] }}
+
+      - name: Restore mui-docs
+        id: cache-mui
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/mui-docs
+          key: bench-mui-docs-${{ runner.os }}-${{ steps.keys.outputs['mui-docs'] }}
+
+      # A no-op for everything restored above.
+      - name: Set up benchmark projects
+        run: python3 bench/run.py --setup-only
+
+      - name: Save suite and compilers
+        if: steps.cache-shared.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: ${{ steps.cache-shared.outputs.cache-primary-key }}
+
+      - name: Save vscode
+        if: steps.cache-vscode.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: bench/.work/solutions/vscode
+          key: ${{ steps.cache-vscode.outputs.cache-primary-key }}
+
+      - name: Save xstate-main
+        if: steps.cache-xstate.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: ${{ steps.cache-xstate.outputs.cache-primary-key }}
+
+      - name: Save webpack
+        if: steps.cache-webpack.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: ${{ steps.cache-webpack.outputs.cache-primary-key }}
+
+      - name: Save mui-docs
+        if: steps.cache-mui.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: bench/.work/solutions/mui-docs
+          key: ${{ steps.cache-mui.outputs.cache-primary-key }}
+
+      - name: Benchmark
+        run: python3 bench/run.py --readme README.md
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-logs
+          path: bench/.work/logs
+          if-no-files-found: ignore
+
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md bench/results
+          git commit -q -m "bench: results for ${GITHUB_SHA::12} [skip ci]"
+          # main moves fast (several agents push to it); rebase onto the latest and retry.
+          for attempt in 1 2 3 4 5; do
+            git pull -q --rebase origin main && git push -q origin HEAD:main && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
