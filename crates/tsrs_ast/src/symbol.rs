@@ -1,7 +1,8 @@
 use std::cell::Cell;
+use std::hash::BuildHasher;
 use std::sync::atomic::AtomicU64;
 
-use indexmap::IndexMap;
+use hashbrown::HashTable;
 use rustc_hash::FxBuildHasher;
 use tsrs_core::{FrozenCell, OwnedCell, P};
 
@@ -136,9 +137,87 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
 //
 // Go's `SymbolTable` is a map (a reference type). Here it is an arena object handled as `P<SymbolTable>`;
 // a Go nil table is `None`. Iteration is in insertion order and returns snapshots.
+//
+// Representation: the entries in insertion order in a `Vec` (24 bytes each), plus a hash index of entry
+// positions once a table has more than `SYMBOL_TABLE_LINEAR_MAX` entries (most tables are tiny: on Project 82%
+// of the 3.9M tables hold at most 8 entries); smaller tables are searched linearly. Same observable behavior as
+// the insertion-ordered map it replaces (`IndexMap`): `set` of an existing name keeps the entry's position and
+// stored key, `delete` shifts the later entries down.
 
 #[derive(Default)]
-pub struct SymbolTable(FrozenCell<IndexMap<&'static str, P<Symbol>, FxBuildHasher>>);
+pub struct SymbolTable(FrozenCell<SymbolMap>);
+
+const SYMBOL_TABLE_LINEAR_MAX: usize = 8;
+
+#[derive(Default, Clone)]
+struct SymbolMap {
+    entries: Vec<(&'static str, P<Symbol>)>,
+    index: Option<Box<HashTable<u32>>>, // positions in `entries`; present once len > SYMBOL_TABLE_LINEAR_MAX
+}
+
+#[inline]
+fn hash_name(name: &str) -> u64 {
+    FxBuildHasher.hash_one(name)
+}
+
+impl SymbolMap {
+    fn with_capacity(n: usize) -> SymbolMap {
+        let index = (n > SYMBOL_TABLE_LINEAR_MAX).then(|| Box::new(HashTable::with_capacity(n)));
+        SymbolMap { entries: Vec::with_capacity(n), index }
+    }
+
+    #[inline]
+    fn position(&self, name: &str) -> Option<usize> {
+        match &self.index {
+            None => self.entries.iter().position(|(k, _)| *k == name),
+            Some(index) => {
+                let entries = &self.entries;
+                index.find(hash_name(name), |&i| entries[i as usize].0 == name).map(|&i| i as usize)
+            }
+        }
+    }
+
+    fn insert(&mut self, name: &'static str, symbol: P<Symbol>) {
+        if let Some(i) = self.position(name) {
+            self.entries[i].1 = symbol;
+            return;
+        }
+        let i = self.entries.len();
+        self.entries.push((name, symbol));
+        let entries = &self.entries;
+        match &mut self.index {
+            Some(index) => {
+                index.insert_unique(hash_name(name), i as u32, |&j| hash_name(entries[j as usize].0));
+            }
+            None if entries.len() > SYMBOL_TABLE_LINEAR_MAX => {
+                let mut index = HashTable::with_capacity(entries.len());
+                for (j, (k, _)) in entries.iter().enumerate() {
+                    index.insert_unique(hash_name(k), j as u32, |&m| hash_name(entries[m as usize].0));
+                }
+                self.index = Some(Box::new(index));
+            }
+            None => {}
+        }
+    }
+
+    fn shift_remove(&mut self, name: &str) {
+        let Some(i) = self.position(name) else {
+            return;
+        };
+        if let Some(index) = &mut self.index {
+            let entries = &self.entries;
+            if let Ok(entry) = index.find_entry(hash_name(name), |&j| entries[j as usize].0 == name) {
+                entry.remove();
+            }
+            for j in index.iter_mut() {
+                if *j as usize > i {
+                    *j -= 1;
+                }
+            }
+        }
+        self.entries.remove(i);
+    }
+}
 
 impl SymbolTable {
     /// Go `make(ast.SymbolTable)`.
@@ -148,7 +227,7 @@ impl SymbolTable {
 
     /// Go `make(ast.SymbolTable, n)`.
     pub fn with_capacity(n: usize) -> P<SymbolTable> {
-        P::new(SymbolTable(FrozenCell::new(IndexMap::with_capacity_and_hasher(n, FxBuildHasher))))
+        P::new(SymbolTable(FrozenCell::new(SymbolMap::with_capacity(n))))
     }
 
     /// Go `maps.Clone(table)` for a non-nil table.
@@ -160,18 +239,20 @@ impl SymbolTable {
     /// `table.lookup(name)` (same thing) there.
     #[inline]
     pub fn get(&self, name: &str) -> Option<P<Symbol>> {
-        self.0.borrow().get(name).copied()
+        self.lookup(name)
     }
 
     #[inline]
     pub fn lookup(&self, name: &str) -> Option<P<Symbol>> {
-        self.0.borrow().get(name).copied()
+        let m = self.0.borrow();
+        m.position(name).map(|i| m.entries[i].1)
     }
 
     /// `lookup` that also returns the stored key.
     #[inline]
     pub fn lookup_entry(&self, name: &str) -> Option<(&'static str, P<Symbol>)> {
-        self.0.borrow().get_key_value(name).map(|(k, v)| (*k, *v))
+        let m = self.0.borrow();
+        m.position(name).map(|i| m.entries[i])
     }
 
     #[inline]
@@ -185,17 +266,17 @@ impl SymbolTable {
 
     #[inline]
     pub fn has(&self, name: &str) -> bool {
-        self.0.borrow().contains_key(name)
+        self.0.borrow().position(name).is_some()
     }
 
     #[inline]
     pub fn len(&self) -> usize {
-        self.0.borrow().len()
+        self.0.borrow().entries.len()
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.0.borrow().is_empty()
+        self.0.borrow().entries.is_empty()
     }
 
     /// Iterates over a snapshot, so `f` may mutate the table.
@@ -206,15 +287,15 @@ impl SymbolTable {
     }
 
     pub fn entries(&self) -> Vec<(&'static str, P<Symbol>)> {
-        self.0.borrow().iter().map(|(k, v)| (*k, *v)).collect()
+        self.0.borrow().entries.clone()
     }
 
     pub fn keys(&self) -> Vec<&'static str> {
-        self.0.borrow().keys().copied().collect()
+        self.0.borrow().entries.iter().map(|(k, _)| *k).collect()
     }
 
     pub fn values(&self) -> Vec<P<Symbol>> {
-        self.0.borrow().values().copied().collect()
+        self.0.borrow().entries.iter().map(|(_, v)| *v).collect()
     }
 }
 

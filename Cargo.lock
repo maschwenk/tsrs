@@ -265,7 +265,7 @@ name = "tsrs_ast"
 version = "0.1.0"
 dependencies = [
  "bitflags",
- "indexmap",
+ "hashbrown",
  "rustc-hash",
  "tsrs_core",
  "tsrs_diagnostics",

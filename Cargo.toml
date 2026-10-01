@@ -17,6 +17,7 @@ commit = "b85298b6a81f772d080b0455de0ca9d744cd6fd6"
 bumpalo = "3"
 rustc-hash = "2"
 indexmap = "2"
+hashbrown = { version = "0.17", default-features = false, features = ["inline-more"] }
 bitflags = "2"
 rayon = "1"
 memchr = "2"

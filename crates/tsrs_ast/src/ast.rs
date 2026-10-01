@@ -2141,6 +2141,38 @@ mod tests {
         assert_eq!(escape_symbol_name(InternalSymbolNameCall), "__call");
     }
 
+    // Regression: a table past the linear-search size keeps insertion order, keeps the original position on
+    // re-set and finds every remaining name after a delete shifts the hash index (wrong lookups would make the
+    // binder/checker miss or duplicate members).
+    #[test]
+    fn symbol_table_indexed_order_and_delete() {
+        let names: Vec<&'static str> = (0..20).map(|i| &*Box::leak(format!("n{i}").into_boxed_str())).collect();
+        let syms: Vec<P<Symbol>> = names.iter().map(|n| Symbol::new(SymbolFlags::Property, n)).collect();
+        let table = SymbolTable::with_capacity(2);
+        for (n, s) in names.iter().zip(&syms) {
+            table.set(n, *s);
+        }
+        table.set(names[3], syms[0]);
+        table.delete(names[5]);
+        table.delete("missing");
+        let mut expected: Vec<&str> = names.clone();
+        expected.remove(5);
+        assert_eq!(table.keys(), expected);
+        assert_eq!(table.lookup(names[3]), Some(syms[0]));
+        for (i, n) in names.iter().enumerate() {
+            match i {
+                3 => {}
+                5 => assert_eq!(table.lookup(n), None),
+                _ => assert_eq!(table.lookup(n), Some(syms[i])),
+            }
+        }
+        let copy = table.clone_table();
+        copy.set("new", syms[1]);
+        assert_eq!(copy.len(), 20);
+        assert_eq!(table.len(), 19);
+        assert_eq!(copy.lookup(names[19]), Some(syms[19]));
+    }
+
     #[test]
     fn kinds_and_flags() {
         assert_eq!(Kind::FirstKeyword, Kind::BreakKeyword);

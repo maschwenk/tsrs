@@ -112,3 +112,36 @@ zero value. Record 56 -> 32 bytes (compile-time assert). Callers use `x()` / `se
 | 4 checkers, after | 10.24-10.36 | 478 G | 15.43 (-0.33) |
 
 Opt-out counters identical; suite pass lists identical in both modes.
+
+(After this step `mem-lazy` landed lazy member tables for tuple references, bd93422: default-mode symbols drop to
+13,297,831 single / 19,555,571 on 4 checkers and the peaks to 9.75 / 14.69 GB; the rows below start from there.)
+
+## Step 4: map overhead
+
+Counts at exit (Project single, default mode, one-off instrumentation):
+
+| map | count | entries | size distribution |
+| --- | --- | --- | --- |
+| `SymbolTable` | 3,894,884 | 25,056,786 (capacity 34.6M) | 1.24M with 1 entry, 1.01M with 2, 0.63M with 3-4, 0.31M with 5-8; 382K with 17-64 hold 14.2M entries |
+| `instantiations` (`GoMap<CacheHashKey, P<Type>>`, type aliases, interfaces, conditional roots, object types) | 27,868 | 6,016,332 | 863 maps hold 5.78M entries; 23K maps with <= 16 |
+| `Relation.results` | 5 relations | (one large table per relation) | |
+| other `GoMap`s (widening contexts, constituent maps, node-builder caches) | < 45K | < 30K | |
+
+So the tiny-map problem is `SymbolTable`, not the instantiation caches (few, large maps: a shared map keyed by
+(owner, key) would hold the same entries) or the relation caches.
+
+**`SymbolTable`** was an `IndexMap<&str, P<Symbol>, Fx>`: 56-byte header, 32 bytes per entry slot (stored hash +
+key + value) plus an 8-byte index per hash slot, even for one entry. Now (`tsrs_ast::symbol`): the entries in
+insertion order in a `Vec<(&str, P<Symbol>)>` (24 bytes per slot), searched linearly up to 8 entries; past that a
+boxed `hashbrown::HashTable<u32>` of positions (5 bytes per slot). Header 32 bytes. Same observable behavior as
+`IndexMap` (insertion-order iteration, re-`set` keeps position and stored key, `delete` = `shift_remove`); unit
+test `symbol_table_indexed_order_and_delete`.
+
+| run (2 interleaved rounds) | check s | instructions | peak GB |
+| --- | --- | --- | --- |
+| single, before | 21.2-31.1 | 316-318 G | 9.75 |
+| single, after | 19.4-29.8 | 315 G | 9.30 (-0.45) |
+| 4 checkers, before | 9.34-9.60 | 474 G | 14.69 |
+| 4 checkers, after | 9.47-9.67 | 471 G | 13.96 (-0.73) |
+| opt-out single / 4 checkers, before | | | 13.19 / 20.22 |
+| opt-out single / 4 checkers, after | | | 12.23 / 18.73 |
