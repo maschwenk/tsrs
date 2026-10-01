@@ -226,6 +226,57 @@ impl<T: Copy + fmt::Debug> fmt::Debug for OwnedCell<T> {
     }
 }
 
+/// `OwnedCell<&'static [T]>` in 12 bytes with 4-byte alignment (a `SliceCell`), so a struct can pack it with
+/// 4-byte fields. `get` returns exactly the slice last `set` (same pointer and length).
+pub struct OwnedSliceCell<T: 'static>(crate::ptr::SliceCell<T>);
+
+impl<T> Default for OwnedSliceCell<T> {
+    fn default() -> Self {
+        OwnedSliceCell::new(&[])
+    }
+}
+
+impl<T> OwnedSliceCell<T> {
+    #[inline]
+    pub fn new(value: &'static [T]) -> OwnedSliceCell<T> {
+        OwnedSliceCell(crate::ptr::SliceCell::new(value))
+    }
+
+    #[inline]
+    pub fn get(&self) -> &'static [T] {
+        self.0.get()
+    }
+
+    #[inline]
+    pub fn set(&self, value: &'static [T]) {
+        crate::ptr::shared_check::assert_not_shared(self, "OwnedSliceCell");
+        self.0.set(value)
+    }
+}
+
+/// `OwnedCell<&'static str>` in 12 bytes with 4-byte alignment; same contract as `OwnedSliceCell`.
+#[derive(Default)]
+pub struct OwnedStrCell(crate::ptr::SliceCell<u8>);
+
+impl OwnedStrCell {
+    #[inline]
+    pub fn new(value: &'static str) -> OwnedStrCell {
+        OwnedStrCell(crate::ptr::SliceCell::new(value.as_bytes()))
+    }
+
+    #[inline]
+    pub fn get(&self) -> &'static str {
+        // SAFETY: only ever set from a `&'static str`.
+        unsafe { std::str::from_utf8_unchecked(self.0.get()) }
+    }
+
+    #[inline]
+    pub fn set(&self, value: &'static str) {
+        crate::ptr::shared_check::assert_not_shared(self, "OwnedStrCell");
+        self.0.set(value.as_bytes())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

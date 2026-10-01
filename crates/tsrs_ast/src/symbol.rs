@@ -4,7 +4,7 @@ use std::sync::atomic::AtomicU64;
 
 use hashbrown::HashTable;
 use rustc_hash::FxBuildHasher;
-use tsrs_core::{FrozenCell, OwnedCell, P};
+use tsrs_core::{FrozenCell, OwnedCell, OwnedSliceCell, OwnedStrCell, P};
 
 use crate::ast::{Node, SourceFile};
 use crate::checkflags::CheckFlags;
@@ -17,14 +17,15 @@ use crate::*;
 // Go's `Symbol` holds `Members`, `Exports` and `ExportSymbol` inline. Few symbols have any of them (on Project 5%
 // of 15.3M: binder symbols of classes, interfaces, modules and exported locals; almost no transient symbols), so
 // they live in a tail allocated on the first write of a non-nil value (`members()` / `set_members()` & co.):
-// 72 bytes per symbol instead of 88. Reads of an absent tail return nil, like the unset Go field.
+// 72 bytes per symbol instead of 88. Reads of an absent tail return nil, like the unset Go field. `name` and
+// `declarations` are packed (pointer + `u32` length, 4-byte aligned) next to the two flag words: 64 bytes.
 
 #[derive(Default)]
 pub struct Symbol {
     pub flags: OwnedCell<SymbolFlags>,
     pub check_flags: OwnedCell<CheckFlags>, // Non-zero only in transient symbols created by Checker
-    pub name: OwnedCell<&'static str>,
-    pub declarations: OwnedCell<&'static [P<Node>]>, // Go slice: shared by copies, replaced (not mutated) on append
+    pub name: OwnedStrCell,
+    pub declarations: OwnedSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
     pub value_declaration: OwnedCell<Option<P<Node>>>,
     pub(crate) id: AtomicU64,
     pub parent: OwnedCell<Option<P<Symbol>>>,
@@ -38,12 +39,12 @@ struct SymbolTables {
     export_symbol: OwnedCell<Option<P<Symbol>>>,
 }
 
-const _: () = assert!(std::mem::size_of::<Symbol>() == 72);
+const _: () = assert!(std::mem::size_of::<Symbol>() == 64);
 
 impl Symbol {
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).
     pub fn new(flags: SymbolFlags, name: &'static str) -> P<Symbol> {
-        P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedCell::new(name), ..Default::default() })
+        P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedStrCell::new(name), ..Default::default() })
     }
 
     #[inline]

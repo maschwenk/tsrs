@@ -4,7 +4,7 @@ pub mod alloc_profile;
 pub use ptr::{alloc, alloc_slice, alloc_str, alloc_vec, alloc_profile_dump, SliceCell, SlicePair, StaticSlicePtr, P};
 
 mod frozen;
-pub use frozen::{FrozenCell, FrozenRef, FrozenRefMut, OwnedCell};
+pub use frozen::{FrozenCell, FrozenRef, FrozenRefMut, OwnedCell, OwnedSliceCell, OwnedStrCell};
 
 pub mod collections;
 pub mod debug;
