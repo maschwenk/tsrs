@@ -65,6 +65,7 @@ Top live heap stacks (sampled, outside the arena): `SymbolArenaLinkStore::get` h
 | lazy JSDoc parse shares the source text | 16.35 GB | 31.4-34.5 s | 25.14 GB | 17.0 s |
 | + module references appended once, transient symbol names not copied | 15.98 GB | 31.2 s | 24.63 GB | 16.9 s |
 | + 32-byte `TypeMapper`, relater comparers built once per relater | 15.78 GB | 35.7 s (load 6-7; user 27.6 s) | 24.30 GB | 14.4 s |
+| + id-keyed link stores map u32 id -> slot in value chunks | 15.35 GB | 29.2-30.6 s (prev 30.8-35.0) | 23.35 GB | best 14.5 s, check 12.0 s (prev 14.4 s, 11.9 s) |
 
 1. **Lazy JSDoc parsing copied the whole file text into the arena per node** (`parse_jsdoc_for_node` ->
    `Parser::initialize_state` -> `alloc_str(source_text)`): ~9.8k calls, 3.0 GB. Go assigns the string (shared
@@ -87,3 +88,11 @@ Top live heap stacks (sampled, outside the arena): `SymbolArenaLinkStore::get` h
    capture the relater handle (and the intersection state), so each relater now builds them once
    (`Relater::worker_comparer`, `signature_comparers`). Relaters are pooled and their handles never change, so a
    cached comparer calls exactly what a fresh one would.
+6. **`valueSymbolLinks` / `symbolNodeLinks` were `FxHashMap<P<K>, P<V>>` plus one arena allocation per value**
+   (24.2M / 3.7M entries on one checker; the value-links table alone was a 570 MB hash table with a 285 MB old
+   table alive during its last resize). Go keys these two stores by symbol/node id (`PagedLinkStore`). Go's paging
+   by id does not fit here (ids are process-wide atomics shared by the checkers, so every checker would touch
+   nearly every page), so `IdLinkStore` maps `u32 id -> u32 slot` (9 bytes per table slot) and keeps the values
+   in 4096-entry chunks allocated in the arena (stable addresses, `P<V>` handed out as before; ids >= 2^32 go to a
+   second map). Ids are still assigned by `get_node_id`/`get_symbol_id` on every access, in the same order.
+   -460 MB single, -940 MB on four checkers.
