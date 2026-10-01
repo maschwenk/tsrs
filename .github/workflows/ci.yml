@@ -1,20 +1,17 @@
-# Security: read-only GITHUB_TOKEN, no secrets, no pull_request_target. Pull requests from forks run here on
-# GitHub-hosted runners after a maintainer approves the run (required for outside contributors). A job moved to a
-# self-hosted or Depot runner must skip fork pull requests:
-#   if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+# Security: read-only GITHUB_TOKEN, no secrets. Runs only on pushes to main and manual dispatch by
+# collaborators; pull requests do not trigger CI (fork workflows are also set to require approval).
 
 name: CI
 
 on:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
 
 # Superseded pull-request runs are cancelled; every push to main runs to completion (several agents push to main).
 concurrency:
-  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.sha }}
+  cancel-in-progress: false
 
 permissions:
   contents: read

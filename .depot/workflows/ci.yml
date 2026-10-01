@@ -9,12 +9,11 @@ name: CI
 on:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
 # Superseded pull-request runs are cancelled; every push to main runs to completion (several agents push to main).
 concurrency:
-  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.sha }}
+  cancel-in-progress: false
 permissions:
   contents: read
 env:
@@ -22,7 +21,6 @@ env:
   CARGO_INCREMENTAL: "0"
 jobs:
   check-and-test:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: depot-ubuntu-22.04 # was: ubuntu-22.04. Mapped standard GitHub runner to Depot equivalent.
     timeout-minutes: 60
     steps:
