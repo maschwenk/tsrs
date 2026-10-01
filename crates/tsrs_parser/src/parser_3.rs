@@ -1221,6 +1221,7 @@ impl Parser {
         self.token == Kind::NoSubstitutionTemplateLiteral || self.token == Kind::TemplateHead
     }
 
+    #[inline]
     pub(crate) fn try_parse_type_arguments_in_expression(&mut self) -> Option<P<NodeList>> {
         // TypeArguments must not be parsed in JavaScript files to avoid ambiguity with binary operators.
         // Check the cheap preconditions before saving the parser state: unless the current token is `<`
@@ -1229,6 +1230,10 @@ impl Parser {
         if self.context_flags.intersects(NodeFlags::JavaScriptFile) || (self.token != Kind::LessThanToken && self.token != Kind::LessThanLessThanToken) {
             return None;
         }
+        self.try_parse_type_arguments_in_expression_worker()
+    }
+
+    fn try_parse_type_arguments_in_expression_worker(&mut self) -> Option<P<NodeList>> {
         let state = self.mark();
         if self.re_scan_less_than_token() == Kind::LessThanToken {
             self.next_token();

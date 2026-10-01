@@ -508,12 +508,18 @@ impl Parser {
     pub(crate) fn next_token(&mut self) -> Kind {
         // if the keyword had an escape
         if ast::is_keyword(self.token) && (self.scanner.has_unicode_escape() || self.scanner.has_extended_unicode_escape()) {
-            // issue a parse error for the escape
-            self.parse_error_at_current_token(&diagnostics::Keywords_cannot_contain_escape_characters, &[]);
+            self.report_keyword_with_escape();
         }
         self.token = self.scanner.scan();
         self.report_scan_errors();
         self.token
+    }
+
+    // Out of line so that next_token stays small (it runs once per token).
+    #[cold]
+    fn report_keyword_with_escape(&mut self) {
+        // issue a parse error for the escape
+        self.parse_error_at_current_token(&diagnostics::Keywords_cannot_contain_escape_characters, &[]);
     }
 
     pub(crate) fn next_token_without_check(&mut self) -> Kind {
@@ -1203,6 +1209,7 @@ impl Parser {
         self.parse_expected_with_diagnostic(kind, None, false)
     }
 
+    #[inline]
     pub(crate) fn parse_expected_with_diagnostic(&mut self, kind: Kind, message: Option<&'static Message>, should_advance: bool) -> bool {
         if self.token == kind {
             if should_advance {
@@ -1210,6 +1217,11 @@ impl Parser {
             }
             return true;
         }
+        self.report_expected(kind, message)
+    }
+
+    #[cold]
+    fn report_expected(&mut self, kind: Kind, message: Option<&'static Message>) -> bool {
         // Report specific message if provided with one.  Otherwise, report generic fallback message.
         if let Some(message) = message {
             self.parse_error_at_current_token(message, &[]);
