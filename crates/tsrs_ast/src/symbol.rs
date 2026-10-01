@@ -182,7 +182,8 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
 //
 // Representation: the entries in insertion order in a `Vec`, plus a hash index of entry positions once a table
 // has more than `SYMBOL_TABLE_LINEAR_MAX` entries (most tables are tiny: on Project 82% of the 3.9M tables hold at
-// most 8 entries); smaller tables are searched linearly. Same observable behavior as the insertion-ordered map it
+// most 8 entries); smaller tables are searched linearly, which compares only the entries' stored lengths and hashes
+// until one matches (16 rather than 8 entries: -0.03 GiB on Project, the same instructions). Same observable behavior as the insertion-ordered map it
 // replaces (`IndexMap`): `set` of an existing name keeps the entry's position and stored key, `delete` shifts the
 // later entries down.
 //
@@ -194,7 +195,7 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
 #[derive(Default)]
 pub struct SymbolTable(FrozenCell<SymbolMap>);
 
-const SYMBOL_TABLE_LINEAR_MAX: usize = 8;
+const SYMBOL_TABLE_LINEAR_MAX: usize = 16;
 
 #[derive(Default, Clone)]
 struct SymbolMap {

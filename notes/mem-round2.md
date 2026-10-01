@@ -170,3 +170,19 @@ constrained types keep the field. Same reads, same writes, same order. TypeAlloc
 | 4 checkers, before | 9.90-9.91 | 432-435 G |
 | 4 checkers, after | 9.83-9.85 (-0.06) | 432-433 G |
 | opt-out single / 4 checkers (go assignment), after | 9.89 / 15.18 | |
+
+### 8. Symbol tables searched linearly up to 16 entries
+
+With step 2 a linear scan compares only the stored lengths and hashes (no symbol is read until one matches), so
+the hash index pays off later. Tables with 9-16 entries no longer get one (a boxed `HashTable<u32>`).
+
+| run (2 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, 8 (before) | 7.344 | 321-323 G |
+| single, 16 | 7.316 (-0.03) | 322-323 G |
+| single, 32 | 7.296 (-0.05) | 322-324 G |
+| 4 checkers, 8 (before) | 9.84-9.85 | 431-432 G |
+| 4 checkers, 16 | 9.81 (-0.04) | 432-434 G |
+| 4 checkers, 32 | 9.77-9.78 (-0.07) | 434-435 G |
+
+16 landed (32 retired +0.6% instructions on 4 checkers for the extra 0.03 GiB). Opt-out after: 9.87 / 15.18 GiB.
