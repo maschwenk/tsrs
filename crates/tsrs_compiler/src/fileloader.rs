@@ -142,10 +142,37 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
     };
     loader.add_project_reference_tasks(single_threaded);
     let roots_start = std::time::Instant::now();
-    for (index, root_file) in root_files.iter().enumerate() {
+    // The lookups (a file_exists per root file) are independent; tasks are still created in root order.
+    let curr_dir = host.get_current_directory().to_string();
+    let containing_file = match &loader.opts.config.config_file {
+        Some(config_file) => tspath::get_normalized_absolute_path(config_file.source_file.file_name(), &curr_dir),
+        None => curr_dir.clone(),
+    };
+    let lookup = |root_file: &String| {
+        let abs_path = tspath::get_normalized_absolute_path(root_file, &curr_dir);
+        // A root file reason is never a referenced-file reason, which is all the lookup asks of it.
+        let looked_up = source_file_from_reference(
+            &compiler_options,
+            host.fs(),
+            &loader.supported_extensions,
+            &loader.supported_extensions_with_json_if_resolve_json_module,
+            &abs_path,
+            root_file,
+            &containing_file,
+            false,
+        );
+        (abs_path, looked_up)
+    };
+    let looked_up: Vec<(String, (String, Option<sourceFileFromReferenceDiagnostic>))> = if single_threaded {
+        root_files.iter().map(lookup).collect()
+    } else {
+        use rayon::prelude::*;
+        crate::program::worker_pool().install(|| root_files.par_iter().map(lookup).collect())
+    };
+    for (index, (abs_path, (resolved_file, diagnostic))) in looked_up.into_iter().enumerate() {
         let mut reason = FileIncludeReason::new(fileIncludeKind::RootFile);
         reason.index = index;
-        loader.add_root_file_task(root_file, None, P::new(reason));
+        loader.add_root_file_task_with(abs_path, resolved_file, diagnostic, None, P::new(reason));
     }
     tsrs_core::phases::record("Program: root file lookups", roots_start.elapsed());
     if !root_files.is_empty() && compiler_options.no_lib.is_false_or_unknown() {
@@ -209,6 +236,17 @@ impl fileLoader {
             containing_file = tspath::get_normalized_absolute_path(config_file.source_file.file_name(), &curr_dir);
         }
         let (resolved_file, diagnostic) = self.get_source_file_from_reference(&abs_path, file_name, &containing_file, Some(include_reason));
+        self.add_root_file_task_with(abs_path, resolved_file, diagnostic, lib_file, include_reason);
+    }
+
+    fn add_root_file_task_with(
+        &mut self,
+        abs_path: String,
+        resolved_file: String,
+        diagnostic: Option<sourceFileFromReferenceDiagnostic>,
+        lib_file: Option<P<LibFile>>,
+        include_reason: P<FileIncludeReason>,
+    ) {
         let mut root_task = parseTask::new(resolved_file);
         root_task.lib_file = lib_file;
         root_task.include_reason = Some(include_reason);
@@ -316,70 +354,172 @@ impl fileLoader {
     }
 
     pub(crate) fn load_source_file_meta_data(&self, file_name: &str) -> SourceFileMetaData {
-        if self.opts.skip_module_resolution {
-            return SourceFileMetaData {
-                implied_node_format: ast::get_implied_node_format_for_file(file_name, ""),
-                ..Default::default()
-            };
-        }
-
-        let package_json_scope = self
-            .resolver
-            .get_resolution_data()
-            .get()
-            .new_resolver(self.project_references.host)
-            .get_package_scope_for_path(&tspath::get_directory_path(file_name));
-        let module_resolution_kind = self.opts.config.compiler_options().unwrap().get_module_resolution_kind();
-
-        let mut package_json_type = String::new();
-        let mut package_json_directory = String::new();
-        if let Some(scope) = package_json_scope.filter(|s| s.exists()) {
-            package_json_directory = scope.package_directory.to_string();
-            if let Some(value) = scope.contents.unwrap().fields.type_.get_value() {
-                if !tspath::file_extension_is_one_of(
-                    file_name,
-                    &[tspath::EXTENSION_MTS, tspath::EXTENSION_CTS, tspath::EXTENSION_MJS, tspath::EXTENSION_CJS],
-                ) && ModuleResolutionKind::Node16 <= module_resolution_kind
-                    && module_resolution_kind <= ModuleResolutionKind::NodeNext
-                    || file_name.contains("/node_modules/")
-                {
-                    package_json_type = value.to_string();
-                }
-            }
-        }
-
-        let implied_node_format = ast::get_implied_node_format_for_file(file_name, &package_json_type);
-        SourceFileMetaData { package_json_type, package_json_directory, implied_node_format }
+        source_file_meta_data(&self.opts, &*self.resolver, &self.project_references, file_name)
     }
 
     pub(crate) fn parse_options_for_task(&self, t: TaskId) -> SourceFileParseOptions {
         let task = &self.tasks[t];
-        let path = self.to_path(&task.normalized_file_path);
-        let options = self.project_references.get_compiler_options_for_file(&task.normalized_file_path, &path);
-        SourceFileParseOptions {
-            file_name: task.normalized_file_path.clone(),
-            path,
-            external_module_indicator_options: ast::get_external_module_indicator_options(
-                &task.normalized_file_path,
-                &options,
-                &task.metadata,
-            ),
-        }
+        parse_options_for(&*self.host, &self.project_references, &task.normalized_file_path, &task.metadata)
     }
 
     pub(crate) fn parse_source_file(&self, t: TaskId) -> Option<P<SourceFile>> {
         self.host.get_source_file(self.parse_options_for_task(t))
     }
+}
 
-    pub(crate) fn is_supported_extension(&self, canonical_file_name: &str) -> bool {
-        self.supported_extensions_with_json_if_resolve_json_module
-            .iter()
-            .any(|group| tspath::file_extension_is_one_of(canonical_file_name, &str_slice(group)))
+pub(crate) fn source_file_meta_data(
+    opts: &ProgramConfig,
+    resolver: &dyn Resolver,
+    project_references: &projectReferenceFileMapperBuilder,
+    file_name: &str,
+) -> SourceFileMetaData {
+    if opts.skip_module_resolution {
+        return SourceFileMetaData {
+            implied_node_format: ast::get_implied_node_format_for_file(file_name, ""),
+            ..Default::default()
+        };
     }
 
-    fn supported_extensions_display(&self) -> String {
-        let flat: Vec<&str> = self.supported_extensions.iter().flatten().map(|s| s.as_str()).collect();
-        format!("'{}'", flat.join("', '"))
+    let package_json_scope = resolver
+        .get_resolution_data()
+        .get()
+        .new_resolver(project_references.host)
+        .get_package_scope_for_path(&tspath::get_directory_path(file_name));
+    let module_resolution_kind = opts.config.compiler_options().unwrap().get_module_resolution_kind();
+
+    let mut package_json_type = String::new();
+    let mut package_json_directory = String::new();
+    if let Some(scope) = package_json_scope.filter(|s| s.exists()) {
+        package_json_directory = scope.package_directory.to_string();
+        if let Some(value) = scope.contents.unwrap().fields.type_.get_value() {
+            if !tspath::file_extension_is_one_of(
+                file_name,
+                &[tspath::EXTENSION_MTS, tspath::EXTENSION_CTS, tspath::EXTENSION_MJS, tspath::EXTENSION_CJS],
+            ) && ModuleResolutionKind::Node16 <= module_resolution_kind
+                && module_resolution_kind <= ModuleResolutionKind::NodeNext
+                || file_name.contains("/node_modules/")
+            {
+                package_json_type = value.to_string();
+            }
+        }
+    }
+
+    let implied_node_format = ast::get_implied_node_format_for_file(file_name, &package_json_type);
+    SourceFileMetaData { package_json_type, package_json_directory, implied_node_format }
+}
+
+pub(crate) fn parse_options_for(
+    host: &dyn CompilerHost,
+    project_references: &projectReferenceFileMapperBuilder,
+    normalized_file_path: &str,
+    metadata: &SourceFileMetaData,
+) -> SourceFileParseOptions {
+    let path = tspath::to_path(normalized_file_path, host.get_current_directory(), host.fs().use_case_sensitive_file_names());
+    let options = project_references.get_compiler_options_for_file(normalized_file_path, &path);
+    SourceFileParseOptions {
+        file_name: normalized_file_path.to_string(),
+        path,
+        external_module_indicator_options: ast::get_external_module_indicator_options(normalized_file_path, &options, metadata),
+    }
+}
+
+// The module and type reference resolutions of one file, computed on a worker thread ahead of the sequential
+// load (filesparser.rs prefetch): one entry per import and string-literal module augmentation (None for an empty
+// name), and one per type reference directive, in source order. Resolution results do not depend on the order
+// in which files are resolved (the resolver caches are keyed by name, directory, mode and redirect), so the
+// sequential load consumes them exactly as if it had resolved on the spot.
+pub(crate) struct prefetchedResolutions {
+    pub(crate) referenced_files: Vec<(String, Option<sourceFileFromReferenceDiagnostic>)>,
+    pub(crate) imports: Vec<Option<Result<(P<ResolvedModule>, Vec<DiagAndArgs>), String>>>,
+    pub(crate) type_references: Vec<(P<ResolvedTypeReferenceDirective>, Vec<DiagAndArgs>)>,
+}
+
+// The parts of the file loader that the parallel prefetch reads (the loader itself is not Sync).
+pub(crate) struct prefetchContext<'a> {
+    pub(crate) opts: &'a ProgramConfig,
+    pub(crate) host: &'a dyn CompilerHost,
+    pub(crate) resolver: &'a dyn Resolver,
+    pub(crate) project_references: &'a projectReferenceFileMapperBuilder,
+    pub(crate) supported_extensions: &'a [Vec<String>],
+    pub(crate) supported_extensions_with_json: &'a [Vec<String>],
+}
+
+impl fileLoader {
+    pub(crate) fn prefetch_context(&self) -> prefetchContext<'_> {
+        prefetchContext {
+            opts: &self.opts,
+            host: &*self.host,
+            resolver: &*self.resolver,
+            project_references: &self.project_references,
+            supported_extensions: &self.supported_extensions,
+            supported_extensions_with_json: &self.supported_extensions_with_json_if_resolve_json_module,
+        }
+    }
+}
+
+// The lookup half of resolveTripleslashPathReference: the normalized referenced file name and the result of
+// getSourceFileFromReference for it.
+fn tripleslash_reference_lookup(
+    ctx: &prefetchContext,
+    module_name: &str,
+    containing_file: &str,
+) -> (String, (String, Option<sourceFileFromReferenceDiagnostic>)) {
+    let base_path = tspath::get_directory_path(containing_file);
+    let mut referenced_file_name = module_name.to_string();
+
+    if !tspath::is_rooted_disk_path(module_name) {
+        referenced_file_name = tspath::combine_paths(&base_path, &[module_name]);
+    }
+    let normalized_file_name = tspath::normalize_path(&referenced_file_name);
+    // The include reason of a triple-slash reference is a referenced-file reason.
+    let looked_up = source_file_from_reference(
+        &ctx.opts.config.compiler_options().unwrap(),
+        ctx.host.fs(),
+        ctx.supported_extensions,
+        ctx.supported_extensions_with_json,
+        &normalized_file_name,
+        module_name,
+        containing_file,
+        true,
+    );
+    (normalized_file_name, looked_up)
+}
+
+pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, meta: &SourceFileMetaData) -> prefetchedResolutions {
+    let (opts, resolver, project_references) = (ctx.opts, ctx.resolver, ctx.project_references);
+    let compiler_options = opts.config.compiler_options().unwrap();
+    let (redirect, file_name) = project_references.get_redirect_for_resolution(file.file_name(), &file.path());
+    let options_for_file = module::get_compiler_options_with_redirect(compiler_options, redirect);
+    let mut referenced_files = Vec::new();
+    let mut type_references = Vec::new();
+    if !compiler_options.no_resolve.is_true() && !opts.skip_module_resolution {
+        for ref_ in file.referenced_files.get().iter() {
+            referenced_files.push(tripleslash_reference_lookup(ctx, &ref_.file_name, file.file_name()).1);
+        }
+        for ref_ in file.type_reference_directives.get().iter() {
+            let resolution_mode = get_mode_for_type_reference_directive_in_file(*ref_, file, meta, &options_for_file);
+            type_references.push(resolver.resolve_type_reference_directive(&ref_.file_name, &file_name, resolution_mode, redirect));
+        }
+    }
+    let mut imports = Vec::new();
+    if !opts.skip_module_resolution {
+        let augmentations = file.module_augmentations.get().iter().copied().filter(|imp| imp.kind == Kind::StringLiteral);
+        for entry in file.imports().iter().copied().chain(augmentations) {
+            let module_name = entry.text();
+            if module_name.is_empty() {
+                imports.push(None);
+                continue;
+            }
+            let mode = get_mode_for_usage_location(file.file_name(), meta, entry, Some(&options_for_file));
+            imports.push(Some(resolver.resolve_module_name(module_name, &file_name, mode, redirect)));
+        }
+    }
+    prefetchedResolutions { referenced_files, imports, type_references }
+}
+
+impl fileLoader {
+    pub(crate) fn is_supported_extension(&self, canonical_file_name: &str) -> bool {
+        is_supported_extension(&self.supported_extensions_with_json_if_resolve_json_module, canonical_file_name)
     }
 
     pub(crate) fn get_source_file_from_reference(
@@ -389,95 +529,33 @@ impl fileLoader {
         containing_file: &str,
         include_reason: Option<P<FileIncludeReason>>,
     ) -> (String, Option<sourceFileFromReferenceDiagnostic>) {
-        let options = self.opts.config.compiler_options().unwrap();
-        let allow_non_ts_extensions = options.allow_non_ts_extensions.is_true();
-        let diagnostic_file_name = tspath::normalize_slashes(reference_text);
-        let fs = self.host.fs();
-
-        if tspath::has_extension(file_name) {
-            let canonical_file_name = tspath::get_canonical_file_name(file_name, fs.use_case_sensitive_file_names());
-            if !allow_non_ts_extensions && !self.is_supported_extension(&canonical_file_name) {
-                if tspath::has_js_file_extension(&canonical_file_name) {
-                    return (
-                        String::new(),
-                        Some(sourceFileFromReferenceDiagnostic {
-                            message: &diagnostics::File_0_is_a_JavaScript_file_Did_you_mean_to_enable_the_allowJs_option,
-                            args: vec![diagnostic_file_name],
-                        }),
-                    );
-                }
-                return (
-                    String::new(),
-                    Some(sourceFileFromReferenceDiagnostic {
-                        message: &diagnostics::File_0_has_an_unsupported_extension_The_only_supported_extensions_are_1,
-                        args: vec![diagnostic_file_name, self.supported_extensions_display()],
-                    }),
-                );
-            }
-
-            if !fs.file_exists(file_name) {
-                return (
-                    String::new(),
-                    Some(sourceFileFromReferenceDiagnostic { message: &diagnostics::File_0_not_found, args: vec![diagnostic_file_name] }),
-                );
-            }
-
-            if include_reason.is_some_and(|r| r.is_referenced_file())
-                && tspath::get_canonical_file_name(containing_file, fs.use_case_sensitive_file_names()) == canonical_file_name
-            {
-                return (
-                    String::new(),
-                    Some(sourceFileFromReferenceDiagnostic { message: &diagnostics::A_file_cannot_have_a_reference_to_itself, args: vec![] }),
-                );
-            }
-            return (file_name.to_string(), None);
-        }
-
-        if allow_non_ts_extensions && fs.file_exists(file_name) {
-            return (file_name.to_string(), None);
-        }
-
-        if allow_non_ts_extensions {
-            return (
-                String::new(),
-                Some(sourceFileFromReferenceDiagnostic { message: &diagnostics::File_0_not_found, args: vec![diagnostic_file_name] }),
-            );
-        }
-
-        for ext in &self.supported_extensions[0] {
-            let candidate = format!("{}{}", file_name, ext);
-            if fs.file_exists(&candidate) {
-                return (candidate, None);
-            }
-        }
-
-        (
-            String::new(),
-            Some(sourceFileFromReferenceDiagnostic {
-                message: &diagnostics::Could_not_resolve_the_path_0_with_the_extensions_Colon_1,
-                args: vec![diagnostic_file_name, self.supported_extensions_display()],
-            }),
+        source_file_from_reference(
+            &self.opts.config.compiler_options().unwrap(),
+            self.host.fs(),
+            &self.supported_extensions,
+            &self.supported_extensions_with_json_if_resolve_json_module,
+            file_name,
+            reference_text,
+            containing_file,
+            include_reason.is_some_and(|r| r.is_referenced_file()),
         )
     }
 
+    // `prefetched` is the lookup computed ahead by the prefetch (tripleslash_reference_lookup), if any.
     pub(crate) fn resolve_tripleslash_path_reference(
         &self,
         module_name: &str,
         containing_file: &str,
         index: usize,
+        prefetched: Option<(String, Option<sourceFileFromReferenceDiagnostic>)>,
     ) -> Result<resolvedRef, processingDiagnostic> {
-        let base_path = tspath::get_directory_path(containing_file);
-        let mut referenced_file_name = module_name.to_string();
-
-        if !tspath::is_rooted_disk_path(module_name) {
-            referenced_file_name = tspath::combine_paths(&base_path, &[module_name]);
-        }
-        let normalized_file_name = tspath::normalize_path(&referenced_file_name);
         let include_reason =
             FileIncludeReason::new_referenced(fileIncludeKind::ReferenceFile, self.to_path(containing_file), index as i32, None);
 
-        let (resolved_file_name, diagnostic) =
-            self.get_source_file_from_reference(&normalized_file_name, module_name, containing_file, Some(include_reason));
+        let (resolved_file_name, diagnostic) = match prefetched {
+            Some(looked_up) => looked_up,
+            None => tripleslash_reference_lookup(&self.prefetch_context(), module_name, containing_file).1,
+        };
         if let Some(diagnostic) = diagnostic {
             return Err(processingDiagnostic::explaining(includeExplainingDiagnostic {
                 file: None,
@@ -504,6 +582,8 @@ impl fileLoader {
         }
         let meta = self.tasks[t].metadata.clone();
         let task_path = self.tasks[t].path.clone();
+        let mut prefetched =
+            self.tasks[t].prefetched_resolutions.as_mut().map(|p| std::mem::take(&mut p.type_references).into_iter());
 
         let mut type_resolutions_in_file = ModeAwareCache::default();
         let mut type_resolutions_trace = Vec::new();
@@ -515,7 +595,10 @@ impl fileLoader {
                 &meta,
                 &module::get_compiler_options_with_redirect(self.opts.config.compiler_options().unwrap(), redirect),
             );
-            let (resolved, trace) = self.resolver.resolve_type_reference_directive(&ref_.file_name, &file_name, resolution_mode, redirect);
+            let (resolved, trace) = match prefetched.as_mut() {
+                Some(prefetched) => prefetched.next().expect("prefetched type reference resolution"),
+                None => self.resolver.resolve_type_reference_directive(&ref_.file_name, &file_name, resolution_mode, redirect),
+            };
             type_resolutions_in_file.insert(ModeAwareCacheKey { name: alloc_str(&ref_.file_name), mode: resolution_mode }, resolved);
             let include_reason =
                 FileIncludeReason::new_referenced(fileIncludeKind::TypeReferenceDirective, task_path.clone(), index as i32, None);
@@ -543,12 +626,6 @@ impl fileLoader {
     }
 
     pub(crate) fn resolve_imports_and_module_augmentations(&mut self, t: TaskId) {
-        let start = std::time::Instant::now();
-        self.resolve_imports_and_module_augmentations_worker(t);
-        tsrs_core::phases::record("Program:   module resolution", start.elapsed());
-    }
-
-    fn resolve_imports_and_module_augmentations_worker(&mut self, t: TaskId) {
         let file = self.tasks[t].file.unwrap();
         let meta = self.tasks[t].metadata.clone();
         let task_path = self.tasks[t].path.clone();
@@ -596,15 +673,24 @@ impl fileLoader {
         if !module_names.is_empty() {
             let mut resolutions_in_file: ModeAwareCache<P<ResolvedModule>> = ModeAwareCache::default();
             let mut resolutions_trace = Vec::new();
+            let mut prefetched = self.tasks[t].prefetched_resolutions.take().map(|p| p.imports);
 
             for (index, &entry) in module_names.iter().enumerate() {
+                let prefetched_resolution = match prefetched.as_mut() {
+                    Some(prefetched) if index as i32 >= imports_start => prefetched[index - imports_start as usize].take(),
+                    _ => None,
+                };
                 let module_name = entry.text();
                 if module_name.is_empty() {
                     continue;
                 }
 
                 let mode = get_mode_for_usage_location(file.file_name(), &meta, entry, Some(&options_for_file));
-                let (resolved_module, trace) = match self.resolver.resolve_module_name(module_name, &file_name, mode, redirect) {
+                let resolution = match prefetched_resolution {
+                    Some(resolution) => resolution,
+                    None => self.resolver.resolve_module_name(module_name, &file_name, mode, redirect),
+                };
+                let (resolved_module, trace) = match resolution {
                     Ok((resolved_module, trace)) => (resolved_module, trace),
                     Err(err) => {
                         if self.module_resolution_error.is_none() {
@@ -729,6 +815,94 @@ impl fileLoader {
         let id = self.new_task(sub_task);
         self.tasks[t].sub_tasks.push(id);
     }
+}
+
+// fileLoader.getSourceFileFromReference; `is_referenced_file_reason` is what it asks of the include reason.
+pub(crate) fn source_file_from_reference(
+    options: &CompilerOptions,
+    fs: &dyn tsrs_vfs::FS,
+    supported_extensions: &[Vec<String>],
+    supported_extensions_with_json: &[Vec<String>],
+    file_name: &str,
+    reference_text: &str,
+    containing_file: &str,
+    is_referenced_file_reason: bool,
+) -> (String, Option<sourceFileFromReferenceDiagnostic>) {
+    let allow_non_ts_extensions = options.allow_non_ts_extensions.is_true();
+    let diagnostic_file_name = tspath::normalize_slashes(reference_text);
+    if tspath::has_extension(file_name) {
+        let canonical_file_name = tspath::get_canonical_file_name(file_name, fs.use_case_sensitive_file_names());
+        if !allow_non_ts_extensions && !is_supported_extension(supported_extensions_with_json, &canonical_file_name) {
+            if tspath::has_js_file_extension(&canonical_file_name) {
+                return (
+                    String::new(),
+                    Some(sourceFileFromReferenceDiagnostic {
+                        message: &diagnostics::File_0_is_a_JavaScript_file_Did_you_mean_to_enable_the_allowJs_option,
+                        args: vec![diagnostic_file_name],
+                    }),
+                );
+            }
+            return (
+                String::new(),
+                Some(sourceFileFromReferenceDiagnostic {
+                    message: &diagnostics::File_0_has_an_unsupported_extension_The_only_supported_extensions_are_1,
+                    args: vec![diagnostic_file_name, supported_extensions_display(supported_extensions)],
+                }),
+            );
+        }
+
+        if !fs.file_exists(file_name) {
+            return (
+                String::new(),
+                Some(sourceFileFromReferenceDiagnostic { message: &diagnostics::File_0_not_found, args: vec![diagnostic_file_name] }),
+            );
+        }
+
+        if is_referenced_file_reason
+            && tspath::get_canonical_file_name(containing_file, fs.use_case_sensitive_file_names()) == canonical_file_name
+        {
+            return (
+                String::new(),
+                Some(sourceFileFromReferenceDiagnostic { message: &diagnostics::A_file_cannot_have_a_reference_to_itself, args: vec![] }),
+            );
+        }
+        return (file_name.to_string(), None);
+    }
+
+    if allow_non_ts_extensions && fs.file_exists(file_name) {
+        return (file_name.to_string(), None);
+    }
+
+    if allow_non_ts_extensions {
+        return (
+            String::new(),
+            Some(sourceFileFromReferenceDiagnostic { message: &diagnostics::File_0_not_found, args: vec![diagnostic_file_name] }),
+        );
+    }
+
+    for ext in &supported_extensions[0] {
+        let candidate = format!("{}{}", file_name, ext);
+        if fs.file_exists(&candidate) {
+            return (candidate, None);
+        }
+    }
+
+    (
+        String::new(),
+        Some(sourceFileFromReferenceDiagnostic {
+            message: &diagnostics::Could_not_resolve_the_path_0_with_the_extensions_Colon_1,
+            args: vec![diagnostic_file_name, supported_extensions_display(supported_extensions)],
+        }),
+    )
+}
+
+fn is_supported_extension(supported_extensions_with_json: &[Vec<String>], canonical_file_name: &str) -> bool {
+    supported_extensions_with_json.iter().any(|group| tspath::file_extension_is_one_of(canonical_file_name, &str_slice(group)))
+}
+
+fn supported_extensions_display(supported_extensions: &[Vec<String>]) -> String {
+    let flat: Vec<&str> = supported_extensions.iter().flatten().map(|s| s.as_str()).collect();
+    format!("'{}'", flat.join("', '"))
 }
 
 const EXTERNAL_HELPERS_MODULE_NAME_TEXT: &str = "tslib"; // TODO(jakebailey): dedupe

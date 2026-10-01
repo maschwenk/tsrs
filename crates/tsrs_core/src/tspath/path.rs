@@ -614,12 +614,19 @@ fn has_relative_path_segment(p: &str) -> bool {
 }
 
 pub fn normalize_path(path: &str) -> String {
-    let path = normalize_slashes(path);
-    if let Some(normalized) = simple_normalize_path(&path) {
+    // normalize_slashes without copying a path that has no backslash (the common case; the result is copied once)
+    let slashed;
+    let path: &str = if path.as_bytes().contains(&b'\\') {
+        slashed = path.replace('\\', "/");
+        &slashed
+    } else {
+        path
+    };
+    if let Some(normalized) = simple_normalize_path(path) {
         return normalized.into_owned();
     }
-    let mut normalized = get_normalized_absolute_path(&path, "");
-    if !normalized.is_empty() && has_trailing_directory_separator(&path) {
+    let mut normalized = get_normalized_absolute_path(path, "");
+    if !normalized.is_empty() && has_trailing_directory_separator(path) {
         normalized = ensure_trailing_directory_separator(&normalized);
     }
     normalized
@@ -721,9 +728,17 @@ pub fn to_file_name_lower_case(file_name: &str) -> String {
 }
 
 pub fn to_path(file_name: &str, base_path: &str, use_case_sensitive_file_names: bool) -> Path {
-    let non_canonicalized_path =
+    let mut non_canonicalized_path =
         if is_rooted_disk_path(file_name) { normalize_path(file_name) } else { get_normalized_absolute_path(file_name, base_path) };
-    Path(get_canonical_file_name(&non_canonicalized_path, use_case_sensitive_file_names))
+    // get_canonical_file_name, reusing the owned string
+    if use_case_sensitive_file_names {
+        return Path(non_canonicalized_path);
+    }
+    if non_canonicalized_path.is_ascii() {
+        non_canonicalized_path.make_ascii_lowercase();
+        return Path(non_canonicalized_path);
+    }
+    Path(to_file_name_lower_case(&non_canonicalized_path))
 }
 
 pub fn remove_trailing_directory_separator(path: &str) -> &str {

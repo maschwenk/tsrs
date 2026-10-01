@@ -9,7 +9,10 @@ use tsrs_module::{DiagAndArgs, ModeAwareCache, PackageId, ResolvedModule, Resolv
 use tsrs_tsoptions as tsoptions;
 
 use crate::file_include::{fileIncludeKind, FileIncludeReason};
-use crate::fileloader::{fileLoader, jsxRuntimeImportSpecifier, processedFiles, redirectsFile, LibFile};
+use crate::fileloader::{
+    fileLoader, jsxRuntimeImportSpecifier, parse_options_for, prefetch_resolutions, prefetchedResolutions, processedFiles, redirectsFile,
+    source_file_meta_data, LibFile,
+};
 use crate::includeprocessor::fileIncludeData;
 use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic};
 
@@ -33,6 +36,7 @@ pub(crate) struct parseTask {
     pub(crate) metadata: SourceFileMetaData,
     // Set when the metadata was computed ahead of time for a parallel parse.
     pub(crate) metadata_loaded: bool,
+    pub(crate) prefetched_resolutions: Option<Box<prefetchedResolutions>>,
     pub(crate) resolutions_in_file: ModeAwareCache<P<ResolvedModule>>,
     pub(crate) resolutions_trace: Vec<DiagAndArgs>,
     pub(crate) type_resolutions_in_file: ModeAwareCache<P<ResolvedTypeReferenceDirective>>,
@@ -64,6 +68,7 @@ impl parseTask {
             package_id: PackageId::default(),
             metadata: SourceFileMetaData::default(),
             metadata_loaded: false,
+            prefetched_resolutions: None,
             resolutions_in_file: ModeAwareCache::default(),
             resolutions_trace: Vec::new(),
             type_resolutions_in_file: ModeAwareCache::default(),
@@ -168,8 +173,10 @@ fn load(t: TaskId, loader: &mut fileLoader) {
 
     let compiler_options = loader.opts.config.compiler_options().unwrap();
     if !compiler_options.no_resolve.is_true() && !loader.opts.skip_module_resolution {
+        let mut prefetched = loader.tasks[t].prefetched_resolutions.as_mut().map(|p| std::mem::take(&mut p.referenced_files).into_iter());
         for (index, ref_) in file.referenced_files.get().iter().enumerate() {
-            match loader.resolve_tripleslash_path_reference(&ref_.file_name, file.file_name(), index) {
+            let prefetched_lookup = prefetched.as_mut().map(|p| p.next().expect("prefetched triple-slash reference lookup"));
+            match loader.resolve_tripleslash_path_reference(&ref_.file_name, file.file_name(), index, prefetched_lookup) {
                 Err(processing_diagnostic) => {
                     loader.tasks[t].processing_diagnostics.push(processing_diagnostic);
                     continue;
@@ -404,29 +411,44 @@ impl filesParser {
         if to_parse.len() < 2 || loader.files_parser.single_threaded {
             return;
         }
-        let metadata_start = std::time::Instant::now();
-        let mut jobs: Vec<(TaskId, SourceFileParseOptions)> = Vec::with_capacity(to_parse.len());
-        for t in to_parse {
-            // Metadata is computed sequentially since it goes through the resolver's package.json cache.
-            // Lib files keep metadata_loaded unset so that load_metadata still counts them.
-            if loader.tasks[t].lib_file.is_some() {
-                loader.tasks[t].metadata = SourceFileMetaData { implied_node_format: ModuleKind::CommonJS, ..Default::default() };
-            } else {
-                let metadata = loader.load_source_file_meta_data(&loader.tasks[t].normalized_file_path);
-                loader.tasks[t].metadata = metadata;
-                loader.tasks[t].metadata_loaded = true;
-            }
-            jobs.push((t, loader.parse_options_for_task(t)));
-        }
-        tsrs_core::phases::record("Program:   file metadata", metadata_start.elapsed());
+        // Each job computes the file's metadata, parses it and, unless resolution traces are requested, resolves
+        // its imports and type reference directives (Go does all of this per task in parallel). Traces stay
+        // sequential: they say whether a lookup was served from a cache, which depends on the resolution order.
+        let resolve_ahead = !loader.opts.config.compiler_options().unwrap().trace_resolution.is_true();
+        let jobs: Vec<(TaskId, String, bool)> =
+            to_parse.into_iter().map(|t| (t, loader.tasks[t].normalized_file_path.clone(), loader.tasks[t].lib_file.is_some())).collect();
+        let ctx = loader.prefetch_context();
+        let (opts, host, resolver, project_references) = (ctx.opts, ctx.host, ctx.resolver, ctx.project_references);
         let parse_start = std::time::Instant::now();
-        let host = loader.host.clone();
-        let parsed: Vec<(TaskId, Option<P<SourceFile>>)> =
-            crate::program::worker_pool().install(|| jobs.into_par_iter().map(|(t, opts)| (t, host.get_source_file(opts))).collect());
-        tsrs_core::phases::record("Program:   parallel parse", parse_start.elapsed());
-        for (t, file) in parsed {
+        let prefetched: Vec<(TaskId, SourceFileMetaData, Option<P<SourceFile>>, Option<Box<prefetchedResolutions>>)> =
+            crate::program::worker_pool().install(|| {
+                jobs.into_par_iter()
+                    .map(|(t, file_name, is_lib)| {
+                        let metadata = if is_lib {
+                            SourceFileMetaData { implied_node_format: ModuleKind::CommonJS, ..Default::default() }
+                        } else {
+                            source_file_meta_data(opts, resolver, project_references, &file_name)
+                        };
+                        let file = host.get_source_file(parse_options_for(host, project_references, &file_name, &metadata));
+                        let resolutions = match file {
+                            Some(file) if resolve_ahead => {
+                                Some(Box::new(prefetch_resolutions(&ctx, file, &metadata)))
+                            }
+                            _ => None,
+                        };
+                        (t, metadata, file, resolutions)
+                    })
+                    .collect()
+            });
+        tsrs_core::phases::record("Program:   parallel parse + resolve", parse_start.elapsed());
+        for (t, metadata, file, resolutions) in prefetched {
+            let task = &mut loader.tasks[t];
+            task.metadata = metadata;
+            // Lib files keep metadata_loaded unset so that load_metadata still counts them.
+            task.metadata_loaded = task.lib_file.is_none();
             // A missing file stays None; load() asks the host again and records it as missing.
-            loader.tasks[t].file = file;
+            task.file = file;
+            task.prefetched_resolutions = resolutions;
         }
     }
 
@@ -557,7 +579,8 @@ impl filesParser {
 
                     // ensure we only walk each task once
                     if let Some(checked_name) = c.seen.get(&data) {
-                        if force_consistent_casing {
+                        // Identical names normalize identically; only differing ones need the comparison.
+                        if force_consistent_casing && *checked_name != loader.tasks[task].normalized_file_path {
                             // Check if it differs only in drive letters its ok to ignore that error:
                             let checked_absolute_path =
                                 tspath::get_normalized_absolute_path_without_root(checked_name, &loader.compare_paths_options.current_directory);
