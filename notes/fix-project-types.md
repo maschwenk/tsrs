@@ -25,6 +25,10 @@ Project project, not only its diagnostics and counters.
 | run | files identical | differing lines | counters (types / symbols / instantiations) |
 | --- | --- | --- | --- |
 | types, main 7f683f4 | 28,207 / 28,213 | 18 (6 files) | equal / equal / tsrs +20 |
+| 51 workspace packages Project depends on (`packages/*` with a tsconfig), `--mode both`, main 80684ca | types 1,526 / 1,526, symbols 1,526 / 1,526 | 0 (752k type lines, 618k symbol lines) | equal in every package |
+
+Packages: `tools/project-types-packages.sh <root> <list> <tsrs-test> <out>` (one package at a time, both sides,
+both walks). `marketing-emails` has 1 diagnostic on both sides (so both print `any` for error types).
 
 Debug technique that located it (kept out of the tree): a private copy of the Go module under
 `target/scratch/project-types/tsc-dbg` with a trace in `visitAndTransformType` (`V/X/C typeId approximateLength`)
