@@ -1857,6 +1857,11 @@ impl Parser {
             let id = self.new_identifier(text);
             return self.finish_node(id, pos);
         }
+        self.create_missing_identifier_with_diagnostic(diagnostic_message, private_identifier_diagnostic_message)
+    }
+
+    #[cold]
+    fn create_missing_identifier_with_diagnostic(&mut self, diagnostic_message: Option<&'static Message>, private_identifier_diagnostic_message: Option<&'static Message>) -> P<Node> {
         if self.token == Kind::PrivateIdentifier {
             if let Some(private_identifier_diagnostic_message) = private_identifier_diagnostic_message {
                 self.parse_error_at_current_token(private_identifier_diagnostic_message, &[]);

@@ -1908,8 +1908,12 @@ impl Parser {
     }
 
     pub(crate) fn parse_any_contextual_modifier(&mut self) -> bool {
+        // Not a modifier: Go marks and rewinds an unchanged state (a no-op) before returning false.
+        if !ast::is_modifier_kind(self.token) {
+            return false;
+        }
         let state = self.mark();
-        if ast::is_modifier_kind(self.token) && self.next_token_can_follow_modifier() {
+        if self.next_token_can_follow_modifier() {
             return true;
         }
         self.rewind(state);
