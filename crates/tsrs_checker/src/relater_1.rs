@@ -183,6 +183,7 @@ impl Checker {
             let is_identity = relation == self.identity_relation;
             let (id, _) = get_relation_key(self, source, target, IntersectionState::None, is_identity, false);
             let related = relation.lookup(id);
+            tsrs_core::sitecount::hit("relation cache (isTypeRelatedTo)", if related != RelationComparisonResult::None { "hit" } else { "miss" });
             if related != RelationComparisonResult::None {
                 return related.intersects(RelationComparisonResult::Succeeded);
             }

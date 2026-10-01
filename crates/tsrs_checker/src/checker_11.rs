@@ -944,8 +944,10 @@ impl Checker {
         let key = b.hash();
         let cache_index = if index != -1 { index as usize } else { self.active_type_mappers_caches.len() - 1 };
         if let Some(&cached_type) = self.active_type_mappers_caches[cache_index].get(&key) {
+            tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", "hit");
             return cached_type;
         }
+        tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", if index == -1 { "miss (new mapper)" } else { "miss (active mapper)" });
         self.total_instantiation_count += 1;
         self.instantiation_count += 1;
         tsrs_core::sitecount::hit("instantiation", type_kind_label(t.flags(), t.object_flags()));

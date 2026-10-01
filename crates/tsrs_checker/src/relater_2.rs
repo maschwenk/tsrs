@@ -623,6 +623,7 @@ impl Relater {
         let is_identity = self.rel() == c.identity_relation;
         let (id, constrained) = get_relation_key(c, source, target, intersection_state, is_identity, false /*ignoreConstraints*/);
         let entry = self.rel().lookup(id);
+        tsrs_core::sitecount::hit("relation cache (recursiveTypeRelatedTo)", if entry != RelationComparisonResult::None { "hit" } else { "miss" });
         if entry != RelationComparisonResult::None {
             if report_errors && entry.intersects(RelationComparisonResult::Failed) && !entry.intersects(RelationComparisonResult::Overflow) {
                 // We are elaborating errors and the cached result is a failure not due to a comparison overflow,
@@ -646,6 +647,7 @@ impl Relater {
         }
         // If source and target are already being compared, consider them related with assumptions
         if self.maybe_keys_set.borrow().has(&id) {
+            tsrs_core::sitecount::hit("relation cache (recursiveTypeRelatedTo)", "maybe stack hit");
             return Ternary::Maybe;
         }
         // A constrained key indicates that we have type references that reference constrained
@@ -654,6 +656,7 @@ impl Relater {
         if constrained {
             let (broadest_equivalent_id, _) = get_relation_key(c, source, target, intersection_state, is_identity, true /*ignoreConstraints*/);
             if self.maybe_keys_set.borrow().has(&broadest_equivalent_id) {
+                tsrs_core::sitecount::hit("relation cache (recursiveTypeRelatedTo)", "maybe stack hit (broadest)");
                 return Ternary::Maybe;
             }
         }
