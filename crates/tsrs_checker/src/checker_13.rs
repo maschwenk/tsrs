@@ -366,7 +366,7 @@ impl Checker {
                 let mut key_property: Option<P<Symbol>> = None;
                 let mut key_property_type: Option<P<Type>> = None;
                 if source.flags().intersects(TypeFlags::Object | TypeFlags::Intersection | TypeFlags::InstantiableNonPrimitive) {
-                    key_property = self.get_properties_of_type(source).into_iter().find(|&p| {
+                    key_property = self.get_properties_of_type(source).iter().copied().find(|&p| {
                         let t = self.get_type_of_symbol(p);
                         is_unit_type(t)
                     });
@@ -1214,10 +1214,10 @@ impl Checker {
         let props = self.get_properties_of_type(t);
         let index_infos = self.get_index_infos_of_type(t);
         let mut types: Vec<P<Type>> = Vec::with_capacity(props.len() + index_infos.len());
-        for &prop in &props {
+        for &prop in props {
             types.push(self.get_literal_type_from_property(prop, include, false));
         }
-        for &info in &index_infos {
+        for &info in index_infos {
             if info != self.enum_number_index_info && self.is_key_type_included(info.key_type(), include) {
                 if info.key_type() == self.string_type && include.intersects(TypeFlags::Number) {
                     types.push(self.string_or_number_type);

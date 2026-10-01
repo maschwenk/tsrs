@@ -169,7 +169,7 @@ impl Checker {
                 }
                 let all_signatures = self.get_signatures_of_type(method_type, SignatureKind::Call);
                 let mut valid_signatures: Vec<P<Signature>> = Vec::new();
-                for &sig in &all_signatures {
+                for &sig in all_signatures {
                     if self.get_min_argument_count(sig) == 0 {
                         valid_signatures.push(sig);
                     }
@@ -286,7 +286,7 @@ impl Checker {
             return IterationTypes { yield_type: Some(self.any_type), return_type: Some(self.any_type), next_type: Some(self.any_type) };
         }
         // Both async and non-async iterators *must* have a `next` method.
-        let mut method_signatures: Vec<P<Signature>> = Vec::new();
+        let mut method_signatures: &[P<Signature>] = &[];
         if let Some(method_type) = method_type {
             method_signatures = self.get_signatures_of_type(method_type, SignatureKind::Call);
         }
@@ -330,7 +330,7 @@ impl Checker {
         // Extract the first parameter and return type of each signature.
         let mut method_parameter_types: Option<Vec<P<Type>>> = None;
         let mut method_return_types: Option<Vec<P<Type>>> = None;
-        for &signature in &method_signatures {
+        for &signature in method_signatures {
             if method_name != "throw" && !signature.parameters().is_empty() {
                 let ty = self.get_type_at_position(signature, 0);
                 method_parameter_types.get_or_insert_with(Vec::new).push(ty);

@@ -340,7 +340,7 @@ impl Checker {
         // Go uses a map keyed by the derived class declaration (which may be nil); iteration order is irrelevant in
         // practice because the key is always t.symbol's class declaration. An insertion-ordered map keeps it deterministic.
         let mut not_implemented_info: Option<collections::OrderedMap<Option<P<Node>>, MemberInfo>> = None;
-        'base_property_check: for base_property in self.get_properties_of_type(base_type) {
+        'base_property_check: for base_property in self.get_properties_of_type(base_type).iter().copied() {
             let base = self.get_target_symbol(base_property).unwrap();
             if base.flags().intersects(SymbolFlags::Prototype) {
                 continue;
@@ -663,7 +663,7 @@ impl Checker {
         if index_infos.is_empty() {
             return;
         }
-        for prop in self.get_properties_of_object_type(t) {
+        for prop in self.get_properties_of_object_type(t).iter().copied() {
             if !(is_static_index && prop.flags().intersects(SymbolFlags::Prototype)) {
                 let prop_name_type = self.get_literal_type_from_property(prop, TypeFlags::StringOrNumberLiteralOrUnique, true /*includeNonPublic*/);
                 let prop_type = self.get_non_missing_type_of_symbol(prop);
@@ -683,7 +683,7 @@ impl Checker {
             }
         }
         if index_infos.len() > 1 {
-            for info in index_infos {
+            for &info in index_infos {
                 self.check_index_constraint_for_index_signature(t, info);
             }
         }
@@ -984,7 +984,7 @@ impl Checker {
         for &base in base_types {
             let base_with_this = self.get_type_with_this_argument(base, t.as_interface_type().this_type.get(), false);
             let properties = self.get_properties_of_type(base_with_this);
-            for prop in properties {
+            for &prop in properties {
                 match seen.get(prop.name()).map(|e| (e.prop, e.containing_type)) {
                     None => {
                         seen.insert(prop.name(), InheritanceInfo { prop, containing_type: base });

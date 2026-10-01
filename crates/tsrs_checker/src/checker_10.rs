@@ -37,7 +37,7 @@ impl Checker {
         let type_arg_count = type_argument_nodes.len() as i32;
         let signatures = self.get_signatures_of_type(t, SignatureKind::Construct);
         let mut result = Vec::new();
-        for sig in signatures {
+        for &sig in signatures {
             if type_arg_count >= self.get_min_type_argument_count(sig.type_parameters.get()) && type_arg_count <= sig.type_parameters.get().len() as i32 {
                 result.push(sig);
             }
@@ -1468,7 +1468,7 @@ impl Checker {
                     error_reported = error_reported || self.report_widening_errors_in_type(s);
                 }
             } else if is_object_literal_type(t) {
-                for p in self.get_properties_of_object_type(t) {
+                for p in self.get_properties_of_object_type(t).iter().copied() {
                     let s = self.get_type_of_symbol(p);
                     if s.object_flags().intersects(ObjectFlags::ContainsWideningType) {
                         error_reported = self.report_widening_errors_in_type(s);
@@ -1936,7 +1936,7 @@ impl Checker {
         let type_arguments = self.get_type_arguments_from_node(base_type_node.unwrap());
         let type_arg_count = type_arguments.len() as i32;
         let mut result = Vec::new();
-        for base_sig in base_signatures {
+        for &base_sig in base_signatures {
             let min_type_argument_count = self.get_min_type_argument_count(base_sig.type_parameters.get());
             let type_param_count = base_sig.type_parameters.get().len() as i32;
             if is_java_script || type_arg_count >= min_type_argument_count && type_arg_count <= type_param_count {
@@ -2191,7 +2191,7 @@ impl Checker {
             }
             lazy.resolving.set(true);
             let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
-            for info in self.get_index_infos_of_type(lazy.modifiers_type) {
+            for info in self.get_index_infos_of_type(lazy.modifiers_type).iter().copied() {
                 index_infos = self.append_mapped_type_index_info(
                     index_infos,
                     t,
@@ -2365,7 +2365,7 @@ impl Checker {
             if t == self.global_function_type {
                 call_signature_lists.push(vec![self.unknown_signature]);
             } else {
-                call_signature_lists.push(self.get_signatures_of_type(t, SignatureKind::Call));
+                call_signature_lists.push(self.get_signatures_of_type(t, SignatureKind::Call).to_vec());
             }
         }
         let mut call_signatures = self.get_union_signatures(&call_signature_lists);
@@ -2374,7 +2374,7 @@ impl Checker {
         }
         let mut construct_signature_lists = Vec::with_capacity(t.types().len());
         for &t in t.types() {
-            construct_signature_lists.push(self.get_signatures_of_type(t, SignatureKind::Construct));
+            construct_signature_lists.push(self.get_signatures_of_type(t, SignatureKind::Construct).to_vec());
         }
         let construct_signatures = self.get_union_signatures(&construct_signature_lists);
         let index_infos = self.get_union_index_infos(t.types());
@@ -2409,7 +2409,7 @@ impl Checker {
         let readonly = some_type(self, t, |c, t| c.is_readonly_array_symbol(t.symbol().unwrap().parent()));
         let array_type = self.create_array_type_ex(array_arg, readonly);
         let member_type = self.get_type_of_property_of_type(array_type, member_name).unwrap();
-        self.get_signatures_of_type(member_type, SignatureKind::Call)
+        self.get_signatures_of_type(member_type, SignatureKind::Call).to_vec()
     }
 
     // checker.go:21435
@@ -2659,7 +2659,7 @@ impl Checker {
             // '{ new(...args: any[]) => A } & { new(s: string) => B }' has a single construct signature
             // 'new(s: string) => A & B'.
             if !mixin_flags[i] {
-                let mut signatures = self.get_signatures_of_type(t, SignatureKind::Construct);
+                let mut signatures = self.get_signatures_of_type(t, SignatureKind::Construct).to_vec();
                 if !signatures.is_empty() && mixin_count > 0 {
                     signatures = signatures
                         .iter()
@@ -2675,7 +2675,7 @@ impl Checker {
             }
             let call = self.get_signatures_of_type(t, SignatureKind::Call);
             call_signatures = self.append_signatures(&call_signatures, &call);
-            for info in self.get_index_infos_of_type(t) {
+            for info in self.get_index_infos_of_type(t).iter().copied() {
                 index_infos = self.append_index_info(&mut index_infos, info, false /*union*/);
             }
         }

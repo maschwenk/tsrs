@@ -436,7 +436,7 @@ impl NodeBuilderImpl {
                 // Count total declarations across all target prop symbols to handle getter/setter pairs,
                 // which are two elements in pt.Elements but only one symbol in targetProps.
                 let mut target_decl_count = 0;
-                for prop in &target_props {
+                for prop in target_props {
                     target_decl_count += prop.declarations().len();
                 }
                 if pt.elements.len() != target_decl_count {
@@ -451,7 +451,7 @@ impl NodeBuilderImpl {
                     if target_prop.is_none() {
                         // Name lookup failed or returned no result; search target properties
                         // for one whose declaration name node matches the one we have
-                        for &prop in &target_props {
+                        for &prop in target_props {
                             if let Some(value_declaration) = prop.value_declaration() {
                                 if value_declaration.name() == Some(e.name) {
                                     target_prop = Some(prop);

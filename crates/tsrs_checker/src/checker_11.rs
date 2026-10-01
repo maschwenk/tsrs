@@ -545,7 +545,7 @@ impl Checker {
         let mut counts: OrderedMap<&'static str, i32> = OrderedMap::default();
         for (i, &t) in types.iter().enumerate() {
             if Some(i) != skipped {
-                for prop in self.get_properties_of_type(t) {
+                for prop in self.get_properties_of_type(t).iter().copied() {
                     *counts.entry(prop.name()).or_insert(0) += 1;
                 }
             }
@@ -620,7 +620,7 @@ impl Checker {
     pub(crate) fn elaborate_never_intersection(&mut self, chain: Option<P<Diagnostic>>, node: P<Node>, t: P<Type>) -> Option<P<Diagnostic>> {
         if t.flags().intersects(TypeFlags::Intersection) && t.object_flags().intersects(ObjectFlags::IsNeverIntersection) {
             let mut never_prop: Option<P<Symbol>> = None;
-            for prop in self.get_properties_of_union_or_intersection_type(t) {
+            for prop in self.get_properties_of_union_or_intersection_type(t).iter().copied() {
                 if self.is_discriminant_with_never_type(prop) {
                     never_prop = Some(prop);
                     break;
@@ -631,7 +631,7 @@ impl Checker {
                 let prop_string = self.symbol_to_string(never_prop);
                 return Some(new_diagnostic_chain_for_node(chain, node, Some(&diagnostics::The_intersection_0_was_reduced_to_never_because_property_1_has_conflicting_types_in_some_constituents), &[&type_string, &prop_string]));
             }
-            let private_prop = self.get_properties_of_union_or_intersection_type(t).into_iter().find(|&p| is_conflicting_private_property(p));
+            let private_prop = self.get_properties_of_union_or_intersection_type(t).iter().copied().find(|&p| is_conflicting_private_property(p));
             if let Some(private_prop) = private_prop {
                 let type_string = self.type_to_string_ex(t, None, TypeFormatFlags::NoTypeReduction, None);
                 let prop_string = self.symbol_to_string(private_prop);
@@ -1694,14 +1694,14 @@ impl Checker {
     // checker.go:23152
     pub(crate) fn for_each_mapped_type_property_key_type_and_index_signature_key_type(&mut self, t: P<Type>, include: TypeFlags, strings_only: bool, cb: impl FnMut(&mut Checker, P<Type>)) {
         let mut cb = cb;
-        for prop in self.get_properties_of_type(t) {
+        for prop in self.get_properties_of_type(t).iter().copied() {
             let key_type = self.get_literal_type_from_property(prop, include, false);
             cb(self, key_type);
         }
         if t.flags().intersects(TypeFlags::Any) {
             cb(self, self.string_type);
         } else {
-            for info in self.get_index_infos_of_type(t) {
+            for info in self.get_index_infos_of_type(t).iter().copied() {
                 if !strings_only || info.key_type().flags().intersects(TypeFlags::String | TypeFlags::TemplateLiteral) {
                     cb(self, info.key_type());
                 }

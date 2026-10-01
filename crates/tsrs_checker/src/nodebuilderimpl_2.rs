@@ -890,7 +890,7 @@ impl NodeBuilderImpl {
         if property_symbol.flags().intersects(SymbolFlags::Function | SymbolFlags::Method) && c.get_properties_of_object_type(property_type).is_empty() && !c.is_readonly_symbol(property_symbol) {
             let filtered_type = c.filter_type(property_type, |_c, t| !t.flags().intersects(TypeFlags::Undefined));
             let signatures = c.get_signatures_of_type(filtered_type, SignatureKind::Call);
-            for &signature in &signatures {
+            for &signature in signatures {
                 let method_declaration = self.signature_to_signature_declaration_helper(c, signature, Kind::MethodSignature, Some(P::new(SignatureToSignatureDeclarationOptions { name: property_name, question_token: optional_token, ..Default::default() })));
                 self.set_comment_range(c, method_declaration, signature.declaration().or(property_symbol.value_declaration()));
                 type_elements.push(method_declaration);

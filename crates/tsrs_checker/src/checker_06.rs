@@ -1018,7 +1018,7 @@ impl Checker {
         // Find a private identifier with the same description on the type.
         let properties = self.get_properties_of_type(left_type);
         let mut property_on_type: Option<P<Symbol>> = None;
-        for symbol in properties {
+        for &symbol in properties {
             let decl = symbol.value_declaration.get();
             if let Some(decl) = decl {
                 if decl.name().is_some_and(|n| ast::is_private_identifier(n) && n.text() == right.text()) {
@@ -1161,7 +1161,7 @@ impl Checker {
 
     // checker.go:11809
     pub(crate) fn get_suggested_symbol_for_nonexistent_property(&mut self, name: P<Node>, containing_type: P<Type>) -> Option<P<Symbol>> {
-        let mut props = self.get_properties_of_type(containing_type);
+        let mut props = self.get_properties_of_type(containing_type).to_vec();
         let parent = name.parent().unwrap();
         if ast::is_property_access_expression(parent) {
             props = tsrs_core::filter(&props, |prop| self.is_valid_property_access_for_completions(parent, containing_type, *prop)).into_owned();

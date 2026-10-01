@@ -896,7 +896,7 @@ impl Checker {
     // inference.go:828
     pub(crate) fn infer_from_properties(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
         let properties = self.get_properties_of_object_type(target);
-        for target_prop in properties {
+        for &target_prop in properties {
             let source_prop = self.get_property_of_type(source, target_prop.name.get());
             if let Some(source_prop) = source_prop {
                 let declarations = source_prop.declarations();
@@ -1008,9 +1008,9 @@ impl Checker {
         }
         let index_infos = self.get_index_infos_of_type(target);
         if self.is_object_type_with_inferable_index(source) {
-            for &target_info in &index_infos {
+            for &target_info in index_infos {
                 let mut prop_types: Vec<P<Type>> = Vec::new();
-                for prop in self.get_properties_of_type(source) {
+                for prop in self.get_properties_of_type(source).iter().copied() {
                     let literal_type = self.get_literal_type_from_property(prop, TypeFlags::StringOrNumberLiteralOrUnique, false);
                     if self.is_applicable_index_type(literal_type, target_info.key_type()) {
                         let mut prop_type = self.get_type_of_symbol(prop);
@@ -1020,7 +1020,7 @@ impl Checker {
                         prop_types.push(prop_type);
                     }
                 }
-                for info in self.get_index_infos_of_type(source) {
+                for info in self.get_index_infos_of_type(source).iter().copied() {
                     if self.is_applicable_index_type(info.key_type(), target_info.key_type()) {
                         prop_types.push(info.value_type());
                     }
@@ -1031,7 +1031,7 @@ impl Checker {
                 }
             }
         }
-        for &target_info in &index_infos {
+        for &target_info in index_infos {
             let source_info = self.get_applicable_index_info(source, target_info.key_type());
             if let Some(source_info) = source_info {
                 self.infer_with_priority(n, source_info.value_type(), target_info.value_type(), priority);
@@ -1092,7 +1092,7 @@ impl Checker {
             // If no inferences can be made to K's constraint, infer from a union of the property types
             // in the source to the template type X.
             let mut prop_types: Vec<P<Type>> = Vec::new();
-            for prop in self.get_properties_of_type(source) {
+            for prop in self.get_properties_of_type(source).iter().copied() {
                 prop_types.push(self.get_type_of_symbol(prop));
             }
             let index_types: Vec<P<Type>> = self
@@ -1184,7 +1184,7 @@ impl Checker {
     pub(crate) fn is_partially_inferable_type(&mut self, t: P<Type>) -> bool {
         !t.object_flags().intersects(ObjectFlags::NonInferrableType)
             || is_object_literal_type(t)
-                && self.get_properties_of_type(t).into_iter().any(|prop| {
+                && self.get_properties_of_type(t).iter().copied().any(|prop| {
                     let prop_type = self.get_type_of_symbol(prop);
                     self.is_partially_inferable_type(prop_type)
                 })
@@ -1253,7 +1253,7 @@ impl Checker {
         }
         let members = SymbolTable::new();
         let limited_constraint = self.get_limited_constraint(t);
-        for prop in self.get_properties_of_type(r_source) {
+        for prop in self.get_properties_of_type(r_source).iter().copied() {
             // In case of a reverse mapped type with an intersection constraint, if we were able to
             // extract the filtering type literals we skip those properties that are not assignable to them,
             // because the extra properties wouldn't get through the application of the mapped type anyway

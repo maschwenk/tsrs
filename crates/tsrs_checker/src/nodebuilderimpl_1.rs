@@ -1399,7 +1399,7 @@ impl NodeBuilderImpl {
 
         let mut properties: Vec<P<Symbol>> = Vec::new();
         if !is_empty_attributes_type {
-            properties = c.get_properties_of_type(result.import_attributes_type.unwrap());
+            properties = c.get_properties_of_type(result.import_attributes_type.unwrap()).to_vec();
         }
         properties.sort_by(|a, b| a.name().cmp(b.name()));
         let mut attributes: Vec<P<Node>> = Vec::with_capacity(properties.len() + 1);

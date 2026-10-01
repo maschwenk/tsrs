@@ -904,7 +904,7 @@ impl Checker {
                     }
                 }
                 let mut discriminant_members = Vec::new();
-                for s in self.get_properties_of_type(contextual_type) {
+                for s in self.get_properties_of_type(contextual_type).iter().copied() {
                     let node_members = node.symbol().unwrap().members();
                     if s.flags().intersects(SymbolFlags::Optional) && node_members.map_or(true, |m| m.lookup(s.name()).is_none()) && self.is_discriminant_property(Some(contextual_type), s.name()) {
                         discriminant_members.push(s);
@@ -2357,7 +2357,7 @@ impl Checker {
     pub(crate) fn get_applicable_index_infos(&mut self, t: P<Type>, key_type: P<Type>) -> Vec<P<IndexInfo>> {
         let index_infos = self.get_index_infos_of_type(t);
         let mut result = Vec::new();
-        for info in index_infos {
+        for &info in index_infos {
             if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) {
                 result.push(info);
             }
@@ -2374,7 +2374,7 @@ impl Checker {
                     if let Some(declaration) = info.declaration.get() {
                         declarations = vec![declaration];
                     } else {
-                        for info in self.get_index_infos_of_type(t) {
+                        for info in self.get_index_infos_of_type(t).iter().copied() {
                             if let Some(declaration) = info.declaration.get() {
                                 if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) {
                                     declarations.push(declaration);

@@ -2065,7 +2065,7 @@ impl Checker {
             return t;
         }
         let members = SymbolTable::new();
-        for prop in self.get_properties_of_object_type(t) {
+        for prop in self.get_properties_of_object_type(t).iter().copied() {
             members.set(prop.name(), prop);
         }
         for e in missing_elements {

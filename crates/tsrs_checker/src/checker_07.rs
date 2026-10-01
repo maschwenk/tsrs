@@ -410,7 +410,7 @@ impl Checker {
             return Vec::new();
         }
         let mut result = Vec::new();
-        for target_prop in self.get_properties_of_type(target) {
+        for target_prop in self.get_properties_of_type(target).iter().copied() {
             let s = self.get_type_of_property_of_type(source, target_prop.name());
             let t = self.get_type_of_symbol(target_prop);
             if self.is_exact_optional_property_mismatch(s, Some(t)) {
@@ -696,7 +696,7 @@ impl Checker {
 
     // checker.go:13589
     pub(crate) fn check_spread_prop_overrides(&mut self, t: P<Type>, props: Option<P<SymbolTable>>, spread: P<Node>) {
-        for right in self.get_properties_of_type(t) {
+        for right in self.get_properties_of_type(t).iter().copied() {
             if !right.flags().intersects(SymbolFlags::Optional) && !right.check_flags().intersects(CheckFlags::Partial) {
                 if let Some(left) = props.and_then(|props| props.lookup(right.name())) {
                     let diagnostic = self.error(left.value_declaration(), &diagnostics::X_0_is_specified_more_than_once_so_this_usage_will_be_overwritten, &[&left.name()]);
@@ -766,11 +766,11 @@ impl Checker {
         let members = SymbolTable::new();
         let mut skipped_private_members: FxHashSet<&'static str> = FxHashSet::default();
         let index_infos = if left == self.empty_object_type {
-            self.get_index_infos_of_type(right)
+            self.get_index_infos_of_type(right).to_vec()
         } else {
             self.get_union_index_infos(&[left, right])
         };
-        for right_prop in self.get_properties_of_type(right) {
+        for right_prop in self.get_properties_of_type(right).iter().copied() {
             if get_declaration_modifier_flags_from_symbol(right_prop).intersects(ModifierFlags::Private | ModifierFlags::Protected) {
                 skipped_private_members.insert(right_prop.name());
             } else if self.is_spreadable_property(right_prop) {
@@ -779,7 +779,7 @@ impl Checker {
             }
         }
 
-        for left_prop in self.get_properties_of_type(left) {
+        for left_prop in self.get_properties_of_type(left).iter().copied() {
             if skipped_private_members.contains(left_prop.name()) || !self.is_spreadable_property(left_prop) {
                 continue;
             }
@@ -883,7 +883,7 @@ impl Checker {
         }
         // gets the type as if it had been spread, but where everything in the spread is made optional
         let members = SymbolTable::new();
-        for prop in self.get_properties_of_type(first_type) {
+        for prop in self.get_properties_of_type(first_type).iter().copied() {
             if get_declaration_modifier_flags_from_symbol(prop).intersects(ModifierFlags::Private | ModifierFlags::Protected) {
                 // do nothing, skip privates
             } else if self.is_spreadable_property(prop) {

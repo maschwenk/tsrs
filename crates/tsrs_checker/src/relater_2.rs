@@ -228,7 +228,7 @@ impl Relater {
             };
             check_types = reduced_target.distributed();
         }
-        for prop in c.get_properties_of_type(source) {
+        for prop in c.get_properties_of_type(source).iter().copied() {
             if should_check_as_excess_property(prop, source.symbol()) && !is_ignored_jsx_property(source, prop) {
                 if !c.is_known_property(reduced_target, prop.name(), is_comparing_jsx_attributes) {
                     if report_errors {
@@ -2180,11 +2180,11 @@ impl Relater {
             let erase_generics = self.rel() == c.comparable_relation;
             result = self.signature_related_to(c, source_signatures[0], target_signatures[0], erase_generics, report_errors, intersection_state);
         } else {
-            'outer: for &t in &target_signatures {
+            'outer: for &t in target_signatures {
                 let save_error_state = self.get_error_state(c);
                 // Only elaborate errors from the first failure
                 let mut should_elaborate_errors = report_errors;
-                for &s in &source_signatures {
+                for &s in source_signatures {
                     let related = self.signature_related_to(c, s, t, true /*erase*/, should_elaborate_errors, intersection_state);
                     if related != Ternary::False {
                         result &= related;
@@ -2287,7 +2287,7 @@ impl Relater {
         let string_type = c.string_type;
         let target_has_string_index = index_infos.iter().any(|info| info.key_type() == string_type);
         let mut result = Ternary::True;
-        for &target_info in &index_infos {
+        for &target_info in index_infos {
             let related = if self.rel() != c.strict_subtype_relation && !source_is_primitive && target_has_string_index && target_info.value_type().flags().intersects(TypeFlags::Any) {
                 Ternary::True
             } else if c.is_generic_mapped_type(source) && target_has_string_index {
@@ -2361,7 +2361,7 @@ impl Relater {
         } else {
             c.get_properties_of_object_type(source)
         };
-        for &prop in &props {
+        for &prop in props {
             // Skip over ignored JSX and symbol-named members
             if is_ignored_jsx_property(source, prop) {
                 continue;
@@ -2385,7 +2385,7 @@ impl Relater {
                 result &= related;
             }
         }
-        for info in c.get_index_infos_of_type(source) {
+        for info in c.get_index_infos_of_type(source).iter().copied() {
             if c.is_applicable_index_type(info.key_type(), key_type) {
                 let related = self.index_info_related_to(c, info, target_info, report_errors, intersection_state);
                 if related == Ternary::False {
@@ -2420,7 +2420,7 @@ impl Relater {
         if source_infos.len() != target_infos.len() {
             return Ternary::False;
         }
-        for &target_info in &target_infos {
+        for &target_info in target_infos {
             let source_info = c.get_index_info_of_type(source, target_info.key_type());
             if !(source_info.is_some()
                 && self.is_related_to(c, source_info.unwrap().value_type(), target_info.value_type(), RecursionFlags::Both, false) != Ternary::False
@@ -2461,7 +2461,7 @@ impl Relater {
         } else if original_target.flags().intersects(TypeFlags::Intersection) && original_target.object_flags().intersects(ObjectFlags::IsNeverIntersection) {
             let mut message = &diagnostics::The_intersection_0_was_reduced_to_never_because_property_1_has_conflicting_types_in_some_constituents;
             let mut prop: Option<P<Symbol>> = None;
-            for p in c.get_properties_of_union_or_intersection_type(original_target) {
+            for p in c.get_properties_of_union_or_intersection_type(original_target).iter().copied() {
                 if c.is_discriminant_with_never_type(p) {
                     prop = Some(p);
                     break;
@@ -2469,7 +2469,7 @@ impl Relater {
             }
             if prop.is_none() {
                 message = &diagnostics::The_intersection_0_was_reduced_to_never_because_property_1_exists_in_multiple_constituents_and_is_private_in_some;
-                prop = c.get_properties_of_union_or_intersection_type(original_target).into_iter().find(|&p| is_conflicting_private_property(p));
+                prop = c.get_properties_of_union_or_intersection_type(original_target).iter().copied().find(|&p| is_conflicting_private_property(p));
             }
             if let Some(prop) = prop {
                 let target_string = c.type_to_string_ex(original_target, None /*enclosingDeclaration*/, TypeFormatFlags::NoTypeReduction, None);

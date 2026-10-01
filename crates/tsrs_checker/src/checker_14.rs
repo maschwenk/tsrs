@@ -411,7 +411,7 @@ impl Checker {
     // checker.go:28646
     pub(crate) fn transform_type_of_members(&mut self, t: P<Type>, mut f: impl FnMut(&mut Checker, P<Type>) -> P<Type>) -> P<SymbolTable> {
         let members = SymbolTable::new();
-        for property in self.get_properties_of_object_type(t) {
+        for property in self.get_properties_of_object_type(t).iter().copied() {
             let mut property = property;
             let original = self.get_type_of_symbol(property);
             let updated = f(self, original);
@@ -1242,7 +1242,7 @@ impl Checker {
         if is_type_any(then_function) {
             return None;
         }
-        let mut then_signatures: Vec<P<Signature>> = Vec::new();
+        let mut then_signatures: &[P<Signature>] = &[];
         if let Some(then_function) = then_function {
             then_signatures = self.get_signatures_of_type(then_function, SignatureKind::Call);
         }
@@ -1254,7 +1254,7 @@ impl Checker {
         }
         let mut this_type_for_error: Option<P<Type>> = None;
         let mut candidates: Vec<P<Signature>> = Vec::new();
-        for &then_signature in &then_signatures {
+        for &then_signature in then_signatures {
             let this_type = self.get_this_type_of_signature(then_signature);
             if this_type.is_some_and(|this_type| this_type != self.void_type && {
                 let subtype_relation = self.subtype_relation;
@@ -1671,7 +1671,7 @@ impl Checker {
         let Some(index_constraint) = self.get_base_constraint_of_type(index_type) else {
             return false;
         };
-        self.get_properties_of_type(object_type).into_iter().any(|p| {
+        self.get_properties_of_type(object_type).iter().copied().any(|p| {
             p.flags().intersects(SymbolFlags::Optional) && {
                 let literal = self.get_literal_type_from_property(p, TypeFlags::StringOrNumberLiteralOrUnique, false);
                 self.is_type_assignable_to(literal, index_constraint)

@@ -1115,7 +1115,7 @@ impl EmitResolver {
 
         let sym = container.symbol().unwrap();
         let type_of_sym = c.get_type_of_symbol(sym);
-        let static_infos = c.get_index_infos_of_type(type_of_sym);
+        let static_infos = c.get_index_infos_of_type(type_of_sym).to_vec();
         let instance_index_symbol = c.get_index_symbol(sym);
         let mut instance_infos: Vec<P<IndexInfo>> = Vec::new();
         if let Some(instance_index_symbol) = instance_index_symbol {
@@ -1331,7 +1331,7 @@ impl EmitResolver {
             return Vec::new();
         };
         let t = c.get_type_of_symbol(s);
-        c.get_properties_of_type(t)
+        c.get_properties_of_type(t).to_vec()
     }
 
     // emitresolver.go:1272

@@ -313,7 +313,7 @@ impl Checker {
             }
         }
         let mut discriminant_members: Vec<P<Symbol>> = Vec::new();
-        for s in self.get_properties_of_type(contextual_type) {
+        for s in self.get_properties_of_type(contextual_type).iter().copied() {
             let keep = 'keep: {
                 if !s.flags().intersects(SymbolFlags::Optional) || node.symbol().is_none() {
                     break 'keep false;
@@ -992,10 +992,10 @@ impl Checker {
         }
         let apparent_elem_type = self.get_apparent_type(element_type);
         // Resolve the signatures, preferring constructor
-        let mut signatures = self.get_signatures_of_type(apparent_elem_type, SignatureKind::Construct);
+        let mut signatures = self.get_signatures_of_type(apparent_elem_type, SignatureKind::Construct).to_vec();
         if signatures.is_empty() {
             // No construct signatures, try call signatures
-            signatures = self.get_signatures_of_type(apparent_elem_type, SignatureKind::Call);
+            signatures = self.get_signatures_of_type(apparent_elem_type, SignatureKind::Call).to_vec();
         }
         if signatures.is_empty() && apparent_elem_type.flags().intersects(TypeFlags::Union) {
             // If each member has some combination of new/call signatures; make a union signature list for those
@@ -1684,13 +1684,13 @@ fn check_tag_name_does_not_expect_too_many_arguments(c: &mut Checker, node: P<No
     let mut has_first_param_signatures = false;
     let mut max_param_count = 0;
     // Check that _some_ first parameter expects a FC-like thing, and that some overload of the SFC expects an acceptable number of arguments
-    for &sig in &call_signatures {
+    for &sig in call_signatures {
         let firstparam = c.get_type_at_position(sig, 0);
         let signatures_of_param = c.get_signatures_of_type(firstparam, SignatureKind::Call);
         if signatures_of_param.is_empty() {
             continue;
         }
-        for &param_sig in &signatures_of_param {
+        for &param_sig in signatures_of_param {
             has_first_param_signatures = true;
             if c.has_effective_rest_parameter(param_sig) {
                 return true; // some signature has a rest param, so function components can have an arbitrary number of arguments
@@ -1707,7 +1707,7 @@ fn check_tag_name_does_not_expect_too_many_arguments(c: &mut Checker, node: P<No
         return true;
     }
     let mut absolute_min_arg_count = i32::MAX;
-    for &tag_sig in &tag_call_signatures {
+    for &tag_sig in tag_call_signatures {
         let tag_required_arg_count = c.get_min_argument_count(tag_sig);
         if tag_required_arg_count < absolute_min_arg_count {
             absolute_min_arg_count = tag_required_arg_count;

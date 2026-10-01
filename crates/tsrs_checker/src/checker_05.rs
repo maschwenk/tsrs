@@ -2007,7 +2007,7 @@ impl Checker {
     pub(crate) fn get_contextual_call_signature(&mut self, t: P<Type>, node: P<Node>) -> Option<P<Signature>> {
         let signatures = self.get_signatures_of_type(t, SignatureKind::Call);
         let mut applicable_by_arity = Vec::new();
-        for &s in &signatures {
+        for &s in signatures {
             if !self.is_arity_smaller(s, node) {
                 applicable_by_arity.push(s);
             }

@@ -46,7 +46,7 @@ impl NodeBuilderImpl {
         let ctx = self.ctx();
         ctx.approximate_length.set(ctx.approximate_length.get() + 9 + name.len() as i32);
         let type_of_symbol = c.get_type_of_symbol(symbol);
-        let member_props: Vec<P<Symbol>> = c.get_properties_of_type(type_of_symbol).into_iter().filter(|p| p.flags().intersects(SymbolFlags::EnumMember)).collect();
+        let member_props: Vec<P<Symbol>> = c.get_properties_of_type(type_of_symbol).iter().copied().filter(|p| p.flags().intersects(SymbolFlags::EnumMember)).collect();
         let mut members: Vec<P<Node>> = Vec::new();
         for (i, &p) in member_props.iter().enumerate() {
             if self.check_truncation_length_if_expanding(c) && (i as i32) + 3 < member_props.len() as i32 - 1 {
@@ -138,7 +138,7 @@ impl NodeBuilderImpl {
 
         // Static members
         let mut static_props: Vec<P<Symbol>> = Vec::new();
-        for p in c.get_properties_of_type(static_type) {
+        for p in c.get_properties_of_type(static_type).iter().copied() {
             if !p.flags().intersects(SymbolFlags::Prototype) && p.name() != "prototype" && !self.is_namespace_member(c, p) {
                 static_props.push(p);
             }
@@ -357,7 +357,7 @@ impl NodeBuilderImpl {
                 }
             }
             let mut private_protected = ModifierFlags::None;
-            for sig in &signatures {
+            for sig in signatures {
                 if let Some(declaration) = sig.declaration.get() {
                     private_protected |= declaration.modifier_flags() & (ModifierFlags::Private | ModifierFlags::Protected);
                 }
@@ -376,7 +376,7 @@ impl NodeBuilderImpl {
             return Vec::new();
         }
         let mut result: Vec<P<Node>> = Vec::new();
-        for &sig in &signatures {
+        for &sig in signatures {
             let ctx = self.ctx();
             ctx.approximate_length.set(ctx.approximate_length.get() + 1);
             result.push(self.signature_to_signature_declaration_helper(c, sig, Kind::Constructor, None));
@@ -388,7 +388,7 @@ impl NodeBuilderImpl {
     // serializeIndexSignaturesOfType builds index signature declarations, filtering those identical to baseType.
     pub(crate) fn serialize_index_signatures_of_type(&self, c: &mut Checker, input: P<Type>, base_type: Option<P<Type>>) -> Vec<P<Node>> {
         let mut result: Vec<P<Node>> = Vec::new();
-        for info in c.get_index_infos_of_type(input) {
+        for info in c.get_index_infos_of_type(input).iter().copied() {
             if let Some(base_type) = base_type {
                 let base_info = c.get_index_info_of_type(base_type, info.key_type.get().unwrap());
                 if let Some(base_info) = base_info {
@@ -524,7 +524,7 @@ impl NodeBuilderImpl {
             if resolved.flags().intersects(SymbolFlags::Function | SymbolFlags::Method) {
                 let t = c.get_type_of_symbol(resolved);
                 let sigs = c.get_signatures_of_type(t, SignatureKind::Call);
-                for sig in sigs {
+                for &sig in sigs {
                     let ctx = self.ctx();
                     ctx.approximate_length.set(ctx.approximate_length.get() + 1);
                     let options = P::new(SignatureToSignatureDeclarationOptions { modifiers: &[], name: Some(self.f.new_identifier(m.name())), question_token: None });
@@ -624,7 +624,7 @@ impl NodeBuilderImpl {
         for &base in base_types {
             let this_type = c.get_target_type(t).unwrap().as_interface_type().this_type.get();
             let base_with_this = c.get_type_with_this_argument(base, this_type, false);
-            for prop in c.get_properties_of_type(base_with_this) {
+            for prop in c.get_properties_of_type(base_with_this).iter().copied() {
                 if let Some(existing) = props_by_name.get(prop.name()) {
                     if prop.parent() == existing.parent() {
                         inherited.add(prop.name());

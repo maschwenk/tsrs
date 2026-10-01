@@ -891,7 +891,7 @@ impl Checker {
         let mut omit_key_type = self.get_union_type(&key_types);
         let mut spreadable_properties: Vec<P<Symbol>> = Vec::new();
         let mut unspreadable_to_rest_keys: Vec<P<Type>> = Vec::new();
-        for prop in self.get_properties_of_type(source) {
+        for prop in self.get_properties_of_type(source).iter().copied() {
             let literal_type_from_property = self.get_literal_type_from_property(prop, TypeFlags::StringOrNumberLiteralOrUnique, false);
             if !self.is_type_assignable_to(literal_type_from_property, omit_key_type)
                 && !get_declaration_modifier_flags_from_symbol(prop).intersects(ModifierFlags::Private | ModifierFlags::Protected)
@@ -1599,7 +1599,7 @@ impl Checker {
             }
         }
         let members = SymbolTable::new();
-        for prop in self.get_properties_of_object_type(t) {
+        for prop in self.get_properties_of_object_type(t).iter().copied() {
             let widened = self.get_widened_property(prop, context);
             members.set(prop.name(), widened);
         }
@@ -1682,7 +1682,7 @@ impl Checker {
             let mut names: OrderedMap<&'static str, P<Symbol>> = OrderedMap::default();
             for t in self.get_siblings_of_context(context) {
                 if is_object_literal_type(t) && !t.object_flags().intersects(ObjectFlags::ContainsSpread) {
-                    for prop in self.get_properties_of_type(t) {
+                    for prop in self.get_properties_of_type(t).iter().copied() {
                         names.insert(prop.name(), prop);
                     }
                 }
@@ -2123,7 +2123,7 @@ impl Checker {
 
     // checker.go:19190
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub fn get_properties_of_type(&mut self, t: P<Type>) -> Vec<P<Symbol>> {
+    pub fn get_properties_of_type(&mut self, t: P<Type>) -> &'static [P<Symbol>] {
         let t = self.get_reduced_apparent_type(t);
         if t.flags().intersects(TypeFlags::UnionOrIntersection) {
             return self.get_properties_of_union_or_intersection_type(t);
@@ -2133,21 +2133,21 @@ impl Checker {
 
     // checker.go:19198
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn get_properties_of_object_type(&mut self, t: P<Type>) -> Vec<P<Symbol>> {
+    pub(crate) fn get_properties_of_object_type(&mut self, t: P<Type>) -> &'static [P<Symbol>] {
         if t.flags().intersects(TypeFlags::Object) {
-            return self.resolve_structured_type_members(t).unwrap().properties().to_vec();
+            return self.resolve_structured_type_members(t).unwrap().properties();
         }
-        Vec::new()
+        &[]
     }
 
     // checker.go:19205
-    pub(crate) fn get_properties_of_union_or_intersection_type(&mut self, t: P<Type>) -> Vec<P<Symbol>> {
+    pub(crate) fn get_properties_of_union_or_intersection_type(&mut self, t: P<Type>) -> &'static [P<Symbol>] {
         let d = t.as_union_or_intersection_type();
         if d.resolved_properties.get().is_none() {
             let mut checked: FxHashSet<&'static str> = FxHashSet::default();
             let mut props: Vec<P<Symbol>> = Vec::new();
             for &current in d.types.get() {
-                for prop in self.get_properties_of_type(current) {
+                for prop in self.get_properties_of_type(current).iter().copied() {
                     if !checked.contains(prop.name()) {
                         checked.insert(prop.name());
                         let combined_prop = self.get_property_of_union_or_intersection_type(
@@ -2168,7 +2168,7 @@ impl Checker {
             }
             d.resolved_properties.set(Some(alloc_vec(props)));
         }
-        d.resolved_properties.get().unwrap().to_vec()
+        d.resolved_properties.get().unwrap()
     }
 
     // checker.go:19231
@@ -2262,15 +2262,15 @@ impl Checker {
 
     // checker.go:19303
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub fn get_signatures_of_type(&mut self, t: P<Type>, kind: SignatureKind) -> Vec<P<Signature>> {
+    pub fn get_signatures_of_type(&mut self, t: P<Type>, kind: SignatureKind) -> &'static [P<Signature>] {
         let t = self.get_reduced_apparent_type(t);
         self.get_signatures_of_structured_type(t, kind)
     }
 
     // checker.go:19307
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn get_signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> Vec<P<Signature>> {
-        self.signatures_of_structured_type(t, kind).to_vec()
+    pub(crate) fn get_signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> &'static [P<Signature>] {
+        self.signatures_of_structured_type(t, kind)
     }
 
     // Go's getSignaturesOfStructuredType returns the stored slice; this is it without the copy.
@@ -2302,14 +2302,14 @@ impl Checker {
     }
 
     // checker.go:19318
-    pub fn get_index_infos_of_type(&mut self, t: P<Type>) -> Vec<P<IndexInfo>> {
+    pub fn get_index_infos_of_type(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] {
         let t = self.get_reduced_apparent_type(t);
         self.get_index_infos_of_structured_type(t)
     }
 
     // checker.go:19322
-    pub(crate) fn get_index_infos_of_structured_type(&mut self, t: P<Type>) -> Vec<P<IndexInfo>> {
-        self.index_infos_of_structured_type(t).to_vec()
+    pub(crate) fn get_index_infos_of_structured_type(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] {
+        self.index_infos_of_structured_type(t)
     }
 
     // Go's getIndexInfosOfStructuredType returns the stored slice; this is it without the copy.
@@ -2587,7 +2587,7 @@ impl Checker {
         let sigs = self.get_signatures_of_type(base_type, SignatureKind::Construct);
         construct_signatures.extend(sigs);
         let inherited_index_infos: Vec<P<IndexInfo>> =
-            if base_type != self.any_type { self.get_index_infos_of_type(base_type) } else { vec![self.any_base_type_index_info] };
+            if base_type != self.any_type { self.get_index_infos_of_type(base_type).to_vec() } else { vec![self.any_base_type_index_info] };
         let filtered: Vec<P<IndexInfo>> = inherited_index_infos.into_iter().filter(|info| find_index_info(index_infos, info.key_type()).is_none()).collect();
         index_infos.extend(filtered);
     }
@@ -2861,7 +2861,7 @@ impl Checker {
                 }
                 continue;
             }
-            for prop in self.get_properties_of_type(base_type) {
+            for prop in self.get_properties_of_type(base_type).iter().copied() {
                 if !is_static_private_identifier_property(prop) && seen.insert(prop.name()) && !f(self, prop) {
                     return false;
                 }

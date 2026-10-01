@@ -338,7 +338,7 @@ impl Checker {
         }
         let target_enum_type = self.get_type_of_symbol(target_symbol);
         let source_enum_type = self.get_type_of_symbol(source_symbol);
-        for source_property in self.get_properties_of_type(source_enum_type) {
+        for source_property in self.get_properties_of_type(source_enum_type).iter().copied() {
             if source_property.flags().intersects(SymbolFlags::EnumMember) {
                 let target_property = self.get_property_of_type(target_enum_type, source_property.name());
                 if target_property.is_none_or(|p| !p.flags().intersects(SymbolFlags::EnumMember)) {
@@ -621,7 +621,7 @@ impl Checker {
     pub(crate) fn elaborate_did_you_mean_to_call_or_construct(&mut self, node: P<Node>, source: P<Type>, target: P<Type>, relation: P<Relation>, kind: SignatureKind, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
         let signatures = self.get_signatures_of_type(source, kind);
         let mut some = false;
-        for s in signatures {
+        for &s in signatures {
             let return_type = self.get_return_type_of_signature(s);
             if !return_type.flags().intersects(TypeFlags::Any | TypeFlags::Never)
                 && self.check_type_related_to(return_type, target, relation, None /*errorNode*/)
@@ -958,7 +958,7 @@ impl Checker {
 
     // relater.go:695
     pub(crate) fn has_common_properties(&mut self, source: P<Type>, target: P<Type>, is_comparing_jsx_attributes: bool) -> bool {
-        for prop in self.get_properties_of_type(source) {
+        for prop in self.get_properties_of_type(source).iter().copied() {
             if self.is_known_property(target, prop.name(), is_comparing_jsx_attributes) {
                 return true;
             }
@@ -1304,11 +1304,11 @@ impl Checker {
         let mut props_out = props_out;
         let lazy_properties = if self.lazy_unmatched { self.get_lazy_properties_in_order(target) } else { None };
         let lazy = lazy_properties.is_some();
-        let properties = match lazy_properties {
-            Some(properties) => properties,
-            None => self.get_properties_of_type(target),
+        let properties: std::borrow::Cow<'static, [P<Symbol>]> = match lazy_properties {
+            Some(properties) => properties.into(),
+            None => self.get_properties_of_type(target).into(),
         };
-        for target_prop in properties {
+        for &target_prop in properties.iter() {
             // TODO: remove this when we support static private identifier fields and find other solutions to get privateNamesAndStaticFields test to pass
             if is_static_private_identifier_property(target_prop) {
                 continue;
@@ -1392,11 +1392,11 @@ impl Checker {
             }
         }
         for &base_type in lm.ready.get().unwrap().base_types {
-            let base_properties = match self.get_lazy_properties_in_order(base_type) {
-                Some(properties) => properties,
-                None => self.get_properties_of_type(base_type),
+            let base_properties: std::borrow::Cow<'static, [P<Symbol>]> = match self.get_lazy_properties_in_order(base_type) {
+                Some(properties) => properties.into(),
+                None => self.get_properties_of_type(base_type).into(),
             };
-            for p in base_properties {
+            for &p in base_properties.iter() {
                 if !is_static_private_identifier_property(p) && seen.insert(p.name()) {
                     members.push(p);
                 }
@@ -1598,7 +1598,7 @@ impl Checker {
     pub(crate) fn get_key_property_candidate_name(&mut self, types: &[P<Type>]) -> String {
         for &t in types {
             if t.flags().intersects(TypeFlags::Object | TypeFlags::InstantiableNonPrimitive) {
-                for p in self.get_properties_of_type(t) {
+                for p in self.get_properties_of_type(t).iter().copied() {
                     let prop_type = self.get_type_of_symbol(p);
                     if is_unit_type(prop_type) {
                         return p.name().to_string();

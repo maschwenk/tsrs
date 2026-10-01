@@ -1075,7 +1075,7 @@ impl Checker {
         let construct_signatures = self.get_signatures_of_type(constructor_type, SignatureKind::Construct);
         if !construct_signatures.is_empty() {
             let mut types = Vec::with_capacity(construct_signatures.len());
-            for signature in construct_signatures {
+            for &signature in construct_signatures {
                 let erased = self.get_erased_signature(signature);
                 types.push(self.get_return_type_of_signature(erased));
             }
