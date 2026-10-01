@@ -8,6 +8,7 @@ use std::sync::{LazyLock, OnceLock};
 use bitflags::bitflags;
 
 use crate::*;
+use tsrs_core::SliceCell;
 
 // CheckMode
 
@@ -301,32 +302,134 @@ bitflags! {
 }
 
 // InferenceContext
+//
+// 1.43M contexts on Project single, so the four fields that fewer than 4% of them set (return mappers, inferred type
+// parameters, intra-expression sites) live in a tail allocated on the first non-default write (`InferenceContextRare`,
+// read through accessors that return the zero value when it is absent), and `inferences` packs with `flags`:
+// 64 bytes instead of 128.
 
 #[derive(Default)]
 pub struct InferenceContext {
-    pub inferences: Cell<&'static [P<InferenceInfo>]>, // Inferences made for each type parameter
-    pub signature: Cell<Option<P<Signature>>>, // Generic signature for which inferences are made (if any)
+    pub inferences: SliceCell<P<InferenceInfo>>, // Inferences made for each type parameter
     pub flags: Cell<InferenceFlags>, // Inference flags
+    pub signature: Cell<Option<P<Signature>>>, // Generic signature for which inferences are made (if any)
     pub compare_types: Cell<Option<TypeComparer>>, // Type comparer function
     pub mapper: Cell<Option<P<TypeMapper>>>, // Mapper that fixes inferences
     pub non_fixing_mapper: Cell<Option<P<TypeMapper>>>, // Mapper that doesn't fix inferences
-    pub return_mapper: Cell<Option<P<TypeMapper>>>, // Type mapper for inferences from return types (if any)
-    pub outer_return_mapper: Cell<Option<P<TypeMapper>>>, // Type mapper for inferences from return types of outer function (if any)
-    pub inferred_type_parameters: Cell<&'static [P<Type>]>, // Inferred type parameters for function result
-    pub intra_expression_inference_sites: RefCell<Vec<IntraExpressionInferenceSite>>,
+    pub(crate) rare: Cell<Option<P<InferenceContextRare>>>,
+}
+
+const _: () = assert!(std::mem::size_of::<InferenceContext>() == 64);
+
+#[derive(Default)]
+pub(crate) struct InferenceContextRare {
+    return_mapper: Cell<Option<P<TypeMapper>>>, // Type mapper for inferences from return types (if any)
+    outer_return_mapper: Cell<Option<P<TypeMapper>>>, // Type mapper for inferences from return types of outer function (if any)
+    inferred_type_parameters: Cell<&'static [P<Type>]>, // Inferred type parameters for function result
+    intra_expression_inference_sites: RefCell<Vec<IntraExpressionInferenceSite>>,
+}
+
+impl InferenceContext {
+    fn rare_for_write(&self) -> P<InferenceContextRare> {
+        match self.rare.get() {
+            Some(rare) => rare,
+            None => {
+                let rare = P::new(InferenceContextRare::default());
+                self.rare.set(Some(rare));
+                rare
+            }
+        }
+    }
+    pub fn return_mapper(&self) -> Option<P<TypeMapper>> {
+        self.rare.get().and_then(|r| r.return_mapper.get())
+    }
+    pub fn set_return_mapper(&self, mapper: Option<P<TypeMapper>>) {
+        if mapper.is_some() || self.rare.get().is_some() {
+            self.rare_for_write().return_mapper.set(mapper);
+        }
+    }
+    pub fn outer_return_mapper(&self) -> Option<P<TypeMapper>> {
+        self.rare.get().and_then(|r| r.outer_return_mapper.get())
+    }
+    pub fn set_outer_return_mapper(&self, mapper: Option<P<TypeMapper>>) {
+        if mapper.is_some() || self.rare.get().is_some() {
+            self.rare_for_write().outer_return_mapper.set(mapper);
+        }
+    }
+    pub fn inferred_type_parameters(&self) -> &'static [P<Type>] {
+        self.rare.get().map_or(&[], |r| r.inferred_type_parameters.get())
+    }
+    pub fn set_inferred_type_parameters(&self, type_parameters: &'static [P<Type>]) {
+        if !type_parameters.is_empty() || self.rare.get().is_some() {
+            self.rare_for_write().inferred_type_parameters.set(type_parameters);
+        }
+    }
+    pub fn has_intra_expression_inference_sites(&self) -> bool {
+        self.rare.get().is_some_and(|r| !r.intra_expression_inference_sites.borrow().is_empty())
+    }
+    pub fn intra_expression_inference_sites(&self) -> Vec<IntraExpressionInferenceSite> {
+        self.rare.get().map_or_else(Vec::new, |r| r.intra_expression_inference_sites.borrow().clone())
+    }
+    pub fn push_intra_expression_inference_site(&self, site: IntraExpressionInferenceSite) {
+        self.rare_for_write().intra_expression_inference_sites.borrow_mut().push(site);
+    }
+    pub fn clear_intra_expression_inference_sites(&self) {
+        if let Some(rare) = self.rare.get() {
+            rare.intra_expression_inference_sites.borrow_mut().clear();
+        }
+    }
+}
+
+/// A Go slice field that most of its owners leave empty (inference candidate lists, 1.78M of them on Project, 64%
+/// never get a covariant and 98% never a contravariant candidate): 8 bytes, and the list lives in an arena
+/// `RefCell<Vec>` allocated by the first `push` or a non-empty `from_vec`. Reads of an absent list see it empty.
+pub struct LazyVec<T: 'static>(Cell<Option<P<RefCell<Vec<T>>>>>);
+
+impl<T> Default for LazyVec<T> {
+    fn default() -> Self {
+        LazyVec(Cell::new(None))
+    }
+}
+
+impl<T: Copy + PartialEq> LazyVec<T> {
+    pub fn from_vec(items: Vec<T>) -> Self {
+        LazyVec(Cell::new((!items.is_empty()).then(|| P::new(RefCell::new(items)))))
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.get().is_none_or(|v| v.borrow().is_empty())
+    }
+    pub fn contains(&self, item: &T) -> bool {
+        self.0.get().is_some_and(|v| v.borrow().contains(item))
+    }
+    pub fn push(&self, item: T) {
+        match self.0.get() {
+            Some(v) => v.borrow_mut().push(item),
+            None => self.0.set(Some(P::new(RefCell::new(vec![item])))),
+        }
+    }
+    pub fn clear(&self) {
+        if let Some(v) = self.0.get() {
+            v.borrow_mut().clear();
+        }
+    }
+    pub fn to_vec(&self) -> Vec<T> {
+        self.0.get().map_or_else(Vec::new, |v| v.borrow().clone())
+    }
 }
 
 #[derive(Default)]
 pub struct InferenceInfo {
     pub type_parameter: Cell<Option<P<Type>>>, // Type parameter for which inferences are being made
-    pub candidates: RefCell<Vec<P<Type>>>, // Candidates in covariant positions in decreasing depth order
-    pub contra_candidates: RefCell<Vec<P<Type>>>, // Candidates in contravariant positions
+    pub candidates: LazyVec<P<Type>>, // Candidates in covariant positions in decreasing depth order
+    pub contra_candidates: LazyVec<P<Type>>, // Candidates in contravariant positions
     pub inferred_type: Cell<Option<P<Type>>>, // Cache for resolved inferred type
     pub priority: Cell<InferencePriority>, // Priority of current inference set
     pub top_level: Cell<bool>, // True if all inferences are to top level occurrences
     pub is_fixed: Cell<bool>, // True if inferences are fixed
     pub implied_arity: Cell<i32>, // Implied arity (or -1)
 }
+
+const _: () = assert!(std::mem::size_of::<InferenceInfo>() == 48);
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]

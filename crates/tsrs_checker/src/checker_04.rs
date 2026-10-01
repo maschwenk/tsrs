@@ -1431,8 +1431,8 @@ impl Checker {
         // In CheckMode.Inferential we collect intra-expression inference sites to process before fixing any type
         // parameters. This information is no longer needed after the call to checkExpression.
         if let Some(inference_context) = inference_context {
-            if !inference_context.intra_expression_inference_sites.borrow().is_empty() {
-                inference_context.intra_expression_inference_sites.borrow_mut().clear();
+            if inference_context.has_intra_expression_inference_sites() {
+                inference_context.clear_intra_expression_inference_sites();
             }
         }
         // We strip literal freshness when an appropriate contextual type is present such that contextually typed
@@ -1634,9 +1634,9 @@ impl Checker {
                         let mut merged = context.inferences.get().to_vec();
                         self.merge_inferences(&mut merged, &inferences);
                         context.inferences.set(alloc_vec(merged));
-                        let mut inferred_type_parameters = context.inferred_type_parameters.get().to_vec();
+                        let mut inferred_type_parameters = context.inferred_type_parameters().to_vec();
                         inferred_type_parameters.extend_from_slice(&unique_type_parameters);
-                        context.inferred_type_parameters.set(alloc_vec(inferred_type_parameters));
+                        context.set_inferred_type_parameters(alloc_vec(inferred_type_parameters));
                         return self.get_or_create_type_from_signature(instantiated_signature);
                     }
                 }
@@ -1671,8 +1671,8 @@ impl Checker {
         let mut result: Vec<P<Type>> = Vec::with_capacity(type_parameters.len());
         for &tp in type_parameters {
             let name = tp.symbol().unwrap().name();
-            if has_type_parameter_by_name(context.inferred_type_parameters.get(), name) || has_type_parameter_by_name(&result, name) {
-                let mut all: Vec<P<Type>> = context.inferred_type_parameters.get().to_vec();
+            if has_type_parameter_by_name(context.inferred_type_parameters(), name) || has_type_parameter_by_name(&result, name) {
+                let mut all: Vec<P<Type>> = context.inferred_type_parameters().to_vec();
                 all.extend_from_slice(&result);
                 let new_name = get_unique_type_parameter_name(&all, name);
                 let symbol = self.new_symbol(SymbolFlags::TypeParameter, alloc_str(&new_name));

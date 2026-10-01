@@ -173,8 +173,8 @@ impl Checker {
                         return;
                     }
                     if n.priority.get().bits() < inference.priority.get().bits() {
-                        inference.candidates.borrow_mut().clear();
-                        inference.contra_candidates.borrow_mut().clear();
+                        inference.candidates.clear();
+                        inference.contra_candidates.clear();
                         inference.top_level.set(true);
                         inference.priority.set(n.priority.get());
                     }
@@ -182,12 +182,12 @@ impl Checker {
                         // We make contravariant inferences only if we are in a pure contravariant position,
                         // i.e. only if we have not descended into a bivariant position.
                         if n.contravariant.get() && !n.bivariant.get() {
-                            if !inference.contra_candidates.borrow().contains(&candidate) {
-                                inference.contra_candidates.borrow_mut().push(candidate);
+                            if !inference.contra_candidates.contains(&candidate) {
+                                inference.contra_candidates.push(candidate);
                                 clear_cached_inferences(&n.inferences.borrow());
                             }
-                        } else if !inference.candidates.borrow().contains(&candidate) {
-                            inference.candidates.borrow_mut().push(candidate);
+                        } else if !inference.candidates.contains(&candidate) {
+                            inference.candidates.push(candidate);
                             clear_cached_inferences(&n.inferences.borrow());
                         }
                     }
@@ -1449,7 +1449,7 @@ impl Checker {
     // inference.go:1273
     pub(crate) fn new_inference_context_worker(&mut self, inferences: &[P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> P<InferenceContext> {
         let n = P::new(InferenceContext {
-            inferences: Cell::new(alloc_slice(inferences)),
+            inferences: SliceCell::new(alloc_slice(inferences)),
             signature: Cell::new(signature),
             flags: Cell::new(flags),
             compare_types: Cell::new(Some(compare_types)),
@@ -1462,7 +1462,7 @@ impl Checker {
 
     // inference.go:1285
     pub(crate) fn add_intra_expression_inference_site(&mut self, n: P<InferenceContext>, node: P<Node>, t: P<Type>) {
-        n.intra_expression_inference_sites.borrow_mut().push(IntraExpressionInferenceSite { node, t });
+        n.push_intra_expression_inference_site(IntraExpressionInferenceSite { node, t });
     }
 
     // We collect intra-expression inference sites within object and array literals to handle cases where
@@ -1480,7 +1480,7 @@ impl Checker {
     // object or array literal, we need to perform intra-expression inferences early.
     // inference.go:1302
     pub(crate) fn infer_from_intra_expression_sites(&mut self, n: P<InferenceContext>) {
-        let sites = n.intra_expression_inference_sites.borrow().clone();
+        let sites = n.intra_expression_inference_sites();
         for site in sites {
             let contextual_type = if ast::is_method_declaration(site.node) {
                 self.get_contextual_type_for_object_literal_method(site.node, ContextFlags::NoConstraints)
@@ -1491,7 +1491,7 @@ impl Checker {
                 self.infer_types(n.inferences.get(), site.t, contextual_type, InferencePriority::None, false);
             }
         }
-        n.intra_expression_inference_sites.borrow_mut().clear();
+        n.clear_intra_expression_inference_sites();
     }
 
     // inference.go:1317
@@ -1506,11 +1506,11 @@ impl Checker {
             let mut fallback_type: Option<P<Type>> = None;
             if let Some(signature) = n.signature.get() {
                 let mut inferred_covariant_type: Option<P<Type>> = None;
-                if !inference.candidates.borrow().is_empty() {
+                if !inference.candidates.is_empty() {
                     inferred_covariant_type = Some(self.get_covariant_inference(inference, signature));
                 }
                 let mut inferred_contravariant_type: Option<P<Type>> = None;
-                if !inference.contra_candidates.borrow().is_empty() {
+                if !inference.contra_candidates.is_empty() {
                     inferred_contravariant_type = self.get_contravariant_inference(inference);
                 }
                 if inferred_covariant_type.is_some() || inferred_contravariant_type.is_some() {
@@ -1526,12 +1526,12 @@ impl Checker {
                             inferred_contravariant_type.is_none()
                                 || !covariant.flags().intersects(TypeFlags::Never | TypeFlags::Any)
                                     && {
-                                        let contra_candidates = inference.contra_candidates.borrow().clone();
+                                        let contra_candidates = inference.contra_candidates.to_vec();
                                         contra_candidates.iter().any(|&t| self.is_type_assignable_to(covariant, t))
                                     }
                                     && n.inferences.get().iter().all(|&other| {
                                         other != inference && self.get_constraint_of_type_parameter(other.type_parameter.get().unwrap()) != inference.type_parameter.get() || {
-                                            let other_candidates = other.candidates.borrow().clone();
+                                            let other_candidates = other.candidates.to_vec();
                                             other_candidates.iter().all(|&t| self.is_type_assignable_to(t, covariant))
                                         }
                                     })
@@ -1633,20 +1633,20 @@ impl Checker {
     // to their inferences at the time of creation.
     // inference.go:1423
     pub(crate) fn create_outer_return_mapper(&mut self, context: P<InferenceContext>) -> P<TypeMapper> {
-        if context.outer_return_mapper.get().is_none() {
+        if context.outer_return_mapper().is_none() {
             let mut mapper = self.clone_inference_context(Some(context), InferenceFlags::None).unwrap().mapper.get().unwrap();
-            if let Some(return_mapper) = context.return_mapper.get() {
+            if let Some(return_mapper) = context.return_mapper() {
                 mapper = new_merged_type_mapper(return_mapper, mapper);
             }
-            context.outer_return_mapper.set(Some(mapper));
+            context.set_outer_return_mapper(Some(mapper));
         }
-        context.outer_return_mapper.get().unwrap()
+        context.outer_return_mapper().unwrap()
     }
 
     // inference.go:1434
     pub(crate) fn get_covariant_inference(&mut self, inference: P<InferenceInfo>, signature: P<Signature>) -> P<Type> {
         // Extract all object and array literal types and replace them with a single widened and normalized type.
-        let inference_candidates = inference.candidates.borrow().clone();
+        let inference_candidates = inference.candidates.to_vec();
         let candidates = self.union_object_and_array_literal_candidates(&inference_candidates);
         // We widen inferred literal types if
         // all inferences were made to top-level occurrences of the type parameter, and
@@ -1674,7 +1674,7 @@ impl Checker {
 
     // inference.go:1463
     pub(crate) fn get_contravariant_inference(&mut self, inference: P<InferenceInfo>) -> Option<P<Type>> {
-        let contra_candidates = inference.contra_candidates.borrow().clone();
+        let contra_candidates = inference.contra_candidates.to_vec();
         if inference.priority.get().intersects(InferencePriority::PriorityImpliesCombination) {
             return Some(self.get_intersection_type(&contra_candidates));
         }
@@ -1735,12 +1735,12 @@ impl Checker {
 
     // inference.go:1509
     pub(crate) fn get_type_from_inference(&mut self, inference: P<InferenceInfo>) -> Option<P<Type>> {
-        if !inference.candidates.borrow().is_empty() {
-            let candidates = inference.candidates.borrow().clone();
+        if !inference.candidates.is_empty() {
+            let candidates = inference.candidates.to_vec();
             return Some(self.get_union_type_ex(&candidates, UnionReduction::Subtype, None, None));
         }
-        if !inference.contra_candidates.borrow().is_empty() {
-            let contra_candidates = inference.contra_candidates.borrow().clone();
+        if !inference.contra_candidates.is_empty() {
+            let contra_candidates = inference.contra_candidates.to_vec();
             return Some(self.get_intersection_type(&contra_candidates));
         }
         None
@@ -1886,8 +1886,8 @@ pub(crate) fn new_inference_info(type_parameter: P<Type>) -> P<InferenceInfo> {
 pub(crate) fn clone_inference_info(info: P<InferenceInfo>) -> P<InferenceInfo> {
     P::new(InferenceInfo {
         type_parameter: Cell::new(info.type_parameter.get()),
-        candidates: RefCell::new(info.candidates.borrow().clone()),
-        contra_candidates: RefCell::new(info.contra_candidates.borrow().clone()),
+        candidates: LazyVec::from_vec(info.candidates.to_vec()),
+        contra_candidates: LazyVec::from_vec(info.contra_candidates.to_vec()),
         inferred_type: Cell::new(info.inferred_type.get()),
         priority: Cell::new(info.priority.get()),
         top_level: Cell::new(info.top_level.get()),
@@ -1907,7 +1907,7 @@ pub(crate) fn clear_cached_inferences(inferences: &[P<InferenceInfo>]) {
 
 // inference.go:1651
 pub(crate) fn has_inference_candidates(info: P<InferenceInfo>) -> bool {
-    !info.candidates.borrow().is_empty() || !info.contra_candidates.borrow().is_empty()
+    !info.candidates.is_empty() || !info.contra_candidates.is_empty()
 }
 
 // inference.go:1655

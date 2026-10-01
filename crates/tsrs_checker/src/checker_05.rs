@@ -560,7 +560,7 @@ impl Checker {
                     }
                 }
                 let inferred_type_parameters: &[P<Type>] = match inference_context {
-                    Some(ctx) => ctx.inferred_type_parameters.get(),
+                    Some(ctx) => ctx.inferred_type_parameters(),
                     None => &[],
                 };
                 check_candidate = self.get_signature_instantiation(candidate, &type_argument_types, is_in_js_file(candidate.declaration()), inferred_type_parameters);
@@ -585,7 +585,7 @@ impl Checker {
                 s.arg_check_mode = CheckMode::Normal;
                 if let Some(ctx) = inference_context {
                     let type_argument_types = self.infer_type_arguments(node, candidate, &args, s.arg_check_mode, ctx);
-                    check_candidate = self.get_signature_instantiation(candidate, &type_argument_types, is_in_js_file(candidate.declaration()), ctx.inferred_type_parameters.get());
+                    check_candidate = self.get_signature_instantiation(candidate, &type_argument_types, is_in_js_file(candidate.declaration()), ctx.inferred_type_parameters());
                     // If the original signature has a generic rest type, instantiation may produce a
                     // signature with different arity and we need to perform another arity check.
                     if self.get_non_array_rest_type(candidate).is_some() && !self.has_correct_arity(node, &args, check_candidate, s.signature_help_trailing_comma) {
@@ -992,9 +992,9 @@ impl Checker {
                     if return_context.inferences.get().iter().any(|&info| has_inference_candidates(info)) {
                         let cloned = self.clone_inferred_part_of_context(return_context);
                         let return_mapper = self.get_mapper_from_context(cloned);
-                        context.return_mapper.set(return_mapper);
+                        context.set_return_mapper(return_mapper);
                     } else {
-                        context.return_mapper.set(None);
+                        context.set_return_mapper(None);
                     }
                 }
             }

@@ -978,7 +978,7 @@ impl Checker {
                             return Some(t);
                         }
                     }
-                    if let Some(return_mapper) = inference_context.return_mapper.get() {
+                    if let Some(return_mapper) = inference_context.return_mapper() {
                         // For other purposes (e.g. determining whether to produce literal types) we only
                         // incorporate inferences made from the return type in a function call. We remove
                         // the 'boolean' type from the contextual type such that contextually typed boolean

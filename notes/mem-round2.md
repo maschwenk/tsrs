@@ -112,3 +112,29 @@ its order.
 With `declared` left as the `FxHashMap` (the rest as above) the peak is 0.02 GiB higher; check times of the three
 binaries were indistinguishable on the shared machine (load 10-40). The opt-out mode has no lazy tables (10.15 /
 15.59 GiB, unchanged).
+
+### 5. Inference contexts 128 -> 64 bytes, inference infos 96 -> 48 bytes
+
+The brief's candidate 4 (recycling contexts through a free list) is out: a context escapes through its fixing /
+non-fixing mappers (`TypeMapperData::Inference` holds the context), and those mappers end up in instantiated
+types (`ObjectType.mapper`, symbol links), so a context cannot be proven dead after the call that made it.
+Its layout can shrink instead. Counted once on Project single (default mode): of 1.43M contexts, 45.5K set a
+return mapper, 24.6K an outer return mapper, 8.7K collect intra-expression sites, and none gets inferred type
+parameters (only higher-order generic-function inference adds them); of 1.78M inference infos 635K ever get a covariant
+candidate and 40K a contravariant one.
+
+- `InferenceContext`: the four rare fields moved into a tail (`InferenceContextRare`, allocated on the first
+  non-default write; accessors `return_mapper()` / `set_return_mapper()` & co. return the zero value when it is
+  absent, 14 call sites), and `inferences` is a `SliceCell` packed with `flags`.
+- `InferenceInfo`: `candidates` / `contra_candidates` are `LazyVec`s (8 bytes; the `RefCell<Vec>` is allocated in
+  the arena by the first push), with `push` / `contains` / `clear` / `is_empty` / `to_vec` in place of the
+  `borrow()` forms (16 call sites).
+
+| run (2 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 7.603 | 320 G |
+| single, after | 7.447 (-0.16) | 320-321 G |
+| 4 checkers, before | 10.19 | 432-433 G |
+| 4 checkers, after | 9.98-10.00 (-0.20) | 432 G |
+| opt-out single / 4 checkers (go assignment), before | 10.15 / 15.59 | |
+| opt-out single / 4 checkers (go assignment), after | 10.00 / 15.38 | |
