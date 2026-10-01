@@ -75,7 +75,7 @@ impl CompilerHost for compilerHost {
     fn get_source_file(&self, opts: SourceFileParseOptions) -> Option<P<SourceFile>> {
         let text = self.fs().read_file(&opts.file_name)?;
         let script_kind = ensure_script_kind_from_file_name(&opts.file_name);
-        Some(tsrs_parser::parse_source_file(opts, &text, script_kind))
+        Some(tsrs_parser::parse_source_file_owned(opts, text, script_kind))
     }
 
     fn get_resolved_project_reference(&self, _file_name: &str, _path: Path) -> Option<P<ParsedCommandLine>> {

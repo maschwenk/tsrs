@@ -189,9 +189,19 @@ pub(crate) fn is_missing_node_list(list: Option<P<NodeList>>) -> bool {
 }
 
 pub fn parse_source_file(opts: SourceFileParseOptions, source_text: &str, script_kind: ScriptKind) -> P<SourceFile> {
+    parse_source_file_static(opts, alloc_str(source_text), script_kind)
+}
+
+/// `parse_source_file` for text the caller hands over (a file just read): it becomes the file's text without a
+/// copy into the arena (Go shares the string). Like the arena, the text is never freed.
+pub fn parse_source_file_owned(opts: SourceFileParseOptions, source_text: String, script_kind: ScriptKind) -> P<SourceFile> {
+    parse_source_file_static(opts, source_text.leak(), script_kind)
+}
+
+fn parse_source_file_static(opts: SourceFileParseOptions, source_text: &'static str, script_kind: ScriptKind) -> P<SourceFile> {
     crate::jsdoc::init();
     let mut p = new_parser();
-    p.initialize_state(opts, source_text, script_kind);
+    p.initialize_state_static(opts, source_text, script_kind);
     p.next_token();
     if p.script_kind == ScriptKind::JSON {
         return p.parse_json_text();
