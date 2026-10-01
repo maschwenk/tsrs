@@ -54,10 +54,15 @@ bitflags! {
 }
 
 impl Parser {
+    #[inline]
     pub(crate) fn with_jsdoc(&mut self, node: P<Node>, info: JsdocScannerInfo) -> &'static [P<Node>] {
         if !info.intersects(JsdocScannerInfo::HasJSDoc) {
             return &[];
         }
+        self.with_jsdoc_worker(node, info)
+    }
+
+    fn with_jsdoc_worker(&mut self, node: P<Node>, info: JsdocScannerInfo) -> &'static [P<Node>] {
 
         // For TS/TSX files, defer JSDoc parsing to first access, unless the comment
         // contains @see/@link (needed for unused-identifier checks).

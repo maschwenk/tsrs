@@ -1401,12 +1401,17 @@ impl Parser {
         self.finish_node(property_access, pos)
     }
 
+    #[inline]
     pub(crate) fn try_reparse_optional_chain(&mut self, node: P<Node>) -> bool {
         if node.flags().intersects(NodeFlags::OptionalChain) {
             return true;
         }
         // check for an optional chain in a non-null expression
-        if ast::is_non_null_expression(node) {
+        ast::is_non_null_expression(node) && self.try_reparse_optional_chain_in_non_null_expression(node)
+    }
+
+    fn try_reparse_optional_chain_in_non_null_expression(&mut self, node: P<Node>) -> bool {
+        {
             let mut expr = node.expression().unwrap();
             while ast::is_non_null_expression(expr) && !expr.flags().intersects(NodeFlags::OptionalChain) {
                 expr = expr.expression().unwrap();
@@ -2593,10 +2598,15 @@ impl Parser {
         }
     }
 
+    #[inline]
     pub(crate) fn check_js_syntax(&mut self, node: P<Node>) -> P<Node> {
         if !node.flags().intersects(NodeFlags::JavaScriptFile) || node.flags().intersects(NodeFlags::JSDoc | NodeFlags::Reparsed) {
             return node;
         }
+        self.check_js_syntax_worker(node)
+    }
+
+    fn check_js_syntax_worker(&mut self, node: P<Node>) -> P<Node> {
         match node.kind() {
             Kind::Parameter
             | Kind::PropertyDeclaration
