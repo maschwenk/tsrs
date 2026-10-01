@@ -323,7 +323,14 @@ def main() -> None:
                     help="print `<name>=<key>` lines (GITHUB_OUTPUT format) for the CI caches of bench/.work")
     ap.add_argument("--out-dir", type=Path, default=BENCH / "results")
     ap.add_argument("--readme", type=Path, help="rewrite the bench block of this README")
+    ap.add_argument("--apply-table", type=Path,
+                    help="only rewrite --readme's bench block from this results .md (no benchmarking)")
     args = ap.parse_args()
+    if args.apply_table:
+        if not args.readme:
+            ap.error("--apply-table needs --readme")
+        update_readme(args.readme, args.apply_table.read_text())
+        return
 
     cfg = json.loads((BENCH / "projects.json").read_text())
     projects = cfg["projects"]
