@@ -981,14 +981,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
 
     // Placeholders for pointer fields Go leaves nil until they are assigned below.
     let compiler_options = program.options();
-    let dummy_type = P::new(Type {
-        flags: Cell::new(TypeFlags::None),
-        object_flags: Cell::new(ObjectFlags::None),
-        id: TypeId(0),
-        symbol: Cell::new(None),
-        alias: Cell::new(None),
-        data: TypeData::Intrinsic(alloc(IntrinsicType::default())),
-    });
+    let dummy_type = Type::alloc(TypeFlags::None, ObjectFlags::None, TypeId(0), IntrinsicType::default());
     let dummy_symbol = P::new(Symbol::default());
     let dummy_mapper = new_simple_type_mapper(dummy_type, dummy_type);
     let dummy_signature = P::new(Signature::default());

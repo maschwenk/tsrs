@@ -1841,17 +1841,15 @@ impl Checker {
 
     // checker.go:25473
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn new_type(&mut self, flags: TypeFlags, object_flags: ObjectFlags, data: TypeData) -> P<Type> {
+    pub(crate) fn new_type<T: TypePayload>(&mut self, flags: TypeFlags, object_flags: ObjectFlags, data: T) -> P<Type> {
         self.type_count += 1;
         tsrs_core::sitecount::hit("type", type_kind_label(flags, object_flags));
-        let t = P::new(Type {
-            flags: Cell::new(flags),
-            object_flags: Cell::new(object_flags & !(ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables | ObjectFlags::MembersResolved)),
-            id: TypeId(self.type_count),
-            symbol: Cell::new(None),
-            alias: Cell::new(None),
+        let t = Type::alloc(
+            flags,
+            object_flags & !(ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables | ObjectFlags::MembersResolved),
+            TypeId(self.type_count),
             data,
-        });
+        );
         #[cfg(feature = "assignment-stats")]
         self.stats_created.0.push(t);
         t
@@ -1864,9 +1862,9 @@ impl Checker {
 
     // checker.go:25491
     pub(crate) fn new_intrinsic_type_ex(&mut self, flags: TypeFlags, intrinsic_name: &str, object_flags: ObjectFlags) -> P<Type> {
-        let data = alloc(IntrinsicType::default());
+        let data = IntrinsicType::default();
         data.intrinsic_name.set(alloc_str(intrinsic_name));
-        self.new_type(flags, object_flags, TypeData::Intrinsic(data))
+        self.new_type(flags, object_flags, data)
     }
 
     // checker.go:25497
@@ -1889,9 +1887,10 @@ impl Checker {
 
     // checker.go:25513
     pub(crate) fn new_literal_type(&mut self, flags: TypeFlags, value: Option<LiteralValue>, regular_type: Option<P<Type>>) -> P<Type> {
-        let data = alloc(LiteralType::default());
+        let data = LiteralType::default();
         data.value.set(value);
-        let t = self.new_type(flags, ObjectFlags::None, TypeData::Literal(data));
+        let t = self.new_type(flags, ObjectFlags::None, data);
+        let data = t.as_literal_type();
         if regular_type.is_some() {
             data.regular_type.set(regular_type);
         } else {
@@ -1902,9 +1901,9 @@ impl Checker {
 
     // checker.go:25525
     pub(crate) fn new_unique_es_symbol_type(&mut self, symbol: P<Symbol>, name: &str) -> P<Type> {
-        let data = alloc(UniqueESSymbolType::default());
+        let data = UniqueESSymbolType::default();
         data.name.set(alloc_str(name));
-        let t = self.new_type(TypeFlags::UniqueESSymbol, ObjectFlags::None, TypeData::UniqueESSymbol(data));
+        let t = self.new_type(TypeFlags::UniqueESSymbol, ObjectFlags::None, data);
         t.symbol.set(Some(symbol));
         t
     }
@@ -1912,26 +1911,25 @@ impl Checker {
     // checker.go:25533
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_object_type(&mut self, object_flags: ObjectFlags, symbol: Option<P<Symbol>>) -> P<Type> {
-        let data = if object_flags.intersects(ObjectFlags::ClassOrInterface) {
-            TypeData::Interface(alloc(InterfaceType::default()))
+        let t = if object_flags.intersects(ObjectFlags::ClassOrInterface) {
+            self.new_type(TypeFlags::Object, object_flags, InterfaceType::default())
         } else if object_flags.intersects(ObjectFlags::Tuple) {
-            TypeData::Tuple(alloc(TupleType::default()))
+            self.new_type(TypeFlags::Object, object_flags, TupleType::default())
         } else if object_flags.intersects(ObjectFlags::Reference) {
-            TypeData::TypeReference(alloc(TypeReference::default()))
+            self.new_type(TypeFlags::Object, object_flags, TypeReference::default())
         } else if object_flags.intersects(ObjectFlags::Mapped) {
-            TypeData::Mapped(alloc(MappedType::default()))
+            self.new_type(TypeFlags::Object, object_flags, MappedType::default())
         } else if object_flags.intersects(ObjectFlags::ReverseMapped) {
-            TypeData::ReverseMapped(alloc(ReverseMappedType::default()))
+            self.new_type(TypeFlags::Object, object_flags, ReverseMappedType::default())
         } else if object_flags.intersects(ObjectFlags::EvolvingArray) {
-            TypeData::EvolvingArray(alloc(EvolvingArrayType::default()))
+            self.new_type(TypeFlags::Object, object_flags, EvolvingArrayType::default())
         } else if object_flags.intersects(ObjectFlags::InstantiationExpressionType) {
-            TypeData::InstantiationExpression(alloc(InstantiationExpressionType::default()))
+            self.new_type(TypeFlags::Object, object_flags, InstantiationExpressionType::default())
         } else if object_flags.intersects(ObjectFlags::Anonymous) {
-            TypeData::Object(alloc(ObjectType::default()))
+            self.new_type(TypeFlags::Object, object_flags, ObjectType::default())
         } else {
             panic!("Unhandled case in newObjectType")
         };
-        let t = self.new_type(TypeFlags::Object, object_flags, data);
         t.symbol.set(symbol);
         t
     }
@@ -2046,7 +2044,7 @@ impl Checker {
 
     // checker.go:25638
     pub(crate) fn new_type_parameter(&mut self, symbol: Option<P<Symbol>>) -> P<Type> {
-        let t = self.new_type(TypeFlags::TypeParameter, ObjectFlags::None, TypeData::TypeParameter(alloc(TypeParameter::default())));
+        let t = self.new_type(TypeFlags::TypeParameter, ObjectFlags::None, TypeParameter::default());
         t.symbol.set(symbol);
         t
     }
@@ -2069,70 +2067,70 @@ impl Checker {
     // checker.go:25658
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_union_type(&mut self, object_flags: ObjectFlags, types: &[P<Type>]) -> P<Type> {
-        let data = alloc(UnionType::default());
+        let data = UnionType::default();
         data.types.set(alloc_slice(types));
-        self.new_type(TypeFlags::Union, object_flags, TypeData::Union(data))
+        self.new_type(TypeFlags::Union, object_flags, data)
     }
 
     // checker.go:25664
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_intersection_type(&mut self, object_flags: ObjectFlags, types: &[P<Type>]) -> P<Type> {
-        let data = alloc(IntersectionType::default());
+        let data = IntersectionType::default();
         data.types.set(alloc_slice(types));
-        self.new_type(TypeFlags::Intersection, object_flags, TypeData::Intersection(data))
+        self.new_type(TypeFlags::Intersection, object_flags, data)
     }
 
     // checker.go:25670
     pub(crate) fn new_indexed_access_type(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags) -> P<Type> {
-        let data = alloc(IndexedAccessType::default());
+        let data = IndexedAccessType::default();
         data.object_type.set(Some(object_type));
         data.index_type.set(Some(index_type));
         data.access_flags.set(access_flags);
-        self.new_type(TypeFlags::IndexedAccess, ObjectFlags::None, TypeData::IndexedAccess(data))
+        self.new_type(TypeFlags::IndexedAccess, ObjectFlags::None, data)
     }
 
     // checker.go:25678
     pub(crate) fn new_index_type(&mut self, target: P<Type>, index_flags: IndexFlags) -> P<Type> {
-        let data = alloc(IndexType::default());
+        let data = IndexType::default();
         data.target.set(Some(target));
         data.index_flags.set(index_flags);
-        self.new_type(TypeFlags::Index, ObjectFlags::None, TypeData::Index(data))
+        self.new_type(TypeFlags::Index, ObjectFlags::None, data)
     }
 
     // checker.go:25685
     pub(crate) fn new_template_literal_type(&mut self, texts: &[&str], types: &[P<Type>]) -> P<Type> {
-        let data = alloc(TemplateLiteralType::default());
+        let data = TemplateLiteralType::default();
         data.texts.set(alloc_vec(texts.iter().map(|s| alloc_str(s)).collect()));
         data.types.set(alloc_slice(types));
-        self.new_type(TypeFlags::TemplateLiteral, ObjectFlags::None, TypeData::TemplateLiteral(data))
+        self.new_type(TypeFlags::TemplateLiteral, ObjectFlags::None, data)
     }
 
     // checker.go:25692
     pub(crate) fn new_string_mapping_type(&mut self, symbol: P<Symbol>, target: P<Type>) -> P<Type> {
-        let data = alloc(StringMappingType::default());
+        let data = StringMappingType::default();
         data.target.set(Some(target));
-        let t = self.new_type(TypeFlags::StringMapping, ObjectFlags::None, TypeData::StringMapping(data));
+        let t = self.new_type(TypeFlags::StringMapping, ObjectFlags::None, data);
         t.symbol.set(Some(symbol));
         t
     }
 
     // checker.go:25700
     pub(crate) fn new_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, combined_mapper: Option<P<TypeMapper>>) -> P<Type> {
-        let data = alloc(ConditionalType::default());
+        let data = ConditionalType::default();
         data.root.set(Some(root));
         data.check_type.set(Some(self.instantiate_type(root.check_type.get().unwrap(), mapper)));
         data.extends_type.set(Some(self.instantiate_type(root.extends_type.get().unwrap(), mapper)));
         data.mapper.set(mapper);
         data.combined_mapper.set(combined_mapper);
-        self.new_type(TypeFlags::Conditional, ObjectFlags::None, TypeData::Conditional(data))
+        self.new_type(TypeFlags::Conditional, ObjectFlags::None, data)
     }
 
     // checker.go:25710
     pub(crate) fn new_substitution_type(&mut self, base_type: P<Type>, constraint: P<Type>) -> P<Type> {
-        let data = alloc(SubstitutionType::default());
+        let data = SubstitutionType::default();
         data.base_type.set(Some(base_type));
         data.constraint.set(Some(constraint));
-        self.new_type(TypeFlags::Substitution, ObjectFlags::None, TypeData::Substitution(data))
+        self.new_type(TypeFlags::Substitution, ObjectFlags::None, data)
     }
 
     // checker.go:25717

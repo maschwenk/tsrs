@@ -858,14 +858,170 @@ impl TypeAliasOptExt for Option<P<TypeAlias>> {
 }
 
 // Type
+//
+// Go's `Type` points to its type-specific data (`data TypeData`, an interface). Here the data struct is allocated
+// together with the header, right after it (`TypeAlloc`), and `data_tag` says which struct it is: one allocation
+// per type and a 32-byte header. `t.data()` returns the `TypeData` view; the `as_*` casts read the data in place.
 
 pub struct Type {
     pub flags: Cell<TypeFlags>,
     pub object_flags: Cell<ObjectFlags>,
     pub id: TypeId,
+    data_tag: TypeDataTag,
     pub symbol: Cell<Option<P<Symbol>>>,
     pub alias: Cell<Option<P<TypeAlias>>>,
-    pub data: TypeData, // Type specific data
+}
+
+const _: () = assert!(std::mem::size_of::<Type>() == 32);
+
+/// One arena allocation per type: the header, then the data struct (`repr(C)`: header at offset 0).
+#[repr(C)]
+struct TypeAlloc<T> {
+    header: Type,
+    data: T,
+}
+
+/// A type data struct, stored after the header of types tagged `TAG`.
+pub trait TypePayload: Sized + 'static {
+    const TAG: TypeDataTag;
+}
+
+/// Which data struct follows a type's header (one variant per `TypeData` variant).
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TypeDataTag {
+    Intrinsic,
+    Literal,
+    UniqueESSymbol,
+    Object,
+    TypeReference,
+    Interface,
+    Tuple,
+    InstantiationExpression,
+    Mapped,
+    ReverseMapped,
+    EvolvingArray,
+    Union,
+    Intersection,
+    TypeParameter,
+    Index,
+    IndexedAccess,
+    TemplateLiteral,
+    StringMapping,
+    Substitution,
+    Conditional,
+}
+
+impl TypePayload for IntrinsicType {
+    const TAG: TypeDataTag = TypeDataTag::Intrinsic;
+}
+impl TypePayload for LiteralType {
+    const TAG: TypeDataTag = TypeDataTag::Literal;
+}
+impl TypePayload for UniqueESSymbolType {
+    const TAG: TypeDataTag = TypeDataTag::UniqueESSymbol;
+}
+impl TypePayload for ObjectType {
+    const TAG: TypeDataTag = TypeDataTag::Object;
+}
+impl TypePayload for TypeReference {
+    const TAG: TypeDataTag = TypeDataTag::TypeReference;
+}
+impl TypePayload for InterfaceType {
+    const TAG: TypeDataTag = TypeDataTag::Interface;
+}
+impl TypePayload for TupleType {
+    const TAG: TypeDataTag = TypeDataTag::Tuple;
+}
+impl TypePayload for InstantiationExpressionType {
+    const TAG: TypeDataTag = TypeDataTag::InstantiationExpression;
+}
+impl TypePayload for MappedType {
+    const TAG: TypeDataTag = TypeDataTag::Mapped;
+}
+impl TypePayload for ReverseMappedType {
+    const TAG: TypeDataTag = TypeDataTag::ReverseMapped;
+}
+impl TypePayload for EvolvingArrayType {
+    const TAG: TypeDataTag = TypeDataTag::EvolvingArray;
+}
+impl TypePayload for UnionType {
+    const TAG: TypeDataTag = TypeDataTag::Union;
+}
+impl TypePayload for IntersectionType {
+    const TAG: TypeDataTag = TypeDataTag::Intersection;
+}
+impl TypePayload for TypeParameter {
+    const TAG: TypeDataTag = TypeDataTag::TypeParameter;
+}
+impl TypePayload for IndexType {
+    const TAG: TypeDataTag = TypeDataTag::Index;
+}
+impl TypePayload for IndexedAccessType {
+    const TAG: TypeDataTag = TypeDataTag::IndexedAccess;
+}
+impl TypePayload for TemplateLiteralType {
+    const TAG: TypeDataTag = TypeDataTag::TemplateLiteral;
+}
+impl TypePayload for StringMappingType {
+    const TAG: TypeDataTag = TypeDataTag::StringMapping;
+}
+impl TypePayload for SubstitutionType {
+    const TAG: TypeDataTag = TypeDataTag::Substitution;
+}
+impl TypePayload for ConditionalType {
+    const TAG: TypeDataTag = TypeDataTag::Conditional;
+}
+
+impl Type {
+    /// Allocates a type whose data struct is `data` (only `Checker::new_type` and the checker's placeholder type).
+    pub(crate) fn alloc<T: TypePayload>(flags: TypeFlags, object_flags: ObjectFlags, id: TypeId, data: T) -> P<Type> {
+        let header = Type { flags: Cell::new(flags), object_flags: Cell::new(object_flags), id, data_tag: T::TAG, symbol: Cell::new(None), alias: Cell::new(None) };
+        let a: &'static TypeAlloc<T> = P::new(TypeAlloc { header, data }).get();
+        // SAFETY: `TypeAlloc` is `repr(C)` with the header first; arena values are never moved or freed.
+        P::from_static(unsafe { &*(a as *const TypeAlloc<T>).cast::<Type>() })
+    }
+
+    /// The data struct after this type's header. Callers check `data_tag == T::TAG` first.
+    #[inline(always)]
+    fn payload<T: TypePayload>(&self) -> &'static T {
+        debug_assert!(self.data_tag == T::TAG);
+        // SAFETY: a type tagged `T::TAG` was allocated by `Type::alloc::<T>` as a `TypeAlloc<T>` whose header is
+        // `self`, so its data struct lives at this offset from the header, for the rest of the process.
+        unsafe { &*(self as *const Type).cast::<u8>().add(std::mem::offset_of!(TypeAlloc<T>, data)).cast::<T>() }
+    }
+
+    /// The type-specific data (Go `t.data`).
+    #[inline]
+    pub fn data(&self) -> TypeData {
+        match self.data_tag {
+            TypeDataTag::Intrinsic => TypeData::Intrinsic(self.payload()),
+            TypeDataTag::Literal => TypeData::Literal(self.payload()),
+            TypeDataTag::UniqueESSymbol => TypeData::UniqueESSymbol(self.payload()),
+            TypeDataTag::Object => TypeData::Object(self.payload()),
+            TypeDataTag::TypeReference => TypeData::TypeReference(self.payload()),
+            TypeDataTag::Interface => TypeData::Interface(self.payload()),
+            TypeDataTag::Tuple => TypeData::Tuple(self.payload()),
+            TypeDataTag::InstantiationExpression => TypeData::InstantiationExpression(self.payload()),
+            TypeDataTag::Mapped => TypeData::Mapped(self.payload()),
+            TypeDataTag::ReverseMapped => TypeData::ReverseMapped(self.payload()),
+            TypeDataTag::EvolvingArray => TypeData::EvolvingArray(self.payload()),
+            TypeDataTag::Union => TypeData::Union(self.payload()),
+            TypeDataTag::Intersection => TypeData::Intersection(self.payload()),
+            TypeDataTag::TypeParameter => TypeData::TypeParameter(self.payload()),
+            TypeDataTag::Index => TypeData::Index(self.payload()),
+            TypeDataTag::IndexedAccess => TypeData::IndexedAccess(self.payload()),
+            TypeDataTag::TemplateLiteral => TypeData::TemplateLiteral(self.payload()),
+            TypeDataTag::StringMapping => TypeData::StringMapping(self.payload()),
+            TypeDataTag::Substitution => TypeData::Substitution(self.payload()),
+            TypeDataTag::Conditional => TypeData::Conditional(self.payload()),
+        }
+    }
+
+    #[inline]
+    pub fn data_tag(&self) -> TypeDataTag {
+        self.data_tag
+    }
 }
 
 impl Type {
@@ -883,146 +1039,163 @@ impl Type {
 
     // Casts for concrete struct types
 
+    #[inline]
     pub fn as_intrinsic_type(&self) -> &'static IntrinsicType {
-        match self.data {
-            TypeData::Intrinsic(d) => d,
-            _ => panic!("as_intrinsic_type: wrong type data"),
+        if self.data_tag != TypeDataTag::Intrinsic {
+            panic!("as_intrinsic_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_literal_type(&self) -> &'static LiteralType {
-        match self.data {
-            TypeData::Literal(d) => d,
-            _ => panic!("as_literal_type: wrong type data"),
+        if self.data_tag != TypeDataTag::Literal {
+            panic!("as_literal_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_unique_es_symbol_type(&self) -> &'static UniqueESSymbolType {
-        match self.data {
-            TypeData::UniqueESSymbol(d) => d,
-            _ => panic!("as_unique_es_symbol_type: wrong type data"),
+        if self.data_tag != TypeDataTag::UniqueESSymbol {
+            panic!("as_unique_es_symbol_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_tuple_type(&self) -> &'static TupleType {
-        match self.data {
-            TypeData::Tuple(d) => d,
-            _ => panic!("as_tuple_type: wrong type data"),
+        if self.data_tag != TypeDataTag::Tuple {
+            panic!("as_tuple_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_instantiation_expression_type(&self) -> &'static InstantiationExpressionType {
-        match self.data {
-            TypeData::InstantiationExpression(d) => d,
-            _ => panic!("as_instantiation_expression_type: wrong type data"),
+        if self.data_tag != TypeDataTag::InstantiationExpression {
+            panic!("as_instantiation_expression_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_mapped_type(&self) -> &'static MappedType {
-        match self.data {
-            TypeData::Mapped(d) => d,
-            _ => panic!("as_mapped_type: wrong type data"),
+        if self.data_tag != TypeDataTag::Mapped {
+            panic!("as_mapped_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_reverse_mapped_type(&self) -> &'static ReverseMappedType {
-        match self.data {
-            TypeData::ReverseMapped(d) => d,
-            _ => panic!("as_reverse_mapped_type: wrong type data"),
+        if self.data_tag != TypeDataTag::ReverseMapped {
+            panic!("as_reverse_mapped_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_evolving_array_type(&self) -> &'static EvolvingArrayType {
-        match self.data {
-            TypeData::EvolvingArray(d) => d,
-            _ => panic!("as_evolving_array_type: wrong type data"),
+        if self.data_tag != TypeDataTag::EvolvingArray {
+            panic!("as_evolving_array_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_type_parameter(&self) -> &'static TypeParameter {
-        match self.data {
-            TypeData::TypeParameter(d) => d,
-            _ => panic!("as_type_parameter: wrong type data"),
+        if self.data_tag != TypeDataTag::TypeParameter {
+            panic!("as_type_parameter: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_union_type(&self) -> &'static UnionType {
-        match self.data {
-            TypeData::Union(d) => d,
-            _ => panic!("as_union_type: wrong type data"),
+        if self.data_tag != TypeDataTag::Union {
+            panic!("as_union_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_intersection_type(&self) -> &'static IntersectionType {
-        match self.data {
-            TypeData::Intersection(d) => d,
-            _ => panic!("as_intersection_type: wrong type data"),
+        if self.data_tag != TypeDataTag::Intersection {
+            panic!("as_intersection_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_index_type(&self) -> &'static IndexType {
-        match self.data {
-            TypeData::Index(d) => d,
-            _ => panic!("as_index_type: wrong type data"),
+        if self.data_tag != TypeDataTag::Index {
+            panic!("as_index_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_indexed_access_type(&self) -> &'static IndexedAccessType {
-        match self.data {
-            TypeData::IndexedAccess(d) => d,
-            _ => panic!("as_indexed_access_type: wrong type data"),
+        if self.data_tag != TypeDataTag::IndexedAccess {
+            panic!("as_indexed_access_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_template_literal_type(&self) -> &'static TemplateLiteralType {
-        match self.data {
-            TypeData::TemplateLiteral(d) => d,
-            _ => panic!("as_template_literal_type: wrong type data"),
+        if self.data_tag != TypeDataTag::TemplateLiteral {
+            panic!("as_template_literal_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_string_mapping_type(&self) -> &'static StringMappingType {
-        match self.data {
-            TypeData::StringMapping(d) => d,
-            _ => panic!("as_string_mapping_type: wrong type data"),
+        if self.data_tag != TypeDataTag::StringMapping {
+            panic!("as_string_mapping_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_substitution_type(&self) -> &'static SubstitutionType {
-        match self.data {
-            TypeData::Substitution(d) => d,
-            _ => panic!("as_substitution_type: wrong type data"),
+        if self.data_tag != TypeDataTag::Substitution {
+            panic!("as_substitution_type: wrong type data");
         }
+        self.payload()
     }
+    #[inline]
     pub fn as_conditional_type(&self) -> &'static ConditionalType {
-        match self.data {
-            TypeData::Conditional(d) => d,
-            _ => panic!("as_conditional_type: wrong type data"),
+        if self.data_tag != TypeDataTag::Conditional {
+            panic!("as_conditional_type: wrong type data");
         }
+        self.payload()
     }
 
     // Casts for embedded struct types. `as_*` panics where Go would return nil; `try_as_*` mirrors Go's nil result.
 
     pub fn as_constrained_type(&self) -> &'static ConstrainedType {
-        self.data.as_constrained_type().expect("as_constrained_type: wrong type data")
+        self.data().as_constrained_type().expect("as_constrained_type: wrong type data")
     }
     pub fn as_structured_type(&self) -> &'static StructuredType {
-        self.data.as_structured_type().expect("as_structured_type: wrong type data")
+        self.data().as_structured_type().expect("as_structured_type: wrong type data")
     }
     pub fn as_object_type(&self) -> &'static ObjectType {
-        self.data.as_object_type().expect("as_object_type: wrong type data")
+        self.data().as_object_type().expect("as_object_type: wrong type data")
     }
     pub fn as_type_reference(&self) -> &'static TypeReference {
-        self.data.as_type_reference().expect("as_type_reference: wrong type data")
+        self.data().as_type_reference().expect("as_type_reference: wrong type data")
     }
     pub fn as_interface_type(&self) -> &'static InterfaceType {
-        self.data.as_interface_type().expect("as_interface_type: wrong type data")
+        self.data().as_interface_type().expect("as_interface_type: wrong type data")
     }
     pub fn as_union_or_intersection_type(&self) -> &'static UnionOrIntersectionType {
-        self.data.as_union_or_intersection_type().expect("as_union_or_intersection_type: wrong type data")
+        self.data().as_union_or_intersection_type().expect("as_union_or_intersection_type: wrong type data")
     }
     pub fn try_as_constrained_type(&self) -> Option<&'static ConstrainedType> {
-        self.data.as_constrained_type()
+        self.data().as_constrained_type()
     }
     pub fn try_as_structured_type(&self) -> Option<&'static StructuredType> {
-        self.data.as_structured_type()
+        self.data().as_structured_type()
     }
     pub fn try_as_object_type(&self) -> Option<&'static ObjectType> {
-        self.data.as_object_type()
+        self.data().as_object_type()
     }
     pub fn try_as_type_reference(&self) -> Option<&'static TypeReference> {
-        self.data.as_type_reference()
+        self.data().as_type_reference()
     }
     pub fn try_as_interface_type(&self) -> Option<&'static InterfaceType> {
-        self.data.as_interface_type()
+        self.data().as_interface_type()
     }
     pub fn try_as_union_or_intersection_type(&self) -> Option<&'static UnionOrIntersectionType> {
-        self.data.as_union_or_intersection_type()
+        self.data().as_union_or_intersection_type()
     }
 
     // Common accessors

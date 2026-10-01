@@ -184,3 +184,22 @@ before, so `map`, `maps_this_only` and `compare_type_mappers` see identical data
 | 4 checkers, after | 9.30-10.79 | 470-471 G | 13.38 (-0.32) |
 | opt-out single / 4 checkers, before | | | 11.86 / 18.12 |
 | opt-out single / 4 checkers, after | | | 11.70 / 17.85 |
+
+### One allocation per type
+
+Same pattern as the AST nodes: `Type` was a 48-byte header with `TypeData` (tag + pointer to a separately
+allocated data struct). Now `Type::alloc` allocates `TypeAlloc<T> { header: Type, data: T }` (`repr(C)`) in one
+`P::new`; the header is 32 bytes with a `u8` `data_tag` in the former padding after `id`. `t.data()` returns the
+`TypeData` view (the multi-struct casts `as_object_type()` & co. match on it), the single-struct casts check the
+tag and read in place. Constructors build the data struct first and hand it to `new_type` (generic over
+`TypePayload`); field writes that preceded `new_type` still do, so evaluation order and type ids are unchanged.
+9.6M types single, 16.2M on 4 checkers.
+
+| run (2 interleaved rounds, quieter machine) | check s | instructions | peak GB |
+| --- | --- | --- | --- |
+| single, before | 18.23-18.40 | 313-314 G | 8.96 |
+| single, after | 17.76-17.87 | 313-314 G | 8.81 (-0.15) |
+| 4 checkers, before | 8.76-8.79 | 470-471 G | 13.39-13.43 |
+| 4 checkers, after | 8.75-8.78 | 471-472 G | 13.14-13.17 (-0.25) |
+| opt-out single / 4 checkers, before | | | 11.70 / 17.85 |
+| opt-out single / 4 checkers, after | | | 11.56 / 17.58 |
