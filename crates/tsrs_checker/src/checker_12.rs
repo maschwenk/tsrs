@@ -2259,9 +2259,9 @@ impl Checker {
 }
 
 // checker.go:25816
-pub(crate) fn get_string_literal_value(t: P<Type>) -> String {
+pub(crate) fn get_string_literal_value(t: P<Type>) -> &'static str {
     match t.as_literal_type().value.get() {
-        Some(LiteralValue::String(s)) => s.to_string(),
+        Some(LiteralValue::String(s)) => s,
         _ => panic!("getStringLiteralValue: not a string literal"),
     }
 }

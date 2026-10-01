@@ -1994,7 +1994,7 @@ impl Checker {
         if t.flags().intersects(TypeFlags::UniqueESSymbol) {
             (t.as_unique_es_symbol_type().name.get().to_string(), true)
         } else if t.flags().intersects(TypeFlags::StringLiteral) {
-            let s = get_string_literal_value(t);
+            let s = get_string_literal_value(t).to_string();
             (s, true)
         } else if t.flags().intersects(TypeFlags::NumberLiteral) {
             let s = get_number_literal_value(t).to_string();

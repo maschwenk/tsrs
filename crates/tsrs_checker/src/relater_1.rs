@@ -3037,7 +3037,7 @@ impl Checker {
     pub(crate) fn infer_types_from_template_literal_type(&mut self, source: P<Type>, target: &'static TemplateLiteralType, compare_types: TypeComparer) -> Vec<P<Type>> {
         if source.flags().intersects(TypeFlags::StringLiteral) {
             let value = get_string_literal_value(source);
-            return self.infer_from_literal_parts_to_template_literal(&[value.as_str()], &[], target);
+            return self.infer_from_literal_parts_to_template_literal(&[value], &[], target);
         }
         if source.flags().intersects(TypeFlags::TemplateLiteral) {
             let source_template = source.as_template_literal_type();
