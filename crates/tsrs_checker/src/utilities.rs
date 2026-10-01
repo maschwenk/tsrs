@@ -788,8 +788,8 @@ pub fn compare_types(c: &mut Checker, t1: Option<P<Type>>, t2: Option<P<Type>>) 
 
 // Go `m.data.(*CompositeTypeMapper).m2` (panics like the Go type assertion on any other mapper kind).
 fn composite_mapper_m2(m: P<TypeMapper>) -> P<TypeMapper> {
-    match &m.data {
-        TypeMapperData::Composite { m2, .. } => *m2,
+    match m.data() {
+        TypeMapperData::Composite { m2, .. } => m2,
         _ => panic!("interface conversion: expected *CompositeTypeMapper"),
     }
 }
@@ -939,13 +939,13 @@ pub(crate) fn compare_type_mappers(c: &mut Checker, m1: Option<P<TypeMapper>>, m
     if kind1 != kind2 {
         return kind1 as i32 - kind2 as i32;
     }
-    match (&m1.data, &m2.data) {
+    match (m1.data(), m2.data()) {
         (TypeMapperData::Simple { source: source1, target: target1 }, TypeMapperData::Simple { source: source2, target: target2 }) => {
-            let r = compare_types(c, Some(*source1), Some(*source2));
+            let r = compare_types(c, Some(source1), Some(source2));
             if r != 0 {
                 return r;
             }
-            compare_types(c, Some(*target1), Some(*target2))
+            compare_types(c, Some(target1), Some(target2))
         }
         (d1, d2) if kind1 == TypeMapperKind::Array => {
             let ((sources1, targets1), (sources2, targets2)) = (d1.array_sources_targets().unwrap(), d2.array_sources_targets().unwrap());
@@ -956,11 +956,11 @@ pub(crate) fn compare_type_mappers(c: &mut Checker, m1: Option<P<TypeMapper>>, m
             compare_type_lists(c, targets1, targets2)
         }
         (TypeMapperData::Merged { m1: m11, m2: m12 }, TypeMapperData::Merged { m1: m21, m2: m22 }) => {
-            let r = compare_type_mappers(c, Some(*m11), Some(*m21));
+            let r = compare_type_mappers(c, Some(m11), Some(m21));
             if r != 0 {
                 return r;
             }
-            compare_type_mappers(c, Some(*m12), Some(*m22))
+            compare_type_mappers(c, Some(m12), Some(m22))
         }
         _ => 0,
     }

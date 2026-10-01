@@ -71,3 +71,24 @@ unit test covers odd keys across deletes. A variant that stored the key's first 
 | opt-out single / 4 checkers (go assignment), after | 10.31 / 15.92 | |
 
 Check times did not move outside the noise of the shared machine (cycles 97-112 G for both binaries single).
+
+### 3. `TypeMapper` 24 -> 16 bytes
+
+17.3M mappers single (Composite, Simple, Array, Inference, Merged make up nearly all). Mapper identity is
+observable (`find_active_mapper` compares pointers, and `compare_type_mappers` short-circuits on identity), so
+interning them (candidate 3 of the brief) is out; their size is not. A mapper is now two words: the kind in the
+low three bits of the first (all payload pointers are 8-aligned, compile-time asserted), the array kinds' list
+lengths in the top 16 bits of the two slice pointers (checked at construction: a pointer above 2^48 or a list
+longer than `u16::MAX` makes the mapper out of line), and the rare kinds (function mappers, deferred mappers, long
+lists) behind a pointer to a `RareTypeMapper`. `TypeMapper::data()` decodes into the `TypeMapperData` view
+(`Array` and `ArrayToSingle` now carry full slices), so `map`, `kind`, `maps_this_only` and
+`compare_type_mappers` read the same sources, targets and lengths as before. Pointers are tagged with
+`map_addr` (strict provenance).
+
+| run (2 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 7.818-7.819 | 321-324 G |
+| single, after | 7.690-7.693 (-0.13) | 321-323 G |
+| 4 checkers, before | 10.52-10.57 | 431-432 G |
+| 4 checkers, after | 10.35-10.36 (-0.19) | 432 G |
+| opt-out single / 4 checkers (go assignment), after | 10.15 / 15.57 | |
