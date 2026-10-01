@@ -214,3 +214,16 @@ interleaved, base e8d4196): single-threaded peak 8.13 -> 7.02 GiB (-13.7%), chec
 mapper and type-list interning (mapper identity is observable; 5.3M distinct of 10M type lists, the table would
 cost more than it saves), recycling inference contexts (they escape through their mappers), a global identifier
 interner (parse +9%). Details and per-step numbers: `notes/mem-round2.md`.
+
+## 2026-10-01: checker CPU pass
+
+Implementation changes only (suite errors and `.types`/`.symbols` byte-identical in both lazy modes, counters
+unchanged, peak unchanged): pooled inference `visited` maps no longer memset a capacity one deep inference grew,
+inlined `keyBuilder` writers, `IdLinkStore` pages in a vector, Go-style reuse of active type-mapper caches, and
+stored slices / strings instead of copies where Go returns them (`getTypeArguments`, `getPropertiesOfType`,
+`getSignaturesOfType`, `getIndexInfosOfType`, `getStringLiteralValue`, property-name helpers). One port
+divergence fixed: Rust's `sort_by` / `binary_search_by` compared different pairs than Go's
+`slices.SortStableFunc` / `BinarySearchFunc` (CompareTypes ran 12% more often than in tsgo, counted in both);
+`tsrs_core::goslices` ports Go's algorithms. Project instructions retired (default mode, medians): single
+325 -> 294 G (-9.5%), 4 checkers 434 -> 401 G (-7.6%); wall not confirmed on a quiet machine. Go-vs-tsrs call
+counts for ~110 hot functions, cache hit rates, profiles before/after: `notes/cpu-checker.md`.
