@@ -265,3 +265,19 @@ of data, IntersectionType 112 -> 104 (compile-time asserts); 1.02M unions and 1.
 | 4 checkers, before | 9.55-9.58 | 435-437 G |
 | 4 checkers, after | 9.51-9.52 (-0.05) | 435 G |
 | opt-out single / 4 checkers (go assignment), after | 9.56 / 14.64 | |
+
+### 13. Relation cache slots 20 -> 17 bytes
+
+`RelationComparisonResult` uses bits 0-5 only, so `Relation.results` stores its bits as a `u8` (checked on
+`set`, rebuilt with `from_bits_retain` on `lookup`) next to an unaligned `RelationKey` (`repr(C, packed)`; same
+128 bits, same hash input): 17-byte slots. Only `lookup` / `set` / `size` touch the map. The relation caches are
+~190 MB single and ~390 MB on 4 checkers (the 4-checker profile attributes half of it to `reset_maybe_stack`,
+where `Relation::set` is inlined).
+
+| run (2-4 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 7.101-7.102 | 323 G |
+| single, after | 7.075-7.076 (-0.03) | 323-324 G |
+| 4 checkers, before | 9.50-9.56 (median 9.51) | 436-437 G |
+| 4 checkers, after | 9.45-9.54 (median 9.46, -0.05) | 435-436 G |
+| opt-out single / 4 checkers (go assignment), after | 9.52 / 14.58 | |

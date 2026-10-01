@@ -31,12 +31,12 @@ pub(crate) fn as_recursion_id<T: Into<RecursionId>>(value: T) -> RecursionId {
 impl Relation {
     // relater.go:102
     pub(crate) fn lookup(&self, key: CacheHashKey) -> RelationComparisonResult {
-        self.results.borrow().get(&RelationKey::from(key)).copied().unwrap_or(RelationComparisonResult::None)
+        self.results.borrow().get(&RelationKey::from(key)).map_or(RelationComparisonResult::None, |&bits| RelationComparisonResult::from_bits_retain(bits as u32))
     }
 
     // relater.go:106
     pub(crate) fn set(&self, key: CacheHashKey, result: RelationComparisonResult) {
-        self.results.borrow_mut().insert(RelationKey::from(key), result);
+        self.results.borrow_mut().insert(RelationKey::from(key), u8::try_from(result.bits()).expect("relation result bits above u8"));
     }
 
     // relater.go:113
