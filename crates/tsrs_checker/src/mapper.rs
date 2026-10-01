@@ -1,5 +1,5 @@
 use crate::*;
-use tsrs_core::SlicePair;
+use tsrs_core::{SlicePair, StaticSlicePtr};
 
 // TypeMapperKind
 
@@ -21,10 +21,14 @@ pub struct TypeMapper {
     pub data: TypeMapperData,
 }
 
+/// The array mappers keep their slice lengths next to the tag (`array_sources_targets()` /
+/// `array_to_single_sources()` read them back), so the enum is 24 bytes; lists longer than `u16::MAX` use
+/// `ArrayLong`.
 pub enum TypeMapperData {
     Simple { source: P<Type>, target: P<Type> },
-    Array { sources_targets: SlicePair<P<Type>, P<Type>> },
-    ArrayToSingle { sources: &'static [P<Type>], target: P<Type> },
+    Array { sources: StaticSlicePtr<P<Type>>, targets: StaticSlicePtr<P<Type>>, sources_len: u16, targets_len: u16 },
+    ArrayLong { sources_targets: &'static SlicePair<P<Type>, P<Type>> },
+    ArrayToSingle { sources: StaticSlicePtr<P<Type>>, sources_len: u32, target: P<Type> },
     Deferred { data: &'static DeferredTypeMapper },
     Function { f: fn(&mut Checker, P<Type>) -> P<Type> },
     Merged { m1: P<TypeMapper>, m2: P<TypeMapper> },
@@ -32,13 +36,38 @@ pub enum TypeMapperData {
     Inference { n: P<InferenceContext>, fixing: bool },
 }
 
-// Rare; kept out of line so `TypeMapperData` stays 32 bytes (checked below).
+// Rare; kept out of line so `TypeMapperData` stays 24 bytes (checked below).
 pub struct DeferredTypeMapper {
     pub sources: &'static [P<Type>],
     pub targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>>,
 }
 
-const _: () = assert!(std::mem::size_of::<TypeMapper>() == 32);
+const _: () = assert!(std::mem::size_of::<TypeMapper>() == 24);
+
+impl TypeMapperData {
+    /// The sources and targets of an array mapper (Go `ArrayMapper`).
+    #[inline]
+    pub fn array_sources_targets(&self) -> Option<(&'static [P<Type>], &'static [P<Type>])> {
+        match *self {
+            // SAFETY: the lengths were stored with the pointers by `new_array_type_mapper`.
+            TypeMapperData::Array { sources, targets, sources_len, targets_len } => {
+                Some(unsafe { (sources.slice(sources_len as usize), targets.slice(targets_len as usize)) })
+            }
+            TypeMapperData::ArrayLong { sources_targets } => Some((sources_targets.first(), sources_targets.second())),
+            _ => None,
+        }
+    }
+
+    /// The sources of an array-to-single mapper (Go `ArrayToSingleTypeMapper`).
+    #[inline]
+    fn array_to_single_sources(&self) -> Option<&'static [P<Type>]> {
+        match *self {
+            // SAFETY: the length was stored with the pointer by `new_array_to_single_type_mapper`.
+            TypeMapperData::ArrayToSingle { sources, sources_len, .. } => Some(unsafe { sources.slice(sources_len as usize) }),
+            _ => None,
+        }
+    }
+}
 
 impl TypeMapper {
     pub fn map(&self, c: &mut Checker, t: P<Type>) -> P<Type> {
@@ -50,8 +79,8 @@ impl TypeMapper {
                     t
                 }
             }
-            TypeMapperData::Array { sources_targets } => {
-                let (sources, targets) = (sources_targets.first(), sources_targets.second());
+            TypeMapperData::Array { .. } | TypeMapperData::ArrayLong { .. } => {
+                let (sources, targets) = self.data.array_sources_targets().unwrap();
                 for (i, s) in sources.iter().enumerate() {
                     if t == *s {
                         return targets[i];
@@ -59,8 +88,8 @@ impl TypeMapper {
                 }
                 t
             }
-            TypeMapperData::ArrayToSingle { sources, target } => {
-                if sources.contains(&t) {
+            TypeMapperData::ArrayToSingle { target, .. } => {
+                if self.data.array_to_single_sources().unwrap().contains(&t) {
                     *target
                 } else {
                     t
@@ -108,7 +137,7 @@ impl TypeMapper {
     pub fn kind(&self) -> TypeMapperKind {
         match self.data {
             TypeMapperData::Simple { .. } => TypeMapperKind::Simple,
-            TypeMapperData::Array { .. } => TypeMapperKind::Array,
+            TypeMapperData::Array { .. } | TypeMapperData::ArrayLong { .. } => TypeMapperKind::Array,
             TypeMapperData::Merged { .. } => TypeMapperKind::Merged,
             _ => TypeMapperKind::Unknown,
         }
@@ -117,13 +146,15 @@ impl TypeMapper {
     pub fn maps_this_only(&self) -> bool {
         match &self.data {
             TypeMapperData::Simple { source, .. } => is_this_type_parameter(*source),
-            TypeMapperData::Array { sources_targets } => {
-                let sources = sources_targets.first();
+            TypeMapperData::Array { .. } | TypeMapperData::ArrayLong { .. } => {
+                let sources = self.data.array_sources_targets().unwrap().0;
                 sources.len() == 1 && is_this_type_parameter(sources[0])
             }
-            TypeMapperData::ArrayToSingle { sources, .. } | TypeMapperData::Deferred { data: DeferredTypeMapper { sources, .. } } => {
+            TypeMapperData::ArrayToSingle { .. } => {
+                let sources = self.data.array_to_single_sources().unwrap();
                 sources.len() == 1 && is_this_type_parameter(sources[0])
             }
+            TypeMapperData::Deferred { data: DeferredTypeMapper { sources, .. } } => sources.len() == 1 && is_this_type_parameter(sources[0]),
             _ => false,
         }
     }
@@ -213,13 +244,23 @@ pub(crate) fn new_simple_type_mapper(source: P<Type>, target: P<Type>) -> P<Type
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_array_type_mapper(sources: &'static [P<Type>], targets: &'static [P<Type>]) -> P<TypeMapper> {
     tsrs_core::sitecount::hit("mapper", "array");
-    P::new(TypeMapper { data: TypeMapperData::Array { sources_targets: SlicePair::new(sources, targets) } })
+    let data = match (u16::try_from(sources.len()), u16::try_from(targets.len())) {
+        (Ok(sources_len), Ok(targets_len)) => TypeMapperData::Array {
+            sources: StaticSlicePtr::new(sources),
+            targets: StaticSlicePtr::new(targets),
+            sources_len,
+            targets_len,
+        },
+        _ => TypeMapperData::ArrayLong { sources_targets: alloc(SlicePair::new(sources, targets)) },
+    };
+    P::new(TypeMapper { data })
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_array_to_single_type_mapper(sources: &'static [P<Type>], target: P<Type>) -> P<TypeMapper> {
     tsrs_core::sitecount::hit("mapper", "array_to_single");
-    P::new(TypeMapper { data: TypeMapperData::ArrayToSingle { sources, target } })
+    let sources_len = u32::try_from(sources.len()).expect("type mapper source list longer than u32::MAX");
+    P::new(TypeMapper { data: TypeMapperData::ArrayToSingle { sources: StaticSlicePtr::new(sources), sources_len, target } })
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]

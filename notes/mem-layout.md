@@ -166,3 +166,21 @@ tail is allocated by that writer).
 | 4 checkers, after | 9.88-10.29 | 471 G | 13.69 (-0.29) |
 | opt-out single / 4 checkers, before | | | 12.23 / 18.73 |
 | opt-out single / 4 checkers, after | | | 11.86 / 18.12 |
+
+### `TypeMapper` 32 -> 24 bytes
+
+21.6M mappers single / 39.8M on 4 checkers (Composite 6.6M, Simple 5.1M, Array 4.1M, Inference 2.9M, Merged 2.8M
+single). Only `Array` (two slices) and `ArrayToSingle` (slice + type) needed more than 16 bytes of payload. They
+now store the slice data pointers (`tsrs_core::StaticSlicePtr`) and keep the lengths in the bytes after the enum
+tag (`u16` + `u16` for `Array`, `u32` for `ArrayToSingle`); lists longer than `u16::MAX` use `ArrayLong`, which
+points to an out-of-line `SlicePair`. `TypeMapperData::array_sources_targets()` returns the same slices as
+before, so `map`, `maps_this_only` and `compare_type_mappers` see identical data.
+
+| run (2 interleaved rounds) | check s | instructions | peak GB |
+| --- | --- | --- | --- |
+| single, before | 21.1-22.4 | 313-314 G | 9.09-9.12 |
+| single, after | 21.4-21.9 | 313-314 G | 8.93 (-0.18) |
+| 4 checkers, before | 9.51-10.70 | 471-472 G | 13.70 |
+| 4 checkers, after | 9.30-10.79 | 470-471 G | 13.38 (-0.32) |
+| opt-out single / 4 checkers, before | | | 11.86 / 18.12 |
+| opt-out single / 4 checkers, after | | | 11.70 / 17.85 |

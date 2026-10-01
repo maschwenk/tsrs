@@ -179,6 +179,37 @@ impl<A, B> SlicePair<A, B> {
 unsafe impl<A, B> Send for SlicePair<A, B> {}
 unsafe impl<A, B> Sync for SlicePair<A, B> {}
 
+/// The data pointer of a `&'static [T]` whose length is stored next to it by the owner (so an enum variant can
+/// keep the length in the space after its tag instead of a 16-byte slice reference).
+pub struct StaticSlicePtr<T: 'static>(std::ptr::NonNull<T>);
+
+impl<T> Clone for StaticSlicePtr<T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for StaticSlicePtr<T> {}
+
+impl<T> StaticSlicePtr<T> {
+    #[inline]
+    pub fn new(s: &'static [T]) -> Self {
+        StaticSlicePtr(std::ptr::NonNull::from(s).cast())
+    }
+    /// The slice back.
+    ///
+    /// # Safety
+    /// `len` must be the length of the slice this pointer was built from.
+    #[inline]
+    pub unsafe fn slice(self, len: usize) -> &'static [T] {
+        std::slice::from_raw_parts(self.0.as_ptr(), len)
+    }
+}
+
+// Same contract as `P`.
+unsafe impl<T> Send for StaticSlicePtr<T> {}
+unsafe impl<T> Sync for StaticSlicePtr<T> {}
+
 /// Copies a slice into the arena. Use for Go slices that are stored in long-lived objects.
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]

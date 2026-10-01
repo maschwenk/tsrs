@@ -947,12 +947,13 @@ pub(crate) fn compare_type_mappers(c: &mut Checker, m1: Option<P<TypeMapper>>, m
             }
             compare_types(c, Some(*target1), Some(*target2))
         }
-        (TypeMapperData::Array { sources_targets: st1 }, TypeMapperData::Array { sources_targets: st2 }) => {
-            let r = compare_type_lists(c, st1.first(), st2.first());
+        (d1, d2) if kind1 == TypeMapperKind::Array => {
+            let ((sources1, targets1), (sources2, targets2)) = (d1.array_sources_targets().unwrap(), d2.array_sources_targets().unwrap());
+            let r = compare_type_lists(c, sources1, sources2);
             if r != 0 {
                 return r;
             }
-            compare_type_lists(c, st1.second(), st2.second())
+            compare_type_lists(c, targets1, targets2)
         }
         (TypeMapperData::Merged { m1: m11, m2: m12 }, TypeMapperData::Merged { m1: m21, m2: m22 }) => {
             let r = compare_type_mappers(c, Some(*m11), Some(*m21));
