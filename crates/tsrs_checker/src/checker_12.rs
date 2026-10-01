@@ -1580,7 +1580,7 @@ impl Checker {
                 if !combined_flags.intersects(ElementFlags::Variable) {
                     let property = self.new_symbol_ex(
                         SymbolFlags::Property | if flags.intersects(ElementFlags::Optional) { SymbolFlags::Optional } else { SymbolFlags::None },
-                        &i.to_string(),
+                        alloc_str(&i.to_string()),
                         if readonly { CheckFlags::Readonly } else { CheckFlags::None },
                     );
                     self.value_symbol_links.get(property).resolved_type.set(Some(type_parameter));

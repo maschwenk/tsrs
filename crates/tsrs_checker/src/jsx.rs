@@ -905,7 +905,7 @@ impl Checker {
                     }
                 }
                 // If there are children in the body of JSX element, create dummy attribute "children" with the union of children types so that it will pass the attribute checking process
-                let children_prop_symbol = self.new_symbol(SymbolFlags::Property, &jsx_children_property_name);
+                let children_prop_symbol = self.new_symbol(SymbolFlags::Property, alloc_str(&jsx_children_property_name));
                 let links = self.value_symbol_links.get(children_prop_symbol);
                 if child_types.len() == 1 {
                     links.resolved_type.set(Some(child_types[0]));

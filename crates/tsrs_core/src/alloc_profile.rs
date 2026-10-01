@@ -212,6 +212,18 @@ mod heap_sample {
                 }
             }
         };
+        let (mut live, mut total) = (0i64, 0u64);
+        for (stack, l, t) in &state.stacks {
+            if stack[0] != 1 {
+                live += l;
+                total += t;
+            }
+        }
+        eprintln!(
+            "\nheap outside arena chunks (sampled): live {:.1} MB, allocated {:.1} MB",
+            live as f64 / 1048576.0,
+            total as f64 / 1048576.0
+        );
         order.sort_by_key(|&i| -state.stacks[i].1);
         print("live", &order, &|i| state.stacks[i].1);
         order.sort_by_key(|&i| -(state.stacks[i].2 as i64));

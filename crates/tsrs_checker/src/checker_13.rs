@@ -2371,7 +2371,7 @@ impl Checker {
             } else if flags.intersects(ElementFlags::Optional) {
                 check_flags = CheckFlags::OptionalParameter;
             }
-            let symbol = self.new_symbol_ex(SymbolFlags::FunctionScopedVariable, &associated_names[i], check_flags);
+            let symbol = self.new_symbol_ex(SymbolFlags::FunctionScopedVariable, alloc_str(&associated_names[i]), check_flags);
             let links = self.value_symbol_links.get(symbol);
             if flags.intersects(ElementFlags::Rest) {
                 links.resolved_type.set(Some(self.create_array_type(t)));

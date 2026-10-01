@@ -63,8 +63,16 @@ Top live heap stacks (sampled, outside the arena): `SymbolArenaLinkStore::get` h
 | --- | --- | --- | --- | --- |
 | before (5ca48f3) | 19.53 GB | 31.5-32.9 s | 28.31 GB | 17.5 s |
 | lazy JSDoc parse shares the source text | 16.35 GB | 31.4-34.5 s | 25.14 GB | 17.0 s |
+| + module references appended once, transient symbol names not copied | 15.98 GB | 31.2 s | 24.63 GB | 16.9 s |
 
 1. **Lazy JSDoc parsing copied the whole file text into the arena per node** (`parse_jsdoc_for_node` ->
    `Parser::initialize_state` -> `alloc_str(source_text)`): ~9.8k calls, 3.0 GB. Go assigns the string (shared
    backing array). Now `initialize_state_static` takes the `&'static` text of the `SourceFile`; the main parse
    still copies the freshly read file once. Pure memory change, nothing observable.
+2. **`collect_module_references` copied the whole imports / ambient-module-names / module-augmentations slice
+   into the arena on every append** (Go appends with amortized growth; the old arrays are garbage): 166 MB. The
+   appends now go to local vectors stored once at the end of `collect_external_module_references`; nothing reads
+   these fields in between.
+3. **`Checker::new_symbol` copied the name** (`alloc_str(name)`) for every transient symbol, 22M x 7 B on one
+   checker, 36M on four (269 MB). Go stores the caller's string. `new_symbol`/`new_symbol_ex`/`new_parameter`/
+   `new_property` now take `&'static str`; the 14 callers that pass a freshly built `String` copy it there.

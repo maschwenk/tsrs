@@ -1402,7 +1402,7 @@ impl Checker {
                 continue;
             }
             let name = get_string_literal_value(t);
-            let literal_prop = self.new_symbol(SymbolFlags::Property, &name);
+            let literal_prop = self.new_symbol(SymbolFlags::Property, alloc_str(&name));
             self.value_symbol_links.get(literal_prop).resolved_type.set(Some(self.any_type));
             if let Some(symbol) = t.symbol() {
                 literal_prop.declarations.set(symbol.declarations());

@@ -1009,7 +1009,7 @@ impl Checker {
             }
             let text = get_property_name_from_type(expr_type);
             let flags = SymbolFlags::Property | if e.initializer().is_some() { SymbolFlags::Optional } else { SymbolFlags::None };
-            let symbol = self.new_symbol(flags, &text);
+            let symbol = self.new_symbol(flags, alloc_str(&text));
             let t = self.get_type_from_binding_element(e, include_pattern_in_type, report_errors);
             self.value_symbol_links.get(symbol).resolved_type.set(Some(t));
             members.set(symbol.name(), symbol);

@@ -237,7 +237,7 @@ impl Checker {
             prop_types.push(t);
         }
         prop_types.extend_from_slice(&index_types);
-        let result = self.new_symbol_ex(prop_flags | optional_flag, name, check_flags | synthetic_flag);
+        let result = self.new_symbol_ex(prop_flags | optional_flag, alloc_str(name), check_flags | synthetic_flag);
         result.set_declarations(&declarations);
         if !has_non_uniform_value_declaration {
             if let Some(first_value_declaration) = first_value_declaration {

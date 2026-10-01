@@ -2021,7 +2021,7 @@ fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTy
             if let Some(modifiers_prop) = modifiers_prop {
                 late_flag = modifiers_prop.check_flags() & CheckFlags::Late;
             }
-            let prop = c.new_symbol(SymbolFlags::Property | if is_optional { SymbolFlags::Optional } else { SymbolFlags::None }, &prop_name);
+            let prop = c.new_symbol(SymbolFlags::Property | if is_optional { SymbolFlags::Optional } else { SymbolFlags::None }, alloc_str(&prop_name));
             prop.check_flags.set(
                 late_flag
                     | CheckFlags::Mapped
@@ -2387,7 +2387,7 @@ impl Checker {
             }
             let param_symbol = self.new_symbol_ex(
                 SymbolFlags::FunctionScopedVariable | if is_optional && !is_rest_param { SymbolFlags::Optional } else { SymbolFlags::None },
-                &param_name,
+                alloc_str(&param_name),
                 if is_rest_param {
                     CheckFlags::RestParameter
                 } else if is_optional {

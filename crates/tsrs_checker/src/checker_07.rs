@@ -525,7 +525,7 @@ impl Checker {
                 }
                 let member_symbol = member.unwrap();
                 let prop = if let Some(name_type) = name_type {
-                    self.new_symbol_ex(SymbolFlags::Property | member_symbol.flags(), &get_property_name_from_type(name_type), check_flags | CheckFlags::Late)
+                    self.new_symbol_ex(SymbolFlags::Property | member_symbol.flags(), alloc_str(&get_property_name_from_type(name_type)), check_flags | CheckFlags::Late)
                 } else {
                     self.new_symbol_ex(SymbolFlags::Property | member_symbol.flags(), member_symbol.name(), check_flags)
                 };
@@ -1585,27 +1585,27 @@ impl Checker {
     }
 
     // checker.go:14305
-    pub(crate) fn new_symbol(&mut self, flags: SymbolFlags, name: &str) -> P<Symbol> {
+    pub(crate) fn new_symbol(&mut self, flags: SymbolFlags, name: &'static str) -> P<Symbol> {
         self.symbol_count += 1;
-        Symbol::new(flags | SymbolFlags::Transient, alloc_str(name))
+        Symbol::new(flags | SymbolFlags::Transient, name)
     }
 
     // checker.go:14313
-    pub(crate) fn new_symbol_ex(&mut self, flags: SymbolFlags, name: &str, check_flags: CheckFlags) -> P<Symbol> {
+    pub(crate) fn new_symbol_ex(&mut self, flags: SymbolFlags, name: &'static str, check_flags: CheckFlags) -> P<Symbol> {
         let result = self.new_symbol(flags, name);
         result.check_flags.set(check_flags);
         result
     }
 
     // checker.go:14319
-    pub(crate) fn new_parameter(&mut self, name: &str, t: P<Type>) -> P<Symbol> {
+    pub(crate) fn new_parameter(&mut self, name: &'static str, t: P<Type>) -> P<Symbol> {
         let symbol = self.new_symbol(SymbolFlags::FunctionScopedVariable, name);
         self.value_symbol_links.get(symbol).resolved_type.set(Some(t));
         symbol
     }
 
     // checker.go:14325
-    pub(crate) fn new_property(&mut self, name: &str, t: P<Type>) -> P<Symbol> {
+    pub(crate) fn new_property(&mut self, name: &'static str, t: P<Type>) -> P<Symbol> {
         let symbol = self.new_symbol(SymbolFlags::Property, name);
         self.value_symbol_links.get(symbol).resolved_type.set(Some(t));
         symbol

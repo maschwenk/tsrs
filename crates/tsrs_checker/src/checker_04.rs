@@ -1675,7 +1675,7 @@ impl Checker {
                 let mut all: Vec<P<Type>> = context.inferred_type_parameters.get().to_vec();
                 all.extend_from_slice(&result);
                 let new_name = get_unique_type_parameter_name(&all, name);
-                let symbol = self.new_symbol(SymbolFlags::TypeParameter, &new_name);
+                let symbol = self.new_symbol(SymbolFlags::TypeParameter, alloc_str(&new_name));
                 let new_type_parameter = self.new_type_parameter(Some(symbol));
                 new_type_parameter.as_type_parameter().target.set(Some(tp));
                 old_type_parameters.push(tp);

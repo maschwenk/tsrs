@@ -204,7 +204,7 @@ fn expand_signature_parameters_with_tuple_members(c: &mut Checker, sig: P<Signat
             // } else {
             // 	name = c.getParameterNameAtPosition(sig, restIndex+i, restType)
             // }
-            let name = &associated_names[i];
+            let name = alloc_str(&associated_names[i]);
             let flags = rest_type.target().unwrap().as_tuple_type().element_infos.get()[i].flags;
             let check_flags = if flags.intersects(ElementFlags::Variable) {
                 CheckFlags::RestParameter

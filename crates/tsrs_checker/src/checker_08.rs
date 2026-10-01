@@ -1159,7 +1159,7 @@ impl Checker {
                 let mut late_symbol = match late_symbols.lookup(&member_name) {
                     Some(s) => s,
                     None => {
-                        let s = self.new_symbol_ex(SymbolFlags::None, &member_name, CheckFlags::Late);
+                        let s = self.new_symbol_ex(SymbolFlags::None, alloc_str(&member_name), CheckFlags::Late);
                         late_symbols.set(s.name(), s);
                         s
                     }
@@ -1187,7 +1187,7 @@ impl Checker {
                     if late_symbol.flags().intersects(SymbolFlags::Accessor) && late_symbol.flags() & SymbolFlags::Accessor != symbol_flags & SymbolFlags::Accessor {
                         late_symbol.flags.set(late_symbol.flags() | SymbolFlags::Accessor);
                     }
-                    late_symbol = self.new_symbol_ex(SymbolFlags::None, &member_name, CheckFlags::Late);
+                    late_symbol = self.new_symbol_ex(SymbolFlags::None, alloc_str(&member_name), CheckFlags::Late);
                 }
                 self.value_symbol_links.get(late_symbol).name_type.set(Some(t));
                 self.add_declaration_to_late_bound_symbol(late_symbol, decl, symbol_flags);
@@ -2066,7 +2066,7 @@ impl Checker {
         }
         for e in missing_elements {
             let name = self.get_property_name_from_binding_element(e);
-            let symbol = self.new_symbol(SymbolFlags::Property | SymbolFlags::Optional, &name);
+            let symbol = self.new_symbol(SymbolFlags::Property | SymbolFlags::Optional, alloc_str(&name));
             let resolved_type = self.get_type_from_binding_element(e, false /*includePatternInType*/, true /*reportErrors*/);
             self.value_symbol_links.get(symbol).resolved_type.set(Some(resolved_type));
             members.set(symbol.name(), symbol);
