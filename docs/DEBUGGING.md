@@ -81,6 +81,16 @@ mode (`TSRS_LAZY_MEMBERS=0`; ~30 min and ~122 GB peak for `types`). That mode's 
 - Full tier (pre-landing for checker changes that can affect printing; ~40 min, up to ~125 GB peak, one at a time):
   the same without `--sample` and without `--subset`.
 
+## The pristine Project checkout is read-only
+
+`$PRIVATE_PROJECT_ROOT/apps/project`
+belongs to Max's monorepo worktree. Two agents have already written into it by accident (a `tsbuildinfo` from a `tsgo-ref`
+run without `--incremental false`; a bench script's results file). Rules: run only `tsrs` there, with its cwd elsewhere
+and every output path pointing into your worktree's `target/`; run `tsgo-ref` there only with `--noEmit --incremental false`;
+anything that writes (mutation testing, scripts that create files) uses the disposable clone at
+`$TSRS_WORK/project-clone`. Before you finish, run `git -C <pristine root> status --short`
+(read-only) and confirm it prints nothing.
+
 ## How to fix
 
 - The Go source (`ts-ref/tsc/internal/…`) is the specification. Find the Go function behind the wrong behavior, read it
