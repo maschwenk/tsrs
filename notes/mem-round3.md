@@ -96,3 +96,23 @@ file), as before.
 | 4 checkers, before (A2) | 8.96-9.01 (8.966) | 429-431 G |
 | 4 checkers, after | 8.79-8.82 (8.812, -0.15) | 431-432 G (+0.4%) |
 | opt-out single / 4 checkers (go assignment), after | 9.08 / 13.95 | 339 / 517 G |
+
+### A4. Symbol table entries 16 -> 8 bytes
+
+Counted once (capacity deltas of every `SymbolMap`): 465 MB of entry capacity and 74 MB of hash index on Project
+single, 19.7M inserts. An entry was (symbol pointer, 32-bit key hash, 32-bit key length). It is now one word: the
+symbol's address / 8 in 45 bits (same platform assumption and provenance handling as A3), an odd-key flag, the
+key length capped at 63 (6 bits) and 12 bits of the key hash. Linear scans (tables up to 16 entries) still compare
+the length first and hash the probe only when a length matches, then the 12 hash bits, then the text; the hash
+index (larger tables) recomputes an entry's full hash from its key when it rehashes (on growth, and when it is
+built at 17 entries) or removes. Same order, same `set`-keeps-key and `delete` behavior; a unit test covers keys
+longer than 63 bytes in linear and indexed tables.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before (A3) | 6.589-6.594 (6.589) | 318-322 G |
+| single, after | 6.372-6.375 (6.373, -0.22) | 319-322 G (+0.3%) |
+| 4 checkers, before (A3) | 8.79-8.82 (8.818) | 432-436 G |
+| 4 checkers, after | 8.53-8.57 (8.551, -0.27) | 433-434 G (+0.2%) |
+| opt-out single, before / after | 9.08 / 8.51 (-0.58) | 340 / 340 G |
+| opt-out 4 checkers (go assignment), after | 13.09 (was 13.95) | 524 G |

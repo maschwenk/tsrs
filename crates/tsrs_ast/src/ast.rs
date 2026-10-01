@@ -2248,6 +2248,27 @@ mod tests {
     }
 
     #[test]
+    fn symbol_table_long_names_share_the_capped_length() {
+        // Entries store the key length capped at 63: keys longer than that are told apart by hash and text.
+        let long = |c: char, n: usize| -> &'static str { Box::leak(format!("{}{c}", "x".repeat(n)).into_boxed_str()) };
+        let names: Vec<&'static str> = (0..40).map(|i| long(char::from(b'a' + (i % 26) as u8), 63 + i / 26)).collect();
+        let syms: Vec<P<Symbol>> = names.iter().map(|n| Symbol::new(SymbolFlags::Property, n)).collect();
+        for count in [5, 40] {
+            let table = SymbolTable::new();
+            for i in 0..count {
+                table.set(names[i], syms[i]);
+            }
+            for i in 0..count {
+                assert_eq!(table.lookup(names[i]), Some(syms[i]));
+            }
+            assert_eq!(table.lookup(long('z', 70)), None);
+            table.delete(names[1]);
+            assert_eq!(table.lookup(names[1]), None);
+            assert_eq!(table.lookup(names[count - 1]), Some(syms[count - 1]));
+        }
+    }
+
+    #[test]
     fn kinds_and_flags() {
         assert_eq!(Kind::FirstKeyword, Kind::BreakKeyword);
         assert_eq!(Kind::LastToken, Kind::DeferKeyword);
