@@ -53,10 +53,11 @@ fewer symbols, types and instantiations than `tsgo-ref` (it equals tsgo with bot
 
 ## Project `.types` / `.symbols` equivalence against the cached reference
 
-Running the Go oracle (`tools/oracle/project-types`) takes hours per side. Its output is cached instead:
+Running the Go oracle (`tools/oracle/project-types`) takes hours per side. Cache its equivalent instead (not
+populated yet; the first full opt-out run creates it):
 `$TSRS_WORK/project-ref-dump/<types|symbols>/manifest.<kind>` (hash, line count, path
 per file, plus the `#counts` line), produced by `tsrs-test types-dump --mode <kind> --text none` in the opt-out
-mode (`TSRS_LAZY_MEMBERS=0`). That mode's `.types` walk was verified identical to the Go oracle on all 28,213 files
+mode (`TSRS_LAZY_MEMBERS=0`; ~30 min and ~122 GB peak for `types`). That mode's `.types` walk was verified identical to the Go oracle on all 28,213 files
 (notes/fix-project-types.md); `.symbols` only on the first 5,558 files (the Go run was stopped). Reference commit b85298b6 (nightly
 7.1.0-dev.20260929); project: the pristine Project checkout
 `$PRIVATE_PROJECT_ROOT/apps/project`
