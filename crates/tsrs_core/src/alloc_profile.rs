@@ -66,6 +66,8 @@ unsafe impl GlobalAlloc for Counting {
 
 /// Sampling heap profiler (`TSRS_HEAP_PROFILE=1`): roughly every `RATE` allocated bytes the current
 /// allocation's raw stack is recorded; live sampled bytes are aggregated per stack and resolved with `atos`.
+/// `TSRS_HEAP_PROFILE=count` samples every `COUNT_RATE`-th allocation instead (allocation churn by call site,
+/// whatever the size; arena chunk allocations included).
 mod heap_sample {
     use rustc_hash::FxHashMap;
     use std::cell::Cell;
@@ -74,6 +76,7 @@ mod heap_sample {
     use std::sync::Mutex;
 
     pub(super) const RATE: isize = 256 * 1024;
+    pub(super) const COUNT_RATE: isize = 1024;
     const DEPTH: usize = 20;
     pub(super) type Stack = [usize; DEPTH];
 
@@ -87,7 +90,7 @@ mod heap_sample {
         pub(super) index: FxHashMap<Stack, u32>,
     }
     pub(super) static STATE: Mutex<Option<State>> = Mutex::new(None);
-    static ENABLED: AtomicU8 = AtomicU8::new(0); // 0 unknown, 1 off, 2 on
+    static ENABLED: AtomicU8 = AtomicU8::new(0); // 0 unknown, 1 off, 2 on (bytes), 3 on (counts)
 
     thread_local! {
         static BUSY: Cell<bool> = const { Cell::new(false) };
@@ -95,16 +98,24 @@ mod heap_sample {
         pub(super) static IN_ARENA: Cell<bool> = const { Cell::new(false) };
     }
 
-    fn enabled() -> bool {
+    fn mode() -> u8 {
         match ENABLED.load(Ordering::Relaxed) {
-            1 => false,
-            2 => true,
-            _ => {
-                let on = std::env::var_os("TSRS_HEAP_PROFILE").is_some_and(|v| v == "1");
-                ENABLED.store(if on { 2 } else { 1 }, Ordering::Relaxed);
-                on
+            0 => {
+                let v = std::env::var_os("TSRS_HEAP_PROFILE");
+                let m = match v.as_ref().and_then(|v| v.to_str()) {
+                    Some("1") => 2,
+                    Some("count") => 3,
+                    _ => 1,
+                };
+                ENABLED.store(m, Ordering::Relaxed);
+                m
             }
+            m => m,
         }
+    }
+
+    pub(super) fn counting() -> bool {
+        ENABLED.load(Ordering::Relaxed) == 3
     }
 
     fn guarded(f: impl FnOnce()) {
@@ -120,18 +131,20 @@ mod heap_sample {
 
     pub(super) fn on_alloc(p: *mut u8, size: usize) {
         guarded(|| {
-            if !enabled() {
+            let mode = mode();
+            if mode == 1 {
                 return;
             }
+            let (cost, rate) = if mode == 3 { (1, COUNT_RATE) } else { (size as isize, RATE) };
             let left = COUNTDOWN.with(|c| {
-                let left = c.get() - size as isize;
-                c.set(if left <= 0 { RATE } else { left });
+                let left = c.get() - cost;
+                c.set(if left <= 0 { rate } else { left });
                 left
             });
             if left > 0 {
                 return;
             }
-            let weight = size.max(RATE as usize);
+            let weight = if mode == 3 { COUNT_RATE as usize } else { size.max(RATE as usize) };
             let mut raw = [std::ptr::null_mut::<c_void>(); DEPTH + 3];
             // SAFETY: `raw` has room for DEPTH + 3 frames.
             let n = unsafe { backtrace(raw.as_mut_ptr(), raw.len() as i32) } as usize;
@@ -156,7 +169,9 @@ mod heap_sample {
             }
             state.stacks[id as usize].1 += weight as i64;
             state.stacks[id as usize].2 += weight as u64;
-            state.live.insert(p as usize, (id, weight));
+            if mode == 2 {
+                state.live.insert(p as usize, (id, weight));
+            }
         });
     }
 
@@ -179,6 +194,7 @@ mod heap_sample {
     }
 
     pub(super) fn dump(top: usize) {
+        let counting = counting();
         ENABLED.store(1, Ordering::Relaxed);
         let Some(state) = STATE.lock().unwrap().take() else {
             return;
@@ -195,7 +211,11 @@ mod heap_sample {
             eprintln!("\n-- heap {title} (sampled, top {top}) --");
             for &i in order.iter().take(top) {
                 let (stack, _, _) = &state.stacks[i];
-                eprintln!("{:>10.1} MB", key(i) as f64 / (1024.0 * 1024.0));
+                if counting {
+                    eprintln!("{:>10.1} M allocations", key(i) as f64 / 1e6);
+                } else {
+                    eprintln!("{:>10.1} MB", key(i) as f64 / (1024.0 * 1024.0));
+                }
                 if stack[0] == 1 {
                     eprintln!("             <arena chunks>");
                     continue;
@@ -214,6 +234,13 @@ mod heap_sample {
                 }
             }
         };
+        if counting {
+            let total: u64 = state.stacks.iter().map(|s| s.2).sum();
+            eprintln!("\nheap allocations (sampled every {COUNT_RATE}th): {:.1} M", total as f64 / 1e6);
+            order.sort_by_key(|&i| -(state.stacks[i].2 as i64));
+            print("allocations by count", &order, &|i| state.stacks[i].2 as i64);
+            return;
+        }
         let (mut live, mut total) = (0i64, 0u64);
         for (stack, l, t) in &state.stacks {
             if stack[0] != 1 {
