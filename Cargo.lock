@@ -279,6 +279,7 @@ version = "0.1.4"
 dependencies = [
  "bitflags",
  "hashbrown",
+ "memchr",
  "rustc-hash",
  "tsrs_core",
  "tsrs_diagnostics",

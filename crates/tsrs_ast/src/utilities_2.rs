@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use rustc_hash::FxHashMap;
 use tsrs_core::tspath;
 use tsrs_core::{CompilerOptions, JsxEmit, ModuleKind, ResolutionMode, ScriptKind, Tristate, P};
@@ -1266,24 +1268,25 @@ pub(crate) fn node_contains_position(node: P<Node>, position: i32) -> bool {
     node.kind() >= Kind::FirstNode && node.pos() <= position && (position < node.end() || position == node.end() && node.kind() == Kind::EndOfFile)
 }
 
+// Go scans for the first 'i' or 'r' and compares; the first "import" or "require" at or after `start` is the
+// same position, found here with two substring searches (the "require" search stops where "import" was found).
 pub(crate) fn find_import_or_require(text: &str, start: i32) -> (i32, i32) {
+    static IMPORT: LazyLock<memchr::memmem::Finder<'static>> = LazyLock::new(|| memchr::memmem::Finder::new("import"));
+    static REQUIRE: LazyLock<memchr::memmem::Finder<'static>> = LazyLock::new(|| memchr::memmem::Finder::new("require"));
     let bytes = text.as_bytes();
-    let mut index = start.max(0) as usize;
-    let n = bytes.len();
-    while index < n {
-        let Some(next) = bytes[index..].iter().position(|&b| b == b'i' || b == b'r') else {
-            break;
-        };
-        index += next;
-
-        let (size, expected): (usize, &[u8]) = if bytes[index] == b'i' { (6, b"import") } else { (7, b"require") };
-        if index + size <= n && &bytes[index..index + size] == expected {
-            return (index as i32, size as i32);
-        }
-        index += 1;
+    let index = (start.max(0) as usize).min(bytes.len());
+    let import = IMPORT.find(&bytes[index..]).map(|i| index + i);
+    let require_end = match import {
+        Some(i) => (i + "require".len()).min(bytes.len()),
+        None => bytes.len(),
+    };
+    if let Some(i) = REQUIRE.find(&bytes[index..require_end]) {
+        return ((index + i) as i32, 7);
     }
-
-    (-1, 0)
+    match import {
+        Some(i) => (i as i32, 6),
+        None => (-1, 0),
+    }
 }
 
 pub fn for_each_dynamic_import_or_require_call(
