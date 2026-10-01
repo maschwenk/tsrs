@@ -60,6 +60,20 @@ impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
             m.borrow_mut().clear();
         }
     }
+    /// Go `clear(m)` for a map that is cleared after every use (a pooled scratch map). Clearing touches every
+    /// bucket, so a table that one large use grew would make every later small use pay for its capacity; such
+    /// a table is reallocated at the size of its last use instead. Unobservable: the map is empty either way.
+    pub fn clear_scratch(&self) {
+        if let Some(m) = self.0.get() {
+            let mut m = m.borrow_mut();
+            let len = m.len();
+            if m.capacity() > 64 && m.capacity() > 4 * len {
+                *m = FxHashMap::with_capacity_and_hasher(len, Default::default());
+            } else {
+                m.clear();
+            }
+        }
+    }
     /// The shared table (Go map value), for aliasing assignments `a.m = b.m`.
     pub fn get_ref(&self) -> Option<P<RefCell<FxHashMap<K, V>>>> {
         self.0.get()

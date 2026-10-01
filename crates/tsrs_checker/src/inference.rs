@@ -23,7 +23,7 @@ impl Checker {
 
     // inference.go:41
     pub(crate) fn put_inference_state(&mut self, n: P<InferenceState>) {
-        n.visited.clear();
+        n.visited.clear_scratch();
         n.inferences.borrow_mut().clear();
         n.original_source.set(None);
         n.original_target.set(None);
