@@ -29,6 +29,11 @@ REPO = Path(__file__).resolve().parent.parent
 BENCH = REPO / "bench"
 MARKER = ".tsrs-bench.json"
 START, END = "<!-- bench:start -->", "<!-- bench:end -->"
+# --tsrs-build: how the measured tsrs binary was built, for the table header.
+TSRS_BUILDS = {
+    "release": "`cargo build --release`",
+    "pgo-dist": "the PGO-optimized `dist` build, built like the npm release binaries",
+}
 
 COUNTER_RE = re.compile(r"^(Files|Lines|Identifiers|Symbols|Types|Instantiations):\s+(\d+)\s*$")
 TIME_RE = re.compile(r"^(Config|Parse|Bind|Check|Total) time:\s+([\d.]+)s\s*$")
@@ -244,8 +249,8 @@ def markdown(result: dict) -> str:
         f"tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, \"tsgo\"). Each row type-checks one "
         f"project from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the "
         f"suite the TypeScript team benchmarks tsgo on ({names}), with tsgo {tv} (npm `typescript@{tv}`) and with tsrs "
-        f"at commit `{commit}`: `tsc -p <project> --noEmit`, median of {result['reps']} interleaved runs, on "
-        f"{m['label']}.",
+        f"at commit `{commit}` ({TSRS_BUILDS[result['tsrs'].get('build', 'release')]}): `tsc -p <project> --noEmit`, "
+        f"median of {result['reps']} interleaved runs, on {m['label']}.",
         "",
     ]
     drift = False
@@ -312,6 +317,8 @@ def main() -> None:
     ap.add_argument("--label", help="machine label for the table header")
     ap.add_argument("--work-dir", type=Path, default=BENCH / ".work", help="clones, installs, logs (default bench/.work)")
     ap.add_argument("--tsrs", type=Path, default=REPO / "target" / "release" / "tsrs")
+    ap.add_argument("--tsrs-build", choices=sorted(TSRS_BUILDS), default="release",
+                    help="how --tsrs was built (named in the table header; CI: pgo-dist, see .depot/workflows/bench.yml)")
     ap.add_argument("--tsgo", type=Path, help="native tsgo binary (default: install typescript@<version> from npm)")
     ap.add_argument("--projects", help="comma-separated subset of bench/projects.json")
     ap.add_argument("--modes", default="default,single")
@@ -375,7 +382,7 @@ def main() -> None:
     result: dict = {
         "date": now.strftime("%Y-%m-%d %H:%M UTC"),
         "machine": machine_info(args.local, args.label),
-        "tsrs": {"commit": commit, "dirty": dirty, "version": tsrs_version},
+        "tsrs": {"commit": commit, "dirty": dirty, "version": tsrs_version, "build": args.tsrs_build},
         "tsgo": {"version": cfg["tsgo"]["version"], "binary": str(tsgo).replace(str(Path.home()), "~")},
         "suite": cfg["suite"],
         "reference": ref_cfg,

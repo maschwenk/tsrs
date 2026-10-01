@@ -62,14 +62,32 @@ jobs:
         with:
           node-version: 24
 
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      # The conformance suite (part of the PGO training workload) reads its tests from ts-ref/tsc/testdata.
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
 
+      - name: Check out TypeScript testdata
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+          components: llvm-tools
+
+      # Caches ~/.cargo and the dependency part of target/, which holds only the instrumented build below: its
+      # RUSTFLAGS are the same in every run, so its dependencies are reused. The final build's RUSTFLAGS contain the
+      # profile's hash, which changes every run, so it is built outside target/ and not cached.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          key: bench-release
-
-      - name: Build tsrs (release)
-        run: cargo build --release --locked -p tsrs_cli
+          key: bench-pgo
 
       # On Depot runners every cache action below is served by Depot Cache (no workflow changes needed). One cache for
       # the suite checkout + the npm compilers, and one per cloned project (checkout + node_modules) keyed on its pinned
@@ -115,7 +133,7 @@ jobs:
           path: bench/.work/solutions/mui-docs
           key: bench-mui-docs-${{ runner.os }}-${{ steps.keys.outputs['mui-docs'] }}
 
-      # A no-op for everything restored above.
+      # A no-op for everything restored above. Also sets up xstate-main and webpack for the PGO training run.
       - name: Set up benchmark projects
         run: python3 bench/run.py --setup-only
 
@@ -156,8 +174,38 @@ jobs:
           path: bench/.work/solutions/mui-docs
           key: ${{ steps.cache-mui.outputs.cache-primary-key }}
 
+      # tsrs is measured as released: the PGO build of the `dist` profile, with the same commands as the build job of
+      # .github/workflows/release.yml (target x86_64-unknown-linux-gnu) and the same training workload
+      # (.github/scripts/pgo-train.sh), which runs on the project checkouts set up above (bench/.work). The training
+      # processes exit before the measurement starts, and every measured run is a fresh process of the final binary.
+      - name: PGO instrumented build
+        env:
+          RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw
+        run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner --target x86_64-unknown-linux-gnu
+
+      - name: PGO training run
+        run: .github/scripts/pgo-train.sh target/x86_64-unknown-linux-gnu/dist /tmp/tsrs-pgo/raw bench/.work
+
+      - name: PGO merge profiles
+        id: profile
+        run: |
+          profdata="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/llvm-profdata"
+          "$profdata" merge -o /tmp/tsrs-pgo/merged.profdata /tmp/tsrs-pgo/raw/*.profraw
+          "$profdata" show /tmp/tsrs-pgo/merged.profdata | tail -5
+          sum=$(shasum -a 256 /tmp/tsrs-pgo/merged.profdata | cut -c1-16)
+          mv /tmp/tsrs-pgo/merged.profdata "/tmp/tsrs-pgo/$sum.profdata"
+          echo "path=/tmp/tsrs-pgo/$sum.profdata" >> "$GITHUB_OUTPUT"
+
+      - name: Build tsrs (PGO, dist profile)
+        env:
+          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}
+          CARGO_TARGET_DIR: /tmp/tsrs-pgo/target
+        run: cargo build --profile dist --locked -p tsrs_cli --target x86_64-unknown-linux-gnu
+
       - name: Benchmark
-        run: python3 bench/run.py --readme README.md
+        run: >-
+          python3 bench/run.py --readme README.md --tsrs-build pgo-dist
+          --tsrs /tmp/tsrs-pgo/target/x86_64-unknown-linux-gnu/dist/tsrs
 
       - name: Upload logs
         if: always()

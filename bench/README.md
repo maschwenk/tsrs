@@ -54,7 +54,11 @@ builds); the tsserver/LSP/startup scenarios (not `tsc` runs). All six included p
 - tsgo: `npm install typescript@7.0.2`. Its `bin/tsc` is a Node launcher (`lib/tsc.js` -> `getExePath.js`) that
   `execve`s the Go binary `@typescript/typescript-<os>-<arch>/lib/tsc`; the harness runs that binary directly (checked
   to be a native executable printing `Version 7.0.2`), so Node startup is not part of the measurement.
-- tsrs: the release build of the checked-out commit (`target/release/tsrs`).
+- tsrs: by default the release build of the checked-out commit (`target/release/tsrs`). CI measures what the npm
+  package ships instead: the PGO build of the `dist` profile (fat LTO, one codegen unit), built with the commands of
+  the release workflow and trained with `.github/scripts/pgo-train.sh` (conformance suite + xstate-main + webpack) on
+  the bench runner itself (`--tsrs <binary> --tsrs-build pgo-dist`; notes/perf-pgo.md). Training and measurement
+  share the project checkouts in `bench/.work`; the training processes have exited before the first measured run.
 - Per project: one untimed warm-up run (tsgo), then N reps (default 3); within a rep the two modes and the two
   compilers alternate, and the compiler order flips every rep. Tables report medians.
 - Wall: process wall clock measured by the harness. Peak: max RSS from `wait4` rusage (the number `/usr/bin/time -v`
@@ -87,7 +91,9 @@ parsing. The first step fails the job if `nproc`/`MemTotal`/arch differ; there i
 standard 2 vCPU / 7 GB runner tsgo swapped on vscode: 146 s wall for a 50 s check.)
 
 Caching (Depot Cache serves the `actions/cache` API on Depot CI, no special configuration): `Swatinem/rust-cache` for
-`~/.cargo` and the dependency part of `target/` (workspace crates are rebuilt: they are what is being measured); one
+`~/.cargo` and the dependency part of `target/`, which holds the PGO-instrumented build (workspace crates are
+rebuilt: they are what is being measured). The final PGO build is not cached: its RUSTFLAGS contain the profile's
+hash, which changes every run, so cargo rebuilds all of it anyway (as in the release workflow); one
 cache for the suite checkout plus the npm-installed compilers (`typescript@7.0.2` and the reference nightly); one cache
 per cloned project (checkout + `node_modules`) keyed on its pinned commit and install command
 (`bench/run.py --print-cache-keys`), so changing one pin re-installs only that project.

@@ -3,8 +3,8 @@
 Question: is profile-guided optimization (with fat LTO and one codegen unit) worth it for the shipped `tsrs`
 binaries? Answer: yes. PGO cuts CPU time by 7-14% and instructions by 13-14% on every project measured,
 counters and output unchanged. Release builds now use it (`.github/workflows/release.yml`, profile `dist` in
-`Cargo.toml`, training script `.github/scripts/pgo-train.sh`). `cargo build --release` (development, bench CI)
-is unchanged.
+`Cargo.toml`, training script `.github/scripts/pgo-train.sh`), and so does the README benchmark
+(`.depot/workflows/bench.yml`, since 2026-10-01). `cargo build --release` (development) is unchanged.
 
 ## Binaries
 
@@ -106,5 +106,6 @@ above were rerun on this binary with the same result.
 
 - Training on the bench projects as well as the suite was the plan from the start; a suite-only profile was not
   compared. The private monorepo was not used for training.
-- The bench CI table (README) measures `cargo build --release`, i.e. (a), not the shipped binaries.
+- The bench CI table (README) measures the shipped binary: (c), built and trained on the bench runner with the
+  release workflow's commands for x86_64-unknown-linux-gnu (before 2026-10-01 it measured (a)).
 - Linux release targets train natively on their own runners; they were not measured here.

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# PGO training workload for release builds (notes/perf-pgo.md): runs PGO-instrumented binaries and leaves their
+# PGO training workload for release builds and the README benchmark (.github/workflows/release.yml,
+# .depot/workflows/bench.yml; notes/perf-pgo.md): runs PGO-instrumented binaries and leaves their
 # raw profiles (*.profraw) in <raw-dir>. Exit codes of the runs are ignored (the suite has known failures and the
 # bench projects have type errors); the script fails only if a run crashes or writes no profile.
 #
