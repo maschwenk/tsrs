@@ -1713,11 +1713,11 @@ impl Checker {
             let source_declarations = source.declarations();
             target.append_declarations(&source_declarations);
             if source.members().is_some() {
-                let target_members = get_symbol_table(&target.members);
+                let target_members = get_members(target);
                 self.merge_symbol_table(target_members, source.members(), unidirectional, None);
             }
             if source.exports().is_some() {
-                let target_exports = get_symbol_table(&target.exports);
+                let target_exports = get_exports(target);
                 self.merge_symbol_table(target_exports, source.exports(), unidirectional, Some(target));
             }
             if !unidirectional {
@@ -1898,8 +1898,8 @@ impl Checker {
         result.declarations.set(symbol.declarations());
         result.parent.set(symbol.parent());
         result.value_declaration.set(symbol.value_declaration());
-        result.members.set(symbol.members().map(|m| m.clone_table()));
-        result.exports.set(symbol.exports().map(|e| e.clone_table()));
+        result.set_members(symbol.members().map(|m| m.clone_table()));
+        result.set_exports(symbol.exports().map(|e| e.clone_table()));
         self.record_merged_symbol(result, symbol);
         result
     }
@@ -2432,8 +2432,8 @@ impl Checker {
             result.parent.set(type_symbol.parent());
         }
         result.value_declaration.set(value_symbol.value_declaration());
-        result.members.set(type_symbol.members().map(|m| m.clone_table()));
-        result.exports.set(value_symbol.exports().map(|e| e.clone_table()));
+        result.set_members(type_symbol.members().map(|m| m.clone_table()));
+        result.set_exports(value_symbol.exports().map(|e| e.clone_table()));
         result
     }
 

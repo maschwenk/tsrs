@@ -13,6 +13,11 @@ use crate::symbolflags::SymbolFlags;
 use crate::*;
 
 // Symbol
+//
+// Go's `Symbol` holds `Members`, `Exports` and `ExportSymbol` inline. Few symbols have any of them (on Project 5%
+// of 15.3M: binder symbols of classes, interfaces, modules and exported locals; almost no transient symbols), so
+// they live in a tail allocated on the first write of a non-nil value (`members()` / `set_members()` & co.):
+// 72 bytes per symbol instead of 88. Reads of an absent tail return nil, like the unset Go field.
 
 #[derive(Default)]
 pub struct Symbol {
@@ -21,12 +26,19 @@ pub struct Symbol {
     pub name: OwnedCell<&'static str>,
     pub declarations: OwnedCell<&'static [P<Node>]>, // Go slice: shared by copies, replaced (not mutated) on append
     pub value_declaration: OwnedCell<Option<P<Node>>>,
-    pub members: OwnedCell<Option<P<SymbolTable>>>,
-    pub exports: OwnedCell<Option<P<SymbolTable>>>,
     pub(crate) id: AtomicU64,
     pub parent: OwnedCell<Option<P<Symbol>>>,
-    pub export_symbol: OwnedCell<Option<P<Symbol>>>,
+    tables: OwnedCell<Option<P<SymbolTables>>>,
 }
+
+#[derive(Default)]
+struct SymbolTables {
+    members: OwnedCell<Option<P<SymbolTable>>>,
+    exports: OwnedCell<Option<P<SymbolTable>>>,
+    export_symbol: OwnedCell<Option<P<Symbol>>>,
+}
+
+const _: () = assert!(std::mem::size_of::<Symbol>() == 72);
 
 impl Symbol {
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).
@@ -73,12 +85,35 @@ impl Symbol {
         self.value_declaration.get()
     }
     #[inline]
+    fn tables_for_write(&self) -> P<SymbolTables> {
+        match self.tables.get() {
+            Some(tables) => tables,
+            None => {
+                let tables = P::new(SymbolTables::default());
+                self.tables.set(Some(tables));
+                tables
+            }
+        }
+    }
+    #[inline]
     pub fn members(&self) -> Option<P<SymbolTable>> {
-        self.members.get()
+        self.tables.get().and_then(|t| t.members.get())
+    }
+    #[inline]
+    pub fn set_members(&self, members: Option<P<SymbolTable>>) {
+        if members.is_some() || self.tables.get().is_some() {
+            self.tables_for_write().members.set(members);
+        }
     }
     #[inline]
     pub fn exports(&self) -> Option<P<SymbolTable>> {
-        self.exports.get()
+        self.tables.get().and_then(|t| t.exports.get())
+    }
+    #[inline]
+    pub fn set_exports(&self, exports: Option<P<SymbolTable>>) {
+        if exports.is_some() || self.tables.get().is_some() {
+            self.tables_for_write().exports.set(exports);
+        }
     }
     #[inline]
     pub fn parent(&self) -> Option<P<Symbol>> {
@@ -86,7 +121,13 @@ impl Symbol {
     }
     #[inline]
     pub fn export_symbol(&self) -> Option<P<Symbol>> {
-        self.export_symbol.get()
+        self.tables.get().and_then(|t| t.export_symbol.get())
+    }
+    #[inline]
+    pub fn set_export_symbol(&self, export_symbol: Option<P<Symbol>>) {
+        if export_symbol.is_some() || self.tables.get().is_some() {
+            self.tables_for_write().export_symbol.set(export_symbol);
+        }
     }
 
     pub fn is_external_module(&self) -> bool {
@@ -103,7 +144,7 @@ impl Symbol {
 
     // See comment on `declareModuleMember` in `binder.go`.
     pub fn combined_local_and_export_symbol_flags(&self) -> SymbolFlags {
-        if let Some(export_symbol) = self.export_symbol.get() {
+        if let Some(export_symbol) = self.export_symbol() {
             return self.flags.get() | export_symbol.flags.get();
         }
         self.flags.get()

@@ -44,11 +44,21 @@ pub fn get_symbol_table(data: &Cell<Option<P<SymbolTable>>>) -> P<SymbolTable> {
 }
 
 pub fn get_members(symbol: P<Symbol>) -> P<SymbolTable> {
-    get_symbol_table(&symbol.members)
+    if let Some(table) = symbol.members() {
+        return table;
+    }
+    let table = P::new(SymbolTable::default());
+    symbol.set_members(Some(table));
+    table
 }
 
 pub fn get_exports(symbol: P<Symbol>) -> P<SymbolTable> {
-    get_symbol_table(&symbol.exports)
+    if let Some(table) = symbol.exports() {
+        return table;
+    }
+    let table = P::new(SymbolTable::default());
+    symbol.set_exports(Some(table));
+    table
 }
 
 pub fn get_locals(container: P<Node>) -> P<SymbolTable> {

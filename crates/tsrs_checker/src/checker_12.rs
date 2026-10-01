@@ -1466,7 +1466,7 @@ impl Checker {
             meta_property_symbol.parent.set(Some(symbol));
             self.value_symbol_links.get(meta_property_symbol).resolved_type.set(Some(import_meta_type));
             let members = create_symbol_table(&[meta_property_symbol]);
-            symbol.members.set(members);
+            symbol.set_members(members);
             self.deferred_global_import_meta_expression_type = Some(self.new_anonymous_type(Some(symbol), members, &[], &[], &[]));
         }
         self.deferred_global_import_meta_expression_type.unwrap()

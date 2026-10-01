@@ -145,3 +145,24 @@ test `symbol_table_indexed_order_and_delete`.
 | 4 checkers, after | 9.47-9.67 | 471 G | 13.96 (-0.73) |
 | opt-out single / 4 checkers, before | | | 13.19 / 20.22 |
 | opt-out single / 4 checkers, after | | | 12.23 / 18.73 |
+
+## Step 5: other layouts
+
+### `Symbol` 88 -> 72 bytes
+
+Occupancy at exit (Project single, default mode): 3.78M binder symbols, of which 617K have `members`, 56K
+`exports`, 115K `export_symbol`; 11.55M transient symbols, of which 301 have `members` and 144 `exports`. The three
+fields moved into a tail (`SymbolTables`) allocated on the first non-nil write; `members()` / `exports()` /
+`export_symbol()` read through it (nil when absent) and `set_members()` / `set_exports()` / `set_export_symbol()`
+write (23 call sites changed from `.x.get()` / `.x.set(..)`; `get_members` / `get_exports` keep Go's
+create-on-demand behavior). Same `OwnedCell` ownership contract as before (only the owning thread writes, and the
+tail is allocated by that writer).
+
+| run (2-4 interleaved rounds) | check s | instructions | peak GB |
+| --- | --- | --- | --- |
+| single, before | 19.3-23.1 | 313-314 G | 9.27-9.30 |
+| single, after | 22.2-23.8 | 313-314 G | 9.12 (-0.15) |
+| 4 checkers, before | 9.93-10.63 | 471 G | 13.98 |
+| 4 checkers, after | 9.88-10.29 | 471 G | 13.69 (-0.29) |
+| opt-out single / 4 checkers, before | | | 12.23 / 18.73 |
+| opt-out single / 4 checkers, after | | | 11.86 / 18.12 |

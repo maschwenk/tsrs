@@ -850,8 +850,8 @@ impl Checker {
         let result = self.new_symbol(symbol.flags(), symbol.name());
         result.declarations.set(symbol.declarations());
         result.value_declaration.set(symbol.value_declaration());
-        result.members.set(symbol.members().map(|m| m.clone_table()));
-        result.exports.set(symbol.exports().map(|e| e.clone_table()));
+        result.set_members(symbol.members().map(|m| m.clone_table()));
+        result.set_exports(symbol.exports().map(|e| e.clone_table()));
         result.parent.set(symbol.parent());
         let links = self.export_type_links.get(result);
         links.target.set(Some(symbol));

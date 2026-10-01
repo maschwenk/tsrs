@@ -93,11 +93,11 @@ impl Dumper {
             self.sb.push_str(" p=");
             escape(&mut self.sb, parent.name.get());
         }
-        if let Some(export_symbol) = s.export_symbol.get() {
+        if let Some(export_symbol) = s.export_symbol() {
             let _ = write!(self.sb, " x={:x}", export_symbol.flags.get().bits());
         }
-        self.table("X", s.exports.get());
-        self.table("M", s.members.get());
+        self.table("X", s.exports());
+        self.table("M", s.members());
         self.sb.push(')');
     }
 

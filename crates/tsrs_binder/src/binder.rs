@@ -476,7 +476,7 @@ impl Binder {
             let local = self.declare_symbol(ast::get_locals(container), None /*parent*/, node, export_kind, symbol_excludes);
             let export_symbol =
                 self.declare_symbol(ast::get_exports(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes);
-            local.export_symbol.set(Some(export_symbol));
+            local.set_export_symbol(Some(export_symbol));
             node.exportable_data().unwrap().local_symbol.set(Some(local));
             return local;
         }
@@ -1131,7 +1131,7 @@ impl Binder {
         self.add_declaration_to_symbol(type_literal_symbol, node, SymbolFlags::TypeLiteral);
         let members = SymbolTable::new();
         members.set(symbol.name.get(), symbol);
-        type_literal_symbol.members.set(Some(members));
+        type_literal_symbol.set_members(Some(members));
     }
 
     pub(crate) fn add_late_bound_assignment_declaration_to_symbol(&mut self, node: P<Node>, symbol: P<Symbol>) {
@@ -1179,7 +1179,7 @@ impl Binder {
     // from the module symbol onto the export= symbol and, if any such exports exist, mark the export=
     // symbol as a namespace module.
     pub(crate) fn bind_common_js_type_exports(&mut self, module_symbol: P<Symbol>) {
-        let Some(module_exports) = module_symbol.exports.get() else {
+        let Some(module_exports) = module_symbol.exports() else {
             return;
         };
         if let Some(export_equals) = (*module_exports).get(ast::InternalSymbolNameExportEquals) {
@@ -1466,7 +1466,7 @@ impl Binder {
             return None;
         }
         if let Some(symbol) = get_initializer_symbol(self.lookup_entity(node.expression().unwrap(), container)) {
-            if let Some(exports) = symbol.exports.get() {
+            if let Some(exports) = symbol.exports() {
                 if let Some(name) = ast::get_element_or_property_access_name(node) {
                     return (*exports).get(name.text());
                 }
@@ -1479,13 +1479,13 @@ impl Binder {
         if let Some(locals_container) = container.locals_container_data() {
             if let Some(locals) = locals_container.locals.get() {
                 if let Some(local) = (*locals).get(name) {
-                    return Some(local.export_symbol.get().unwrap_or(local));
+                    return Some(local.export_symbol().unwrap_or(local));
                 }
             }
         }
         if let Some(declaration) = container.declaration_data() {
             if let Some(symbol) = declaration.symbol.get() {
-                return symbol.exports.get().and_then(|exports| (*exports).get(name));
+                return symbol.exports().and_then(|exports| (*exports).get(name));
             }
         }
         None
@@ -1850,7 +1850,7 @@ impl Binder {
                 exports_property.parent.set(Some(symbol));
                 let members = SymbolTable::new();
                 members.set("exports", exports_property);
-                symbol.members.set(Some(members));
+                symbol.set_members(Some(members));
             }
             locals.set(name, symbol);
         }

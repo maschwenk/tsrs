@@ -169,7 +169,7 @@ impl<H: 'static> NameResolver<H> {
                         let Some(module_symbol) = self.get_symbol_of_declaration(host, loc) else {
                             break 'switch;
                         };
-                        let module_exports = module_symbol.exports.get();
+                        let module_exports = module_symbol.exports();
                         if ast::is_source_file(loc)
                             || (ast::is_module_declaration(loc) && loc.flags().intersects(NodeFlags::Ambient) && !ast::is_global_scope_augmentation(loc))
                         {
@@ -224,7 +224,7 @@ impl<H: 'static> NameResolver<H> {
                         let Some(enum_symbol) = self.get_symbol_of_declaration(host, loc) else {
                             break 'switch;
                         };
-                        result = self.lookup(host, enum_symbol.exports.get(), name, meaning & SymbolFlags::EnumMember);
+                        result = self.lookup(host, enum_symbol.exports(), name, meaning & SymbolFlags::EnumMember);
                         if let Some(res) = result {
                             if name_not_found_message.is_some()
                                 && self.compiler_options.get_isolated_modules()
@@ -261,7 +261,7 @@ impl<H: 'static> NameResolver<H> {
                         }
                     }
                     Kind::ClassDeclaration | Kind::ClassExpression | Kind::InterfaceDeclaration => {
-                        let members = self.get_symbol_of_declaration(host, loc).unwrap().members.get();
+                        let members = self.get_symbol_of_declaration(host, loc).unwrap().members();
                         result = self.lookup(host, members, name, meaning & SymbolFlags::Type);
                         if let Some(res) = result {
                             if !is_type_parameter_symbol_declared_in_container(res, loc) {
@@ -299,7 +299,7 @@ impl<H: 'static> NameResolver<H> {
                         {
                             let container = parent.parent().unwrap();
                             if ast::is_class_like(container) {
-                                let members = self.get_symbol_of_declaration(host, container).unwrap().members.get();
+                                let members = self.get_symbol_of_declaration(host, container).unwrap().members();
                                 result = self.lookup(host, members, name, meaning & SymbolFlags::Type);
                                 if result.is_some() {
                                     if name_not_found_message.is_some() {
@@ -322,7 +322,7 @@ impl<H: 'static> NameResolver<H> {
                         let gp = grandparent.unwrap();
                         if ast::is_class_like(gp) || ast::is_interface_declaration(gp) {
                             // A reference to this grandparent's type parameters would be an error
-                            let members = self.get_symbol_of_declaration(host, gp).unwrap().members.get();
+                            let members = self.get_symbol_of_declaration(host, gp).unwrap().members();
                             result = self.lookup(host, members, name, meaning & SymbolFlags::Type);
                             if result.is_some() {
                                 if name_not_found_message.is_some() {
