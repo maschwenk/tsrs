@@ -47,6 +47,13 @@ opt-level = 3
 debug = "line-tables-only"
 panic = "unwind"
 
+# Release binaries (.github/workflows/release.yml) build with this profile twice, for PGO: -Cprofile-generate,
+# training run, -Cprofile-use (notes/perf-pgo.md). `cargo build --release` stays the development build.
+[profile.dist]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+
 [workspace.lints.rust]
 dead_code = "allow"
 unused_variables = "allow"

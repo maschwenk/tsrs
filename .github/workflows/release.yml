@@ -49,18 +49,25 @@ jobs:
           echo "version=$(node npm/build.mjs --print-version)" >> "$GITHUB_OUTPUT"
           echo "ts_commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
 
+  # Release binaries are PGO builds with the `dist` profile (fat LTO, one codegen unit; Cargo.toml): an instrumented
+  # build of tsrs + tsrs-test, the training workload (.github/scripts/pgo-train.sh: the conformance suite and two
+  # open-source bench projects), then the final build with the merged profile. Numbers: notes/perf-pgo.md.
   build:
     name: build ${{ matrix.target }}
     needs: version
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         include:
           - { target: aarch64-apple-darwin, os: macos-14, experimental: false, run: true }
-          # Cross-compiled on the arm64 runner (Apple's toolchain targets both architectures).
+          # Cross-compiled on the arm64 runner (Apple's toolchain targets both architectures). Its profile comes
+          # from its own x86_64 instrumented build, trained under Rosetta 2 on that runner: the arm64 profile does
+          # not fit, because profile entries are keyed by symbol names whose hashes depend on the target triple
+          # (with the arm64 profile 9.3k functions had no data instead of 1.8k, and the gain under Rosetta was 4%
+          # instructions instead of 16%; notes/perf-pgo.md). The smoke test below stays off (`run: false`) as before.
           - { target: x86_64-apple-darwin, os: macos-14, experimental: false, run: false }
           # Built on 22.04 so the binary needs at most glibc 2.35.
           - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, experimental: false, run: true }
@@ -71,21 +78,63 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The conformance suite (part of the training workload) reads its tests from ts-ref/tsc/testdata.
+      - name: Check out TypeScript testdata
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ needs.version.outputs.ts_commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+      # The bench projects of the training workload install with npm/pnpm/yarn (bench/run.py --setup-only).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           targets: ${{ matrix.target }}
+          components: llvm-tools
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          key: ${{ matrix.target }}
+          key: ${{ matrix.target }}-pgo
+      - name: Rosetta 2 (x86_64 training run on the arm64 runner)
+        if: matrix.target == 'x86_64-apple-darwin'
+        run: arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
+      # Everything of the PGO steps but the final build lives outside target/, which rust-cache saves.
+      - name: Instrumented build
+        shell: bash
+        env:
+          RUSTFLAGS: -Cprofile-generate=${{ runner.temp }}/pgo/raw
+          CARGO_TARGET_DIR: ${{ runner.temp }}/pgo/target
+        run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner --target ${{ matrix.target }}
+      - name: Training run
+        shell: bash
+        run: .github/scripts/pgo-train.sh "$RUNNER_TEMP/pgo/target/${{ matrix.target }}/dist" "$RUNNER_TEMP/pgo/raw" "$RUNNER_TEMP/pgo/bench"
+      - name: Merge profiles
+        id: profile
+        shell: bash
+        run: |
+          profdata="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/llvm-profdata"
+          "$profdata" merge -o "$RUNNER_TEMP/pgo/merged.profdata" "$RUNNER_TEMP"/pgo/raw/*.profraw
+          "$profdata" show "$RUNNER_TEMP/pgo/merged.profdata" | tail -5
+          # The profile's hash is part of its path, and so of RUSTFLAGS: cargo then rebuilds dependencies restored by
+          # rust-cache whenever the profile changes.
+          sum=$(shasum -a 256 "$RUNNER_TEMP/pgo/merged.profdata" | cut -c1-16)
+          mv "$RUNNER_TEMP/pgo/merged.profdata" "$RUNNER_TEMP/pgo/$sum.profdata"
+          echo "path=$RUNNER_TEMP/pgo/$sum.profdata" >> "$GITHUB_OUTPUT"
       - name: cargo build
         shell: bash
-        run: cargo build --release --locked -p tsrs_cli --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}
+        run: cargo build --profile dist --locked -p tsrs_cli --target ${{ matrix.target }}
       - name: Stage binary
         shell: bash
         run: |
           exe=tsrs; [ "${{ matrix.target }}" = x86_64-pc-windows-msvc ] && exe=tsrs.exe
           mkdir -p "out/${{ matrix.target }}"
-          cp "target/${{ matrix.target }}/release/$exe" "out/${{ matrix.target }}/$exe"
+          cp "target/${{ matrix.target }}/dist/$exe" "out/${{ matrix.target }}/$exe"
           if [ "${{ matrix.run }}" = true ]; then
             "out/${{ matrix.target }}/$exe" --version
             printf 'const x: number = "no";\n' > bad.ts
