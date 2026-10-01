@@ -1,0 +1,71 @@
+# Depot CI Migration
+# Source: .github/workflows/ci.yml
+#
+# Changes made:
+# - Changed GitHub runs-on labels to their Depot equivalents
+
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+# Superseded pull-request runs are cancelled; every push to main runs to completion (several agents push to main).
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+jobs:
+  check-and-test:
+    runs-on: depot-ubuntu-22.04 # was: ubuntu-22.04. Mapped standard GitHub runner to Depot equivalent.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+      # The conformance tests and the tsoptions unit tests read the reference baselines from ts-ref/tsc/testdata.
+      - name: Check out TypeScript testdata
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check
+        run: cargo check --workspace --locked
+        env:
+          RUSTFLAGS: -D warnings
+      - name: cargo test (fast crates)
+        run: >-
+          cargo test --locked --no-fail-fast -p tsrs_core -p tsrs_ast -p tsrs_scanner -p tsrs_diagnostics -p tsrs_vfs -p tsrs_module -p tsrs_tsoptions -p tsrs_printer -p tsrs_modulespecifiers -p tsrs_compiler -p tsrs_testrunner
+      - name: Build release binaries
+        run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner
+      - name: Conformance suite
+        run: .github/scripts/conformance-gate.sh
+      - name: npm packaging smoke test
+        run: |
+          node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/release/tsrs --pack
+          dir=$(mktemp -d)
+          cd "$dir"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$GITHUB_WORKSPACE"/npm/dist/*.tgz
+          npx tsrs --version
+          printf 'const x: number = 1;\n' > ok.ts
+          npx tsrs ok.ts
+          printf 'const x: number = "no";\n' > bad.ts
+          if npx tsrs bad.ts; then echo "expected a type error"; exit 1; fi
+      - name: Upload conformance results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-results
+          path: target/test-results/*.txt
+          if-no-files-found: ignore
