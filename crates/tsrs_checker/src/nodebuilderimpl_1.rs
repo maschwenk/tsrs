@@ -549,17 +549,17 @@ impl NodeBuilderImpl {
         if st.construct_signatures().is_empty() {
             return t;
         }
-        if let Some(existing) = st.object_type_without_abstract_construct_signatures.get() {
+        if let Some(&existing) = c.object_types_without_abstract_construct_signatures.get(&t) {
             return existing;
         }
         let construct_signatures: Vec<P<Signature>> = st.construct_signatures().iter().copied().filter(|signature| !signature.flags.get().intersects(SignatureFlags::Abstract)).collect();
         if construct_signatures.len() == st.construct_signatures().len() {
-            st.object_type_without_abstract_construct_signatures.set(Some(t));
+            c.object_types_without_abstract_construct_signatures.insert(t, t);
             return t;
         }
         let type_copy = c.new_anonymous_type(t.symbol(), st.members.get(), st.call_signatures(), &construct_signatures, st.index_infos.get());
-        st.object_type_without_abstract_construct_signatures.set(Some(type_copy));
-        type_copy.as_structured_type().object_type_without_abstract_construct_signatures.set(Some(type_copy));
+        c.object_types_without_abstract_construct_signatures.insert(t, type_copy);
+        c.object_types_without_abstract_construct_signatures.insert(type_copy, type_copy);
         type_copy
     }
 

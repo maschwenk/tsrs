@@ -868,6 +868,9 @@ pub struct Checker {
     pub reg_exp_scanner: Option<Box<Scanner>>,
     pub pattern_for_type: FxHashMap<P<Type>, P<Node>>,
     pub(crate) lazy_member_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMemberTable>>,
+    // Go `StructuredType.objectTypeWithoutAbstractConstructSignatures`: set only by the node builder, for few types,
+    // so kept here instead of in every object, union and intersection type.
+    pub(crate) object_types_without_abstract_construct_signatures: FxHashMap<P<Type>, P<Type>>,
     pub(crate) lazy_mapped_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>,
     /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
     pub lazy_members: bool,
@@ -1225,6 +1228,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         reg_exp_scanner: None,
         pattern_for_type: FxHashMap::default(),
         lazy_member_tables: FxHashMap::default(),
+        object_types_without_abstract_construct_signatures: FxHashMap::default(),
         lazy_mapped_tables: FxHashMap::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
         lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),

@@ -1522,12 +1522,11 @@ pub struct StructuredType {
     pub signatures: SliceCell<P<Signature>>, // Signatures (call + construct)
     pub call_signature_count: Cell<i32>, // Count of call signatures
     pub index_infos: SliceCell<P<IndexInfo>>,
-
-    pub object_type_without_abstract_construct_signatures: Cell<Option<P<Type>>>,
+    // Go's objectTypeWithoutAbstractConstructSignatures is `Checker::object_types_without_abstract_construct_signatures`.
 }
 embeds!(StructuredType, constrained_type, ConstrainedType);
 
-const _: () = assert!(std::mem::size_of::<StructuredType>() == 64);
+const _: () = assert!(std::mem::size_of::<StructuredType>() == 56);
 
 impl StructuredType {
     pub fn call_signatures(&self) -> &'static [P<Signature>] {

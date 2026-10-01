@@ -138,3 +138,18 @@ candidate and 40K a contravariant one.
 | 4 checkers, after | 9.98-10.00 (-0.20) | 432 G |
 | opt-out single / 4 checkers (go assignment), before | 10.15 / 15.59 | |
 | opt-out single / 4 checkers (go assignment), after | 10.00 / 15.38 | |
+
+### 6. `StructuredType` 64 -> 56 bytes: the node builder's abstract-construct-signature cache moves to the checker
+
+`objectTypeWithoutAbstractConstructSignatures` is a cache that only `getResolvedTypeWithoutAbstractConstructSignatures`
+(node builder) reads and writes, for few types, but every object, reference, union and intersection type (7.6M
+single) carried it. It is now a checker map keyed by the type (types belong to one checker; same lookups, same
+values). TypeAlloc<ObjectType> 120 -> 112, <TypeReference> 144 -> 136, <UnionType> 192 -> 184.
+
+| run (2 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 7.447 | 320-321 G |
+| single, after | 7.390 (-0.06) | 320-322 G |
+| 4 checkers, before | 9.98-9.99 | 431-433 G |
+| 4 checkers, after | 9.91-9.92 (-0.07) | 432-433 G |
+| opt-out single / 4 checkers (go assignment), after | 9.94 / 15.30 | |
