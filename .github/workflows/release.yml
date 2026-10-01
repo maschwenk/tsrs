@@ -64,9 +64,8 @@ jobs:
           - { target: x86_64-apple-darwin, os: macos-14, experimental: false, run: false }
           # Built on 22.04 so the binary needs at most glibc 2.35.
           - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, experimental: false, run: true }
-          # Not in the first release (npm/README.md TODO): linux-arm64, win32-x64. The main package lists only the
-          # platforms built here.
-          # - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, experimental: false, run: true }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, experimental: false, run: true }
+          # Not built yet (npm/README.md TODO): win32-x64. The main package lists only the platforms built here.
           # - { target: x86_64-pc-windows-msvc, os: windows-latest, experimental: true, run: true }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -133,7 +132,7 @@ jobs:
           merge-multiple: true
       - name: Require the release platforms
         run: |
-          for t in aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu; do
+          for t in aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu; do
             test -f "artifacts/$t/tsrs" || { echo "::error::missing binary for $t"; exit 1; }
           done
           ls -lR artifacts

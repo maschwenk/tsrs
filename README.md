@@ -46,7 +46,7 @@ baselines; the four exceptions are test-harness artifacts. `docs/STATUS.md` has 
 ## Use it
 
 ```sh
-npx -y @maschwenk/tsrs -p path/to/project        # macOS arm64/x64, Linux x64
+npx -y @maschwenk/tsrs -p path/to/project        # macOS arm64/x64, Linux x64/arm64
 npx -y @maschwenk/tsrs -p . --singleThreaded     # one checker thread (less memory)
 ```
 

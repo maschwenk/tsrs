@@ -7,8 +7,8 @@ tsrs ships on npm the way TypeScript 7 ships its native compiler (`typescript@7`
 | `@maschwenk/tsrs` | `bin/tsrs` (Node launcher), `lib/` (binary lookup, `version.cjs`), `optionalDependencies` on every platform package |
 | `@maschwenk/tsrs-<os>-<arch>` | the `tsrs` binary for one platform, with `os`/`cpu` (and `libc: glibc` on Linux) so package managers install only the matching one |
 
-Platforms in the first release: `darwin-arm64`, `darwin-x64`, `linux-x64` (glibc). `npm/build.mjs` and the launcher
-also know `linux-arm64` and `win32-x64` (see TODO).
+Platforms: `darwin-arm64`, `darwin-x64`, `linux-x64` and `linux-arm64` (glibc). `npm/build.mjs` and the launcher
+also know `win32-x64` (see TODO).
 
 The package name is set in one place, `npm/tsrs/package.json`; platform packages are always `<name>-<os>-<cpu>`, and
 the launcher derives that name from its own `package.json` at runtime.
@@ -79,7 +79,7 @@ pnpm re-resolve the whole lockfile.)
 `.github/workflows/release.yml` runs on a pushed tag `v<workspace version>` or `v<npm version>` (e.g. `v0.1.0`):
 
 1. checks the tag against `Cargo.toml`, and runs `cargo check --workspace`;
-2. builds release binaries for macOS arm64 and x64 (x64 cross-compiled on the arm64 runner) and Linux x64
+2. builds release binaries for macOS arm64 and x64 (x64 cross-compiled on the arm64 runner) and Linux x64 and arm64
    (`ubuntu-22.04`), and smoke-runs the native ones (`--version`, exit code 2 on a type error);
 3. assembles and packs with `npm/build.mjs`, uploads the tarballs as the `npm-packages` artifact, and publishes the
    platform packages, then the main package, with `--access public --tag latest` (skipping any already on the
@@ -126,10 +126,6 @@ them keep working.
 
 ## TODO
 
-- linux-arm64: uncomment its matrix entry in `release.yml` (native `ubuntu-22.04-arm` runner, if available to this
-  private repo) or cross-compile on `ubuntu-22.04` with `gcc-aarch64-linux-gnu` and
-  `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc` (all dependencies are pure Rust, so no C cross
-  toolchain beyond the linker is needed; untested), then add it to the "Require the release platforms" list.
 - win32-x64: uncomment its matrix entry; Windows has never been built or run.
 - Make the conformance suite a release gate again (`.github/scripts/conformance-gate.sh`, already green in `ci.yml`
   with a 120 s per-test timeout).
