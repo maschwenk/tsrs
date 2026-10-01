@@ -55,8 +55,11 @@ Measured on vscode and mui-docs, which are not part of the training workload.
 Binary size (arm64): a 16.3 MB (12.9 MB stripped), b 13.3 MB (11.5), c 13.4 MB (11.6).
 
 Build time (clean target dir, both binaries, same machine): a 34 s; b 68 s; c = instrumented build 87-90 s +
-training ~15 s + final build 72-76 s, ~3 min in total (~+2.5 min over a). On GitHub runners expect more, since the
-one codegen unit of `tsrs_checker` serializes its compilation (the build job's timeout is now 90 minutes).
+training ~15 s + final build 72-76 s, ~3 min in total (~+2.5 min over a). On GitHub runners (release dry run
+36922215992, warm rust-cache) the build jobs went from 1.3-2.1 min to 4.7 min (linux x64), 6.2 (linux arm64),
+8.7 (macOS arm64) and 10.5 (macOS x64: the training run is ~2x slower under Rosetta); the instrumented build takes
+1.5-4 min, the training run 1-2.5 min (incl. the bench projects' clone + install, uncached), the final build
+1.4-2.7 min. The job timeout is now 90 minutes.
 
 ## macOS x86_64 (cross-compiled on the arm64 runner)
 
@@ -87,6 +90,17 @@ profile trained under Rosetta.
   (12,779 pass / 0 codes / 0 fail / 0 crash in both modes).
 - The private monorepo, `--checkers 1` and 4 checkers: the same 9 errors and identical `--extendedDiagnostics`
   counters (files, lines, identifiers, symbols, types, instantiations and the lazy-member counters) as (a).
+
+## C code (mimalloc) is not PGO-optimized
+
+cc (1.5) forwards `-Cprofile-generate` / `-Cprofile-use` from RUSTFLAGS to clang (not to gcc). On macOS that
+instruments mimalloc with Apple clang, whose instrumentation does not have to match the profiler runtime of
+rustc's LLVM: with rustc 1.95 it happened to work, with 1.99 (the release runners' stable on 2026-10-01) every
+instrumented binary crashed at startup in `__llvm_profile_instrument_target` called from mimalloc. The workflow
+sets `CFLAGS=-fno-profile-generate` / `-fno-profile-use` on macOS (CFLAGS come last on cc's command line), so
+mimalloc is built as before on every platform. Measured: same instructions as with an instrumented mimalloc
+(private monorepo 266.3 vs 266.2 G single, 359.1 vs 358.9 G on 4 checkers), and the conformance and counter gates
+above were rerun on this binary with the same result.
 
 ## Notes
 
