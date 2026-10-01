@@ -767,14 +767,14 @@ impl Parser {
         let pos = self.node_pos();
         let save_parsing_contexts = self.parsing_contexts;
         self.parsing_contexts |= 1 << (ParsingContext::JsxChildren as i32);
-        let mut list: Vec<P<Node>> = Vec::new();
+        let start = self.node_stack.len();
         loop {
             let current_token = self.scanner.re_scan_jsx_token(true /*allowMultilineJsxText*/);
             self.report_scan_errors();
             let Some(child) = self.parse_jsx_child(opening_tag, current_token) else {
                 break;
             };
-            list.push(child);
+            self.node_stack.push(child);
             if ast::is_jsx_opening_element(opening_tag)
                 && child.kind() == Kind::JsxElement
                 && !ast::tag_names_are_equivalent(child.as_jsx_element().opening_element.tag_name(), child.as_jsx_element().closing_element.tag_name())
@@ -786,7 +786,7 @@ impl Parser {
         }
         self.parsing_contexts = save_parsing_contexts;
         let end = self.node_pos();
-        self.new_node_list(TextRange::new(pos, end), &list)
+        self.finish_node_list(start, TextRange::new(pos, end))
     }
 
     pub(crate) fn parse_jsx_child(&mut self, opening_tag: P<Node>, token: Kind) -> Option<P<Node>> {
@@ -1529,16 +1529,16 @@ impl Parser {
 
     pub(crate) fn parse_template_spans(&mut self, is_tagged_template: bool) -> P<NodeList> {
         let pos = self.node_pos();
-        let mut list: Vec<P<Node>> = Vec::new();
+        let start = self.node_stack.len();
         loop {
             let span = self.parse_template_span(is_tagged_template);
-            list.push(span);
+            self.node_stack.push(span);
             if span.as_template_span().literal.kind() != Kind::TemplateMiddle {
                 break;
             }
         }
         let end = self.node_pos();
-        self.new_node_list(TextRange::new(pos, end), &list)
+        self.finish_node_list(start, TextRange::new(pos, end))
     }
 
     pub(crate) fn parse_template_span(&mut self, is_tagged_template: bool) -> P<Node> {
@@ -1881,14 +1881,14 @@ impl Parser {
         self.create_missing_identifier()
     }
 
-    pub(crate) fn new_node_list(&mut self, loc: TextRange, nodes: &[P<Node>]) -> P<NodeList> {
-        let list = self.factory.new_node_list(nodes.to_vec());
+    pub(crate) fn new_node_list(&self, loc: TextRange, nodes: &[P<Node>]) -> P<NodeList> {
+        let list = self.factory.new_node_list_from_slice(nodes);
         list.loc.set(loc);
         list
     }
 
-    pub(crate) fn new_modifier_list(&mut self, loc: TextRange, nodes: &[P<Node>]) -> P<ModifierList> {
-        let list = self.factory.new_modifier_list(nodes.to_vec());
+    pub(crate) fn new_modifier_list(&self, loc: TextRange, nodes: &[P<Node>]) -> P<ModifierList> {
+        let list = self.factory.new_modifier_list_from_slice(nodes);
         list.list.loc.set(loc);
         list
     }

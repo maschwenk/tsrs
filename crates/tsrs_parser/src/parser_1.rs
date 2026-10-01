@@ -127,6 +127,12 @@ pub struct Parser {
 
     pub(crate) current_parent: Option<P<Node>>,
     pub(crate) reparsed_clones: Vec<P<Node>>,
+
+    // Go builds node lists in `make([]*ast.Node, 0, 16)` slices that escape analysis keeps on the goroutine stack,
+    // and clones the finished list into the node slice arena. The port builds every list on this one stack
+    // instead (a nested list pushes above its parent's elements and pops them before returning), so building a
+    // list costs no heap allocation; `finish_node_list` copies the elements into the arena.
+    pub(crate) node_stack: Vec<P<Node>>,
 }
 
 pub(crate) fn new_parser() -> Parser {
@@ -158,6 +164,7 @@ pub(crate) fn new_parser() -> Parser {
         reparse_list: Vec::new(),
         current_parent: None,
         reparsed_clones: Vec::new(),
+        node_stack: Vec::new(),
     }
 }
 
@@ -715,14 +722,20 @@ impl Parser {
         result
     }
 
-    pub(crate) fn parse_list_index(&mut self, kind: ParsingContext, mut parse_element: impl FnMut(&mut Parser, usize) -> P<Node>) -> Vec<P<Node>> {
+    pub(crate) fn parse_list_index(&mut self, kind: ParsingContext, parse_element: impl FnMut(&mut Parser, usize) -> P<Node>) -> Vec<P<Node>> {
+        let start = self.parse_list_index_on_stack(kind, parse_element);
+        self.node_stack.split_off(start)
+    }
+
+    /// `parseListIndex` with the elements left on `node_stack` above the returned start index.
+    pub(crate) fn parse_list_index_on_stack(&mut self, kind: ParsingContext, mut parse_element: impl FnMut(&mut Parser, usize) -> P<Node>) -> usize {
         let save_parsing_contexts = self.parsing_contexts;
         self.parsing_contexts |= 1 << kind as i32;
         let mut outer_reparse_list = std::mem::take(&mut self.reparse_list);
-        let mut list: Vec<P<Node>> = Vec::with_capacity(16);
+        let start = self.node_stack.len();
         while !self.is_list_terminator(kind) {
             if self.is_list_element(kind, false /*inErrorRecovery*/) {
-                let elt = parse_element(self, list.len());
+                let elt = parse_element(self, self.node_stack.len() - start);
                 if !self.reparse_list.is_empty() {
                     for e in std::mem::take(&mut self.reparse_list) {
                         // Propagate @typedef type alias declarations outwards to a context that permits them.
@@ -732,11 +745,11 @@ impl Parser {
                         {
                             outer_reparse_list.push(e);
                         } else {
-                            list.push(e);
+                            self.node_stack.push(e);
                         }
                     }
                 }
-                list.push(elt);
+                self.node_stack.push(elt);
                 continue;
             }
             if self.abort_parsing_list_or_move_to_next_token(kind) {
@@ -745,14 +758,21 @@ impl Parser {
         }
         self.reparse_list = outer_reparse_list;
         self.parsing_contexts = save_parsing_contexts;
-        list
+        start
     }
 
     pub(crate) fn parse_list(&mut self, kind: ParsingContext, mut parse_element: impl FnMut(&mut Parser) -> P<Node>) -> P<NodeList> {
         let pos = self.node_pos();
-        let nodes = self.parse_list_index(kind, |p, _| parse_element(p));
+        let start = self.parse_list_index_on_stack(kind, |p, _| parse_element(p));
         let end = self.node_pos();
-        self.new_node_list(new_text_range(pos, end), &nodes)
+        self.finish_node_list(start, new_text_range(pos, end))
+    }
+
+    /// Moves the elements above `start` off `node_stack` into a new arena node list.
+    pub(crate) fn finish_node_list(&mut self, start: usize, loc: TextRange) -> P<NodeList> {
+        let list = self.new_node_list(loc, &self.node_stack[start..]);
+        self.node_stack.truncate(start);
+        list
     }
 
     // Return a non-nil (but possibly empty) slice if parsing was successful, or nil if parseElement returned nil
@@ -764,17 +784,18 @@ impl Parser {
         let pos = self.node_pos();
         let save_parsing_contexts = self.parsing_contexts;
         self.parsing_contexts |= 1 << kind as i32;
-        let mut list: Vec<P<Node>> = Vec::with_capacity(16);
+        let start = self.node_stack.len();
         loop {
             if self.is_list_element(kind, false /*inErrorRecovery*/) {
                 let start_pos = self.node_pos();
                 let element: Option<P<Node>> = parse_element(self).into();
                 let Some(element) = element else {
                     self.parsing_contexts = save_parsing_contexts;
+                    self.node_stack.truncate(start);
                     // Return nil to indicate parseElement failed
                     return None;
                 };
-                list.push(element);
+                self.node_stack.push(element);
                 if self.parse_optional(Kind::CommaToken) {
                     // No need to check for a zero length node since we know we parsed a comma
                     continue;
@@ -818,7 +839,7 @@ impl Parser {
         }
         self.parsing_contexts = save_parsing_contexts;
         let end = self.node_pos();
-        Some(self.new_node_list(new_text_range(pos, end), &list))
+        Some(self.finish_node_list(start, new_text_range(pos, end)))
     }
 
     // Return a non-nil (but possibly empty) NodeList if parsing was successful, a missing NodeList if the opening

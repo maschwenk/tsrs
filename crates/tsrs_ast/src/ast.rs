@@ -239,7 +239,14 @@ pub struct ModifierList {
 
 impl NodeFactory {
     pub fn new_modifier_list(&self, nodes: Vec<P<Node>>) -> P<ModifierList> {
-        let nodes = alloc_vec(nodes);
+        self.new_modifier_list_from_static(alloc_vec(nodes))
+    }
+
+    pub fn new_modifier_list_from_slice(&self, nodes: &[P<Node>]) -> P<ModifierList> {
+        self.new_modifier_list_from_static(alloc_slice(nodes))
+    }
+
+    fn new_modifier_list_from_static(&self, nodes: &'static [P<Node>]) -> P<ModifierList> {
         P::new(ModifierList {
             list: NodeList { loc: OwnedCell::new(undefined_text_range()), nodes },
             modifier_flags: modifiers_to_flags(nodes),

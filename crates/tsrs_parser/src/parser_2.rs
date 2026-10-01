@@ -342,13 +342,14 @@ impl Parser {
             type_node = parse_constituent_type(self);
         }
         if self.token == operator || has_leading_operator {
-            let mut types: Vec<P<Node>> = Vec::with_capacity(8);
-            types.push(type_node);
+            let start = self.node_stack.len();
+            self.node_stack.push(type_node);
             while self.parse_optional(operator) {
-                types.push(self.parse_function_or_constructor_type_to_error(is_union_type, parse_constituent_type));
+                let t = self.parse_function_or_constructor_type_to_error(is_union_type, parse_constituent_type);
+                self.node_stack.push(t);
             }
             let end = self.node_pos();
-            let list = self.new_node_list(TextRange::new(pos, end), &types);
+            let list = self.finish_node_list(start, TextRange::new(pos, end));
             type_node = self.create_union_or_intersection_type_node(operator, list);
             self.finish_node(type_node, pos);
         }
@@ -1623,16 +1624,16 @@ impl Parser {
 
     pub(crate) fn parse_template_type_spans(&mut self) -> P<NodeList> {
         let pos = self.node_pos();
-        let mut list: Vec<P<Node>> = Vec::new();
+        let start = self.node_stack.len();
         loop {
             let span = self.parse_template_type_span();
-            list.push(span);
+            self.node_stack.push(span);
             if span.as_template_literal_type_span().literal.kind() != Kind::TemplateMiddle {
                 break;
             }
         }
         let end = self.node_pos();
-        self.new_node_list(TextRange::new(pos, end), &list)
+        self.finish_node_list(start, TextRange::new(pos, end))
     }
 
     pub(crate) fn parse_template_type_span(&mut self) -> P<Node> {
@@ -1812,11 +1813,11 @@ impl Parser {
         // It is illegal to have both leadingDecorators and trailingDecorators, but we will report that as a grammar check in the checker.
         // parse leading decorators
         let pos = self.node_pos();
-        let mut list: Vec<P<Node>> = Vec::with_capacity(16);
+        let start = self.node_stack.len();
         loop {
             if allow_decorators && self.token == Kind::AtToken && !has_trailing_modifier {
                 let decorator = self.parse_decorator();
-                list.push(decorator);
+                self.node_stack.push(decorator);
                 if has_leading_modifier {
                     has_trailing_decorator = true;
                 }
@@ -1829,7 +1830,7 @@ impl Parser {
                 if modifier.kind() == Kind::StaticKeyword {
                     has_static_modifier = true;
                 }
-                list.push(modifier);
+                self.node_stack.push(modifier);
                 if has_trailing_decorator {
                     has_trailing_modifier = true;
                 } else {
@@ -1837,9 +1838,11 @@ impl Parser {
                 }
             }
         }
-        if !list.is_empty() {
+        if self.node_stack.len() > start {
             let end = self.node_pos();
-            return Some(self.new_modifier_list(TextRange::new(pos, end), &list));
+            let list = self.new_modifier_list(TextRange::new(pos, end), &self.node_stack[start..]);
+            self.node_stack.truncate(start);
+            return Some(list);
         }
         None
     }
