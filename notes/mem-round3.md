@@ -116,3 +116,19 @@ longer than 63 bytes in linear and indexed tables.
 | 4 checkers, after | 8.53-8.57 (8.551, -0.27) | 433-434 G (+0.2%) |
 | opt-out single, before / after | 9.08 / 8.51 (-0.58) | 340 / 340 G |
 | opt-out 4 checkers (go assignment), after | 13.09 (was 13.95) | 524 G |
+
+### A5. No links slot for a read of an object literal member's `nameType`
+
+Walking the value-symbol link slots at exit with their creating call sites: 0.96M of the 0.98M never-written slots
+come from one read, `getContextualTypeForObjectLiteralElement` asking for the `nameType` of the element's
+declaration symbol. It now uses `try_get` (the store still assigns the symbol its id at the same point, so ids are
+unchanged; a missing slot reads as nil like a fresh one). mem-lazy noted the same site; in Go the paged store
+allocates the slot with its page either way, so this is tsrs-only.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before (A4) | 6.374-6.378 (6.376) | 316-318 G |
+| single, after | 6.344-6.353 (6.345, -0.03) | 316-318 G |
+| 4 checkers, before (A4) | 8.51-8.55 (8.541) | 431-432 G |
+| 4 checkers, after | 8.48-8.53 (8.525, -0.02) | 432 G |
+| opt-out single / 4 checkers (go assignment), after | 8.48 / 13.07 | 341 / 518 G |
