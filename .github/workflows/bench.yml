@@ -1,0 +1,97 @@
+# Benchmarks tsrs against tsgo (typescript@7.0.2) on the typescript-benchmarking projects (bench/README.md) and
+# rewrites the table between the bench markers at the top of README.md.
+#
+# Loop guards: the results commit only touches README.md and bench/results/** (paths-ignore), carries [skip ci], and
+# is pushed with GITHUB_TOKEN (whose pushes never trigger workflows).
+
+name: Bench
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - README.md
+      - bench/results/**
+  workflow_dispatch:
+
+# A newer push cancels a bench still running for an older one.
+concurrency:
+  group: bench
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  bench:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the results commit can be rebased onto a newer main
+
+      - name: Runner hardware
+        run: |
+          nproc; free -g; df -h / | tail -1
+          lscpu | grep -E 'Model name|^CPU\(s\)' || true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: bench-release
+
+      - name: Build tsrs (release)
+        run: cargo build --release --locked -p tsrs_cli
+
+      # Clones at the pinned commits plus their node_modules, keyed on bench/projects.json.
+      - name: Restore benchmark projects
+        id: work-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work
+          key: bench-work-v1-${{ runner.os }}-${{ hashFiles('bench/projects.json') }}
+
+      - name: Set up benchmark projects
+        if: steps.work-cache.outputs.cache-hit != 'true'
+        run: python3 bench/run.py --setup-only
+
+      - name: Save benchmark projects
+        if: steps.work-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: bench/.work
+          key: ${{ steps.work-cache.outputs.cache-primary-key }}
+
+      - name: Benchmark
+        run: python3 bench/run.py --readme README.md
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-logs
+          path: bench/.work/logs
+          if-no-files-found: ignore
+
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md bench/results
+          git commit -q -m "bench: results for ${GITHUB_SHA::12} [skip ci]"
+          # main moves fast (several agents push to it); rebase onto the latest and retry.
+          for attempt in 1 2 3 4 5; do
+            git pull -q --rebase origin main && git push -q origin HEAD:main && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1

@@ -4,3 +4,4 @@ target/
 ts-ref
 __pycache__/
 npm/dist/
+bench/.work/
