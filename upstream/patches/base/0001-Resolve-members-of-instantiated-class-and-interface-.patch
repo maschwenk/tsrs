@@ -1,0 +1,1098 @@
+From 454faf31533e656d11f8dda9c43f03b8ea41fd5a Mon Sep 17 00:00:00 2001
+From: Max schwenk <maschwenk@gmail.com>
+Date: Thu, 1 Oct 2026 03:05:04 -0400
+Subject: [PATCH 1/2] Resolve members of instantiated class and interface
+ references lazily (#64475, squashed onto main)
+
+---
+ tsc/internal/checker/checker.go               | 287 +++++++++++++++---
+ tsc/internal/checker/relater.go               |   4 +-
+ ...nstantiatedReferenceLazyMembers.errors.txt | 112 +++++++
+ .../instantiatedReferenceLazyMembers.symbols  | 259 ++++++++++++++++
+ .../instantiatedReferenceLazyMembers.types    | 193 ++++++++++++
+ .../instantiatedReferenceLazyMembers.ts       |  74 +++++
+ 6 files changed, 892 insertions(+), 37 deletions(-)
+ create mode 100644 tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.errors.txt
+ create mode 100644 tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.symbols
+ create mode 100644 tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.types
+ create mode 100644 tsc/testdata/tests/cases/compiler/instantiatedReferenceLazyMembers.ts
+
+diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
+index 415c8ecdf7..f04c079aa9 100644
+--- a/tsc/internal/checker/checker.go
++++ b/tsc/internal/checker/checker.go
+@@ -700,6 +700,7 @@ type Checker struct {
+ 	sourceFileLinks                             core.LinkStore[*ast.SourceFile, SourceFileLinks]
+ 	regExpScanner                               *scanner.Scanner
+ 	patternForType                              map[*Type]*ast.Node
++	lazyMemberTables                            map[*Type]*lazyMemberTable
+ 	contextFreeTypes                            map[*ast.Node]*Type
+ 	anyType                                     *Type
+ 	autoType                                    *Type
+@@ -980,6 +981,7 @@ func NewChecker(program Program, tracer *Tracer) (*Checker, *sync.Mutex) {
+ 	c.propertiesTypes = make(map[PropertiesTypesKey]*Type)
+ 	c.mergedSymbols = make(map[*ast.Symbol]*ast.Symbol)
+ 	c.patternForType = make(map[*Type]*ast.Node)
++	c.lazyMemberTables = make(map[*Type]*lazyMemberTable)
+ 	c.contextFreeTypes = make(map[*ast.Node]*Type)
+ 	c.anyType = c.newIntrinsicType(TypeFlagsAny, "any")
+ 	c.autoType = c.newIntrinsicTypeEx(TypeFlagsAny, "any", ObjectFlagsNonInferrableType)
+@@ -19244,8 +19246,7 @@ func (c *Checker) getPropertyOfTypeEx(t *Type, name string, skipObjectFunctionPr
+ 	t = c.getReducedApparentType(t)
+ 	switch {
+ 	case t.flags&TypeFlagsObject != 0:
+-		resolved := c.resolveStructuredTypeMembers(t)
+-		symbol := resolved.members[name]
++		symbol := c.getMemberOfStructuredType(t, name)
+ 		if symbol != nil {
+ 			if !includeTypeOnlyMembers && t.symbol != nil && t.symbol.Flags&ast.SymbolFlagsValueModule != 0 && c.moduleSymbolLinks.Get(t.symbol).typeOnlyExportStarMap[name] != nil {
+ 				// If this is the type of a module, `resolved.members.get(name)` might have effectively skipped over
+@@ -19264,9 +19265,9 @@ func (c *Checker) getPropertyOfTypeEx(t *Type, name string, skipObjectFunctionPr
+ 		switch {
+ 		case t == c.anyFunctionType:
+ 			functionType = c.globalFunctionType
+-		case len(resolved.CallSignatures()) != 0:
++		case len(c.getSignaturesOfStructuredType(t, SignatureKindCall)) != 0:
+ 			functionType = c.globalCallableFunctionType
+-		case len(resolved.ConstructSignatures()) != 0:
++		case len(c.getSignaturesOfStructuredType(t, SignatureKindConstruct)) != 0:
+ 			functionType = c.globalNewableFunctionType
+ 		}
+ 		if functionType != nil {
+@@ -19308,6 +19309,12 @@ func (c *Checker) getSignaturesOfStructuredType(t *Type, kind SignatureKind) []*
+ 	if t.flags&TypeFlagsStructuredType == 0 {
+ 		return nil
+ 	}
++	if lm := c.getReadyLazyMemberTable(t); lm != nil {
++		if kind == SignatureKindCall {
++			return lm.callSignatures
++		}
++		return lm.constructSignatures
++	}
+ 	resolved := c.resolveStructuredTypeMembers(t)
+ 	if kind == SignatureKindCall {
+ 		return resolved.signatures[:resolved.callSignatureCount]
+@@ -19321,6 +19328,9 @@ func (c *Checker) getIndexInfosOfType(t *Type) []*IndexInfo {
+ 
+ func (c *Checker) getIndexInfosOfStructuredType(t *Type) []*IndexInfo {
+ 	if t.flags&TypeFlagsStructuredType != 0 {
++		if lm := c.getReadyLazyMemberTable(t); lm != nil {
++			return lm.indexInfos
++		}
+ 		return c.resolveStructuredTypeMembers(t).indexInfos
+ 	}
+ 	return nil
+@@ -19437,13 +19447,12 @@ func (c *Checker) resolveClassOrInterfaceMembers(t *Type) {
+ }
+ 
+ func (c *Checker) resolveTypeReferenceMembers(t *Type) {
+-	source := t.Target()
+-	typeParameters := source.AsInterfaceType().allTypeParameters
+-	typeArguments := c.getTypeArguments(t)
+-	paddedTypeArguments := typeArguments
+-	if len(typeArguments) == len(typeParameters)-1 {
+-		paddedTypeArguments = core.Concatenate(typeArguments, []*Type{t})
++	if lm := c.lazyMemberTables[t]; lm != nil && lm.ready {
++		c.resolveLazyMembers(t, lm)
++		return
+ 	}
++	source := t.Target()
++	typeParameters, paddedTypeArguments := c.getReferenceMemberTypeArguments(t, source)
+ 	c.resolveObjectTypeMembers(t, source, typeParameters, paddedTypeArguments)
+ }
+ 
+@@ -19480,17 +19489,7 @@ func (c *Checker) resolveObjectTypeMembers(t *Type, source *Type, typeParameters
+ 				instantiatedBaseType = c.getTypeWithThisArgument(c.instantiateType(baseType, mapper), thisArgument, false /*needsApparentType*/)
+ 			}
+ 			members = c.addInheritedMembers(members, c.getPropertiesOfType(instantiatedBaseType))
+-			callSignatures = core.Concatenate(callSignatures, c.getSignaturesOfType(instantiatedBaseType, SignatureKindCall))
+-			constructSignatures = core.Concatenate(constructSignatures, c.getSignaturesOfType(instantiatedBaseType, SignatureKindConstruct))
+-			var inheritedIndexInfos []*IndexInfo
+-			if instantiatedBaseType != c.anyType {
+-				inheritedIndexInfos = c.getIndexInfosOfType(instantiatedBaseType)
+-			} else {
+-				inheritedIndexInfos = []*IndexInfo{c.anyBaseTypeIndexInfo}
+-			}
+-			indexInfos = core.Concatenate(indexInfos, core.Filter(inheritedIndexInfos, func(info *IndexInfo) bool {
+-				return findIndexInfo(indexInfos, info.keyType) == nil
+-			}))
++			callSignatures, constructSignatures, indexInfos = c.appendInheritedSignaturesAndIndexInfos(callSignatures, constructSignatures, indexInfos, instantiatedBaseType)
+ 		}
+ 	}
+ 	c.setStructuredTypeMembers(t, members, callSignatures, constructSignatures, indexInfos)
+@@ -19505,6 +19504,213 @@ func findIndexInfo(indexInfos []*IndexInfo, keyType *Type) *IndexInfo {
+ 	return nil
+ }
+ 
++func (c *Checker) appendInheritedSignaturesAndIndexInfos(callSignatures []*Signature, constructSignatures []*Signature, indexInfos []*IndexInfo, baseType *Type) ([]*Signature, []*Signature, []*IndexInfo) {
++	callSignatures = core.Concatenate(callSignatures, c.getSignaturesOfType(baseType, SignatureKindCall))
++	constructSignatures = core.Concatenate(constructSignatures, c.getSignaturesOfType(baseType, SignatureKindConstruct))
++	var inheritedIndexInfos []*IndexInfo
++	if baseType != c.anyType {
++		inheritedIndexInfos = c.getIndexInfosOfType(baseType)
++	} else {
++		inheritedIndexInfos = []*IndexInfo{c.anyBaseTypeIndexInfo}
++	}
++	indexInfos = core.Concatenate(indexInfos, core.Filter(inheritedIndexInfos, func(info *IndexInfo) bool {
++		return findIndexInfo(indexInfos, info.keyType) == nil
++	}))
++	return callSignatures, constructSignatures, indexInfos
++}
++
++// Instantiated class and interface references get a lazy member table in place of
++// resolved members. It has the signatures and index infos, but only instantiates the
++// members that are looked up, and reuses them if the members are later resolved in full.
++
++type lazyMemberTable struct {
++	ready               bool
++	mapper              *TypeMapper
++	typeArguments       []*Type
++	unaffected          []string // sorted names of declared members that instantiate to themselves
++	callSignatures      []*Signature
++	constructSignatures []*Signature
++	indexInfos          []*IndexInfo
++	baseTypes           []*Type
++	declared            map[string]*ast.Symbol
++}
++
++func mayHaveLazyMembers(t *Type) bool {
++	return t.objectFlags&(ObjectFlagsMembersResolved|ObjectFlagsReference) == ObjectFlagsReference
++}
++
++func (c *Checker) getReferenceMemberTypeArguments(t *Type, source *Type) (typeParameters []*Type, typeArguments []*Type) {
++	typeParameters = source.AsInterfaceType().allTypeParameters
++	typeArguments = c.getTypeArguments(t)
++	if len(typeArguments) == len(typeParameters)-1 {
++		typeArguments = core.Concatenate(typeArguments, []*Type{t})
++	}
++	return typeParameters, typeArguments
++}
++
++// Returns nil if t has no lazy member table or it is still being prepared.
++func (c *Checker) getReadyLazyMemberTable(t *Type) *lazyMemberTable {
++	if !mayHaveLazyMembers(t) {
++		return nil
++	}
++	return c.getReadyLazyMemberTableWorker(t)
++}
++
++func (c *Checker) getReadyLazyMemberTableWorker(t *Type) *lazyMemberTable {
++	source := t.Target()
++	if t.flags&TypeFlagsObject == 0 || source == nil || source == t || source.objectFlags&ObjectFlagsClassOrInterface == 0 ||
++		source.objectFlags&ObjectFlagsTuple != 0 || t.symbol != nil && t.symbol.Flags&ast.SymbolFlagsValueModule != 0 {
++		return nil
++	}
++	lm := c.lazyMemberTables[t]
++	if lm == nil {
++		typeParameters, typeArguments := c.getReferenceMemberTypeArguments(t, t.Target())
++		if slices.Equal(typeParameters, typeArguments) {
++			return nil
++		}
++		lm = &lazyMemberTable{
++			mapper:        newTypeMapper(typeParameters, typeArguments),
++			typeArguments: typeArguments,
++			declared:      map[string]*ast.Symbol{},
++		}
++		c.lazyMemberTables[t] = lm
++		c.prepareLazyMembers(t, lm)
++	}
++	if !lm.ready || t.objectFlags&ObjectFlagsMembersResolved != 0 {
++		return nil
++	}
++	return lm
++}
++
++// Mirrors resolveObjectTypeMembers without creating member symbols.
++func (c *Checker) prepareLazyMembers(t *Type, lm *lazyMemberTable) {
++	source := t.Target()
++	resolved := c.resolveDeclaredMembers(source)
++	// Whether instantiateSymbol returns a member itself depends on what is resolved now.
++	for id, symbol := range resolved.declaredMembers {
++		if c.isNamedMember(symbol, id) && c.isSymbolUnaffectedByInstantiation(symbol, lm.mapper) {
++			lm.unaffected = append(lm.unaffected, id)
++		}
++	}
++	slices.Sort(lm.unaffected)
++	callSignatures := c.instantiateSignatures(resolved.declaredCallSignatures, lm.mapper)
++	constructSignatures := c.instantiateSignatures(resolved.declaredConstructSignatures, lm.mapper)
++	indexInfos := c.instantiateIndexInfos(resolved.declaredIndexInfos, lm.mapper)
++	thisArgument := core.LastOrNil(lm.typeArguments)
++	for _, baseType := range c.getBaseTypes(source) {
++		instantiatedBaseType := baseType
++		if thisArgument != nil {
++			instantiatedBaseType = c.getTypeWithThisArgument(c.instantiateType(baseType, lm.mapper), thisArgument, false /*needsApparentType*/)
++		}
++		lm.baseTypes = append(lm.baseTypes, instantiatedBaseType)
++		if c.getReadyLazyMemberTable(c.getReducedApparentType(instantiatedBaseType)) == nil {
++			c.getPropertiesOfType(instantiatedBaseType)
++		}
++		callSignatures, constructSignatures, indexInfos = c.appendInheritedSignaturesAndIndexInfos(callSignatures, constructSignatures, indexInfos, instantiatedBaseType)
++	}
++	lm.callSignatures, lm.constructSignatures, lm.indexInfos = callSignatures, constructSignatures, indexInfos
++	lm.ready = true
++	if t.objectFlags&ObjectFlagsMembersResolved != 0 {
++		// t was resolved while preparing; resolveObjectTypeMembers would now replace its members.
++		c.resolveLazyMembers(t, lm)
++	}
++}
++
++func (c *Checker) resolveLazyMembers(t *Type, lm *lazyMemberTable) {
++	resolved := c.resolveDeclaredMembers(t.Target())
++	var members ast.SymbolTable
++	if len(resolved.declaredMembers) != 0 {
++		members = make(ast.SymbolTable, len(resolved.declaredMembers))
++		for id, symbol := range resolved.declaredMembers {
++			if c.isNamedMember(symbol, id) {
++				members[id] = c.getLazyDeclaredMember(lm, symbol, id)
++			}
++		}
++	}
++	for _, baseType := range lm.baseTypes {
++		members = c.addInheritedMembers(members, c.getPropertiesOfType(baseType))
++	}
++	c.setStructuredTypeMembers(t, members, lm.callSignatures, lm.constructSignatures, lm.indexInfos)
++	delete(c.lazyMemberTables, t)
++}
++
++func (c *Checker) getLazyDeclaredMember(lm *lazyMemberTable, symbol *ast.Symbol, name string) *ast.Symbol {
++	result := lm.declared[name]
++	if result == nil {
++		result = symbol
++		if _, unaffected := slices.BinarySearch(lm.unaffected, name); !unaffected {
++			result = c.newInstantiatedSymbol(symbol, lm.mapper)
++		}
++		lm.declared[name] = result
++	}
++	return result
++}
++
++func (c *Checker) getMemberOfStructuredType(t *Type, name string) *ast.Symbol {
++	if t.objectFlags&ObjectFlagsMembersResolved != 0 {
++		return t.AsStructuredType().members[name]
++	}
++	return c.getMemberOfUnresolvedStructuredType(t, name)
++}
++
++func (c *Checker) getMemberOfUnresolvedStructuredType(t *Type, name string) *ast.Symbol {
++	lm := c.getReadyLazyMemberTable(t)
++	if lm == nil || isReservedMemberName(name) {
++		return c.resolveStructuredTypeMembers(t).members[name]
++	}
++	// The declared member, else the first base type's property (see addInheritedMembers).
++	var result *ast.Symbol
++	if decl := c.resolveDeclaredMembers(t.Target()).declaredMembers[name]; decl != nil && c.isNamedMember(decl, name) {
++		result = c.getLazyDeclaredMember(lm, decl, name)
++	}
++	for _, baseType := range lm.baseTypes {
++		if result != nil && result.Flags&ast.SymbolFlagsValue != 0 {
++			break
++		}
++		if prop := c.getPropertyOfTypeEx(baseType, name, true /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/); prop != nil && !isStaticPrivateIdentifierProperty(prop) {
++			result = prop
++		}
++	}
++	return result
++}
++
++// f may see a declared member instead of its instantiation, which has the same flags.
++func (c *Checker) everyPropertyOfStructuredType(t *Type, f func(prop *ast.Symbol) bool) bool {
++	if lm := c.getReadyLazyMemberTable(t); lm != nil {
++		var seen collections.Set[string]
++		return c.everyLazyProperty(t, lm, &seen, f)
++	}
++	return core.Every(c.resolveStructuredTypeMembers(t).properties, f)
++}
++
++func (c *Checker) hasPropertiesOfStructuredType(t *Type) bool {
++	return !c.everyPropertyOfStructuredType(t, func(*ast.Symbol) bool { return false })
++}
++
++// seen has the names of properties that hide inherited ones, as in addInheritedMembers.
++func (c *Checker) everyLazyProperty(t *Type, lm *lazyMemberTable, seen *collections.Set[string], f func(prop *ast.Symbol) bool) bool {
++	for id, symbol := range c.resolveDeclaredMembers(t.Target()).declaredMembers {
++		if c.isNamedMember(symbol, id) && seen.AddIfAbsent(id) && !f(symbol) {
++			return false
++		}
++	}
++	for _, baseType := range lm.baseTypes {
++		reduced := c.getReducedApparentType(baseType)
++		if baseTable := c.getReadyLazyMemberTable(reduced); baseTable != nil {
++			if !c.everyLazyProperty(reduced, baseTable, seen, f) {
++				return false
++			}
++			continue
++		}
++		for _, prop := range c.getPropertiesOfType(baseType) {
++			if !isStaticPrivateIdentifierProperty(prop) && seen.AddIfAbsent(prop.Name) && !f(prop) {
++				return false
++			}
++		}
++	}
++	return true
++}
++
+ func (c *Checker) getBaseTypes(t *Type) []*Type {
+ 	if t.objectFlags&(ObjectFlagsClassOrInterface|ObjectFlagsTuple) == 0 {
+ 		return nil
+@@ -19693,13 +19899,14 @@ func (c *Checker) getSingleCallOrConstructSignature(t *Type) *Signature {
+ 
+ func (c *Checker) getSingleSignature(t *Type, kind SignatureKind, allowMembers bool) *Signature {
+ 	if t.flags&TypeFlagsObject != 0 {
+-		resolved := c.resolveStructuredTypeMembers(t)
+-		if allowMembers || len(resolved.properties) == 0 && len(resolved.indexInfos) == 0 {
+-			if kind == SignatureKindCall && len(resolved.CallSignatures()) == 1 && len(resolved.ConstructSignatures()) == 0 {
+-				return resolved.CallSignatures()[0]
++		if allowMembers || !c.hasPropertiesOfStructuredType(t) && len(c.getIndexInfosOfStructuredType(t)) == 0 {
++			callSignatures := c.getSignaturesOfStructuredType(t, SignatureKindCall)
++			constructSignatures := c.getSignaturesOfStructuredType(t, SignatureKindConstruct)
++			if kind == SignatureKindCall && len(callSignatures) == 1 && len(constructSignatures) == 0 {
++				return callSignatures[0]
+ 			}
+-			if kind == SignatureKindConstruct && len(resolved.ConstructSignatures()) == 1 && len(resolved.CallSignatures()) == 0 {
+-				return resolved.ConstructSignatures()[0]
++			if kind == SignatureKindConstruct && len(constructSignatures) == 1 && len(callSignatures) == 0 {
++				return constructSignatures[0]
+ 			}
+ 		}
+ 	}
+@@ -21092,24 +21299,34 @@ func (c *Checker) instantiateSymbolTable(symbols ast.SymbolTable, m *TypeMapper)
+ }
+ 
+ func (c *Checker) instantiateSymbol(symbol *ast.Symbol, m *TypeMapper) *ast.Symbol {
+-	if symbol == nil {
+-		return nil
++	if symbol == nil || c.isSymbolUnaffectedByInstantiation(symbol, m) {
++		return symbol
+ 	}
++	return c.newInstantiatedSymbol(symbol, m)
++}
++
++// Can change from false to true once the type of the symbol is resolved.
++func (c *Checker) isSymbolUnaffectedByInstantiation(symbol *ast.Symbol, m *TypeMapper) bool {
+ 	links := c.valueSymbolLinks.Get(symbol)
+ 	if m != nil && m.MapsThisOnly() && isThisless(symbol) {
+-		return symbol
++		return true
+ 	}
+ 	// If the type of the symbol is already resolved, and if that type could not possibly
+ 	// be affected by instantiation, simply return the symbol itself.
+ 	if links.resolvedType != nil && !c.couldContainTypeVariables(links.resolvedType) {
+ 		if symbol.Flags&ast.SymbolFlagsSetAccessor == 0 {
+-			return symbol
++			return true
+ 		}
+ 		// If we're a setter, check writeType.
+ 		if links.writeType != nil && !c.couldContainTypeVariables(links.writeType) {
+-			return symbol
++			return true
+ 		}
+ 	}
++	return false
++}
++
++func (c *Checker) newInstantiatedSymbol(symbol *ast.Symbol, m *TypeMapper) *ast.Symbol {
++	links := c.valueSymbolLinks.Get(symbol)
+ 	if symbol.CheckFlags&ast.CheckFlagsInstantiated != 0 {
+ 		// If symbol being instantiated is itself a instantiation, fetch the original target and combine the
+ 		// type mappers. This ensures that original type identities are properly preserved and that aliases
+@@ -27833,7 +28050,7 @@ func (c *Checker) getPropertyNameFromIndex(indexType *Type, accessNode *ast.Node
+ }
+ 
+ func (c *Checker) isStringIndexSignatureOnlyTypeWorker(t *Type) bool {
+-	return t.flags&TypeFlagsObject != 0 && !c.isGenericMappedType(t) && len(c.getPropertiesOfType(t)) == 0 && len(c.getIndexInfosOfType(t)) == 1 && c.getIndexInfoOfType(t, c.stringType) != nil ||
++	return t.flags&TypeFlagsObject != 0 && !c.isGenericMappedType(t) && !c.hasPropertiesOfStructuredType(t) && len(c.getIndexInfosOfType(t)) == 1 && c.getIndexInfoOfType(t, c.stringType) != nil ||
+ 		t.flags&TypeFlagsUnionOrIntersection != 0 && core.Every(t.Types(), c.isStringIndexSignatureOnlyType)
+ }
+ 
+@@ -31633,8 +31850,8 @@ func (c *Checker) isFunctionObjectType(t *Type) bool {
+ 	}
+ 	// We do a quick check for a "bind" property before performing the more expensive subtype
+ 	// check. This gives us a quicker out in the common case where an object type is not a function.
+-	resolved := c.resolveStructuredTypeMembers(t)
+-	return len(resolved.signatures) != 0 || resolved.members["bind"] != nil && c.isTypeSubtypeOf(t, c.globalFunctionType)
++	return len(c.getSignaturesOfStructuredType(t, SignatureKindCall)) != 0 || len(c.getSignaturesOfStructuredType(t, SignatureKindConstruct)) != 0 ||
++		c.getMemberOfStructuredType(t, "bind") != nil && c.isTypeSubtypeOf(t, c.globalFunctionType)
+ }
+ 
+ func (c *Checker) getTypeWithFacts(t *Type, include TypeFacts) *Type {
+diff --git a/tsc/internal/checker/relater.go b/tsc/internal/checker/relater.go
+index 9d71d2504c..c959dd60b2 100644
+--- a/tsc/internal/checker/relater.go
++++ b/tsc/internal/checker/relater.go
+@@ -678,8 +678,8 @@ func (c *Checker) elaborateArrowFunction(node *ast.Node, source *Type, target *T
+ // and no required properties, call/construct signatures or index signatures
+ func (c *Checker) isWeakType(t *Type) bool {
+ 	if t.flags&TypeFlagsObject != 0 {
+-		resolved := c.resolveStructuredTypeMembers(t)
+-		return len(resolved.signatures) == 0 && len(resolved.indexInfos) == 0 && len(resolved.properties) > 0 && core.Every(resolved.properties, func(p *ast.Symbol) bool {
++		return len(c.getSignaturesOfStructuredType(t, SignatureKindCall)) == 0 && len(c.getSignaturesOfStructuredType(t, SignatureKindConstruct)) == 0 &&
++			len(c.getIndexInfosOfStructuredType(t)) == 0 && c.hasPropertiesOfStructuredType(t) && c.everyPropertyOfStructuredType(t, func(p *ast.Symbol) bool {
+ 			return p.Flags&ast.SymbolFlagsOptional != 0
+ 		})
+ 	}
+diff --git a/tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.errors.txt b/tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.errors.txt
+new file mode 100644
+index 0000000000..88d489ddfb
+--- /dev/null
++++ b/tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.errors.txt
+@@ -0,0 +1,112 @@
++instantiatedReferenceLazyMembers.ts(14,9): error TS2339: Property 'missing' does not exist on type 'Derived<number>'.
++instantiatedReferenceLazyMembers.ts(22,5): error TS2341: Property 'secret' is private and only accessible within class 'Box<T>'.
++instantiatedReferenceLazyMembers.ts(31,7): error TS2559: Type '{ other: number; }' has no properties in common with type 'Weak<"b">'.
++instantiatedReferenceLazyMembers.ts(32,7): error TS2741: Property 'kind' is missing in type '{ other: number; }' but required in type 'Weak<"a">'.
++instantiatedReferenceLazyMembers.ts(37,9): error TS2339: Property 'bind' does not exist on type 'Fn<"b">'.
++instantiatedReferenceLazyMembers.ts(45,7): error TS2322: Type 'Dict<"b">' is not assignable to type '{ [key: string]: number; }'.
++  'string' index signatures are incompatible.
++    Type 'unknown' is not assignable to type 'number'.
++instantiatedReferenceLazyMembers.ts(47,11): error TS2430: Interface 'Wrap<T>' incorrectly extends interface 'T'.
++  'Wrap<T>' is assignable to the constraint of type 'T', but 'T' could be instantiated with a different subtype of constraint '{ a?: string | undefined; }'.
++instantiatedReferenceLazyMembers.ts(48,7): error TS2741: Property 'b' is missing in type '{ other: number; }' but required in type 'Wrap<{ a?: string | undefined; b: number; }>'.
++instantiatedReferenceLazyMembers.ts(54,7): error TS2322: Type '<U>(x: U, y: string) => U' is not assignable to type 'number'.
++instantiatedReferenceLazyMembers.ts(56,7): error TS2322: Type '(x: unknown, y: string) => unknown' is not assignable to type 'number'.
++
++
++==== instantiatedReferenceLazyMembers.ts (10 errors) ====
++    // Member lookups and shape queries on instantiated class and interface
++    // references, including base types whose shape depends on the instantiation.
++    
++    interface Base<T> {
++        value: T;
++        shared: string;
++    }
++    interface Derived<T> extends Base<T[]> {
++        shared: "derived";
++    }
++    declare const derived: Derived<number>;
++    const derived1 = derived.value;
++    const derived2 = derived.shared;
++    derived.missing;
++            ~~~~~~~
++!!! error TS2339: Property 'missing' does not exist on type 'Derived<number>'.
++    
++    class Box<T> {
++        private secret!: T;
++        contents!: T;
++    }
++    declare const box: Box<string>;
++    const box1 = box.contents;
++    box.secret;
++        ~~~~~~
++!!! error TS2341: Property 'secret' is private and only accessible within class 'Box<T>'.
++    
++    // Tagged<"b"> reduces to never, Tagged<"a"> doesn't.
++    type Tagged<T> = { kind: T } & { kind: "a" };
++    declare const other: { other: number };
++    
++    interface Weak<T extends string> extends Tagged<T> {
++        opt?: number;
++    }
++    const weak1: Weak<"b"> = other;
++          ~~~~~
++!!! error TS2559: Type '{ other: number; }' has no properties in common with type 'Weak<"b">'.
++    const weak2: Weak<"a"> = other;
++          ~~~~~
++!!! error TS2741: Property 'kind' is missing in type '{ other: number; }' but required in type 'Weak<"a">'.
++!!! related TS2728 instantiatedReferenceLazyMembers.ts:25:20: 'kind' is declared here.
++    
++    type Callable<T> = { (): void; kind: T } & { kind: "a" };
++    interface Fn<T extends string> extends Callable<T> {}
++    declare const neverFn: Fn<"b">;
++    neverFn.bind;
++            ~~~~
++!!! error TS2339: Property 'bind' does not exist on type 'Fn<"b">'.
++    declare const fn: Fn<"a">;
++    const fn1 = fn.bind;
++    
++    interface Dict<T extends string> extends Tagged<T> {
++        [key: string]: unknown;
++    }
++    declare const dict: Dict<"b">;
++    const dict1: { [key: string]: number } = dict;
++          ~~~~~
++!!! error TS2322: Type 'Dict<"b">' is not assignable to type '{ [key: string]: number; }'.
++!!! error TS2322:   'string' index signatures are incompatible.
++!!! error TS2322:     Type 'unknown' is not assignable to type 'number'.
++    
++    interface Wrap<T extends { a?: string }> extends T {}
++              ~~~~
++!!! error TS2430: Interface 'Wrap<T>' incorrectly extends interface 'T'.
++!!! error TS2430:   'Wrap<T>' is assignable to the constraint of type 'T', but 'T' could be instantiated with a different subtype of constraint '{ a?: string | undefined; }'.
++    const wrap1: Wrap<{ a?: string; b: number }> = other;
++          ~~~~~
++!!! error TS2741: Property 'b' is missing in type '{ other: number; }' but required in type 'Wrap<{ a?: string | undefined; b: number; }>'.
++!!! related TS2728 instantiatedReferenceLazyMembers.ts:48:33: 'b' is declared here.
++    
++    type Two<T> = { <U>(x: U, y: T): U } & { <U>(x: U, y: string): U };
++    interface Overloads<T> extends Two<T> {}
++    declare function pipe<A extends any[], B>(f: (...args: A) => B): (...args: A) => B;
++    declare const merged: Overloads<string>;
++    const piped1: number = pipe(merged);
++          ~~~~~~
++!!! error TS2322: Type '<U>(x: U, y: string) => U' is not assignable to type 'number'.
++    declare const distinct: Overloads<number>;
++    const piped2: number = pipe(distinct);
++          ~~~~~~
++!!! error TS2322: Type '(x: unknown, y: string) => unknown' is not assignable to type 'number'.
++    
++    interface Tree<T> extends Array<Tree<T>> {
++        value: T;
++    }
++    declare const tree: Tree<string>;
++    const tree1 = tree.map(child => child.value);
++    
++    interface CallableBox<T> {
++        (): T;
++    }
++    declare const boxOrCallable: CallableBox<string> | Box<string>;
++    if (typeof boxOrCallable === "function") {
++        boxOrCallable;
++    }
++    
+\ No newline at end of file
+diff --git a/tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.symbols b/tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.symbols
+new file mode 100644
+index 0000000000..0993fb5c79
+--- /dev/null
++++ b/tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.symbols
+@@ -0,0 +1,259 @@
++//// [tests/cases/compiler/instantiatedReferenceLazyMembers.ts] ////
++
++=== instantiatedReferenceLazyMembers.ts ===
++// Member lookups and shape queries on instantiated class and interface
++// references, including base types whose shape depends on the instantiation.
++
++interface Base<T> {
++>Base : Symbol(Base, Decl(instantiatedReferenceLazyMembers.ts, 0, 0))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 3, 15))
++
++    value: T;
++>value : Symbol(Base.value, Decl(instantiatedReferenceLazyMembers.ts, 3, 19))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 3, 15))
++
++    shared: string;
++>shared : Symbol(Base.shared, Decl(instantiatedReferenceLazyMembers.ts, 4, 13))
++}
++interface Derived<T> extends Base<T[]> {
++>Derived : Symbol(Derived, Decl(instantiatedReferenceLazyMembers.ts, 6, 1))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 7, 18))
++>Base : Symbol(Base, Decl(instantiatedReferenceLazyMembers.ts, 0, 0))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 7, 18))
++
++    shared: "derived";
++>shared : Symbol(Derived.shared, Decl(instantiatedReferenceLazyMembers.ts, 7, 40))
++}
++declare const derived: Derived<number>;
++>derived : Symbol(derived, Decl(instantiatedReferenceLazyMembers.ts, 10, 13))
++>Derived : Symbol(Derived, Decl(instantiatedReferenceLazyMembers.ts, 6, 1))
++
++const derived1 = derived.value;
++>derived1 : Symbol(derived1, Decl(instantiatedReferenceLazyMembers.ts, 11, 5))
++>derived.value : Symbol(Base.value, Decl(instantiatedReferenceLazyMembers.ts, 3, 19))
++>derived : Symbol(derived, Decl(instantiatedReferenceLazyMembers.ts, 10, 13))
++>value : Symbol(Base.value, Decl(instantiatedReferenceLazyMembers.ts, 3, 19))
++
++const derived2 = derived.shared;
++>derived2 : Symbol(derived2, Decl(instantiatedReferenceLazyMembers.ts, 12, 5))
++>derived.shared : Symbol(Derived.shared, Decl(instantiatedReferenceLazyMembers.ts, 7, 40))
++>derived : Symbol(derived, Decl(instantiatedReferenceLazyMembers.ts, 10, 13))
++>shared : Symbol(Derived.shared, Decl(instantiatedReferenceLazyMembers.ts, 7, 40))
++
++derived.missing;
++>derived : Symbol(derived, Decl(instantiatedReferenceLazyMembers.ts, 10, 13))
++
++class Box<T> {
++>Box : Symbol(Box, Decl(instantiatedReferenceLazyMembers.ts, 13, 16))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 15, 10))
++
++    private secret!: T;
++>secret : Symbol(Box.secret, Decl(instantiatedReferenceLazyMembers.ts, 15, 14))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 15, 10))
++
++    contents!: T;
++>contents : Symbol(Box.contents, Decl(instantiatedReferenceLazyMembers.ts, 16, 23))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 15, 10))
++}
++declare const box: Box<string>;
++>box : Symbol(box, Decl(instantiatedReferenceLazyMembers.ts, 19, 13))
++>Box : Symbol(Box, Decl(instantiatedReferenceLazyMembers.ts, 13, 16))
++
++const box1 = box.contents;
++>box1 : Symbol(box1, Decl(instantiatedReferenceLazyMembers.ts, 20, 5))
++>box.contents : Symbol(Box.contents, Decl(instantiatedReferenceLazyMembers.ts, 16, 23))
++>box : Symbol(box, Decl(instantiatedReferenceLazyMembers.ts, 19, 13))
++>contents : Symbol(Box.contents, Decl(instantiatedReferenceLazyMembers.ts, 16, 23))
++
++box.secret;
++>box.secret : Symbol(Box.secret, Decl(instantiatedReferenceLazyMembers.ts, 15, 14))
++>box : Symbol(box, Decl(instantiatedReferenceLazyMembers.ts, 19, 13))
++>secret : Symbol(Box.secret, Decl(instantiatedReferenceLazyMembers.ts, 15, 14))
++
++// Tagged<"b"> reduces to never, Tagged<"a"> doesn't.
++type Tagged<T> = { kind: T } & { kind: "a" };
++>Tagged : Symbol(Tagged, Decl(instantiatedReferenceLazyMembers.ts, 21, 11))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 24, 12))
++>kind : Symbol(kind, Decl(instantiatedReferenceLazyMembers.ts, 24, 18))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 24, 12))
++>kind : Symbol(kind, Decl(instantiatedReferenceLazyMembers.ts, 24, 32))
++
++declare const other: { other: number };
++>other : Symbol(other, Decl(instantiatedReferenceLazyMembers.ts, 25, 13))
++>other : Symbol(other, Decl(instantiatedReferenceLazyMembers.ts, 25, 22))
++
++interface Weak<T extends string> extends Tagged<T> {
++>Weak : Symbol(Weak, Decl(instantiatedReferenceLazyMembers.ts, 25, 39))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 27, 15))
++>Tagged : Symbol(Tagged, Decl(instantiatedReferenceLazyMembers.ts, 21, 11))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 27, 15))
++
++    opt?: number;
++>opt : Symbol(Weak.opt, Decl(instantiatedReferenceLazyMembers.ts, 27, 52))
++}
++const weak1: Weak<"b"> = other;
++>weak1 : Symbol(weak1, Decl(instantiatedReferenceLazyMembers.ts, 30, 5))
++>Weak : Symbol(Weak, Decl(instantiatedReferenceLazyMembers.ts, 25, 39))
++>other : Symbol(other, Decl(instantiatedReferenceLazyMembers.ts, 25, 13))
++
++const weak2: Weak<"a"> = other;
++>weak2 : Symbol(weak2, Decl(instantiatedReferenceLazyMembers.ts, 31, 5))
++>Weak : Symbol(Weak, Decl(instantiatedReferenceLazyMembers.ts, 25, 39))
++>other : Symbol(other, Decl(instantiatedReferenceLazyMembers.ts, 25, 13))
++
++type Callable<T> = { (): void; kind: T } & { kind: "a" };
++>Callable : Symbol(Callable, Decl(instantiatedReferenceLazyMembers.ts, 31, 31))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 33, 14))
++>kind : Symbol(kind, Decl(instantiatedReferenceLazyMembers.ts, 33, 30))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 33, 14))
++>kind : Symbol(kind, Decl(instantiatedReferenceLazyMembers.ts, 33, 44))
++
++interface Fn<T extends string> extends Callable<T> {}
++>Fn : Symbol(Fn, Decl(instantiatedReferenceLazyMembers.ts, 33, 57))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 34, 13))
++>Callable : Symbol(Callable, Decl(instantiatedReferenceLazyMembers.ts, 31, 31))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 34, 13))
++
++declare const neverFn: Fn<"b">;
++>neverFn : Symbol(neverFn, Decl(instantiatedReferenceLazyMembers.ts, 35, 13))
++>Fn : Symbol(Fn, Decl(instantiatedReferenceLazyMembers.ts, 33, 57))
++
++neverFn.bind;
++>neverFn : Symbol(neverFn, Decl(instantiatedReferenceLazyMembers.ts, 35, 13))
++
++declare const fn: Fn<"a">;
++>fn : Symbol(fn, Decl(instantiatedReferenceLazyMembers.ts, 37, 13))
++>Fn : Symbol(Fn, Decl(instantiatedReferenceLazyMembers.ts, 33, 57))
++
++const fn1 = fn.bind;
++>fn1 : Symbol(fn1, Decl(instantiatedReferenceLazyMembers.ts, 38, 5))
++>fn.bind : Symbol(CallableFunction.bind, Decl(lib.es5.d.ts, --, --), Decl(lib.es5.d.ts, --, --))
++>fn : Symbol(fn, Decl(instantiatedReferenceLazyMembers.ts, 37, 13))
++>bind : Symbol(CallableFunction.bind, Decl(lib.es5.d.ts, --, --), Decl(lib.es5.d.ts, --, --))
++
++interface Dict<T extends string> extends Tagged<T> {
++>Dict : Symbol(Dict, Decl(instantiatedReferenceLazyMembers.ts, 38, 20))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 40, 15))
++>Tagged : Symbol(Tagged, Decl(instantiatedReferenceLazyMembers.ts, 21, 11))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 40, 15))
++
++    [key: string]: unknown;
++>key : Symbol(key, Decl(instantiatedReferenceLazyMembers.ts, 41, 5))
++}
++declare const dict: Dict<"b">;
++>dict : Symbol(dict, Decl(instantiatedReferenceLazyMembers.ts, 43, 13))
++>Dict : Symbol(Dict, Decl(instantiatedReferenceLazyMembers.ts, 38, 20))
++
++const dict1: { [key: string]: number } = dict;
++>dict1 : Symbol(dict1, Decl(instantiatedReferenceLazyMembers.ts, 44, 5))
++>key : Symbol(key, Decl(instantiatedReferenceLazyMembers.ts, 44, 16))
++>dict : Symbol(dict, Decl(instantiatedReferenceLazyMembers.ts, 43, 13))
++
++interface Wrap<T extends { a?: string }> extends T {}
++>Wrap : Symbol(Wrap, Decl(instantiatedReferenceLazyMembers.ts, 44, 46))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 46, 15))
++>a : Symbol(a, Decl(instantiatedReferenceLazyMembers.ts, 46, 26))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 46, 15))
++
++const wrap1: Wrap<{ a?: string; b: number }> = other;
++>wrap1 : Symbol(wrap1, Decl(instantiatedReferenceLazyMembers.ts, 47, 5))
++>Wrap : Symbol(Wrap, Decl(instantiatedReferenceLazyMembers.ts, 44, 46))
++>a : Symbol(a, Decl(instantiatedReferenceLazyMembers.ts, 47, 19))
++>b : Symbol(b, Decl(instantiatedReferenceLazyMembers.ts, 47, 31))
++>other : Symbol(other, Decl(instantiatedReferenceLazyMembers.ts, 25, 13))
++
++type Two<T> = { <U>(x: U, y: T): U } & { <U>(x: U, y: string): U };
++>Two : Symbol(Two, Decl(instantiatedReferenceLazyMembers.ts, 47, 53))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 49, 9))
++>U : Symbol(U, Decl(instantiatedReferenceLazyMembers.ts, 49, 17))
++>x : Symbol(x, Decl(instantiatedReferenceLazyMembers.ts, 49, 20))
++>U : Symbol(U, Decl(instantiatedReferenceLazyMembers.ts, 49, 17))
++>y : Symbol(y, Decl(instantiatedReferenceLazyMembers.ts, 49, 25))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 49, 9))
++>U : Symbol(U, Decl(instantiatedReferenceLazyMembers.ts, 49, 17))
++>U : Symbol(U, Decl(instantiatedReferenceLazyMembers.ts, 49, 42))
++>x : Symbol(x, Decl(instantiatedReferenceLazyMembers.ts, 49, 45))
++>U : Symbol(U, Decl(instantiatedReferenceLazyMembers.ts, 49, 42))
++>y : Symbol(y, Decl(instantiatedReferenceLazyMembers.ts, 49, 50))
++>U : Symbol(U, Decl(instantiatedReferenceLazyMembers.ts, 49, 42))
++
++interface Overloads<T> extends Two<T> {}
++>Overloads : Symbol(Overloads, Decl(instantiatedReferenceLazyMembers.ts, 49, 67))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 50, 20))
++>Two : Symbol(Two, Decl(instantiatedReferenceLazyMembers.ts, 47, 53))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 50, 20))
++
++declare function pipe<A extends any[], B>(f: (...args: A) => B): (...args: A) => B;
++>pipe : Symbol(pipe, Decl(instantiatedReferenceLazyMembers.ts, 50, 40))
++>A : Symbol(A, Decl(instantiatedReferenceLazyMembers.ts, 51, 22))
++>B : Symbol(B, Decl(instantiatedReferenceLazyMembers.ts, 51, 38))
++>f : Symbol(f, Decl(instantiatedReferenceLazyMembers.ts, 51, 42))
++>args : Symbol(args, Decl(instantiatedReferenceLazyMembers.ts, 51, 46))
++>A : Symbol(A, Decl(instantiatedReferenceLazyMembers.ts, 51, 22))
++>B : Symbol(B, Decl(instantiatedReferenceLazyMembers.ts, 51, 38))
++>args : Symbol(args, Decl(instantiatedReferenceLazyMembers.ts, 51, 66))
++>A : Symbol(A, Decl(instantiatedReferenceLazyMembers.ts, 51, 22))
++>B : Symbol(B, Decl(instantiatedReferenceLazyMembers.ts, 51, 38))
++
++declare const merged: Overloads<string>;
++>merged : Symbol(merged, Decl(instantiatedReferenceLazyMembers.ts, 52, 13))
++>Overloads : Symbol(Overloads, Decl(instantiatedReferenceLazyMembers.ts, 49, 67))
++
++const piped1: number = pipe(merged);
++>piped1 : Symbol(piped1, Decl(instantiatedReferenceLazyMembers.ts, 53, 5))
++>pipe : Symbol(pipe, Decl(instantiatedReferenceLazyMembers.ts, 50, 40))
++>merged : Symbol(merged, Decl(instantiatedReferenceLazyMembers.ts, 52, 13))
++
++declare const distinct: Overloads<number>;
++>distinct : Symbol(distinct, Decl(instantiatedReferenceLazyMembers.ts, 54, 13))
++>Overloads : Symbol(Overloads, Decl(instantiatedReferenceLazyMembers.ts, 49, 67))
++
++const piped2: number = pipe(distinct);
++>piped2 : Symbol(piped2, Decl(instantiatedReferenceLazyMembers.ts, 55, 5))
++>pipe : Symbol(pipe, Decl(instantiatedReferenceLazyMembers.ts, 50, 40))
++>distinct : Symbol(distinct, Decl(instantiatedReferenceLazyMembers.ts, 54, 13))
++
++interface Tree<T> extends Array<Tree<T>> {
++>Tree : Symbol(Tree, Decl(instantiatedReferenceLazyMembers.ts, 55, 38))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 57, 15))
++>Array : Symbol(Array, Decl(lib.es5.d.ts, --, --), Decl(lib.es5.d.ts, --, --), Decl(lib.es2015.core.d.ts, --, --), Decl(lib.es2015.iterable.d.ts, --, --), Decl(lib.es2015.symbol.wellknown.d.ts, --, --) ... and 4 more)
++>Tree : Symbol(Tree, Decl(instantiatedReferenceLazyMembers.ts, 55, 38))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 57, 15))
++
++    value: T;
++>value : Symbol(Tree.value, Decl(instantiatedReferenceLazyMembers.ts, 57, 42))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 57, 15))
++}
++declare const tree: Tree<string>;
++>tree : Symbol(tree, Decl(instantiatedReferenceLazyMembers.ts, 60, 13))
++>Tree : Symbol(Tree, Decl(instantiatedReferenceLazyMembers.ts, 55, 38))
++
++const tree1 = tree.map(child => child.value);
++>tree1 : Symbol(tree1, Decl(instantiatedReferenceLazyMembers.ts, 61, 5))
++>tree.map : Symbol(Array.map, Decl(lib.es5.d.ts, --, --))
++>tree : Symbol(tree, Decl(instantiatedReferenceLazyMembers.ts, 60, 13))
++>map : Symbol(Array.map, Decl(lib.es5.d.ts, --, --))
++>child : Symbol(child, Decl(instantiatedReferenceLazyMembers.ts, 61, 23))
++>child.value : Symbol(Tree.value, Decl(instantiatedReferenceLazyMembers.ts, 57, 42))
++>child : Symbol(child, Decl(instantiatedReferenceLazyMembers.ts, 61, 23))
++>value : Symbol(Tree.value, Decl(instantiatedReferenceLazyMembers.ts, 57, 42))
++
++interface CallableBox<T> {
++>CallableBox : Symbol(CallableBox, Decl(instantiatedReferenceLazyMembers.ts, 61, 45))
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 63, 22))
++
++    (): T;
++>T : Symbol(T, Decl(instantiatedReferenceLazyMembers.ts, 63, 22))
++}
++declare const boxOrCallable: CallableBox<string> | Box<string>;
++>boxOrCallable : Symbol(boxOrCallable, Decl(instantiatedReferenceLazyMembers.ts, 66, 13))
++>CallableBox : Symbol(CallableBox, Decl(instantiatedReferenceLazyMembers.ts, 61, 45))
++>Box : Symbol(Box, Decl(instantiatedReferenceLazyMembers.ts, 13, 16))
++
++if (typeof boxOrCallable === "function") {
++>boxOrCallable : Symbol(boxOrCallable, Decl(instantiatedReferenceLazyMembers.ts, 66, 13))
++
++    boxOrCallable;
++>boxOrCallable : Symbol(boxOrCallable, Decl(instantiatedReferenceLazyMembers.ts, 66, 13))
++}
++
+diff --git a/tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.types b/tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.types
+new file mode 100644
+index 0000000000..970b6c79de
+--- /dev/null
++++ b/tsc/testdata/baselines/reference/compiler/instantiatedReferenceLazyMembers.types
+@@ -0,0 +1,193 @@
++//// [tests/cases/compiler/instantiatedReferenceLazyMembers.ts] ////
++
++=== instantiatedReferenceLazyMembers.ts ===
++// Member lookups and shape queries on instantiated class and interface
++// references, including base types whose shape depends on the instantiation.
++
++interface Base<T> {
++    value: T;
++>value : T
++
++    shared: string;
++>shared : string
++}
++interface Derived<T> extends Base<T[]> {
++    shared: "derived";
++>shared : "derived"
++}
++declare const derived: Derived<number>;
++>derived : Derived<number>
++
++const derived1 = derived.value;
++>derived1 : number[]
++>derived.value : number[]
++>derived : Derived<number>
++>value : number[]
++
++const derived2 = derived.shared;
++>derived2 : "derived"
++>derived.shared : "derived"
++>derived : Derived<number>
++>shared : "derived"
++
++derived.missing;
++>derived.missing : any
++>derived : Derived<number>
++>missing : any
++
++class Box<T> {
++>Box : Box<T>
++
++    private secret!: T;
++>secret : T
++
++    contents!: T;
++>contents : T
++}
++declare const box: Box<string>;
++>box : Box<string>
++
++const box1 = box.contents;
++>box1 : string
++>box.contents : string
++>box : Box<string>
++>contents : string
++
++box.secret;
++>box.secret : string
++>box : Box<string>
++>secret : string
++
++// Tagged<"b"> reduces to never, Tagged<"a"> doesn't.
++type Tagged<T> = { kind: T } & { kind: "a" };
++>Tagged : Tagged<T>
++>kind : T
++>kind : "a"
++
++declare const other: { other: number };
++>other : { other: number; }
++>other : number
++
++interface Weak<T extends string> extends Tagged<T> {
++    opt?: number;
++>opt : number | undefined
++}
++const weak1: Weak<"b"> = other;
++>weak1 : Weak<"b">
++>other : { other: number; }
++
++const weak2: Weak<"a"> = other;
++>weak2 : Weak<"a">
++>other : { other: number; }
++
++type Callable<T> = { (): void; kind: T } & { kind: "a" };
++>Callable : Callable<T>
++>kind : T
++>kind : "a"
++
++interface Fn<T extends string> extends Callable<T> {}
++declare const neverFn: Fn<"b">;
++>neverFn : Fn<"b">
++
++neverFn.bind;
++>neverFn.bind : any
++>neverFn : Fn<"b">
++>bind : any
++
++declare const fn: Fn<"a">;
++>fn : Fn<"a">
++
++const fn1 = fn.bind;
++>fn1 : { <T>(this: T, thisArg: ThisParameterType<T>): OmitThisParameter<T>; <T, A extends any[], B extends any[], R>(this: (this: T, ...args: [...A, ...B]) => R, thisArg: T, ...args: A): (...args: B) => R; }
++>fn.bind : { <T>(this: T, thisArg: ThisParameterType<T>): OmitThisParameter<T>; <T, A extends any[], B extends any[], R>(this: (this: T, ...args: [...A, ...B]) => R, thisArg: T, ...args: A): (...args: B) => R; }
++>fn : Fn<"a">
++>bind : { <T>(this: T, thisArg: ThisParameterType<T>): OmitThisParameter<T>; <T, A extends any[], B extends any[], R>(this: (this: T, ...args: [...A, ...B]) => R, thisArg: T, ...args: A): (...args: B) => R; }
++
++interface Dict<T extends string> extends Tagged<T> {
++    [key: string]: unknown;
++>key : string
++}
++declare const dict: Dict<"b">;
++>dict : Dict<"b">
++
++const dict1: { [key: string]: number } = dict;
++>dict1 : { [key: string]: number; }
++>key : string
++>dict : Dict<"b">
++
++interface Wrap<T extends { a?: string }> extends T {}
++>a : string | undefined
++
++const wrap1: Wrap<{ a?: string; b: number }> = other;
++>wrap1 : Wrap<{ a?: string; b: number; }>
++>a : string | undefined
++>b : number
++>other : { other: number; }
++
++type Two<T> = { <U>(x: U, y: T): U } & { <U>(x: U, y: string): U };
++>Two : Two<T>
++>x : U
++>y : T
++>x : U
++>y : string
++
++interface Overloads<T> extends Two<T> {}
++declare function pipe<A extends any[], B>(f: (...args: A) => B): (...args: A) => B;
++>pipe : <A extends any[], B>(f: (...args: A) => B) => (...args: A) => B
++>f : (...args: A) => B
++>args : A
++>args : A
++
++declare const merged: Overloads<string>;
++>merged : Overloads<string>
++
++const piped1: number = pipe(merged);
++>piped1 : number
++>pipe(merged) : <U>(x: U, y: string) => U
++>pipe : <A extends any[], B>(f: (...args: A) => B) => (...args: A) => B
++>merged : Overloads<string>
++
++declare const distinct: Overloads<number>;
++>distinct : Overloads<number>
++
++const piped2: number = pipe(distinct);
++>piped2 : number
++>pipe(distinct) : (x: unknown, y: string) => unknown
++>pipe : <A extends any[], B>(f: (...args: A) => B) => (...args: A) => B
++>distinct : Overloads<number>
++
++interface Tree<T> extends Array<Tree<T>> {
++    value: T;
++>value : T
++}
++declare const tree: Tree<string>;
++>tree : Tree<string>
++
++const tree1 = tree.map(child => child.value);
++>tree1 : string[]
++>tree.map(child => child.value) : string[]
++>tree.map : <U>(callbackfn: (value: Tree<string>, index: number, array: Tree<string>[]) => U, thisArg?: any) => U[]
++>tree : Tree<string>
++>map : <U>(callbackfn: (value: Tree<string>, index: number, array: Tree<string>[]) => U, thisArg?: any) => U[]
++>child => child.value : (child: Tree<string>) => string
++>child : Tree<string>
++>child.value : string
++>child : Tree<string>
++>value : string
++
++interface CallableBox<T> {
++    (): T;
++}
++declare const boxOrCallable: CallableBox<string> | Box<string>;
++>boxOrCallable : Box<string> | CallableBox<string>
++
++if (typeof boxOrCallable === "function") {
++>typeof boxOrCallable === "function" : boolean
++>typeof boxOrCallable : "bigint" | "boolean" | "function" | "number" | "object" | "string" | "symbol" | "undefined"
++>boxOrCallable : Box<string> | CallableBox<string>
++>"function" : "function"
++
++    boxOrCallable;
++>boxOrCallable : CallableBox<string>
++}
++
+diff --git a/tsc/testdata/tests/cases/compiler/instantiatedReferenceLazyMembers.ts b/tsc/testdata/tests/cases/compiler/instantiatedReferenceLazyMembers.ts
+new file mode 100644
+index 0000000000..c6a9201525
+--- /dev/null
++++ b/tsc/testdata/tests/cases/compiler/instantiatedReferenceLazyMembers.ts
+@@ -0,0 +1,74 @@
++// @strict: true
++// @target: esnext
++// @noEmit: true
++
++// Member lookups and shape queries on instantiated class and interface
++// references, including base types whose shape depends on the instantiation.
++
++interface Base<T> {
++    value: T;
++    shared: string;
++}
++interface Derived<T> extends Base<T[]> {
++    shared: "derived";
++}
++declare const derived: Derived<number>;
++const derived1 = derived.value;
++const derived2 = derived.shared;
++derived.missing;
++
++class Box<T> {
++    private secret!: T;
++    contents!: T;
++}
++declare const box: Box<string>;
++const box1 = box.contents;
++box.secret;
++
++// Tagged<"b"> reduces to never, Tagged<"a"> doesn't.
++type Tagged<T> = { kind: T } & { kind: "a" };
++declare const other: { other: number };
++
++interface Weak<T extends string> extends Tagged<T> {
++    opt?: number;
++}
++const weak1: Weak<"b"> = other;
++const weak2: Weak<"a"> = other;
++
++type Callable<T> = { (): void; kind: T } & { kind: "a" };
++interface Fn<T extends string> extends Callable<T> {}
++declare const neverFn: Fn<"b">;
++neverFn.bind;
++declare const fn: Fn<"a">;
++const fn1 = fn.bind;
++
++interface Dict<T extends string> extends Tagged<T> {
++    [key: string]: unknown;
++}
++declare const dict: Dict<"b">;
++const dict1: { [key: string]: number } = dict;
++
++interface Wrap<T extends { a?: string }> extends T {}
++const wrap1: Wrap<{ a?: string; b: number }> = other;
++
++type Two<T> = { <U>(x: U, y: T): U } & { <U>(x: U, y: string): U };
++interface Overloads<T> extends Two<T> {}
++declare function pipe<A extends any[], B>(f: (...args: A) => B): (...args: A) => B;
++declare const merged: Overloads<string>;
++const piped1: number = pipe(merged);
++declare const distinct: Overloads<number>;
++const piped2: number = pipe(distinct);
++
++interface Tree<T> extends Array<Tree<T>> {
++    value: T;
++}
++declare const tree: Tree<string>;
++const tree1 = tree.map(child => child.value);
++
++interface CallableBox<T> {
++    (): T;
++}
++declare const boxOrCallable: CallableBox<string> | Box<string>;
++if (typeof boxOrCallable === "function") {
++    boxOrCallable;
++}
+-- 
+2.53.0
+

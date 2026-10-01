@@ -1,0 +1,1072 @@
+From 980e2adf9b83e1371a01293138941dd3911a7a3f Mon Sep 17 00:00:00 2001
+From: Max schwenk <maschwenk@gmail.com>
+Date: Thu, 1 Oct 2026 03:06:17 -0400
+Subject: [PATCH 2/2] Resolve members of keyof mapped types lazily (#64526,
+ squashed onto main)
+
+somePropertyReducesToNever is rebased onto the ordered counts of #64521:
+both the skipped constituent's lookups and the final check iterate
+counts.Entries() in discovery order.
+---
+ tsc/internal/checker/checker.go               | 224 +++++++++++---
+ .../compiler/mappedTypeLazyMembers.errors.txt | 119 ++++++++
+ .../compiler/mappedTypeLazyMembers.symbols    | 281 ++++++++++++++++++
+ .../compiler/mappedTypeLazyMembers.types      | 243 +++++++++++++++
+ .../cases/compiler/mappedTypeLazyMembers.ts   |  76 +++++
+ 5 files changed, 901 insertions(+), 42 deletions(-)
+ create mode 100644 tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.errors.txt
+ create mode 100644 tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.symbols
+ create mode 100644 tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.types
+ create mode 100644 tsc/testdata/tests/cases/compiler/mappedTypeLazyMembers.ts
+
+diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
+index f04c079aa9..89f4ed6546 100644
+--- a/tsc/internal/checker/checker.go
++++ b/tsc/internal/checker/checker.go
+@@ -701,6 +701,7 @@ type Checker struct {
+ 	regExpScanner                               *scanner.Scanner
+ 	patternForType                              map[*Type]*ast.Node
+ 	lazyMemberTables                            map[*Type]*lazyMemberTable
++	lazyMappedTables                            map[*Type]*lazyMappedTable
+ 	contextFreeTypes                            map[*ast.Node]*Type
+ 	anyType                                     *Type
+ 	autoType                                    *Type
+@@ -982,6 +983,7 @@ func NewChecker(program Program, tracer *Tracer) (*Checker, *sync.Mutex) {
+ 	c.mergedSymbols = make(map[*ast.Symbol]*ast.Symbol)
+ 	c.patternForType = make(map[*Type]*ast.Node)
+ 	c.lazyMemberTables = make(map[*Type]*lazyMemberTable)
++	c.lazyMappedTables = make(map[*Type]*lazyMappedTable)
+ 	c.contextFreeTypes = make(map[*ast.Node]*Type)
+ 	c.anyType = c.newIntrinsicType(TypeFlagsAny, "any")
+ 	c.autoType = c.newIntrinsicTypeEx(TypeFlagsAny, "any", ObjectFlagsNonInferrableType)
+@@ -19315,6 +19317,10 @@ func (c *Checker) getSignaturesOfStructuredType(t *Type, kind SignatureKind) []*
+ 		}
+ 		return lm.constructSignatures
+ 	}
++	if t.objectFlags&ObjectFlagsMapped != 0 {
++		// Mapped types have no signatures.
++		return nil
++	}
+ 	resolved := c.resolveStructuredTypeMembers(t)
+ 	if kind == SignatureKindCall {
+ 		return resolved.signatures[:resolved.callSignatureCount]
+@@ -19331,6 +19337,9 @@ func (c *Checker) getIndexInfosOfStructuredType(t *Type) []*IndexInfo {
+ 		if lm := c.getReadyLazyMemberTable(t); lm != nil {
+ 			return lm.indexInfos
+ 		}
++		if lazy := c.getLazyMappedTable(t); lazy != nil {
++			return c.getLazyMappedTypeIndexInfos(t, lazy)
++		}
+ 		return c.resolveStructuredTypeMembers(t).indexInfos
+ 	}
+ 	return nil
+@@ -19603,7 +19612,7 @@ func (c *Checker) prepareLazyMembers(t *Type, lm *lazyMemberTable) {
+ 			instantiatedBaseType = c.getTypeWithThisArgument(c.instantiateType(baseType, lm.mapper), thisArgument, false /*needsApparentType*/)
+ 		}
+ 		lm.baseTypes = append(lm.baseTypes, instantiatedBaseType)
+-		if c.getReadyLazyMemberTable(c.getReducedApparentType(instantiatedBaseType)) == nil {
++		if reduced := c.getReducedApparentType(instantiatedBaseType); reduced.flags&TypeFlagsIntersection == 0 && c.getReadyLazyMemberTable(reduced) == nil {
+ 			c.getPropertiesOfType(instantiatedBaseType)
+ 		}
+ 		callSignatures, constructSignatures, indexInfos = c.appendInheritedSignaturesAndIndexInfos(callSignatures, constructSignatures, indexInfos, instantiatedBaseType)
+@@ -19654,6 +19663,13 @@ func (c *Checker) getMemberOfStructuredType(t *Type, name string) *ast.Symbol {
+ }
+ 
+ func (c *Checker) getMemberOfUnresolvedStructuredType(t *Type, name string) *ast.Symbol {
++	if t.objectFlags&ObjectFlagsMapped != 0 && !isReservedMemberName(name) {
++		if lazy := c.getLazyMappedTable(t); lazy != nil {
++			if member, ok := c.getLazyMappedTypeMember(t, lazy, name); ok {
++				return member
++			}
++		}
++	}
+ 	lm := c.getReadyLazyMemberTable(t)
+ 	if lm == nil || isReservedMemberName(name) {
+ 		return c.resolveStructuredTypeMembers(t).members[name]
+@@ -21466,6 +21482,8 @@ func (c *Checker) resolveMappedTypeMembers(t *Type) {
+ 	// The 'T' in 'keyof T'
+ 	templateModifiers := getMappedTypeModifiers(t)
+ 	include := TypeFlagsStringOrNumberLiteralOrUnique
++	lazy := c.lazyMappedTables[t]
++	delete(c.lazyMappedTables, t)
+ 	addMemberForKeyTypeWorker := func(keyType *Type, propNameType *Type) {
+ 		// If the current iteration type constituent is a string literal type, create a property.
+ 		// Otherwise, for type string create a string index signature.
+@@ -21479,46 +21497,13 @@ func (c *Checker) resolveMappedTypeMembers(t *Type) {
+ 				valueLinks.nameType = c.getUnionType([]*Type{valueLinks.nameType, propNameType})
+ 				mappedLinks := c.mappedSymbolLinks.Get(existingProp)
+ 				mappedLinks.keyType = c.getUnionType([]*Type{mappedLinks.keyType, keyType})
++			} else if lazy != nil && lazy.members[propName] != nil {
++				members[propName] = lazy.members[propName]
+ 			} else {
+-				var modifiersProp *ast.Symbol
+-				if isTypeUsableAsPropertyName(keyType) {
+-					modifiersProp = c.getPropertyOfType(modifiersType, getPropertyNameFromType(keyType))
+-				}
+-				isOptional := templateModifiers&MappedTypeModifiersIncludeOptional != 0 || templateModifiers&MappedTypeModifiersExcludeOptional == 0 && modifiersProp != nil && modifiersProp.Flags&ast.SymbolFlagsOptional != 0
+-				isReadonly := templateModifiers&MappedTypeModifiersIncludeReadonly != 0 || templateModifiers&MappedTypeModifiersExcludeReadonly == 0 && modifiersProp != nil && c.isReadonlySymbol(modifiersProp)
+-				stripOptional := c.strictNullChecks && !isOptional && modifiersProp != nil && modifiersProp.Flags&ast.SymbolFlagsOptional != 0
+-				var lateFlag ast.CheckFlags
+-				if modifiersProp != nil {
+-					lateFlag = modifiersProp.CheckFlags & ast.CheckFlagsLate
+-				}
+-				prop := c.newSymbol(ast.SymbolFlagsProperty|core.IfElse(isOptional, ast.SymbolFlagsOptional, 0), propName)
+-				prop.CheckFlags = lateFlag | ast.CheckFlagsMapped | core.IfElse(isReadonly, ast.CheckFlagsReadonly, 0) | core.IfElse(stripOptional, ast.CheckFlagsStripOptional, 0)
+-				valueLinks := c.valueSymbolLinks.Get(prop)
+-				valueLinks.containingType = t
+-				valueLinks.nameType = propNameType
+-				mappedLinks := c.mappedSymbolLinks.Get(prop)
+-				mappedLinks.keyType = keyType
+-				if modifiersProp != nil {
+-					mappedLinks.syntheticOrigin = modifiersProp
+-					if shouldLinkPropDeclarations {
+-						prop.Declarations = modifiersProp.Declarations
+-					}
+-				}
+-				members[propName] = prop
+-			}
+-		} else if c.isValidIndexKeyType(propNameType) || propNameType.flags&(TypeFlagsAny|TypeFlagsEnum) != 0 {
+-			indexKeyType := propNameType
+-			switch {
+-			case propNameType.flags&(TypeFlagsAny|TypeFlagsString) != 0:
+-				indexKeyType = c.stringType
+-			case propNameType.flags&(TypeFlagsNumber|TypeFlagsEnum) != 0:
+-				indexKeyType = c.numberType
++				members[propName] = c.newMappedTypeMember(t, modifiersType, templateModifiers, shouldLinkPropDeclarations, keyType, propNameType, propName)
+ 			}
+-			propType := c.instantiateType(templateType, appendTypeMapping(t.AsMappedType().mapper, typeParameter, keyType))
+-			modifiersIndexInfo := c.getApplicableIndexInfo(modifiersType, propNameType)
+-			isReadonly := templateModifiers&MappedTypeModifiersIncludeReadonly != 0 || templateModifiers&MappedTypeModifiersExcludeReadonly == 0 && modifiersIndexInfo != nil && modifiersIndexInfo.isReadonly
+-			indexInfo := c.newIndexInfo(indexKeyType, propType, isReadonly, nil, nil)
+-			indexInfos = c.appendIndexInfo(indexInfos, indexInfo, true /*union*/)
++		} else if lazy == nil || !lazy.indexInfosReady {
++			indexInfos = c.appendMappedTypeIndexInfo(indexInfos, t, modifiersType, typeParameter, templateType, templateModifiers, keyType, propNameType)
+ 		}
+ 	}
+ 	addMemberForKeyType := func(keyType *Type) {
+@@ -21536,9 +21521,149 @@ func (c *Checker) resolveMappedTypeMembers(t *Type) {
+ 	} else {
+ 		forEachType(c.getLowerBoundOfKeyType(constraintType), addMemberForKeyType)
+ 	}
++	if lazy != nil && lazy.indexInfosReady {
++		indexInfos = lazy.indexInfos
++	}
+ 	c.setStructuredTypeMembers(t, members, nil, nil, indexInfos)
+ }
+ 
++func (c *Checker) appendMappedTypeIndexInfo(indexInfos []*IndexInfo, t *Type, modifiersType *Type, typeParameter *Type, templateType *Type, templateModifiers MappedTypeModifiers, keyType *Type, propNameType *Type) []*IndexInfo {
++	if !c.isValidIndexKeyType(propNameType) && propNameType.flags&(TypeFlagsAny|TypeFlagsEnum) == 0 {
++		return indexInfos
++	}
++	indexKeyType := propNameType
++	switch {
++	case propNameType.flags&(TypeFlagsAny|TypeFlagsString) != 0:
++		indexKeyType = c.stringType
++	case propNameType.flags&(TypeFlagsNumber|TypeFlagsEnum) != 0:
++		indexKeyType = c.numberType
++	}
++	propType := c.instantiateType(templateType, appendTypeMapping(t.AsMappedType().mapper, typeParameter, keyType))
++	modifiersIndexInfo := c.getApplicableIndexInfo(modifiersType, propNameType)
++	isReadonly := templateModifiers&MappedTypeModifiersIncludeReadonly != 0 || templateModifiers&MappedTypeModifiersExcludeReadonly == 0 && modifiersIndexInfo != nil && modifiersIndexInfo.isReadonly
++	indexInfo := c.newIndexInfo(indexKeyType, propType, isReadonly, nil, nil)
++	return c.appendIndexInfo(indexInfos, indexInfo, true /*union*/)
++}
++
++func (c *Checker) newMappedTypeMember(t *Type, modifiersType *Type, templateModifiers MappedTypeModifiers, shouldLinkPropDeclarations bool, keyType *Type, propNameType *Type, propName string) *ast.Symbol {
++	var modifiersProp *ast.Symbol
++	if isTypeUsableAsPropertyName(keyType) {
++		modifiersProp = c.getPropertyOfType(modifiersType, getPropertyNameFromType(keyType))
++	}
++	isOptional := templateModifiers&MappedTypeModifiersIncludeOptional != 0 || templateModifiers&MappedTypeModifiersExcludeOptional == 0 && modifiersProp != nil && modifiersProp.Flags&ast.SymbolFlagsOptional != 0
++	isReadonly := templateModifiers&MappedTypeModifiersIncludeReadonly != 0 || templateModifiers&MappedTypeModifiersExcludeReadonly == 0 && modifiersProp != nil && c.isReadonlySymbol(modifiersProp)
++	stripOptional := c.strictNullChecks && !isOptional && modifiersProp != nil && modifiersProp.Flags&ast.SymbolFlagsOptional != 0
++	var lateFlag ast.CheckFlags
++	if modifiersProp != nil {
++		lateFlag = modifiersProp.CheckFlags & ast.CheckFlagsLate
++	}
++	prop := c.newSymbol(ast.SymbolFlagsProperty|core.IfElse(isOptional, ast.SymbolFlagsOptional, 0), propName)
++	prop.CheckFlags = lateFlag | ast.CheckFlagsMapped | core.IfElse(isReadonly, ast.CheckFlagsReadonly, 0) | core.IfElse(stripOptional, ast.CheckFlagsStripOptional, 0)
++	valueLinks := c.valueSymbolLinks.Get(prop)
++	valueLinks.containingType = t
++	valueLinks.nameType = propNameType
++	mappedLinks := c.mappedSymbolLinks.Get(prop)
++	mappedLinks.keyType = keyType
++	if modifiersProp != nil {
++		mappedLinks.syntheticOrigin = modifiersProp
++		if shouldLinkPropDeclarations {
++			prop.Declarations = modifiersProp.Declarations
++		}
++	}
++	return prop
++}
++
++// Mapped types { [P in keyof T]: X } where T is an object type get a lazy table that creates
++// members and index infos as they are asked for, the way resolveMappedTypeMembers would.
++type lazyMappedTable struct {
++	typeParameter              *Type
++	templateType               *Type
++	modifiersType              *Type
++	templateModifiers          MappedTypeModifiers
++	shouldLinkPropDeclarations bool
++	members                    ast.SymbolTable
++	indexInfos                 []*IndexInfo
++	indexInfosReady            bool
++	resolving                  bool
++}
++
++func (c *Checker) getLazyMappedTable(t *Type) *lazyMappedTable {
++	if t.objectFlags&(ObjectFlagsMapped|ObjectFlagsMembersResolved) != ObjectFlagsMapped {
++		return nil
++	}
++	if lazy := c.lazyMappedTables[t]; lazy != nil {
++		return lazy
++	}
++	if !c.isMappedTypeWithKeyofConstraintDeclaration(t) {
++		return nil
++	}
++	// The same steps as resolveMappedTypeMembers before it creates members.
++	typeParameter := c.getTypeParameterFromMappedType(t)
++	c.getConstraintTypeFromMappedType(t)
++	mappedType := core.OrElse(t.AsMappedType().target, t)
++	if c.getNameTypeFromMappedType(mappedType) != nil {
++		return nil
++	}
++	shouldLinkPropDeclarations := c.getMappedTypeNameTypeKind(mappedType) != MappedTypeNameTypeKindRemapping
++	templateType := c.getTemplateTypeFromMappedType(mappedType)
++	modifiersType := c.getApparentType(c.getModifiersTypeFromMappedType(t))
++	if modifiersType.flags&TypeFlagsObject == 0 || t.objectFlags&ObjectFlagsMembersResolved != 0 {
++		return nil
++	}
++	lazy := &lazyMappedTable{
++		typeParameter:              typeParameter,
++		templateType:               templateType,
++		modifiersType:              modifiersType,
++		templateModifiers:          getMappedTypeModifiers(t),
++		shouldLinkPropDeclarations: shouldLinkPropDeclarations,
++		members:                    make(ast.SymbolTable),
++	}
++	c.lazyMappedTables[t] = lazy
++	return lazy
++}
++
++func (c *Checker) getLazyMappedTypeMember(t *Type, lazy *lazyMappedTable, name string) (member *ast.Symbol, ok bool) {
++	if existing, ok := lazy.members[name]; ok {
++		return existing, true
++	}
++	// Recursive lookups see no member, as they would while resolveMappedTypeMembers runs.
++	lazy.members[name] = nil
++	modifiersProp := c.getMemberOfStructuredType(lazy.modifiersType, name)
++	if t.objectFlags&ObjectFlagsMembersResolved != 0 {
++		return t.AsStructuredType().members[name], true
++	}
++	if modifiersProp != nil && c.isNamedMember(modifiersProp, name) {
++		keyType := c.getLiteralTypeFromProperty(modifiersProp, TypeFlagsStringOrNumberLiteralOrUnique, false)
++		if !isTypeUsableAsPropertyName(keyType) || getPropertyNameFromType(keyType) != name {
++			delete(lazy.members, name)
++			return nil, false
++		}
++		member = c.newMappedTypeMember(t, lazy.modifiersType, lazy.templateModifiers, lazy.shouldLinkPropDeclarations, keyType, keyType, name)
++	}
++	lazy.members[name] = member
++	return member, true
++}
++
++func (c *Checker) getLazyMappedTypeIndexInfos(t *Type, lazy *lazyMappedTable) []*IndexInfo {
++	if !lazy.indexInfosReady {
++		if lazy.resolving {
++			// Recursive requests see no index infos, as they would while resolveMappedTypeMembers runs.
++			return nil
++		}
++		lazy.resolving = true
++		defer func() { lazy.resolving = false }()
++		var indexInfos []*IndexInfo
++		for _, info := range c.getIndexInfosOfType(lazy.modifiersType) {
++			indexInfos = c.appendMappedTypeIndexInfo(indexInfos, t, lazy.modifiersType, lazy.typeParameter, lazy.templateType, lazy.templateModifiers, info.keyType, info.keyType)
++		}
++		if t.objectFlags&ObjectFlagsMembersResolved != 0 {
++			return t.AsStructuredType().indexInfos
++		}
++		lazy.indexInfos, lazy.indexInfosReady = indexInfos, true
++	}
++	return lazy.indexInfos
++}
++
+ func (c *Checker) getTypeOfMappedSymbol(symbol *ast.Symbol) *Type {
+ 	links := c.valueSymbolLinks.Get(symbol)
+ 	if links.resolvedType == nil {
+@@ -22436,10 +22561,25 @@ func (c *Checker) isMappingOfSameObjectType(types []*Type) bool {
+ 
+ func (c *Checker) somePropertyReducesToNever(t *Type) bool {
+ 	// Collect declaration counts for each property across all constituent types of the intersection.
++	// A name that occurs in more than one constituent occurs in one other than skipped, so skipped
++	// only needs its members looked up, which may not resolve them.
++	types := t.Types()
++	skipped := slices.IndexFunc(types, func(t *Type) bool {
++		return t.objectFlags&(ObjectFlagsMapped|ObjectFlagsMembersResolved) == ObjectFlagsMapped || mayHaveLazyMembers(t) && t.flags&TypeFlagsObject != 0
++	})
+ 	var counts collections.OrderedMap[string, int]
+-	for _, t := range t.Types() {
+-		for _, prop := range c.getPropertiesOfType(t) {
+-			counts.Set(prop.Name, counts.GetOrZero(prop.Name)+1)
++	for i, t := range types {
++		if i != skipped {
++			for _, prop := range c.getPropertiesOfType(t) {
++				counts.Set(prop.Name, counts.GetOrZero(prop.Name)+1)
++			}
++		}
++	}
++	if skipped >= 0 {
++		for propName, count := range counts.Entries() {
++			if c.getPropertyOfTypeEx(types[skipped], propName, true /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/) != nil {
++				counts.Set(propName, count+1)
++			}
+ 		}
+ 	}
+ 	// Check if any property appears in more than one constituent type and reduces to 'never'.
+diff --git a/tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.errors.txt b/tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.errors.txt
+new file mode 100644
+index 0000000000..fa492d2e56
+--- /dev/null
++++ b/tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.errors.txt
+@@ -0,0 +1,119 @@
++mappedTypeLazyMembers.ts(11,9): error TS2540: Cannot assign to 'name' because it is a read-only property.
++mappedTypeLazyMembers.ts(12,9): error TS2339: Property 'missing' does not exist on type 'Partial<Options>'.
++mappedTypeLazyMembers.ts(23,7): error TS2322: Type 'string[]' is not assignable to type 'number'.
++mappedTypeLazyMembers.ts(33,7): error TS2322: Type 'Boxed<Dictionary>' is not assignable to type 'Record<string, { value: string; }>'.
++  'string' index signatures are incompatible.
++    Type '{ value: number; }' is not assignable to type '{ value: string; }'.
++      Types of property 'value' are incompatible.
++        Type 'number' is not assignable to type 'string'.
++mappedTypeLazyMembers.ts(48,18): error TS2345: Argument of type 'number' is not assignable to parameter of type 'string'.
++mappedTypeLazyMembers.ts(51,11): error TS2339: Property 'missing' does not exist on type 'Assertion<number>'.
++mappedTypeLazyMembers.ts(56,8): error TS2339: Property 'other' does not exist on type 'never'.
++  The intersection 'Kinded<{ kind: "a"; other: number; }>' was reduced to 'never' because property 'kind' has conflicting types in some constituents.
++mappedTypeLazyMembers.ts(61,6): error TS2456: Type alias 'SelfMapped' circularly references itself.
++mappedTypeLazyMembers.ts(61,27): error TS2313: Type parameter 'K' has a circular constraint.
++mappedTypeLazyMembers.ts(65,21): error TS2313: Type parameter 'K' has a circular constraint.
++mappedTypeLazyMembers.ts(66,11): error TS2310: Type 'Y' recursively references itself as a base type.
++
++
++==== mappedTypeLazyMembers.ts (11 errors) ====
++    // Member lookups, index signatures and never reduction on { [P in keyof T]: X }
++    // mapped types whose members aren't otherwise resolved.
++    
++    interface Options {
++        readonly name: string;
++        size?: number;
++        tags: string[];
++    }
++    declare const partial: Partial<Options>;
++    const partial1 = partial.size;
++    partial.name = "x";
++            ~~~~
++!!! error TS2540: Cannot assign to 'name' because it is a read-only property.
++    partial.missing;
++            ~~~~~~~
++!!! error TS2339: Property 'missing' does not exist on type 'Partial<Options>'.
++    
++    declare const required: Required<Options>;
++    const required1: number = required.size;
++    
++    declare const mutable: { -readonly [K in keyof Options]: Options[K] };
++    mutable.name = "y";
++    
++    type Boxed<T> = { [K in keyof T]: { value: T[K] } };
++    declare const boxed: Boxed<Options>;
++    const boxed1: string = boxed.name.value;
++    const boxed2: number = boxed.tags.value;
++          ~~~~~~
++!!! error TS2322: Type 'string[]' is not assignable to type 'number'.
++    
++    // Index signatures of the modifiers type become index signatures of the mapped type.
++    interface Dictionary {
++        [key: string]: number;
++        fixed: number;
++    }
++    declare const dict: Boxed<Dictionary>;
++    const dict1 = dict.fixed.value;
++    const dict2 = dict.anything.value;
++    const dict3: Record<string, { value: string }> = dict;
++          ~~~~~
++!!! error TS2322: Type 'Boxed<Dictionary>' is not assignable to type 'Record<string, { value: string; }>'.
++!!! error TS2322:   'string' index signatures are incompatible.
++!!! error TS2322:     Type '{ value: number; }' is not assignable to type '{ value: string; }'.
++!!! error TS2322:       Types of property 'value' are incompatible.
++!!! error TS2322:         Type 'number' is not assignable to type 'string'.
++    
++    // Assertion chains in the style of test frameworks, where the base type is an
++    // intersection of a mapped type and a call signature.
++    interface ChaiLike {
++        equal(value: unknown): void;
++        deep: ChaiLike;
++    }
++    type Chain<A, T> = { [K in keyof A]: A[K] extends ChaiLike ? Assertion<T> : A[K] } & ((message?: string) => Assertion<T>);
++    interface Matchers<T> {
++        toBe(value: T): void;
++    }
++    interface Assertion<T> extends Chain<ChaiLike, T>, Matchers<T> {}
++    declare function expect<T>(value: T): Assertion<T>;
++    expect(1).toBe(2);
++    expect("a").toBe(1);
++                     ~
++!!! error TS2345: Argument of type 'number' is not assignable to parameter of type 'string'.
++    expect(true).deep.equal(false);
++    expect(1)("message").toBe(3);
++    expect(1).missing;
++              ~~~~~~~
++!!! error TS2339: Property 'missing' does not exist on type 'Assertion<number>'.
++    
++    // Intersections with mapped types that reduce to never.
++    type Kinded<T> = { [K in keyof T]: T[K] } & { kind: "b" };
++    declare const kinded: Kinded<{ kind: "a"; other: number }>;
++    kinded.other;
++           ~~~~~
++!!! error TS2339: Property 'other' does not exist on type 'never'.
++!!! error TS2339:   The intersection 'Kinded<{ kind: "a"; other: number; }>' was reduced to 'never' because property 'kind' has conflicting types in some constituents.
++    declare const compatible: Kinded<{ kind: "b"; other: number }>;
++    const compatible1: number = compatible.other;
++    
++    // Circular mapped types.
++    type SelfMapped = { [K in keyof SelfMapped]: string };
++         ~~~~~~~~~~
++!!! error TS2456: Type alias 'SelfMapped' circularly references itself.
++                              ~~~~~~~~~~~~~~~~
++!!! error TS2313: Type parameter 'K' has a circular constraint.
++    declare const selfMapped: SelfMapped;
++    selfMapped.anything;
++    
++    type X<T> = { [K in keyof T]: string } & { b: string };
++                        ~~~~~~~
++!!! error TS2313: Type parameter 'K' has a circular constraint.
++!!! related TS2751 mappedTypeLazyMembers.ts:66:11: Circularity originates in type at this location.
++    interface Y extends X<Y> {
++              ~
++!!! error TS2310: Type 'Y' recursively references itself as a base type.
++        a: "";
++    }
++    declare const y: Y;
++    const y1 = y.a;
++    const y2 = y.b;
++    
+\ No newline at end of file
+diff --git a/tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.symbols b/tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.symbols
+new file mode 100644
+index 0000000000..cb0fdfba24
+--- /dev/null
++++ b/tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.symbols
+@@ -0,0 +1,281 @@
++//// [tests/cases/compiler/mappedTypeLazyMembers.ts] ////
++
++=== mappedTypeLazyMembers.ts ===
++// Member lookups, index signatures and never reduction on { [P in keyof T]: X }
++// mapped types whose members aren't otherwise resolved.
++
++interface Options {
++>Options : Symbol(Options, Decl(mappedTypeLazyMembers.ts, 0, 0))
++
++    readonly name: string;
++>name : Symbol(Options.name, Decl(mappedTypeLazyMembers.ts, 3, 19))
++
++    size?: number;
++>size : Symbol(Options.size, Decl(mappedTypeLazyMembers.ts, 4, 26))
++
++    tags: string[];
++>tags : Symbol(Options.tags, Decl(mappedTypeLazyMembers.ts, 5, 18))
++}
++declare const partial: Partial<Options>;
++>partial : Symbol(partial, Decl(mappedTypeLazyMembers.ts, 8, 13))
++>Partial : Symbol(Partial, Decl(lib.es5.d.ts, --, --))
++>Options : Symbol(Options, Decl(mappedTypeLazyMembers.ts, 0, 0))
++
++const partial1 = partial.size;
++>partial1 : Symbol(partial1, Decl(mappedTypeLazyMembers.ts, 9, 5))
++>partial.size : Symbol(size, Decl(mappedTypeLazyMembers.ts, 4, 26))
++>partial : Symbol(partial, Decl(mappedTypeLazyMembers.ts, 8, 13))
++>size : Symbol(size, Decl(mappedTypeLazyMembers.ts, 4, 26))
++
++partial.name = "x";
++>partial.name : Symbol(name, Decl(mappedTypeLazyMembers.ts, 3, 19))
++>partial : Symbol(partial, Decl(mappedTypeLazyMembers.ts, 8, 13))
++>name : Symbol(name, Decl(mappedTypeLazyMembers.ts, 3, 19))
++
++partial.missing;
++>partial : Symbol(partial, Decl(mappedTypeLazyMembers.ts, 8, 13))
++
++declare const required: Required<Options>;
++>required : Symbol(required, Decl(mappedTypeLazyMembers.ts, 13, 13))
++>Required : Symbol(Required, Decl(lib.es5.d.ts, --, --))
++>Options : Symbol(Options, Decl(mappedTypeLazyMembers.ts, 0, 0))
++
++const required1: number = required.size;
++>required1 : Symbol(required1, Decl(mappedTypeLazyMembers.ts, 14, 5))
++>required.size : Symbol(size, Decl(mappedTypeLazyMembers.ts, 4, 26))
++>required : Symbol(required, Decl(mappedTypeLazyMembers.ts, 13, 13))
++>size : Symbol(size, Decl(mappedTypeLazyMembers.ts, 4, 26))
++
++declare const mutable: { -readonly [K in keyof Options]: Options[K] };
++>mutable : Symbol(mutable, Decl(mappedTypeLazyMembers.ts, 16, 13))
++>K : Symbol(K, Decl(mappedTypeLazyMembers.ts, 16, 36))
++>Options : Symbol(Options, Decl(mappedTypeLazyMembers.ts, 0, 0))
++>Options : Symbol(Options, Decl(mappedTypeLazyMembers.ts, 0, 0))
++>K : Symbol(K, Decl(mappedTypeLazyMembers.ts, 16, 36))
++
++mutable.name = "y";
++>mutable.name : Symbol(name, Decl(mappedTypeLazyMembers.ts, 3, 19))
++>mutable : Symbol(mutable, Decl(mappedTypeLazyMembers.ts, 16, 13))
++>name : Symbol(name, Decl(mappedTypeLazyMembers.ts, 3, 19))
++
++type Boxed<T> = { [K in keyof T]: { value: T[K] } };
++>Boxed : Symbol(Boxed, Decl(mappedTypeLazyMembers.ts, 17, 19))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 19, 11))
++>K : Symbol(K, Decl(mappedTypeLazyMembers.ts, 19, 19))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 19, 11))
++>value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 19, 35))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 19, 11))
++>K : Symbol(K, Decl(mappedTypeLazyMembers.ts, 19, 19))
++
++declare const boxed: Boxed<Options>;
++>boxed : Symbol(boxed, Decl(mappedTypeLazyMembers.ts, 20, 13))
++>Boxed : Symbol(Boxed, Decl(mappedTypeLazyMembers.ts, 17, 19))
++>Options : Symbol(Options, Decl(mappedTypeLazyMembers.ts, 0, 0))
++
++const boxed1: string = boxed.name.value;
++>boxed1 : Symbol(boxed1, Decl(mappedTypeLazyMembers.ts, 21, 5))
++>boxed.name.value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 19, 35))
++>boxed.name : Symbol(name, Decl(mappedTypeLazyMembers.ts, 3, 19))
++>boxed : Symbol(boxed, Decl(mappedTypeLazyMembers.ts, 20, 13))
++>name : Symbol(name, Decl(mappedTypeLazyMembers.ts, 3, 19))
++>value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 19, 35))
++
++const boxed2: number = boxed.tags.value;
++>boxed2 : Symbol(boxed2, Decl(mappedTypeLazyMembers.ts, 22, 5))
++>boxed.tags.value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 19, 35))
++>boxed.tags : Symbol(tags, Decl(mappedTypeLazyMembers.ts, 5, 18))
++>boxed : Symbol(boxed, Decl(mappedTypeLazyMembers.ts, 20, 13))
++>tags : Symbol(tags, Decl(mappedTypeLazyMembers.ts, 5, 18))
++>value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 19, 35))
++
++// Index signatures of the modifiers type become index signatures of the mapped type.
++interface Dictionary {
++>Dictionary : Symbol(Dictionary, Decl(mappedTypeLazyMembers.ts, 22, 40))
++
++    [key: string]: number;
++>key : Symbol(key, Decl(mappedTypeLazyMembers.ts, 26, 5))
++
++    fixed: number;
++>fixed : Symbol(Dictionary.fixed, Decl(mappedTypeLazyMembers.ts, 26, 26))
++}
++declare const dict: Boxed<Dictionary>;
++>dict : Symbol(dict, Decl(mappedTypeLazyMembers.ts, 29, 13))
++>Boxed : Symbol(Boxed, Decl(mappedTypeLazyMembers.ts, 17, 19))
++>Dictionary : Symbol(Dictionary, Decl(mappedTypeLazyMembers.ts, 22, 40))
++
++const dict1 = dict.fixed.value;
++>dict1 : Symbol(dict1, Decl(mappedTypeLazyMembers.ts, 30, 5))
++>dict.fixed.value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 19, 35))
++>dict.fixed : Symbol(fixed, Decl(mappedTypeLazyMembers.ts, 26, 26))
++>dict : Symbol(dict, Decl(mappedTypeLazyMembers.ts, 29, 13))
++>fixed : Symbol(fixed, Decl(mappedTypeLazyMembers.ts, 26, 26))
++>value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 19, 35))
++
++const dict2 = dict.anything.value;
++>dict2 : Symbol(dict2, Decl(mappedTypeLazyMembers.ts, 31, 5))
++>dict.anything.value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 19, 35))
++>dict : Symbol(dict, Decl(mappedTypeLazyMembers.ts, 29, 13))
++>value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 19, 35))
++
++const dict3: Record<string, { value: string }> = dict;
++>dict3 : Symbol(dict3, Decl(mappedTypeLazyMembers.ts, 32, 5))
++>Record : Symbol(Record, Decl(lib.es5.d.ts, --, --))
++>value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 32, 29))
++>dict : Symbol(dict, Decl(mappedTypeLazyMembers.ts, 29, 13))
++
++// Assertion chains in the style of test frameworks, where the base type is an
++// intersection of a mapped type and a call signature.
++interface ChaiLike {
++>ChaiLike : Symbol(ChaiLike, Decl(mappedTypeLazyMembers.ts, 32, 54))
++
++    equal(value: unknown): void;
++>equal : Symbol(ChaiLike.equal, Decl(mappedTypeLazyMembers.ts, 36, 20))
++>value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 37, 10))
++
++    deep: ChaiLike;
++>deep : Symbol(ChaiLike.deep, Decl(mappedTypeLazyMembers.ts, 37, 32))
++>ChaiLike : Symbol(ChaiLike, Decl(mappedTypeLazyMembers.ts, 32, 54))
++}
++type Chain<A, T> = { [K in keyof A]: A[K] extends ChaiLike ? Assertion<T> : A[K] } & ((message?: string) => Assertion<T>);
++>Chain : Symbol(Chain, Decl(mappedTypeLazyMembers.ts, 39, 1))
++>A : Symbol(A, Decl(mappedTypeLazyMembers.ts, 40, 11))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 40, 13))
++>K : Symbol(K, Decl(mappedTypeLazyMembers.ts, 40, 22))
++>A : Symbol(A, Decl(mappedTypeLazyMembers.ts, 40, 11))
++>A : Symbol(A, Decl(mappedTypeLazyMembers.ts, 40, 11))
++>K : Symbol(K, Decl(mappedTypeLazyMembers.ts, 40, 22))
++>ChaiLike : Symbol(ChaiLike, Decl(mappedTypeLazyMembers.ts, 32, 54))
++>Assertion : Symbol(Assertion, Decl(mappedTypeLazyMembers.ts, 43, 1))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 40, 13))
++>A : Symbol(A, Decl(mappedTypeLazyMembers.ts, 40, 11))
++>K : Symbol(K, Decl(mappedTypeLazyMembers.ts, 40, 22))
++>message : Symbol(message, Decl(mappedTypeLazyMembers.ts, 40, 87))
++>Assertion : Symbol(Assertion, Decl(mappedTypeLazyMembers.ts, 43, 1))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 40, 13))
++
++interface Matchers<T> {
++>Matchers : Symbol(Matchers, Decl(mappedTypeLazyMembers.ts, 40, 122))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 41, 19))
++
++    toBe(value: T): void;
++>toBe : Symbol(Matchers.toBe, Decl(mappedTypeLazyMembers.ts, 41, 23))
++>value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 42, 9))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 41, 19))
++}
++interface Assertion<T> extends Chain<ChaiLike, T>, Matchers<T> {}
++>Assertion : Symbol(Assertion, Decl(mappedTypeLazyMembers.ts, 43, 1))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 44, 20))
++>Chain : Symbol(Chain, Decl(mappedTypeLazyMembers.ts, 39, 1))
++>ChaiLike : Symbol(ChaiLike, Decl(mappedTypeLazyMembers.ts, 32, 54))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 44, 20))
++>Matchers : Symbol(Matchers, Decl(mappedTypeLazyMembers.ts, 40, 122))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 44, 20))
++
++declare function expect<T>(value: T): Assertion<T>;
++>expect : Symbol(expect, Decl(mappedTypeLazyMembers.ts, 44, 65))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 45, 24))
++>value : Symbol(value, Decl(mappedTypeLazyMembers.ts, 45, 27))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 45, 24))
++>Assertion : Symbol(Assertion, Decl(mappedTypeLazyMembers.ts, 43, 1))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 45, 24))
++
++expect(1).toBe(2);
++>expect(1).toBe : Symbol(Matchers.toBe, Decl(mappedTypeLazyMembers.ts, 41, 23))
++>expect : Symbol(expect, Decl(mappedTypeLazyMembers.ts, 44, 65))
++>toBe : Symbol(Matchers.toBe, Decl(mappedTypeLazyMembers.ts, 41, 23))
++
++expect("a").toBe(1);
++>expect("a").toBe : Symbol(Matchers.toBe, Decl(mappedTypeLazyMembers.ts, 41, 23))
++>expect : Symbol(expect, Decl(mappedTypeLazyMembers.ts, 44, 65))
++>toBe : Symbol(Matchers.toBe, Decl(mappedTypeLazyMembers.ts, 41, 23))
++
++expect(true).deep.equal(false);
++>expect(true).deep.equal : Symbol(equal, Decl(mappedTypeLazyMembers.ts, 36, 20))
++>expect(true).deep : Symbol(deep, Decl(mappedTypeLazyMembers.ts, 37, 32))
++>expect : Symbol(expect, Decl(mappedTypeLazyMembers.ts, 44, 65))
++>deep : Symbol(deep, Decl(mappedTypeLazyMembers.ts, 37, 32))
++>equal : Symbol(equal, Decl(mappedTypeLazyMembers.ts, 36, 20))
++
++expect(1)("message").toBe(3);
++>expect(1)("message").toBe : Symbol(Matchers.toBe, Decl(mappedTypeLazyMembers.ts, 41, 23))
++>expect : Symbol(expect, Decl(mappedTypeLazyMembers.ts, 44, 65))
++>toBe : Symbol(Matchers.toBe, Decl(mappedTypeLazyMembers.ts, 41, 23))
++
++expect(1).missing;
++>expect : Symbol(expect, Decl(mappedTypeLazyMembers.ts, 44, 65))
++
++// Intersections with mapped types that reduce to never.
++type Kinded<T> = { [K in keyof T]: T[K] } & { kind: "b" };
++>Kinded : Symbol(Kinded, Decl(mappedTypeLazyMembers.ts, 50, 18))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 53, 12))
++>K : Symbol(K, Decl(mappedTypeLazyMembers.ts, 53, 20))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 53, 12))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 53, 12))
++>K : Symbol(K, Decl(mappedTypeLazyMembers.ts, 53, 20))
++>kind : Symbol(kind, Decl(mappedTypeLazyMembers.ts, 53, 45))
++
++declare const kinded: Kinded<{ kind: "a"; other: number }>;
++>kinded : Symbol(kinded, Decl(mappedTypeLazyMembers.ts, 54, 13))
++>Kinded : Symbol(Kinded, Decl(mappedTypeLazyMembers.ts, 50, 18))
++>kind : Symbol(kind, Decl(mappedTypeLazyMembers.ts, 54, 30))
++>other : Symbol(other, Decl(mappedTypeLazyMembers.ts, 54, 41))
++
++kinded.other;
++>kinded : Symbol(kinded, Decl(mappedTypeLazyMembers.ts, 54, 13))
++
++declare const compatible: Kinded<{ kind: "b"; other: number }>;
++>compatible : Symbol(compatible, Decl(mappedTypeLazyMembers.ts, 56, 13))
++>Kinded : Symbol(Kinded, Decl(mappedTypeLazyMembers.ts, 50, 18))
++>kind : Symbol(kind, Decl(mappedTypeLazyMembers.ts, 56, 34))
++>other : Symbol(other, Decl(mappedTypeLazyMembers.ts, 56, 45))
++
++const compatible1: number = compatible.other;
++>compatible1 : Symbol(compatible1, Decl(mappedTypeLazyMembers.ts, 57, 5))
++>compatible.other : Symbol(other, Decl(mappedTypeLazyMembers.ts, 56, 45))
++>compatible : Symbol(compatible, Decl(mappedTypeLazyMembers.ts, 56, 13))
++>other : Symbol(other, Decl(mappedTypeLazyMembers.ts, 56, 45))
++
++// Circular mapped types.
++type SelfMapped = { [K in keyof SelfMapped]: string };
++>SelfMapped : Symbol(SelfMapped, Decl(mappedTypeLazyMembers.ts, 57, 45))
++>K : Symbol(K, Decl(mappedTypeLazyMembers.ts, 60, 21))
++>SelfMapped : Symbol(SelfMapped, Decl(mappedTypeLazyMembers.ts, 57, 45))
++
++declare const selfMapped: SelfMapped;
++>selfMapped : Symbol(selfMapped, Decl(mappedTypeLazyMembers.ts, 61, 13))
++>SelfMapped : Symbol(SelfMapped, Decl(mappedTypeLazyMembers.ts, 57, 45))
++
++selfMapped.anything;
++>selfMapped : Symbol(selfMapped, Decl(mappedTypeLazyMembers.ts, 61, 13))
++
++type X<T> = { [K in keyof T]: string } & { b: string };
++>X : Symbol(X, Decl(mappedTypeLazyMembers.ts, 62, 20))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 64, 7))
++>K : Symbol(K, Decl(mappedTypeLazyMembers.ts, 64, 15))
++>T : Symbol(T, Decl(mappedTypeLazyMembers.ts, 64, 7))
++>b : Symbol(b, Decl(mappedTypeLazyMembers.ts, 64, 42))
++
++interface Y extends X<Y> {
++>Y : Symbol(Y, Decl(mappedTypeLazyMembers.ts, 64, 55))
++>X : Symbol(X, Decl(mappedTypeLazyMembers.ts, 62, 20))
++>Y : Symbol(Y, Decl(mappedTypeLazyMembers.ts, 64, 55))
++
++    a: "";
++>a : Symbol(Y.a, Decl(mappedTypeLazyMembers.ts, 65, 26))
++}
++declare const y: Y;
++>y : Symbol(y, Decl(mappedTypeLazyMembers.ts, 68, 13))
++>Y : Symbol(Y, Decl(mappedTypeLazyMembers.ts, 64, 55))
++
++const y1 = y.a;
++>y1 : Symbol(y1, Decl(mappedTypeLazyMembers.ts, 69, 5))
++>y.a : Symbol(Y.a, Decl(mappedTypeLazyMembers.ts, 65, 26))
++>y : Symbol(y, Decl(mappedTypeLazyMembers.ts, 68, 13))
++>a : Symbol(Y.a, Decl(mappedTypeLazyMembers.ts, 65, 26))
++
++const y2 = y.b;
++>y2 : Symbol(y2, Decl(mappedTypeLazyMembers.ts, 70, 5))
++>y.b : Symbol(b, Decl(mappedTypeLazyMembers.ts, 64, 42))
++>y : Symbol(y, Decl(mappedTypeLazyMembers.ts, 68, 13))
++>b : Symbol(b, Decl(mappedTypeLazyMembers.ts, 64, 42))
++
+diff --git a/tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.types b/tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.types
+new file mode 100644
+index 0000000000..63acde7e9d
+--- /dev/null
++++ b/tsc/testdata/baselines/reference/compiler/mappedTypeLazyMembers.types
+@@ -0,0 +1,243 @@
++//// [tests/cases/compiler/mappedTypeLazyMembers.ts] ////
++
++=== mappedTypeLazyMembers.ts ===
++// Member lookups, index signatures and never reduction on { [P in keyof T]: X }
++// mapped types whose members aren't otherwise resolved.
++
++interface Options {
++    readonly name: string;
++>name : string
++
++    size?: number;
++>size : number | undefined
++
++    tags: string[];
++>tags : string[]
++}
++declare const partial: Partial<Options>;
++>partial : Partial<Options>
++
++const partial1 = partial.size;
++>partial1 : number | undefined
++>partial.size : number | undefined
++>partial : Partial<Options>
++>size : number | undefined
++
++partial.name = "x";
++>partial.name = "x" : "x"
++>partial.name : any
++>partial : Partial<Options>
++>name : any
++>"x" : "x"
++
++partial.missing;
++>partial.missing : any
++>partial : Partial<Options>
++>missing : any
++
++declare const required: Required<Options>;
++>required : Required<Options>
++
++const required1: number = required.size;
++>required1 : number
++>required.size : number
++>required : Required<Options>
++>size : number
++
++declare const mutable: { -readonly [K in keyof Options]: Options[K] };
++>mutable : { name: string; size?: number; tags: string[]; }
++
++mutable.name = "y";
++>mutable.name = "y" : "y"
++>mutable.name : string
++>mutable : { name: string; size?: number; tags: string[]; }
++>name : string
++>"y" : "y"
++
++type Boxed<T> = { [K in keyof T]: { value: T[K] } };
++>Boxed : Boxed<T>
++>value : T[K]
++
++declare const boxed: Boxed<Options>;
++>boxed : Boxed<Options>
++
++const boxed1: string = boxed.name.value;
++>boxed1 : string
++>boxed.name.value : string
++>boxed.name : { value: string; }
++>boxed : Boxed<Options>
++>name : { value: string; }
++>value : string
++
++const boxed2: number = boxed.tags.value;
++>boxed2 : number
++>boxed.tags.value : string[]
++>boxed.tags : { value: string[]; }
++>boxed : Boxed<Options>
++>tags : { value: string[]; }
++>value : string[]
++
++// Index signatures of the modifiers type become index signatures of the mapped type.
++interface Dictionary {
++    [key: string]: number;
++>key : string
++
++    fixed: number;
++>fixed : number
++}
++declare const dict: Boxed<Dictionary>;
++>dict : Boxed<Dictionary>
++
++const dict1 = dict.fixed.value;
++>dict1 : number
++>dict.fixed.value : number
++>dict.fixed : { value: number; }
++>dict : Boxed<Dictionary>
++>fixed : { value: number; }
++>value : number
++
++const dict2 = dict.anything.value;
++>dict2 : number
++>dict.anything.value : number
++>dict.anything : { value: number; }
++>dict : Boxed<Dictionary>
++>anything : { value: number; }
++>value : number
++
++const dict3: Record<string, { value: string }> = dict;
++>dict3 : Record<string, { value: string; }>
++>value : string
++>dict : Boxed<Dictionary>
++
++// Assertion chains in the style of test frameworks, where the base type is an
++// intersection of a mapped type and a call signature.
++interface ChaiLike {
++    equal(value: unknown): void;
++>equal : (value: unknown) => void
++>value : unknown
++
++    deep: ChaiLike;
++>deep : ChaiLike
++}
++type Chain<A, T> = { [K in keyof A]: A[K] extends ChaiLike ? Assertion<T> : A[K] } & ((message?: string) => Assertion<T>);
++>Chain : Chain<A, T>
++>message : string | undefined
++
++interface Matchers<T> {
++    toBe(value: T): void;
++>toBe : (value: T) => void
++>value : T
++}
++interface Assertion<T> extends Chain<ChaiLike, T>, Matchers<T> {}
++declare function expect<T>(value: T): Assertion<T>;
++>expect : <T>(value: T) => Assertion<T>
++>value : T
++
++expect(1).toBe(2);
++>expect(1).toBe(2) : void
++>expect(1).toBe : (value: number) => void
++>expect(1) : Assertion<number>
++>expect : <T>(value: T) => Assertion<T>
++>1 : 1
++>toBe : (value: number) => void
++>2 : 2
++
++expect("a").toBe(1);
++>expect("a").toBe(1) : void
++>expect("a").toBe : (value: string) => void
++>expect("a") : Assertion<string>
++>expect : <T>(value: T) => Assertion<T>
++>"a" : "a"
++>toBe : (value: string) => void
++>1 : 1
++
++expect(true).deep.equal(false);
++>expect(true).deep.equal(false) : void
++>expect(true).deep.equal : (value: unknown) => void
++>expect(true).deep : Assertion<boolean>
++>expect(true) : Assertion<boolean>
++>expect : <T>(value: T) => Assertion<T>
++>true : true
++>deep : Assertion<boolean>
++>equal : (value: unknown) => void
++>false : false
++
++expect(1)("message").toBe(3);
++>expect(1)("message").toBe(3) : void
++>expect(1)("message").toBe : (value: number) => void
++>expect(1)("message") : Assertion<number>
++>expect(1) : Assertion<number>
++>expect : <T>(value: T) => Assertion<T>
++>1 : 1
++>"message" : "message"
++>toBe : (value: number) => void
++>3 : 3
++
++expect(1).missing;
++>expect(1).missing : any
++>expect(1) : Assertion<number>
++>expect : <T>(value: T) => Assertion<T>
++>1 : 1
++>missing : any
++
++// Intersections with mapped types that reduce to never.
++type Kinded<T> = { [K in keyof T]: T[K] } & { kind: "b" };
++>Kinded : Kinded<T>
++>kind : "b"
++
++declare const kinded: Kinded<{ kind: "a"; other: number }>;
++>kinded : never
++>kind : "a"
++>other : number
++
++kinded.other;
++>kinded.other : any
++>kinded : never
++>other : any
++
++declare const compatible: Kinded<{ kind: "b"; other: number }>;
++>compatible : Kinded<{ kind: "b"; other: number; }>
++>kind : "b"
++>other : number
++
++const compatible1: number = compatible.other;
++>compatible1 : number
++>compatible.other : number
++>compatible : Kinded<{ kind: "b"; other: number; }>
++>other : number
++
++// Circular mapped types.
++type SelfMapped = { [K in keyof SelfMapped]: string };
++>SelfMapped : any
++
++declare const selfMapped: SelfMapped;
++>selfMapped : any
++
++selfMapped.anything;
++>selfMapped.anything : any
++>selfMapped : any
++>anything : any
++
++type X<T> = { [K in keyof T]: string } & { b: string };
++>X : X<T>
++>b : string
++
++interface Y extends X<Y> {
++    a: "";
++>a : ""
++}
++declare const y: Y;
++>y : Y
++
++const y1 = y.a;
++>y1 : ""
++>y.a : ""
++>y : Y
++>a : ""
++
++const y2 = y.b;
++>y2 : string
++>y.b : string
++>y : Y
++>b : string
++
+diff --git a/tsc/testdata/tests/cases/compiler/mappedTypeLazyMembers.ts b/tsc/testdata/tests/cases/compiler/mappedTypeLazyMembers.ts
+new file mode 100644
+index 0000000000..2137d06195
+--- /dev/null
++++ b/tsc/testdata/tests/cases/compiler/mappedTypeLazyMembers.ts
+@@ -0,0 +1,76 @@
++// @strict: true
++// @target: esnext
++// @noEmit: true
++// @lib: esnext
++
++// Member lookups, index signatures and never reduction on { [P in keyof T]: X }
++// mapped types whose members aren't otherwise resolved.
++
++interface Options {
++    readonly name: string;
++    size?: number;
++    tags: string[];
++}
++declare const partial: Partial<Options>;
++const partial1 = partial.size;
++partial.name = "x";
++partial.missing;
++
++declare const required: Required<Options>;
++const required1: number = required.size;
++
++declare const mutable: { -readonly [K in keyof Options]: Options[K] };
++mutable.name = "y";
++
++type Boxed<T> = { [K in keyof T]: { value: T[K] } };
++declare const boxed: Boxed<Options>;
++const boxed1: string = boxed.name.value;
++const boxed2: number = boxed.tags.value;
++
++// Index signatures of the modifiers type become index signatures of the mapped type.
++interface Dictionary {
++    [key: string]: number;
++    fixed: number;
++}
++declare const dict: Boxed<Dictionary>;
++const dict1 = dict.fixed.value;
++const dict2 = dict.anything.value;
++const dict3: Record<string, { value: string }> = dict;
++
++// Assertion chains in the style of test frameworks, where the base type is an
++// intersection of a mapped type and a call signature.
++interface ChaiLike {
++    equal(value: unknown): void;
++    deep: ChaiLike;
++}
++type Chain<A, T> = { [K in keyof A]: A[K] extends ChaiLike ? Assertion<T> : A[K] } & ((message?: string) => Assertion<T>);
++interface Matchers<T> {
++    toBe(value: T): void;
++}
++interface Assertion<T> extends Chain<ChaiLike, T>, Matchers<T> {}
++declare function expect<T>(value: T): Assertion<T>;
++expect(1).toBe(2);
++expect("a").toBe(1);
++expect(true).deep.equal(false);
++expect(1)("message").toBe(3);
++expect(1).missing;
++
++// Intersections with mapped types that reduce to never.
++type Kinded<T> = { [K in keyof T]: T[K] } & { kind: "b" };
++declare const kinded: Kinded<{ kind: "a"; other: number }>;
++kinded.other;
++declare const compatible: Kinded<{ kind: "b"; other: number }>;
++const compatible1: number = compatible.other;
++
++// Circular mapped types.
++type SelfMapped = { [K in keyof SelfMapped]: string };
++declare const selfMapped: SelfMapped;
++selfMapped.anything;
++
++type X<T> = { [K in keyof T]: string } & { b: string };
++interface Y extends X<Y> {
++    a: "";
++}
++declare const y: Y;
++const y1 = y.a;
++const y2 = y.b;
+-- 
+2.53.0
+

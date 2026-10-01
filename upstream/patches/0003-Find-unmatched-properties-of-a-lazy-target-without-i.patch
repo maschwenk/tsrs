@@ -1,0 +1,868 @@
+From 7762e7c44c596b737a0579fb02152c9bfa278f38 Mon Sep 17 00:00:00 2001
+From: Max schwenk <maschwenk@gmail.com>
+Date: Thu, 1 Oct 2026 03:11:57 -0400
+Subject: [PATCH 3/5] Find unmatched properties of a lazy target without
+ instantiating its members
+
+getUnmatchedPropertiesWorker resolved a target with a lazy member table in
+full and looked up every required property in the source with
+getPropertyOfType, which instantiates lazy members, although only the
+existence of a source property matters without discriminant matching.
+This is the relater's path for failing comparisons, where those members
+are dropped right after.
+
+With a lazy target, getPropertiesOfTypeLazily lists the properties
+getPropertiesOfType would return, in the same order, with declared
+members standing in for instantiations the table hasn't created yet (same
+names, flags and declarations). It builds the list the way
+resolveLazyMembers builds the member table and keeps it on the table, so
+base types share it. Without discriminant matching the source is only
+asked hasPropertyOfType, which doesn't instantiate lazy members, and the
+real target property is looked up only where it's returned or its type
+is compared.
+
+38k-file program (37,942 files), tsgo on main + #64475 + #64526 + the
+previous commits, median of 3, single threaded / 4 checkers: symbols
+13,082,184 -> 12,810,418 (-2.1%) / 19,241,821 -> 18,691,689 (-2.9%),
+types and instantiations unchanged, heap after check 10.41 -> 10.37 GB
+(-0.4%) / 15.32 -> 15.22 GB (-0.7%), allocations +0.25M (+0.17%) / +0.5M
+(+0.2%) for the property lists.
+
+Prototype in a Rust port of the checker (same counts as this commit):
+-245K symbols single threaded (-1.8%), -428K with 4 checkers (-2.5%),
+measured on the tuple commit alone; before, lazy targets were resolved in
+full 34K times (453K symbols) and source lookups instantiated 652K
+members, 61% never typed; after, 621,288 / 1,140,871 existence-only
+lookups, 152,771 / 340,444 answered by an uninstantiated member; 190,623 /
+300,502 property lists requested (including recursive and cached).
+
+lazyMembersUnmatchedProperties.ts covers missing property lists across
+declared and inherited members (and their order), the "and N more" form,
+private members, implements, and discriminated unions in assignments and
+inference. Baselines are generated on main without #64475 and #64526.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ tsc/internal/checker/checker.go               |  64 ++++-
+ tsc/internal/checker/relater.go               |  18 +-
+ .../lazyMembersUnmatchedProperties.errors.txt | 104 ++++++++
+ .../lazyMembersUnmatchedProperties.symbols    | 237 ++++++++++++++++++
+ .../lazyMembersUnmatchedProperties.types      | 209 +++++++++++++++
+ .../lazyMembersUnmatchedProperties.ts         |  67 +++++
+ 6 files changed, 690 insertions(+), 9 deletions(-)
+ create mode 100644 tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.errors.txt
+ create mode 100644 tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.symbols
+ create mode 100644 tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.types
+ create mode 100644 tsc/testdata/tests/cases/compiler/lazyMembersUnmatchedProperties.ts
+
+diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
+index 72101e21ae..8500429f7e 100644
+--- a/tsc/internal/checker/checker.go
++++ b/tsc/internal/checker/checker.go
+@@ -19245,10 +19245,19 @@ func (c *Checker) getPropertyOfType(t *Type, name string) *ast.Symbol {
+  * @param name a name of property to look up in a given type
+  */
+ func (c *Checker) getPropertyOfTypeEx(t *Type, name string, skipObjectFunctionPropertyAugment bool, includeTypeOnlyMembers bool) *ast.Symbol {
++	return c.getPropertyOfTypeWorker(t, name, skipObjectFunctionPropertyAugment, includeTypeOnlyMembers, true /*instantiate*/)
++}
++
++// Whether getPropertyOfType(t, name) returns a property, without instantiating members of lazy member tables.
++func (c *Checker) hasPropertyOfType(t *Type, name string) bool {
++	return c.getPropertyOfTypeWorker(t, name, false /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/, false /*instantiate*/) != nil
++}
++
++func (c *Checker) getPropertyOfTypeWorker(t *Type, name string, skipObjectFunctionPropertyAugment bool, includeTypeOnlyMembers bool, instantiate bool) *ast.Symbol {
+ 	t = c.getReducedApparentType(t)
+ 	switch {
+ 	case t.flags&TypeFlagsObject != 0:
+-		symbol := c.getMemberOfStructuredType(t, name)
++		symbol := c.getMemberOfStructuredType(t, name, instantiate)
+ 		if symbol != nil {
+ 			if !includeTypeOnlyMembers && t.symbol != nil && t.symbol.Flags&ast.SymbolFlagsValueModule != 0 && c.moduleSymbolLinks.Get(t.symbol).typeOnlyExportStarMap[name] != nil {
+ 				// If this is the type of a module, `resolved.members.get(name)` might have effectively skipped over
+@@ -19542,6 +19551,7 @@ type lazyMemberTable struct {
+ 	indexInfos          []*IndexInfo
+ 	baseTypes           []*Type
+ 	declared            map[string]*ast.Symbol
++	properties          []*ast.Symbol // see getPropertiesOfTypeLazily
+ }
+ 
+ func mayHaveLazyMembers(t *Type) bool {
+@@ -19655,14 +19665,16 @@ func (c *Checker) getLazyDeclaredMember(lm *lazyMemberTable, symbol *ast.Symbol,
+ 	return result
+ }
+ 
+-func (c *Checker) getMemberOfStructuredType(t *Type, name string) *ast.Symbol {
++// Without instantiate, a declared member of a lazy member table that has not been instantiated yet
++// is returned as is (it has the same name and flags as its instantiation).
++func (c *Checker) getMemberOfStructuredType(t *Type, name string, instantiate bool) *ast.Symbol {
+ 	if t.objectFlags&ObjectFlagsMembersResolved != 0 {
+ 		return t.AsStructuredType().members[name]
+ 	}
+-	return c.getMemberOfUnresolvedStructuredType(t, name)
++	return c.getMemberOfUnresolvedStructuredType(t, name, instantiate)
+ }
+ 
+-func (c *Checker) getMemberOfUnresolvedStructuredType(t *Type, name string) *ast.Symbol {
++func (c *Checker) getMemberOfUnresolvedStructuredType(t *Type, name string, instantiate bool) *ast.Symbol {
+ 	if t.objectFlags&ObjectFlagsMapped != 0 && !isReservedMemberName(name) {
+ 		if lazy := c.getLazyMappedTable(t); lazy != nil {
+ 			if member, ok := c.getLazyMappedTypeMember(t, lazy, name); ok {
+@@ -19677,13 +19689,17 @@ func (c *Checker) getMemberOfUnresolvedStructuredType(t *Type, name string) *ast
+ 	// The declared member, else the first base type's property (see addInheritedMembers).
+ 	var result *ast.Symbol
+ 	if decl := c.resolveDeclaredMembers(t.Target()).declaredMembers[name]; decl != nil && c.isNamedMember(decl, name) {
+-		result = c.getLazyDeclaredMember(lm, decl, name)
++		if instantiate {
++			result = c.getLazyDeclaredMember(lm, decl, name)
++		} else {
++			result = core.OrElse(lm.declared[name], decl)
++		}
+ 	}
+ 	for _, baseType := range lm.baseTypes {
+ 		if result != nil && result.Flags&ast.SymbolFlagsValue != 0 {
+ 			break
+ 		}
+-		if prop := c.getPropertyOfTypeEx(baseType, name, true /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/); prop != nil && !isStaticPrivateIdentifierProperty(prop) {
++		if prop := c.getPropertyOfTypeWorker(baseType, name, true /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/, instantiate); prop != nil && !isStaticPrivateIdentifierProperty(prop) {
+ 			result = prop
+ 		}
+ 	}
+@@ -19727,6 +19743,38 @@ func (c *Checker) everyLazyProperty(t *Type, lm *lazyMemberTable, seen *collecti
+ 	return true
+ }
+ 
++// Same as getPropertiesOfType, except that for a type with a lazy member table, declared members stand
++// in for instantiations the table hasn't created yet. They have the same names, flags and declarations,
++// so the order is the same. Also returns the type with the table (the reduced apparent type of t), or
++// nil if there is none. Mirrors resolveLazyMembers.
++func (c *Checker) getPropertiesOfTypeLazily(t *Type) (properties []*ast.Symbol, lazyType *Type) {
++	t = c.getReducedApparentType(t)
++	if t.flags&TypeFlagsUnionOrIntersection != 0 {
++		return c.getPropertiesOfUnionOrIntersectionType(t), nil
++	}
++	lm := c.getReadyLazyMemberTable(t)
++	if lm == nil {
++		return c.getPropertiesOfObjectType(t), nil
++	}
++	if lm.properties == nil {
++		var members ast.SymbolTable
++		if declaredMembers := c.resolveDeclaredMembers(t.Target()).declaredMembers; len(declaredMembers) != 0 {
++			members = make(ast.SymbolTable, len(declaredMembers))
++			for id, symbol := range declaredMembers {
++				if c.isNamedMember(symbol, id) {
++					members[id] = core.OrElse(lm.declared[id], symbol)
++				}
++			}
++		}
++		for _, baseType := range lm.baseTypes {
++			baseProperties, _ := c.getPropertiesOfTypeLazily(baseType)
++			members = c.addInheritedMembers(members, baseProperties)
++		}
++		lm.properties = c.getNamedMembers(members, t.symbol)
++	}
++	return lm.properties, t
++}
++
+ func (c *Checker) getBaseTypes(t *Type) []*Type {
+ 	if t.objectFlags&(ObjectFlagsClassOrInterface|ObjectFlagsTuple) == 0 {
+ 		return nil
+@@ -21628,7 +21676,7 @@ func (c *Checker) getLazyMappedTypeMember(t *Type, lazy *lazyMappedTable, name s
+ 	}
+ 	// Recursive lookups see no member, as they would while resolveMappedTypeMembers runs.
+ 	lazy.members[name] = nil
+-	modifiersProp := c.getMemberOfStructuredType(lazy.modifiersType, name)
++	modifiersProp := c.getMemberOfStructuredType(lazy.modifiersType, name, true /*instantiate*/)
+ 	if t.objectFlags&ObjectFlagsMembersResolved != 0 {
+ 		return t.AsStructuredType().members[name], true
+ 	}
+@@ -31999,7 +32047,7 @@ func (c *Checker) isFunctionObjectType(t *Type) bool {
+ 	// We do a quick check for a "bind" property before performing the more expensive subtype
+ 	// check. This gives us a quicker out in the common case where an object type is not a function.
+ 	return len(c.getSignaturesOfStructuredType(t, SignatureKindCall)) != 0 || len(c.getSignaturesOfStructuredType(t, SignatureKindConstruct)) != 0 ||
+-		c.getMemberOfStructuredType(t, "bind") != nil && c.isTypeSubtypeOf(t, c.globalFunctionType)
++		c.getMemberOfStructuredType(t, "bind", true /*instantiate*/) != nil && c.isTypeSubtypeOf(t, c.globalFunctionType)
+ }
+ 
+ func (c *Checker) getTypeWithFacts(t *Type, include TypeFacts) *Type {
+diff --git a/tsc/internal/checker/relater.go b/tsc/internal/checker/relater.go
+index c959dd60b2..5ee40e2d2c 100644
+--- a/tsc/internal/checker/relater.go
++++ b/tsc/internal/checker/relater.go
+@@ -975,14 +975,30 @@ func (c *Checker) getUnmatchedProperties(source *Type, target *Type, requireOpti
+ }
+ 
+ func (c *Checker) getUnmatchedPropertiesWorker(source *Type, target *Type, requireOptionalProperties bool, matchDiscriminantProperties bool, propsOut *[]*ast.Symbol) *ast.Symbol {
+-	properties := c.getPropertiesOfType(target)
++	// With a lazy member table (lazyType is the reduced apparent type of target that has it), declared
++	// members stand in for target properties until a property is returned or its type is needed.
++	properties, lazyType := c.getPropertiesOfTypeLazily(target)
++	lazy := lazyType != nil
+ 	for _, targetProp := range properties {
+ 		// TODO: remove this when we support static private identifier fields and find other solutions to get privateNamesAndStaticFields test to pass
+ 		if isStaticPrivateIdentifierProperty(targetProp) {
+ 			continue
+ 		}
+ 		if requireOptionalProperties || targetProp.Flags&ast.SymbolFlagsOptional == 0 && targetProp.CheckFlags&ast.CheckFlagsPartial == 0 {
++			if lazy && !matchDiscriminantProperties {
++				if !c.hasPropertyOfType(source, targetProp.Name) {
++					targetProp = c.getPropertyOfType(lazyType, targetProp.Name)
++					if propsOut == nil {
++						return targetProp
++					}
++					*propsOut = append(*propsOut, targetProp)
++				}
++				continue
++			}
+ 			sourceProp := c.getPropertyOfType(source, targetProp.Name)
++			if lazy {
++				targetProp = c.getPropertyOfType(lazyType, targetProp.Name)
++			}
+ 			if sourceProp == nil {
+ 				if propsOut == nil {
+ 					return targetProp
+diff --git a/tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.errors.txt b/tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.errors.txt
+new file mode 100644
+index 0000000000..fcf83f675e
+--- /dev/null
++++ b/tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.errors.txt
+@@ -0,0 +1,104 @@
++lazyMembersUnmatchedProperties.ts(15,7): error TS2739: Type '{}' is missing the following properties from type 'Derived<number>': d1, shared, b1, b2
++lazyMembersUnmatchedProperties.ts(16,7): error TS2739: Type '{ d1: number; }' is missing the following properties from type 'Derived<number>': shared, b1, b2
++lazyMembersUnmatchedProperties.ts(18,7): error TS2420: Class 'Impl<T>' incorrectly implements interface 'Derived<T>'.
++  Type 'Impl<T>' is missing the following properties from type 'Derived<T>': shared, b1, b2
++lazyMembersUnmatchedProperties.ts(29,7): error TS2740: Type '{ m1: string; }' is missing the following properties from type 'Many<string>': m2, m3, m4, b1, and 2 more.
++lazyMembersUnmatchedProperties.ts(30,90): error TS2353: Object literal may only specify known properties, and 'extra' does not exist in type 'Many<string>'.
++lazyMembersUnmatchedProperties.ts(39,7): error TS2739: Type '{ contents: string; }' is missing the following properties from type 'Box<string>': secret, method
++lazyMembersUnmatchedProperties.ts(41,7): error TS2741: Property 'secret' is missing in type '{ contents: string; method(): string; }' but required in type 'Box<string>'.
++lazyMembersUnmatchedProperties.ts(52,7): error TS2322: Type '{ kind: "circle"; }' is not assignable to type 'Shape<number>'.
++  Property 'radius' is missing in type '{ kind: "circle"; }' but required in type 'Circle<number>'.
++lazyMembersUnmatchedProperties.ts(53,49): error TS2353: Object literal may only specify known properties, and 'radius' does not exist in type 'Square<number>'.
++lazyMembersUnmatchedProperties.ts(63,7): error TS2741: Property 'value' is missing in type 'never[]' but required in type 'Tree<string>'.
++
++
++==== lazyMembersUnmatchedProperties.ts (10 errors) ====
++    // Missing property errors and discriminant checks against instantiated class
++    // and interface references, including inherited members and the order in which
++    // missing properties are reported.
++    
++    interface Base<T> {
++        b1: T;
++        b2: string;
++        shared: number;
++    }
++    interface Derived<T> extends Base<T[]> {
++        d1: T;
++        shared: number;
++        d2?: T;
++    }
++    const derived1: Derived<number> = {};
++          ~~~~~~~~
++!!! error TS2739: Type '{}' is missing the following properties from type 'Derived<number>': d1, shared, b1, b2
++    const derived2: Derived<number> = { d1: 1 };
++          ~~~~~~~~
++!!! error TS2739: Type '{ d1: number; }' is missing the following properties from type 'Derived<number>': shared, b1, b2
++    const derived3: Derived<number> = { d1: 1, b1: [1], b2: "", shared: 1 };
++    class Impl<T> implements Derived<T> {
++          ~~~~
++!!! error TS2420: Class 'Impl<T>' incorrectly implements interface 'Derived<T>'.
++!!! error TS2420:   Type 'Impl<T>' is missing the following properties from type 'Derived<T>': shared, b1, b2
++        d1!: T;
++    }
++    
++    interface Many<T> extends Base<T> {
++        m1: T;
++        m2: T;
++        m3: T;
++        m4: T;
++        m5?: T;
++    }
++    const many1: Many<string> = { m1: "" };
++          ~~~~~
++!!! error TS2740: Type '{ m1: string; }' is missing the following properties from type 'Many<string>': m2, m3, m4, b1, and 2 more.
++    const many2: Many<string> = { b1: "", b2: "", shared: 0, m1: "", m2: "", m3: "", m4: "", extra: 1 };
++                                                                                             ~~~~~
++!!! error TS2353: Object literal may only specify known properties, and 'extra' does not exist in type 'Many<string>'.
++    
++    class Box<T> {
++        private secret!: T;
++        contents!: T;
++        method(): T {
++            return this.contents;
++        }
++    }
++    const box1: Box<string> = { contents: "" };
++          ~~~~
++!!! error TS2739: Type '{ contents: string; }' is missing the following properties from type 'Box<string>': secret, method
++    declare const notBox: { contents: string; method(): string };
++    const box2: Box<string> = notBox;
++          ~~~~
++!!! error TS2741: Property 'secret' is missing in type '{ contents: string; method(): string; }' but required in type 'Box<string>'.
++!!! related TS2728 lazyMembersUnmatchedProperties.ts:33:13: 'secret' is declared here.
++    
++    interface Circle<T> {
++        kind: "circle";
++        radius: T;
++    }
++    interface Square<T> {
++        kind: "square";
++        size: T;
++    }
++    type Shape<T> = Circle<T> | Square<T>;
++    const shape1: Shape<number> = { kind: "circle" };
++          ~~~~~~
++!!! error TS2322: Type '{ kind: "circle"; }' is not assignable to type 'Shape<number>'.
++!!! error TS2322:   Property 'radius' is missing in type '{ kind: "circle"; }' but required in type 'Circle<number>'.
++!!! related TS2728 lazyMembersUnmatchedProperties.ts:45:5: 'radius' is declared here.
++    const shape2: Shape<number> = { kind: "square", radius: 1 };
++                                                    ~~~~~~
++!!! error TS2353: Object literal may only specify known properties, and 'radius' does not exist in type 'Square<number>'.
++    declare function area<T>(shape: Shape<T>): T;
++    const area1 = area({ kind: "circle", radius: 1 });
++    const area2 = area({ kind: "square", size: "x" });
++    declare function pick<T>(a: Circle<T> | T[]): T;
++    const picked = pick({ kind: "circle", radius: 1 });
++    
++    interface Tree<T> extends Array<Tree<T>> {
++        value: T;
++    }
++    const tree: Tree<string> = [];
++          ~~~~
++!!! error TS2741: Property 'value' is missing in type 'never[]' but required in type 'Tree<string>'.
++!!! related TS2728 lazyMembersUnmatchedProperties.ts:61:5: 'value' is declared here.
++    
+\ No newline at end of file
+diff --git a/tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.symbols b/tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.symbols
+new file mode 100644
+index 0000000000..4cc469a5cc
+--- /dev/null
++++ b/tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.symbols
+@@ -0,0 +1,237 @@
++//// [tests/cases/compiler/lazyMembersUnmatchedProperties.ts] ////
++
++=== lazyMembersUnmatchedProperties.ts ===
++// Missing property errors and discriminant checks against instantiated class
++// and interface references, including inherited members and the order in which
++// missing properties are reported.
++
++interface Base<T> {
++>Base : Symbol(Base, Decl(lazyMembersUnmatchedProperties.ts, 0, 0))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 4, 15))
++
++    b1: T;
++>b1 : Symbol(Base.b1, Decl(lazyMembersUnmatchedProperties.ts, 4, 19))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 4, 15))
++
++    b2: string;
++>b2 : Symbol(Base.b2, Decl(lazyMembersUnmatchedProperties.ts, 5, 10))
++
++    shared: number;
++>shared : Symbol(Base.shared, Decl(lazyMembersUnmatchedProperties.ts, 6, 15))
++}
++interface Derived<T> extends Base<T[]> {
++>Derived : Symbol(Derived, Decl(lazyMembersUnmatchedProperties.ts, 8, 1))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 9, 18))
++>Base : Symbol(Base, Decl(lazyMembersUnmatchedProperties.ts, 0, 0))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 9, 18))
++
++    d1: T;
++>d1 : Symbol(Derived.d1, Decl(lazyMembersUnmatchedProperties.ts, 9, 40))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 9, 18))
++
++    shared: number;
++>shared : Symbol(Derived.shared, Decl(lazyMembersUnmatchedProperties.ts, 10, 10))
++
++    d2?: T;
++>d2 : Symbol(Derived.d2, Decl(lazyMembersUnmatchedProperties.ts, 11, 19))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 9, 18))
++}
++const derived1: Derived<number> = {};
++>derived1 : Symbol(derived1, Decl(lazyMembersUnmatchedProperties.ts, 14, 5))
++>Derived : Symbol(Derived, Decl(lazyMembersUnmatchedProperties.ts, 8, 1))
++
++const derived2: Derived<number> = { d1: 1 };
++>derived2 : Symbol(derived2, Decl(lazyMembersUnmatchedProperties.ts, 15, 5))
++>Derived : Symbol(Derived, Decl(lazyMembersUnmatchedProperties.ts, 8, 1))
++>d1 : Symbol(d1, Decl(lazyMembersUnmatchedProperties.ts, 15, 35))
++
++const derived3: Derived<number> = { d1: 1, b1: [1], b2: "", shared: 1 };
++>derived3 : Symbol(derived3, Decl(lazyMembersUnmatchedProperties.ts, 16, 5))
++>Derived : Symbol(Derived, Decl(lazyMembersUnmatchedProperties.ts, 8, 1))
++>d1 : Symbol(d1, Decl(lazyMembersUnmatchedProperties.ts, 16, 35))
++>b1 : Symbol(b1, Decl(lazyMembersUnmatchedProperties.ts, 16, 42))
++>b2 : Symbol(b2, Decl(lazyMembersUnmatchedProperties.ts, 16, 51))
++>shared : Symbol(shared, Decl(lazyMembersUnmatchedProperties.ts, 16, 59))
++
++class Impl<T> implements Derived<T> {
++>Impl : Symbol(Impl, Decl(lazyMembersUnmatchedProperties.ts, 16, 72))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 17, 11))
++>Derived : Symbol(Derived, Decl(lazyMembersUnmatchedProperties.ts, 8, 1))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 17, 11))
++
++    d1!: T;
++>d1 : Symbol(Impl.d1, Decl(lazyMembersUnmatchedProperties.ts, 17, 37))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 17, 11))
++}
++
++interface Many<T> extends Base<T> {
++>Many : Symbol(Many, Decl(lazyMembersUnmatchedProperties.ts, 19, 1))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 21, 15))
++>Base : Symbol(Base, Decl(lazyMembersUnmatchedProperties.ts, 0, 0))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 21, 15))
++
++    m1: T;
++>m1 : Symbol(Many.m1, Decl(lazyMembersUnmatchedProperties.ts, 21, 35))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 21, 15))
++
++    m2: T;
++>m2 : Symbol(Many.m2, Decl(lazyMembersUnmatchedProperties.ts, 22, 10))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 21, 15))
++
++    m3: T;
++>m3 : Symbol(Many.m3, Decl(lazyMembersUnmatchedProperties.ts, 23, 10))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 21, 15))
++
++    m4: T;
++>m4 : Symbol(Many.m4, Decl(lazyMembersUnmatchedProperties.ts, 24, 10))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 21, 15))
++
++    m5?: T;
++>m5 : Symbol(Many.m5, Decl(lazyMembersUnmatchedProperties.ts, 25, 10))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 21, 15))
++}
++const many1: Many<string> = { m1: "" };
++>many1 : Symbol(many1, Decl(lazyMembersUnmatchedProperties.ts, 28, 5))
++>Many : Symbol(Many, Decl(lazyMembersUnmatchedProperties.ts, 19, 1))
++>m1 : Symbol(m1, Decl(lazyMembersUnmatchedProperties.ts, 28, 29))
++
++const many2: Many<string> = { b1: "", b2: "", shared: 0, m1: "", m2: "", m3: "", m4: "", extra: 1 };
++>many2 : Symbol(many2, Decl(lazyMembersUnmatchedProperties.ts, 29, 5))
++>Many : Symbol(Many, Decl(lazyMembersUnmatchedProperties.ts, 19, 1))
++>b1 : Symbol(b1, Decl(lazyMembersUnmatchedProperties.ts, 29, 29))
++>b2 : Symbol(b2, Decl(lazyMembersUnmatchedProperties.ts, 29, 37))
++>shared : Symbol(shared, Decl(lazyMembersUnmatchedProperties.ts, 29, 45))
++>m1 : Symbol(m1, Decl(lazyMembersUnmatchedProperties.ts, 29, 56))
++>m2 : Symbol(m2, Decl(lazyMembersUnmatchedProperties.ts, 29, 64))
++>m3 : Symbol(m3, Decl(lazyMembersUnmatchedProperties.ts, 29, 72))
++>m4 : Symbol(m4, Decl(lazyMembersUnmatchedProperties.ts, 29, 80))
++>extra : Symbol(extra, Decl(lazyMembersUnmatchedProperties.ts, 29, 88))
++
++class Box<T> {
++>Box : Symbol(Box, Decl(lazyMembersUnmatchedProperties.ts, 29, 100))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 31, 10))
++
++    private secret!: T;
++>secret : Symbol(Box.secret, Decl(lazyMembersUnmatchedProperties.ts, 31, 14))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 31, 10))
++
++    contents!: T;
++>contents : Symbol(Box.contents, Decl(lazyMembersUnmatchedProperties.ts, 32, 23))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 31, 10))
++
++    method(): T {
++>method : Symbol(Box.method, Decl(lazyMembersUnmatchedProperties.ts, 33, 17))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 31, 10))
++
++        return this.contents;
++>this.contents : Symbol(Box.contents, Decl(lazyMembersUnmatchedProperties.ts, 32, 23))
++>this : Symbol(Box, Decl(lazyMembersUnmatchedProperties.ts, 29, 100))
++>contents : Symbol(Box.contents, Decl(lazyMembersUnmatchedProperties.ts, 32, 23))
++    }
++}
++const box1: Box<string> = { contents: "" };
++>box1 : Symbol(box1, Decl(lazyMembersUnmatchedProperties.ts, 38, 5))
++>Box : Symbol(Box, Decl(lazyMembersUnmatchedProperties.ts, 29, 100))
++>contents : Symbol(contents, Decl(lazyMembersUnmatchedProperties.ts, 38, 27))
++
++declare const notBox: { contents: string; method(): string };
++>notBox : Symbol(notBox, Decl(lazyMembersUnmatchedProperties.ts, 39, 13))
++>contents : Symbol(contents, Decl(lazyMembersUnmatchedProperties.ts, 39, 23))
++>method : Symbol(method, Decl(lazyMembersUnmatchedProperties.ts, 39, 41))
++
++const box2: Box<string> = notBox;
++>box2 : Symbol(box2, Decl(lazyMembersUnmatchedProperties.ts, 40, 5))
++>Box : Symbol(Box, Decl(lazyMembersUnmatchedProperties.ts, 29, 100))
++>notBox : Symbol(notBox, Decl(lazyMembersUnmatchedProperties.ts, 39, 13))
++
++interface Circle<T> {
++>Circle : Symbol(Circle, Decl(lazyMembersUnmatchedProperties.ts, 40, 33))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 42, 17))
++
++    kind: "circle";
++>kind : Symbol(Circle.kind, Decl(lazyMembersUnmatchedProperties.ts, 42, 21))
++
++    radius: T;
++>radius : Symbol(Circle.radius, Decl(lazyMembersUnmatchedProperties.ts, 43, 19))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 42, 17))
++}
++interface Square<T> {
++>Square : Symbol(Square, Decl(lazyMembersUnmatchedProperties.ts, 45, 1))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 46, 17))
++
++    kind: "square";
++>kind : Symbol(Square.kind, Decl(lazyMembersUnmatchedProperties.ts, 46, 21))
++
++    size: T;
++>size : Symbol(Square.size, Decl(lazyMembersUnmatchedProperties.ts, 47, 19))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 46, 17))
++}
++type Shape<T> = Circle<T> | Square<T>;
++>Shape : Symbol(Shape, Decl(lazyMembersUnmatchedProperties.ts, 49, 1))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 50, 11))
++>Circle : Symbol(Circle, Decl(lazyMembersUnmatchedProperties.ts, 40, 33))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 50, 11))
++>Square : Symbol(Square, Decl(lazyMembersUnmatchedProperties.ts, 45, 1))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 50, 11))
++
++const shape1: Shape<number> = { kind: "circle" };
++>shape1 : Symbol(shape1, Decl(lazyMembersUnmatchedProperties.ts, 51, 5))
++>Shape : Symbol(Shape, Decl(lazyMembersUnmatchedProperties.ts, 49, 1))
++>kind : Symbol(kind, Decl(lazyMembersUnmatchedProperties.ts, 51, 31))
++
++const shape2: Shape<number> = { kind: "square", radius: 1 };
++>shape2 : Symbol(shape2, Decl(lazyMembersUnmatchedProperties.ts, 52, 5))
++>Shape : Symbol(Shape, Decl(lazyMembersUnmatchedProperties.ts, 49, 1))
++>kind : Symbol(kind, Decl(lazyMembersUnmatchedProperties.ts, 52, 31))
++>radius : Symbol(radius, Decl(lazyMembersUnmatchedProperties.ts, 52, 47))
++
++declare function area<T>(shape: Shape<T>): T;
++>area : Symbol(area, Decl(lazyMembersUnmatchedProperties.ts, 52, 60))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 53, 22))
++>shape : Symbol(shape, Decl(lazyMembersUnmatchedProperties.ts, 53, 25))
++>Shape : Symbol(Shape, Decl(lazyMembersUnmatchedProperties.ts, 49, 1))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 53, 22))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 53, 22))
++
++const area1 = area({ kind: "circle", radius: 1 });
++>area1 : Symbol(area1, Decl(lazyMembersUnmatchedProperties.ts, 54, 5))
++>area : Symbol(area, Decl(lazyMembersUnmatchedProperties.ts, 52, 60))
++>kind : Symbol(kind, Decl(lazyMembersUnmatchedProperties.ts, 54, 20))
++>radius : Symbol(radius, Decl(lazyMembersUnmatchedProperties.ts, 54, 36))
++
++const area2 = area({ kind: "square", size: "x" });
++>area2 : Symbol(area2, Decl(lazyMembersUnmatchedProperties.ts, 55, 5))
++>area : Symbol(area, Decl(lazyMembersUnmatchedProperties.ts, 52, 60))
++>kind : Symbol(kind, Decl(lazyMembersUnmatchedProperties.ts, 55, 20))
++>size : Symbol(size, Decl(lazyMembersUnmatchedProperties.ts, 55, 36))
++
++declare function pick<T>(a: Circle<T> | T[]): T;
++>pick : Symbol(pick, Decl(lazyMembersUnmatchedProperties.ts, 55, 50))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 56, 22))
++>a : Symbol(a, Decl(lazyMembersUnmatchedProperties.ts, 56, 25))
++>Circle : Symbol(Circle, Decl(lazyMembersUnmatchedProperties.ts, 40, 33))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 56, 22))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 56, 22))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 56, 22))
++
++const picked = pick({ kind: "circle", radius: 1 });
++>picked : Symbol(picked, Decl(lazyMembersUnmatchedProperties.ts, 57, 5))
++>pick : Symbol(pick, Decl(lazyMembersUnmatchedProperties.ts, 55, 50))
++>kind : Symbol(kind, Decl(lazyMembersUnmatchedProperties.ts, 57, 21))
++>radius : Symbol(radius, Decl(lazyMembersUnmatchedProperties.ts, 57, 37))
++
++interface Tree<T> extends Array<Tree<T>> {
++>Tree : Symbol(Tree, Decl(lazyMembersUnmatchedProperties.ts, 57, 51))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 59, 15))
++>Array : Symbol(Array, Decl(lib.es5.d.ts, --, --), Decl(lib.es5.d.ts, --, --), Decl(lib.es2015.core.d.ts, --, --), Decl(lib.es2015.iterable.d.ts, --, --), Decl(lib.es2015.symbol.wellknown.d.ts, --, --) ... and 4 more)
++>Tree : Symbol(Tree, Decl(lazyMembersUnmatchedProperties.ts, 57, 51))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 59, 15))
++
++    value: T;
++>value : Symbol(Tree.value, Decl(lazyMembersUnmatchedProperties.ts, 59, 42))
++>T : Symbol(T, Decl(lazyMembersUnmatchedProperties.ts, 59, 15))
++}
++const tree: Tree<string> = [];
++>tree : Symbol(tree, Decl(lazyMembersUnmatchedProperties.ts, 62, 5))
++>Tree : Symbol(Tree, Decl(lazyMembersUnmatchedProperties.ts, 57, 51))
++
+diff --git a/tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.types b/tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.types
+new file mode 100644
+index 0000000000..8695c044a2
+--- /dev/null
++++ b/tsc/testdata/baselines/reference/compiler/lazyMembersUnmatchedProperties.types
+@@ -0,0 +1,209 @@
++//// [tests/cases/compiler/lazyMembersUnmatchedProperties.ts] ////
++
++=== lazyMembersUnmatchedProperties.ts ===
++// Missing property errors and discriminant checks against instantiated class
++// and interface references, including inherited members and the order in which
++// missing properties are reported.
++
++interface Base<T> {
++    b1: T;
++>b1 : T
++
++    b2: string;
++>b2 : string
++
++    shared: number;
++>shared : number
++}
++interface Derived<T> extends Base<T[]> {
++    d1: T;
++>d1 : T
++
++    shared: number;
++>shared : number
++
++    d2?: T;
++>d2 : T | undefined
++}
++const derived1: Derived<number> = {};
++>derived1 : Derived<number>
++>{} : {}
++
++const derived2: Derived<number> = { d1: 1 };
++>derived2 : Derived<number>
++>{ d1: 1 } : { d1: number; }
++>d1 : number
++>1 : 1
++
++const derived3: Derived<number> = { d1: 1, b1: [1], b2: "", shared: 1 };
++>derived3 : Derived<number>
++>{ d1: 1, b1: [1], b2: "", shared: 1 } : { d1: number; b1: number[]; b2: string; shared: number; }
++>d1 : number
++>1 : 1
++>b1 : number[]
++>[1] : number[]
++>1 : 1
++>b2 : string
++>"" : ""
++>shared : number
++>1 : 1
++
++class Impl<T> implements Derived<T> {
++>Impl : Impl<T>
++
++    d1!: T;
++>d1 : T
++}
++
++interface Many<T> extends Base<T> {
++    m1: T;
++>m1 : T
++
++    m2: T;
++>m2 : T
++
++    m3: T;
++>m3 : T
++
++    m4: T;
++>m4 : T
++
++    m5?: T;
++>m5 : T | undefined
++}
++const many1: Many<string> = { m1: "" };
++>many1 : Many<string>
++>{ m1: "" } : { m1: string; }
++>m1 : string
++>"" : ""
++
++const many2: Many<string> = { b1: "", b2: "", shared: 0, m1: "", m2: "", m3: "", m4: "", extra: 1 };
++>many2 : Many<string>
++>{ b1: "", b2: "", shared: 0, m1: "", m2: "", m3: "", m4: "", extra: 1 } : { b1: string; b2: string; shared: number; m1: string; m2: string; m3: string; m4: string; extra: number; }
++>b1 : string
++>"" : ""
++>b2 : string
++>"" : ""
++>shared : number
++>0 : 0
++>m1 : string
++>"" : ""
++>m2 : string
++>"" : ""
++>m3 : string
++>"" : ""
++>m4 : string
++>"" : ""
++>extra : number
++>1 : 1
++
++class Box<T> {
++>Box : Box<T>
++
++    private secret!: T;
++>secret : T
++
++    contents!: T;
++>contents : T
++
++    method(): T {
++>method : () => T
++
++        return this.contents;
++>this.contents : T
++>this : this
++>contents : T
++    }
++}
++const box1: Box<string> = { contents: "" };
++>box1 : Box<string>
++>{ contents: "" } : { contents: string; }
++>contents : string
++>"" : ""
++
++declare const notBox: { contents: string; method(): string };
++>notBox : { contents: string; method(): string; }
++>contents : string
++>method : () => string
++
++const box2: Box<string> = notBox;
++>box2 : Box<string>
++>notBox : { contents: string; method(): string; }
++
++interface Circle<T> {
++    kind: "circle";
++>kind : "circle"
++
++    radius: T;
++>radius : T
++}
++interface Square<T> {
++    kind: "square";
++>kind : "square"
++
++    size: T;
++>size : T
++}
++type Shape<T> = Circle<T> | Square<T>;
++>Shape : Shape<T>
++
++const shape1: Shape<number> = { kind: "circle" };
++>shape1 : Shape<number>
++>{ kind: "circle" } : { kind: "circle"; }
++>kind : "circle"
++>"circle" : "circle"
++
++const shape2: Shape<number> = { kind: "square", radius: 1 };
++>shape2 : Shape<number>
++>{ kind: "square", radius: 1 } : { kind: "square"; radius: number; }
++>kind : "square"
++>"square" : "square"
++>radius : number
++>1 : 1
++
++declare function area<T>(shape: Shape<T>): T;
++>area : <T>(shape: Shape<T>) => T
++>shape : Shape<T>
++
++const area1 = area({ kind: "circle", radius: 1 });
++>area1 : number
++>area({ kind: "circle", radius: 1 }) : number
++>area : <T>(shape: Shape<T>) => T
++>{ kind: "circle", radius: 1 } : { kind: "circle"; radius: number; }
++>kind : "circle"
++>"circle" : "circle"
++>radius : number
++>1 : 1
++
++const area2 = area({ kind: "square", size: "x" });
++>area2 : string
++>area({ kind: "square", size: "x" }) : string
++>area : <T>(shape: Shape<T>) => T
++>{ kind: "square", size: "x" } : { kind: "square"; size: string; }
++>kind : "square"
++>"square" : "square"
++>size : string
++>"x" : "x"
++
++declare function pick<T>(a: Circle<T> | T[]): T;
++>pick : <T>(a: Circle<T> | T[]) => T
++>a : T[] | Circle<T>
++
++const picked = pick({ kind: "circle", radius: 1 });
++>picked : number
++>pick({ kind: "circle", radius: 1 }) : number
++>pick : <T>(a: Circle<T> | T[]) => T
++>{ kind: "circle", radius: 1 } : { kind: "circle"; radius: number; }
++>kind : "circle"
++>"circle" : "circle"
++>radius : number
++>1 : 1
++
++interface Tree<T> extends Array<Tree<T>> {
++    value: T;
++>value : T
++}
++const tree: Tree<string> = [];
++>tree : Tree<string>
++>[] : never[]
++
+diff --git a/tsc/testdata/tests/cases/compiler/lazyMembersUnmatchedProperties.ts b/tsc/testdata/tests/cases/compiler/lazyMembersUnmatchedProperties.ts
+new file mode 100644
+index 0000000000..8768bb0b85
+--- /dev/null
++++ b/tsc/testdata/tests/cases/compiler/lazyMembersUnmatchedProperties.ts
+@@ -0,0 +1,67 @@
++// @strict: true
++// @target: esnext
++// @noEmit: true
++
++// Missing property errors and discriminant checks against instantiated class
++// and interface references, including inherited members and the order in which
++// missing properties are reported.
++
++interface Base<T> {
++    b1: T;
++    b2: string;
++    shared: number;
++}
++interface Derived<T> extends Base<T[]> {
++    d1: T;
++    shared: number;
++    d2?: T;
++}
++const derived1: Derived<number> = {};
++const derived2: Derived<number> = { d1: 1 };
++const derived3: Derived<number> = { d1: 1, b1: [1], b2: "", shared: 1 };
++class Impl<T> implements Derived<T> {
++    d1!: T;
++}
++
++interface Many<T> extends Base<T> {
++    m1: T;
++    m2: T;
++    m3: T;
++    m4: T;
++    m5?: T;
++}
++const many1: Many<string> = { m1: "" };
++const many2: Many<string> = { b1: "", b2: "", shared: 0, m1: "", m2: "", m3: "", m4: "", extra: 1 };
++
++class Box<T> {
++    private secret!: T;
++    contents!: T;
++    method(): T {
++        return this.contents;
++    }
++}
++const box1: Box<string> = { contents: "" };
++declare const notBox: { contents: string; method(): string };
++const box2: Box<string> = notBox;
++
++interface Circle<T> {
++    kind: "circle";
++    radius: T;
++}
++interface Square<T> {
++    kind: "square";
++    size: T;
++}
++type Shape<T> = Circle<T> | Square<T>;
++const shape1: Shape<number> = { kind: "circle" };
++const shape2: Shape<number> = { kind: "square", radius: 1 };
++declare function area<T>(shape: Shape<T>): T;
++const area1 = area({ kind: "circle", radius: 1 });
++const area2 = area({ kind: "square", size: "x" });
++declare function pick<T>(a: Circle<T> | T[]): T;
++const picked = pick({ kind: "circle", radius: 1 });
++
++interface Tree<T> extends Array<Tree<T>> {
++    value: T;
++}
++const tree: Tree<string> = [];
+-- 
+2.53.0
+

@@ -1,0 +1,75 @@
+From 6b03235762be32000a1abe67cbf0c6fb3076b712 Mon Sep 17 00:00:00 2001
+From: Max schwenk <maschwenk@gmail.com>
+Date: Thu, 1 Oct 2026 03:12:17 -0400
+Subject: [PATCH 4/5] Don't copy union and intersection properties into the
+ augmented property cache
+
+A non-partial property created by a lookup without the function property
+augment was also copied into the augmented cache. An augmented lookup
+that misses its own cache now reads it from the other cache instead, which
+gives the same symbol in every order of lookups: the augmented cache is
+still consulted first, and partial properties are still recreated. Cache
+maps are allocated on their first store instead of on the first lookup.
+Nothing else reads the caches.
+
+38k-file program (37,942 files), median of 3, single threaded / 4
+checkers, symbols/types/instantiations unchanged. On top of the lazy
+member PRs and the previous commits: heap after check 10.37 -> 10.25 GB
+(-1.2%) / 15.22 -> 15.00 GB (-1.5%), allocations 149.29M -> 148.47M /
+250.83M -> 249.48M. On main alone: heap 14.04 -> 13.85 GB (-1.4%) /
+21.54 -> 21.26 GB (-1.3%).
+
+Prototype in a Rust port of the checker (4 checkers there assign files
+by directory locality): 2,369,096 / 3,391,408 cache entries avoided,
+70,673 / 77,947 augmented lookups served from the other cache, -0.11 /
+-0.13 GB.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ tsc/internal/checker/checker.go | 24 +++++++++++-------------
+ 1 file changed, 11 insertions(+), 13 deletions(-)
+
+diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
+index 8500429f7e..46afea3dd4 100644
+--- a/tsc/internal/checker/checker.go
++++ b/tsc/internal/checker/checker.go
+@@ -22157,25 +22157,23 @@ func (c *Checker) getPropertyOfUnionOrIntersectionType(t *Type, name string, ski
+ // these partial properties when identifying discriminant properties, but otherwise they are filtered out
+ // and do not appear to be present in the union type.
+ func (c *Checker) getUnionOrIntersectionProperty(t *Type, name string, skipObjectFunctionPropertyAugment bool) *ast.Symbol {
+-	var cache ast.SymbolTable
++	d := t.AsUnionOrIntersectionType()
++	cache := &d.propertyCache
+ 	if skipObjectFunctionPropertyAugment {
+-		cache = ast.GetSymbolTable(&t.AsUnionOrIntersectionType().propertyCacheWithoutFunctionPropertyAugment)
+-	} else {
+-		cache = ast.GetSymbolTable(&t.AsUnionOrIntersectionType().propertyCache)
++		cache = &d.propertyCacheWithoutFunctionPropertyAugment
+ 	}
+-	if prop := cache[name]; prop != nil {
++	if prop := (*cache)[name]; prop != nil {
+ 		return prop
+ 	}
++	// A property found without the function property augment is also the augmented one unless it is partial.
++	if !skipObjectFunctionPropertyAugment {
++		if prop := d.propertyCacheWithoutFunctionPropertyAugment[name]; prop != nil && prop.CheckFlags&ast.CheckFlagsPartial == 0 {
++			return prop
++		}
++	}
+ 	prop := c.createUnionOrIntersectionProperty(t, name, skipObjectFunctionPropertyAugment)
+ 	if prop != nil {
+-		cache[name] = prop
+-		// Propagate an entry from the non-augmented cache to the augmented cache unless the property is partial.
+-		if skipObjectFunctionPropertyAugment && prop.CheckFlags&ast.CheckFlagsPartial == 0 {
+-			augmentedCache := ast.GetSymbolTable(&t.AsUnionOrIntersectionType().propertyCache)
+-			if augmentedCache[name] == nil {
+-				augmentedCache[name] = prop
+-			}
+-		}
++		ast.GetSymbolTable(cache)[name] = prop
+ 	}
+ 	return prop
+ }
+-- 
+2.53.0
+

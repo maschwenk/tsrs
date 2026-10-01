@@ -1,0 +1,77 @@
+From 6520b8973d691324f19655084167d98010df6760 Mon Sep 17 00:00:00 2001
+From: Max schwenk <maschwenk@gmail.com>
+Date: Thu, 1 Oct 2026 03:13:01 -0400
+Subject: [PATCH 5/5] Instantiate conditional types without a combined mapper
+ for the cache lookup
+
+instantiateTypeWorker built combineTypeMappers(t.mapper, m) for every
+conditional type it instantiated, but getConditionalTypeInstantiation only
+uses that mapper to compute the type arguments for the cache key, and
+builds a new mapper from them on a miss. getConditionalTypeInstantiationEx
+maps the outer type parameters the way CompositeTypeMapper.Map does
+instead, without allocating the composite. (Not mapTypeWithCompositeMapper:
+it goes through getMappedType, which first replaces a distributed type
+parameter with its constraint.)
+
+38k-file program (37,942 files), median of 3, single threaded / 4
+checkers: allocations 148.47M -> 144.13M (-4.34M, -2.9%) / 249.48M ->
+240.56M (-8.9M, -3.6%) on top of the lazy member PRs and the previous
+commits, 147.91M -> 143.56M / 247.32M -> 238.50M on main with the previous
+commit. Heap after check, symbols, types and instantiations unchanged: the
+composites were garbage right away, so this saves allocations and GC work,
+not retained memory.
+
+Prototype in a Rust port of the checker (4 checkers there assign files
+by directory locality): 4,340,555 / 7,677,745 composite mappers avoided;
+Go's malloc count goes down by 4,340,242 single threaded. There the
+mappers are arena-allocated, so -0.10 / -0.17 GB retained.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ tsc/internal/checker/checker.go | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
+index 46afea3dd4..a9994ebc94 100644
+--- a/tsc/internal/checker/checker.go
++++ b/tsc/internal/checker/checker.go
+@@ -23100,7 +23100,7 @@ func (c *Checker) instantiateTypeWorker(t *Type, m *TypeMapper, alias *TypeAlias
+ 	case flags&TypeFlagsStringMapping != 0:
+ 		return c.getStringMappingType(t.symbol, c.instantiateType(t.AsStringMappingType().target, m))
+ 	case flags&TypeFlagsConditional != 0:
+-		return c.getConditionalTypeInstantiation(t, c.combineTypeMappers(t.AsConditionalType().mapper, m), false /*forConstraint*/, alias)
++		return c.getConditionalTypeInstantiationEx(t, t.AsConditionalType().mapper, m, false /*forConstraint*/, alias)
+ 	case flags&TypeFlagsSubstitution != 0:
+ 		newBaseType := c.instantiateType(t.AsSubstitutionType().baseType, m)
+ 		if c.isNoInferType(t) {
+@@ -23311,12 +23311,26 @@ func (c *Checker) instantiateAnonymousType(t *Type, m *TypeMapper, alias *TypeAl
+ }
+ 
+ func (c *Checker) getConditionalTypeInstantiation(t *Type, mapper *TypeMapper, forConstraint bool, alias *TypeAlias) *Type {
++	return c.getConditionalTypeInstantiationEx(t, nil, mapper, forConstraint, alias)
++}
++
++// Instantiates t with combineTypeMappers(m1, mapper) without creating the combined mapper, which
++// is only needed for the type arguments.
++func (c *Checker) getConditionalTypeInstantiationEx(t *Type, m1 *TypeMapper, mapper *TypeMapper, forConstraint bool, alias *TypeAlias) *Type {
+ 	root := t.AsConditionalType().root
+ 	if len(root.outerTypeParameters) != 0 {
+ 		// We are instantiating a conditional type that has one or more type parameters in scope. Apply the
+ 		// mapper to the type parameters to produce the effective list of type arguments, and compute the
+ 		// instantiation cache key from the type IDs of the type arguments.
+-		typeArguments := core.Map(root.outerTypeParameters, mapper.Map)
++		typeArguments := core.Map(root.outerTypeParameters, func(t *Type) *Type {
++			// What CompositeTypeMapper.Map does.
++			if m1 != nil {
++				if t1 := m1.Map(t); t1 != t {
++					return c.instantiateType(t1, mapper)
++				}
++			}
++			return mapper.Map(t)
++		})
+ 		key := getConditionalTypeKey(typeArguments, alias, forConstraint)
+ 		result := root.instantiations[key]
+ 		if result == nil {
+-- 
+2.53.0
+
