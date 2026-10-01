@@ -1,6 +1,6 @@
 use std::cell::Cell;
 use std::hash::BuildHasher;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicU32;
 
 use hashbrown::HashTable;
 use rustc_hash::FxBuildHasher;
@@ -17,8 +17,9 @@ use crate::*;
 // Go's `Symbol` holds `Members`, `Exports` and `ExportSymbol` inline. Few symbols have any of them (on Project 5%
 // of 15.3M: binder symbols of classes, interfaces, modules and exported locals; almost no transient symbols), so
 // they live in a tail allocated on the first write of a non-nil value (`members()` / `set_members()` & co.):
-// 72 bytes per symbol instead of 88. Reads of an absent tail return nil, like the unset Go field. `name` and
-// `declarations` are packed (pointer + `u32` length, 4-byte aligned) next to the two flag words: 64 bytes.
+// 72 bytes per symbol instead of 88. Reads of an absent tail return nil, like the unset Go field. `name` is a
+// `PackedStr` (pointer and length in one word), `declarations` a 4-byte-aligned (pointer, `u32` length) pair packed
+// with the two flag words and the `u32` id: 56 bytes.
 
 #[derive(Default)]
 pub struct Symbol {
@@ -27,7 +28,7 @@ pub struct Symbol {
     pub name: OwnedStrCell,
     pub declarations: OwnedSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
     pub value_declaration: OwnedCell<Option<P<Node>>>,
-    pub(crate) id: AtomicU64,
+    pub(crate) id: AtomicU32, // Go uint64; ids above u32::MAX panic in get_symbol_id
     pub parent: OwnedCell<Option<P<Symbol>>>,
     tables: OwnedCell<Option<P<SymbolTables>>>,
 }
@@ -39,7 +40,7 @@ struct SymbolTables {
     export_symbol: OwnedCell<Option<P<Symbol>>>,
 }
 
-const _: () = assert!(std::mem::size_of::<Symbol>() == 64);
+const _: () = assert!(std::mem::size_of::<Symbol>() == 56);
 
 impl Symbol {
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).

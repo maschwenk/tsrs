@@ -26,12 +26,14 @@ pub fn get_symbol_id(symbol: P<Symbol>) -> SymbolId {
     let mut id = symbol.id.load(Ordering::Relaxed);
     if id == 0 {
         // Worst case, we burn a few ids if we have to CAS.
-        id = NEXT_SYMBOL_ID.fetch_add(1, Ordering::Relaxed) + 1;
+        let next = NEXT_SYMBOL_ID.fetch_add(1, Ordering::Relaxed) + 1;
+        // Symbols store their id in 32 bits (memory); Go's ids are 64-bit but no program gets near 2^32.
+        id = u32::try_from(next).expect("more than u32::MAX symbol ids");
         if symbol.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_err() {
             id = symbol.id.load(Ordering::Relaxed);
         }
     }
-    SymbolId(id)
+    SymbolId(id as u64)
 }
 
 pub fn get_symbol_table(data: &Cell<Option<P<SymbolTable>>>) -> P<SymbolTable> {

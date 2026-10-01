@@ -216,3 +216,20 @@ copies and no hashing.
 
 (The base here includes upstream compiler commits 1c2d9cc..9a5fd13, which moved the single-threaded peak from
 7.316 to 7.358 GiB.)
+
+### 10. `Symbol` 64 -> 56 bytes: name as `PackedStr`, 32-bit id
+
+`OwnedStrCell` (the symbol name) is now a `PackedStr` (8 bytes, from step 9) instead of a 12-byte packed slice,
+and the symbol id is stored in 32 bits (`AtomicU32`): ids still come from the process-wide 64-bit counter in
+`get_symbol_id` and are returned as the 64-bit `SymbolId`, with a panic past `u32::MAX` (Project uses 26M in the
+opt-out mode). Flags, check flags, declarations and id pack into 24 bytes.
+
+| run (2 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 7.327-7.337 | 320 G |
+| single, after | 7.166-7.168 (-0.17) | 322-323 G |
+| 4 checkers, before | 9.77-9.86 | 432-433 G |
+| 4 checkers, after | 9.60 (-0.2) | 434-435 G |
+| opt-out single / 4 checkers (go assignment), after | 9.62 / 14.74 | |
+
+(The base is main at 2ec7b64, after upstream 5842054, which moved the single-threaded peak to 7.33 GiB.)

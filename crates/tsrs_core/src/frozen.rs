@@ -254,26 +254,30 @@ impl<T> OwnedSliceCell<T> {
     }
 }
 
-/// `OwnedCell<&'static str>` in 12 bytes with 4-byte alignment; same contract as `OwnedSliceCell`.
-#[derive(Default)]
-pub struct OwnedStrCell(crate::ptr::SliceCell<u8>);
+/// `OwnedCell<&'static str>` in 8 bytes (a `PackedStr`); `get` returns the text last `set`.
+pub struct OwnedStrCell(Cell<crate::ptr::PackedStr>);
 
 impl OwnedStrCell {
     #[inline]
     pub fn new(value: &'static str) -> OwnedStrCell {
-        OwnedStrCell(crate::ptr::SliceCell::new(value.as_bytes()))
+        OwnedStrCell(Cell::new(crate::ptr::PackedStr::new(value)))
     }
 
     #[inline]
     pub fn get(&self) -> &'static str {
-        // SAFETY: only ever set from a `&'static str`.
-        unsafe { std::str::from_utf8_unchecked(self.0.get()) }
+        self.0.get().as_str()
     }
 
     #[inline]
     pub fn set(&self, value: &'static str) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedStrCell");
-        self.0.set(value.as_bytes())
+        self.0.set(crate::ptr::PackedStr::new(value))
+    }
+}
+
+impl Default for OwnedStrCell {
+    fn default() -> Self {
+        OwnedStrCell::new("")
     }
 }
 
