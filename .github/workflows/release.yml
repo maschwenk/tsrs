@@ -21,6 +21,11 @@ on:
         type: boolean
         default: true
 
+# One release per ref at a time; never cancel a publish half-way.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -35,7 +40,9 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       ts_commit: ${{ steps.v.outputs.ts_commit }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - id: v
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then node npm/build.mjs --check-tag "$GITHUB_REF_NAME"; fi
@@ -62,11 +69,13 @@ jobs:
           # - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, experimental: false, run: true }
           # - { target: x86_64-pc-windows-msvc, os: windows-latest, experimental: true, run: true }
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ${{ matrix.target }}
       - name: cargo build
@@ -84,7 +93,7 @@ jobs:
             set +e; "out/${{ matrix.target }}/$exe" bad.ts; status=$?; set -e
             [ "$status" = 2 ] || { echo "expected exit 2 for a type error, got $status"; exit 1; }
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bin-${{ matrix.target }}
           path: out/
@@ -95,9 +104,11 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo check --workspace --locked
 
   publish:
@@ -108,12 +119,14 @@ jobs:
       contents: read
       id-token: write # npm provenance
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: bin-*
           path: artifacts
@@ -126,7 +139,7 @@ jobs:
           ls -lR artifacts
       - name: Assemble and pack
         run: node npm/build.mjs --artifacts artifacts --pack
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: npm-packages
           path: npm/dist/*.tgz
@@ -134,6 +147,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          VERSION: ${{ needs.version.outputs.version }}
           PRIVATE_REPO: ${{ github.event.repository.private }}
         run: |
           flags=(--access public --tag latest)
@@ -145,8 +159,8 @@ jobs:
           node -e 'for (const p of require("./npm/dist/packages.json").packages) console.log(p.name + " " + p.tarball)' |
           while read -r name tarball; do
             # Re-running a partially published release skips what is already on the registry.
-            if [ "$DRY_RUN" != true ] && npm view "$name@${{ needs.version.outputs.version }}" version > /dev/null 2>&1; then
-              echo "$name@${{ needs.version.outputs.version }} already published"
+            if [ "$DRY_RUN" != true ] && npm view "$name@$VERSION" version > /dev/null 2>&1; then
+              echo "$name@$VERSION already published"
               continue
             fi
             npm publish "$tarball" "${flags[@]}"

@@ -2,7 +2,8 @@
 # rewrites the table between the bench markers at the top of README.md.
 #
 # Loop guards: the results commit only touches README.md and bench/results/** (paths-ignore), carries [skip ci], and
-# is pushed with GITHUB_TOKEN (whose pushes never trigger workflows).
+# is pushed with GITHUB_TOKEN (whose pushes never trigger workflows). Only the bench job can write contents.
+# Never runs for pull requests, and not in forks (the Depot runner is this repository's).
 
 name: Bench
 
@@ -20,8 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  actions: write # the watchdog cancels a run whose bench job is never picked up
+  contents: read
 
 # Fixed machine spec so runs are comparable: Depot 8 vCPU / 32 GB / x64 (bench/README.md "CI"). There is deliberately
 # no fallback to another runner; if the label is not served, the watchdog below fails the run.
@@ -32,12 +32,15 @@ env:
 
 jobs:
   bench:
+    if: github.repository == 'maschwenk/tsrs'
     runs-on: depot-ubuntu-24.04-8
+    permissions:
+      contents: write # pushes the results commit
     timeout-minutes: 90
     env:
       BENCH_RUNNER: depot-ubuntu-24.04-8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # full history so the results commit can be rebased onto a newer main
 
@@ -50,13 +53,13 @@ jobs:
             echo "::error::expected 8 vCPU / 32 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: bench-release
 
@@ -66,7 +69,7 @@ jobs:
       # Clones at the pinned commits plus their node_modules, keyed on bench/projects.json.
       - name: Restore benchmark projects
         id: work-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work
           key: bench-work-v1-${{ runner.os }}-${{ hashFiles('bench/projects.json') }}
@@ -77,7 +80,7 @@ jobs:
 
       - name: Save benchmark projects
         if: steps.work-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work
           key: ${{ steps.work-cache.outputs.cache-primary-key }}
@@ -87,7 +90,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bench-logs
           path: bench/.work/logs
@@ -108,7 +111,10 @@ jobs:
 
   # A runs-on label nobody serves leaves the job queued for up to 24 hours. Fail visibly instead.
   watchdog:
+    if: github.repository == 'maschwenk/tsrs'
     runs-on: ubuntu-latest
+    permissions:
+      actions: write # cancels a run whose bench job is never picked up
     timeout-minutes: 20
     steps:
       - name: Require the bench job to start within 15 minutes

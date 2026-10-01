@@ -3,6 +3,7 @@
 #
 # Changes made:
 # - Changed GitHub runs-on labels to their Depot equivalents
+# - Fork pull requests are skipped: they must not run on Depot runners (they run in .github/workflows/ci.yml)
 
 name: CI
 on:
@@ -21,24 +22,28 @@ env:
   CARGO_INCREMENTAL: "0"
 jobs:
   check-and-test:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: depot-ubuntu-22.04 # was: ubuntu-22.04. Mapped standard GitHub runner to Depot equivalent.
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Read TypeScript reference commit
         id: ts
         run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
       # The conformance tests and the tsoptions unit tests read the reference baselines from ts-ref/tsc/testdata.
       - name: Check out TypeScript testdata
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: microsoft/TypeScript
           ref: ${{ steps.ts.outputs.commit }}
           path: ts-ref
           fetch-depth: 1
           sparse-checkout: tsc/testdata
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: cargo check
         run: cargo check --workspace --locked
         env:
@@ -64,7 +69,7 @@ jobs:
           if npx tsrs bad.ts; then echo "expected a type error"; exit 1; fi
       - name: Upload conformance results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: conformance-results
           path: target/test-results/*.txt
