@@ -119,6 +119,15 @@ impl Statistics {
         }
         table.add_duration("Total time", self.compile_times.total_time);
         table.print(sys);
+        // tsrs-only sub-phases (tsrs_core::phases), in the order they first ran.
+        let mut table = table::default();
+        for (name, value) in tsrs_core::phases::snapshot() {
+            match value {
+                tsrs_core::phases::PhaseValue::Time(d) => table.add_duration(name, d),
+                tsrs_core::phases::PhaseValue::Count(n) => table.add(name, n),
+            }
+        }
+        table.print(sys);
         if let Some(stats) = &self.lazy_member_stats {
             let mut table = table::default();
             for (name, value) in stats.rows() {

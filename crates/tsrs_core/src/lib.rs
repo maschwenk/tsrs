@@ -12,6 +12,7 @@ pub mod glob;
 pub mod jsnum;
 pub mod json;
 pub mod lazymembers;
+pub mod phases;
 pub mod semver;
 pub mod sitecount;
 pub mod stringutil;

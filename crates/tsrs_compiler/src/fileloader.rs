@@ -141,11 +141,13 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
         module_resolution_error: None,
     };
     loader.add_project_reference_tasks(single_threaded);
+    let roots_start = std::time::Instant::now();
     for (index, root_file) in root_files.iter().enumerate() {
         let mut reason = FileIncludeReason::new(fileIncludeKind::RootFile);
         reason.index = index;
         loader.add_root_file_task(root_file, None, P::new(reason));
     }
+    tsrs_core::phases::record("Program: root file lookups", roots_start.elapsed());
     if !root_files.is_empty() && compiler_options.no_lib.is_false_or_unknown() {
         if compiler_options.lib.is_none() {
             let name = tsoptions::get_default_lib_file_name(&compiler_options);
@@ -171,9 +173,9 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
     }
 
     let root_tasks = loader.root_tasks.clone();
-    filesParser::parse(&mut loader, &root_tasks);
+    tsrs_core::phases::time("Program: file graph (parse + resolve)", || filesParser::parse(&mut loader, &root_tasks));
 
-    let processed = filesParser::get_processed_files(&mut loader);
+    let processed = tsrs_core::phases::time("Program: collect files", || filesParser::get_processed_files(&mut loader));
     let resolution_data = loader.resolver.get_resolution_data();
     (processed, resolution_data, loader.module_resolution_error.take())
 }
@@ -541,6 +543,12 @@ impl fileLoader {
     }
 
     pub(crate) fn resolve_imports_and_module_augmentations(&mut self, t: TaskId) {
+        let start = std::time::Instant::now();
+        self.resolve_imports_and_module_augmentations_worker(t);
+        tsrs_core::phases::record("Program:   module resolution", start.elapsed());
+    }
+
+    fn resolve_imports_and_module_augmentations_worker(&mut self, t: TaskId) {
         let file = self.tasks[t].file.unwrap();
         let meta = self.tasks[t].metadata.clone();
         let task_path = self.tasks[t].path.clone();

@@ -294,10 +294,13 @@ impl filesParser {
             if round.is_empty() {
                 break;
             }
+            tsrs_core::phases::count("Program:   loader rounds", 1);
             Self::prefetch(loader, &round);
+            let start = std::time::Instant::now();
             for item in round {
                 Self::run_queued(loader, item);
             }
+            tsrs_core::phases::record("Program:   sequential load", start.elapsed());
         }
     }
 
@@ -401,6 +404,7 @@ impl filesParser {
         if to_parse.len() < 2 || loader.files_parser.single_threaded {
             return;
         }
+        let metadata_start = std::time::Instant::now();
         let mut jobs: Vec<(TaskId, SourceFileParseOptions)> = Vec::with_capacity(to_parse.len());
         for t in to_parse {
             // Metadata is computed sequentially since it goes through the resolver's package.json cache.
@@ -414,9 +418,12 @@ impl filesParser {
             }
             jobs.push((t, loader.parse_options_for_task(t)));
         }
+        tsrs_core::phases::record("Program:   file metadata", metadata_start.elapsed());
+        let parse_start = std::time::Instant::now();
         let host = loader.host.clone();
         let parsed: Vec<(TaskId, Option<P<SourceFile>>)> =
             crate::program::worker_pool().install(|| jobs.into_par_iter().map(|(t, opts)| (t, host.get_source_file(opts))).collect());
+        tsrs_core::phases::record("Program:   parallel parse", parse_start.elapsed());
         for (t, file) in parsed {
             // A missing file stays None; load() asks the host again and records it as missing.
             loader.tasks[t].file = file;

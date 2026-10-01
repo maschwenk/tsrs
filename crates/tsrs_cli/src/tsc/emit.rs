@@ -78,14 +78,16 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
     let emit_diagnostics: Vec<P<Diagnostic>> = Vec::new();
     all_diagnostics.extend(emit_diagnostics);
 
-    let all_diagnostics = sort_and_deduplicate_diagnostics(&all_diagnostics);
-    for &diagnostic in &all_diagnostics {
-        (input.report_diagnostic)(diagnostic);
-    }
+    let all_diagnostics = tsrs_core::phases::time("Diagnostics: sort", || sort_and_deduplicate_diagnostics(&all_diagnostics));
+    tsrs_core::phases::time("Diagnostics: report", || {
+        for &diagnostic in &all_diagnostics {
+            (input.report_diagnostic)(diagnostic);
+        }
+    });
 
-    list_files(input);
+    tsrs_core::phases::time("List files", || list_files(input));
 
-    (input.report_error_summary)(&all_diagnostics);
+    tsrs_core::phases::time("Error summary", || (input.report_error_summary)(&all_diagnostics));
     CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, status: ExitStatus::Success, times }
 }
 

@@ -2364,15 +2364,17 @@ pub(crate) fn get_file_names_from_config_specs(
     let mut json_only_include_matchers: Option<Option<vfsmatch::SpecMatcher>> = None;
     if !validated_include_specs.is_empty() {
         let flat_extensions: Vec<String> = supported_extensions_with_json_if_resolve_json_module.iter().flatten().cloned().collect();
-        let files = vfsmatch::read_directory(
-            host,
-            &base_path,
-            &base_path,
-            &flat_extensions,
-            validated_exclude_specs,
-            validated_include_specs,
-            vfsmatch::UNLIMITED_DEPTH,
-        );
+        let files = tsrs_core::phases::time("Config: include glob", || {
+            vfsmatch::read_directory(
+                host,
+                &base_path,
+                &base_path,
+                &flat_extensions,
+                validated_exclude_specs,
+                validated_include_specs,
+                vfsmatch::UNLIMITED_DEPTH,
+            )
+        });
         for file in files {
             if tspath::file_extension_is(&file, tspath::EXTENSION_JSON) {
                 let matchers = json_only_include_matchers.get_or_insert_with(|| {

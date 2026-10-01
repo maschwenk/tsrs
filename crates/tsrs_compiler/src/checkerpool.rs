@@ -324,14 +324,16 @@ impl checkerPool {
                 program.bind_source_files();
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
+            let create_start = std::time::Instant::now();
             let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
             run_work_group(self.single_threaded, self.checker_count, |i| {
                 *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
             });
             let checkers: Vec<CheckerSlot> = slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect();
+            tsrs_core::phases::record("Checkers: create", create_start.elapsed());
 
             let files = &program.files;
-            let associations = compute_associations(program, self.checker_count);
+            let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
             let mut file_associations = FxHashMap::default();
             for (i, &file) in files.iter().enumerate() {
                 file_associations.insert(file, associations[i]);

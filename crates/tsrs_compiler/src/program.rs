@@ -272,7 +272,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         declaration_diagnostic_cache: Mutex::new(FxHashMap::default()),
     };
     p.init_checker_pool();
-    p.verify_compiler_options();
+    tsrs_core::phases::time("Program: verify options", || p.verify_compiler_options());
     Box::leak(Box::new(p))
 }
 
@@ -1976,25 +1976,27 @@ pub fn get_diagnostics_of_any_program(
         };
 
     let mut syntactic_diagnostics = Vec::new();
+    let start = std::time::Instant::now();
     append_diagnostics_for_all_files(&mut syntactic_diagnostics, &mut |f| program.get_syntactic_diagnostics(f));
+    tsrs_core::phases::record("Diagnostics: syntactic", start.elapsed());
     all_diagnostics.extend(syntactic_diagnostics);
 
     // If we didn't have any syntactic errors, then also try getting the program (options),
     // global and semantic errors.
     if all_diagnostics.len() == config_file_parsing_diagnostics_length {
-        all_diagnostics.extend(program.get_program_diagnostics());
+        all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: program", || program.get_program_diagnostics()));
 
         // Do binding early so we can track the time.
         append_diagnostics_for_all_files(&mut Vec::new(), get_bind_diagnostics);
 
         if program.options().list_files_only.is_false_or_unknown() {
-            all_diagnostics.extend(program.get_global_diagnostics());
+            all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: global (first)", || program.get_global_diagnostics()));
 
             if all_diagnostics.len() == config_file_parsing_diagnostics_length {
                 append_diagnostics_for_all_files(&mut all_diagnostics, get_semantic_diagnostics);
                 // Incremental programs cache checking globals with file diagnostics;
                 // a late sweep would also collect incidental signature-generation globals.
-                all_diagnostics.extend(program.get_global_diagnostics());
+                all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: global (after)", || program.get_global_diagnostics()));
             }
 
             if (skip_no_emit_check_for_dts_diagnostics || program.options().no_emit.is_true())
