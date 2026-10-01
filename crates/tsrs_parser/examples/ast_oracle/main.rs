@@ -353,7 +353,7 @@ fn run() {
                 inputs.push((path.to_string(), text, parse_options(path, flags)));
             }
             for _ in 0..rounds {
-                let start_instructions = process_instructions();
+                let (start_instructions, start_cycles) = process_counters();
                 let start_allocs = HEAP_ALLOCS.load(std::sync::atomic::Ordering::Relaxed);
                 let start = std::time::Instant::now();
                 let mut nodes = 0usize;
@@ -362,16 +362,18 @@ fn run() {
                     nodes += f.node_count.get();
                 }
                 let el = start.elapsed().as_secs_f64();
-                let instructions = process_instructions() - start_instructions;
+                let (end_instructions, end_cycles) = process_counters();
+                let (instructions, cycles) = (end_instructions - start_instructions, end_cycles - start_cycles);
                 let allocs = HEAP_ALLOCS.load(std::sync::atomic::Ordering::Relaxed) - start_allocs;
                 println!(
-                    "rust: {} files, {:.1} MB, {} nodes, {:.3} s, {:.1} MB/s, {:.3} G instructions, {} heap allocations",
+                    "rust: {} files, {:.1} MB, {} nodes, {:.3} s, {:.1} MB/s, {:.3} G instructions, {:.3} G cycles, {} heap allocations",
                     inputs.len(),
                     total as f64 / 1e6,
                     nodes,
                     el,
                     total as f64 / 1e6 / el,
                     instructions as f64 / 1e9,
+                    cycles as f64 / 1e9,
                     allocs
                 );
             }
@@ -380,26 +382,27 @@ fn run() {
     }
 }
 
-/// Instructions retired by the whole process so far (user and kernel; macOS `proc_pid_rusage`, 0 elsewhere).
+/// (instructions retired, cycles) of the whole process so far (user and kernel; macOS `proc_pid_rusage`, zeros
+/// elsewhere).
 #[cfg(target_os = "macos")]
-fn process_instructions() -> u64 {
+fn process_counters() -> (u64, u64) {
     extern "C" {
         fn proc_pid_rusage(pid: i32, flavor: i32, buffer: *mut u64) -> i32;
     }
-    // struct rusage_info_v4 is 41 u64 words after the 16-byte uuid; ri_instructions is word 31.
+    // struct rusage_info_v4 is 41 u64 words after the 16-byte uuid; ri_instructions and ri_cycles are words 31, 32.
     let mut buf = [0u64; 64];
     // SAFETY: the buffer is larger than struct rusage_info_v4 (flavor 4).
     let rc = unsafe { proc_pid_rusage(std::process::id() as i32, 4, buf.as_mut_ptr()) };
     if rc == 0 {
-        buf[31]
+        (buf[31], buf[32])
     } else {
-        0
+        (0, 0)
     }
 }
 
 #[cfg(not(target_os = "macos"))]
-fn process_instructions() -> u64 {
-    0
+fn process_counters() -> (u64, u64) {
+    (0, 0)
 }
 
 fn main() {
