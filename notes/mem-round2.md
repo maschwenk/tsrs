@@ -153,3 +153,20 @@ values). TypeAlloc<ObjectType> 120 -> 112, <TypeReference> 144 -> 136, <UnionTyp
 | 4 checkers, before | 9.98-9.99 | 431-433 G |
 | 4 checkers, after | 9.91-9.92 (-0.07) | 432-433 G |
 | opt-out single / 4 checkers (go assignment), after | 9.94 / 15.30 | |
+
+### 7. `StructuredType` 56 -> 48 bytes: structured types' base constraints in a checker map
+
+`getResolvedBaseConstraint` stores its result in the type (`ConstrainedType.resolvedBaseConstraint`, embedded in
+every structured type in Go), but only 321K of the 7.6M structured types single ever get one (counted once).
+Structured types no longer embed `ConstrainedType`; their base constraint lives in
+`Checker::structured_type_base_constraints`, read and written through `resolved_base_constraint_of` (also used by
+the circularity check in `has_type_resolution`). Type parameters, indexed-access, conditional and the other
+constrained types keep the field. Same reads, same writes, same order. TypeAlloc<ObjectType> 112 -> 104.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 7.390-7.391 | 320-322 G |
+| single, after | 7.344 (-0.05) | 320-322 G |
+| 4 checkers, before | 9.90-9.91 | 432-435 G |
+| 4 checkers, after | 9.83-9.85 (-0.06) | 432-433 G |
+| opt-out single / 4 checkers (go assignment), after | 9.89 / 15.18 | |

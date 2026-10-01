@@ -2054,10 +2054,10 @@ impl Checker {
 
     // checker.go:27917
     pub(crate) fn get_resolved_base_constraint(&mut self, t: P<Type>, stack: &[RecursionId]) -> P<Type> {
-        let Some(constrained) = t.try_as_constrained_type() else {
+        if t.try_as_constrained_type().is_none() && t.try_as_structured_type().is_none() {
             return t;
-        };
-        if let Some(resolved) = constrained.resolved_base_constraint.get() {
+        }
+        if let Some(resolved) = self.resolved_base_constraint_of(t) {
             return resolved;
         }
         if !self.push_type_resolution(TypeSystemEntity::Type(t), TypeSystemPropertyName::ResolvedBaseConstraint) {
@@ -2093,10 +2093,25 @@ impl Checker {
             constraint = Some(self.circular_constraint_type);
         }
         let constraint = constraint.unwrap_or(self.no_constraint_type);
-        if constrained.resolved_base_constraint.get().is_none() {
-            constrained.resolved_base_constraint.set(Some(constraint));
+        if self.resolved_base_constraint_of(t).is_none() {
+            match t.try_as_constrained_type() {
+                Some(constrained) => constrained.resolved_base_constraint.set(Some(constraint)),
+                None => {
+                    self.structured_type_base_constraints.insert(t, constraint);
+                }
+            }
         }
         constraint
+    }
+
+    /// Go `t.AsConstrainedType().resolvedBaseConstraint` (structured types keep it in
+    /// `structured_type_base_constraints`).
+    #[inline]
+    pub(crate) fn resolved_base_constraint_of(&self, t: P<Type>) -> Option<P<Type>> {
+        match t.try_as_constrained_type() {
+            Some(constrained) => constrained.resolved_base_constraint.get(),
+            None => self.structured_type_base_constraints.get(&t).copied(),
+        }
     }
 
     // checker.go:27960

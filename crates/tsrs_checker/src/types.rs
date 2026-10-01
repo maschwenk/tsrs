@@ -1364,16 +1364,17 @@ impl TypeData {
     pub fn as_constrained_type(&self) -> Option<&'static ConstrainedType> {
         Some(match *self {
             TypeData::Intrinsic(_) | TypeData::Literal(_) | TypeData::UniqueESSymbol(_) => return None,
-            TypeData::Object(d) => d,
-            TypeData::TypeReference(d) => d,
-            TypeData::Interface(d) => d,
-            TypeData::Tuple(d) => d,
-            TypeData::InstantiationExpression(d) => d,
-            TypeData::Mapped(d) => d,
-            TypeData::ReverseMapped(d) => d,
-            TypeData::EvolvingArray(d) => d,
-            TypeData::Union(d) => d,
-            TypeData::Intersection(d) => d,
+            // Structured types keep their base constraint in the checker (see `StructuredType`).
+            TypeData::Object(_)
+            | TypeData::TypeReference(_)
+            | TypeData::Interface(_)
+            | TypeData::Tuple(_)
+            | TypeData::InstantiationExpression(_)
+            | TypeData::Mapped(_)
+            | TypeData::ReverseMapped(_)
+            | TypeData::EvolvingArray(_)
+            | TypeData::Union(_)
+            | TypeData::Intersection(_) => return None,
             TypeData::TypeParameter(d) => d,
             TypeData::Index(d) => d,
             TypeData::IndexedAccess(d) => d,
@@ -1512,9 +1513,11 @@ pub struct ConstrainedType {
 
 // StructuredType (base of all types with members)
 
+// Go's StructuredType embeds ConstrainedType; here the base constraint of a structured type (set for 4% of the 7.6M
+// on Project) is kept in `Checker::structured_type_base_constraints` (`resolved_base_constraint_of`), and
+// `try_as_constrained_type()` is None for structured types.
 #[derive(Default)]
 pub struct StructuredType {
-    pub constrained_type: ConstrainedType,
     pub members: Cell<Option<P<SymbolTable>>>,
     // `SliceCell`s (12 bytes, 4-aligned) pack with `call_signature_count`: 40 bytes instead of 56 for every
     // object, union and intersection type.
@@ -1524,9 +1527,8 @@ pub struct StructuredType {
     pub index_infos: SliceCell<P<IndexInfo>>,
     // Go's objectTypeWithoutAbstractConstructSignatures is `Checker::object_types_without_abstract_construct_signatures`.
 }
-embeds!(StructuredType, constrained_type, ConstrainedType);
 
-const _: () = assert!(std::mem::size_of::<StructuredType>() == 56);
+const _: () = assert!(std::mem::size_of::<StructuredType>() == 48);
 
 impl StructuredType {
     pub fn call_signatures(&self) -> &'static [P<Signature>] {

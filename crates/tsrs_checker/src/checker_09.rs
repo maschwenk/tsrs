@@ -2050,7 +2050,7 @@ impl Checker {
             }
             (TypeSystemPropertyName::ResolvedReturnType, TypeSystemEntity::Signature(s)) => s.resolved_return_type.get().is_some(),
             (TypeSystemPropertyName::ResolvedBaseConstraint, TypeSystemEntity::Type(t)) => {
-                t.as_constrained_type().resolved_base_constraint.get().is_some()
+                self.resolved_base_constraint_of(t).is_some()
             }
             (TypeSystemPropertyName::InitializerIsUndefined, TypeSystemEntity::Node(n)) => {
                 self.node_links.get(n).flags.get().intersects(NodeCheckFlags::InitializerIsUndefinedComputed)
