@@ -39,7 +39,7 @@ fn escape(sb: &mut String, s: &str) {
 fn node_ref(n: Option<P<Node>>) -> String {
     match n {
         None => "-".to_string(),
-        Some(n) => format!("{}@{}", n.kind as i16, n.pos()),
+        Some(n) => format!("{}@{}", n.kind() as i16, n.pos()),
     }
 }
 
@@ -127,7 +127,7 @@ impl Dumper {
             let r = self.flow_ref(Some(end));
             let _ = write!(self.sb, " e={}", r);
         }
-        let ret = match n.kind {
+        let ret = match n.kind() {
             Kind::Constructor => n.as_constructor_declaration().return_flow_node(),
             Kind::FunctionDeclaration => n.as_function_declaration().return_flow_node(),
             Kind::FunctionExpression => n.as_function_expression().return_flow_node(),
@@ -147,7 +147,7 @@ impl Dumper {
         }
         let body = std::mem::replace(&mut self.sb, old);
         if !body.is_empty() {
-            let _ = writeln!(self.sb, "N {} {} {}{}", n.kind as i16, n.pos(), n.end(), body);
+            let _ = writeln!(self.sb, "N {} {} {}{}", n.kind() as i16, n.pos(), n.end(), body);
         }
         n.for_each_child(&mut |child| self.visit(child))
     }

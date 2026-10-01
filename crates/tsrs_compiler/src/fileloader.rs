@@ -510,7 +510,7 @@ pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, m
     }
     let mut imports = Vec::new();
     if !opts.skip_module_resolution {
-        let augmentations = file.module_augmentations.get().iter().copied().filter(|imp| imp.kind == Kind::StringLiteral);
+        let augmentations = file.module_augmentations.get().iter().copied().filter(|imp| imp.kind() == Kind::StringLiteral);
         for entry in file.imports().iter().copied().chain(augmentations) {
             let module_name = entry.text();
             if module_name.is_empty() {
@@ -676,7 +676,7 @@ impl fileLoader {
 
         module_names.extend_from_slice(imports);
         for &imp in file.module_augmentations.get() {
-            if imp.kind == Kind::StringLiteral {
+            if imp.kind() == Kind::StringLiteral {
                 module_names.push(imp);
             }
             // Do nothing if it's an Identifier; we don't need to do module resolution for `declare global`.
@@ -999,13 +999,13 @@ pub(crate) fn get_mode_for_usage_location(
 ) -> ResolutionMode {
     let parent = usage.parent().unwrap();
     if ast::is_import_declaration(parent)
-        || parent.kind == Kind::JSImportDeclaration
+        || parent.kind() == Kind::JSImportDeclaration
         || ast::is_export_declaration(parent)
         || ast::is_jsdoc_import_tag(parent)
     {
         let is_type_only = ast::is_exclusively_type_only_import_or_export(parent);
         if is_type_only {
-            let attributes = match parent.kind {
+            let attributes = match parent.kind() {
                 Kind::ImportDeclaration | Kind::JSImportDeclaration => parent.as_import_declaration().attributes,
                 Kind::ExportDeclaration => parent.as_export_declaration().attributes,
                 Kind::JSDocImportTag => parent.as_jsdoc_import_tag().attributes,

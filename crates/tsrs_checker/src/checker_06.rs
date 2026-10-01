@@ -241,7 +241,7 @@ impl Checker {
         if operand_type == self.silent_never_type {
             return self.silent_never_type;
         }
-        match expr.operand.kind {
+        match expr.operand.kind() {
             Kind::NumericLiteral => match expr.operator {
                 Kind::MinusToken => {
                     let t = self.get_number_literal_type(-jsnum::from_string(expr.operand.text()));
@@ -492,7 +492,7 @@ impl Checker {
         // reference occurs with the same binding pattern, return the non-inferrable any type. This for example occurs in
         // 'const [a, b = a + 1] = [2]' when we're computing the contextual type for the array literal '[2]'.
         if let Some(decl) = declaration {
-            if decl.kind == Kind::BindingElement
+            if decl.kind() == Kind::BindingElement
                 && decl.parent().is_some_and(|p| self.contextual_binding_patterns.contains(&p))
                 && ast::find_ancestor(node, |parent| Some(parent) == decl.parent()).is_some()
             {
@@ -554,7 +554,7 @@ impl Checker {
         // The declaration container is the innermost function that encloses the declaration of the variable
         // or parameter. The flow container is the innermost function starting with which we analyze the control
         // flow graph to determine the control flow based type.
-        let is_parameter = ast::get_root_declaration(declaration).kind == Kind::Parameter;
+        let is_parameter = ast::get_root_declaration(declaration).kind() == Kind::Parameter;
         let declaration_container = self.get_control_flow_container(declaration);
         let mut flow_container = self.get_control_flow_container(node);
         let is_outer_variable = flow_container != declaration_container;
@@ -564,7 +564,7 @@ impl Checker {
             && self.is_destructuring_assignment_target(node.parent().unwrap().parent().unwrap());
         let is_module_exports = symbol.flags().intersects(SymbolFlags::ModuleExports);
         let type_is_automatic = t == self.auto_type || t == self.auto_array_type;
-        let is_automatic_type_in_non_null = type_is_automatic && node.parent().unwrap().kind == Kind::NonNullExpression;
+        let is_automatic_type_in_non_null = type_is_automatic && node.parent().unwrap().kind() == Kind::NonNullExpression;
         // When the control flow originates in a function expression, arrow function, method, or accessor, and
         // we are referencing a closed-over const variable or parameter or mutable local variable past its last
         // assignment, we extend the origin of the control flow analysis to include the immediately enclosing
@@ -602,7 +602,7 @@ impl Checker {
                     || t.flags().intersects(TypeFlags::AnyOrUnknown | TypeFlags::Void)
                     || crate::is_in_type_query(node)
                     || self.is_in_ambient_or_type_node(node)
-                    || node.parent().unwrap().kind == Kind::ExportSpecifier)
+                    || node.parent().unwrap().kind() == Kind::ExportSpecifier)
             || ast::is_non_null_expression(node.parent().unwrap())
             || ast::is_variable_declaration(declaration) && declaration.as_variable_declaration().exclamation_token.is_some()
             || declaration.flags().intersects(NodeFlags::Ambient);
@@ -798,7 +798,7 @@ impl Checker {
                 }
                 return apparent_type;
             }
-            prop = self.get_property_of_type_ex(apparent_type, right.text(), is_const_enum_object_type(apparent_type) /*skipObjectFunctionPropertyAugment*/, node.kind == Kind::QualifiedName /*includeTypeOnlyMembers*/);
+            prop = self.get_property_of_type_ex(apparent_type, right.text(), is_const_enum_object_type(apparent_type) /*skipObjectFunctionPropertyAugment*/, node.kind() == Kind::QualifiedName /*includeTypeOnlyMembers*/);
         }
         self.mark_linked_references(node, ReferenceHint::Property, prop, Some(left_type));
         let prop_type: P<Type>;
@@ -861,7 +861,7 @@ impl Checker {
                 let is_self_type_access = self.is_self_type_access(left, parent_symbol);
                 self.mark_property_as_referenced(prop, Some(node), is_self_type_access);
                 self.symbol_node_links.get(node).resolved_symbol.set(Some(prop));
-                self.check_property_accessibility(node, left.kind == Kind::SuperKeyword, ast::is_write_access(node), apparent_type, prop);
+                self.check_property_accessibility(node, left.kind() == Kind::SuperKeyword, ast::is_write_access(node), apparent_type, prop);
                 if self.is_assignment_to_readonly_entity(node, prop, assignment_kind) {
                     self.error(Some(right), &diagnostics::Cannot_assign_to_0_because_it_is_a_read_only_property, &[&right.text()]);
                     return self.error_type;
@@ -906,7 +906,7 @@ impl Checker {
         if self.strict_null_checks {
             if let Some(p) = prop {
                 if let Some(declaration) = p.value_declaration.get() {
-                    if self.strict_property_initialization && ast::is_access_expression(node) && node.expression().unwrap().kind == Kind::ThisKeyword {
+                    if self.strict_property_initialization && ast::is_access_expression(node) && node.expression().unwrap().kind() == Kind::ThisKeyword {
                         if self.is_property_without_initializer(declaration) && !ast::is_static(declaration) {
                             let flow_container = self.get_control_flow_container(node);
                             if ast::is_constructor_declaration(flow_container.unwrap())
@@ -1179,7 +1179,7 @@ impl Checker {
     // @param property the accessed property's symbol.
     // checker.go:11828
     pub(crate) fn is_valid_property_access_for_completions(&mut self, node: P<Node>, t: P<Type>, property: P<Symbol>) -> bool {
-        self.is_property_accessible(node, ast::is_property_access_expression(node) && node.expression().unwrap().kind == Kind::SuperKeyword, false /*isWrite*/, t, property)
+        self.is_property_accessible(node, ast::is_property_access_expression(node) && node.expression().unwrap().kind() == Kind::SuperKeyword, false /*isWrite*/, t, property)
         // Previously we validated the 'this' type of methods but this adversely affected performance. See #31377 for more context.
     }
 
@@ -1243,7 +1243,7 @@ impl Checker {
      */
     // checker.go:11879
     pub(crate) fn get_entity_name_for_extending_interface(&mut self, node: P<Node>) -> Option<P<Node>> {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier | Kind::QualifiedName | Kind::PropertyAccessExpression => {
                 if let Some(parent) = node.parent() {
                     return self.get_entity_name_for_extending_interface(parent);
@@ -1346,7 +1346,7 @@ impl Checker {
     pub(crate) fn check_property_accessibility_ex(&mut self, node: P<Node>, is_super: bool, writing: bool, t: P<Type>, prop: P<Symbol>, report_error: bool) -> bool {
         let mut error_node: Option<P<Node>> = None;
         if report_error {
-            error_node = match node.kind {
+            error_node = match node.kind() {
                 Kind::PropertyAccessExpression => Some(node.as_property_access_expression().name),
                 Kind::QualifiedName => Some(node.as_qualified_name().right),
                 Kind::ImportType => Some(node),
@@ -1748,7 +1748,7 @@ impl Checker {
         if this_in_computed_property_name {
             self.error(Some(node), &diagnostics::X_this_cannot_be_referenced_in_a_computed_property_name, &[]);
         } else {
-            match container.kind {
+            match container.kind() {
                 Kind::ModuleDeclaration => {
                     self.error(Some(node), &diagnostics::X_this_cannot_be_referenced_in_a_module_or_namespace_body, &[]);
                     // do not return here so in case if lexical this is captured - it will be reflected in flags on NodeLinks
@@ -1850,7 +1850,7 @@ impl Checker {
                 panic!("No parent in getThisContainer");
             };
             node = parent;
-            match node.kind {
+            match node.kind() {
                 Kind::ComputedPropertyName => {
                     // If the grandparent node is an object literal (as opposed to a class),
                     // then the computed property is not a 'this' container.
@@ -1868,7 +1868,7 @@ impl Checker {
                 }
                 Kind::Decorator => {
                     // Decorators are always applied outside of the body of a class or method.
-                    if node.parent().unwrap().kind == Kind::Parameter && ast::is_class_element(node.parent().unwrap().parent().unwrap()) {
+                    if node.parent().unwrap().kind() == Kind::Parameter && ast::is_class_element(node.parent().unwrap().parent().unwrap()) {
                         // If the decorator's parent is a Parameter, we resolve the this container from
                         // the grandparent class declaration.
                         node = node.parent().unwrap().parent().unwrap();
@@ -1971,7 +1971,7 @@ impl Checker {
 
     // checker.go:12490
     pub(crate) fn check_assertion(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        if node.kind == Kind::TypeAssertionExpression {
+        if node.kind() == Kind::TypeAssertionExpression {
             let file = ast::get_source_file_of_node(node);
             if let Some(file) = file {
                 if tspath::file_extension_is_one_of(file.file_name(), &[tspath::EXTENSION_MTS, tspath::EXTENSION_CTS]) {
@@ -2034,10 +2034,10 @@ impl Checker {
 
     // checker.go:12539
     pub(crate) fn check_binary_like_expression(&mut self, left: P<Node>, operator_token: P<Node>, right: P<Node>, check_mode: CheckMode, error_node: Option<P<Node>>) -> P<Type> {
-        let operator = operator_token.kind;
-        if operator == Kind::EqualsToken && (left.kind == Kind::ObjectLiteralExpression || left.kind == Kind::ArrayLiteralExpression) {
+        let operator = operator_token.kind();
+        if operator == Kind::EqualsToken && (left.kind() == Kind::ObjectLiteralExpression || left.kind() == Kind::ArrayLiteralExpression) {
             let right_type = self.check_expression_ex(right, check_mode);
-            return self.check_destructuring_assignment(left, right_type, check_mode, right.kind == Kind::ThisKeyword);
+            return self.check_destructuring_assignment(left, right_type, check_mode, right.kind() == Kind::ThisKeyword);
         }
         let mut left_type = self.check_expression_ex(left, check_mode);
         let mut right_type = self.check_expression_ex(right, check_mode);
@@ -2093,7 +2093,7 @@ impl Checker {
                         self.error(
                             Some(operator_token),
                             &diagnostics::The_0_operator_is_not_allowed_for_boolean_types_Consider_using_1_instead,
-                            &[&tsrs_scanner::token_to_string(operator_token.kind), &tsrs_scanner::token_to_string(suggested_operator)],
+                            &[&tsrs_scanner::token_to_string(operator_token.kind()), &tsrs_scanner::token_to_string(suggested_operator)],
                         );
                         return self.number_type;
                     }
@@ -2329,7 +2329,7 @@ impl Checker {
         } else {
             target = node;
         }
-        if ast::is_binary_expression(target) && target.as_binary_expression().operator_token.kind == Kind::EqualsToken {
+        if ast::is_binary_expression(target) && target.as_binary_expression().operator_token.kind() == Kind::EqualsToken {
             self.check_binary_expression(target, check_mode);
             target = target.as_binary_expression().left;
             // A default value is specified, so remove undefined from the final type.
@@ -2425,7 +2425,7 @@ impl Checker {
         let mut in_bounds_type = if self.compiler_options.no_unchecked_indexed_access == Tristate::True { None } else { Some(possibly_out_of_bounds_type) };
         for i in 0..elements.len() {
             let mut t = possibly_out_of_bounds_type;
-            if elements[i].kind == Kind::SpreadElement {
+            if elements[i].kind() == Kind::SpreadElement {
                 if in_bounds_type.is_none() {
                     in_bounds_type = Some(self.check_iterated_type_or_element_type(IterationUse::Destructuring, source_type, undefined_type, Some(node)));
                 }
@@ -2462,7 +2462,7 @@ impl Checker {
                 self.error(Some(element), &diagnostics::A_rest_element_must_be_last_in_a_destructuring_pattern, &[]);
             } else {
                 let rest_expression = element.expression().unwrap();
-                if ast::is_binary_expression(rest_expression) && rest_expression.as_binary_expression().operator_token.kind == Kind::EqualsToken {
+                if ast::is_binary_expression(rest_expression) && rest_expression.as_binary_expression().operator_token.kind() == Kind::EqualsToken {
                     self.error(Some(rest_expression.as_binary_expression().operator_token), &diagnostics::A_rest_element_cannot_have_an_initializer, &[]);
                 } else {
                     self.check_grammar_for_disallowed_trailing_comma(Some(elements), &diagnostics::A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma);

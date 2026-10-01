@@ -281,7 +281,7 @@ impl Parser {
         let Some(value_expression) = value_expression else {
             return;
         };
-        match value_expression.kind {
+        match value_expression.kind() {
             Kind::TrueKeyword | Kind::FalseKeyword | Kind::NullKeyword | Kind::NumericLiteral => {
                 return;
             }
@@ -298,7 +298,7 @@ impl Parser {
             }
             Kind::PrefixUnaryExpression => {
                 let prefix = value_expression.as_prefix_unary_expression();
-                if !(prefix.operator() != Kind::MinusToken || prefix.operand().kind != Kind::NumericLiteral) {
+                if !(prefix.operator() != Kind::MinusToken || prefix.operand().kind() != Kind::NumericLiteral) {
                     return;
                 }
                 // not valid JSON syntax
@@ -333,7 +333,7 @@ impl Parser {
     pub(crate) fn validate_json_object_literal(&mut self, source_file: P<SourceFile>, node: P<Node>) {
         for element in node.as_object_literal_expression().properties().nodes {
             let element = *element;
-            if element.kind != Kind::PropertyAssignment {
+            if element.kind() != Kind::PropertyAssignment {
                 self.diagnostics.push(ast::new_diagnostic(
                     Some(source_file),
                     get_error_span_for_node(self.source_text, element),
@@ -545,7 +545,7 @@ impl Parser {
         let end_jsdoc = self.jsdoc_scanner_info();
         let eof = self.parse_token_node();
         self.with_jsdoc(eof, end_jsdoc);
-        if eof.kind != Kind::EndOfFile {
+        if eof.kind() != Kind::EndOfFile {
             panic!("Expected end of file token from scanner.");
         }
         if !self.reparse_list.is_empty() {
@@ -1381,7 +1381,7 @@ impl Parser {
 }
 
 pub(crate) fn is_declare_modifier(modifier: P<Node>) -> bool {
-    modifier.kind == Kind::DeclareKeyword
+    modifier.kind() == Kind::DeclareKeyword
 }
 
 impl Parser {
@@ -1740,7 +1740,7 @@ impl Parser {
         let has_paren = self.token == Kind::OpenParenToken;
         let expression = self.parse_expression();
 
-        if expression.kind == Kind::Identifier && self.parse_optional(Kind::ColonToken) {
+        if expression.kind() == Kind::Identifier && self.parse_optional(Kind::ColonToken) {
             let statement = self.parse_statement();
             let result = self.factory.new_labeled_statement(expression, statement);
             let result = self.finish_node(result, pos);
@@ -1836,7 +1836,7 @@ impl Parser {
         let jsdoc = self.jsdoc_scanner_info();
         let name = self.parse_identifier_or_pattern_with_diagnostic(Some(&diagnostics::Private_identifiers_are_not_allowed_in_variable_declarations));
         let mut exclamation_token = None;
-        if allow_exclamation && name.kind == Kind::Identifier && self.token == Kind::ExclamationToken && !self.has_preceding_line_break() {
+        if allow_exclamation && name.kind() == Kind::Identifier && self.token == Kind::ExclamationToken && !self.has_preceding_line_break() {
             exclamation_token = Some(self.parse_token_node());
         }
         let type_node = self.parse_type_annotation();
@@ -2055,11 +2055,11 @@ impl Parser {
 }
 
 pub(crate) fn is_export_modifier(modifier: P<Node>) -> bool {
-    modifier.kind == Kind::ExportKeyword
+    modifier.kind() == Kind::ExportKeyword
 }
 
 pub(crate) fn is_async_modifier(modifier: P<Node>) -> bool {
-    modifier.kind == Kind::AsyncKeyword
+    modifier.kind() == Kind::AsyncKeyword
 }
 
 impl Parser {
@@ -2341,14 +2341,14 @@ impl Parser {
         // Tagged template literals are sometimes used in places where only simple strings are allowed, i.e.:
         //   module `M1` {
         //   ^^^^^^^^^^^ This block is parsed as a template literal like module`M1`.
-        if node.kind == Kind::TaggedTemplateExpression {
+        if node.kind() == Kind::TaggedTemplateExpression {
             let loc = self.skip_range_trivia(node.as_tagged_template_expression().template().loc());
             self.parse_error_at_range(loc, &diagnostics::Module_declaration_names_may_only_use_or_quoted_strings, &[]);
             return;
         }
         // Otherwise, if this isn't a well-known keyword-like identifier, give the generic fallback message.
         let mut expression_text = "";
-        if node.kind == Kind::Identifier {
+        if node.kind() == Kind::Identifier {
             expression_text = node.text();
         }
         if expression_text.is_empty() {

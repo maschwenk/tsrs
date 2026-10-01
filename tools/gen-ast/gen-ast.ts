@@ -467,7 +467,7 @@ function diffExpr(ty: string, a: string, b: string): string {
 
 // Value of a factory member read back from existing data (`recv` = data struct, `nodeVar` = the Node).
 function memberValue(l: Layout, m: MemberInfo, recv: string, nodeVar: string): string {
-    if (m.isKindParam()) return `${nodeVar}.kind`;
+    if (m.isKindParam()) return `${nodeVar}.kind()`;
     if (isNodeFlagsMember(m)) return `${nodeVar}.flags.get()`;
     return `${recv}.${findFlat(l, m.name).rust}()`;
 }
@@ -482,12 +482,12 @@ function genUpdateFactory(node: NodeType) {
     w(`        let data = node.as_${snake(node.name)}();`);
     const cmps = updateParams.map(p => diffExpr(p.ty, p.name, memberValue(l, p.m, "data", "node")));
     w(`        if ${cmps.join(" || ")} {`);
-    const newArgs = params.map(p => p.m.isKindParam() ? "node.kind" : p.name).join(", ");
+    const newArgs = params.map(p => p.m.isKindParam() ? "node.kind()" : p.name).join(", ");
     if (node.kindAliases.length > 0) {
-        w(`            let updated = match node.kind {`);
+        w(`            let updated = match node.kind() {`);
         w(`                Kind::${node.syntaxKindName} => self.new_${snake(node.name)}(${newArgs}),`);
         for (const a of node.kindAliases) w(`                Kind::${a} => self.new_${snake(a)}(${newArgs}),`);
-        w(`                _ => panic!("unexpected kind in update_${snake(node.name)}: {:?}", node.kind),`);
+        w(`                _ => panic!("unexpected kind in update_${snake(node.name)}: {:?}", node.kind()),`);
         w(`            };`);
         w(`            return update_node(updated, node, &self.hooks);`);
     }
@@ -588,10 +588,10 @@ function genClone(node: NodeType) {
     w(`impl ${node.name} {`);
     w(`    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {`);
     if (node.kindAliases.length > 0) {
-        w(`        let updated = match node.kind {`);
+        w(`        let updated = match node.kind() {`);
         w(`            Kind::${node.syntaxKindName} => f.new_${snake(node.name)}(${args}),`);
         for (const a of node.kindAliases) w(`            Kind::${a} => f.new_${snake(a)}(${args}),`);
-        w(`            _ => panic!("unexpected kind in ${node.name}.clone_node: {:?}", node.kind),`);
+        w(`            _ => panic!("unexpected kind in ${node.name}.clone_node: {:?}", node.kind()),`);
         w(`        };`);
         w(`        clone_node(updated, node, &f.hooks)`);
     }
@@ -607,7 +607,7 @@ function genIsFunctions(node: NodeType) {
     const kindTypes = node.kindTypes();
     if (node.kindType.kind === "typeParameter") {
         w(`pub fn is_${snake(node.name)}(node: P<Node>) -> bool {`);
-        w(`    matches!(node.kind, ${kindTypes.map(k => `Kind::${k.name}`).join(" | ")})`);
+        w(`    matches!(node.kind(), ${kindTypes.map(k => `Kind::${k.name}`).join(" | ")})`);
         w(`}`);
         w();
         return;
@@ -615,19 +615,19 @@ function genIsFunctions(node: NodeType) {
     if (node.isMultiKind()) {
         for (const k of kindTypes) {
             w(`pub fn is_${snake(k.name)}(node: P<Node>) -> bool {`);
-            w(`    node.kind == Kind::${k.name}`);
+            w(`    node.kind() == Kind::${k.name}`);
             w(`}`);
             w();
         }
         return;
     }
     w(`pub fn is_${snake(node.name)}(node: P<Node>) -> bool {`);
-    w(`    node.kind == Kind::${node.syntaxKindName}`);
+    w(`    node.kind() == Kind::${node.syntaxKindName}`);
     w(`}`);
     w();
     for (const a of node.kindAliases) {
         w(`pub fn is_${snake(a)}(node: P<Node>) -> bool {`);
-        w(`    node.kind == Kind::${a}`);
+        w(`    node.kind() == Kind::${a}`);
         w(`}`);
         w();
     }
@@ -671,7 +671,7 @@ function genNodeDataEnum() {
     w();
 }
 
-// One match arm over `self.data_tag`; `d.` in `expr` stands for the node's data struct.
+// One match arm over `self.data_tag()`; `d.` in `expr` stands for the node's data struct.
 function arm(name: string, expr: string): string {
     if (isEmptyLayout(layouts.get(name)!)) return `            NodeDataTag::${name} => ${expr},`;
     return `            NodeDataTag::${name} => ${expr.replace(/\bd\./g, `self.payload::<${name}>().`)},`;
@@ -683,7 +683,7 @@ function genNodeImpl() {
     w("impl Node {");
     w(`    /// The node's data struct.`);
     w(`    pub fn data(&self) -> NodeData {`);
-    w(`        match self.data_tag {`);
+    w(`        match self.data_tag() {`);
     for (const n of nodes) {
         if (isEmptyLayout(layouts.get(n.name)!)) w(`            NodeDataTag::${n.name} => NodeData::${n.name},`);
         else w(`            NodeDataTag::${n.name} => NodeData::${n.name}(self.payload()),`);
@@ -697,8 +697,8 @@ function genNodeImpl() {
         const empty = isEmptyLayout(layouts.get(n.name)!);
         w(`    #[inline]`);
         w(`    pub fn ${fn}(&self) -> &'static ${n.name} {`);
-        w(`        if self.data_tag != NodeDataTag::${n.name} {`);
-        w(`            panic!("${fn} called on {:?}", self.kind);`);
+        w(`        if self.data_tag() != NodeDataTag::${n.name} {`);
+        w(`            panic!("${fn} called on {:?}", self.kind());`);
         w(`        }`);
         w(empty ? `        &${n.name}` : `        self.payload()`);
         w(`    }`);
@@ -707,8 +707,8 @@ function genNodeImpl() {
         const fn = `as_${snake(e)}`;
         w(`    #[inline]`);
         w(`    pub fn ${fn}(&self) -> &'static ${e} {`);
-        w(`        if self.data_tag != NodeDataTag::${e} {`);
-        w(`            panic!("${fn} called on {:?}", self.kind);`);
+        w(`        if self.data_tag() != NodeDataTag::${e} {`);
+        w(`            panic!("${fn} called on {:?}", self.kind());`);
         w(`        }`);
         w(`        self.payload()`);
         w(`    }`);
@@ -717,7 +717,7 @@ function genNodeImpl() {
 
     // for_each_child dispatch
     w(`    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {`);
-    w(`        match self.data_tag {`);
+    w(`        match self.data_tag() {`);
     for (const n of nodes) {
         if (!hasForEachChild(n)) continue;
         w(arm(n.name, `d.for_each_child(v)`));
@@ -730,7 +730,7 @@ function genNodeImpl() {
     // visit_each_child dispatch
     w(`    pub fn visit_each_child(&self, v: &mut NodeVisitor) -> P<Node> {`);
     w(`        let node = self.as_p();`);
-    w(`        match self.data_tag {`);
+    w(`        match self.data_tag() {`);
     for (const n of nodes) {
         if (!hasForEachChild(n)) continue;
         w(arm(n.name, `d.visit_each_child(node, v)`));
@@ -743,12 +743,12 @@ function genNodeImpl() {
     // clone_node dispatch
     w(`    pub fn clone_node(&self, f: &NodeFactory) -> P<Node> {`);
     w(`        let node = self.as_p();`);
-    w(`        match self.data_tag {`);
+    w(`        match self.data_tag() {`);
     for (const n of nodes) {
         if (isEmptyLayout(layouts.get(n.name)!)) w(arm(n.name, `${n.name}.clone_node(node, f)`));
         else w(arm(n.name, `d.clone_node(node, f)`));
     }
-    w(`            _ => panic!("clone_node: unsupported node data for {:?}", self.kind),`);
+    w(`            _ => panic!("clone_node: unsupported node data for {:?}", self.kind()),`);
     w(`        }`);
     w(`    }`);
     w();
@@ -757,7 +757,7 @@ function genNodeImpl() {
     const withField = (fieldName: string) =>
         nodes.filter(n => n.name !== "SourceFile" && promoted(layouts.get(n.name)!).some(f => f.name === fieldName));
     w(`    pub fn name(&self) -> Option<P<Node>> {`);
-    w(`        match self.data_tag {`);
+    w(`        match self.data_tag() {`);
     for (const n of withField("name")) {
         const f = findFlat(layouts.get(n.name)!, "name");
         w(arm(n.name, f.ty.startsWith("Option") ? `d.${f.rust}()` : `Some(d.${f.rust}())`));
@@ -767,14 +767,14 @@ function genNodeImpl() {
     w(`    }`);
     w();
     w(`    pub fn modifiers(&self) -> Option<P<ModifierList>> {`);
-    w(`        match self.data_tag {`);
+    w(`        match self.data_tag() {`);
     for (const n of withField("modifiers")) w(arm(n.name, `d.modifiers()`));
     w(`            _ => None,`);
     w(`        }`);
     w(`    }`);
     w();
     w(`    pub(crate) fn set_modifiers_data(&self, modifiers: Option<P<ModifierList>>) {`);
-    w(`        match self.data_tag {`);
+    w(`        match self.data_tag() {`);
     for (const n of withField("modifiers")) w(arm(n.name, `d.set_modifiers(modifiers)`));
     w(`            _ => {}`);
     w(`        }`);
@@ -794,7 +794,7 @@ function genNodeImpl() {
     ];
     for (const [fn, base] of baseAccessors) {
         w(`    pub fn ${fn}(&self) -> Option<&'static ${base}> {`);
-        w(`        match self.data_tag {`);
+        w(`        match self.data_tag() {`);
         for (const n of nodes) {
             const p = basePath(layouts.get(n.name)!, base);
             if (p) w(arm(n.name, `Some(&d.${p})`));

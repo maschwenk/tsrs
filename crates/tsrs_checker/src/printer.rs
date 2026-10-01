@@ -179,7 +179,7 @@ impl Checker {
             source_file = ast::get_source_file_of_node(enclosing_declaration);
         }
         // add neverAsciiEscape for GH#39027
-        let mut printer_ = if enclosing_declaration.is_some_and(|e| e.kind == Kind::SourceFile) {
+        let mut printer_ = if enclosing_declaration.is_some_and(|e| e.kind() == Kind::SourceFile) {
             create_printer_with_remove_comments_omit_trailing_semicolon_never_ascii_escape(node_builder.emit_context())
         } else {
             create_printer_with_remove_comments_omit_trailing_semicolon(node_builder.emit_context())
@@ -499,7 +499,7 @@ impl Checker {
 
 // symbolaccessibility.go:105
 pub(crate) fn has_non_global_augmentation_external_module_symbol(declaration: P<Node>) -> bool {
-    ast::is_module_with_string_literal_name(declaration) || (declaration.kind == Kind::SourceFile && ast::is_external_or_common_js_module(declaration.as_source_file_p()))
+    ast::is_module_with_string_literal_name(declaration) || (declaration.kind() == Kind::SourceFile && ast::is_external_or_common_js_module(declaration.as_source_file_p()))
 }
 
 // symbolaccessibility.go:109
@@ -662,7 +662,7 @@ impl Checker {
 
 // symbolaccessibility.go:249
 pub(crate) fn has_external_module_symbol(declaration: P<Node>) -> bool {
-    ast::is_ambient_module(declaration) || (declaration.kind == Kind::SourceFile && ast::is_external_or_common_js_module(declaration.as_source_file_p()))
+    ast::is_ambient_module(declaration) || (declaration.kind() == Kind::SourceFile && ast::is_external_or_common_js_module(declaration.as_source_file_p()))
 }
 
 impl Checker {
@@ -729,7 +729,7 @@ impl Checker {
             if ast::is_class_expression(d) && ast::is_binary_expression(d.parent().unwrap()) && {
                 let binary = d.parent().unwrap();
                 let binary = binary.as_binary_expression();
-                binary.operator_token().kind == Kind::EqualsToken && ast::is_access_expression(binary.left()) && ast::is_entity_name_expression(binary.left().expression().unwrap())
+                binary.operator_token().kind() == Kind::EqualsToken && ast::is_access_expression(binary.left()) && ast::is_entity_name_expression(binary.left().expression().unwrap())
             } {
                 let left = d.parent().unwrap().as_binary_expression().left();
                 if ast::is_module_exports_access_expression(left) || ast::is_exports_identifier(left.expression().unwrap()) {
@@ -1168,7 +1168,7 @@ pub(crate) fn is_property_or_method_declaration_symbol(symbol: P<Symbol>) -> boo
     let declarations = symbol.declarations();
     if !declarations.is_empty() {
         for declaration in declarations.iter() {
-            match declaration.kind {
+            match declaration.kind() {
                 Kind::PropertyDeclaration | Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => continue,
                 _ => return false,
             }
@@ -1189,7 +1189,7 @@ impl Checker {
                     return true;
                 }
             }
-            match loc.kind {
+            match loc.kind() {
                 Kind::SourceFile | Kind::ModuleDeclaration => {
                     if !(ast::is_source_file(loc) && !ast::is_external_or_common_js_module(loc.as_source_file_p())) {
                         let sym = self.get_symbol_of_declaration(ast::get_reparsed_node_for_node(loc).unwrap()).unwrap();

@@ -254,7 +254,7 @@ impl Checker {
 
 // checker.go:24157
 pub(crate) fn get_type_reference_name(node: P<Node>) -> Option<P<Node>> {
-    match node.kind {
+    match node.kind() {
         Kind::TypeReference => {
             return Some(node.as_type_reference_node().type_name);
         }
@@ -341,7 +341,7 @@ impl Checker {
                 Some(parent) => parent,
                 None => return Vec::new(),
             };
-            let kind = node.kind;
+            let kind = node.kind();
             match kind {
                 Kind::ClassDeclaration
                 | Kind::ClassExpression
@@ -498,7 +498,7 @@ impl Checker {
             let mut member_type_list: Vec<P<Type>> = Vec::new();
             let declarations = symbol.declarations();
             for declaration in declarations {
-                if declaration.kind == Kind::EnumDeclaration {
+                if declaration.kind() == Kind::EnumDeclaration {
                     for &member in declaration.members() {
                         if !ast::has_dynamic_name(member) {
                             let member_symbol = self.get_symbol_of_declaration(member).unwrap();
@@ -674,13 +674,13 @@ impl Checker {
 
     // checker.go:24494
     pub(crate) fn evaluate_entity(&mut self, expr: P<Node>, location: Option<P<Node>>) -> evaluator::Result {
-        match expr.kind {
+        match expr.kind() {
             Kind::Identifier | Kind::PropertyAccessExpression => {
                 let symbol = self.resolve_entity_name(expr, SymbolFlags::Value, true /*ignoreErrors*/, false, None);
                 let Some(symbol) = symbol else {
                     return evaluator::new_result(None, false, false, false);
                 };
-                if expr.kind == Kind::Identifier {
+                if expr.kind() == Kind::Identifier {
                     if ast::is_infinity_or_nan_string(expr.text()) && (Some(symbol) == self.get_global_symbol(expr.text(), SymbolFlags::Value, None /*diagnostic*/)) {
                         // Technically we resolved a global lib file here, but the decision to treat this as numeric
                         // is more predicated on the fact that the single-file resolution *didn't* resolve to a
@@ -791,14 +791,14 @@ impl Checker {
             let target = self.get_array_or_tuple_target_type(node);
             if target == self.empty_generic_type {
                 links.resolved_type.set(Some(self.empty_object_type));
-            } else if !(node.kind == Kind::TupleType && node.elements().iter().any(|&e| self.is_variadic_tuple_element(e))) && self.is_deferred_type_reference_node(node, false) {
-                if node.kind == Kind::TupleType && node.elements().is_empty() {
+            } else if !(node.kind() == Kind::TupleType && node.elements().iter().any(|&e| self.is_variadic_tuple_element(e))) && self.is_deferred_type_reference_node(node, false) {
+                if node.kind() == Kind::TupleType && node.elements().is_empty() {
                     links.resolved_type.set(Some(target));
                 } else {
                     links.resolved_type.set(Some(self.create_deferred_type_reference(target, node, None /*mapper*/, None /*alias*/)));
                 }
             } else {
-                let element_types: Vec<P<Type>> = if node.kind == Kind::ArrayType {
+                let element_types: Vec<P<Type>> = if node.kind() == Kind::ArrayType {
                     vec![self.get_type_from_type_node(node.as_array_type_node().element_type)]
                 } else {
                     node.elements().iter().map(|&e| self.get_type_from_type_node(e)).collect()
@@ -863,17 +863,17 @@ impl Checker {
 
     // checker.go:24655
     pub(crate) fn get_array_element_type_node(&mut self, node: P<Node>) -> Option<P<Node>> {
-        match node.kind {
+        match node.kind() {
             Kind::ParenthesizedType => {
                 return self.get_array_element_type_node(node.type_node().unwrap());
             }
             Kind::TupleType => {
                 if node.elements().len() == 1 {
                     let node = node.elements()[0];
-                    if node.kind == Kind::RestType {
+                    if node.kind() == Kind::RestType {
                         return self.get_array_element_type_node(node.type_node().unwrap());
                     }
-                    if node.kind == Kind::NamedTupleMember && node.as_named_tuple_member().dot_dot_dot_token.is_some() {
+                    if node.kind() == Kind::NamedTupleMember && node.as_named_tuple_member().dot_dot_dot_token.is_some() {
                         return self.get_array_element_type_node(node.type_node().unwrap());
                     }
                 }
@@ -1491,7 +1491,7 @@ impl Checker {
 
     // checker.go:25179
     pub(crate) fn get_tuple_element_flags(&mut self, node: P<Node>) -> ElementFlags {
-        match node.kind {
+        match node.kind() {
             Kind::OptionalType => {
                 return ElementFlags::Optional;
             }
@@ -1775,7 +1775,7 @@ impl Checker {
         let mut covariant = true;
         let mut node = node;
         while let Some(n) = node {
-            if ast::is_statement(n) || n.kind == Kind::JSDoc {
+            if ast::is_statement(n) || n.kind() == Kind::JSDoc {
                 break;
             }
             let parent = n.parent().unwrap();

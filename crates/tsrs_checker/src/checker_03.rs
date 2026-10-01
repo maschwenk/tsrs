@@ -136,7 +136,7 @@ impl Checker {
                 continue;
             };
             for &tag in tags.nodes() {
-                if tag.kind != Kind::JSDocAugmentsTag {
+                if tag.kind() != Kind::JSDocAugmentsTag {
                     continue;
                 }
                 let source_type_node = tag.class_name();
@@ -1047,7 +1047,7 @@ impl Checker {
             let mut seen_enum_missing_initial_initializer = false;
             for &declaration in declarations {
                 // return true if we hit a violation of the rule, false otherwise
-                if declaration.kind != Kind::EnumDeclaration {
+                if declaration.kind() != Kind::EnumDeclaration {
                     continue;
                 }
                 let members = declaration.members();
@@ -1143,7 +1143,7 @@ impl Checker {
                 && node.modifier_flags().intersects(ModifierFlags::Export)
                 && self.program.get_emit_module_format_of_file(node.parent().unwrap().as_source_file_p()) == ModuleKind::CommonJS
             {
-                let export_modifier = node.modifier_nodes().iter().copied().find(|m| m.kind == Kind::ExportKeyword);
+                let export_modifier = node.modifier_nodes().iter().copied().find(|m| m.kind() == Kind::ExportKeyword);
                 self.error(export_modifier, &diagnostics::A_top_level_export_modifier_cannot_be_used_on_value_declarations_in_a_CommonJS_module_when_verbatimModuleSyntax_is_enabled, &[]);
             }
         }
@@ -1244,7 +1244,7 @@ impl Checker {
 
     // checker.go:5370
     pub(crate) fn check_module_augmentation_element(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::VariableStatement => {
                 // error each individual name in variable statement instead of marking the entire variable statement
                 for &decl in node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes() {
@@ -1256,7 +1256,7 @@ impl Checker {
             }
             Kind::ImportEqualsDeclaration | Kind::ImportDeclaration | Kind::JSImportDeclaration => {
                 // import a = e.x; in module augmentation is ok, but not import a = require('fs)
-                if node.kind == Kind::ImportEqualsDeclaration && ast::is_internal_module_import_equals_declaration(node) {
+                if node.kind() == Kind::ImportEqualsDeclaration && ast::is_internal_module_import_equals_declaration(node) {
                     return;
                 }
                 self.grammar_error_on_first_token(node, &diagnostics::Imports_are_not_permitted_in_module_augmentations_Consider_moving_them_to_the_enclosing_external_module, &[]);
@@ -1401,7 +1401,7 @@ impl Checker {
 
     // checker.go:5517
     pub(crate) fn check_module_export_name(&mut self, name: Option<P<Node>>, allow_string_literal: bool) {
-        let Some(name) = name.filter(|n| n.kind == Kind::StringLiteral) else {
+        let Some(name) = name.filter(|n| n.kind() == Kind::StringLiteral) else {
             return;
         };
         if !allow_string_literal {
@@ -1606,7 +1606,7 @@ impl Checker {
 
     // checker.go:5702
     pub(crate) fn check_external_module_name_in_global_scope(&mut self, node: P<Node>) {
-        if get_enclosing_container(node).unwrap().kind != Kind::SourceFile || (is_import_declaration_or_js_import_declaration(node) && node.import_clause().is_none()) {
+        if get_enclosing_container(node).unwrap().kind() != Kind::SourceFile || (is_import_declaration_or_js_import_declaration(node) && node.import_clause().is_none()) {
             return;
         }
         if let Some(module_name) = get_external_module_name(node) {
@@ -1628,7 +1628,7 @@ impl Checker {
 
         if !has_module_specifier {
             let exported_name = node.property_name_or_name().unwrap();
-            if exported_name.kind == Kind::StringLiteral {
+            if exported_name.kind() == Kind::StringLiteral {
                 return; // Skip for invalid syntax like this: export { "x" }
             }
             // find immediate value referenced by exported name (SymbolFlags.Alias is set so we don't chase down aliases)
@@ -1759,7 +1759,7 @@ impl Checker {
             container = container.parent().unwrap();
         }
         self.check_external_module_exports(container);
-        if let Some(type_node) = node.type_node().filter(|_| node.kind == Kind::ExportAssignment) {
+        if let Some(type_node) = node.type_node().filter(|_| node.kind() == Kind::ExportAssignment) {
             let t = self.get_type_from_type_node(type_node);
             self.check_type_assignable_to_and_optionally_elaborate(expr_type, t, node.expression(), node.expression(), None /*headMessage*/, None);
         }
@@ -1963,7 +1963,7 @@ impl Checker {
                     if let Some(property) = property {
                         self.mark_property_as_referenced(property, None /*nodeForCheckWriteOnly*/, false /*isSelfTypeAccess*/);
                         // A destructuring is never a write-only reference.
-                        let is_super = parent.initializer().is_some_and(|i| i.kind == Kind::SuperKeyword);
+                        let is_super = parent.initializer().is_some_and(|i| i.kind() == Kind::SuperKeyword);
                         self.check_property_accessibility(node, is_super, false /*writing*/, parent_type, property);
                     }
                 }
@@ -1983,7 +1983,7 @@ impl Checker {
             if crate::is_in_ambient_or_type_node(node) {
                 return;
             }
-            let need_check_initializer = initializer.is_some() && node.parent().unwrap().parent().unwrap().kind != Kind::ForInStatement;
+            let need_check_initializer = initializer.is_some() && node.parent().unwrap().parent().unwrap().kind() != Kind::ForInStatement;
             let need_check_widened_type = !name.elements().iter().any(|n| n.name().is_some());
             if need_check_initializer || need_check_widened_type {
                 // Don't validate for-in initializer as it is already an error
@@ -2217,7 +2217,7 @@ impl Checker {
         let Some(expected_return_type) = decorator_signature.and_then(|s| s.resolved_return_type.get()) else {
             return;
         };
-        let head_message: &'static Message = match node.parent().unwrap().kind {
+        let head_message: &'static Message = match node.parent().unwrap().kind() {
             Kind::ClassDeclaration | Kind::ClassExpression => &diagnostics::Decorator_function_return_type_0_is_not_assignable_to_type_1,
             Kind::PropertyDeclaration if !self.legacy_decorators => &diagnostics::Decorator_function_return_type_0_is_not_assignable_to_type_1,
             Kind::PropertyDeclaration | Kind::Parameter => &diagnostics::Decorator_function_return_type_is_0_but_is_expected_to_be_void_or_any,

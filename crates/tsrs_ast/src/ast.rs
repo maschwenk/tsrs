@@ -1,6 +1,6 @@
 use std::cell::Cell;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Once, OnceLock, RwLock};
 
 use rustc_hash::FxHashMap;
@@ -97,12 +97,10 @@ pub fn new_node_factory(hooks: NodeFactoryHooks) -> NodeFactory {
 
 fn node_header(kind: Kind, data_tag: NodeDataTag) -> Node {
     Node {
-        kind,
-        data_tag,
+        header: OwnedCell::new(NodeHeaderWord::new(kind, data_tag)),
         flags: OwnedCell::new(NodeFlags::None),
+        id: AtomicU32::new(0),
         loc: OwnedCell::new(undefined_text_range()),
-        parent: OwnedCell::new(None),
-        id: AtomicU64::new(0),
     }
 }
 
@@ -282,22 +280,75 @@ impl ModifierList {
 // AST Node
 
 /// Go `ast.Node`. The node's data struct (Go: the struct that embeds `NodeBase`) is allocated together with the
-/// header, right after it (`NodeAlloc`); `data_tag` says which struct it is. `node.data()` returns it as a
+/// header, right after it (`NodeAlloc`); `data_tag()` says which struct it is. `node.data()` returns it as a
 /// `NodeData`, `as_*()` and the generated accessors read it in place. Data structs without fields (`Token`,
 /// `KeywordTypeNode`, ...) allocate only the header.
+///
+/// The header is 24 bytes: the kind, the data tag and the parent pointer share one word (`NodeHeaderWord`), and the
+/// id is stored in 32 bits (ids still come from a 64-bit counter and are returned as `NodeId`; more than
+/// `u32::MAX` node ids panic, like symbol ids). 23M nodes on Project.
 pub struct Node {
-    pub kind: Kind,
-    pub(crate) data_tag: NodeDataTag,
+    header: OwnedCell<NodeHeaderWord>,
     pub flags: OwnedCell<NodeFlags>,
+    pub(crate) id: AtomicU32,
     pub loc: OwnedCell<TextRange>,
-    pub parent: OwnedCell<Option<P<Node>>>,
-    pub(crate) id: AtomicU64,
 }
 
-const _: () = assert!(std::mem::size_of::<Node>() == 32);
+const _: () = assert!(std::mem::size_of::<Node>() == 24);
+
+/// A node's kind, data tag and parent in one word: the parent's address divided by 8 in the low 45 bits (nodes are
+/// 8-aligned and user-space addresses are below 2^48 on every supported platform; checked when the parent is set),
+/// the kind in the next 9 bits and the data tag in the 8 above. Only the parent changes after creation. The parent's
+/// provenance is exposed when it is stored and recovered with `with_exposed_provenance`.
+#[derive(Clone, Copy)]
+struct NodeHeaderWord(u64);
+
+impl NodeHeaderWord {
+    const PARENT_BITS: u32 = 45;
+    const PARENT_MASK: u64 = (1 << Self::PARENT_BITS) - 1;
+    const KIND_SHIFT: u32 = Self::PARENT_BITS;
+    const KIND_BITS: u32 = 9;
+    const TAG_SHIFT: u32 = Self::KIND_SHIFT + Self::KIND_BITS;
+
+    #[inline]
+    fn new(kind: Kind, data_tag: NodeDataTag) -> NodeHeaderWord {
+        NodeHeaderWord((kind as u16 as u64) << Self::KIND_SHIFT | (data_tag as u8 as u64) << Self::TAG_SHIFT)
+    }
+
+    #[inline]
+    fn kind(self) -> Kind {
+        let v = (self.0 >> Self::KIND_SHIFT) as u16 & ((1 << Self::KIND_BITS) - 1);
+        // SAFETY: the bits were stored from a `Kind` (repr(i16), contiguous discriminants 0..=Count < 2^9).
+        unsafe { std::mem::transmute::<i16, Kind>(v as i16) }
+    }
+
+    #[inline]
+    fn data_tag(self) -> NodeDataTag {
+        // SAFETY: the bits were stored from a `NodeDataTag` (repr(u8)).
+        unsafe { std::mem::transmute::<u8, NodeDataTag>((self.0 >> Self::TAG_SHIFT) as u8) }
+    }
+
+    #[inline]
+    fn parent(self) -> Option<P<Node>> {
+        let addr = ((self.0 & Self::PARENT_MASK) << 3) as usize;
+        // SAFETY: a nonzero address was stored from a live `P<Node>` (arena nodes are never freed or moved), whose
+        // provenance `with_parent` exposed.
+        (addr != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Node>(addr) }))
+    }
+
+    #[inline]
+    fn with_parent(self, parent: Option<P<Node>>) -> NodeHeaderWord {
+        let addr = parent.map_or(0, |p| (p.get() as *const Node).expose_provenance()) as u64;
+        assert!(addr & 7 == 0 && addr >> (Self::PARENT_BITS + 3) == 0, "node address {addr:#x} does not fit the node header");
+        NodeHeaderWord(self.0 & !Self::PARENT_MASK | addr >> 3)
+    }
+}
+
+const _: () = assert!((Kind::Count as u64) < 1 << NodeHeaderWord::KIND_BITS);
+const _: () = assert!(NodeHeaderWord::TAG_SHIFT + 8 <= 64);
 
 /// One arena allocation per node: the header, then the data struct. `repr(C)` puts the header at offset 0 and
-/// the data at `offset_of!(NodeAlloc<T>, data)` (32 for every data struct: none is aligned to more than 8).
+/// the data at `offset_of!(NodeAlloc<T>, data)` (24 for every data struct: none is aligned to more than 8).
 #[repr(C)]
 pub(crate) struct NodeAlloc<T> {
     node: Node,
@@ -313,10 +364,21 @@ pub(crate) trait NodePayload: Sized + 'static {
 // for_each_child(), ...) are generated in generated.rs.
 
 impl Node {
-    /// The data struct after this node's header. Callers check `data_tag == T::TAG` first.
+    #[inline(always)]
+    pub fn kind(&self) -> Kind {
+        self.header.get().kind()
+    }
+
+    /// Which data struct follows this node's header.
+    #[inline(always)]
+    pub(crate) fn data_tag(&self) -> NodeDataTag {
+        self.header.get().data_tag()
+    }
+
+    /// The data struct after this node's header. Callers check `data_tag() == T::TAG` first.
     #[inline(always)]
     pub(crate) fn payload<T: NodePayload>(&self) -> &'static T {
-        debug_assert!(self.data_tag == T::TAG);
+        debug_assert!(self.data_tag() == T::TAG);
         // SAFETY: a node tagged `T::TAG` was allocated by `new_node::<T>` as a `NodeAlloc<T>` whose header is
         // `self`, so its data struct lives at this offset from the header, for the rest of the process.
         unsafe { &*(self as *const Node).cast::<u8>().add(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<T>() }
@@ -361,11 +423,11 @@ impl Node {
     }
     #[inline]
     pub fn parent(&self) -> Option<P<Node>> {
-        self.parent.get()
+        self.header.get().parent()
     }
     #[inline]
     pub fn set_parent(&self, parent: Option<P<Node>>) {
-        self.parent.set(parent)
+        self.header.set(self.header.get().with_parent(parent))
     }
 
     /// Go `IterChildren`: the children in `for_each_child` order.
@@ -390,11 +452,11 @@ impl Node {
     }
 
     pub fn kind_string(&self) -> String {
-        format!("{:?}", self.kind)
+        format!("{:?}", self.kind())
     }
 
     pub fn kind_value(&self) -> i16 {
-        self.kind as i16
+        self.kind() as i16
     }
 
     pub fn decorators(&self) -> Vec<P<Node>> {
@@ -451,7 +513,7 @@ impl Node {
 
     /// Go `Text()`. Joined texts (JsxNamespacedName, JSDoc text) are allocated in the arena.
     pub fn text(&self) -> &'static str {
-        match self.kind {
+        match self.kind() {
             Kind::Identifier => self.as_identifier().text(),
             Kind::PrivateIdentifier => self.as_private_identifier().text(),
             Kind::StringLiteral => self.as_string_literal().text(),
@@ -471,12 +533,12 @@ impl Node {
             Kind::JSDocLink => join_texts(self.as_jsdoc_link().text()),
             Kind::JSDocLinkCode => join_texts(self.as_jsdoc_link_code().text()),
             Kind::JSDocLinkPlain => join_texts(self.as_jsdoc_link_plain().text()),
-            _ => panic!("Unhandled case in Node.Text: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.Text: {:?}", self.kind()),
         }
     }
 
     pub fn expression(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::PropertyAccessExpression => Some(self.as_property_access_expression().expression),
             Kind::ElementAccessExpression => Some(self.as_element_access_expression().expression),
             Kind::ParenthesizedExpression => Some(self.as_parenthesized_expression().expression.get()),
@@ -512,35 +574,35 @@ impl Node {
             Kind::Decorator => Some(self.as_decorator().expression),
             Kind::JsxExpression => self.as_jsx_expression().expression,
             Kind::JsxSpreadAttribute => Some(self.as_jsx_spread_attribute().expression),
-            _ => panic!("Unhandled case in Node.Expression: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.Expression: {:?}", self.kind()),
         }
     }
 
     pub fn raw_text(&self) -> &'static str {
-        match self.kind {
+        match self.kind() {
             Kind::TemplateHead => self.as_template_head().raw_text(),
             Kind::TemplateMiddle => self.as_template_middle().raw_text(),
             Kind::TemplateTail => self.as_template_tail().raw_text(),
-            _ => panic!("Unhandled case in Node.RawText: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.RawText: {:?}", self.kind()),
         }
     }
 
     /// Go `MutableNode.SetExpression`. Only the kinds the reparser mutates have a mutable `expression`
     /// field in this port; the other Go cases panic.
     pub fn set_expression(&self, expr: P<Node>) {
-        match self.kind {
+        match self.kind() {
             Kind::ParenthesizedExpression => self.as_parenthesized_expression().expression.set(expr),
             Kind::ReturnStatement => self.as_return_statement().expression.set(Some(expr)),
             Kind::ExportAssignment => self.as_export_assignment().expression.set(expr),
-            _ => panic!("Unhandled case in mutableNode.SetExpression: {:?}", self.kind),
+            _ => panic!("Unhandled case in mutableNode.SetExpression: {:?}", self.kind()),
         }
     }
 
     pub fn argument_list(&self) -> Option<P<NodeList>> {
-        match self.kind {
+        match self.kind() {
             Kind::CallExpression => Some(self.as_call_expression().arguments),
             Kind::NewExpression => self.as_new_expression().arguments,
-            _ => panic!("Unhandled case in Node.Arguments: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.Arguments: {:?}", self.kind()),
         }
     }
 
@@ -552,7 +614,7 @@ impl Node {
     }
 
     pub fn type_argument_list(&self) -> Option<P<NodeList>> {
-        match self.kind {
+        match self.kind() {
             Kind::CallExpression => self.as_call_expression().type_arguments,
             Kind::NewExpression => self.as_new_expression().type_arguments,
             Kind::TaggedTemplateExpression => self.as_tagged_template_expression().type_arguments,
@@ -574,7 +636,7 @@ impl Node {
     }
 
     pub fn type_parameter_list(&self) -> Option<P<NodeList>> {
-        match self.kind {
+        match self.kind() {
             Kind::ClassDeclaration => self.as_class_declaration().type_parameters(),
             Kind::ClassExpression => self.as_class_expression().type_parameters(),
             Kind::InterfaceDeclaration => self.as_interface_declaration().type_parameters,
@@ -597,14 +659,14 @@ impl Node {
     }
 
     pub fn member_list(&self) -> Option<P<NodeList>> {
-        match self.kind {
+        match self.kind() {
             Kind::ClassDeclaration => Some(self.as_class_declaration().members()),
             Kind::ClassExpression => Some(self.as_class_expression().members()),
             Kind::InterfaceDeclaration => Some(self.as_interface_declaration().members),
             Kind::EnumDeclaration => Some(self.as_enum_declaration().members),
             Kind::TypeLiteral => Some(self.as_type_literal_node().members),
             Kind::MappedType => self.as_mapped_type_node().members,
-            _ => panic!("Unhandled case in Node.MemberList: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.MemberList: {:?}", self.kind()),
         }
     }
 
@@ -616,12 +678,12 @@ impl Node {
     }
 
     pub fn statement_list(&self) -> Option<P<NodeList>> {
-        match self.kind {
+        match self.kind() {
             Kind::SourceFile => Some(self.as_source_file().statements),
             Kind::Block => Some(self.as_block().statements),
             Kind::ModuleBlock => Some(self.as_module_block().statements),
             Kind::CaseClause | Kind::DefaultClause => Some(self.as_case_or_default_clause().statements),
-            _ => panic!("Unhandled case in Node.StatementList: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.StatementList: {:?}", self.kind()),
         }
     }
 
@@ -633,7 +695,7 @@ impl Node {
     }
 
     pub fn can_have_statements(&self) -> bool {
-        matches!(self.kind, Kind::SourceFile | Kind::Block | Kind::ModuleBlock | Kind::CaseClause | Kind::DefaultClause)
+        matches!(self.kind(), Kind::SourceFile | Kind::Block | Kind::ModuleBlock | Kind::CaseClause | Kind::DefaultClause)
     }
 
     pub fn modifier_flags(&self) -> ModifierFlags {
@@ -652,7 +714,7 @@ impl Node {
 
     /// Go `Type()`.
     pub fn type_node(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::VariableDeclaration => self.as_variable_declaration().type_.get(),
             Kind::Parameter => self.as_parameter_declaration().type_.get(),
             Kind::PropertySignature => self.as_property_signature_declaration().type_.get(),
@@ -690,7 +752,7 @@ impl Node {
     /// Go `MutableNode.SetType`. Only the kinds the reparser mutates have a mutable type field in this
     /// port; the other Go cases panic.
     pub fn set_type(&self, t: Option<P<Node>>) {
-        match self.kind {
+        match self.kind() {
             Kind::VariableDeclaration => self.as_variable_declaration().type_.set(t),
             Kind::Parameter => self.as_parameter_declaration().type_.set(t),
             Kind::PropertySignature => self.as_property_signature_declaration().type_.set(t),
@@ -704,14 +766,14 @@ impl Node {
                 if let Some(func_like) = self.function_like_data() {
                     func_like.type_.set(t);
                 } else {
-                    panic!("Unhandled case in mutableNode.SetType: {:?}", self.kind);
+                    panic!("Unhandled case in mutableNode.SetType: {:?}", self.kind());
                 }
             }
         }
     }
 
     pub fn initializer(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::VariableDeclaration => self.as_variable_declaration().initializer.get(),
             Kind::Parameter => self.as_parameter_declaration().initializer,
             Kind::BindingElement => self.as_binding_element().initializer,
@@ -728,7 +790,7 @@ impl Node {
 
     /// Go `MutableNode.SetInitializer`. Only the kinds the reparser mutates are supported.
     pub fn set_initializer(&self, initializer: P<Node>) {
-        match self.kind {
+        match self.kind() {
             Kind::VariableDeclaration => self.as_variable_declaration().initializer.set(Some(initializer)),
             Kind::PropertyDeclaration => self.as_property_declaration().initializer.set(Some(initializer)),
             Kind::PropertyAssignment => self.as_property_assignment().initializer.set(initializer),
@@ -737,7 +799,7 @@ impl Node {
     }
 
     pub fn tag_name(&self) -> P<Node> {
-        match self.kind {
+        match self.kind() {
             Kind::JsxOpeningElement => self.as_jsx_opening_element().tag_name,
             Kind::JsxClosingElement => self.as_jsx_closing_element().tag_name,
             Kind::JsxSelfClosingElement => self.as_jsx_self_closing_element().tag_name,
@@ -763,7 +825,7 @@ impl Node {
             | Kind::JSDocSatisfiesTag
             | Kind::JSDocThrowsTag
             | Kind::JSDocImportTag => self.jsdoc_tag_base().tag_name,
-            _ => panic!("Unhandled case in Node.TagName: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.TagName: {:?}", self.kind()),
         }
     }
 
@@ -790,12 +852,12 @@ impl Node {
             NodeData::JSDocSatisfiesTag(d) => &d.jsdoc_tag_base,
             NodeData::JSDocThrowsTag(d) => &d.jsdoc_tag_base,
             NodeData::JSDocImportTag(d) => &d.jsdoc_tag_base,
-            _ => panic!("not a JSDoc tag: {:?}", self.kind),
+            _ => panic!("not a JSDoc tag: {:?}", self.kind()),
         }
     }
 
     pub fn property_name(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::ImportSpecifier => self.as_import_specifier().property_name,
             Kind::ExportSpecifier => self.as_export_specifier().property_name,
             Kind::BindingElement => self.as_binding_element().property_name,
@@ -812,7 +874,7 @@ impl Node {
     }
 
     pub fn is_type_only(&self) -> bool {
-        match self.kind {
+        match self.kind() {
             Kind::ImportEqualsDeclaration => self.as_import_equals_declaration().is_type_only,
             Kind::ImportSpecifier => self.as_import_specifier().is_type_only,
             Kind::ImportClause => self.as_import_clause().phase_modifier.get() == Kind::TypeKeyword,
@@ -824,7 +886,7 @@ impl Node {
 
     // If updating this function, also update `hasComment`.
     pub fn comment_list(&self) -> Option<P<NodeList>> {
-        match self.kind {
+        match self.kind() {
             Kind::JSDoc => Some(self.as_jsdoc().comment),
             Kind::JSDocUnknownTag
             | Kind::JSDocAugmentsTag
@@ -848,7 +910,7 @@ impl Node {
             | Kind::JSDocSatisfiesTag
             | Kind::JSDocThrowsTag
             | Kind::JSDocImportTag => self.jsdoc_tag_base().comment,
-            _ => panic!("Unhandled case in Node.CommentList: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.CommentList: {:?}", self.kind()),
         }
     }
 
@@ -860,65 +922,65 @@ impl Node {
     }
 
     pub fn label(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::LabeledStatement => Some(self.as_labeled_statement().label),
             Kind::BreakStatement => self.as_break_statement().label,
             Kind::ContinueStatement => self.as_continue_statement().label,
-            _ => panic!("Unhandled case in Node.Label: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.Label: {:?}", self.kind()),
         }
     }
 
     pub fn attributes(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::JsxOpeningElement => Some(self.as_jsx_opening_element().attributes),
             Kind::JsxSelfClosingElement => Some(self.as_jsx_self_closing_element().attributes),
             Kind::ModuleDeclaration => self.as_module_declaration().attributes,
-            _ => panic!("Unhandled case in Node.Attributes: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.Attributes: {:?}", self.kind()),
         }
     }
 
     pub fn children(&self) -> P<NodeList> {
-        match self.kind {
+        match self.kind() {
             Kind::JsxElement => self.as_jsx_element().children,
             Kind::JsxFragment => self.as_jsx_fragment().children,
-            _ => panic!("Unhandled case in Node.Children: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.Children: {:?}", self.kind()),
         }
     }
 
     pub fn module_specifier(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::ImportDeclaration | Kind::JSImportDeclaration => Some(self.as_import_declaration().module_specifier),
             Kind::ExportDeclaration => self.as_export_declaration().module_specifier,
             Kind::JSDocImportTag => Some(self.as_jsdoc_import_tag().module_specifier),
-            _ => panic!("Unhandled case in Node.ModuleSpecifier: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.ModuleSpecifier: {:?}", self.kind()),
         }
     }
 
     pub fn import_clause(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::ImportDeclaration | Kind::JSImportDeclaration => self.as_import_declaration().import_clause,
             Kind::JSDocImportTag => self.as_jsdoc_import_tag().import_clause,
-            _ => panic!("Unhandled case in Node.ImportClause: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.ImportClause: {:?}", self.kind()),
         }
     }
 
     pub fn statement(&self) -> P<Node> {
-        match self.kind {
+        match self.kind() {
             Kind::DoStatement => self.as_do_statement().statement(),
             Kind::WhileStatement => self.as_while_statement().statement(),
             Kind::ForStatement => self.as_for_statement().statement(),
             Kind::ForInStatement | Kind::ForOfStatement => self.as_for_in_or_of_statement().statement,
             Kind::WithStatement => self.as_with_statement().statement,
             Kind::LabeledStatement => self.as_labeled_statement().statement,
-            _ => panic!("Unhandled case in Node.Statement: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.Statement: {:?}", self.kind()),
         }
     }
 
     pub fn property_list(&self) -> P<NodeList> {
-        match self.kind {
+        match self.kind() {
             Kind::ObjectLiteralExpression => self.as_object_literal_expression().properties,
             Kind::JsxAttributes => self.as_jsx_attributes().properties,
-            _ => panic!("Unhandled case in Node.PropertyList: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.PropertyList: {:?}", self.kind()),
         }
     }
 
@@ -927,13 +989,13 @@ impl Node {
     }
 
     pub fn element_list(&self) -> P<NodeList> {
-        match self.kind {
+        match self.kind() {
             Kind::NamedImports => self.as_named_imports().elements,
             Kind::NamedExports => self.as_named_exports().elements,
             Kind::ObjectBindingPattern | Kind::ArrayBindingPattern => self.as_binding_pattern().elements,
             Kind::ArrayLiteralExpression => self.as_array_literal_expression().elements,
             Kind::TupleType => self.as_tuple_type_node().elements,
-            _ => panic!("Unhandled case in Node.ElementList: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.ElementList: {:?}", self.kind()),
         }
     }
 
@@ -942,7 +1004,7 @@ impl Node {
     }
 
     pub fn postfix_token(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::MethodDeclaration => self.as_method_declaration().postfix_token(),
             Kind::ShorthandPropertyAssignment => self.as_shorthand_property_assignment().postfix_token(),
             Kind::MethodSignature => self.as_method_signature_declaration().postfix_token(),
@@ -957,7 +1019,7 @@ impl Node {
     }
 
     pub fn question_token(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::Parameter => return self.as_parameter_declaration().question_token.get(),
             Kind::ConditionalExpression => return Some(self.as_conditional_expression().question_token),
             Kind::MappedType => return self.as_mapped_type_node().question_token,
@@ -966,7 +1028,7 @@ impl Node {
         }
         let postfix = self.postfix_token();
         if let Some(postfix) = postfix {
-            if postfix.kind == Kind::QuestionToken {
+            if postfix.kind() == Kind::QuestionToken {
                 return Some(postfix);
             }
         }
@@ -974,17 +1036,17 @@ impl Node {
     }
 
     pub fn question_dot_token(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::ElementAccessExpression => self.as_element_access_expression().question_dot_token,
             Kind::PropertyAccessExpression => self.as_property_access_expression().question_dot_token,
             Kind::CallExpression => self.as_call_expression().question_dot_token,
             Kind::TaggedTemplateExpression => self.as_tagged_template_expression().question_dot_token,
-            _ => panic!("Unhandled case in Node.QuestionDotToken: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.QuestionDotToken: {:?}", self.kind()),
         }
     }
 
     pub fn type_expression(&self) -> Option<P<Node>> {
-        match self.kind {
+        match self.kind() {
             Kind::JSDocParameterTag | Kind::JSDocPropertyTag => self.as_jsdoc_parameter_or_property_tag().type_expression,
             Kind::JSDocReturnTag => self.as_jsdoc_return_tag().type_expression,
             Kind::JSDocTypeTag => Some(self.as_jsdoc_type_tag().type_expression),
@@ -992,15 +1054,15 @@ impl Node {
             Kind::JSDocCallbackTag => Some(self.as_jsdoc_callback_tag().type_expression),
             Kind::JSDocSatisfiesTag => Some(self.as_jsdoc_satisfies_tag().type_expression),
             Kind::JSDocThrowsTag => self.as_jsdoc_throws_tag().type_expression,
-            _ => panic!("Unhandled case in Node.TypeExpression: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.TypeExpression: {:?}", self.kind()),
         }
     }
 
     pub fn class_name(&self) -> P<Node> {
-        match self.kind {
+        match self.kind() {
             Kind::JSDocAugmentsTag => self.as_jsdoc_augments_tag().class_name,
             Kind::JSDocImplementsTag => self.as_jsdoc_implements_tag().class_name,
-            _ => panic!("Unhandled case in Node.ClassName: {:?}", self.kind),
+            _ => panic!("Unhandled case in Node.ClassName: {:?}", self.kind()),
         }
     }
 
@@ -1012,7 +1074,7 @@ impl Node {
             if std::ptr::eq(d.get(), self) {
                 return true;
             }
-            let parent = d.parent.get();
+            let parent = d.parent();
             if parent.is_none() && !is_source_file(d) {
                 panic!("descendant is not parented");
             }
@@ -1022,7 +1084,7 @@ impl Node {
     }
 
     pub fn is_jsdoc(&self) -> bool {
-        self.kind == Kind::JSDoc
+        self.kind() == Kind::JSDoc
     }
 
     // if you provide nil for file, this code will walk to the root of the tree to find the file
@@ -1081,17 +1143,17 @@ pub fn is_write_access(node: P<Node>) -> bool {
 
 pub fn is_write_access_for_reference(node: P<Node>) -> bool {
     let decl = get_declaration_from_name(Some(node));
-    (decl.is_some() && declaration_is_write_access(decl)) || node.kind == Kind::DefaultKeyword || is_write_access(node)
+    (decl.is_some() && declaration_is_write_access(decl)) || node.kind() == Kind::DefaultKeyword || is_write_access(node)
 }
 
 pub fn get_declaration_from_name(name: Option<P<Node>>) -> Option<P<Node>> {
     let name = name?;
-    let parent = name.parent.get()?;
+    let parent = name.parent()?;
     let mut fallthrough = false;
-    match name.kind {
+    match name.kind() {
         Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::NumericLiteral => {
             if is_computed_property_name(parent) {
-                return parent.parent.get();
+                return parent.parent();
             }
             fallthrough = true;
         }
@@ -1111,7 +1173,7 @@ pub fn get_declaration_from_name(name: Option<P<Node>>) -> Option<P<Node>> {
             return None;
         }
         if is_qualified_name(parent) {
-            let tag = parent.parent.get();
+            let tag = parent.parent();
             if let Some(tag) = tag {
                 if is_jsdoc_parameter_tag(tag) && tag.name() == Some(parent) {
                     return Some(tag);
@@ -1119,7 +1181,7 @@ pub fn get_declaration_from_name(name: Option<P<Node>>) -> Option<P<Node>> {
             }
             return None;
         }
-        let bin_exp = parent.parent.get();
+        let bin_exp = parent.parent();
         if let Some(bin_exp) = bin_exp {
             if is_binary_expression(bin_exp) && get_assignment_declaration_kind(bin_exp) != JSDeclarationKind::None {
                 // (binExp.left as BindableStaticNameExpression).symbol || binExp.symbol
@@ -1144,7 +1206,7 @@ fn declaration_is_write_access(decl: Option<P<Node>>) -> bool {
         return true;
     }
 
-    match decl.kind {
+    match decl.kind() {
         Kind::BinaryExpression
         | Kind::BindingElement
         | Kind::ClassDeclaration
@@ -1171,7 +1233,7 @@ fn declaration_is_write_access(decl: Option<P<Node>>) -> bool {
         | Kind::TypeParameter => true,
 
         // In `({ x: y } = 0);`, `x` is not a write access.
-        Kind::PropertyAssignment => !is_array_literal_or_object_literal_destructuring_pattern(decl.parent.get()),
+        Kind::PropertyAssignment => !is_array_literal_or_object_literal_destructuring_pattern(decl.parent()),
 
         // functions considered write if they provide a value (have a body)
         Kind::FunctionDeclaration
@@ -1183,11 +1245,11 @@ fn declaration_is_write_access(decl: Option<P<Node>>) -> bool {
 
         // variable/property write if initializer present or is in catch clause
         Kind::VariableDeclaration | Kind::PropertyDeclaration => {
-            let has_init = match decl.kind {
+            let has_init = match decl.kind() {
                 Kind::VariableDeclaration => decl.as_variable_declaration().initializer.get().is_some(),
                 _ => decl.as_property_declaration().initializer.get().is_some(),
             };
-            has_init || decl.parent.get().is_some_and(is_catch_clause)
+            has_init || decl.parent().is_some_and(is_catch_clause)
         }
 
         Kind::MethodSignature | Kind::PropertySignature | Kind::JSDocPropertyTag | Kind::JSDocParameterTag => false,
@@ -1204,14 +1266,14 @@ pub fn is_array_literal_or_object_literal_destructuring_pattern(node: Option<P<N
     if !(is_array_literal_expression(node) || is_object_literal_expression(node)) {
         return false;
     }
-    let Some(parent) = node.parent.get() else {
+    let Some(parent) = node.parent() else {
         return false;
     };
     // [a,b,c] from:
     // [a, b, c] = someExpression;
     if is_binary_expression(parent)
         && parent.as_binary_expression().left == node
-        && parent.as_binary_expression().operator_token.kind == Kind::EqualsToken
+        && parent.as_binary_expression().operator_token.kind() == Kind::EqualsToken
     {
         return true;
     }
@@ -1222,7 +1284,7 @@ pub fn is_array_literal_or_object_literal_destructuring_pattern(node: Option<P<N
     }
     // {x, a: {a, b, c} } = someExpression
     if is_property_assignment(parent) {
-        return is_array_literal_or_object_literal_destructuring_pattern(parent.parent.get());
+        return is_array_literal_or_object_literal_destructuring_pattern(parent.parent());
     }
     // [a, b, c] of
     // [x, [a, b, c] ] = someExpression
@@ -1230,10 +1292,10 @@ pub fn is_array_literal_or_object_literal_destructuring_pattern(node: Option<P<N
 }
 
 fn access_kind(node: P<Node>) -> AccessKind {
-    let Some(parent) = node.parent.get() else {
+    let Some(parent) = node.parent() else {
         return AccessKind::Read;
     };
-    match parent.kind {
+    match parent.kind() {
         Kind::ParenthesizedExpression => access_kind(parent),
         Kind::PrefixUnaryExpression => {
             let operator = parent.as_prefix_unary_expression().operator;
@@ -1252,8 +1314,8 @@ fn access_kind(node: P<Node>) -> AccessKind {
         Kind::BinaryExpression => {
             if parent.as_binary_expression().left == node {
                 let operator = parent.as_binary_expression().operator_token;
-                if is_assignment_operator(operator.kind) {
-                    if operator.kind == Kind::EqualsToken {
+                if is_assignment_operator(operator.kind()) {
+                    if operator.kind() == Kind::EqualsToken {
                         return AccessKind::Write;
                     }
                     return AccessKind::ReadWrite;
@@ -1268,7 +1330,7 @@ fn access_kind(node: P<Node>) -> AccessKind {
             access_kind(parent)
         }
         Kind::PropertyAssignment => {
-            let parent_access = access_kind(parent.parent.get().unwrap());
+            let parent_access = access_kind(parent.parent().unwrap());
             // In `({ x: varname }) = { x: 1 }`, the left `x` is a read, the right `x` is a write.
             if node == parent.as_property_assignment().name() {
                 return reverse_access_kind(parent_access);
@@ -1280,7 +1342,7 @@ fn access_kind(node: P<Node>) -> AccessKind {
             if Some(node) == parent.as_shorthand_property_assignment().object_assignment_initializer.get() {
                 return AccessKind::Read;
             }
-            access_kind(parent.parent.get().unwrap())
+            access_kind(parent.parent().unwrap())
         }
         Kind::ArrayLiteralExpression => access_kind(parent),
         Kind::ForInStatement | Kind::ForOfStatement => {
@@ -1318,15 +1380,15 @@ pub fn is_locals_container(node: P<Node>) -> bool {
 }
 
 pub fn is_type_or_js_type_alias_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::TypeAliasDeclaration || node.kind == Kind::JSTypeAliasDeclaration
+    node.kind() == Kind::TypeAliasDeclaration || node.kind() == Kind::JSTypeAliasDeclaration
 }
 
 pub fn is_import_declaration_or_js_import_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::ImportDeclaration || node.kind == Kind::JSImportDeclaration
+    node.kind() == Kind::ImportDeclaration || node.kind() == Kind::JSImportDeclaration
 }
 
 pub fn is_any_export_assignment(node: P<Node>) -> bool {
-    node.kind == Kind::ExportAssignment
+    node.kind() == Kind::ExportAssignment
 }
 
 impl NodeFactory {
@@ -1823,7 +1885,7 @@ impl Node {
 fn collect_identifiers_for_source_file(source_file: &SourceFile) -> Set<&'static str> {
     let mut identifiers: Set<&'static str> = Set::default();
     fn collect(node: P<Node>, identifiers: &mut Set<&'static str>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier
             | Kind::PrivateIdentifier
             | Kind::StringLiteral
@@ -1984,7 +2046,7 @@ mod tests {
 
     fn set_parents(node: P<Node>) {
         node.for_each_child(&mut |child| {
-            child.parent.set(Some(node));
+            child.set_parent(Some(node));
             set_parents(child);
             false
         });
@@ -2012,7 +2074,7 @@ mod tests {
         assert_eq!(children(bin), vec![a, plus, b]);
         assert_eq!(children(block), vec![stmt]);
         assert_eq!(bin.as_binary_expression().left(), a);
-        assert_eq!(bin.as_binary_expression().operator_token.kind, Kind::PlusToken);
+        assert_eq!(bin.as_binary_expression().operator_token.kind(), Kind::PlusToken);
         assert_eq!(stmt.expression(), Some(bin));
         assert_eq!(block.statements(), &[stmt]);
         assert_eq!(a.text(), "a");
@@ -2195,6 +2257,19 @@ mod tests {
         assert_eq!(NodeFlags::BlockScoped, NodeFlags::Let | NodeFlags::Const | NodeFlags::Using);
         assert!(SymbolFlags::Value.contains(SymbolFlags::Function));
         assert!(!SymbolFlags::FunctionScopedVariableExcludes.intersects(SymbolFlags::FunctionScopedVariable));
-        assert_eq!(std::mem::size_of::<Node>(), 32);
+        assert_eq!(std::mem::size_of::<Node>(), 24);
+    }
+
+    #[test]
+    fn node_header_word_keeps_kind_tag_and_parent() {
+        let f = NodeFactory::default();
+        let parent = f.new_keyword_expression(Kind::ThisKeyword);
+        let child = f.new_token(Kind::Count);
+        assert_eq!((child.kind(), child.data_tag(), child.parent()), (Kind::Count, NodeDataTag::Token, None));
+        child.set_parent(Some(parent));
+        assert_eq!((child.kind(), child.data_tag(), child.parent()), (Kind::Count, NodeDataTag::Token, Some(parent)));
+        assert_eq!((parent.kind(), parent.data_tag()), (Kind::ThisKeyword, NodeDataTag::KeywordExpression));
+        child.set_parent(None);
+        assert_eq!((child.kind(), child.parent()), (Kind::Count, None));
     }
 }

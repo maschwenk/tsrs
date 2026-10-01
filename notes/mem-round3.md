@@ -75,3 +75,24 @@ alias each other: Go's `'s'` and `'g'` byte strings differ, and a simple key is 
 | 4 checkers, before (A1) | 9.13-9.18 (9.148) | 435-436 G |
 | 4 checkers, after | 8.965-8.991 (8.971, -0.18) | 432-434 G (-0.8%) |
 | opt-out single / 4 checkers (go assignment), after | 9.26 / 14.12 | 344 / 515 G (-1.2%, -1.6%) |
+
+### A3. AST node header 32 -> 24 bytes
+
+23.0M nodes on Project (the AST is shared by all checkers). The header held the kind (`u16`), the data tag (`u8`),
+flags, the range, the parent pointer and a 64-bit id, 32 bytes with padding. Now the kind (9 bits), the data tag
+(8 bits) and the parent (address / 8 in 45 bits: nodes are 8-aligned and user-space addresses are below 2^48;
+asserted when a parent is set) share one word, and the id is stored in 32 bits like symbol ids (a 64-bit counter,
+`NodeId` stays `u64`, panic past `u32::MAX`). The parent's provenance is exposed on store and recovered with
+`with_exposed_provenance`. Only the parent part is written after creation, under the same owner-only contract as
+before (`OwnedCell`). `node.kind` became `node.kind()` and `node.parent.get()` / `.set(..)` `parent()` /
+`set_parent(..)` (mechanical, 1,950 sites; `tools/gen-ast/gen-ast.ts` emits the new forms, `generated.rs`
+regenerated). AST oracle: 113/113 libs and 17,318/17,319 test units identical (the one is the known non-UTF-8
+file), as before.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before (A2) | 6.759-6.763 (6.760) | 315-316 G |
+| single, after | 6.587-6.592 (6.592, -0.17) | 317-318 G (+0.5%) |
+| 4 checkers, before (A2) | 8.96-9.01 (8.966) | 429-431 G |
+| 4 checkers, after | 8.79-8.82 (8.812, -0.15) | 431-432 G (+0.4%) |
+| opt-out single / 4 checkers (go assignment), after | 9.08 / 13.95 | 339 / 517 G |

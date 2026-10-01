@@ -411,7 +411,7 @@ impl Binder {
             }
             return ast::InternalSymbolNameMissing;
         }
-        match node.kind {
+        match node.kind() {
             Kind::Constructor => return ast::InternalSymbolNameConstructor,
             Kind::FunctionType | Kind::CallSignature => return ast::InternalSymbolNameCall,
             Kind::ConstructorType | Kind::ConstructSignature => return ast::InternalSymbolNameNew,
@@ -445,7 +445,7 @@ impl Binder {
         let has_export_modifier =
             ast::get_combined_modifier_flags(node).intersects(ModifierFlags::Export) || ast::is_implicitly_exported_jsdoc_declaration(node);
         if symbol_flags.intersects(SymbolFlags::Alias) {
-            if node.kind == Kind::ExportSpecifier || (node.kind == Kind::ImportEqualsDeclaration && has_export_modifier) {
+            if node.kind() == Kind::ExportSpecifier || (node.kind() == Kind::ImportEqualsDeclaration && has_export_modifier) {
                 return self.declare_symbol(ast::get_exports(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes);
             }
             return self.declare_symbol(ast::get_locals(container), None /*parent*/, node, symbol_flags, symbol_excludes);
@@ -505,7 +505,7 @@ impl Binder {
         symbol_excludes: SymbolFlags,
     ) -> P<Symbol> {
         let container = self.container();
-        match container.kind {
+        match container.kind() {
             Kind::ModuleDeclaration => self.declare_module_member(node, symbol_flags, symbol_excludes),
             Kind::SourceFile => self.declare_source_file_member(node, symbol_flags, symbol_excludes),
             Kind::ClassExpression | Kind::ClassDeclaration => self.declare_class_member(node, symbol_flags, symbol_excludes),
@@ -566,8 +566,8 @@ impl Binder {
             }
             return self.unreachable_flow;
         };
-        if (expression.kind == Kind::TrueKeyword && flags.intersects(FlowFlags::FalseCondition)
-            || expression.kind == Kind::FalseKeyword && flags.intersects(FlowFlags::TrueCondition))
+        if (expression.kind() == Kind::TrueKeyword && flags.intersects(FlowFlags::FalseCondition)
+            || expression.kind() == Kind::FalseKeyword && flags.intersects(FlowFlags::TrueCondition))
             && !ast::is_expression_of_optional_chain_root(expression)
             && !ast::is_nullish_coalesce(expression.parent().unwrap())
         {
@@ -691,13 +691,13 @@ impl Binder {
         //
         // However, not all symbols will end up in any of these tables. 'Anonymous' symbols
         // (like TypeLiterals for example) will not be put in any table.
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => {
                 node.flow_node_data().unwrap().flow_node.set(self.current_flow);
                 self.check_contextual_identifier(node);
             }
             Kind::ThisKeyword | Kind::SuperKeyword => {
-                if node.kind == Kind::ThisKeyword {
+                if node.kind() == Kind::ThisKeyword {
                     self.seen_this_keyword = true;
                 }
                 node.flow_node_data().unwrap().flow_node.set(self.current_flow);
@@ -806,7 +806,7 @@ impl Binder {
         // a local should go into for example. Since terminal nodes are known not to have
         // children, as an optimization we don't process those.
         let mut this_node_or_any_subnodes_has_error = node.flags().intersects(NodeFlags::ThisNodeHasError);
-        if node.kind > Kind::LastToken {
+        if node.kind() > Kind::LastToken {
             let save_seen_parse_error = self.seen_parse_error;
             self.seen_parse_error = false;
             let container_flags = get_container_flags(node);
@@ -1014,7 +1014,7 @@ impl Binder {
 
     pub(crate) fn has_export_declarations(&self, node: P<Node>) -> bool {
         let mut statements: &[P<Node>] = &[];
-        match node.kind {
+        match node.kind() {
             Kind::SourceFile => {
                 statements = node.statements();
             }
@@ -1070,7 +1070,7 @@ impl Binder {
 
     pub(crate) fn bind_class_like_declaration(&mut self, node: P<Node>) {
         let name = node.name();
-        match node.kind {
+        match node.kind() {
             Kind::ClassDeclaration => {
                 self.bind_block_scoped_declaration(node, SymbolFlags::Class, SymbolFlags::ClassExcludes);
             }
@@ -1215,7 +1215,7 @@ impl Binder {
 }
 
 pub(crate) fn get_parent_of_property_assignment(node: P<Node>) -> P<Node> {
-    match node.kind {
+    match node.kind() {
         Kind::BinaryExpression => node.as_binary_expression().left().expression().unwrap(),
         Kind::CallExpression => node.arguments()[0],
         _ => panic!("Unhandled case in getParentOfPropertyAssignment"),
@@ -1294,9 +1294,9 @@ impl Binder {
             }
         } else {
             let this_container = self.this_container.unwrap();
-            if this_container.kind != Kind::FunctionDeclaration && this_container.kind != Kind::FunctionExpression {
+            if this_container.kind() != Kind::FunctionDeclaration && this_container.kind() != Kind::FunctionExpression {
                 // !!! constructor functions
-                panic!("Unhandled case in bindThisPropertyAssignment: {:?}", this_container.kind);
+                panic!("Unhandled case in bindThisPropertyAssignment: {:?}", this_container.kind());
             }
         }
     }
@@ -1307,7 +1307,7 @@ impl Binder {
         };
         let mut class_symbol = None;
         let mut symbol_table = None;
-        match this_container.kind {
+        match this_container.kind() {
             Kind::FunctionDeclaration | Kind::FunctionExpression => {
                 // !!! constructor functions
             }
@@ -1425,7 +1425,7 @@ impl Binder {
 
     pub(crate) fn bind_block_scoped_declaration(&mut self, node: P<Node>, symbol_flags: SymbolFlags, symbol_excludes: SymbolFlags) {
         let block_scope_container = self.block_scope_container.unwrap();
-        match block_scope_container.kind {
+        match block_scope_container.kind() {
             Kind::ModuleDeclaration => {
                 self.declare_module_member(node, symbol_flags, symbol_excludes);
             }
@@ -1439,7 +1439,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_type_parameter(&mut self, node: P<Node>) {
-        if node.parent().unwrap().kind == Kind::InferType {
+        if node.parent().unwrap().kind() == Kind::InferType {
             let container = self.get_infer_type_container(node.parent().unwrap());
             if let Some(container) = container {
                 self.declare_symbol(ast::get_locals(container), None /*parent*/, node, SymbolFlags::TypeParameter, SymbolFlags::TypeParameterExcludes);
@@ -1456,7 +1456,7 @@ impl Binder {
         if ast::is_identifier(node) {
             return self.lookup_name(node.text(), container);
         }
-        if node.expression().unwrap().kind == Kind::ThisKeyword {
+        if node.expression().unwrap().kind() == Kind::ThisKeyword {
             let (_, symbol_table) = self.get_this_class_and_symbol_table();
             if let Some(symbol_table) = symbol_table {
                 if let Some(name) = ast::get_element_or_property_access_name(node) {
@@ -1597,7 +1597,7 @@ impl Binder {
 
     pub(crate) fn check_strict_mode_binary_expression(&mut self, node: P<Node>) {
         let expr = node.as_binary_expression();
-        if ast::is_left_hand_side_expression(expr.left()) && ast::is_assignment_operator(expr.operator_token().kind) {
+        if ast::is_left_hand_side_expression(expr.left()) && ast::is_assignment_operator(expr.operator_token().kind()) {
             // ECMA 262 (Annex C) The identifier eval or arguments may not appear as the LeftHandSideExpression of an
             // Assignment operator(11.13) or of a PostfixExpression(11.3)
             self.check_strict_mode_eval_or_arguments(node, Some(expr.left()));
@@ -1616,7 +1616,7 @@ impl Binder {
     pub(crate) fn check_strict_mode_delete_expression(&mut self, node: P<Node>) {
         // Grammar checking
         let expr = node.as_delete_expression();
-        if expr.expression().kind == Kind::Identifier {
+        if expr.expression().kind() == Kind::Identifier {
             // When a delete operator occurs within strict mode code, a SyntaxError is thrown if its
             // UnaryExpression is a direct reference to a variable, function argument, or function name
             self.error_on_node(expr.expression(), &diagnostics::X_delete_cannot_be_called_on_an_identifier_in_strict_mode, &[]);
@@ -1739,7 +1739,7 @@ impl Binder {
                 && !ast::has_syntactic_modifier(node, ModifierFlags::Async)
                 && !is_generator_function_expression(node)
                 && ast::get_immediately_invoked_function_expression(node).is_some())
-                || node.kind == Kind::ClassStaticBlockDeclaration;
+                || node.kind() == Kind::ClassStaticBlockDeclaration;
             // A non-async, non-generator IIFE is considered part of the containing control flow. Return statements behave
             // similarly to break statements that exit to a label just past the statement body.
             if !is_immediately_invoked {
@@ -1751,7 +1751,7 @@ impl Binder {
             }
             // We create a return control flow graph for IIFEs and constructors. For constructors
             // we use the return control flow graph in strict property initialization checks.
-            if is_immediately_invoked || node.kind == Kind::Constructor {
+            if is_immediately_invoked || node.kind() == Kind::Constructor {
                 self.current_return_target = Some(self.new_flow_node(FlowFlags::BranchLabel));
             } else {
                 self.current_return_target = None;
@@ -1778,13 +1778,13 @@ impl Binder {
             if self.seen_this_keyword {
                 node.set_flags(node.flags() | NodeFlags::ContainsThis);
             }
-            if node.kind == Kind::SourceFile {
+            if node.kind() == Kind::SourceFile {
                 node.set_flags(node.flags() | self.emit_flags);
             }
             if self.current_return_target.is_some() {
                 self.add_antecedent(self.current_return_target, self.current_flow());
                 self.current_flow = Some(self.finish_flow_label(self.current_return_target.unwrap()));
-                if node.kind == Kind::Constructor || node.kind == Kind::ClassStaticBlockDeclaration {
+                if node.kind() == Kind::Constructor || node.kind() == Kind::ClassStaticBlockDeclaration {
                     set_return_flow_node(node, self.current_flow);
                 }
             }
@@ -1874,13 +1874,13 @@ impl Binder {
             return;
         }
 
-        if Kind::FirstStatement <= node.kind && node.kind <= Kind::LastStatement {
+        if Kind::FirstStatement <= node.kind() && node.kind() <= Kind::LastStatement {
             if let Some(flow_node_data) = node.flow_node_data() {
                 flow_node_data.flow_node.set(self.current_flow);
             }
         }
 
-        match node.kind {
+        match node.kind() {
             Kind::WhileStatement => self.bind_while_statement(node),
             Kind::DoStatement => self.bind_do_statement(node),
             Kind::ForStatement => self.bind_for_statement(node),
@@ -1957,12 +1957,12 @@ impl Binder {
 
     pub(crate) fn bind_each_statement_functions_first(&mut self, statements: P<NodeList>) {
         for &node in statements.nodes {
-            if node.kind == Kind::FunctionDeclaration {
+            if node.kind() == Kind::FunctionDeclaration {
                 self.bind(node);
             }
         }
         for &node in statements.nodes {
-            if node.kind != Kind::FunctionDeclaration {
+            if node.kind() != Kind::FunctionDeclaration {
                 self.bind(node);
             }
         }
@@ -1971,7 +1971,7 @@ impl Binder {
     pub(crate) fn set_continue_target(&mut self, node: P<Node>, target: P<FlowNode>) -> P<FlowNode> {
         let mut node = node;
         let mut index = self.active_label_list.len();
-        while index > 0 && node.parent().unwrap().kind == Kind::LabeledStatement {
+        while index > 0 && node.parent().unwrap().kind() == Kind::LabeledStatement {
             index -= 1;
             self.active_label_list[index].continue_target = Some(target);
             node = node.parent().unwrap();
@@ -2030,10 +2030,10 @@ pub(crate) fn is_logical_assignment_expression(node: P<Node>) -> bool {
 
 impl Binder {
     pub(crate) fn bind_assignment_target_flow(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::ArrayLiteralExpression => {
                 for &e in node.elements() {
-                    if e.kind == Kind::SpreadElement {
+                    if e.kind() == Kind::SpreadElement {
                         self.bind_assignment_target_flow(e.expression().unwrap());
                     } else {
                         self.bind_destructuring_target_flow(e);
@@ -2042,7 +2042,7 @@ impl Binder {
             }
             Kind::ObjectLiteralExpression => {
                 for &p in node.properties() {
-                    match p.kind {
+                    match p.kind() {
                         Kind::PropertyAssignment => self.bind_destructuring_target_flow(p.initializer().unwrap()),
                         Kind::ShorthandPropertyAssignment => self.bind_assignment_target_flow(p.name().unwrap()),
                         Kind::SpreadAssignment => self.bind_assignment_target_flow(p.expression().unwrap()),
@@ -2059,7 +2059,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_destructuring_target_flow(&mut self, node: P<Node>) {
-        if ast::is_binary_expression(node) && node.as_binary_expression().operator_token().kind == Kind::EqualsToken {
+        if ast::is_binary_expression(node) && node.as_binary_expression().operator_token().kind() == Kind::EqualsToken {
             self.bind_assignment_target_flow(node.as_binary_expression().left());
         } else {
             self.bind_assignment_target_flow(node);
@@ -2145,12 +2145,12 @@ impl Binder {
         let post_loop_label = self.create_branch_label();
         self.add_antecedent(Some(pre_loop_label), self.current_flow());
         self.current_flow = Some(pre_loop_label);
-        if node.kind == Kind::ForOfStatement {
+        if node.kind() == Kind::ForOfStatement {
             self.bind(stmt.await_modifier());
         }
         self.add_antecedent(Some(post_loop_label), self.current_flow());
         self.bind(stmt.initializer());
-        if stmt.initializer().kind != Kind::VariableDeclarationList {
+        if stmt.initializer().kind() != Kind::VariableDeclarationList {
             self.bind_assignment_target_flow(stmt.initializer());
         }
         self.bind_iterative_statement(stmt.statement(), Some(post_loop_label), Some(pre_loop_label));
@@ -2323,7 +2323,7 @@ impl Binder {
         self.pre_switch_case_flow = self.current_flow;
         self.bind(stmt.case_block());
         self.add_antecedent(Some(post_switch_label), self.current_flow());
-        let has_default = stmt.case_block().as_case_block().clauses().nodes.iter().any(|c| c.kind == Kind::DefaultClause);
+        let has_default = stmt.case_block().as_case_block().clauses().nodes.iter().any(|c| c.kind() == Kind::DefaultClause);
         if !has_default {
             let clause = self.create_flow_switch_clause(self.pre_switch_case_flow.unwrap(), node, 0, 0);
             self.add_antecedent(Some(post_switch_label), clause);
@@ -2337,7 +2337,7 @@ impl Binder {
         let switch_statement = node.parent().unwrap();
         let clauses = node.as_case_block().clauses().nodes;
         let is_narrowing_switch =
-            switch_statement.expression().unwrap().kind == Kind::TrueKeyword || is_narrowing_expression(switch_statement.expression().unwrap());
+            switch_statement.expression().unwrap().kind() == Kind::TrueKeyword || is_narrowing_expression(switch_statement.expression().unwrap());
         let mut fallthrough_flow: P<FlowNode> = self.unreachable_flow;
         let mut i = 0;
         while i < clauses.len() {
@@ -2389,7 +2389,7 @@ impl Binder {
         // is potentially an assertion and is therefore included in the control flow.
         if ast::is_call_expression(node) {
             let expression = node.expression().unwrap();
-            if expression.kind != Kind::SuperKeyword && ast::is_dotted_name(expression) {
+            if expression.kind() != Kind::SuperKeyword && ast::is_dotted_name(expression) {
                 self.current_flow = Some(self.create_flow_call(self.current_flow(), node));
             }
         }
@@ -2462,7 +2462,7 @@ impl Binder {
 
     pub(crate) fn bind_binary_expression_flow(&mut self, node: P<Node>) {
         let expr = node.as_binary_expression();
-        let operator = expr.operator_token().kind;
+        let operator = expr.operator_token().kind();
         if ast::is_logical_or_coalescing_binary_operator(operator) || ast::is_logical_or_coalescing_assignment_operator(operator) {
             if is_top_level_logical_expression(node) {
                 let post_expression_label = self.create_branch_label();
@@ -2492,7 +2492,7 @@ impl Binder {
             }
             if ast::is_assignment_operator(operator) && !ast::is_assignment_target(node) {
                 self.bind_assignment_target_flow(expr.left());
-                if operator == Kind::EqualsToken && expr.left().kind == Kind::ElementAccessExpression {
+                if operator == Kind::EqualsToken && expr.left().kind() == Kind::ElementAccessExpression {
                     let element_access = expr.left().as_element_access_expression();
                     if is_narrowable_operand(element_access.expression()) {
                         self.current_flow = Some(self.create_flow_mutation(FlowFlags::ArrayMutation, self.current_flow(), node));
@@ -2505,14 +2505,14 @@ impl Binder {
     pub(crate) fn bind_logical_like_expression(&mut self, node: P<Node>, true_target: Option<P<FlowNode>>, false_target: Option<P<FlowNode>>) {
         let expr = node.as_binary_expression();
         let pre_right_label = self.create_branch_label();
-        if expr.operator_token().kind == Kind::AmpersandAmpersandToken || expr.operator_token().kind == Kind::AmpersandAmpersandEqualsToken {
+        if expr.operator_token().kind() == Kind::AmpersandAmpersandToken || expr.operator_token().kind() == Kind::AmpersandAmpersandEqualsToken {
             self.bind_condition(Some(expr.left()), Some(pre_right_label), false_target);
         } else {
             self.bind_condition(Some(expr.left()), true_target, Some(pre_right_label));
         }
         self.current_flow = Some(self.finish_flow_label(pre_right_label));
         self.bind(expr.operator_token());
-        if ast::is_logical_or_coalescing_assignment_operator(expr.operator_token().kind) {
+        if ast::is_logical_or_coalescing_assignment_operator(expr.operator_token().kind()) {
             self.do_with_conditional_branches(|b, n| b.bind(n), Some(expr.right()), true_target, false_target);
             self.bind_assignment_target_flow(expr.left());
             let true_condition = self.create_flow_condition(FlowFlags::TrueCondition, self.current_flow(), Some(node));
@@ -2527,7 +2527,7 @@ impl Binder {
     pub(crate) fn bind_delete_expression_flow(&mut self, node: P<Node>) {
         let expr = node.as_delete_expression();
         self.bind_each_child(node);
-        if expr.expression().kind == Kind::PropertyAccessExpression {
+        if expr.expression().kind() == Kind::PropertyAccessExpression {
             self.bind_assignment_target_flow(expr.expression());
         }
     }
@@ -2565,7 +2565,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_initialized_variable_flow(&mut self, node: P<Node>) {
-        let name = match node.kind {
+        let name = match node.kind() {
             Kind::VariableDeclaration | Kind::BindingElement => node.name(),
             _ => None,
         };
@@ -2647,7 +2647,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_optional_chain_rest(&mut self, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::PropertyAccessExpression => {
                 self.bind(node.question_dot_token());
                 self.bind(node.name());
@@ -2675,13 +2675,13 @@ impl Binder {
             // an immediately invoked function expression (IIFE). Initialize the flowNode property to
             // the current control flow (which includes evaluation of the IIFE arguments).
             let expr = ast::skip_parentheses(call.expression());
-            if expr.kind == Kind::FunctionExpression || expr.kind == Kind::ArrowFunction {
+            if expr.kind() == Kind::FunctionExpression || expr.kind() == Kind::ArrowFunction {
                 self.bind_node_list(call.type_arguments());
                 self.bind_each(call.arguments().nodes);
                 self.bind(call.expression());
             } else {
                 self.bind_each_child(node);
-                if call.expression().kind == Kind::SuperKeyword {
+                if call.expression().kind() == Kind::SuperKeyword {
                     self.current_flow = Some(self.create_flow_call(self.current_flow(), node));
                 }
             }
@@ -2750,7 +2750,7 @@ pub(crate) fn set_flow_node(node: P<Node>, flow_node: Option<P<FlowNode>>) {
 }
 
 pub(crate) fn set_return_flow_node(node: P<Node>, return_flow_node: Option<P<FlowNode>>) {
-    match node.kind {
+    match node.kind() {
         Kind::Constructor => node.as_constructor_declaration().set_return_flow_node(return_flow_node),
         Kind::FunctionDeclaration => node.as_function_declaration().set_return_flow_node(return_flow_node),
         Kind::FunctionExpression => node.as_function_expression().set_return_flow_node(return_flow_node),
@@ -2796,7 +2796,7 @@ pub fn set_value_declaration(symbol: P<Symbol>, node: P<Node>) {
         None => true,
         Some(value_declaration) => {
             is_assignment_declaration(value_declaration) && !is_assignment_declaration(node)
-                || value_declaration.kind != node.kind && is_effective_module_declaration(value_declaration)
+                || value_declaration.kind() != node.kind() && is_effective_module_declaration(value_declaration)
         }
     };
     if replace {
@@ -2807,7 +2807,7 @@ pub fn set_value_declaration(symbol: P<Symbol>, node: P<Node>) {
 }
 
 pub fn get_container_flags(node: P<Node>) -> ContainerFlags {
-    match node.kind {
+    match node.kind() {
         Kind::ClassExpression
         | Kind::ClassDeclaration
         | Kind::EnumDeclaration
@@ -2886,7 +2886,7 @@ pub fn get_container_flags(node: P<Node>) -> ContainerFlags {
 }
 
 pub(crate) fn is_narrowing_expression(expr: P<Node>) -> bool {
-    match expr.kind {
+    match expr.kind() {
         Kind::Identifier | Kind::ThisKeyword => true,
         Kind::PropertyAccessExpression | Kind::ElementAccessExpression => contains_narrowable_reference(expr),
         Kind::CallExpression => has_narrowable_argument(expr),
@@ -2905,7 +2905,7 @@ pub(crate) fn contains_narrowable_reference(expr: P<Node>) -> bool {
         return true;
     }
     if expr.flags().intersects(NodeFlags::OptionalChain) {
-        match expr.kind {
+        match expr.kind() {
             Kind::PropertyAccessExpression | Kind::ElementAccessExpression | Kind::CallExpression | Kind::NonNullExpression => {
                 return contains_narrowable_reference(expr.expression().unwrap());
             }
@@ -2916,7 +2916,7 @@ pub(crate) fn contains_narrowable_reference(expr: P<Node>) -> bool {
 }
 
 pub(crate) fn is_narrowable_reference(node: P<Node>) -> bool {
-    match node.kind {
+    match node.kind() {
         Kind::Identifier | Kind::ThisKeyword | Kind::SuperKeyword | Kind::MetaProperty => true,
         Kind::PropertyAccessExpression | Kind::ParenthesizedExpression | Kind::NonNullExpression => {
             is_narrowable_reference(node.expression().unwrap())
@@ -2928,8 +2928,8 @@ pub(crate) fn is_narrowable_reference(node: P<Node>) -> bool {
         }
         Kind::BinaryExpression => {
             let expr = node.as_binary_expression();
-            expr.operator_token().kind == Kind::CommaToken && is_narrowable_reference(expr.right())
-                || ast::is_assignment_operator(expr.operator_token().kind) && ast::is_left_hand_side_expression(expr.left())
+            expr.operator_token().kind() == Kind::CommaToken && is_narrowable_reference(expr.right())
+                || ast::is_assignment_operator(expr.operator_token().kind()) && ast::is_left_hand_side_expression(expr.left())
         }
         _ => false,
     }
@@ -2952,7 +2952,7 @@ pub(crate) fn has_narrowable_argument(expr: P<Node>) -> bool {
 
 pub(crate) fn is_narrowing_binary_expression(node: P<Node>) -> bool {
     let expr = node.as_binary_expression();
-    match expr.operator_token().kind {
+    match expr.operator_token().kind() {
         Kind::EqualsToken | Kind::BarBarEqualsToken | Kind::AmpersandAmpersandEqualsToken | Kind::QuestionQuestionEqualsToken => {
             contains_narrowable_reference(expr.left())
         }
@@ -2973,11 +2973,11 @@ pub(crate) fn is_narrowing_binary_expression(node: P<Node>) -> bool {
 }
 
 pub(crate) fn is_narrowable_operand(expr: P<Node>) -> bool {
-    match expr.kind {
+    match expr.kind() {
         Kind::ParenthesizedExpression => return is_narrowable_operand(expr.expression().unwrap()),
         Kind::BinaryExpression => {
             let binary = expr.as_binary_expression();
-            match binary.operator_token().kind {
+            match binary.operator_token().kind() {
                 Kind::EqualsToken => return is_narrowable_operand(binary.left()),
                 Kind::CommaToken => return is_narrowable_operand(binary.right()),
                 _ => {}
@@ -3016,7 +3016,7 @@ impl Binder {
 }
 
 pub(crate) fn is_signed_numeric_literal(node: P<Node>) -> bool {
-    if node.kind == Kind::PrefixUnaryExpression {
+    if node.kind() == Kind::PrefixUnaryExpression {
         let node = node.as_prefix_unary_expression();
         return (node.operator() == Kind::PlusToken || node.operator() == Kind::MinusToken) && ast::is_numeric_literal(node.operand());
     }
@@ -3025,7 +3025,7 @@ pub(crate) fn is_signed_numeric_literal(node: P<Node>) -> bool {
 
 pub(crate) fn get_optional_symbol_flag_for_node(node: P<Node>) -> SymbolFlags {
     match node.postfix_token() {
-        Some(postfix_token) if postfix_token.kind == Kind::QuestionToken => SymbolFlags::Optional,
+        Some(postfix_token) if postfix_token.kind() == Kind::QuestionToken => SymbolFlags::Optional,
         _ => SymbolFlags::None,
     }
 }
@@ -3046,7 +3046,7 @@ pub(crate) fn is_function_symbol(symbol: P<Symbol>) -> bool {
 
 pub(crate) fn is_statement_condition(node: P<Node>) -> bool {
     let parent = node.parent().unwrap();
-    match parent.kind {
+    match parent.kind() {
         Kind::IfStatement | Kind::WhileStatement | Kind::DoStatement => parent.expression() == Some(node),
         Kind::ForStatement => parent.as_for_statement().condition() == Some(node),
         Kind::ConditionalExpression => parent.as_conditional_expression().condition() == node,

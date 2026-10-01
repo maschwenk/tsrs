@@ -12,7 +12,7 @@ impl Checker {
     pub(crate) fn check_unmatched_jsdoc_parameters(&mut self, node: P<Node>) {
         let mut jsdoc_parameters: Vec<P<Node>> = Vec::new();
         for tag in get_all_jsdoc_tags(node) {
-            if tag.kind == Kind::JSDocParameterTag {
+            if tag.kind() == Kind::JSDocParameterTag {
                 let name = tag.as_jsdoc_parameter_or_property_tag().name();
                 if ast::is_identifier(name) && name.text().is_empty() {
                     continue;

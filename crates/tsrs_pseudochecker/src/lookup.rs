@@ -6,7 +6,7 @@ use tsrs_ast as ast;
 impl PseudoChecker {
     // lookup.go:11
     pub fn get_return_type_of_signature(&self, signature_node: P<Node>) -> Option<P<PseudoType>> {
-        match signature_node.kind {
+        match signature_node.kind() {
             Kind::GetAccessor => self.get_type_of_accessor(signature_node),
             Kind::MethodDeclaration
             | Kind::FunctionDeclaration
@@ -37,7 +37,7 @@ impl PseudoChecker {
 
     // lookup.go:34
     pub fn get_type_of_declaration(&self, node: P<Node>) -> Option<P<PseudoType>> {
-        match node.kind {
+        match node.kind() {
             Kind::Parameter => self.type_from_parameter(node),
             Kind::VariableDeclaration => Some(self.type_from_variable(node)),
             Kind::PropertySignature | Kind::PropertyDeclaration | Kind::JSDocPropertyTag => Some(self.type_from_property(node)),
@@ -68,7 +68,7 @@ impl PseudoChecker {
         if let Some(annotation) = annotation {
             return new_pseudo_type_direct(annotation);
         }
-        if node.kind == Kind::PropertyAssignment {
+        if node.kind() == Kind::PropertyAssignment {
             let init = node.initializer();
             if let Some(init) = init {
                 let expr = self.type_from_expression(init);
@@ -113,7 +113,7 @@ impl PseudoChecker {
                     if let Some(expr) = expr {
                         if expr.kind != PseudoTypeKind::Inferred || !expr.as_pseudo_type_inferred().error_nodes.is_empty() {
                             let postfix_token = node.as_property_declaration().postfix_token();
-                            if expr.kind != PseudoTypeKind::Direct && postfix_token.is_some_and(|t| t.kind == Kind::QuestionToken) {
+                            if expr.kind != PseudoTypeKind::Direct && postfix_token.is_some_and(|t| t.kind() == Kind::QuestionToken) {
                                 // type comes from the initializer expression on a property with a `?` - add `| undefined` to the type
                                 return add_undefined_if_definitely_required(expr);
                             }
@@ -202,7 +202,7 @@ impl PseudoChecker {
     // lookup.go:177
     pub(crate) fn get_type_annotation_from_accessor(&self, node: P<Node>) -> Option<P<Node>> {
         // !!! TODO: support ripping return type off of .FullSignature
-        if node.kind == Kind::GetAccessor {
+        if node.kind() == Kind::GetAccessor {
             return node.as_get_accessor_declaration().type_();
         }
         let set = node.as_set_accessor_declaration();
@@ -278,9 +278,9 @@ impl PseudoChecker {
         if let Some(candidate_expr) = candidate_expr {
             if is_contextually_typed(candidate_expr) {
                 let mut t: Option<P<Node>> = None;
-                if candidate_expr.kind == Kind::TypeAssertionExpression {
+                if candidate_expr.kind() == Kind::TypeAssertionExpression {
                     t = Some(candidate_expr.as_type_assertion().type_);
-                } else if candidate_expr.kind == Kind::AsExpression {
+                } else if candidate_expr.kind() == Kind::AsExpression {
                     t = Some(candidate_expr.as_as_expression().type_);
                 }
                 if let Some(t) = t {
@@ -298,7 +298,7 @@ impl PseudoChecker {
     // lookup.go:262
     // This is basically `checkExpression` for pseudotypes
     pub(crate) fn type_from_expression(&self, node: P<Node>) -> Option<P<PseudoType>> {
-        match node.kind {
+        match node.kind() {
             Kind::OmittedExpression => return Some(*PseudoTypeUndefined),
             Kind::ParenthesizedExpression => {
                 // assertions transformed on reparse, just unwrap
@@ -358,9 +358,9 @@ impl PseudoChecker {
         }
         let mut results: Vec<P<PseudoObjectElement>> = Vec::with_capacity(properties.len());
         for &e in properties {
-            match e.kind {
+            match e.kind() {
                 Kind::MethodDeclaration => {
-                    let optional = e.as_method_declaration().postfix_token().is_some_and(|t| t.kind == Kind::QuestionToken);
+                    let optional = e.as_method_declaration().postfix_token().is_some_and(|t| t.kind() == Kind::QuestionToken);
                     if let Some(full_signature) = e.function_like_data().unwrap().full_signature() {
                         results.push(new_pseudo_property_assignment(false, e.name().unwrap(), optional, new_pseudo_type_direct(full_signature)));
                     } else {
@@ -378,7 +378,7 @@ impl PseudoChecker {
                     results.push(new_pseudo_property_assignment(
                         false,
                         e.name().unwrap(),
-                        e.as_property_assignment().postfix_token().is_some_and(|t| t.kind == Kind::QuestionToken),
+                        e.as_property_assignment().postfix_token().is_some_and(|t| t.kind() == Kind::QuestionToken),
                         self.type_from_expression(e.initializer().unwrap()).unwrap(),
                     ));
                 }
@@ -443,7 +443,7 @@ impl PseudoChecker {
                 error_nodes.push(e);
                 continue;
             }
-            if e.kind == Kind::ShorthandPropertyAssignment || e.kind == Kind::SpreadAssignment {
+            if e.kind() == Kind::ShorthandPropertyAssignment || e.kind() == Kind::SpreadAssignment {
                 error_nodes.push(e);
                 continue;
             }
@@ -452,11 +452,11 @@ impl PseudoChecker {
                 error_nodes.push(name);
                 continue;
             }
-            if name.kind == Kind::PrivateIdentifier {
+            if name.kind() == Kind::PrivateIdentifier {
                 error_nodes.push(e);
                 continue;
             }
-            if name.kind == Kind::ComputedPropertyName {
+            if name.kind() == Kind::ComputedPropertyName {
                 let expression = name.expression().unwrap();
                 if !is_primitive_literal_value(expression, false) {
                     error_nodes.push(name);
@@ -494,7 +494,7 @@ impl PseudoChecker {
             return vec![node];
         }
         for &e in node.elements() {
-            if e.kind == Kind::SpreadElement {
+            if e.kind() == Kind::SpreadElement {
                 return vec![e];
             }
         }
@@ -525,7 +525,7 @@ pub fn is_in_const_context(node: P<Node>) -> bool {
     // An expression is in a const context if an ancestor is a const type maybeAssertion expression
     let maybe_assertion = find_ancestor(node.parent(), |n| {
         // stop traversing at assertions or anything not an array/object literal, since only those create or transfer const-ness
-        is_assertion_expression(n) || !is_const_context_propagating_kind(n.kind)
+        is_assertion_expression(n) || !is_const_context_propagating_kind(n.kind())
     });
     is_const_assertion(maybe_assertion.unwrap())
 }
@@ -539,10 +539,10 @@ impl PseudoChecker {
             expr = p.operand;
         }
         let inner = p.operand;
-        if inner.kind == Kind::BigIntLiteral {
+        if inner.kind() == Kind::BigIntLiteral {
             return Some(new_pseudo_type_maybe_const_location(node, new_pseudo_type_big_int_literal(expr), *PseudoTypeBigInt));
         }
-        if inner.kind == Kind::NumericLiteral {
+        if inner.kind() == Kind::NumericLiteral {
             return Some(new_pseudo_type_maybe_const_location(node, new_pseudo_type_numeric_literal(expr), *PseudoTypeNumber));
         }
         debug::fail_bad_syntax_kind(&inner.kind_string(), &[])
@@ -593,10 +593,10 @@ pub(crate) fn is_undefined_pseudo_type(t: P<PseudoType>) -> bool {
 // lookup.go:550
 pub(crate) fn type_node_could_refer_to_undefined(node: P<Node>) -> bool {
     let mut node = node;
-    while node.kind == Kind::ParenthesizedType {
+    while node.kind() == Kind::ParenthesizedType {
         node = node.as_parenthesized_type_node().type_;
     }
-    match node.kind {
+    match node.kind() {
         // these types require symbolic/type resolution to know if they definitely do or do not refer to `undefined`, so might (or definitely do)
         Kind::TypeReference | Kind::IndexedAccessType | Kind::TypeQuery | Kind::OptionalType | Kind::RestType | Kind::ImportType => true,
         Kind::IntersectionType => {
@@ -675,7 +675,7 @@ impl PseudoChecker {
     // lookup.go:631
     pub(crate) fn type_from_parameter(&self, node: P<Node>) -> Option<P<PseudoType>> {
         let parent = node.parent().unwrap();
-        if parent.kind == Kind::SetAccessor {
+        if parent.kind() == Kind::SetAccessor {
             return self.get_type_of_accessor(parent);
         }
         // Fast path: no initializer means we never need parameter position info.
@@ -695,7 +695,7 @@ impl PseudoChecker {
     // lookup.go:649
     pub(crate) fn type_from_parameter_worker(&self, node: P<Node>, self_idx: i32, last_required: i32) -> Option<P<PseudoType>> {
         let parent = node.parent().unwrap();
-        if parent.kind == Kind::SetAccessor {
+        if parent.kind() == Kind::SetAccessor {
             return self.get_type_of_accessor(parent);
         }
         let has_required_after = self_idx < last_required - 1;

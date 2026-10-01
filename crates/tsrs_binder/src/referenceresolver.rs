@@ -134,7 +134,7 @@ impl<H: 'static> ReferenceResolver<H> {
 
             let mut node = self.get_declaration_of_alias_symbol(symbol);
             while let Some(n) = node {
-                match n.kind {
+                match n.kind() {
                     Kind::ImportEqualsDeclaration | Kind::ExportDeclaration => {
                         return n.is_type_only();
                     }
@@ -183,7 +183,7 @@ impl<H: 'static> ReferenceResolver<H> {
         // declaration if it contains an exported member with the same name.
         let start_in_declaration_container = node
             .parent()
-            .is_some_and(|p| (p.kind == Kind::ModuleDeclaration || p.kind == Kind::EnumDeclaration) && Some(node) == p.name());
+            .is_some_and(|p| (p.kind() == Kind::ModuleDeclaration || p.kind() == Kind::EnumDeclaration) && Some(node) == p.name());
         if let Some(mut symbol) = self.get_referenced_value_symbol(h, node, start_in_declaration_container) {
             if symbol.flags().intersects(SymbolFlags::ExportValue) {
                 // If we reference an exported entity within the same module declaration, then whether
@@ -199,7 +199,7 @@ impl<H: 'static> ReferenceResolver<H> {
             if let Some(parent_symbol) = parent_symbol {
                 if parent_symbol.flags().intersects(SymbolFlags::ValueModule) {
                     if let Some(value_declaration) = parent_symbol.value_declaration() {
-                        if value_declaration.kind == Kind::SourceFile {
+                        if value_declaration.kind() == Kind::SourceFile {
                             let symbol_file = value_declaration; // .AsSourceFile()
                             let reference_file = ast::get_source_file_of_node(Some(node));
                             // If `node` accesses an export and that export isn't in the same file, then symbol is a namespace export, so return nil.
@@ -213,7 +213,7 @@ impl<H: 'static> ReferenceResolver<H> {
                 }
                 let mut n = node.parent();
                 while let Some(cur) = n {
-                    if (cur.kind == Kind::ModuleDeclaration || cur.kind == Kind::EnumDeclaration) && self.get_symbol_of_declaration(h, Some(cur)) == Some(parent_symbol) {
+                    if (cur.kind() == Kind::ModuleDeclaration || cur.kind() == Kind::EnumDeclaration) && self.get_symbol_of_declaration(h, Some(cur)) == Some(parent_symbol) {
                         return Some(cur);
                     }
                     n = cur.parent();
@@ -249,7 +249,7 @@ impl<H: 'static> ReferenceResolver<H> {
         if let Some(symbol) = self.get_referenced_value_symbol(h, node, false /*startInDeclarationContainer*/) {
             let symbol = self.get_export_symbol_of_value_symbol_if_exported(h, Some(symbol)).unwrap();
             for &declaration in symbol.declarations() {
-                match declaration.kind {
+                match declaration.kind() {
                     Kind::VariableDeclaration
                     | Kind::Parameter
                     | Kind::BindingElement

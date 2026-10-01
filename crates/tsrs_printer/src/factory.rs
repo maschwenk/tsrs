@@ -186,7 +186,7 @@ impl NodeFactory {
     // Allocates a new StringLiteral whose source text is derived from the provided node. This is often used to create a
     // string representation of an Identifier or NumericLiteral.
     pub fn new_string_literal_from_node(&self, text_source_node: P<Node>) -> P<Node> {
-        let text = match text_source_node.kind {
+        let text = match text_source_node.kind() {
             Kind::Identifier
             | Kind::PrivateIdentifier
             | Kind::JsxNamespacedName

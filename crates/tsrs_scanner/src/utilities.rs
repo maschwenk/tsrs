@@ -101,7 +101,7 @@ pub fn get_text_of_node_from_source_text(source_text: &str, node: P<Node>, inclu
         // Only the above node kinds are currently transformed into one another by the reparser, requiring the textual remapping.
         // (Any reamppings done by emit transforms are handled by `getLiteralTextOfNode` in the printer)
         // Fail on any other kinds.
-        panic!("Unexpected reparser-transformed node kind: {:?}", node.kind);
+        panic!("Unexpected reparser-transformed node kind: {:?}", node.kind());
     }
     text
 }
@@ -116,7 +116,7 @@ pub fn get_text_of_jsdoc_comment(comment: Option<P<NodeList>>) -> String {
     };
     let mut b = String::new();
     for &n in comment.nodes {
-        match n.kind {
+        match n.kind() {
             Kind::JSDocText => b.push_str(n.text()),
             Kind::JSDocLink | Kind::JSDocLinkCode | Kind::JSDocLinkPlain => b.push_str(&get_text_of_node(n)),
             _ => {}

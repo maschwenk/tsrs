@@ -180,7 +180,7 @@ callback, even when the closure does not need it.
   point (file parsing and binding use rayon; the checker pool runs one OS thread per checker, see "Threading"). `sync.Once` -> `std::sync::OnceLock`. `sync.Mutex` -> `std::sync::Mutex` only if
   the data really is shared between threads, otherwise drop it. `atomic.*` -> the `std::sync::atomic` equivalent.
 - `switch` with fallthrough, labeled `break`/`continue`, `goto` -> loops with labels / `match`; preserve evaluation order.
-- Type switches on node kind -> `match node.kind`.
+- Type switches on node kind -> `match node.kind()`.
 
 ## What not to port
 

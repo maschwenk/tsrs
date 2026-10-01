@@ -46,7 +46,7 @@ impl Checker {
         let parent = node.parent().unwrap();
         if ast::is_binary_expression(parent) {
             let expr = parent.as_binary_expression();
-            if expr.left() == node && expr.operator_token().kind == Kind::EqualsToken {
+            if expr.left() == node && expr.operator_token().kind() == Kind::EqualsToken {
                 return self.get_target_of_alias_like_expression(expr.right());
             }
         }
@@ -55,7 +55,7 @@ impl Checker {
 
     // checker.go:15273
     pub(crate) fn get_module_specifier_for_import_or_export(&mut self, node: P<Node>) -> Option<P<Node>> {
-        match node.kind {
+        match node.kind() {
             Kind::ImportClause => get_module_specifier_from_node(node.parent().unwrap()),
             Kind::ImportEqualsDeclaration => {
                 let module_reference = node.as_import_equals_declaration().module_reference();
@@ -76,7 +76,7 @@ impl Checker {
 
 // checker.go:15295
 pub(crate) fn get_module_specifier_from_node(node: P<Node>) -> Option<P<Node>> {
-    match node.kind {
+    match node.kind() {
         Kind::ImportDeclaration | Kind::JSImportDeclaration => node.module_specifier(),
         Kind::ExportDeclaration => node.module_specifier(),
         _ => panic!("Unhandled case in getModuleSpecifierFromNode: {}", node.kind_string()),
@@ -150,7 +150,7 @@ impl Checker {
     // checker.go:15372
     pub(crate) fn get_external_module_file_from_declaration(&mut self, declaration: P<Node>) -> Option<P<SourceFile>> {
         let mut specifier: Option<P<Node>> = None;
-        if declaration.kind == Kind::ModuleDeclaration {
+        if declaration.kind() == Kind::ModuleDeclaration {
             if ast::is_string_literal(declaration.name().unwrap()) {
                 specifier = declaration.name();
             }
@@ -217,7 +217,7 @@ impl Checker {
                 ancestor = ast::find_ancestor(location, ast::is_import_equals_declaration);
                 if let Some(a) = ancestor {
                     let module_refrence = a.as_import_equals_declaration().module_reference();
-                    if module_refrence.kind == Kind::ExternalModuleReference {
+                    if module_refrence.kind() == Kind::ExternalModuleReference {
                         context_specifier = module_refrence.expression();
                     }
                 }
@@ -355,9 +355,9 @@ impl Checker {
                                 }
 
                                 let message: &'static Message;
-                                if override_host.is_some_and(|h| h.kind == Kind::ImportDeclaration && h.import_clause().is_some() && h.import_clause().unwrap().is_type_only()) {
+                                if override_host.is_some_and(|h| h.kind() == Kind::ImportDeclaration && h.import_clause().is_some() && h.import_clause().unwrap().is_type_only()) {
                                     message = &diagnostics::Type_only_import_of_an_ECMAScript_module_from_a_CommonJS_module_must_have_a_resolution_mode_attribute;
-                                } else if override_host.is_some_and(|h| h.kind == Kind::ImportType) {
+                                } else if override_host.is_some_and(|h| h.kind() == Kind::ImportType) {
                                     message = &diagnostics::Type_import_of_an_ECMAScript_module_from_a_CommonJS_module_must_have_a_resolution_mode_attribute;
                                 } else {
                                     message = &diagnostics::The_current_file_is_a_CommonJS_module_whose_imports_will_produce_require_calls_however_the_referenced_file_is_an_ECMAScript_module_and_cannot_be_imported_with_require_Consider_writing_a_dynamic_import_0_call_instead;
@@ -865,7 +865,7 @@ impl Checker {
     // checker.go:16059
     pub(crate) fn get_target_of_alias_declaration(&mut self, node: Option<P<Node>>) -> Option<P<Symbol>> {
         let node = node?;
-        match node.kind {
+        match node.kind() {
             Kind::ImportEqualsDeclaration | Kind::VariableDeclaration => self.get_target_of_import_equals_declaration(node),
             Kind::ImportClause => self.get_target_of_import_clause(node),
             Kind::NamespaceImport => self.get_target_of_namespace_import(node),
@@ -891,7 +891,7 @@ impl Checker {
             return None;
         }
         let mut symbol: Option<P<Symbol>>;
-        match name.kind {
+        match name.kind() {
             Kind::Identifier => {
                 let mut message: Option<&'static Message> = None;
                 if !ignore_errors {
@@ -934,7 +934,7 @@ impl Checker {
             if s != self.unknown_symbol {
                 if !ast::node_is_synthesized(name)
                     && ast::is_entity_name(name)
-                    && (s.flags().intersects(SymbolFlags::Alias) || name.parent().is_some_and(|p| p.kind == Kind::ExportAssignment))
+                    && (s.flags().intersects(SymbolFlags::Alias) || name.parent().is_some_and(|p| p.kind() == Kind::ExportAssignment))
                 {
                     self.mark_symbol_of_alias_declaration_if_type_only(get_alias_declaration_from_name(name), None);
                 }
@@ -1665,7 +1665,7 @@ impl Checker {
                     location = location.parent().unwrap();
                 }
                 if ast::is_expression_node(location) && (!ast::is_assignment_target(location) || ast::is_write_access(location)) {
-                    let t = if ast::is_write_access(location) && location.kind == Kind::PropertyAccessExpression {
+                    let t = if ast::is_write_access(location) && location.kind() == Kind::PropertyAccessExpression {
                         self.check_property_access_expression(location, CheckMode::Normal, true /*writeOnly*/)
                     } else {
                         self.get_type_of_expression(location)
@@ -1822,7 +1822,7 @@ impl Checker {
             }
             return self.new_anonymous_type(Some(symbol), symbol.members(), &[], &[], &[]);
         }
-        let result = match declaration.kind {
+        let result = match declaration.kind() {
             Kind::Parameter | Kind::PropertyDeclaration | Kind::PropertySignature | Kind::VariableDeclaration | Kind::BindingElement => {
                 let report_errors = !self.is_parameter_of_context_sensitive_signature(symbol);
                 self.get_widened_type_for_variable_like_declaration(declaration, report_errors) // only report diagnostics for context-insensitive parameters - context-sensitive ones may have their type fixed to something else
@@ -1871,7 +1871,7 @@ impl Checker {
         // right hand expression is of a type parameter type.
         if ast::is_variable_declaration(declaration) {
             let grand_parent = declaration.parent().unwrap().parent().unwrap();
-            match grand_parent.kind {
+            match grand_parent.kind() {
                 Kind::ForInStatement => {
                     let t = self.check_expression_ex(grand_parent.expression().unwrap(), check_mode /*checkMode*/);
                     let t = self.get_non_nullable_type_if_needed(t);
@@ -2032,7 +2032,7 @@ impl Checker {
         };
         if ast::is_parameter_declaration(ast::get_root_declaration(declaration)) {
             let name = declaration.name().unwrap();
-            match name.kind {
+            match name.kind() {
                 Kind::ObjectBindingPattern => {
                     if is_object_literal_type(t) {
                         return self.pad_object_literal_type(t, name);

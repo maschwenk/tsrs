@@ -41,7 +41,7 @@ impl Parser {
         let pos = self.node_pos();
         let (is_type_only, property_name, name) = self.parse_import_or_export_specifier(Kind::ImportSpecifier);
         let identifier_name;
-        if name.kind == Kind::Identifier {
+        if name.kind() == Kind::Identifier {
             identifier_name = name;
         } else {
             let loc = self.skip_range_trivia(name.loc());
@@ -69,7 +69,7 @@ impl Parser {
         let mut can_parse_as_keyword = true;
         let disallow_keywords = kind == Kind::ImportSpecifier;
         let (mut name, mut name_ok) = self.parse_module_export_name(disallow_keywords);
-        if name.kind == Kind::Identifier && name.text() == "type" {
+        if name.kind() == Kind::Identifier && name.text() == "type" {
             // If the first token of an import specifier is 'type', there are a lot of possibilities,
             // especially if we see 'as' afterwards:
             //
@@ -931,7 +931,7 @@ impl Parser {
         if self.token == Kind::ReadonlyKeyword || self.token == Kind::PlusToken || self.token == Kind::MinusToken {
             let token = self.parse_token_node();
             readonly_token = Some(token);
-            if token.kind != Kind::ReadonlyKeyword {
+            if token.kind() != Kind::ReadonlyKeyword {
                 self.parse_expected(Kind::ReadonlyKeyword);
             }
         }
@@ -946,7 +946,7 @@ impl Parser {
         if self.token == Kind::QuestionToken || self.token == Kind::PlusToken || self.token == Kind::MinusToken {
             let token = self.parse_token_node();
             question_token = Some(token);
-            if token.kind != Kind::QuestionToken {
+            if token.kind() != Kind::QuestionToken {
                 self.parse_expected(Kind::QuestionToken);
             }
         }
@@ -1627,7 +1627,7 @@ impl Parser {
         loop {
             let span = self.parse_template_type_span();
             list.push(span);
-            if span.as_template_literal_type_span().literal.kind != Kind::TemplateMiddle {
+            if span.as_template_literal_type_span().literal.kind() != Kind::TemplateMiddle {
                 break;
             }
         }
@@ -1681,7 +1681,7 @@ impl Parser {
         if self.is_start_of_function_type_or_constructor_type() {
             let type_node = self.parse_function_or_constructor_type();
             let diagnostic: &'static Message;
-            if type_node.kind == Kind::FunctionType {
+            if type_node.kind() == Kind::FunctionType {
                 diagnostic = if is_in_union_type {
                     &diagnostics::Function_type_notation_must_be_parenthesized_when_used_in_a_union_type
                 } else {
@@ -1826,7 +1826,7 @@ impl Parser {
                 else {
                     break;
                 };
-                if modifier.kind == Kind::StaticKeyword {
+                if modifier.kind() == Kind::StaticKeyword {
                     has_static_modifier = true;
                 }
                 list.push(modifier);

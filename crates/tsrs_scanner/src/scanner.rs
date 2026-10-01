@@ -2883,7 +2883,7 @@ pub fn get_token_pos_of_node(node: P<Node>, source_file: P<SourceFile>, include_
     if ast::node_is_missing(Some(node)) {
         return node.pos();
     }
-    if ast::is_jsdoc_node(node) || node.kind == Kind::JsxText {
+    if ast::is_jsdoc_node(node) || node.kind() == Kind::JsxText {
         // JsxText cannot actually contain comments, even though the scanner will think it sees comments
         return skip_trivia_ex(source_file.text(), node.pos(), Some(&SkipTriviaOptions { stop_at_comments: true, ..Default::default() }));
     }
@@ -2904,7 +2904,7 @@ fn get_error_range_for_arrow_function(source_file: P<SourceFile>, node: P<Node>)
     let pos = skip_trivia(source_file.text(), node.pos());
     let body = node.body();
     if let Some(body) = body {
-        if body.kind == Kind::Block {
+        if body.kind() == Kind::Block {
             let start_line = get_ecma_line_of_position(&*source_file, body.pos());
             let end_line = get_ecma_line_of_position(&*source_file, body.end());
             if start_line < end_line {
@@ -2953,7 +2953,7 @@ fn find_originating_jsdoc_satisfies_tag(source_file: P<SourceFile>, node: P<Node
 
 pub fn get_error_range_for_node(source_file: P<SourceFile>, node: P<Node>) -> TextRange {
     let mut error_node = Some(node);
-    match node.kind {
+    match node.kind() {
         Kind::SourceFile => {
             let pos = skip_trivia(source_file.text(), 0);
             if pos as usize == source_file.text().len() {
@@ -2979,7 +2979,7 @@ pub fn get_error_range_for_node(source_file: P<SourceFile>, node: P<Node>) -> Te
         | Kind::PropertyDeclaration
         | Kind::PropertySignature
         | Kind::NamespaceImport => {
-            if (node.kind == Kind::FunctionDeclaration || node.kind == Kind::MethodDeclaration)
+            if (node.kind() == Kind::FunctionDeclaration || node.kind() == Kind::MethodDeclaration)
                 && node.flags().intersects(NodeFlags::Reparsed)
             {
                 error_node = Some(node);

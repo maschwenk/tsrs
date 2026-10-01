@@ -949,7 +949,7 @@ pub(crate) fn starts_with_square_bracket(str: &str) -> bool {
 
 // nodebuilderimpl.go:932
 pub(crate) fn is_default_binding_context(location: P<Node>) -> bool {
-    location.kind == Kind::SourceFile || is_ambient_module(location)
+    location.kind() == Kind::SourceFile || is_ambient_module(location)
 }
 
 impl NodeBuilderImpl {
@@ -1032,7 +1032,7 @@ impl NodeBuilderImpl {
             }
             let declaration = declarations[0]; // Declaration may be nameless, but we'll try anyway
             if let Some(parent) = declaration.parent() {
-                if parent.kind == Kind::VariableDeclaration {
+                if parent.kind() == Kind::VariableDeclaration {
                     return tsrs_scanner::declaration_name_to_string(Some(parent.as_variable_declaration().name));
                 }
             }
@@ -1040,7 +1040,7 @@ impl NodeBuilderImpl {
                 if self.ctx.get().is_some() && !ctx.encountered_error.get() && !ctx.flags.get().intersects(Flags::AllowAnonymousIdentifier) {
                     ctx.encountered_error.set(true);
                 }
-                match declaration.kind {
+                match declaration.kind() {
                     Kind::ClassExpression => return "(Anonymous class)".to_string(),
                     Kind::FunctionExpression | Kind::ArrowFunction => return "(Anonymous function)".to_string(),
                     _ => {}
@@ -1218,7 +1218,7 @@ pub(crate) fn can_have_module_specifier(node: Option<P<Node>>) -> bool {
         return false;
     };
     matches!(
-        node.kind,
+        node.kind(),
         Kind::VariableDeclaration
             | Kind::BindingElement
             | Kind::ImportDeclaration
@@ -1244,7 +1244,7 @@ pub fn try_get_module_specifier_from_declaration(node: P<Node>) -> Option<P<Node
 
 // nodebuilderimpl.go:1201
 pub(crate) fn try_get_module_specifier_from_declaration_worker(node: P<Node>) -> Option<P<Node>> {
-    match node.kind {
+    match node.kind() {
         Kind::VariableDeclaration | Kind::BindingElement => {
             let module_call = find_ancestor(node.initializer(), |node| {
                 is_require_call(node, true /*requireStringLiteralLikeArgument*/) || is_import_call(node)
@@ -1254,7 +1254,7 @@ pub(crate) fn try_get_module_specifier_from_declaration_worker(node: P<Node>) ->
         Kind::ImportDeclaration | Kind::ExportDeclaration | Kind::JSDocImportTag => node.module_specifier(),
         Kind::ImportEqualsDeclaration => {
             let ref_ = node.as_import_equals_declaration().module_reference;
-            if ref_.kind != Kind::ExternalModuleReference {
+            if ref_.kind() != Kind::ExternalModuleReference {
                 return None;
             }
             ref_.expression()
@@ -1597,11 +1597,11 @@ impl NodeBuilderImpl {
         let decl = declaration.as_mapped_type_node();
         let mut readonly_token: Option<P<Node>> = None;
         if let Some(token) = decl.readonly_token {
-            readonly_token = Some(self.f.new_token(token.kind));
+            readonly_token = Some(self.f.new_token(token.kind()));
         }
         let mut question_token: Option<P<Node>> = None;
         if let Some(token) = decl.question_token {
-            question_token = Some(self.f.new_token(token.kind));
+            question_token = Some(self.f.new_token(token.kind()));
         }
         let appropriate_constraint_type_node: Option<P<Node>>;
         let mut new_type_variable: Option<P<Node>> = None;
@@ -1841,7 +1841,7 @@ impl NodeBuilderImpl {
         }
 
         let name = parameter_declaration.unwrap().name().unwrap();
-        match name.kind {
+        match name.kind() {
             Kind::Identifier => {
                 let cloned = self.f.deep_clone_node(Some(name)).unwrap();
                 self.e.set_emit_flags(cloned, EmitFlags::NoAsciiEscaping);

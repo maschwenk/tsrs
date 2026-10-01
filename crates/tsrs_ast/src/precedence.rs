@@ -75,11 +75,11 @@ impl OperatorPrecedence {
 }
 
 pub(crate) fn get_operator(expression: P<Node>) -> Kind {
-    match expression.kind {
-        Kind::BinaryExpression => expression.as_binary_expression().operator_token.kind,
+    match expression.kind() {
+        Kind::BinaryExpression => expression.as_binary_expression().operator_token.kind(),
         Kind::PrefixUnaryExpression => expression.as_prefix_unary_expression().operator,
         Kind::PostfixUnaryExpression => expression.as_postfix_unary_expression().operator,
-        _ => expression.kind,
+        _ => expression.kind(),
     }
 }
 
@@ -87,12 +87,12 @@ pub(crate) fn get_operator(expression: P<Node>) -> Kind {
 pub fn get_expression_precedence(expression: P<Node>) -> OperatorPrecedence {
     let operator = get_operator(expression);
     let mut flags = OperatorPrecedenceFlags::None;
-    if expression.kind == Kind::NewExpression && expression.argument_list().is_none() {
+    if expression.kind() == Kind::NewExpression && expression.argument_list().is_none() {
         flags = OperatorPrecedenceFlags::NewWithoutArguments;
     } else if is_optional_chain(expression) {
         flags = OperatorPrecedenceFlags::OptionalChain;
     }
-    get_operator_precedence(expression.kind, operator, flags)
+    get_operator_precedence(expression.kind(), operator, flags)
 }
 
 bitflags! {
@@ -228,7 +228,7 @@ pub fn get_binary_operator_precedence(operator_kind: Kind) -> OperatorPrecedence
 // Gets the leftmost expression of an expression, e.g. `a` in `a.b`, `a[b]`, `a++`, `a+b`, `a?b:c`, `a as B`, etc.
 pub fn get_leftmost_expression(mut node: P<Node>, stop_at_call_expressions: bool) -> P<Node> {
     loop {
-        match node.kind {
+        match node.kind() {
             Kind::PostfixUnaryExpression => {
                 node = node.as_postfix_unary_expression().operand;
                 continue;
@@ -292,7 +292,7 @@ impl TypePrecedence {
 
 // Gets the precedence of a TypeNode
 pub fn get_type_node_precedence(n: P<Node>) -> TypePrecedence {
-    match n.kind {
+    match n.kind() {
         Kind::ConditionalType => TypePrecedence::Conditional,
         Kind::JSDocOptionalType | Kind::JSDocVariadicType => TypePrecedence::JSDoc,
         Kind::FunctionType | Kind::ConstructorType => TypePrecedence::Function,
@@ -342,6 +342,6 @@ pub fn get_type_node_precedence(n: P<Node>) -> TypePrecedence {
         // These occur in pseudo-types like `f<T>.C`, where `f` is a generic function and `C` is a local type
         | Kind::PropertyAccessExpression
         | Kind::ExpressionWithTypeArguments => TypePrecedence::NonArray,
-        _ => panic!("unhandled TypeNode: {:?}", n.kind),
+        _ => panic!("unhandled TypeNode: {:?}", n.kind()),
     }
 }

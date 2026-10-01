@@ -132,7 +132,7 @@ pub(crate) fn get_referenced_location(r: P<FileIncludeReason>, program: &Program
             } else {
                 let mut aug_index = imports.len() as i32;
                 for &imp in file.module_augmentations.get() {
-                    if imp.kind == Kind::StringLiteral {
+                    if imp.kind() == Kind::StringLiteral {
                         if aug_index == ref_.index {
                             specifier = Some(imp);
                             break;

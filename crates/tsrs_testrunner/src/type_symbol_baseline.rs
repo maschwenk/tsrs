@@ -170,7 +170,7 @@ impl TypeWriterWalker {
         let mut results = Vec::new();
         for n in nodes {
             if ast::is_expression_node(n)
-                || n.kind == Kind::Identifier
+                || n.kind() == Kind::Identifier
                 || ast::is_declaration_name(n)
                 || ast::is_qualified_name(n) && ast::is_name_of_heritage_clause_type_reference(n) && (is_symbol_walk || ast::is_qualified_name(n.parent().unwrap()))
             {
@@ -197,7 +197,7 @@ impl TypeWriterWalker {
             // Don't try to get the type of something that's already a type.
             // Exception for `T` in `type T = something` because that may evaluate to some interesting type.
             if ast::is_part_of_type_node(node)
-                || (node.kind == Kind::AsExpression || node.kind == Kind::SatisfiesExpression) && node.type_node().unwrap().flags().intersects(NodeFlags::Reparsed)
+                || (node.kind() == Kind::AsExpression || node.kind() == Kind::SatisfiesExpression) && node.type_node().unwrap().flags().intersects(NodeFlags::Reparsed)
                 || ast::is_identifier(node)
                     && !ast::get_meaning_from_declaration(parent).intersects(SemanticMeaning::Value)
                     && !(ast::is_type_or_js_type_alias_declaration(parent) && Some(node) == parent.name())
@@ -321,11 +321,11 @@ fn for_each_ast_node(node: P<Node>) -> Vec<P<Node>> {
 
     while let Some(elem) = work.pop() {
         let reparsed = elem.flags().intersects(NodeFlags::Reparsed);
-        let parent_kind = elem.parent().map(|p| p.kind);
+        let parent_kind = elem.parent().map(|p| p.kind());
         let parent_is_as_or_satisfies = matches!(parent_kind, Some(Kind::SatisfiesExpression) | Some(Kind::AsExpression));
         if !reparsed
-            || elem.kind == Kind::AsExpression
-            || elem.kind == Kind::SatisfiesExpression
+            || elem.kind() == Kind::AsExpression
+            || elem.kind() == Kind::SatisfiesExpression
             || (parent_is_as_or_satisfies && Some(elem) == elem.parent().unwrap().expression())
         {
             if !reparsed || parent_is_as_or_satisfies {

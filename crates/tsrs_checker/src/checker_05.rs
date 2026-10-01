@@ -252,7 +252,7 @@ impl Checker {
     // Gets the localized diagnostic head message to use for errors when resolving a decorator as a call expression.
     // checker.go:8970
     pub(crate) fn get_diagnostic_head_message_for_decorator_resolution(&mut self, node: P<Node>) -> &'static Message {
-        match node.parent().unwrap().kind {
+        match node.parent().unwrap().kind() {
             Kind::ClassDeclaration | Kind::ClassExpression => &diagnostics::Unable_to_resolve_signature_of_class_decorator_when_called_as_an_expression,
             Kind::Parameter => &diagnostics::Unable_to_resolve_signature_of_parameter_decorator_when_called_as_an_expression,
             Kind::PropertyDeclaration => &diagnostics::Unable_to_resolve_signature_of_property_decorator_when_called_as_an_expression,
@@ -299,17 +299,17 @@ impl Checker {
     pub(crate) fn resolve_call(&mut self, node: P<Node>, signatures: &[P<Signature>], candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode, call_chain_flags: SignatureFlags, head_message: Option<&'static Message>) -> P<Signature> {
         let mut candidates_out_array = candidates_out_array;
         let mut head_message = head_message;
-        let is_tagged_template = node.kind == Kind::TaggedTemplateExpression;
-        let is_decorator = node.kind == Kind::Decorator;
+        let is_tagged_template = node.kind() == Kind::TaggedTemplateExpression;
+        let is_decorator = node.kind() == Kind::Decorator;
         let is_jsx_opening_or_self_closing_element = is_jsx_opening_like_element(node);
-        let is_instanceof = node.kind == Kind::BinaryExpression;
+        let is_instanceof = node.kind() == Kind::BinaryExpression;
         let report_errors = !self.is_inference_partially_blocked && candidates_out_array.is_none();
         let mut s = CallState::default();
         s.node = Some(node);
         if !is_decorator && !is_instanceof && !is_super_call(node) && !is_jsx_opening_fragment(node) {
             s.type_arguments = node.type_arguments().to_vec();
             // We already perform checking on the type arguments on the class declaration itself.
-            if is_tagged_template || is_jsx_opening_or_self_closing_element || node.expression().unwrap().kind != Kind::SuperKeyword {
+            if is_tagged_template || is_jsx_opening_or_self_closing_element || node.expression().unwrap().kind() != Kind::SuperKeyword {
                 let type_arguments = s.type_arguments.clone();
                 self.check_source_elements(&type_arguments);
             }
@@ -699,7 +699,7 @@ impl Checker {
     // checker.go:9385
     pub(crate) fn get_legacy_decorator_argument_count(&mut self, node: P<Node>, signature: P<Signature>) -> i32 {
         let parent = node.parent().unwrap();
-        match parent.kind {
+        match parent.kind() {
             Kind::ClassDeclaration | Kind::ClassExpression => 1,
             Kind::PropertyDeclaration => {
                 if has_accessor_modifier(parent) {
@@ -1024,7 +1024,7 @@ impl Checker {
         }
         for i in 0..arg_count {
             let arg = args[i as usize];
-            if arg.kind != Kind::OmittedExpression {
+            if arg.kind() != Kind::OmittedExpression {
                 let param_type = self.get_type_at_position(signature, i);
                 if self.could_contain_type_variables(param_type) {
                     let arg_type = self.check_expression_with_contextual_type(arg, param_type, Some(context), check_mode);
@@ -1534,7 +1534,7 @@ impl Checker {
             // This gets us diagnostics for the type arguments and marks them as referenced.
             self.check_source_elements(node.type_arguments());
         }
-        match node.kind {
+        match node.kind() {
             Kind::TaggedTemplateExpression => {
                 self.check_expression(node.as_tagged_template_expression().template);
             }
@@ -2234,7 +2234,7 @@ impl Checker {
                 return false;
             }
         }
-        match node.kind {
+        match node.kind() {
             Kind::PropertyDeclaration | Kind::PropertySignature | Kind::MethodDeclaration | Kind::MethodSignature | Kind::GetAccessor | Kind::SetAccessor | Kind::PropertyAssignment => {
                 // it is ok to have member named '_super', '_this', `Promise`, etc. - member access is always qualified
                 return false;
@@ -2404,7 +2404,7 @@ impl Checker {
         self.check_source_elements(node.type_arguments());
         if is_expression_with_type_arguments(node) {
             let parent = walk_up_parenthesized_expressions(node.parent()).unwrap();
-            if is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind == Kind::InstanceOfKeyword && crate::is_node_descendant_of(Some(node), parent.as_binary_expression().right()) {
+            if is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind() == Kind::InstanceOfKeyword && crate::is_node_descendant_of(Some(node), parent.as_binary_expression().right()) {
                 self.error(Some(node), &diagnostics::The_right_hand_side_of_an_instanceof_expression_must_not_be_an_instantiation_expression, &[]);
             }
         }

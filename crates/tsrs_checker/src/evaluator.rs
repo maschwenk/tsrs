@@ -36,7 +36,7 @@ pub fn evaluate<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expression
     // our evaluation results, so we're currently being conservative so as to issue errors
     // on code that might break Babel.
     let expr = ast::skip_outer_expressions(expr, outer_expressions_to_skip | ast::OuterExpressionKinds::Parentheses);
-    match expr.kind {
+    match expr.kind() {
         Kind::PrefixUnaryExpression => {
             let result = evaluate(host, evaluate_entity, outer_expressions_to_skip, expr.as_prefix_unary_expression().operand(), location);
             resolved_other_files = result.resolved_other_files;
@@ -60,8 +60,8 @@ pub fn evaluate<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expression
             let bin = expr.as_binary_expression();
             let left = evaluate(host, evaluate_entity, outer_expressions_to_skip, bin.left(), location);
             let right = evaluate(host, evaluate_entity, outer_expressions_to_skip, bin.right(), location);
-            let operator = bin.operator_token().kind;
-            is_syntactically_string = (left.is_syntactically_string || right.is_syntactically_string) && bin.operator_token().kind == Kind::PlusToken;
+            let operator = bin.operator_token().kind();
+            is_syntactically_string = (left.is_syntactically_string || right.is_syntactically_string) && bin.operator_token().kind() == Kind::PlusToken;
             resolved_other_files = left.resolved_other_files || right.resolved_other_files;
             has_external_references = left.has_external_references || right.has_external_references;
             let left_num = if let Some(LiteralValue::Number(n)) = left.value { Some(n) } else { None };

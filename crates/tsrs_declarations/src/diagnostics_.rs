@@ -75,7 +75,7 @@ pub(crate) fn get_accessor_name_visibility_diagnostic_message(node: P<Node>, sym
             &diagnostics::Public_static_property_0_of_exported_class_has_or_is_using_name_1_from_private_module_2,
             &diagnostics::Public_static_property_0_of_exported_class_has_or_is_using_private_name_1,
         )
-    } else if node.parent().unwrap().kind == Kind::ClassDeclaration {
+    } else if node.parent().unwrap().kind() == Kind::ClassDeclaration {
         select_diagnostic_based_on_module_name(
             symbol_accessibility_result,
             &diagnostics::Public_property_0_of_exported_class_has_or_is_using_name_1_from_external_module_2_but_cannot_be_named,
@@ -100,7 +100,7 @@ pub(crate) fn get_method_name_visibility_diagnostic_message(node: P<Node>, symbo
             &diagnostics::Public_static_method_0_of_exported_class_has_or_is_using_name_1_from_private_module_2,
             &diagnostics::Public_static_method_0_of_exported_class_has_or_is_using_private_name_1,
         )
-    } else if node.parent().unwrap().kind == Kind::ClassDeclaration {
+    } else if node.parent().unwrap().kind() == Kind::ClassDeclaration {
         select_diagnostic_based_on_module_name(
             symbol_accessibility_result,
             &diagnostics::Public_method_0_of_exported_class_has_or_is_using_name_1_from_external_module_2_but_cannot_be_named,
@@ -189,7 +189,7 @@ pub(crate) fn create_get_symbol_accessibility_diagnostic_for_node(node: P<Node>)
 
 // diagnostics.go:223
 pub(crate) fn get_variable_declaration_type_visibility_diagnostic_message(node: P<Node>, symbol_accessibility_result: &SymbolAccessibilityResult) -> Option<&'static Message> {
-    if node.kind == Kind::VariableDeclaration || node.kind == Kind::BindingElement {
+    if node.kind() == Kind::VariableDeclaration || node.kind() == Kind::BindingElement {
         return Some(select_diagnostic_based_on_module_name(
             symbol_accessibility_result,
             &diagnostics::Exported_variable_0_has_or_is_using_name_1_from_external_module_2_but_cannot_be_named,
@@ -199,7 +199,7 @@ pub(crate) fn get_variable_declaration_type_visibility_diagnostic_message(node: 
 
         // This check is to ensure we don't report error on constructor parameter property as that error would be reported during parameter emit
         // The only exception here is if the constructor was marked as private. we are not emitting the constructor parameters at all.
-    } else if node.kind == Kind::PropertyDeclaration || node.kind == Kind::PropertyAccessExpression || node.kind == Kind::ElementAccessExpression || node.kind == Kind::BinaryExpression || node.kind == Kind::PropertySignature || (node.kind == Kind::Parameter && ast::has_syntactic_modifier(node.parent().unwrap(), ModifierFlags::Private)) {
+    } else if node.kind() == Kind::PropertyDeclaration || node.kind() == Kind::PropertyAccessExpression || node.kind() == Kind::ElementAccessExpression || node.kind() == Kind::BinaryExpression || node.kind() == Kind::PropertySignature || (node.kind() == Kind::Parameter && ast::has_syntactic_modifier(node.parent().unwrap(), ModifierFlags::Private)) {
         // TODO(jfreeman): Deal with computed properties in error reporting.
         if ast::is_static(node) {
             return Some(select_diagnostic_based_on_module_name(
@@ -208,7 +208,7 @@ pub(crate) fn get_variable_declaration_type_visibility_diagnostic_message(node: 
                 &diagnostics::Public_static_property_0_of_exported_class_has_or_is_using_name_1_from_private_module_2,
                 &diagnostics::Public_static_property_0_of_exported_class_has_or_is_using_private_name_1,
             ));
-        } else if node.parent().unwrap().kind == Kind::ClassDeclaration || node.kind == Kind::Parameter {
+        } else if node.parent().unwrap().kind() == Kind::ClassDeclaration || node.kind() == Kind::Parameter {
             return Some(select_diagnostic_based_on_module_name(
                 symbol_accessibility_result,
                 &diagnostics::Public_property_0_of_exported_class_has_or_is_using_name_1_from_external_module_2_but_cannot_be_named,
@@ -229,7 +229,7 @@ pub(crate) fn get_variable_declaration_type_visibility_diagnostic_message(node: 
 
 // diagnostics.go:263
 pub(crate) fn get_accessor_declaration_type_visibility_diagnostic_message(node: P<Node>, symbol_accessibility_result: &SymbolAccessibilityResult) -> &'static Message {
-    if node.kind == Kind::SetAccessor {
+    if node.kind() == Kind::SetAccessor {
         // Getters can infer the return type from the returned expression, but setters cannot, so the
         // "_from_external_module_1_but_cannot_be_named" case cannot occur.
         if ast::is_static(node) {
@@ -264,7 +264,7 @@ pub(crate) fn get_accessor_declaration_type_visibility_diagnostic_message(node: 
 
 // diagnostics.go:299
 pub(crate) fn get_return_type_visibility_diagnostic_message(node: P<Node>, symbol_accessibility_result: &SymbolAccessibilityResult) -> &'static Message {
-    match node.kind {
+    match node.kind() {
         Kind::ConstructSignature => {
             // Interfaces cannot have return types that cannot be named
             select_diagnostic_based_on_module_name_no_name_check(
@@ -298,7 +298,7 @@ pub(crate) fn get_return_type_visibility_diagnostic_message(node: P<Node>, symbo
                     &diagnostics::Return_type_of_public_static_method_from_exported_class_has_or_is_using_name_0_from_private_module_1,
                     &diagnostics::Return_type_of_public_static_method_from_exported_class_has_or_is_using_private_name_0,
                 )
-            } else if node.parent().unwrap().kind == Kind::ClassDeclaration {
+            } else if node.parent().unwrap().kind() == Kind::ClassDeclaration {
                 select_diagnostic_based_on_module_name(
                     symbol_accessibility_result,
                     &diagnostics::Return_type_of_public_method_from_exported_class_has_or_is_using_name_0_from_external_module_1_but_cannot_be_named,
@@ -327,7 +327,7 @@ pub(crate) fn get_return_type_visibility_diagnostic_message(node: P<Node>, symbo
 // diagnostics.go:358
 pub(crate) fn get_parameter_declaration_type_visibility_diagnostic_message(node: P<Node>, symbol_accessibility_result: &SymbolAccessibilityResult) -> &'static Message {
     let parent = node.parent().unwrap();
-    match parent.kind {
+    match parent.kind() {
         Kind::Constructor => select_diagnostic_based_on_module_name(
             symbol_accessibility_result,
             &diagnostics::Parameter_0_of_constructor_from_exported_class_has_or_is_using_name_1_from_external_module_2_but_cannot_be_named,
@@ -370,7 +370,7 @@ pub(crate) fn get_parameter_declaration_type_visibility_diagnostic_message(node:
                     &diagnostics::Parameter_0_of_public_static_method_from_exported_class_has_or_is_using_name_1_from_private_module_2,
                     &diagnostics::Parameter_0_of_public_static_method_from_exported_class_has_or_is_using_private_name_1,
                 )
-            } else if parent.parent().unwrap().kind == Kind::ClassDeclaration {
+            } else if parent.parent().unwrap().kind() == Kind::ClassDeclaration {
                 select_diagnostic_based_on_module_name(
                     symbol_accessibility_result,
                     &diagnostics::Parameter_0_of_public_method_from_exported_class_has_or_is_using_name_1_from_external_module_2_but_cannot_be_named,
@@ -408,7 +408,7 @@ pub(crate) fn get_parameter_declaration_type_visibility_diagnostic_message(node:
 pub(crate) fn get_type_parameter_constraint_visibility_diagnostic_message(node: P<Node>, _symbol_accessibility_result: &SymbolAccessibilityResult) -> &'static Message {
     // Type parameter constraints are named by user so we should always be able to name it
     let parent = node.parent().unwrap();
-    match parent.kind {
+    match parent.kind() {
         Kind::ClassDeclaration => &diagnostics::Type_parameter_0_of_exported_class_has_or_is_using_private_name_1,
         Kind::InterfaceDeclaration => &diagnostics::Type_parameter_0_of_exported_interface_has_or_is_using_private_name_1,
         Kind::MappedType => &diagnostics::Type_parameter_0_of_exported_mapped_object_type_is_using_private_name_1,
@@ -417,7 +417,7 @@ pub(crate) fn get_type_parameter_constraint_visibility_diagnostic_message(node: 
         Kind::MethodDeclaration | Kind::MethodSignature => {
             if ast::is_static(parent) {
                 &diagnostics::Type_parameter_0_of_public_static_method_from_exported_class_has_or_is_using_private_name_1
-            } else if parent.parent().unwrap().kind == Kind::ClassDeclaration {
+            } else if parent.parent().unwrap().kind() == Kind::ClassDeclaration {
                 &diagnostics::Type_parameter_0_of_public_method_from_exported_class_has_or_is_using_private_name_1
             } else {
                 &diagnostics::Type_parameter_0_of_method_from_exported_interface_has_or_is_using_private_name_1
@@ -517,7 +517,7 @@ pub(crate) fn add_parent_declaration_related_info(node: P<Node>, diag: P<Diagnos
     if !ast::is_export_assignment(parent_declaration) && parent_declaration.name().is_some() {
         target_str = scanner::get_text_of_node(parent_declaration.name().unwrap());
     }
-    diag.add_related_info(create_diagnostic_for_node(parent_declaration, get_related_suggestion_by_declaration_kind(parent_declaration.kind).unwrap(), &[&target_str]));
+    diag.add_related_info(create_diagnostic_for_node(parent_declaration, get_related_suggestion_by_declaration_kind(parent_declaration.kind()).unwrap(), &[&target_str]));
 }
 
 // diagnostics.go:586
@@ -529,35 +529,35 @@ pub(crate) fn create_accessor_type_error(node: P<Node>) -> P<Diagnostic> {
     if ast::is_set_accessor_declaration(node) && !node.parameters().is_empty() {
         target_node = node.parameters()[0];
     }
-    let diag = create_diagnostic_for_node(target_node, get_error_by_declaration_kind(node.kind).unwrap(), &[]);
+    let diag = create_diagnostic_for_node(target_node, get_error_by_declaration_kind(node.kind()).unwrap(), &[]);
     if let Some(set_accessor) = set_accessor {
-        diag.add_related_info(create_diagnostic_for_node(set_accessor, get_related_suggestion_by_declaration_kind(set_accessor.kind).unwrap(), &[]));
+        diag.add_related_info(create_diagnostic_for_node(set_accessor, get_related_suggestion_by_declaration_kind(set_accessor.kind()).unwrap(), &[]));
     }
     if let Some(get_accessor) = get_accessor {
-        diag.add_related_info(create_diagnostic_for_node(get_accessor, get_related_suggestion_by_declaration_kind(get_accessor.kind).unwrap(), &[]));
+        diag.add_related_info(create_diagnostic_for_node(get_accessor, get_related_suggestion_by_declaration_kind(get_accessor.kind()).unwrap(), &[]));
     }
     diag
 }
 
 // diagnostics.go:604
 pub(crate) fn create_object_literal_error(node: P<Node>) -> P<Diagnostic> {
-    let diag = create_diagnostic_for_node(node, get_error_by_declaration_kind(node.kind).unwrap(), &[]);
+    let diag = create_diagnostic_for_node(node, get_error_by_declaration_kind(node.kind()).unwrap(), &[]);
     add_parent_declaration_related_info(node, diag);
     diag
 }
 
 // diagnostics.go:610
 pub(crate) fn create_array_literal_error(node: P<Node>) -> P<Diagnostic> {
-    let diag = create_diagnostic_for_node(node, get_error_by_declaration_kind(node.kind).unwrap(), &[]);
+    let diag = create_diagnostic_for_node(node, get_error_by_declaration_kind(node.kind()).unwrap(), &[]);
     add_parent_declaration_related_info(node, diag);
     diag
 }
 
 // diagnostics.go:616
 pub(crate) fn create_return_type_error(node: P<Node>) -> P<Diagnostic> {
-    let diag = create_diagnostic_for_node(node, get_error_by_declaration_kind(node.kind).unwrap(), &[]);
+    let diag = create_diagnostic_for_node(node, get_error_by_declaration_kind(node.kind()).unwrap(), &[]);
     add_parent_declaration_related_info(node, diag);
-    diag.add_related_info(create_diagnostic_for_node(node, get_related_suggestion_by_declaration_kind(node.kind).unwrap(), &[]));
+    diag.add_related_info(create_diagnostic_for_node(node, get_related_suggestion_by_declaration_kind(node.kind()).unwrap(), &[]));
     diag
 }
 
@@ -568,8 +568,8 @@ pub(crate) fn create_binding_element_error(node: P<Node>) -> P<Diagnostic> {
 
 // diagnostics.go:627
 pub(crate) fn create_variable_or_property_error(node: P<Node>) -> P<Diagnostic> {
-    let diag = create_diagnostic_for_node(node, get_error_by_declaration_kind(node.kind).unwrap(), &[]);
-    diag.add_related_info(create_diagnostic_for_node(node, get_related_suggestion_by_declaration_kind(node.kind).unwrap(), &[&scanner::get_text_of_node(node.name().unwrap())]));
+    let diag = create_diagnostic_for_node(node, get_error_by_declaration_kind(node.kind()).unwrap(), &[]);
+    diag.add_related_info(create_diagnostic_for_node(node, get_related_suggestion_by_declaration_kind(node.kind()).unwrap(), &[&scanner::get_text_of_node(node.name().unwrap())]));
     diag
 }
 
@@ -611,17 +611,17 @@ pub(crate) fn create_expression_error_ex(node: P<Node>, mut diagnostic_message: 
 
     if Some(parent_declaration) == parent {
         if diagnostic_message.is_none() {
-            diagnostic_message = get_error_by_declaration_kind(parent_declaration.kind);
+            diagnostic_message = get_error_by_declaration_kind(parent_declaration.kind());
         }
         let diag = create_diagnostic_for_node(node, diagnostic_message.unwrap(), &[]);
-        diag.add_related_info(create_diagnostic_for_node(parent_declaration, get_related_suggestion_by_declaration_kind(parent_declaration.kind).unwrap(), &[&target_str]));
+        diag.add_related_info(create_diagnostic_for_node(parent_declaration, get_related_suggestion_by_declaration_kind(parent_declaration.kind()).unwrap(), &[&target_str]));
         return diag;
     }
     if diagnostic_message.is_none() {
         diagnostic_message = Some(&diagnostics::Expression_type_can_t_be_inferred_with_isolatedDeclarations);
     }
     let diag = create_diagnostic_for_node(node, diagnostic_message.unwrap(), &[]);
-    diag.add_related_info(create_diagnostic_for_node(parent_declaration, get_related_suggestion_by_declaration_kind(parent_declaration.kind).unwrap(), &[&target_str]));
+    diag.add_related_info(create_diagnostic_for_node(parent_declaration, get_related_suggestion_by_declaration_kind(parent_declaration.kind()).unwrap(), &[&target_str]));
     diag.add_related_info(create_diagnostic_for_node(node, &diagnostics::Add_satisfies_and_a_type_assertion_to_this_expression_satisfies_T_as_T_to_make_the_type_explicit, &[]));
     diag
 }
@@ -636,13 +636,13 @@ pub(crate) fn create_get_isolated_declaration_errors(resolver: Resolver) -> GetI
         if !add_undefined && node.initializer().is_some() {
             return create_expression_error(node.initializer().unwrap());
         }
-        let mut message = get_error_by_declaration_kind(node.kind);
+        let mut message = get_error_by_declaration_kind(node.kind());
         if add_undefined {
             message = Some(&diagnostics::Declaration_emit_for_this_parameter_requires_implicitly_adding_undefined_to_its_type_This_is_not_supported_with_isolatedDeclarations);
         }
         let diag = create_diagnostic_for_node(node, message.unwrap(), &[]);
         let target_str = scanner::get_text_of_node(node.name().unwrap());
-        diag.add_related_info(create_diagnostic_for_node(node, get_related_suggestion_by_declaration_kind(node.kind).unwrap(), &[&target_str]));
+        diag.add_related_info(create_diagnostic_for_node(node, get_related_suggestion_by_declaration_kind(node.kind()).unwrap(), &[&target_str]));
         diag
     };
 
@@ -657,7 +657,7 @@ pub(crate) fn create_get_isolated_declaration_errors(resolver: Resolver) -> GetI
         if ast::is_entity_name(node) || ast::is_entity_name_expression(node) {
             return create_entity_in_type_node_error(node);
         }
-        match node.kind {
+        match node.kind() {
             Kind::GetAccessor | Kind::SetAccessor => create_accessor_type_error(node),
             Kind::ComputedPropertyName | Kind::ShorthandPropertyAssignment | Kind::SpreadAssignment => create_object_literal_error(node),
             Kind::ArrayLiteralExpression | Kind::SpreadElement => create_array_literal_error(node),

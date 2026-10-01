@@ -29,7 +29,7 @@ impl DeclarationTransformer {
         if self.needs_declare.get() && !is_always_type(node) {
             additions = ModifierFlags::Ambient;
         }
-        let parent_is_file = node.parent().unwrap().kind == Kind::SourceFile;
+        let parent_is_file = node.parent().unwrap().kind() == Kind::SourceFile;
         if !parent_is_file {
             mask ^= ModifierFlags::Ambient;
             additions = ModifierFlags::None;
@@ -137,7 +137,7 @@ impl DeclarationTransformer {
 
     // transform.go:2447
     pub(crate) fn visit_binding_name(&self, node: P<Node>) -> P<Node> {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier | Kind::OmittedExpression => node,
             Kind::ArrayBindingPattern | Kind::ObjectBindingPattern => self.binding_name_visitor().visit_each_child(Some(node)).unwrap(),
             Kind::BindingElement => {
@@ -159,7 +159,7 @@ impl DeclarationTransformer {
             return None;
         }
         let import_equals = decl.as_import_equals_declaration();
-        if import_equals.module_reference.kind == Kind::ExternalModuleReference {
+        if import_equals.module_reference.kind() == Kind::ExternalModuleReference {
             // Rewrite external module names if necessary
             let specifier = ast::get_external_module_import_equals_declaration_expression(decl);
             Some(self.factory().update_import_equals_declaration(
@@ -212,7 +212,7 @@ impl DeclarationTransformer {
                 import_decl.attributes,
             ));
         };
-        if named_bindings.kind == Kind::NamespaceImport {
+        if named_bindings.kind() == Kind::NamespaceImport {
             // Namespace import (optionally with visible default)
             let mut named_bindings_result = None;
             if self.resolver.is_declaration_visible(named_bindings) {
@@ -345,7 +345,7 @@ impl DeclarationTransformer {
 
 // transform.go:2668
 pub(crate) fn is_not_declare_modifier(mod_: P<Node>) -> bool {
-    mod_.kind != Kind::DeclareKeyword
+    mod_.kind() != Kind::DeclareKeyword
 }
 
 impl DeclarationTransformer {
@@ -422,7 +422,7 @@ impl DeclarationTransformer {
         };
 
         let ns = ast::get_leftmost_access_expression(left);
-        if ns.kind != Kind::Identifier {
+        if ns.kind() != Kind::Identifier {
             return;
         }
 
@@ -646,7 +646,7 @@ impl DeclarationTransformer {
             let mut modifiers = None;
             let mut name = None;
             let mut host: Vec<P<Node>> = Vec::new();
-            if let Some(n) = n.filter(|n| n.kind == Kind::SyntaxList) {
+            if let Some(n) = n.filter(|n| n.kind() == Kind::SyntaxList) {
                 // find the first named syntax list element and use its' name & modifiers
                 for c in n.iter_children() {
                     if let Some(c_name) = c.name() {
@@ -678,7 +678,7 @@ impl DeclarationTransformer {
 
 // transform.go:2980
 pub(crate) fn extract_expando_host_params(node: P<Node>) -> (Option<P<NodeList>>, Option<P<NodeList>>, Option<P<Node>>) {
-    match node.kind {
+    match node.kind() {
         Kind::FunctionExpression => {
             let fn_ = node.as_function_expression();
             (fn_.type_parameters(), fn_.parameters(), fn_.asterisk_token())

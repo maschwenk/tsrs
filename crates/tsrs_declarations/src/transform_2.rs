@@ -206,7 +206,7 @@ impl DeclarationTransformer {
         let f = self.factory();
         // Reuse the same name node so unique names resolve consistently with the class/export
         let ns_name = cjs_export_assignment_name;
-        let mut members: &'static [P<Node>] = if content.kind == Kind::SyntaxList {
+        let mut members: &'static [P<Node>] = if content.kind() == Kind::SyntaxList {
             content.as_syntax_list().children
         } else {
             alloc_vec(vec![content])
@@ -261,7 +261,7 @@ impl DeclarationTransformer {
     // transform.go:1608
     pub(crate) fn rewrite_module_specifier(&self, parent: P<Node>, input: Option<P<Node>>) -> Option<P<Node>> {
         let input = input?;
-        self.result_has_external_module_indicator.set(self.result_has_external_module_indicator.get() || (parent.kind != Kind::ModuleDeclaration && parent.kind != Kind::ImportType));
+        self.result_has_external_module_indicator.set(self.result_has_external_module_indicator.get() || (parent.kind() != Kind::ModuleDeclaration && parent.kind() != Kind::ImportType));
         Some(input)
     }
 
@@ -351,7 +351,7 @@ impl DeclarationTransformer {
         } else if ast::is_function_like(node) {
             type_node = self.resolver.create_return_type_of_signature_declaration(self.emit_context(), node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
         } else {
-            panic!("Unhandled node kind in ensureType: {:?}", node.kind);
+            panic!("Unhandled node kind in ensureType: {:?}", node.kind());
         }
 
         self.state.error_name_node.set(old_error_name_node);
@@ -385,13 +385,13 @@ impl DeclarationTransformer {
         if self.should_strip_internal(Some(input)) {
             return None;
         }
-        if input.kind == Kind::ImportEqualsDeclaration {
+        if input.kind() == Kind::ImportEqualsDeclaration {
             return self.transform_import_equals_declaration(input);
         }
-        if input.kind == Kind::ImportDeclaration || input.kind == Kind::JSImportDeclaration {
+        if input.kind() == Kind::ImportDeclaration || input.kind() == Kind::JSImportDeclaration {
             let res = self.transform_import_declaration(input);
             if let Some(res) = res {
-                if res.kind != Kind::ImportDeclaration {
+                if res.kind() != Kind::ImportDeclaration {
                     // Go: `res := res.Clone(tx.Factory()); res.Kind = ast.KindImportDeclaration`
                     return Some(ast::clone_as_import_declaration(res, self.factory().as_node_factory()));
                 }
@@ -430,7 +430,7 @@ impl DeclarationTransformer {
         }
         let save_needs_declare = self.needs_declare.get();
 
-        let result = match input.kind {
+        let result = match input.kind() {
             Kind::TypeAliasDeclaration | Kind::JSTypeAliasDeclaration => Some(self.transform_type_alias_declaration(input)),
             Kind::InterfaceDeclaration => Some(self.transform_interface_declaration(input)),
             Kind::FunctionDeclaration => Some(self.transform_function_declaration(input)),
@@ -439,7 +439,7 @@ impl DeclarationTransformer {
             Kind::VariableStatement => self.transform_variable_statement(input),
             Kind::EnumDeclaration => Some(self.transform_enum_declaration(input)),
             // Anything left unhandled is an error, so this should be unreachable
-            _ => panic!("Unhandled top-level node in declaration emit: {:?}", input.kind),
+            _ => panic!("Unhandled top-level node in declaration emit: {:?}", input.kind()),
         };
 
         self.enclosing_declaration.set(previous_enclosing_declaration);
@@ -510,7 +510,7 @@ impl DeclarationTransformer {
         }
         let attributes = self.visit_fn(input.attributes());
 
-        if let Some(inner) = inner.filter(|inner| inner.kind == Kind::ModuleBlock) {
+        if let Some(inner) = inner.filter(|inner| inner.kind() == Kind::ModuleBlock) {
             let old_needs_scope_fix = self.needs_scope_fix_marker.get();
             let old_has_scope_fix = self.result_has_scope_marker.get();
             self.result_has_scope_marker.set(false);
@@ -589,7 +589,7 @@ impl DeclarationTransformer {
                     continue;
                 }
                 *self.state.get_symbol_accessibility_diagnostic.borrow_mut() = create_get_symbol_accessibility_diagnostic_for_node(param);
-                if param.name().unwrap().kind == Kind::Identifier {
+                if param.name().unwrap().kind() == Kind::Identifier {
                     let updated = f.new_property_declaration(self.ensure_modifiers(param), param.name().unwrap(), param.question_token(), self.ensure_type(param, false), self.ensure_no_initializer(param));
                     self.preserve_js_doc(updated, param);
                     parameter_properties.push(updated);
@@ -651,7 +651,7 @@ impl DeclarationTransformer {
 
             if let Some(extends_clause) = extends_clause {
                 let extends_expression = extends_clause.as_expression_with_type_arguments().expression;
-                if !ast::is_entity_name_expression(extends_expression) && extends_expression.kind != Kind::NullKeyword {
+                if !ast::is_entity_name_expression(extends_expression) && extends_expression.kind() != Kind::NullKeyword {
                     self.resolver.lock(|c| self.tracker.report_inference_fallback(c, extends_expression)); // Add an isolated declarations error on this extends clause
                     let mut old_id = "default";
                     if ast::node_is_present(decl.name()) && ast::is_identifier(decl.name().unwrap()) && !decl.name().unwrap().text().is_empty() {
@@ -783,7 +783,7 @@ pub(crate) fn is_class_extending_null(node: Option<P<Node>>) -> bool {
         return false;
     }
     let expr = types.nodes[0].as_expression_with_type_arguments().expression;
-    expr.kind == Kind::NullKeyword
+    expr.kind() == Kind::NullKeyword
 }
 
 impl DeclarationTransformer {

@@ -884,7 +884,7 @@ impl Parser {
                         self.rewind(state);
                         break;
                     };
-                    match child.kind {
+                    match child.kind() {
                         Kind::JSDocParameterTag | Kind::JSDocPropertyTag => {
                             children.get_or_insert_with(Vec::new).push(child);
                         }
@@ -899,7 +899,7 @@ impl Parser {
                     }
                 }
                 if let Some(children) = children {
-                    let is_array_type = type_expression.type_node().unwrap().kind == Kind::ArrayType;
+                    let is_array_type = type_expression.type_node().unwrap().kind() == Kind::ArrayType;
                     let literal = self.factory.new_jsdoc_type_literal(alloc_vec(children), is_array_type);
                     let literal = self.finish_node(literal, pos);
                     let node = self.factory.new_jsdoc_type_expression(literal);
@@ -1118,7 +1118,7 @@ impl Parser {
                     break;
                 };
                 has_children = true;
-                match child.kind {
+                match child.kind() {
                     Kind::JSDocTemplateTag => {
                         self.parse_error_at_range(
                             child.tag_name().loc(),
@@ -1149,7 +1149,7 @@ impl Parser {
                 }
             }
             if has_children {
-                let is_array_type = type_expression.is_some_and(|t| t.type_node().unwrap().kind == Kind::ArrayType);
+                let is_array_type = type_expression.is_some_and(|t| t.type_node().unwrap().kind() == Kind::ArrayType);
                 let first_pos = jsdoc_property_tags.first().map(|t| t.pos());
                 let jsdoc_type_literal = self.factory.new_jsdoc_type_literal(alloc_vec(jsdoc_property_tags), is_array_type);
                 let child_type_expression = child_type_tag.map(|t| t.as_jsdoc_type_tag().type_expression);
@@ -1203,7 +1203,7 @@ impl Parser {
                 self.rewind(state);
                 break;
             };
-            if child.kind == Kind::JSDocTemplateTag {
+            if child.kind() == Kind::JSDocTemplateTag {
                 self.parse_error_at_range(
                     child.tag_name().loc(),
                     &diagnostics::A_JSDoc_template_tag_may_not_follow_a_typedef_callback_or_overload_tag,
@@ -1223,7 +1223,7 @@ impl Parser {
         let state = self.mark();
         if self.parse_optional_jsdoc(Kind::AtToken) {
             let tag = self.parse_tag(&[], indent);
-            if tag.kind == Kind::JSDocReturnTag {
+            if tag.kind() == Kind::JSDocReturnTag {
                 return_tag = Some(tag);
             }
         }
@@ -1283,7 +1283,7 @@ impl Parser {
                     if can_parse_tag && self.scanner.can_follow_jsdoc_at() {
                         let child = self.try_parse_child_tag(target, indent);
                         if let (Some(child), Some(name)) = (child, name) {
-                            if (child.kind == Kind::JSDocParameterTag || child.kind == Kind::JSDocPropertyTag)
+                            if (child.kind() == Kind::JSDocParameterTag || child.kind() == Kind::JSDocPropertyTag)
                                 && (ast::is_identifier(child.name().unwrap())
                                     || !texts_equal(name, child.name().unwrap().as_qualified_name().left))
                             {
@@ -1501,7 +1501,7 @@ fn is_jsdoc_link_tag(kind: &str) -> bool {
 }
 
 fn is_object_or_object_array_type_reference(node: P<Node>) -> bool {
-    match node.kind {
+    match node.kind() {
         Kind::ObjectKeyword => true,
         Kind::ArrayType => is_object_or_object_array_type_reference(node.as_array_type_node().element_type),
         _ => {

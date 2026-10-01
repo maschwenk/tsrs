@@ -812,7 +812,7 @@ fn test_node_visitor_environment_hooks() {
     let ec = new_emit_context();
     let file = parse_type_script("function f(a = 1, { b } = {}) {\n    return a;\n}", false);
     let visit: VisitFn = std::rc::Rc::new(move |v, n| {
-        if n.kind == Kind::NumericLiteral {
+        if n.kind() == Kind::NumericLiteral {
             ec.add_variable_declaration(ec.factory.new_temp_variable());
             return Some(n);
         }

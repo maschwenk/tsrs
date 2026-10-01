@@ -66,7 +66,7 @@ impl Parser {
     }
 
     pub(crate) fn reparse_unhosted(&mut self, tag: P<Node>, parent: P<Node>, js_doc: P<Node>) {
-        match tag.kind {
+        match tag.kind() {
             Kind::JSDocTypedefTag => {
                 let Some(type_expression) = tag.type_expression() else {
                     return;
@@ -83,12 +83,12 @@ impl Parser {
                 let type_alias = self.factory.new_js_type_alias_declaration(modifiers, name, None, None);
                 let type_parameters = self.gather_type_parameters(js_doc, true /*typedefOrCallback*/);
                 type_alias.as_type_alias_declaration().type_parameters.set(type_parameters);
-                let t = match type_expression.kind {
+                let t = match type_expression.kind() {
                     Kind::JSDocTypeExpression => self.add_deep_clone_reparse(type_expression.type_node()),
                     Kind::JSDocTypeLiteral => self.reparse_jsdoc_type_literal(Some(type_expression)),
                     _ => panic!(
                         "typedef tag type expression should be a name reference or a type expression{:?}",
-                        type_expression.kind
+                        type_expression.kind()
                     ),
                 };
                 type_alias.as_type_alias_declaration().type_.set(t);
@@ -162,7 +162,7 @@ impl Parser {
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {
         let cloned_modifiers = self.factory.deep_clone_reparse_modifiers(modifiers);
-        let signature = match fun.kind {
+        let signature = match fun.kind() {
             Kind::FunctionDeclaration => {
                 let checked = self.check_non_identifier_name(fun.name());
                 let name = self.factory.deep_clone_reparse(checked);
@@ -178,17 +178,17 @@ impl Parser {
                 let any = self.factory.new_keyword_type_node(Kind::AnyKeyword);
                 self.factory.new_function_type_node(None, None, Some(any))
             }
-            _ => panic!("Unexpected kind {:?}", fun.kind),
+            _ => panic!("Unexpected kind {:?}", fun.kind()),
         };
 
-        if tag.kind != Kind::JSDocCallbackTag {
+        if tag.kind() != Kind::JSDocCallbackTag {
             let type_parameters = self.gather_type_parameters(js_doc, false /*typedefOrCallback*/);
             signature.function_like_data().unwrap().type_parameters.set(type_parameters);
         }
         let mut parameters: Vec<P<Node>> = Vec::new();
         for (pi, &param) in js_signature.parameters().iter().enumerate() {
             let parameter;
-            if param.kind == Kind::JSDocThisTag {
+            if param.kind() == Kind::JSDocThisTag {
                 let this_tag = param.as_jsdoc_this_tag();
                 let this_ident = self.factory.new_identifier("this");
                 this_ident.set_loc(param.loc());
@@ -198,7 +198,7 @@ impl Parser {
                     let t = self.add_deep_clone_reparse(type_expression.type_node());
                     parameter.as_parameter_declaration().type_.set(t);
                 }
-            } else if param.kind == Kind::JSDocParameterTag || param.kind == Kind::JSDocPropertyTag {
+            } else if param.kind() == Kind::JSDocParameterTag || param.kind() == Kind::JSDocPropertyTag {
                 let jsparam = param.as_jsdoc_parameter_or_property_tag();
                 // Skip sub-property parameters (e.g., @param x.y) - these have QualifiedNames
                 // and describe properties of a parent parameter, not standalone parameters.
@@ -209,7 +209,7 @@ impl Parser {
                 let mut param_type = None;
 
                 if let Some(type_expression) = jsparam.type_expression {
-                    if type_expression.type_node().unwrap().kind == Kind::JSDocVariadicType {
+                    if type_expression.type_node().unwrap().kind() == Kind::JSDocVariadicType {
                         let token = self.factory.new_token(Kind::DotDotDotToken);
                         token.set_loc(param.loc());
                         token.set_flags(self.context_flags | NodeFlags::Reparsed);
@@ -251,7 +251,7 @@ impl Parser {
                 let question_token = self.make_question_if_optional(param);
                 parameter = self.factory.new_parameter_declaration(None, dot_dot_dot_token, name, question_token, param_type, None);
             } else {
-                panic!("Unexpected kind {:?}", param.kind);
+                panic!("Unexpected kind {:?}", param.kind());
             }
             self.finish_reparsed_node(parameter, param);
             parameters.push(parameter);
@@ -268,7 +268,7 @@ impl Parser {
             }
         }
         let mut loc = js_signature;
-        if tag.kind == Kind::JSDocOverloadTag {
+        if tag.kind() == Kind::JSDocOverloadTag {
             loc = tag.tag_name();
         }
         self.finish_reparsed_node(signature, loc);
@@ -277,17 +277,17 @@ impl Parser {
 
     pub(crate) fn reparse_jsdoc_type_literal(&mut self, t: Option<P<Node>>) -> Option<P<Node>> {
         let t = t?;
-        if t.kind == Kind::JSDocTypeLiteral {
+        if t.kind() == Kind::JSDocTypeLiteral {
             let jstypeliteral = t.as_jsdoc_type_literal();
             let is_array_type = jstypeliteral.is_array_type;
             let mut properties: Vec<P<Node>> = Vec::new();
             for &prop in jstypeliteral.jsdoc_property_tags {
-                if prop.kind != Kind::JSDocPropertyTag && prop.kind != Kind::JSDocParameterTag {
+                if prop.kind() != Kind::JSDocPropertyTag && prop.kind() != Kind::JSDocParameterTag {
                     continue;
                 }
                 let jsprop = prop.as_jsdoc_parameter_or_property_tag();
                 let mut name = prop.name().unwrap();
-                if name.kind == Kind::QualifiedName {
+                if name.kind() == Kind::QualifiedName {
                     name = name.as_qualified_name().right;
                 }
                 if ast::is_identifier(name) && !scanner::is_valid_identifier(name.as_identifier().text()) {
@@ -384,9 +384,9 @@ impl Parser {
 
     pub(crate) fn reparse_hosted(&mut self, tag: P<Node>, parent: P<Node>, js_doc: P<Node>) {
         let mut parent = parent;
-        match tag.kind {
+        match tag.kind() {
             Kind::JSDocTypeTag => {
-                match parent.kind {
+                match parent.kind() {
                     Kind::VariableStatement => {
                         if let Some(declaration_list) = Some(parent.as_variable_statement().declaration_list) {
                             for &declaration in declaration_list.as_variable_declaration_list().declarations.nodes() {
@@ -422,7 +422,7 @@ impl Parser {
                     }
                     Kind::ExpressionStatement => {
                         let expression = parent.expression().unwrap();
-                        if expression.kind == Kind::BinaryExpression {
+                        if expression.kind() == Kind::BinaryExpression {
                             let bin = expression;
                             let kind = ast::get_assignment_declaration_kind(bin);
                             if kind != ast::JSDeclarationKind::None && tag.type_expression().is_some() {
@@ -453,7 +453,7 @@ impl Parser {
                     }
                 }
             }
-            Kind::JSDocSatisfiesTag => match parent.kind {
+            Kind::JSDocSatisfiesTag => match parent.kind() {
                 Kind::VariableStatement => {
                     if let Some(declaration_list) = Some(parent.as_variable_statement().declaration_list) {
                         for &declaration in declaration_list.as_variable_declaration_list().declarations.nodes() {
@@ -496,7 +496,7 @@ impl Parser {
                 }
                 Kind::ExpressionStatement => {
                     let expression = parent.expression().unwrap();
-                    if expression.kind == Kind::BinaryExpression {
+                    if expression.kind() == Kind::BinaryExpression {
                         let bin = expression.as_binary_expression();
                         let kind = ast::get_assignment_declaration_kind(expression);
                         if kind != ast::JSDeclarationKind::None && tag.type_expression().is_some() {
@@ -516,7 +516,7 @@ impl Parser {
                         fun.function_like_data().unwrap().type_parameters.set(type_parameters);
                         self.finish_mutated_node(fun);
                     }
-                } else if parent.kind == Kind::ClassDeclaration || parent.kind == Kind::ClassExpression {
+                } else if parent.kind() == Kind::ClassDeclaration || parent.kind() == Kind::ClassExpression {
                     let class = parent.class_like_data().unwrap();
                     if class.type_parameters.get().is_none() {
                         let type_parameters = self.gather_type_parameters(js_doc, false /*typedefOrCallback*/);
@@ -549,7 +549,7 @@ impl Parser {
                 if let Some(fun) = get_function_like_host(parent) {
                     let params = fun.parameters();
                     if params.is_empty()
-                        || (params[0].name().unwrap().kind != Kind::ThisKeyword && !ast::is_this_identifier(params[0].name().unwrap()))
+                        || (params[0].name().unwrap().kind() != Kind::ThisKeyword && !ast::is_this_identifier(params[0].name().unwrap()))
                     {
                         let this_identifier = self.factory.new_identifier("this");
                         let this_param = self.factory.new_parameter_declaration(
@@ -587,10 +587,10 @@ impl Parser {
                 }
             }
             Kind::JSDocReadonlyTag | Kind::JSDocPrivateTag | Kind::JSDocPublicTag | Kind::JSDocProtectedTag | Kind::JSDocOverrideTag => {
-                if parent.kind == Kind::ExpressionStatement {
+                if parent.kind() == Kind::ExpressionStatement {
                     parent = parent.expression().unwrap();
                 }
-                let applies = match parent.kind {
+                let applies = match parent.kind() {
                     // In object literals these aren't class-like members, so JSDoc modifiers like @override
                     // or @readonly aren't real modifiers there; reparsing them produces spurious grammar errors (#4437).
                     Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => {
@@ -603,7 +603,7 @@ impl Parser {
                     _ => false,
                 };
                 if applies {
-                    let keyword = match tag.kind {
+                    let keyword = match tag.kind() {
                         Kind::JSDocReadonlyTag => Kind::ReadonlyKeyword,
                         Kind::JSDocPrivateTag => Kind::PrivateKeyword,
                         Kind::JSDocPublicTag => Kind::PublicKeyword,
@@ -713,7 +713,7 @@ impl Parser {
         let data = parameter.as_jsdoc_parameter_or_property_tag();
         let mut question_token = None;
         if data.is_bracketed
-            || data.type_expression.is_some_and(|t| t.type_node().unwrap().kind == Kind::JSDocOptionalType)
+            || data.type_expression.is_some_and(|t| t.type_node().unwrap().kind() == Kind::JSDocOptionalType)
         {
             let token = self.factory.new_token(Kind::QuestionToken);
             token.set_loc(parameter.loc());
@@ -745,7 +745,7 @@ impl Parser {
     // the identifier itself. For "A.B.C", it returns the identifier "C".
     pub(crate) fn get_innermost_name_of_jsdoc_namespace(&mut self, full_name: Option<P<Node>>) -> Option<P<Node>> {
         let mut full_name = full_name?;
-        while full_name.kind == Kind::ModuleDeclaration {
+        while full_name.kind() == Kind::ModuleDeclaration {
             let Some(body) = full_name.body() else {
                 return full_name.name();
             };
@@ -790,7 +790,7 @@ fn find_matching_parameter(fun: P<Node>, parameter_tag: P<Node>, js_doc: P<Node>
     let mut tag_index: i32 = -1;
     let mut param_count: i32 = -1;
     for &tag in js_doc.as_jsdoc().tags.unwrap().nodes() {
-        if tag.kind == Kind::JSDocParameterTag {
+        if tag.kind() == Kind::JSDocParameterTag {
             param_count += 1;
             if tag == parameter_tag {
                 tag_index = param_count;
@@ -800,9 +800,9 @@ fn find_matching_parameter(fun: P<Node>, parameter_tag: P<Node>, js_doc: P<Node>
     }
     for (parameter_index, &parameter) in fun.parameters().iter().enumerate() {
         let parameter_index = parameter_index as i32;
-        if parameter.name().unwrap().kind == Kind::Identifier {
+        if parameter.name().unwrap().kind() == Kind::Identifier {
             let tag_name = parameter_tag.name().unwrap();
-            if tag_name.kind == Kind::Identifier
+            if tag_name.kind() == Kind::Identifier
                 && ((parameter.name().unwrap().text() == tag_name.text()) || (parameter_index == tag_index && tag_name.text().is_empty()))
             {
                 return Some(parameter);
@@ -817,7 +817,7 @@ fn find_matching_parameter(fun: P<Node>, parameter_tag: P<Node>, js_doc: P<Node>
 fn skip_satisfies_expressions(node: Option<P<Node>>) -> Option<P<Node>> {
     let mut node = node;
     while let Some(n) = node {
-        if n.kind != Kind::SatisfiesExpression {
+        if n.kind() != Kind::SatisfiesExpression {
             break;
         }
         node = n.expression();
@@ -827,7 +827,7 @@ fn skip_satisfies_expressions(node: Option<P<Node>>) -> Option<P<Node>> {
 
 fn get_function_like_host(host: P<Node>) -> Option<P<Node>> {
     let mut fun = Some(host);
-    match host.kind {
+    match host.kind() {
         Kind::VariableStatement => {
             let nodes = host.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes();
             if !nodes.is_empty() {
@@ -854,7 +854,7 @@ fn get_function_like_host(host: P<Node>) -> Option<P<Node>> {
 
 fn get_class_like_data(parent: P<Node>) -> Option<&'static ClassLikeBase> {
     let mut class = None;
-    match parent.kind {
+    match parent.kind() {
         Kind::ClassDeclaration => {
             class = parent.class_like_data();
         }

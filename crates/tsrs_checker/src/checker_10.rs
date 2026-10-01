@@ -157,7 +157,7 @@ impl Checker {
         if sig.isolated_signature_type().is_none() {
             let mut kind = Kind::Unknown;
             if let Some(declaration) = sig.declaration.get() {
-                kind = declaration.kind;
+                kind = declaration.kind();
             }
             // If declaration is undefined, it is likely to be the signature of the default constructor.
             let is_constructor = kind == Kind::Unknown || kind == Kind::Constructor || kind == Kind::ConstructSignature || kind == Kind::ConstructorType;
@@ -613,7 +613,7 @@ impl Checker {
 
     // checker.go:20112
     pub(crate) fn is_numeric_name(&mut self, name: P<Node>) -> bool {
-        match name.kind {
+        match name.kind() {
             Kind::ComputedPropertyName => return self.is_numeric_computed_name(name),
             Kind::Identifier | Kind::NumericLiteral | Kind::StringLiteral => return is_numeric_literal_name(name.text()),
             _ => {}
@@ -667,7 +667,7 @@ impl Checker {
             // precedes the implementation node (i.e. has the same parent and ends where the implementation starts).
             if i > 0 && decl.body().is_some() {
                 let previous = declarations[i - 1];
-                if decl.parent() == previous.parent() && decl.kind == previous.kind
+                if decl.parent() == previous.parent() && decl.kind() == previous.kind()
                     && (decl.pos() == previous.end() || previous.flags().intersects(NodeFlags::Reparsed))
                 {
                     continue;
@@ -724,7 +724,7 @@ impl Checker {
             } else {
                 parameters.push(param_symbol.unwrap());
             }
-            if type_node.is_some_and(|t| t.kind == Kind::LiteralType) {
+            if type_node.is_some_and(|t| t.kind() == Kind::LiteralType) {
                 flags |= SignatureFlags::HasLiteralTypes;
             }
             // Record a new minimum argument count if this is not an optional parameter
@@ -1010,7 +1010,7 @@ impl Checker {
     // checker.go:20447
     pub(crate) fn get_annotated_accessor_type_node(&mut self, accessor: Option<P<Node>>) -> Option<P<Node>> {
         if let Some(accessor) = accessor {
-            match accessor.kind {
+            match accessor.kind() {
                 Kind::GetAccessor | Kind::PropertyDeclaration => return accessor.type_node(),
                 Kind::SetAccessor => return get_effective_set_accessor_type_annotation_node(accessor),
                 _ => {}
@@ -1226,7 +1226,7 @@ impl Checker {
 
 // checker.go:20653
 pub(crate) fn may_return_never(fn_: P<Node>) -> bool {
-    match fn_.kind {
+    match fn_.kind() {
         Kind::FunctionExpression | Kind::ArrowFunction => return true,
         Kind::MethodDeclaration => return ast::is_object_literal_expression(fn_.parent().unwrap()),
         _ => {}
@@ -1494,7 +1494,7 @@ impl Checker {
 
     // checker.go:20876
     pub(crate) fn get_type_predicate_from_body(&mut self, fn_: P<Node>) -> Option<P<TypePredicate>> {
-        match fn_.kind {
+        match fn_.kind() {
             Kind::Constructor | Kind::GetAccessor | Kind::SetAccessor => return None,
             _ => {}
         }
@@ -1852,7 +1852,7 @@ pub(crate) fn is_thisless(symbol: P<Symbol>) -> bool {
     let declarations = symbol.declarations();
     if declarations.len() == 1 {
         let declaration = declarations[0];
-        match declaration.kind {
+        match declaration.kind() {
             Kind::Parameter => return is_thisless_variable_like_declaration(declaration),
             Kind::PropertyDeclaration | Kind::PropertySignature => return is_thisless_variable_like_declaration(declaration),
             Kind::MethodDeclaration | Kind::MethodSignature | Kind::Constructor | Kind::GetAccessor | Kind::SetAccessor => {
@@ -1880,7 +1880,7 @@ pub(crate) fn is_thisless_variable_like_declaration(node: P<Node>) -> bool {
 // free of this references.
 // checker.go:21169
 pub(crate) fn is_thisless_type(node: P<Node>) -> bool {
-    match node.kind {
+    match node.kind() {
         Kind::AnyKeyword
         | Kind::UnknownKeyword
         | Kind::StringKeyword

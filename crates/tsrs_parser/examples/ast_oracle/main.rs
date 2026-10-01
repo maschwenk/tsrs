@@ -56,7 +56,7 @@ impl Dumper {
         match n {
             None => "-".to_string(),
             Some(n) if n == self.file.as_node() => "self".to_string(),
-            Some(n) => format!("{}@{}:{}", kind_name(n.kind), n.pos(), n.end()),
+            Some(n) => format!("{}@{}:{}", kind_name(n.kind()), n.pos(), n.end()),
         }
     }
 
@@ -92,7 +92,7 @@ impl Dumper {
             if i > 0 {
                 self.sb.push(',');
             }
-            let _ = write!(self.sb, "{}@{}:{}", kind_name(n.kind), n.pos(), n.end());
+            let _ = write!(self.sb, "{}@{}:{}", kind_name(n.kind()), n.pos(), n.end());
         }
         self.sb.push('}');
     }
@@ -133,7 +133,7 @@ impl Dumper {
 
     fn node(&mut self, n: P<Node>, depth: usize, parent: Option<P<Node>>, tag: char) {
         self.sb.push(tag);
-        let _ = write!(self.sb, "{} {} {} {} {:x} sf={:x}", depth, kind_name(n.kind), n.pos(), n.end(), n.flags().bits(), n.subtree_facts().bits());
+        let _ = write!(self.sb, "{} {} {} {} {:x} sf={:x}", depth, kind_name(n.kind()), n.pos(), n.end(), n.flags().bits(), n.subtree_facts().bits());
         fields::dump_fields(&n, self);
         if n.parent() != parent {
             let r = self.node_ref(n.parent());

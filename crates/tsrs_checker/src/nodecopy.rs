@@ -585,7 +585,7 @@ impl ExistingNodeTree {
 
     fn try_visit_simple_type_node(self, c: &mut Checker, v: &mut NodeVisitor, node: P<Node>) -> Option<P<Node>> {
         let inner_node = ast::skip_parentheses(node);
-        match inner_node.kind {
+        match inner_node.kind() {
             Kind::TypeReference => return self.try_visit_type_reference(c, v, inner_node),
             Kind::TypeQuery => return self.try_visit_type_query(c, v, inner_node),
             Kind::IndexedAccessType => return self.try_visit_indexed_access(c, v, inner_node),
@@ -609,12 +609,12 @@ impl ExistingNodeTree {
         // accidentally.
         // Still, what can be ported of the logic is here, just in case.
         // Begin JSDoc handling
-        if node.kind == Kind::JSDocTypeExpression {
+        if node.kind() == Kind::JSDocTypeExpression {
             // Unwrap JSDocTypeExpressions
             return self.visit_node(c, v, Some(node.as_jsdoc_type_expression().type_));
         }
         // !!! TODO: We don't _actually_ support jsdoc namepath types, emit `any` instead; verify we handle as gracefully as strada
-        if node.kind == Kind::JSDocAllType
+        if node.kind() == Kind::JSDocAllType
         /* || node.Kind == ast.JSDocNamepathType */
         {
             return Some(factory.new_keyword_type_node(Kind::AnyKeyword));
@@ -623,33 +623,33 @@ impl ExistingNodeTree {
         // if node.Kind == ast.KindJSDocUnknownType {
         // 	return factory.NewKeywordTypeNode(ast.KindUnknownKeyword)
         // }
-        if node.kind == Kind::JSDocNullableType {
+        if node.kind() == Kind::JSDocNullableType {
             let union_members = vec![
                 self.visit_node(c, v, Some(node.as_jsdoc_nullable_type().type_)).unwrap(),
                 factory.new_literal_type_node(factory.new_keyword_expression(Kind::NullKeyword)),
             ];
             return Some(factory.new_union_type_node(factory.new_node_list(union_members)));
         }
-        if node.kind == Kind::JSDocOptionalType {
+        if node.kind() == Kind::JSDocOptionalType {
             let union_members = vec![
                 self.visit_node(c, v, Some(node.as_jsdoc_optional_type().type_)).unwrap(),
                 factory.new_keyword_type_node(Kind::UndefinedKeyword),
             ];
             return Some(factory.new_union_type_node(factory.new_node_list(union_members)));
         }
-        if node.kind == Kind::JSDocNonNullableType {
+        if node.kind() == Kind::JSDocNonNullableType {
             // Unwrap
             return self.visit_node(c, v, Some(node.as_jsdoc_non_nullable_type().type_));
         }
-        if node.kind == Kind::JSDocVariadicType {
+        if node.kind() == Kind::JSDocVariadicType {
             // !!! TODO: verify this matches how jsdoc variadics are actually handled now?
             let element_type = self.visit_node(c, v, Some(node.as_jsdoc_variadic_type().type_)).unwrap();
             return Some(factory.new_array_type_node(element_type));
         }
-        if node.kind == Kind::JSDocTypeLiteral {
+        if node.kind() == Kind::JSDocTypeLiteral {
             let mut members: Vec<P<Node>> = Vec::new();
             for &t in node.as_jsdoc_type_literal().jsdoc_property_tags {
-                if t.kind != Kind::JSDocPropertyTag && t.kind != Kind::JSDocParameterTag {
+                if t.kind() != Kind::JSDocPropertyTag && t.kind() != Kind::JSDocParameterTag {
                     continue;
                 }
                 let n = t.name().unwrap();
@@ -660,7 +660,7 @@ impl ExistingNodeTree {
                 };
                 let name = self.visit_node(c, v, Some(target_name));
                 let should_be_optional = t.as_jsdoc_parameter_or_property_tag().is_bracketed
-                    || t.type_expression().is_some_and(|te| te.kind == Kind::JSDocOptionalType);
+                    || t.type_expression().is_some_and(|te| te.kind() == Kind::JSDocOptionalType);
                 let question = if should_be_optional { Some(factory.new_token(Kind::QuestionToken)) } else { None };
                 let ty = self.visit_node(c, v, t.type_expression()); // !!! TODO: alternate lookup locations for the type? serialize on demand if it doesn't serialze? strada does something funky here.
 
@@ -730,7 +730,7 @@ impl ExistingNodeTree {
         }
         if ast::is_type_operator_node(node) {
             let to = node.as_type_operator_node();
-            if to.operator == Kind::UniqueKeyword && to.type_.kind == Kind::SymbolKeyword {
+            if to.operator == Kind::UniqueKeyword && to.type_.kind() == Kind::SymbolKeyword {
                 let non_fake_enclosing = b.get_enclosing_declaration_ignoring_fake_scope(c);
                 let same_scope = ast::find_ancestor(node, |a| Some(a) == non_fake_enclosing);
                 if same_scope.is_none() {
@@ -778,7 +778,7 @@ impl ExistingNodeTree {
             return Some(factory.update_import_type_node(node, it.is_type_of, arg, attributes, qualifier, type_arguments));
         }
         if let Some(name) = node.name() {
-            if name.kind == Kind::ComputedPropertyName && !c.has_late_bindable_name(node) {
+            if name.kind() == Kind::ComputedPropertyName && !c.has_late_bindable_name(node) {
                 if !ast::has_dynamic_name(node) {
                     // !!! TODO: This matches strada, but rather than recursing, this should probably fall down to later cases.
                     // Take a `["field"]` property declaration - it still needs a `: any` appended to it
@@ -804,7 +804,7 @@ impl ExistingNodeTree {
             }
             node = visited;
             let new_type = factory.new_keyword_type_node(Kind::AnyKeyword);
-            match node.kind {
+            match node.kind() {
                 Kind::PropertyDeclaration => {
                     return Some(factory.update_property_declaration(node, node.modifiers(), node.name().unwrap(), node.postfix_token(), Some(new_type), None));
                 }

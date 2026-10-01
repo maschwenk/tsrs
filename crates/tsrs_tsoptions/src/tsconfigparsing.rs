@@ -412,7 +412,7 @@ pub(crate) fn convert_config_file_to_object(
     let statements = source_file.as_node().statements();
     let root_expression = if !statements.is_empty() { statements[0].expression() } else { None };
     if let Some(root_expression) = root_expression {
-        if root_expression.kind != Kind::ObjectLiteralExpression {
+        if root_expression.kind() != Kind::ObjectLiteralExpression {
             let mut base_file_name = "tsconfig.json";
             if tspath::get_base_file_name(source_file.file_name()) == "jsconfig.json" {
                 base_file_name = "jsconfig.json";
@@ -958,7 +958,7 @@ fn convert_object_literal_expression_to_json(
     let mut result: Option<OrderedMap<String, CompilerOptionsValue>> = if return_value { Some(OrderedMap::default()) } else { None };
     let mut errors: Vec<P<Diagnostic>> = Vec::new();
     for element in node.as_object_literal_expression().properties.nodes.iter().copied() {
-        if element.kind != Kind::PropertyAssignment {
+        if element.kind() != Kind::PropertyAssignment {
             errors.push(new_diagnostic(Some(source_file), element.loc(), &diagnostics::Property_assignment_expected, &[]));
             continue;
         }
@@ -1045,7 +1045,7 @@ fn convert_property_value_to_json(
     return_value: bool,
     json_conversion_notifier: Option<&mut JsonConversionNotifier>,
 ) -> (CompilerOptionsValue, Vec<P<Diagnostic>>) {
-    match value_expression.kind {
+    match value_expression.kind() {
         Kind::TrueKeyword => return (CompilerOptionsValue::Bool(true), Vec::new()),
         Kind::FalseKeyword => return (CompilerOptionsValue::Bool(false), Vec::new()),
         Kind::NullKeyword => return (CompilerOptionsValue::Null, Vec::new()), // todo: how to manage null
@@ -1070,7 +1070,7 @@ fn convert_property_value_to_json(
         }
         Kind::PrefixUnaryExpression => {
             let prefix = value_expression.as_prefix_unary_expression();
-            if prefix.operator == Kind::MinusToken && prefix.operand.kind == Kind::NumericLiteral {
+            if prefix.operator == Kind::MinusToken && prefix.operand.kind() == Kind::NumericLiteral {
                 return (CompilerOptionsValue::Float(-jsnum::from_string(prefix.operand.text()).0), Vec::new());
             }
             // not valid JSON syntax

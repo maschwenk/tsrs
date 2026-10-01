@@ -211,7 +211,7 @@ impl Node {
             | NodeData::TypeParameterDeclaration(_)
             | NodeData::JSDocTypeLiteral(_) => F::ContainsTypeScript,
 
-            NodeData::Token => match self.kind {
+            NodeData::Token => match self.kind() {
                 Kind::UsingKeyword => F::ContainsUsing,
                 Kind::PublicKeyword
                 | Kind::PrivateKeyword
@@ -275,7 +275,7 @@ impl Node {
             NodeData::VariableDeclarationList(d) => {
                 propagate_node_list_subtree_facts(d.declarations(), propagate_subtree_facts) | if_else(self.flags().intersects(NodeFlags::Using), F::ContainsUsing, NONE)
             }
-            NodeData::BindingPattern(d) => match self.kind {
+            NodeData::BindingPattern(d) => match self.kind() {
                 Kind::ObjectBindingPattern => propagate_node_list_subtree_facts(d.elements(), propagate_object_binding_element_subtree_facts),
                 Kind::ArrayBindingPattern => propagate_node_list_subtree_facts(d.elements(), propagate_binding_element_subtree_facts),
                 _ => NONE,
@@ -443,7 +443,7 @@ impl Node {
                     | F::ContainsClassFields
             }
             NodeData::ClassStaticBlockDeclaration(d) => propagate_modifier_list_subtree_facts(d.modifiers()) | prop(d.body()) | F::ContainsClassFields,
-            NodeData::KeywordExpression(_) => match self.kind {
+            NodeData::KeywordExpression(_) => match self.kind() {
                 Kind::ThisKeyword => F::ContainsLexicalThis,
                 Kind::SuperKeyword => F::ContainsLexicalSuper,
                 _ => NONE,
@@ -458,11 +458,11 @@ impl Node {
                     | prop(d.operator_token())
                     | prop(d.right())
                     | if_else(
-                        d.operator_token().kind == Kind::InKeyword && is_private_identifier(d.left()),
+                        d.operator_token().kind() == Kind::InKeyword && is_private_identifier(d.left()),
                         F::ContainsClassFields | F::ContainsPrivateIdentifierInExpression,
                         NONE,
                     );
-                if d.operator_token().kind == Kind::EqualsToken
+                if d.operator_token().kind() == Kind::EqualsToken
                     && (is_object_literal_expression(d.left()) || is_array_literal_expression(d.left()))
                     && contains_object_rest_or_spread(d.left())
                 {
@@ -504,7 +504,7 @@ impl Node {
                     | propagate_subtree_facts(d.question_dot_token())
                     | propagate_eraseable_syntax_list_subtree_facts(d.type_arguments())
                     | propagate_node_list_subtree_facts(d.arguments(), propagate_subtree_facts)
-                    | if_else(d.expression().kind == Kind::ImportKeyword, F::ContainsDynamicImport, NONE)
+                    | if_else(d.expression().kind() == Kind::ImportKeyword, F::ContainsDynamicImport, NONE)
             }
             NodeData::NewExpression(d) => {
                 prop(d.expression())

@@ -85,7 +85,7 @@ impl Printer {
         self.write_line_repeat(lines_before_dot);
         self.increase_indent_if(lines_before_dot > 0);
         let should_emit_dot_dot =
-            token.kind != Kind::QuestionDotToken && self.may_need_dot_dot_for_property_access(n.expression()) && !self.writer().has_trailing_comment() && !self.writer().has_trailing_whitespace();
+            token.kind() != Kind::QuestionDotToken && self.may_need_dot_dot_for_property_access(n.expression()) && !self.writer().has_trailing_comment() && !self.writer().has_trailing_whitespace();
         if should_emit_dot_dot {
             self.write_punctuation(".");
         }
@@ -126,7 +126,7 @@ impl Printer {
             self.write_space();
             self.emit_expression(callee, OperatorPrecedence::Comma);
             self.write_punctuation(")");
-        } else if parent_node.kind == Kind::CallExpression && is_new_expression_without_arguments(skip_partially_emitted_expressions(callee)) {
+        } else if parent_node.kind() == Kind::CallExpression && is_new_expression_without_arguments(skip_partially_emitted_expressions(callee)) {
             // Parenthesize `new C` inside of a CallExpression so it is treated as `(new C)()` and not `new C()`
             self.emit_expression(callee, OperatorPrecedence::Parentheses);
         } else {
@@ -149,7 +149,7 @@ impl Printer {
         let n = node.as_new_expression();
         self.emit_token(Kind::NewKeyword, node.pos(), WriteKind::Keyword, node);
         self.write_space();
-        if skip_partially_emitted_expressions(n.expression()).kind == Kind::CallExpression {
+        if skip_partially_emitted_expressions(n.expression()).kind() == Kind::CallExpression {
             // Parenthesize `C()` inside of a NewExpression so it is treated as `new (C())` and not `new C()`
             self.emit_expression(n.expression(), OperatorPrecedence::Parentheses);
         } else {
@@ -161,10 +161,10 @@ impl Printer {
     }
 
     pub(crate) fn emit_template_literal(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::NoSubstitutionTemplateLiteral => self.emit_no_substitution_template_literal(node),
             Kind::TemplateExpression => self.emit_template_expression(node),
-            _ => panic!("unhandled TemplateLiteral: {:?}", node.kind),
+            _ => panic!("unhandled TemplateLiteral: {:?}", node.kind()),
         }
     }
 
@@ -234,7 +234,7 @@ impl Printer {
         } else if is_expression(node) {
             self.emit_expression(node, OperatorPrecedence::Yield);
         } else {
-            panic!("unexpected ConciseBody: {:?}", node.kind);
+            panic!("unexpected ConciseBody: {:?}", node.kind());
         }
     }
 
@@ -308,7 +308,7 @@ impl Printer {
         // the resulting expression a prefix increment operation. And in the second, it will make the resulting
         // expression a prefix increment whose operand is a plus expression - (++(+x))
         // The same is true of minus of course.
-        if operand.kind == Kind::PrefixUnaryExpression {
+        if operand.kind() == Kind::PrefixUnaryExpression {
             let inner = operand.as_prefix_unary_expression().operator;
             if (operator == Kind::PlusToken && (inner == Kind::PlusToken || inner == Kind::PlusPlusToken))
                 || (operator == Kind::MinusToken && (inner == Kind::MinusToken || inner == Kind::MinusMinusToken))
@@ -336,13 +336,13 @@ impl Printer {
     pub(crate) fn get_literal_kind_of_binary_plus_operand(&self, node: P<Node>) -> Kind {
         let node = skip_partially_emitted_expressions(node);
 
-        if is_literal_kind(node.kind) {
-            return node.kind;
+        if is_literal_kind(node.kind()) {
+            return node.kind();
         }
 
-        if node.kind == Kind::BinaryExpression {
+        if node.kind() == Kind::BinaryExpression {
             let n = node.as_binary_expression();
-            if n.operator_token().kind == Kind::PlusToken {
+            if n.operator_token().kind() == Kind::PlusToken {
                 // !!! Determine if caching this is worthwhile over recomputing
                 ////if n.cachedLiteralKind != KindUnknown {
                 ////	return n.cachedLiteralKind;
@@ -409,7 +409,7 @@ impl Printer {
                 right_prec = OperatorPrecedence::Additive;
             }
             OperatorPrecedence::Additive => 'case: {
-                if n.operator_token().kind == Kind::PlusToken && is_binary_operation(n.right(), Kind::PlusToken) {
+                if n.operator_token().kind() == Kind::PlusToken && is_binary_operation(n.right(), Kind::PlusToken) {
                     let left_kind = self.get_literal_kind_of_binary_plus_operand(n.left());
                     if is_literal_kind(left_kind) && left_kind == self.get_literal_kind_of_binary_plus_operand(n.right()) {
                         // No need to parenthesize the right operand when the binary operator
@@ -424,7 +424,7 @@ impl Printer {
                 right_prec = OperatorPrecedence::Multiplicative;
             }
             OperatorPrecedence::Multiplicative => 'case: {
-                if n.operator_token().kind == Kind::AsteriskToken && is_binary_operation(n.right(), Kind::AsteriskToken) {
+                if n.operator_token().kind() == Kind::AsteriskToken && is_binary_operation(n.right(), Kind::AsteriskToken) {
                     // No need to parenthesize the right operand when the binary operator and
                     // operand are both * due to the associative property of mathematics:
                     //  x*(a*b)     => x*a*b
@@ -446,15 +446,15 @@ impl Printer {
         let (mut left_prec, mut right_prec) = self.get_binary_expression_precedence(node);
         let emitted_left = skip_partially_emitted_expressions(n.left());
         if node_is_synthesized(emitted_left)
-            && emitted_left.kind == Kind::BinaryExpression
-            && mixing_binary_operators_requires_parentheses(n.operator_token().kind, emitted_left.as_binary_expression().operator_token().kind)
+            && emitted_left.kind() == Kind::BinaryExpression
+            && mixing_binary_operators_requires_parentheses(n.operator_token().kind(), emitted_left.as_binary_expression().operator_token().kind())
         {
             left_prec = OperatorPrecedence::Highest;
         }
         let emitted_right = skip_partially_emitted_expressions(n.right());
         if node_is_synthesized(emitted_right)
-            && emitted_right.kind == Kind::BinaryExpression
-            && mixing_binary_operators_requires_parentheses(n.operator_token().kind, emitted_right.as_binary_expression().operator_token().kind)
+            && emitted_right.kind() == Kind::BinaryExpression
+            && mixing_binary_operators_requires_parentheses(n.operator_token().kind(), emitted_right.as_binary_expression().operator_token().kind())
         {
             right_prec = OperatorPrecedence::Highest;
         }
@@ -462,7 +462,7 @@ impl Printer {
         self.emit_expression(n.left(), left_prec);
         let lines_before_operator = self.get_lines_between_nodes(node, n.left(), n.operator_token());
         let lines_after_operator = self.get_lines_between_nodes(node, n.operator_token(), n.right());
-        self.write_lines_and_indent(lines_before_operator, n.operator_token().kind != Kind::CommaToken /*writeSpaceIfNotIndenting*/);
+        self.write_lines_and_indent(lines_before_operator, n.operator_token().kind() != Kind::CommaToken /*writeSpaceIfNotIndenting*/);
         self.emit_token_node_ex(Some(n.operator_token()), tokenEmitFlags::NoSourceMaps);
         self.write_lines_and_indent(lines_after_operator, true /*writeSpaceIfNotIndenting*/); // Binary operators should have a space before the comment starts
         self.emit_expression(n.right(), right_prec);
@@ -698,7 +698,7 @@ impl Printer {
     // that would introduce a line separator between the node and its parent.
     pub(crate) fn parenthesize_expression_for_no_asi(&mut self, node: P<Node>) -> P<Node> {
         if !self.comments_disabled {
-            match node.kind {
+            match node.kind() {
                 Kind::PartiallyEmittedExpression => {
                     if self.will_emit_leading_new_line(node) {
                         let pee = node.as_partially_emitted_expression();
@@ -785,7 +785,7 @@ impl Printer {
             self.write_punctuation("(");
         }
 
-        match node.kind {
+        match node.kind() {
             // Keywords
             Kind::TrueKeyword | Kind::FalseKeyword | Kind::NullKeyword => self.emit_token_node(Some(node)),
             Kind::ThisKeyword | Kind::SuperKeyword | Kind::ImportKeyword => self.emit_keyword_expression(node),
@@ -849,7 +849,7 @@ impl Printer {
             Kind::PartiallyEmittedExpression => self.emit_partially_emitted_expression(node),
             Kind::SyntheticReferenceExpression => panic!("SyntheticReferenceExpression should not be printed"),
 
-            _ => panic!("unexpected Expression: {:?}", node.kind),
+            _ => panic!("unexpected Expression: {:?}", node.kind()),
         }
 
         if parens {
@@ -948,7 +948,7 @@ impl Printer {
             //   (function() { })()  -- not (function() { }())
             self.emit_iife_with_parenthesized_callee(expression);
         } else {
-            match get_leftmost_expression(expression, false /*stopAtCallExpression*/).kind {
+            match get_leftmost_expression(expression, false /*stopAtCallExpression*/).kind() {
                 Kind::FunctionExpression | Kind::ObjectLiteralExpression => self.emit_expression(expression, OperatorPrecedence::Parentheses),
                 _ => self.emit_expression(expression, OperatorPrecedence::Comma),
             }
@@ -999,7 +999,7 @@ impl Printer {
         if let Some(else_statement) = n.else_statement() {
             self.write_line_or_space(node, n.then_statement(), else_statement);
             self.emit_token(Kind::ElseKeyword, n.then_statement().end(), WriteKind::Keyword, node);
-            if else_statement.kind == Kind::IfStatement {
+            if else_statement.kind() == Kind::IfStatement {
                 self.write_space();
                 self.emit_if_statement(else_statement);
             } else {
@@ -1042,7 +1042,7 @@ impl Printer {
     }
 
     pub(crate) fn emit_for_initializer(&mut self, node: P<Node>) {
-        if node.kind == Kind::VariableDeclarationList {
+        if node.kind() == Kind::VariableDeclarationList {
             self.emit_variable_declaration_list(node);
         } else {
             self.emit_expression(node, OperatorPrecedence::Lowest);
@@ -1454,11 +1454,11 @@ impl Printer {
     }
 
     pub(crate) fn emit_module_reference(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_identifier_reference(node),
             Kind::QualifiedName => self.emit_qualified_name(node),
             Kind::ExternalModuleReference => self.emit_external_module_reference(node),
-            _ => panic!("unhandled ModuleReference: {:?}", node.kind),
+            _ => panic!("unhandled ModuleReference: {:?}", node.kind()),
         }
     }
 
@@ -1523,10 +1523,10 @@ impl Printer {
         let Some(node) = node else {
             return;
         };
-        match node.kind {
+        match node.kind() {
             Kind::NamespaceImport => self.emit_namespace_import(node),
             Kind::NamedImports => self.emit_named_imports(node),
-            _ => panic!("unhandled NamedImportBindings: {:?}", node.kind),
+            _ => panic!("unhandled NamedImportBindings: {:?}", node.kind()),
         }
     }
 
@@ -1666,10 +1666,10 @@ impl Printer {
     }
 
     pub(crate) fn emit_named_export_bindings(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::NamespaceExport => self.emit_namespace_export(node),
             Kind::NamedExports => self.emit_named_exports(node),
-            _ => panic!("unhandled NamedExportBindings: {:?}", node.kind),
+            _ => panic!("unhandled NamedExportBindings: {:?}", node.kind()),
         }
     }
 
@@ -1701,7 +1701,7 @@ impl Printer {
         } else {
             self.write_line();
             self.increase_indent();
-            if node.kind == Kind::EmptyStatement {
+            if node.kind() == Kind::EmptyStatement {
                 self.emit_empty_statement(node, true /*isEmbeddedStatement*/);
             } else {
                 self.emit_statement(node);
@@ -1716,7 +1716,7 @@ impl Printer {
             return;
         }
 
-        match node.kind {
+        match node.kind() {
             // Statements
             Kind::Block => self.emit_block(node),
             Kind::EmptyStatement => self.emit_empty_statement(node, false /*isEmbeddedStatement*/),
@@ -1757,7 +1757,7 @@ impl Printer {
             Kind::ExportAssignment => self.emit_export_assignment(node),
             Kind::ExportDeclaration => self.emit_export_declaration(node),
 
-            _ => panic!("unhandled statement: {:?}", node.kind),
+            _ => panic!("unhandled statement: {:?}", node.kind()),
         }
     }
 }
@@ -1884,10 +1884,10 @@ impl Printer {
     }
 
     pub(crate) fn emit_jsx_attribute_like(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::JsxAttribute => self.emit_jsx_attribute(node),
             Kind::JsxSpreadAttribute => self.emit_jsx_spread_attribute(node),
-            _ => panic!("unhandled JsxAttributeLike: {:?}", node.kind),
+            _ => panic!("unhandled JsxAttributeLike: {:?}", node.kind()),
         }
     }
 
@@ -1919,36 +1919,36 @@ impl Printer {
     }
 
     pub(crate) fn emit_jsx_child(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::JsxText => self.emit_jsx_text(node),
             Kind::JsxExpression => self.emit_jsx_expression(node),
             Kind::JsxElement => self.emit_jsx_element(node),
             Kind::JsxSelfClosingElement => self.emit_jsx_self_closing_element(node),
             Kind::JsxFragment => self.emit_jsx_fragment(node),
-            _ => panic!("unhandled JsxChild: {:?}", node.kind),
+            _ => panic!("unhandled JsxChild: {:?}", node.kind()),
         }
     }
 
     pub(crate) fn emit_jsx_tag_name(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_identifier_reference(node),
             Kind::ThisKeyword => self.emit_keyword_expression(node),
             Kind::JsxNamespacedName => self.emit_jsx_namespaced_name(node),
             Kind::PropertyAccessExpression => self.emit_property_access_expression(node),
-            _ => panic!("unhandled JsxTagName: {:?}", node.kind),
+            _ => panic!("unhandled JsxTagName: {:?}", node.kind()),
         }
     }
 
     pub(crate) fn emit_jsx_attribute_name(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_identifier_name(node),
             Kind::JsxNamespacedName => self.emit_jsx_namespaced_name(node),
-            _ => panic!("unhandled JsxAttributeName: {:?}", node.kind),
+            _ => panic!("unhandled JsxAttributeName: {:?}", node.kind()),
         }
     }
 
     pub(crate) fn emit_jsx_attribute_value(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::StringLiteral => self.emit_string_literal(node),
             Kind::JsxExpression => self.emit_jsx_expression(node),
             Kind::JsxElement => self.emit_jsx_element(node),
@@ -2005,10 +2005,10 @@ impl Printer {
     }
 
     pub(crate) fn emit_case_or_default_clause_node(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::CaseClause => self.emit_case_clause(node),
             Kind::DefaultClause => self.emit_default_clause(node),
-            _ => panic!("unhandled CaseOrDefaultClause: {:?}", node.kind),
+            _ => panic!("unhandled CaseOrDefaultClause: {:?}", node.kind()),
         }
     }
 
@@ -2023,10 +2023,10 @@ impl Printer {
     }
 
     pub(crate) fn emit_heritage_clause_element(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::ExpressionWithTypeArguments => self.emit_expression_with_type_arguments(node),
             Kind::TypeReference => self.emit_type_reference(node),
-            _ => panic!("unhandled HeritageClauseElement: {:?}", node.kind),
+            _ => panic!("unhandled HeritageClauseElement: {:?}", node.kind()),
         }
     }
 

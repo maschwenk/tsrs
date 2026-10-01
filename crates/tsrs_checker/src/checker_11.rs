@@ -669,7 +669,7 @@ impl Checker {
             let mut type_arguments: Vec<P<Type>> = Vec::new();
             let node = t.as_type_reference().node.get();
             if let Some(node) = node {
-                match node.kind {
+                match node.kind() {
                     Kind::TypeReference => {
                         type_arguments = n.outer_type_parameters().to_vec();
                         let effective = self.get_effective_type_arguments(node, n.local_type_parameters());
@@ -1056,7 +1056,7 @@ impl Checker {
                     declaration = get_declaration_of_kind(alias_symbol, Kind::JSTypeAliasDeclaration);
                 }
                 return match declaration {
-                    Some(declaration) => find_ancestor_or_quit(declaration.parent(), |n| match n.kind {
+                    Some(declaration) => find_ancestor_or_quit(declaration.parent(), |n| match n.kind() {
                         Kind::SourceFile => FindAncestorResult::True,
                         Kind::ModuleDeclaration => FindAncestorResult::False,
                         _ => FindAncestorResult::Quit,
@@ -1309,7 +1309,7 @@ impl Checker {
 
     // The `containsReference` closure of isTypeParameterPossiblyReferenced (checker.go:22830).
     fn type_parameter_contains_reference(&mut self, tp: P<Type>, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::ThisType => {
                 return tp.as_type_parameter().is_this_type();
             }
@@ -1790,7 +1790,7 @@ impl Checker {
 
     // checker.go:23236
     pub(crate) fn get_type_from_type_node_worker(&mut self, node: P<Node>) -> P<Type> {
-        match node.kind {
+        match node.kind() {
             Kind::AnyKeyword | Kind::JSDocAllType => self.any_type,
             Kind::JSDocNonNullableType => self.get_type_from_type_node(node.type_node().unwrap()),
             Kind::JSDocNullableType => {
@@ -1878,7 +1878,7 @@ impl Checker {
 
     // checker.go:23347
     pub(crate) fn get_type_from_literal_type_node(&mut self, node: P<Node>) -> P<Type> {
-        if node.as_literal_type_node().literal.kind == Kind::NullKeyword {
+        if node.as_literal_type_node().literal.kind() == Kind::NullKeyword {
             return self.null_type;
         }
         let links = self.type_node_links.get(node);
@@ -1936,7 +1936,7 @@ impl Checker {
                     links.resolved_type.set(Some(index_type));
                 }
                 Kind::UniqueKeyword => {
-                    if arg_type.kind == Kind::SymbolKeyword {
+                    if arg_type.kind() == Kind::SymbolKeyword {
                         let t = self.get_es_symbol_like_type_for_node(walk_up_parenthesized_types(node.parent()).unwrap());
                         links.resolved_type.set(Some(t));
                     } else {
@@ -2152,14 +2152,14 @@ impl Checker {
 
     // checker.go:23563
     pub(crate) fn get_unresolved_symbol_for_entity_name(&mut self, name: P<Node>) -> P<Symbol> {
-        let identifier = match name.kind {
+        let identifier = match name.kind() {
             Kind::QualifiedName => name.as_qualified_name().right,
             Kind::PropertyAccessExpression => name.name().unwrap(),
             _ => name,
         };
         let text = identifier.text();
         if !text.is_empty() {
-            let parent_symbol: Option<P<Symbol>> = match name.kind {
+            let parent_symbol: Option<P<Symbol>> = match name.kind() {
                 Kind::QualifiedName => Some(self.get_unresolved_symbol_for_entity_name(name.as_qualified_name().left)),
                 Kind::PropertyAccessExpression => Some(self.get_unresolved_symbol_for_entity_name(name.expression().unwrap())),
                 _ => None,
@@ -2255,7 +2255,7 @@ impl Checker {
                     return self.error_type;
                 }
             }
-            if node.kind == Kind::TypeReference && self.is_deferred_type_reference_node(node, num_type_arguments != type_parameters.len() as i32) {
+            if node.kind() == Kind::TypeReference && self.is_deferred_type_reference_node(node, num_type_arguments != type_parameters.len() as i32) {
                 return self.create_deferred_type_reference(t, node, None /*mapper*/, None /*alias*/);
             }
             // In a type reference, the outer type parameters of the referenced class or interface are automatically
@@ -2299,7 +2299,7 @@ impl Checker {
             return true;
         }
         if self.is_resolved_by_type_alias(node) {
-            match node.kind {
+            match node.kind() {
                 Kind::ArrayType => return self.may_resolve_type_alias(node.as_array_type_node().element_type),
                 Kind::TupleType => return node.elements().iter().any(|&e| self.may_resolve_type_alias(e)),
                 Kind::TypeReference => return has_default_type_arguments || node.type_arguments().iter().any(|&a| self.may_resolve_type_alias(a)),
@@ -2316,7 +2316,7 @@ impl Checker {
     // checker.go:23718
     pub(crate) fn is_resolved_by_type_alias(&mut self, node: P<Node>) -> bool {
         let parent = node.parent().unwrap();
-        match parent.kind {
+        match parent.kind() {
             Kind::ParenthesizedType
             | Kind::NamedTupleMember
             | Kind::TypeReference
@@ -2336,14 +2336,14 @@ impl Checker {
     // of a type alias.
     // checker.go:23732
     pub(crate) fn may_resolve_type_alias(&mut self, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::TypeReference => self.resolve_type_reference_name(node, SymbolFlags::Type, false).flags().intersects(SymbolFlags::TypeAlias),
             Kind::TypeQuery => true,
             Kind::TypeOperator => node.as_type_operator_node().operator != Kind::UniqueKeyword && self.may_resolve_type_alias(node.type_node().unwrap()),
             Kind::ParenthesizedType | Kind::OptionalType | Kind::NamedTupleMember => self.may_resolve_type_alias(node.type_node().unwrap()),
             Kind::RestType => {
                 let type_node = node.type_node().unwrap();
-                type_node.kind != Kind::ArrayType || self.may_resolve_type_alias(type_node.as_array_type_node().element_type)
+                type_node.kind() != Kind::ArrayType || self.may_resolve_type_alias(type_node.as_array_type_node().element_type)
             }
             Kind::UnionType => node.as_union_type_node().types().nodes.iter().any(|&t| self.may_resolve_type_alias(t)),
             Kind::IntersectionType => node.as_intersection_type_node().types().nodes.iter().any(|&t| self.may_resolve_type_alias(t)),

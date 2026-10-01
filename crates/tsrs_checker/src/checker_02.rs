@@ -160,7 +160,7 @@ impl Checker {
             }
         }
 
-        match node.kind {
+        match node.kind() {
             Kind::TypeParameter => self.check_type_parameter(node),
             Kind::Parameter => self.check_parameter(node),
             Kind::PropertyDeclaration => self.check_property_declaration(node),
@@ -292,7 +292,7 @@ impl Checker {
         if node.flags().intersects(NodeFlags::Unreachable) {
             // The binder has determined that this code is unreachable.
             // Ignore const enums unless preserveConstEnums is set.
-            match node.kind {
+            match node.kind() {
                 Kind::EnumDeclaration => return !ast::is_enum_const(node) || self.compiler_options.should_preserve_const_enums(),
                 Kind::ModuleDeclaration => return ast::is_instantiated_module(node, self.compiler_options.should_preserve_const_enums()),
                 _ => return true,
@@ -348,7 +348,7 @@ impl Checker {
         let save_current_node = self.current_node;
         self.current_node = Some(node);
         self.instantiation_count = 0;
-        match node.kind {
+        match node.kind() {
             Kind::CallExpression | Kind::NewExpression | Kind::TaggedTemplateExpression | Kind::Decorator | Kind::JsxOpeningElement => {
                 // These node kinds are deferred checked when overload resolution fails. To save on work,
                 // we ensure the arguments are checked just once in a deferred way.
@@ -388,7 +388,7 @@ impl Checker {
     pub(crate) fn check_jsdoc_comment(&mut self, node: P<Node>) {
         // This performs minimal checking of JSDoc nodes to ensure that @link references to entities are recorded
         // for purposes of checking unused identifiers.
-        match node.kind {
+        match node.kind() {
             Kind::JSDocLink | Kind::JSDocLinkCode | Kind::JSDocLinkPlain => {
                 self.resolve_jsdoc_member_name(node.name());
             }
@@ -605,7 +605,7 @@ impl Checker {
     // checker.go:2766
     pub(crate) fn check_signature_declaration(&mut self, node: P<Node>) {
         // Grammar checking
-        match node.kind {
+        match node.kind() {
             Kind::IndexSignature => {
                 self.check_grammar_index_signature(node);
             }
@@ -634,7 +634,7 @@ impl Checker {
             self.check_source_element(Some(return_type_node));
         }
         if self.no_implicit_any && return_type_node.is_none() {
-            match node.kind {
+            match node.kind() {
                 Kind::ConstructSignature => {
                     self.error(Some(node), &diagnostics::Construct_signature_which_lacks_return_type_annotation_implicitly_has_an_any_return_type, &[]);
                 }
@@ -834,10 +834,10 @@ pub(crate) fn super_call_is_root_level_in_constructor(super_call: P<Node>, body:
 
 // checker.go:2961
 pub(crate) fn node_immediately_references_super_or_this(node: P<Node>) -> bool {
-    match node.kind {
+    match node.kind() {
         Kind::SuperKeyword | Kind::ThisKeyword => return true,
         Kind::ArrowFunction | Kind::FunctionDeclaration | Kind::FunctionExpression | Kind::PropertyDeclaration => return false,
-        Kind::Block => match node.parent().unwrap().kind {
+        Kind::Block => match node.parent().unwrap().kind() {
             Kind::Constructor | Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => return false,
             _ => {}
         },
@@ -899,7 +899,7 @@ impl Checker {
         }
         let symbol = self.get_symbol_of_declaration(node).unwrap();
         let return_type = self.get_type_of_accessors(symbol);
-        if node.kind == Kind::GetAccessor {
+        if node.kind() == Kind::GetAccessor {
             self.check_all_code_paths_in_non_void_function_return_or_throw(node, Some(return_type));
         }
         self.check_source_element(node.body());
@@ -984,7 +984,7 @@ impl Checker {
     // checker.go:3081
     pub(crate) fn get_deprecated_suggestion_node(&mut self, node: P<Node>) -> Option<P<Node>> {
         let node = ast::skip_parentheses(node);
-        match node.kind {
+        match node.kind() {
             Kind::CallExpression | Kind::Decorator | Kind::NewExpression => return self.get_deprecated_suggestion_node(node.expression().unwrap()),
             Kind::TaggedTemplateExpression => return self.get_deprecated_suggestion_node(node.as_tagged_template_expression().tag),
             Kind::JsxOpeningElement | Kind::JsxSelfClosingElement => return self.get_deprecated_suggestion_node(node.tag_name()),
@@ -1053,7 +1053,7 @@ impl Checker {
     // checker.go:3147
     pub(crate) fn get_type_predicate_parent(&mut self, node: P<Node>) -> Option<P<Node>> {
         let parent = node.parent().unwrap();
-        match parent.kind {
+        match parent.kind() {
             Kind::ArrowFunction
             | Kind::CallSignature
             | Kind::FunctionDeclaration
@@ -1274,7 +1274,7 @@ impl Checker {
     // checker.go:3336
     pub(crate) fn check_infer_type(&mut self, node: P<Node>) {
         if ast::find_ancestor(node, |n| {
-            n.parent().is_some_and(|parent| parent.kind == Kind::ConditionalType && parent.as_conditional_type_node().extends_type == n)
+            n.parent().is_some_and(|parent| parent.kind() == Kind::ConditionalType && parent.as_conditional_type_node().extends_type == n)
         })
         .is_none()
         {
@@ -1340,14 +1340,14 @@ impl Checker {
         if tuple_member.dot_dot_dot_token.is_some() && tuple_member.question_token.is_some() {
             self.grammar_error_on_node(node, &diagnostics::A_tuple_member_cannot_be_both_optional_and_rest, &[]);
         }
-        if tuple_member.type_.kind == Kind::OptionalType {
+        if tuple_member.type_.kind() == Kind::OptionalType {
             self.grammar_error_on_node(
                 tuple_member.type_,
                 &diagnostics::A_labeled_tuple_element_is_declared_as_optional_with_a_question_mark_after_the_name_and_before_the_colon_rather_than_after_the_type,
                 &[],
             );
         }
-        if tuple_member.type_.kind == Kind::RestType {
+        if tuple_member.type_.kind() == Kind::RestType {
             self.grammar_error_on_node(
                 tuple_member.type_,
                 &diagnostics::A_labeled_tuple_element_is_declared_as_rest_with_a_before_the_name_rather_than_before_the_type,
@@ -1583,7 +1583,7 @@ impl Checker {
             // We may be here because of some extra nodes between overloads that could not be parsed into a valid node.
             // In this case the subsequent node is not really consecutive (.pos !== node.end), and we must ignore it here.
             if let Some(subsequent_node) = subsequent_node {
-                if subsequent_node.pos() == node.end() && subsequent_node.kind == node.kind {
+                if subsequent_node.pos() == node.end() && subsequent_node.kind() == node.kind() {
                     let subsequent_name = subsequent_node.name();
                     let error_node = subsequent_name.or(Some(subsequent_node));
                     if let (Some(name), Some(subsequent_name)) = (name, subsequent_name) {
@@ -1694,7 +1694,7 @@ impl Checker {
                 }
             }
             for &declaration in &declarations {
-                let diagnostic: Option<&'static Message> = match declaration.kind {
+                let diagnostic: Option<&'static Message> = match declaration.kind() {
                     Kind::ClassDeclaration => Some(&diagnostics::Class_declaration_cannot_implement_overload_list_for_0),
                     Kind::FunctionDeclaration => Some(&diagnostics::Function_with_bodies_can_only_merge_with_classes_that_are_ambient),
                     _ => None,
@@ -1834,7 +1834,7 @@ impl Checker {
     // checker.go:3813
     pub(crate) fn check_block(&mut self, node: P<Node>) {
         // Grammar checking for SyntaxKind.Block
-        if node.kind == Kind::Block {
+        if node.kind() == Kind::Block {
             self.check_grammar_statement_in_ambient_context(node);
         }
         if ast::is_function_or_module_block(node) {
@@ -1875,8 +1875,8 @@ impl Checker {
         let mut cond_expr = ast::skip_parentheses(cond_expr);
         self.check_testing_known_truthy_type(cond_expr, cond_type, body);
         while ast::is_binary_expression(cond_expr)
-            && (cond_expr.as_binary_expression().operator_token.kind == Kind::BarBarToken
-                || cond_expr.as_binary_expression().operator_token.kind == Kind::QuestionQuestionToken)
+            && (cond_expr.as_binary_expression().operator_token.kind() == Kind::BarBarToken
+                || cond_expr.as_binary_expression().operator_token.kind() == Kind::QuestionQuestionToken)
         {
             cond_expr = ast::skip_parentheses(cond_expr.as_binary_expression().left);
             self.check_testing_known_truthy_type(cond_expr, cond_type, body);
@@ -1966,7 +1966,7 @@ impl Checker {
             child.for_each_child(&mut |n| visit(c, n, tested_symbol))
         }
         let mut node = node;
-        while ast::is_binary_expression(node) && node.as_binary_expression().operator_token.kind == Kind::AmpersandAmpersandToken {
+        while ast::is_binary_expression(node) && node.as_binary_expression().operator_token.kind() == Kind::AmpersandAmpersandToken {
             let is_used = node.as_binary_expression().right().for_each_child(&mut |n| visit(self, n, tested_symbol));
             if is_used {
                 return true;
@@ -1991,7 +1991,7 @@ impl Checker {
                     let mut tested_expression = tested.parent();
                     let mut child_expression = child_node.parent();
                     while let (Some(te), Some(ce)) = (tested_expression, child_expression) {
-                        if ast::is_identifier(te) && ast::is_identifier(ce) || te.kind == Kind::ThisKeyword && ce.kind == Kind::ThisKeyword {
+                        if ast::is_identifier(te) && ast::is_identifier(ce) || te.kind() == Kind::ThisKeyword && ce.kind() == Kind::ThisKeyword {
                             return c.get_symbol_at_location(te, false) == c.get_symbol_at_location(ce, false);
                         } else if ast::is_property_access_expression(te) && ast::is_property_access_expression(ce) {
                             if c.get_symbol_at_location(te.name().unwrap(), false) != c.get_symbol_at_location(ce.name().unwrap(), false) {
@@ -2031,7 +2031,7 @@ impl Checker {
     pub(crate) fn check_for_statement(&mut self, node: P<Node>) {
         if !self.check_grammar_statement_in_ambient_context(node) {
             if let Some(init) = node.initializer() {
-                if init.kind == Kind::VariableDeclarationList {
+                if init.kind() == Kind::VariableDeclarationList {
                     self.check_grammar_variable_declaration_list(init);
                 }
             }
@@ -2247,7 +2247,7 @@ impl Checker {
                 return;
             }
         }
-        let in_return_statement = node.kind == Kind::ReturnStatement;
+        let in_return_statement = node.kind() == Kind::ReturnStatement;
         if function_flags.intersects(FunctionFlags::Async) {
             unwrapped_expr_type = self.check_awaited_type(
                 expr_type,

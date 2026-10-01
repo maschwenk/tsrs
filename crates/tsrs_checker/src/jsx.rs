@@ -480,7 +480,7 @@ impl Checker {
 
     // jsx.go:393
     pub(crate) fn get_elaboration_element_for_jsx_child(&mut self, child: P<Node>, name_type: P<Type>, get_invalid_text_diagnostic: InvalidTextDiagnosticFn) -> JsxElaborationElement {
-        match child.kind {
+        match child.kind() {
             Kind::JsxExpression => {
                 // child is of the type of the expression
                 JsxElaborationElement { error_node: Some(child), inner_expression: child.expression(), name_type: Some(name_type), create_diagnostic: None }
@@ -837,7 +837,7 @@ impl Checker {
                         self.add_intra_expression_inference_site(inference_context.unwrap(), inference_node, expr_type);
                     }
                 } else {
-                    assert!(attribute_decl.kind == Kind::JsxSpreadAttribute);
+                    assert!(attribute_decl.kind() == Kind::JsxSpreadAttribute);
                     if attributes_table.len() != 0 {
                         let t = create_jsx_attributes_type(self, &mut object_flags, attributes_symbol, attributes_table);
                         spread = self.get_spread_type(spread, t, attributes_symbol, object_flags, false /*readonly*/);

@@ -160,13 +160,13 @@ impl Checker {
     // services.go:476
     pub fn get_export_specifier_local_target_symbol(&mut self, node: P<Node>) -> Option<P<Symbol>> {
         // node should be ExportSpecifier | Identifier
-        match node.kind {
+        match node.kind() {
             Kind::ExportSpecifier => {
                 if node.parent().unwrap().parent().unwrap().module_specifier().is_some() {
                     return self.get_external_module_member(node.parent().unwrap().parent().unwrap(), node, false /*dontResolveAlias*/);
                 }
                 let name = node.property_name_or_name().unwrap();
-                if name.kind == Kind::StringLiteral {
+                if name.kind() == Kind::StringLiteral {
                     // Skip for invalid syntax like this: export { "x" }
                     return None;
                 }
@@ -182,7 +182,7 @@ impl Checker {
     // services.go:495
     pub fn get_shorthand_assignment_value_symbol(&mut self, location: Option<P<Node>>) -> Option<P<Symbol>> {
         if let Some(location) = location {
-            if location.kind == Kind::ShorthandPropertyAssignment {
+            if location.kind() == Kind::ShorthandPropertyAssignment {
                 return self.resolve_entity_name(location.name().unwrap(), SymbolFlags::Value | SymbolFlags::Alias, true /*ignoreErrors*/, false, None);
             }
         }
@@ -191,7 +191,7 @@ impl Checker {
 
     // services.go:870
     pub fn get_constant_value(&mut self, node: P<Node>) -> Option<LiteralValue> {
-        if node.kind == Kind::EnumMember {
+        if node.kind() == Kind::EnumMember {
             return self.get_enum_member_value(node).value;
         }
 

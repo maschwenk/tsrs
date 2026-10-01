@@ -107,14 +107,14 @@ impl Printer {
             return true;
         }
 
-        if original_parent.kind != parent_node.kind {
+        if original_parent.kind() != parent_node.kind() {
             // if the original node is some other kind of node, we cannot correlate the list
             return false;
         }
 
         // find the respective node list on the original parent
         let mut original_list = Some(children);
-        match original_parent.kind {
+        match original_parent.kind() {
             Kind::ObjectLiteralExpression => original_list = Some(original_parent.property_list()),
             Kind::ArrayLiteralExpression => original_list = Some(original_parent.element_list()),
             Kind::CallExpression | Kind::NewExpression => {
@@ -484,7 +484,7 @@ impl Printer {
             self.writer().grow(source_file.text().len());
         }
 
-        match node.kind {
+        match node.kind() {
             // Pseudo-literals
             Kind::TemplateHead => self.emit_template_head(node),
             Kind::TemplateMiddle => self.emit_template_middle(node),
@@ -585,14 +585,14 @@ impl Printer {
                     self.emit_statement(node);
                 } else if is_expression(node) {
                     self.emit_expression(node, OperatorPrecedence::Lowest);
-                } else if is_keyword_kind(node.kind) {
+                } else if is_keyword_kind(node.kind()) {
                     self.emit_keyword_node(Some(node));
-                } else if is_punctuation_kind(node.kind) {
+                } else if is_punctuation_kind(node.kind()) {
                     self.emit_punctuation_node(Some(node));
-                } else if is_jsdoc_kind(node.kind) {
+                } else if is_jsdoc_kind(node.kind()) {
                     self.emit_jsdoc_node(node);
                 } else {
-                    panic!("unhandled Node: {:?}", node.kind);
+                    panic!("unhandled Node: {:?}", node.kind());
                 }
             }
         }
@@ -675,7 +675,7 @@ impl Printer {
         }
 
         let node = self.emit_context.parse_node(Some(context_node));
-        let is_similar_node = node.is_some_and(|n| n.kind == context_node.kind);
+        let is_similar_node = node.is_some_and(|n| n.kind() == context_node.kind());
         if !is_similar_node {
             return (None, pos);
         }
@@ -697,7 +697,7 @@ impl Printer {
         }
 
         if context_node.end() != pos {
-            let is_jsx_expr_context = context_node.kind == Kind::JsxExpression;
+            let is_jsx_expr_context = context_node.kind() == Kind::JsxExpression;
             self.emit_trailing_comments(pos, if is_jsx_expr_context { commentSeparator::None } else { commentSeparator::Before });
         }
     }
@@ -748,13 +748,13 @@ impl Printer {
         if (!position_is_synthesized(pos) || !position_is_synthesized(end)) && pos != end {
             // We have to explicitly check that the node is JsxText because if the compilerOptions.jsx is "preserve" we will not do any transformation.
             // It is expensive to walk entire tree just to set one kind of node to have no comments.
-            let skip_leading_comments = position_is_synthesized(pos) || emit_flags.intersects(EmitFlags::NoLeadingComments) || node.kind == Kind::JsxText;
-            let skip_trailing_comments = position_is_synthesized(end) || emit_flags.intersects(EmitFlags::NoTrailingComments) || node.kind == Kind::JsxText;
+            let skip_leading_comments = position_is_synthesized(pos) || emit_flags.intersects(EmitFlags::NoLeadingComments) || node.kind() == Kind::JsxText;
+            let skip_trailing_comments = position_is_synthesized(end) || emit_flags.intersects(EmitFlags::NoTrailingComments) || node.kind() == Kind::JsxText;
 
             // Emit leading comments if the position is not synthesized and the node
             // has not opted out from emitting leading comments.
             if !skip_leading_comments {
-                self.emit_leading_comments(pos, node.kind == Kind::NotEmittedStatement /*elided*/);
+                self.emit_leading_comments(pos, node.kind() == Kind::NotEmittedStatement /*elided*/);
             }
 
             if !skip_leading_comments || (pos >= 0 && emit_flags.intersects(EmitFlags::NoLeadingComments)) {
@@ -768,7 +768,7 @@ impl Printer {
 
                 // To avoid invalid comment emit in a down-level binding pattern, we
                 // keep track of the last declaration list container's end
-                if node.kind == Kind::VariableDeclarationList {
+                if node.kind() == Kind::VariableDeclarationList {
                     self.declaration_list_container_end = end;
                 }
             }
@@ -778,7 +778,7 @@ impl Printer {
     pub(crate) fn emit_trailing_comments_of_node(&mut self, node: P<Node>, emit_flags: EmitFlags, comment_range: TextRange, container_pos: i32, container_end: i32, declaration_list_container_end: i32) {
         let pos = comment_range.pos();
         let end = comment_range.end();
-        let skip_trailing_comments = end < 0 || emit_flags.intersects(EmitFlags::NoTrailingComments) || node.kind == Kind::JsxText;
+        let skip_trailing_comments = end < 0 || emit_flags.intersects(EmitFlags::NoTrailingComments) || node.kind() == Kind::JsxText;
         if (!position_is_synthesized(pos) || !position_is_synthesized(end)) && pos != end {
             // Restore previous container state.
             self.container_pos = container_pos;
@@ -787,7 +787,7 @@ impl Printer {
 
             // Emit trailing comments if the position is not synthesized and the node
             // has not opted out from emitting leading comments and is an emitted node.
-            if !skip_trailing_comments && node.kind != Kind::NotEmittedStatement {
+            if !skip_trailing_comments && node.kind() != Kind::NotEmittedStatement {
                 self.emit_trailing_comments(end, commentSeparator::Before);
             }
         }
@@ -1284,7 +1284,7 @@ impl Printer {
             return;
         };
 
-        match node.kind {
+        match node.kind() {
             Kind::Block | Kind::CaseClause | Kind::DefaultClause => self.generate_all_names(node.statement_list()),
             Kind::LabeledStatement | Kind::WithStatement | Kind::DoStatement | Kind::WhileStatement => self.generate_names(Some(node.statement())),
             Kind::IfStatement => {
@@ -1349,7 +1349,7 @@ impl Printer {
         let Some(node) = node else {
             return;
         };
-        match node.kind {
+        match node.kind() {
             Kind::PropertyAssignment
             | Kind::ShorthandPropertyAssignment
             | Kind::PropertyDeclaration

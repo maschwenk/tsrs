@@ -295,7 +295,7 @@ impl Checker {
 // checker.go:1241
 pub(crate) fn get_global_type_declaration(symbol: P<Symbol>) -> Option<P<Node>> {
     for declaration in symbol.declarations().iter() {
-        match declaration.kind {
+        match declaration.kind() {
             Kind::ClassDeclaration | Kind::InterfaceDeclaration | Kind::EnumDeclaration | Kind::TypeAliasDeclaration => {
                 return Some(*declaration);
             }
@@ -723,7 +723,7 @@ impl Checker {
             return;
         }
         if let Some(loc) = error_location {
-            if loc.parent().unwrap().kind == Kind::JSDocLink
+            if loc.parent().unwrap().kind() == Kind::JSDocLink
                 || self.check_and_report_error_for_missing_prefix(loc, name)
                 || self.check_and_report_error_for_extending_interface(loc)
                 || self.check_and_report_error_for_using_type_as_namespace(loc, name, meaning)
@@ -806,7 +806,7 @@ impl Checker {
 
     // checker.go:1670
     pub(crate) fn check_and_report_error_for_exporting_primitive_type(&mut self, error_location: P<Node>, name: &str) -> bool {
-        if is_primitive_type_name(name) && error_location.parent().unwrap().kind == Kind::ExportSpecifier {
+        if is_primitive_type_name(name) && error_location.parent().unwrap().kind() == Kind::ExportSpecifier {
             self.error(Some(error_location), &diagnostics::Cannot_export_0_Only_local_declarations_can_be_exported_from_a_module, &[&name]);
             return true;
         }
@@ -854,7 +854,7 @@ impl Checker {
                 if let Some(grandparent) = grandparent.filter(|g| g.parent().is_some() && ast::is_heritage_clause(*g)) {
                     let heritage_kind = grandparent.as_heritage_clause().token;
                     let container = grandparent.parent().unwrap();
-                    let container_kind = container.kind;
+                    let container_kind = container.kind();
                     if container_kind == Kind::InterfaceDeclaration && heritage_kind == Kind::ExtendsKeyword {
                         self.error(
                             Some(error_location),
@@ -1208,7 +1208,7 @@ impl Checker {
                 && !is_exclamation_token(declaration.postfix_token()))
         {
             // declaration is before usage
-            if declaration.kind == Kind::BindingElement {
+            if declaration.kind() == Kind::BindingElement {
                 // still might be illegal if declaration and usage are both binding elements (eg var [a = b, b = b] = [1, 2])
                 let error_binding_element = ast::find_ancestor_kind(usage, Kind::BindingElement);
                 if let Some(error_binding_element) = error_binding_element {
@@ -1217,7 +1217,7 @@ impl Checker {
                 }
                 // or it might be illegal if usage happens before parent variable is declared (eg var [a] = a)
                 return self.is_block_scoped_name_declared_before_use(ast::find_ancestor_kind(declaration, Kind::VariableDeclaration).unwrap(), usage);
-            } else if declaration.kind == Kind::VariableDeclaration {
+            } else if declaration.kind() == Kind::VariableDeclaration {
                 // still might be illegal if usage is in the initializer of the variable declaration (eg var a = a)
                 return !is_immediately_used_in_initializer_of_block_scoped_variable(declaration, usage, decl_container.unwrap());
             } else if ast::is_class_like(declaration) {
@@ -1386,7 +1386,7 @@ impl Checker {
 // checker.go:2113
 pub(crate) fn is_immediately_used_in_initializer_of_block_scoped_variable(declaration: P<Node>, usage: P<Node>, decl_container: P<Node>) -> bool {
     let grandparent = declaration.parent().unwrap().parent().unwrap();
-    match grandparent.kind {
+    match grandparent.kind() {
         Kind::VariableStatement | Kind::ForStatement | Kind::ForOfStatement => {
             // variable statement/for/for-of statement case,
             // use site should not be inside variable declaration (initializer of declaration or binding element)
@@ -1440,7 +1440,7 @@ pub(crate) fn is_property_immediately_referenced_within_declaration(declaration:
         if cur == declaration {
             break;
         }
-        match cur.kind {
+        match cur.kind() {
             Kind::ArrowFunction => return false,
             Kind::PropertyDeclaration => {
                 // even when stopping at any property declaration, they need to come from the same class
@@ -1449,7 +1449,7 @@ pub(crate) fn is_property_immediately_referenced_within_declaration(declaration:
                         || (ast::is_parameter_property_declaration(declaration, declaration.parent().unwrap())
                             && cur.parent() == declaration.parent().unwrap().parent()));
             }
-            Kind::Block => match cur.parent().unwrap().kind {
+            Kind::Block => match cur.parent().unwrap().kind() {
                 Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => return false,
                 _ => {}
             },

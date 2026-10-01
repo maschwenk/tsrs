@@ -934,7 +934,7 @@ impl Checker {
         if !source.flags().intersects(SignatureFlags::IsNonInferrable) {
             let save_bivariant = n.bivariant.get();
             let kind = match target.declaration() {
-                Some(declaration) => declaration.kind,
+                Some(declaration) => declaration.kind(),
                 None => Kind::Unknown,
             };
             // Once we descend into a bivariant signature we remain bivariant for all nested inferences

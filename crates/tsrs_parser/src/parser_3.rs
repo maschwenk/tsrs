@@ -64,7 +64,7 @@ impl Parser {
         // To avoid a look-ahead, we did not handle the case of an arrow function with a single un-parenthesized
         // parameter ('x => ...') above. We handle it here by checking if the parsed expression was a single
         // identifier and the current token is an arrow.
-        if expr.kind == Kind::Identifier && self.token == Kind::EqualsGreaterThanToken {
+        if expr.kind() == Kind::Identifier && self.token == Kind::EqualsGreaterThanToken {
             return self.parse_simple_arrow_function_expression(pos, expr, allow_return_type_in_arrow_function, jsdoc, None /*asyncModifier*/);
         }
         // Now see if we might be in cases '2' or '3'.
@@ -332,7 +332,7 @@ impl Parser {
         // So we need just a bit of lookahead to ensure that it can only be a signature.
         let mut unwrapped_type = return_type;
         while let Some(t) = unwrapped_type {
-            if t.kind != Kind::ParenthesizedType {
+            if t.kind() != Kind::ParenthesizedType {
                 break;
             }
             unwrapped_type = t.type_node(); // Skip parens if need be
@@ -562,7 +562,7 @@ impl Parser {
                     // assertion. See https://github.com/microsoft/TypeScript/issues/63527.
                     let mut last_precedence = OperatorPrecedence::Highest;
                     if ast::is_binary_expression(last_operand) {
-                        last_precedence = ast::get_binary_operator_precedence(last_operand.as_binary_expression().operator_token.kind);
+                        last_precedence = ast::get_binary_operator_precedence(last_operand.as_binary_expression().operator_token.kind());
                     }
                     if operator == Kind::SatisfiesKeyword {
                         let type_node = self.parse_type();
@@ -634,7 +634,7 @@ impl Parser {
         if self.token == Kind::AsteriskAsteriskToken {
             let pos = scanner::skip_trivia(self.source_text, simple_unary_expression.pos());
             let end = simple_unary_expression.end();
-            if simple_unary_expression.kind == Kind::TypeAssertionExpression {
+            if simple_unary_expression.kind() == Kind::TypeAssertionExpression {
                 self.parse_error_at(pos, end, &diagnostics::A_type_assertion_expression_is_not_allowed_in_the_left_hand_side_of_an_exponentiation_expression_Consider_enclosing_the_expression_in_parentheses, &[]);
             } else {
                 assert!(is_keyword_or_punctuation(unary_operator));
@@ -678,13 +678,13 @@ impl Parser {
         let pos = self.node_pos();
         let opening = self.parse_jsx_opening_or_self_closing_element_or_opening_fragment(in_expression_context);
         let mut result: P<Node>;
-        match opening.kind {
+        match opening.kind() {
             Kind::JsxOpeningElement => {
                 let mut children = self.parse_jsx_children(opening);
                 let closing_element: P<Node>;
                 let last_child = children.nodes.last().copied();
                 if let Some(last_child) = last_child.filter(|last_child| {
-                    last_child.kind == Kind::JsxElement
+                    last_child.kind() == Kind::JsxElement
                         && !ast::tag_names_are_equivalent(last_child.as_jsx_element().opening_element.tag_name(), last_child.as_jsx_element().closing_element.tag_name())
                         && ast::tag_names_are_equivalent(opening.tag_name(), last_child.as_jsx_element().closing_element.tag_name())
                 }) {
@@ -776,7 +776,7 @@ impl Parser {
             };
             list.push(child);
             if ast::is_jsx_opening_element(opening_tag)
-                && child.kind == Kind::JsxElement
+                && child.kind() == Kind::JsxElement
                 && !ast::tag_names_are_equivalent(child.as_jsx_element().opening_element.tag_name(), child.as_jsx_element().closing_element.tag_name())
                 && ast::tag_names_are_equivalent(opening_tag.tag_name(), child.as_jsx_element().closing_element.tag_name())
             {
@@ -1448,7 +1448,7 @@ impl Parser {
             }
             if type_arguments.is_some() || self.token == Kind::OpenParenToken {
                 // Absorb type arguments into CallExpression when preceding expression is ExpressionWithTypeArguments
-                if question_dot_token.is_none() && expression.kind == Kind::ExpressionWithTypeArguments {
+                if question_dot_token.is_none() && expression.kind() == Kind::ExpressionWithTypeArguments {
                     type_arguments = expression.type_argument_list();
                     expression = expression.as_expression_with_type_arguments().expression;
                 }
@@ -1533,7 +1533,7 @@ impl Parser {
         loop {
             let span = self.parse_template_span(is_tagged_template);
             list.push(span);
-            if span.as_template_span().literal.kind != Kind::TemplateMiddle {
+            if span.as_template_span().literal.kind() != Kind::TemplateMiddle {
                 break;
             }
         }
@@ -1757,7 +1757,7 @@ impl Parser {
         let mut expression = self.parse_member_expression_rest(expression_pos, primary, false /*allowOptionalChain*/);
         let mut type_arguments: Option<P<NodeList>> = None;
         // Absorb type arguments into NewExpression when preceding expression is ExpressionWithTypeArguments
-        if expression.kind == Kind::ExpressionWithTypeArguments {
+        if expression.kind() == Kind::ExpressionWithTypeArguments {
             type_arguments = expression.type_argument_list();
             expression = expression.as_expression_with_type_arguments().expression;
         }
@@ -2551,7 +2551,7 @@ impl Parser {
                 if ast::is_class_declaration(node) {
                     let export_index = find_index(modifiers, is_export_modifier);
                     if export_index >= 0 {
-                        let default_index = find_index(modifiers, |m| m.kind == Kind::DefaultKeyword);
+                        let default_index = find_index(modifiers, |m| m.kind() == Kind::DefaultKeyword);
                         if decorator_index > export_index && default_index >= 0 && decorator_index < default_index {
                             // Decorator between `export` and `default`
                             self.js_error_at_range(modifiers[decorator_index as usize].loc(), &diagnostics::Decorators_are_not_valid_here, &[]);
@@ -2592,7 +2592,7 @@ impl Parser {
         if !node.flags().intersects(NodeFlags::JavaScriptFile) || node.flags().intersects(NodeFlags::JSDoc | NodeFlags::Reparsed) {
             return node;
         }
-        match node.kind {
+        match node.kind() {
             Kind::Parameter
             | Kind::PropertyDeclaration
             | Kind::MethodDeclaration
@@ -2605,7 +2605,7 @@ impl Parser {
             | Kind::ArrowFunction
             | Kind::VariableDeclaration
             | Kind::IndexSignature => {
-                if matches!(node.kind, Kind::Parameter | Kind::PropertyDeclaration | Kind::MethodDeclaration) {
+                if matches!(node.kind(), Kind::Parameter | Kind::PropertyDeclaration | Kind::MethodDeclaration) {
                     if let Some(token) = node.question_token() {
                         if !token.flags().intersects(NodeFlags::Reparsed) && ast::is_question_token(token) {
                             self.js_error_at_range(token.loc(), &diagnostics::The_0_modifier_can_only_be_used_in_TypeScript_files, &[&"?"]);
@@ -2679,7 +2679,7 @@ impl Parser {
         // Check decorator placement in JS files
         self.check_js_decorator_syntax(node);
         // Check absence of type parameters, type arguments and non-JavaScript modifiers
-        match node.kind {
+        match node.kind() {
             Kind::ClassDeclaration
             | Kind::ClassExpression
             | Kind::MethodDeclaration
@@ -2691,7 +2691,7 @@ impl Parser {
             | Kind::ArrowFunction
             | Kind::VariableStatement
             | Kind::PropertyDeclaration => {
-                if !matches!(node.kind, Kind::VariableStatement | Kind::PropertyDeclaration) {
+                if !matches!(node.kind(), Kind::VariableStatement | Kind::PropertyDeclaration) {
                     if let Some(list) = node.type_parameter_list() {
                         if list.nodes.iter().any(|n| !n.flags().intersects(NodeFlags::Reparsed)) {
                             self.js_error_at_range(list.loc.get(), &diagnostics::Type_parameter_declarations_can_only_be_used_in_TypeScript_files, &[]);
@@ -2700,8 +2700,8 @@ impl Parser {
                     // fallthrough
                 }
                 for &modifier in node.modifier_nodes() {
-                    if !modifier.flags().intersects(NodeFlags::Reparsed) && modifier.kind != Kind::Decorator && !ast::modifier_to_flag(modifier.kind).intersects(ModifierFlags::JavaScript) {
-                        let text = scanner::token_to_string(modifier.kind);
+                    if !modifier.flags().intersects(NodeFlags::Reparsed) && modifier.kind() != Kind::Decorator && !ast::modifier_to_flag(modifier.kind()).intersects(ModifierFlags::JavaScript) {
+                        let text = scanner::token_to_string(modifier.kind());
                         self.js_error_at_range(modifier.loc(), &diagnostics::The_0_modifier_can_only_be_used_in_TypeScript_files, &[&text]);
                     }
                 }
@@ -2726,7 +2726,7 @@ impl Parser {
 
 // If true, we should abort parsing an error function.
 fn type_has_arrow_function_blocking_parse_error(node: P<Node>) -> bool {
-    match node.kind {
+    match node.kind() {
         Kind::TypeReference => ast::node_is_missing(Some(node.as_type_reference_node().type_name)),
         Kind::FunctionType | Kind::ConstructorType => {
             is_missing_node_list(node.function_like_data().unwrap().parameters.get()) || type_has_arrow_function_blocking_parse_error(node.type_node().unwrap())

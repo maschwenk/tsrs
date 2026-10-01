@@ -636,7 +636,7 @@ pub(crate) fn should_mark_identifier_alias_referenced(node: P<Node>) -> bool {
 
 // checker.go:28862
 pub(crate) fn is_internal_module_import_equals_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::ImportEqualsDeclaration && node.as_import_equals_declaration().module_reference.kind != Kind::ExternalModuleReference
+    node.kind() == Kind::ImportEqualsDeclaration && node.as_import_equals_declaration().module_reference.kind() != Kind::ExternalModuleReference
 }
 
 // emitresolver.go:693 (emitresolver.go is not ported; needed by the alias-marking functions below)
@@ -714,7 +714,7 @@ impl Checker {
                 prop = self.get_property_of_type(apparent_type, right.text());
             }
         }
-        if !prop.is_some_and(|prop| is_const_enum_or_const_enum_only_module(prop) || prop.flags().intersects(SymbolFlags::EnumMember) && location.parent().unwrap().kind == Kind::EnumMember) {
+        if !prop.is_some_and(|prop| is_const_enum_or_const_enum_only_module(prop) || prop.flags().intersects(SymbolFlags::EnumMember) && location.parent().unwrap().kind() == Kind::EnumMember) {
             self.mark_alias_referenced(parent_symbol, location);
         }
     }
@@ -810,7 +810,7 @@ impl Checker {
         let grandparent = location.parent().unwrap().parent().unwrap();
         if grandparent.module_specifier().is_none() && !location.is_type_only() && !grandparent.is_type_only() {
             let exported_name = location.property_name_or_name().unwrap();
-            if exported_name.kind == Kind::StringLiteral {
+            if exported_name.kind() == Kind::StringLiteral {
                 return; // Skip for invalid syntax like this: export { "x" }
             }
             let symbol = self.resolve_name(Some(exported_name), exported_name.text(), SymbolFlags::Value | SymbolFlags::Type | SymbolFlags::Namespace | SymbolFlags::Alias, None /*nameNotFoundMessage*/, true /*isUse*/, false /*excludeGlobals*/);
@@ -969,7 +969,7 @@ impl Checker {
         self.check_external_emit_helpers(first_decorator, ExternalEmitHelpers::Metadata);
 
         // we only need to perform these checks if we are emitting serialized type metadata for the target of a decorator.
-        match node.kind {
+        match node.kind() {
             Kind::ClassDeclaration => {
                 if let Some(ctor) = get_first_constructor_with_body(node) {
                     for &p in ctor.parameters() {
@@ -979,7 +979,7 @@ impl Checker {
                 }
             }
             Kind::GetAccessor | Kind::SetAccessor => {
-                let other_kind = if node.kind == Kind::SetAccessor { Kind::GetAccessor } else { Kind::SetAccessor };
+                let other_kind = if node.kind() == Kind::SetAccessor { Kind::GetAccessor } else { Kind::SetAccessor };
                 let symbol = self.get_symbol_of_declaration(node).unwrap();
                 let other_accessor = get_declaration_of_kind(symbol, other_kind);
                 let mut annotation = self.get_annotated_accessor_type_node(Some(node));
@@ -1036,7 +1036,7 @@ impl Checker {
     // checker.go:29219
     pub(crate) fn get_entity_name_for_decorator_metadata(&mut self, node: Option<P<Node>>) -> Option<P<Node>> {
         let node = node?;
-        match node.kind {
+        match node.kind() {
             Kind::IntersectionType => self.get_entity_name_for_decorator_metadata_from_type_list(node.as_intersection_type_node().types().nodes),
             Kind::UnionType => self.get_entity_name_for_decorator_metadata_from_type_list(node.as_union_type_node().types().nodes),
             Kind::ConditionalType => {
@@ -1054,10 +1054,10 @@ impl Checker {
     pub(crate) fn get_entity_name_for_decorator_metadata_from_type_list(&mut self, type_nodes: &[P<Node>]) -> Option<P<Node>> {
         let mut common_entity_name: Option<P<Node>> = None;
         for &type_node in type_nodes {
-            if type_node.kind == Kind::NeverKeyword {
+            if type_node.kind() == Kind::NeverKeyword {
                 continue; // Always elide `never` from the union/intersection if possible
             }
-            if !self.strict_null_checks && (type_node.kind == Kind::LiteralType && type_node.as_literal_type_node().literal.kind == Kind::NullKeyword || type_node.kind == Kind::UndefinedKeyword) {
+            if !self.strict_null_checks && (type_node.kind() == Kind::LiteralType && type_node.as_literal_type_node().literal.kind() == Kind::NullKeyword || type_node.kind() == Kind::UndefinedKeyword) {
                 continue; // Elide null and undefined from unions for metadata, just like what we did prior to the implementation of strict null checks
             }
             let Some(individual_entity_name) = self.get_entity_name_for_decorator_metadata(Some(type_node)) else {
@@ -1118,7 +1118,7 @@ impl Checker {
             // We defer checking of the reference of an `import =` until the import itself is referenced,
             // This way a chain of imports can be elided if ultimately the final input is only used in a type
             // position.
-            if is_import_equals_declaration(node) && node.as_import_equals_declaration().module_reference.kind != Kind::ExternalModuleReference {
+            if is_import_equals_declaration(node) && node.as_import_equals_declaration().module_reference.kind() != Kind::ExternalModuleReference {
                 let resolved = self.resolve_symbol(symbol);
                 if self.get_symbol_flags(resolved).intersects(SymbolFlags::Value) {
                     // import foo = <symbol>
@@ -1147,7 +1147,7 @@ impl Checker {
         };
 
         let root_name = get_first_identifier(type_name);
-        let meaning = if_else(type_name.kind == Kind::Identifier, SymbolFlags::Type, SymbolFlags::Namespace) | SymbolFlags::Alias;
+        let meaning = if_else(type_name.kind() == Kind::Identifier, SymbolFlags::Type, SymbolFlags::Namespace) | SymbolFlags::Alias;
         let root_symbol = self.resolve_name(Some(root_name), root_name.text(), meaning, None /*nameNotFoundMessage*/, true /*isUse*/, false /*excludeGlobals*/);
 
         if let Some(root_symbol) = root_symbol.filter(|s| s.flags().intersects(SymbolFlags::Alias)) {
@@ -1178,7 +1178,7 @@ impl Checker {
 
 // checker.go:29362
 pub(crate) fn get_entity_name_from_type_node(node: P<Node>) -> Option<P<Node>> {
-    match node.kind {
+    match node.kind() {
         Kind::TypeReference => Some(node.as_type_reference_node().type_name),
         Kind::ExpressionWithTypeArguments => {
             if is_entity_name_expression(node.expression().unwrap()) {
@@ -1317,10 +1317,10 @@ pub(crate) fn get_mapped_type_modifiers(t: P<Type>) -> MappedTypeModifiers {
     let declaration = t.as_mapped_type().declaration.get().unwrap().as_mapped_type_node();
     let mut modifiers = MappedTypeModifiers::empty();
     if let Some(readonly_token) = declaration.readonly_token {
-        modifiers |= if_else(readonly_token.kind == Kind::MinusToken, MappedTypeModifiers::ExcludeReadonly, MappedTypeModifiers::IncludeReadonly);
+        modifiers |= if_else(readonly_token.kind() == Kind::MinusToken, MappedTypeModifiers::ExcludeReadonly, MappedTypeModifiers::IncludeReadonly);
     }
     if let Some(question_token) = declaration.question_token {
-        modifiers |= if_else(question_token.kind == Kind::MinusToken, MappedTypeModifiers::ExcludeOptional, MappedTypeModifiers::IncludeOptional);
+        modifiers |= if_else(question_token.kind() == Kind::MinusToken, MappedTypeModifiers::ExcludeOptional, MappedTypeModifiers::IncludeOptional);
     }
     modifiers
 }
@@ -1722,7 +1722,7 @@ impl Checker {
             return self.contextual_infos[index as usize].t;
         }
         let parent = node.parent().unwrap();
-        match parent.kind {
+        match parent.kind() {
             Kind::VariableDeclaration | Kind::Parameter | Kind::PropertyDeclaration | Kind::PropertySignature | Kind::BindingElement => self.get_contextual_type_for_initializer_expression(node, context_flags),
             Kind::ArrowFunction | Kind::ReturnStatement => self.get_contextual_type_for_return_expression(node, context_flags),
             Kind::YieldExpression => self.get_contextual_type_for_yield_operand(parent, context_flags),
@@ -1793,7 +1793,7 @@ impl Checker {
         if let Some(type_node) = declaration.type_node() {
             return Some(self.get_type_from_type_node(type_node));
         }
-        match declaration.kind {
+        match declaration.kind() {
             Kind::Parameter => return self.get_contextually_typed_parameter_type(declaration),
             Kind::BindingElement => return self.get_contextual_type_for_binding_element(declaration, context_flags),
             Kind::PropertyDeclaration => {
@@ -2199,7 +2199,7 @@ impl Checker {
         if let Some(t) = binary.type_.get() {
             return Some(self.get_type_from_type_node(t));
         }
-        match binary.operator_token.kind {
+        match binary.operator_token.kind() {
             Kind::EqualsToken | Kind::AmpersandAmpersandEqualsToken | Kind::BarBarEqualsToken | Kind::QuestionQuestionEqualsToken => {
                 // In an assignment expression, the right operand is contextually typed by the type of the left operand
                 // unless it's an assignment declaration.
@@ -2237,7 +2237,7 @@ impl Checker {
         let left = binary.as_binary_expression().left;
         if is_access_expression(left) {
             let expr = left.expression().unwrap();
-            match expr.kind {
+            match expr.kind() {
                 Kind::Identifier => {
                     let resolved = self.get_resolved_symbol(expr);
                     let symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(resolved)).unwrap();

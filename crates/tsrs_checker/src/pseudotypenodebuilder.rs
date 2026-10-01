@@ -135,7 +135,7 @@ impl NodeBuilderImpl {
                         }
                         return;
                     }
-                    if node.kind == Kind::UndefinedKeyword {
+                    if node.kind() == Kind::UndefinedKeyword {
                         if *has_undefined {
                             return;
                         }

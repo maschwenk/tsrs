@@ -184,7 +184,7 @@ impl Checker {
         let links = self.signature_links.get(node);
         if links.decorator_signature.get().is_none() {
             links.decorator_signature.set(Some(self.any_signature));
-            match node.kind {
+            match node.kind() {
                 Kind::ClassDeclaration | Kind::ClassExpression => {
                     // For a class decorator, the `target` is the type of the class (e.g. the
                     // "static" or "constructor" side of the class).
@@ -352,7 +352,7 @@ impl Checker {
         let links = self.signature_links.get(node);
         if links.decorator_signature.get().is_none() {
             links.decorator_signature.set(Some(self.any_signature));
-            match node.kind {
+            match node.kind() {
                 Kind::ClassDeclaration | Kind::ClassExpression => {
                     // Class decorators have a `context` of `ClassDecoratorContext<Class>`, where the `Class` type
                     // argument will be the "final type" of the class after all decorators are applied.
@@ -619,7 +619,7 @@ impl Checker {
     // checker.go:31025
     pub(crate) fn get_class_element_property_key_type(&mut self, element: P<Node>) -> P<Type> {
         let name = element.name().unwrap();
-        match name.kind {
+        match name.kind() {
             Kind::Identifier | Kind::NumericLiteral | Kind::StringLiteral => {
                 return self.get_string_literal_type(name.text());
             }
@@ -942,7 +942,7 @@ impl Checker {
     // recursive (and possibly infinite) invocations of getContextualType.
     // checker.go:31291
     pub(crate) fn is_possibly_discriminant_value(&mut self, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::StringLiteral | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::TemplateExpression
             | Kind::TrueKeyword | Kind::FalseKeyword | Kind::NullKeyword | Kind::Identifier | Kind::UndefinedKeyword => {
                 return true;
@@ -1046,7 +1046,7 @@ impl Checker {
     // that is subject to contextual typing.
     // checker.go:31386
     pub fn is_context_sensitive(&mut self, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::FunctionExpression | Kind::ArrowFunction | Kind::MethodDeclaration | Kind::FunctionDeclaration => {
                 return self.is_context_sensitive_function_like_declaration(node);
             }
@@ -1688,7 +1688,7 @@ impl Checker {
 
     // checker.go:31964
     pub(crate) fn is_some_symbol_assigned_worker(&mut self, node: P<Node>) -> bool {
-        if node.kind == Kind::Identifier {
+        if node.kind() == Kind::Identifier {
             let symbol = self.get_symbol_of_declaration(node.parent().unwrap()).unwrap();
             return self.is_symbol_assigned(symbol);
         }
@@ -1898,13 +1898,13 @@ impl Checker {
             }
         }
 
-        match node.kind {
+        match node.kind() {
             Kind::Identifier | Kind::PrivateIdentifier | Kind::PropertyAccessExpression | Kind::QualifiedName | Kind::ThisKeyword | Kind::ThisType => {
-                if node.kind != Kind::ThisKeyword && node.kind != Kind::ThisType && !ast::is_this_in_type_query(node) {
+                if node.kind() != Kind::ThisKeyword && node.kind() != Kind::ThisType && !ast::is_this_in_type_query(node) {
                     return self.get_symbol_of_name_or_property_access_expression(node);
                 }
                 // fallthrough (case ast.KindThisKeyword)
-                if node.kind != Kind::ThisType {
+                if node.kind() != Kind::ThisType {
                     let container = self.get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
                     if ast::is_function_like(container) {
                         let sig = self.get_signature_from_declaration(container.unwrap());
@@ -1923,20 +1923,20 @@ impl Checker {
             Kind::ConstructorKeyword => {
                 // constructor keyword for an overload, should take us to the definition if it exist
                 let constructor_declaration = parent;
-                if constructor_declaration.kind == Kind::Constructor {
+                if constructor_declaration.kind() == Kind::Constructor {
                     return constructor_declaration.parent().unwrap().symbol();
                 }
                 None
             }
             Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::NumericLiteral => {
-                if node.kind != Kind::NumericLiteral {
+                if node.kind() != Kind::NumericLiteral {
                     // 1). import x = require("./mo/*gotToDefinitionHere*/d")
                     // 2). External module name in an import declaration
                     // 3). Require in Javascript
                     // 4). type A = import("./f/*gotToDefinitionHere*/oo")
                     let gp_is = |f: fn(P<Node>) -> bool| grand_parent.is_some_and(f);
                     if (gp_is(ast::is_external_module_import_equals_declaration) && ast::get_external_module_import_equals_declaration_expression(grand_parent.unwrap()) == Some(node))
-                        || ((parent.kind == Kind::ImportDeclaration || parent.kind == Kind::JSImportDeclaration || parent.kind == Kind::ExportDeclaration) && ast::get_external_module_name(parent) == Some(node))
+                        || ((parent.kind() == Kind::ImportDeclaration || parent.kind() == Kind::JSImportDeclaration || parent.kind() == Kind::ExportDeclaration) && ast::get_external_module_name(parent) == Some(node))
                         || gp_is(ast::is_variable_declaration_initialized_to_require)
                         || ast::is_import_call(parent)
                         || (ast::is_literal_type_node(parent) && gp_is(ast::is_literal_import_type_node) && grand_parent.unwrap().as_import_type_node().argument == parent)
@@ -1981,7 +1981,7 @@ impl Checker {
                 None
             }
             Kind::ImportKeyword | Kind::NewKeyword => {
-                if node.kind == Kind::ImportKeyword && ast::is_meta_property(parent) && parent.text() == "defer" {
+                if node.kind() == Kind::ImportKeyword && ast::is_meta_property(parent) && parent.text() == "defer" {
                     return None;
                 }
                 // fallthrough (case ast.KindNewKeyword)
@@ -2042,7 +2042,7 @@ impl Checker {
         if ast::is_declaration_name(name) {
             return self.get_symbol_of_node(name.parent().unwrap());
         }
-        if name.parent().unwrap().kind == Kind::ExportAssignment && ast::is_entity_name_expression(name) {
+        if name.parent().unwrap().kind() == Kind::ExportAssignment && ast::is_entity_name_expression(name) {
             // Even an entity name expression that doesn't resolve as an entityname may still typecheck as a property access expression
             let success = self.resolve_entity_name(
                 name,
@@ -2079,7 +2079,7 @@ impl Checker {
         if is_in_name_of_expression_with_type_arguments_or_heritage_type_reference(name) {
             let mut meaning;
             let name_parent = name.parent().unwrap();
-            if name_parent.kind == Kind::ExpressionWithTypeArguments || name_parent.kind == Kind::TypeReference {
+            if name_parent.kind() == Kind::ExpressionWithTypeArguments || name_parent.kind() == Kind::TypeReference {
                 // A heritage element name may appear in type space, value space, or both;
                 // ensure the meaning matches its context.
                 meaning = if ast::is_part_of_type_node(name) { SymbolFlags::Type } else { SymbolFlags::Value };
@@ -2157,7 +2157,7 @@ impl Checker {
                 return links.resolved_symbol.get();
             }
         } else if ast::is_entity_name(name) && is_type_reference_identifier(name) {
-            let meaning = if name.parent().unwrap().kind == Kind::TypeReference { SymbolFlags::Type } else { SymbolFlags::Namespace };
+            let meaning = if name.parent().unwrap().kind() == Kind::TypeReference { SymbolFlags::Type } else { SymbolFlags::Namespace };
             let symbol = self.resolve_entity_name(name, meaning, true /*ignoreErrors*/, true /*dontResolveAlias*/, None /*location*/);
             if symbol.is_some() && symbol != Some(self.unknown_symbol) {
                 return symbol;
@@ -2168,7 +2168,7 @@ impl Checker {
             return Some(self.get_unresolved_symbol_for_entity_name(name));
         }
 
-        if name.parent().unwrap().kind == Kind::TypePredicate {
+        if name.parent().unwrap().kind() == Kind::TypePredicate {
             return self.resolve_entity_name(
                 name,
                 SymbolFlags::FunctionScopedVariable, /*meaning*/
@@ -2182,7 +2182,7 @@ impl Checker {
 
     // checker.go:32408
     pub(crate) fn is_this_property_and_this_typed(&mut self, node: P<Node>) -> bool {
-        if node.expression().unwrap().kind == Kind::ThisKeyword {
+        if node.expression().unwrap().kind() == Kind::ThisKeyword {
             let container = self.get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
             if ast::is_function_like(container) {
                 let containing_literal = get_containing_object_literal(container.unwrap());
@@ -2298,7 +2298,7 @@ impl Checker {
         }
 
         let parent = node.parent().unwrap();
-        if ast::is_meta_property(parent) && parent.as_meta_property().keyword_token == node.kind {
+        if ast::is_meta_property(parent) && parent.as_meta_property().keyword_token == node.kind() {
             return self.check_meta_property_keyword(parent);
         }
 
@@ -2319,7 +2319,7 @@ impl Checker {
             if this_type.is_some() {
                 return this_type;
             }
-            if literal.parent().unwrap().kind != Kind::PropertyAssignment {
+            if literal.parent().unwrap().kind() != Kind::PropertyAssignment {
                 break;
             }
             literal = literal.parent().unwrap().parent().unwrap();
@@ -2423,7 +2423,7 @@ impl Checker {
             let Some(node) = node else {
                 return false;
             };
-            match node.kind {
+            match node.kind() {
                 Kind::Identifier => {
                     // Go: c.IsArgumentsSymbol(symbol) is `symbol == c.argumentsSymbol` (services.go).
                     return node.text() == c.arguments_symbol.name() && c.get_resolved_symbol(node) == c.arguments_symbol;

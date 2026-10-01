@@ -14,12 +14,14 @@ pub fn get_node_id(node: P<Node>) -> NodeId {
     let mut id = node.id.load(Ordering::Relaxed);
     if id == 0 {
         // Worst case, we burn a few ids if we have to CAS.
-        id = NEXT_NODE_ID.fetch_add(1, Ordering::Relaxed) + 1;
+        let next = NEXT_NODE_ID.fetch_add(1, Ordering::Relaxed) + 1;
+        // Nodes store their id in 32 bits (memory); Go's ids are 64-bit but no program gets near 2^32.
+        id = u32::try_from(next).expect("more than u32::MAX node ids");
         if node.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_err() {
             id = node.id.load(Ordering::Relaxed);
         }
     }
-    NodeId(id)
+    NodeId(id as u64)
 }
 
 pub fn get_symbol_id(symbol: P<Symbol>) -> SymbolId {
@@ -71,7 +73,7 @@ pub fn get_locals(container: P<Node>) -> P<SymbolTable> {
 pub fn node_is_missing(node: impl Into<Option<P<Node>>>) -> bool {
     match node.into() {
         None => true,
-        Some(node) => node.pos() == node.end() && node.pos() >= 0 && node.kind != Kind::EndOfFile,
+        Some(node) => node.pos() == node.end() && node.pos() >= 0 && node.kind() != Kind::EndOfFile,
     }
 }
 
@@ -91,11 +93,11 @@ pub fn position_is_synthesized(pos: i32) -> bool {
 }
 
 pub fn node_kind_is(node: P<Node>, kinds: &[Kind]) -> bool {
-    kinds.contains(&node.kind)
+    kinds.contains(&node.kind())
 }
 
 pub fn is_modifier(node: P<Node>) -> bool {
-    is_modifier_kind(node.kind)
+    is_modifier_kind(node.kind())
 }
 
 pub fn is_compound_assignment(token: Kind) -> bool {
@@ -103,10 +105,10 @@ pub fn is_compound_assignment(token: Kind) -> bool {
 }
 
 pub fn is_assignment_expression(node: P<Node>, exclude_compound_assignment: bool) -> bool {
-    if node.kind == Kind::BinaryExpression {
+    if node.kind() == Kind::BinaryExpression {
         let expr = node.as_binary_expression();
-        return (expr.operator_token.kind == Kind::EqualsToken
-            || !exclude_compound_assignment && is_assignment_operator(expr.operator_token.kind))
+        return (expr.operator_token.kind() == Kind::EqualsToken
+            || !exclude_compound_assignment && is_assignment_operator(expr.operator_token.kind()))
             && is_left_hand_side_expression(expr.left);
     }
     false
@@ -121,19 +123,19 @@ pub fn get_right_most_assigned_expression(mut node: P<Node>) -> P<Node> {
 
 pub fn is_destructuring_assignment(node: P<Node>) -> bool {
     if is_assignment_expression(node, true /*excludeCompoundAssignment*/) {
-        let kind = node.as_binary_expression().left.kind;
+        let kind = node.as_binary_expression().left.kind();
         return kind == Kind::ObjectLiteralExpression || kind == Kind::ArrayLiteralExpression;
     }
     false
 }
 
 pub fn is_binding_pattern(node: P<Node>) -> bool {
-    node.kind == Kind::ObjectBindingPattern || node.kind == Kind::ArrayBindingPattern
+    node.kind() == Kind::ObjectBindingPattern || node.kind() == Kind::ArrayBindingPattern
 }
 
 pub fn is_for_in_or_of_statement(node: impl Into<Option<P<Node>>>) -> bool {
     match node.into() {
-        Some(node) => node.kind == Kind::ForInStatement || node.kind == Kind::ForOfStatement,
+        Some(node) => node.kind() == Kind::ForInStatement || node.kind() == Kind::ForOfStatement,
         None => false,
     }
 }
@@ -151,9 +153,9 @@ pub fn is_assignment_target(node: P<Node>) -> bool {
 pub fn get_assignment_target(mut node: P<Node>) -> Option<P<Node>> {
     loop {
         let parent = node.parent().unwrap();
-        match parent.kind {
+        match parent.kind() {
             Kind::BinaryExpression => {
-                if is_assignment_operator(parent.as_binary_expression().operator_token.kind) && parent.as_binary_expression().left == node {
+                if is_assignment_operator(parent.as_binary_expression().operator_token.kind()) && parent.as_binary_expression().left == node {
                     return Some(parent);
                 }
                 return None;
@@ -210,18 +212,18 @@ pub fn is_logical_or_coalescing_binary_operator(token: Kind) -> bool {
 }
 
 pub fn is_logical_or_coalescing_binary_expression(expr: P<Node>) -> bool {
-    is_binary_expression(expr) && is_logical_or_coalescing_binary_operator(expr.as_binary_expression().operator_token.kind)
+    is_binary_expression(expr) && is_logical_or_coalescing_binary_operator(expr.as_binary_expression().operator_token.kind())
 }
 
 pub fn is_logical_or_coalescing_assignment_expression(expr: P<Node>) -> bool {
-    is_binary_expression(expr) && is_logical_or_coalescing_assignment_operator(expr.as_binary_expression().operator_token.kind)
+    is_binary_expression(expr) && is_logical_or_coalescing_assignment_operator(expr.as_binary_expression().operator_token.kind())
 }
 
 pub fn is_logical_expression(mut node: P<Node>) -> bool {
     loop {
-        if node.kind == Kind::ParenthesizedExpression {
+        if node.kind() == Kind::ParenthesizedExpression {
             node = node.expression().unwrap();
-        } else if node.kind == Kind::PrefixUnaryExpression && node.as_prefix_unary_expression().operator == Kind::ExclamationToken {
+        } else if node.kind() == Kind::PrefixUnaryExpression && node.as_prefix_unary_expression().operator == Kind::ExclamationToken {
             node = node.as_prefix_unary_expression().operand;
         } else {
             return is_logical_or_coalescing_binary_expression(node);
@@ -230,24 +232,24 @@ pub fn is_logical_expression(mut node: P<Node>) -> bool {
 }
 
 pub fn is_accessor(node: P<Node>) -> bool {
-    node.kind == Kind::GetAccessor || node.kind == Kind::SetAccessor
+    node.kind() == Kind::GetAccessor || node.kind() == Kind::SetAccessor
 }
 
 pub fn is_property_name_literal(node: P<Node>) -> bool {
-    matches!(node.kind, Kind::Identifier | Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::NumericLiteral)
+    matches!(node.kind(), Kind::Identifier | Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::NumericLiteral)
 }
 
 pub fn is_member_name(node: P<Node>) -> bool {
-    node.kind == Kind::Identifier || node.kind == Kind::PrivateIdentifier
+    node.kind() == Kind::Identifier || node.kind() == Kind::PrivateIdentifier
 }
 
 pub fn is_entity_name(node: P<Node>) -> bool {
-    node.kind == Kind::Identifier || node.kind == Kind::QualifiedName
+    node.kind() == Kind::Identifier || node.kind() == Kind::QualifiedName
 }
 
 pub fn is_property_name(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::Identifier | Kind::PrivateIdentifier | Kind::StringLiteral | Kind::NumericLiteral | Kind::ComputedPropertyName
     )
 }
@@ -255,7 +257,7 @@ pub fn is_property_name(node: P<Node>) -> bool {
 // Return true if the given identifier is classified as an IdentifierName by inspecting the parent of the node
 pub fn is_identifier_name(node: P<Node>) -> bool {
     let parent = node.parent().unwrap();
-    match parent.kind {
+    match parent.kind() {
         Kind::PropertyDeclaration
         | Kind::PropertySignature
         | Kind::MethodDeclaration
@@ -279,15 +281,15 @@ pub fn is_push_or_unshift_identifier(node: P<Node>) -> bool {
 }
 
 pub fn is_boolean_literal(node: P<Node>) -> bool {
-    node.kind == Kind::TrueKeyword || node.kind == Kind::FalseKeyword
+    node.kind() == Kind::TrueKeyword || node.kind() == Kind::FalseKeyword
 }
 
 pub fn is_literal_expression(node: P<Node>) -> bool {
-    is_literal_kind(node.kind)
+    is_literal_kind(node.kind())
 }
 
 pub fn is_string_literal_like(node: P<Node>) -> bool {
-    matches!(node.kind, Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral)
+    matches!(node.kind(), Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral)
 }
 
 pub fn is_string_or_numeric_literal_like(node: P<Node>) -> bool {
@@ -295,7 +297,7 @@ pub fn is_string_or_numeric_literal_like(node: P<Node>) -> bool {
 }
 
 pub fn is_signed_numeric_literal(node: P<Node>) -> bool {
-    if node.kind == Kind::PrefixUnaryExpression {
+    if node.kind() == Kind::PrefixUnaryExpression {
         let node = node.as_prefix_unary_expression();
         return (node.operator == Kind::PlusToken || node.operator == Kind::MinusToken) && is_numeric_literal(node.operand);
     }
@@ -306,7 +308,7 @@ pub fn is_signed_numeric_literal(node: P<Node>) -> bool {
 pub fn is_optional_chain(node: P<Node>) -> bool {
     if node.flags().intersects(NodeFlags::OptionalChain) {
         return matches!(
-            node.kind,
+            node.kind(),
             Kind::PropertyAccessExpression | Kind::ElementAccessExpression | Kind::CallExpression | Kind::NonNullExpression
         );
     }
@@ -345,11 +347,11 @@ pub fn is_expression_of_optional_chain_root(node: P<Node>) -> bool {
 }
 
 pub fn is_nullish_coalesce(node: P<Node>) -> bool {
-    node.kind == Kind::BinaryExpression && node.as_binary_expression().operator_token.kind == Kind::QuestionQuestionToken
+    node.kind() == Kind::BinaryExpression && node.as_binary_expression().operator_token.kind() == Kind::QuestionQuestionToken
 }
 
 pub fn is_assertion_expression(node: P<Node>) -> bool {
-    let kind = node.kind;
+    let kind = node.kind();
     kind == Kind::TypeAssertionExpression || kind == Kind::AsExpression
 }
 
@@ -392,7 +394,7 @@ pub(crate) fn is_left_hand_side_expression_kind(kind: Kind) -> bool {
 
 // Determines whether a node is a LeftHandSideExpression based only on its kind.
 pub fn is_left_hand_side_expression(node: P<Node>) -> bool {
-    is_left_hand_side_expression_kind(skip_partially_emitted_expressions(node).kind)
+    is_left_hand_side_expression_kind(skip_partially_emitted_expressions(node).kind())
 }
 
 pub(crate) fn is_unary_expression_kind(kind: Kind) -> bool {
@@ -425,11 +427,11 @@ pub(crate) fn is_expression_kind(kind: Kind) -> bool {
 
 // Determines whether a node is an expression based only on its kind.
 pub fn is_expression(node: P<Node>) -> bool {
-    is_expression_kind(skip_partially_emitted_expressions(node).kind)
+    is_expression_kind(skip_partially_emitted_expressions(node).kind())
 }
 
 pub fn is_comma_expression(node: P<Node>) -> bool {
-    node.kind == Kind::BinaryExpression && node.as_binary_expression().operator_token.kind == Kind::CommaToken
+    node.kind() == Kind::BinaryExpression && node.as_binary_expression().operator_token.kind() == Kind::CommaToken
 }
 
 pub fn is_comma_sequence(node: P<Node>) -> bool {
@@ -437,7 +439,7 @@ pub fn is_comma_sequence(node: P<Node>) -> bool {
 }
 
 pub fn is_iteration_statement(node: P<Node>, look_in_labeled_statements: bool) -> bool {
-    match node.kind {
+    match node.kind() {
         Kind::ForStatement | Kind::ForInStatement | Kind::ForOfStatement | Kind::DoStatement | Kind::WhileStatement => true,
         Kind::LabeledStatement => look_in_labeled_statements && is_iteration_statement(node.statement(), look_in_labeled_statements),
         _ => false,
@@ -446,7 +448,7 @@ pub fn is_iteration_statement(node: P<Node>, look_in_labeled_statements: bool) -
 
 // Determines if a node is a property or element access expression
 pub fn is_access_expression(node: P<Node>) -> bool {
-    node.kind == Kind::PropertyAccessExpression || node.kind == Kind::ElementAccessExpression
+    node.kind() == Kind::PropertyAccessExpression || node.kind() == Kind::ElementAccessExpression
 }
 
 pub(crate) fn is_function_like_declaration_kind(kind: Kind) -> bool {
@@ -466,7 +468,7 @@ pub(crate) fn is_function_like_declaration_kind(kind: Kind) -> bool {
 pub fn is_function_like_declaration(node: impl Into<Option<P<Node>>>) -> bool {
     // TODO(rbuckton): Move `node != nil` test to call sites
     match node.into() {
-        Some(node) => is_function_like_declaration_kind(node.kind),
+        Some(node) => is_function_like_declaration_kind(node.kind()),
         None => false,
     }
 }
@@ -488,7 +490,7 @@ pub fn is_function_like_kind(kind: Kind) -> bool {
 pub fn is_function_like(node: impl Into<Option<P<Node>>>) -> bool {
     // TODO(rbuckton): Move `node != nil` test to call sites
     match node.into() {
-        Some(node) => is_function_like_kind(node.kind),
+        Some(node) => is_function_like_kind(node.kind()),
         None => false,
     }
 }
@@ -505,16 +507,16 @@ pub fn is_function_or_source_file(node: P<Node>) -> bool {
 }
 
 pub fn is_class_like(node: P<Node>) -> bool {
-    node.kind == Kind::ClassDeclaration || node.kind == Kind::ClassExpression
+    node.kind() == Kind::ClassDeclaration || node.kind() == Kind::ClassExpression
 }
 
 pub fn is_class_or_interface_like(node: P<Node>) -> bool {
-    node.kind == Kind::ClassDeclaration || node.kind == Kind::ClassExpression || node.kind == Kind::InterfaceDeclaration
+    node.kind() == Kind::ClassDeclaration || node.kind() == Kind::ClassExpression || node.kind() == Kind::InterfaceDeclaration
 }
 
 pub fn is_class_element(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::Constructor
             | Kind::PropertyDeclaration
             | Kind::MethodDeclaration
@@ -527,7 +529,7 @@ pub fn is_class_element(node: P<Node>) -> bool {
 }
 
 pub fn is_method_or_accessor(node: P<Node>) -> bool {
-    matches!(node.kind, Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor)
+    matches!(node.kind(), Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor)
 }
 
 pub fn is_private_identifier_class_element_declaration(node: P<Node>) -> bool {
@@ -535,14 +537,14 @@ pub fn is_private_identifier_class_element_declaration(node: P<Node>) -> bool {
 }
 
 pub fn is_object_literal_or_class_expression_method_or_accessor(node: P<Node>) -> bool {
-    let kind = node.kind;
+    let kind = node.kind();
     (kind == Kind::MethodDeclaration || kind == Kind::GetAccessor || kind == Kind::SetAccessor)
-        && (node.parent().unwrap().kind == Kind::ObjectLiteralExpression || node.parent().unwrap().kind == Kind::ClassExpression)
+        && (node.parent().unwrap().kind() == Kind::ObjectLiteralExpression || node.parent().unwrap().kind() == Kind::ClassExpression)
 }
 
 pub fn is_object_literal_element(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::PropertyAssignment
             | Kind::ShorthandPropertyAssignment
             | Kind::SpreadAssignment
@@ -554,7 +556,7 @@ pub fn is_object_literal_element(node: P<Node>) -> bool {
 
 pub fn is_object_literal_method(node: impl Into<Option<P<Node>>>) -> bool {
     match node.into() {
-        Some(node) => node.kind == Kind::MethodDeclaration && node.parent().unwrap().kind == Kind::ObjectLiteralExpression,
+        Some(node) => node.kind() == Kind::MethodDeclaration && node.parent().unwrap().kind() == Kind::ObjectLiteralExpression,
         None => false,
     }
 }
@@ -564,12 +566,12 @@ pub fn is_auto_accessor_property_declaration(node: P<Node>) -> bool {
 }
 
 pub fn is_parameter_property_declaration(node: P<Node>, parent: P<Node>) -> bool {
-    is_parameter_declaration(node) && has_syntactic_modifier(node, ModifierFlags::ParameterPropertyModifier) && parent.kind == Kind::Constructor
+    is_parameter_declaration(node) && has_syntactic_modifier(node, ModifierFlags::ParameterPropertyModifier) && parent.kind() == Kind::Constructor
 }
 
 pub fn is_type_element(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::ConstructSignature
             | Kind::CallSignature
             | Kind::PropertySignature
@@ -582,7 +584,7 @@ pub fn is_type_element(node: P<Node>) -> bool {
 }
 
 pub fn is_jsx_child(node: P<Node>) -> bool {
-    matches!(node.kind, Kind::JsxElement | Kind::JsxExpression | Kind::JsxSelfClosingElement | Kind::JsxText | Kind::JsxFragment)
+    matches!(node.kind(), Kind::JsxElement | Kind::JsxExpression | Kind::JsxSelfClosingElement | Kind::JsxText | Kind::JsxFragment)
 }
 
 pub fn is_jsx_attribute_like(node: P<Node>) -> bool {
@@ -614,7 +616,7 @@ pub(crate) fn is_declaration_statement_kind(kind: Kind) -> bool {
 //
 // NOTE: ECMA262 would just call this a Declaration
 pub fn is_declaration_statement(node: P<Node>) -> bool {
-    is_declaration_statement_kind(node.kind)
+    is_declaration_statement_kind(node.kind())
 }
 
 pub(crate) fn is_statement_kind_but_not_declaration_kind(kind: Kind) -> bool {
@@ -647,18 +649,18 @@ pub(crate) fn is_statement_kind_but_not_declaration_kind(kind: Kind) -> bool {
 //
 // NOTE: ECMA262 would call this either a StatementListItem or ModuleListItem
 pub fn is_statement(node: P<Node>) -> bool {
-    let kind = node.kind;
+    let kind = node.kind();
     is_statement_kind_but_not_declaration_kind(kind) || is_declaration_statement_kind(kind) || is_block_statement(node)
 }
 
 // Determines whether a node is a BlockStatement. If parents are available, this ensures the Block is
 // not part of a `try` statement, `catch` clause, or the Block-like body of a function
 pub(crate) fn is_block_statement(node: P<Node>) -> bool {
-    if node.kind != Kind::Block {
+    if node.kind() != Kind::Block {
         return false;
     }
     if let Some(parent) = node.parent() {
-        if parent.kind == Kind::TryStatement || parent.kind == Kind::CatchClause {
+        if parent.kind() == Kind::TryStatement || parent.kind() == Kind::CatchClause {
             return false;
         }
     }
@@ -668,7 +670,7 @@ pub(crate) fn is_block_statement(node: P<Node>) -> bool {
 // Determines whether a node is the Block-like body of a function by walking the parent of the node
 pub fn is_function_block(node: impl Into<Option<P<Node>>>) -> bool {
     match node.into() {
-        Some(node) => node.kind == Kind::Block && node.parent().is_some() && is_function_like(node.parent()),
+        Some(node) => node.kind() == Kind::Block && node.parent().is_some() && is_function_like(node.parent()),
         None => false,
     }
 }
@@ -679,7 +681,7 @@ pub fn is_block_or_catch_scoped(declaration: P<Node>) -> bool {
 
 pub fn is_catch_clause_variable_declaration_or_binding_element(declaration: P<Node>) -> bool {
     let node = get_root_declaration(declaration);
-    node.kind == Kind::VariableDeclaration && node.parent().unwrap().kind == Kind::CatchClause
+    node.kind() == Kind::VariableDeclaration && node.parent().unwrap().kind() == Kind::CatchClause
 }
 
 pub fn is_type_node_kind(kind: Kind) -> bool {
@@ -707,7 +709,7 @@ pub fn is_type_node_kind(kind: Kind) -> bool {
 }
 
 pub fn is_type_node(node: P<Node>) -> bool {
-    is_type_node_kind(node.kind)
+    is_type_node_kind(node.kind())
 }
 
 pub fn is_jsdoc_kind(kind: Kind) -> bool {
@@ -726,7 +728,7 @@ pub fn is_jsdoc_type_assertion(node: impl Into<Option<P<Node>>>) -> bool {
 }
 
 pub fn is_prologue_directive(node: P<Node>) -> bool {
-    node.kind == Kind::ExpressionStatement && node.expression().unwrap().kind == Kind::StringLiteral
+    node.kind() == Kind::ExpressionStatement && node.expression().unwrap().kind() == Kind::StringLiteral
 }
 
 bitflags::bitflags! {
@@ -753,7 +755,7 @@ pub type OEK = OuterExpressionKinds;
 
 // Determines whether node is an "outer expression" of the provided kinds
 pub fn is_outer_expression(node: P<Node>, kinds: OuterExpressionKinds) -> bool {
-    match node.kind {
+    match node.kind() {
         Kind::ParenthesizedExpression => {
             kinds.intersects(OEK::Parentheses) && !(kinds.intersects(OEK::ExcludeJSDocTypeAssertion) && is_jsdoc_type_assertion(node))
         }
@@ -762,7 +764,7 @@ pub fn is_outer_expression(node: P<Node>, kinds: OuterExpressionKinds) -> bool {
         Kind::ExpressionWithTypeArguments => kinds.intersects(OEK::ExpressionsWithTypeArguments),
         Kind::NonNullExpression => kinds.intersects(OEK::NonNullAssertions),
         Kind::PartiallyEmittedExpression => kinds.intersects(OEK::PartiallyEmittedExpressions),
-        Kind::BinaryExpression => match node.as_binary_expression().operator_token.kind {
+        Kind::BinaryExpression => match node.as_binary_expression().operator_token.kind() {
             Kind::EqualsToken => kinds.intersects(OEK::Assignments),
             Kind::CommaToken => kinds.intersects(OEK::Comma),
             _ => false,
@@ -803,7 +805,7 @@ pub fn skip_partially_emitted_expressions(node: P<Node>) -> P<Node> {
 pub fn walk_up_parenthesized_expressions(node: impl Into<Option<P<Node>>>) -> Option<P<Node>> {
     let mut node = node.into();
     while let Some(n) = node {
-        if n.kind != Kind::ParenthesizedExpression {
+        if n.kind() != Kind::ParenthesizedExpression {
             break;
         }
         node = n.parent();
@@ -815,7 +817,7 @@ pub fn walk_up_parenthesized_expressions(node: impl Into<Option<P<Node>>>) -> Op
 pub fn walk_up_parenthesized_types(node: impl Into<Option<P<Node>>>) -> Option<P<Node>> {
     let mut node = node.into();
     while let Some(n) = node {
-        if n.kind != Kind::ParenthesizedType {
+        if n.kind() != Kind::ParenthesizedType {
             break;
         }
         node = n.parent();
@@ -827,7 +829,7 @@ pub fn walk_up_parenthesized_types(node: impl Into<Option<P<Node>>>) -> Option<P
 pub fn get_source_file_of_node(node: impl Into<Option<P<Node>>>) -> Option<P<SourceFile>> {
     let mut node = node.into();
     while let Some(n) = node {
-        if n.kind == Kind::SourceFile {
+        if n.kind() == Kind::SourceFile {
             return Some(P::from_static(n.as_source_file()));
         }
         node = n.parent();
@@ -883,7 +885,7 @@ pub fn find_many_ancestors(node: impl Into<Option<P<Node>>>, callbacks: &mut [&m
 pub fn find_ancestor_kind(node: impl Into<Option<P<Node>>>, kind: Kind) -> Option<P<Node>> {
     let mut node = node.into();
     while let Some(n) = node {
-        if n.kind == kind {
+        if n.kind() == kind {
             return Some(n);
         }
         node = n.parent();
@@ -957,7 +959,7 @@ pub fn modifier_to_flag(token: Kind) -> ModifierFlags {
 pub fn modifiers_to_flags(modifiers: &[P<Node>]) -> ModifierFlags {
     let mut flags = ModifierFlags::None;
     for modifier in modifiers {
-        flags |= modifier_to_flag(modifier.kind);
+        flags |= modifier_to_flag(modifier.kind());
     }
     flags
 }
@@ -981,7 +983,7 @@ pub fn is_static(node: P<Node>) -> bool {
 
 pub fn can_have_symbol(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::ArrowFunction
             | Kind::BinaryExpression
             | Kind::BindingElement
@@ -1043,7 +1045,7 @@ pub fn can_have_symbol(node: P<Node>) -> bool {
 
 pub fn can_have_illegal_decorators(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::PropertyAssignment
             | Kind::ShorthandPropertyAssignment
             | Kind::FunctionDeclaration
@@ -1067,7 +1069,7 @@ pub fn can_have_illegal_decorators(node: P<Node>) -> bool {
 
 pub fn can_have_illegal_modifiers(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::ClassStaticBlockDeclaration
             | Kind::PropertyAssignment
             | Kind::ShorthandPropertyAssignment
@@ -1078,7 +1080,7 @@ pub fn can_have_illegal_modifiers(node: P<Node>) -> bool {
 
 pub fn can_have_modifiers(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::TypeParameter
             | Kind::Parameter
             | Kind::PropertySignature
@@ -1110,7 +1112,7 @@ pub fn can_have_modifiers(node: P<Node>) -> bool {
 
 pub fn can_have_decorators(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::Parameter
             | Kind::PropertyDeclaration
             | Kind::MethodDeclaration
@@ -1133,7 +1135,7 @@ pub fn is_function_expression_or_arrow_function(node: P<Node>) -> bool {
 // in the event that 'visitor' returns true.
 pub fn for_each_return_statement(body: P<Node>, mut visitor: impl FnMut(P<Node>) -> bool) -> bool {
     fn traverse(node: P<Node>, visitor: &mut dyn FnMut(P<Node>) -> bool) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::ReturnStatement => visitor(node),
             Kind::CaseBlock
             | Kind::Block
@@ -1157,7 +1159,7 @@ pub fn for_each_return_statement(body: P<Node>, mut visitor: impl FnMut(P<Node>)
 }
 
 pub fn get_root_declaration(mut node: P<Node>) -> P<Node> {
-    while node.kind == Kind::BindingElement {
+    while node.kind() == Kind::BindingElement {
         node = node.parent().unwrap().parent().unwrap();
     }
     node
@@ -1168,18 +1170,18 @@ pub fn get_combined_modifier_flags(node: P<Node>) -> ModifierFlags {
     let mut flags = node.modifier_flags();
     let mut node = Some(node);
     if let Some(n) = node {
-        if n.kind == Kind::VariableDeclaration {
+        if n.kind() == Kind::VariableDeclaration {
             node = n.parent();
         }
     }
     if let Some(n) = node {
-        if n.kind == Kind::VariableDeclarationList {
+        if n.kind() == Kind::VariableDeclarationList {
             flags |= n.modifier_flags();
             node = n.parent();
         }
     }
     if let Some(n) = node {
-        if n.kind == Kind::VariableStatement {
+        if n.kind() == Kind::VariableStatement {
             flags |= n.modifier_flags();
         }
     }
@@ -1191,18 +1193,18 @@ pub fn get_combined_node_flags(node: P<Node>) -> NodeFlags {
     let mut flags = node.flags();
     let mut node = Some(node);
     if let Some(n) = node {
-        if n.kind == Kind::VariableDeclaration {
+        if n.kind() == Kind::VariableDeclaration {
             node = n.parent();
         }
     }
     if let Some(n) = node {
-        if n.kind == Kind::VariableDeclarationList {
+        if n.kind() == Kind::VariableDeclarationList {
             flags |= n.flags();
             node = n.parent();
         }
     }
     if let Some(n) = node {
-        if n.kind == Kind::VariableStatement {
+        if n.kind() == Kind::VariableStatement {
             flags |= n.flags();
         }
     }
@@ -1266,7 +1268,7 @@ pub fn is_var_let(node: P<Node>) -> bool {
 }
 
 pub fn is_import_meta(node: P<Node>) -> bool {
-    if node.kind == Kind::MetaProperty {
+    if node.kind() == Kind::MetaProperty {
         return node.as_meta_property().keyword_token == Kind::ImportKeyword && node.name().unwrap().text() == "meta";
     }
     false
@@ -1293,7 +1295,7 @@ pub fn is_in_js_file(node: impl Into<Option<P<Node>>>) -> bool {
 }
 
 pub fn is_declaration(node: P<Node>) -> bool {
-    if node.kind == Kind::TypeParameter {
+    if node.kind() == Kind::TypeParameter {
         return node.parent().is_some();
     }
     is_declaration_node(node)
@@ -1306,24 +1308,24 @@ pub fn is_declaration_name(name: P<Node>) -> bool {
 
 // Like 'isDeclarationName', but returns true for LHS of `import { x as y }` or `export { x as y }`.
 pub fn is_declaration_name_or_import_property_name(name: P<Node>) -> bool {
-    match name.parent().unwrap().kind {
-        Kind::ImportSpecifier | Kind::ExportSpecifier => is_identifier(name) || name.kind == Kind::StringLiteral,
+    match name.parent().unwrap().kind() {
+        Kind::ImportSpecifier | Kind::ExportSpecifier => is_identifier(name) || name.kind() == Kind::StringLiteral,
         _ => is_declaration_name(name),
     }
 }
 
 pub fn is_literal_computed_property_declaration_name(node: P<Node>) -> bool {
     is_string_or_numeric_literal_like(node)
-        && node.parent().unwrap().kind == Kind::ComputedPropertyName
+        && node.parent().unwrap().kind() == Kind::ComputedPropertyName
         && is_declaration(node.parent().unwrap().parent().unwrap())
 }
 
 pub fn is_external_module_import_equals_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::ImportEqualsDeclaration && node.as_import_equals_declaration().module_reference.kind == Kind::ExternalModuleReference
+    node.kind() == Kind::ImportEqualsDeclaration && node.as_import_equals_declaration().module_reference.kind() == Kind::ExternalModuleReference
 }
 
 pub fn is_module_or_enum_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::ModuleDeclaration || node.kind == Kind::EnumDeclaration
+    node.kind() == Kind::ModuleDeclaration || node.kind() == Kind::EnumDeclaration
 }
 
 pub fn is_literal_import_type_node(node: P<Node>) -> bool {
@@ -1334,7 +1336,7 @@ pub fn is_literal_import_type_node(node: P<Node>) -> bool {
 
 pub fn is_jsx_tag_name(node: P<Node>) -> bool {
     let parent = node.parent().unwrap();
-    match parent.kind {
+    match parent.kind() {
         Kind::JsxOpeningElement | Kind::JsxClosingElement | Kind::JsxSelfClosingElement => parent.tag_name() == node,
         _ => false,
     }
@@ -1362,14 +1364,14 @@ pub fn is_this_parameter(node: P<Node>) -> bool {
 
 pub fn is_bindable_static_access_expression(node: P<Node>, exclude_this_keyword: bool) -> bool {
     is_property_access_expression(node)
-        && (!exclude_this_keyword && node.expression().unwrap().kind == Kind::ThisKeyword
+        && (!exclude_this_keyword && node.expression().unwrap().kind() == Kind::ThisKeyword
             || is_identifier(node.name().unwrap()) && is_bindable_static_name_expression(node.expression().unwrap(), true /*excludeThisKeyword*/))
         || is_bindable_static_element_access_expression(node, exclude_this_keyword)
 }
 
 pub fn is_bindable_static_element_access_expression(node: P<Node>, exclude_this_keyword: bool) -> bool {
     is_literal_like_element_access(node)
-        && ((!exclude_this_keyword && node.expression().unwrap().kind == Kind::ThisKeyword)
+        && ((!exclude_this_keyword && node.expression().unwrap().kind() == Kind::ThisKeyword)
             || is_entity_name_expression(node.expression().unwrap())
             || is_bindable_static_access_expression(node.expression().unwrap(), true /*excludeThisKeyword*/))
 }
@@ -1394,7 +1396,7 @@ pub fn is_bindable_static_name_expression(node: P<Node>, exclude_this_keyword: b
 // Does not handle signed numeric names like `a[+0]` - handling those would require handling prefix unary expressions
 // throughout late binding handling as well, which is awkward (but ultimately probably doable if there is demand)
 pub fn get_element_or_property_access_name(node: P<Node>) -> Option<P<Node>> {
-    match node.kind {
+    match node.kind() {
         Kind::PropertyAccessExpression => {
             let name = node.name().unwrap();
             if is_identifier(name) {
@@ -1453,7 +1455,7 @@ pub fn get_name_of_declaration(declaration: impl Into<Option<P<Node>>>) -> Optio
 
 pub fn get_non_assigned_name_of_declaration(declaration: P<Node>) -> Option<P<Node>> {
     // !!!
-    match declaration.kind {
+    match declaration.kind() {
         Kind::BinaryExpression | Kind::CallExpression => {
             match get_assignment_declaration_kind(declaration) {
                 JSDeclarationKind::Property | JSDeclarationKind::ThisProperty | JSDeclarationKind::ExportsProperty => {
@@ -1483,13 +1485,13 @@ pub fn get_non_assigned_name_of_declaration(declaration: P<Node>) -> Option<P<No
 
 pub fn get_assigned_name(node: P<Node>) -> Option<P<Node>> {
     if let Some(parent) = node.parent() {
-        match parent.kind {
+        match parent.kind() {
             Kind::PropertyAssignment => return parent.name(),
             Kind::BindingElement => return parent.name(),
             Kind::BinaryExpression => {
                 if node == parent.as_binary_expression().right() {
                     let left = parent.as_binary_expression().left;
-                    match left.kind {
+                    match left.kind() {
                         Kind::Identifier => return Some(left),
                         Kind::PropertyAccessExpression => return left.name(),
                         Kind::ElementAccessExpression => {

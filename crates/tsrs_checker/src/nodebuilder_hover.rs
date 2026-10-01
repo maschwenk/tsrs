@@ -218,7 +218,7 @@ impl NodeBuilderImpl {
 pub(crate) fn type_elements_to_class_elements(f: &NodeFactory, members: &mut [P<Node>]) -> Vec<P<Node>> {
     for i in 0..members.len() {
         let m = members[i];
-        match m.kind {
+        match m.kind() {
             Kind::PropertySignature => {
                 members[i] = f.new_property_declaration(m.modifiers(), m.name().unwrap(), m.question_token(), m.type_node(), None);
             }

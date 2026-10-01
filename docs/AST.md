@@ -15,13 +15,12 @@ Import everything with `use tsrs_ast::*;` (or `use tsrs_ast as ast;` and `ast::i
 ## Node
 
 ```rust
-pub struct Node {                         // 32 bytes; the data struct is allocated right after it (NodeAlloc)
-    pub kind: Kind,                       // never changes
-    pub(crate) data_tag: NodeDataTag,     // which data struct follows the header
+pub struct Node {                         // 24 bytes; the data struct is allocated right after it (NodeAlloc)
+    header: OwnedCell<NodeHeaderWord>,    // kind (never changes), data tag and parent in one word:
+                                          // node.kind(), node.data_tag() (crate), node.parent() / set_parent()
     pub flags: OwnedCell<NodeFlags>,     // OwnedCell = Cell written only by the node's owner, see PORTING.md "Threading"
+    pub(crate) id: AtomicU32,             // lazily assigned, see get_node_id (utilities); NodeId is still u64
     pub loc: OwnedCell<TextRange>,
-    pub parent: OwnedCell<Option<P<Node>>>,
-    pub(crate) id: AtomicU64,             // lazily assigned, see get_node_id (utilities)
 }
 
 // node.data() -> NodeData: a Copy view of the data struct to match on
@@ -40,9 +39,9 @@ pub enum NodeData {
 
 Payload-less variants (structs with no Rust fields; `as_x()` still returns `&'static X` of the unit
 struct): `Token`, `OmittedExpression`, `KeywordTypeNode`, `ThisTypeNode`, `JsxOpeningFragment`,
-`JsxClosingFragment`, `JSDocAllType`. Their nodes allocate only the 32-byte header; every other node is one
+`JsxClosingFragment`, `JSDocAllType`. Their nodes allocate only the 24-byte header; every other node is one
 arena allocation `NodeAlloc<T> { node: Node, data: T }` (`repr(C)`), and `as_x()` / the generated dispatchers
-check `data_tag` and read the data struct at `offset_of!(NodeAlloc<T>, data)` from the header (Go has the
+check `data_tag()` and read the data struct at `offset_of!(NodeAlloc<T>, data)` from the header (Go has the
 same single allocation: the data struct embeds `NodeBase`).
 
 Nodes are always handled as `P<Node>`. A Go function that takes a typed data pointer
@@ -53,7 +52,7 @@ Methods on `Node` (all `&self`), hand-written in `ast.rs` unless noted:
 
 - `pos()`, `end()`, `loc()`, `set_loc(TextRange)`, `flags()`, `set_flags(NodeFlags)`, `parent()`,
   `set_parent(Option<P<Node>>)`, `as_p()`/`as_node()`, `kind_string()`, `kind_value()`.
-  Go `node.Parent.Kind` (Go assumes non-nil) -> `node.parent().unwrap().kind`.
+  Go `node.Parent.Kind` (Go assumes non-nil) -> `node.parent().unwrap().kind()`.
 - Casts (generated): `as_<snake_case struct name>() -> &'static <Struct>` for every node struct, e.g.
   `as_binary_expression()`, `as_identifier()`, `as_type_assertion()` (struct `TypeAssertion`, kind
   `TypeAssertionExpression`), `as_jsdoc_parameter_or_property_tag()`, `as_source_file()`. Panics on

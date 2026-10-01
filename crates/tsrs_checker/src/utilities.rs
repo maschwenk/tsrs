@@ -86,9 +86,9 @@ pub(crate) fn get_assignment_target_kind(node: P<Node>) -> AssignmentKind {
     let Some(target) = ast::get_assignment_target(node) else {
         return AssignmentKind::None;
     };
-    match target.kind {
+    match target.kind() {
         Kind::BinaryExpression => {
-            let binary_operator = target.as_binary_expression().operator_token.kind;
+            let binary_operator = target.as_binary_expression().operator_token.kind();
             if binary_operator == Kind::EqualsToken || ast::is_logical_or_coalescing_assignment_operator(binary_operator) {
                 return AssignmentKind::Definite;
             }
@@ -107,7 +107,7 @@ pub(crate) fn is_delete_target(node: P<Node>) -> bool {
         return false;
     }
     let node = ast::walk_up_parenthesized_expressions(node.parent());
-    matches!(node, Some(n) if n.kind == Kind::DeleteExpression)
+    matches!(node, Some(n) if n.kind() == Kind::DeleteExpression)
 }
 
 // utilities.go:117
@@ -121,7 +121,7 @@ pub(crate) fn is_in_compound_like_assignment(node: P<Node>) -> bool {
 // utilities.go:122
 pub(crate) fn is_compound_like_assignment(assignment: P<Node>) -> bool {
     let right = ast::skip_parentheses(assignment.as_binary_expression().right());
-    right.kind == Kind::BinaryExpression && is_shift_operator_or_higher(right.as_binary_expression().operator_token.kind)
+    right.kind() == Kind::BinaryExpression && is_shift_operator_or_higher(right.as_binary_expression().operator_token.kind())
 }
 
 // utilities.go:127
@@ -187,7 +187,7 @@ pub fn get_single_variable_of_variable_statement(node: P<Node>) -> Option<P<Node
 // utilities.go:161
 pub(crate) fn is_type_reference_identifier(node: P<Node>) -> bool {
     let mut node = node;
-    while node.parent().unwrap().kind == Kind::QualifiedName {
+    while node.parent().unwrap().kind() == Kind::QualifiedName {
         node = node.parent().unwrap();
     }
     ast::is_type_reference_node(node.parent().unwrap())
@@ -198,7 +198,7 @@ pub fn is_in_type_query(node: P<Node>) -> bool {
     // TypeScript 1.0 spec (April 2014): 3.6.3
     // A type query consists of the keyword typeof followed by an expression.
     // The expression is restricted to a single identifier or a sequence of identifiers separated by periods
-    ast::find_ancestor_or_quit(node, |n| match n.kind {
+    ast::find_ancestor_or_quit(node, |n| match n.kind() {
         Kind::TypeQuery => FindAncestorResult::True,
         Kind::Identifier | Kind::QualifiedName => FindAncestorResult::False,
         _ => FindAncestorResult::Quit,
@@ -209,7 +209,7 @@ pub fn is_in_type_query(node: P<Node>) -> bool {
 // utilities.go:183
 pub(crate) fn can_have_locals(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::ArrowFunction
             | Kind::Block
             | Kind::CallSignature
@@ -248,13 +248,13 @@ pub(crate) fn is_shorthand_ambient_module_symbol(module_symbol: P<Symbol>) -> bo
 // utilities.go:201
 pub(crate) fn is_shorthand_ambient_module(node: Option<P<Node>>) -> bool {
     // The only kind of module that can be missing a body is a shorthand ambient module.
-    matches!(node, Some(n) if n.kind == Kind::ModuleDeclaration && n.body().is_none())
+    matches!(node, Some(n) if n.kind() == Kind::ModuleDeclaration && n.body().is_none())
 }
 
 // utilities.go:206
 pub(crate) fn get_alias_declaration_from_name(node: P<Node>) -> Option<P<Node>> {
     let parent = node.parent().unwrap();
-    match parent.kind {
+    match parent.kind() {
         Kind::ImportClause
         | Kind::ImportSpecifier
         | Kind::NamespaceImport
@@ -339,14 +339,14 @@ pub(crate) fn is_type_alias(node: P<Node>) -> bool {
 // utilities.go:264
 pub(crate) fn has_only_expression_initializer(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::VariableDeclaration | Kind::Parameter | Kind::BindingElement | Kind::PropertyDeclaration | Kind::PropertyAssignment | Kind::EnumMember
     )
 }
 
 // utilities.go:272
 pub(crate) fn has_dot_dot_dot_token(node: P<Node>) -> bool {
-    match node.kind {
+    match node.kind() {
         Kind::Parameter => node.as_parameter_declaration().dot_dot_dot_token.is_some(),
         Kind::BindingElement => node.as_binding_element().dot_dot_dot_token.is_some(),
         Kind::NamedTupleMember => node.as_named_tuple_member().dot_dot_dot_token.is_some(),
@@ -368,7 +368,7 @@ pub(crate) fn is_jsdoc_optional_parameter(node: P<Node>) -> bool {
 
 // utilities.go:294
 pub(crate) fn is_exclamation_token(node: Option<P<Node>>) -> bool {
-    matches!(node, Some(n) if n.kind == Kind::ExclamationToken)
+    matches!(node, Some(n) if n.kind() == Kind::ExclamationToken)
 }
 
 // utilities.go:298
@@ -417,7 +417,7 @@ pub(crate) fn is_empty_array_literal(expression: P<Node>) -> bool {
 pub(crate) fn declaration_belongs_to_private_ambient_member(declaration: P<Node>) -> bool {
     let root = ast::get_root_declaration(declaration);
     let mut member_declaration = root;
-    if root.kind == Kind::Parameter {
+    if root.kind() == Kind::Parameter {
         member_declaration = root.parent().unwrap();
     }
     is_private_within_ambient(member_declaration)
@@ -1204,7 +1204,7 @@ pub(crate) fn is_numeric_literal_name(name: &str) -> bool {
 
 // utilities.go:966
 pub(crate) fn is_this_property(node: P<Node>) -> bool {
-    (ast::is_property_access_expression(node) || ast::is_element_access_expression(node)) && node.expression().unwrap().kind == Kind::ThisKeyword
+    (ast::is_property_access_expression(node) || ast::is_element_access_expression(node)) && node.expression().unwrap().kind() == Kind::ThisKeyword
 }
 
 // utilities.go:970
@@ -1332,8 +1332,8 @@ pub(crate) fn is_this_initialized_object_binding_expression(node: Option<P<Node>
     }
     let grandparent = node.parent().unwrap().parent().unwrap();
     ast::is_binary_expression(grandparent)
-        && grandparent.as_binary_expression().operator_token.kind == Kind::EqualsToken
-        && grandparent.as_binary_expression().right().kind == Kind::ThisKeyword
+        && grandparent.as_binary_expression().operator_token.kind() == Kind::EqualsToken
+        && grandparent.as_binary_expression().right().kind() == Kind::ThisKeyword
 }
 
 // utilities.go:1075
@@ -1341,7 +1341,7 @@ pub(crate) fn is_this_initialized_declaration(node: Option<P<Node>>) -> bool {
     let Some(node) = node else {
         return false;
     };
-    ast::is_variable_declaration(node) && matches!(node.initializer(), Some(init) if init.kind == Kind::ThisKeyword)
+    ast::is_variable_declaration(node) && matches!(node.initializer(), Some(init) if init.kind() == Kind::ThisKeyword)
 }
 
 // utilities.go:1079
@@ -1373,7 +1373,7 @@ impl Checker {
         let parent = declaration.parent().unwrap();
         parent.flags().intersects(NodeFlags::Let)
             && !(ast::get_combined_modifier_flags(declaration).intersects(ModifierFlags::Export)
-                || parent.parent().unwrap().kind == Kind::VariableStatement && ast::is_global_source_file(parent.parent().unwrap().parent().unwrap()))
+                || parent.parent().unwrap().kind() == Kind::VariableStatement && ast::is_global_source_file(parent.parent().unwrap().parent().unwrap()))
     }
 }
 
@@ -1386,7 +1386,7 @@ pub(crate) fn is_in_ambient_or_type_node(node: P<Node>) -> bool {
 // utilities.go:1107
 pub(crate) fn is_literal_expression_of_object(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::ObjectLiteralExpression | Kind::ArrayLiteralExpression | Kind::RegularExpressionLiteral | Kind::FunctionExpression | Kind::ClassExpression
     )
 }
@@ -1420,12 +1420,12 @@ impl Checker {
 
 // utilities.go:1136
 pub(crate) fn is_super_call(n: P<Node>) -> bool {
-    ast::is_call_expression(n) && n.expression().unwrap().kind == Kind::SuperKeyword
+    ast::is_call_expression(n) && n.expression().unwrap().kind() == Kind::SuperKeyword
 }
 
 // utilities.go:1140
 pub(crate) fn get_members_of_declaration(node: P<Node>) -> Vec<P<Node>> {
-    match node.kind {
+    match node.kind() {
         Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::ClassExpression | Kind::TypeLiteral => node.members().to_vec(),
         Kind::ObjectLiteralExpression => node.properties().to_vec(),
         _ => Vec::new(),
@@ -1435,12 +1435,12 @@ pub(crate) fn get_members_of_declaration(node: P<Node>) -> Vec<P<Node>> {
 // utilities.go:1150
 pub(crate) fn is_in_right_side_of_import_or_export_assignment(node: P<Node>) -> bool {
     let mut node = node;
-    while node.parent().unwrap().kind == Kind::QualifiedName {
+    while node.parent().unwrap().kind() == Kind::QualifiedName {
         node = node.parent().unwrap();
     }
     let parent = node.parent().unwrap();
-    parent.kind == Kind::ImportEqualsDeclaration && parent.as_import_equals_declaration().module_reference == node
-        || parent.kind == Kind::ExportAssignment && parent.expression() == Some(node)
+    parent.kind() == Kind::ImportEqualsDeclaration && parent.as_import_equals_declaration().module_reference == node
+        || parent.kind() == Kind::ExportAssignment && parent.expression() == Some(node)
 }
 
 // utilities.go:1159
@@ -1451,9 +1451,9 @@ pub(crate) fn is_jsx_intrinsic_tag_name(tag_name: P<Node>) -> bool {
 // utilities.go:1163
 pub(crate) fn get_containing_object_literal(f: P<Node>) -> Option<P<Node>> {
     let parent = f.parent().unwrap();
-    if (f.kind == Kind::MethodDeclaration || f.kind == Kind::GetAccessor || f.kind == Kind::SetAccessor) && parent.kind == Kind::ObjectLiteralExpression {
+    if (f.kind() == Kind::MethodDeclaration || f.kind() == Kind::GetAccessor || f.kind() == Kind::SetAccessor) && parent.kind() == Kind::ObjectLiteralExpression {
         return Some(parent);
-    } else if f.kind == Kind::FunctionExpression && parent.kind == Kind::PropertyAssignment {
+    } else if f.kind() == Kind::FunctionExpression && parent.kind() == Kind::PropertyAssignment {
         return parent.parent();
     }
     None
@@ -1472,7 +1472,7 @@ pub(crate) fn is_import_type_qualifier_part(node: P<Node>) -> Option<P<Node>> {
     }
 
     if let Some(parent) = parent {
-        if parent.kind == Kind::ImportType && parent.as_import_type_node().qualifier == Some(node) {
+        if parent.kind() == Kind::ImportType && parent.as_import_type_node().qualifier == Some(node) {
             return Some(parent);
         }
     }
@@ -1483,11 +1483,11 @@ pub(crate) fn is_import_type_qualifier_part(node: P<Node>) -> Option<P<Node>> {
 // utilities.go:1188
 pub(crate) fn is_in_name_of_expression_with_type_arguments_or_heritage_type_reference(node: P<Node>) -> bool {
     let mut node = node;
-    while node.parent().unwrap().kind == Kind::PropertyAccessExpression || node.parent().unwrap().kind == Kind::QualifiedName {
+    while node.parent().unwrap().kind() == Kind::PropertyAccessExpression || node.parent().unwrap().kind() == Kind::QualifiedName {
         node = node.parent().unwrap();
     }
 
-    node.parent().unwrap().kind == Kind::ExpressionWithTypeArguments || ast::is_name_of_heritage_clause_type_reference(node)
+    node.parent().unwrap().kind() == Kind::ExpressionWithTypeArguments || ast::is_name_of_heritage_clause_type_reference(node)
 }
 
 // utilities.go:1197
@@ -1514,7 +1514,7 @@ pub(crate) fn expression_result_is_unused(node: P<Node>) -> bool {
         {
             return true;
         }
-        if ast::is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind == Kind::CommaToken {
+        if ast::is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind() == Kind::CommaToken {
             // left side of comma is always unused
             if node == parent.as_binary_expression().left() {
                 return true;
@@ -1537,7 +1537,7 @@ pub(crate) fn get_super_container(node: P<Node>, stop_on_functions: bool) -> Opt
     let mut node = node;
     loop {
         node = node.parent()?;
-        match node.kind {
+        match node.kind() {
             Kind::ComputedPropertyName => {
                 node = node.parent().unwrap();
             }
@@ -1578,7 +1578,7 @@ pub(crate) fn get_super_container(node: P<Node>, stop_on_functions: bool) -> Opt
 // utilities.go:1264
 pub(crate) fn for_each_yield_expression(body: P<Node>, mut visitor: impl FnMut(P<Node>) -> bool) -> bool {
     fn traverse(node: P<Node>, visitor: &mut dyn FnMut(P<Node>) -> bool) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::YieldExpression => {
                 if visitor(node) {
                     return true;
@@ -1620,7 +1620,7 @@ pub(crate) fn get_enclosing_container(node: P<Node>) -> Option<P<Node>> {
 
 // utilities.go:1304
 pub(crate) fn get_declarations_of_kind(symbol: P<Symbol>, kind: Kind) -> Vec<P<Node>> {
-    symbol.declarations().iter().copied().filter(|d| d.kind == kind).collect()
+    symbol.declarations().iter().copied().filter(|d| d.kind() == kind).collect()
 }
 
 // utilities.go:1308
@@ -1701,7 +1701,7 @@ pub(crate) fn contains_non_missing_undefined_type(c: &mut Checker, t: P<Type>) -
 
 // utilities.go:1657
 pub(crate) fn get_any_import_syntax(node: P<Node>) -> Option<P<Node>> {
-    let import_node = match node.kind {
+    let import_node = match node.kind() {
         Kind::ImportEqualsDeclaration => Some(node),
         Kind::ImportClause => node.parent(),
         Kind::NamespaceImport => node.parent().unwrap().parent(),
@@ -1723,7 +1723,7 @@ pub(crate) fn is_reserved_member_name(name: &str) -> bool {
 // utilities.go:1681
 pub(crate) fn introduces_arguments_exotic_object(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::MethodDeclaration
             | Kind::MethodSignature
             | Kind::Constructor
@@ -1821,7 +1821,7 @@ pub fn value_to_string(value: LiteralValue) -> String {
 // utilities.go:1763
 pub(crate) fn node_starts_new_lexical_environment(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::Constructor
             | Kind::FunctionExpression
             | Kind::FunctionDeclaration
@@ -1868,7 +1868,7 @@ impl Checker {
                 };
                 return !(Some(file) != declaration_file && declaration_file.is_some() && ast::is_global_source_file(declaration_file.unwrap().as_node()))
                     && !(exclude_classes && matches!(suggestion, Some(s) if s.flags().intersects(SymbolFlags::Class)) && suggestion_has_no_extends_or_decorators)
-                    && !(matches!(node, Some(n) if exclude_classes && ast::is_property_access_expression(n) && n.expression().unwrap().kind == Kind::ThisKeyword)
+                    && !(matches!(node, Some(n) if exclude_classes && ast::is_property_access_expression(n) && n.expression().unwrap().kind() == Kind::ThisKeyword)
                         && suggestion_has_no_extends_or_decorators);
             }
         }

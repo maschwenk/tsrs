@@ -7,7 +7,7 @@ pub(crate) fn needs_scope_marker(result: P<Node>) -> bool {
 
 // util.go:13
 pub(crate) fn can_have_literal_initializer(host: &'static dyn DeclarationEmitHost, node: P<Node>) -> bool {
-    match node.kind {
+    match node.kind() {
         Kind::PropertyDeclaration | Kind::PropertySignature => host.get_effective_declaration_flags(node, ModifierFlags::Private).is_empty(),
         Kind::Parameter | Kind::VariableDeclaration => true,
         _ => false,
@@ -55,7 +55,7 @@ pub(crate) fn can_reuse_modifier_nodes(nodes: &[P<Node>]) -> bool {
 // util.go:61
 pub(crate) fn is_declaration_and_not_visible(emit_context: P<EmitContext>, resolver: Resolver, node: P<Node>) -> bool {
     let node = emit_context.parse_node(Some(node)).unwrap();
-    match node.kind {
+    match node.kind() {
         Kind::FunctionDeclaration | Kind::ModuleDeclaration | Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::TypeAliasDeclaration | Kind::JSTypeAliasDeclaration | Kind::EnumDeclaration => {
             !resolver.is_declaration_visible(node)
         }
@@ -106,7 +106,7 @@ pub(crate) fn is_enclosing_declaration(node: P<Node>) -> bool {
 
 // util.go:122
 pub(crate) fn is_always_type(node: P<Node>) -> bool {
-    if node.kind == Kind::InterfaceDeclaration {
+    if node.kind() == Kind::InterfaceDeclaration {
         return true;
     }
     false
@@ -129,7 +129,7 @@ pub(crate) fn mask_modifier_flags(node: P<Node>, modifier_mask: ModifierFlags, m
 // util.go:142
 pub(crate) fn unwrap_parenthesized_expression(o: P<Node>) -> Option<P<Node>> {
     let mut o = o;
-    while o.kind == Kind::ParenthesizedExpression {
+    while o.kind() == Kind::ParenthesizedExpression {
         o = o.expression().unwrap();
     }
     Some(o)
@@ -138,7 +138,7 @@ pub(crate) fn unwrap_parenthesized_expression(o: P<Node>) -> Option<P<Node>> {
 // util.go:149
 pub(crate) fn is_private_method_type_parameter(host: &'static dyn DeclarationEmitHost, node: P<Node>) -> bool {
     let parent = node.parent().unwrap();
-    parent.kind == Kind::MethodDeclaration && !host.get_effective_declaration_flags(parent, ModifierFlags::Private).is_empty()
+    parent.kind() == Kind::MethodDeclaration && !host.get_effective_declaration_flags(parent, ModifierFlags::Private).is_empty()
 }
 
 // util.go:153

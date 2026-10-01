@@ -154,7 +154,7 @@ impl NameGenerator {
     }
 
     fn generate_name_for_node(&mut self, node: P<Node>, private_name: bool, flags: GeneratedIdentifierFlags, prefix: &str, suffix: &str) -> String {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier | Kind::PrivateIdentifier => {
                 let text = self.call_get_text_of_node(node);
                 self.make_unique_name(&text, None /*checkFn*/, flags.is_optimistic(), flags.is_reserved_in_nested_scopes(), private_name, prefix, suffix)

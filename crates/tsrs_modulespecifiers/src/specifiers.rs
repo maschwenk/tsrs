@@ -135,7 +135,7 @@ pub(crate) fn try_get_module_name_from_ambient_module(module_symbol: P<Symbol>, 
             continue;
         };
         let export_assignment_decl = sym.value_declaration();
-        let Some(export_assignment_decl) = export_assignment_decl.filter(|decl| decl.kind == Kind::ExportAssignment) else {
+        let Some(export_assignment_decl) = export_assignment_decl.filter(|decl| decl.kind() == Kind::ExportAssignment) else {
             continue;
         };
         let export_symbol = checker.get_symbol_at_location(export_assignment_decl.expression().unwrap());

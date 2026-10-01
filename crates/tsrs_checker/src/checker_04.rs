@@ -518,7 +518,7 @@ impl Checker {
         // A type-only import/export will already have a grammar error in a JS file, so no need to issue more errors within
         if is_in_js_file(node) && !target_flags.intersects(SymbolFlags::Value) && !is_type_only_import_or_export_declaration(node) {
             let error_node = node.property_name_or_name().unwrap_or(node);
-            assert!(node.kind != Kind::NamespaceExport);
+            assert!(node.kind() != Kind::NamespaceExport);
             if is_export_specifier(node) {
                 let diag = self.error(Some(error_node), &diagnostics::Types_cannot_appear_in_export_declarations_in_JavaScript_files, &[]);
                 if let Some(source_symbol) = get_source_file_of_node(node).unwrap().as_node().symbol() {
@@ -587,7 +587,7 @@ impl Checker {
             let type_only_alias = self.get_type_only_alias_declaration(symbol);
             let is_type = !target_flags.intersects(SymbolFlags::Value);
             if is_type || type_only_alias.is_some() {
-                match node.kind {
+                match node.kind() {
                     Kind::ImportClause | Kind::ImportSpecifier | Kind::ImportEqualsDeclaration => {
                         if self.compiler_options.verbatim_module_syntax.is_true() {
                             assert!(node.name().is_some(), "An ImportClause with a symbol should have a name");
@@ -602,7 +602,7 @@ impl Checker {
                             let diag = self.error(Some(node), message, &[&name]);
                             self.add_type_only_declaration_related_info(diag, if is_type { None } else { type_only_alias }, name);
                         }
-                        if is_type && node.kind == Kind::ImportEqualsDeclaration && has_modifier(node, ModifierFlags::Export) {
+                        if is_type && node.kind() == Kind::ImportEqualsDeclaration && has_modifier(node, ModifierFlags::Export) {
                             let flag_name = self.get_isolated_modules_like_flag_name();
                             self.error(Some(node), &diagnostics::Cannot_use_export_import_on_a_type_or_type_only_namespace_when_0_is_enabled, &[&flag_name]);
                         }
@@ -701,7 +701,7 @@ impl Checker {
         let type_parameters = node.type_parameters();
         self.check_type_parameters(type_parameters);
         if let Some(type_node) = type_node {
-            if type_node.kind == Kind::IntrinsicKeyword {
+            if type_node.kind() == Kind::IntrinsicKeyword {
                 let name = node.name().unwrap().text();
                 if !(type_parameters.is_empty() && name == "BuiltinIteratorReturn"
                     || type_parameters.len() == 1 && intrinsicTypeKinds.get(name).copied().unwrap_or(IntrinsicTypeKind::Unknown) != IntrinsicTypeKind::Unknown)
@@ -746,7 +746,7 @@ impl Checker {
             }
         };
         // Run the check only for the first declaration in the list.
-        if get_declaration_of_kind(symbol, node.kind) != Some(node) {
+        if get_declaration_of_kind(symbol, node.kind()) != Some(node) {
             return;
         }
         let mut exported_declaration_spaces = DeclarationSpaces::None;
@@ -802,7 +802,7 @@ impl Checker {
             }
             result
         }
-        match node.kind {
+        match node.kind() {
             Kind::InterfaceDeclaration | Kind::TypeAliasDeclaration | Kind::JSTypeAliasDeclaration | Kind::JSDocTypedefTag | Kind::JSDocCallbackTag => {
                 DeclarationSpaces::ExportType
             }
@@ -879,7 +879,7 @@ impl Checker {
     // checker.go:7218
     pub(crate) fn check_unused_identifiers(&mut self, potentially_unused_identifiers: &[P<Node>]) {
         for &node in potentially_unused_identifiers {
-            match node.kind {
+            match node.kind() {
                 Kind::ClassDeclaration | Kind::ClassExpression => {
                     self.check_unused_class_members(node);
                     self.check_unused_type_parameters(node);
@@ -965,7 +965,7 @@ impl Checker {
     // checker.go:7287
     pub(crate) fn check_unused_class_members(&mut self, node: P<Node>) {
         for &member in node.members() {
-            match member.kind {
+            match member.kind() {
                 Kind::MethodDeclaration | Kind::PropertyDeclaration | Kind::GetAccessor | Kind::SetAccessor => {
                     if is_set_accessor_declaration(member) && member.symbol().unwrap().flags().intersects(SymbolFlags::GetAccessor) {
                         continue; // Already would have reported an error on the getter.
@@ -1160,7 +1160,7 @@ pub(crate) fn is_identifier_that_starts_with_underscore(node: P<Node>) -> bool {
 
 // checker.go:7443
 pub(crate) fn import_clause_from_imported(node: P<Node>) -> Option<P<Node>> {
-    match node.kind {
+    match node.kind() {
         Kind::ImportClause => Some(node),
         Kind::NamespaceImport => node.parent(),
         _ => node.parent().unwrap().parent(),
@@ -1286,7 +1286,7 @@ impl Checker {
         // Optimize for the common case of a call to a function with a single non-generic call
         // signature where we can just fetch the return type without checking the arguments.
         if is_call_expression(expr)
-            && expr.expression().unwrap().kind != Kind::SuperKeyword
+            && expr.expression().unwrap().kind() != Kind::SuperKeyword
             && !is_require_call(expr, true /*requireStringLiteralLikeArgument*/)
             && !self.is_symbol_or_symbol_for_call(expr)
             && !is_import_call(expr)
@@ -1394,7 +1394,7 @@ impl Checker {
         if is_entity_name_expression(node) {
             node_text = crate::entity_name_to_string(node);
         }
-        if node.kind == Kind::NullKeyword {
+        if node.kind() == Kind::NullKeyword {
             self.error(Some(node), &diagnostics::The_value_0_cannot_be_used_here, &[&"null"]);
             return;
         }
@@ -1719,7 +1719,7 @@ pub(crate) fn get_unique_type_parameter_name(type_parameters: &[P<Type>], base_n
 impl Checker {
     // checker.go:7903
     pub(crate) fn check_expression_worker(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.check_identifier(node, check_mode),
             Kind::PrivateIdentifier => self.check_private_identifier_expression(node),
             Kind::ThisKeyword => self.check_this_expression(node),
@@ -1893,7 +1893,7 @@ impl Checker {
                 &diagnostics::X_super_must_be_called_before_accessing_a_property_of_super_in_the_constructor_of_a_derived_class,
             );
         }
-        if container.parent().unwrap().kind == Kind::ObjectLiteralExpression {
+        if container.parent().unwrap().kind() == Kind::ObjectLiteralExpression {
             // for object literal assume that type of 'super' is 'any'
             return self.any_type;
         }
@@ -2281,7 +2281,7 @@ impl Checker {
         let number_type = self.number_type;
         let has_number_index_info = self.get_index_info_of_type(object_type, number_type).is_some();
         if every_type(self, index_type, |c, t| c.is_type_assignable_to(t, object_index_type) || has_number_index_info && c.is_applicable_index_type(t, number_type)) {
-            if access_node.kind == Kind::ElementAccessExpression
+            if access_node.kind() == Kind::ElementAccessExpression
                 && is_assignment_target(access_node)
                 && object_type.object_flags().intersects(ObjectFlags::Mapped)
                 && get_mapped_type_modifiers(object_type).intersects(MappedTypeModifiers::IncludeReadonly)
@@ -2396,7 +2396,7 @@ impl Checker {
             return self.silent_never_type;
         }
         self.check_deprecated_signature(signature, node);
-        if node.expression().unwrap().kind == Kind::SuperKeyword {
+        if node.expression().unwrap().kind() == Kind::SuperKeyword {
             return self.void_type;
         }
         if is_new_expression(node) {
@@ -2540,7 +2540,7 @@ impl Checker {
 
     // checker.go:8627
     pub(crate) fn resolve_signature(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
-        match node.kind {
+        match node.kind() {
             Kind::CallExpression => self.resolve_call_expression(node, candidates_out_array, check_mode),
             Kind::NewExpression => self.resolve_new_expression(node, candidates_out_array, check_mode),
             Kind::TaggedTemplateExpression => self.resolve_tagged_template_expression(node, candidates_out_array, check_mode),
@@ -2556,7 +2556,7 @@ impl Checker {
     // checker.go:8645
     pub(crate) fn resolve_call_expression(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
         let expression = node.expression().unwrap();
-        if expression.kind == Kind::SuperKeyword {
+        if expression.kind() == Kind::SuperKeyword {
             let super_type = self.check_super_expression(expression);
             if is_type_any(Some(super_type)) {
                 for &arg in node.arguments() {

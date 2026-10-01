@@ -180,7 +180,7 @@ pub(crate) fn get_literal_text_of_node_worker(g: &mut NameGenerator, s: &printer
     if is_string_literal(node) {
         if let Some(text_source_node) = s.emit_context.text_source(node) {
             let text;
-            match text_source_node.kind {
+            match text_source_node.kind() {
                 Kind::NumericLiteral => {
                     text = text_source_node.text().to_string();
                 }
@@ -227,7 +227,7 @@ pub(crate) fn get_text_of_node_worker(g: &mut NameGenerator, s: &printerTextStat
     let current_source_file = s.current_source_file.get();
     let can_use_source_file = current_source_file.is_some() && node.parent().is_some() && !node_is_synthesized(node);
 
-    match node.kind {
+    match node.kind() {
         Kind::Identifier | Kind::PrivateIdentifier | Kind::JsxNamespacedName => {
             if !can_use_source_file || get_source_file_of_node(node).map(|f| f.as_node()) != Some(s.emit_context.most_original(Some(current_source_file.unwrap().as_node())).unwrap()) {
                 return node.text().to_string();
@@ -236,7 +236,7 @@ pub(crate) fn get_text_of_node_worker(g: &mut NameGenerator, s: &printerTextStat
         Kind::StringLiteral | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::TemplateHead | Kind::TemplateMiddle | Kind::TemplateTail => {
             return get_literal_text_of_node_worker(g, s, node, None /*sourceFile*/, getLiteralTextFlags::None);
         }
-        _ => panic!("unexpected node: {:?}", node.kind),
+        _ => panic!("unexpected node: {:?}", node.kind()),
     }
     scanner::get_source_text_of_node_from_source_file(current_source_file.unwrap(), node, include_trivia)
 }
@@ -534,7 +534,7 @@ impl Printer {
                 // leading newline to start the modifiers.
                 return 0;
             }
-            if first_child.kind == Kind::JsxText {
+            if first_child.kind() == Kind::JsxText {
                 // JsxText will be written with its leading whitespace, so don't add more manually.
                 return 0;
             }
@@ -564,7 +564,7 @@ impl Printer {
             let (Some(previous_node), Some(next_node)) = (previous_node, next_node) else {
                 return 0;
             };
-            if next_node.kind == Kind::JsxText {
+            if next_node.kind() == Kind::JsxText {
                 // JsxText will be written with its leading whitespace, so don't add more manually.
                 return 0;
             } else if self.current_source_file().is_some() && !node_is_synthesized(previous_node) && !node_is_synthesized(next_node) {
@@ -876,7 +876,7 @@ impl Printer {
             return false;
         }
 
-        match node.kind {
+        match node.kind() {
             Kind::ObjectLiteralExpression => true,
             Kind::ArrayLiteralExpression
             | Kind::ArrowFunction
@@ -942,7 +942,7 @@ impl Printer {
         };
 
         let state = self.enter_token_node(node, flags);
-        self.write_token_text(node.kind, WriteKind::Keyword, node.pos());
+        self.write_token_text(node.kind(), WriteKind::Keyword, node.pos());
         self.exit_token_node(node, state);
     }
 
@@ -956,7 +956,7 @@ impl Printer {
         };
 
         let state = self.enter_token_node(node, flags);
-        self.write_token_text(node.kind, WriteKind::Punctuation, node.pos());
+        self.write_token_text(node.kind(), WriteKind::Punctuation, node.pos());
         self.exit_token_node(node, state);
     }
 
@@ -969,12 +969,12 @@ impl Printer {
             return;
         };
 
-        if is_keyword_kind(n.kind) {
+        if is_keyword_kind(n.kind()) {
             self.emit_keyword_node_ex(node, flags);
-        } else if is_punctuation_kind(n.kind) {
+        } else if is_punctuation_kind(n.kind()) {
             self.emit_punctuation_node_ex(node, flags);
         } else {
-            panic!("unexpected TokenNode: {:?}", n.kind);
+            panic!("unexpected TokenNode: {:?}", n.kind());
         }
     }
 }
@@ -1078,7 +1078,7 @@ impl Printer {
     }
 
     pub(crate) fn emit_template_middle_tail(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::TemplateMiddle => self.emit_template_middle(node),
             Kind::TemplateTail => self.emit_template_tail(node),
             _ => {}
@@ -1098,7 +1098,7 @@ impl Printer {
     }
 
     pub(crate) fn emit_tab_stop(&mut self, node: P<Node>, snippet_element: SnippetElement) {
-        assert!(node.kind == Kind::EmptyStatement, "Snippet tab stops can only be emitted on empty statements");
+        assert!(node.kind() == Kind::EmptyStatement, "Snippet tab stops can only be emitted on empty statements");
         self.writer().raw_write(&format!("${}", snippet_element.order));
     }
 }
@@ -1223,7 +1223,7 @@ impl Printer {
     }
 
     pub(crate) fn emit_entity_name(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_identifier_reference(node),
             Kind::QualifiedName => self.emit_qualified_name(node),
             Kind::PropertyAccessExpression => {
@@ -1231,7 +1231,7 @@ impl Printer {
                 // TS's emitter handles this via generic emit(); we dispatch to expression emitter here.
                 self.emit_expression(node, OperatorPrecedence::DisallowComma);
             }
-            _ => panic!("unexpected EntityName: {:?}", node.kind),
+            _ => panic!("unexpected EntityName: {:?}", node.kind()),
         }
     }
 
@@ -1240,11 +1240,11 @@ impl Printer {
             return;
         };
 
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_binding_identifier(node),
             Kind::ObjectBindingPattern => self.emit_object_binding_pattern(node),
             Kind::ArrayBindingPattern => self.emit_array_binding_pattern(node),
-            _ => panic!("unexpected BindingName: {:?}", node.kind),
+            _ => panic!("unexpected BindingName: {:?}", node.kind()),
         }
     }
 
@@ -1256,7 +1256,7 @@ impl Printer {
         let saved_write_kind = self.write_kind;
         self.write_kind = WriteKind::Property;
 
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_identifier_name(node),
             Kind::PrivateIdentifier => self.emit_private_identifier(node),
             Kind::StringLiteral => self.emit_string_literal(node),
@@ -1264,7 +1264,7 @@ impl Printer {
             Kind::NumericLiteral => self.emit_numeric_literal(node),
             Kind::BigIntLiteral => self.emit_big_int_literal(node),
             Kind::ComputedPropertyName => self.emit_computed_property_name(node),
-            _ => panic!("unexpected PropertyName: {:?}", node.kind),
+            _ => panic!("unexpected PropertyName: {:?}", node.kind()),
         }
 
         self.write_kind = saved_write_kind;
@@ -1275,10 +1275,10 @@ impl Printer {
             return;
         };
 
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_identifier_name(node),
             Kind::PrivateIdentifier => self.emit_private_identifier(node),
-            _ => panic!("unexpected MemberName: {:?}", node.kind),
+            _ => panic!("unexpected MemberName: {:?}", node.kind()),
         }
     }
 
@@ -1287,10 +1287,10 @@ impl Printer {
             return;
         };
 
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_binding_identifier(node),
             Kind::StringLiteral => self.emit_string_literal(node),
-            _ => panic!("unexpected ModuleName: {:?}", node.kind),
+            _ => panic!("unexpected ModuleName: {:?}", node.kind()),
         }
     }
 
@@ -1299,18 +1299,18 @@ impl Printer {
             return;
         };
 
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_identifier_name(node),
             Kind::StringLiteral => self.emit_string_literal(node),
-            _ => panic!("unexpected ModuleExportName: {:?}", node.kind),
+            _ => panic!("unexpected ModuleExportName: {:?}", node.kind()),
         }
     }
 
     pub(crate) fn emit_import_attribute_name(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_identifier_name(node),
             Kind::StringLiteral => self.emit_string_literal(node),
-            _ => panic!("unexpected ImportAttributeName: {:?}", node.kind),
+            _ => panic!("unexpected ImportAttributeName: {:?}", node.kind()),
         }
     }
 
@@ -1319,10 +1319,10 @@ impl Printer {
             return;
         };
 
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_identifier_name(node),
             Kind::StringLiteral => self.emit_string_literal(node),
-            _ => panic!("unexpected ModuleName: {:?}", node.kind),
+            _ => panic!("unexpected ModuleName: {:?}", node.kind()),
         }
     }
 }
@@ -1485,7 +1485,7 @@ impl Printer {
         } else if is_modifier(node) {
             self.emit_keyword_node(Some(node));
         } else {
-            panic!("unhandled ModifierLike: {:?}", node.kind);
+            panic!("unhandled ModifierLike: {:?}", node.kind());
         }
     }
 
@@ -1786,7 +1786,7 @@ impl Printer {
     }
 
     pub(crate) fn emit_class_element(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::PropertyDeclaration => self.emit_property_declaration(node),
             Kind::MethodDeclaration => self.emit_method_declaration(node),
             Kind::ClassStaticBlockDeclaration => self.emit_class_static_block_declaration(node),
@@ -1797,12 +1797,12 @@ impl Printer {
             Kind::SemicolonClassElement => self.emit_semicolon_class_element(node),
             Kind::NotEmittedStatement => self.emit_not_emitted_statement(node),
             Kind::JSTypeAliasDeclaration => self.emit_type_alias_declaration(node),
-            _ => panic!("unexpected ClassElement: {:?}", node.kind),
+            _ => panic!("unexpected ClassElement: {:?}", node.kind()),
         }
     }
 
     pub(crate) fn emit_type_element(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::PropertySignature => self.emit_property_signature(node),
             Kind::MethodSignature => self.emit_method_signature(node),
             Kind::CallSignature => self.emit_call_signature(node),
@@ -1811,19 +1811,19 @@ impl Printer {
             Kind::SetAccessor => self.emit_set_accessor_declaration(node),
             Kind::IndexSignature => self.emit_index_signature(node),
             Kind::NotEmittedTypeElement => self.emit_not_emitted_type_element(node),
-            _ => panic!("unexpected TypeElement: {:?}", node.kind),
+            _ => panic!("unexpected TypeElement: {:?}", node.kind()),
         }
     }
 
     pub(crate) fn emit_object_literal_element(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::PropertyAssignment => self.emit_property_assignment(node),
             Kind::ShorthandPropertyAssignment => self.emit_shorthand_property_assignment(node),
             Kind::SpreadAssignment => self.emit_spread_assignment(node),
             Kind::MethodDeclaration => self.emit_method_declaration(node),
             Kind::GetAccessor => self.emit_get_accessor_declaration(node),
             Kind::SetAccessor => self.emit_set_accessor_declaration(node),
-            _ => panic!("unhandled ObjectLiteralElement: {:?}", node.kind),
+            _ => panic!("unhandled ObjectLiteralElement: {:?}", node.kind()),
         }
     }
 }
@@ -1838,10 +1838,10 @@ impl Printer {
     }
 
     pub(crate) fn emit_type_predicate_parameter_name(&mut self, node: P<Node>) {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => self.emit_identifier_reference(node),
             Kind::ThisType => self.emit_this_type(node),
-            _ => panic!("unexpected TypePredicateParameterName: {:?}", node.kind),
+            _ => panic!("unexpected TypePredicateParameterName: {:?}", node.kind()),
         }
     }
 
@@ -1888,7 +1888,7 @@ impl Printer {
         };
         self.write_punctuation("=>");
         self.write_space();
-        if self.in_extends && node.kind == Kind::InferType && node.as_infer_type_node().type_parameter().as_type_parameter_declaration().constraint().is_some() {
+        if self.in_extends && node.kind() == Kind::InferType && node.as_infer_type_node().type_parameter().as_type_parameter_declaration().constraint().is_some() {
             // if the parent FunctionTypeNode or ConstructorTypeNode is in the `extends` clause of a ConditionalTypeNode,
             // we must parenthesize `infer ... extends ...` so as not to result in an ambiguous parse.
             //
@@ -1974,7 +1974,7 @@ impl Printer {
     // via the factory, so parsed postfix types preserve the source as written during round-trip
     // emit while synthesized postfix types (e.g., from declaration emit) still get the parentheses.
     pub(crate) fn emit_postfix_type_operand(&mut self, operand: P<Node>, parent: P<Node>) {
-        if is_parse_tree_node(parent) && operand.kind == Kind::TypeQuery {
+        if is_parse_tree_node(parent) && operand.kind() == Kind::TypeQuery {
             self.emit_type_node(operand, TypePrecedence::TypeOperator);
             return;
         }
@@ -2139,7 +2139,7 @@ impl Printer {
         }
         if let Some(readonly_token) = n.readonly_token() {
             self.emit_token_node(Some(readonly_token));
-            if readonly_token.kind != Kind::ReadonlyKeyword {
+            if readonly_token.kind() != Kind::ReadonlyKeyword {
                 self.write_keyword("readonly");
             }
             self.write_space();
@@ -2155,7 +2155,7 @@ impl Printer {
         self.write_punctuation("]");
         if let Some(question_token) = n.question_token() {
             self.emit_punctuation_node(Some(question_token));
-            if question_token.kind != Kind::QuestionToken {
+            if question_token.kind() != Kind::QuestionToken {
                 self.write_punctuation("?");
             }
         }
@@ -2284,7 +2284,7 @@ impl Printer {
             self.write_punctuation("(");
         }
 
-        match node.kind {
+        match node.kind() {
             // Keyword Types
             Kind::AnyKeyword
             | Kind::UnknownKeyword
@@ -2340,7 +2340,7 @@ impl Printer {
             Kind::JSDocOptionalType => self.emit_jsdoc_optional_type(node),
             Kind::JSDocVariadicType => self.emit_jsdoc_variadic_type(node),
 
-            _ => panic!("unhandled TypeNode: {:?}", node.kind),
+            _ => panic!("unhandled TypeNode: {:?}", node.kind()),
         }
 
         if parens {

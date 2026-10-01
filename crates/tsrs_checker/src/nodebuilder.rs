@@ -176,7 +176,7 @@ impl NodeBuilder {
         let f = &self.impl_.f;
         let mut result = Vec::with_capacity(nodes.len());
         for node in nodes {
-            match node.kind {
+            match node.kind() {
                 Kind::ClassDeclaration => {
                     result.push(simplify_class_declaration(f, node, symbol));
                 }

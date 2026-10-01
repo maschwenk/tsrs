@@ -198,7 +198,7 @@ pub(crate) fn can_use_original_text(node: P<Node>, flags: getLiteralTextFlags) -
         return false;
     }
 
-    if node.kind == Kind::NumericLiteral {
+    if node.kind() == Kind::NumericLiteral {
         let token_flags = node.as_numeric_literal().token_flags();
         // For a numeric literal, we cannot use the original text if the original text was an invalid literal
         if token_flags.intersects(TokenFlags::IsInvalid) {
@@ -215,7 +215,7 @@ pub(crate) fn can_use_original_text(node: P<Node>, flags: getLiteralTextFlags) -
     // TODO(rbuckton): The reason as to why we do not use the original text for bigints is not mentioned in the
     // original compiler source. It could be that this is no longer necessary, in which case bigint literals should
     // use the same code path as numeric literals, above
-    node.kind != Kind::BigIntLiteral
+    node.kind() != Kind::BigIntLiteral
 }
 
 pub(crate) fn get_literal_text(node: P<Node>, source_file: Option<P<SourceFile>>, flags: getLiteralTextFlags) -> String {
@@ -229,7 +229,7 @@ pub(crate) fn get_literal_text(node: P<Node>, source_file: Option<P<SourceFile>>
 
     // If we can't reach the original source text, use the canonical form if it's a number,
     // or a (possibly escaped) quoted form of the original text if it's string-like.
-    match node.kind {
+    match node.kind() {
         Kind::StringLiteral => {
             let quote_char = if node.as_string_literal().token_flags().intersects(TokenFlags::SingleQuote) {
                 QuoteChar::SingleQuote
@@ -262,7 +262,7 @@ pub(crate) fn get_literal_text(node: P<Node>, source_file: Option<P<SourceFile>>
 
             // Write leading quote character
             let mut b = String::new();
-            match node.kind {
+            match node.kind() {
                 Kind::NoSubstitutionTemplateLiteral => {
                     b.reserve(2 + text_len);
                     b.push('`');
@@ -291,7 +291,7 @@ pub(crate) fn get_literal_text(node: P<Node>, source_file: Option<P<SourceFile>>
             }
 
             // Write trailing quote character
-            match node.kind {
+            match node.kind() {
                 Kind::NoSubstitutionTemplateLiteral => b.push('`'),
                 Kind::TemplateHead => b.push_str("${"),
                 Kind::TemplateMiddle => b.push_str("${"),
@@ -439,14 +439,14 @@ fn modifier_node_list(modifiers: P<ModifierList>) -> P<NodeList> {
 pub(crate) fn get_containing_node_array(node: P<Node>) -> Option<P<NodeList>> {
     let parent = node.parent()?;
 
-    match node.kind {
+    match node.kind() {
         Kind::TypeParameter => {
             if is_function_like(parent) || is_class_like(parent) || is_interface_declaration(parent) || is_type_or_js_type_alias_declaration(parent) {
                 return parent.type_parameter_list();
             } else if is_infer_type_node(parent) {
                 // infer type nodes have no associated type parameter list
             } else {
-                panic!("Unexpected TypeParameter parent: {:?}", parent.kind);
+                panic!("Unexpected TypeParameter parent: {:?}", parent.kind());
             }
         }
 
@@ -479,7 +479,7 @@ pub(crate) fn get_containing_node_array(node: P<Node>) -> Option<P<NodeList>> {
     // 	 return node.parent.tags
     // }
 
-    match parent.kind {
+    match parent.kind() {
         Kind::TypeLiteral | Kind::InterfaceDeclaration => {
             if is_type_element(node) {
                 return parent.member_list();
@@ -546,7 +546,7 @@ pub(crate) fn get_containing_node_array(node: P<Node>) -> Option<P<NodeList>> {
 
 pub(crate) fn can_have_decorators(node: P<Node>) -> bool {
     matches!(
-        node.kind,
+        node.kind(),
         Kind::Parameter | Kind::PropertyDeclaration | Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor | Kind::ClassExpression | Kind::ClassDeclaration
     )
 }
@@ -611,19 +611,19 @@ pub(crate) fn greatest_end(end: i32, nodes: &[&dyn TryGetEnd]) -> i32 {
 
 pub(crate) fn skip_synthesized_parentheses(node: P<Node>) -> P<Node> {
     let mut node = node;
-    while node.kind == Kind::ParenthesizedExpression && node_is_synthesized(node) {
+    while node.kind() == Kind::ParenthesizedExpression && node_is_synthesized(node) {
         node = node.expression().unwrap();
     }
     node
 }
 
 pub(crate) fn is_new_expression_without_arguments(node: P<Node>) -> bool {
-    node.kind == Kind::NewExpression && node.argument_list().is_none()
+    node.kind() == Kind::NewExpression && node.argument_list().is_none()
 }
 
 pub(crate) fn is_binary_operation(node: P<Node>, token: Kind) -> bool {
     let node = skip_partially_emitted_expressions(node);
-    node.kind == Kind::BinaryExpression && node.as_binary_expression().operator_token.kind == token
+    node.kind() == Kind::BinaryExpression && node.as_binary_expression().operator_token.kind() == token
 }
 
 pub(crate) fn mixing_binary_operators_requires_parentheses(a: Kind, b: Kind) -> bool {

@@ -119,16 +119,16 @@ impl<H: 'static> NameResolver<H> {
                         // - parameters are only in the scope of function body
                         // This restriction does not apply to JSDoc comment types because they are parented
                         // at a higher level than type parameters would normally be
-                        if (meaning & res.flags.get()).intersects(SymbolFlags::Type) && last.kind != Kind::JSDoc {
+                        if (meaning & res.flags.get()).intersects(SymbolFlags::Type) && last.kind() != Kind::JSDoc {
                             // type parameters are visible in parameter list, return type and type parameter list.
                             // Synthetic fake scopes are added for signatures so type parameters are accessible from them.
                             use_result = res.flags.get().intersects(SymbolFlags::TypeParameter)
                                 && (last.flags().intersects(NodeFlags::Synthesized)
                                     || last_location == loc.type_node()
-                                    || last.kind == Kind::Parameter
-                                    || last.kind == Kind::JSDocParameterTag
-                                    || last.kind == Kind::JSDocReturnTag
-                                    || last.kind == Kind::TypeParameter);
+                                    || last.kind() == Kind::Parameter
+                                    || last.kind() == Kind::JSDocParameterTag
+                                    || last.kind() == Kind::JSDocReturnTag
+                                    || last.kind() == Kind::TypeParameter);
                         }
                         if (meaning & res.flags.get()).intersects(SymbolFlags::Variable) {
                             // expression inside parameter will lookup as normal variable scope when targeting es2015+
@@ -139,13 +139,13 @@ impl<H: 'static> NameResolver<H> {
                                 // technically for parameter list case here we might mix parameters and variables declared in function,
                                 // however it is detected separately when checking initializers of parameters
                                 // to make sure that they reference no variables declared after them.
-                                use_result = last.kind == Kind::Parameter
+                                use_result = last.kind() == Kind::Parameter
                                     || last.flags().intersects(NodeFlags::Synthesized)
                                     || last_location == loc.type_node()
                                         && ast::find_ancestor(res.value_declaration.get(), ast::is_parameter_declaration).is_some();
                             }
                         }
-                    } else if loc.kind == Kind::ConditionalType {
+                    } else if loc.kind() == Kind::ConditionalType {
                         // A type parameter declared using 'infer T' in a conditional type is visible only in
                         // the true branch of the conditional type.
                         use_result = last_location == Some(loc.as_conditional_type_node().true_type());
@@ -158,9 +158,9 @@ impl<H: 'static> NameResolver<H> {
             }
             within_deferred_context = within_deferred_context || get_is_deferred_context(loc, last_location);
             'switch: {
-                match loc.kind {
+                match loc.kind() {
                     Kind::SourceFile | Kind::ModuleDeclaration => {
-                        if loc.kind == Kind::SourceFile && !ast::is_external_or_common_js_module(loc.as_source_file().as_p()) {
+                        if loc.kind() == Kind::SourceFile && !ast::is_external_or_common_js_module(loc.as_source_file().as_p()) {
                             break 'switch;
                         }
                         if is_module_attributes {
@@ -367,7 +367,7 @@ impl<H: 'static> NameResolver<H> {
                         //   }
                         //
                         if let Some(parent) = loc.parent() {
-                            if parent.kind == Kind::Parameter {
+                            if parent.kind() == Kind::Parameter {
                                 loc = parent;
                             }
                         }
@@ -383,7 +383,7 @@ impl<H: 'static> NameResolver<H> {
                         //   @param(1 as T) // <-- T should resolve to the type alias outside of class C
                         //   class C<T> {}
                         if let Some(parent) = loc.parent() {
-                            if ast::is_class_element(parent) || parent.kind == Kind::ClassDeclaration {
+                            if ast::is_class_element(parent) || parent.kind() == Kind::ClassDeclaration {
                                 loc = parent;
                             }
                         }
@@ -538,7 +538,7 @@ impl<H: 'static> NameResolver<H> {
     }
 
     pub(crate) fn requires_scope_change_worker(&self, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::ArrowFunction | Kind::FunctionExpression | Kind::FunctionDeclaration | Kind::Constructor => false,
             Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor | Kind::PropertyAssignment => {
                 self.requires_scope_change_worker(node.name().unwrap())
@@ -631,11 +631,11 @@ pub(crate) fn is_export_default_symbol(symbol: Option<P<Symbol>>) -> bool {
 }
 
 pub(crate) fn get_is_deferred_context(location: P<Node>, last_location: Option<P<Node>>) -> bool {
-    if location.kind != Kind::ArrowFunction && location.kind != Kind::FunctionExpression {
+    if location.kind() != Kind::ArrowFunction && location.kind() != Kind::FunctionExpression {
         // initializers in instance property declaration of class like entities are executed in constructor and thus deferred
         // A name is evaluated within the enclosing scope - so it shouldn't count as deferred
         return ast::is_type_query_node(location)
-            || (ast::is_function_like_declaration(Some(location)) || location.kind == Kind::PropertyDeclaration && !ast::is_static(location))
+            || (ast::is_function_like_declaration(Some(location)) || location.kind() == Kind::PropertyDeclaration && !ast::is_static(location))
                 && (last_location.is_none() || last_location != location.name());
     }
     if last_location.is_some() && last_location == location.name() {
@@ -650,7 +650,7 @@ pub(crate) fn get_is_deferred_context(location: P<Node>, last_location: Option<P
 
 pub(crate) fn is_type_parameter_symbol_declared_in_container(symbol: P<Symbol>, container: P<Node>) -> bool {
     for &decl in symbol.declarations().iter() {
-        if decl.kind == Kind::TypeParameter {
+        if decl.kind() == Kind::TypeParameter {
             let parent = decl.parent();
             if parent == Some(container) {
                 return true;
@@ -661,7 +661,7 @@ pub(crate) fn is_type_parameter_symbol_declared_in_container(symbol: P<Symbol>, 
 }
 
 pub(crate) fn is_self_reference_location(node: P<Node>, last_location: Option<P<Node>>) -> bool {
-    match node.kind {
+    match node.kind() {
         Kind::Parameter => last_location.is_some() && last_location == node.name(),
         Kind::FunctionDeclaration
         | Kind::ClassDeclaration

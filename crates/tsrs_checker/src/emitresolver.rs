@@ -98,7 +98,7 @@ impl EmitResolver {
 
     // emitresolver.go:131
     pub(crate) fn determine_if_declaration_is_visible(&self, c: &mut Checker, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::JSDocCallbackTag
             // | Kind::JSDocEnumTag // !!! TODO: JSDoc @enum support?
             | Kind::JSDocTypedefTag => {
@@ -135,8 +135,8 @@ impl EmitResolver {
                 let parent = ast::get_declaration_container(node).unwrap();
                 // If the node is not exported or it is not ambient module element (except import declaration)
                 if !c.get_combined_modifier_flags_cached(node).intersects(ModifierFlags::Export)
-                    && !(node.kind != Kind::ImportEqualsDeclaration
-                        && parent.kind != Kind::SourceFile
+                    && !(node.kind() != Kind::ImportEqualsDeclaration
+                        && parent.kind() != Kind::SourceFile
                         && parent.flags().intersects(NodeFlags::Ambient))
                 {
                     return ast::is_global_source_file(parent);
@@ -237,14 +237,14 @@ pub(crate) fn is_common_js_module_exports(node: P<Node>) -> bool {
 impl EmitResolver {
     // emitresolver.go:260
     pub(crate) fn alias_marking_visitor_worker(&self, c: &mut Checker, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::BinaryExpression => {
                 if is_common_js_module_exports(node) && ast::is_identifier(node.as_binary_expression().right()) {
                     self.mark_linked_aliases(c, node.as_binary_expression().right());
                 }
             }
             Kind::ExportAssignment => {
-                if node.expression().unwrap().kind == Kind::Identifier {
+                if node.expression().unwrap().kind() == Kind::Identifier {
                     self.mark_linked_aliases(c, node.expression().unwrap());
                 }
             }
@@ -261,7 +261,7 @@ impl EmitResolver {
     // emitresolver.go:278
     pub(crate) fn mark_linked_aliases(&self, c: &mut Checker, node: P<Node>) {
         let mut export_symbol: Option<P<Symbol>> = None;
-        if node.kind != Kind::StringLiteral
+        if node.kind() != Kind::StringLiteral
             && node.parent().is_some_and(|p| ast::is_export_assignment(p) || is_common_js_module_exports(p))
         {
             export_symbol = c.resolve_name(
@@ -272,7 +272,7 @@ impl EmitResolver {
                 false, /*isUse*/
                 false,
             );
-        } else if node.parent().unwrap().kind == Kind::ExportSpecifier {
+        } else if node.parent().unwrap().kind() == Kind::ExportSpecifier {
             export_symbol = c.get_target_of_export_specifier(
                 node.parent().unwrap(),
                 SymbolFlags::Value | SymbolFlags::Type | SymbolFlags::Namespace | SymbolFlags::Alias,
@@ -315,21 +315,21 @@ impl EmitResolver {
 pub(crate) fn get_meaning_of_entity_name_reference(entity_name: P<Node>) -> SymbolFlags {
     let parent = entity_name.parent().unwrap();
     // get symbol of the first identifier of the entityName
-    if parent.kind == Kind::TypeQuery
-        || parent.kind == Kind::ExpressionWithTypeArguments && !ast::is_part_of_type_node(parent)
-        || parent.kind == Kind::ComputedPropertyName
-        || parent.kind == Kind::TypePredicate && parent.as_type_predicate_node().parameter_name == entity_name
-        || parent.kind == Kind::BinaryExpression
+    if parent.kind() == Kind::TypeQuery
+        || parent.kind() == Kind::ExpressionWithTypeArguments && !ast::is_part_of_type_node(parent)
+        || parent.kind() == Kind::ComputedPropertyName
+        || parent.kind() == Kind::TypePredicate && parent.as_type_predicate_node().parameter_name == entity_name
+        || parent.kind() == Kind::BinaryExpression
     {
         // Typeof value
         return SymbolFlags::Value | SymbolFlags::ExportValue;
     }
-    if entity_name.kind == Kind::QualifiedName
-        || entity_name.kind == Kind::PropertyAccessExpression
-        || parent.kind == Kind::ImportEqualsDeclaration
-        || (parent.kind == Kind::QualifiedName && parent.as_qualified_name().left == entity_name)
-        || (parent.kind == Kind::PropertyAccessExpression && parent.expression() == Some(entity_name))
-        || (parent.kind == Kind::ElementAccessExpression && parent.expression() == Some(entity_name))
+    if entity_name.kind() == Kind::QualifiedName
+        || entity_name.kind() == Kind::PropertyAccessExpression
+        || parent.kind() == Kind::ImportEqualsDeclaration
+        || (parent.kind() == Kind::QualifiedName && parent.as_qualified_name().left == entity_name)
+        || (parent.kind() == Kind::PropertyAccessExpression && parent.expression() == Some(entity_name))
+        || (parent.kind() == Kind::ElementAccessExpression && parent.expression() == Some(entity_name))
     {
         // Left identifier from type reference or TypeAlias
         // Entity name of the import declaration
@@ -592,7 +592,7 @@ impl EmitResolver {
             return false;
         }
         let expression = node.expression().unwrap();
-        if expression.kind == Kind::Identifier {
+        if expression.kind() == Kind::Identifier {
             if expression.text() != "Symbol" {
                 return false;
             }
@@ -601,7 +601,7 @@ impl EmitResolver {
             return Some(resolved) == c.get_global_symbol("Symbol", SymbolFlags::Value | SymbolFlags::ExportValue, None /*diagnostic*/);
         }
         let inner = expression.expression().unwrap();
-        if inner.kind != Kind::Identifier || inner.text() != "globalThis" || expression.name().unwrap().text() != "Symbol" {
+        if inner.kind() != Kind::Identifier || inner.text() != "globalThis" || expression.name().unwrap().text() != "Symbol" {
             return false;
         }
         // Exactly `globalThis.Symbol.something` and `globalThis` resolves to the global `globalThis`
@@ -631,7 +631,7 @@ impl EmitResolver {
         if !ast::is_parse_tree_node(declaration) {
             return false;
         }
-        match declaration.kind {
+        match declaration.kind() {
             Kind::PropertyDeclaration | Kind::PropertySignature | Kind::JSDocPropertyTag => {
                 let symbol = match symbol {
                     Some(s) => s,
@@ -781,7 +781,7 @@ impl EmitResolver {
 
     // emitresolver.go:735
     pub(crate) fn is_value_alias_declaration_worker(&self, c: &mut Checker, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::ImportEqualsDeclaration => {
                 let symbol = c.get_symbol_of_declaration(node);
                 return self.is_alias_resolved_to_value(c, symbol, false /*excludeTypeOnlyValues*/);
@@ -802,7 +802,7 @@ impl EmitResolver {
                 };
             }
             Kind::ExportAssignment => {
-                if node.expression().is_some_and(|e| e.kind == Kind::Identifier) {
+                if node.expression().is_some_and(|e| e.kind() == Kind::Identifier) {
                     let symbol = c.get_symbol_of_declaration(node);
                     return self.is_alias_resolved_to_value(c, symbol, true /*excludeTypeOnlyValues*/);
                 }
@@ -852,12 +852,12 @@ impl EmitResolver {
         if !c.can_collect_symbol_alias_accessibility_data {
             return true;
         }
-        if !ast::is_parse_tree_node(node) || node.kind != Kind::ImportEqualsDeclaration || node.parent().unwrap().kind != Kind::SourceFile {
+        if !ast::is_parse_tree_node(node) || node.kind() != Kind::ImportEqualsDeclaration || node.parent().unwrap().kind() != Kind::SourceFile {
             return false;
         }
         if ast::is_import_equals_declaration(node)
             && (ast::node_is_missing(node.as_import_equals_declaration().module_reference)
-                || node.as_import_equals_declaration().module_reference.kind == Kind::ExternalModuleReference)
+                || node.as_import_equals_declaration().module_reference.kind() == Kind::ExternalModuleReference)
         {
             return false;
         }

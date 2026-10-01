@@ -123,7 +123,7 @@ impl DeclarationTransformer {
         if !ast::is_parse_tree_node(parse_tree_node) {
             return false;
         }
-        if parse_tree_node.kind == Kind::Parameter {
+        if parse_tree_node.kind() == Kind::Parameter {
             let params = parse_tree_node.parent().unwrap().parameters();
             let param_idx = params.iter().position(|p| *p == parse_tree_node);
             let mut previous_sibling: Option<P<Node>> = None;
@@ -170,7 +170,7 @@ impl DeclarationTransformer {
 
     // transform.go:203
     pub(crate) fn get_leading_comment_ranges_of_node(&self, node: P<Node>, source_file: P<SourceFile>) -> Vec<CommentRange> {
-        if node.kind == Kind::JsxText {
+        if node.kind() == Kind::JsxText {
             return Vec::new();
         }
         scanner::get_leading_comment_ranges(source_file.text(), node.pos()).collect()
@@ -187,7 +187,7 @@ impl DeclarationTransformer {
     // transform.go:226
     // functions as both `visitDeclarationStatements` and `transformRoot`, utilitzing SyntaxList nodes
     pub(crate) fn visit(&self, node: P<Node>) -> Option<P<Node>> {
-        match node.kind {
+        match node.kind() {
             Kind::SourceFile => Some(self.visit_source_file(node.as_source_file_p())),
             // statements we keep but do something to
             Kind::FunctionDeclaration
@@ -412,7 +412,7 @@ impl DeclarationTransformer {
             let Some(replacement) = replacement else {
                 continue; // deleted
             };
-            if replacement.kind == Kind::SyntaxList {
+            if replacement.kind() == Kind::SyntaxList {
                 if !self.needs_scope_fix_marker.get() || !self.result_has_external_module_indicator.get() {
                     for &elem in replacement.as_syntax_list().children {
                         if needs_scope_marker(elem) {
@@ -518,8 +518,8 @@ impl DeclarationTransformer {
     pub(crate) fn setup_diagnostic_context(&self, input: P<Node>) -> (bool, Box<dyn FnMut() + '_>) {
         let can_produce_diagnostic = can_produce_diagnostics(input);
         let old_within_object_literal_type = self.suppress_new_diagnostic_contexts.get();
-        let should_enter_suppress_new_diagnostics_context_context = (input.kind == Kind::TypeLiteral || input.kind == Kind::MappedType)
-            && !(input.parent().unwrap().kind == Kind::TypeAliasDeclaration || input.parent().unwrap().kind == Kind::JSTypeAliasDeclaration);
+        let should_enter_suppress_new_diagnostics_context_context = (input.kind() == Kind::TypeLiteral || input.kind() == Kind::MappedType)
+            && !(input.parent().unwrap().kind() == Kind::TypeAliasDeclaration || input.parent().unwrap().kind() == Kind::JSTypeAliasDeclaration);
 
         let old_diag = self.state.get_symbol_accessibility_diagnostic.borrow().clone();
         if can_produce_diagnostic && !self.suppress_new_diagnostic_contexts.get() {
@@ -575,7 +575,7 @@ impl DeclarationTransformer {
             return None;
         }
 
-        if input.kind == Kind::SemicolonClassElement {
+        if input.kind() == Kind::SemicolonClassElement {
             return None;
         }
 
@@ -593,7 +593,7 @@ impl DeclarationTransformer {
 
         let (can_produce_diagnostic, mut cleanup_diagnostic_context) = self.setup_diagnostic_context(input);
 
-        let result: Option<P<Node>> = match input.kind {
+        let result: Option<P<Node>> = match input.kind() {
             Kind::MappedType => Some(self.transform_mapped_type_node(input)),
             Kind::HeritageClause => self.transform_heritage_clause(input),
             Kind::MethodSignature => self.transform_method_signature_declaration(input),
@@ -620,7 +620,7 @@ impl DeclarationTransformer {
             }
             Kind::QualifiedName => {
                 let right = input.as_qualified_name().right;
-                if right.kind == Kind::PrivateIdentifier {
+                if right.kind() == Kind::PrivateIdentifier {
                     self.state.add_diagnostic(create_diagnostic_for_node(input, &diagnostics::Declaration_emit_elides_private_members_but_0_refers_to_a_private_member_Write_an_explicit_type_here, &[&right.text()]));
                 }
                 self.visitor().visit_each_child(Some(input))
@@ -703,7 +703,7 @@ impl DeclarationTransformer {
                 let name = ast::get_heritage_clause_element_name(t);
                 ast::is_entity_name(name)
                     || ast::is_entity_name_expression(name)
-                    || (heritage_clause.token == Kind::ExtendsKeyword && ast::is_expression_with_type_arguments(t) && t.expression().unwrap().kind == Kind::NullKeyword)
+                    || (heritage_clause.token == Kind::ExtendsKeyword && ast::is_expression_with_type_arguments(t) && t.expression().unwrap().kind() == Kind::NullKeyword)
             })
             .collect();
         if retained_clauses.is_empty() {
@@ -874,7 +874,7 @@ impl DeclarationTransformer {
             let Some(result) = self.recreate_binding_element(elem) else {
                 continue;
             };
-            if result.kind == Kind::SyntaxList {
+            if result.kind() == Kind::SyntaxList {
                 results.extend_from_slice(result.as_syntax_list().children);
             } else {
                 results.push(result);
@@ -949,7 +949,7 @@ impl DeclarationTransformer {
         }
         // Remove definite assignment assertion (!) from declaration files
         let mut postfix_token = input.postfix_token();
-        if postfix_token.is_some_and(|t| t.kind == Kind::ExclamationToken) {
+        if postfix_token.is_some_and(|t| t.kind() == Kind::ExclamationToken) {
             postfix_token = None;
         }
         Some(self.factory().update_property_declaration(input, self.ensure_modifiers(input), input.name().unwrap(), postfix_token, self.ensure_type(input, false), self.ensure_no_initializer(input)))
@@ -1123,7 +1123,7 @@ impl DeclarationTransformer {
         if self.should_strip_internal(Some(input)) {
             return None;
         }
-        match input.kind {
+        match input.kind() {
             Kind::ExportDeclaration => {
                 if ast::is_source_file(input.parent().unwrap()) {
                     self.result_has_external_module_indicator.set(true);

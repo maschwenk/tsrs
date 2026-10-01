@@ -6876,7 +6876,7 @@ impl NodePayload for FlowReduceLabelData {
 impl Node {
     /// The node's data struct.
     pub fn data(&self) -> NodeData {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::Token => NodeData::Token,
             NodeDataTag::Identifier => NodeData::Identifier(self.payload()),
             NodeDataTag::PrivateIdentifier => NodeData::PrivateIdentifier(self.payload()),
@@ -7076,1365 +7076,1365 @@ impl Node {
 
     #[inline]
     pub fn as_token(&self) -> &'static Token {
-        if self.data_tag != NodeDataTag::Token {
-            panic!("as_token called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::Token {
+            panic!("as_token called on {:?}", self.kind());
         }
         &Token
     }
     #[inline]
     pub fn as_identifier(&self) -> &'static Identifier {
-        if self.data_tag != NodeDataTag::Identifier {
-            panic!("as_identifier called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::Identifier {
+            panic!("as_identifier called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_private_identifier(&self) -> &'static PrivateIdentifier {
-        if self.data_tag != NodeDataTag::PrivateIdentifier {
-            panic!("as_private_identifier called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::PrivateIdentifier {
+            panic!("as_private_identifier called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_qualified_name(&self) -> &'static QualifiedName {
-        if self.data_tag != NodeDataTag::QualifiedName {
-            panic!("as_qualified_name called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::QualifiedName {
+            panic!("as_qualified_name called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_computed_property_name(&self) -> &'static ComputedPropertyName {
-        if self.data_tag != NodeDataTag::ComputedPropertyName {
-            panic!("as_computed_property_name called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ComputedPropertyName {
+            panic!("as_computed_property_name called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_decorator(&self) -> &'static Decorator {
-        if self.data_tag != NodeDataTag::Decorator {
-            panic!("as_decorator called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::Decorator {
+            panic!("as_decorator called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_empty_statement(&self) -> &'static EmptyStatement {
-        if self.data_tag != NodeDataTag::EmptyStatement {
-            panic!("as_empty_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::EmptyStatement {
+            panic!("as_empty_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_if_statement(&self) -> &'static IfStatement {
-        if self.data_tag != NodeDataTag::IfStatement {
-            panic!("as_if_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::IfStatement {
+            panic!("as_if_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_do_statement(&self) -> &'static DoStatement {
-        if self.data_tag != NodeDataTag::DoStatement {
-            panic!("as_do_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::DoStatement {
+            panic!("as_do_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_while_statement(&self) -> &'static WhileStatement {
-        if self.data_tag != NodeDataTag::WhileStatement {
-            panic!("as_while_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::WhileStatement {
+            panic!("as_while_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_for_statement(&self) -> &'static ForStatement {
-        if self.data_tag != NodeDataTag::ForStatement {
-            panic!("as_for_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ForStatement {
+            panic!("as_for_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_for_in_or_of_statement(&self) -> &'static ForInOrOfStatement {
-        if self.data_tag != NodeDataTag::ForInOrOfStatement {
-            panic!("as_for_in_or_of_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ForInOrOfStatement {
+            panic!("as_for_in_or_of_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_break_statement(&self) -> &'static BreakStatement {
-        if self.data_tag != NodeDataTag::BreakStatement {
-            panic!("as_break_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::BreakStatement {
+            panic!("as_break_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_continue_statement(&self) -> &'static ContinueStatement {
-        if self.data_tag != NodeDataTag::ContinueStatement {
-            panic!("as_continue_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ContinueStatement {
+            panic!("as_continue_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_return_statement(&self) -> &'static ReturnStatement {
-        if self.data_tag != NodeDataTag::ReturnStatement {
-            panic!("as_return_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ReturnStatement {
+            panic!("as_return_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_with_statement(&self) -> &'static WithStatement {
-        if self.data_tag != NodeDataTag::WithStatement {
-            panic!("as_with_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::WithStatement {
+            panic!("as_with_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_switch_statement(&self) -> &'static SwitchStatement {
-        if self.data_tag != NodeDataTag::SwitchStatement {
-            panic!("as_switch_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::SwitchStatement {
+            panic!("as_switch_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_case_block(&self) -> &'static CaseBlock {
-        if self.data_tag != NodeDataTag::CaseBlock {
-            panic!("as_case_block called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::CaseBlock {
+            panic!("as_case_block called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_case_or_default_clause(&self) -> &'static CaseOrDefaultClause {
-        if self.data_tag != NodeDataTag::CaseOrDefaultClause {
-            panic!("as_case_or_default_clause called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::CaseOrDefaultClause {
+            panic!("as_case_or_default_clause called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_throw_statement(&self) -> &'static ThrowStatement {
-        if self.data_tag != NodeDataTag::ThrowStatement {
-            panic!("as_throw_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ThrowStatement {
+            panic!("as_throw_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_try_statement(&self) -> &'static TryStatement {
-        if self.data_tag != NodeDataTag::TryStatement {
-            panic!("as_try_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TryStatement {
+            panic!("as_try_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_catch_clause(&self) -> &'static CatchClause {
-        if self.data_tag != NodeDataTag::CatchClause {
-            panic!("as_catch_clause called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::CatchClause {
+            panic!("as_catch_clause called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_debugger_statement(&self) -> &'static DebuggerStatement {
-        if self.data_tag != NodeDataTag::DebuggerStatement {
-            panic!("as_debugger_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::DebuggerStatement {
+            panic!("as_debugger_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_labeled_statement(&self) -> &'static LabeledStatement {
-        if self.data_tag != NodeDataTag::LabeledStatement {
-            panic!("as_labeled_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::LabeledStatement {
+            panic!("as_labeled_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_expression_statement(&self) -> &'static ExpressionStatement {
-        if self.data_tag != NodeDataTag::ExpressionStatement {
-            panic!("as_expression_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ExpressionStatement {
+            panic!("as_expression_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_block(&self) -> &'static Block {
-        if self.data_tag != NodeDataTag::Block {
-            panic!("as_block called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::Block {
+            panic!("as_block called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_variable_statement(&self) -> &'static VariableStatement {
-        if self.data_tag != NodeDataTag::VariableStatement {
-            panic!("as_variable_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::VariableStatement {
+            panic!("as_variable_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_variable_declaration(&self) -> &'static VariableDeclaration {
-        if self.data_tag != NodeDataTag::VariableDeclaration {
-            panic!("as_variable_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::VariableDeclaration {
+            panic!("as_variable_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_variable_declaration_list(&self) -> &'static VariableDeclarationList {
-        if self.data_tag != NodeDataTag::VariableDeclarationList {
-            panic!("as_variable_declaration_list called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::VariableDeclarationList {
+            panic!("as_variable_declaration_list called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_binding_pattern(&self) -> &'static BindingPattern {
-        if self.data_tag != NodeDataTag::BindingPattern {
-            panic!("as_binding_pattern called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::BindingPattern {
+            panic!("as_binding_pattern called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_parameter_declaration(&self) -> &'static ParameterDeclaration {
-        if self.data_tag != NodeDataTag::ParameterDeclaration {
-            panic!("as_parameter_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ParameterDeclaration {
+            panic!("as_parameter_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_binding_element(&self) -> &'static BindingElement {
-        if self.data_tag != NodeDataTag::BindingElement {
-            panic!("as_binding_element called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::BindingElement {
+            panic!("as_binding_element called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_missing_declaration(&self) -> &'static MissingDeclaration {
-        if self.data_tag != NodeDataTag::MissingDeclaration {
-            panic!("as_missing_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::MissingDeclaration {
+            panic!("as_missing_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_function_declaration(&self) -> &'static FunctionDeclaration {
-        if self.data_tag != NodeDataTag::FunctionDeclaration {
-            panic!("as_function_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::FunctionDeclaration {
+            panic!("as_function_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_class_declaration(&self) -> &'static ClassDeclaration {
-        if self.data_tag != NodeDataTag::ClassDeclaration {
-            panic!("as_class_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ClassDeclaration {
+            panic!("as_class_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_class_expression(&self) -> &'static ClassExpression {
-        if self.data_tag != NodeDataTag::ClassExpression {
-            panic!("as_class_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ClassExpression {
+            panic!("as_class_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_heritage_clause(&self) -> &'static HeritageClause {
-        if self.data_tag != NodeDataTag::HeritageClause {
-            panic!("as_heritage_clause called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::HeritageClause {
+            panic!("as_heritage_clause called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_interface_declaration(&self) -> &'static InterfaceDeclaration {
-        if self.data_tag != NodeDataTag::InterfaceDeclaration {
-            panic!("as_interface_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::InterfaceDeclaration {
+            panic!("as_interface_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_type_alias_declaration(&self) -> &'static TypeAliasDeclaration {
-        if self.data_tag != NodeDataTag::TypeAliasDeclaration {
-            panic!("as_type_alias_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TypeAliasDeclaration {
+            panic!("as_type_alias_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_enum_member(&self) -> &'static EnumMember {
-        if self.data_tag != NodeDataTag::EnumMember {
-            panic!("as_enum_member called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::EnumMember {
+            panic!("as_enum_member called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_enum_declaration(&self) -> &'static EnumDeclaration {
-        if self.data_tag != NodeDataTag::EnumDeclaration {
-            panic!("as_enum_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::EnumDeclaration {
+            panic!("as_enum_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_module_block(&self) -> &'static ModuleBlock {
-        if self.data_tag != NodeDataTag::ModuleBlock {
-            panic!("as_module_block called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ModuleBlock {
+            panic!("as_module_block called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_not_emitted_statement(&self) -> &'static NotEmittedStatement {
-        if self.data_tag != NodeDataTag::NotEmittedStatement {
-            panic!("as_not_emitted_statement called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NotEmittedStatement {
+            panic!("as_not_emitted_statement called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_not_emitted_type_element(&self) -> &'static NotEmittedTypeElement {
-        if self.data_tag != NodeDataTag::NotEmittedTypeElement {
-            panic!("as_not_emitted_type_element called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NotEmittedTypeElement {
+            panic!("as_not_emitted_type_element called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_import_declaration(&self) -> &'static ImportDeclaration {
-        if self.data_tag != NodeDataTag::ImportDeclaration {
-            panic!("as_import_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ImportDeclaration {
+            panic!("as_import_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_external_module_reference(&self) -> &'static ExternalModuleReference {
-        if self.data_tag != NodeDataTag::ExternalModuleReference {
-            panic!("as_external_module_reference called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ExternalModuleReference {
+            panic!("as_external_module_reference called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_namespace_import(&self) -> &'static NamespaceImport {
-        if self.data_tag != NodeDataTag::NamespaceImport {
-            panic!("as_namespace_import called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NamespaceImport {
+            panic!("as_namespace_import called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_named_imports(&self) -> &'static NamedImports {
-        if self.data_tag != NodeDataTag::NamedImports {
-            panic!("as_named_imports called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NamedImports {
+            panic!("as_named_imports called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_export_assignment(&self) -> &'static ExportAssignment {
-        if self.data_tag != NodeDataTag::ExportAssignment {
-            panic!("as_export_assignment called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ExportAssignment {
+            panic!("as_export_assignment called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_namespace_export_declaration(&self) -> &'static NamespaceExportDeclaration {
-        if self.data_tag != NodeDataTag::NamespaceExportDeclaration {
-            panic!("as_namespace_export_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NamespaceExportDeclaration {
+            panic!("as_namespace_export_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_namespace_export(&self) -> &'static NamespaceExport {
-        if self.data_tag != NodeDataTag::NamespaceExport {
-            panic!("as_namespace_export called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NamespaceExport {
+            panic!("as_namespace_export called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_named_exports(&self) -> &'static NamedExports {
-        if self.data_tag != NodeDataTag::NamedExports {
-            panic!("as_named_exports called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NamedExports {
+            panic!("as_named_exports called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_export_specifier(&self) -> &'static ExportSpecifier {
-        if self.data_tag != NodeDataTag::ExportSpecifier {
-            panic!("as_export_specifier called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ExportSpecifier {
+            panic!("as_export_specifier called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_call_signature_declaration(&self) -> &'static CallSignatureDeclaration {
-        if self.data_tag != NodeDataTag::CallSignatureDeclaration {
-            panic!("as_call_signature_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::CallSignatureDeclaration {
+            panic!("as_call_signature_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_construct_signature_declaration(&self) -> &'static ConstructSignatureDeclaration {
-        if self.data_tag != NodeDataTag::ConstructSignatureDeclaration {
-            panic!("as_construct_signature_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ConstructSignatureDeclaration {
+            panic!("as_construct_signature_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_constructor_declaration(&self) -> &'static ConstructorDeclaration {
-        if self.data_tag != NodeDataTag::ConstructorDeclaration {
-            panic!("as_constructor_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ConstructorDeclaration {
+            panic!("as_constructor_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_get_accessor_declaration(&self) -> &'static GetAccessorDeclaration {
-        if self.data_tag != NodeDataTag::GetAccessorDeclaration {
-            panic!("as_get_accessor_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::GetAccessorDeclaration {
+            panic!("as_get_accessor_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_set_accessor_declaration(&self) -> &'static SetAccessorDeclaration {
-        if self.data_tag != NodeDataTag::SetAccessorDeclaration {
-            panic!("as_set_accessor_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::SetAccessorDeclaration {
+            panic!("as_set_accessor_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_index_signature_declaration(&self) -> &'static IndexSignatureDeclaration {
-        if self.data_tag != NodeDataTag::IndexSignatureDeclaration {
-            panic!("as_index_signature_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::IndexSignatureDeclaration {
+            panic!("as_index_signature_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_method_signature_declaration(&self) -> &'static MethodSignatureDeclaration {
-        if self.data_tag != NodeDataTag::MethodSignatureDeclaration {
-            panic!("as_method_signature_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::MethodSignatureDeclaration {
+            panic!("as_method_signature_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_method_declaration(&self) -> &'static MethodDeclaration {
-        if self.data_tag != NodeDataTag::MethodDeclaration {
-            panic!("as_method_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::MethodDeclaration {
+            panic!("as_method_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_property_signature_declaration(&self) -> &'static PropertySignatureDeclaration {
-        if self.data_tag != NodeDataTag::PropertySignatureDeclaration {
-            panic!("as_property_signature_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::PropertySignatureDeclaration {
+            panic!("as_property_signature_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_property_declaration(&self) -> &'static PropertyDeclaration {
-        if self.data_tag != NodeDataTag::PropertyDeclaration {
-            panic!("as_property_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::PropertyDeclaration {
+            panic!("as_property_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_semicolon_class_element(&self) -> &'static SemicolonClassElement {
-        if self.data_tag != NodeDataTag::SemicolonClassElement {
-            panic!("as_semicolon_class_element called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::SemicolonClassElement {
+            panic!("as_semicolon_class_element called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_class_static_block_declaration(&self) -> &'static ClassStaticBlockDeclaration {
-        if self.data_tag != NodeDataTag::ClassStaticBlockDeclaration {
-            panic!("as_class_static_block_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ClassStaticBlockDeclaration {
+            panic!("as_class_static_block_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_omitted_expression(&self) -> &'static OmittedExpression {
-        if self.data_tag != NodeDataTag::OmittedExpression {
-            panic!("as_omitted_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::OmittedExpression {
+            panic!("as_omitted_expression called on {:?}", self.kind());
         }
         &OmittedExpression
     }
     #[inline]
     pub fn as_keyword_expression(&self) -> &'static KeywordExpression {
-        if self.data_tag != NodeDataTag::KeywordExpression {
-            panic!("as_keyword_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::KeywordExpression {
+            panic!("as_keyword_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_string_literal(&self) -> &'static StringLiteral {
-        if self.data_tag != NodeDataTag::StringLiteral {
-            panic!("as_string_literal called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::StringLiteral {
+            panic!("as_string_literal called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_numeric_literal(&self) -> &'static NumericLiteral {
-        if self.data_tag != NodeDataTag::NumericLiteral {
-            panic!("as_numeric_literal called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NumericLiteral {
+            panic!("as_numeric_literal called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_big_int_literal(&self) -> &'static BigIntLiteral {
-        if self.data_tag != NodeDataTag::BigIntLiteral {
-            panic!("as_big_int_literal called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::BigIntLiteral {
+            panic!("as_big_int_literal called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_regular_expression_literal(&self) -> &'static RegularExpressionLiteral {
-        if self.data_tag != NodeDataTag::RegularExpressionLiteral {
-            panic!("as_regular_expression_literal called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::RegularExpressionLiteral {
+            panic!("as_regular_expression_literal called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_no_substitution_template_literal(&self) -> &'static NoSubstitutionTemplateLiteral {
-        if self.data_tag != NodeDataTag::NoSubstitutionTemplateLiteral {
-            panic!("as_no_substitution_template_literal called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NoSubstitutionTemplateLiteral {
+            panic!("as_no_substitution_template_literal called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_binary_expression(&self) -> &'static BinaryExpression {
-        if self.data_tag != NodeDataTag::BinaryExpression {
-            panic!("as_binary_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::BinaryExpression {
+            panic!("as_binary_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_prefix_unary_expression(&self) -> &'static PrefixUnaryExpression {
-        if self.data_tag != NodeDataTag::PrefixUnaryExpression {
-            panic!("as_prefix_unary_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::PrefixUnaryExpression {
+            panic!("as_prefix_unary_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_postfix_unary_expression(&self) -> &'static PostfixUnaryExpression {
-        if self.data_tag != NodeDataTag::PostfixUnaryExpression {
-            panic!("as_postfix_unary_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::PostfixUnaryExpression {
+            panic!("as_postfix_unary_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_yield_expression(&self) -> &'static YieldExpression {
-        if self.data_tag != NodeDataTag::YieldExpression {
-            panic!("as_yield_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::YieldExpression {
+            panic!("as_yield_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_arrow_function(&self) -> &'static ArrowFunction {
-        if self.data_tag != NodeDataTag::ArrowFunction {
-            panic!("as_arrow_function called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ArrowFunction {
+            panic!("as_arrow_function called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_function_expression(&self) -> &'static FunctionExpression {
-        if self.data_tag != NodeDataTag::FunctionExpression {
-            panic!("as_function_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::FunctionExpression {
+            panic!("as_function_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_as_expression(&self) -> &'static AsExpression {
-        if self.data_tag != NodeDataTag::AsExpression {
-            panic!("as_as_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::AsExpression {
+            panic!("as_as_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_satisfies_expression(&self) -> &'static SatisfiesExpression {
-        if self.data_tag != NodeDataTag::SatisfiesExpression {
-            panic!("as_satisfies_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::SatisfiesExpression {
+            panic!("as_satisfies_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_conditional_expression(&self) -> &'static ConditionalExpression {
-        if self.data_tag != NodeDataTag::ConditionalExpression {
-            panic!("as_conditional_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ConditionalExpression {
+            panic!("as_conditional_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_property_access_expression(&self) -> &'static PropertyAccessExpression {
-        if self.data_tag != NodeDataTag::PropertyAccessExpression {
-            panic!("as_property_access_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::PropertyAccessExpression {
+            panic!("as_property_access_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_element_access_expression(&self) -> &'static ElementAccessExpression {
-        if self.data_tag != NodeDataTag::ElementAccessExpression {
-            panic!("as_element_access_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ElementAccessExpression {
+            panic!("as_element_access_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_call_expression(&self) -> &'static CallExpression {
-        if self.data_tag != NodeDataTag::CallExpression {
-            panic!("as_call_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::CallExpression {
+            panic!("as_call_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_new_expression(&self) -> &'static NewExpression {
-        if self.data_tag != NodeDataTag::NewExpression {
-            panic!("as_new_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NewExpression {
+            panic!("as_new_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_meta_property(&self) -> &'static MetaProperty {
-        if self.data_tag != NodeDataTag::MetaProperty {
-            panic!("as_meta_property called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::MetaProperty {
+            panic!("as_meta_property called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_non_null_expression(&self) -> &'static NonNullExpression {
-        if self.data_tag != NodeDataTag::NonNullExpression {
-            panic!("as_non_null_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NonNullExpression {
+            panic!("as_non_null_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_spread_element(&self) -> &'static SpreadElement {
-        if self.data_tag != NodeDataTag::SpreadElement {
-            panic!("as_spread_element called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::SpreadElement {
+            panic!("as_spread_element called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_template_expression(&self) -> &'static TemplateExpression {
-        if self.data_tag != NodeDataTag::TemplateExpression {
-            panic!("as_template_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TemplateExpression {
+            panic!("as_template_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_template_span(&self) -> &'static TemplateSpan {
-        if self.data_tag != NodeDataTag::TemplateSpan {
-            panic!("as_template_span called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TemplateSpan {
+            panic!("as_template_span called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_tagged_template_expression(&self) -> &'static TaggedTemplateExpression {
-        if self.data_tag != NodeDataTag::TaggedTemplateExpression {
-            panic!("as_tagged_template_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TaggedTemplateExpression {
+            panic!("as_tagged_template_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_parenthesized_expression(&self) -> &'static ParenthesizedExpression {
-        if self.data_tag != NodeDataTag::ParenthesizedExpression {
-            panic!("as_parenthesized_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ParenthesizedExpression {
+            panic!("as_parenthesized_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_array_literal_expression(&self) -> &'static ArrayLiteralExpression {
-        if self.data_tag != NodeDataTag::ArrayLiteralExpression {
-            panic!("as_array_literal_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ArrayLiteralExpression {
+            panic!("as_array_literal_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_object_literal_expression(&self) -> &'static ObjectLiteralExpression {
-        if self.data_tag != NodeDataTag::ObjectLiteralExpression {
-            panic!("as_object_literal_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ObjectLiteralExpression {
+            panic!("as_object_literal_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_spread_assignment(&self) -> &'static SpreadAssignment {
-        if self.data_tag != NodeDataTag::SpreadAssignment {
-            panic!("as_spread_assignment called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::SpreadAssignment {
+            panic!("as_spread_assignment called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_property_assignment(&self) -> &'static PropertyAssignment {
-        if self.data_tag != NodeDataTag::PropertyAssignment {
-            panic!("as_property_assignment called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::PropertyAssignment {
+            panic!("as_property_assignment called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_shorthand_property_assignment(&self) -> &'static ShorthandPropertyAssignment {
-        if self.data_tag != NodeDataTag::ShorthandPropertyAssignment {
-            panic!("as_shorthand_property_assignment called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ShorthandPropertyAssignment {
+            panic!("as_shorthand_property_assignment called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_delete_expression(&self) -> &'static DeleteExpression {
-        if self.data_tag != NodeDataTag::DeleteExpression {
-            panic!("as_delete_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::DeleteExpression {
+            panic!("as_delete_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_type_of_expression(&self) -> &'static TypeOfExpression {
-        if self.data_tag != NodeDataTag::TypeOfExpression {
-            panic!("as_type_of_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TypeOfExpression {
+            panic!("as_type_of_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_void_expression(&self) -> &'static VoidExpression {
-        if self.data_tag != NodeDataTag::VoidExpression {
-            panic!("as_void_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::VoidExpression {
+            panic!("as_void_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_await_expression(&self) -> &'static AwaitExpression {
-        if self.data_tag != NodeDataTag::AwaitExpression {
-            panic!("as_await_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::AwaitExpression {
+            panic!("as_await_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_type_assertion(&self) -> &'static TypeAssertion {
-        if self.data_tag != NodeDataTag::TypeAssertion {
-            panic!("as_type_assertion called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TypeAssertion {
+            panic!("as_type_assertion called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_keyword_type_node(&self) -> &'static KeywordTypeNode {
-        if self.data_tag != NodeDataTag::KeywordTypeNode {
-            panic!("as_keyword_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::KeywordTypeNode {
+            panic!("as_keyword_type_node called on {:?}", self.kind());
         }
         &KeywordTypeNode
     }
     #[inline]
     pub fn as_union_type_node(&self) -> &'static UnionTypeNode {
-        if self.data_tag != NodeDataTag::UnionTypeNode {
-            panic!("as_union_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::UnionTypeNode {
+            panic!("as_union_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_intersection_type_node(&self) -> &'static IntersectionTypeNode {
-        if self.data_tag != NodeDataTag::IntersectionTypeNode {
-            panic!("as_intersection_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::IntersectionTypeNode {
+            panic!("as_intersection_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_conditional_type_node(&self) -> &'static ConditionalTypeNode {
-        if self.data_tag != NodeDataTag::ConditionalTypeNode {
-            panic!("as_conditional_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ConditionalTypeNode {
+            panic!("as_conditional_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_type_operator_node(&self) -> &'static TypeOperatorNode {
-        if self.data_tag != NodeDataTag::TypeOperatorNode {
-            panic!("as_type_operator_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TypeOperatorNode {
+            panic!("as_type_operator_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_infer_type_node(&self) -> &'static InferTypeNode {
-        if self.data_tag != NodeDataTag::InferTypeNode {
-            panic!("as_infer_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::InferTypeNode {
+            panic!("as_infer_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_array_type_node(&self) -> &'static ArrayTypeNode {
-        if self.data_tag != NodeDataTag::ArrayTypeNode {
-            panic!("as_array_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ArrayTypeNode {
+            panic!("as_array_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_indexed_access_type_node(&self) -> &'static IndexedAccessTypeNode {
-        if self.data_tag != NodeDataTag::IndexedAccessTypeNode {
-            panic!("as_indexed_access_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::IndexedAccessTypeNode {
+            panic!("as_indexed_access_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_type_reference_node(&self) -> &'static TypeReferenceNode {
-        if self.data_tag != NodeDataTag::TypeReferenceNode {
-            panic!("as_type_reference_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TypeReferenceNode {
+            panic!("as_type_reference_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_expression_with_type_arguments(&self) -> &'static ExpressionWithTypeArguments {
-        if self.data_tag != NodeDataTag::ExpressionWithTypeArguments {
-            panic!("as_expression_with_type_arguments called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ExpressionWithTypeArguments {
+            panic!("as_expression_with_type_arguments called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_literal_type_node(&self) -> &'static LiteralTypeNode {
-        if self.data_tag != NodeDataTag::LiteralTypeNode {
-            panic!("as_literal_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::LiteralTypeNode {
+            panic!("as_literal_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_this_type_node(&self) -> &'static ThisTypeNode {
-        if self.data_tag != NodeDataTag::ThisTypeNode {
-            panic!("as_this_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ThisTypeNode {
+            panic!("as_this_type_node called on {:?}", self.kind());
         }
         &ThisTypeNode
     }
     #[inline]
     pub fn as_type_predicate_node(&self) -> &'static TypePredicateNode {
-        if self.data_tag != NodeDataTag::TypePredicateNode {
-            panic!("as_type_predicate_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TypePredicateNode {
+            panic!("as_type_predicate_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_import_attribute(&self) -> &'static ImportAttribute {
-        if self.data_tag != NodeDataTag::ImportAttribute {
-            panic!("as_import_attribute called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ImportAttribute {
+            panic!("as_import_attribute called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_import_attributes(&self) -> &'static ImportAttributes {
-        if self.data_tag != NodeDataTag::ImportAttributes {
-            panic!("as_import_attributes called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ImportAttributes {
+            panic!("as_import_attributes called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_type_query_node(&self) -> &'static TypeQueryNode {
-        if self.data_tag != NodeDataTag::TypeQueryNode {
-            panic!("as_type_query_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TypeQueryNode {
+            panic!("as_type_query_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_mapped_type_node(&self) -> &'static MappedTypeNode {
-        if self.data_tag != NodeDataTag::MappedTypeNode {
-            panic!("as_mapped_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::MappedTypeNode {
+            panic!("as_mapped_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_type_literal_node(&self) -> &'static TypeLiteralNode {
-        if self.data_tag != NodeDataTag::TypeLiteralNode {
-            panic!("as_type_literal_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TypeLiteralNode {
+            panic!("as_type_literal_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_tuple_type_node(&self) -> &'static TupleTypeNode {
-        if self.data_tag != NodeDataTag::TupleTypeNode {
-            panic!("as_tuple_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TupleTypeNode {
+            panic!("as_tuple_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_named_tuple_member(&self) -> &'static NamedTupleMember {
-        if self.data_tag != NodeDataTag::NamedTupleMember {
-            panic!("as_named_tuple_member called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::NamedTupleMember {
+            panic!("as_named_tuple_member called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_optional_type_node(&self) -> &'static OptionalTypeNode {
-        if self.data_tag != NodeDataTag::OptionalTypeNode {
-            panic!("as_optional_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::OptionalTypeNode {
+            panic!("as_optional_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_rest_type_node(&self) -> &'static RestTypeNode {
-        if self.data_tag != NodeDataTag::RestTypeNode {
-            panic!("as_rest_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::RestTypeNode {
+            panic!("as_rest_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_parenthesized_type_node(&self) -> &'static ParenthesizedTypeNode {
-        if self.data_tag != NodeDataTag::ParenthesizedTypeNode {
-            panic!("as_parenthesized_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ParenthesizedTypeNode {
+            panic!("as_parenthesized_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_function_type_node(&self) -> &'static FunctionTypeNode {
-        if self.data_tag != NodeDataTag::FunctionTypeNode {
-            panic!("as_function_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::FunctionTypeNode {
+            panic!("as_function_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_constructor_type_node(&self) -> &'static ConstructorTypeNode {
-        if self.data_tag != NodeDataTag::ConstructorTypeNode {
-            panic!("as_constructor_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ConstructorTypeNode {
+            panic!("as_constructor_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_template_head(&self) -> &'static TemplateHead {
-        if self.data_tag != NodeDataTag::TemplateHead {
-            panic!("as_template_head called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TemplateHead {
+            panic!("as_template_head called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_template_middle(&self) -> &'static TemplateMiddle {
-        if self.data_tag != NodeDataTag::TemplateMiddle {
-            panic!("as_template_middle called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TemplateMiddle {
+            panic!("as_template_middle called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_template_tail(&self) -> &'static TemplateTail {
-        if self.data_tag != NodeDataTag::TemplateTail {
-            panic!("as_template_tail called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TemplateTail {
+            panic!("as_template_tail called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_template_literal_type_node(&self) -> &'static TemplateLiteralTypeNode {
-        if self.data_tag != NodeDataTag::TemplateLiteralTypeNode {
-            panic!("as_template_literal_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TemplateLiteralTypeNode {
+            panic!("as_template_literal_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_template_literal_type_span(&self) -> &'static TemplateLiteralTypeSpan {
-        if self.data_tag != NodeDataTag::TemplateLiteralTypeSpan {
-            panic!("as_template_literal_type_span called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TemplateLiteralTypeSpan {
+            panic!("as_template_literal_type_span called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_synthetic_expression(&self) -> &'static SyntheticExpression {
-        if self.data_tag != NodeDataTag::SyntheticExpression {
-            panic!("as_synthetic_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::SyntheticExpression {
+            panic!("as_synthetic_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_partially_emitted_expression(&self) -> &'static PartiallyEmittedExpression {
-        if self.data_tag != NodeDataTag::PartiallyEmittedExpression {
-            panic!("as_partially_emitted_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::PartiallyEmittedExpression {
+            panic!("as_partially_emitted_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsx_element(&self) -> &'static JsxElement {
-        if self.data_tag != NodeDataTag::JsxElement {
-            panic!("as_jsx_element called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxElement {
+            panic!("as_jsx_element called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsx_attributes(&self) -> &'static JsxAttributes {
-        if self.data_tag != NodeDataTag::JsxAttributes {
-            panic!("as_jsx_attributes called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxAttributes {
+            panic!("as_jsx_attributes called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsx_namespaced_name(&self) -> &'static JsxNamespacedName {
-        if self.data_tag != NodeDataTag::JsxNamespacedName {
-            panic!("as_jsx_namespaced_name called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxNamespacedName {
+            panic!("as_jsx_namespaced_name called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsx_opening_element(&self) -> &'static JsxOpeningElement {
-        if self.data_tag != NodeDataTag::JsxOpeningElement {
-            panic!("as_jsx_opening_element called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxOpeningElement {
+            panic!("as_jsx_opening_element called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsx_self_closing_element(&self) -> &'static JsxSelfClosingElement {
-        if self.data_tag != NodeDataTag::JsxSelfClosingElement {
-            panic!("as_jsx_self_closing_element called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxSelfClosingElement {
+            panic!("as_jsx_self_closing_element called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsx_fragment(&self) -> &'static JsxFragment {
-        if self.data_tag != NodeDataTag::JsxFragment {
-            panic!("as_jsx_fragment called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxFragment {
+            panic!("as_jsx_fragment called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsx_opening_fragment(&self) -> &'static JsxOpeningFragment {
-        if self.data_tag != NodeDataTag::JsxOpeningFragment {
-            panic!("as_jsx_opening_fragment called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxOpeningFragment {
+            panic!("as_jsx_opening_fragment called on {:?}", self.kind());
         }
         &JsxOpeningFragment
     }
     #[inline]
     pub fn as_jsx_closing_fragment(&self) -> &'static JsxClosingFragment {
-        if self.data_tag != NodeDataTag::JsxClosingFragment {
-            panic!("as_jsx_closing_fragment called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxClosingFragment {
+            panic!("as_jsx_closing_fragment called on {:?}", self.kind());
         }
         &JsxClosingFragment
     }
     #[inline]
     pub fn as_jsx_attribute(&self) -> &'static JsxAttribute {
-        if self.data_tag != NodeDataTag::JsxAttribute {
-            panic!("as_jsx_attribute called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxAttribute {
+            panic!("as_jsx_attribute called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsx_spread_attribute(&self) -> &'static JsxSpreadAttribute {
-        if self.data_tag != NodeDataTag::JsxSpreadAttribute {
-            panic!("as_jsx_spread_attribute called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxSpreadAttribute {
+            panic!("as_jsx_spread_attribute called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsx_closing_element(&self) -> &'static JsxClosingElement {
-        if self.data_tag != NodeDataTag::JsxClosingElement {
-            panic!("as_jsx_closing_element called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxClosingElement {
+            panic!("as_jsx_closing_element called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsx_expression(&self) -> &'static JsxExpression {
-        if self.data_tag != NodeDataTag::JsxExpression {
-            panic!("as_jsx_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxExpression {
+            panic!("as_jsx_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsx_text(&self) -> &'static JsxText {
-        if self.data_tag != NodeDataTag::JsxText {
-            panic!("as_jsx_text called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JsxText {
+            panic!("as_jsx_text called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_syntax_list(&self) -> &'static SyntaxList {
-        if self.data_tag != NodeDataTag::SyntaxList {
-            panic!("as_syntax_list called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::SyntaxList {
+            panic!("as_syntax_list called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc(&self) -> &'static JSDoc {
-        if self.data_tag != NodeDataTag::JSDoc {
-            panic!("as_jsdoc called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDoc {
+            panic!("as_jsdoc called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_type_expression(&self) -> &'static JSDocTypeExpression {
-        if self.data_tag != NodeDataTag::JSDocTypeExpression {
-            panic!("as_jsdoc_type_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocTypeExpression {
+            panic!("as_jsdoc_type_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_non_nullable_type(&self) -> &'static JSDocNonNullableType {
-        if self.data_tag != NodeDataTag::JSDocNonNullableType {
-            panic!("as_jsdoc_non_nullable_type called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocNonNullableType {
+            panic!("as_jsdoc_non_nullable_type called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_nullable_type(&self) -> &'static JSDocNullableType {
-        if self.data_tag != NodeDataTag::JSDocNullableType {
-            panic!("as_jsdoc_nullable_type called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocNullableType {
+            panic!("as_jsdoc_nullable_type called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_all_type(&self) -> &'static JSDocAllType {
-        if self.data_tag != NodeDataTag::JSDocAllType {
-            panic!("as_jsdoc_all_type called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocAllType {
+            panic!("as_jsdoc_all_type called on {:?}", self.kind());
         }
         &JSDocAllType
     }
     #[inline]
     pub fn as_jsdoc_variadic_type(&self) -> &'static JSDocVariadicType {
-        if self.data_tag != NodeDataTag::JSDocVariadicType {
-            panic!("as_jsdoc_variadic_type called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocVariadicType {
+            panic!("as_jsdoc_variadic_type called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_optional_type(&self) -> &'static JSDocOptionalType {
-        if self.data_tag != NodeDataTag::JSDocOptionalType {
-            panic!("as_jsdoc_optional_type called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocOptionalType {
+            panic!("as_jsdoc_optional_type called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_type_tag(&self) -> &'static JSDocTypeTag {
-        if self.data_tag != NodeDataTag::JSDocTypeTag {
-            panic!("as_jsdoc_type_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocTypeTag {
+            panic!("as_jsdoc_type_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_unknown_tag(&self) -> &'static JSDocUnknownTag {
-        if self.data_tag != NodeDataTag::JSDocUnknownTag {
-            panic!("as_jsdoc_unknown_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocUnknownTag {
+            panic!("as_jsdoc_unknown_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_template_tag(&self) -> &'static JSDocTemplateTag {
-        if self.data_tag != NodeDataTag::JSDocTemplateTag {
-            panic!("as_jsdoc_template_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocTemplateTag {
+            panic!("as_jsdoc_template_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_return_tag(&self) -> &'static JSDocReturnTag {
-        if self.data_tag != NodeDataTag::JSDocReturnTag {
-            panic!("as_jsdoc_return_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocReturnTag {
+            panic!("as_jsdoc_return_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_public_tag(&self) -> &'static JSDocPublicTag {
-        if self.data_tag != NodeDataTag::JSDocPublicTag {
-            panic!("as_jsdoc_public_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocPublicTag {
+            panic!("as_jsdoc_public_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_private_tag(&self) -> &'static JSDocPrivateTag {
-        if self.data_tag != NodeDataTag::JSDocPrivateTag {
-            panic!("as_jsdoc_private_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocPrivateTag {
+            panic!("as_jsdoc_private_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_protected_tag(&self) -> &'static JSDocProtectedTag {
-        if self.data_tag != NodeDataTag::JSDocProtectedTag {
-            panic!("as_jsdoc_protected_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocProtectedTag {
+            panic!("as_jsdoc_protected_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_readonly_tag(&self) -> &'static JSDocReadonlyTag {
-        if self.data_tag != NodeDataTag::JSDocReadonlyTag {
-            panic!("as_jsdoc_readonly_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocReadonlyTag {
+            panic!("as_jsdoc_readonly_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_override_tag(&self) -> &'static JSDocOverrideTag {
-        if self.data_tag != NodeDataTag::JSDocOverrideTag {
-            panic!("as_jsdoc_override_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocOverrideTag {
+            panic!("as_jsdoc_override_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_deprecated_tag(&self) -> &'static JSDocDeprecatedTag {
-        if self.data_tag != NodeDataTag::JSDocDeprecatedTag {
-            panic!("as_jsdoc_deprecated_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocDeprecatedTag {
+            panic!("as_jsdoc_deprecated_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_see_tag(&self) -> &'static JSDocSeeTag {
-        if self.data_tag != NodeDataTag::JSDocSeeTag {
-            panic!("as_jsdoc_see_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocSeeTag {
+            panic!("as_jsdoc_see_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_implements_tag(&self) -> &'static JSDocImplementsTag {
-        if self.data_tag != NodeDataTag::JSDocImplementsTag {
-            panic!("as_jsdoc_implements_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocImplementsTag {
+            panic!("as_jsdoc_implements_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_augments_tag(&self) -> &'static JSDocAugmentsTag {
-        if self.data_tag != NodeDataTag::JSDocAugmentsTag {
-            panic!("as_jsdoc_augments_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocAugmentsTag {
+            panic!("as_jsdoc_augments_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_satisfies_tag(&self) -> &'static JSDocSatisfiesTag {
-        if self.data_tag != NodeDataTag::JSDocSatisfiesTag {
-            panic!("as_jsdoc_satisfies_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocSatisfiesTag {
+            panic!("as_jsdoc_satisfies_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_throws_tag(&self) -> &'static JSDocThrowsTag {
-        if self.data_tag != NodeDataTag::JSDocThrowsTag {
-            panic!("as_jsdoc_throws_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocThrowsTag {
+            panic!("as_jsdoc_throws_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_this_tag(&self) -> &'static JSDocThisTag {
-        if self.data_tag != NodeDataTag::JSDocThisTag {
-            panic!("as_jsdoc_this_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocThisTag {
+            panic!("as_jsdoc_this_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_import_tag(&self) -> &'static JSDocImportTag {
-        if self.data_tag != NodeDataTag::JSDocImportTag {
-            panic!("as_jsdoc_import_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocImportTag {
+            panic!("as_jsdoc_import_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_callback_tag(&self) -> &'static JSDocCallbackTag {
-        if self.data_tag != NodeDataTag::JSDocCallbackTag {
-            panic!("as_jsdoc_callback_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocCallbackTag {
+            panic!("as_jsdoc_callback_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_overload_tag(&self) -> &'static JSDocOverloadTag {
-        if self.data_tag != NodeDataTag::JSDocOverloadTag {
-            panic!("as_jsdoc_overload_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocOverloadTag {
+            panic!("as_jsdoc_overload_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_typedef_tag(&self) -> &'static JSDocTypedefTag {
-        if self.data_tag != NodeDataTag::JSDocTypedefTag {
-            panic!("as_jsdoc_typedef_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocTypedefTag {
+            panic!("as_jsdoc_typedef_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_signature(&self) -> &'static JSDocSignature {
-        if self.data_tag != NodeDataTag::JSDocSignature {
-            panic!("as_jsdoc_signature called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocSignature {
+            panic!("as_jsdoc_signature called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_name_reference(&self) -> &'static JSDocNameReference {
-        if self.data_tag != NodeDataTag::JSDocNameReference {
-            panic!("as_jsdoc_name_reference called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocNameReference {
+            panic!("as_jsdoc_name_reference called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_source_file(&self) -> &'static SourceFile {
-        if self.data_tag != NodeDataTag::SourceFile {
-            panic!("as_source_file called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::SourceFile {
+            panic!("as_source_file called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_module_declaration(&self) -> &'static ModuleDeclaration {
-        if self.data_tag != NodeDataTag::ModuleDeclaration {
-            panic!("as_module_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ModuleDeclaration {
+            panic!("as_module_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_import_equals_declaration(&self) -> &'static ImportEqualsDeclaration {
-        if self.data_tag != NodeDataTag::ImportEqualsDeclaration {
-            panic!("as_import_equals_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ImportEqualsDeclaration {
+            panic!("as_import_equals_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_export_declaration(&self) -> &'static ExportDeclaration {
-        if self.data_tag != NodeDataTag::ExportDeclaration {
-            panic!("as_export_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ExportDeclaration {
+            panic!("as_export_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_import_type_node(&self) -> &'static ImportTypeNode {
-        if self.data_tag != NodeDataTag::ImportTypeNode {
-            panic!("as_import_type_node called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ImportTypeNode {
+            panic!("as_import_type_node called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_import_clause(&self) -> &'static ImportClause {
-        if self.data_tag != NodeDataTag::ImportClause {
-            panic!("as_import_clause called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ImportClause {
+            panic!("as_import_clause called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_import_specifier(&self) -> &'static ImportSpecifier {
-        if self.data_tag != NodeDataTag::ImportSpecifier {
-            panic!("as_import_specifier called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::ImportSpecifier {
+            panic!("as_import_specifier called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_text(&self) -> &'static JSDocText {
-        if self.data_tag != NodeDataTag::JSDocText {
-            panic!("as_jsdoc_text called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocText {
+            panic!("as_jsdoc_text called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_link(&self) -> &'static JSDocLink {
-        if self.data_tag != NodeDataTag::JSDocLink {
-            panic!("as_jsdoc_link called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocLink {
+            panic!("as_jsdoc_link called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_link_plain(&self) -> &'static JSDocLinkPlain {
-        if self.data_tag != NodeDataTag::JSDocLinkPlain {
-            panic!("as_jsdoc_link_plain called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocLinkPlain {
+            panic!("as_jsdoc_link_plain called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_link_code(&self) -> &'static JSDocLinkCode {
-        if self.data_tag != NodeDataTag::JSDocLinkCode {
-            panic!("as_jsdoc_link_code called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocLinkCode {
+            panic!("as_jsdoc_link_code called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_type_parameter_declaration(&self) -> &'static TypeParameterDeclaration {
-        if self.data_tag != NodeDataTag::TypeParameterDeclaration {
-            panic!("as_type_parameter_declaration called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::TypeParameterDeclaration {
+            panic!("as_type_parameter_declaration called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_synthetic_reference_expression(&self) -> &'static SyntheticReferenceExpression {
-        if self.data_tag != NodeDataTag::SyntheticReferenceExpression {
-            panic!("as_synthetic_reference_expression called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::SyntheticReferenceExpression {
+            panic!("as_synthetic_reference_expression called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_type_literal(&self) -> &'static JSDocTypeLiteral {
-        if self.data_tag != NodeDataTag::JSDocTypeLiteral {
-            panic!("as_jsdoc_type_literal called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocTypeLiteral {
+            panic!("as_jsdoc_type_literal called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_parameter_or_property_tag(&self) -> &'static JSDocParameterOrPropertyTag {
-        if self.data_tag != NodeDataTag::JSDocParameterOrPropertyTag {
-            panic!("as_jsdoc_parameter_or_property_tag called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::JSDocParameterOrPropertyTag {
+            panic!("as_jsdoc_parameter_or_property_tag called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_flow_switch_clause_data(&self) -> &'static FlowSwitchClauseData {
-        if self.data_tag != NodeDataTag::FlowSwitchClauseData {
-            panic!("as_flow_switch_clause_data called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::FlowSwitchClauseData {
+            panic!("as_flow_switch_clause_data called on {:?}", self.kind());
         }
         self.payload()
     }
     #[inline]
     pub fn as_flow_reduce_label_data(&self) -> &'static FlowReduceLabelData {
-        if self.data_tag != NodeDataTag::FlowReduceLabelData {
-            panic!("as_flow_reduce_label_data called on {:?}", self.kind);
+        if self.data_tag() != NodeDataTag::FlowReduceLabelData {
+            panic!("as_flow_reduce_label_data called on {:?}", self.kind());
         }
         self.payload()
     }
 
     pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::QualifiedName => self.payload::<QualifiedName>().for_each_child(v),
             NodeDataTag::ComputedPropertyName => self.payload::<ComputedPropertyName>().for_each_child(v),
             NodeDataTag::Decorator => self.payload::<Decorator>().for_each_child(v),
@@ -8608,7 +8608,7 @@ impl Node {
 
     pub fn visit_each_child(&self, v: &mut NodeVisitor) -> P<Node> {
         let node = self.as_p();
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::QualifiedName => self.payload::<QualifiedName>().visit_each_child(node, v),
             NodeDataTag::ComputedPropertyName => self.payload::<ComputedPropertyName>().visit_each_child(node, v),
             NodeDataTag::Decorator => self.payload::<Decorator>().visit_each_child(node, v),
@@ -8782,7 +8782,7 @@ impl Node {
 
     pub fn clone_node(&self, f: &NodeFactory) -> P<Node> {
         let node = self.as_p();
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::Token => Token.clone_node(node, f),
             NodeDataTag::Identifier => self.payload::<Identifier>().clone_node(node, f),
             NodeDataTag::PrivateIdentifier => self.payload::<PrivateIdentifier>().clone_node(node, f),
@@ -8975,12 +8975,12 @@ impl Node {
             NodeDataTag::SyntheticReferenceExpression => self.payload::<SyntheticReferenceExpression>().clone_node(node, f),
             NodeDataTag::JSDocTypeLiteral => self.payload::<JSDocTypeLiteral>().clone_node(node, f),
             NodeDataTag::JSDocParameterOrPropertyTag => self.payload::<JSDocParameterOrPropertyTag>().clone_node(node, f),
-            _ => panic!("clone_node: unsupported node data for {:?}", self.kind),
+            _ => panic!("clone_node: unsupported node data for {:?}", self.kind()),
         }
     }
 
     pub fn name(&self) -> Option<P<Node>> {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::VariableDeclaration => Some(self.payload::<VariableDeclaration>().name()),
             NodeDataTag::ParameterDeclaration => Some(self.payload::<ParameterDeclaration>().name()),
             NodeDataTag::BindingElement => self.payload::<BindingElement>().name(),
@@ -9027,7 +9027,7 @@ impl Node {
     }
 
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::VariableStatement => self.payload::<VariableStatement>().modifiers(),
             NodeDataTag::ParameterDeclaration => self.payload::<ParameterDeclaration>().modifiers(),
             NodeDataTag::MissingDeclaration => self.payload::<MissingDeclaration>().modifiers(),
@@ -9066,7 +9066,7 @@ impl Node {
     }
 
     pub(crate) fn set_modifiers_data(&self, modifiers: Option<P<ModifierList>>) {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::VariableStatement => self.payload::<VariableStatement>().set_modifiers(modifiers),
             NodeDataTag::ParameterDeclaration => self.payload::<ParameterDeclaration>().set_modifiers(modifiers),
             NodeDataTag::MissingDeclaration => self.payload::<MissingDeclaration>().set_modifiers(modifiers),
@@ -9105,7 +9105,7 @@ impl Node {
     }
 
     pub fn flow_node_data(&self) -> Option<&'static FlowNodeBase> {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::Identifier => Some(&self.payload::<Identifier>().flow_node_base),
             NodeDataTag::QualifiedName => Some(&self.payload::<QualifiedName>().flow_node_base),
             NodeDataTag::EmptyStatement => Some(&self.payload::<EmptyStatement>().flow_node_base),
@@ -9155,7 +9155,7 @@ impl Node {
     }
 
     pub fn declaration_data(&self) -> Option<&'static DeclarationBase> {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::VariableDeclaration => Some(&self.payload::<VariableDeclaration>().declaration_base),
             NodeDataTag::ParameterDeclaration => Some(&self.payload::<ParameterDeclaration>().declaration_base),
             NodeDataTag::BindingElement => Some(&self.payload::<BindingElement>().declaration_base),
@@ -9217,7 +9217,7 @@ impl Node {
     }
 
     pub fn exportable_data(&self) -> Option<&'static ExportableBase> {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::VariableDeclaration => Some(&self.payload::<VariableDeclaration>().exportable_base),
             NodeDataTag::BindingElement => Some(&self.payload::<BindingElement>().exportable_base),
             NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().exportable_base),
@@ -9237,7 +9237,7 @@ impl Node {
     }
 
     pub fn locals_container_data(&self) -> Option<&'static LocalsContainerBase> {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::ForStatement => Some(&self.payload::<ForStatement>().locals_container_base),
             NodeDataTag::ForInOrOfStatement => Some(&self.payload::<ForInOrOfStatement>().locals_container_base),
             NodeDataTag::CaseBlock => Some(&self.payload::<CaseBlock>().locals_container_base),
@@ -9270,7 +9270,7 @@ impl Node {
     }
 
     pub fn function_like_data(&self) -> Option<&'static FunctionLikeBase> {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().function_like_base),
             NodeDataTag::CallSignatureDeclaration => Some(&self.payload::<CallSignatureDeclaration>().function_like_base),
             NodeDataTag::ConstructSignatureDeclaration => Some(&self.payload::<ConstructSignatureDeclaration>().function_like_base),
@@ -9290,7 +9290,7 @@ impl Node {
     }
 
     pub fn class_like_data(&self) -> Option<&'static ClassLikeBase> {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::ClassDeclaration => Some(&self.payload::<ClassDeclaration>().class_like_base),
             NodeDataTag::ClassExpression => Some(&self.payload::<ClassExpression>().class_like_base),
             _ => None,
@@ -9298,7 +9298,7 @@ impl Node {
     }
 
     pub fn body_data(&self) -> Option<&'static BodyBase> {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().body_base),
             NodeDataTag::ConstructorDeclaration => Some(&self.payload::<ConstructorDeclaration>().body_base),
             NodeDataTag::GetAccessorDeclaration => Some(&self.payload::<GetAccessorDeclaration>().body_base),
@@ -9312,7 +9312,7 @@ impl Node {
     }
 
     pub fn literal_like_data(&self) -> Option<&'static LiteralLikeNodeBase> {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::StringLiteral => Some(&self.payload::<StringLiteral>().literal_like_node_base),
             NodeDataTag::NumericLiteral => Some(&self.payload::<NumericLiteral>().literal_like_node_base),
             NodeDataTag::BigIntLiteral => Some(&self.payload::<BigIntLiteral>().literal_like_node_base),
@@ -9327,7 +9327,7 @@ impl Node {
     }
 
     pub fn template_literal_like_data(&self) -> Option<&'static TemplateLiteralLikeNodeBase> {
-        match self.data_tag {
+        match self.data_tag() {
             NodeDataTag::NoSubstitutionTemplateLiteral => Some(&self.payload::<NoSubstitutionTemplateLiteral>().template_literal_like_node_base),
             NodeDataTag::TemplateHead => Some(&self.payload::<TemplateHead>().template_literal_like_node_base),
             NodeDataTag::TemplateMiddle => Some(&self.payload::<TemplateMiddle>().template_literal_like_node_base),
@@ -9520,7 +9520,7 @@ impl NodeFactory {
     pub fn update_for_in_or_of_statement(&self, node: P<Node>, await_modifier: Option<P<Node>>, initializer: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
         let data = node.as_for_in_or_of_statement();
         if await_modifier != data.await_modifier() || initializer != data.initializer() || expression != data.expression() || statement != data.statement() {
-            return update_node(self.new_for_in_or_of_statement(node.kind, await_modifier, initializer, expression, statement), node, &self.hooks);
+            return update_node(self.new_for_in_or_of_statement(node.kind(), await_modifier, initializer, expression, statement), node, &self.hooks);
         }
         node
     }
@@ -9641,7 +9641,7 @@ impl NodeFactory {
     pub fn update_case_or_default_clause(&self, node: P<Node>, expression: Option<P<Node>>, statements: P<NodeList>) -> P<Node> {
         let data = node.as_case_or_default_clause();
         if expression != data.expression() || statements != data.statements() {
-            return update_node(self.new_case_or_default_clause(node.kind, expression, statements), node, &self.hooks);
+            return update_node(self.new_case_or_default_clause(node.kind(), expression, statements), node, &self.hooks);
         }
         node
     }
@@ -9834,7 +9834,7 @@ impl NodeFactory {
     pub fn update_binding_pattern(&self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
         let data = node.as_binding_pattern();
         if elements != data.elements() {
-            return update_node(self.new_binding_pattern(node.kind, elements), node, &self.hooks);
+            return update_node(self.new_binding_pattern(node.kind(), elements), node, &self.hooks);
         }
         node
     }
@@ -10115,10 +10115,10 @@ impl NodeFactory {
     pub fn update_type_alias_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
         let data = node.as_type_alias_declaration();
         if modifiers != data.modifiers() || name != data.name() || type_parameters != data.type_parameters() || type_node != data.type_() {
-            let updated = match node.kind {
+            let updated = match node.kind() {
                 Kind::TypeAliasDeclaration => self.new_type_alias_declaration(modifiers, name, type_parameters, type_node),
                 Kind::JSTypeAliasDeclaration => self.new_js_type_alias_declaration(modifiers, name, type_parameters, type_node),
-                _ => panic!("unexpected kind in update_type_alias_declaration: {:?}", node.kind),
+                _ => panic!("unexpected kind in update_type_alias_declaration: {:?}", node.kind()),
             };
             return update_node(updated, node, &self.hooks);
         }
@@ -10246,10 +10246,10 @@ impl NodeFactory {
     pub fn update_import_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
         let data = node.as_import_declaration();
         if modifiers != data.modifiers() || import_clause != data.import_clause() || module_specifier != data.module_specifier() || attributes != data.attributes() {
-            let updated = match node.kind {
+            let updated = match node.kind() {
                 Kind::ImportDeclaration => self.new_import_declaration(modifiers, import_clause, module_specifier, attributes),
                 Kind::JSImportDeclaration => self.new_js_import_declaration(modifiers, import_clause, module_specifier, attributes),
-                _ => panic!("unexpected kind in update_import_declaration: {:?}", node.kind),
+                _ => panic!("unexpected kind in update_import_declaration: {:?}", node.kind()),
             };
             return update_node(updated, node, &self.hooks);
         }
@@ -12863,7 +12863,7 @@ impl NodeFactory {
     pub fn update_jsdoc_parameter_or_property_tag(&self, node: P<Node>, tag_name: P<Node>, name: P<Node>, is_bracketed: bool, type_expression: Option<P<Node>>, is_name_first: bool, comment: Option<P<NodeList>>) -> P<Node> {
         let data = node.as_jsdoc_parameter_or_property_tag();
         if tag_name != data.tag_name() || name != data.name() || is_bracketed != data.is_bracketed() || type_expression != data.type_expression() || is_name_first != data.is_name_first() || comment != data.comment() {
-            return update_node(self.new_jsdoc_parameter_or_property_tag(node.kind, tag_name, name, is_bracketed, type_expression, is_name_first, comment), node, &self.hooks);
+            return update_node(self.new_jsdoc_parameter_or_property_tag(node.kind(), tag_name, name, is_bracketed, type_expression, is_name_first, comment), node, &self.hooks);
         }
         node
     }
@@ -12872,7 +12872,7 @@ impl NodeFactory {
 
 impl Token {
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        clone_node(f.new_token(node.kind), node, &f.hooks)
+        clone_node(f.new_token(node.kind()), node, &f.hooks)
     }
 }
 
@@ -13064,7 +13064,7 @@ impl ForInOrOfStatement {
 
 impl ForInOrOfStatement {
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        clone_node(f.new_for_in_or_of_statement(node.kind, self.await_modifier(), self.initializer(), self.expression(), self.statement()), node, &f.hooks)
+        clone_node(f.new_for_in_or_of_statement(node.kind(), self.await_modifier(), self.initializer(), self.expression(), self.statement()), node, &f.hooks)
     }
 }
 
@@ -13203,7 +13203,7 @@ impl CaseOrDefaultClause {
 
 impl CaseOrDefaultClause {
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        clone_node(f.new_case_or_default_clause(node.kind, self.expression(), self.statements()), node, &f.hooks)
+        clone_node(f.new_case_or_default_clause(node.kind(), self.expression(), self.statements()), node, &f.hooks)
     }
 }
 
@@ -13415,7 +13415,7 @@ impl BindingPattern {
 
 impl BindingPattern {
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        clone_node(f.new_binding_pattern(node.kind, self.elements()), node, &f.hooks)
+        clone_node(f.new_binding_pattern(node.kind(), self.elements()), node, &f.hooks)
     }
 }
 
@@ -13646,10 +13646,10 @@ impl TypeAliasDeclaration {
 
 impl TypeAliasDeclaration {
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        let updated = match node.kind {
+        let updated = match node.kind() {
             Kind::TypeAliasDeclaration => f.new_type_alias_declaration(self.modifiers(), self.name(), self.type_parameters(), self.type_()),
             Kind::JSTypeAliasDeclaration => f.new_js_type_alias_declaration(self.modifiers(), self.name(), self.type_parameters(), self.type_()),
-            _ => panic!("unexpected kind in TypeAliasDeclaration.clone_node: {:?}", node.kind),
+            _ => panic!("unexpected kind in TypeAliasDeclaration.clone_node: {:?}", node.kind()),
         };
         clone_node(updated, node, &f.hooks)
     }
@@ -13751,10 +13751,10 @@ impl ImportDeclaration {
 
 impl ImportDeclaration {
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        let updated = match node.kind {
+        let updated = match node.kind() {
             Kind::ImportDeclaration => f.new_import_declaration(self.modifiers(), self.import_clause(), self.module_specifier(), self.attributes()),
             Kind::JSImportDeclaration => f.new_js_import_declaration(self.modifiers(), self.import_clause(), self.module_specifier(), self.attributes()),
-            _ => panic!("unexpected kind in ImportDeclaration.clone_node: {:?}", node.kind),
+            _ => panic!("unexpected kind in ImportDeclaration.clone_node: {:?}", node.kind()),
         };
         clone_node(updated, node, &f.hooks)
     }
@@ -14233,7 +14233,7 @@ impl OmittedExpression {
 
 impl KeywordExpression {
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        clone_node(f.new_keyword_expression(node.kind), node, &f.hooks)
+        clone_node(f.new_keyword_expression(node.kind()), node, &f.hooks)
     }
 }
 
@@ -14935,7 +14935,7 @@ impl TypeAssertion {
 
 impl KeywordTypeNode {
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        clone_node(f.new_keyword_type_node(node.kind), node, &f.hooks)
+        clone_node(f.new_keyword_type_node(node.kind()), node, &f.hooks)
     }
 }
 
@@ -16679,802 +16679,802 @@ impl JSDocParameterOrPropertyTag {
 
 impl JSDocParameterOrPropertyTag {
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        clone_node(f.new_jsdoc_parameter_or_property_tag(node.kind, self.tag_name(), self.name(), self.is_bracketed(), self.type_expression(), self.is_name_first(), self.comment()), node, &f.hooks)
+        clone_node(f.new_jsdoc_parameter_or_property_tag(node.kind(), self.tag_name(), self.name(), self.is_bracketed(), self.type_expression(), self.is_name_first(), self.comment()), node, &f.hooks)
     }
 }
 
 // ── is_* predicates ──────────────────────────────────────────────────────
 
 pub fn is_token(node: P<Node>) -> bool {
-    matches!(node.kind, Kind::Unknown | Kind::EndOfFile | Kind::SingleLineCommentTrivia | Kind::MultiLineCommentTrivia | Kind::NewLineTrivia | Kind::WhitespaceTrivia | Kind::ConflictMarkerTrivia | Kind::NonTextFileMarkerTrivia | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::StringLiteral | Kind::JsxText | Kind::JsxTextAllWhiteSpaces | Kind::RegularExpressionLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::TemplateHead | Kind::TemplateMiddle | Kind::TemplateTail | Kind::OpenBraceToken | Kind::CloseBraceToken | Kind::OpenParenToken | Kind::CloseParenToken | Kind::OpenBracketToken | Kind::CloseBracketToken | Kind::DotToken | Kind::DotDotDotToken | Kind::SemicolonToken | Kind::CommaToken | Kind::QuestionDotToken | Kind::LessThanToken | Kind::LessThanSlashToken | Kind::GreaterThanToken | Kind::LessThanEqualsToken | Kind::GreaterThanEqualsToken | Kind::EqualsEqualsToken | Kind::ExclamationEqualsToken | Kind::EqualsEqualsEqualsToken | Kind::ExclamationEqualsEqualsToken | Kind::EqualsGreaterThanToken | Kind::PlusToken | Kind::MinusToken | Kind::AsteriskToken | Kind::AsteriskAsteriskToken | Kind::SlashToken | Kind::PercentToken | Kind::PlusPlusToken | Kind::MinusMinusToken | Kind::LessThanLessThanToken | Kind::GreaterThanGreaterThanToken | Kind::GreaterThanGreaterThanGreaterThanToken | Kind::AmpersandToken | Kind::BarToken | Kind::CaretToken | Kind::ExclamationToken | Kind::TildeToken | Kind::AmpersandAmpersandToken | Kind::BarBarToken | Kind::QuestionToken | Kind::ColonToken | Kind::AtToken | Kind::QuestionQuestionToken | Kind::BacktickToken | Kind::HashToken | Kind::EqualsToken | Kind::PlusEqualsToken | Kind::MinusEqualsToken | Kind::AsteriskEqualsToken | Kind::AsteriskAsteriskEqualsToken | Kind::SlashEqualsToken | Kind::PercentEqualsToken | Kind::LessThanLessThanEqualsToken | Kind::GreaterThanGreaterThanEqualsToken | Kind::GreaterThanGreaterThanGreaterThanEqualsToken | Kind::AmpersandEqualsToken | Kind::BarEqualsToken | Kind::BarBarEqualsToken | Kind::AmpersandAmpersandEqualsToken | Kind::QuestionQuestionEqualsToken | Kind::CaretEqualsToken | Kind::Identifier | Kind::PrivateIdentifier | Kind::JSDocCommentTextToken | Kind::BreakKeyword | Kind::CaseKeyword | Kind::CatchKeyword | Kind::ClassKeyword | Kind::ConstKeyword | Kind::ContinueKeyword | Kind::DebuggerKeyword | Kind::DefaultKeyword | Kind::DeleteKeyword | Kind::DoKeyword | Kind::ElseKeyword | Kind::EnumKeyword | Kind::ExportKeyword | Kind::ExtendsKeyword | Kind::FalseKeyword | Kind::FinallyKeyword | Kind::ForKeyword | Kind::FunctionKeyword | Kind::IfKeyword | Kind::ImportKeyword | Kind::InKeyword | Kind::InstanceOfKeyword | Kind::NewKeyword | Kind::NullKeyword | Kind::ReturnKeyword | Kind::SuperKeyword | Kind::SwitchKeyword | Kind::ThisKeyword | Kind::ThrowKeyword | Kind::TrueKeyword | Kind::TryKeyword | Kind::TypeOfKeyword | Kind::VarKeyword | Kind::VoidKeyword | Kind::WhileKeyword | Kind::WithKeyword | Kind::ImplementsKeyword | Kind::InterfaceKeyword | Kind::LetKeyword | Kind::PackageKeyword | Kind::PrivateKeyword | Kind::ProtectedKeyword | Kind::PublicKeyword | Kind::StaticKeyword | Kind::YieldKeyword | Kind::AbstractKeyword | Kind::AccessorKeyword | Kind::AsKeyword | Kind::AssertsKeyword | Kind::AssertKeyword | Kind::AnyKeyword | Kind::AsyncKeyword | Kind::AwaitKeyword | Kind::BooleanKeyword | Kind::ConstructorKeyword | Kind::DeclareKeyword | Kind::GetKeyword | Kind::ImmediateKeyword | Kind::InferKeyword | Kind::IntrinsicKeyword | Kind::IsKeyword | Kind::KeyOfKeyword | Kind::ModuleKeyword | Kind::NamespaceKeyword | Kind::NeverKeyword | Kind::OutKeyword | Kind::ReadonlyKeyword | Kind::RequireKeyword | Kind::NumberKeyword | Kind::ObjectKeyword | Kind::SatisfiesKeyword | Kind::SetKeyword | Kind::StringKeyword | Kind::SymbolKeyword | Kind::TypeKeyword | Kind::UndefinedKeyword | Kind::UniqueKeyword | Kind::UnknownKeyword | Kind::UsingKeyword | Kind::FromKeyword | Kind::GlobalKeyword | Kind::BigIntKeyword | Kind::OverrideKeyword | Kind::OfKeyword | Kind::DeferKeyword)
+    matches!(node.kind(), Kind::Unknown | Kind::EndOfFile | Kind::SingleLineCommentTrivia | Kind::MultiLineCommentTrivia | Kind::NewLineTrivia | Kind::WhitespaceTrivia | Kind::ConflictMarkerTrivia | Kind::NonTextFileMarkerTrivia | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::StringLiteral | Kind::JsxText | Kind::JsxTextAllWhiteSpaces | Kind::RegularExpressionLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::TemplateHead | Kind::TemplateMiddle | Kind::TemplateTail | Kind::OpenBraceToken | Kind::CloseBraceToken | Kind::OpenParenToken | Kind::CloseParenToken | Kind::OpenBracketToken | Kind::CloseBracketToken | Kind::DotToken | Kind::DotDotDotToken | Kind::SemicolonToken | Kind::CommaToken | Kind::QuestionDotToken | Kind::LessThanToken | Kind::LessThanSlashToken | Kind::GreaterThanToken | Kind::LessThanEqualsToken | Kind::GreaterThanEqualsToken | Kind::EqualsEqualsToken | Kind::ExclamationEqualsToken | Kind::EqualsEqualsEqualsToken | Kind::ExclamationEqualsEqualsToken | Kind::EqualsGreaterThanToken | Kind::PlusToken | Kind::MinusToken | Kind::AsteriskToken | Kind::AsteriskAsteriskToken | Kind::SlashToken | Kind::PercentToken | Kind::PlusPlusToken | Kind::MinusMinusToken | Kind::LessThanLessThanToken | Kind::GreaterThanGreaterThanToken | Kind::GreaterThanGreaterThanGreaterThanToken | Kind::AmpersandToken | Kind::BarToken | Kind::CaretToken | Kind::ExclamationToken | Kind::TildeToken | Kind::AmpersandAmpersandToken | Kind::BarBarToken | Kind::QuestionToken | Kind::ColonToken | Kind::AtToken | Kind::QuestionQuestionToken | Kind::BacktickToken | Kind::HashToken | Kind::EqualsToken | Kind::PlusEqualsToken | Kind::MinusEqualsToken | Kind::AsteriskEqualsToken | Kind::AsteriskAsteriskEqualsToken | Kind::SlashEqualsToken | Kind::PercentEqualsToken | Kind::LessThanLessThanEqualsToken | Kind::GreaterThanGreaterThanEqualsToken | Kind::GreaterThanGreaterThanGreaterThanEqualsToken | Kind::AmpersandEqualsToken | Kind::BarEqualsToken | Kind::BarBarEqualsToken | Kind::AmpersandAmpersandEqualsToken | Kind::QuestionQuestionEqualsToken | Kind::CaretEqualsToken | Kind::Identifier | Kind::PrivateIdentifier | Kind::JSDocCommentTextToken | Kind::BreakKeyword | Kind::CaseKeyword | Kind::CatchKeyword | Kind::ClassKeyword | Kind::ConstKeyword | Kind::ContinueKeyword | Kind::DebuggerKeyword | Kind::DefaultKeyword | Kind::DeleteKeyword | Kind::DoKeyword | Kind::ElseKeyword | Kind::EnumKeyword | Kind::ExportKeyword | Kind::ExtendsKeyword | Kind::FalseKeyword | Kind::FinallyKeyword | Kind::ForKeyword | Kind::FunctionKeyword | Kind::IfKeyword | Kind::ImportKeyword | Kind::InKeyword | Kind::InstanceOfKeyword | Kind::NewKeyword | Kind::NullKeyword | Kind::ReturnKeyword | Kind::SuperKeyword | Kind::SwitchKeyword | Kind::ThisKeyword | Kind::ThrowKeyword | Kind::TrueKeyword | Kind::TryKeyword | Kind::TypeOfKeyword | Kind::VarKeyword | Kind::VoidKeyword | Kind::WhileKeyword | Kind::WithKeyword | Kind::ImplementsKeyword | Kind::InterfaceKeyword | Kind::LetKeyword | Kind::PackageKeyword | Kind::PrivateKeyword | Kind::ProtectedKeyword | Kind::PublicKeyword | Kind::StaticKeyword | Kind::YieldKeyword | Kind::AbstractKeyword | Kind::AccessorKeyword | Kind::AsKeyword | Kind::AssertsKeyword | Kind::AssertKeyword | Kind::AnyKeyword | Kind::AsyncKeyword | Kind::AwaitKeyword | Kind::BooleanKeyword | Kind::ConstructorKeyword | Kind::DeclareKeyword | Kind::GetKeyword | Kind::ImmediateKeyword | Kind::InferKeyword | Kind::IntrinsicKeyword | Kind::IsKeyword | Kind::KeyOfKeyword | Kind::ModuleKeyword | Kind::NamespaceKeyword | Kind::NeverKeyword | Kind::OutKeyword | Kind::ReadonlyKeyword | Kind::RequireKeyword | Kind::NumberKeyword | Kind::ObjectKeyword | Kind::SatisfiesKeyword | Kind::SetKeyword | Kind::StringKeyword | Kind::SymbolKeyword | Kind::TypeKeyword | Kind::UndefinedKeyword | Kind::UniqueKeyword | Kind::UnknownKeyword | Kind::UsingKeyword | Kind::FromKeyword | Kind::GlobalKeyword | Kind::BigIntKeyword | Kind::OverrideKeyword | Kind::OfKeyword | Kind::DeferKeyword)
 }
 
 pub fn is_identifier(node: P<Node>) -> bool {
-    node.kind == Kind::Identifier
+    node.kind() == Kind::Identifier
 }
 
 pub fn is_private_identifier(node: P<Node>) -> bool {
-    node.kind == Kind::PrivateIdentifier
+    node.kind() == Kind::PrivateIdentifier
 }
 
 pub fn is_qualified_name(node: P<Node>) -> bool {
-    node.kind == Kind::QualifiedName
+    node.kind() == Kind::QualifiedName
 }
 
 pub fn is_computed_property_name(node: P<Node>) -> bool {
-    node.kind == Kind::ComputedPropertyName
+    node.kind() == Kind::ComputedPropertyName
 }
 
 pub fn is_decorator(node: P<Node>) -> bool {
-    node.kind == Kind::Decorator
+    node.kind() == Kind::Decorator
 }
 
 pub fn is_empty_statement(node: P<Node>) -> bool {
-    node.kind == Kind::EmptyStatement
+    node.kind() == Kind::EmptyStatement
 }
 
 pub fn is_if_statement(node: P<Node>) -> bool {
-    node.kind == Kind::IfStatement
+    node.kind() == Kind::IfStatement
 }
 
 pub fn is_do_statement(node: P<Node>) -> bool {
-    node.kind == Kind::DoStatement
+    node.kind() == Kind::DoStatement
 }
 
 pub fn is_while_statement(node: P<Node>) -> bool {
-    node.kind == Kind::WhileStatement
+    node.kind() == Kind::WhileStatement
 }
 
 pub fn is_for_statement(node: P<Node>) -> bool {
-    node.kind == Kind::ForStatement
+    node.kind() == Kind::ForStatement
 }
 
 pub fn is_for_in_statement(node: P<Node>) -> bool {
-    node.kind == Kind::ForInStatement
+    node.kind() == Kind::ForInStatement
 }
 
 pub fn is_for_of_statement(node: P<Node>) -> bool {
-    node.kind == Kind::ForOfStatement
+    node.kind() == Kind::ForOfStatement
 }
 
 pub fn is_break_statement(node: P<Node>) -> bool {
-    node.kind == Kind::BreakStatement
+    node.kind() == Kind::BreakStatement
 }
 
 pub fn is_continue_statement(node: P<Node>) -> bool {
-    node.kind == Kind::ContinueStatement
+    node.kind() == Kind::ContinueStatement
 }
 
 pub fn is_return_statement(node: P<Node>) -> bool {
-    node.kind == Kind::ReturnStatement
+    node.kind() == Kind::ReturnStatement
 }
 
 pub fn is_with_statement(node: P<Node>) -> bool {
-    node.kind == Kind::WithStatement
+    node.kind() == Kind::WithStatement
 }
 
 pub fn is_switch_statement(node: P<Node>) -> bool {
-    node.kind == Kind::SwitchStatement
+    node.kind() == Kind::SwitchStatement
 }
 
 pub fn is_case_block(node: P<Node>) -> bool {
-    node.kind == Kind::CaseBlock
+    node.kind() == Kind::CaseBlock
 }
 
 pub fn is_case_clause(node: P<Node>) -> bool {
-    node.kind == Kind::CaseClause
+    node.kind() == Kind::CaseClause
 }
 
 pub fn is_default_clause(node: P<Node>) -> bool {
-    node.kind == Kind::DefaultClause
+    node.kind() == Kind::DefaultClause
 }
 
 pub fn is_throw_statement(node: P<Node>) -> bool {
-    node.kind == Kind::ThrowStatement
+    node.kind() == Kind::ThrowStatement
 }
 
 pub fn is_try_statement(node: P<Node>) -> bool {
-    node.kind == Kind::TryStatement
+    node.kind() == Kind::TryStatement
 }
 
 pub fn is_catch_clause(node: P<Node>) -> bool {
-    node.kind == Kind::CatchClause
+    node.kind() == Kind::CatchClause
 }
 
 pub fn is_debugger_statement(node: P<Node>) -> bool {
-    node.kind == Kind::DebuggerStatement
+    node.kind() == Kind::DebuggerStatement
 }
 
 pub fn is_labeled_statement(node: P<Node>) -> bool {
-    node.kind == Kind::LabeledStatement
+    node.kind() == Kind::LabeledStatement
 }
 
 pub fn is_expression_statement(node: P<Node>) -> bool {
-    node.kind == Kind::ExpressionStatement
+    node.kind() == Kind::ExpressionStatement
 }
 
 pub fn is_block(node: P<Node>) -> bool {
-    node.kind == Kind::Block
+    node.kind() == Kind::Block
 }
 
 pub fn is_variable_statement(node: P<Node>) -> bool {
-    node.kind == Kind::VariableStatement
+    node.kind() == Kind::VariableStatement
 }
 
 pub fn is_variable_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::VariableDeclaration
+    node.kind() == Kind::VariableDeclaration
 }
 
 pub fn is_variable_declaration_list(node: P<Node>) -> bool {
-    node.kind == Kind::VariableDeclarationList
+    node.kind() == Kind::VariableDeclarationList
 }
 
 pub fn is_object_binding_pattern(node: P<Node>) -> bool {
-    node.kind == Kind::ObjectBindingPattern
+    node.kind() == Kind::ObjectBindingPattern
 }
 
 pub fn is_array_binding_pattern(node: P<Node>) -> bool {
-    node.kind == Kind::ArrayBindingPattern
+    node.kind() == Kind::ArrayBindingPattern
 }
 
 pub fn is_parameter_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::Parameter
+    node.kind() == Kind::Parameter
 }
 
 pub fn is_binding_element(node: P<Node>) -> bool {
-    node.kind == Kind::BindingElement
+    node.kind() == Kind::BindingElement
 }
 
 pub fn is_missing_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::MissingDeclaration
+    node.kind() == Kind::MissingDeclaration
 }
 
 pub fn is_function_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::FunctionDeclaration
+    node.kind() == Kind::FunctionDeclaration
 }
 
 pub fn is_class_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::ClassDeclaration
+    node.kind() == Kind::ClassDeclaration
 }
 
 pub fn is_class_expression(node: P<Node>) -> bool {
-    node.kind == Kind::ClassExpression
+    node.kind() == Kind::ClassExpression
 }
 
 pub fn is_heritage_clause(node: P<Node>) -> bool {
-    node.kind == Kind::HeritageClause
+    node.kind() == Kind::HeritageClause
 }
 
 pub fn is_interface_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::InterfaceDeclaration
+    node.kind() == Kind::InterfaceDeclaration
 }
 
 pub fn is_type_alias_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::TypeAliasDeclaration
+    node.kind() == Kind::TypeAliasDeclaration
 }
 
 pub fn is_js_type_alias_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::JSTypeAliasDeclaration
+    node.kind() == Kind::JSTypeAliasDeclaration
 }
 
 pub fn is_enum_member(node: P<Node>) -> bool {
-    node.kind == Kind::EnumMember
+    node.kind() == Kind::EnumMember
 }
 
 pub fn is_enum_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::EnumDeclaration
+    node.kind() == Kind::EnumDeclaration
 }
 
 pub fn is_module_block(node: P<Node>) -> bool {
-    node.kind == Kind::ModuleBlock
+    node.kind() == Kind::ModuleBlock
 }
 
 pub fn is_not_emitted_statement(node: P<Node>) -> bool {
-    node.kind == Kind::NotEmittedStatement
+    node.kind() == Kind::NotEmittedStatement
 }
 
 pub fn is_not_emitted_type_element(node: P<Node>) -> bool {
-    node.kind == Kind::NotEmittedTypeElement
+    node.kind() == Kind::NotEmittedTypeElement
 }
 
 pub fn is_import_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::ImportDeclaration
+    node.kind() == Kind::ImportDeclaration
 }
 
 pub fn is_js_import_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::JSImportDeclaration
+    node.kind() == Kind::JSImportDeclaration
 }
 
 pub fn is_external_module_reference(node: P<Node>) -> bool {
-    node.kind == Kind::ExternalModuleReference
+    node.kind() == Kind::ExternalModuleReference
 }
 
 pub fn is_namespace_import(node: P<Node>) -> bool {
-    node.kind == Kind::NamespaceImport
+    node.kind() == Kind::NamespaceImport
 }
 
 pub fn is_named_imports(node: P<Node>) -> bool {
-    node.kind == Kind::NamedImports
+    node.kind() == Kind::NamedImports
 }
 
 pub fn is_export_assignment(node: P<Node>) -> bool {
-    node.kind == Kind::ExportAssignment
+    node.kind() == Kind::ExportAssignment
 }
 
 pub fn is_namespace_export_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::NamespaceExportDeclaration
+    node.kind() == Kind::NamespaceExportDeclaration
 }
 
 pub fn is_namespace_export(node: P<Node>) -> bool {
-    node.kind == Kind::NamespaceExport
+    node.kind() == Kind::NamespaceExport
 }
 
 pub fn is_named_exports(node: P<Node>) -> bool {
-    node.kind == Kind::NamedExports
+    node.kind() == Kind::NamedExports
 }
 
 pub fn is_export_specifier(node: P<Node>) -> bool {
-    node.kind == Kind::ExportSpecifier
+    node.kind() == Kind::ExportSpecifier
 }
 
 pub fn is_call_signature_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::CallSignature
+    node.kind() == Kind::CallSignature
 }
 
 pub fn is_construct_signature_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::ConstructSignature
+    node.kind() == Kind::ConstructSignature
 }
 
 pub fn is_constructor_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::Constructor
+    node.kind() == Kind::Constructor
 }
 
 pub fn is_get_accessor_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::GetAccessor
+    node.kind() == Kind::GetAccessor
 }
 
 pub fn is_set_accessor_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::SetAccessor
+    node.kind() == Kind::SetAccessor
 }
 
 pub fn is_index_signature_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::IndexSignature
+    node.kind() == Kind::IndexSignature
 }
 
 pub fn is_method_signature_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::MethodSignature
+    node.kind() == Kind::MethodSignature
 }
 
 pub fn is_method_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::MethodDeclaration
+    node.kind() == Kind::MethodDeclaration
 }
 
 pub fn is_property_signature_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::PropertySignature
+    node.kind() == Kind::PropertySignature
 }
 
 pub fn is_property_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::PropertyDeclaration
+    node.kind() == Kind::PropertyDeclaration
 }
 
 pub fn is_semicolon_class_element(node: P<Node>) -> bool {
-    node.kind == Kind::SemicolonClassElement
+    node.kind() == Kind::SemicolonClassElement
 }
 
 pub fn is_class_static_block_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::ClassStaticBlockDeclaration
+    node.kind() == Kind::ClassStaticBlockDeclaration
 }
 
 pub fn is_omitted_expression(node: P<Node>) -> bool {
-    node.kind == Kind::OmittedExpression
+    node.kind() == Kind::OmittedExpression
 }
 
 pub fn is_keyword_expression(node: P<Node>) -> bool {
-    matches!(node.kind, Kind::NullKeyword | Kind::TrueKeyword | Kind::FalseKeyword | Kind::ThisKeyword | Kind::SuperKeyword | Kind::ImportKeyword)
+    matches!(node.kind(), Kind::NullKeyword | Kind::TrueKeyword | Kind::FalseKeyword | Kind::ThisKeyword | Kind::SuperKeyword | Kind::ImportKeyword)
 }
 
 pub fn is_string_literal(node: P<Node>) -> bool {
-    node.kind == Kind::StringLiteral
+    node.kind() == Kind::StringLiteral
 }
 
 pub fn is_numeric_literal(node: P<Node>) -> bool {
-    node.kind == Kind::NumericLiteral
+    node.kind() == Kind::NumericLiteral
 }
 
 pub fn is_big_int_literal(node: P<Node>) -> bool {
-    node.kind == Kind::BigIntLiteral
+    node.kind() == Kind::BigIntLiteral
 }
 
 pub fn is_regular_expression_literal(node: P<Node>) -> bool {
-    node.kind == Kind::RegularExpressionLiteral
+    node.kind() == Kind::RegularExpressionLiteral
 }
 
 pub fn is_no_substitution_template_literal(node: P<Node>) -> bool {
-    node.kind == Kind::NoSubstitutionTemplateLiteral
+    node.kind() == Kind::NoSubstitutionTemplateLiteral
 }
 
 pub fn is_binary_expression(node: P<Node>) -> bool {
-    node.kind == Kind::BinaryExpression
+    node.kind() == Kind::BinaryExpression
 }
 
 pub fn is_prefix_unary_expression(node: P<Node>) -> bool {
-    node.kind == Kind::PrefixUnaryExpression
+    node.kind() == Kind::PrefixUnaryExpression
 }
 
 pub fn is_postfix_unary_expression(node: P<Node>) -> bool {
-    node.kind == Kind::PostfixUnaryExpression
+    node.kind() == Kind::PostfixUnaryExpression
 }
 
 pub fn is_yield_expression(node: P<Node>) -> bool {
-    node.kind == Kind::YieldExpression
+    node.kind() == Kind::YieldExpression
 }
 
 pub fn is_arrow_function(node: P<Node>) -> bool {
-    node.kind == Kind::ArrowFunction
+    node.kind() == Kind::ArrowFunction
 }
 
 pub fn is_function_expression(node: P<Node>) -> bool {
-    node.kind == Kind::FunctionExpression
+    node.kind() == Kind::FunctionExpression
 }
 
 pub fn is_as_expression(node: P<Node>) -> bool {
-    node.kind == Kind::AsExpression
+    node.kind() == Kind::AsExpression
 }
 
 pub fn is_satisfies_expression(node: P<Node>) -> bool {
-    node.kind == Kind::SatisfiesExpression
+    node.kind() == Kind::SatisfiesExpression
 }
 
 pub fn is_conditional_expression(node: P<Node>) -> bool {
-    node.kind == Kind::ConditionalExpression
+    node.kind() == Kind::ConditionalExpression
 }
 
 pub fn is_property_access_expression(node: P<Node>) -> bool {
-    node.kind == Kind::PropertyAccessExpression
+    node.kind() == Kind::PropertyAccessExpression
 }
 
 pub fn is_element_access_expression(node: P<Node>) -> bool {
-    node.kind == Kind::ElementAccessExpression
+    node.kind() == Kind::ElementAccessExpression
 }
 
 pub fn is_call_expression(node: P<Node>) -> bool {
-    node.kind == Kind::CallExpression
+    node.kind() == Kind::CallExpression
 }
 
 pub fn is_new_expression(node: P<Node>) -> bool {
-    node.kind == Kind::NewExpression
+    node.kind() == Kind::NewExpression
 }
 
 pub fn is_meta_property(node: P<Node>) -> bool {
-    node.kind == Kind::MetaProperty
+    node.kind() == Kind::MetaProperty
 }
 
 pub fn is_non_null_expression(node: P<Node>) -> bool {
-    node.kind == Kind::NonNullExpression
+    node.kind() == Kind::NonNullExpression
 }
 
 pub fn is_spread_element(node: P<Node>) -> bool {
-    node.kind == Kind::SpreadElement
+    node.kind() == Kind::SpreadElement
 }
 
 pub fn is_template_expression(node: P<Node>) -> bool {
-    node.kind == Kind::TemplateExpression
+    node.kind() == Kind::TemplateExpression
 }
 
 pub fn is_template_span(node: P<Node>) -> bool {
-    node.kind == Kind::TemplateSpan
+    node.kind() == Kind::TemplateSpan
 }
 
 pub fn is_tagged_template_expression(node: P<Node>) -> bool {
-    node.kind == Kind::TaggedTemplateExpression
+    node.kind() == Kind::TaggedTemplateExpression
 }
 
 pub fn is_parenthesized_expression(node: P<Node>) -> bool {
-    node.kind == Kind::ParenthesizedExpression
+    node.kind() == Kind::ParenthesizedExpression
 }
 
 pub fn is_array_literal_expression(node: P<Node>) -> bool {
-    node.kind == Kind::ArrayLiteralExpression
+    node.kind() == Kind::ArrayLiteralExpression
 }
 
 pub fn is_object_literal_expression(node: P<Node>) -> bool {
-    node.kind == Kind::ObjectLiteralExpression
+    node.kind() == Kind::ObjectLiteralExpression
 }
 
 pub fn is_spread_assignment(node: P<Node>) -> bool {
-    node.kind == Kind::SpreadAssignment
+    node.kind() == Kind::SpreadAssignment
 }
 
 pub fn is_property_assignment(node: P<Node>) -> bool {
-    node.kind == Kind::PropertyAssignment
+    node.kind() == Kind::PropertyAssignment
 }
 
 pub fn is_shorthand_property_assignment(node: P<Node>) -> bool {
-    node.kind == Kind::ShorthandPropertyAssignment
+    node.kind() == Kind::ShorthandPropertyAssignment
 }
 
 pub fn is_delete_expression(node: P<Node>) -> bool {
-    node.kind == Kind::DeleteExpression
+    node.kind() == Kind::DeleteExpression
 }
 
 pub fn is_type_of_expression(node: P<Node>) -> bool {
-    node.kind == Kind::TypeOfExpression
+    node.kind() == Kind::TypeOfExpression
 }
 
 pub fn is_void_expression(node: P<Node>) -> bool {
-    node.kind == Kind::VoidExpression
+    node.kind() == Kind::VoidExpression
 }
 
 pub fn is_await_expression(node: P<Node>) -> bool {
-    node.kind == Kind::AwaitExpression
+    node.kind() == Kind::AwaitExpression
 }
 
 pub fn is_type_assertion(node: P<Node>) -> bool {
-    node.kind == Kind::TypeAssertionExpression
+    node.kind() == Kind::TypeAssertionExpression
 }
 
 pub fn is_keyword_type_node(node: P<Node>) -> bool {
-    matches!(node.kind, Kind::AnyKeyword | Kind::BigIntKeyword | Kind::BooleanKeyword | Kind::IntrinsicKeyword | Kind::NeverKeyword | Kind::NumberKeyword | Kind::ObjectKeyword | Kind::StringKeyword | Kind::SymbolKeyword | Kind::UndefinedKeyword | Kind::UnknownKeyword | Kind::VoidKeyword)
+    matches!(node.kind(), Kind::AnyKeyword | Kind::BigIntKeyword | Kind::BooleanKeyword | Kind::IntrinsicKeyword | Kind::NeverKeyword | Kind::NumberKeyword | Kind::ObjectKeyword | Kind::StringKeyword | Kind::SymbolKeyword | Kind::UndefinedKeyword | Kind::UnknownKeyword | Kind::VoidKeyword)
 }
 
 pub fn is_union_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::UnionType
+    node.kind() == Kind::UnionType
 }
 
 pub fn is_intersection_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::IntersectionType
+    node.kind() == Kind::IntersectionType
 }
 
 pub fn is_conditional_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::ConditionalType
+    node.kind() == Kind::ConditionalType
 }
 
 pub fn is_type_operator_node(node: P<Node>) -> bool {
-    node.kind == Kind::TypeOperator
+    node.kind() == Kind::TypeOperator
 }
 
 pub fn is_infer_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::InferType
+    node.kind() == Kind::InferType
 }
 
 pub fn is_array_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::ArrayType
+    node.kind() == Kind::ArrayType
 }
 
 pub fn is_indexed_access_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::IndexedAccessType
+    node.kind() == Kind::IndexedAccessType
 }
 
 pub fn is_type_reference_node(node: P<Node>) -> bool {
-    node.kind == Kind::TypeReference
+    node.kind() == Kind::TypeReference
 }
 
 pub fn is_expression_with_type_arguments(node: P<Node>) -> bool {
-    node.kind == Kind::ExpressionWithTypeArguments
+    node.kind() == Kind::ExpressionWithTypeArguments
 }
 
 pub fn is_literal_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::LiteralType
+    node.kind() == Kind::LiteralType
 }
 
 pub fn is_this_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::ThisType
+    node.kind() == Kind::ThisType
 }
 
 pub fn is_type_predicate_node(node: P<Node>) -> bool {
-    node.kind == Kind::TypePredicate
+    node.kind() == Kind::TypePredicate
 }
 
 pub fn is_import_attribute(node: P<Node>) -> bool {
-    node.kind == Kind::ImportAttribute
+    node.kind() == Kind::ImportAttribute
 }
 
 pub fn is_import_attributes(node: P<Node>) -> bool {
-    node.kind == Kind::ImportAttributes
+    node.kind() == Kind::ImportAttributes
 }
 
 pub fn is_type_query_node(node: P<Node>) -> bool {
-    node.kind == Kind::TypeQuery
+    node.kind() == Kind::TypeQuery
 }
 
 pub fn is_mapped_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::MappedType
+    node.kind() == Kind::MappedType
 }
 
 pub fn is_type_literal_node(node: P<Node>) -> bool {
-    node.kind == Kind::TypeLiteral
+    node.kind() == Kind::TypeLiteral
 }
 
 pub fn is_tuple_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::TupleType
+    node.kind() == Kind::TupleType
 }
 
 pub fn is_named_tuple_member(node: P<Node>) -> bool {
-    node.kind == Kind::NamedTupleMember
+    node.kind() == Kind::NamedTupleMember
 }
 
 pub fn is_optional_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::OptionalType
+    node.kind() == Kind::OptionalType
 }
 
 pub fn is_rest_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::RestType
+    node.kind() == Kind::RestType
 }
 
 pub fn is_parenthesized_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::ParenthesizedType
+    node.kind() == Kind::ParenthesizedType
 }
 
 pub fn is_function_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::FunctionType
+    node.kind() == Kind::FunctionType
 }
 
 pub fn is_constructor_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::ConstructorType
+    node.kind() == Kind::ConstructorType
 }
 
 pub fn is_template_head(node: P<Node>) -> bool {
-    node.kind == Kind::TemplateHead
+    node.kind() == Kind::TemplateHead
 }
 
 pub fn is_template_middle(node: P<Node>) -> bool {
-    node.kind == Kind::TemplateMiddle
+    node.kind() == Kind::TemplateMiddle
 }
 
 pub fn is_template_tail(node: P<Node>) -> bool {
-    node.kind == Kind::TemplateTail
+    node.kind() == Kind::TemplateTail
 }
 
 pub fn is_template_literal_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::TemplateLiteralType
+    node.kind() == Kind::TemplateLiteralType
 }
 
 pub fn is_template_literal_type_span(node: P<Node>) -> bool {
-    node.kind == Kind::TemplateLiteralTypeSpan
+    node.kind() == Kind::TemplateLiteralTypeSpan
 }
 
 pub fn is_synthetic_expression(node: P<Node>) -> bool {
-    node.kind == Kind::SyntheticExpression
+    node.kind() == Kind::SyntheticExpression
 }
 
 pub fn is_partially_emitted_expression(node: P<Node>) -> bool {
-    node.kind == Kind::PartiallyEmittedExpression
+    node.kind() == Kind::PartiallyEmittedExpression
 }
 
 pub fn is_jsx_element(node: P<Node>) -> bool {
-    node.kind == Kind::JsxElement
+    node.kind() == Kind::JsxElement
 }
 
 pub fn is_jsx_attributes(node: P<Node>) -> bool {
-    node.kind == Kind::JsxAttributes
+    node.kind() == Kind::JsxAttributes
 }
 
 pub fn is_jsx_namespaced_name(node: P<Node>) -> bool {
-    node.kind == Kind::JsxNamespacedName
+    node.kind() == Kind::JsxNamespacedName
 }
 
 pub fn is_jsx_opening_element(node: P<Node>) -> bool {
-    node.kind == Kind::JsxOpeningElement
+    node.kind() == Kind::JsxOpeningElement
 }
 
 pub fn is_jsx_self_closing_element(node: P<Node>) -> bool {
-    node.kind == Kind::JsxSelfClosingElement
+    node.kind() == Kind::JsxSelfClosingElement
 }
 
 pub fn is_jsx_fragment(node: P<Node>) -> bool {
-    node.kind == Kind::JsxFragment
+    node.kind() == Kind::JsxFragment
 }
 
 pub fn is_jsx_opening_fragment(node: P<Node>) -> bool {
-    node.kind == Kind::JsxOpeningFragment
+    node.kind() == Kind::JsxOpeningFragment
 }
 
 pub fn is_jsx_closing_fragment(node: P<Node>) -> bool {
-    node.kind == Kind::JsxClosingFragment
+    node.kind() == Kind::JsxClosingFragment
 }
 
 pub fn is_jsx_attribute(node: P<Node>) -> bool {
-    node.kind == Kind::JsxAttribute
+    node.kind() == Kind::JsxAttribute
 }
 
 pub fn is_jsx_spread_attribute(node: P<Node>) -> bool {
-    node.kind == Kind::JsxSpreadAttribute
+    node.kind() == Kind::JsxSpreadAttribute
 }
 
 pub fn is_jsx_closing_element(node: P<Node>) -> bool {
-    node.kind == Kind::JsxClosingElement
+    node.kind() == Kind::JsxClosingElement
 }
 
 pub fn is_jsx_expression(node: P<Node>) -> bool {
-    node.kind == Kind::JsxExpression
+    node.kind() == Kind::JsxExpression
 }
 
 pub fn is_jsx_text(node: P<Node>) -> bool {
-    node.kind == Kind::JsxText
+    node.kind() == Kind::JsxText
 }
 
 pub fn is_syntax_list(node: P<Node>) -> bool {
-    node.kind == Kind::SyntaxList
+    node.kind() == Kind::SyntaxList
 }
 
 pub fn is_jsdoc(node: P<Node>) -> bool {
-    node.kind == Kind::JSDoc
+    node.kind() == Kind::JSDoc
 }
 
 pub fn is_jsdoc_type_expression(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocTypeExpression
+    node.kind() == Kind::JSDocTypeExpression
 }
 
 pub fn is_jsdoc_non_nullable_type(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocNonNullableType
+    node.kind() == Kind::JSDocNonNullableType
 }
 
 pub fn is_jsdoc_nullable_type(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocNullableType
+    node.kind() == Kind::JSDocNullableType
 }
 
 pub fn is_jsdoc_all_type(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocAllType
+    node.kind() == Kind::JSDocAllType
 }
 
 pub fn is_jsdoc_variadic_type(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocVariadicType
+    node.kind() == Kind::JSDocVariadicType
 }
 
 pub fn is_jsdoc_optional_type(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocOptionalType
+    node.kind() == Kind::JSDocOptionalType
 }
 
 pub fn is_jsdoc_type_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocTypeTag
+    node.kind() == Kind::JSDocTypeTag
 }
 
 pub fn is_jsdoc_unknown_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocUnknownTag
+    node.kind() == Kind::JSDocUnknownTag
 }
 
 pub fn is_jsdoc_template_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocTemplateTag
+    node.kind() == Kind::JSDocTemplateTag
 }
 
 pub fn is_jsdoc_return_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocReturnTag
+    node.kind() == Kind::JSDocReturnTag
 }
 
 pub fn is_jsdoc_public_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocPublicTag
+    node.kind() == Kind::JSDocPublicTag
 }
 
 pub fn is_jsdoc_private_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocPrivateTag
+    node.kind() == Kind::JSDocPrivateTag
 }
 
 pub fn is_jsdoc_protected_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocProtectedTag
+    node.kind() == Kind::JSDocProtectedTag
 }
 
 pub fn is_jsdoc_readonly_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocReadonlyTag
+    node.kind() == Kind::JSDocReadonlyTag
 }
 
 pub fn is_jsdoc_override_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocOverrideTag
+    node.kind() == Kind::JSDocOverrideTag
 }
 
 pub fn is_jsdoc_deprecated_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocDeprecatedTag
+    node.kind() == Kind::JSDocDeprecatedTag
 }
 
 pub fn is_jsdoc_see_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocSeeTag
+    node.kind() == Kind::JSDocSeeTag
 }
 
 pub fn is_jsdoc_implements_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocImplementsTag
+    node.kind() == Kind::JSDocImplementsTag
 }
 
 pub fn is_jsdoc_augments_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocAugmentsTag
+    node.kind() == Kind::JSDocAugmentsTag
 }
 
 pub fn is_jsdoc_satisfies_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocSatisfiesTag
+    node.kind() == Kind::JSDocSatisfiesTag
 }
 
 pub fn is_jsdoc_throws_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocThrowsTag
+    node.kind() == Kind::JSDocThrowsTag
 }
 
 pub fn is_jsdoc_this_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocThisTag
+    node.kind() == Kind::JSDocThisTag
 }
 
 pub fn is_jsdoc_import_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocImportTag
+    node.kind() == Kind::JSDocImportTag
 }
 
 pub fn is_jsdoc_callback_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocCallbackTag
+    node.kind() == Kind::JSDocCallbackTag
 }
 
 pub fn is_jsdoc_overload_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocOverloadTag
+    node.kind() == Kind::JSDocOverloadTag
 }
 
 pub fn is_jsdoc_typedef_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocTypedefTag
+    node.kind() == Kind::JSDocTypedefTag
 }
 
 pub fn is_jsdoc_signature(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocSignature
+    node.kind() == Kind::JSDocSignature
 }
 
 pub fn is_jsdoc_name_reference(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocNameReference
+    node.kind() == Kind::JSDocNameReference
 }
 
 pub fn is_source_file(node: P<Node>) -> bool {
-    node.kind == Kind::SourceFile
+    node.kind() == Kind::SourceFile
 }
 
 pub fn is_module_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::ModuleDeclaration
+    node.kind() == Kind::ModuleDeclaration
 }
 
 pub fn is_import_equals_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::ImportEqualsDeclaration
+    node.kind() == Kind::ImportEqualsDeclaration
 }
 
 pub fn is_export_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::ExportDeclaration
+    node.kind() == Kind::ExportDeclaration
 }
 
 pub fn is_import_type_node(node: P<Node>) -> bool {
-    node.kind == Kind::ImportType
+    node.kind() == Kind::ImportType
 }
 
 pub fn is_import_clause(node: P<Node>) -> bool {
-    node.kind == Kind::ImportClause
+    node.kind() == Kind::ImportClause
 }
 
 pub fn is_import_specifier(node: P<Node>) -> bool {
-    node.kind == Kind::ImportSpecifier
+    node.kind() == Kind::ImportSpecifier
 }
 
 pub fn is_jsdoc_text(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocText
+    node.kind() == Kind::JSDocText
 }
 
 pub fn is_jsdoc_link(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocLink
+    node.kind() == Kind::JSDocLink
 }
 
 pub fn is_jsdoc_link_plain(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocLinkPlain
+    node.kind() == Kind::JSDocLinkPlain
 }
 
 pub fn is_jsdoc_link_code(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocLinkCode
+    node.kind() == Kind::JSDocLinkCode
 }
 
 pub fn is_type_parameter_declaration(node: P<Node>) -> bool {
-    node.kind == Kind::TypeParameter
+    node.kind() == Kind::TypeParameter
 }
 
 pub fn is_synthetic_reference_expression(node: P<Node>) -> bool {
-    node.kind == Kind::SyntheticReferenceExpression
+    node.kind() == Kind::SyntheticReferenceExpression
 }
 
 pub fn is_jsdoc_type_literal(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocTypeLiteral
+    node.kind() == Kind::JSDocTypeLiteral
 }
 
 pub fn is_jsdoc_parameter_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocParameterTag
+    node.kind() == Kind::JSDocParameterTag
 }
 
 pub fn is_jsdoc_property_tag(node: P<Node>) -> bool {
-    node.kind == Kind::JSDocPropertyTag
+    node.kind() == Kind::JSDocPropertyTag
 }
 
 // ── Kind alias guards ────────────────────────────────────────────────────

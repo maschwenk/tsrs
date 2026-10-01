@@ -1294,7 +1294,7 @@ pub(crate) fn is_invalid_computed_property_name(node: P<Node>) -> bool {
     let grand_parent = node.parent().unwrap().parent().unwrap();
     (is_type_literal_node(grand_parent) || is_class_like(grand_parent) || is_interface_declaration(grand_parent))
         && is_binary_expression(node.expression().unwrap())
-        && node.expression().unwrap().as_binary_expression().operator_token.kind == Kind::InKeyword
+        && node.expression().unwrap().as_binary_expression().operator_token.kind() == Kind::InKeyword
         && !is_accessor(node.parent().unwrap())
 }
 
@@ -1765,7 +1765,7 @@ impl Checker {
         }
         if let Some(access_node) = access_node {
             let index_node = get_index_node_for_access_expression(access_node).unwrap();
-            if index_node.kind != Kind::BigIntLiteral && index_type.flags().intersects(TypeFlags::StringLiteral | TypeFlags::NumberLiteral) {
+            if index_node.kind() != Kind::BigIntLiteral && index_type.flags().intersects(TypeFlags::StringLiteral | TypeFlags::NumberLiteral) {
                 let value = literal_value_to_string(index_type.as_literal_type().value());
                 let type_string = self.type_to_string_exported(object_type);
                 self.error(Some(index_node), &diagnostics::Property_0_does_not_exist_on_type_1, &[&value, &type_string]);
@@ -1774,7 +1774,7 @@ impl Checker {
                 let index_string = self.type_to_string_exported(index_type);
                 self.error(Some(index_node), &diagnostics::Type_0_has_no_matching_index_signature_for_type_1, &[&type_string, &index_string]);
             } else {
-                let type_string = if index_node.kind == Kind::BigIntLiteral { "bigint".to_string() } else { self.type_to_string_exported(index_type) };
+                let type_string = if index_node.kind() == Kind::BigIntLiteral { "bigint".to_string() } else { self.type_to_string_exported(index_type) };
                 self.error(Some(index_node), &diagnostics::Type_0_cannot_be_used_as_an_index_type, &[&type_string]);
             }
         }
@@ -1839,7 +1839,7 @@ impl Checker {
 
 // checker.go:27727
 pub(crate) fn get_index_node_for_access_expression(access_node: P<Node>) -> Option<P<Node>> {
-    match access_node.kind {
+    match access_node.kind() {
         Kind::ElementAccessExpression => Some(access_node.as_element_access_expression().argument_expression),
         Kind::IndexedAccessType => Some(access_node.as_indexed_access_type_node().index_type),
         Kind::ComputedPropertyName => access_node.expression(),
@@ -1860,7 +1860,7 @@ impl Checker {
 
     // checker.go:27745
     pub(crate) fn is_self_type_access(&mut self, name: P<Node>, parent: Option<P<Symbol>>) -> bool {
-        name.kind == Kind::ThisKeyword || parent.is_some() && is_entity_name_expression(name) && parent == Some(self.get_resolved_symbol(get_first_identifier(name)))
+        name.kind() == Kind::ThisKeyword || parent.is_some() && is_entity_name_expression(name) && parent == Some(self.get_resolved_symbol(get_first_identifier(name)))
     }
 
     // checker.go:27749
@@ -1881,7 +1881,7 @@ impl Checker {
         }
         if self.is_readonly_symbol(symbol) {
             // Allow assignments to readonly properties within constructors of the same class declaration.
-            if symbol.flags().intersects(SymbolFlags::Property) && is_access_expression(expr) && expr.expression().unwrap().kind == Kind::ThisKeyword {
+            if symbol.flags().intersects(SymbolFlags::Property) && is_access_expression(expr) && expr.expression().unwrap().kind() == Kind::ThisKeyword {
                 // Look for if this is the constructor for the class that `symbol` is a property of.
                 let ctor = self.get_control_flow_container(expr);
                 let Some(ctor) = ctor.filter(|&ctor| is_constructor_declaration(ctor)) else {

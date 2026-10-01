@@ -479,7 +479,7 @@ impl NodeBuilderImpl {
                 Some(symbol) => {
                     t = self.ctx().enclosing_symbol_types.borrow().get(&ast::get_symbol_id(symbol)).copied();
                     if t.is_none() {
-                        if symbol.flags().intersects(SymbolFlags::Accessor) && declaration.unwrap().kind == Kind::SetAccessor {
+                        if symbol.flags().intersects(SymbolFlags::Accessor) && declaration.unwrap().kind() == Kind::SetAccessor {
                             let write_type = c.get_write_type_of_symbol(symbol).unwrap();
                             t = Some(c.instantiate_type(write_type, self.ctx().mapper.get()));
                         } else if !symbol.flags().intersects(SymbolFlags::TypeLiteral | SymbolFlags::Signature) {
@@ -868,7 +868,7 @@ impl NodeBuilderImpl {
                         type_elements.push(setter);
                     }
                     return type_elements;
-                } else if parent_is_class && prop_declaration.is_some() && prop_declaration.unwrap().modifier_nodes().iter().any(|m| m.kind == Kind::AccessorKeyword) {
+                } else if parent_is_class && prop_declaration.is_some() && prop_declaration.unwrap().modifier_nodes().iter().any(|m| m.kind() == Kind::AccessorKeyword) {
                     let prop_declaration = prop_declaration.unwrap();
                     let fake_getter_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[], Some(property_type), None, 0);
                     let fake_getter_declaration = self.signature_to_signature_declaration_helper(c, fake_getter_signature, Kind::GetAccessor, Some(P::new(SignatureToSignatureDeclarationOptions { name: property_name, ..Default::default() })));
@@ -1096,7 +1096,7 @@ impl NodeBuilderImpl {
             } else {
                 for &declaration in &declarations {
                     let parent = declaration.parent().unwrap();
-                    if parent.kind == Kind::SourceFile || parent.kind == Kind::ModuleBlock {
+                    if parent.kind() == Kind::SourceFile || parent.kind() == Kind::ModuleBlock {
                         is_non_local_function_symbol = true;
                         break;
                     }
@@ -1105,7 +1105,7 @@ impl NodeBuilderImpl {
                         && ast::is_variable_declaration_list(parent.parent().unwrap())
                         && ast::is_variable_statement(parent.parent().unwrap().parent().unwrap())
                         && parent.parent().unwrap().parent().unwrap().parent().is_some()
-                        && (parent.parent().unwrap().parent().unwrap().parent().unwrap().kind == Kind::SourceFile || parent.parent().unwrap().parent().unwrap().parent().unwrap().kind == Kind::ModuleBlock)
+                        && (parent.parent().unwrap().parent().unwrap().parent().unwrap().kind() == Kind::SourceFile || parent.parent().unwrap().parent().unwrap().parent().unwrap().kind() == Kind::ModuleBlock)
                     {
                         is_non_local_function_symbol = true;
                         is_function_expression_symbol = true;

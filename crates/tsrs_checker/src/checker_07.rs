@@ -88,7 +88,7 @@ impl Checker {
     // checker.go:13094
     pub(crate) fn get_syntactic_truthy_semantics(&mut self, node: P<Node>) -> PredicateSemantics {
         let node = ast::skip_outer_expressions(node, OuterExpressionKinds::All);
-        match node.kind {
+        match node.kind() {
             Kind::NumericLiteral => {
                 // Allow `while(0)` or `while(1)`
                 if node.text() == "0" || node.text() == "1" {
@@ -136,29 +136,29 @@ impl Checker {
         if ast::is_binary_expression(grandparent) {
             let grandparent_left = grandparent.as_binary_expression().left;
             let grandparent_operator_token = grandparent.as_binary_expression().operator_token;
-            if ast::is_binary_expression(grandparent_left) && grandparent_operator_token.kind == Kind::BarBarToken {
+            if ast::is_binary_expression(grandparent_left) && grandparent_operator_token.kind() == Kind::BarBarToken {
                 self.grammar_error_on_node(
                     grandparent_left,
                     &diagnostics::X_0_and_1_operations_cannot_be_mixed_without_parentheses,
-                    &[&tsrs_scanner::token_to_string(Kind::QuestionQuestionToken), &tsrs_scanner::token_to_string(grandparent_operator_token.kind)],
+                    &[&tsrs_scanner::token_to_string(Kind::QuestionQuestionToken), &tsrs_scanner::token_to_string(grandparent_operator_token.kind())],
                 );
             }
         } else if ast::is_binary_expression(left) {
             let operator_token = left.as_binary_expression().operator_token;
-            if operator_token.kind == Kind::BarBarToken || operator_token.kind == Kind::AmpersandAmpersandToken {
+            if operator_token.kind() == Kind::BarBarToken || operator_token.kind() == Kind::AmpersandAmpersandToken {
                 self.grammar_error_on_node(
                     left,
                     &diagnostics::X_0_and_1_operations_cannot_be_mixed_without_parentheses,
-                    &[&tsrs_scanner::token_to_string(operator_token.kind), &tsrs_scanner::token_to_string(Kind::QuestionQuestionToken)],
+                    &[&tsrs_scanner::token_to_string(operator_token.kind()), &tsrs_scanner::token_to_string(Kind::QuestionQuestionToken)],
                 );
             }
         } else if ast::is_binary_expression(right) {
             let operator_token = right.as_binary_expression().operator_token;
-            if operator_token.kind == Kind::AmpersandAmpersandToken {
+            if operator_token.kind() == Kind::AmpersandAmpersandToken {
                 self.grammar_error_on_node(
                     right,
                     &diagnostics::X_0_and_1_operations_cannot_be_mixed_without_parentheses,
-                    &[&tsrs_scanner::token_to_string(Kind::QuestionQuestionToken), &tsrs_scanner::token_to_string(operator_token.kind)],
+                    &[&tsrs_scanner::token_to_string(Kind::QuestionQuestionToken), &tsrs_scanner::token_to_string(operator_token.kind())],
                 );
             }
         }
@@ -181,7 +181,7 @@ impl Checker {
     // checker.go:13156
     pub(crate) fn get_syntactic_nullishness_semantics(&mut self, node: P<Node>) -> PredicateSemantics {
         let node = ast::skip_outer_expressions(node, OuterExpressionKinds::All);
-        match node.kind {
+        match node.kind() {
             Kind::AwaitExpression
             | Kind::CallExpression
             | Kind::TaggedTemplateExpression
@@ -197,7 +197,7 @@ impl Checker {
                 let bin = node.as_binary_expression();
                 // List of operators that can produce null/undefined:
                 // || ||= && &&= ?? ??=
-                match bin.operator_token.kind {
+                match bin.operator_token.kind() {
                     Kind::BarBarToken | Kind::BarBarEqualsToken | Kind::AmpersandAmpersandToken | Kind::AmpersandAmpersandEqualsToken => {
                         return PredicateSemantics::Sometimes;
                     }
@@ -252,7 +252,7 @@ impl Checker {
     // checker.go:13219
     pub(crate) fn is_side_effect_free(&mut self, node: P<Node>) -> bool {
         let node = ast::skip_parentheses(node);
-        match node.kind {
+        match node.kind() {
             Kind::Identifier
             | Kind::StringLiteral
             | Kind::RegularExpressionLiteral
@@ -282,7 +282,7 @@ impl Checker {
             }
             Kind::BinaryExpression => {
                 let bin = node.as_binary_expression();
-                if ast::is_assignment_operator(bin.operator_token.kind) {
+                if ast::is_assignment_operator(bin.operator_token.kind()) {
                     return false;
                 }
                 return self.is_side_effect_free(bin.left) && self.is_side_effect_free(bin.right());
@@ -432,7 +432,7 @@ impl Checker {
     pub(crate) fn check_reference_expression(&mut self, expr: P<Node>, invalid_reference_message: &'static Message, invalid_optional_chain_message: &'static Message) -> bool {
         // References are combinations of identifiers, parentheses, and property accesses.
         let node = ast::skip_outer_expressions(expr, OuterExpressionKinds::Assertions | OuterExpressionKinds::Parentheses);
-        if node.kind != Kind::Identifier && !ast::is_access_expression(node) {
+        if node.kind() != Kind::Identifier && !ast::is_access_expression(node) {
             self.error(Some(expr), invalid_reference_message, &[]);
             return false;
         }
@@ -506,12 +506,12 @@ impl Checker {
             let mut member = self.get_symbol_of_declaration(member_decl);
             let mut computed_name_type: Option<P<Type>> = None;
             if let Some(name) = member_decl.name() {
-                if name.kind == Kind::ComputedPropertyName {
+                if name.kind() == Kind::ComputedPropertyName {
                     computed_name_type = Some(self.check_computed_property_name(name));
                 }
             }
             if ast::is_property_assignment(member_decl) || ast::is_shorthand_property_assignment(member_decl) || ast::is_object_literal_method(member_decl) {
-                let t = match member_decl.kind {
+                let t = match member_decl.kind() {
                     Kind::PropertyAssignment => self.check_property_assignment(member_decl, check_mode),
                     Kind::ShorthandPropertyAssignment => self.check_shorthand_property_assignment(member_decl, in_destructuring_pattern, check_mode),
                     _ => self.check_object_literal_method(member_decl, check_mode),
@@ -576,7 +576,7 @@ impl Checker {
                     }
                     self.add_intra_expression_inference_site(inference_context.unwrap(), inference_node, t);
                 }
-            } else if member_decl.kind == Kind::SpreadAssignment {
+            } else if member_decl.kind() == Kind::SpreadAssignment {
                 if !st.properties_array.is_empty() {
                     let object_literal_type = create_object_literal_type(self, node, &st);
                     spread = self.get_spread_type(spread, object_literal_type, node.symbol(), st.object_flags, in_const_context);
@@ -609,7 +609,7 @@ impl Checker {
                 // an ordinary function declaration(section 6.1) with no parameters.
                 // A set accessor declaration is processed in the same manner
                 // as an ordinary function declaration with a single parameter and a Void return type.
-                assert!(member_decl.kind == Kind::GetAccessor || member_decl.kind == Kind::SetAccessor);
+                assert!(member_decl.kind() == Kind::GetAccessor || member_decl.kind() == Kind::SetAccessor);
                 self.check_node_deferred(member_decl);
             }
             let member = member.unwrap();
@@ -967,7 +967,7 @@ impl Checker {
         ast::is_binding_element(node) && node.initializer().is_some()
             || ast::is_property_assignment(node) && self.has_default_value(node.initializer().unwrap())
             || ast::is_shorthand_property_assignment(node) && node.as_shorthand_property_assignment().object_assignment_initializer.get().is_some()
-            || ast::is_binary_expression(node) && node.as_binary_expression().operator_token.kind == Kind::EqualsToken
+            || ast::is_binary_expression(node) && node.as_binary_expression().operator_token.kind() == Kind::EqualsToken
     }
 
     // checker.go:13833
@@ -1007,7 +1007,7 @@ impl Checker {
 
     // checker.go:13858
     pub(crate) fn is_valid_const_assertion_argument(&mut self, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::StringLiteral
             | Kind::NoSubstitutionTemplateLiteral
             | Kind::NumericLiteral
@@ -1025,8 +1025,8 @@ impl Checker {
             Kind::PrefixUnaryExpression => {
                 let op = node.as_prefix_unary_expression().operator;
                 let arg = node.as_prefix_unary_expression().operand;
-                return op == Kind::MinusToken && (arg.kind == Kind::NumericLiteral || arg.kind == Kind::BigIntLiteral)
-                    || op == Kind::PlusToken && arg.kind == Kind::NumericLiteral;
+                return op == Kind::MinusToken && (arg.kind() == Kind::NumericLiteral || arg.kind() == Kind::BigIntLiteral)
+                    || op == Kind::PlusToken && arg.kind() == Kind::NumericLiteral;
             }
             Kind::PropertyAccessExpression | Kind::ElementAccessExpression => {
                 let expr = ast::skip_parentheses(node.expression().unwrap());
@@ -1111,7 +1111,7 @@ impl Checker {
 
     // checker.go:13941
     pub(crate) fn is_in_property_initializer_or_class_static_block(&mut self, node: P<Node>, ignore_arrow_functions: bool) -> bool {
-        ast::find_ancestor_or_quit(node, |node| match node.kind {
+        ast::find_ancestor_or_quit(node, |node| match node.kind() {
             Kind::PropertyDeclaration | Kind::ClassStaticBlockDeclaration => FindAncestorResult::True,
             Kind::TypeQuery | Kind::JsxClosingElement => FindAncestorResult::Quit,
             Kind::ArrowFunction => {
@@ -1122,7 +1122,7 @@ impl Checker {
                 }
             }
             Kind::Block => {
-                if ast::is_function_like_declaration(node.parent()) && node.parent().unwrap().kind != Kind::ArrowFunction {
+                if ast::is_function_like_declaration(node.parent()) && node.parent().unwrap().kind() != Kind::ArrowFunction {
                     FindAncestorResult::Quit
                 } else {
                     FindAncestorResult::False
@@ -1423,7 +1423,7 @@ impl Checker {
                     return &diagnostics::Cannot_find_name_0_Did_you_mean_to_write_this_in_an_async_function;
                 }
                 // fallthrough
-                if node.parent().unwrap().kind == Kind::ShorthandPropertyAssignment {
+                if node.parent().unwrap().kind() == Kind::ShorthandPropertyAssignment {
                     return &diagnostics::No_value_exists_in_scope_for_the_shorthand_property_0_Either_declare_one_or_provide_an_initializer;
                 }
                 &diagnostics::Cannot_find_name_0
@@ -2020,7 +2020,7 @@ impl Checker {
     // checker.go:14668
     pub(crate) fn get_target_of_import_equals_declaration(&mut self, node: P<Node>) -> Option<P<Symbol>> {
         // Node is ImportEqualsDeclaration | VariableDeclaration
-        if ast::is_variable_declaration(node) || node.as_import_equals_declaration().module_reference.kind == Kind::ExternalModuleReference {
+        if ast::is_variable_declaration(node) || node.as_import_equals_declaration().module_reference.kind() == Kind::ExternalModuleReference {
             let mut module_reference = get_external_module_require_argument(node);
             if module_reference.is_none() {
                 module_reference = ast::get_external_module_import_equals_declaration_expression(node);
@@ -2065,16 +2065,16 @@ impl Checker {
         //     import a = |b.c|; // Value, type, namespace
         //     import a = |b.c|.d; // Namespace
         let mut entity_name = entity_name;
-        if entity_name.kind == Kind::Identifier && ast::is_right_side_of_qualified_name_or_property_access(entity_name) {
+        if entity_name.kind() == Kind::Identifier && ast::is_right_side_of_qualified_name_or_property_access(entity_name) {
             entity_name = entity_name.parent().unwrap(); // QualifiedName
         }
         // Check for case 1 and 3 in the above example
-        if entity_name.kind == Kind::Identifier || entity_name.parent().unwrap().kind == Kind::QualifiedName {
+        if entity_name.kind() == Kind::Identifier || entity_name.parent().unwrap().kind() == Kind::QualifiedName {
             return self.resolve_entity_name(entity_name, SymbolFlags::Namespace, false /*ignoreErrors*/, true /*dontResolveAlias*/, None /*location*/);
         }
         // Case 2 in above example
         // entityName.kind could be a QualifiedName or a Missing identifier
-        assert!(entity_name.parent().unwrap().kind == Kind::ImportEqualsDeclaration);
+        assert!(entity_name.parent().unwrap().kind() == Kind::ImportEqualsDeclaration);
         self.resolve_entity_name(
             entity_name,
             SymbolFlags::Value | SymbolFlags::Type | SymbolFlags::Namespace,
@@ -2329,7 +2329,7 @@ impl Checker {
             //   import { "" as foo } from "./foo";
             //   export { foo as "" };
             //
-            if !name_text.is_empty() || name.kind == Kind::StringLiteral {
+            if !name_text.is_empty() || name.kind() == Kind::StringLiteral {
                 let module_symbol_ = module_symbol.unwrap();
                 if is_shorthand_ambient_module_symbol(module_symbol_) {
                     return module_symbol;

@@ -206,7 +206,7 @@ fn push_fake_scope(b: &NodeBuilderImpl, c: &mut Checker, kind: &'static str, add
         b.links.get(fake_scope).fake_scope_for_signature_declaration.set(Some(kind));
         let data = fake_scope.locals_container_data().unwrap();
         data.locals.set(Some(locals));
-        fake_scope.parent.set(Some(enclosing_declaration));
+        fake_scope.set_parent(Some(enclosing_declaration));
         b.ctx().enclosing_declaration.set(Some(fake_scope));
         None
     } else {
@@ -225,7 +225,7 @@ fn push_fake_scope(b: &NodeBuilderImpl, c: &mut Checker, kind: &'static str, add
 // Go's `bindPatternWorker` closure in enterNewScope.
 fn bind_pattern(b: &NodeBuilderImpl, c: &mut Checker, p: P<Node>, add: AddSymbol) {
     for &e in p.elements() {
-        match e.kind {
+        match e.kind() {
             Kind::OmittedExpression => return,
             Kind::BindingElement => {
                 bind_element(b, c, e, add);

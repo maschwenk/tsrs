@@ -129,7 +129,7 @@ pub(crate) fn write_file_times(program: &'static Program) {
         return;
     };
     fn count_kinds(node: P<tsrs_ast::Node>, counts: &mut [u32]) {
-        counts[node.kind as usize] += 1;
+        counts[node.kind() as usize] += 1;
         node.for_each_child(&mut |child| {
             count_kinds(child, counts);
             false

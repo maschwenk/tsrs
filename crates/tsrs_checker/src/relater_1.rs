@@ -574,14 +574,14 @@ impl Checker {
         ) {
             return true;
         }
-        match node.kind {
+        match node.kind() {
             Kind::AsExpression | Kind::JsxExpression | Kind::ParenthesizedExpression => {
-                if node.kind == Kind::AsExpression && !is_const_assertion(node) {
+                if node.kind() == Kind::AsExpression && !is_const_assertion(node) {
                     return false;
                 }
                 return self.elaborate_error(node.expression(), source, target, relation, head_message, diagnostic_output);
             }
-            Kind::BinaryExpression => match node.as_binary_expression().operator_token.kind {
+            Kind::BinaryExpression => match node.as_binary_expression().operator_token.kind() {
                 Kind::EqualsToken | Kind::CommaToken => {
                     return self.elaborate_error(
                         Some(node.as_binary_expression().right()),
@@ -665,7 +665,7 @@ impl Checker {
             if name_type.flags().intersects(TypeFlags::Never) {
                 continue;
             }
-            match prop.kind {
+            match prop.kind() {
                 Kind::SetAccessor | Kind::GetAccessor | Kind::MethodDeclaration | Kind::ShorthandPropertyAssignment => {
                     reported_error = self.elaborate_element(
                         source,
@@ -2018,7 +2018,7 @@ impl Checker {
         if source_rest_type.is_some() || target_rest_type.is_some() {
             self.instantiate_type(source_rest_type.or(target_rest_type).unwrap(), report_unreliable_markers);
         }
-        let kind = target.declaration().map_or(Kind::Unknown, |d| d.kind);
+        let kind = target.declaration().map_or(Kind::Unknown, |d| d.kind());
         let strict_variance = !check_mode.intersects(SignatureCheckMode::Callback)
             && self.strict_function_types
             && kind != Kind::MethodDeclaration
@@ -2571,7 +2571,7 @@ impl Checker {
     // relater.go:1992
     pub(crate) fn get_tuple_element_label_from_binding_element(&mut self, node: P<Node>, index: i32, element_flags: ElementFlags) -> String {
         if let Some(name_node) = node.name() {
-            match name_node.kind {
+            match name_node.kind() {
                 Kind::Identifier => {
                     let name = name_node.text();
                     if has_dot_dot_dot_token(node) {

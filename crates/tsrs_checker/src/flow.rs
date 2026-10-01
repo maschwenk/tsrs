@@ -199,7 +199,7 @@ impl Checker {
                     if Some(container) != f.flow_container.get()
                         && !ast::is_property_access_expression(reference)
                         && !ast::is_element_access_expression(reference)
-                        && !(reference.kind == Kind::ThisKeyword && !ast::is_arrow_function(container))
+                        && !(reference.kind() == Kind::ThisKeyword && !ast::is_arrow_function(container))
                     {
                         flow = container.flow_node_data().unwrap().flow_node.get().unwrap();
                         continue;
@@ -382,16 +382,16 @@ impl Checker {
     // flow.go:338
     pub(crate) fn narrow_type_by_assertion(&mut self, f: P<FlowState>, t: P<Type>, expr: P<Node>) -> P<Type> {
         let node = ast::skip_parentheses(expr);
-        if node.kind == Kind::FalseKeyword {
+        if node.kind() == Kind::FalseKeyword {
             return self.unreachable_never_type;
         }
-        if node.kind == Kind::BinaryExpression {
+        if node.kind() == Kind::BinaryExpression {
             let binary = node.as_binary_expression();
-            if binary.operator_token.kind == Kind::AmpersandAmpersandToken {
+            if binary.operator_token.kind() == Kind::AmpersandAmpersandToken {
                 let left_type = self.narrow_type_by_assertion(f, t, binary.left);
                 return self.narrow_type_by_assertion(f, left_type, binary.right());
             }
-            if binary.operator_token.kind == Kind::BarBarToken {
+            if binary.operator_token.kind() == Kind::BarBarToken {
                 let left_type = self.narrow_type_by_assertion(f, t, binary.left);
                 let right_type = self.narrow_type_by_assertion(f, t, binary.right());
                 return self.get_union_type(&[left_type, right_type]);
@@ -430,14 +430,14 @@ impl Checker {
         if ast::is_expression_of_optional_chain_root(expr) || {
             let parent = expr.parent().unwrap();
             ast::is_binary_expression(parent)
-                && (parent.as_binary_expression().operator_token.kind == Kind::QuestionQuestionToken || parent.as_binary_expression().operator_token.kind == Kind::QuestionQuestionEqualsToken)
+                && (parent.as_binary_expression().operator_token.kind() == Kind::QuestionQuestionToken || parent.as_binary_expression().operator_token.kind() == Kind::QuestionQuestionEqualsToken)
                 && parent.as_binary_expression().left == expr
         } {
             return self.narrow_type_by_optionality(f, t, expr, assume_true);
         }
-        match expr.kind {
+        match expr.kind() {
             Kind::Identifier | Kind::ThisKeyword | Kind::SuperKeyword | Kind::PropertyAccessExpression | Kind::ElementAccessExpression => {
-                if expr.kind == Kind::Identifier {
+                if expr.kind() == Kind::Identifier {
                     // When narrowing a reference to a const variable, non-assigned parameter, or readonly property, we inline
                     // up to five levels of aliased conditional expressions that are themselves declared as const variables.
                     if !self.is_matching_reference(f.ref_node(), expr) && self.inline_level < 5 {
@@ -543,19 +543,19 @@ impl Checker {
     pub(crate) fn narrow_type_by_binary_expression(&mut self, f: P<FlowState>, t: P<Type>, expr: P<Node>, assume_true: bool) -> P<Type> {
         let mut t = t;
         let binary = expr.as_binary_expression();
-        match binary.operator_token.kind {
+        match binary.operator_token.kind() {
             Kind::EqualsToken | Kind::BarBarEqualsToken | Kind::AmpersandAmpersandEqualsToken | Kind::QuestionQuestionEqualsToken => {
                 let narrowed = self.narrow_type(f, t, binary.right(), assume_true);
                 return self.narrow_type_by_truthiness(f, narrowed, binary.left, assume_true);
             }
             Kind::EqualsEqualsToken | Kind::ExclamationEqualsToken | Kind::EqualsEqualsEqualsToken | Kind::ExclamationEqualsEqualsToken => {
-                let operator = binary.operator_token.kind;
+                let operator = binary.operator_token.kind();
                 let left = self.get_reference_candidate(binary.left);
                 let right = self.get_reference_candidate(binary.right());
-                if left.kind == Kind::TypeOfExpression && ast::is_string_literal_like(right) {
+                if left.kind() == Kind::TypeOfExpression && ast::is_string_literal_like(right) {
                     return self.narrow_type_by_typeof(f, t, left, operator, right, assume_true);
                 }
-                if right.kind == Kind::TypeOfExpression && ast::is_string_literal_like(left) {
+                if right.kind() == Kind::TypeOfExpression && ast::is_string_literal_like(left) {
                     return self.narrow_type_by_typeof(f, t, right, operator, left, assume_true);
                 }
                 if self.is_matching_reference(f.ref_node(), left) {
@@ -902,7 +902,7 @@ impl Checker {
 
     // flow.go:806
     pub(crate) fn narrow_type_by_boolean_comparison(&mut self, f: P<FlowState>, t: P<Type>, expr: P<Node>, bool_value: P<Node>, operator: Kind, assume_true: bool) -> P<Type> {
-        let assume_true = (assume_true != (bool_value.kind == Kind::TrueKeyword)) != (operator != Kind::ExclamationEqualsEqualsToken && operator != Kind::ExclamationEqualsToken);
+        let assume_true = (assume_true != (bool_value.kind() == Kind::TrueKeyword)) != (operator != Kind::ExclamationEqualsEqualsToken && operator != Kind::ExclamationEqualsToken);
         self.narrow_type(f, t, expr, assume_true)
     }
 
@@ -1173,9 +1173,9 @@ impl Checker {
         let mut t = flow_type.t.unwrap();
         if self.is_matching_reference(f.ref_node(), expr) {
             t = self.narrow_type_by_switch_on_discriminant(t, data);
-        } else if expr.kind == Kind::TypeOfExpression && self.is_matching_reference(f.ref_node(), expr.expression().unwrap()) {
+        } else if expr.kind() == Kind::TypeOfExpression && self.is_matching_reference(f.ref_node(), expr.expression().unwrap()) {
             t = self.narrow_type_by_switch_on_type_of(t, data);
-        } else if expr.kind == Kind::TrueKeyword {
+        } else if expr.kind() == Kind::TrueKeyword {
             t = self.narrow_type_by_switch_on_true(f, t, data);
         } else {
             if self.strict_null_checks {
@@ -1276,7 +1276,7 @@ impl Checker {
         };
         let clauses = data.switch_statement.as_switch_statement().case_block.as_case_block().clauses.nodes;
         // Equal start and end denotes implicit fallthrough; undefined marks explicit default clause.
-        let default_index = clauses.iter().position(|clause| clause.kind == Kind::DefaultClause).map_or(-1, |i| i as i32);
+        let default_index = clauses.iter().position(|clause| clause.kind() == Kind::DefaultClause).map_or(-1, |i| i as i32);
         let clause_start = data.clause_start;
         let clause_end = data.clause_end;
         let has_default_clause = clause_start == clause_end || (default_index >= clause_start && default_index < clause_end);
@@ -1303,14 +1303,14 @@ impl Checker {
         let mut t = t;
         let data = data.as_flow_switch_clause_data();
         let clauses = data.switch_statement.as_switch_statement().case_block.as_case_block().clauses.nodes;
-        let default_index = clauses.iter().position(|clause| clause.kind == Kind::DefaultClause).map_or(-1, |i| i as i32);
+        let default_index = clauses.iter().position(|clause| clause.kind() == Kind::DefaultClause).map_or(-1, |i| i as i32);
         let clause_start = data.clause_start;
         let clause_end = data.clause_end;
         let has_default_clause = clause_start == clause_end || (default_index >= clause_start && default_index < clause_end);
         // First, narrow away all of the cases that preceded this set of cases.
         for i in 0..clause_start as usize {
             let clause = clauses[i];
-            if clause.kind == Kind::CaseClause {
+            if clause.kind() == Kind::CaseClause {
                 t = self.narrow_type(f, t, clause.expression().unwrap(), false /*assumeTrue*/);
             }
         }
@@ -1320,7 +1320,7 @@ impl Checker {
         if has_default_clause {
             for i in clause_end as usize..clauses.len() {
                 let clause = clauses[i];
-                if clause.kind == Kind::CaseClause {
+                if clause.kind() == Kind::CaseClause {
                     t = self.narrow_type(f, t, clause.expression().unwrap(), false /*assumeTrue*/);
                 }
             }
@@ -1329,7 +1329,7 @@ impl Checker {
         // Now, narrow based on the cases in this set.
         let mut types = Vec::with_capacity((clause_end - clause_start) as usize);
         for &clause in &clauses[clause_start as usize..clause_end as usize] {
-            if clause.kind == Kind::CaseClause {
+            if clause.kind() == Kind::CaseClause {
                 types.push(self.narrow_type(f, t, clause.expression().unwrap(), true /*assumeTrue*/));
             } else {
                 types.push(self.never_type);
@@ -1737,7 +1737,7 @@ impl Checker {
         let is_element_assignment = ast::is_element_access_expression(parent)
             && parent.expression() == Some(root)
             && ast::is_binary_expression(parent.parent().unwrap())
-            && parent.parent().unwrap().as_binary_expression().operator_token.kind == Kind::EqualsToken
+            && parent.parent().unwrap().as_binary_expression().operator_token.kind() == Kind::EqualsToken
             && parent.parent().unwrap().as_binary_expression().left == parent
             && !ast::is_assignment_target(parent.parent().unwrap())
             && {
@@ -1801,19 +1801,19 @@ impl Checker {
 
     // flow.go:1597
     pub(crate) fn is_matching_reference(&mut self, source: P<Node>, target: P<Node>) -> bool {
-        match target.kind {
+        match target.kind() {
             Kind::ParenthesizedExpression | Kind::NonNullExpression => {
                 return self.is_matching_reference(source, target.expression().unwrap());
             }
             Kind::BinaryExpression => {
                 return ast::is_assignment_expression(target, false) && self.is_matching_reference(source, target.as_binary_expression().left)
                     || ast::is_binary_expression(target)
-                        && target.as_binary_expression().operator_token.kind == Kind::CommaToken
+                        && target.as_binary_expression().operator_token.kind() == Kind::CommaToken
                         && self.is_matching_reference(source, target.as_binary_expression().right());
             }
             _ => {}
         }
-        match source.kind {
+        match source.kind() {
             Kind::MetaProperty => {
                 return ast::is_meta_property(target)
                     && source.as_meta_property().keyword_token == target.as_meta_property().keyword_token
@@ -1821,7 +1821,7 @@ impl Checker {
             }
             Kind::Identifier | Kind::PrivateIdentifier => {
                 if ast::is_this_in_type_query(source) {
-                    return target.kind == Kind::ThisKeyword;
+                    return target.kind() == Kind::ThisKeyword;
                 }
                 if ast::is_identifier(target) && self.get_resolved_symbol(source) == self.get_resolved_symbol(target) {
                     return true;
@@ -1834,10 +1834,10 @@ impl Checker {
                 return false;
             }
             Kind::ThisKeyword => {
-                return target.kind == Kind::ThisKeyword;
+                return target.kind() == Kind::ThisKeyword;
             }
             Kind::SuperKeyword => {
-                return target.kind == Kind::SuperKeyword;
+                return target.kind() == Kind::SuperKeyword;
             }
             Kind::NonNullExpression | Kind::ParenthesizedExpression | Kind::SatisfiesExpression => {
                 return self.is_matching_reference(source.expression().unwrap(), target);
@@ -1873,7 +1873,7 @@ impl Checker {
             }
             Kind::BinaryExpression => {
                 return ast::is_binary_expression(source)
-                    && source.as_binary_expression().operator_token.kind == Kind::CommaToken
+                    && source.as_binary_expression().operator_token.kind() == Kind::CommaToken
                     && self.is_matching_reference(source.as_binary_expression().right(), target);
             }
             _ => {}
@@ -1896,9 +1896,9 @@ impl Checker {
 
     // flow.go:1665
     pub(crate) fn write_flow_cache_key(&mut self, b: &mut keyBuilder, node: P<Node>, declared_type: P<Type>, initial_type: P<Type>, flow_container: Option<P<Node>>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier | Kind::ThisKeyword => {
-                if node.kind == Kind::Identifier && !ast::is_this_in_type_query(node) {
+                if node.kind() == Kind::Identifier && !ast::is_this_in_type_query(node) {
                     let symbol = self.get_resolved_symbol(node);
                     if symbol == self.unknown_symbol {
                         return false;
@@ -2063,7 +2063,7 @@ impl Checker {
 
     // flow.go:1814
     pub(crate) fn is_constant_reference(&mut self, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::ThisKeyword => {
                 return true;
             }
@@ -2122,11 +2122,11 @@ impl Checker {
 
     // flow.go:1861
     pub(crate) fn get_reference_candidate(&mut self, node: P<Node>) -> P<Node> {
-        match node.kind {
+        match node.kind() {
             Kind::ParenthesizedExpression => {
                 return self.get_reference_candidate(node.expression().unwrap());
             }
-            Kind::BinaryExpression => match node.as_binary_expression().operator_token.kind {
+            Kind::BinaryExpression => match node.as_binary_expression().operator_token.kind() {
                 Kind::EqualsToken | Kind::BarBarEqualsToken | Kind::AmpersandAmpersandEqualsToken | Kind::QuestionQuestionEqualsToken => {
                     return self.get_reference_candidate(node.as_binary_expression().left);
                 }
@@ -2144,8 +2144,8 @@ impl Checker {
     pub(crate) fn get_reference_root(&mut self, node: P<Node>) -> P<Node> {
         let parent = node.parent().unwrap();
         if ast::is_parenthesized_expression(parent)
-            || ast::is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind == Kind::EqualsToken && parent.as_binary_expression().left == node
-            || ast::is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind == Kind::CommaToken && parent.as_binary_expression().right() == node
+            || ast::is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind() == Kind::EqualsToken && parent.as_binary_expression().left == node
+            || ast::is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind() == Kind::CommaToken && parent.as_binary_expression().right() == node
         {
             return self.get_reference_root(parent);
         }
@@ -2274,7 +2274,7 @@ impl Checker {
             let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes;
             let mut witnesses: Option<Vec<&'static str>> = Some(vec![""; clauses.len()]);
             for (i, &clause) in clauses.iter().enumerate() {
-                if clause.kind == Kind::CaseClause {
+                if clause.kind() == Kind::CaseClause {
                     let expression = clause.expression().unwrap();
                     if !ast::is_string_literal_like(expression) {
                         witnesses = None;
@@ -2327,7 +2327,7 @@ impl Checker {
 
     // flow.go:2040
     pub(crate) fn get_type_of_switch_clause(&mut self, clause: P<Node>) -> P<Type> {
-        if clause.kind == Kind::CaseClause {
+        if clause.kind() == Kind::CaseClause {
             let t = self.get_type_of_expression(clause.expression().unwrap());
             return self.get_regular_type_of_literal_type(t);
         }
@@ -2349,7 +2349,7 @@ impl Checker {
                 func_type = self.get_symbol_has_instance_method_of_object_type(right_type);
             } else if ast::is_expression_statement(node.parent().unwrap()) {
                 func_type = self.get_type_of_dotted_name(node.expression().unwrap(), None /*diagnostic*/);
-            } else if node.expression().unwrap().kind != Kind::SuperKeyword {
+            } else if node.expression().unwrap().kind() != Kind::SuperKeyword {
                 let expression = node.expression().unwrap();
                 if ast::is_optional_chain(node) {
                     let expression_type = self.check_expression(expression);
@@ -2420,7 +2420,7 @@ impl Checker {
     // flow.go:2122
     pub(crate) fn get_type_of_dotted_name(&mut self, node: P<Node>, diagnostic: Option<P<Diagnostic>>) -> Option<P<Type>> {
         if !node.flags().intersects(NodeFlags::InWithStatement) {
-            match node.kind {
+            match node.kind() {
                 Kind::Identifier => {
                     let resolved = self.get_resolved_symbol(node);
                     let symbol = self.get_export_symbol_of_value_symbol_if_exported(Some(resolved)).unwrap();
@@ -2562,7 +2562,7 @@ impl Checker {
 
     // flow.go:2234
     pub(crate) fn get_initial_type(&mut self, node: P<Node>) -> P<Type> {
-        match node.kind {
+        match node.kind() {
             Kind::VariableDeclaration => return self.get_initial_type_of_variable_declaration(node),
             Kind::BindingElement => return self.get_initial_type_of_binding_element(node),
             _ => {}
@@ -2617,7 +2617,7 @@ impl Checker {
     // flow.go:2288
     pub(crate) fn get_assigned_type(&mut self, node: P<Node>) -> P<Type> {
         let parent = node.parent().unwrap();
-        match parent.kind {
+        match parent.kind() {
             Kind::ForInStatement => return self.string_type,
             Kind::ForOfStatement => {
                 return self.check_right_hand_side_of_for_of(parent);
@@ -2950,13 +2950,13 @@ impl Checker {
     // flow.go:2589
     pub(crate) fn is_false_expression(&mut self, expr: P<Node>) -> bool {
         let node = ast::skip_parentheses(expr);
-        if node.kind == Kind::FalseKeyword {
+        if node.kind() == Kind::FalseKeyword {
             return true;
         }
         if ast::is_binary_expression(node) {
             let binary = node.as_binary_expression();
-            return binary.operator_token.kind == Kind::AmpersandAmpersandToken && (self.is_false_expression(binary.left) || self.is_false_expression(binary.right()))
-                || binary.operator_token.kind == Kind::BarBarToken && self.is_false_expression(binary.left) && self.is_false_expression(binary.right());
+            return binary.operator_token.kind() == Kind::AmpersandAmpersandToken && (self.is_false_expression(binary.left) || self.is_false_expression(binary.right()))
+                || binary.operator_token.kind() == Kind::BarBarToken && self.is_false_expression(binary.left) && self.is_false_expression(binary.right());
         }
         false
     }
@@ -2990,7 +2990,7 @@ impl Checker {
             if flags.intersects(FlowFlags::Assignment | FlowFlags::Condition | FlowFlags::ArrayMutation | FlowFlags::SwitchClause) {
                 flow = flow.antecedent().unwrap();
             } else if flags.intersects(FlowFlags::Call) {
-                if flow.node().unwrap().expression().unwrap().kind == Kind::SuperKeyword {
+                if flow.node().unwrap().expression().unwrap().kind() == Kind::SuperKeyword {
                     return true;
                 }
                 flow = flow.antecedent().unwrap();
@@ -3070,7 +3070,7 @@ impl Checker {
     // only a single walk over the AST).
     // flow.go:2700
     pub(crate) fn mark_node_assignments_worker(&mut self, node: P<Node>) -> bool {
-        match node.kind {
+        match node.kind() {
             Kind::Identifier => {
                 let assignment_kind = get_assignment_target_kind(node);
                 if assignment_kind != AssignmentKind::None {
@@ -3131,7 +3131,7 @@ impl Checker {
             if n.pos() <= declaration.pos() {
                 break;
             }
-            match n.kind {
+            match n.kind() {
                 Kind::VariableStatement
                 | Kind::ExpressionStatement
                 | Kind::IfStatement

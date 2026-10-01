@@ -49,7 +49,7 @@ impl Transformer {
 
 // utilities.go:241
 pub fn is_simple_copiable_expression(expression: P<Node>) -> bool {
-    ast::is_string_literal_like(expression) || ast::is_numeric_literal(expression) || ast::is_keyword_kind(expression.kind) || ast::is_identifier(expression)
+    ast::is_string_literal_like(expression) || ast::is_numeric_literal(expression) || ast::is_keyword_kind(expression.kind()) || ast::is_identifier(expression)
 }
 
 // utilities.go:248

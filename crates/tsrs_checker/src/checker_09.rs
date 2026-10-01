@@ -706,7 +706,7 @@ impl Checker {
     // checker.go:18007
     pub(crate) fn is_null_or_undefined(&mut self, node: P<Node>) -> bool {
         let expr = skip_parentheses(node);
-        match expr.kind {
+        match expr.kind() {
             Kind::NullKeyword => return true,
             Kind::Identifier => return self.get_resolved_symbol(expr) == self.undefined_symbol,
             _ => {}
@@ -770,7 +770,7 @@ impl Checker {
         let access_flags = AccessFlags::ExpressionPosition
             | if no_tuple_bounds_check || self.has_default_value(declaration) { AccessFlags::AllowMissing } else { AccessFlags::None };
         let t: P<Type>;
-        match pattern.kind {
+        match pattern.kind() {
             Kind::ObjectBindingPattern => {
                 if has_dot_dot_dot_token(declaration) {
                     parent_type = self.get_reduced_type(parent_type);
@@ -960,7 +960,7 @@ impl Checker {
     // checker.go:18222
     pub(crate) fn get_parent_element_access(&mut self, node: P<Node>) -> Option<P<Node>> {
         let ancestor = node.parent().unwrap().parent().unwrap();
-        match ancestor.kind {
+        match ancestor.kind() {
             Kind::BindingElement | Kind::PropertyAssignment => return self.get_synthetic_element_access(ancestor),
             Kind::ArrayLiteralExpression => return self.get_synthetic_element_access(node.parent().unwrap()),
             Kind::VariableDeclaration => return ancestor.initializer(),
@@ -1314,7 +1314,7 @@ impl Checker {
             }
             let bin = declaration.as_binary_expression();
             if get_assignment_declaration_kind(declaration) == JSDeclarationKind::ThisProperty
-                && (bin.left().kind != Kind::ElementAccessExpression
+                && (bin.left().kind() != Kind::ElementAccessExpression
                     || is_string_or_numeric_literal_like(bin.left().as_element_access_expression().argument_expression))
             {
                 if bin.type_().is_some() {
@@ -1394,7 +1394,7 @@ impl Checker {
         let widened = self.get_widened_type(t);
         let type_as_string = self.type_to_string(widened, None);
         let diagnostic: &'static Message;
-        match declaration.kind {
+        match declaration.kind() {
             Kind::BinaryExpression | Kind::PropertyDeclaration | Kind::PropertySignature => {
                 diagnostic = if self.no_implicit_any {
                     &diagnostics::Member_0_implicitly_has_an_1_type

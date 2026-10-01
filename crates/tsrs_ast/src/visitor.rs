@@ -65,13 +65,13 @@ impl NodeVisitor {
         };
         let mut visited = visit(self, node);
         if let Some(v) = visited {
-            if v.kind == Kind::SyntaxList {
+            if v.kind() == Kind::SyntaxList {
                 let nodes = v.as_syntax_list().children;
                 if nodes.len() != 1 {
                     panic!("Expected only a single node to be written to output");
                 }
                 visited = Some(nodes[0]);
-                if nodes[0].kind == Kind::SyntaxList {
+                if nodes[0].kind() == Kind::SyntaxList {
                     panic!("The result of visiting and lifting a Node may not be SyntaxList");
                 }
             }
@@ -158,7 +158,7 @@ impl NodeVisitor {
                     // finish prior loop
                     match visited {
                         None => {}
-                        Some(v) if v.kind == Kind::SyntaxList => updated.extend_from_slice(v.as_syntax_list().children),
+                        Some(v) if v.kind() == Kind::SyntaxList => updated.extend_from_slice(v.as_syntax_list().children),
                         Some(v) => updated.push(v),
                     }
                     i += 1;
@@ -263,7 +263,7 @@ impl NodeVisitor {
 
     fn lift_to_block(&mut self, node: Option<P<Node>>) -> P<Node> {
         let nodes: Vec<P<Node>> = match node {
-            Some(n) if n.kind == Kind::SyntaxList => n.as_syntax_list().children.to_vec(),
+            Some(n) if n.kind() == Kind::SyntaxList => n.as_syntax_list().children.to_vec(),
             Some(n) => vec![n],
             None => Vec::new(),
         };
@@ -273,7 +273,7 @@ impl NodeVisitor {
             let list = self.factory.new_node_list(nodes);
             self.factory.new_block(list, true /*multiLine*/)
         };
-        if node.kind == Kind::SyntaxList {
+        if node.kind() == Kind::SyntaxList {
             panic!("The result of visiting and lifting a Node may not be SyntaxList");
         }
         node
