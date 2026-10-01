@@ -1733,10 +1733,59 @@ embeds!(TypeReference, object_type, ObjectType);
 
 // InterfaceType (when generic, serves as reference to instantiation of itself)
 
+/// Go's `instantiations` map of a generic class, interface or tuple target (`map[CacheHashKey]*Type`, keyed by
+/// `getTypeListKey(typeArguments)`). Every value is a non-deferred reference whose `resolved_type_arguments` are
+/// exactly the list its key was made from (the target itself for its type parameters), and they never change, so
+/// the table stores only the references and compares type-argument lists: one word per slot instead of the 128-bit
+/// key plus the value, and a lookup hashes the type ids instead of xxh3 over the key bytes. Exact list equality maps
+/// lists to references like Go's collision-free 128-bit key does. Nil until `make()`, like the Go map.
+#[derive(Default)]
+pub struct ReferenceInstantiations(Cell<Option<P<RefCell<hashbrown::HashTable<P<Type>>>>>>);
+
+impl ReferenceInstantiations {
+    fn hash(type_arguments: &[P<Type>]) -> u64 {
+        use std::hash::Hasher;
+        let mut h = rustc_hash::FxHasher::default();
+        h.write_usize(type_arguments.len());
+        for t in type_arguments {
+            h.write_u32(t.id.0);
+        }
+        h.finish()
+    }
+
+    fn arguments_of(reference: P<Type>) -> &'static [P<Type>] {
+        reference.as_type_reference().resolved_type_arguments.get().unwrap()
+    }
+
+    /// Go `m = make(map[CacheHashKey]*Type)`.
+    pub fn make(&self) {
+        self.0.set(Some(P::new(RefCell::new(hashbrown::HashTable::new()))));
+    }
+
+    /// Go `m[getTypeListKey(typeArguments)]`.
+    pub fn get(&self, type_arguments: &[P<Type>]) -> Option<P<Type>> {
+        let cell = self.0.get()?;
+        let table = cell.borrow();
+        table.find(Self::hash(type_arguments), |&t| Self::arguments_of(t) == type_arguments).copied()
+    }
+
+    /// Go `m[getTypeListKey(reference's type arguments)] = reference` for a key that is not present yet.
+    pub fn add(&self, reference: P<Type>) {
+        if self.0.get().is_none() {
+            self.make();
+        }
+        let cell = self.0.get().unwrap();
+        let mut table = cell.borrow_mut();
+        let arguments = Self::arguments_of(reference);
+        debug_assert!(table.find(Self::hash(arguments), |&t| Self::arguments_of(t) == arguments).is_none());
+        table.insert_unique(Self::hash(arguments), reference, |&t| Self::hash(Self::arguments_of(t)));
+    }
+}
+
 #[derive(Default)]
 pub struct InterfaceType {
     pub type_reference: TypeReference,
-    pub instantiations: GoMap<CacheHashKey, P<Type>>, // Map of type instantiations (Go: in ObjectType)
+    pub instantiations: ReferenceInstantiations, // Map of type instantiations (Go: in ObjectType)
     pub all_type_parameters: Cell<&'static [P<Type>]>, // Type parameters (outer + local + thisType)
     pub outer_type_parameter_count: Cell<i32>, // Count of outer type parameters
     pub this_type: Cell<Option<P<Type>>>, // The "this" type (nil if none)

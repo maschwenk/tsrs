@@ -302,7 +302,7 @@ impl Checker {
                 d.outer_type_parameter_count.set(outer_type_parameter_count as i32);
                 d.resolved_type_arguments.set(Some(d.type_parameters()));
                 d.instantiations.make();
-                d.instantiations.set(get_type_list_key(d.type_parameters()), t);
+                d.instantiations.add(t);
                 d.target.set(Some(t));
             }
         }

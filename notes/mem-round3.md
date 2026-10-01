@@ -231,3 +231,22 @@ memory).
 | opt-out single / 4 checkers (go assignment), after | 8.43 / 12.98 | 342 / 519 G |
 
 Gates: suite trees identical in all three modes, counters unchanged (mappers are not counted).
+
+### A7. Reference instantiation tables store only the references
+
+After A1-A6 the instantiation caches are the largest heap item (Project 4 checkers: conditional 135 MB, references
+112 MB, object types 99 MB). For generic class, interface and tuple targets the map is keyed by
+`getTypeListKey(typeArguments)` and every value is a non-deferred reference whose `resolved_type_arguments` are
+exactly that list (the target itself for its type parameters) and never change. `InterfaceType.instantiations` is
+now a `ReferenceInstantiations`: a `hashbrown::HashTable<P<Type>>` hashed over the type ids and compared by list
+equality, one word per slot instead of a 128-bit key plus the value, and no xxh3 over the key bytes per lookup.
+List equality is the injective version of Go's key (Go relies on the 128-bit hash having no collisions). The
+conditional and object-type caches map keys to arbitrary result types, so they keep their keys.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before (B2) | 6.266-6.275 (6.269) | 317-319 G |
+| single, after | 6.208-6.212 (6.209, -0.06) | 316-318 G |
+| 4 checkers, before (B2) | 8.375-8.416 (8.398) | 433-434 G |
+| 4 checkers, after | 8.331-8.353 (8.336, -0.06) | 430-433 G |
+| opt-out single / 4 checkers (go assignment), after | 8.37 / 12.91 | 344 / 520 G |

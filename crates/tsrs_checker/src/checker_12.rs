@@ -1610,10 +1610,10 @@ impl Checker {
         this_type.as_type_parameter().constraint.set(Some(t));
         type_parameters.push(this_type);
         d.all_type_parameters.set(alloc_vec(type_parameters));
-        d.instantiations.make();
-        d.instantiations.set(get_type_list_key(d.type_parameters()), t);
         d.target.set(Some(t));
         d.resolved_type_arguments.set(Some(d.type_parameters()));
+        d.instantiations.make();
+        d.instantiations.add(t);
         d.declared_members_resolved.set(true);
         d.declared_members.set(Some(members));
         d.element_infos.set(alloc_slice(element_infos));
@@ -1966,9 +1966,8 @@ impl Checker {
     // checker.go:25577
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn create_type_reference_ex(&mut self, target: P<Type>, type_arguments: &[P<Type>], object_flags: ObjectFlags) -> P<Type> {
-        let id = get_type_list_key(type_arguments);
         let intf = target.as_interface_type();
-        if let Some(t) = intf.instantiations.get(&id) {
+        if let Some(t) = intf.instantiations.get(type_arguments) {
             return t;
         }
         let propagating_flags = self.get_propagating_flags_of_types(type_arguments, TypeFlags::None);
@@ -1976,7 +1975,7 @@ impl Checker {
         let d = t.as_type_reference();
         d.target.set(Some(target));
         d.resolved_type_arguments.set(Some(alloc_slice(type_arguments)));
-        intf.instantiations.set(id, t);
+        intf.instantiations.add(t);
         t
     }
 
