@@ -1448,15 +1448,11 @@ impl Checker {
 
     // inference.go:1273
     pub(crate) fn new_inference_context_worker(&mut self, inferences: &[P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> P<InferenceContext> {
-        let n = P::new(InferenceContext {
-            inferences: SliceCell::new(alloc_slice(inferences)),
-            signature: Cell::new(signature),
-            flags: Cell::new(flags),
-            compare_types: Cell::new(Some(compare_types)),
-            ..Default::default()
-        });
-        n.mapper.set(Some(self.new_inference_type_mapper(n, true /*fixing*/)));
-        n.non_fixing_mapper.set(Some(self.new_inference_type_mapper(n, false /*fixing*/)));
+        let n = P::new(InferenceContext::new(alloc_slice(inferences), signature, flags, compare_types));
+        if !tsrs_core::lazymembers::lazy_inference_mappers() {
+            n.mapper();
+            n.non_fixing_mapper();
+        }
         n
     }
 
@@ -1558,7 +1554,7 @@ impl Checker {
                         // Instantiate the default type. Any forward reference to a type
                         // parameter should be instantiated to the empty object type.
                         let backreference_mapper = self.new_backreference_mapper(n, index);
-                        let mapper = merge_type_mappers(Some(backreference_mapper), n.non_fixing_mapper.get().unwrap());
+                        let mapper = merge_type_mappers(Some(backreference_mapper), n.non_fixing_mapper().unwrap());
                         inferred_type = Some(self.instantiate_type(default_type, Some(mapper)));
                     }
                 }
@@ -1571,7 +1567,7 @@ impl Checker {
             }
             let constraint = self.get_constraint_of_type_parameter(type_parameter);
             if let Some(constraint) = constraint {
-                let instantiated_constraint = self.instantiate_type(constraint, n.non_fixing_mapper.get());
+                let instantiated_constraint = self.instantiate_type(constraint, n.non_fixing_mapper());
                 let compare_types = n.compare_types.get().unwrap();
                 if let Some(inferred) = inferred_type {
                     if !n.flags.get().intersects(InferenceFlags::NoConstraintChecks) {
@@ -1626,7 +1622,7 @@ impl Checker {
     // n and the result are Option (Go returns nil for a nil context; callers pass nil-able contexts).
     pub(crate) fn get_mapper_from_context(&mut self, n: Option<P<InferenceContext>>) -> Option<P<TypeMapper>> {
         let n = n?;
-        n.mapper.get()
+        n.mapper()
     }
 
     // Return a type mapper that combines the context's return mapper with a mapper that erases any additional type parameters
@@ -1634,7 +1630,7 @@ impl Checker {
     // inference.go:1423
     pub(crate) fn create_outer_return_mapper(&mut self, context: P<InferenceContext>) -> P<TypeMapper> {
         if context.outer_return_mapper().is_none() {
-            let mut mapper = self.clone_inference_context(Some(context), InferenceFlags::None).unwrap().mapper.get().unwrap();
+            let mut mapper = self.clone_inference_context(Some(context), InferenceFlags::None).unwrap().mapper().unwrap();
             if let Some(return_mapper) = context.return_mapper() {
                 mapper = new_merged_type_mapper(return_mapper, mapper);
             }

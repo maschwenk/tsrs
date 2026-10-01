@@ -152,3 +152,82 @@ one record its call made, as before. Call sites that pass `None` or an existing 
 | 4 checkers, before (A5) | 8.516-8.522 (8.517) | 431 G |
 | 4 checkers, after | 8.42-8.47 (8.442, -0.08) | 431-432 G |
 | opt-out single / 4 checkers (go assignment), after | 8.42 / 12.98 | 341 / 518 G |
+
+## Track B: lazy creation on the type side
+
+Same conventions as notes/mem-lazy.md: every candidate has a `TSRS_LAZY_*` switch in `tsrs_core::lazymembers`
+that only acts when the master switch is on, so `TSRS_LAZY_MEMBERS=0` stays reference-identical.
+
+### Attribution (Project single, default mode, `--features site-counts`)
+
+Types (9.63M) by creating call, with `track_caller` added (locally, not committed) through the union, intersection
+and reference constructors so each row names the code that asked:
+
+| types | kind | asked for by |
+| --- | --- | --- |
+| 1,735,719 | instantiated anonymous | `instantiateAnonymousType` (every instantiation cache miss of a declared anonymous type) |
+| 1,046,391 | reference | `instantiateType` of a non-deferred reference (new type arguments) |
+| 663,066 | anonymous | `checkObjectLiteral` |
+| 632,811 | conditional | `getConditionalType` |
+| 598,399 | reference | `getTypeWithThisArgument` of base types when lazy member tables are prepared (mem-lazy: 97.6% needed later) |
+| 538,952 | intersection | `getCrossProductIntersections` (distributing an intersection over unions; all go into the result union) |
+| 533,607 / 177,373 | union / intersection | `instantiateType` of a union / intersection |
+| 307,284 | intersection | `getUnionOrIntersectionProperty` -> `createUnionOrIntersectionProperty`: the type of a synthetic property of an intersection, computed eagerly when it has at most two constituent property types (candidate B1) |
+
+Mappers (17.3M): simple 5.06M, array 4.09M, inference 2.86M, merged 2.77M, composite 2.25M. Largest sites: the
+conditional-type instantiation mapper on a cache miss (1.52M), the two mappers of every inference context (1.43M
+each, candidate B2), the object-instantiation mapper on a miss (2.07M), lazy member table mappers (1.02M), and the
+composite mappers of conditional types with `infer` (0.65M + 0.65M). Type lists (13.7M, 230 MB): union and
+intersection constituent lists, reference type arguments and the mapper target lists of the sites above, each
+belonging to an object created on a cache miss.
+
+Most rows are objects created on a cache miss and kept by the type they built, so they are "used" by construction.
+Two had a measurable never-used share:
+
+### B1 (rejected): defer the type of two-constituent union/intersection properties (`TSRS_LAZY_PROP_TYPES`, removed)
+
+`createUnionOrIntersectionProperty` computes the property type eagerly unless there are more than two constituent
+types (then it sets `CheckFlags::DeferredType` and keeps the constituents in `deferredSymbolLinks`). Counted with
+throwaway instrumentation: of the eagerly typed properties, 159K are ever read through `getTypeOfSymbol`, and the
+unread ones made 339K new intersection types (541K properties) and 25K new unions (67K properties). Deferring the
+two-constituent case as well (`len > 2 || len == 2`) gave 9,630,120 -> 9,275,217 types (-3.7%) but peak only
+6.289 -> 6.275 GiB (the deferred-symbol links and constituent lists cost nearly what the types did), and it changed
+results: Project reports TS2578 (unused `@ts-expect-error`) in `handler.test.ts`, because code that
+reads `links.resolvedType` directly (e.g. `isSymbolUnaffectedByInstantiation`) and the deferred-type paths behave
+differently. Not pursued.
+
+### B2 (landed, default on): inference context mappers on first use (`TSRS_LAZY_INFERENCE_MAPPERS`)
+
+Go's `newInferenceContextWorker` creates `context.mapper` and `context.nonFixingMapper` with every context. Now
+`InferenceContext::mapper()` / `non_fixing_mapper()` create them on the first call (once, so the identity that
+`findActiveMapper` and `compareTypeMappers` see is stable; nothing else about a mapper is observable). Of 1.43M
+contexts on Project, 0.93M ever use the non-fixing mapper and 0.80M the fixing one: inference mappers 2.86M ->
+1.73M. Upstream this saves the same 1.13M allocations per Project check (Go: allocation/GC work, not retained
+memory).
+
+```go
+ func (c *Checker) newInferenceContextWorker(inferences []*InferenceInfo, signature *Signature, flags InferenceFlags, compareTypes TypeComparer) *InferenceContext {
+ 	n := &InferenceContext{inferences: inferences, signature: signature, flags: flags, compareTypes: compareTypes}
+-	n.mapper = c.newInferenceTypeMapper(n, true /*fixing*/)
+-	n.nonFixingMapper = c.newInferenceTypeMapper(n, false /*fixing*/)
+ 	return n
+ }
++
++func (c *Checker) getFixingMapper(n *InferenceContext) *TypeMapper {
++	if n.mapper == nil {
++		n.mapper = c.newInferenceTypeMapper(n, true /*fixing*/)
++	}
++	return n.mapper
++}
+```
+(and `getNonFixingMapper` likewise; the ~15 reads of `n.mapper` / `n.nonFixingMapper` go through them.)
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before (A6) | 6.284-6.286 (6.286) | 316-317 G |
+| single, after | 6.267-6.268 (6.268, -0.02) | 316-318 G |
+| 4 checkers, before (A6) | 8.39-8.43 (8.430) | 432-433 G |
+| 4 checkers, after | 8.39-8.41 (8.405, -0.03) | 432 G |
+| opt-out single / 4 checkers (go assignment), after | 8.43 / 12.98 | 342 / 519 G |
+
+Gates: suite trees identical in all three modes, counters unchanged (mappers are not counted).

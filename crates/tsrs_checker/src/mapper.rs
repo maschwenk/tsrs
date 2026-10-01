@@ -253,11 +253,12 @@ impl Checker {
         new_array_to_single_type_mapper(alloc_slice(&type_parameters), self.unknown_type)
     }
 
-    #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn new_inference_type_mapper(&mut self, n: P<InferenceContext>, fixing: bool) -> P<TypeMapper> {
-        tsrs_core::sitecount::hit("mapper", "inference");
-        P::new(TypeMapper { first: tagged(n.get(), TAG_INFERENCE), second: std::ptr::without_provenance(fixing as usize) })
-    }
+}
+
+#[cfg_attr(feature = "site-counts", track_caller)]
+pub(crate) fn new_inference_type_mapper(n: P<InferenceContext>, fixing: bool) -> P<TypeMapper> {
+    tsrs_core::sitecount::hit("mapper", "inference");
+    P::new(TypeMapper { first: tagged(n.get(), TAG_INFERENCE), second: std::ptr::without_provenance(fixing as usize) })
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]

@@ -1247,7 +1247,7 @@ impl Checker {
                             let mut mapper: Option<P<TypeMapper>> = None;
                             let context = self.get_inference_context(fn_);
                             if let Some(context) = context {
-                                mapper = context.non_fixing_mapper.get();
+                                mapper = context.non_fixing_mapper();
                             }
                             let rest_param_type = self.get_type_of_symbol(contextual_signature.parameters.get()[0]);
                             let instantiated = self.instantiate_type(rest_param_type, mapper);

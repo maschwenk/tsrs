@@ -973,7 +973,7 @@ impl Checker {
                     if context_flags.intersects(ContextFlags::Signature) && inference_context.inferences.get().iter().any(|&info| has_inference_candidates_or_default(info)) {
                         // For contextual signatures we incorporate all inferences made so far, e.g. from return
                         // types as well as arguments to the left in a function call.
-                        let t = self.instantiate_instantiable_types(contextual_type, inference_context.non_fixing_mapper.get().unwrap());
+                        let t = self.instantiate_instantiable_types(contextual_type, inference_context.non_fixing_mapper().unwrap());
                         if !t.flags().intersects(TypeFlags::AnyOrUnknown) {
                             return Some(t);
                         }

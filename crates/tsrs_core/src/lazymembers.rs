@@ -74,6 +74,13 @@ pub fn lazy_empty() -> bool {
     env_flag(&F, "TSRS_LAZY_EMPTY", true)
 }
 
+/// Candidate B2 (notes/mem-round3.md): an inference context's fixing and non-fixing mappers are created on first
+/// use instead of with the context. `TSRS_LAZY_INFERENCE_MAPPERS=0|1`.
+pub fn lazy_inference_mappers() -> bool {
+    static F: OnceLock<bool> = OnceLock::new();
+    env_flag(&F, "TSRS_LAZY_INFERENCE_MAPPERS", true)
+}
+
 macro_rules! lazy_member_stats {
     ($($field:ident: $label:literal,)*) => {
         /// Per-checker counts of the lazy paths (only incremented when the flag is on).

@@ -269,9 +269,9 @@ impl Checker {
         let mut mapper = None;
         if let Some(inference_context) = inference_context {
             if rest_type.is_some_and(|r| r.flags().intersects(TypeFlags::TypeParameter)) {
-                mapper = inference_context.non_fixing_mapper.get();
+                mapper = inference_context.non_fixing_mapper();
             } else {
-                mapper = inference_context.mapper.get();
+                mapper = inference_context.mapper();
             }
         }
         let source_signature = if mapper.is_some() { self.instantiate_signature(contextual_signature, mapper) } else { contextual_signature };

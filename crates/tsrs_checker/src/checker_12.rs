@@ -1049,8 +1049,8 @@ impl Checker {
                 //    * The mapper that maps the infer type parameter to its inference result (`context.mapper`)
                 let context = self.new_inference_context(root.infer_type_parameters.get(), None /*signature*/, InferenceFlags::None, None);
                 if let Some(mapper) = mapper {
-                    let non_fixing_mapper = self.combine_type_mappers(context.non_fixing_mapper.get(), mapper);
-                    context.non_fixing_mapper.set(Some(non_fixing_mapper));
+                    let non_fixing_mapper = self.combine_type_mappers(context.non_fixing_mapper(), mapper);
+                    context.set_non_fixing_mapper(non_fixing_mapper);
                 }
                 if !check_type_deferred {
                     // We don't want inferences from constraints as they may cause us to eagerly resolve the
@@ -1062,9 +1062,9 @@ impl Checker {
                 // those type parameters are used in type references (see getInferredTypeParameterConstraint). For
                 // that reason we need context.mapper to be first in the combined mapper. See #42636 for examples.
                 if let Some(mapper) = mapper {
-                    combined_mapper = Some(self.combine_type_mappers(context.mapper.get(), mapper));
+                    combined_mapper = Some(self.combine_type_mappers(context.mapper(), mapper));
                 } else {
-                    combined_mapper = context.mapper.get();
+                    combined_mapper = context.mapper();
                 }
             }
             // Instantiate the extends type including inferences for 'infer T' type parameters

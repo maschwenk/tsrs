@@ -314,8 +314,10 @@ pub struct InferenceContext {
     pub flags: Cell<InferenceFlags>, // Inference flags
     pub signature: Cell<Option<P<Signature>>>, // Generic signature for which inferences are made (if any)
     pub compare_types: Cell<Option<TypeComparer>>, // Type comparer function
-    pub mapper: Cell<Option<P<TypeMapper>>>, // Mapper that fixes inferences
-    pub non_fixing_mapper: Cell<Option<P<TypeMapper>>>, // Mapper that doesn't fix inferences
+    // Mapper that fixes inferences / that doesn't: created on first use with `TSRS_LAZY_INFERENCE_MAPPERS` (`mapper()`,
+    // `non_fixing_mapper()`), see notes/mem-round3.md.
+    mapper: Cell<Option<P<TypeMapper>>>,
+    non_fixing_mapper: Cell<Option<P<TypeMapper>>>,
     pub(crate) rare: Cell<Option<P<InferenceContextRare>>>,
 }
 
@@ -330,6 +332,43 @@ pub(crate) struct InferenceContextRare {
 }
 
 impl InferenceContext {
+    pub(crate) fn new(inferences: &'static [P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> InferenceContext {
+        InferenceContext {
+            inferences: SliceCell::new(inferences),
+            signature: Cell::new(signature),
+            flags: Cell::new(flags),
+            compare_types: Cell::new(Some(compare_types)),
+            ..Default::default()
+        }
+    }
+
+    /// The arena handle of this context (contexts are only created with `P::new` and never freed or moved).
+    fn as_p(&self) -> P<InferenceContext> {
+        // SAFETY: see above.
+        P::from_static(unsafe { &*(self as *const InferenceContext) })
+    }
+
+    /// Go `context.mapper`, the mapper that fixes inferences. Go creates it with the context; here it may be created
+    /// on the first call (candidate B2), once, so every caller gets the same mapper.
+    pub fn mapper(&self) -> Option<P<TypeMapper>> {
+        if self.mapper.get().is_none() {
+            self.mapper.set(Some(new_inference_type_mapper(self.as_p(), true /*fixing*/)));
+        }
+        self.mapper.get()
+    }
+
+    /// Go `context.nonFixingMapper` (created like `mapper()`).
+    pub fn non_fixing_mapper(&self) -> Option<P<TypeMapper>> {
+        if self.non_fixing_mapper.get().is_none() {
+            self.non_fixing_mapper.set(Some(new_inference_type_mapper(self.as_p(), false /*fixing*/)));
+        }
+        self.non_fixing_mapper.get()
+    }
+
+    pub fn set_non_fixing_mapper(&self, mapper: P<TypeMapper>) {
+        self.non_fixing_mapper.set(Some(mapper));
+    }
+
     fn rare_for_write(&self) -> P<InferenceContextRare> {
         match self.rare.get() {
             Some(rare) => rare,

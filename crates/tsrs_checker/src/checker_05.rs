@@ -1865,14 +1865,14 @@ impl Checker {
                             let rest_type = self.get_effective_rest_type(contextual_signature);
                             if let Some(rest_type) = rest_type {
                                 if rest_type.flags().intersects(TypeFlags::TypeParameter) {
-                                    let non_fixing_mapper = inference_context.unwrap().non_fixing_mapper.get();
+                                    let non_fixing_mapper = inference_context.unwrap().non_fixing_mapper();
                                     instantiated_contextual_signature = Some(self.instantiate_signature(contextual_signature, non_fixing_mapper));
                                 }
                             }
                         }
                         if instantiated_contextual_signature.is_none() {
                             if let Some(inference_context) = inference_context {
-                                let mapper = inference_context.mapper.get();
+                                let mapper = inference_context.mapper();
                                 instantiated_contextual_signature = Some(self.instantiate_signature(contextual_signature, mapper));
                             } else {
                                 instantiated_contextual_signature = Some(contextual_signature);
