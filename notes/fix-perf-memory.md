@@ -96,3 +96,35 @@ Top live heap stacks (sampled, outside the arena): `SymbolArenaLinkStore::get` h
    in 4096-entry chunks allocated in the arena (stable addresses, `P<V>` handed out as before; ids >= 2^32 go to a
    second map). Ids are still assigned by `get_node_id`/`get_symbol_id` on every access, in the same order.
    -460 MB single, -940 MB on four checkers.
+
+## Project, single-threaded, after (3fe4280)
+
+Peak footprint 15.35 GB (Go 16.7 GB); 4 checkers 23.35 GB (Go 24.4 GB). Arena requested 9.57 GB (was 13.1 GB),
+heap outside the arena ~4.27 GB live (was ~4.7 GB).
+
+| MB | count | B/each | type |
+| --- | --- | --- | --- |
+| 2179.8 | 25,973,355 | 88 | Symbol |
+| 1293.0 | 5,911 chunks | 229,376 | [ValueSymbolLinks] (24.2M values, 56 B) |
+| 1052.2 | 22,985,698 | 48 | Node |
+| 661.2 | 21,666,011 | 32 | TypeMapper |
+| 441.3 | 9,639,963 | 48 | Type |
+| 348.4 | 13,050,244 | 27 | str (213 MB of it source text, read once) |
+| 337.7 | 3,643,896 | 97 | [P<Symbol>] |
+| 298.3 | 3,007,846 | 104 | ObjectType |
+
+Top live heap stacks now: `IdLinkStore` table for value links 288 MB, `Relation::set` 200 MB, `SymbolTable`
+index maps in `resolve_object_type_members` & co. ~400 MB spread over many stacks, `symbolNodeLinks` table 72 MB,
+other pointer-keyed `LinkStore`s ~100 MB.
+
+## Not done (each < 2% or not behavior-safe)
+
+- `SymbolTable` is an `IndexMap` (insertion-ordered: ~45-60 B per entry incl. stored hash and Vec slack vs ~30 B
+  for Go's map). Replacing it changes iteration order, which ported code depends on for determinism.
+- `Symbol` (88 B) is already smaller than Go's (96 B). `ValueSymbolLinks` values (56 B) are the same fields as Go.
+- Pointer-keyed `LinkStore`s (`mappedSymbolLinks`, `signatureLinks`, `typeNodeLinks`, ...) could move to slot
+  chunks too, but they must stay keyed by pointer (Go does not assign ids there; ids are observable): ~100 MB.
+- `get_union_or_intersection_property` copies `name` for the property cache key (and again for the augmented
+  cache): ~65 MB; the symbol name is not provably the same string, so left as is.
+- ~1.1 GB of the footprint is neither arena nor live heap: malloc retention after ~23 GB of transient heap churn
+  (Vec/HashMap temporaries). Reducing churn is a wall-time topic as much as a memory one.

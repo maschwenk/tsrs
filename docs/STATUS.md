@@ -143,3 +143,10 @@ internal name embeds the id and counts toward the node builder's length budget. 
 12,779). Go's own ids are not deterministic across runs (map iteration), so ids agree as a multiset, not exactly.
 `.symbols` on Project: the first 5,558 files identical (run stopped, hours per side). All 51 workspace packages
 Project depends on: types and symbols identical (1,526 files), counters equal. Details: `notes/fix-project-types.md`.
+
+## 2026-09-30 (later): peak memory
+
+Project peak footprint is now below the Go reference: 15.35 GB `--singleThreaded` (was 19.5; tsgo 16.7) and
+23.35 GB with 4 checkers (was 28.3; tsgo 24.4), counters and conformance unchanged. The largest item was lazy JSDoc
+parsing copying the whole file text per node (3 GB). Opt-in arena/heap allocation profile:
+`--features tsrs_core/alloc-profile` (+ `TSRS_HEAP_PROFILE=1`). Details: `notes/fix-perf-memory.md`.
