@@ -225,3 +225,17 @@ parameters}` with its four 4-byte fields (112 -> 104 bytes). No call site change
 | 4 checkers, after | 7.46-7.61 | 421-423 G | 11.58-11.62 (-0.17) |
 | opt-out single / 4 checkers (go assignment), before | | | 11.56 / 17.62 |
 | opt-out single / 4 checkers (go assignment), after | | | 11.44 / 17.39 |
+
+### Relation cache slots 24 -> 20 bytes
+
+`Relation.results` keys are now `RelationKey` (the same 128 bits as `CacheHashKey`, 4-byte aligned, same `Hash`
+input), so a slot of (key, `u32` result) is 20 bytes. Only `lookup` / `set` / `size` touch the map; nothing
+iterates it.
+
+| run (2 interleaved rounds) | check s | instructions | peak GB |
+| --- | --- | --- | --- |
+| single, before | 18.54-20.45 | 313-314 G | 8.68 |
+| single, after | 18.20-19.19 | 314 G | 8.64 (-0.04) |
+| 4 checkers, before | 7.21-7.22 | 421-422 G | 11.61 |
+| 4 checkers, after | 7.24-7.51 | 421 G | 11.50 (-0.12) |
+| opt-out single / 4 checkers (go assignment), after | | | 11.41 / 17.32 |

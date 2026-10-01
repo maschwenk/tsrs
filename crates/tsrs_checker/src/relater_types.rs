@@ -113,8 +113,26 @@ impl From<P<Type>> for RecursionId {
 
 #[derive(Default)]
 pub struct Relation {
-    pub results: RefCell<FxHashMap<CacheHashKey, RelationComparisonResult>>,
+    pub results: RefCell<FxHashMap<RelationKey, RelationComparisonResult>>,
 }
+
+/// A `CacheHashKey` with 4-byte alignment, so a relation cache slot (key + `u32` result) is 20 bytes instead of 24.
+/// Same bits, same `Hash` input (`hi` then `lo`).
+#[repr(C, packed(4))]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RelationKey {
+    hi: u64,
+    lo: u64,
+}
+
+impl From<CacheHashKey> for RelationKey {
+    #[inline]
+    fn from(k: CacheHashKey) -> Self {
+        RelationKey { hi: k.hi, lo: k.lo }
+    }
+}
+
+const _: () = assert!(std::mem::size_of::<(RelationKey, RelationComparisonResult)>() == 20);
 
 /// Go `TypeDiscriminator`; the `c` field is dropped (methods take `c: &mut Checker`).
 pub struct TypeDiscriminator<'a> {
