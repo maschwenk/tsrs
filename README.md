@@ -34,50 +34,42 @@ Runner: Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EP
 
 # tsrs
 
-A Rust port of the TypeScript 7 type checker (the Go implementation in
-[microsoft/TypeScript](https://github.com/microsoft/TypeScript), `tsc/internal`, at commit
-`b85298b6a81f`). Type checking only: no emit, no language service.
+A Rust port of the TypeScript 7 type checker. It is `tsc --noEmit`: same flags, same tsconfig, same diagnostics,
+byte for byte. No emit, no language service.
 
-This is a derivative work of TypeScript, which is licensed under Apache-2.0 (see `LICENSE`);
-the bundled `lib.*.d.ts` files and the structure of the code come from that project.
+It ports the Go implementation in [microsoft/TypeScript](https://github.com/microsoft/TypeScript) (`tsc/internal`)
+at commit `b85298b6a81f` function for function, and the Go code is the specification: on the TypeScript conformance
+suite the output matches the reference on 13,458 of 13,462 error baselines and on all 12,779 `.types` and `.symbols`
+baselines; the four exceptions are test-harness artifacts. `docs/STATUS.md` has the details and the comparison on a
+38k-file production codebase.
 
-## Provenance
+## Use it
 
-- **Derivative work.** tsrs is a port of microsoft/TypeScript (Copyright Microsoft Corporation), licensed under
-  Apache-2.0 like the original (`LICENSE`, `NOTICE`). The bundled `lib.*.d.ts` files are TypeScript's, unchanged, and
-  the structure and names of the code follow the Go sources. This project is not affiliated with
-  or endorsed by Microsoft.
-- **The Go implementation is the specification.** Functions correspond one to one to Go functions at the pinned commit
-  (`Cargo.toml` `[workspace.metadata.typescript]`); behavior that differs from Go is a bug, including message text
-  and diagnostic order. The only intended deviations are internal (memory layout, lazy member resolution that can be
-  switched off with `--noLazyMembers`), and they must not change any diagnostic.
-- **How it was written.** The port was produced with heavy use of AI coding agents, directed and reviewed by Max
-  Schwenk. Correctness is established by evidence rather than by review alone: the TypeScript conformance suite's
-  reference baselines, Go oracle programs under `tools/oracle/` that compare scanner, parser, binder, module
-  resolution, printer and `.types`/`.symbols` output against the Go code, checker counters that equal the reference
-  exactly, mutation testing on a large private codebase, and the benchmark projects above. `docs/STATUS.md` has the
-  numbers and how each was measured.
+```sh
+npx -y @maschwenk/tsrs -p path/to/project        # macOS arm64/x64, Linux x64
+npx -y @maschwenk/tsrs -p . --singleThreaded     # one checker thread (less memory)
+```
 
-## Layout
+or `pnpm add -D @maschwenk/tsrs` and run `tsrs` from scripts. `--extendedDiagnostics` prints the usual counters.
+By default tsrs resolves class and interface members lazily (a port of upstream PRs
+[#64475](https://github.com/microsoft/TypeScript/pull/64475) and
+[#64526](https://github.com/microsoft/TypeScript/pull/64526) plus follow-ups); `--noLazyMembers` gives the
+reference-identical mode. Neither changes any diagnostic.
 
-- `docs/PORTING.md` — porting conventions
-- `docs/AST.md`, `docs/CHECKER.md` — crate contracts
-- `crates/` — the port, one crate per Go package group
-- `tools/` — generators and Go oracle programs used to compare against the reference implementation
-- `npm/` — the npm packages (`@maschwenk/tsrs` + per-platform binaries), versioning and the release workflow
-- `CONTRIBUTING.md` — building, running the suite, and how changes land
-
-## Usage
+## Build from source
 
 ```sh
 cargo build --release -p tsrs_cli -p tsrs_testrunner
-./target/release/tsrs -p path/to/project            # like `tsc --noEmit`; 4 checker threads by default
-./target/release/tsrs -p path/to/project --singleThreaded --extendedDiagnostics
-./target/release/tsrs-test run --suite all           # TypeScript conformance suite, error baselines
-./target/release/tsrs-test run --suite all --baselines types,symbols
+./target/release/tsrs -p path/to/project
+./target/release/tsrs-test run --suite all --baselines types,symbols   # conformance suite, ~20 s
 ```
 
-From npm (once published): `pnpm add -D @maschwenk/tsrs`, then `pnpm exec tsrs -p path/to/project`; see `npm/README.md`.
+`CONTRIBUTING.md` covers the workflow; `docs/PORTING.md`, `docs/AST.md` and `docs/CHECKER.md` the conventions;
+`tools/oracle/` the Go oracle programs that compare each stage against the reference.
 
-`docs/STATUS.md` has the current conformance numbers and the comparison against the reference compiler on a
-38k-file private TypeScript monorepo (5.9M lines); `docs/DEBUGGING.md` describes the fix workflow and the oracles under `tools/oracle/`.
+## Provenance
+
+Derivative work of microsoft/TypeScript (Copyright Microsoft Corporation), Apache-2.0 like the original
+(`LICENSE`, `NOTICE`); the bundled `lib.*.d.ts` files are TypeScript's. Not affiliated with or endorsed by
+Microsoft. The port was written largely by AI coding agents directed and reviewed by Max Schwenk; its correctness
+rests on the evidence above rather than on review alone.
