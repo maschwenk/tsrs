@@ -51,10 +51,19 @@ npx -y @maschwenk/tsrs -p . --singleThreaded     # one checker thread (less memo
 ```
 
 or `pnpm add -D @maschwenk/tsrs` and run `tsrs` from scripts. `--extendedDiagnostics` prints the usual counters.
-By default tsrs resolves class and interface members lazily (a port of upstream PRs
-[#64475](https://github.com/microsoft/TypeScript/pull/64475) and
-[#64526](https://github.com/microsoft/TypeScript/pull/64526) plus follow-ups); `--noLazyMembers` gives the
-reference-identical mode. Neither changes any diagnostic.
+By default tsrs also runs with checker changes that are not merged upstream yet; `--noLazyMembers` turns them
+off and gives the reference-identical mode. None of them changes any diagnostic (verified on the whole conformance
+suite, errors, types and symbols):
+
+* [build member tables of instantiated classes/interfaces lazily (microsoft/TypeScript#64475)](https://github.com/microsoft/TypeScript/pull/64475)
+* [build members of keyof mapped types lazily (microsoft/TypeScript#64526)](https://github.com/microsoft/TypeScript/pull/64526)
+* [give tuple references lazy member tables](upstream/pr-01-tuple-lazy-tables.md)
+* [answer empty-object checks from lazy member tables](upstream/pr-02-empty-object-lazy-tables.md)
+* [find unmatched properties without instantiating a lazy target's members](upstream/pr-03-unmatched-properties-lazy-target.md)
+* [don't copy union/intersection properties into the augmented property cache](upstream/pr-04-union-property-cache.md)
+* [instantiate conditional types without a combined mapper for the cache lookup](upstream/pr-05-conditional-instantiation-mapper.md)
+
+The last five are Go patches prepared from this port, not yet opened upstream (`upstream/`).
 
 ## Build from source
 
