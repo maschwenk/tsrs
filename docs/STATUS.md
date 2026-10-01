@@ -128,3 +128,18 @@ Project (`declaration: false`, so the pipeline does not run): 0 errors, counters
 16,200,921 types / 89,981,648 instantiations with 4 checkers). Wall times versus main measured back to back on a
 loaded machine (load average ~14) were within noise in both directions (4 checkers: 22.3/27.0 s main vs 39.4/34.2 s;
 single-threaded: 58.9/56.3 s main vs 43.9/46.7 s).
+
+## 2026-09-30 (later): Project `.types` / `.symbols` walk
+
+`tsrs-test types-dump` and the Go oracle `tools/oracle/project-types` run the conformance `.types`/`.symbols` walk
+(printed type / resolved symbol of every expression and declaration) over every non-`node_modules` file of a tsconfig
+project, single-threaded, after `tsc`-style checking; `tools/project-types-compare.py` compares them. Project: 28,213
+files, 16.5M baseline lines; first run **28,207 / 28,213 files identical** (18 lines in 6 files differ), symbol and
+type counters equal. The 6 files print >1 MB `vi.mocked(..., { partial: true, deep: true })` types whose truncation
+point depended on **symbol ids**: Go assigns ids on every `valueSymbolLinks` / `symbolNodeLinks` access (those stores
+are id-keyed) and binds files in reverse order when single-threaded (LIFO work group); a well-known-symbol property's
+internal name embeds the id and counts toward the node builder's length budget. Both fixed (regression
+`testdata/regressions/unique-symbol-name-truncation`); conformance unchanged (13,458 / types 12,779 / symbols
+12,779). Go's own ids are not deterministic across runs (map iteration), so ids agree as a multiset, not exactly.
+`.symbols` on Project: the first 5,558 files identical (run stopped, hours per side). All 51 workspace packages
+Project depends on: types and symbols identical (1,526 files), counters equal. Details: `notes/fix-project-types.md`.
