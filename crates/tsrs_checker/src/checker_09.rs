@@ -354,6 +354,7 @@ impl CacheHashKey {
 
 impl keyBuilder {
     // checker.go:17713
+    #[inline]
     pub(crate) fn hash(&self) -> CacheHashKey {
         match &self.overflow_buffer {
             None => CacheHashKey::hash_128(&self.inline_buffer[..self.inline_length as usize]),
@@ -368,6 +369,8 @@ impl keyBuilder {
     // spill moves the buffered bytes onto the end of overflowBuffer, so the key's byte
     // stream stays overflowBuffer followed by inlineBuffer.
     // checker.go:17722
+    #[cold]
+    #[inline(never)]
     pub(crate) fn spill(&mut self) {
         let n = self.inline_length as usize;
         let inline = self.inline_buffer;
@@ -376,6 +379,7 @@ impl keyBuilder {
     }
 
     // checker.go:17727
+    #[inline]
     pub(crate) fn write_byte(&mut self, c: u8) {
         if self.inline_length as usize == self.inline_buffer.len() {
             self.spill();
@@ -385,6 +389,7 @@ impl keyBuilder {
     }
 
     // checker.go:17735
+    #[inline]
     pub(crate) fn write_string(&mut self, s: &str) {
         if self.inline_length as usize + s.len() > self.inline_buffer.len() {
             self.spill();
@@ -399,6 +404,7 @@ impl keyBuilder {
     }
 
     // checker.go:17746
+    #[inline]
     pub(crate) fn write_uint32(&mut self, v: u32) {
         if self.inline_length as usize + 4 > self.inline_buffer.len() {
             self.spill();
@@ -409,6 +415,7 @@ impl keyBuilder {
     }
 
     // checker.go:17754
+    #[inline]
     pub(crate) fn write_uint64(&mut self, v: u64) {
         if self.inline_length as usize + 8 > self.inline_buffer.len() {
             self.spill();
@@ -419,22 +426,26 @@ impl keyBuilder {
     }
 
     // checker.go:17762
+    #[inline]
     pub(crate) fn write_int(&mut self, value: i32) {
         // Go `uint64(value)` of a (64-bit) int: sign-extend
         self.write_uint64(value as i64 as u64);
     }
 
     // checker.go:17766
+    #[inline]
     pub(crate) fn write_symbol(&mut self, s: P<Symbol>) {
         self.write_uint64(get_symbol_id(s).0);
     }
 
     // checker.go:17770
+    #[inline]
     pub(crate) fn write_type(&mut self, t: P<Type>) {
         self.write_uint32(t.id.0);
     }
 
     // checker.go:17774
+    #[inline]
     pub(crate) fn write_types(&mut self, types: &[P<Type>]) {
         self.write_int(types.len() as i32);
         for &t in types {
@@ -443,6 +454,7 @@ impl keyBuilder {
     }
 
     // checker.go:17781
+    #[inline]
     pub(crate) fn write_alias(&mut self, alias: Option<P<TypeAlias>>) {
         self.write_alias_arg(alias.into());
     }
@@ -509,11 +521,13 @@ impl keyBuilder {
     }
 
     // checker.go:17826
+    #[inline]
     pub(crate) fn write_node_id(&mut self, id: NodeId) {
         self.write_uint64(id.0);
     }
 
     // checker.go:17830
+    #[inline]
     pub(crate) fn write_node(&mut self, node: Option<P<Node>>) {
         if let Some(node) = node {
             self.write_node_id(get_node_id(node));
