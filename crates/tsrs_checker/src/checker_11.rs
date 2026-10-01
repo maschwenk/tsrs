@@ -989,15 +989,23 @@ impl Checker {
     // checker.go:22571
     pub(crate) fn push_active_mapper(&mut self, mapper: P<TypeMapper>) {
         self.active_mappers.push(mapper);
-        // Go reuses a cleared map left in the slice capacity by popActiveMapper; a fresh map is equivalent.
-        self.active_type_mappers_caches.push(FxHashMap::default());
+        // Go reuses a cleared map left in the slice capacity by popActiveMapper (here: a pool of cleared maps).
+        let cache = self.free_type_mapper_caches.pop().unwrap_or_default();
+        self.active_type_mappers_caches.push(cache);
     }
 
     // checker.go:22586
     pub(crate) fn pop_active_mapper(&mut self) {
         self.active_mappers.pop();
         // Go clears the map and leaves it in the list for later reuse.
-        self.active_type_mappers_caches.pop();
+        let mut cache = self.active_type_mappers_caches.pop().unwrap();
+        if cache.capacity() > 64 && cache.capacity() > 4 * cache.len() {
+            // A table one large instantiation grew is not worth clearing (clearing touches every bucket).
+            cache = FxHashMap::default();
+        } else {
+            cache.clear();
+        }
+        self.free_type_mapper_caches.push(cache);
     }
 
     // checker.go:22596

@@ -1124,6 +1124,7 @@ pub struct Checker {
     pub packages_map: Option<FxHashMap<String, bool>>, // Go nil map = not computed
     pub active_mappers: Vec<P<TypeMapper>>,
     pub active_type_mappers_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>,
+    pub free_type_mapper_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
     pub ambient_modules_once: bool, // Go sync.Once: true once ambient_modules has been computed
     pub ambient_modules: Vec<P<Symbol>>,
     pub within_unreachable_code: bool,
@@ -1475,6 +1476,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         packages_map: None,
         active_mappers: Vec::new(),
         active_type_mappers_caches: Vec::new(),
+        free_type_mapper_caches: Vec::new(),
         ambient_modules_once: false,
         ambient_modules: Vec::new(),
         within_unreachable_code: false,
