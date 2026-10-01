@@ -1,9 +1,15 @@
 use rustc_hash::FxHashSet;
 use std::hash::Hash;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Set<T: Hash + Eq> {
     pub m: FxHashSet<T>,
+}
+
+impl<T: Hash + Eq> Default for Set<T> {
+    fn default() -> Self {
+        Set { m: FxHashSet::default() }
+    }
 }
 
 pub fn new_set_with_size_hint<T: Hash + Eq>(hint: usize) -> Set<T> {

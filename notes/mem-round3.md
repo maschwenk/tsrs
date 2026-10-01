@@ -56,3 +56,22 @@ TypeAlloc<ObjectType> 96 -> 56 bytes, <TypeReference> 120 -> 80, <UnionType> 160
 | 4 checkers, before | 9.39-9.48 (9.410) | 435-439 G |
 | 4 checkers, after | 9.13-9.15 (9.151, -0.26) | 435-439 G |
 | opt-out single / 4 checkers (go assignment), after | 9.35 / 14.30 | 348 / 523 G |
+
+### A2. Relation cache keys: type-id pairs packed into 8-byte slots
+
+Go keys the relation caches by the 128-bit xxh3 hash of the `getRelationKey` bytes. The simple form
+(`'s'`, source id, target id, intersection state; 99.7% of keys) is a triple of small numbers, so
+`get_relation_key` now returns `RelationKey::Pair` (source id, target id below 2^28, state below 2^2, packed into
+58 bits; an injective mapping) without building and hashing the key bytes, and `RelationKey::Hashed` (the same
+128-bit hash as before) for everything else. `Relation` keeps the pairs in a `hashbrown::HashTable<u64>` whose slot
+is `key << 6 | result bits` (8 bytes + 1 control byte per slot instead of 17 + 1) and the hashed keys in the
+previous map; `size()` counts both. The relater's maybe-key stack and set hold `RelationKey`s. The forms never
+alias each other: Go's `'s'` and `'g'` byte strings differ, and a simple key is `Pair` exactly when it fits.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before (A1) | 6.852-6.858 (6.852) | 321-323 G |
+| single, after | 6.766-6.770 (6.768, -0.08) | 320-321 G |
+| 4 checkers, before (A1) | 9.13-9.18 (9.148) | 435-436 G |
+| 4 checkers, after | 8.965-8.991 (8.971, -0.18) | 432-434 G (-0.8%) |
+| opt-out single / 4 checkers (go assignment), after | 9.26 / 14.12 | 344 / 515 G (-1.2%, -1.6%) |

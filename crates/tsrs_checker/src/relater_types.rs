@@ -111,28 +111,58 @@ impl From<P<Type>> for RecursionId {
     }
 }
 
+/// Go's relation cache, `map[CacheHashKey]RelationComparisonResult`, in two tables by key form (see `RelationKey`).
 #[derive(Default)]
 pub struct Relation {
-    pub results: RefCell<FxHashMap<RelationKey, u8>>, // RelationComparisonResult bits (all below 2^8)
+    /// `RelationKey::Pair` keys: each slot is `key << RELATION_RESULT_BITS | result bits` (8 bytes).
+    pub(crate) pairs: RefCell<hashbrown::HashTable<u64>>,
+    /// `RelationKey::Hashed` keys -> result bits.
+    pub(crate) hashed: RefCell<FxHashMap<PackedHashKey, u8>>,
 }
 
-/// A `CacheHashKey` without alignment, so a relation cache slot (key + the result's `u8` bits) is 17 bytes instead
-/// of 24. Same bits, same `Hash` input (`hi` then `lo`).
+/// `RelationComparisonResult` uses bits 0-5.
+pub(crate) const RELATION_RESULT_BITS: u32 = 6;
+
+/// A relation cache key. Go hashes the key bytes of `getRelationKey` to a 128-bit `CacheHashKey`. Almost every key
+/// (99.7% on Project) is the simple form `'s', source id, target id, intersection state`, which is a triple of
+/// small numbers: when the ids are below 2^28 and the state below 2^2 it is packed into 58 bits as `Pair` (an
+/// injective mapping, no hashing). Every other key (the `'g'` form of generic references, larger ids) is
+/// `Hashed`, the same 128-bit hash Go uses. The two forms never denote the same Go key, since the simple form only
+/// ever produces `Pair` keys when it fits and Go's `'s'` and `'g'` byte strings differ.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum RelationKey {
+    Pair(u64),
+    Hashed(CacheHashKey),
+}
+
+impl RelationKey {
+    const ID_BITS: u32 = 28;
+
+    /// The `Pair` form of the simple key, if the triple fits.
+    #[inline]
+    pub(crate) fn pair(source: TypeId, target: TypeId, intersection_state: IntersectionState) -> Option<RelationKey> {
+        let (s, t, i) = (source.0 as u64, target.0 as u64, intersection_state.bits() as u64);
+        (s >> Self::ID_BITS == 0 && t >> Self::ID_BITS == 0 && i >> 2 == 0).then(|| RelationKey::Pair(s | t << Self::ID_BITS | i << (2 * Self::ID_BITS)))
+    }
+}
+
+/// A `CacheHashKey` without alignment, so a hashed-key slot (key + the result's `u8` bits) is 17 bytes instead of
+/// 24. Same bits, same `Hash` input (`hi` then `lo`).
 #[repr(C, packed)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RelationKey {
+pub struct PackedHashKey {
     hi: u64,
     lo: u64,
 }
 
-impl From<CacheHashKey> for RelationKey {
+impl From<CacheHashKey> for PackedHashKey {
     #[inline]
     fn from(k: CacheHashKey) -> Self {
-        RelationKey { hi: k.hi, lo: k.lo }
+        PackedHashKey { hi: k.hi, lo: k.lo }
     }
 }
 
-const _: () = assert!(std::mem::size_of::<(RelationKey, u8)>() == 17);
+const _: () = assert!(std::mem::size_of::<(PackedHashKey, u8)>() == 17);
 
 /// Go `TypeDiscriminator`; the `c` field is dropped (methods take `c: &mut Checker`).
 pub struct TypeDiscriminator<'a> {
@@ -167,8 +197,8 @@ pub struct Relater {
     pub error_node: Cell<Option<P<Node>>>,
     pub error_chain: Cell<Option<P<ErrorChain>>>,
     pub related_info: RefCell<Vec<P<Diagnostic>>>,
-    pub maybe_keys: RefCell<Vec<CacheHashKey>>,
-    pub maybe_keys_set: RefCell<Set<CacheHashKey>>,
+    pub maybe_keys: RefCell<Vec<RelationKey>>,
+    pub maybe_keys_set: RefCell<Set<RelationKey>>,
     pub source_stack: RefCell<Vec<P<Type>>>,
     pub target_stack: RefCell<Vec<P<Type>>>,
     pub maybe_count: Cell<i32>,

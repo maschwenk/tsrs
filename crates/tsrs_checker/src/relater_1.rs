@@ -28,20 +28,49 @@ pub(crate) fn as_recursion_id<T: Into<RecursionId>>(value: T) -> RecursionId {
     value.into()
 }
 
+const RELATION_RESULT_MASK: u64 = (1 << RELATION_RESULT_BITS) - 1;
+
+#[inline]
+fn pair_slot_hash(key: u64) -> u64 {
+    use std::hash::BuildHasher;
+    rustc_hash::FxBuildHasher.hash_one(key)
+}
+
 impl Relation {
     // relater.go:102
-    pub(crate) fn lookup(&self, key: CacheHashKey) -> RelationComparisonResult {
-        self.results.borrow().get(&RelationKey::from(key)).map_or(RelationComparisonResult::None, |&bits| RelationComparisonResult::from_bits_retain(bits as u32))
+    pub(crate) fn lookup(&self, key: RelationKey) -> RelationComparisonResult {
+        let bits = match key {
+            RelationKey::Pair(k) => self.pairs.borrow().find(pair_slot_hash(k), |&slot| slot >> RELATION_RESULT_BITS == k).map(|&slot| slot & RELATION_RESULT_MASK),
+            RelationKey::Hashed(k) => self.hashed.borrow().get(&PackedHashKey::from(k)).map(|&bits| bits as u64),
+        };
+        bits.map_or(RelationComparisonResult::None, |bits| RelationComparisonResult::from_bits_retain(bits as u32))
     }
 
     // relater.go:106
-    pub(crate) fn set(&self, key: CacheHashKey, result: RelationComparisonResult) {
-        self.results.borrow_mut().insert(RelationKey::from(key), u8::try_from(result.bits()).expect("relation result bits above u8"));
+    pub(crate) fn set(&self, key: RelationKey, result: RelationComparisonResult) {
+        let bits = result.bits() as u64;
+        assert!(bits <= RELATION_RESULT_MASK, "relation result bits above {RELATION_RESULT_BITS}");
+        match key {
+            RelationKey::Pair(k) => {
+                let slot = k << RELATION_RESULT_BITS | bits;
+                let mut pairs = self.pairs.borrow_mut();
+                let hash = pair_slot_hash(k);
+                match pairs.find_mut(hash, |&slot| slot >> RELATION_RESULT_BITS == k) {
+                    Some(existing) => *existing = slot,
+                    None => {
+                        pairs.insert_unique(hash, slot, |&slot| pair_slot_hash(slot >> RELATION_RESULT_BITS));
+                    }
+                }
+            }
+            RelationKey::Hashed(k) => {
+                self.hashed.borrow_mut().insert(PackedHashKey::from(k), bits as u8);
+            }
+        }
     }
 
     // relater.go:113
     pub(crate) fn size(&self) -> i32 {
-        self.results.borrow().len() as i32
+        (self.pairs.borrow().len() + self.hashed.borrow().len()) as i32
     }
 }
 

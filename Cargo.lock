@@ -289,6 +289,7 @@ name = "tsrs_checker"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "hashbrown",
  "indexmap",
  "rustc-hash",
  "tsrs_ast",

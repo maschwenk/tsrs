@@ -640,7 +640,7 @@ pub(crate) fn get_conditional_type_key(type_arguments: &[P<Type>], alias: Option
 }
 
 // checker.go:17953
-pub(crate) fn get_relation_key(c: &mut Checker, source: P<Type>, target: P<Type>, intersection_state: IntersectionState, is_identity: bool, ignore_constraints: bool) -> (CacheHashKey, bool) {
+pub(crate) fn get_relation_key(c: &mut Checker, source: P<Type>, target: P<Type>, intersection_state: IntersectionState, is_identity: bool, ignore_constraints: bool) -> (RelationKey, bool) {
     let (mut source, mut target) = (source, target);
     if is_identity && source.id > target.id {
         std::mem::swap(&mut source, &mut target);
@@ -651,13 +651,17 @@ pub(crate) fn get_relation_key(c: &mut Checker, source: P<Type>, target: P<Type>
         b.write_byte(b'g');
         constrained = b.write_generic_type_references(c, source, target, ignore_constraints);
     } else {
+        // The simple key `'s', source id, target id, intersection state`, packed when it fits (`RelationKey`).
+        if let Some(key) = RelationKey::pair(source.id, target.id, intersection_state) {
+            return (key, false);
+        }
         b.write_byte(b's');
         b.write_type(source);
         b.write_type(target);
         constrained = false;
     }
     b.write_uint32(intersection_state.bits());
-    (b.hash(), constrained)
+    (RelationKey::Hashed(b.hash()), constrained)
 }
 
 // checker.go:17971
