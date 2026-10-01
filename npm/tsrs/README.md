@@ -13,7 +13,7 @@ pnpm exec tsrs --checkers 8                    # checker threads (default 4); --
 pnpm exec tsrs --version
 ```
 
-Supported platforms: macOS arm64/x64, Linux x64/arm64 (glibc), Windows x64. The binary comes from the optional
+Supported platforms: macOS arm64/x64, Linux x64 (glibc). The binary comes from the optional
 dependency `@maschwenk/tsrs-<os>-<arch>`, installed automatically for the current platform. To run a locally built
 binary through the same launcher, set `TSRS_BINARY=/path/to/tsrs`.
 
