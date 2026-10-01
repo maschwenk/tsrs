@@ -147,6 +147,7 @@ function main() {
         console.log(versions[opts.print]);
         return;
     }
+    if (opts.checkTag !== undefined && opts.binaries.size === 0) return;
     if (opts.binaries.size === 0) usage("no binaries given (--binary or --artifacts)");
 
     const template = JSON.parse(fs.readFileSync(path.join(npmDir, "tsrs", "package.json"), "utf8"));
