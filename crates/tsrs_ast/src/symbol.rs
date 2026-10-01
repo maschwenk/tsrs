@@ -201,9 +201,122 @@ const SYMBOL_TABLE_LINEAR_MAX: usize = 16;
 
 #[derive(Default, Clone)]
 struct SymbolMap {
-    entries: Vec<SymbolMapEntry>,
+    entries: EntryVec,
     extra: Option<Box<SymbolMapExtra>>,
 }
+
+const _: () = assert!(std::mem::size_of::<SymbolMap>() == 24);
+
+/// `Vec<SymbolMapEntry>` with a `u32` length and capacity (16 bytes instead of 24; 3.5M symbol tables on Project).
+/// Grows like `Vec` (`push` doubles from 4; `reserve_exact` adds exactly).
+struct EntryVec {
+    ptr: std::ptr::NonNull<SymbolMapEntry>,
+    len: u32,
+    cap: u32,
+}
+
+impl Default for EntryVec {
+    fn default() -> Self {
+        EntryVec { ptr: std::ptr::NonNull::dangling(), len: 0, cap: 0 }
+    }
+}
+
+impl EntryVec {
+    fn with_capacity(n: usize) -> EntryVec {
+        let mut v = EntryVec::default();
+        v.reserve_exact(n);
+        v
+    }
+
+    #[inline]
+    fn capacity(&self) -> usize {
+        self.cap as usize
+    }
+
+    fn layout(cap: usize) -> std::alloc::Layout {
+        std::alloc::Layout::array::<SymbolMapEntry>(cap).expect("symbol table too large")
+    }
+
+    /// Makes room for at least `additional` more entries, allocating exactly that much when it grows.
+    fn reserve_exact(&mut self, additional: usize) {
+        let needed = self.len as usize + additional;
+        if needed > self.cap as usize {
+            self.set_capacity(needed);
+        }
+    }
+
+    fn set_capacity(&mut self, cap: usize) {
+        let cap32 = u32::try_from(cap).expect("symbol table with more than u32::MAX entries");
+        let ptr = if self.cap == 0 {
+            // SAFETY: `cap` > 0 entries of a non-zero-sized type.
+            unsafe { std::alloc::alloc(Self::layout(cap)) }
+        } else {
+            // SAFETY: `ptr` was allocated with the layout of `self.cap` entries.
+            unsafe { std::alloc::realloc(self.ptr.as_ptr().cast(), Self::layout(self.cap as usize), Self::layout(cap).size()) }
+        };
+        self.ptr = std::ptr::NonNull::new(ptr.cast()).unwrap_or_else(|| std::alloc::handle_alloc_error(Self::layout(cap)));
+        self.cap = cap32;
+    }
+
+    #[inline]
+    fn push(&mut self, e: SymbolMapEntry) {
+        if self.len == self.cap {
+            self.set_capacity((self.cap as usize * 2).max(4));
+        }
+        // SAFETY: `len` < `cap`.
+        unsafe { self.ptr.as_ptr().add(self.len as usize).write(e) };
+        self.len += 1;
+    }
+
+    fn remove(&mut self, i: usize) {
+        let len = self.len as usize;
+        assert!(i < len, "removal index out of bounds");
+        // SAFETY: `i` < `len`; the entries are `Copy`.
+        unsafe { std::ptr::copy(self.ptr.as_ptr().add(i + 1), self.ptr.as_ptr().add(i), len - i - 1) };
+        self.len -= 1;
+    }
+}
+
+impl std::ops::Deref for EntryVec {
+    type Target = [SymbolMapEntry];
+    #[inline]
+    fn deref(&self) -> &[SymbolMapEntry] {
+        // SAFETY: the first `len` entries are initialized (dangling and empty when `cap` is 0).
+        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len as usize) }
+    }
+}
+
+impl std::ops::DerefMut for EntryVec {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut [SymbolMapEntry] {
+        // SAFETY: as in `deref`, and `&mut self` is unique.
+        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len as usize) }
+    }
+}
+
+impl Clone for EntryVec {
+    /// Like `Vec::clone`: capacity equal to the length.
+    fn clone(&self) -> EntryVec {
+        let mut v = EntryVec::with_capacity(self.len as usize);
+        for &e in self.iter() {
+            v.push(e);
+        }
+        v
+    }
+}
+
+impl Drop for EntryVec {
+    fn drop(&mut self) {
+        if self.cap != 0 {
+            // SAFETY: allocated with the layout of `cap` entries.
+            unsafe { std::alloc::dealloc(self.ptr.as_ptr().cast(), Self::layout(self.cap as usize)) };
+        }
+    }
+}
+
+// SAFETY: an `EntryVec` owns its buffer like a `Vec` (entries are plain words).
+unsafe impl Send for EntryVec {}
+unsafe impl Sync for EntryVec {}
 
 /// One word: the symbol's address / 8 in the low 45 bits (symbols are 8-aligned and user-space addresses are below
 /// 2^48; checked on store), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
@@ -312,7 +425,7 @@ impl SymbolMap {
     fn with_capacity(n: usize) -> SymbolMap {
         let extra = (n > SYMBOL_TABLE_LINEAR_MAX)
             .then(|| Box::new(SymbolMapExtra { index: Some(HashTable::with_capacity(n)), odd_keys: Vec::new() }));
-        SymbolMap { entries: Vec::with_capacity(n), extra }
+        SymbolMap { entries: EntryVec::with_capacity(n), extra }
     }
 
     #[inline]

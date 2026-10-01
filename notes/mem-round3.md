@@ -304,3 +304,17 @@ a miss and bounds-checked the chunk access retired +0.6% instructions; this one 
 | 4 checkers, before (A9) | 8.10-8.14 (8.102) | 430-431 G |
 | 4 checkers, after | 8.05-8.10 (8.096, -0.01) | 431-432 G |
 | opt-out single / 4 checkers (go assignment), after | 8.04 / 12.43 | 341 / 518 G |
+
+### A11. Symbol table header 32 -> 24 bytes
+
+3.49M `SymbolTable`s on Project single (arena, 32 bytes each: a `Vec` of entries plus the boxed index/odd-key
+extra). The entries are now an `EntryVec`: pointer plus `u32` length and capacity, same growth as `Vec` (`push`
+doubles from 4, `reserve_exact` adds exactly, `clone` allocates the length). `SymbolMap` 24 bytes.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before (A10) | 6.048-6.054 (6.050) | 316 G |
+| single, after | 6.013-6.029 (6.013, -0.04) | 316-317 G |
+| 4 checkers, before (A10) | 8.097-8.111 (8.109) | 431-433 G |
+| 4 checkers, after | 8.036-8.068 (8.046, -0.06) | 431-432 G |
+| opt-out single / 4 checkers (go assignment), after | 8.01 / 12.37 | 340 / 518 G |
