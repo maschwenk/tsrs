@@ -770,6 +770,27 @@ pub struct Checker {
     pub lazy_members: bool,
     /// notes/mem-lazy.md L1: tuple references get lazy member tables too.
     pub lazy_tuples: bool,
+    /// site-counts profile: creation site of each instantiated symbol until its type is resolved.
+    #[cfg(feature = "site-counts")]
+    pub inst_symbol_sites: FxHashMap<P<Symbol>, &'static std::panic::Location<'static>>,
+    /// notes/mem-lazy.md L5: conditional type instantiation without the composite mapper.
+    pub lazy_cond_mapper: bool,
+    /// notes/mem-lazy.md L3: shape queries on unresolved anonymous instantiations ask the target.
+    pub lazy_anon_shapes: bool,
+    /// notes/mem-lazy.md L2: somePropertyReducesToNever walks names of lazy constituents.
+    pub lazy_reduce_names: bool,
+    /// notes/mem-lazy.md L6: union/intersection property caches without the eager copy.
+    pub lazy_prop_cache: bool,
+    /// notes/mem-lazy.md L4: every-property queries on lazy mapped tables.
+    pub lazy_mapped_every: bool,
+    /// notes/mem-lazy.md L8: no eager base property resolution in prepareLazyMembers.
+    pub lazy_base_props: bool,
+    /// notes/mem-lazy.md L9: existence-only property queries in getUnmatchedProperties.
+    pub lazy_has_prop: bool,
+    /// notes/mem-lazy.md L10: getUnmatchedProperties walks lazy targets.
+    pub lazy_unmatched: bool,
+    /// notes/mem-lazy.md L11: empty-object tests on lazy tables.
+    pub lazy_empty: bool,
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
     /// Instrumentation (feature `assignment-stats`): every type / symbol this checker created.
     #[cfg(feature = "assignment-stats")]
@@ -1112,6 +1133,17 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_mapped_tables: FxHashMap::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
         lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
+        #[cfg(feature = "site-counts")]
+        inst_symbol_sites: FxHashMap::default(),
+        lazy_cond_mapper: tsrs_core::lazymembers::lazy_cond_mapper(),
+        lazy_anon_shapes: tsrs_core::lazymembers::lazy_anon_shapes(),
+        lazy_reduce_names: tsrs_core::lazymembers::lazy_reduce_names(),
+        lazy_prop_cache: tsrs_core::lazymembers::lazy_prop_cache(),
+        lazy_mapped_every: tsrs_core::lazymembers::lazy_mapped_every(),
+        lazy_base_props: tsrs_core::lazymembers::lazy_base_props(),
+        lazy_has_prop: tsrs_core::lazymembers::lazy_has_prop(),
+        lazy_unmatched: tsrs_core::lazymembers::lazy_unmatched(),
+        lazy_empty: tsrs_core::lazymembers::lazy_empty(),
         lazy_member_stats: Default::default(),
         #[cfg(feature = "assignment-stats")]
         stats_created: Default::default(),

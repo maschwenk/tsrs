@@ -21,6 +21,18 @@ mod imp {
         *guard.get_or_insert_with(FxHashMap::default).entry((kind, label, loc)).or_insert(0) += 1;
     }
 
+    #[track_caller]
+    pub fn hit_n(kind: &'static str, label: &'static str, n: u64) {
+        let loc = Location::caller();
+        let mut guard = COUNTS.lock().unwrap();
+        *guard.get_or_insert_with(FxHashMap::default).entry((kind, label, loc)).or_insert(0) += n;
+    }
+
+    pub fn hit_at(kind: &'static str, label: &'static str, loc: &'static Location<'static>) {
+        let mut guard = COUNTS.lock().unwrap();
+        *guard.get_or_insert_with(FxHashMap::default).entry((kind, label, loc)).or_insert(0) += 1;
+    }
+
     pub fn dump() {
         let top: usize = std::env::var("TSRS_SITE_COUNTS_TOP").ok().and_then(|v| v.parse().ok()).unwrap_or(40);
         let guard = COUNTS.lock().unwrap();
@@ -59,11 +71,15 @@ mod imp {
 }
 
 #[cfg(feature = "site-counts")]
-pub use imp::{dump, hit};
+pub use imp::{dump, hit, hit_at, hit_n};
 
 #[cfg(not(feature = "site-counts"))]
 #[inline(always)]
 pub fn hit(_kind: &'static str, _label: &'static str) {}
+
+#[cfg(not(feature = "site-counts"))]
+#[inline(always)]
+pub fn hit_n(_kind: &'static str, _label: &'static str, _n: u64) {}
 
 #[cfg(not(feature = "site-counts"))]
 pub fn dump() {}

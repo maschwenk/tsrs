@@ -17,6 +17,9 @@ impl Checker {
     // checker.go:21769
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_union_or_intersection_property(&mut self, t: P<Type>, name: &str, skip_object_function_property_augment: bool) -> Option<P<Symbol>> {
+        if self.lazy_prop_cache {
+            return self.get_union_or_intersection_property_lazy_cache(t, name, skip_object_function_property_augment);
+        }
         let cache = if skip_object_function_property_augment {
             ast::get_symbol_table(&t.as_union_or_intersection_type().property_cache_without_function_property_augment)
         } else {
@@ -37,6 +40,38 @@ impl Checker {
                 if augmented_cache.lookup(name).is_none() {
                     augmented_cache.set(key, prop);
                 }
+            }
+        }
+        prop
+    }
+
+    // notes/mem-lazy.md L6: the same lookups without allocating a cache before there is something to store, and
+    // without copying non-partial entries of the non-augmented cache into the augmented one: an augmented lookup
+    // that misses reads them from the non-augmented cache, which is what the copy would have given it.
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn get_union_or_intersection_property_lazy_cache(&mut self, t: P<Type>, name: &str, skip_object_function_property_augment: bool) -> Option<P<Symbol>> {
+        let d = t.as_union_or_intersection_type();
+        let cache_cell = if skip_object_function_property_augment { &d.property_cache_without_function_property_augment } else { &d.property_cache };
+        if let Some(prop) = cache_cell.get().and_then(|c| c.lookup(name)) {
+            return Some(prop);
+        }
+        if !skip_object_function_property_augment {
+            if let Some(prop) = d.property_cache_without_function_property_augment.get().and_then(|c| c.lookup(name)) {
+                if !prop.check_flags.get().intersects(CheckFlags::Partial) {
+                    self.lazy_member_stats.prop_cache_shared_hits += 1;
+                    return Some(prop);
+                }
+            }
+        }
+        let prop = self.create_union_or_intersection_property(t, name, skip_object_function_property_augment);
+        if let Some(prop) = prop {
+            let key = if prop.name() == name { prop.name() } else { alloc_str(name) };
+            ast::get_symbol_table(cache_cell).set(key, prop);
+            if skip_object_function_property_augment
+                && !prop.check_flags.get().intersects(CheckFlags::Partial)
+                && d.property_cache.get().map_or(true, |c| c.lookup(name).is_none())
+            {
+                self.lazy_member_stats.prop_cache_copies_avoided += 1;
             }
         }
         prop
@@ -499,10 +534,11 @@ impl Checker {
         // A name that occurs in more than one constituent occurs in one other than skipped, so skipped
         // only needs its members looked up, which may not resolve them.
         let types = t.types();
+        let lazy_names = self.lazy_reduce_names;
         let skipped = if self.lazy_members {
             types.iter().position(|&t| {
                 t.object_flags() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) == ObjectFlags::Mapped
-                    || may_have_lazy_members(t) && t.flags().intersects(TypeFlags::Object)
+                    || !lazy_names && may_have_lazy_members(t) && t.flags().intersects(TypeFlags::Object)
             })
         } else {
             None
@@ -510,6 +546,28 @@ impl Checker {
         let mut counts: OrderedMap<&'static str, i32> = OrderedMap::default();
         for (i, &t) in types.iter().enumerate() {
             if Some(i) != skipped {
+                // notes/mem-lazy.md L2: names only, in getPropertiesOfType order, without creating members.
+                if lazy_names && t.flags().intersects(TypeFlags::Object) {
+                    let lazy = self.get_ready_lazy_member_table(t);
+                    let shape_target = if lazy.is_none() { self.get_anonymous_instantiation_shape_target_ex(t) } else { None };
+                    if lazy.is_some() || shape_target.is_some() {
+                        self.lazy_member_stats.reduce_names_lazy_constituents += 1;
+                        let mut count = |_: &mut Checker, p: P<Symbol>| {
+                            *counts.entry(p.name()).or_insert(0) += 1;
+                            true
+                        };
+                        match lazy {
+                            Some(lm) => {
+                                let mut seen: FxHashSet<&'static str> = FxHashSet::default();
+                                self.every_lazy_property(t, &lm, &mut seen, &mut count);
+                            }
+                            None => {
+                                self.every_property_of_structured_type(shape_target.unwrap(), &mut count);
+                            }
+                        }
+                        continue;
+                    }
+                }
                 for prop in self.get_properties_of_type(t) {
                     *counts.entry(prop.name()).or_insert(0) += 1;
                 }
@@ -1098,6 +1156,12 @@ impl Checker {
             let target = self.instantiate_type(t.as_string_mapping_type().target().unwrap(), Some(m));
             return self.get_string_mapping_type(t.symbol().unwrap(), target);
         } else if flags.intersects(TypeFlags::Conditional) {
+            if self.lazy_cond_mapper {
+                if t.as_conditional_type().mapper.get().is_some() {
+                    self.lazy_member_stats.cond_mappers_avoided += 1;
+                }
+                return self.get_conditional_type_instantiation_ex(t, t.as_conditional_type().mapper.get(), m, false /*forConstraint*/, alias);
+            }
             let mapper = self.combine_type_mappers(t.as_conditional_type().mapper.get(), m);
             return self.get_conditional_type_instantiation(t, mapper, false /*forConstraint*/, alias);
         } else if flags.intersects(TypeFlags::Substitution) {
@@ -1341,13 +1405,33 @@ impl Checker {
 
     // checker.go:22910
     pub(crate) fn get_conditional_type_instantiation(&mut self, t: P<Type>, mapper: P<TypeMapper>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> {
+        self.get_conditional_type_instantiation_ex(t, None, mapper, for_constraint, alias)
+    }
+
+    // notes/mem-lazy.md L5: the effective mapper is combineTypeMappers(m1, mapper), which is only used to compute the
+    // type arguments, so it is applied in place instead of being allocated.
+    pub(crate) fn get_conditional_type_instantiation_ex(&mut self, t: P<Type>, m1: Option<P<TypeMapper>>, mapper: P<TypeMapper>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> {
         let root = t.as_conditional_type().root.get().unwrap();
         if !root.outer_type_parameters.get().is_empty() {
             // We are instantiating a conditional type that has one or more type parameters in scope. Apply the
             // mapper to the type parameters to produce the effective list of type arguments, and compute the
             // instantiation cache key from the type IDs of the type arguments.
             let outer_type_parameters = root.outer_type_parameters.get();
-            let type_arguments: Vec<P<Type>> = outer_type_parameters.iter().map(|&tp| mapper.map(self, tp)).collect();
+            // With m1, this is what the composite mapper's Map does.
+            let type_arguments: Vec<P<Type>> = outer_type_parameters
+                .iter()
+                .map(|&tp| match m1 {
+                    Some(m1) => {
+                        let t1 = m1.map(self, tp);
+                        if t1 != tp {
+                            self.instantiate_type(t1, Some(mapper))
+                        } else {
+                            mapper.map(self, tp)
+                        }
+                    }
+                    None => mapper.map(self, tp),
+                })
+                .collect();
             let key = get_conditional_type_key(&type_arguments, alias, for_constraint);
             let mut result = root.instantiations.get(&key);
             if result.is_none() {

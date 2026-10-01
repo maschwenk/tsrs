@@ -1735,6 +1735,10 @@ impl Checker {
     pub(crate) fn get_type_of_instantiated_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.resolved_type.get().is_none() {
+            #[cfg(feature = "site-counts")]
+            if let Some(loc) = self.inst_symbol_sites.remove(&symbol) {
+                tsrs_core::sitecount::hit_at("inst-symbol-type-resolved", "", loc);
+            }
             let target_type = self.get_type_of_symbol(links.target.get().unwrap());
             let t = self.instantiate_type(target_type, links.mapper.get());
             links.resolved_type.set(Some(t));

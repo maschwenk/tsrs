@@ -2145,6 +2145,7 @@ impl Checker {
     }
 
     // checker.go:19231
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get_property_of_type(&mut self, t: P<Type>, name: &str) -> Option<P<Symbol>> {
         self.get_property_of_type_ex(t, name, false /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/)
     }
@@ -2156,10 +2157,24 @@ impl Checker {
     // @param type a type to look up property from
     // @param name a name of property to look up in a given type
     // checker.go:19243
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_property_of_type_ex(&mut self, t: P<Type>, name: &str, skip_object_function_property_augment: bool, include_type_only_members: bool) -> Option<P<Symbol>> {
+        self.get_property_of_type_worker(t, name, skip_object_function_property_augment, include_type_only_members, true /*instantiate*/)
+    }
+
+    // notes/mem-lazy.md L9: whether getPropertyOfType(t, name) returns a property. Members of lazy member tables
+    // are not instantiated for this: the declared member stands in for its instantiation (same flags).
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn has_property_of_type(&mut self, t: P<Type>, name: &str) -> bool {
+        self.lazy_member_stats.has_prop_queries += 1;
+        self.get_property_of_type_worker(t, name, false /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/, false /*instantiate*/).is_some()
+    }
+
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn get_property_of_type_worker(&mut self, t: P<Type>, name: &str, skip_object_function_property_augment: bool, include_type_only_members: bool, instantiate: bool) -> Option<P<Symbol>> {
         let t = self.get_reduced_apparent_type(t);
         if t.flags().intersects(TypeFlags::Object) {
-            let symbol = self.get_member_of_structured_type(t, name);
+            let symbol = self.get_member_of_structured_type_ex(t, name, instantiate);
             if let Some(symbol) = symbol {
                 if !include_type_only_members
                     && t.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::ValueModule))
@@ -2219,23 +2234,28 @@ impl Checker {
     }
 
     // checker.go:19303
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get_signatures_of_type(&mut self, t: P<Type>, kind: SignatureKind) -> Vec<P<Signature>> {
         let t = self.get_reduced_apparent_type(t);
         self.get_signatures_of_structured_type(t, kind)
     }
 
     // checker.go:19307
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> Vec<P<Signature>> {
         self.signatures_of_structured_type(t, kind).to_vec()
     }
 
     // Go's getSignaturesOfStructuredType returns the stored slice; this is it without the copy.
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> &'static [P<Signature>] {
         if !t.flags().intersects(TypeFlags::StructuredType) {
             return &[];
         }
         if let Some(lm) = self.get_ready_lazy_member_table(t) {
             self.lazy_member_stats.member_signature_queries += 1;
+            #[cfg(feature = "site-counts")]
+            self.probe_lazy_bases_needed(&lm);
             let ready = lm.ready.get().unwrap();
             if kind == SignatureKind::Call {
                 return ready.call_signatures;
@@ -2272,6 +2292,8 @@ impl Checker {
         if t.flags().intersects(TypeFlags::StructuredType) {
             if let Some(lm) = self.get_ready_lazy_member_table(t) {
                 self.lazy_member_stats.member_index_info_queries += 1;
+                #[cfg(feature = "site-counts")]
+                self.probe_lazy_bases_needed(&lm);
                 return lm.ready.get().unwrap().index_infos;
             }
             if let Some(lazy) = self.get_lazy_mapped_table(t) {
@@ -2383,7 +2405,30 @@ impl Checker {
             // Exclusive symbol/signature counts created by this resolution, attributed to the code that asked for it.
             thread_local! { static NESTED: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) }; }
             let label = if t.object_flags().intersects(ObjectFlags::Reference) && t.target().is_some_and(|s| s.object_flags().intersects(ObjectFlags::Tuple)) {
-                "tuple"
+                if self.lazy_member_tables.contains_key(&t) { "tuple:lazy" } else { "tuple" }
+            } else if t.object_flags().intersects(ObjectFlags::Reference) && self.lazy_member_tables.contains_key(&t) {
+                "reference:lazy"
+            } else if t.object_flags().intersects(ObjectFlags::Mapped) {
+                if self.is_mapped_type_with_keyof_constraint_declaration(t) {
+                    if self.lazy_mapped_tables.contains_key(&t) {
+                        "mapped:keyof-lazy"
+                    } else {
+                        let mapped_type = t.as_mapped_type().target.get().unwrap_or(t);
+                        let modifiers = self.get_modifiers_type_from_mapped_type(t);
+                        let modifiers = self.get_apparent_type(modifiers);
+                        if self.get_name_type_from_mapped_type(mapped_type).is_some() {
+                            "mapped:keyof-as"
+                        } else if modifiers.flags().intersects(TypeFlags::Intersection) {
+                            "mapped:keyof-intersection"
+                        } else if modifiers.flags().intersects(TypeFlags::Object) {
+                            "mapped:keyof-object"
+                        } else {
+                            "mapped:keyof-other"
+                        }
+                    }
+                } else {
+                    "mapped:other"
+                }
             } else {
                 type_kind_label(t.flags(), t.object_flags())
             };
@@ -2535,6 +2580,10 @@ pub(crate) struct LazyMemberTable {
     // Go `ready` plus the fields prepareLazyMembers fills in before it sets `ready`.
     pub(crate) ready: std::cell::OnceCell<LazyMembers>,
     pub(crate) declared: RefCell<FxHashMap<&'static str, P<Symbol>>>,
+    // site-counts profile: objects created by a top-level prepareLazyMembers (types, instantiations,
+    // symbols + signatures), reported again once something needs the base types / inherited members.
+    #[cfg(feature = "site-counts")]
+    pub(crate) probe: Cell<Option<(u64, u64, u64)>>,
 }
 
 pub(crate) struct LazyMembers {
@@ -2591,6 +2640,8 @@ impl Checker {
                     type_arguments,
                     ready: std::cell::OnceCell::new(),
                     declared: RefCell::new(FxHashMap::default()),
+                    #[cfg(feature = "site-counts")]
+                    probe: Cell::new(None),
                 });
                 self.lazy_member_tables.insert(t, lm.clone());
                 self.lazy_member_stats.member_tables_created += 1;
@@ -2609,6 +2660,49 @@ impl Checker {
 
     // Mirrors resolveObjectTypeMembers without creating member symbols.
     pub(crate) fn prepare_lazy_members(&mut self, t: P<Type>, lm: &std::rc::Rc<LazyMemberTable>) {
+        #[cfg(feature = "site-counts")]
+        {
+            thread_local! { static DEPTH: Cell<u32> = const { Cell::new(0) }; }
+            let depth = DEPTH.with(|d| d.replace(d.get() + 1));
+            let before = (self.type_count as u64, self.total_instantiation_count as u64, self.symbol_count as u64 + self.signature_count as u64);
+            self.prepare_lazy_members_worker(t, lm);
+            DEPTH.with(|d| d.set(depth));
+            if depth == 0 {
+                let cost = (self.type_count as u64 - before.0, self.total_instantiation_count as u64 - before.1, self.symbol_count as u64 + self.signature_count as u64 - before.2);
+                for (label, n) in [("types", cost.0), ("instantiations", cost.1), ("symbols+signatures", cost.2)] {
+                    for _ in 0..n {
+                        tsrs_core::sitecount::hit("prepare-total", label);
+                    }
+                }
+                if lm.probe.get().is_none() {
+                    lm.probe.set(Some(cost));
+                }
+            }
+            return;
+        }
+        #[cfg(not(feature = "site-counts"))]
+        self.prepare_lazy_members_worker(t, lm);
+    }
+
+    #[cfg(feature = "site-counts")]
+    #[track_caller]
+    pub(crate) fn probe_lazy_bases_needed(&mut self, lm: &LazyMemberTable) {
+        if let Some(cost) = lm.probe.get() {
+            if cost != (u64::MAX, 0, 0) {
+                lm.probe.set(Some((u64::MAX, 0, 0)));
+                for (label, n) in [("types", cost.0), ("instantiations", cost.1), ("symbols+signatures", cost.2)] {
+                    for _ in 0..n {
+                        tsrs_core::sitecount::hit("prepare-needed", label);
+                    }
+                }
+                tsrs_core::sitecount::hit("prepare-needed-by", "");
+            }
+        } else {
+            lm.probe.set(Some((u64::MAX, 0, 0)));
+        }
+    }
+
+    fn prepare_lazy_members_worker(&mut self, t: P<Type>, lm: &std::rc::Rc<LazyMemberTable>) {
         let source = t.target().unwrap();
         let resolved = self.resolve_declared_members(source).unwrap();
         // Whether instantiateSymbol returns a member itself depends on what is resolved now.
@@ -2624,6 +2718,7 @@ impl Checker {
             }
         }
         unaffected.sort_unstable();
+        tsrs_core::sitecount::hit_n("lazy-table-unaffected", "", unaffected.len() as u64);
         let mut call_signatures = self.instantiate_signatures(resolved.declared_call_signatures.get(), lm.mapper);
         let mut construct_signatures = self.instantiate_signatures(resolved.declared_construct_signatures.get(), lm.mapper);
         let mut index_infos = self.instantiate_index_infos(resolved.declared_index_infos.get(), lm.mapper);
@@ -2638,7 +2733,11 @@ impl Checker {
             base_types.push(instantiated_base_type);
             let reduced = self.get_reduced_apparent_type(instantiated_base_type);
             if !reduced.flags().intersects(TypeFlags::Intersection) && self.get_ready_lazy_member_table(reduced).is_none() {
-                self.get_properties_of_type(instantiated_base_type);
+                if self.lazy_base_props {
+                    self.lazy_member_stats.base_props_skipped += 1;
+                } else {
+                    self.get_properties_of_type(instantiated_base_type);
+                }
             }
             self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
         }
@@ -2656,6 +2755,8 @@ impl Checker {
     }
 
     pub(crate) fn resolve_lazy_members(&mut self, t: P<Type>, lm: &std::rc::Rc<LazyMemberTable>) {
+        #[cfg(feature = "site-counts")]
+        self.probe_lazy_bases_needed(lm);
         self.lazy_member_stats.member_tables_resolved_in_full += 1;
         if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
             self.lazy_member_stats.tuple_tables_resolved_in_full += 1;
@@ -2681,6 +2782,7 @@ impl Checker {
         self.lazy_member_tables.remove(&t);
     }
 
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_lazy_declared_member(&mut self, lm: &std::rc::Rc<LazyMemberTable>, symbol: P<Symbol>, name: &'static str) -> P<Symbol> {
         let existing = lm.declared.borrow().get(name).copied();
         if let Some(result) = existing {
@@ -2695,14 +2797,23 @@ impl Checker {
         result
     }
 
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_member_of_structured_type(&mut self, t: P<Type>, name: &str) -> Option<P<Symbol>> {
+        self.get_member_of_structured_type_ex(t, name, true /*instantiate*/)
+    }
+
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn get_member_of_structured_type_ex(&mut self, t: P<Type>, name: &str, instantiate: bool) -> Option<P<Symbol>> {
         if t.object_flags().intersects(ObjectFlags::MembersResolved) {
             return t.as_structured_type().members.get().and_then(|m| m.lookup(name));
         }
-        self.get_member_of_unresolved_structured_type(t, name)
+        self.get_member_of_unresolved_structured_type(t, name, instantiate)
     }
 
-    pub(crate) fn get_member_of_unresolved_structured_type(&mut self, t: P<Type>, name: &str) -> Option<P<Symbol>> {
+    // Without instantiate, a declared member that has not been instantiated yet is returned as is (for callers that
+    // only test for the member or look at its flags).
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn get_member_of_unresolved_structured_type(&mut self, t: P<Type>, name: &str, instantiate: bool) -> Option<P<Symbol>> {
         if t.object_flags().intersects(ObjectFlags::Mapped) && !is_reserved_member_name(name) {
             if let Some(lazy) = self.get_lazy_mapped_table(t) {
                 if let Some(member) = self.get_lazy_mapped_type_member(t, &lazy, name) {
@@ -2720,14 +2831,21 @@ impl Checker {
         let declared_members = self.resolve_declared_members(t.target().unwrap()).unwrap().declared_members.get();
         if let Some((name, decl)) = declared_members.and_then(|m| m.lookup_entry(name)) {
             if self.is_named_member(decl, name) {
-                result = Some(self.get_lazy_declared_member(&lm, decl, name));
+                if instantiate {
+                    result = Some(self.get_lazy_declared_member(&lm, decl, name));
+                } else {
+                    self.lazy_member_stats.has_prop_uninstantiated += 1;
+                    result = Some(lm.declared.borrow().get(name).copied().unwrap_or(decl));
+                }
             }
         }
         for &base_type in &lm.ready.get().unwrap().base_types {
             if result.is_some_and(|r| r.flags().intersects(SymbolFlags::Value)) {
                 break;
             }
-            if let Some(prop) = self.get_property_of_type_ex(base_type, name, true /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/) {
+            #[cfg(feature = "site-counts")]
+            self.probe_lazy_bases_needed(&lm);
+            if let Some(prop) = self.get_property_of_type_worker(base_type, name, true /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/, instantiate) {
                 if !is_static_private_identifier_property(prop) {
                     result = Some(prop);
                 }
@@ -2740,11 +2858,73 @@ impl Checker {
     pub(crate) fn every_property_of_structured_type(&mut self, t: P<Type>, f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool) -> bool {
         if let Some(lm) = self.get_ready_lazy_member_table(t) {
             self.lazy_member_stats.member_every_property_queries += 1;
+            #[cfg(feature = "site-counts")]
+            self.probe_lazy_bases_needed(&lm);
             let mut seen: FxHashSet<&'static str> = FxHashSet::default();
             return self.every_lazy_property(t, &lm, &mut seen, f);
         }
+        if let Some(target) = self.get_anonymous_instantiation_shape_target(t) {
+            self.lazy_member_stats.anon_shape_every_property += 1;
+            return self.every_property_of_structured_type(target, f);
+        }
+        if self.lazy_mapped_every && t.object_flags() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) == ObjectFlags::Mapped {
+            if let Some(result) = self.every_lazy_mapped_property(t, f) {
+                return result;
+            }
+        }
         let properties = self.resolve_structured_type_members(t).unwrap().properties.get();
         properties.iter().all(|&p| f(self, p))
+    }
+
+    // notes/mem-lazy.md L4: resolveMappedTypeMembers creates one member per property of the modifiers type, in
+    // that order, for { [P in keyof T]: X }; with a lazy mapped table the members are created (and kept) one at a
+    // time until f returns false. None when the table cannot answer for some property (resolve in full instead).
+    pub(crate) fn every_lazy_mapped_property(&mut self, t: P<Type>, f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool) -> Option<bool> {
+        let lazy = self.get_lazy_mapped_table(t)?;
+        let modifiers = self.get_reduced_apparent_type(lazy.modifiers_type);
+        if !modifiers.flags().intersects(TypeFlags::Object) {
+            return None;
+        }
+        self.lazy_member_stats.mapped_every_property_queries += 1;
+        let mut fallback = false;
+        let mut result = true;
+        self.every_property_of_structured_type(modifiers, &mut |c, p| match c.get_lazy_mapped_type_member(t, &lazy, p.name()) {
+            None => {
+                fallback = true;
+                false
+            }
+            Some(None) => true,
+            Some(Some(member)) => {
+                result = f(c, member);
+                result
+            }
+        });
+        if fallback {
+            self.lazy_member_stats.mapped_every_property_fallbacks += 1;
+            return None;
+        }
+        Some(result)
+    }
+
+    // notes/mem-lazy.md L3: resolveAnonymousTypeMembers gives an instantiation of an anonymous type one instantiated
+    // member per property of its target (same name and flags), and as many signatures and index infos (with the
+    // same key types) as its target. Until it is resolved, queries that only depend on that shape ask the target.
+    pub(crate) fn get_anonymous_instantiation_shape_target(&mut self, t: P<Type>) -> Option<P<Type>> {
+        if !self.lazy_anon_shapes {
+            return None;
+        }
+        self.get_anonymous_instantiation_shape_target_ex(t)
+    }
+
+    pub(crate) fn get_anonymous_instantiation_shape_target_ex(&mut self, t: P<Type>) -> Option<P<Type>> {
+        if !t.flags().intersects(TypeFlags::Object)
+            || t.object_flags()
+                & (ObjectFlags::Anonymous | ObjectFlags::Reference | ObjectFlags::ClassOrInterface | ObjectFlags::ReverseMapped | ObjectFlags::Mapped | ObjectFlags::MembersResolved)
+                != ObjectFlags::Anonymous
+        {
+            return None;
+        }
+        t.as_object_type().target.get()
     }
 
     pub(crate) fn has_properties_of_structured_type(&mut self, t: P<Type>) -> bool {

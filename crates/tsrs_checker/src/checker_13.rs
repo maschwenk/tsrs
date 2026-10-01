@@ -337,10 +337,7 @@ impl Checker {
         // object types, and if none of those are present we can exclude primitive types from the subtype check.
         let has_empty_object = has_object_types
             && types.clone().into_iter().any(|t| {
-                t.flags().intersects(TypeFlags::Object) && !self.is_generic_mapped_type(t) && {
-                    let resolved = self.resolve_structured_type_members(t).unwrap();
-                    self.is_empty_resolved_type(resolved)
-                }
+                t.flags().intersects(TypeFlags::Object) && !self.is_generic_mapped_type(t) && self.is_empty_structured_type(t)
             });
         let length = types.len() as i64;
         let mut i = types.len();
@@ -917,6 +914,20 @@ impl Checker {
         }
     }
 
+    // isEmptyResolvedType(resolveStructuredTypeMembers(t)); notes/mem-lazy.md L11: a type with a lazy member table
+    // (an instantiated reference, never anyFunctionType) is asked without resolving it.
+    pub(crate) fn is_empty_structured_type(&mut self, t: P<Type>) -> bool {
+        if self.lazy_empty {
+            if let Some(lm) = self.get_ready_lazy_member_table(t) {
+                self.lazy_member_stats.empty_lazy_queries += 1;
+                let ready = lm.ready.get().unwrap();
+                return ready.call_signatures.is_empty() && ready.construct_signatures.is_empty() && ready.index_infos.is_empty() && !self.has_properties_of_structured_type(t);
+            }
+        }
+        let resolved = self.resolve_structured_type_members(t).unwrap();
+        self.is_empty_resolved_type(resolved)
+    }
+
     // checker.go:26951
     pub(crate) fn is_empty_resolved_type(&mut self, t: &'static StructuredType) -> bool {
         !std::ptr::eq(t, self.any_function_type.as_structured_type())
@@ -931,8 +942,11 @@ impl Checker {
             if self.is_generic_mapped_type(t) {
                 return false;
             }
-            let resolved = self.resolve_structured_type_members(t).unwrap();
-            return self.is_empty_resolved_type(resolved);
+            if let Some(target) = self.get_anonymous_instantiation_shape_target(t) {
+                self.lazy_member_stats.anon_shape_empty += 1;
+                return self.is_empty_object_type(target);
+            }
+            return self.is_empty_structured_type(t);
         } else if t.flags().intersects(TypeFlags::NonPrimitive) {
             return true;
         } else if t.flags().intersects(TypeFlags::Union) {

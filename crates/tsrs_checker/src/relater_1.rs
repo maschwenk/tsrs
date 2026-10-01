@@ -912,6 +912,10 @@ impl Checker {
     // and no required properties, call/construct signatures or index signatures
     pub(crate) fn is_weak_type(&mut self, t: P<Type>) -> bool {
         if t.flags().intersects(TypeFlags::Object) {
+            if let Some(target) = self.get_anonymous_instantiation_shape_target(t) {
+                self.lazy_member_stats.anon_shape_weak += 1;
+                return self.is_weak_type(target);
+            }
             return self.signatures_of_structured_type(t, SignatureKind::Call).is_empty()
                 && self.signatures_of_structured_type(t, SignatureKind::Construct).is_empty()
                 && self.index_infos_of_structured_type(t).is_empty()
@@ -1273,6 +1277,61 @@ impl Checker {
     // relater.go:977
     pub(crate) fn get_unmatched_properties_worker(&mut self, source: P<Type>, target: P<Type>, require_optional_properties: bool, match_discriminant_properties: bool, props_out: Option<&mut Vec<P<Symbol>>>) -> Option<P<Symbol>> {
         let mut props_out = props_out;
+        if self.lazy_unmatched {
+            let reduced = self.get_reduced_apparent_type(target);
+            if reduced.flags().intersects(TypeFlags::Object) {
+                if let Some(lm) = self.get_ready_lazy_member_table(reduced) {
+                    // notes/mem-lazy.md L10: the walk sees declared members in place of their instantiations (same
+                    // names and flags, same order as getPropertiesOfType); the real property is looked up only
+                    // where it is returned or its type is needed.
+                    self.lazy_member_stats.unmatched_lazy_walks += 1;
+                    let mut result: Option<P<Symbol>> = None;
+                    let mut seen: FxHashSet<&'static str> = FxHashSet::default();
+                    self.every_lazy_property(reduced, &lm, &mut seen, &mut |c, declared_prop| {
+                        if is_static_private_identifier_property(declared_prop) {
+                            return true;
+                        }
+                        if !(require_optional_properties
+                            || !declared_prop.flags().intersects(SymbolFlags::Optional) && !declared_prop.check_flags.get().intersects(CheckFlags::Partial))
+                        {
+                            return true;
+                        }
+                        let name = declared_prop.name();
+                        let unmatched = if !match_discriminant_properties {
+                            !c.has_property_of_type(source, name)
+                        } else {
+                            match c.get_property_of_type(source, name) {
+                                None => true,
+                                Some(source_prop) => {
+                                    let target_prop = c.get_property_of_type(target, name).unwrap();
+                                    let target_type = c.get_type_of_symbol(target_prop);
+                                    target_type.flags().intersects(TypeFlags::Unit) && {
+                                        let source_type = c.get_type_of_symbol(source_prop);
+                                        !(source_type.flags().intersects(TypeFlags::Any) || {
+                                            let a = c.get_regular_type_of_literal_type(source_type);
+                                            let b = c.get_regular_type_of_literal_type(target_type);
+                                            a == b
+                                        })
+                                    }
+                                }
+                            }
+                        };
+                        if unmatched {
+                            let target_prop = c.get_property_of_type(target, name).unwrap();
+                            match props_out.as_deref_mut() {
+                                None => {
+                                    result = Some(target_prop);
+                                    return false;
+                                }
+                                Some(out) => out.push(target_prop),
+                            }
+                        }
+                        true
+                    });
+                    return result;
+                }
+            }
+        }
         let properties = self.get_properties_of_type(target);
         for target_prop in properties {
             // TODO: remove this when we support static private identifier fields and find other solutions to get privateNamesAndStaticFields test to pass
@@ -1283,7 +1342,12 @@ impl Checker {
                 || !target_prop.flags().intersects(SymbolFlags::Optional)
                     && !target_prop.check_flags.get().intersects(CheckFlags::Partial)
             {
-                let source_prop = self.get_property_of_type(source, target_prop.name());
+                let source_prop = if self.lazy_has_prop && !match_discriminant_properties {
+                    // notes/mem-lazy.md L9: only whether the source has the property matters below.
+                    if self.has_property_of_type(source, target_prop.name()) { Some(target_prop) } else { None }
+                } else {
+                    self.get_property_of_type(source, target_prop.name())
+                };
                 match source_prop {
                     None => match props_out.as_deref_mut() {
                         None => return Some(target_prop),

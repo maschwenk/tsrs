@@ -116,6 +116,7 @@ impl Checker {
 
     // If type has a single call signature and no other members, return that signature. Otherwise, return nil.
     // checker.go:19682
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_single_call_signature(&mut self, t: P<Type>) -> Option<P<Signature>> {
         self.get_single_signature(t, SignatureKind::Call, false /*allowMembers*/)
     }
@@ -130,6 +131,7 @@ impl Checker {
     }
 
     // checker.go:19694
+    #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_single_signature(&mut self, t: P<Type>, kind: SignatureKind, allow_members: bool) -> Option<P<Signature>> {
         if t.flags().intersects(TypeFlags::Object) {
             if allow_members || !self.has_properties_of_structured_type(t) && self.index_infos_of_structured_type(t).is_empty() {
@@ -1827,6 +1829,11 @@ impl Checker {
         result.declarations.set(symbol.declarations());
         result.parent.set(symbol.parent());
         result.value_declaration.set(symbol.value_declaration());
+        #[cfg(feature = "site-counts")]
+        {
+            self.inst_symbol_sites.insert(result, std::panic::Location::caller());
+            tsrs_core::sitecount::hit("inst-symbol-created", "");
+        }
         let result_links = self.value_symbol_links.get(result);
         result_links.target.set(Some(symbol));
         result_links.mapper.set(m);
@@ -2106,6 +2113,7 @@ impl Checker {
         self.get_constraint_type_from_mapped_type(t);
         let mapped_type = t.as_mapped_type().target.get().unwrap_or(t);
         if self.get_name_type_from_mapped_type(mapped_type).is_some() {
+            tsrs_core::sitecount::hit("mapped-table-refused", "name-type");
             return None;
         }
         let should_link_prop_declarations = self.get_mapped_type_name_type_kind(mapped_type) != MappedTypeNameTypeKind::Remapping;
@@ -2113,6 +2121,11 @@ impl Checker {
         let modifiers_type_of_mapped = self.get_modifiers_type_from_mapped_type(t);
         let modifiers_type = self.get_apparent_type(modifiers_type_of_mapped);
         if !modifiers_type.flags().intersects(TypeFlags::Object) || t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            #[cfg(feature = "site-counts")]
+            tsrs_core::sitecount::hit(
+                "mapped-table-refused",
+                if t.object_flags().intersects(ObjectFlags::MembersResolved) { "resolved-meanwhile" } else { type_kind_label(modifiers_type.flags(), modifiers_type.object_flags()) },
+            );
             return None;
         }
         let lazy = std::rc::Rc::new(LazyMappedTable {
