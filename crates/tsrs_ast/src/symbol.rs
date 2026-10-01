@@ -168,6 +168,12 @@ impl SymbolTable {
         self.0.borrow().get(name).copied()
     }
 
+    /// `lookup` that also returns the stored key.
+    #[inline]
+    pub fn lookup_entry(&self, name: &str) -> Option<(&'static str, P<Symbol>)> {
+        self.0.borrow().get_key_value(name).map(|(k, v)| (*k, *v))
+    }
+
     #[inline]
     pub fn set(&self, name: &'static str, symbol: P<Symbol>) {
         self.0.borrow_mut().insert(name, symbol);

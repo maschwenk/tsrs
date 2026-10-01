@@ -1469,6 +1469,14 @@ impl Program {
         val.into_inner()
     }
 
+    pub fn lazy_member_stats(&'static self) -> tsrs_core::lazymembers::LazyMemberStats {
+        let total = std::sync::Mutex::new(tsrs_core::lazymembers::LazyMemberStats::default());
+        self.pool().for_each_checker_parallel(self, |_, c| {
+            total.lock().unwrap().add(&c.lazy_member_stats);
+        });
+        total.into_inner().unwrap()
+    }
+
     pub fn get_source_file_meta_data(&self, path: &Path) -> SourceFileMetaData {
         self.source_file_meta_datas.get(path).cloned().unwrap_or_default()
     }

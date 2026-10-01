@@ -53,6 +53,7 @@ pub struct Statistics {
     memory_used: u64,
     memory_allocs: u64,
     compile_times: CompileTimes,
+    lazy_member_stats: Option<tsrs_core::lazymembers::LazyMemberStats>,
 }
 
 // Go reports runtime.MemStats (live heap and malloc count). There is no GC heap here; the resident
@@ -81,6 +82,7 @@ pub fn statistics_from_program(input: &EmitInput, times: &CompileTimes) -> Stati
         memory_used: memory_used_bytes(),
         memory_allocs: 0,
         compile_times: *times,
+        lazy_member_stats: tsrs_core::lazymembers::enabled().then(|| program.lazy_member_stats()),
     }
 }
 
@@ -117,5 +119,12 @@ impl Statistics {
         }
         table.add_duration("Total time", self.compile_times.total_time);
         table.print(sys);
+        if let Some(stats) = &self.lazy_member_stats {
+            let mut table = table::default();
+            for (name, value) in stats.rows() {
+                table.add(name, value);
+            }
+            table.print(sys);
+        }
     }
 }

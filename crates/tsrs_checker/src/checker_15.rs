@@ -1315,12 +1315,10 @@ impl Checker {
         }
         // We do a quick check for a "bind" property before performing the more expensive subtype
         // check. This gives us a quicker out in the common case where an object type is not a function.
-        let resolved = self.resolve_structured_type_members(t).unwrap();
-        if !resolved.signatures.get().is_empty() {
-            return true;
+        !self.signatures_of_structured_type(t, SignatureKind::Call).is_empty() || !self.signatures_of_structured_type(t, SignatureKind::Construct).is_empty() || {
+            let global_function_type = self.global_function_type;
+            self.get_member_of_structured_type(t, "bind").is_some() && self.is_type_subtype_of(t, global_function_type)
         }
-        let global_function_type = self.global_function_type;
-        resolved.members.get().is_some_and(|m| m.lookup("bind").is_some()) && self.is_type_subtype_of(t, global_function_type)
     }
 
     // checker.go:31639

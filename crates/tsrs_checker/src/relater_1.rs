@@ -912,11 +912,11 @@ impl Checker {
     // and no required properties, call/construct signatures or index signatures
     pub(crate) fn is_weak_type(&mut self, t: P<Type>) -> bool {
         if t.flags().intersects(TypeFlags::Object) {
-            let resolved = self.resolve_structured_type_members(t).unwrap();
-            return resolved.signatures.get().is_empty()
-                && resolved.index_infos.get().is_empty()
-                && !resolved.properties.get().is_empty()
-                && resolved.properties.get().iter().all(|p| p.flags().intersects(SymbolFlags::Optional));
+            return self.signatures_of_structured_type(t, SignatureKind::Call).is_empty()
+                && self.signatures_of_structured_type(t, SignatureKind::Construct).is_empty()
+                && self.index_infos_of_structured_type(t).is_empty()
+                && self.has_properties_of_structured_type(t)
+                && self.every_property_of_structured_type(t, &mut |_, p| p.flags().intersects(SymbolFlags::Optional));
         }
         if t.flags().intersects(TypeFlags::Substitution) {
             return self.is_weak_type(t.as_substitution_type().base_type.get().unwrap());

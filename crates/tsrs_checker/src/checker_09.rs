@@ -2157,8 +2157,7 @@ impl Checker {
     pub(crate) fn get_property_of_type_ex(&mut self, t: P<Type>, name: &str, skip_object_function_property_augment: bool, include_type_only_members: bool) -> Option<P<Symbol>> {
         let t = self.get_reduced_apparent_type(t);
         if t.flags().intersects(TypeFlags::Object) {
-            let resolved = self.resolve_structured_type_members(t).unwrap();
-            let symbol = resolved.members.get().and_then(|m| m.lookup(name));
+            let symbol = self.get_member_of_structured_type(t, name);
             if let Some(symbol) = symbol {
                 if !include_type_only_members
                     && t.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::ValueModule))
@@ -2178,9 +2177,9 @@ impl Checker {
             }
             let function_type = if t == self.any_function_type {
                 Some(self.global_function_type)
-            } else if !resolved.call_signatures().is_empty() {
+            } else if !self.signatures_of_structured_type(t, SignatureKind::Call).is_empty() {
                 Some(self.global_callable_function_type)
-            } else if !resolved.construct_signatures().is_empty() {
+            } else if !self.signatures_of_structured_type(t, SignatureKind::Construct).is_empty() {
                 Some(self.global_newable_function_type)
             } else {
                 None
@@ -2225,14 +2224,27 @@ impl Checker {
 
     // checker.go:19307
     pub(crate) fn get_signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> Vec<P<Signature>> {
+        self.signatures_of_structured_type(t, kind).to_vec()
+    }
+
+    // Go's getSignaturesOfStructuredType returns the stored slice; this is it without the copy.
+    pub(crate) fn signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> &'static [P<Signature>] {
         if !t.flags().intersects(TypeFlags::StructuredType) {
-            return Vec::new();
+            return &[];
+        }
+        if let Some(lm) = self.get_ready_lazy_member_table(t) {
+            self.lazy_member_stats.member_signature_queries += 1;
+            let ready = lm.ready.get().unwrap();
+            if kind == SignatureKind::Call {
+                return ready.call_signatures;
+            }
+            return ready.construct_signatures;
         }
         let resolved = self.resolve_structured_type_members(t).unwrap();
         if kind == SignatureKind::Call {
-            return resolved.call_signatures().to_vec();
+            return resolved.call_signatures();
         }
-        resolved.construct_signatures().to_vec()
+        resolved.construct_signatures()
     }
 
     // checker.go:19318
@@ -2243,10 +2255,19 @@ impl Checker {
 
     // checker.go:19322
     pub(crate) fn get_index_infos_of_structured_type(&mut self, t: P<Type>) -> Vec<P<IndexInfo>> {
+        self.index_infos_of_structured_type(t).to_vec()
+    }
+
+    // Go's getIndexInfosOfStructuredType returns the stored slice; this is it without the copy.
+    pub(crate) fn index_infos_of_structured_type(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] {
         if t.flags().intersects(TypeFlags::StructuredType) {
-            return self.resolve_structured_type_members(t).unwrap().index_infos.get().to_vec();
+            if let Some(lm) = self.get_ready_lazy_member_table(t) {
+                self.lazy_member_stats.member_index_info_queries += 1;
+                return lm.ready.get().unwrap().index_infos;
+            }
+            return self.resolve_structured_type_members(t).unwrap().index_infos.get();
         }
-        Vec::new()
+        &[]
     }
 
     // Return the indexing info of the given kind in the given type. Creates synthetic union index types when necessary and
@@ -2377,12 +2398,12 @@ impl Checker {
 
     // checker.go:19439
     pub(crate) fn resolve_type_reference_members(&mut self, t: P<Type>) {
-        let source = t.target().unwrap();
-        let type_parameters = source.as_interface_type().all_type_parameters.get();
-        let mut padded_type_arguments = self.get_type_arguments(t);
-        if padded_type_arguments.len() + 1 == type_parameters.len() {
-            padded_type_arguments.push(t);
+        if let Some(lm) = self.lazy_member_tables.get(&t).filter(|lm| lm.ready.get().is_some()).cloned() {
+            self.resolve_lazy_members(t, &lm);
+            return;
         }
+        let source = t.target().unwrap();
+        let (type_parameters, padded_type_arguments) = self.get_reference_member_type_arguments(t, source);
         self.resolve_object_type_members(t, source, type_parameters, &padded_type_arguments);
     }
 
@@ -2423,18 +2444,7 @@ impl Checker {
                 }
                 let base_properties = self.get_properties_of_type(instantiated_base_type);
                 members = self.add_inherited_members(members, &base_properties);
-                let sigs = self.get_signatures_of_type(instantiated_base_type, SignatureKind::Call);
-                call_signatures.extend(sigs);
-                let sigs = self.get_signatures_of_type(instantiated_base_type, SignatureKind::Construct);
-                construct_signatures.extend(sigs);
-                let inherited_index_infos: Vec<P<IndexInfo>> = if instantiated_base_type != self.any_type {
-                    self.get_index_infos_of_type(instantiated_base_type)
-                } else {
-                    vec![self.any_base_type_index_info]
-                };
-                let filtered: Vec<P<IndexInfo>> =
-                    inherited_index_infos.into_iter().filter(|info| find_index_info(&index_infos, info.key_type()).is_none()).collect();
-                index_infos.extend(filtered);
+                self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
             }
         }
         self.set_structured_type_members(t, members, &call_signatures, &construct_signatures, &index_infos);
@@ -2449,6 +2459,271 @@ pub(crate) fn find_index_info(index_infos: &[P<IndexInfo>], key_type: P<Type>) -
         }
     }
     None
+}
+
+// #64475 (behind `Checker::lazy_members`)
+impl Checker {
+    pub(crate) fn append_inherited_signatures_and_index_infos(
+        &mut self,
+        call_signatures: &mut Vec<P<Signature>>,
+        construct_signatures: &mut Vec<P<Signature>>,
+        index_infos: &mut Vec<P<IndexInfo>>,
+        base_type: P<Type>,
+    ) {
+        let sigs = self.get_signatures_of_type(base_type, SignatureKind::Call);
+        call_signatures.extend(sigs);
+        let sigs = self.get_signatures_of_type(base_type, SignatureKind::Construct);
+        construct_signatures.extend(sigs);
+        let inherited_index_infos: Vec<P<IndexInfo>> =
+            if base_type != self.any_type { self.get_index_infos_of_type(base_type) } else { vec![self.any_base_type_index_info] };
+        let filtered: Vec<P<IndexInfo>> = inherited_index_infos.into_iter().filter(|info| find_index_info(index_infos, info.key_type()).is_none()).collect();
+        index_infos.extend(filtered);
+    }
+}
+
+// Instantiated class and interface references get a lazy member table in place of
+// resolved members. It has the signatures and index infos, but only instantiates the
+// members that are looked up, and reuses them if the members are later resolved in full.
+
+pub(crate) struct LazyMemberTable {
+    pub(crate) mapper: P<TypeMapper>,
+    pub(crate) type_arguments: Vec<P<Type>>,
+    // Go `ready` plus the fields prepareLazyMembers fills in before it sets `ready`.
+    pub(crate) ready: std::cell::OnceCell<LazyMembers>,
+    pub(crate) declared: RefCell<FxHashMap<&'static str, P<Symbol>>>,
+}
+
+pub(crate) struct LazyMembers {
+    pub(crate) unaffected: Vec<&'static str>, // sorted names of declared members that instantiate to themselves
+    pub(crate) call_signatures: &'static [P<Signature>],
+    pub(crate) construct_signatures: &'static [P<Signature>],
+    pub(crate) index_infos: &'static [P<IndexInfo>],
+    pub(crate) base_types: Vec<P<Type>>,
+}
+
+pub(crate) fn may_have_lazy_members(t: P<Type>) -> bool {
+    t.object_flags() & (ObjectFlags::MembersResolved | ObjectFlags::Reference) == ObjectFlags::Reference
+}
+
+impl Checker {
+    pub(crate) fn get_reference_member_type_arguments(&mut self, t: P<Type>, source: P<Type>) -> (&'static [P<Type>], Vec<P<Type>>) {
+        let type_parameters = source.as_interface_type().all_type_parameters.get();
+        let mut type_arguments = self.get_type_arguments(t);
+        if type_arguments.len() + 1 == type_parameters.len() {
+            type_arguments.push(t);
+        }
+        (type_parameters, type_arguments)
+    }
+
+    // Returns nil if t has no lazy member table or it is still being prepared.
+    pub(crate) fn get_ready_lazy_member_table(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMemberTable>> {
+        if !self.lazy_members || !may_have_lazy_members(t) {
+            return None;
+        }
+        self.get_ready_lazy_member_table_worker(t)
+    }
+
+    pub(crate) fn get_ready_lazy_member_table_worker(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMemberTable>> {
+        let source = t.target();
+        if !t.flags().intersects(TypeFlags::Object)
+            || source.is_none()
+            || source == Some(t)
+            || !source.unwrap().object_flags().intersects(ObjectFlags::ClassOrInterface)
+            || source.unwrap().object_flags().intersects(ObjectFlags::Tuple)
+            || t.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::ValueModule))
+        {
+            return None;
+        }
+        let lm = match self.lazy_member_tables.get(&t) {
+            Some(lm) => lm.clone(),
+            None => {
+                let (type_parameters, type_arguments) = self.get_reference_member_type_arguments(t, t.target().unwrap());
+                if type_parameters == &type_arguments[..] {
+                    return None;
+                }
+                let lm = std::rc::Rc::new(LazyMemberTable {
+                    mapper: new_type_mapper(type_parameters, alloc_slice(&type_arguments)),
+                    type_arguments,
+                    ready: std::cell::OnceCell::new(),
+                    declared: RefCell::new(FxHashMap::default()),
+                });
+                self.lazy_member_tables.insert(t, lm.clone());
+                self.lazy_member_stats.member_tables_created += 1;
+                self.prepare_lazy_members(t, &lm);
+                lm
+            }
+        };
+        if lm.ready.get().is_none() || t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            return None;
+        }
+        Some(lm)
+    }
+
+    // Mirrors resolveObjectTypeMembers without creating member symbols.
+    pub(crate) fn prepare_lazy_members(&mut self, t: P<Type>, lm: &std::rc::Rc<LazyMemberTable>) {
+        let source = t.target().unwrap();
+        let resolved = self.resolve_declared_members(source).unwrap();
+        // Whether instantiateSymbol returns a member itself depends on what is resolved now.
+        let mut unaffected: Vec<&'static str> = Vec::new();
+        if let Some(declared_members) = resolved.declared_members.get() {
+            for (id, symbol) in declared_members.entries() {
+                if self.is_named_member(symbol, id) {
+                    self.lazy_member_stats.member_table_declared_members += 1;
+                    if self.is_symbol_unaffected_by_instantiation(symbol, Some(lm.mapper)) {
+                        unaffected.push(id);
+                    }
+                }
+            }
+        }
+        unaffected.sort_unstable();
+        let mut call_signatures = self.instantiate_signatures(resolved.declared_call_signatures.get(), lm.mapper);
+        let mut construct_signatures = self.instantiate_signatures(resolved.declared_construct_signatures.get(), lm.mapper);
+        let mut index_infos = self.instantiate_index_infos(resolved.declared_index_infos.get(), lm.mapper);
+        let this_argument = lm.type_arguments.last().copied();
+        let mut base_types: Vec<P<Type>> = Vec::new();
+        for &base_type in self.get_base_types(source) {
+            let mut instantiated_base_type = base_type;
+            if this_argument.is_some() {
+                let inst = self.instantiate_type(base_type, Some(lm.mapper));
+                instantiated_base_type = self.get_type_with_this_argument(inst, this_argument, false /*needsApparentType*/);
+            }
+            base_types.push(instantiated_base_type);
+            let reduced = self.get_reduced_apparent_type(instantiated_base_type);
+            if self.get_ready_lazy_member_table(reduced).is_none() {
+                self.get_properties_of_type(instantiated_base_type);
+            }
+            self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
+        }
+        let _ = lm.ready.set(LazyMembers {
+            unaffected,
+            call_signatures: alloc_vec(call_signatures),
+            construct_signatures: alloc_vec(construct_signatures),
+            index_infos: alloc_vec(index_infos),
+            base_types,
+        });
+        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            // t was resolved while preparing; resolveObjectTypeMembers would now replace its members.
+            self.resolve_lazy_members(t, lm);
+        }
+    }
+
+    pub(crate) fn resolve_lazy_members(&mut self, t: P<Type>, lm: &std::rc::Rc<LazyMemberTable>) {
+        self.lazy_member_stats.member_tables_resolved_in_full += 1;
+        let resolved = self.resolve_declared_members(t.target().unwrap()).unwrap();
+        let mut members: Option<P<SymbolTable>> = None;
+        if let Some(declared_members) = resolved.declared_members.get().filter(|m| !m.is_empty()) {
+            let table = SymbolTable::with_capacity(declared_members.len());
+            for (id, symbol) in declared_members.entries() {
+                if self.is_named_member(symbol, id) {
+                    let member = self.get_lazy_declared_member(lm, symbol, id);
+                    table.set(id, member);
+                }
+            }
+            members = Some(table);
+        }
+        let ready = lm.ready.get().unwrap();
+        for &base_type in &ready.base_types {
+            let base_properties = self.get_properties_of_type(base_type);
+            members = self.add_inherited_members(members, &base_properties);
+        }
+        self.set_structured_type_members(t, members, ready.call_signatures, ready.construct_signatures, ready.index_infos);
+        self.lazy_member_tables.remove(&t);
+    }
+
+    pub(crate) fn get_lazy_declared_member(&mut self, lm: &std::rc::Rc<LazyMemberTable>, symbol: P<Symbol>, name: &'static str) -> P<Symbol> {
+        let existing = lm.declared.borrow().get(name).copied();
+        if let Some(result) = existing {
+            return result;
+        }
+        let mut result = symbol;
+        if lm.ready.get().unwrap().unaffected.binary_search(&name).is_err() {
+            self.lazy_member_stats.member_table_declared_instantiated += 1;
+            result = self.new_instantiated_symbol(symbol, Some(lm.mapper));
+        }
+        lm.declared.borrow_mut().insert(name, result);
+        result
+    }
+
+    pub(crate) fn get_member_of_structured_type(&mut self, t: P<Type>, name: &str) -> Option<P<Symbol>> {
+        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            return t.as_structured_type().members.get().and_then(|m| m.lookup(name));
+        }
+        self.get_member_of_unresolved_structured_type(t, name)
+    }
+
+    pub(crate) fn get_member_of_unresolved_structured_type(&mut self, t: P<Type>, name: &str) -> Option<P<Symbol>> {
+        let lm = self.get_ready_lazy_member_table(t);
+        let Some(lm) = lm.filter(|_| !is_reserved_member_name(name)) else {
+            return self.resolve_structured_type_members(t).unwrap().members.get().and_then(|m| m.lookup(name));
+        };
+        self.lazy_member_stats.member_lookups += 1;
+        // The declared member, else the first base type's property (see addInheritedMembers).
+        let mut result: Option<P<Symbol>> = None;
+        let declared_members = self.resolve_declared_members(t.target().unwrap()).unwrap().declared_members.get();
+        if let Some((name, decl)) = declared_members.and_then(|m| m.lookup_entry(name)) {
+            if self.is_named_member(decl, name) {
+                result = Some(self.get_lazy_declared_member(&lm, decl, name));
+            }
+        }
+        for &base_type in &lm.ready.get().unwrap().base_types {
+            if result.is_some_and(|r| r.flags().intersects(SymbolFlags::Value)) {
+                break;
+            }
+            if let Some(prop) = self.get_property_of_type_ex(base_type, name, true /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/) {
+                if !is_static_private_identifier_property(prop) {
+                    result = Some(prop);
+                }
+            }
+        }
+        result
+    }
+
+    // f may see a declared member instead of its instantiation, which has the same flags.
+    pub(crate) fn every_property_of_structured_type(&mut self, t: P<Type>, f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool) -> bool {
+        if let Some(lm) = self.get_ready_lazy_member_table(t) {
+            self.lazy_member_stats.member_every_property_queries += 1;
+            let mut seen: FxHashSet<&'static str> = FxHashSet::default();
+            return self.every_lazy_property(t, &lm, &mut seen, f);
+        }
+        let properties = self.resolve_structured_type_members(t).unwrap().properties.get();
+        properties.iter().all(|&p| f(self, p))
+    }
+
+    pub(crate) fn has_properties_of_structured_type(&mut self, t: P<Type>) -> bool {
+        !self.every_property_of_structured_type(t, &mut |_, _| false)
+    }
+
+    // seen has the names of properties that hide inherited ones, as in addInheritedMembers.
+    pub(crate) fn every_lazy_property(
+        &mut self,
+        t: P<Type>,
+        lm: &std::rc::Rc<LazyMemberTable>,
+        seen: &mut FxHashSet<&'static str>,
+        f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool,
+    ) -> bool {
+        if let Some(declared_members) = self.resolve_declared_members(t.target().unwrap()).unwrap().declared_members.get() {
+            for (id, symbol) in declared_members.entries() {
+                if self.is_named_member(symbol, id) && seen.insert(id) && !f(self, symbol) {
+                    return false;
+                }
+            }
+        }
+        for &base_type in &lm.ready.get().unwrap().base_types {
+            let reduced = self.get_reduced_apparent_type(base_type);
+            if let Some(base_table) = self.get_ready_lazy_member_table(reduced) {
+                if !self.every_lazy_property(reduced, &base_table, seen, f) {
+                    return false;
+                }
+                continue;
+            }
+            for prop in self.get_properties_of_type(base_type) {
+                if !is_static_private_identifier_property(prop) && seen.insert(prop.name()) && !f(self, prop) {
+                    return false;
+                }
+            }
+        }
+        true
+    }
 }
 
 impl Checker {

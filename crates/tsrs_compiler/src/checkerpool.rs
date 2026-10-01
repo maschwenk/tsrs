@@ -21,6 +21,7 @@ pub struct Checker {
     pub type_count: u32,
     pub symbol_count: u32,
     pub total_instantiation_count: u32,
+    pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
 }
 
 // Go `context.Context` (see tsrs_checker::Context).
@@ -45,7 +46,7 @@ impl Checker {
 
 #[cfg(not(feature = "checker"))]
 fn new_checker(_program: &'static Program) -> Box<Checker> {
-    Box::new(Checker { type_count: 0, symbol_count: 0, total_instantiation_count: 0 })
+    Box::new(Checker { type_count: 0, symbol_count: 0, total_instantiation_count: 0, lazy_member_stats: Default::default() })
 }
 
 // Checkers recurse deeply (the single-threaded CLI runs on a 512 MB stack); each checker thread gets the same.

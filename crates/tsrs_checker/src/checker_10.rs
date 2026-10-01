@@ -131,13 +131,14 @@ impl Checker {
     // checker.go:19694
     pub(crate) fn get_single_signature(&mut self, t: P<Type>, kind: SignatureKind, allow_members: bool) -> Option<P<Signature>> {
         if t.flags().intersects(TypeFlags::Object) {
-            let resolved = self.resolve_structured_type_members(t).unwrap();
-            if allow_members || resolved.properties.get().is_empty() && resolved.index_infos.get().is_empty() {
-                if kind == SignatureKind::Call && resolved.call_signatures().len() == 1 && resolved.construct_signatures().is_empty() {
-                    return Some(resolved.call_signatures()[0]);
+            if allow_members || !self.has_properties_of_structured_type(t) && self.index_infos_of_structured_type(t).is_empty() {
+                let call_signatures = self.signatures_of_structured_type(t, SignatureKind::Call);
+                let construct_signatures = self.signatures_of_structured_type(t, SignatureKind::Construct);
+                if kind == SignatureKind::Call && call_signatures.len() == 1 && construct_signatures.is_empty() {
+                    return Some(call_signatures[0]);
                 }
-                if kind == SignatureKind::Construct && resolved.construct_signatures().len() == 1 && resolved.call_signatures().is_empty() {
-                    return Some(resolved.construct_signatures()[0]);
+                if kind == SignatureKind::Construct && construct_signatures.len() == 1 && call_signatures.is_empty() {
+                    return Some(construct_signatures[0]);
                 }
             }
         }
@@ -1770,27 +1771,40 @@ impl Checker {
 
     // checker.go:21094
     pub(crate) fn instantiate_symbol(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> P<Symbol> {
-        let mut symbol = symbol;
-        let mut m = m;
+        if self.is_symbol_unaffected_by_instantiation(symbol, m) {
+            return symbol;
+        }
+        self.new_instantiated_symbol(symbol, m)
+    }
+
+    // Can change from false to true once the type of the symbol is resolved.
+    pub(crate) fn is_symbol_unaffected_by_instantiation(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> bool {
         let links = self.value_symbol_links.get(symbol);
         if m.is_some_and(|m| m.maps_this_only()) && is_thisless(symbol) {
-            return symbol;
+            return true;
         }
         // If the type of the symbol is already resolved, and if that type could not possibly
         // be affected by instantiation, simply return the symbol itself.
         if let Some(resolved_type) = links.resolved_type.get() {
             if !self.could_contain_type_variables(resolved_type) {
                 if !symbol.flags().intersects(SymbolFlags::SetAccessor) {
-                    return symbol;
+                    return true;
                 }
                 // If we're a setter, check writeType.
                 if let Some(write_type) = links.write_type.get() {
                     if !self.could_contain_type_variables(write_type) {
-                        return symbol;
+                        return true;
                     }
                 }
             }
         }
+        false
+    }
+
+    pub(crate) fn new_instantiated_symbol(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> P<Symbol> {
+        let mut symbol = symbol;
+        let mut m = m;
+        let links = self.value_symbol_links.get(symbol);
         if symbol.check_flags().intersects(CheckFlags::Instantiated) {
             // If symbol being instantiated is itself a instantiation, fetch the original target and combine the
             // type mappers. This ensures that original type identities are properly preserved and that aliases

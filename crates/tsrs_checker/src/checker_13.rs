@@ -1948,7 +1948,7 @@ impl Checker {
 
     // checker.go:27835
     pub(crate) fn is_string_index_signature_only_type_worker(&mut self, t: P<Type>) -> bool {
-        t.flags().intersects(TypeFlags::Object) && !self.is_generic_mapped_type(t) && self.get_properties_of_type(t).is_empty() && self.get_index_infos_of_type(t).len() == 1 && {
+        t.flags().intersects(TypeFlags::Object) && !self.is_generic_mapped_type(t) && !self.has_properties_of_structured_type(t) && self.get_index_infos_of_type(t).len() == 1 && {
             let string_type = self.string_type;
             self.get_index_info_of_type(t, string_type).is_some()
         } || t.flags().intersects(TypeFlags::UnionOrIntersection) && t.types().iter().all(|&t| self.is_string_index_signature_only_type(t))

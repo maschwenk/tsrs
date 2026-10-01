@@ -11,6 +11,7 @@ pub mod debug;
 pub mod glob;
 pub mod jsnum;
 pub mod json;
+pub mod lazymembers;
 pub mod semver;
 pub mod stringutil;
 pub mod tspath;
