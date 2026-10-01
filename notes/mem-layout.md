@@ -270,3 +270,56 @@ the per-checker hash tables, and lookups no longer miss the cache.
 | 4 checkers, before | 7.20-7.23 | 146-151 G | 11.42-11.46 |
 | 4 checkers, after | 6.67-6.71 | 138 G | 11.33-11.34 (-0.11) |
 | opt-out single / 4 checkers (go assignment), after | 19.39 / 8.95 | | 11.08 / 17.07 |
+
+## Result
+
+Interleaved, 3 rounds each, same machine (base = c1c1488, the start of this pass). Reference mode isolates this
+pass (the other agents' changes are off there: no lazy tables, `--checkerAssignment go`); default mode also includes
+lazy tuple tables (bd93422) and locality assignment (c9c52b2).
+
+| run | base peak GB | final peak GB | base check s | final check s | instructions |
+| --- | --- | --- | --- | --- | --- |
+| reference, single | 13.94 | 11.08 (-20.5%) | 20.9-21.4 | 18.1-18.2 | 338 -> 334 G |
+| reference, 4 checkers | 21.21 | 17.06 (-19.6%) | 10.06-10.11 | 8.64-8.78 | 507 -> 501 G |
+| default, single | 10.80 | 8.39 (-22%) | 18.9-20.3 | 16.7-18.0 | |
+| default, 4 checkers | 16.09 | 11.33 (-30%) | 9.10-9.26 | 6.67-6.69 | |
+
+Counters: reference mode 25,973,354 / 9,639,962 / 44,884,281 single and 39,704,001 / 16,200,921 / 89,981,648 on 4
+checkers after every step; default mode unchanged by every step of this pass.
+
+## Profile after (default mode)
+
+Single: arena 6,192 MB requested (was 7,811), heap outside the arena 2,179 MB live (was 3,003). 4 checkers: arena
+7,930 MB (was 11,277 before this pass and the two upstream changes), heap 3,228 MB (was 4,711).
+
+| arena type | single MB | 4-checker MB | B/each |
+| --- | --- | --- | --- |
+| Symbol | 913 | 1188 | 72 |
+| TypeMapper | 495 | 776 | 24 |
+| NodeAlloc<Identifier> | 419 | 420 | 56 |
+| [ValueSymbolLinks] chunks | 352 | 484 | 32 per value |
+| TypeAlloc<ObjectType> | 344 | 460 | 120 |
+| TypeAlloc<TypeReference> | 289 | 425 | 144 |
+| str (213 MB source text) | 274 | 287 | |
+| [P<Type>] | 225 | 351 | ~17 |
+| TypeAlloc<UnionType> / <IntersectionType> | 187 / 173 | 271 / 250 | 192 / 160 |
+| InferenceContext / InferenceInfo | 175 / 163 | 233 / 220 | 128 / 96 |
+| Signature | 156 | 223 | 104 |
+
+Heap live: `SymbolMap::insert` 587 / 706 MB (symbol table entries, 24 bytes each), instantiation `GoMap`s 228 /
+333, relation caches 190 / 388, lazy member tables ~250 / ~350, pointer-keyed `LinkStore`s 104 / 145.
+
+## Not done / what remains
+
+- `Symbol` (72 B): `name` and `declarations` are 16-byte slices; a thin representation would need
+  length-prefixed allocations, but names point into source text and declaration slices are shared.
+- `TypeMapper` count (21.6M single) and `[P<Type>]` lists: creation is semantics (mapper identity is used in
+  caches); interning one-element lists would change slice identity.
+- `InferenceContext` / `InferenceInfo` (~340 MB single): garbage after inference in Go, never freed in the
+  arena; the two `RefCell<Vec>` candidate lists could share a borrow flag (~14 MB), not worth it.
+- Instantiation maps (`GoMap<CacheHashKey, P<Type>>`): few large maps (863 hold 96% of 6M entries), 24-byte
+  slots; a shared map would hold the same entries.
+- Pointer-keyed `LinkStore`s (~100 MB single): keyed by pointer by design (Go assigns no ids there); slot chunks
+  would save ~25 MB.
+- `UnionOrIntersectionType.types` / `resolved_properties` and `TypeReference.resolved_type_arguments` as packed
+  slice cells: ~20 MB, needs an `Option` variant.

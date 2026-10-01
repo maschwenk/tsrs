@@ -176,3 +176,14 @@ Project (go -> locality, same commit 52ef5a9, medians of 3): 4 checkers peak 14.
 Single-threaded unchanged (no assignment with one checker). Of the remaining multi-checker excess, most is library instantiations (zod,
 MikroORM, lib) that every checker needs. Measurements, duplication breakdown, instrumentation
 (`TSRS_ASSIGNMENT_STATS`, feature `assignment-stats`): `notes/mem-assignment.md`.
+
+## 2026-10-01: data-layout pass (peak memory)
+
+Layout and allocation changes only (counters, suite pass lists and artifacts identical in both lazy modes): one
+arena allocation per AST node and per type (32-byte headers), `SymbolTable` as an insertion-ordered `Vec` with an
+index only past 8 entries, rarely set `ValueSymbolLinks` and `Symbol` fields in lazily allocated tails, 24-byte
+`TypeMapper`, packed slice cells in structured types and signatures, 20-byte relation cache slots, id-keyed link
+stores paged by id. Project, reference mode (isolates these changes; medians of 3, interleaved): single-threaded
+peak 13.94 -> 11.08 GB, check 21.2 -> 18.2 s; 4 checkers 21.21 -> 17.06 GB, check 10.07 -> 8.66 s. Default mode
+(with lazy tuples and locality assignment landed meanwhile): 10.80 -> 8.39 GB / 20.0 -> 17.1 s single, 16.09 ->
+11.33 GB / 9.1 -> 6.7 s on 4 checkers. Details and per-change numbers: `notes/mem-layout.md`.
