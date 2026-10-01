@@ -658,26 +658,31 @@ fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
     for (i, &file) in files.iter().enumerate() {
         file_indices.insert(file, i);
     }
-    let mut adjacent_files: Vec<Vec<usize>> = vec![Vec::new(); files.len()];
-    for (file_index, file) in files.iter().enumerate() {
-        let Some(resolved_modules) = program.resolved_modules.get(file.path()) else {
-            continue;
+    // The in-program import targets of each file, in resolution-map order (looking a resolved file name up
+    // normalizes it, so this part runs on the worker pool); the adjacency lists are then built in file order.
+    let targets_of = |file_index: usize| -> Vec<usize> {
+        let Some(resolved_modules) = program.resolved_modules.get(files[file_index].path()) else {
+            return Vec::new();
         };
         // Go iterates the resolution map in random order; FENNEL only counts neighbors, so the
         // order of entries within an adjacency list does not affect the result.
-        for resolved in resolved_modules.values() {
-            if !resolved.is_resolved() {
-                continue;
-            }
-            let Some(imported_file) = program.get_source_file_for_resolved_module(&resolved.resolved_file_name) else {
-                continue;
-            };
-            let Some(&imported_index) = file_indices.get(&imported_file) else {
-                continue;
-            };
-            if imported_index == file_index {
-                continue;
-            }
+        resolved_modules
+            .values()
+            .filter(|resolved| resolved.is_resolved())
+            .filter_map(|resolved| program.get_source_file_for_resolved_module(&resolved.resolved_file_name))
+            .filter_map(|imported_file| file_indices.get(&imported_file).copied())
+            .filter(|&imported_index| imported_index != file_index)
+            .collect()
+    };
+    let targets: Vec<Vec<usize>> = if program.single_threaded() {
+        (0..files.len()).map(targets_of).collect()
+    } else {
+        use rayon::prelude::*;
+        crate::program::worker_pool().install(|| (0..files.len()).into_par_iter().map(targets_of).collect())
+    };
+    let mut adjacent_files: Vec<Vec<usize>> = vec![Vec::new(); files.len()];
+    for (file_index, file_targets) in targets.into_iter().enumerate() {
+        for imported_index in file_targets {
             adjacent_files[file_index].push(imported_index);
             adjacent_files[imported_index].push(file_index);
         }
