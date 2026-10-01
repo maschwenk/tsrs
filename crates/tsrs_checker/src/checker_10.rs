@@ -1717,20 +1717,20 @@ impl Checker {
             }
             if symbol.flags().intersects(SymbolFlags::Enum)
                 && (self.get_declared_type_of_symbol(symbol).flags().intersects(TypeFlags::Enum)
-                    || d.properties.get().iter().any(|prop| self.get_type_of_symbol(*prop).flags().intersects(TypeFlags::NumberLike)))
+                    || d.properties().iter().any(|prop| self.get_type_of_symbol(*prop).flags().intersects(TypeFlags::NumberLike)))
             {
                 index_infos.push(self.enum_number_index_info);
             }
         }
-        d.index_infos.set(alloc_vec(index_infos));
+        d.set_index_infos(alloc_vec(index_infos));
         // We resolve the members before computing the signatures because a signature may use
         // typeof with a qualified name expression that circularly references the type we are
         // in the process of resolving (see issue #6072). The temporarily empty signature list
         // will never be observed because a qualified name can't reference signatures.
         if symbol.flags().intersects(SymbolFlags::Function | SymbolFlags::Method) {
             let signatures = self.get_signatures_of_symbol(Some(symbol));
-            d.signatures.set(alloc_vec(signatures));
-            d.call_signature_count.set(d.signatures.get().len() as i32);
+            d.set_signatures(alloc_vec(signatures));
+            d.set_call_signature_count(d.signatures().len() as i32);
         }
         // And likewise for construct signatures for classes
         if symbol.flags().intersects(SymbolFlags::Class) {
@@ -1740,9 +1740,9 @@ impl Checker {
             if construct_signatures.is_empty() {
                 construct_signatures = self.get_default_construct_signatures(class_type);
             }
-            let mut signatures = d.signatures.get().to_vec();
+            let mut signatures = d.signatures().to_vec();
             signatures.extend(construct_signatures);
-            d.signatures.set(alloc_vec(signatures));
+            d.set_signatures(alloc_vec(signatures));
         }
     }
 
@@ -2155,7 +2155,7 @@ impl Checker {
         lazy.members.borrow_mut().insert(name.to_string(), None);
         let modifiers_prop = self.get_member_of_structured_type(lazy.modifiers_type, name);
         if t.object_flags().intersects(ObjectFlags::MembersResolved) {
-            return Some(t.as_structured_type().members.get().and_then(|m| m.lookup(name)));
+            return Some(t.as_structured_type().members().and_then(|m| m.lookup(name)));
         }
         let mut member = None;
         if let Some(modifiers_prop) = modifiers_prop {
@@ -2204,7 +2204,7 @@ impl Checker {
             }
             lazy.resolving.set(false);
             if t.object_flags().intersects(ObjectFlags::MembersResolved) {
-                return t.as_structured_type().index_infos.get();
+                return t.as_structured_type().index_infos();
             }
             self.lazy_member_stats.mapped_index_info_queries += 1;
             lazy.index_infos.set(alloc_vec(index_infos));
@@ -2771,7 +2771,7 @@ impl Checker {
     pub(crate) fn get_property_of_object_type(&mut self, t: P<Type>, name: &str) -> Option<P<Symbol>> {
         if t.flags().intersects(TypeFlags::Object) {
             let resolved = self.resolve_structured_type_members(t).unwrap();
-            let symbol = resolved.members.get().and_then(|m| m.lookup(name));
+            let symbol = resolved.members().and_then(|m| m.lookup(name));
             if let Some(symbol) = symbol {
                 if self.symbol_is_value(symbol) {
                     return Some(symbol);

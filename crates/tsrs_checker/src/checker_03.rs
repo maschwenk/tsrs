@@ -301,11 +301,11 @@ impl Checker {
     pub(crate) fn get_type_without_signatures(&mut self, t: P<Type>) -> P<Type> {
         if t.flags().intersects(TypeFlags::Object) {
             let resolved = self.resolve_structured_type_members(t).unwrap();
-            if !resolved.signatures.get().is_empty() {
+            if !resolved.signatures().is_empty() {
                 let result = self.new_object_type(ObjectFlags::Anonymous, t.symbol());
                 result.object_flags.set(result.object_flags.get() | ObjectFlags::MembersResolved);
-                result.as_object_type().members.set(resolved.members.get());
-                result.as_object_type().properties.set(resolved.properties.get());
+                result.as_object_type().set_members(resolved.members());
+                result.as_object_type().set_properties(resolved.properties());
                 return result;
             }
         } else if t.flags().intersects(TypeFlags::Intersection) {

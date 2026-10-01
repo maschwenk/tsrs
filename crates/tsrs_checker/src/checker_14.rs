@@ -49,7 +49,7 @@ impl Checker {
 
     // checker.go:28331
     pub fn type_has_call_or_construct_signatures(&mut self, t: P<Type>) -> bool {
-        t.flags().intersects(TypeFlags::StructuredType) && !self.resolve_structured_type_members(t).unwrap().signatures.get().is_empty()
+        t.flags().intersects(TypeFlags::StructuredType) && !self.resolve_structured_type_members(t).unwrap().signatures().is_empty()
     }
 
     // checker.go:28335
@@ -400,7 +400,7 @@ impl Checker {
         }
         let resolved = self.resolve_structured_type_members(t).unwrap();
         let members = self.transform_type_of_members(t, |c, t| c.get_regular_type_of_object_literal(t));
-        let regular = self.new_anonymous_type(t.symbol(), Some(members), resolved.call_signatures(), resolved.construct_signatures(), resolved.index_infos.get());
+        let regular = self.new_anonymous_type(t.symbol(), Some(members), resolved.call_signatures(), resolved.construct_signatures(), resolved.index_infos());
         // resolved is t's own structured data, so resolved.flags/objectFlags are t's header flags
         regular.flags.set(t.flags());
         regular.object_flags.set(regular.object_flags() | (t.object_flags() & !ObjectFlags::FreshLiteral));

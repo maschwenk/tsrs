@@ -1530,29 +1530,89 @@ pub struct ConstrainedType {
 // Go's StructuredType embeds ConstrainedType; here the base constraint of a structured type (set for 4% of the 7.6M
 // on Project) is kept in `Checker::structured_type_base_constraints` (`resolved_base_constraint_of`), and
 // `try_as_constrained_type()` is None for structured types.
+//
+// The resolved members (Go's five fields) live in a `StructuredMembers` record allocated on the first write: most
+// structured types are never resolved (on Project 4.9M of 7.6M: type references answered by lazy member tables,
+// unions and intersections whose members nobody asks for), and those now carry one pointer instead of 48 bytes.
+// Reads of an absent record return the zero values (nil members, empty slices, count 0), exactly like reading the
+// unset fields; once allocated, every getter returns exactly what was last set.
 #[derive(Default)]
 pub struct StructuredType {
-    pub members: Cell<Option<P<SymbolTable>>>,
-    // `SliceCell`s (12 bytes, 4-aligned) pack with `call_signature_count`: 40 bytes instead of 56 for every
-    // object, union and intersection type.
-    pub properties: SliceCell<P<Symbol>>,
-    pub signatures: SliceCell<P<Signature>>, // Signatures (call + construct)
-    pub call_signature_count: Cell<i32>, // Count of call signatures
-    pub index_infos: SliceCell<P<IndexInfo>>,
+    resolved: Cell<Option<P<StructuredMembers>>>,
     // Go's objectTypeWithoutAbstractConstructSignatures is `Checker::object_types_without_abstract_construct_signatures`.
 }
 
-const _: () = assert!(std::mem::size_of::<StructuredType>() == 48);
+#[derive(Default)]
+struct StructuredMembers {
+    members: Cell<Option<P<SymbolTable>>>,
+    // `SliceCell`s (12 bytes, 4-aligned) pack with `call_signature_count`.
+    properties: SliceCell<P<Symbol>>,
+    signatures: SliceCell<P<Signature>>, // Signatures (call + construct)
+    call_signature_count: Cell<i32>,     // Count of call signatures
+    index_infos: SliceCell<P<IndexInfo>>,
+}
+
+const _: () = assert!(std::mem::size_of::<StructuredType>() == 8);
 
 impl StructuredType {
+    #[inline]
+    fn resolved_for_write(&self) -> P<StructuredMembers> {
+        match self.resolved.get() {
+            Some(resolved) => resolved,
+            None => {
+                let resolved = P::new(StructuredMembers::default());
+                self.resolved.set(Some(resolved));
+                resolved
+            }
+        }
+    }
+
+    #[inline]
+    pub fn members(&self) -> Option<P<SymbolTable>> {
+        self.resolved.get().and_then(|r| r.members.get())
+    }
+    #[inline]
+    pub fn set_members(&self, members: Option<P<SymbolTable>>) {
+        self.resolved_for_write().members.set(members);
+    }
+    #[inline]
+    pub fn properties(&self) -> &'static [P<Symbol>] {
+        self.resolved.get().map_or(&[], |r| r.properties.get())
+    }
+    #[inline]
+    pub fn set_properties(&self, properties: &'static [P<Symbol>]) {
+        self.resolved_for_write().properties.set(properties);
+    }
+    /// Call signatures followed by construct signatures.
+    #[inline]
+    pub fn signatures(&self) -> &'static [P<Signature>] {
+        self.resolved.get().map_or(&[], |r| r.signatures.get())
+    }
+    #[inline]
+    pub fn set_signatures(&self, signatures: &'static [P<Signature>]) {
+        self.resolved_for_write().signatures.set(signatures);
+    }
+    #[inline]
+    pub fn call_signature_count(&self) -> i32 {
+        self.resolved.get().map_or(0, |r| r.call_signature_count.get())
+    }
+    #[inline]
+    pub fn set_call_signature_count(&self, count: i32) {
+        self.resolved_for_write().call_signature_count.set(count);
+    }
+    #[inline]
+    pub fn index_infos(&self) -> &'static [P<IndexInfo>] {
+        self.resolved.get().map_or(&[], |r| r.index_infos.get())
+    }
+    #[inline]
+    pub fn set_index_infos(&self, index_infos: &'static [P<IndexInfo>]) {
+        self.resolved_for_write().index_infos.set(index_infos);
+    }
     pub fn call_signatures(&self) -> &'static [P<Signature>] {
-        &self.signatures.get()[..self.call_signature_count.get() as usize]
+        &self.signatures()[..self.call_signature_count() as usize]
     }
     pub fn construct_signatures(&self) -> &'static [P<Signature>] {
-        &self.signatures.get()[self.call_signature_count.get() as usize..]
-    }
-    pub fn properties(&self) -> &'static [P<Symbol>] {
-        self.properties.get()
+        &self.signatures()[self.call_signature_count() as usize..]
     }
 }
 
@@ -1818,7 +1878,7 @@ pub struct UnionType {
 }
 embeds!(UnionType, union_or_intersection_type, UnionOrIntersectionType);
 
-const _: () = assert!(std::mem::size_of::<UnionType>() == 128);
+const _: () = assert!(std::mem::size_of::<UnionType>() == 88);
 
 // IntersectionType
 
@@ -1830,7 +1890,7 @@ pub struct IntersectionType {
 }
 embeds!(IntersectionType, union_or_intersection_type, UnionOrIntersectionType);
 
-const _: () = assert!(std::mem::size_of::<IntersectionType>() == 104);
+const _: () = assert!(std::mem::size_of::<IntersectionType>() == 64);
 
 // TypeParameter
 

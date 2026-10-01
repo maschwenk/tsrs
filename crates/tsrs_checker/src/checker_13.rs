@@ -931,9 +931,9 @@ impl Checker {
     // checker.go:26951
     pub(crate) fn is_empty_resolved_type(&mut self, t: &'static StructuredType) -> bool {
         !std::ptr::eq(t, self.any_function_type.as_structured_type())
-            && t.properties.get().is_empty()
-            && t.signatures.get().is_empty()
-            && t.index_infos.get().is_empty()
+            && t.properties().is_empty()
+            && t.signatures().is_empty()
+            && t.index_infos().is_empty()
     }
 
     // checker.go:26955

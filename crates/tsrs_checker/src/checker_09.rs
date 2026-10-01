@@ -2108,7 +2108,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_properties_of_object_type(&mut self, t: P<Type>) -> Vec<P<Symbol>> {
         if t.flags().intersects(TypeFlags::Object) {
-            return self.resolve_structured_type_members(t).unwrap().properties.get().to_vec();
+            return self.resolve_structured_type_members(t).unwrap().properties().to_vec();
         }
         Vec::new()
     }
@@ -2295,7 +2295,7 @@ impl Checker {
             if let Some(lazy) = self.get_lazy_mapped_table(t) {
                 return self.get_lazy_mapped_type_index_infos(t, &lazy);
             }
-            return self.resolve_structured_type_members(t).unwrap().index_infos.get();
+            return self.resolve_structured_type_members(t).unwrap().index_infos();
         }
         &[]
     }
@@ -2749,7 +2749,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_member_of_structured_type_ex(&mut self, t: P<Type>, name: &str, instantiate: bool) -> Option<P<Symbol>> {
         if t.object_flags().intersects(ObjectFlags::MembersResolved) {
-            return t.as_structured_type().members.get().and_then(|m| m.lookup(name));
+            return t.as_structured_type().members().and_then(|m| m.lookup(name));
         }
         self.get_member_of_unresolved_structured_type(t, name, instantiate)
     }
@@ -2767,7 +2767,7 @@ impl Checker {
         }
         let lm = self.get_ready_lazy_member_table(t);
         let Some(lm) = lm.filter(|_| !is_reserved_member_name(name)) else {
-            return self.resolve_structured_type_members(t).unwrap().members.get().and_then(|m| m.lookup(name));
+            return self.resolve_structured_type_members(t).unwrap().members().and_then(|m| m.lookup(name));
         };
         self.lazy_member_stats.member_lookups += 1;
         // The declared member, else the first base type's property (see addInheritedMembers).
@@ -2803,7 +2803,7 @@ impl Checker {
             let mut seen: FxHashSet<&'static str> = FxHashSet::default();
             return self.every_lazy_property(t, &lm, &mut seen, f);
         }
-        let properties = self.resolve_structured_type_members(t).unwrap().properties.get();
+        let properties = self.resolve_structured_type_members(t).unwrap().properties();
         properties.iter().all(|&p| f(self, p))
     }
 

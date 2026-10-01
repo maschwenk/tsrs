@@ -2021,25 +2021,25 @@ impl Checker {
     ) {
         t.object_flags.set(t.object_flags() | ObjectFlags::MembersResolved);
         let data = t.as_structured_type();
-        data.members.set(members);
+        data.set_members(members);
         let properties = self.get_named_members(members, t.symbol());
-        data.properties.set(alloc_vec(properties));
+        data.set_properties(alloc_vec(properties));
         if !call_signatures.is_empty() {
             if !construct_signatures.is_empty() {
-                data.signatures.set(alloc_vec([call_signatures, construct_signatures].concat()));
+                data.set_signatures(alloc_vec([call_signatures, construct_signatures].concat()));
             } else {
-                data.signatures.set(alloc_slice(call_signatures));
+                data.set_signatures(alloc_slice(call_signatures));
             }
-            data.call_signature_count.set(call_signatures.len() as i32);
+            data.set_call_signature_count(call_signatures.len() as i32);
         } else {
             if !construct_signatures.is_empty() {
-                data.signatures.set(alloc_slice(construct_signatures));
+                data.set_signatures(alloc_slice(construct_signatures));
             } else {
-                data.signatures.set(&[]);
+                data.set_signatures(&[]);
             }
-            data.call_signature_count.set(0);
+            data.set_call_signature_count(0);
         }
-        data.index_infos.set(alloc_slice(index_infos));
+        data.set_index_infos(alloc_slice(index_infos));
     }
 
     // checker.go:25638

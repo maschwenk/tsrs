@@ -557,7 +557,7 @@ impl NodeBuilderImpl {
             c.object_types_without_abstract_construct_signatures.insert(t, t);
             return t;
         }
-        let type_copy = c.new_anonymous_type(t.symbol(), st.members.get(), st.call_signatures(), &construct_signatures, st.index_infos.get());
+        let type_copy = c.new_anonymous_type(t.symbol(), st.members(), st.call_signatures(), &construct_signatures, st.index_infos());
         c.object_types_without_abstract_construct_signatures.insert(t, type_copy);
         c.object_types_without_abstract_construct_signatures.insert(type_copy, type_copy);
         type_copy

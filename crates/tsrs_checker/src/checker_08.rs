@@ -857,7 +857,7 @@ impl Checker {
         links.target.set(Some(symbol));
         links.originating_import.set(Some(reference_parent));
         let resolved_module_type = self.resolve_structured_type_members(module_type).unwrap();
-        let t = self.new_anonymous_type(Some(result), resolved_module_type.members.get(), &[], &[], resolved_module_type.index_infos.get());
+        let t = self.new_anonymous_type(Some(result), resolved_module_type.members(), &[], &[], resolved_module_type.index_infos());
         self.value_symbol_links.get(result).resolved_type.set(Some(t));
         result
     }

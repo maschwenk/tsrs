@@ -57,7 +57,7 @@ fn get_instantiated_type_part(c: &mut Checker, st: &mut InstantiationExpressionS
             assert!(t.symbol().is_some(), "Instantiation expression source type must have a symbol");
             symbol.declarations.set(t.symbol().unwrap().declarations());
             let result = c.new_object_type(ObjectFlags::Anonymous | ObjectFlags::InstantiationExpressionType, Some(symbol));
-            c.set_structured_type_members(result, resolved.members.get(), &call_signatures, &construct_signatures, resolved.index_infos.get());
+            c.set_structured_type_members(result, resolved.members(), &call_signatures, &construct_signatures, resolved.index_infos());
             result.as_instantiation_expression_type().node.set(Some(st.node));
             return result;
         }

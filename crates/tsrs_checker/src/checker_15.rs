@@ -1882,7 +1882,7 @@ impl Checker {
                 // (See #44364 and #45031 for relevant implementation PRs)
                 if meta_prop.keyword_token == Kind::ImportKeyword && node.text() == "meta" {
                     let import_meta_type = self.get_global_import_meta_expression_type();
-                    return import_meta_type.as_object_type().members.get().and_then(|m| m.lookup("meta"));
+                    return import_meta_type.as_object_type().members().and_then(|m| m.lookup("meta"));
                 }
                 // no other meta properties are valid syntax, thus no others should have symbols
                 return None;
