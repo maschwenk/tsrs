@@ -371,13 +371,23 @@ pub fn parse_isolated_entity_name(text: &str) -> Option<P<Node>> {
 
 impl Parser {
     pub(crate) fn initialize_state(&mut self, opts: SourceFileParseOptions, source_text: &str, script_kind: ScriptKind) {
+        self.initialize_state_static(opts, alloc_str(source_text), script_kind)
+    }
+
+    /// `initialize_state` for text that already lives in the arena (Go shares the string; no copy).
+    pub(crate) fn initialize_state_static(
+        &mut self,
+        opts: SourceFileParseOptions,
+        source_text: &'static str,
+        script_kind: ScriptKind,
+    ) {
         if script_kind == ScriptKind::Unknown {
             panic!("ScriptKind must be specified when parsing source file: {}", opts.file_name);
         }
 
         self.scanner.reset();
         self.opts = opts;
-        self.source_text = alloc_str(source_text);
+        self.source_text = source_text;
         self.script_kind = script_kind;
         self.language_variant = get_language_variant(self.script_kind);
         self.context_flags = match self.script_kind {

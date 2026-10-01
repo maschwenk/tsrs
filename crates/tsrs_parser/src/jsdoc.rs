@@ -19,7 +19,7 @@ pub(crate) fn init() {
 // Called on first access to Node.JSDoc() for non-JS source files.
 fn parse_jsdoc_for_node(source_file: &'static SourceFile, node: P<Node>) -> Vec<P<Node>> {
     let mut p = new_parser();
-    p.initialize_state(source_file.parse_options().clone(), source_file.text(), source_file.script_kind());
+    p.initialize_state_static(source_file.parse_options().clone(), source_file.text(), source_file.script_kind());
     let ranges = get_jsdoc_comment_ranges(&mut p.factory, &[], node, source_file.text());
     if ranges.is_empty() {
         return Vec::new();

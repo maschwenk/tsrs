@@ -22,12 +22,23 @@ thread_local! {
         let arena: &'static Bump = Box::leak(Box::new(Bump::with_capacity(1 << 20)));
         #[cfg(any(debug_assertions, feature = "checked-cells"))]
         shared_check::register(arena);
+        #[cfg(feature = "alloc-profile")]
+        crate::alloc_profile::register_arena(arena);
         arena
+    };
+}
+
+macro_rules! profile {
+    ($ty:ty, $bytes:expr) => {
+        #[cfg(feature = "alloc-profile")]
+        crate::alloc_profile::record(std::panic::Location::caller(), std::any::type_name::<$ty>(), $bytes);
     };
 }
 
 #[inline]
 fn with_arena<R>(f: impl FnOnce(&'static Bump) -> R) -> R {
+    #[cfg(feature = "alloc-profile")]
+    let _chunk = crate::alloc_profile::ArenaScope::enter();
     ARENA.with(|a| f(a))
 }
 
@@ -39,7 +50,9 @@ pub struct P<T: ?Sized + 'static>(&'static T);
 impl<T> P<T> {
     /// Allocates `value` in the current thread's leak arena. Destructors never run.
     #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(value: T) -> P<T> {
+        profile!(T, std::mem::size_of::<T>());
         with_arena(|a| P(a.alloc(value)))
     }
 }
@@ -124,35 +137,49 @@ unsafe impl<T: ?Sized> Sync for P<T> {}
 
 /// Copies a slice into the arena. Use for Go slices that are stored in long-lived objects.
 #[inline]
+#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc_slice<T: Copy>(items: &[T]) -> &'static [T] {
     if items.is_empty() {
         return &[];
     }
+    profile!([T], std::mem::size_of_val(items));
     with_arena(|a| &*a.alloc_slice_copy(items))
 }
 
 /// Moves a `Vec` of arbitrary (possibly non-`Copy`) items into the arena.
 #[inline]
+#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc_vec<T>(items: Vec<T>) -> &'static [T] {
     if items.is_empty() {
         return &[];
     }
+    profile!([T], std::mem::size_of_val(&items[..]));
     with_arena(|a| &*a.alloc_slice_fill_iter(items))
 }
 
 /// Copies a string into the arena.
 #[inline]
+#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc_str(s: &str) -> &'static str {
     if s.is_empty() {
         return "";
     }
+    profile!(str, s.len());
     with_arena(|a| &*a.alloc_str(s))
 }
 
 /// Allocates a plain `&'static T` (for values that do not need pointer identity semantics).
 #[inline]
+#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc<T>(value: T) -> &'static T {
+    profile!(T, std::mem::size_of::<T>());
     with_arena(|a| &*a.alloc(value))
+}
+
+/// Prints the allocation profile (no-op unless built with `--features tsrs_core/alloc-profile`).
+pub fn alloc_profile_dump() {
+    #[cfg(feature = "alloc-profile")]
+    crate::alloc_profile::dump();
 }
 
 /// Bytes allocated so far by the current thread's arena.

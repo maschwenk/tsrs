@@ -10,6 +10,8 @@ workspace = true
 [features]
 # Atomic borrow checking for FrozenCell in release builds (always on with debug_assertions).
 checked-cells = []
+# Per-call-site arena allocation profile and a counting global allocator (src/alloc_profile.rs).
+alloc-profile = []
 
 [dependencies]
 bumpalo.workspace = true

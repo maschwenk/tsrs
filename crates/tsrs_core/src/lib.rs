@@ -1,5 +1,7 @@
 pub mod ptr;
-pub use ptr::{alloc, alloc_slice, alloc_str, alloc_vec, P};
+#[cfg(feature = "alloc-profile")]
+pub mod alloc_profile;
+pub use ptr::{alloc, alloc_slice, alloc_str, alloc_vec, alloc_profile_dump, P};
 
 mod frozen;
 pub use frozen::{FrozenCell, FrozenRef, FrozenRefMut, OwnedCell};

@@ -12,6 +12,7 @@ fn main() {
             let sys: &'static sys::osSys = Box::leak(Box::new(sys::new_system()));
             let result = execute::command_line(sys, args);
             tsc::System::flush(sys);
+            tsrs_core::alloc_profile_dump();
             result.status
         })
         .unwrap()
