@@ -203,3 +203,25 @@ tag and read in place. Constructors build the data struct first and hand it to `
 | 4 checkers, after | 8.75-8.78 | 471-472 G | 13.14-13.17 (-0.25) |
 | opt-out single / 4 checkers, before | | | 11.70 / 17.85 |
 | opt-out single / 4 checkers, after | | | 11.56 / 17.58 |
+
+(After this step `mem-assignment` made directory-locality checker assignment the default, c9c52b2: default-mode
+4-checker counters drop to 17,297,363 / 13,788,912 / 76,888,800 and the peak to 11.77 GB. Opt-out comparisons with
+`tsgo-ref` now also pass `TSRS_CHECKER_ASSIGNMENT=go` on 4 checkers; the measurement scripts run `tsrs` from this
+worktree's `target/` with `-p <project>/tsconfig.json`.)
+
+### Packed slice cells in `StructuredType` and `Signature`
+
+`tsrs_core::SliceCell<T>`: a `Cell<&'static [T]>` stored as a 4-byte-aligned (pointer, `u32` length) pair, 12
+bytes; same `get` / `set`, and `get` returns exactly the slice last set. `StructuredType.{properties, signatures,
+index_infos}` now pack with `call_signature_count` (56 -> 40 bytes of the struct, 80 -> 64 total, so every object,
+reference, union and intersection type shrinks by 16 bytes: ~7.6M types single), and `Signature.{type_parameters,
+parameters}` with its four 4-byte fields (112 -> 104 bytes). No call site changed.
+
+| run (2 interleaved rounds) | check s | instructions | peak GB |
+| --- | --- | --- | --- |
+| single, before | 18.31-19.96 | 314 G | 8.78-8.80 |
+| single, after | 18.41-19.24 | 314 G | 8.68 (-0.11) |
+| 4 checkers, before | 7.23-7.55 | 421-422 G | 11.76-11.79 |
+| 4 checkers, after | 7.46-7.61 | 421-423 G | 11.58-11.62 (-0.17) |
+| opt-out single / 4 checkers (go assignment), before | | | 11.56 / 17.62 |
+| opt-out single / 4 checkers (go assignment), after | | | 11.44 / 17.39 |

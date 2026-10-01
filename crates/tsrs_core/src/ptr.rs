@@ -210,6 +210,52 @@ impl<T> StaticSlicePtr<T> {
 unsafe impl<T> Send for StaticSlicePtr<T> {}
 unsafe impl<T> Sync for StaticSlicePtr<T> {}
 
+#[repr(C, packed(4))]
+struct PackedSlice<T: 'static> {
+    ptr: std::ptr::NonNull<T>,
+    len: u32,
+}
+
+impl<T> Clone for PackedSlice<T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for PackedSlice<T> {}
+
+/// A `Cell<&'static [T]>` in 12 bytes with 4-byte alignment (data pointer + `u32` length), so a struct can pack
+/// it with other 4-byte fields instead of padding a 16-byte slice reference. `get` returns exactly the slice
+/// last `set` (same pointer and length).
+pub struct SliceCell<T: 'static>(std::cell::Cell<PackedSlice<T>>);
+
+impl<T> SliceCell<T> {
+    #[inline]
+    pub fn new(s: &'static [T]) -> Self {
+        SliceCell(std::cell::Cell::new(Self::pack(s)))
+    }
+    #[inline]
+    fn pack(s: &'static [T]) -> PackedSlice<T> {
+        PackedSlice { ptr: std::ptr::NonNull::from(s).cast(), len: u32::try_from(s.len()).expect("slice longer than u32::MAX") }
+    }
+    #[inline]
+    pub fn get(&self) -> &'static [T] {
+        let p = self.0.get();
+        // SAFETY: built from a `&'static [T]` of this length.
+        unsafe { std::slice::from_raw_parts(p.ptr.as_ptr(), p.len as usize) }
+    }
+    #[inline]
+    pub fn set(&self, s: &'static [T]) {
+        self.0.set(Self::pack(s))
+    }
+}
+
+impl<T> Default for SliceCell<T> {
+    fn default() -> Self {
+        SliceCell::new(&[])
+    }
+}
+
 /// Copies a slice into the arena. Use for Go slices that are stored in long-lived objects.
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]

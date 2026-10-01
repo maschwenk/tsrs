@@ -2,6 +2,7 @@ use std::fmt;
 use std::hash::Hash;
 
 use bitflags::bitflags;
+use tsrs_core::SliceCell;
 
 use crate::*;
 
@@ -1515,14 +1516,18 @@ pub struct ConstrainedType {
 pub struct StructuredType {
     pub constrained_type: ConstrainedType,
     pub members: Cell<Option<P<SymbolTable>>>,
-    pub properties: Cell<&'static [P<Symbol>]>,
-    pub signatures: Cell<&'static [P<Signature>]>, // Signatures (call + construct)
+    // `SliceCell`s (12 bytes, 4-aligned) pack with `call_signature_count`: 40 bytes instead of 56 for every
+    // object, union and intersection type.
+    pub properties: SliceCell<P<Symbol>>,
+    pub signatures: SliceCell<P<Signature>>, // Signatures (call + construct)
     pub call_signature_count: Cell<i32>, // Count of call signatures
-    pub index_infos: Cell<&'static [P<IndexInfo>]>,
+    pub index_infos: SliceCell<P<IndexInfo>>,
 
     pub object_type_without_abstract_construct_signatures: Cell<Option<P<Type>>>,
 }
 embeds!(StructuredType, constrained_type, ConstrainedType);
+
+const _: () = assert!(std::mem::size_of::<StructuredType>() == 64);
 
 impl StructuredType {
     pub fn call_signatures(&self) -> &'static [P<Signature>] {
@@ -1990,8 +1995,8 @@ pub struct Signature {
     pub min_argument_count: Cell<i32>,
     pub resolved_min_argument_count: Cell<i32>,
     pub declaration: Cell<Option<P<Node>>>,
-    pub type_parameters: Cell<&'static [P<Type>]>,
-    pub parameters: Cell<&'static [P<Symbol>]>,
+    pub type_parameters: SliceCell<P<Type>>, // SliceCells pack with the four 4-byte fields above
+    pub parameters: SliceCell<P<Symbol>>,
     pub this_parameter: Cell<Option<P<Symbol>>>,
     pub resolved_return_type: Cell<Option<P<Type>>>,
     pub resolved_type_predicate: Cell<Option<P<TypePredicate>>>,
@@ -2000,6 +2005,8 @@ pub struct Signature {
     pub isolated_signature_type: Cell<Option<P<Type>>>,
     pub composite: Cell<Option<P<CompositeSignature>>>,
 }
+
+const _: () = assert!(std::mem::size_of::<Signature>() == 104);
 
 impl Signature {
     pub fn id(&self) -> SignatureId {
