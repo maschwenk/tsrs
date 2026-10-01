@@ -285,7 +285,7 @@ impl Program {
         let _ = self.checker_pool.set(pool);
     }
 
-    fn pool(&self) -> &checkerPool {
+    pub(crate) fn pool(&self) -> &checkerPool {
         self.checker_pool.get().unwrap()
     }
 
@@ -2001,6 +2001,8 @@ pub fn get_diagnostics_of_any_program(
                 // Incremental programs cache checking globals with file diagnostics;
                 // a late sweep would also collect incidental signature-generation globals.
                 all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: global (after)", || program.get_global_diagnostics()));
+                #[cfg(feature = "checker")]
+                crate::checkerpool::write_file_times(program);
             }
 
             if (skip_no_emit_check_for_dts_diagnostics || program.options().no_emit.is_true())

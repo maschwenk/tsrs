@@ -111,6 +111,41 @@ pub(crate) struct poolState {
     pub(crate) associations: Vec<usize>,
     // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, (seconds, files run) per checker.
     pub(crate) group_runs: Mutex<Vec<Vec<(f64, usize)>>>,
+    // TSRS_FILE_TIMES only: (file, checker, seconds) per checked file, in completion order.
+    pub(crate) file_times: Mutex<Vec<(P<SourceFile>, usize, f64)>>,
+}
+
+// TSRS_FILE_TIMES=<path> (experiments): after checking, write one line per file run by a checker group:
+// checker, seconds, node count, text length, import count, file name, and the file's node-kind histogram
+// (`Kind=count` pairs), for fitting assignment cost models offline.
+pub(crate) fn file_times_path() -> Option<&'static str> {
+    static PATH: OnceLock<Option<String>> = OnceLock::new();
+    PATH.get_or_init(|| std::env::var("TSRS_FILE_TIMES").ok().filter(|v| !v.is_empty())).as_deref()
+}
+
+pub(crate) fn write_file_times(program: &'static Program) {
+    use std::fmt::Write;
+    let (Some(path), Some(state)) = (file_times_path(), program.pool().state.get()) else {
+        return;
+    };
+    fn count_kinds(node: P<tsrs_ast::Node>, counts: &mut [u32]) {
+        counts[node.kind as usize] += 1;
+        node.for_each_child(&mut |child| {
+            count_kinds(child, counts);
+            false
+        });
+    }
+    let mut out = String::new();
+    for &(file, checker, seconds) in state.file_times.lock().unwrap().iter() {
+        let mut counts = vec![0u32; tsrs_ast::Kind::Count as usize + 1];
+        count_kinds(file.as_node(), &mut counts);
+        let _ = write!(out, "{checker}\t{seconds:.6}\t{}\t{}\t{}\t{}\t", file.node_count.get(), file.text().len(), file.imports().len(), file.file_name());
+        for (kind, &count) in counts.iter().enumerate().filter(|(_, &c)| c > 0) {
+            let _ = write!(out, "{:?}={count} ", tsrs_ast::Kind::from_i16(kind as i16));
+        }
+        out.push('\n');
+    }
+    std::fs::write(path, out).expect("TSRS_FILE_TIMES");
 }
 
 // TSRS_ASSIGNMENT_STATS=1: record per-checker group timings and, after `--extendedDiagnostics`, print the
@@ -338,7 +373,7 @@ impl checkerPool {
             for (i, &file) in files.iter().enumerate() {
                 file_associations.insert(file, associations[i]);
             }
-            poolState { checkers, file_associations, associations, group_runs: Mutex::new(Vec::new()) }
+            poolState { checkers, file_associations, associations, group_runs: Mutex::new(Vec::new()), file_times: Mutex::new(Vec::new()) }
         })
     }
 
@@ -393,13 +428,18 @@ impl checkerPool {
         let state = self.create_checkers(program);
         let stats = assignment_stats_enabled();
         let times: Vec<Mutex<(f64, usize)>> = if stats { (0..state.checkers.len()).map(|_| Mutex::new((0.0, 0))).collect() } else { Vec::new() };
+        let file_times = file_times_path().is_some();
         let run = |checker_idx: usize| {
             let start = stats.then(std::time::Instant::now);
             let mut count = 0;
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
             for (i, &file) in files.iter().enumerate() {
                 if state.file_associations.get(&file) == Some(&checker_idx) {
+                    let file_start = file_times.then(std::time::Instant::now);
                     cb(&mut guard, i, file);
+                    if let Some(file_start) = file_start {
+                        state.file_times.lock().unwrap().push((file, checker_idx, file_start.elapsed().as_secs_f64()));
+                    }
                     count += 1;
                 }
             }
