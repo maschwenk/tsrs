@@ -163,7 +163,7 @@ impl Checker {
 // checker.go:8894
 pub(crate) fn some_signature(signatures: &[P<Signature>], mut f: impl FnMut(P<Signature>) -> bool) -> bool {
     for &sig in signatures {
-        let composite = sig.composite.get();
+        let composite = sig.composite();
         if composite.is_some_and(|composite| composite.is_union.get() && composite.signatures.get().iter().any(|&s| f(s))) || composite.is_none() && f(sig) {
             return true;
         }
@@ -1995,7 +1995,7 @@ impl Checker {
     // checker.go:10492
     pub(crate) fn create_union_signature(&mut self, sig: P<Signature>, union_signatures: &[P<Signature>]) -> P<Signature> {
         let result = self.clone_signature(sig);
-        result.composite.set(Some(P::new(CompositeSignature { is_union: Cell::new(true), signatures: Cell::new(alloc_slice(union_signatures)) })));
+        result.set_composite(Some(P::new(CompositeSignature { is_union: Cell::new(true), signatures: Cell::new(alloc_slice(union_signatures)) })));
         result.target.set(None);
         result.mapper.set(None);
         result
@@ -2068,7 +2068,7 @@ impl Checker {
             let parameter = sig.this_parameter();
             if parameter.is_none() || parameter.unwrap().value_declaration().is_some_and(|vd| vd.type_node().is_none()) {
                 if parameter.is_none() {
-                    sig.this_parameter.set(Some(self.create_symbol_with_type(context_this_parameter, None /*type*/)));
+                    sig.set_this_parameter(Some(self.create_symbol_with_type(context_this_parameter, None /*type*/)));
                 }
                 let t = self.get_type_of_symbol(context_this_parameter);
                 self.assign_parameter_type(sig.this_parameter().unwrap(), Some(t));

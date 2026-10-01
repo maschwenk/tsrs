@@ -2007,16 +2007,23 @@ pub struct Signature {
     pub declaration: Cell<Option<P<Node>>>,
     pub type_parameters: SliceCell<P<Type>>, // SliceCells pack with the four 4-byte fields above
     pub parameters: SliceCell<P<Symbol>>,
-    pub this_parameter: Cell<Option<P<Symbol>>>,
     pub resolved_return_type: Cell<Option<P<Type>>>,
     pub resolved_type_predicate: Cell<Option<P<TypePredicate>>>,
     pub target: Cell<Option<P<Signature>>>,
     pub mapper: Cell<Option<P<TypeMapper>>>,
-    pub isolated_signature_type: Cell<Option<P<Type>>>,
-    pub composite: Cell<Option<P<CompositeSignature>>>,
+    // `thisParameter`, `isolatedSignatureType` and `composite` (few signatures have any) live in a tail allocated on
+    // the first non-nil write; `this_parameter()` / `set_this_parameter()` & co. read nil when it is absent.
+    rare: Cell<Option<P<SignatureRare>>>,
 }
 
-const _: () = assert!(std::mem::size_of::<Signature>() == 104);
+const _: () = assert!(std::mem::size_of::<Signature>() == 88);
+
+#[derive(Default)]
+struct SignatureRare {
+    this_parameter: Cell<Option<P<Symbol>>>,
+    isolated_signature_type: Cell<Option<P<Type>>>,
+    composite: Cell<Option<P<CompositeSignature>>>,
+}
 
 impl Signature {
     pub fn id(&self) -> SignatureId {
@@ -2034,8 +2041,39 @@ impl Signature {
     pub fn target(&self) -> Option<P<Signature>> {
         self.target.get()
     }
+    fn rare_for_write(&self) -> P<SignatureRare> {
+        match self.rare.get() {
+            Some(rare) => rare,
+            None => {
+                let rare = P::new(SignatureRare::default());
+                self.rare.set(Some(rare));
+                rare
+            }
+        }
+    }
     pub fn this_parameter(&self) -> Option<P<Symbol>> {
-        self.this_parameter.get()
+        self.rare.get().and_then(|r| r.this_parameter.get())
+    }
+    pub fn set_this_parameter(&self, this_parameter: Option<P<Symbol>>) {
+        if this_parameter.is_some() || self.rare.get().is_some() {
+            self.rare_for_write().this_parameter.set(this_parameter);
+        }
+    }
+    pub fn isolated_signature_type(&self) -> Option<P<Type>> {
+        self.rare.get().and_then(|r| r.isolated_signature_type.get())
+    }
+    pub fn set_isolated_signature_type(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.rare.get().is_some() {
+            self.rare_for_write().isolated_signature_type.set(t);
+        }
+    }
+    pub fn composite(&self) -> Option<P<CompositeSignature>> {
+        self.rare.get().and_then(|r| r.composite.get())
+    }
+    pub fn set_composite(&self, composite: Option<P<CompositeSignature>>) {
+        if composite.is_some() || self.rare.get().is_some() {
+            self.rare_for_write().composite.set(composite);
+        }
     }
     pub fn parameters(&self) -> &'static [P<Symbol>] {
         self.parameters.get()

@@ -1951,7 +1951,7 @@ impl Checker {
                     if this_parameter.is_some() && Some(declaration) == this_parameter {
                         // Use the type from the *getter*
                         assert!(this_parameter.unwrap().type_node().is_none());
-                        return Some(self.get_type_of_symbol(getter_signature.this_parameter.get().unwrap()));
+                        return Some(self.get_type_of_symbol(getter_signature.this_parameter().unwrap()));
                     }
                     return Some(self.get_return_type_of_signature(getter_signature));
                 }

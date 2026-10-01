@@ -2543,7 +2543,7 @@ impl Checker {
         let container = ast::get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
         if ast::is_function_like(container) {
             let signature = self.get_signature_from_declaration(container);
-            if let Some(this_parameter) = signature.this_parameter.get() {
+            if let Some(this_parameter) = signature.this_parameter() {
                 return self.get_explicit_type_of_symbol(this_parameter, None);
             }
         }

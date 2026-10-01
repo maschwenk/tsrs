@@ -1669,7 +1669,7 @@ impl Checker {
         if self.is_context_sensitive_function_or_object_literal_method(fn_) {
             let contextual_signature = self.get_contextual_signature(fn_);
             if let Some(contextual_signature) = contextual_signature {
-                let this_parameter = contextual_signature.this_parameter.get();
+                let this_parameter = contextual_signature.this_parameter();
                 if let Some(this_parameter) = this_parameter {
                     return Some(self.get_type_of_symbol(this_parameter));
                 }

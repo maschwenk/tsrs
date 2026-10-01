@@ -2154,7 +2154,7 @@ impl Checker {
         sig.declaration.set(declaration);
         sig.type_parameters.set(alloc_slice(type_parameters));
         sig.parameters.set(alloc_slice(parameters));
-        sig.this_parameter.set(this_parameter);
+        sig.set_this_parameter(this_parameter);
         sig.resolved_return_type.set(resolved_return_type);
         sig.resolved_type_predicate.set(resolved_type_predicate);
         sig.min_argument_count.set(min_argument_count);

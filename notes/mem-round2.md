@@ -281,3 +281,18 @@ where `Relation::set` is inlined).
 | 4 checkers, before | 9.50-9.56 (median 9.51) | 436-437 G |
 | 4 checkers, after | 9.45-9.54 (median 9.46, -0.05) | 435-436 G |
 | opt-out single / 4 checkers (go assignment), after | 9.52 / 14.58 | |
+
+### 14. `Signature` 104 -> 88 bytes: rare fields in a tail
+
+`thisParameter` (functions with a `this` parameter and their instantiations), `isolatedSignatureType` and
+`composite` (union / intersection signatures) are set on few of the 1.57M signatures single. They moved into
+`SignatureRare`, allocated on the first non-nil write (`this_parameter()` / `set_this_parameter()` & co.; 40
+call sites changed mechanically from `.x.get()` / `.x.set(..)`).
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 7.078-7.079 | 323-324 G |
+| single, after | 7.049-7.057 (-0.025) | 323-324 G |
+| 4 checkers, before | 9.46-9.52 (median 9.48) | 435-437 G |
+| 4 checkers, after | 9.42-9.45 (median 9.43, -0.05) | 435-436 G |
+| opt-out single / 4 checkers (go assignment), after | 9.50 / 14.55 | |

@@ -1908,8 +1908,8 @@ impl Checker {
                     let container = self.get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
                     if ast::is_function_like(container) {
                         let sig = self.get_signature_from_declaration(container.unwrap());
-                        if sig.this_parameter.get().is_some() {
-                            return sig.this_parameter.get();
+                        if sig.this_parameter().is_some() {
+                            return sig.this_parameter();
                         }
                     }
                     if ast::is_in_expression_context(node) {

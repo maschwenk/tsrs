@@ -1079,7 +1079,7 @@ impl Checker {
 
     // jsx.go:989
     pub(crate) fn get_jsx_props_type_for_signature_from_member(&mut self, sig: P<Signature>, forced_lookup_location: &str) -> Option<P<Type>> {
-        if let Some(composite) = sig.composite.get() {
+        if let Some(composite) = sig.composite() {
             // JSX Elements using the legacy `props`-field based lookup (eg, react class components) need to treat the `props` member as an input
             // instead of an output position when resolving the signature. We need to go back to the input signatures of the composite signature,
             // get the type of `props` on each return type individually, and then _intersect them_, rather than union them (as would normally occur

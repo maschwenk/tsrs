@@ -73,7 +73,7 @@ impl Checker {
             sig.flags.get() & SignatureFlags::PropagatingFlags,
             sig.declaration.get(),
             sig.type_parameters.get(),
-            sig.this_parameter.get(),
+            sig.this_parameter(),
             sig.parameters.get(),
             None,
             None,
@@ -81,7 +81,7 @@ impl Checker {
         );
         result.target.set(sig.target.get());
         result.mapper.set(sig.mapper.get());
-        result.composite.set(sig.composite.get());
+        result.set_composite(sig.composite());
         result
     }
 
@@ -154,7 +154,7 @@ impl Checker {
         // using the constructor keyword, and the other is declaring a bare construct signature in an
         // object type literal or interface (using the new keyword). Each way of declaring a constructor
         // will result in a different declaration kind.
-        if sig.isolated_signature_type.get().is_none() {
+        if sig.isolated_signature_type().is_none() {
             let mut kind = Kind::Unknown;
             if let Some(declaration) = sig.declaration.get() {
                 kind = declaration.kind;
@@ -172,9 +172,9 @@ impl Checker {
             } else {
                 self.set_structured_type_members(t, None, &[sig], &[], &[]);
             }
-            sig.isolated_signature_type.set(Some(t));
+            sig.set_isolated_signature_type(Some(t));
         }
-        sig.isolated_signature_type.get().unwrap()
+        sig.isolated_signature_type().unwrap()
     }
 
     // checker.go:19737
@@ -891,7 +891,7 @@ impl Checker {
         if let Some(target) = sig.target.get() {
             let target_return_type = self.get_return_type_of_signature(target);
             t = self.instantiate_type(target_return_type, sig.mapper.get());
-        } else if let Some(composite) = sig.composite.get() {
+        } else if let Some(composite) = sig.composite() {
             let mut return_types = Vec::with_capacity(composite.signatures.get().len());
             for &s in composite.signatures.get() {
                 return_types.push(self.get_return_type_of_signature(s));
@@ -1622,7 +1622,7 @@ impl Checker {
         // Don't compute resolvedReturnType and resolvedTypePredicate now,
         // because using `mapper` now could trigger inferences to become fixed. (See `createInferenceContext`.)
         // See GH#17600.
-        let this_parameter = sig.this_parameter.get().map(|s| self.instantiate_symbol(s, Some(m)));
+        let this_parameter = sig.this_parameter().map(|s| self.instantiate_symbol(s, Some(m)));
         let parameters = self.instantiate_symbols(sig.parameters.get(), m);
         let result = self.new_signature(
             sig.flags.get() & SignatureFlags::PropagatingFlags,
@@ -2462,12 +2462,12 @@ impl Checker {
                         let mut s = signature;
                         // Union the result types when more than one signature matches
                         if union_signatures.len() > 1 {
-                            let mut this_parameter = signature.this_parameter.get();
-                            let first_this_parameter_of_union_signatures = first_non_nil(&union_signatures, |sig| sig.this_parameter.get());
+                            let mut this_parameter = signature.this_parameter();
+                            let first_this_parameter_of_union_signatures = first_non_nil(&union_signatures, |sig| sig.this_parameter());
                             if let Some(first_this) = first_this_parameter_of_union_signatures {
                                 let mut this_types = Vec::new();
                                 for &sig in &union_signatures {
-                                    if let Some(tp) = sig.this_parameter.get() {
+                                    if let Some(tp) = sig.this_parameter() {
                                         this_types.push(self.get_type_of_symbol(tp));
                                     }
                                 }
@@ -2475,7 +2475,7 @@ impl Checker {
                                 this_parameter = Some(self.create_symbol_with_type(first_this, Some(this_type)));
                             }
                             s = self.create_union_signature(signature, &union_signatures);
-                            s.this_parameter.set(this_parameter);
+                            s.set_this_parameter(this_parameter);
                         }
                         result.push(s);
                     }
@@ -2531,23 +2531,23 @@ impl Checker {
         if last_param.is_some_and(|p| p.check_flags().intersects(CheckFlags::RestParameter)) {
             flags |= SignatureFlags::HasRestParameter;
         }
-        let this_param = self.combine_union_or_intersection_this_param(left.this_parameter.get(), right.this_parameter.get(), param_mapper, is_union);
+        let this_param = self.combine_union_or_intersection_this_param(left.this_parameter(), right.this_parameter(), param_mapper, is_union);
         let min_arg_count = left.min_argument_count.get().max(right.min_argument_count.get());
         let result = self.new_signature(flags, declaration, type_params, this_param, &params, None, None, min_arg_count);
-        let mut left_signatures: Vec<P<Signature>> = if let Some(composite) = left.composite.get().filter(|c| c.is_union.get()) {
+        let mut left_signatures: Vec<P<Signature>> = if let Some(composite) = left.composite().filter(|c| c.is_union.get()) {
             composite.signatures.get().to_vec()
         } else {
             vec![left]
         };
         left_signatures.push(right);
-        result.composite.set(Some(P::new(CompositeSignature { is_union: Cell::new(is_union), signatures: Cell::new(alloc_vec(left_signatures)) })));
+        result.set_composite(Some(P::new(CompositeSignature { is_union: Cell::new(is_union), signatures: Cell::new(alloc_vec(left_signatures)) })));
         if let Some(param_mapper) = param_mapper {
-            if left.composite.get().is_some_and(|c| c.is_union.get() == is_union) && left.mapper.get().is_some() {
+            if left.composite().is_some_and(|c| c.is_union.get() == is_union) && left.mapper.get().is_some() {
                 result.mapper.set(Some(self.combine_type_mappers(left.mapper.get(), param_mapper)));
             } else {
                 result.mapper.set(Some(param_mapper));
             }
-        } else if left.composite.get().is_some_and(|c| c.is_union.get() == is_union) {
+        } else if left.composite().is_some_and(|c| c.is_union.get() == is_union) {
             result.mapper.set(left.mapper.get());
         }
         result

@@ -616,7 +616,7 @@ impl NodeBuilderImpl {
     // pseudotypenodebuilder.go:585
     pub(crate) fn pseudo_parameters_equivalent_to_parameters(&self, c: &mut Checker, params: &[P<PseudoParameter>], target_sig: P<Signature>, report_errors: bool, non_param_error_location: P<Node>) -> bool {
         let mut params = params;
-        let this_parameter = target_sig.this_parameter.get();
+        let this_parameter = target_sig.this_parameter();
         if this_parameter.is_some() && params.is_empty() {
             if report_errors {
                 self.ctx().tracker.get().unwrap().report_inference_fallback(c, non_param_error_location); // missing `this` param

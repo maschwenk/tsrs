@@ -2614,7 +2614,7 @@ impl Checker {
                     let predicate = self.instantiate_type_predicate(target_type_predicate, sig.mapper.get().unwrap());
                     sig.resolved_type_predicate.set(Some(predicate));
                 }
-            } else if let Some(composite) = sig.composite.get() {
+            } else if let Some(composite) = sig.composite() {
                 let predicate = self.get_union_or_intersection_type_predicate(composite.signatures.get(), composite.is_union.get());
                 sig.resolved_type_predicate.set(predicate);
             } else if let Some(declaration) = sig.declaration() {
@@ -2722,7 +2722,7 @@ impl Checker {
 
     // relater.go:2145
     pub(crate) fn is_resolving_return_type_of_signature(&mut self, signature: P<Signature>) -> bool {
-        if let Some(composite) = signature.composite.get() {
+        if let Some(composite) = signature.composite() {
             if composite.signatures.get().iter().any(|&s| self.is_resolving_return_type_of_signature(s)) {
                 return true;
             }
