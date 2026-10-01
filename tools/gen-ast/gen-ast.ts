@@ -514,7 +514,7 @@ function genForEachChild(node: NodeType) {
     const children = childMembers(node);
     if (children.length === 0) return;
     w(`impl ${node.name} {`);
-    w(`    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {`);
+    w(`    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {`);
     if (node.handWrittenVisitor) {
         w(`        for_each_child_${snake(node.name)}(self, v)`);
     }
@@ -717,6 +717,12 @@ function genNodeImpl() {
 
     // for_each_child dispatch
     w(`    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {`);
+    w(`        self.for_each_child_static(v)`);
+    w(`    }`);
+    w();
+    w(`    /// \`for_each_child\` compiled for one visitor type: with a closure, no dynamic call per child (the parser`);
+    w(`    /// visits the children of every node it finishes).`);
+    w(`    pub fn for_each_child_static<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {`);
     w(`        match self.data_tag() {`);
     for (const n of nodes) {
         if (!hasForEachChild(n)) continue;

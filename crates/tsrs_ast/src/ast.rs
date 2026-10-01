@@ -30,7 +30,7 @@ pub fn set_parse_jsdoc_for_node(f: ParseJSDocForNodeFn) {
 // Go `type Visitor func(*Node) bool`; Rust visitors are `&mut dyn FnMut(P<Node>) -> bool`.
 
 #[inline]
-pub(crate) fn visit(v: &mut dyn FnMut(P<Node>) -> bool, node: Option<P<Node>>) -> bool {
+pub(crate) fn visit<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, node: Option<P<Node>>) -> bool {
     match node {
         Some(node) => v(node),
         None => false,
@@ -38,7 +38,7 @@ pub(crate) fn visit(v: &mut dyn FnMut(P<Node>) -> bool, node: Option<P<Node>>) -
 }
 
 #[inline]
-pub(crate) fn visit_nodes(v: &mut dyn FnMut(P<Node>) -> bool, nodes: &[P<Node>]) -> bool {
+pub(crate) fn visit_nodes<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, nodes: &[P<Node>]) -> bool {
     for &node in nodes {
         if v(node) {
             return true;
@@ -48,7 +48,7 @@ pub(crate) fn visit_nodes(v: &mut dyn FnMut(P<Node>) -> bool, nodes: &[P<Node>])
 }
 
 #[inline]
-pub(crate) fn visit_node_list(v: &mut dyn FnMut(P<Node>) -> bool, node_list: Option<P<NodeList>>) -> bool {
+pub(crate) fn visit_node_list<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, node_list: Option<P<NodeList>>) -> bool {
     match node_list {
         Some(list) => visit_nodes(v, list.nodes),
         None => false,
@@ -56,7 +56,7 @@ pub(crate) fn visit_node_list(v: &mut dyn FnMut(P<Node>) -> bool, node_list: Opt
 }
 
 #[inline]
-pub(crate) fn visit_modifiers(v: &mut dyn FnMut(P<Node>) -> bool, modifiers: Option<P<ModifierList>>) -> bool {
+pub(crate) fn visit_modifiers<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, modifiers: Option<P<ModifierList>>) -> bool {
     match modifiers {
         Some(list) => visit_nodes(v, list.list.nodes),
         None => false,
@@ -1732,7 +1732,7 @@ impl SourceFile {
         self.bind_diagnostics.set(alloc_slice(diags))
     }
 
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.statements)) || visit(v, Some(self.end_of_file_token))
     }
 
@@ -2024,7 +2024,7 @@ impl PragmaSpecification {
 // Hand-written visitor implementations for nodes with runtime-dependent
 // child ordering. Generated code in generated.rs delegates to these.
 
-pub(crate) fn for_each_child_jsdoc_parameter_or_property_tag(node: &JSDocParameterOrPropertyTag, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+pub(crate) fn for_each_child_jsdoc_parameter_or_property_tag<V: FnMut(P<Node>) -> bool + ?Sized>(node: &JSDocParameterOrPropertyTag, v: &mut V) -> bool {
     v(node.tag_name())
         || (node.is_name_first && (v(node.name) || visit(v, node.type_expression)))
         || (!node.is_name_first && (visit(v, node.type_expression) || v(node.name)))

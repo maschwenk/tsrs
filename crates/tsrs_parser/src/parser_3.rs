@@ -1922,7 +1922,7 @@ impl Parser {
     pub(crate) fn override_parent_in_immediate_children(&mut self, node: P<Node>) {
         self.current_parent = Some(node);
         let current_parent = self.current_parent;
-        node.for_each_child(&mut |n| {
+        node.for_each_child_static(&mut |n: P<Node>| {
             n.set_parent(current_parent);
             false
         });

@@ -8434,6 +8434,12 @@ impl Node {
     }
 
     pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+        self.for_each_child_static(v)
+    }
+
+    /// `for_each_child` compiled for one visitor type: with a closure, no dynamic call per child (the parser
+    /// visits the children of every node it finishes).
+    pub fn for_each_child_static<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         match self.data_tag() {
             NodeDataTag::QualifiedName => self.payload::<QualifiedName>().for_each_child(v),
             NodeDataTag::ComputedPropertyName => self.payload::<ComputedPropertyName>().for_each_child(v),
@@ -12889,7 +12895,7 @@ impl PrivateIdentifier {
 }
 
 impl QualifiedName {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.left())
             || v(self.right())
     }
@@ -12910,7 +12916,7 @@ impl QualifiedName {
 }
 
 impl ComputedPropertyName {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -12929,7 +12935,7 @@ impl ComputedPropertyName {
 }
 
 impl Decorator {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -12954,7 +12960,7 @@ impl EmptyStatement {
 }
 
 impl IfStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || v(self.then_statement())
             || visit(v, self.else_statement())
@@ -12977,7 +12983,7 @@ impl IfStatement {
 }
 
 impl DoStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.statement())
             || v(self.expression())
     }
@@ -12998,7 +13004,7 @@ impl DoStatement {
 }
 
 impl WhileStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || v(self.statement())
     }
@@ -13019,7 +13025,7 @@ impl WhileStatement {
 }
 
 impl ForStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.initializer())
             || visit(v, self.condition())
             || visit(v, self.incrementor())
@@ -13044,7 +13050,7 @@ impl ForStatement {
 }
 
 impl ForInOrOfStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.await_modifier())
             || v(self.initializer())
             || v(self.expression())
@@ -13069,7 +13075,7 @@ impl ForInOrOfStatement {
 }
 
 impl BreakStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.label())
     }
 }
@@ -13088,7 +13094,7 @@ impl BreakStatement {
 }
 
 impl ContinueStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.label())
     }
 }
@@ -13107,7 +13113,7 @@ impl ContinueStatement {
 }
 
 impl ReturnStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.expression())
     }
 }
@@ -13126,7 +13132,7 @@ impl ReturnStatement {
 }
 
 impl WithStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || v(self.statement())
     }
@@ -13147,7 +13153,7 @@ impl WithStatement {
 }
 
 impl SwitchStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || v(self.case_block())
     }
@@ -13168,7 +13174,7 @@ impl SwitchStatement {
 }
 
 impl CaseBlock {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.clauses()))
     }
 }
@@ -13187,7 +13193,7 @@ impl CaseBlock {
 }
 
 impl CaseOrDefaultClause {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.expression())
             || visit_node_list(v, Some(self.statements()))
     }
@@ -13208,7 +13214,7 @@ impl CaseOrDefaultClause {
 }
 
 impl ThrowStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -13227,7 +13233,7 @@ impl ThrowStatement {
 }
 
 impl TryStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.try_block())
             || visit(v, self.catch_clause())
             || visit(v, self.finally_block())
@@ -13250,7 +13256,7 @@ impl TryStatement {
 }
 
 impl CatchClause {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.variable_declaration())
             || v(self.block())
     }
@@ -13277,7 +13283,7 @@ impl DebuggerStatement {
 }
 
 impl LabeledStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.label())
             || v(self.statement())
     }
@@ -13298,7 +13304,7 @@ impl LabeledStatement {
 }
 
 impl ExpressionStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -13317,7 +13323,7 @@ impl ExpressionStatement {
 }
 
 impl Block {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.statements()))
     }
 }
@@ -13336,7 +13342,7 @@ impl Block {
 }
 
 impl VariableStatement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.declaration_list())
     }
@@ -13357,7 +13363,7 @@ impl VariableStatement {
 }
 
 impl VariableDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.name())
             || visit(v, self.exclamation_token())
             || visit(v, self.type_())
@@ -13382,7 +13388,7 @@ impl VariableDeclaration {
 }
 
 impl VariableDeclarationList {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.declarations()))
     }
 }
@@ -13401,7 +13407,7 @@ impl VariableDeclarationList {
 }
 
 impl BindingPattern {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.elements()))
     }
 }
@@ -13420,7 +13426,7 @@ impl BindingPattern {
 }
 
 impl ParameterDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit(v, self.dot_dot_dot_token())
             || v(self.name())
@@ -13449,7 +13455,7 @@ impl ParameterDeclaration {
 }
 
 impl BindingElement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.dot_dot_dot_token())
             || visit(v, self.property_name())
             || visit(v, self.name())
@@ -13474,7 +13480,7 @@ impl BindingElement {
 }
 
 impl MissingDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
     }
 }
@@ -13493,7 +13499,7 @@ impl MissingDeclaration {
 }
 
 impl FunctionDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit(v, self.asterisk_token())
             || visit(v, self.name())
@@ -13526,7 +13532,7 @@ impl FunctionDeclaration {
 }
 
 impl ClassDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit(v, self.name())
             || visit_node_list(v, self.type_parameters())
@@ -13553,7 +13559,7 @@ impl ClassDeclaration {
 }
 
 impl ClassExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit(v, self.name())
             || visit_node_list(v, self.type_parameters())
@@ -13580,7 +13586,7 @@ impl ClassExpression {
 }
 
 impl HeritageClause {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.types()))
     }
 }
@@ -13599,7 +13605,7 @@ impl HeritageClause {
 }
 
 impl InterfaceDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit_node_list(v, self.type_parameters())
@@ -13626,7 +13632,7 @@ impl InterfaceDeclaration {
 }
 
 impl TypeAliasDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit_node_list(v, self.type_parameters())
@@ -13656,7 +13662,7 @@ impl TypeAliasDeclaration {
 }
 
 impl EnumMember {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.name())
             || visit(v, self.initializer())
     }
@@ -13677,7 +13683,7 @@ impl EnumMember {
 }
 
 impl EnumDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit_node_list(v, Some(self.members()))
@@ -13700,7 +13706,7 @@ impl EnumDeclaration {
 }
 
 impl ModuleBlock {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.statements()))
     }
 }
@@ -13731,7 +13737,7 @@ impl NotEmittedTypeElement {
 }
 
 impl ImportDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit(v, self.import_clause())
             || v(self.module_specifier())
@@ -13761,7 +13767,7 @@ impl ImportDeclaration {
 }
 
 impl ExternalModuleReference {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -13780,7 +13786,7 @@ impl ExternalModuleReference {
 }
 
 impl NamespaceImport {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.name())
     }
 }
@@ -13799,7 +13805,7 @@ impl NamespaceImport {
 }
 
 impl NamedImports {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.elements()))
     }
 }
@@ -13818,7 +13824,7 @@ impl NamedImports {
 }
 
 impl ExportAssignment {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit(v, self.type_())
             || v(self.expression())
@@ -13841,7 +13847,7 @@ impl ExportAssignment {
 }
 
 impl NamespaceExportDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
     }
@@ -13862,7 +13868,7 @@ impl NamespaceExportDeclaration {
 }
 
 impl NamespaceExport {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.name())
     }
 }
@@ -13881,7 +13887,7 @@ impl NamespaceExport {
 }
 
 impl NamedExports {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.elements()))
     }
 }
@@ -13900,7 +13906,7 @@ impl NamedExports {
 }
 
 impl ExportSpecifier {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.property_name())
             || v(self.name())
     }
@@ -13921,7 +13927,7 @@ impl ExportSpecifier {
 }
 
 impl CallSignatureDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, self.type_parameters())
             || visit_node_list(v, self.parameters())
             || visit(v, self.type_())
@@ -13944,7 +13950,7 @@ impl CallSignatureDeclaration {
 }
 
 impl ConstructSignatureDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, self.type_parameters())
             || visit_node_list(v, self.parameters())
             || visit(v, self.type_())
@@ -13967,7 +13973,7 @@ impl ConstructSignatureDeclaration {
 }
 
 impl ConstructorDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit_node_list(v, self.type_parameters())
             || visit_node_list(v, self.parameters())
@@ -13996,7 +14002,7 @@ impl ConstructorDeclaration {
 }
 
 impl GetAccessorDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit_node_list(v, self.type_parameters())
@@ -14027,7 +14033,7 @@ impl GetAccessorDeclaration {
 }
 
 impl SetAccessorDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit_node_list(v, self.type_parameters())
@@ -14058,7 +14064,7 @@ impl SetAccessorDeclaration {
 }
 
 impl IndexSignatureDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit_node_list(v, self.parameters())
             || visit(v, self.type_())
@@ -14081,7 +14087,7 @@ impl IndexSignatureDeclaration {
 }
 
 impl MethodSignatureDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit(v, self.postfix_token())
@@ -14110,7 +14116,7 @@ impl MethodSignatureDeclaration {
 }
 
 impl MethodDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit(v, self.asterisk_token())
             || v(self.name())
@@ -14145,7 +14151,7 @@ impl MethodDeclaration {
 }
 
 impl PropertySignatureDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit(v, self.postfix_token())
@@ -14172,7 +14178,7 @@ impl PropertySignatureDeclaration {
 }
 
 impl PropertyDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit(v, self.postfix_token())
@@ -14205,7 +14211,7 @@ impl SemicolonClassElement {
 }
 
 impl ClassStaticBlockDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.body())
     }
@@ -14268,7 +14274,7 @@ impl NoSubstitutionTemplateLiteral {
 }
 
 impl BinaryExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.left())
             || visit(v, self.type_())
@@ -14295,7 +14301,7 @@ impl BinaryExpression {
 }
 
 impl PrefixUnaryExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.operand())
     }
 }
@@ -14314,7 +14320,7 @@ impl PrefixUnaryExpression {
 }
 
 impl PostfixUnaryExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.operand())
     }
 }
@@ -14333,7 +14339,7 @@ impl PostfixUnaryExpression {
 }
 
 impl YieldExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.asterisk_token())
             || visit(v, self.expression())
     }
@@ -14354,7 +14360,7 @@ impl YieldExpression {
 }
 
 impl ArrowFunction {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit_node_list(v, self.type_parameters())
             || visit_node_list(v, self.parameters())
@@ -14385,7 +14391,7 @@ impl ArrowFunction {
 }
 
 impl FunctionExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit(v, self.asterisk_token())
             || visit(v, self.name())
@@ -14418,7 +14424,7 @@ impl FunctionExpression {
 }
 
 impl AsExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || v(self.type_())
     }
@@ -14439,7 +14445,7 @@ impl AsExpression {
 }
 
 impl SatisfiesExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || v(self.type_())
     }
@@ -14460,7 +14466,7 @@ impl SatisfiesExpression {
 }
 
 impl ConditionalExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.condition())
             || v(self.question_token())
             || v(self.when_true())
@@ -14487,7 +14493,7 @@ impl ConditionalExpression {
 }
 
 impl PropertyAccessExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || visit(v, self.question_dot_token())
             || v(self.name())
@@ -14510,7 +14516,7 @@ impl PropertyAccessExpression {
 }
 
 impl ElementAccessExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || visit(v, self.question_dot_token())
             || v(self.argument_expression())
@@ -14533,7 +14539,7 @@ impl ElementAccessExpression {
 }
 
 impl CallExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || visit(v, self.question_dot_token())
             || visit_node_list(v, self.type_arguments())
@@ -14558,7 +14564,7 @@ impl CallExpression {
 }
 
 impl NewExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || visit_node_list(v, self.type_arguments())
             || visit_node_list(v, self.arguments())
@@ -14581,7 +14587,7 @@ impl NewExpression {
 }
 
 impl MetaProperty {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.name())
     }
 }
@@ -14600,7 +14606,7 @@ impl MetaProperty {
 }
 
 impl NonNullExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -14619,7 +14625,7 @@ impl NonNullExpression {
 }
 
 impl SpreadElement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -14638,7 +14644,7 @@ impl SpreadElement {
 }
 
 impl TemplateExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.head())
             || visit_node_list(v, Some(self.template_spans()))
     }
@@ -14659,7 +14665,7 @@ impl TemplateExpression {
 }
 
 impl TemplateSpan {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || v(self.literal())
     }
@@ -14680,7 +14686,7 @@ impl TemplateSpan {
 }
 
 impl TaggedTemplateExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag())
             || visit(v, self.question_dot_token())
             || visit_node_list(v, self.type_arguments())
@@ -14705,7 +14711,7 @@ impl TaggedTemplateExpression {
 }
 
 impl ParenthesizedExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -14724,7 +14730,7 @@ impl ParenthesizedExpression {
 }
 
 impl ArrayLiteralExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.elements()))
     }
 }
@@ -14743,7 +14749,7 @@ impl ArrayLiteralExpression {
 }
 
 impl ObjectLiteralExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.properties()))
     }
 }
@@ -14762,7 +14768,7 @@ impl ObjectLiteralExpression {
 }
 
 impl SpreadAssignment {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -14781,7 +14787,7 @@ impl SpreadAssignment {
 }
 
 impl PropertyAssignment {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit(v, self.postfix_token())
@@ -14808,7 +14814,7 @@ impl PropertyAssignment {
 }
 
 impl ShorthandPropertyAssignment {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit(v, self.postfix_token())
@@ -14837,7 +14843,7 @@ impl ShorthandPropertyAssignment {
 }
 
 impl DeleteExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -14856,7 +14862,7 @@ impl DeleteExpression {
 }
 
 impl TypeOfExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -14875,7 +14881,7 @@ impl TypeOfExpression {
 }
 
 impl VoidExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -14894,7 +14900,7 @@ impl VoidExpression {
 }
 
 impl AwaitExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -14913,7 +14919,7 @@ impl AwaitExpression {
 }
 
 impl TypeAssertion {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_())
             || v(self.expression())
     }
@@ -14940,7 +14946,7 @@ impl KeywordTypeNode {
 }
 
 impl UnionTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.types()))
     }
 }
@@ -14959,7 +14965,7 @@ impl UnionTypeNode {
 }
 
 impl IntersectionTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.types()))
     }
 }
@@ -14978,7 +14984,7 @@ impl IntersectionTypeNode {
 }
 
 impl ConditionalTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.check_type())
             || v(self.extends_type())
             || v(self.true_type())
@@ -15003,7 +15009,7 @@ impl ConditionalTypeNode {
 }
 
 impl TypeOperatorNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_())
     }
 }
@@ -15022,7 +15028,7 @@ impl TypeOperatorNode {
 }
 
 impl InferTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_parameter())
     }
 }
@@ -15041,7 +15047,7 @@ impl InferTypeNode {
 }
 
 impl ArrayTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.element_type())
     }
 }
@@ -15060,7 +15066,7 @@ impl ArrayTypeNode {
 }
 
 impl IndexedAccessTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.object_type())
             || v(self.index_type())
     }
@@ -15081,7 +15087,7 @@ impl IndexedAccessTypeNode {
 }
 
 impl TypeReferenceNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_name())
             || visit_node_list(v, self.type_arguments())
     }
@@ -15102,7 +15108,7 @@ impl TypeReferenceNode {
 }
 
 impl ExpressionWithTypeArguments {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || visit_node_list(v, self.type_arguments())
     }
@@ -15123,7 +15129,7 @@ impl ExpressionWithTypeArguments {
 }
 
 impl LiteralTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.literal())
     }
 }
@@ -15148,7 +15154,7 @@ impl ThisTypeNode {
 }
 
 impl TypePredicateNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.asserts_modifier())
             || v(self.parameter_name())
             || visit(v, self.type_())
@@ -15171,7 +15177,7 @@ impl TypePredicateNode {
 }
 
 impl ImportAttribute {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.name())
             || v(self.value())
     }
@@ -15192,7 +15198,7 @@ impl ImportAttribute {
 }
 
 impl ImportAttributes {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.attributes()))
     }
 }
@@ -15211,7 +15217,7 @@ impl ImportAttributes {
 }
 
 impl TypeQueryNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expr_name())
             || visit_node_list(v, self.type_arguments())
     }
@@ -15232,7 +15238,7 @@ impl TypeQueryNode {
 }
 
 impl MappedTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.readonly_token())
             || v(self.type_parameter())
             || visit(v, self.name_type())
@@ -15261,7 +15267,7 @@ impl MappedTypeNode {
 }
 
 impl TypeLiteralNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.members()))
     }
 }
@@ -15280,7 +15286,7 @@ impl TypeLiteralNode {
 }
 
 impl TupleTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.elements()))
     }
 }
@@ -15299,7 +15305,7 @@ impl TupleTypeNode {
 }
 
 impl NamedTupleMember {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.dot_dot_dot_token())
             || v(self.name())
             || visit(v, self.question_token())
@@ -15324,7 +15330,7 @@ impl NamedTupleMember {
 }
 
 impl OptionalTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_())
     }
 }
@@ -15343,7 +15349,7 @@ impl OptionalTypeNode {
 }
 
 impl RestTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_())
     }
 }
@@ -15362,7 +15368,7 @@ impl RestTypeNode {
 }
 
 impl ParenthesizedTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_())
     }
 }
@@ -15381,7 +15387,7 @@ impl ParenthesizedTypeNode {
 }
 
 impl FunctionTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, self.type_parameters())
             || visit_node_list(v, self.parameters())
             || visit(v, self.type_())
@@ -15404,7 +15410,7 @@ impl FunctionTypeNode {
 }
 
 impl ConstructorTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit_node_list(v, self.type_parameters())
             || visit_node_list(v, self.parameters())
@@ -15447,7 +15453,7 @@ impl TemplateTail {
 }
 
 impl TemplateLiteralTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.head())
             || visit_node_list(v, Some(self.template_spans()))
     }
@@ -15468,7 +15474,7 @@ impl TemplateLiteralTypeNode {
 }
 
 impl TemplateLiteralTypeSpan {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_())
             || v(self.literal())
     }
@@ -15489,7 +15495,7 @@ impl TemplateLiteralTypeSpan {
 }
 
 impl SyntheticExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.tuple_name_source())
     }
 }
@@ -15508,7 +15514,7 @@ impl SyntheticExpression {
 }
 
 impl PartiallyEmittedExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -15527,7 +15533,7 @@ impl PartiallyEmittedExpression {
 }
 
 impl JsxElement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.opening_element())
             || visit_node_list(v, Some(self.children()))
             || v(self.closing_element())
@@ -15550,7 +15556,7 @@ impl JsxElement {
 }
 
 impl JsxAttributes {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.properties()))
     }
 }
@@ -15569,7 +15575,7 @@ impl JsxAttributes {
 }
 
 impl JsxNamespacedName {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.namespace())
             || v(self.name())
     }
@@ -15590,7 +15596,7 @@ impl JsxNamespacedName {
 }
 
 impl JsxOpeningElement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit_node_list(v, self.type_arguments())
             || v(self.attributes())
@@ -15613,7 +15619,7 @@ impl JsxOpeningElement {
 }
 
 impl JsxSelfClosingElement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit_node_list(v, self.type_arguments())
             || v(self.attributes())
@@ -15636,7 +15642,7 @@ impl JsxSelfClosingElement {
 }
 
 impl JsxFragment {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.opening_fragment())
             || visit_node_list(v, Some(self.children()))
             || v(self.closing_fragment())
@@ -15671,7 +15677,7 @@ impl JsxClosingFragment {
 }
 
 impl JsxAttribute {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.name())
             || visit(v, self.initializer())
     }
@@ -15692,7 +15698,7 @@ impl JsxAttribute {
 }
 
 impl JsxSpreadAttribute {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
     }
 }
@@ -15711,7 +15717,7 @@ impl JsxSpreadAttribute {
 }
 
 impl JsxClosingElement {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
     }
 }
@@ -15730,7 +15736,7 @@ impl JsxClosingElement {
 }
 
 impl JsxExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.dot_dot_dot_token())
             || visit(v, self.expression())
     }
@@ -15757,7 +15763,7 @@ impl JsxText {
 }
 
 impl SyntaxList {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_nodes(v, self.children())
     }
 }
@@ -15776,7 +15782,7 @@ impl SyntaxList {
 }
 
 impl JSDoc {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, Some(self.comment()))
             || visit_node_list(v, self.tags())
     }
@@ -15797,7 +15803,7 @@ impl JSDoc {
 }
 
 impl JSDocTypeExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_())
     }
 }
@@ -15816,7 +15822,7 @@ impl JSDocTypeExpression {
 }
 
 impl JSDocNonNullableType {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_())
     }
 }
@@ -15835,7 +15841,7 @@ impl JSDocNonNullableType {
 }
 
 impl JSDocNullableType {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_())
     }
 }
@@ -15860,7 +15866,7 @@ impl JSDocAllType {
 }
 
 impl JSDocVariadicType {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_())
     }
 }
@@ -15879,7 +15885,7 @@ impl JSDocVariadicType {
 }
 
 impl JSDocOptionalType {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.type_())
     }
 }
@@ -15898,7 +15904,7 @@ impl JSDocOptionalType {
 }
 
 impl JSDocTypeTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || v(self.type_expression())
             || visit_node_list(v, self.comment())
@@ -15921,7 +15927,7 @@ impl JSDocTypeTag {
 }
 
 impl JSDocUnknownTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit_node_list(v, self.comment())
     }
@@ -15942,7 +15948,7 @@ impl JSDocUnknownTag {
 }
 
 impl JSDocTemplateTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit(v, self.constraint())
             || visit_node_list(v, Some(self.type_parameters()))
@@ -15967,7 +15973,7 @@ impl JSDocTemplateTag {
 }
 
 impl JSDocReturnTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit(v, self.type_expression())
             || visit_node_list(v, self.comment())
@@ -15990,7 +15996,7 @@ impl JSDocReturnTag {
 }
 
 impl JSDocPublicTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit_node_list(v, self.comment())
     }
@@ -16011,7 +16017,7 @@ impl JSDocPublicTag {
 }
 
 impl JSDocPrivateTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit_node_list(v, self.comment())
     }
@@ -16032,7 +16038,7 @@ impl JSDocPrivateTag {
 }
 
 impl JSDocProtectedTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit_node_list(v, self.comment())
     }
@@ -16053,7 +16059,7 @@ impl JSDocProtectedTag {
 }
 
 impl JSDocReadonlyTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit_node_list(v, self.comment())
     }
@@ -16074,7 +16080,7 @@ impl JSDocReadonlyTag {
 }
 
 impl JSDocOverrideTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit_node_list(v, self.comment())
     }
@@ -16095,7 +16101,7 @@ impl JSDocOverrideTag {
 }
 
 impl JSDocDeprecatedTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit_node_list(v, self.comment())
     }
@@ -16116,7 +16122,7 @@ impl JSDocDeprecatedTag {
 }
 
 impl JSDocSeeTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit(v, self.name_expression())
             || visit_node_list(v, self.comment())
@@ -16139,7 +16145,7 @@ impl JSDocSeeTag {
 }
 
 impl JSDocImplementsTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || v(self.class_name())
             || visit_node_list(v, self.comment())
@@ -16162,7 +16168,7 @@ impl JSDocImplementsTag {
 }
 
 impl JSDocAugmentsTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || v(self.class_name())
             || visit_node_list(v, self.comment())
@@ -16185,7 +16191,7 @@ impl JSDocAugmentsTag {
 }
 
 impl JSDocSatisfiesTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || v(self.type_expression())
             || visit_node_list(v, self.comment())
@@ -16208,7 +16214,7 @@ impl JSDocSatisfiesTag {
 }
 
 impl JSDocThrowsTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit(v, self.type_expression())
             || visit_node_list(v, self.comment())
@@ -16231,7 +16237,7 @@ impl JSDocThrowsTag {
 }
 
 impl JSDocThisTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || v(self.type_expression())
             || visit_node_list(v, self.comment())
@@ -16254,7 +16260,7 @@ impl JSDocThisTag {
 }
 
 impl JSDocImportTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit(v, self.import_clause())
             || v(self.module_specifier())
@@ -16281,7 +16287,7 @@ impl JSDocImportTag {
 }
 
 impl JSDocCallbackTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || v(self.type_expression())
             || visit(v, self.name())
@@ -16306,7 +16312,7 @@ impl JSDocCallbackTag {
 }
 
 impl JSDocOverloadTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || v(self.type_expression())
             || visit_node_list(v, self.comment())
@@ -16329,7 +16335,7 @@ impl JSDocOverloadTag {
 }
 
 impl JSDocTypedefTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.tag_name())
             || visit(v, self.type_expression())
             || visit(v, self.name())
@@ -16354,7 +16360,7 @@ impl JSDocTypedefTag {
 }
 
 impl JSDocSignature {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_node_list(v, self.type_parameters())
             || visit_node_list(v, self.parameters())
             || visit(v, self.type_())
@@ -16377,7 +16383,7 @@ impl JSDocSignature {
 }
 
 impl JSDocNameReference {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.name())
     }
 }
@@ -16396,7 +16402,7 @@ impl JSDocNameReference {
 }
 
 impl ModuleDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit(v, self.attributes())
@@ -16421,7 +16427,7 @@ impl ModuleDeclaration {
 }
 
 impl ImportEqualsDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || v(self.module_reference())
@@ -16444,7 +16450,7 @@ impl ImportEqualsDeclaration {
 }
 
 impl ExportDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || visit(v, self.export_clause())
             || visit(v, self.module_specifier())
@@ -16469,7 +16475,7 @@ impl ExportDeclaration {
 }
 
 impl ImportTypeNode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.argument())
             || visit(v, self.attributes())
             || visit(v, self.qualifier())
@@ -16494,7 +16500,7 @@ impl ImportTypeNode {
 }
 
 impl ImportClause {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.name())
             || visit(v, self.named_bindings())
     }
@@ -16515,7 +16521,7 @@ impl ImportClause {
 }
 
 impl ImportSpecifier {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.property_name())
             || v(self.name())
     }
@@ -16542,7 +16548,7 @@ impl JSDocText {
 }
 
 impl JSDocLink {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.name())
     }
 }
@@ -16561,7 +16567,7 @@ impl JSDocLink {
 }
 
 impl JSDocLinkPlain {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.name())
     }
 }
@@ -16580,7 +16586,7 @@ impl JSDocLinkPlain {
 }
 
 impl JSDocLinkCode {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit(v, self.name())
     }
 }
@@ -16599,7 +16605,7 @@ impl JSDocLinkCode {
 }
 
 impl TypeParameterDeclaration {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_modifiers(v, self.modifiers())
             || v(self.name())
             || visit(v, self.constraint())
@@ -16626,7 +16632,7 @@ impl TypeParameterDeclaration {
 }
 
 impl SyntheticReferenceExpression {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         v(self.expression())
             || v(self.this_arg())
     }
@@ -16647,7 +16653,7 @@ impl SyntheticReferenceExpression {
 }
 
 impl JSDocTypeLiteral {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         visit_nodes(v, self.jsdoc_property_tags())
     }
 }
@@ -16666,7 +16672,7 @@ impl JSDocTypeLiteral {
 }
 
 impl JSDocParameterOrPropertyTag {
-    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    pub fn for_each_child<V: FnMut(P<Node>) -> bool + ?Sized>(&self, v: &mut V) -> bool {
         for_each_child_jsdoc_parameter_or_property_tag(self, v)
     }
 }
