@@ -96,6 +96,7 @@ impl Parser {
                 self.jsdoc_infos.push(JSDocInfo { parent: type_alias, js_docs: alloc_slice(&[js_doc]) });
                 type_alias.set_flags(type_alias.flags() | NodeFlags::HasJSDoc);
                 let result = self.wrap_in_jsdoc_namespace(full_name, type_alias, false /*nested*/);
+                tsrs_core::arena_pin();
                 self.reparse_list.push(result);
             }
             Kind::JSDocCallbackTag => {
@@ -118,6 +119,7 @@ impl Parser {
                 self.jsdoc_infos.push(JSDocInfo { parent: type_alias, js_docs: alloc_slice(&[js_doc]) });
                 type_alias.set_flags(type_alias.flags() | NodeFlags::HasJSDoc);
                 let result = self.wrap_in_jsdoc_namespace(full_name, type_alias, false /*nested*/);
+                tsrs_core::arena_pin();
                 self.reparse_list.push(result);
             }
             Kind::JSDocImportTag => {
@@ -132,6 +134,7 @@ impl Parser {
                 let attributes = self.add_deep_clone_reparse(import_tag.attributes);
                 let import_declaration = self.factory.new_js_import_declaration(modifiers, Some(import_clause), module_specifier, attributes);
                 self.finish_reparsed_node(import_declaration, tag);
+                tsrs_core::arena_pin();
                 self.reparse_list.push(import_declaration);
             }
             Kind::JSDocOverloadTag => {
@@ -146,6 +149,7 @@ impl Parser {
                         tag,
                         parent.modifiers(),
                     );
+                    tsrs_core::arena_pin();
                     self.reparse_list.push(signature);
                 }
             }

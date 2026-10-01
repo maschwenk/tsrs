@@ -16,7 +16,6 @@ alloc-profile = ["dep:mimalloc"]
 site-counts = []
 
 [dependencies]
-bumpalo.workspace = true
 rustc-hash.workspace = true
 indexmap.workspace = true
 bitflags.workspace = true

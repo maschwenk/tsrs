@@ -15,7 +15,7 @@
 
 use super::heap_sample::IN_ARENA;
 use super::{short_type, THREADS};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::panic::Location;
@@ -30,7 +30,7 @@ type Stack = [usize; DEPTH];
 static MODE: AtomicU8 = AtomicU8::new(0);
 
 const SHARDS: usize = 64;
-type LiveMap = FxHashMap<usize, (usize, u32)>;
+type LiveMap = FxHashMap<usize, (usize, u32, u32)>;
 static LIVE: [Mutex<Option<LiveMap>>; SHARDS] = [const { Mutex::new(None) }; SHARDS];
 
 struct StackTable {
@@ -75,7 +75,7 @@ fn enabled() -> bool {
     }
 }
 
-pub(super) fn recording() -> bool {
+pub(crate) fn recording() -> bool {
     match MODE.load(Ordering::Relaxed) {
         0 => with_guard(enabled),
         m => m == 2,
@@ -150,7 +150,7 @@ pub(super) fn on_alloc(p: *mut u8, size: usize) {
         }
         let id = intern(&capture());
         let a = p as usize;
-        LIVE[shard(a)].lock().unwrap().get_or_insert_with(FxHashMap::default).insert(a, (size, id));
+        LIVE[shard(a)].lock().unwrap().get_or_insert_with(FxHashMap::default).insert(a, (size, id, next_seq()));
     });
 }
 
@@ -172,6 +172,15 @@ struct Block {
     start: u64,
     size: u32,
     class: u32,
+    /// Allocation order (`next_seq`).
+    seq: u32,
+}
+
+static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// A global event counter (/4, to fit `u32`): orders allocations and frees across threads for the would-free check.
+pub(super) fn next_seq() -> u32 {
+    (SEQ.fetch_add(1, Ordering::Relaxed) >> 2) as u32
 }
 
 enum Class {
@@ -299,6 +308,16 @@ impl Table {
 }
 
 static RESULT: Mutex<Option<Table>> = Mutex::new(None);
+static WOULD_FREE: Mutex<Vec<(u64, u32)>> = Mutex::new(Vec::new());
+
+/// After `run`: whether `addr` lies in a block the arena freed or rewound (see `check_would_free`).
+pub fn is_would_free(addr: usize) -> bool {
+    with_guard(|| {
+        let w = WOULD_FREE.lock().unwrap();
+        let i = w.partition_point(|&(a, _)| a <= addr as u64);
+        i > 0 && (addr as u64) < w[i - 1].0 + w[i - 1].1 as u64
+    })
+}
 
 /// After `run`: whether `addr` points into a reachable block (`None`: not inside any recorded block).
 pub fn is_reachable(addr: usize) -> Option<bool> {
@@ -470,6 +489,7 @@ fn run_frozen(roots: &[usize]) {
     let mut class_index: FxHashMap<(usize, usize), u32> = FxHashMap::default();
     let mut blocks: Vec<Block> = Vec::new();
     let mut samples: Vec<(u64, u32)> = Vec::new();
+    let mut would_free: Vec<(u64, u32, u32)> = Vec::new();
     for t in THREADS.lock().unwrap().iter() {
         let mut data = t.lock().unwrap();
         let remap: Vec<u32> = data
@@ -487,9 +507,10 @@ fn run_frozen(roots: &[usize]) {
             .collect();
         let own = std::mem::take(&mut data.blocks);
         blocks.reserve(own.len());
-        blocks.extend(own.iter().map(|&(start, size, site)| Block { start, size, class: remap[site as usize] }));
+        blocks.extend(own.iter().map(|&(start, size, site, seq)| Block { start, size, class: remap[site as usize], seq }));
         drop(own);
         samples.extend(std::mem::take(&mut data.samples));
+        would_free.extend(std::mem::take(&mut data.would_free));
     }
     let arena_classes = classes.len() as u32;
     let stacks = STACKS.lock().unwrap().take().map_or_else(Vec::new, |t| t.stacks);
@@ -498,7 +519,7 @@ fn run_frozen(roots: &[usize]) {
     for shard in LIVE.iter() {
         if let Some(map) = shard.lock().unwrap().take() {
             blocks.reserve(map.len());
-            for (a, (size, stack)) in map {
+            for (a, (size, stack, seq)) in map {
                 if size == 0 {
                     continue;
                 }
@@ -506,7 +527,7 @@ fn run_frozen(roots: &[usize]) {
                     oversized += 1;
                     u32::MAX
                 });
-                blocks.push(Block { start: a as u64, size, class: arena_classes + stack });
+                blocks.push(Block { start: a as u64, size, class: arena_classes + stack, seq });
             }
         }
     }
@@ -548,6 +569,7 @@ fn run_frozen(roots: &[usize]) {
         }
     }
     let t_mark = t0.elapsed();
+    check_would_free(&table, &classes, &stacks, &scan, roots, would_free);
 
     let mut per_class = vec![Agg::default(); classes.len()];
     for (i, b) in table.blocks.iter().enumerate() {
@@ -693,6 +715,274 @@ fn run_frozen(roots: &[usize]) {
         let _ = out.flush();
     }
     *RESULT.lock().unwrap() = Some(table);
+}
+
+/// Offsets (in 4-byte scan steps) of words that overlap struct padding in arena types whose padding showed up as
+/// would-free references: `P::new` copies the value with its padding, so stale stack words land there.
+/// `TypeAlloc<TypeParameter>`: two bools then 6 padding bytes at +80; `TypeAlloc<LiteralType>`: the 24-byte value
+/// enum, whose number / boolean variants leave the last 8 bytes (+48) uninitialized; `TypeAlloc<MappedType>` and
+/// `Diagnostic`: a trailing bool (+112, +144).
+fn padding_words(c: &Class) -> &'static [usize] {
+    match c {
+        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::TypeParameter>") => &[76, 80, 84],
+        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::LiteralType>") => &[44, 48, 52],
+        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::MappedType>") => &[108, 112],
+        Class::Arena { ty, .. } if ty.ends_with("tsrs_ast::diagnostic::Diagnostic") => &[140, 144],
+        _ => &[],
+    }
+}
+
+fn class_name(c: &Class) -> String {
+    match c {
+        Class::Arena { loc, ty } => {
+            let file = loc.file();
+            let file = file.find("crates/").map(|i| &file[i + 7..]).unwrap_or(file);
+            format!("{}:{}  {}", file, loc.line(), short_type(ty))
+        }
+        Class::Heap { stack } => format!("heap block (stack {stack})"),
+    }
+}
+
+/// The census gate for arena recycling: every block the arena freed or rewound (recorded, never reused, in this
+/// mode) must be unreachable. A reachable one means the escape analysis that freed it is wrong; up to ten examples
+/// are traced to the blocks (or roots) that point to them. `TSRS_CENSUS_ASSERT=1` exits with status 3 then.
+fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[bool], roots: &[usize], mut would_free: Vec<(u64, u32, u32)>) {
+    would_free.sort_unstable();
+    would_free.dedup_by_key(|w| w.0);
+    *WOULD_FREE.lock().unwrap() = would_free.iter().map(|&(a, size, _)| (a, size)).collect();
+    let (mut checked, mut bytes, mut missing) = (0u64, 0u64, 0u64);
+    let mut violations: FxHashMap<u32, (u64, u64)> = FxHashMap::default();
+    let mut by_class: FxHashMap<u32, (u64, u64)> = FxHashMap::default();
+    for &(addr, size, _) in &would_free {
+        match table.lookup(addr) {
+            Some(i) if table.blocks[i].start == addr => {
+                checked += 1;
+                bytes += size as u64;
+                let b = table.blocks[i];
+                let e = by_class.entry(b.class).or_default();
+                e.0 += 1;
+                e.1 += b.size as u64;
+                if table.marked(i) {
+                    let v = violations.entry(b.class).or_default();
+                    v.0 += 1;
+                    v.1 += b.size as u64;
+                }
+            }
+            _ => missing += 1,
+        }
+    }
+    let reachable: u64 = violations.values().map(|v| v.0).sum();
+    eprintln!(
+        "\n== census would-free check: {checked} blocks ({}) freed or rewound, {reachable} conservatively reachable, {missing} not recorded ==",
+        mb(bytes) + " MB"
+    );
+    let mut rows: Vec<(u32, (u64, u64))> = by_class.into_iter().collect();
+    rows.sort_by(|a, b| b.1 .1.cmp(&a.1 .1));
+    for (class, (n, b)) in rows.iter().take(25) {
+        eprintln!("  would-free {:>10} blocks {:>9} MB  {}", n, mb(*b), class_name(&classes[*class as usize]));
+    }
+    let mut rows: Vec<(u32, (u64, u64))> = violations.into_iter().collect();
+    rows.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+    for (class, (n, b)) in rows.iter().take(25) {
+        eprintln!("  conservatively reachable {:>10} blocks {:>9} MB  {}", n, mb(*b), class_name(&classes[*class as usize]));
+    }
+    // The conservative mark above counts every word that looks like a pointer, and freed blocks are exactly the
+    // objects whose addresses linger in dead stack slots, struct padding and pooled vectors. So reachability is
+    // recomputed with only the references the program actually stores ("strong" edges): a plain 48-bit pointer to
+    // the start of a block (mappers and inference contexts may carry tag bits; mapper slice words keep a length in
+    // the top 16 bits), not in a known padding word (`padding_words`), x8-encoded words only for symbol table
+    // entries in heap blocks. An edge into a freed block must also come from a block allocated before the free
+    // (later blocks can only hold stale copies) and not be 64 KiB-aligned (a stale pointer whose low bytes a small
+    // field overwrote). A freed block reached this way is a violation.
+    let wf_seq: FxHashMap<usize, u32> = would_free
+        .iter()
+        .filter_map(|&(a, _, seq)| table.lookup(a).filter(|&i| table.blocks[i].start == a).map(|i| (i, seq)))
+        .collect();
+    let class_is = |c: u32, suffix: &str| matches!(&classes[c as usize], Class::Arena { ty, .. } if ty.ends_with(suffix));
+    let is_heap = |c: u32| matches!(&classes[c as usize], Class::Heap { .. });
+    let n = table.blocks.len();
+    let mut smark = vec![0u64; n / 64 + 1];
+    let mut strong: FxHashMap<usize, String> = FxHashMap::default();
+    let mut work: Vec<u32> = Vec::new();
+    // SAFETY (all reads): inside a recorded live block or a mapped root range; the bytes are only inspected.
+    let read = |p: usize| u64::from_ne_bytes(unsafe { std::ptr::read_volatile(p as *const [u8; 8]) });
+    // Decides whether `w` (at `off` in block `from`, or in a root) is a strong edge; returns the target.
+    let edge = |from: Option<usize>, off: usize, w: u64| -> Option<usize> {
+        let (packed, tags, padding, born, heap) = match from {
+            Some(j) => {
+                let rb = table.blocks[j];
+                let empty_slice = class_is(rb.class, "TypeAlloc<tsrs_checker::types::TypeReference>")
+                    && off == 40
+                    && read(rb.start as usize + 32) == 0; // empty tail slice in `resolved_type_arguments`
+                (
+                    class_is(rb.class, "TypeMapper"),
+                    class_is(rb.class, "TypeMapper") || class_is(rb.class, "InferenceContext"),
+                    padding_words(&classes[rb.class as usize]).contains(&off) || empty_slice,
+                    Some(rb.seq),
+                    is_heap(rb.class),
+                )
+            }
+            None => (false, false, false, None, false),
+        };
+        if padding {
+            return None;
+        }
+        let c = w & MASK48;
+        if let Some(i) = table.lookup(c) {
+            let b = table.blocks[i];
+            let off_t = c - b.start;
+            // Interior pointers: hash tables point at their control bytes (heap blocks), sub-slices into arena
+            // lists (8-byte elements).
+            let slice = matches!(&classes[b.class as usize], Class::Arena { ty, .. } if ty.starts_with('['));
+            let aimed = off_t == 0
+                || (tags && off_t < 8 && (class_is(b.class, "TypeMapper") || class_is(b.class, "InferenceContext") || class_is(b.class, "InferenceContextRare")))
+                || is_heap(b.class)
+                || (slice && off_t % 8 == 0);
+            if aimed && (w >> 48 == 0 || packed) {
+                match wf_seq.get(&i) {
+                    None => return Some(i),
+                    Some(&freed) if c & 0xffff != 0 && born.is_none_or(|b| b <= freed) => return Some(i),
+                    _ => {}
+                }
+            }
+        }
+        if heap {
+            let c = (w & MASK45) << 3;
+            if let Some(i) = table.lookup(c) {
+                if table.blocks[i].start == c && class_is(table.blocks[i].class, "Symbol") {
+                    return Some(i);
+                }
+            }
+        }
+        None
+    };
+    let mut visit = |i: usize, why: &dyn Fn() -> String, work: &mut Vec<u32>, smark: &mut Vec<u64>| {
+        let (word, bit) = (i / 64, 1u64 << (i % 64));
+        if smark[word] & bit == 0 {
+            smark[word] |= bit;
+            if wf_seq.contains_key(&i) {
+                strong.insert(i, why());
+            } else {
+                work.push(i as u32);
+            }
+        }
+    };
+    for &r in roots {
+        if let Some(i) = table.lookup(r as u64) {
+            visit(i, &|| "explicit root".into(), &mut work, &mut smark);
+        }
+    }
+    let marker = 0u64;
+    let low = std::hint::black_box(&marker) as *const u64 as usize & !7;
+    // SAFETY: plain libc queries about the current thread.
+    let high = unsafe { pthread_get_stackaddr_np(pthread_self()) } as usize;
+    let mut roots_ranges: Vec<(usize, usize, String)> = data_segments();
+    roots_ranges.push((low, high - low, "stack".into()));
+    for (start, len, name) in &roots_ranges {
+        let mut p = *start;
+        while p + 8 <= start + len {
+            let w = read(p);
+            if w != 0 {
+                if let Some(i) = edge(None, 0, w) {
+                    let off = p - start;
+                    visit(i, &|| format!("root {name} +{off:#x} [{w:#018x}]"), &mut work, &mut smark);
+                }
+            }
+            p += 4;
+        }
+    }
+    while let Some(j) = work.pop() {
+        let j = j as usize;
+        let b = table.blocks[j];
+        if !scan[b.class as usize] || b.size < 8 {
+            continue;
+        }
+        let mut p = b.start as usize;
+        let end = b.start as usize + b.size as usize;
+        while p + 8 <= end {
+            let w = read(p);
+            if w != 0 {
+                let off = p - b.start as usize;
+                if let Some(i) = edge(Some(j), off, w) {
+                    visit(
+                        i,
+                        &|| {
+                            let around = |o: isize| -> String {
+                                let at = off as isize + o;
+                                if at < 0 || at as usize + 8 > b.size as usize {
+                                    return "-".into();
+                                }
+                                format!("{:#x}", read(b.start as usize + at as usize))
+                            };
+                            format!("{} +{off} (words before/after: {} {}) [{w:#018x}]", class_name(&classes[b.class as usize]), around(-8), around(8))
+                        },
+                        &mut work,
+                        &mut smark,
+                    );
+                }
+            }
+            p += 4;
+        }
+    }
+    // Heap referrers are named only now. `Rc<LazyMemberTable>` blocks hold an empty `OnceCell<LazyMembers>` until
+    // the table is prepared, whose payload bytes are uninitialized (copied from the stack): weak. (The table's own
+    // mapper and type list are never recycled.)
+    let mut ips: Vec<usize> = Vec::new();
+    let heap_stack = |r: &str| -> Option<usize> { r.strip_prefix("heap block (stack ")?.split(')').next()?.parse().ok() };
+    for r in strong.values() {
+        if let Some(k) = heap_stack(r) {
+            ips.extend(stacks[k].iter().copied());
+        }
+    }
+    let mut names: FxHashMap<usize, String> = FxHashMap::default();
+    atos(&ips, &mut names);
+    let heap_frames = |r: &str| -> Option<Vec<String>> {
+        let k = heap_stack(r)?;
+        Some(stacks[k].iter().take_while(|&&ip| ip != 0).filter_map(|ip| names.get(ip)).filter(|n| !boring(n)).take(3).cloned().collect())
+    };
+    strong.retain(|_, r| !heap_frames(r).is_some_and(|f| f.first().is_some_and(|f| f.ends_with("get_ready_lazy_member_table_worker"))));
+    let (mut conservative, mut strongly, mut cbytes, mut sbytes) = (0u64, 0u64, 0u64, 0u64);
+    let mut only_weak: FxHashMap<u32, (u64, u64)> = FxHashMap::default();
+    for (i, b) in table.blocks.iter().enumerate() {
+        if table.marked(i) {
+            conservative += 1;
+            cbytes += b.size as u64;
+            if smark[i / 64] & (1 << (i % 64)) != 0 {
+                strongly += 1;
+                sbytes += b.size as u64;
+            } else if !wf_seq.contains_key(&i) {
+                let e = only_weak.entry(b.class).or_default();
+                e.0 += 1;
+                e.1 += b.size as u64;
+            }
+        }
+    }
+    let mut rows: Vec<(u32, (u64, u64))> = only_weak.into_iter().collect();
+    rows.sort_by(|a, b| b.1 .1.cmp(&a.1 .1));
+    for (class, (n, b)) in rows.iter().take(12) {
+        eprintln!("  only conservatively reachable {:>10} blocks {:>9} MB  {}", n, mb(*b), class_name(&classes[*class as usize]));
+    }
+    eprintln!(
+        "  strong mark: {strongly} of {conservative} conservatively reachable blocks ({} of {} MB)",
+        mb(sbytes),
+        mb(cbytes)
+    );
+    eprintln!("  strongly reachable freed blocks (violations): {}", strong.len());
+    for (&i, r) in strong.iter().take(20) {
+        let b = table.blocks[i];
+        let mut r = r.clone();
+        if let Some(f) = heap_frames(&r) {
+            r = format!("{r} {{{}}}", f.join(" <- "));
+        }
+        eprintln!("  STRONG {:#x} ({} bytes, {}) <- {r}", b.start, b.size, class_name(&classes[b.class as usize]));
+    }
+    if strong.is_empty() {
+        return;
+    }
+    if std::env::var_os("TSRS_CENSUS_ASSERT").is_some_and(|v| v == "1") {
+        eprintln!("census would-free check failed: {} freed blocks are strongly reachable", strong.len());
+        std::process::exit(3);
+    }
 }
 
 /// The first crate of a v0-mangled symbol (`_RNvCs<hash>_7___rustc12___rust_alloc` -> `__rustc`).

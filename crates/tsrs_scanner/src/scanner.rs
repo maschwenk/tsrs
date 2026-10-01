@@ -963,6 +963,7 @@ impl Scanner {
                                 } else {
                                     self.state.token_value = alloc_str(&format!("0x{digits}"));
                                 }
+                                tsrs_core::arena_pin(); // the cache outlives a rolled-back parse (notes/mem-recycle.md)
                                 self.hex_number_cache.insert(digits, self.state.token_value);
                             }
                             self.state.token_flags |= TokenFlags::HexSpecifier;
@@ -2484,6 +2485,7 @@ impl Scanner {
                 Cow::Borrowed(s) => s,
                 Cow::Owned(s) => alloc_str(&s),
             };
+            tsrs_core::arena_pin(); // the cache outlives a rolled-back parse (notes/mem-recycle.md)
             self.hex_digit_cache.insert(original, digits);
             digits
         }
@@ -2536,6 +2538,7 @@ impl Scanner {
             self.state.token_value = cached;
         } else {
             let token_value = self.canonical_number(self.state.token_value);
+            tsrs_core::arena_pin(); // the cache outlives a rolled-back parse (notes/mem-recycle.md)
             self.number_cache.insert(self.state.token_value, token_value);
             self.state.token_value = token_value;
         }

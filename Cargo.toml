@@ -14,7 +14,6 @@ version = "7.1.0-dev.20260929"
 commit = "b85298b6a81f772d080b0455de0ca9d744cd6fd6"
 
 [workspace.dependencies]
-bumpalo = "3"
 rustc-hash = "2"
 indexmap = "2"
 hashbrown = { version = "0.17", default-features = false, features = ["inline-more"] }

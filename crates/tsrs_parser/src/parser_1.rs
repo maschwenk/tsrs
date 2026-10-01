@@ -470,11 +470,16 @@ pub struct ParserState {
     pub(crate) reparsed_clones_len: usize,
     pub(crate) statement_has_await_identifier: bool,
     pub(crate) has_parse_error: bool,
+    // Rolling back a parse also discards the arena memory it allocated (notes/mem-recycle.md). Parser data that
+    // `rewind` does not truncate and that can receive nodes from inside a speculation (`reparse_list`,
+    // `jsdoc_diagnostics`, the scanner's number caches) calls `tsrs_core::arena_pin`, which cancels that.
+    pub(crate) arena: tsrs_core::arena::Checkpoint,
 }
 
 impl Parser {
     pub(crate) fn mark(&mut self) -> ParserState {
         ParserState {
+            arena: tsrs_core::arena_checkpoint(),
             scanner_state: self.scanner.mark(),
             context_flags: self.context_flags,
             diagnostics_len: self.diagnostics.len(),
@@ -487,6 +492,13 @@ impl Parser {
     }
 
     pub(crate) fn rewind(&mut self, state: ParserState) {
+        let arena = state.arena;
+        self.rewind_keeping_nodes(state);
+        tsrs_core::arena_rewind(arena);
+    }
+
+    /// `rewind` for a caller that keeps nodes it parsed after `mark` (the top-level await reparse).
+    pub(crate) fn rewind_keeping_nodes(&mut self, state: ParserState) {
         self.scanner.rewind(state.scanner_state);
         self.token = self.scanner.token();
         self.context_flags = state.context_flags;
@@ -718,7 +730,7 @@ impl Parser {
 
             // Keep diagnostics from the reparse
             state.diagnostics_len = self.diagnostics.len();
-            self.rewind(state);
+            self.rewind_keeping_nodes(state);
             i += 2;
         }
 

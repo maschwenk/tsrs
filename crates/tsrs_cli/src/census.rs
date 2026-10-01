@@ -1,10 +1,12 @@
 // Reachability census at the end of a run (alloc-profile build, `TSRS_CENSUS=1`; tsrs_core::alloc_profile::census).
 // `TSRS_CENSUS_VERIFY=1` then checks the census against the program: every AST node, every binder symbol in a file's
 // tables and every declaration of those symbols is reachable through the program, so none may be reported
-// unreachable.
+// unreachable. It also walks the program precisely for the arena recycling gate (notes/mem-recycle.md): no node,
+// parent, JSDoc node, flow node or flow list reachable through the program's fields may be a block the arena freed
+// or rewound (the conservative mark can be fooled by stale words in padding; this walk cannot).
 
 use rustc_hash::FxHashSet;
-use tsrs_ast::{Node, Symbol};
+use tsrs_ast::{FlowNode, Kind, Node, Symbol};
 use tsrs_compiler::Program;
 use tsrs_core::alloc_profile::census;
 use tsrs_core::P;
@@ -45,14 +47,63 @@ impl Tally {
     }
 }
 
+#[derive(Default)]
+struct FreedRefs {
+    checked: u64,
+    freed: u64,
+    examples: Vec<String>,
+}
+
+impl FreedRefs {
+    fn check(&mut self, addr: usize, what: &dyn Fn() -> String) {
+        self.checked += 1;
+        if census::is_would_free(addr) {
+            self.freed += 1;
+            if self.examples.len() < 10 {
+                self.examples.push(what());
+            }
+        }
+    }
+}
+
+fn flow_nodes_of(node: P<Node>) -> Vec<P<FlowNode>> {
+    let mut out: Vec<P<FlowNode>> = Vec::new();
+    out.extend(node.flow_node());
+    if let Some(body) = node.body_data() {
+        out.extend(body.end_flow_node());
+    }
+    match node.kind() {
+        Kind::FunctionDeclaration => out.extend(node.as_function_declaration().return_flow_node()),
+        Kind::FunctionExpression => out.extend(node.as_function_expression().return_flow_node.get()),
+        Kind::Constructor => out.extend(node.as_constructor_declaration().return_flow_node()),
+        Kind::ClassStaticBlockDeclaration => out.extend(node.as_class_static_block_declaration().return_flow_node()),
+        Kind::CaseClause | Kind::DefaultClause => out.extend(node.as_case_or_default_clause().fallthrough_flow_node()),
+        _ => {}
+    }
+    out
+}
+
 fn verify(program: &'static Program) {
     let (mut nodes, mut symbols) = (Tally::default(), Tally::default());
+    let mut freed = FreedRefs::default();
     let mut seen_symbols: FxHashSet<P<Symbol>> = FxHashSet::default();
+    let mut seen_flow: FxHashSet<P<FlowNode>> = FxHashSet::default();
     for &file in program.get_source_files() {
         let mut work: Vec<P<Node>> = vec![file.as_node()];
         let mut pending_symbols: Vec<P<Symbol>> = Vec::new();
+        let mut flow_work: Vec<P<FlowNode>> = Vec::new();
+        for list in [file.diagnostics(), file.jsdoc_diagnostics(), file.bind_diagnostics()] {
+            for d in list {
+                freed.check(d.addr(), &|| format!("diagnostic in {}", file.file_name()));
+            }
+        }
         while let Some(node) = work.pop() {
             nodes.check(node.addr(), &|| format!("{:?} in {}", node.kind(), file.file_name()));
+            freed.check(node.addr(), &|| format!("{:?} at {} in {}", node.kind(), node.pos(), file.file_name()));
+            if let Some(parent) = node.parent() {
+                freed.check(parent.addr(), &|| format!("parent of {:?} at {} in {}", node.kind(), node.pos(), file.file_name()));
+            }
+            flow_work.extend(flow_nodes_of(node));
             pending_symbols.extend(node.symbol());
             pending_symbols.extend(node.local_symbol());
             if let Some(locals) = node.locals() {
@@ -62,6 +113,23 @@ fn verify(program: &'static Program) {
                 work.push(child);
                 false
             });
+            work.extend(node.eager_jsdoc(Some(file.get())).iter().copied());
+        }
+        while let Some(flow) = flow_work.pop() {
+            if !seen_flow.insert(flow) {
+                continue;
+            }
+            freed.check(flow.addr(), &|| format!("flow node {:?} in {}", flow.flags.get(), file.file_name()));
+            flow_work.extend(flow.antecedent.get());
+            if let Some(n) = flow.node.get() {
+                freed.check(n.addr(), &|| format!("node of flow node {:?} in {}", flow.flags.get(), file.file_name()));
+            }
+            let mut list = flow.antecedents.get();
+            while let Some(l) = list {
+                freed.check(l.addr(), &|| format!("antecedent list of {:?} in {}", flow.flags.get(), file.file_name()));
+                flow_work.push(l.flow);
+                list = l.next.get();
+            }
         }
         while let Some(symbol) = pending_symbols.pop() {
             if !seen_symbols.insert(symbol) {
@@ -73,9 +141,16 @@ fn verify(program: &'static Program) {
             }
             for &decl in symbol.declarations() {
                 nodes.check(decl.addr(), &|| format!("declaration {:?} of {}", decl.kind(), symbol.name()));
+                freed.check(decl.addr(), &|| format!("declaration {:?} of {}", decl.kind(), symbol.name()));
             }
         }
     }
+    eprintln!(
+        "census verify (recycling): {} program references checked (nodes, parents, JSDoc, diagnostics, flow nodes, flow lists, declarations), {} to freed or rewound blocks{}",
+        freed.checked,
+        freed.freed,
+        if freed.examples.is_empty() { String::new() } else { format!(" (e.g. {})", freed.examples.join("; ")) }
+    );
     for (what, t) in [("AST nodes", &nodes), ("binder symbols", &symbols)] {
         eprintln!(
             "census verify: {what}: {} checked, {} unreachable, {} not recorded{}",

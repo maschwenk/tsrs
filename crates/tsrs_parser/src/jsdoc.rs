@@ -177,7 +177,8 @@ impl Parser {
         let comment = self.parse_jsdoc_comment_worker(start, end, full_start, initial_indent);
         // move jsdoc diagnostics to jsdocDiagnostics -- for JS files only
         let moved = self.diagnostics.split_off(save_diagnostics_length);
-        if self.context_flags.intersects(NodeFlags::JavaScriptFile) {
+        if self.context_flags.intersects(NodeFlags::JavaScriptFile) && !moved.is_empty() {
+            tsrs_core::arena_pin();
             self.jsdoc_diagnostics.extend(moved);
         }
 

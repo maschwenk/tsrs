@@ -113,7 +113,7 @@ fn bind_source_file_worker(file: P<SourceFile>) {
 }
 
 fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>) -> P<FlowNode> {
-    P::new(FlowNode {
+    P::new_recycled(FlowNode {
         flags: OwnedCell::new(flags),
         node: OwnedCell::new(node),
         antecedent: OwnedCell::new(antecedent),
@@ -612,7 +612,7 @@ impl Binder {
     }
 
     pub(crate) fn new_flow_list(&mut self, head: P<FlowNode>, tail: Option<P<FlowList>>) -> P<FlowList> {
-        P::new(FlowList { flow: head, next: OwnedCell::new(tail) })
+        P::new_recycled(FlowList { flow: head, next: OwnedCell::new(tail) })
     }
 
     pub(crate) fn combine_flow_lists(&mut self, head: Option<P<FlowList>>, tail: Option<P<FlowList>>) -> Option<P<FlowList>> {
@@ -665,6 +665,46 @@ impl Binder {
             return antecedents.flow;
         }
         label
+    }
+
+    /// `finishFlowLabel` for a branch label that only its creator and the binder's target fields have seen (if
+    /// statements, loops, conditional and logical expressions): a dropped label is recycled (notes/mem-recycle.md).
+    pub(crate) fn finish_local_flow_label(&mut self, label: P<FlowNode>) -> P<FlowNode> {
+        let result = self.finish_flow_label(label);
+        if result != label {
+            self.recycle_flow_label(label);
+        }
+        result
+    }
+
+    /// Gives a branch label that nothing references any more (and its antecedent list cells, not the antecedents)
+    /// back to the arena. Kept when it was ever used as an antecedent or a binder field still holds it.
+    pub(crate) fn recycle_flow_label(&mut self, label: P<FlowNode>) {
+        debug_assert!(label.flags.get().intersects(FlowFlags::BranchLabel));
+        let held = |t: Option<P<FlowNode>>| t == Some(label);
+        if label.flags.get().intersects(FlowFlags::Referenced)
+            || label == self.unreachable_flow
+            || held(self.current_flow)
+            || held(self.current_break_target)
+            || held(self.current_continue_target)
+            || held(self.current_return_target)
+            || held(self.current_true_target)
+            || held(self.current_false_target)
+            || held(self.current_exception_target)
+            || held(self.pre_switch_case_flow)
+            || self.active_label_list.iter().any(|l| held(l.break_target) || held(l.continue_target))
+        {
+            return;
+        }
+        let mut list = label.antecedents.get();
+        while let Some(l) = list {
+            list = l.next.get();
+            // SAFETY: a label's antecedent list cells are referenced only by the label (combineFlowLists copies
+            // them; only try/finally labels, which are never recycled, hand their lists to reduce labels).
+            unsafe { tsrs_core::free!(l) };
+        }
+        // SAFETY: never an antecedent (no Referenced flag), not held by the binder, and its creator dropped it.
+        unsafe { tsrs_core::free!(label) };
     }
 
     pub(crate) fn bind(&mut self, node: impl Into<Option<P<Node>>>) -> bool {
@@ -2075,10 +2115,10 @@ impl Binder {
         self.add_antecedent(Some(pre_while_label), self.current_flow());
         self.current_flow = Some(pre_while_label);
         self.bind_condition(Some(stmt.expression()), Some(pre_body_label), Some(post_while_label));
-        self.current_flow = Some(self.finish_flow_label(pre_body_label));
+        self.current_flow = Some(self.finish_local_flow_label(pre_body_label));
         self.bind_iterative_statement(stmt.statement(), Some(post_while_label), Some(pre_while_label));
         self.add_antecedent(Some(pre_while_label), self.current_flow());
-        self.current_flow = Some(self.finish_flow_label(post_while_label));
+        self.current_flow = Some(self.finish_local_flow_label(post_while_label));
     }
 
     pub(crate) fn bind_do_statement(&mut self, node: P<Node>) {
@@ -2091,9 +2131,9 @@ impl Binder {
         self.current_flow = Some(pre_do_label);
         self.bind_iterative_statement(stmt.statement(), Some(post_do_label), Some(pre_condition_label));
         self.add_antecedent(Some(pre_condition_label), self.current_flow());
-        self.current_flow = Some(self.finish_flow_label(pre_condition_label));
+        self.current_flow = Some(self.finish_local_flow_label(pre_condition_label));
         self.bind_condition(Some(stmt.expression()), Some(pre_do_label), Some(post_do_label));
-        self.current_flow = Some(self.finish_flow_label(post_do_label));
+        self.current_flow = Some(self.finish_local_flow_label(post_do_label));
     }
 
     pub(crate) fn bind_for_statement(&mut self, node: P<Node>) {
@@ -2118,13 +2158,13 @@ impl Binder {
         self.add_antecedent(Some(pre_loop_label), self.current_flow());
         self.current_flow = Some(pre_loop_label);
         self.bind_condition(stmt.condition(), Some(pre_body_label), Some(post_loop_label));
-        self.current_flow = Some(self.finish_flow_label(pre_body_label));
+        self.current_flow = Some(self.finish_local_flow_label(pre_body_label));
         self.bind_iterative_statement(stmt.statement(), Some(post_loop_label), Some(pre_incrementor_label));
         self.add_antecedent(Some(pre_incrementor_label), self.current_flow());
-        self.current_flow = Some(self.finish_flow_label(pre_incrementor_label));
+        self.current_flow = Some(self.finish_local_flow_label(pre_incrementor_label));
         self.bind(stmt.incrementor());
         self.add_antecedent(Some(pre_loop_label), self.current_flow());
-        self.current_flow = Some(self.finish_flow_label(post_loop_label));
+        self.current_flow = Some(self.finish_local_flow_label(post_loop_label));
     }
 
     pub(crate) fn bind_for_in_or_for_of_statement(&mut self, node: P<Node>) {
@@ -2155,7 +2195,7 @@ impl Binder {
         }
         self.bind_iterative_statement(stmt.statement(), Some(post_loop_label), Some(pre_loop_label));
         self.add_antecedent(Some(pre_loop_label), self.current_flow());
-        self.current_flow = Some(self.finish_flow_label(post_loop_label));
+        self.current_flow = Some(self.finish_local_flow_label(post_loop_label));
     }
 
     pub(crate) fn bind_if_statement(&mut self, node: P<Node>) {
@@ -2164,13 +2204,13 @@ impl Binder {
         let else_label = self.create_branch_label();
         let post_if_label = self.create_branch_label();
         self.bind_condition(Some(stmt.expression()), Some(then_label), Some(else_label));
-        self.current_flow = Some(self.finish_flow_label(then_label));
+        self.current_flow = Some(self.finish_local_flow_label(then_label));
         self.bind(stmt.then_statement());
         self.add_antecedent(Some(post_if_label), self.current_flow());
-        self.current_flow = Some(self.finish_flow_label(else_label));
+        self.current_flow = Some(self.finish_local_flow_label(else_label));
         self.bind(stmt.else_statement());
         self.add_antecedent(Some(post_if_label), self.current_flow());
-        self.current_flow = Some(self.finish_flow_label(post_if_label));
+        self.current_flow = Some(self.finish_local_flow_label(post_if_label));
     }
 
     pub(crate) fn bind_return_statement(&mut self, node: P<Node>) {
@@ -2471,9 +2511,10 @@ impl Binder {
                 self.has_flow_effects = false;
                 self.bind_logical_like_expression(node, Some(post_expression_label), Some(post_expression_label));
                 if self.has_flow_effects {
-                    self.current_flow = Some(self.finish_flow_label(post_expression_label));
+                    self.current_flow = Some(self.finish_local_flow_label(post_expression_label));
                 } else {
                     self.current_flow = save_current_flow;
+                    self.recycle_flow_label(post_expression_label);
                 }
                 self.has_flow_effects = self.has_flow_effects || save_has_flow_effects;
             } else {
@@ -2510,7 +2551,7 @@ impl Binder {
         } else {
             self.bind_condition(Some(expr.left()), true_target, Some(pre_right_label));
         }
-        self.current_flow = Some(self.finish_flow_label(pre_right_label));
+        self.current_flow = Some(self.finish_local_flow_label(pre_right_label));
         self.bind(expr.operator_token());
         if ast::is_logical_or_coalescing_assignment_operator(expr.operator_token().kind()) {
             self.do_with_conditional_branches(|b, n| b.bind(n), Some(expr.right()), true_target, false_target);
@@ -2541,18 +2582,19 @@ impl Binder {
         let save_has_flow_effects = self.has_flow_effects;
         self.has_flow_effects = false;
         self.bind_condition(Some(expr.condition()), Some(true_label), Some(false_label));
-        self.current_flow = Some(self.finish_flow_label(true_label));
+        self.current_flow = Some(self.finish_local_flow_label(true_label));
         self.bind(expr.question_token());
         self.bind(expr.when_true());
         self.add_antecedent(Some(post_expression_label), self.current_flow());
-        self.current_flow = Some(self.finish_flow_label(false_label));
+        self.current_flow = Some(self.finish_local_flow_label(false_label));
         self.bind(expr.colon_token());
         self.bind(expr.when_false());
         self.add_antecedent(Some(post_expression_label), self.current_flow());
         if self.has_flow_effects {
-            self.current_flow = Some(self.finish_flow_label(post_expression_label));
+            self.current_flow = Some(self.finish_local_flow_label(post_expression_label));
         } else {
             self.current_flow = save_current_flow;
+            self.recycle_flow_label(post_expression_label);
         }
         self.has_flow_effects = self.has_flow_effects || save_has_flow_effects;
     }
@@ -2593,9 +2635,10 @@ impl Binder {
             let save_has_flow_effects = self.has_flow_effects;
             self.bind_optional_chain(node, Some(post_expression_label), Some(post_expression_label));
             if self.has_flow_effects {
-                self.current_flow = Some(self.finish_flow_label(post_expression_label));
+                self.current_flow = Some(self.finish_local_flow_label(post_expression_label));
             } else {
                 self.current_flow = save_current_flow;
+                self.recycle_flow_label(post_expression_label);
             }
             self.has_flow_effects = self.has_flow_effects || save_has_flow_effects;
         } else {
@@ -2625,7 +2668,7 @@ impl Binder {
             false_target,
         );
         if let Some(pre_chain_label) = pre_chain_label {
-            self.current_flow = Some(self.finish_flow_label(pre_chain_label));
+            self.current_flow = Some(self.finish_local_flow_label(pre_chain_label));
         }
         self.do_with_conditional_branches(|b, n| b.bind_optional_chain_rest(n.unwrap()), Some(node), true_target, false_target);
         if ast::is_outermost_optional_chain(node) {

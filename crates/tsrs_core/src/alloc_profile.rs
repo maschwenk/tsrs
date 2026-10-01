@@ -321,8 +321,10 @@ struct ThreadData {
     sites: Vec<(&'static Location<'static>, &'static str, Entry)>,
     /// Census only: every arena block this thread allocated (address, size, index into `sites`), and the raw stack
     /// of every `census::ARENA_SAMPLE`-th one (address, stack id).
-    blocks: Vec<(u64, u32, u32)>,
+    blocks: Vec<(u64, u32, u32, u32)>, // address, size, site, census::next_seq()
     samples: Vec<(u64, u32)>,
+    /// Census only: blocks the arena was asked to free or rewind (address, size); see `census::run`.
+    would_free: Vec<(u64, u32, u32)>, // address, size, census::next_seq() when freed
     countdown: u32,
 }
 type Shared = Arc<Mutex<ThreadData>>;
@@ -337,6 +339,7 @@ thread_local! {
             sites: Vec::new(),
             blocks: Vec::new(),
             samples: Vec::new(),
+            would_free: Vec::new(),
             countdown: 0,
         }));
         THREADS.lock().unwrap().push(data.clone());
@@ -360,8 +363,39 @@ impl Drop for ArenaScope {
     }
 }
 
-pub(crate) fn register_arena(arena: &'static bumpalo::Bump) {
-    ARENAS.lock().unwrap().push(arena as *const bumpalo::Bump as usize);
+pub(crate) fn register_arena(arena: &'static crate::arena::Arena) {
+    ARENAS.lock().unwrap().push(arena as *const crate::arena::Arena as usize);
+}
+
+/// Census only: the number of arena blocks this thread has recorded (an arena checkpoint keeps it).
+pub(crate) fn census_block_count() -> usize {
+    if !census::recording() {
+        return 0;
+    }
+    LOCAL.try_with(|local| local.lock().unwrap().blocks.len()).unwrap_or(0)
+}
+
+/// Census only: a block the arena would have freed (`P::free`); never reused, checked at exit.
+pub(crate) fn census_would_free(addr: usize, size: usize) {
+    let _ = LOCAL.try_with(|local| {
+        let mut data = local.lock().unwrap();
+        census::with_guard(|| data.would_free.push((addr as u64, size as u32, census::next_seq())));
+    });
+}
+
+/// Census only: every block this thread recorded since `census_block_count()` returned `since` would be discarded
+/// by an arena rewind.
+pub(crate) fn census_would_free_since(since: usize) {
+    let _ = LOCAL.try_with(|local| {
+        let mut data = local.lock().unwrap();
+        let data = &mut *data;
+        census::with_guard(|| {
+            let seq = census::next_seq();
+            for &(addr, size, _, _) in data.blocks.get(since..).unwrap_or(&[]) {
+                data.would_free.push((addr, size, seq));
+            }
+        });
+    });
 }
 
 #[inline(never)]
@@ -382,7 +416,7 @@ pub(crate) fn record(site: &'static Location<'static>, ty: &'static str, bytes: 
             let sample = data.countdown == 0;
             data.countdown = if sample { census::arena_sample_rate() - 1 } else { data.countdown - 1 };
             census::with_guard(|| {
-                data.blocks.push((addr as u64, size, idx));
+                data.blocks.push((addr as u64, size, idx, census::next_seq()));
                 if sample {
                     data.samples.push((addr as u64, census::stack_id()));
                 }
@@ -430,8 +464,8 @@ pub fn dump() {
         .iter()
         .map(|&a| {
             // SAFETY: arenas are leaked; allocated_bytes only reads the chunk list header.
-            let a = unsafe { &*(a as *const bumpalo::Bump) };
-            a.allocated_bytes() as u64
+            let a = unsafe { &*(a as *const crate::arena::Arena) };
+            a.capacity() as u64
         })
         .sum();
     let requested: u64 = sites.values().map(|v| v.2.bytes).sum();

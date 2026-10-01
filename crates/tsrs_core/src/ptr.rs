@@ -12,14 +12,14 @@
 //! created them (parser/binder per file, checker per checker). After a file is bound its AST and
 //! symbols are read-only and shared. `P<T>` is therefore declared `Send + Sync`.
 
-use bumpalo::Bump;
+use crate::arena::{self, Arena, Checkpoint};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 thread_local! {
-    static ARENA: &'static Bump = {
-        let arena: &'static Bump = Box::leak(Box::new(Bump::with_capacity(1 << 20)));
+    static ARENA: &'static Arena = {
+        let arena: &'static Arena = Box::leak(Box::new(Arena::new()));
         #[cfg(any(debug_assertions, feature = "checked-cells"))]
         shared_check::register(arena);
         #[cfg(feature = "alloc-profile")]
@@ -36,7 +36,7 @@ macro_rules! profile {
 }
 
 #[inline]
-fn with_arena<R>(f: impl FnOnce(&'static Bump) -> R) -> R {
+fn with_arena<R>(f: impl FnOnce(&'static Arena) -> R) -> R {
     #[cfg(feature = "alloc-profile")]
     let _chunk = crate::alloc_profile::ArenaScope::enter();
     ARENA.with(|a| f(a))
@@ -55,6 +55,24 @@ impl<T> P<T> {
         let p = with_arena(|a| P(a.alloc(value)));
         profile!(T, std::mem::size_of::<T>(), p.addr());
         p
+    }
+
+    /// `P::new` that first takes a block of the right size from the current thread's free list (see `free`).
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn new_recycled(value: T) -> P<T> {
+        let class = const { arena::free_class(std::mem::size_of::<T>(), std::mem::align_of::<T>()) };
+        if class != 0 {
+            if let Some(block) = with_arena(|a| a.pop_free(class)) {
+                let p = block.cast::<T>();
+                // SAFETY: a dead block of exactly `size_of::<T>()` bytes, 8-aligned (`free_class`).
+                unsafe { p.as_ptr().write(value) };
+                profile!(T, std::mem::size_of::<T>(), p.addr().get());
+                // SAFETY: as above; the block is now owned by the new value.
+                return P(unsafe { &*p.as_ptr() });
+            }
+        }
+        P::new(value)
     }
 }
 
@@ -407,9 +425,112 @@ pub fn alloc_vec<T>(items: Vec<T>) -> &'static [T] {
         return &[];
     }
     let bytes = std::mem::size_of_val(&items[..]);
-    let s: &'static [T] = with_arena(|a| &*a.alloc_slice_fill_iter(items));
+    let s: &'static [T] = with_arena(|a| &*a.alloc_vec(items));
     profile!([T], bytes, s.as_ptr() as usize);
     s
+}
+
+/// `alloc_slice` that first takes a block of the right size from the current thread's free list (see `free`).
+#[inline]
+#[cfg_attr(feature = "alloc-profile", track_caller)]
+pub fn alloc_slice_recycled<T: Copy>(items: &[T]) -> &'static [T] {
+    if items.is_empty() {
+        return &[];
+    }
+    let class = arena::free_class(std::mem::size_of_val(items), std::mem::align_of::<T>());
+    if class != 0 {
+        if let Some(block) = with_arena(|a| a.pop_free(class)) {
+            let p = block.cast::<T>();
+            // SAFETY: a dead block of exactly `size_of_val(items)` bytes, 8-aligned; `T: Copy`.
+            let s: &'static [T] = unsafe {
+                std::ptr::copy_nonoverlapping(items.as_ptr(), p.as_ptr(), items.len());
+                std::slice::from_raw_parts(p.as_ptr(), items.len())
+            };
+            profile!([T], std::mem::size_of_val(items), s.as_ptr() as usize);
+            return s;
+        }
+    }
+    alloc_slice(items)
+}
+
+/// Gives a dead arena block back to the current thread's free list for its size (8-byte multiples up to
+/// `arena::MAX_FREE_SIZE`, alignment <= 8; other sizes are ignored). Use the `free!` / `free_slice!` macros, which
+/// pass the block as an address: a `P<T>` / `&T` argument would be a live, protected reference to the memory while
+/// it is overwritten. Destructors do not run. The caller has proved that nothing reachable or live points to the
+/// block: the next `new_recycled` / `alloc_slice_recycled` of that size reuses it. With `TSRS_ARENA_POISON=1` the
+/// block is filled with `arena::POISON` instead, and in the census build (`TSRS_CENSUS=1`) it is recorded, never
+/// reused, and the census checks at exit that it is unreachable.
+///
+/// # Safety
+/// No live object, local or cache may point into the block afterwards, and it must be an arena block of exactly
+/// `size` bytes.
+#[inline]
+pub unsafe fn free_raw(addr: usize, size: usize, align: usize) {
+    with_arena(|a| arena::free_block(a, addr, size, align));
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn layout_of_pointee<T: ?Sized>(p: &T) -> (usize, usize) {
+    (std::mem::size_of_val(p), std::mem::align_of_val(p))
+}
+
+/// `free!(p)`: gives the arena object `p: P<T>` back (`free_raw`). Unsafe: see `free_raw`.
+#[macro_export]
+macro_rules! free {
+    ($p:expr) => {{
+        let p = $p;
+        let (size, align) = $crate::ptr::layout_of_pointee(p.get());
+        $crate::ptr::free_raw(p.addr(), size, align)
+    }};
+}
+
+/// `free_slice!(s)`: gives the arena slice `s: &'static [T]` back (empty slices are ignored; it must not be a static
+/// or a sub-slice). Unsafe: see `free_raw`.
+#[macro_export]
+macro_rules! free_slice {
+    ($s:expr) => {{
+        let s = $s;
+        if !s.is_empty() {
+            let (size, align) = $crate::ptr::layout_of_pointee(s);
+            $crate::ptr::free_raw(s.as_ptr() as usize, size, align)
+        }
+    }};
+}
+
+/// Census builds (`TSRS_CENSUS=1`): zeroes the unused capacity of a pooled vector after elements were removed, so
+/// stale pointers there do not count as references in the would-free check. Compiled to nothing otherwise.
+#[inline(always)]
+pub fn census_scrub_slack<T>(v: &mut Vec<T>) {
+    #[cfg(feature = "alloc-profile")]
+    if crate::alloc_profile::census::recording() {
+        for slot in v.spare_capacity_mut() {
+            *slot = std::mem::MaybeUninit::zeroed();
+        }
+    }
+    #[cfg(not(feature = "alloc-profile"))]
+    let _ = v;
+}
+
+/// The current thread's arena position, for discarding a speculative parse (`arena_rewind`).
+#[inline]
+pub fn arena_checkpoint() -> Checkpoint {
+    with_arena(|a| a.checkpoint())
+}
+
+/// Discards everything the current thread allocated in the arena since `cp`, if nothing can point to it: the
+/// caller guarantees that its own data does not, and the arena skips the rewind when a chunk was added or a free /
+/// `arena_pin` happened since `cp` (see `arena`). Checkpoints nest: rewind in reverse order.
+#[inline]
+pub fn arena_rewind(cp: Checkpoint) {
+    with_arena(|a| arena::rewind(a, cp));
+}
+
+/// Declares that data allocated since the innermost open checkpoint may now be referenced from a structure that
+/// outlives it (a cache, a list that is not rolled back), so no open checkpoint may be rewound.
+#[inline]
+pub fn arena_pin() {
+    with_arena(|a| a.bump_epoch());
 }
 
 /// Copies a string into the arena.
@@ -441,7 +562,7 @@ pub fn alloc_profile_dump() {
 
 /// Bytes allocated so far by the current thread's arena.
 pub fn arena_allocated_bytes() -> usize {
-    with_arena(|a| a.allocated_bytes())
+    with_arena(|a| a.capacity())
 }
 
 /// Debug aid for the threading contract (checked builds only, opt-in with `TSRS_CHECK_SHARED=1`):
@@ -449,10 +570,10 @@ pub fn arena_allocated_bytes() -> usize {
 /// shared, and `assert_not_shared` panics when a checker writes to such an object. Release builds without
 /// `checked-cells` compile both to nothing.
 pub mod shared_check {
-    use bumpalo::Bump;
+    use crate::arena::Arena;
     use std::sync::{Mutex, OnceLock, RwLock};
 
-    struct ArenaRef(&'static Bump);
+    struct ArenaRef(&'static Arena);
     // SAFETY: only used to read chunk bounds while the owning threads are idle.
     unsafe impl Send for ArenaRef {}
 
@@ -460,7 +581,7 @@ pub mod shared_check {
     static FROZEN: RwLock<Vec<(usize, usize)>> = RwLock::new(Vec::new());
 
     #[cfg(any(debug_assertions, feature = "checked-cells"))]
-    pub(super) fn register(arena: &'static Bump) {
+    pub(super) fn register(arena: &'static Arena) {
         ARENAS.lock().unwrap().push(ArenaRef(arena));
     }
 
@@ -485,9 +606,9 @@ pub mod shared_check {
         }
         let mut ranges = Vec::new();
         for arena in ARENAS.lock().unwrap().iter() {
-            // SAFETY: the owning threads are idle; the chunks are only read.
-            for (ptr, len) in unsafe { arena.0.iter_allocated_chunks_raw() } {
-                ranges.push((ptr as usize, ptr as usize + len));
+            // The owning threads are idle; the chunk list is only read.
+            for (ptr, len) in arena.0.used_ranges() {
+                ranges.push((ptr, ptr + len));
             }
         }
         ranges.sort_unstable();
