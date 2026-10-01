@@ -318,3 +318,67 @@ doubles from 4, `reserve_exact` adds exactly, `clone` allocates the length). `Sy
 | 4 checkers, before (A10) | 8.097-8.111 (8.109) | 431-433 G |
 | 4 checkers, after | 8.036-8.068 (8.046, -0.06) | 431-432 G |
 | opt-out single / 4 checkers (go assignment), after | 8.01 / 12.37 | 340 / 518 G |
+
+## Tried and not landed
+
+- **Deferred two-constituent property types (B1)**: see above (-3.7% types, -0.014 GiB, changes results).
+- **Lazy member tables in the arena instead of `Rc`** (128-byte packed table, no reference counts): arena +155 MB,
+  heap -141 MB, peak +0.01 GiB single / +0.03 GiB 4 checkers (the `Rc` blocks fit a 176-byte size class exactly,
+  and the 12% of tables dropped when resolved in full are reused heap). Instructions -0.3%. The same packing
+  inside the `Rc` (176 -> 144-byte blocks): -0.01 / -0.02 GiB, not worth the churn. Patch kept out of tree.
+- **Symbol tables searched linearly up to 32 entries** (re-measured with 8-byte entries): -0.02 GiB, +0.3-0.6%
+  instructions; stays at 16.
+- **A first version of A10** (lookup then insert, bounds-checked chunk access): +0.6% instructions for -0.03 GiB;
+  the landed version uses the hash table's entry API (+0.3%).
+- **Interning 1-2 element type-argument lists**: not built; mem-round2 measured 5.35M distinct of 10M lists, and
+  for short lists the dedup table's entry (16+ bytes) costs more than the 8-16 bytes a duplicate saves.
+- **Identifier text from the source**: an identifier's text is a slice of its file's text, but recovering the file
+  from the node needs a parent walk on every `text()`; not attempted. The node header (A3) took 8 bytes off every
+  identifier instead.
+- **Symbol 56 -> 48 bytes**: needs two cuts (e.g. a thin declarations slice plus moving the member/export tail
+  out); the 4-byte id, both flag words and five pointers do not fit 48 bytes without splitting fields. Not done.
+
+## Result
+
+Interleaved, 3 rounds each (base = dc59d8e, the start of this pass; final = 49feed5). The final binary also
+contains the concurrent checker CPU pass (notes/cpu-checker.md), which accounts for the instruction drop; the
+steps of this pass were each within -0.8% (A2) .. +0.5% (A3) instructions of their predecessor.
+
+| run | base peak GiB | final peak GiB | base instructions | final instructions |
+| --- | --- | --- | --- | --- |
+| default, single | 7.017-7.019 (7.017) | 6.016-6.033 (6.022, -14.2%) | 323 G | 297 G |
+| default, 4 checkers | 9.383-9.392 (9.384) | 8.036-8.071 (8.069, -14.0%) | 434-438 G | 400-402 G |
+| opt-out, single | 9.47 | 8.01 (-15.4%) | 345 G | 318 G |
+| opt-out, 4 checkers (go assignment) | 14.53 | 12.35 (-15.0%) | 520 G | 481 G |
+
+Per step (single / 4 checkers, GiB): A1 -0.17 / -0.26, A2 -0.08 / -0.18, A3 -0.17 / -0.15, A4 -0.22 / -0.27,
+A5 -0.03 / -0.02, A6 -0.06 / -0.08, B2 -0.02 / -0.03, A7 -0.06 / -0.06, A8 -0.07 / -0.08, A9 -0.07 / -0.11,
+A10 -0.03 / -0.01, A11 -0.04 / -0.06. Counters after every step: opt-out 25,973,354 / 9,639,962 / 44,884,281
+single and 39,704,001 / 16,200,921 / 89,981,648 on 4 checkers (go assignment); default 12,811,032 / 9,630,120 /
+44,820,708 single and 16,549,988 / 13,788,912 / 76,888,800 on 4 checkers.
+
+## Profile after (default mode, single)
+
+Arena 4,673 MB requested (was 5,287), heap outside the arena 1,335 MB live (was 1,723).
+
+| arena type | MB | count | B/each |
+| --- | --- | --- | --- |
+| Symbol | 684 | 12,811,033 | 56 |
+| NodeAlloc<Identifier> | 299 | 7,844,376 | 40 |
+| str (213 MB source text) | 274 | | |
+| TypeMapper | 247 | 16,163,299 | 16 |
+| [ValueSymbolLinks] chunks | 231 | ~10.1M values | 24 |
+| [P<Type>] | 211 | 11,907,032 | 18 |
+| TypeAlloc<TypeReference> / <ObjectType> | 161 / 161 | 2.11M / 3.01M | 80 / 56 |
+| Signature | 132 | 1,574,006 | 88 |
+| StructuredMembers | 121 | 2,637,655 | 48 |
+| TypeAlloc<UnionType> / <IntersectionType> | 117 / 104 | 1.02M / 1.13M | 120 / 96 |
+
+Heap live: relation caches 86 MB single (~170 MB on 4 checkers), conditional-type and object-type instantiation
+maps 72 + 71 MB (they map keys to arbitrary result types, so A7 does not apply), symbol table entries ~230 MB,
+lazy member tables ~110 MB, pointer-keyed link stores ~70 MB.
+
+What remains: `Symbol` (684 MB), identifiers (299 MB), mappers and type lists created on instantiation cache
+misses (kept by the types they built), the remaining instantiation maps, inference contexts and infos (~180 MB,
+garbage after inference in Go; they escape through their mappers here, though with B2 a context whose mappers were
+never created cannot escape that way, which could make recycling those provable).

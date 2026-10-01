@@ -227,3 +227,20 @@ divergence fixed: Rust's `sort_by` / `binary_search_by` compared different pairs
 `tsrs_core::goslices` ports Go's algorithms. Project instructions retired (default mode, medians): single
 325 -> 294 G (-9.5%), 4 checkers 434 -> 401 G (-7.6%); wall not confirmed on a quiet machine. Go-vs-tsrs call
 counts for ~110 hot functions, cache hit rates, profiles before/after: `notes/cpu-checker.md`.
+
+## 2026-10-01: peak memory, round 3 (representation + lazy creation)
+
+Representation changes (suite errors and `.types`/`.symbols` byte-identical to the base in both lazy modes and
+with multi-threaded programs; counters unchanged; AST oracle unchanged): resolved members of structured types in
+a record allocated on first write (4.9M of 7.6M are never resolved), relation keys of the simple form as packed
+type-id pairs in 8-byte slots (no hashing), a 24-byte AST node header (kind, data tag and parent in one word,
+32-bit node ids), 8-byte symbol table entries (symbol address + key fingerprint) and 24-byte table headers,
+24-byte value-symbol links (a mode selects target/mapper, synthetic-symbol fields or a full tail), instantiated
+type aliases allocated only when a cached constructor creates a type, reference instantiation tables keyed by
+the references' own type arguments, 12-byte pointer-keyed link slots, one read-only link access through
+`try_get`. Track B (lazy creation, Go-portable): inference context mappers created on first use
+(`TSRS_LAZY_INFERENCE_MAPPERS`, default on; -1.13M mappers); deferring two-constituent union/intersection
+property types was rejected (-3.7% types but it changes results). Project, default mode (medians of 3,
+interleaved, base dc59d8e): single-threaded peak 7.02 -> 6.02 GiB (-14.2%), 4 checkers 9.38 -> 8.07 GiB
+(-14.0%); opt-out 9.47 -> 8.01 / 14.53 -> 12.35 GiB. Details, per-step numbers and rejected candidates:
+`notes/mem-round3.md`.
