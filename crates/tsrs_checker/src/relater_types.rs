@@ -160,6 +160,10 @@ pub struct Relater {
     pub overflow: Cell<bool>,
     pub relation_count: Cell<i32>,
     pub next: Cell<Option<P<Relater>>>,
+    // The `'static` comparers that wrap this relater's methods (Go passes the method values). They capture only the
+    // relater handle (and the intersection state), so they are built once per relater instead of leaking one per call.
+    pub worker_comparer: Cell<Option<TypeComparer>>,
+    pub signature_comparers: RefCell<Vec<(IntersectionState, TypeComparer)>>,
 }
 
 impl Relater {
@@ -168,6 +172,17 @@ impl Relater {
     pub fn as_p(&self) -> P<Relater> {
         // SAFETY: relaters are only created with `P::new` (`Checker::get_relater`) and never freed or moved.
         P::from_static(unsafe { &*(self as *const Relater) })
+    }
+
+    /// `type_comparer` over `r.isRelatedToWorker`.
+    pub fn worker_comparer(&self) -> TypeComparer {
+        if let Some(f) = self.worker_comparer.get() {
+            return f;
+        }
+        let r = self.as_p();
+        let f = type_comparer(move |c, s, t, report_errors| r.is_related_to_worker(c, s, t, report_errors));
+        self.worker_comparer.set(Some(f));
+        f
     }
 }
 

@@ -135,6 +135,50 @@ impl<T: ?Sized> fmt::Debug for P<T> {
 unsafe impl<T: ?Sized> Send for P<T> {}
 unsafe impl<T: ?Sized> Sync for P<T> {}
 
+/// Two `&'static` slices in 24 bytes (u32 lengths) instead of 32, so an enum variant holding both still fits in a
+/// 32-byte enum (Go slice headers are larger, but Go's mapper structs are separate allocations per kind).
+pub struct SlicePair<A: 'static, B: 'static> {
+    a: std::ptr::NonNull<A>,
+    b: std::ptr::NonNull<B>,
+    a_len: u32,
+    b_len: u32,
+}
+
+impl<A, B> Clone for SlicePair<A, B> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<A, B> Copy for SlicePair<A, B> {}
+
+impl<A, B> SlicePair<A, B> {
+    #[inline]
+    pub fn new(a: &'static [A], b: &'static [B]) -> Self {
+        assert!(a.len() <= u32::MAX as usize && b.len() <= u32::MAX as usize);
+        SlicePair {
+            a: std::ptr::NonNull::from(a).cast(),
+            b: std::ptr::NonNull::from(b).cast(),
+            a_len: a.len() as u32,
+            b_len: b.len() as u32,
+        }
+    }
+    #[inline]
+    pub fn first(&self) -> &'static [A] {
+        // SAFETY: built from a `&'static [A]` of this length.
+        unsafe { std::slice::from_raw_parts(self.a.as_ptr(), self.a_len as usize) }
+    }
+    #[inline]
+    pub fn second(&self) -> &'static [B] {
+        // SAFETY: built from a `&'static [B]` of this length.
+        unsafe { std::slice::from_raw_parts(self.b.as_ptr(), self.b_len as usize) }
+    }
+}
+
+// Same contract as `P`.
+unsafe impl<A, B> Send for SlicePair<A, B> {}
+unsafe impl<A, B> Sync for SlicePair<A, B> {}
+
 /// Copies a slice into the arena. Use for Go slices that are stored in long-lived objects.
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]

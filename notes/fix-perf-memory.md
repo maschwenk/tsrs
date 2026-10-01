@@ -64,6 +64,7 @@ Top live heap stacks (sampled, outside the arena): `SymbolArenaLinkStore::get` h
 | before (5ca48f3) | 19.53 GB | 31.5-32.9 s | 28.31 GB | 17.5 s |
 | lazy JSDoc parse shares the source text | 16.35 GB | 31.4-34.5 s | 25.14 GB | 17.0 s |
 | + module references appended once, transient symbol names not copied | 15.98 GB | 31.2 s | 24.63 GB | 16.9 s |
+| + 32-byte `TypeMapper`, relater comparers built once per relater | 15.78 GB | 35.7 s (load 6-7; user 27.6 s) | 24.30 GB | 14.4 s |
 
 1. **Lazy JSDoc parsing copied the whole file text into the arena per node** (`parse_jsdoc_for_node` ->
    `Parser::initialize_state` -> `alloc_str(source_text)`): ~9.8k calls, 3.0 GB. Go assigns the string (shared
@@ -76,3 +77,13 @@ Top live heap stacks (sampled, outside the arena): `SymbolArenaLinkStore::get` h
 3. **`Checker::new_symbol` copied the name** (`alloc_str(name)`) for every transient symbol, 22M x 7 B on one
    checker, 36M on four (269 MB). Go stores the caller's string. `new_symbol`/`new_symbol_ex`/`new_parameter`/
    `new_property` now take `&'static str`; the 14 callers that pass a freshly built `String` copy it there.
+4. **`TypeMapper` was 40 bytes** (21.7M on one checker, 39.9M on four) because `Array` held two slice headers
+   and `Deferred` a slice plus a `Vec`. `Array` now holds a `tsrs_core::SlicePair` (two pointers, two u32
+   lengths: 24 bytes) and the rare `Deferred` mapper lives out of line, so the enum is 32 bytes (compile-time
+   assert in mapper.rs): -173 MB / -320 MB. Same lengths and elements, so mapping and `compare_type_mappers` are
+   unchanged.
+5. **relater `type_comparer` leaked one closure per call** (`signatures_related_to`, template-literal matching,
+   infer-type-parameter contexts; 2.2M closures on four checkers, 30 MB, `notes/relater-2.md`). The closures only
+   capture the relater handle (and the intersection state), so each relater now builds them once
+   (`Relater::worker_comparer`, `signature_comparers`). Relaters are pooled and their handles never change, so a
+   cached comparer calls exactly what a fresh one would.

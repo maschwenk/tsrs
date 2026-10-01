@@ -1196,7 +1196,7 @@ impl Relater {
                 c.instantiate_type(source, Some(c.report_unreliable_mapper));
             }
             let r = self.as_p();
-            if c.is_type_matched_by_template_literal_type(source, target.as_template_literal_type(), type_comparer(move |c, s, t, report_errors| r.is_related_to_worker(c, s, t, report_errors))) {
+            if c.is_type_matched_by_template_literal_type(source, target.as_template_literal_type(), r.worker_comparer()) {
                 return Ternary::True;
             }
         } else if target.flags().intersects(TypeFlags::StringMapping) {
@@ -1363,7 +1363,7 @@ impl Relater {
                 if !source_params.is_empty() {
                     // If the source has infer type parameters, we instantiate them in the context of the target
                     let r = self.as_p();
-                    let ctx = c.new_inference_context(source_params, None /*signature*/, InferenceFlags::None, Some(type_comparer(move |c, s, t, report_errors| r.is_related_to_worker(c, s, t, report_errors))));
+                    let ctx = c.new_inference_context(source_params, None /*signature*/, InferenceFlags::None, Some(r.worker_comparer()));
                     c.infer_types(ctx.inferences.get(), target_conditional.extends_type.get().unwrap(), source_extends, InferencePriority::NoConstraints | InferencePriority::AlwaysStrict, false);
                     source_extends = c.instantiate_type(source_extends, ctx.mapper.get());
                     mapper = ctx.mapper.get();
@@ -2246,8 +2246,16 @@ impl Relater {
             source = c.get_erased_signature(source);
             target = c.get_erased_signature(target);
         }
-        let r = self.as_p();
-        let is_related_to_worker = type_comparer(move |c, source, target, report_errors| r.is_related_to_ex(c, source, target, RecursionFlags::Both, report_errors, None /*headMessage*/, intersection_state));
+        let cached = self.signature_comparers.borrow().iter().find(|e| e.0 == intersection_state).map(|e| e.1);
+        let is_related_to_worker = match cached {
+            Some(f) => f,
+            None => {
+                let r = self.as_p();
+                let f = type_comparer(move |c, source, target, report_errors| r.is_related_to_ex(c, source, target, RecursionFlags::Both, report_errors, None /*headMessage*/, intersection_state));
+                self.signature_comparers.borrow_mut().push((intersection_state, f));
+                f
+            }
+        };
         let mut reporter = |c: &mut Checker, message: &'static Message, args: &[&dyn Display]| self.report_error(c, message, args);
         c.compare_signatures_related(source, target, check_mode, report_errors, Some(&mut reporter), is_related_to_worker, Some(c.report_unreliable_mapper))
     }

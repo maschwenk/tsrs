@@ -1,4 +1,5 @@
 use crate::*;
+use tsrs_core::SlicePair;
 
 // TypeMapperKind
 
@@ -22,14 +23,22 @@ pub struct TypeMapper {
 
 pub enum TypeMapperData {
     Simple { source: P<Type>, target: P<Type> },
-    Array { sources: &'static [P<Type>], targets: &'static [P<Type>] },
+    Array { sources_targets: SlicePair<P<Type>, P<Type>> },
     ArrayToSingle { sources: &'static [P<Type>], target: P<Type> },
-    Deferred { sources: &'static [P<Type>], targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>> },
+    Deferred { data: &'static DeferredTypeMapper },
     Function { f: fn(&mut Checker, P<Type>) -> P<Type> },
     Merged { m1: P<TypeMapper>, m2: P<TypeMapper> },
     Composite { m1: P<TypeMapper>, m2: P<TypeMapper> },
     Inference { n: P<InferenceContext>, fixing: bool },
 }
+
+// Rare; kept out of line so `TypeMapperData` stays 32 bytes (checked below).
+pub struct DeferredTypeMapper {
+    pub sources: &'static [P<Type>],
+    pub targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>>,
+}
+
+const _: () = assert!(std::mem::size_of::<TypeMapper>() == 32);
 
 impl TypeMapper {
     pub fn map(&self, c: &mut Checker, t: P<Type>) -> P<Type> {
@@ -41,7 +50,8 @@ impl TypeMapper {
                     t
                 }
             }
-            TypeMapperData::Array { sources, targets } => {
+            TypeMapperData::Array { sources_targets } => {
+                let (sources, targets) = (sources_targets.first(), sources_targets.second());
                 for (i, s) in sources.iter().enumerate() {
                     if t == *s {
                         return targets[i];
@@ -56,10 +66,10 @@ impl TypeMapper {
                     t
                 }
             }
-            TypeMapperData::Deferred { sources, targets } => {
-                for (i, s) in sources.iter().enumerate() {
+            TypeMapperData::Deferred { data } => {
+                for (i, s) in data.sources.iter().enumerate() {
                     if t == *s {
-                        return targets[i](c);
+                        return data.targets[i](c);
                     }
                 }
                 t
@@ -107,9 +117,13 @@ impl TypeMapper {
     pub fn maps_this_only(&self) -> bool {
         match &self.data {
             TypeMapperData::Simple { source, .. } => is_this_type_parameter(*source),
-            TypeMapperData::Array { sources, .. }
-            | TypeMapperData::ArrayToSingle { sources, .. }
-            | TypeMapperData::Deferred { sources, .. } => sources.len() == 1 && is_this_type_parameter(sources[0]),
+            TypeMapperData::Array { sources_targets } => {
+                let sources = sources_targets.first();
+                sources.len() == 1 && is_this_type_parameter(sources[0])
+            }
+            TypeMapperData::ArrayToSingle { sources, .. } | TypeMapperData::Deferred { data: DeferredTypeMapper { sources, .. } } => {
+                sources.len() == 1 && is_this_type_parameter(sources[0])
+            }
             _ => false,
         }
     }
@@ -187,7 +201,7 @@ pub(crate) fn new_simple_type_mapper(source: P<Type>, target: P<Type>) -> P<Type
 }
 
 pub(crate) fn new_array_type_mapper(sources: &'static [P<Type>], targets: &'static [P<Type>]) -> P<TypeMapper> {
-    P::new(TypeMapper { data: TypeMapperData::Array { sources, targets } })
+    P::new(TypeMapper { data: TypeMapperData::Array { sources_targets: SlicePair::new(sources, targets) } })
 }
 
 pub(crate) fn new_array_to_single_type_mapper(sources: &'static [P<Type>], target: P<Type>) -> P<TypeMapper> {
@@ -195,7 +209,7 @@ pub(crate) fn new_array_to_single_type_mapper(sources: &'static [P<Type>], targe
 }
 
 pub(crate) fn new_deferred_type_mapper(sources: &'static [P<Type>], targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>>) -> P<TypeMapper> {
-    P::new(TypeMapper { data: TypeMapperData::Deferred { sources, targets } })
+    P::new(TypeMapper { data: TypeMapperData::Deferred { data: alloc(DeferredTypeMapper { sources, targets }) } })
 }
 
 pub(crate) fn new_function_type_mapper(f: fn(&mut Checker, P<Type>) -> P<Type>) -> P<TypeMapper> {
