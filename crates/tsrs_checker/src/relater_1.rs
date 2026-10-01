@@ -814,7 +814,7 @@ impl Checker {
         let mut property_name = String::new();
         let mut target_prop: Option<P<Symbol>> = None;
         if is_type_usable_as_property_name(name_type) {
-            property_name = get_property_name_from_type(name_type);
+            property_name = get_property_name_from_type(name_type).into_owned();
             target_prop = self.get_property_of_type(target, &property_name);
         }
         let mut issued_elaboration = false;

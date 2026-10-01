@@ -2445,7 +2445,7 @@ impl Checker {
         if symbol.flags().intersects(SymbolFlags::Module) {
             let export_symbol = self.get_exports_of_symbol(symbol).and_then(|exports| exports.lookup(name_text));
             let resolved = export_symbol.map(|s| self.resolve_symbol_ex(s, dont_resolve_alias));
-            let export_star_declaration = self.module_symbol_links.get(symbol).type_only_export_star_map.get(&name_text.to_string());
+            let export_star_declaration = self.module_symbol_links.get(symbol).type_only_export_star_map.get(name_text);
             self.mark_symbol_of_alias_declaration_if_type_only(Some(specifier), export_star_declaration);
             return resolved;
         }

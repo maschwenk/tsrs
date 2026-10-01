@@ -2406,7 +2406,7 @@ impl Checker {
             let unique_type = self.get_type_of_property_of_type(ctor_symbol_type, symbol_name);
             if let Some(unique_type) = unique_type {
                 if is_type_usable_as_property_name(unique_type) {
-                    return get_property_name_from_type(unique_type);
+                    return get_property_name_from_type(unique_type).into_owned();
                 }
             }
         }

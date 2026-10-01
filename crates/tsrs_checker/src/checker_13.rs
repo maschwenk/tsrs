@@ -1537,7 +1537,7 @@ impl Checker {
                 access_expression = Some(access_node);
             }
         }
-        let mut prop_name = String::new();
+        let mut prop_name = std::borrow::Cow::Borrowed("");
         let mut has_prop_name = false;
         if !access_node.is_some_and(is_private_identifier) {
             prop_name = self.get_property_name_from_index(index_type, access_node);
@@ -1946,14 +1946,14 @@ impl Checker {
     }
 
     // checker.go:27825
-    pub(crate) fn get_property_name_from_index(&mut self, index_type: P<Type>, access_node: Option<P<Node>>) -> String {
+    pub(crate) fn get_property_name_from_index(&mut self, index_type: P<Type>, access_node: Option<P<Node>>) -> std::borrow::Cow<'static, str> {
         if is_type_usable_as_property_name(index_type) {
             return get_property_name_from_type(index_type);
         }
         if let Some(access_node) = access_node.filter(|&n| is_property_name(n)) {
             return get_property_name_for_property_name_node(access_node);
         }
-        InternalSymbolNameMissing.to_string()
+        InternalSymbolNameMissing.into()
     }
 
     // checker.go:27835

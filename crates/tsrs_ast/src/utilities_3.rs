@@ -97,7 +97,7 @@ pub(crate) fn is_shorthand_property_name_use_site(use_site: P<Node>) -> bool {
     is_identifier(use_site) && is_shorthand_property_assignment(use_site.parent().unwrap()) && use_site.parent().unwrap().name() == Some(use_site)
 }
 
-pub fn get_property_name_for_property_name_node(name: P<Node>) -> String {
+pub fn get_property_name_for_property_name_node(name: P<Node>) -> std::borrow::Cow<'static, str> {
     match name.kind() {
         Kind::Identifier
         | Kind::PrivateIdentifier
@@ -105,20 +105,20 @@ pub fn get_property_name_for_property_name_node(name: P<Node>) -> String {
         | Kind::NoSubstitutionTemplateLiteral
         | Kind::NumericLiteral
         | Kind::BigIntLiteral
-        | Kind::JsxNamespacedName => name.text().to_string(),
+        | Kind::JsxNamespacedName => name.text().into(),
         Kind::ComputedPropertyName => {
             let name_expression = name.expression().unwrap();
             if is_string_or_numeric_literal_like(name_expression) {
-                return name_expression.text().to_string();
+                return name_expression.text().into();
             }
             if is_signed_numeric_literal(name_expression) {
                 let mut text = name_expression.as_prefix_unary_expression().operand.text().to_string();
                 if name_expression.as_prefix_unary_expression().operator == Kind::MinusToken {
                     text = format!("-{}", text);
                 }
-                return text;
+                return text.into();
             }
-            InternalSymbolNameMissing.to_string()
+            InternalSymbolNameMissing.into()
         }
         _ => panic!("Unhandled case in getPropertyNameForPropertyNameNode"),
     }

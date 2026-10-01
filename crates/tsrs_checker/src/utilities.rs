@@ -1163,15 +1163,15 @@ pub fn is_type_usable_as_property_name(t: P<Type>) -> bool {
 
 // Gets the symbolic name for a member from its type.
 // utilities.go:929
-pub fn get_property_name_from_type(t: P<Type>) -> String {
+pub fn get_property_name_from_type(t: P<Type>) -> std::borrow::Cow<'static, str> {
     if t.flags().intersects(TypeFlags::StringLiteral) {
-        return literal_string_value(t).to_string();
+        return literal_string_value(t).into();
     }
     if t.flags().intersects(TypeFlags::NumberLiteral) {
-        return literal_number_value(t).string();
+        return literal_number_value(t).string().into();
     }
     if t.flags().intersects(TypeFlags::UniqueESSymbol) {
-        return t.as_unique_es_symbol_type().name.get().to_string();
+        return t.as_unique_es_symbol_type().name.get().into();
     }
     panic!("Unhandled case in getPropertyNameFromType")
 }

@@ -1972,7 +1972,7 @@ impl Checker {
     pub(crate) fn get_effective_property_name_for_property_name_node(&mut self, node: P<Node>) -> (String, bool) {
         let name = get_property_name_for_property_name_node(node);
         if name != InternalSymbolNameMissing {
-            return (name, true);
+            return (name.into_owned(), true);
         }
         if is_computed_property_name(node) {
             // This is cached so `getTypeOfExpression` isn't constantly reinvoked for every property name lookup
@@ -2205,7 +2205,7 @@ impl Checker {
             if let Some(symbol) = symbol {
                 if !include_type_only_members
                     && t.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::ValueModule))
-                    && self.module_symbol_links.get(t.symbol().unwrap()).type_only_export_star_map.get(&name.to_string()).is_some()
+                    && self.module_symbol_links.get(t.symbol().unwrap()).type_only_export_star_map.get(name).is_some()
                 {
                     // If this is the type of a module, `resolved.members.get(name)` might have effectively skipped over
                     // an `export type * from './foo'`, leaving `symbolIsValue` unable to see that the symbol is being

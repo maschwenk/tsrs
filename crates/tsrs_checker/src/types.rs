@@ -30,7 +30,10 @@ impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
         self.0.get().is_none()
     }
     /// Go `v, ok := m[k]` (reading a nil map is allowed).
-    pub fn get(&self, key: &K) -> Option<V> {
+    pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V>
+    where
+        K: std::borrow::Borrow<Q>,
+    {
         self.0.get().and_then(|m| m.borrow().get(key).cloned())
     }
     pub fn has(&self, key: &K) -> bool {

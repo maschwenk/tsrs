@@ -2245,7 +2245,7 @@ fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTy
             let mapped_links = c.mapped_symbol_links.get(existing_prop);
             let key_type_union = c.get_union_type(&[mapped_links.key_type.get().unwrap(), key_type]);
             mapped_links.key_type.set(Some(key_type_union));
-        } else if let Some(member) = st.lazy.as_ref().and_then(|lazy| lazy.members.borrow().get(prop_name.as_str()).copied().flatten()) {
+        } else if let Some(member) = st.lazy.as_ref().and_then(|lazy| lazy.members.borrow().get(&*prop_name).copied().flatten()) {
             st.members.set(member.name(), member);
         } else {
             let prop = c.new_mapped_type_member(t, st.modifiers_type, st.template_modifiers, st.should_link_prop_declarations, key_type, prop_name_type, &prop_name);

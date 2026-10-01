@@ -1178,7 +1178,7 @@ impl Checker {
                     };
                     let mut name = member_name.clone();
                     if t.flags().intersects(TypeFlags::UniqueESSymbol) {
-                        name = tsrs_scanner::declaration_name_to_string(Some(decl_name));
+                        name = tsrs_scanner::declaration_name_to_string(Some(decl_name)).into();
                     }
                     for d in declarations {
                         self.error(Some(ast::get_name_of_declaration(d).unwrap_or(d)), &diagnostics::Duplicate_identifier_0, &[&name]);
@@ -2085,7 +2085,7 @@ impl Checker {
     pub(crate) fn get_property_name_from_binding_element(&mut self, e: P<Node>) -> String {
         let expr_type = self.get_literal_type_from_property_name(e.property_name_or_name().unwrap());
         if is_type_usable_as_property_name(expr_type) {
-            return get_property_name_from_type(expr_type);
+            return get_property_name_from_type(expr_type).into_owned();
         }
         InternalSymbolNameMissing.to_string()
     }
