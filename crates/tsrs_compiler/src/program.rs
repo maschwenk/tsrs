@@ -1443,7 +1443,11 @@ impl Program {
     }
 
     pub fn line_count(&self) -> usize {
-        self.files.iter().map(|f| f.ecma_line_map().len()).sum()
+        // Most line maps are first computed here (--diagnostics / --extendedDiagnostics); they are independent.
+        if self.single_threaded() {
+            return self.files.iter().map(|f| f.ecma_line_map().len()).sum();
+        }
+        worker_pool().install(|| self.files.par_iter().map(|f| f.ecma_line_map().len()).sum())
     }
 
     pub fn identifier_count(&self) -> usize {
