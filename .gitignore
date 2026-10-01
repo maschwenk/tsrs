@@ -3,3 +3,4 @@ target/
 .DS_Store
 ts-ref
 __pycache__/
+npm/dist/

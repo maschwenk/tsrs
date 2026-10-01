@@ -1,0 +1,36 @@
+{
+    "name": "@maschwenk/tsrs",
+    "version": "0.0.0-set-by-npm-build",
+    "license": "Apache-2.0",
+    "description": "A Rust port of the TypeScript 7 type checker: `tsc --noEmit`, faster",
+    "keywords": [
+        "TypeScript",
+        "typecheck",
+        "tsc",
+        "rust"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/maschwenk/tsrs.git"
+    },
+    "type": "module",
+    "preferUnplugged": true,
+    "engines": {
+        "node": ">=16.20.0"
+    },
+    "files": [
+        "bin",
+        "lib",
+        "NOTICE.txt"
+    ],
+    "bin": {
+        "tsrs": "./bin/tsrs"
+    },
+    "exports": {
+        "./package.json": "./package.json",
+        ".": "./lib/version.cjs"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

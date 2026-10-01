@@ -11,6 +11,7 @@ the bundled `lib.*.d.ts` files and the structure of the code come from that proj
 - `docs/AST.md`, `docs/CHECKER.md` — crate contracts
 - `crates/` — the port, one crate per Go package group
 - `tools/` — generators and Go oracle programs used to compare against the reference implementation
+- `npm/` — the npm packages (`@maschwenk/tsrs` + per-platform binaries), versioning and the release workflow
 
 ## Usage
 
@@ -21,6 +22,8 @@ cargo build --release -p tsrs_cli -p tsrs_testrunner
 ./target/release/tsrs-test run --suite all           # TypeScript conformance suite, error baselines
 ./target/release/tsrs-test run --suite all --baselines types,symbols
 ```
+
+From npm (once published): `pnpm add -D @maschwenk/tsrs`, then `pnpm exec tsrs -p path/to/project`; see `npm/README.md`.
 
 `docs/STATUS.md` has the current conformance numbers and the comparison against the reference compiler on a
 38k-file production project; `docs/DEBUGGING.md` describes the fix workflow and the oracles under `tools/oracle/`.

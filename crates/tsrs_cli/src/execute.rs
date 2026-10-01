@@ -198,8 +198,14 @@ fn find_config_file(search_path: &str, file_exists: impl Fn(&str) -> bool, confi
     .unwrap_or_default()
 }
 
+// tsc's "Version X" first (scripts grep for it), then the tsrs release and the TypeScript commit it ports.
 fn print_version(sys: &dyn System) {
-    sys.write(&format!("{}\n", diagnostics::Version_0.localize(&[&tsrs_core::version()])));
+    sys.write(&format!(
+        "{} (tsrs {}, microsoft/TypeScript@{})\n",
+        diagnostics::Version_0.localize(&[&tsrs_core::version()]),
+        env!("TSRS_RELEASE_VERSION"),
+        env!("TSRS_TYPESCRIPT_COMMIT"),
+    ));
 }
 
 fn perform_compilation(
