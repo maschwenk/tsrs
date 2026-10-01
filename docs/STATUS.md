@@ -187,3 +187,15 @@ stores paged by id. Project, reference mode (isolates these changes; medians of 
 peak 13.94 -> 11.08 GB, check 21.2 -> 18.2 s; 4 checkers 21.21 -> 17.06 GB, check 10.07 -> 8.66 s. Default mode
 (with lazy tuples and locality assignment landed meanwhile): 10.80 -> 8.39 GB / 20.0 -> 17.1 s single, 16.09 ->
 11.33 GB / 9.1 -> 6.7 s on 4 checkers. Details and per-change numbers: `notes/mem-layout.md`.
+
+## 2026-10-01: frontend wall time (program construction, config, statistics)
+
+Everything outside the checkers on Project (4 checkers, medians of 5): 1.90 -> 1.00 s, wall 9.72 -> 8.63 s,
+checker semantics untouched (suite identical in default, opt-out and parallel-program modes; counters,
+`--listFiles`, `--explainFiles`, `--traceResolution` unchanged). The file loader's parallel prefetch now also
+computes metadata and resolves imports / type references / triple-slash references (was sequential, 0.6 s),
+root file lookups, the include glob's directory listings, the assignment's import adjacency and the statistics
+line count run in parallel ("Parse time" 1.56 -> 0.80 s). `--extendedDiagnostics` prints the sub-phases
+(`tsrs_core::phases`). What remains: ~0.54 s of parallel parse + resolve bound by file-system calls; checker
+imbalance (slowest checker consistently ~10.5% above the mean; a syntactic cost model did not transfer, see
+the notes). Details: `notes/speed-frontend.md`.
