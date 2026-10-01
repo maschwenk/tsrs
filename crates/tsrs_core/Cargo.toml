@@ -11,7 +11,7 @@ workspace = true
 # Atomic borrow checking for FrozenCell in release builds (always on with debug_assertions).
 checked-cells = []
 # Per-call-site arena allocation profile and a counting global allocator (src/alloc_profile.rs).
-alloc-profile = []
+alloc-profile = ["dep:mimalloc"]
 
 [dependencies]
 bumpalo.workspace = true
@@ -19,3 +19,4 @@ rustc-hash.workspace = true
 indexmap.workspace = true
 bitflags.workspace = true
 memchr.workspace = true
+mimalloc = { version = "0.1.52", optional = true }

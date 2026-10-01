@@ -149,7 +149,7 @@ Project depends on: types and symbols identical (1,526 files), counters equal. D
 Project peak footprint is now below the Go reference: 15.35 GB `--singleThreaded` (was 19.5; tsgo 16.7) and
 23.35 GB with 4 checkers (was 28.3; tsgo 24.4), counters and conformance unchanged. The largest item was lazy JSDoc
 parsing copying the whole file text per node (3 GB). Opt-in arena/heap allocation profile:
-`--features tsrs_core/alloc-profile` (+ `TSRS_HEAP_PROFILE=1`). Details: `notes/fix-perf-memory.md`.
+`--features alloc-profile` on `tsrs_cli` (+ `TSRS_HEAP_PROFILE=1`). Details: `notes/fix-perf-memory.md`.
 
 ## 2026-09-30 (later): lazy member resolution on by default
 

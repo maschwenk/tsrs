@@ -1,3 +1,5 @@
+// The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead.
+#[cfg(not(feature = "alloc-profile"))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 

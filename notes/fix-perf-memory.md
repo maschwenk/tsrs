@@ -6,7 +6,7 @@ Acceptance per change: `--extendedDiagnostics` counters identical, conformance p
 
 ## Allocation profile (opt-in)
 
-Build: `CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features tsrs_core/alloc-profile`.
+Build: `CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile` (was `--features tsrs_core/alloc-profile` before mimalloc; see notes/mem-layout.md).
 Compiled out otherwise (`#[cfg_attr(feature, track_caller)]`, the counters are `#[cfg]`).
 
 - Every arena allocation (`P::new`, `alloc`, `alloc_slice`, `alloc_vec`, `alloc_str`) is recorded per (call site,

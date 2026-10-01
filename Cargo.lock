@@ -352,6 +352,7 @@ dependencies = [
  "bumpalo",
  "indexmap",
  "memchr",
+ "mimalloc",
  "rustc-hash",
 ]
 

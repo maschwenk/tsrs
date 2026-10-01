@@ -23,6 +23,8 @@ mimalloc = "0.1.52"
 [features]
 default = ["checker"]
 checker = ["tsrs_compiler/checker"]
+# Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
+alloc-profile = ["tsrs_core/alloc-profile"]
 
 [[bin]]
 name = "tsrs"

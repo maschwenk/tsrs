@@ -1,12 +1,14 @@
-//! Opt-in allocation profile (`--features tsrs_core/alloc-profile`, compiled out otherwise).
+//! Opt-in allocation profile (`--features alloc-profile` on `tsrs_cli` / `tsrs_testrunner`, which forwards to
+//! `tsrs_core/alloc-profile`; compiled out otherwise).
 //!
 //! Every leak-arena allocation (`P::new`, `alloc`, `alloc_slice`, `alloc_vec`, `alloc_str`) is recorded per
-//! (call site, element type) through `#[track_caller]`; a counting global allocator tracks the Rust heap
-//! (which includes the arena chunks). `dump()` prints top-N tables to stderr; `TSRS_ALLOC_PROFILE_TOP`
+//! (call site, element type) through `#[track_caller]`; a counting global allocator (over mimalloc, the
+//! binaries' production allocator) tracks the Rust heap (which includes the arena chunks). `dump()` prints top-N tables to stderr; `TSRS_ALLOC_PROFILE_TOP`
 //! sets N (default 60).
 
 use rustc_hash::FxHashMap;
-use std::alloc::{GlobalAlloc, Layout, System};
+use mimalloc::MiMalloc as System;
+use std::alloc::{GlobalAlloc, Layout};
 use std::panic::Location;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
