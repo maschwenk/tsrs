@@ -205,7 +205,7 @@ impl NodeBuilderImpl {
         }
         // Recurse into type arguments (e.g., check Apple in Promise<Apple>).
         if t.object_flags().intersects(ObjectFlags::Reference) {
-            for arg in c.get_type_arguments(t) {
+            for &arg in c.get_type_arguments(t) {
                 self.check_type_expandability(c, Some(arg));
                 if self.ctx().can_increase_expansion_depth.get() {
                     return;

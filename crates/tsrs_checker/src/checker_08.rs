@@ -2096,7 +2096,7 @@ impl Checker {
         if t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) || self.get_type_reference_arity(t) as usize >= pattern_elements.len() {
             return t;
         }
-        let mut element_types = self.get_element_types(t);
+        let mut element_types = self.get_element_types(t).to_vec();
         let mut element_infos: Vec<TupleElementInfo> = t.target_tuple_type().element_infos.get().to_vec();
         let mut i = self.get_type_reference_arity(t) as usize;
         while i < pattern_elements.len() {

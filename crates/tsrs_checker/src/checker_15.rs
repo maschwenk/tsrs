@@ -88,7 +88,7 @@ impl Checker {
                     }
                 }
                 if let Some(spread_type) = spread_type.filter(|&t| is_tuple_type(t)) {
-                    for (i, t) in self.get_element_types(spread_type).into_iter().enumerate() {
+                    for (i, t) in self.get_element_types(spread_type).iter().copied().enumerate() {
                         let element_infos = spread_type.target_tuple_type().element_infos();
                         let flags = element_infos[i].flags;
                         let mut synthetic_type = t;

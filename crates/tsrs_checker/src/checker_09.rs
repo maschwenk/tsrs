@@ -700,7 +700,7 @@ pub(crate) fn get_node_list_key(nodes: &[P<Node>]) -> CacheHashKey {
 // checker.go:17980
 pub(crate) fn is_type_reference_with_generic_arguments(c: &mut Checker, t: P<Type>) -> bool {
     is_non_deferred_type_reference(t)
-        && c.get_type_arguments(t).into_iter().any(|t| t.flags().intersects(TypeFlags::TypeParameter) || is_type_reference_with_generic_arguments(c, t))
+        && c.get_type_arguments(t).iter().any(|&t| t.flags().intersects(TypeFlags::TypeParameter) || is_type_reference_with_generic_arguments(c, t))
 }
 
 // checker.go:17986
@@ -1578,7 +1578,7 @@ impl Checker {
                 let types: Vec<P<Type>> = t.types().iter().map(|&t| self.get_widened_type(t)).collect();
                 result = Some(self.get_intersection_type(&types));
             } else if self.is_array_or_tuple_type(t) {
-                let type_arguments: Vec<P<Type>> = self.get_type_arguments(t).into_iter().map(|t| self.get_widened_type(t)).collect();
+                let type_arguments: Vec<P<Type>> = self.get_type_arguments(t).iter().map(|&t| self.get_widened_type(t)).collect();
                 result = Some(self.create_type_reference(t.target().unwrap(), &type_arguments));
             }
             if let Some(result) = result {
@@ -2622,7 +2622,7 @@ pub(crate) fn may_have_lazy_members(t: P<Type>) -> bool {
 impl Checker {
     pub(crate) fn get_reference_member_type_arguments(&mut self, t: P<Type>, source: P<Type>) -> (&'static [P<Type>], Vec<P<Type>>) {
         let type_parameters = source.as_interface_type().all_type_parameters.get();
-        let mut type_arguments = self.get_type_arguments(t);
+        let mut type_arguments = self.get_type_arguments(t).to_vec();
         if type_arguments.len() + 1 == type_parameters.len() {
             type_arguments.push(t);
         }

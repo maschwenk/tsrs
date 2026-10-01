@@ -1145,7 +1145,7 @@ impl Checker {
         }
         if is_tuple_type(source) {
             let mut element_types: Vec<Option<P<Type>>> = Vec::new();
-            for t in self.get_element_types(source) {
+            for &t in self.get_element_types(source) {
                 element_types.push(self.infer_reverse_mapped_type(t, target, constraint));
             }
             if !element_types.iter().all(|t| t.is_some()) {
@@ -1188,7 +1188,7 @@ impl Checker {
                     let prop_type = self.get_type_of_symbol(prop);
                     self.is_partially_inferable_type(prop_type)
                 })
-            || is_tuple_type(t) && self.get_element_types(t).into_iter().any(|t| self.is_partially_inferable_type(t))
+            || is_tuple_type(t) && self.get_element_types(t).iter().any(|&t| self.is_partially_inferable_type(t))
     }
 
     // inference.go:1066

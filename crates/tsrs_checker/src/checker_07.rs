@@ -1064,7 +1064,7 @@ impl Checker {
             let type_variable = self.get_homomorphic_type_variable(t);
             return type_variable.is_some() && self.is_const_type_variable(type_variable, depth);
         } else if self.is_generic_tuple_type(t) {
-            for (i, s) in self.get_element_types(t).into_iter().enumerate() {
+            for (i, s) in self.get_element_types(t).iter().copied().enumerate() {
                 if t.target_tuple_type().element_infos.get()[i].flags.intersects(ElementFlags::Variadic) && self.is_const_type_variable(Some(s), depth) {
                     return true;
                 }

@@ -1328,7 +1328,7 @@ impl NodeBuilderImpl {
 
     // nodebuilderimpl.go:3070
     pub(crate) fn type_reference_to_type_node(&self, c: &mut Checker, t: P<Type>) -> Option<P<Node>> {
-        let mut type_arguments: Vec<P<Type>> = c.get_type_arguments(t);
+        let mut type_arguments: Vec<P<Type>> = c.get_type_arguments(t).to_vec();
         let target = t.target().unwrap();
         if target == c.global_array_type || target == c.global_readonly_array_type {
             if self.ctx().flags.get().intersects(Flags::WriteArrayAsGenericType) {

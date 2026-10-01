@@ -390,7 +390,8 @@ impl Checker {
                 if this_argument.is_none() {
                     this_argument = target.as_interface_type().this_type.get();
                 }
-                let mut args = type_arguments;
+                let mut args = Vec::with_capacity(type_arguments.len() + 1);
+                args.extend_from_slice(type_arguments);
                 args.push(this_argument.unwrap());
                 return self.create_type_reference(target, &args);
             }
@@ -1463,7 +1464,7 @@ impl Checker {
                     }
                 }
             } else if self.is_array_or_tuple_type(t) {
-                for s in self.get_type_arguments(t) {
+                for &s in self.get_type_arguments(t) {
                     error_reported = error_reported || self.report_widening_errors_in_type(s);
                 }
             } else if is_object_literal_type(t) {

@@ -659,12 +659,12 @@ pub(crate) fn is_conflicting_private_property(prop: P<Symbol>) -> bool {
 
 impl Checker {
     // checker.go:22289
-    pub fn get_type_arguments(&mut self, t: P<Type>) -> Vec<P<Type>> {
+    pub fn get_type_arguments(&mut self, t: P<Type>) -> &'static [P<Type>] {
         let d = t.as_type_reference();
         if d.resolved_type_arguments.get().is_none() {
             let n = d.target.get().unwrap().as_interface_type();
             if !self.push_type_resolution(t.into(), TypeSystemPropertyName::ResolvedTypeArguments) {
-                return vec![self.error_type; n.type_parameters().len()];
+                return alloc_vec(vec![self.error_type; n.type_parameters().len()]);
             }
             let mut type_arguments: Vec<P<Type>> = Vec::new();
             let node = t.as_type_reference().node.get();
@@ -702,7 +702,7 @@ impl Checker {
                 }
             }
         }
-        d.resolved_type_arguments.get().unwrap().to_vec()
+        d.resolved_type_arguments.get().unwrap()
     }
 
     // checker.go:22329
@@ -2549,14 +2549,13 @@ pub(crate) fn get_total_fixed_element_count(t: &'static TupleType) -> i32 {
 
 impl Checker {
     // checker.go:23929
-    pub(crate) fn get_element_types(&mut self, t: P<Type>) -> Vec<P<Type>> {
-        let mut type_arguments = self.get_type_arguments(t);
+    pub(crate) fn get_element_types(&mut self, t: P<Type>) -> &'static [P<Type>] {
+        let type_arguments = self.get_type_arguments(t);
         let arity = self.get_type_reference_arity(t);
         if type_arguments.len() as i32 == arity {
             return type_arguments;
         }
-        type_arguments.truncate(arity as usize);
-        type_arguments
+        &type_arguments[..(arity as usize).min(type_arguments.len())]
     }
 
     // checker.go:23938
