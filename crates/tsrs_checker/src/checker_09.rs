@@ -2572,20 +2572,20 @@ impl Checker {
 
 pub(crate) struct LazyMemberTable {
     pub(crate) mapper: P<TypeMapper>,
-    pub(crate) type_arguments: Vec<P<Type>>,
+    pub(crate) type_arguments: &'static [P<Type>],
     // Go `ready` plus the fields prepareLazyMembers fills in before it sets `ready`.
     pub(crate) ready: std::cell::OnceCell<LazyMembers>,
-    pub(crate) declared: RefCell<FxHashMap<&'static str, P<Symbol>>>,
+    pub(crate) declared: SymbolTable, // keyed by the declared members' names
     // notes/mem-lazy.md L10: getPropertiesOfType order with declared members standing in (getLazyPropertiesInOrder).
     pub(crate) ordered_properties: std::cell::OnceCell<Vec<P<Symbol>>>,
 }
 
 pub(crate) struct LazyMembers {
-    pub(crate) unaffected: Vec<&'static str>, // sorted names of declared members that instantiate to themselves
+    pub(crate) unaffected: Box<[&'static str]>, // sorted names of declared members that instantiate to themselves
     pub(crate) call_signatures: &'static [P<Signature>],
     pub(crate) construct_signatures: &'static [P<Signature>],
     pub(crate) index_infos: &'static [P<IndexInfo>],
-    pub(crate) base_types: Vec<P<Type>>,
+    pub(crate) base_types: &'static [P<Type>],
 }
 
 pub(crate) fn may_have_lazy_members(t: P<Type>) -> bool {
@@ -2629,11 +2629,12 @@ impl Checker {
                 if type_parameters == &type_arguments[..] {
                     return None;
                 }
+                let type_arguments = alloc_slice(&type_arguments);
                 let lm = std::rc::Rc::new(LazyMemberTable {
-                    mapper: new_type_mapper(type_parameters, alloc_slice(&type_arguments)),
+                    mapper: new_type_mapper(type_parameters, type_arguments),
                     type_arguments,
                     ready: std::cell::OnceCell::new(),
-                    declared: RefCell::new(FxHashMap::default()),
+                    declared: SymbolTable::default(),
                     ordered_properties: std::cell::OnceCell::new(),
                 });
                 self.lazy_member_tables.insert(t, lm.clone());
@@ -2687,11 +2688,11 @@ impl Checker {
             self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
         }
         let _ = lm.ready.set(LazyMembers {
-            unaffected,
+            unaffected: unaffected.into_boxed_slice(),
             call_signatures: alloc_vec(call_signatures),
             construct_signatures: alloc_vec(construct_signatures),
             index_infos: alloc_vec(index_infos),
-            base_types,
+            base_types: alloc_vec(base_types),
         });
         if t.object_flags().intersects(ObjectFlags::MembersResolved) {
             // t was resolved while preparing; resolveObjectTypeMembers would now replace its members.
@@ -2717,7 +2718,7 @@ impl Checker {
             members = Some(table);
         }
         let ready = lm.ready.get().unwrap();
-        for &base_type in &ready.base_types {
+        for &base_type in ready.base_types {
             let base_properties = self.get_properties_of_type(base_type);
             members = self.add_inherited_members(members, &base_properties);
         }
@@ -2727,7 +2728,7 @@ impl Checker {
 
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_lazy_declared_member(&mut self, lm: &std::rc::Rc<LazyMemberTable>, symbol: P<Symbol>, name: &'static str) -> P<Symbol> {
-        let existing = lm.declared.borrow().get(name).copied();
+        let existing = lm.declared.lookup(name);
         if let Some(result) = existing {
             return result;
         }
@@ -2736,7 +2737,7 @@ impl Checker {
             self.lazy_member_stats.member_table_declared_instantiated += 1;
             result = self.new_instantiated_symbol(symbol, Some(lm.mapper));
         }
-        lm.declared.borrow_mut().insert(name, result);
+        lm.declared.set(name, result);
         result
     }
 
@@ -2778,11 +2779,11 @@ impl Checker {
                     result = Some(self.get_lazy_declared_member(&lm, decl, name));
                 } else {
                     self.lazy_member_stats.has_prop_uninstantiated += 1;
-                    result = Some(lm.declared.borrow().get(name).copied().unwrap_or(decl));
+                    result = Some(lm.declared.lookup(name).unwrap_or(decl));
                 }
             }
         }
-        for &base_type in &lm.ready.get().unwrap().base_types {
+        for &base_type in lm.ready.get().unwrap().base_types {
             if result.is_some_and(|r| r.flags().intersects(SymbolFlags::Value)) {
                 break;
             }
@@ -2825,7 +2826,7 @@ impl Checker {
                 }
             }
         }
-        for &base_type in &lm.ready.get().unwrap().base_types {
+        for &base_type in lm.ready.get().unwrap().base_types {
             let reduced = self.get_reduced_apparent_type(base_type);
             if let Some(base_table) = self.get_ready_lazy_member_table(reduced) {
                 if !self.every_lazy_property(reduced, &base_table, seen, f) {

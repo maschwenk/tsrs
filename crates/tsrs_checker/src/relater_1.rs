@@ -1358,11 +1358,11 @@ impl Checker {
             for (id, symbol) in declared_members.entries() {
                 if self.is_named_member(symbol, id) {
                     seen.insert(id);
-                    members.push(lm.declared.borrow().get(id).copied().unwrap_or(symbol));
+                    members.push(lm.declared.lookup(id).unwrap_or(symbol));
                 }
             }
         }
-        for &base_type in &lm.ready.get().unwrap().base_types {
+        for &base_type in lm.ready.get().unwrap().base_types {
             let base_properties = match self.get_lazy_properties_in_order(base_type) {
                 Some(properties) => properties,
                 None => self.get_properties_of_type(base_type),

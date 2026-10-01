@@ -92,3 +92,23 @@ lists) behind a pointer to a `RareTypeMapper`. `TypeMapper::data()` decodes into
 | 4 checkers, before | 10.52-10.57 | 431-432 G |
 | 4 checkers, after | 10.35-10.36 (-0.19) | 432 G |
 | opt-out single / 4 checkers (go assignment), after | 10.15 / 15.57 | |
+
+### 4. Lazy member tables: shared type-argument list, slices, a `SymbolTable` for instantiated members
+
+1.04M lazy member tables single (1.49M on 4 checkers), most alive until exit. Each held its type arguments
+twice (a `Vec` and the arena copy given to its mapper), its base types and unaffected names in `Vec`s with growth
+slack, and its instantiated members in an `FxHashMap<&str, P<Symbol>>`. Now the table keeps the mapper's arena
+slice, `base_types` is an arena slice, `unaffected` a boxed slice, and `declared` a `SymbolTable` (16-byte
+entries, the key is the member's name). Only lookups by name and inserts touch `declared`, so nothing depends on
+its order.
+
+| run (2-3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 7.693 | 321-323 G |
+| single, after | 7.603 (-0.09) | 319-322 G |
+| 4 checkers, before | 10.32-10.35 | 431-432 G |
+| 4 checkers, after | 10.19-10.21 (-0.14) | 431-432 G |
+
+With `declared` left as the `FxHashMap` (the rest as above) the peak is 0.02 GiB higher; check times of the three
+binaries were indistinguishable on the shared machine (load 10-40). The opt-out mode has no lazy tables (10.15 /
+15.59 GiB, unchanged).
