@@ -212,7 +212,7 @@ mod heap_sample {
             for &i in order.iter().take(top) {
                 let (stack, _, _) = &state.stacks[i];
                 if counting {
-                    eprintln!("{:>10.1} M allocations", key(i) as f64 / 1e6);
+                    eprintln!("{:>10.3} M allocations", key(i) as f64 / 1e6);
                 } else {
                     eprintln!("{:>10.1} MB", key(i) as f64 / (1024.0 * 1024.0));
                 }

@@ -7,6 +7,29 @@
 // Everything runs on a thread with a large stack: Go's goroutine stacks grow, the Rust parser recurses
 // on the native stack.
 
+// Same allocator as the tsrs binary, so `bench` measures what tsrs does; `bench` also reports the number of heap
+// allocations (arena chunks included).
+struct CountingAlloc;
+
+static HEAP_ALLOCS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+unsafe impl std::alloc::GlobalAlloc for CountingAlloc {
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+        HEAP_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        mimalloc::MiMalloc.alloc(layout)
+    }
+    unsafe fn dealloc(&self, p: *mut u8, layout: std::alloc::Layout) {
+        mimalloc::MiMalloc.dealloc(p, layout)
+    }
+    unsafe fn realloc(&self, p: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
+        HEAP_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        mimalloc::MiMalloc.realloc(p, layout, new_size)
+    }
+}
+
+#[global_allocator]
+static GLOBAL: CountingAlloc = CountingAlloc;
+
 mod fields;
 
 use std::fmt::Write as _;
@@ -330,6 +353,8 @@ fn run() {
                 inputs.push((path.to_string(), text, parse_options(path, flags)));
             }
             for _ in 0..rounds {
+                let start_instructions = process_instructions();
+                let start_allocs = HEAP_ALLOCS.load(std::sync::atomic::Ordering::Relaxed);
                 let start = std::time::Instant::now();
                 let mut nodes = 0usize;
                 for (path, text, opts) in &inputs {
@@ -337,11 +362,44 @@ fn run() {
                     nodes += f.node_count.get();
                 }
                 let el = start.elapsed().as_secs_f64();
-                println!("rust: {} files, {:.1} MB, {} nodes, {:.3} s, {:.1} MB/s", inputs.len(), total as f64 / 1e6, nodes, el, total as f64 / 1e6 / el);
+                let instructions = process_instructions() - start_instructions;
+                let allocs = HEAP_ALLOCS.load(std::sync::atomic::Ordering::Relaxed) - start_allocs;
+                println!(
+                    "rust: {} files, {:.1} MB, {} nodes, {:.3} s, {:.1} MB/s, {:.3} G instructions, {} heap allocations",
+                    inputs.len(),
+                    total as f64 / 1e6,
+                    nodes,
+                    el,
+                    total as f64 / 1e6 / el,
+                    instructions as f64 / 1e9,
+                    allocs
+                );
             }
         }
         other => panic!("unknown command {}", other),
     }
+}
+
+/// Instructions retired by the whole process so far (user and kernel; macOS `proc_pid_rusage`, 0 elsewhere).
+#[cfg(target_os = "macos")]
+fn process_instructions() -> u64 {
+    extern "C" {
+        fn proc_pid_rusage(pid: i32, flavor: i32, buffer: *mut u64) -> i32;
+    }
+    // struct rusage_info_v4 is 41 u64 words after the 16-byte uuid; ri_instructions is word 31.
+    let mut buf = [0u64; 64];
+    // SAFETY: the buffer is larger than struct rusage_info_v4 (flavor 4).
+    let rc = unsafe { proc_pid_rusage(std::process::id() as i32, 4, buf.as_mut_ptr()) };
+    if rc == 0 {
+        buf[31]
+    } else {
+        0
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn process_instructions() -> u64 {
+    0
 }
 
 fn main() {

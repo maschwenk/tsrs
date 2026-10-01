@@ -17,3 +17,4 @@ bitflags.workspace = true
 
 [dev-dependencies]
 tsrs_vfs.workspace = true
+mimalloc = "0.1.52"
