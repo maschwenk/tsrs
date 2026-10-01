@@ -32,3 +32,5 @@ default = ["checker"]
 checker = ["dep:tsrs_checker", "dep:tsrs_declarations"]
 # Creation-site counters of checker objects (tsrs_core::sitecount).
 site-counts = ["tsrs_checker?/site-counts"]
+# TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files.
+assignment-stats = ["checker", "tsrs_checker/assignment-stats"]

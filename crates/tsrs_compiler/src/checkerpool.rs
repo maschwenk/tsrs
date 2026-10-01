@@ -1,7 +1,7 @@
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use rustc_hash::FxHashMap;
-use tsrs_ast::{Diagnostic, SourceFile};
+use tsrs_ast::{self as ast, Diagnostic, SourceFile};
 use tsrs_core::P;
 
 use crate::program::{sort_and_deduplicate_diagnostics, Program};
@@ -104,9 +104,20 @@ impl std::ops::DerefMut for CheckerGuard<'_> {
     }
 }
 
-struct poolState {
+pub(crate) struct poolState {
     checkers: Vec<CheckerSlot>,
     file_associations: FxHashMap<P<SourceFile>, usize>,
+    // Checker index per program file index.
+    pub(crate) associations: Vec<usize>,
+    // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, (seconds, files run) per checker.
+    pub(crate) group_runs: Mutex<Vec<Vec<(f64, usize)>>>,
+}
+
+// TSRS_ASSIGNMENT_STATS=1: record per-checker group timings and, after `--extendedDiagnostics`, print the
+// per-checker assignment report (checkerpool_stats.rs). Read once; nothing is recorded when unset.
+pub fn assignment_stats_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var("TSRS_ASSIGNMENT_STATS").is_ok_and(|v| !v.is_empty() && v != "0"))
 }
 
 pub(crate) struct checkerPool {
@@ -320,50 +331,17 @@ impl checkerPool {
             let checkers: Vec<CheckerSlot> = slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect();
 
             let files = &program.files;
-            let mut associations = vec![0usize; files.len()];
-            if self.checker_count > 1 {
-                let mut base_weights = vec![0i64; files.len()];
-                let mut import_counts = vec![0i64; files.len()];
-                let mut is_declaration_file = vec![false; files.len()];
-                let mut total_base_weight = 0i64;
-                let mut declaration_base_weight = 0i64;
-                for (i, file) in files.iter().enumerate() {
-                    let base_weight = get_checker_association_base_weight(file.node_count.get() as i64, file.text().len() as i64);
-                    total_base_weight += base_weight;
-                    if file.is_declaration_file.get() {
-                        declaration_base_weight += base_weight;
-                    }
-                    base_weights[i] = base_weight;
-                    import_counts[i] = file.imports().len() as i64;
-                    is_declaration_file[i] = file.is_declaration_file.get();
-                }
-                let policy = get_checker_association_policy(total_base_weight, declaration_base_weight, self.checker_count);
-                if policy.source_file_weight_multiplier != 1 {
-                    // Apply this before import normalization. The policy intentionally
-                    // increases both source-file work and the normalized import unit.
-                    for (i, &declaration) in is_declaration_file.iter().enumerate() {
-                        if !declaration {
-                            base_weights[i] *= policy.source_file_weight_multiplier;
-                        }
-                    }
-                }
-                let file_weights = get_checker_association_weights(&base_weights, &import_counts);
-                let adjacent_files = get_import_adjacency(program);
-                let file_order = get_checker_association_order(&file_weights, &is_declaration_file, policy.prioritize_source_files);
-                associations = get_checker_associations_in_order(
-                    &file_weights,
-                    &adjacent_files,
-                    file_order.as_deref(),
-                    self.checker_count,
-                    policy.balance_penalty_multiplier,
-                );
-            }
+            let associations = compute_associations(program, self.checker_count);
             let mut file_associations = FxHashMap::default();
             for (i, &file) in files.iter().enumerate() {
                 file_associations.insert(file, associations[i]);
             }
-            poolState { checkers, file_associations }
+            poolState { checkers, file_associations, associations, group_runs: Mutex::new(Vec::new()) }
         })
+    }
+
+    pub(crate) fn state(&self, program: &'static Program) -> &poolState {
+        self.create_checkers(program)
     }
 
     pub(crate) fn checker_count(&self) -> usize {
@@ -411,16 +389,264 @@ impl checkerPool {
         cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync,
     ) {
         let state = self.create_checkers(program);
+        let stats = assignment_stats_enabled();
+        let times: Vec<Mutex<(f64, usize)>> = if stats { (0..state.checkers.len()).map(|_| Mutex::new((0.0, 0))).collect() } else { Vec::new() };
         let run = |checker_idx: usize| {
+            let start = stats.then(std::time::Instant::now);
+            let mut count = 0;
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
             for (i, &file) in files.iter().enumerate() {
                 if state.file_associations.get(&file) == Some(&checker_idx) {
                     cb(&mut guard, i, file);
+                    count += 1;
                 }
+            }
+            if let Some(start) = start {
+                *times[checker_idx].lock().unwrap() = (start.elapsed().as_secs_f64(), count);
             }
         };
         run_work_group(single_threaded || self.single_threaded, state.checkers.len(), run);
+        if stats {
+            state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
+        }
     }
+}
+
+// Go `createCheckers`' association step (FENNEL over the import graph, see above).
+fn go_associations(program: &Program, checker_count: usize) -> Vec<usize> {
+    let files = &program.files;
+    let mut base_weights = vec![0i64; files.len()];
+    let mut import_counts = vec![0i64; files.len()];
+    let mut is_declaration_file = vec![false; files.len()];
+    let mut total_base_weight = 0i64;
+    let mut declaration_base_weight = 0i64;
+    for (i, file) in files.iter().enumerate() {
+        let base_weight = get_checker_association_base_weight(file.node_count.get() as i64, file.text().len() as i64);
+        total_base_weight += base_weight;
+        if file.is_declaration_file.get() {
+            declaration_base_weight += base_weight;
+        }
+        base_weights[i] = base_weight;
+        import_counts[i] = file.imports().len() as i64;
+        is_declaration_file[i] = file.is_declaration_file.get();
+    }
+    let policy = get_checker_association_policy(total_base_weight, declaration_base_weight, checker_count);
+    if policy.source_file_weight_multiplier != 1 {
+        // Apply this before import normalization. The policy intentionally
+        // increases both source-file work and the normalized import unit.
+        for (i, &declaration) in is_declaration_file.iter().enumerate() {
+            if !declaration {
+                base_weights[i] *= policy.source_file_weight_multiplier;
+            }
+        }
+    }
+    let file_weights = get_checker_association_weights(&base_weights, &import_counts);
+    let adjacent_files = get_import_adjacency(program);
+    let file_order = get_checker_association_order(&file_weights, &is_declaration_file, policy.prioritize_source_files);
+    get_checker_associations_in_order(
+        &file_weights,
+        &adjacent_files,
+        file_order.as_deref(),
+        checker_count,
+        policy.balance_penalty_multiplier,
+    )
+}
+
+fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
+    if checker_count <= 1 {
+        return vec![0; program.files.len()];
+    }
+    let associations = match checker_assignment() {
+        CheckerAssignment::Go => go_associations(program, checker_count),
+        CheckerAssignment::Locality => locality_associations(program, checker_count),
+        CheckerAssignment::File(path) => {
+            let text = std::fs::read_to_string(path).expect("TSRS_CHECKER_ASSIGNMENT file");
+            let associations: Vec<usize> = text.lines().map(|l| l.trim().parse::<usize>().unwrap().min(checker_count - 1)).collect();
+            assert_eq!(associations.len(), program.files.len(), "TSRS_CHECKER_ASSIGNMENT file length");
+            associations
+        }
+    };
+    if let Ok(path) = std::env::var("TSRS_ASSIGNMENT_DUMP") {
+        dump_assignment_inputs(program, &associations, &path);
+    }
+    associations
+}
+
+// tsrs-only: how files are assigned to checkers. `--checkerAssignment <name>` (CLI) or
+// TSRS_CHECKER_ASSIGNMENT=<name> (any binary). The assignment never changes what a file's diagnostics are, only
+// which checker computes them (and so how much checker state is duplicated across checkers).
+//   locality (default): directory-subtree groups packed onto checkers with Go's FENNEL (below)
+//   go:                 Go's createCheckers association (FENNEL over single files in program order)
+//   file:<path>:        one checker index per line by program file index (experiments)
+pub enum CheckerAssignment {
+    Locality,
+    Go,
+    File(String),
+}
+
+static CLI_CHECKER_ASSIGNMENT: OnceLock<String> = OnceLock::new();
+
+/// `--checkerAssignment <name>`; returns false for an unknown name.
+pub fn set_checker_assignment_from_cli(name: &str) -> bool {
+    if parse_checker_assignment(name).is_none() {
+        return false;
+    }
+    let _ = CLI_CHECKER_ASSIGNMENT.set(name.to_string());
+    true
+}
+
+fn parse_checker_assignment(name: &str) -> Option<CheckerAssignment> {
+    match name {
+        "" | "locality" => Some(CheckerAssignment::Locality),
+        "go" => Some(CheckerAssignment::Go),
+        _ => name.strip_prefix("file:").map(|p| CheckerAssignment::File(p.to_string())),
+    }
+}
+
+fn checker_assignment() -> CheckerAssignment {
+    let name = match CLI_CHECKER_ASSIGNMENT.get() {
+        Some(name) => name.clone(),
+        None => std::env::var("TSRS_CHECKER_ASSIGNMENT").unwrap_or_default(),
+    };
+    parse_checker_assignment(&name).unwrap_or_else(|| panic!("unknown checker assignment {name:?} (locality, go, file:<path>)"))
+}
+
+// A directory subtree whose checked weight is at most 1/LOCALITY_GROUP_FRACTION of an average checker load is
+// kept on one checker.
+const LOCALITY_GROUP_FRACTION: i64 = 4;
+const LOCALITY_PENALTY_MULTIPLIER: i64 = 1;
+
+// Checker assignment by locality. Checker state duplication comes from files on different checkers that
+// resolve the same declarations; files of one directory subtree (a feature folder, a package) resolve
+// largely the same ones, more so than direct import edges predict. So: (1) only files that are type checked
+// carry weight (Go's weights; skipLibCheck declaration files are never checked and would otherwise take a
+// share of a checker's budget; see checked_file_weights), (2) every directory subtree of at most 1/LOCALITY_GROUP_FRACTION of an
+// average checker load becomes one group (the shallowest such subtree per file; a file directly inside an
+// oversized directory is its own group), (3) the groups are placed with Go's FENNEL step (affinity = import
+// edges between groups, 101% load cap) in descending weight order, largest first. Deterministic: paths are
+// sorted, groups are numbered in path order, ties are broken by index. Unchecked declaration files go to
+// checker 0 (no checker ever runs over them).
+fn locality_associations(program: &Program, checker_count: usize) -> Vec<usize> {
+    let files = &program.files;
+    let weights = checked_file_weights(program);
+    let mut order: Vec<usize> = (0..files.len()).filter(|&i| weights[i] > 0).collect();
+    let mut associations = vec![0usize; files.len()];
+    if order.is_empty() {
+        return associations;
+    }
+    order.sort_by(|&a, &b| files[a].path().cmp(files[b].path()).then(a.cmp(&b)));
+    let total: i64 = order.iter().map(|&i| weights[i]).sum();
+    let threshold = total / (checker_count as i64 * LOCALITY_GROUP_FRACTION);
+
+    // Checked weight of every directory subtree (keys are path prefixes ending before a '/').
+    let mut subtree_weights: FxHashMap<&str, i64> = FxHashMap::default();
+    for &i in &order {
+        let path: &str = files[i].path();
+        for (pos, _) in path.match_indices('/') {
+            *subtree_weights.entry(&path[..pos]).or_default() += weights[i];
+        }
+    }
+    let mut group_ids: FxHashMap<&str, usize> = FxHashMap::default();
+    let mut group_of_file = vec![usize::MAX; files.len()];
+    let mut group_weights: Vec<i64> = Vec::new();
+    for &i in &order {
+        let path: &str = files[i].path();
+        let key = path.match_indices('/').map(|(pos, _)| &path[..pos]).find(|dir| subtree_weights[dir] <= threshold).unwrap_or(path);
+        let group = *group_ids.entry(key).or_insert_with(|| {
+            group_weights.push(0);
+            group_weights.len() - 1
+        });
+        group_of_file[i] = group;
+        group_weights[group] += weights[i];
+    }
+
+    // Import edges between groups of checked files, one adjacency entry per file-level edge and direction.
+    let adjacent_files = get_import_adjacency(program);
+    let mut group_adjacency: Vec<Vec<usize>> = vec![Vec::new(); group_weights.len()];
+    for &i in &order {
+        for &j in &adjacent_files[i] {
+            let (gi, gj) = (group_of_file[i], group_of_file[j]);
+            if gj != usize::MAX && gi != gj {
+                group_adjacency[gi].push(gj);
+            }
+        }
+    }
+
+    let mut group_order: Vec<usize> = (0..group_weights.len()).collect();
+    group_order.sort_by(|&a, &b| group_weights[b].cmp(&group_weights[a]).then(a.cmp(&b)));
+    let group_associations =
+        get_checker_associations_in_order(&group_weights, &group_adjacency, Some(&group_order), checker_count, LOCALITY_PENALTY_MULTIPLIER);
+    for &i in &order {
+        associations[i] = group_associations[group_of_file[i]];
+    }
+    associations
+}
+
+// Go's file weights (base work, regime-2 source multiplier, normalized import fanout) for the files a checker
+// processes; 0 for declaration and JSON files that are not type checked (skipLibCheck / skipDefaultLibCheck;
+// JSON files are never checked): no checker does work for them. Other source files keep their weight even
+// when not type checked (noCheck, JS without checkJs), since declaration diagnostics still use their checker.
+fn checked_file_weights(program: &Program) -> Vec<i64> {
+    let files = &program.files;
+    let checked: Vec<bool> = files
+        .iter()
+        .map(|&f| !((f.is_declaration_file.get() || ast::is_json_source_file(f)) && program.skip_type_checking(f, false)))
+        .collect();
+    let base_weights: Vec<i64> = files
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            if !checked[i] {
+                return 0;
+            }
+            let base = get_checker_association_base_weight(f.node_count.get() as i64, f.text().len() as i64);
+            if f.is_declaration_file.get() { base } else { base * CHECKER_ASSOCIATION_SOURCE_FILE_WEIGHT_MULTIPLIER }
+        })
+        .collect();
+    let import_counts: Vec<i64> = files.iter().enumerate().map(|(i, f)| if checked[i] { f.imports().len() as i64 } else { 0 }).collect();
+    get_checker_association_weights(&base_weights, &import_counts)
+}
+
+// TSRS_ASSIGNMENT_DUMP=<path>: writes the assignment inputs for offline experiments: `<path>.files.tsv`
+// (index, checked, declaration, node count, text length, import count, association, file name) and
+// `<path>.edges.tsv` (directed resolved in-program imports, by file index).
+fn dump_assignment_inputs(program: &Program, associations: &[usize], path: &str) {
+    use std::fmt::Write;
+    let files = &program.files;
+    let mut out = String::new();
+    for (i, &file) in files.iter().enumerate() {
+        let _ = writeln!(
+            out,
+            "{i}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            !program.skip_type_checking(file, false) as u8,
+            file.is_declaration_file.get() as u8,
+            file.node_count.get(),
+            file.text().len(),
+            file.imports().len(),
+            associations[i],
+            file.file_name()
+        );
+    }
+    std::fs::write(format!("{path}.files.tsv"), out).expect("TSRS_ASSIGNMENT_DUMP");
+    let file_indices: FxHashMap<P<SourceFile>, usize> = files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
+    let mut out = String::new();
+    for (file_index, file) in files.iter().enumerate() {
+        let Some(resolved_modules) = program.resolved_modules.get(file.path()) else {
+            continue;
+        };
+        let mut targets: Vec<usize> = resolved_modules
+            .values()
+            .filter(|r| r.is_resolved())
+            .filter_map(|r| program.get_source_file_for_resolved_module(&r.resolved_file_name))
+            .filter_map(|f| file_indices.get(&f).copied())
+            .filter(|&t| t != file_index)
+            .collect();
+        targets.sort_unstable();
+        for t in targets {
+            let _ = writeln!(out, "{file_index}\t{t}");
+        }
+    }
+    std::fs::write(format!("{path}.edges.tsv"), out).expect("TSRS_ASSIGNMENT_DUMP");
 }
 
 // getImportAdjacency returns an undirected import graph represented by file index.

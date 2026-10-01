@@ -161,3 +161,18 @@ DEBUGGING.md applies to the opt-out mode (reference-identical: suite pass lists 
 default mode must not lose passes either. Conformance with the flag on: no output change in any variant (errors,
 `.types`, `.symbols`). Project, medians of 3 (flag off -> on): single-threaded peak 15.34 -> 11.77 GB, check
 26.3 -> 22.9 s; 4 checkers peak 23.32 -> 17.49 GB, check 13.2 -> 11.1 s. Details: `notes/lazy-members.md`.
+
+## 2026-10-01: checker assignment by locality (multi-checker memory)
+
+Files are now assigned to checkers by directory locality (`--checkerAssignment locality`, the default;
+`--checkerAssignment go` / `TSRS_CHECKER_ASSIGNMENT=go` restores Go's FENNEL assignment). Checker code is
+unchanged and the assignment cannot change any file's diagnostics or their order (per-file results, output in
+file order): conformance with parallel test programs is identical under both assignments and both lazy modes
+(13,458 pass, `.types` / `.symbols` 12,779 / 12,779, all artifacts byte-identical to single-threaded).
+
+Project (go -> locality, same commit 52ef5a9, medians of 3): 4 checkers peak 14.99 -> 13.37 GB (-10.8%), check
+9.5 -> 8.0 s, symbols 19.6M -> 17.3M; reference mode 20.08 -> 17.70 GB. Full curve on 7d96945 (2-8 checkers:
+-4% to -13% peak, faster at every count; 3 checkers with locality beat Go's 4 on both axes) in the notes.
+Single-threaded unchanged (no assignment with one checker). Of the remaining multi-checker excess, most is library instantiations (zod,
+MikroORM, lib) that every checker needs. Measurements, duplication breakdown, instrumentation
+(`TSRS_ASSIGNMENT_STATS`, feature `assignment-stats`): `notes/mem-assignment.md`.

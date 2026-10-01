@@ -51,6 +51,14 @@ exactly (that is the reference-equivalence gate), and the default run must not l
 against `tsgo-ref` counters (symbols/types/instantiations) use the opt-out mode; with the default mode tsrs creates
 fewer symbols, types and instantiations than `tsgo-ref` (it equals tsgo with both PRs applied).
 
+## Checker assignment (multi-checker counters)
+
+With more than one checker, tsrs assigns files to checkers by directory locality by default
+(`--checkerAssignment locality`, notes/mem-assignment.md); Go uses FENNEL over single files. Per-file diagnostics
+do not depend on it, but multi-checker symbol/type/instantiation counters and peak memory do: compare them
+against `tsgo-ref` with `--checkerAssignment go` (or `TSRS_CHECKER_ASSIGNMENT=go`). Single-threaded runs are
+unaffected.
+
 ## Project `.types` / `.symbols` equivalence against the cached reference
 
 Running the Go oracle (`tools/oracle/project-types`) takes hours per side. Cache its equivalent instead (not

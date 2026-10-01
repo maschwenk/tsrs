@@ -29,6 +29,9 @@ pub fn emit_and_report_statistics(input: EmitInput) -> (CompileAndEmitResult, Op
     if options.diagnostics.is_true() || options.extended_diagnostics.is_true() {
         let stats = statistics_from_program(&input, &result.times);
         stats.report(input.sys);
+        if tsrs_compiler::assignment_stats_enabled() {
+            input.sys.write(&input.program.checker_assignment_report());
+        }
         statistics = Some(stats);
     }
 

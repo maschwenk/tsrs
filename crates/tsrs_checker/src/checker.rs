@@ -771,6 +771,9 @@ pub struct Checker {
     /// notes/mem-lazy.md L1: tuple references get lazy member tables too.
     pub lazy_tuples: bool,
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
+    /// Instrumentation (feature `assignment-stats`): every type / symbol this checker created.
+    #[cfg(feature = "assignment-stats")]
+    pub stats_created: (Vec<P<Type>>, Vec<P<Symbol>>),
     pub context_free_types: FxHashMap<P<Node>, P<Type>>,
     pub any_type: P<Type>,
     pub auto_type: P<Type>,
@@ -1117,6 +1120,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_members: tsrs_core::lazymembers::enabled(),
         lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
         lazy_member_stats: Default::default(),
+        #[cfg(feature = "assignment-stats")]
+        stats_created: Default::default(),
         context_free_types: FxHashMap::default(),
         any_type: dummy_type,
         auto_type: dummy_type,

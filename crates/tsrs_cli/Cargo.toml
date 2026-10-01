@@ -27,6 +27,8 @@ checker = ["tsrs_compiler/checker"]
 site-counts = ["tsrs_compiler/site-counts"]
 # Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
 alloc-profile = ["tsrs_core/alloc-profile"]
+# TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files (tsrs_compiler checkerpool_stats.rs).
+assignment-stats = ["tsrs_compiler/assignment-stats"]
 
 [[bin]]
 name = "tsrs"

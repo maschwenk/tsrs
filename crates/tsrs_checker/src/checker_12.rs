@@ -1844,14 +1844,17 @@ impl Checker {
     pub(crate) fn new_type(&mut self, flags: TypeFlags, object_flags: ObjectFlags, data: TypeData) -> P<Type> {
         self.type_count += 1;
         tsrs_core::sitecount::hit("type", type_kind_label(flags, object_flags));
-        P::new(Type {
+        let t = P::new(Type {
             flags: Cell::new(flags),
             object_flags: Cell::new(object_flags & !(ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables | ObjectFlags::MembersResolved)),
             id: TypeId(self.type_count),
             symbol: Cell::new(None),
             alias: Cell::new(None),
             data,
-        })
+        });
+        #[cfg(feature = "assignment-stats")]
+        self.stats_created.0.push(t);
+        t
     }
 
     // checker.go:25487

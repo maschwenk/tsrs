@@ -1,6 +1,8 @@
 #[cfg(feature = "checker")]
 mod checker_program;
 mod checkerpool;
+#[cfg(feature = "checker")]
+mod checkerpool_stats;
 pub mod diagnosticwriter;
 mod emitter;
 #[cfg(feature = "checker")]
@@ -17,7 +19,7 @@ mod projectreferencefilemapper;
 #[cfg(all(test, feature = "checker"))]
 mod modulespecifiers_oracle_test;
 
-pub use checkerpool::CheckerGuard;
+pub use checkerpool::{assignment_stats_enabled, set_checker_assignment_from_cli, CheckerGuard};
 pub use file_include::FileIncludeReason;
 pub use fileloader::LibFile;
 pub use host::{new_cached_fs_compiler_host, new_compiler_host, CompilerHost, TraceFn};

@@ -1589,7 +1589,10 @@ impl Checker {
     pub(crate) fn new_symbol(&mut self, flags: SymbolFlags, name: &'static str) -> P<Symbol> {
         self.symbol_count += 1;
         tsrs_core::sitecount::hit("symbol", "");
-        Symbol::new(flags | SymbolFlags::Transient, name)
+        let s = Symbol::new(flags | SymbolFlags::Transient, name);
+        #[cfg(feature = "assignment-stats")]
+        self.stats_created.1.push(s);
+        s
     }
 
     // checker.go:14313

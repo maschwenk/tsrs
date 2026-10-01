@@ -293,6 +293,12 @@ impl Program {
         self.pool().checker_count()
     }
 
+    // TSRS_ASSIGNMENT_STATS report (checkerpool_stats.rs).
+    #[cfg(feature = "checker")]
+    pub fn checker_assignment_report(&'static self) -> String {
+        crate::checkerpool_stats::report(self, self.pool())
+    }
+
     pub(crate) fn processing_diagnostics(&self) -> std::sync::MutexGuard<'_, Vec<processingDiagnostic>> {
         self.processing_diagnostics.lock().unwrap()
     }
