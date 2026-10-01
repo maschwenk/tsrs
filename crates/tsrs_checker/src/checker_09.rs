@@ -178,7 +178,7 @@ impl Checker {
         let index_constraint = self.get_simplified_type_or_constraint(index_type);
         if let Some(index_constraint) = index_constraint {
             if index_constraint != index_type {
-                let indexed_access = self.get_indexed_access_type_or_undefined(object_type, index_constraint, access_flags, None, None);
+                let indexed_access = self.get_indexed_access_type_or_undefined(object_type, index_constraint, access_flags, None, AliasArg::None);
                 if indexed_access.is_some() {
                     return indexed_access;
                 }
@@ -187,7 +187,7 @@ impl Checker {
         let object_constraint = self.get_simplified_type_or_constraint(object_type);
         if let Some(object_constraint) = object_constraint {
             if object_constraint != object_type {
-                return self.get_indexed_access_type_or_undefined(object_constraint, index_type, access_flags, None, None);
+                return self.get_indexed_access_type_or_undefined(object_constraint, index_type, access_flags, None, AliasArg::None);
             }
         }
         None
@@ -444,13 +444,22 @@ impl keyBuilder {
 
     // checker.go:17781
     pub(crate) fn write_alias(&mut self, alias: Option<P<TypeAlias>>) {
-        if let Some(alias) = alias {
-            self.write_byte(1);
-            self.write_symbol(alias.symbol.get().unwrap());
-            self.write_types(alias.type_arguments.get());
-        } else {
-            self.write_byte(0);
-        }
+        self.write_alias_arg(alias.into());
+    }
+
+    /// `write_alias` of an `AliasArg` (a pending alias writes the same bytes as the alias it stands for).
+    pub(crate) fn write_alias_arg(&mut self, alias: AliasArg<'_>) {
+        let (symbol, type_arguments) = match alias {
+            AliasArg::None => {
+                self.write_byte(0);
+                return;
+            }
+            AliasArg::Some(alias) => (alias.symbol.get(), alias.type_arguments.get()),
+            AliasArg::Pending(pending) => (pending.symbol, pending.type_arguments.as_slice()),
+        };
+        self.write_byte(1);
+        self.write_symbol(symbol.unwrap());
+        self.write_types(type_arguments);
     }
 
     // checker.go:17791
@@ -520,14 +529,14 @@ pub(crate) fn get_type_list_key(types: &[P<Type>]) -> CacheHashKey {
 }
 
 // checker.go:17842
-pub(crate) fn get_alias_key(alias: Option<P<TypeAlias>>) -> CacheHashKey {
+pub(crate) fn get_alias_key(alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = keyBuilder::default();
-    b.write_alias(alias);
+    b.write_alias_arg(alias);
     b.hash()
 }
 
 // checker.go:17848
-pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: Option<P<TypeAlias>>) -> CacheHashKey {
+pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = keyBuilder::default();
     match origin {
         None => b.write_types(types),
@@ -548,16 +557,16 @@ pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: O
         }
         _ => panic!("Unhandled case in getUnionKey"),
     }
-    b.write_alias(alias);
+    b.write_alias_arg(alias);
     b.hash()
 }
 
 // checker.go:17872
-pub(crate) fn get_intersection_key(types: &[P<Type>], flags: IntersectionFlags, alias: Option<P<TypeAlias>>) -> CacheHashKey {
+pub(crate) fn get_intersection_key(types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = keyBuilder::default();
     b.write_types(types);
     if !flags.intersects(IntersectionFlags::NoConstraintReduction) {
-        b.write_alias(alias);
+        b.write_alias_arg(alias);
     } else {
         b.write_byte(b'*');
     }
@@ -589,14 +598,14 @@ pub(crate) fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) 
 
 // checker.go:17906
 pub(crate) fn get_type_alias_instantiation_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>) -> CacheHashKey {
-    get_type_instantiation_key(type_arguments, alias, false)
+    get_type_instantiation_key(type_arguments, alias.into(), false)
 }
 
 // checker.go:17910
-pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, single_signature: bool) -> CacheHashKey {
+pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: AliasArg<'_>, single_signature: bool) -> CacheHashKey {
     let mut b = keyBuilder::default();
     b.write_types(type_arguments);
-    b.write_alias(alias);
+    b.write_alias_arg(alias);
     if single_signature {
         b.write_byte(b'!');
     }
@@ -604,12 +613,12 @@ pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: Opti
 }
 
 // checker.go:17920
-pub(crate) fn get_indexed_access_key(object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, alias: Option<P<TypeAlias>>) -> CacheHashKey {
+pub(crate) fn get_indexed_access_key(object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = keyBuilder::default();
     b.write_type(object_type);
     b.write_type(index_type);
     b.write_uint32(access_flags.bits());
-    b.write_alias(alias);
+    b.write_alias_arg(alias);
     b.hash()
 }
 
@@ -791,7 +800,7 @@ impl Checker {
                     // Use explicitly specified property name ({ p: xxx } form), or otherwise the implied name ({ p } form)
                     let name = declaration.property_name_or_name().unwrap();
                     let index_type = self.get_literal_type_from_property_name(name);
-                    let declared_type = self.get_indexed_access_type_ex(parent_type, index_type, access_flags, Some(name), None);
+                    let declared_type = self.get_indexed_access_type_ex(parent_type, index_type, access_flags, Some(name), AliasArg::None);
                     t = self.get_flow_type_of_destructuring(declaration, declared_type);
                 }
             }
@@ -826,7 +835,7 @@ impl Checker {
                 } else if self.is_array_like_type(parent_type) {
                     let index_type = self.get_number_literal_type(Number(index as f64));
                     let declared_type = self
-                        .get_indexed_access_type_or_undefined(parent_type, index_type, access_flags, declaration.name(), None)
+                        .get_indexed_access_type_or_undefined(parent_type, index_type, access_flags, declaration.name(), AliasArg::None)
                         .unwrap_or(self.error_type);
                     t = self.get_flow_type_of_destructuring(declaration, declared_type);
                 } else {
@@ -851,7 +860,7 @@ impl Checker {
         }
         let non_undefined = self.get_non_undefined_type(t);
         let init_type = self.check_declaration_initializer(declaration, CheckMode::Normal, None);
-        let u = self.get_union_type_ex(&[non_undefined, init_type], UnionReduction::Subtype, None, None);
+        let u = self.get_union_type_ex(&[non_undefined, init_type], UnionReduction::Subtype, AliasArg::None, None);
         self.widen_type_inferred_from_initializer(declaration, u)
     }
 
@@ -1550,7 +1559,7 @@ impl Checker {
                 // union includes empty object types (e.g. reducing {} | string to just {}).
                 let reduction =
                     if widened_types.iter().any(|&t| self.is_empty_object_type(t)) { UnionReduction::Subtype } else { UnionReduction::Literal };
-                result = Some(self.get_union_type_ex(&widened_types, reduction, None, None));
+                result = Some(self.get_union_type_ex(&widened_types, reduction, AliasArg::None, None));
             } else if t.flags().intersects(TypeFlags::Intersection) {
                 let types: Vec<P<Type>> = t.types().iter().map(|&t| self.get_widened_type(t)).collect();
                 result = Some(self.get_intersection_type(&types));

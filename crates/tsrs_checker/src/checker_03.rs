@@ -2289,7 +2289,7 @@ impl Checker {
                 let array_types = input_type.types();
                 let filtered_types: Vec<P<Type>> = array_types.iter().copied().filter(|t| !t.flags().intersects(TypeFlags::StringLike)).collect();
                 if filtered_types.len() != array_types.len() {
-                    array_type = self.get_union_type_ex(&filtered_types, UnionReduction::Subtype, None, None);
+                    array_type = self.get_union_type_ex(&filtered_types, UnionReduction::Subtype, AliasArg::None, None);
                 }
             } else if array_type.flags().intersects(TypeFlags::StringLike) {
                 array_type = self.never_type;
@@ -2338,10 +2338,10 @@ impl Checker {
             }
             if possible_out_of_bounds {
                 let types = [array_element_type, self.string_type, self.undefined_type];
-                return Some(self.get_union_type_ex(&types, UnionReduction::Subtype, None, None));
+                return Some(self.get_union_type_ex(&types, UnionReduction::Subtype, AliasArg::None, None));
             }
             let types = [array_element_type, self.string_type];
-            return Some(self.get_union_type_ex(&types, UnionReduction::Subtype, None, None));
+            return Some(self.get_union_type_ex(&types, UnionReduction::Subtype, AliasArg::None, None));
         }
         if use_.intersects(IterationUse::PossiblyOutOfBounds) {
             return array_element_type.map(|t| self.include_undefined_in_index_signature(t));

@@ -1665,7 +1665,7 @@ impl Checker {
         // If all inferences were made from a position that implies a combined result, infer a union type.
         // Otherwise, infer a common supertype.
         let unwidened_type = if inference.priority.get().intersects(InferencePriority::PriorityImpliesCombination) {
-            self.get_union_type_ex(&base_candidates, UnionReduction::Subtype, None, None)
+            self.get_union_type_ex(&base_candidates, UnionReduction::Subtype, AliasArg::None, None)
         } else {
             self.get_common_supertype(&base_candidates).unwrap()
         };
@@ -1686,7 +1686,7 @@ impl Checker {
         if candidates.len() > 1 {
             let object_literals: Vec<P<Type>> = candidates.iter().copied().filter(|&t| is_object_or_array_literal_type(t)).collect();
             if !object_literals.is_empty() {
-                let literals_type = self.get_union_type_ex(&object_literals, UnionReduction::Subtype, None, None);
+                let literals_type = self.get_union_type_ex(&object_literals, UnionReduction::Subtype, AliasArg::None, None);
                 let mut non_literal_types: Vec<P<Type>> = candidates.iter().copied().filter(|&t| !is_object_or_array_literal_type(t)).collect();
                 non_literal_types.push(literals_type);
                 return non_literal_types;
@@ -1737,7 +1737,7 @@ impl Checker {
     pub(crate) fn get_type_from_inference(&mut self, inference: P<InferenceInfo>) -> Option<P<Type>> {
         if !inference.candidates.is_empty() {
             let candidates = inference.candidates.to_vec();
-            return Some(self.get_union_type_ex(&candidates, UnionReduction::Subtype, None, None));
+            return Some(self.get_union_type_ex(&candidates, UnionReduction::Subtype, AliasArg::None, None));
         }
         if !inference.contra_candidates.is_empty() {
             let contra_candidates = inference.contra_candidates.to_vec();

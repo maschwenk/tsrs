@@ -1062,7 +1062,7 @@ impl Relater {
                 let base_index_type = c.get_base_constraint_or_type(index_type);
                 if !c.is_generic_object_type(base_object_type) && !c.is_generic_index_type(base_index_type) {
                     let access_flags = AccessFlags::Writing | if base_object_type != object_type { AccessFlags::NoIndexSignatures } else { AccessFlags::None };
-                    let constraint = c.get_indexed_access_type_or_undefined(base_object_type, base_index_type, access_flags, None, None);
+                    let constraint = c.get_indexed_access_type_or_undefined(base_object_type, base_index_type, access_flags, None, AliasArg::None);
                     if let Some(constraint) = constraint {
                         if report_errors && original_error_chain.is_some() {
                             // create a new chain for the constraint error

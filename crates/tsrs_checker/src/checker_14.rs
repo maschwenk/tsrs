@@ -1292,7 +1292,7 @@ impl Checker {
             return None;
         }
         let types: Vec<P<Type>> = onfulfilled_parameter_signatures.iter().map(|&s| self.get_type_of_first_parameter_of_signature(s)).collect();
-        let result = self.get_union_type_ex(&types, UnionReduction::Subtype, None, None);
+        let result = self.get_union_type_ex(&types, UnionReduction::Subtype, AliasArg::None, None);
         self.cached_types.insert(key, result);
         Some(result)
     }
@@ -1905,7 +1905,7 @@ impl Checker {
                     }
                 } else {
                     let index_type = self.get_number_literal_type(jsnum::Number((i - index) as f64));
-                    self.get_indexed_access_type_ex(rest_type, index_type, AccessFlags::Contextual, None, None)
+                    self.get_indexed_access_type_ex(rest_type, index_type, AccessFlags::Contextual, None, AliasArg::None)
                 };
                 let arg_type = self.check_expression_with_contextual_type(arg, contextual_type, context, check_mode);
                 let has_primitive_contextual_type = in_const_context || self.maybe_type_of_kind(contextual_type, TypeFlags::Primitive | TypeFlags::Index | TypeFlags::TemplateLiteral | TypeFlags::StringMapping);
@@ -2178,7 +2178,7 @@ impl Checker {
         if signature_has_rest_parameter(signature) && arg_index >= rest_index {
             let rest_type = self.get_type_of_symbol(signature.parameters.get()[rest_index as usize]);
             let index_type = self.get_number_literal_type(jsnum::Number((arg_index - rest_index) as f64));
-            return Some(self.get_indexed_access_type_ex(rest_type, index_type, AccessFlags::Contextual, None, None));
+            return Some(self.get_indexed_access_type_ex(rest_type, index_type, AccessFlags::Contextual, None, AliasArg::None));
         }
         Some(self.get_type_at_position(signature, arg_index))
     }

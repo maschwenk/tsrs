@@ -123,7 +123,7 @@ impl Checker {
         if symbol.check_flags.get().intersects(CheckFlags::Unresolved) {
             let alias_type_arguments: Vec<P<Type>> = type_arguments.iter().map(|&n| self.get_type_from_type_node(n)).collect();
             let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), type_arguments: Cell::new(alloc_vec(alias_type_arguments)) });
-            let key = get_alias_key(Some(alias));
+            let key = get_alias_key(Some(alias).into());
             let mut error_type = self.error_types.get(&key).copied();
             if error_type.is_none() {
                 let t = self.new_intrinsic_type(TypeFlags::Any, "error");
@@ -517,7 +517,7 @@ impl Checker {
             }
             let enum_type = if !member_type_list.is_empty() {
                 let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), ..Default::default() });
-                self.get_union_type_ex(&member_type_list, UnionReduction::Literal, Some(alias), None /*origin*/)
+                self.get_union_type_ex(&member_type_list, UnionReduction::Literal, Some(alias).into(), None /*origin*/)
             } else {
                 self.create_computed_enum_type(symbol)
             };
@@ -899,7 +899,7 @@ impl Checker {
             let alias = self.get_alias_for_type_node(node);
             let types: Vec<P<Type>> =
                 node.as_union_type_node().union_or_intersection_type_node_base.types.nodes.iter().map(|&n| self.get_type_from_type_node(n)).collect();
-            links.resolved_type.set(Some(self.get_union_type_ex(&types, UnionReduction::Literal, alias, None /*origin*/)));
+            links.resolved_type.set(Some(self.get_union_type_ex(&types, UnionReduction::Literal, alias.into(), None /*origin*/)));
         }
         links.resolved_type.get().unwrap()
     }
@@ -923,7 +923,7 @@ impl Checker {
                 }
             }
             let flags = if no_supertype_reduction { IntersectionFlags::NoSupertypeReduction } else { IntersectionFlags::None };
-            links.resolved_type.set(Some(self.get_intersection_type_ex(&types, flags, alias)));
+            links.resolved_type.set(Some(self.get_intersection_type_ex(&types, flags, alias.into())));
         }
         links.resolved_type.get().unwrap()
     }
@@ -1641,7 +1641,7 @@ impl Checker {
             if writing {
                 return Some(self.get_intersection_type(&element_types));
             }
-            return Some(self.get_union_type_ex(&element_types, if no_reductions { UnionReduction::None } else { UnionReduction::Literal }, None, None));
+            return Some(self.get_union_type_ex(&element_types, if no_reductions { UnionReduction::None } else { UnionReduction::Literal }, AliasArg::None, None));
         }
         None
     }
@@ -2505,7 +2505,7 @@ impl Checker {
         let mut f = f;
         if t.flags().intersects(TypeFlags::Union) && alias.is_some() {
             let types: Vec<P<Type>> = t.types().iter().map(|&t| f(self, t)).collect();
-            return self.get_union_type_ex(&types, UnionReduction::Literal, alias, None);
+            return self.get_union_type_ex(&types, UnionReduction::Literal, alias.into(), None);
         }
         self.map_type(t, |c, t| Some(f(c, t))).unwrap()
     }
@@ -2551,7 +2551,7 @@ impl Checker {
             if mapped_types.is_empty() {
                 return None;
             }
-            return Some(self.get_union_type_ex(&mapped_types, if no_reductions { UnionReduction::None } else { UnionReduction::Literal }, None /*alias*/, None /*origin*/));
+            return Some(self.get_union_type_ex(&mapped_types, if no_reductions { UnionReduction::None } else { UnionReduction::Literal }, AliasArg::None /*alias*/, None /*origin*/));
         }
         Some(t)
     }
@@ -2559,14 +2559,14 @@ impl Checker {
     // checker.go:26080
     pub(crate) fn get_union_or_intersection_type(&mut self, types: &[P<Type>], is_union: bool, union_reduction: UnionReduction) -> P<Type> {
         if is_union {
-            return self.get_union_type_ex(types, union_reduction, None, None);
+            return self.get_union_type_ex(types, union_reduction, AliasArg::None, None);
         }
         self.get_intersection_type(types)
     }
 
     // checker.go:26087
     pub fn get_union_type(&mut self, types: &[P<Type>]) -> P<Type> {
-        self.get_union_type_ex(types, UnionReduction::Literal, None /*alias*/, None /*origin*/)
+        self.get_union_type_ex(types, UnionReduction::Literal, AliasArg::None /*alias*/, None /*origin*/)
     }
 
     // We sort and deduplicate the constituent types based on object identity. If the subtypeReduction
@@ -2577,7 +2577,7 @@ impl Checker {
     // circularly reference themselves and therefore cannot be subtype reduced during their declaration.
     // For example, "type Item = string | (() => Item" is a named type that circularly references itself.
     // checker.go:26098
-    pub(crate) fn get_union_type_ex(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: Option<P<TypeAlias>>, origin: Option<P<Type>>) -> P<Type> {
+    pub(crate) fn get_union_type_ex(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> {
         if types.is_empty() {
             return self.never_type;
         }

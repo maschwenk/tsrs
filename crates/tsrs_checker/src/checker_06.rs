@@ -344,7 +344,7 @@ impl Checker {
         self.check_testing_known_truthy_callable_or_awaitable_or_enum_member_type(cond.condition, t, Some(cond.when_true));
         let type1 = self.check_expression_ex(cond.when_true, check_mode);
         let type2 = self.check_expression_ex(cond.when_false, check_mode);
-        self.get_union_type_ex(&[type1, type2], UnionReduction::Subtype, None, None)
+        self.get_union_type_ex(&[type1, type2], UnionReduction::Subtype, AliasArg::None, None)
     }
 
     // checker.go:11143
@@ -2263,7 +2263,7 @@ impl Checker {
                 if self.has_type_facts(left_type, TypeFacts::Falsy) {
                     let removed = self.remove_definitely_falsy_types(left_type);
                     let non_nullable = self.get_non_nullable_type(removed);
-                    result_type = self.get_union_type_ex(&[non_nullable, right_type], UnionReduction::Subtype, None, None);
+                    result_type = self.get_union_type_ex(&[non_nullable, right_type], UnionReduction::Subtype, AliasArg::None, None);
                 }
                 if operator == Kind::BarBarEqualsToken {
                     self.check_assignment_operator(left, operator, right, left_type, right_type);
@@ -2277,7 +2277,7 @@ impl Checker {
                 let mut result_type = left_type;
                 if self.has_type_facts(left_type, TypeFacts::EQUndefinedOrNull) {
                     let non_nullable = self.get_non_nullable_type(left_type);
-                    result_type = self.get_union_type_ex(&[non_nullable, right_type], UnionReduction::Subtype, None, None);
+                    result_type = self.get_union_type_ex(&[non_nullable, right_type], UnionReduction::Subtype, AliasArg::None, None);
                 }
                 if operator == Kind::QuestionQuestionEqualsToken {
                     self.check_assignment_operator(left, operator, right, left_type, right_type);
@@ -2382,7 +2382,7 @@ impl Checker {
                 }
             }
             let access_flags = AccessFlags::ExpressionPosition | if self.has_default_value(property) { AccessFlags::AllowMissing } else { AccessFlags::empty() };
-            let element_type = self.get_indexed_access_type_ex(object_literal_type, expr_type, access_flags, name, None);
+            let element_type = self.get_indexed_access_type_ex(object_literal_type, expr_type, access_flags, name, AliasArg::None);
             let t = self.get_flow_type_of_destructuring(property, element_type);
             let mut expr = property;
             if ast::is_property_assignment(property) {
@@ -2448,7 +2448,7 @@ impl Checker {
                     // when the element is a SyntaxKind.ElementAccessExpression.
                     let access_flags = AccessFlags::ExpressionPosition | if self.has_default_value(element) { AccessFlags::AllowMissing } else { AccessFlags::empty() };
                     let synthetic = self.create_synthetic_expression(element, index_type, false, None);
-                    let element_type = self.get_indexed_access_type_or_undefined(source_type, index_type, access_flags, Some(synthetic), None).unwrap_or(self.error_type);
+                    let element_type = self.get_indexed_access_type_or_undefined(source_type, index_type, access_flags, Some(synthetic), AliasArg::None).unwrap_or(self.error_type);
                     let mut assigned_type = element_type;
                     if self.has_default_value(element) {
                         assigned_type = self.get_type_with_facts(element_type, TypeFacts::NEUndefined);

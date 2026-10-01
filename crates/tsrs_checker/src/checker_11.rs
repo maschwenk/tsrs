@@ -1108,9 +1108,8 @@ impl Checker {
             if new_types.as_slice() == types && alias.symbol() == t.alias().symbol() {
                 return t;
             }
-            if alias.is_none() {
-                alias = self.instantiate_type_alias(t.alias(), Some(m));
-            }
+            let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), Some(m)) } else { None };
+            let alias = AliasArg::given_or_pending(alias, &pending);
             if source.flags().intersects(TypeFlags::Intersection) {
                 return self.get_intersection_type_ex(&new_types, IntersectionFlags::None, alias);
             }
@@ -1119,9 +1118,8 @@ impl Checker {
             let target = self.instantiate_type(t.target().unwrap(), Some(m));
             return self.get_index_type(target);
         } else if flags.intersects(TypeFlags::IndexedAccess) {
-            if alias.is_none() {
-                alias = self.instantiate_type_alias(t.alias(), Some(m));
-            }
+            let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), Some(m)) } else { None };
+            let alias = AliasArg::given_or_pending(alias, &pending);
             let d = t.as_indexed_access_type();
             let object_type = self.instantiate_type(d.object_type().unwrap(), Some(m));
             let index_type = self.instantiate_type(d.index_type().unwrap(), Some(m));
@@ -1235,20 +1233,19 @@ impl Checker {
         for &tp in type_parameters {
             type_arguments.push(self.map_type_with_composite_mapper(tp, t.mapper(), m.unwrap()));
         }
-        let mut new_alias = alias;
-        if new_alias.is_none() {
-            new_alias = self.instantiate_type_alias(t.alias(), m);
-        }
+        let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), m) } else { None };
+        let new_alias = AliasArg::given_or_pending(alias, &pending);
         // Go `data := target.AsObjectType()`; `data.instantiations` is `self.object_type_instantiations[target]`
         // (the target is a declared anonymous or mapped type or a deferred reference, never an interface or tuple).
         assert!(target.try_as_interface_type().is_none(), "object type instantiation of an interface target");
         let key = get_type_instantiation_key(&type_arguments, new_alias, t.object_flags().intersects(ObjectFlags::SingleSignatureType));
         if !self.object_type_instantiations.contains_key(&target) {
-            let initial_key = get_type_instantiation_key(type_parameters, target.alias(), false);
+            let initial_key = get_type_instantiation_key(type_parameters, target.alias().into(), false);
             self.object_type_instantiations.insert(target, FxHashMap::from_iter([(initial_key, target)]));
         }
         let mut result = self.object_type_instantiations[&target].get(&key).copied();
         if result.is_none() {
+            let new_alias = new_alias.alias();
             let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
             if target.object_flags().intersects(ObjectFlags::SingleSignatureType) && m.is_some() {
                 new_mapper = self.combine_type_mappers(Some(new_mapper), m.unwrap());
@@ -1731,6 +1728,14 @@ impl Checker {
         Some(P::new(TypeAlias { symbol: Cell::new(alias.symbol()), type_arguments: Cell::new(alloc_vec(type_arguments)) }))
     }
 
+    /// `instantiate_type_alias` for the alias argument of a cached type constructor (`AliasArg::Pending`): the type
+    /// arguments are instantiated here, like Go, the `TypeAlias` is allocated only if a type is created with it.
+    pub(crate) fn instantiate_type_alias_pending(&mut self, alias: Option<P<TypeAlias>>, m: Option<P<TypeMapper>>) -> Option<PendingTypeAlias> {
+        let alias = alias?;
+        let type_arguments = self.instantiate_types(alias.type_arguments(), m);
+        Some(PendingTypeAlias::new(alias.symbol(), type_arguments))
+    }
+
     // checker.go:23192
     pub(crate) fn instantiate_types(&mut self, types: &[P<Type>], m: Option<P<TypeMapper>>) -> Vec<P<Type>> {
         self.instantiate_list(types, m, |c, t, m| c.instantiate_type(t, m))
@@ -1918,7 +1923,7 @@ impl Checker {
             let object_type = self.get_type_from_type_node(node.as_indexed_access_type_node().object_type);
             let index_type = self.get_type_from_type_node(node.as_indexed_access_type_node().index_type);
             let potential_alias = self.get_alias_for_type_node(node);
-            let t = self.get_indexed_access_type_ex(object_type, index_type, AccessFlags::None, Some(node), potential_alias);
+            let t = self.get_indexed_access_type_ex(object_type, index_type, AccessFlags::None, Some(node), potential_alias.into());
             links.resolved_type.set(Some(t));
         }
         links.resolved_type.get().unwrap()

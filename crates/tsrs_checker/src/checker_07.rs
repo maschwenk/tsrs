@@ -802,7 +802,7 @@ impl Checker {
                     if left_type_without_undefined == right_type_without_undefined {
                         links.resolved_type.set(Some(left_type));
                     } else {
-                        let u = self.get_union_type_ex(&[left_type, right_type_without_undefined], UnionReduction::Subtype, None, None);
+                        let u = self.get_union_type_ex(&[left_type, right_type_without_undefined], UnionReduction::Subtype, AliasArg::None, None);
                         links.resolved_type.set(Some(u));
                     }
                     self.spread_links.get(result).left_spread.set(Some(left_prop));

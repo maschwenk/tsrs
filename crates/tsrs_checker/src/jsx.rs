@@ -548,7 +548,7 @@ impl Checker {
             let Some(mut target_prop_type) = target_prop_type else {
                 continue;
             };
-            let source_prop_type = self.get_indexed_access_type_or_undefined(source, name_type, AccessFlags::None, None, None);
+            let source_prop_type = self.get_indexed_access_type_or_undefined(source, name_type, AccessFlags::None, None, AliasArg::None);
             let Some(mut source_prop_type) = source_prop_type else {
                 continue;
             };

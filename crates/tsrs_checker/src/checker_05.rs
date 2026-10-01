@@ -1189,7 +1189,7 @@ impl Checker {
                     rest_types.push(t);
                 }
             }
-            let union = self.get_union_type_ex(&rest_types, UnionReduction::Subtype, None, None);
+            let union = self.get_union_type_ex(&rest_types, UnionReduction::Subtype, AliasArg::None, None);
             let t = self.create_array_type(union);
             parameters.push(self.create_combined_symbol_for_overload_failure(&rest_parameter_symbols, t));
             flags |= SignatureFlags::HasRestParameter;
@@ -1207,7 +1207,7 @@ impl Checker {
 
     // checker.go:9814
     pub(crate) fn create_combined_symbol_from_types(&mut self, sources: &[P<Symbol>], types: &[P<Type>]) -> P<Symbol> {
-        let t = self.get_union_type_ex(types, UnionReduction::Subtype, None, None);
+        let t = self.get_union_type_ex(types, UnionReduction::Subtype, AliasArg::None, None);
         self.create_combined_symbol_for_overload_failure(sources, t)
     }
 

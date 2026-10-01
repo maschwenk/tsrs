@@ -212,7 +212,7 @@ impl Checker {
 
     // exports.go:370
     pub fn get_union_type_ex_exported(&mut self, types: &[P<Type>], union_reduction: UnionReduction) -> P<Type> {
-        self.get_union_type_ex(types, union_reduction, None, None)
+        self.get_union_type_ex(types, union_reduction, AliasArg::None, None)
     }
 
     // exports.go:374

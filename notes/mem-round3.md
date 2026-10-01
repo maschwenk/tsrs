@@ -132,3 +132,23 @@ allocates the slot with its page either way, so this is tsrs-only.
 | 4 checkers, before (A4) | 8.51-8.55 (8.541) | 431-432 G |
 | 4 checkers, after | 8.48-8.53 (8.525, -0.02) | 432 G |
 | opt-out single / 4 checkers (go assignment), after | 8.48 / 13.07 | 341 / 518 G |
+
+### A6. Instantiated type aliases allocated only when a type is created with them
+
+Of the 2.34M `TypeAlias` records `instantiateTypeAlias` made on Project single, 0.55M ended up on a type: the
+union/intersection (1.12M made, 0.17M kept), indexed-access (0.11M, 5K kept) and object-instantiation (0.83M,
+0.10M kept) paths build the alias before the constructor's cache lookup, and a hit drops it. The constructors that
+look up a cache first (`get_union_type_ex` and its worker / sorted-list part, `get_intersection_type_ex`,
+`get_indexed_access_type_ex` / `_or_undefined`, `get_object_type_instantiation`) now take an `AliasArg`: none, an
+existing alias, or a `PendingTypeAlias` (symbol + instantiated type arguments, instantiated at the same point as
+before) that the cache keys read directly and that is allocated, at most once, when a type is created with it.
+Alias identity (`typesAreSameReference` compares `TypeAlias` pointers) is unchanged: every created type gets the
+one record its call made, as before. Call sites that pass `None` or an existing alias changed mechanically.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before (A5) | 6.341-6.346 (6.346) | 315-316 G |
+| single, after | 6.288-6.290 (6.290, -0.06) | 316-317 G |
+| 4 checkers, before (A5) | 8.516-8.522 (8.517) | 431 G |
+| 4 checkers, after | 8.42-8.47 (8.442, -0.08) | 431-432 G |
+| opt-out single / 4 checkers (go assignment), after | 8.42 / 12.98 | 341 / 518 G |

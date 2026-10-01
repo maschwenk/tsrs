@@ -2115,10 +2115,10 @@ impl Checker {
                 let e = element_types[i];
                 if element_infos[i].flags.intersects(ElementFlags::Variadic) {
                     let number_type = self.number_type;
-                    element_types[i] = self.get_indexed_access_type_or_undefined(e, number_type, AccessFlags::None, None, None).unwrap_or(self.any_type);
+                    element_types[i] = self.get_indexed_access_type_or_undefined(e, number_type, AccessFlags::None, None, AliasArg::None).unwrap_or(self.any_type);
                 }
             }
-            element_type = self.get_union_type_ex(&element_types, UnionReduction::Subtype, None, None);
+            element_type = self.get_union_type_ex(&element_types, UnionReduction::Subtype, AliasArg::None, None);
         } else {
             element_type = if self.strict_null_checks { self.implicit_never_type } else { self.undefined_widening_type };
         }
@@ -2208,7 +2208,7 @@ impl Checker {
                 | (if self.is_generic_object_type(object_type) && !is_this_type_parameter(object_type) { AccessFlags::NoIndexSignatures } else { AccessFlags::None })
         };
         let indexed_access_type =
-            self.get_indexed_access_type_or_undefined(object_type, effective_index_type, access_flags, Some(node), None).unwrap_or(self.error_type);
+            self.get_indexed_access_type_or_undefined(object_type, effective_index_type, access_flags, Some(node), AliasArg::None).unwrap_or(self.error_type);
         let resolved_symbol = self.get_resolved_symbol_or_nil(node);
         let flow_type = self.get_flow_type_of_access_expression(node, resolved_symbol, indexed_access_type, index_expression, check_mode);
         self.check_indexed_access_index_type(flow_type, node)

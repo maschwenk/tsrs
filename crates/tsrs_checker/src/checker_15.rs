@@ -1007,7 +1007,7 @@ impl Checker {
         }
         if t.flags().intersects(TypeFlags::Union) {
             let types: Vec<P<Type>> = t.types().iter().map(|&t| self.instantiate_instantiable_types(t, mapper)).collect();
-            return self.get_union_type_ex(&types, UnionReduction::None, None, None);
+            return self.get_union_type_ex(&types, UnionReduction::None, AliasArg::None, None);
         }
         if t.flags().intersects(TypeFlags::Intersection) {
             let types: Vec<P<Type>> = t.types().iter().map(|&t| self.instantiate_instantiable_types(t, mapper)).collect();

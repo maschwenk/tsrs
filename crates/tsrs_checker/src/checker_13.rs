@@ -25,7 +25,7 @@ fn literal_value_to_string(value: Option<LiteralValue>) -> String {
 
 impl Checker {
     // checker.go:26123
-    pub(crate) fn get_union_type_worker(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: Option<P<TypeAlias>>, origin: Option<P<Type>>) -> P<Type> {
+    pub(crate) fn get_union_type_worker(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> {
         let mut origin = origin;
         let (mut type_set, includes) = self.add_types_to_union(types);
         if union_reduction != UnionReduction::None {
@@ -109,7 +109,7 @@ impl Checker {
 
     // This function assumes the constituent type list is sorted and deduplicated.
     // checker.go:26206
-    pub(crate) fn get_union_type_from_sorted_list(&mut self, types: &[P<Type>], precomputed_object_flags: ObjectFlags, alias: Option<P<TypeAlias>>, origin: Option<P<Type>>) -> P<Type> {
+    pub(crate) fn get_union_type_from_sorted_list(&mut self, types: &[P<Type>], precomputed_object_flags: ObjectFlags, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> {
         if types.is_empty() {
             return self.never_type;
         }
@@ -123,7 +123,7 @@ impl Checker {
         let flags = precomputed_object_flags | self.get_propagating_flags_of_types(types, TypeFlags::Nullable);
         let t = self.new_union_type(flags, types);
         t.as_union_type().origin.set(origin);
-        t.alias.set(alias);
+        t.alias.set(alias.alias());
         if types.len() == 2 && types[0].flags().intersects(TypeFlags::BooleanLiteral) && types[1].flags().intersects(TypeFlags::BooleanLiteral) {
             t.flags.set(t.flags() | TypeFlags::Boolean);
         }
@@ -443,11 +443,11 @@ impl Checker {
     // for intersections of types with signatures can be deterministic.
     // checker.go:26522
     pub(crate) fn get_intersection_type(&mut self, types: &[P<Type>]) -> P<Type> {
-        self.get_intersection_type_ex(types, IntersectionFlags::None, None /*alias*/)
+        self.get_intersection_type_ex(types, IntersectionFlags::None, AliasArg::None /*alias*/)
     }
 
     // checker.go:26526
-    pub(crate) fn get_intersection_type_ex(&mut self, types: &[P<Type>], flags: IntersectionFlags, alias: Option<P<TypeAlias>>) -> P<Type> {
+    pub(crate) fn get_intersection_type_ex(&mut self, types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>) -> P<Type> {
         let mut ordered_types: orderedSet<P<Type>> = orderedSet { values_by_key: None, values: Vec::with_capacity(types.len()) };
         let includes = self.add_types_to_intersection(&mut ordered_types, TypeFlags::empty(), types);
         let mut type_set = ordered_types.values;
@@ -573,11 +573,11 @@ impl Checker {
                         contained_undefined_type = self.missing_type;
                     }
                     self.filter_types(&mut type_set, |_, t| is_not_undefined_type(t));
-                    let intersection = self.get_intersection_type_ex(&type_set, flags, None /*alias*/);
+                    let intersection = self.get_intersection_type_ex(&type_set, flags, AliasArg::None /*alias*/);
                     r = self.get_union_type_ex(&[intersection, contained_undefined_type], UnionReduction::Literal, alias, None /*origin*/);
                 } else if type_set.iter().all(|&t| is_union_with_null(t)) {
                     self.filter_types(&mut type_set, |_, t| is_not_null_type(t));
-                    let intersection = self.get_intersection_type_ex(&type_set, flags, None /*alias*/);
+                    let intersection = self.get_intersection_type_ex(&type_set, flags, AliasArg::None /*alias*/);
                     let null_type = self.null_type;
                     r = self.get_union_type_ex(&[intersection, null_type], UnionReduction::Literal, alias, None /*origin*/);
                 } else if type_set.len() >= 3 && types.len() > 2 {
@@ -586,8 +586,8 @@ impl Checker {
                     // unions of intersections than the full cartesian product (due to some intersections becoming `never`), this can
                     // dramatically reduce the overall work.
                     let middle = type_set.len() / 2;
-                    let left = self.get_intersection_type_ex(&type_set[..middle], flags, None /*alias*/);
-                    let right = self.get_intersection_type_ex(&type_set[middle..], flags, None /*alias*/);
+                    let left = self.get_intersection_type_ex(&type_set[..middle], flags, AliasArg::None /*alias*/);
+                    let right = self.get_intersection_type_ex(&type_set[middle..], flags, AliasArg::None /*alias*/);
                     r = self.get_intersection_type_ex(&[left, right], flags, alias);
                 } else {
                     // We are attempting to construct a type of the form X & (A | B) & (C | D). Transform this into a type of
@@ -609,7 +609,7 @@ impl Checker {
             } else {
                 let propagated = self.get_propagating_flags_of_types(types, TypeFlags::Nullable /*excludeKinds*/);
                 r = self.new_intersection_type(object_flags | propagated, &type_set);
-                r.alias.set(alias);
+                r.alias.set(alias.alias());
             }
             self.intersection_types.insert(key, r);
             result = Some(r);
@@ -799,7 +799,7 @@ impl Checker {
             }
         }
         // Finally replace the first union with the result
-        types[index] = self.get_union_type_from_sorted_list(&result, ObjectFlags::PrimitiveUnion, None /*alias*/, None /*origin*/);
+        types[index] = self.get_union_type_from_sorted_list(&result, ObjectFlags::PrimitiveUnion, AliasArg::None /*alias*/, None /*origin*/);
         (types, true)
     }
 
@@ -861,7 +861,7 @@ impl Checker {
                     n /= length;
                 }
             }
-            let t = self.get_intersection_type_ex(&constituents, flags, None /*alias*/);
+            let t = self.get_intersection_type_ex(&constituents, flags, AliasArg::None /*alias*/);
             if !t.flags().intersects(TypeFlags::Never) {
                 intersections.push(t);
             }
@@ -1051,7 +1051,7 @@ impl Checker {
             }
             // filtering could remove intersections so `ContainsIntersections` might be forwarded "incorrectly"
             // it is purely an optimization hint so there is no harm in accidentally forwarding it
-            return self.get_union_type_from_sorted_list(&filtered, t.object_flags() & (ObjectFlags::PrimitiveUnion | ObjectFlags::ContainsIntersections), None /*alias*/, new_origin);
+            return self.get_union_type_from_sorted_list(&filtered, t.object_flags() & (ObjectFlags::PrimitiveUnion | ObjectFlags::ContainsIntersections), AliasArg::None /*alias*/, new_origin);
         }
         if t.flags().intersects(TypeFlags::Never) || f(self, t) {
             return t;
@@ -1080,7 +1080,7 @@ impl Checker {
             // Remove the target type from the slice.
             let mut filtered: Vec<P<Type>> = types[..i].to_vec();
             filtered.extend_from_slice(&types[i + 1..]);
-            return self.get_union_type_from_sorted_list(&filtered, t.object_flags() & (ObjectFlags::PrimitiveUnion | ObjectFlags::ContainsIntersections), None /*alias*/, None /*origin*/);
+            return self.get_union_type_from_sorted_list(&filtered, t.object_flags() & (ObjectFlags::PrimitiveUnion | ObjectFlags::ContainsIntersections), AliasArg::None /*alias*/, None /*origin*/);
         }
         t
     }
@@ -1226,7 +1226,7 @@ impl Checker {
                 }
             }
         }
-        let result = self.get_union_type_ex(&types, UnionReduction::Literal, None, origin);
+        let result = self.get_union_type_ex(&types, UnionReduction::Literal, AliasArg::None, origin);
         self.properties_types.insert(key, result);
         result
     }
@@ -1441,11 +1441,11 @@ impl Checker {
 
     // checker.go:27393
     pub(crate) fn get_indexed_access_type(&mut self, object_type: P<Type>, index_type: P<Type>) -> P<Type> {
-        self.get_indexed_access_type_ex(object_type, index_type, AccessFlags::None, None, None)
+        self.get_indexed_access_type_ex(object_type, index_type, AccessFlags::None, None, AliasArg::None)
     }
 
     // checker.go:27397
-    pub(crate) fn get_indexed_access_type_ex(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: Option<P<TypeAlias>>) -> P<Type> {
+    pub(crate) fn get_indexed_access_type_ex(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> P<Type> {
         let result = self.get_indexed_access_type_or_undefined(object_type, index_type, access_flags, access_node, alias);
         match result {
             Some(result) => result,
@@ -1454,7 +1454,7 @@ impl Checker {
     }
 
     // checker.go:27405
-    pub(crate) fn get_indexed_access_type_or_undefined(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: Option<P<TypeAlias>>) -> Option<P<Type>> {
+    pub(crate) fn get_indexed_access_type_or_undefined(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> Option<P<Type>> {
         let mut index_type = index_type;
         let mut access_flags = access_flags;
         if object_type == self.wildcard_type || index_type == self.wildcard_type {
@@ -1488,7 +1488,7 @@ impl Checker {
                 return Some(t);
             }
             let t = self.new_indexed_access_type(object_type, index_type, persistent_access_flags);
-            t.alias.set(alias);
+            t.alias.set(alias.alias());
             self.indexed_access_types.insert(key, t);
             return Some(t);
         }
@@ -2190,7 +2190,7 @@ impl Checker {
             let (Some(base_object_type), Some(base_index_type)) = (base_object_type, base_index_type) else {
                 return None;
             };
-            let indexed = self.get_indexed_access_type_or_undefined(base_object_type, base_index_type, ia.access_flags.get(), None, None);
+            let indexed = self.get_indexed_access_type_or_undefined(base_object_type, base_index_type, ia.access_flags.get(), None, AliasArg::None);
             return self.get_next_base_constraint(indexed, stack);
         } else if flags.intersects(TypeFlags::Conditional) {
             if self.conditional_constraint_depth >= 100 {

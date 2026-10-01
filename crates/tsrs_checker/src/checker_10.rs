@@ -567,7 +567,7 @@ impl Checker {
         }
         let mut union_type = self.undefined_type;
         if !prop_types.is_empty() {
-            union_type = self.get_union_type_ex(&prop_types, UnionReduction::Subtype, None, None);
+            union_type = self.get_union_type_ex(&prop_types, UnionReduction::Subtype, AliasArg::None, None);
         }
         self.new_index_info(key_type, union_type, is_readonly, None /*declaration*/, &components)
     }
@@ -1061,11 +1061,11 @@ impl Checker {
             if is_never_returning {
                 fallback_return_type = self.never_type;
             } else if !return_types.is_empty() {
-                return_type = Some(self.get_union_type_ex(&return_types, UnionReduction::Subtype, None, None));
+                return_type = Some(self.get_union_type_ex(&return_types, UnionReduction::Subtype, AliasArg::None, None));
             }
             let (yield_types, next_types) = self.check_and_aggregate_yield_operand_types(fn_, check_mode);
             if !yield_types.is_empty() {
-                yield_type = Some(self.get_union_type_ex(&yield_types, UnionReduction::Subtype, None, None));
+                yield_type = Some(self.get_union_type_ex(&yield_types, UnionReduction::Subtype, AliasArg::None, None));
             }
             if !next_types.is_empty() {
                 next_type = Some(self.get_intersection_type(&next_types));
@@ -1098,7 +1098,7 @@ impl Checker {
                 return return_type;
             }
             // Return a union of the return expression types.
-            return_type = Some(self.get_union_type_ex(&types, UnionReduction::Subtype, None, None));
+            return_type = Some(self.get_union_type_ex(&types, UnionReduction::Subtype, AliasArg::None, None));
         }
         if return_type.is_some() || yield_type.is_some() || next_type.is_some() {
             if let Some(yt) = yield_type {

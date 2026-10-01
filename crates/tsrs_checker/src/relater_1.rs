@@ -751,7 +751,7 @@ impl Checker {
             // Don't elaborate on indexes on generic variables
             return false;
         };
-        let source_prop_type = self.get_indexed_access_type_or_undefined(source, name_type, AccessFlags::None, None, None);
+        let source_prop_type = self.get_indexed_access_type_or_undefined(source, name_type, AccessFlags::None, None, AliasArg::None);
         let Some(mut source_prop_type) = source_prop_type else {
             // Don't elaborate on indexes on generic variables or when types match
             return false;
@@ -859,14 +859,14 @@ impl Checker {
 
     // relater.go:618
     pub(crate) fn get_best_match_indexed_access_type_or_undefined(&mut self, source: P<Type>, target: P<Type>, name_type: P<Type>) -> Option<P<Type>> {
-        let idx = self.get_indexed_access_type_or_undefined(target, name_type, AccessFlags::None, None, None);
+        let idx = self.get_indexed_access_type_or_undefined(target, name_type, AccessFlags::None, None, AliasArg::None);
         if idx.is_some() {
             return idx;
         }
         if target.flags().intersects(TypeFlags::Union) {
             let best = self.get_best_matching_type(source, target, |c, s, t| c.compare_types_assignable_simple(s, t));
             if let Some(best) = best {
-                return self.get_indexed_access_type_or_undefined(best, name_type, AccessFlags::None, None, None);
+                return self.get_indexed_access_type_or_undefined(best, name_type, AccessFlags::None, None, AliasArg::None);
             }
         }
         None
@@ -1696,7 +1696,7 @@ impl Checker {
                     filtered_types.push(t);
                 }
             }
-            let filtered = self.get_union_type_ex(&filtered_types, UnionReduction::None, None, None);
+            let filtered = self.get_union_type_ex(&filtered_types, UnionReduction::None, AliasArg::None, None);
             if !filtered.flags().intersects(TypeFlags::Never) {
                 return filtered;
             }
@@ -2996,7 +2996,7 @@ impl Checker {
                 }
             }
             // The source types were normalized; ensure the result is normalized too.
-            let intersection = self.get_intersection_type_ex(&constraints, IntersectionFlags::NoConstraintReduction, None);
+            let intersection = self.get_intersection_type_ex(&constraints, IntersectionFlags::NoConstraintReduction, AliasArg::None);
             return Some(self.get_normalized_type(intersection, false /*writing*/));
         }
         None

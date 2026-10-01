@@ -1468,7 +1468,7 @@ impl Checker {
         for &t in types {
             finalized_types.push(self.finalize_evolving_array_type(t));
         }
-        let union_type = self.get_union_type_ex(&finalized_types, subtype_reduction, None, None);
+        let union_type = self.get_union_type_ex(&finalized_types, subtype_reduction, AliasArg::None, None);
         let result = self.recombine_unknown_type(union_type);
         let declared_type = f.declared();
         if result != declared_type && (result.flags() & declared_type.flags()).intersects(TypeFlags::Union) && result.as_union_type().types() == declared_type.as_union_type().types() {
@@ -1785,7 +1785,7 @@ impl Checker {
         if element_type.flags().intersects(TypeFlags::Never) {
             return self.auto_array_type;
         } else if element_type.flags().intersects(TypeFlags::Union) {
-            let union_type = self.get_union_type_ex(element_type.types(), UnionReduction::Subtype, None, None);
+            let union_type = self.get_union_type_ex(element_type.types(), UnionReduction::Subtype, AliasArg::None, None);
             return self.create_array_type(union_type);
         }
         self.create_array_type(element_type)
