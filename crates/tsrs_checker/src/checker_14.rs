@@ -2337,7 +2337,7 @@ impl Checker {
                 // in the type. It will just be "__computed", which does not appear in any
                 // SymbolTable.
                 let symbol = self.get_symbol_of_declaration(element).unwrap();
-                // Read-only: no links slot for the 0.96M object literal members on Project that never get any (the
+                // Read-only: no links slot for the 0.96M object literal members on the private monorepo that never get any (the
                 // symbol's id is assigned the same way).
                 let name_type = self.value_symbol_links.try_get(symbol).and_then(|links| links.name_type());
                 return self.get_type_of_property_of_contextual_type_ex(t, symbol.name(), name_type);

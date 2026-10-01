@@ -261,7 +261,7 @@ pub struct SymbolReferenceLinks {
 //
 // - plain (the common case: instantiated symbols and most others): `target`, `mapper`;
 // - synthetic: `containing_type`, `name_type`, for records that set those but never `target` / `mapper` (union and
-//   intersection properties, mapped type members: 2.15M of the 2.5M records on Project that set any of the four
+//   intersection properties, mapped type members: 2.15M of the 2.5M records on the private monorepo that set any of the four
 //   rare fields);
 // - tail: a pointer to `ValueSymbolLinksTail`, which holds all six other fields, for the remaining records (0.35M).
 //
@@ -994,7 +994,7 @@ impl TypeAlias {
 /// The alias argument of the type constructors that look up a cache before they create a type (union,
 /// intersection, indexed access, object type instantiation; Go passes a `*TypeAlias`). `Pending` is an instantiated
 /// alias (Go's `instantiateTypeAlias` result) that is allocated only when a type is created with it: the cache key
-/// needs only its symbol and type arguments, and most calls return a cached type (on Project 1.79M of the 2.34M
+/// needs only its symbol and type arguments, and most calls return a cached type (on the private monorepo 1.79M of the 2.34M
 /// instantiated aliases were dropped that way). A pending alias is allocated at most once, so every type created
 /// with it shares one `TypeAlias`, as before.
 #[derive(Clone, Copy, Default)]
@@ -1722,11 +1722,11 @@ pub struct ConstrainedType {
 // StructuredType (base of all types with members)
 
 // Go's StructuredType embeds ConstrainedType; here the base constraint of a structured type (set for 4% of the 7.6M
-// on Project) is kept in `Checker::structured_type_base_constraints` (`resolved_base_constraint_of`), and
+// on the private monorepo) is kept in `Checker::structured_type_base_constraints` (`resolved_base_constraint_of`), and
 // `try_as_constrained_type()` is None for structured types.
 //
 // The resolved members (Go's five fields) live in a `StructuredMembers` record allocated on the first write: most
-// structured types are never resolved (on Project 4.9M of 7.6M: type references answered by lazy member tables,
+// structured types are never resolved (on the private monorepo 4.9M of 7.6M: type references answered by lazy member tables,
 // unions and intersections whose members nobody asks for), and those now carry one pointer instead of 48 bytes.
 // Reads of an absent record return the zero values (nil members, empty slices, count 0), exactly like reading the
 // unset fields; once allocated, every getter returns exactly what was last set.

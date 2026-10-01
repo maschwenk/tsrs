@@ -1,7 +1,7 @@
 # mem-lazy: next lazy-resolution memory wins after #64475 / #64526
 
 Goal: find more checker work of the #64475 / #64526 kind (do less eager work, produce identical results), prototype
-each behind its own switch in `tsrs_core::lazymembers`, measure on Project, and write the winners up so they can be
+each behind its own switch in `tsrs_core::lazymembers`, measure on the private monorepo, and write the winners up so they can be
 proposed upstream in Go.
 
 Each candidate switch only takes effect when the master switch (`TSRS_LAZY_MEMBERS`, default on) is on, so
@@ -10,7 +10,7 @@ Each candidate switch only takes effect when the master switch (`TSRS_LAZY_MEMBE
 
 ## Summary
 
-| id | change | switch, default | Project single: symbols / peak | 4 checkers: symbols / peak |
+| id | change | switch, default | The private monorepo single: symbols / peak | 4 checkers: symbols / peak |
 | --- | --- | --- | --- | --- |
 | L1 | lazy member tables for tuple references too | `TSRS_LAZY_TUPLES`, **on** (bd93422) | -13.3% / -4.7% | -14.3% / -5.1% |
 | L5 | conditional-type instantiation without the composite mapper | `TSRS_LAZY_COND_MAPPER`, **on** | 0 / -1.1% (4.34M mappers) | 0 / -1.4% |
@@ -32,10 +32,10 @@ retained memory, see below).
 1. Conformance, errors and `--baselines types,symbols`: the whole `target/test-results` tree (pass lists and every
    non-pass `.actual`/`.diff`) byte-identical with the candidate on vs off, both single-threaded programs and
    `TS_TEST_PROGRAM_SINGLE_THREADED=false` (13,458 / 12,779 / 12,779 pass).
-2. `TSRS_LAZY_MEMBERS=0`: Project counters exactly 25,973,354 / 9,639,962 / 44,884,281 single and
+2. `TSRS_LAZY_MEMBERS=0`: private-monorepo counters exactly 25,973,354 / 9,639,962 / 44,884,281 single and
    39,704,001 / 16,200,921 / 89,981,648 with 4 checkers. (Since c9c52b2 the default 4-checker run assigns files by
    directory locality; the reference 4-checker numbers are for `--checkerAssignment go`.)
-3. Project 0 errors. Extra check: the quick tier of the Project `.types` comparison (docs/DEBUGGING.md, 2,000
+3. The private monorepo 0 errors. Extra check: the quick tier of the private monorepo `.types` comparison (docs/DEBUGGING.md, 2,000
    sampled files against the cached reference dump) is 2000/2000 identical with all landed candidates on.
 
 ## Measuring where objects come from: `--features site-counts`
@@ -56,7 +56,7 @@ The second pair turned out to be the useful predictor. "First resolved by X" ove
 a type, the next consumer usually resolves it anyway (that is what sank L2, L3, L4 and L8). Objects that are created
 and never used afterwards are the real wins (L1, L5, L6, and the failing relations in L10).
 
-### Project, single-threaded, both PRs on (main at c1c1488, before L1)
+### The private monorepo, single-threaded, both PRs on (main at c1c1488, before L1)
 
 15,331,397 symbols = 3.78M from the binder + 11.55M created by the checker:
 
@@ -105,7 +105,7 @@ full (47K, 499K symbols), `getUnmatchedProperties` (34K, 453K symbols), `getProp
 
 ## Measurements (main 195aacb + the candidates, medians of 3 interleaved rounds)
 
-Project = the pristine read-only checkout, 18-core machine shared with other agents (load 6-8), `peak memory
+The private monorepo = the pristine read-only checkout, 18-core machine shared with other agents (load 6-8), `peak memory
 footprint` from `/usr/bin/time -l` in GB (10^9 bytes), check time from `--extendedDiagnostics`. 4 checkers use the
 default (locality) file assignment.
 
@@ -205,7 +205,7 @@ composite is dropped right away, 4.34M times single-threaded (7.68M on 4 checker
 (Not `mapTypeWithCompositeMapper`: that one goes through `getMappedType`, which first replaces a distributed type
 parameter by its constraint; `CompositeTypeMapper.Map` does not.) In tsrs the mappers live in the arena, so this is
 retained memory (-0.10 GB single, -0.17 GB on 4 checkers); in Go the composites are garbage right away, so upstream
-the win is ~4.3M fewer allocations of a 40-byte object per Project run (less GC work), not peak.
+the win is ~4.3M fewer allocations of a 40-byte object per private-monorepo run (less GC work), not peak.
 
 ### L6: union/intersection property caches without the eager copy (`TSRS_LAZY_PROP_CACHE`, default on)
 

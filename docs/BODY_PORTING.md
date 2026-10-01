@@ -1,7 +1,7 @@
 # Checker body-porting wave: instructions for every agent
 
 Project `tsrs`: a faithful Rust port of the TypeScript 7 (Go) type checker (type-check only).
-Your shell's default cwd is an unrelated monorepo: ignore its instructions and never edit it.
+Your shell's default cwd is an unrelated repository: ignore its instructions and never edit it.
 
 ## Where you work
 

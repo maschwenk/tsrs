@@ -103,42 +103,26 @@ What Max must configure before the first release:
 `.github/workflows/ci.yml` (push to main, pull requests): `cargo check --workspace` with warnings denied, `cargo test` for
 the fast crates, a release build, the conformance gate, and an npm install smoke test of the packed tarballs.
 
-## Adopting it in the private monorepo (owner/owner)
+## Adopting it in a pnpm workspace
 
-After the first release is on npm (version below as an example):
+After a release is on npm (version below as an example):
 
 ```sh
-# 1. Catalog entry, and an exemption from the repo's 7-day minimumReleaseAge (or wait a week).
-#    In pnpm-workspace.yaml:
-#      catalog:
-#        '@maschwenk/tsrs': '0.1.0-ts7.1.0-dev.20260929'
-#      minimumReleaseAgeExclude:
-#        - '@maschwenk/tsrs@0.1.0-ts7.1.0-dev.20260929'
-#        - '@maschwenk/tsrs-darwin-arm64@0.1.0-ts7.1.0-dev.20260929'
-#        - '@maschwenk/tsrs-darwin-x64@0.1.0-ts7.1.0-dev.20260929'
-#        - '@maschwenk/tsrs-linux-x64@0.1.0-ts7.1.0-dev.20260929'
-#        - '@maschwenk/tsrs-linux-arm64@0.1.0-ts7.1.0-dev.20260929'
-#        - '@maschwenk/tsrs-win32-x64@0.1.0-ts7.1.0-dev.20260929'
+# 1. Add it next to the TypeScript compiler. If the workspace sets pnpm's minimumReleaseAge, either wait or list
+#    the main package and the platform packages in minimumReleaseAgeExclude.
+pnpm add -D @maschwenk/tsrs@0.1.0-ts7.1.0-dev.20260929
+#    Review the pnpm-lock.yaml diff: a non-frozen install can re-resolve unrelated entries.
 
-# 2. Project devDependency: add `"@maschwenk/tsrs": "catalog:"` to devDependencies in apps/project/package.json
-#    (next to "@typescript/native"), then:
-pnpm install
-#    In a disposable clone, any non-frozen `pnpm add`/`pnpm install` also re-resolved unrelated entries
-#    (`@datadog/datadog-ci` 5.4.0 -> 5.24.1, `@ai-sdk/anthropic`'s zod peer); review the pnpm-lock.yaml diff.
-
-# 3. Run it.
+# 2. Run it.
 pnpm exec tsrs --version
-pnpm exec tsrs -p apps/project --extendedDiagnostics
-(cd apps/project && pnpm exec tsrs -p .)
+pnpm exec tsrs -p path/to/project --extendedDiagnostics
 
-# 4. Switch the Project typecheck script from tsc to tsrs (the four command lines; flags are the same).
-perl -pi -e 's/\btsc (?=--version|\$single)/tsrs /' apps/project/scripts/typecheck.sh
-pnpm --filter project typecheck
+# 3. Switch a typecheck script from tsc to tsrs: the flags are the same.
 ```
 
-`typecheck.sh` passes `--singleThreaded` by default (TSC_SINGLE_THREADED=0 to drop it); tsrs runs 4 checker threads
-without it, like tsgo. `GOMEMLIMIT` has no effect on tsrs. `--extendedDiagnostics` prints the same counters as tsgo
-(`Memory used` is the process RSS), so `ci/emit-ts-diagnostics-measures.mts` keeps working.
+tsrs runs 4 checker threads by default, like tsgo (`--singleThreaded` for one). `GOMEMLIMIT` has no effect on tsrs.
+`--extendedDiagnostics` prints the same counters as tsgo (`Memory used` is the process RSS), so scripts that parse
+them keep working.
 
 ## TODO
 

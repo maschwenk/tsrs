@@ -67,7 +67,7 @@ non-generic mapped types; no observable difference anywhere below).
 
 ## Evidence
 
-Machine: 18 cores, 128 GB, other load ~6 (desktop apps). Project = the pristine read-only checkout
+Machine: 18 cores, 128 GB, other load ~6 (desktop apps). The private monorepo = the pristine read-only checkout
 (37,942 files). Every run: 0 errors. Medians of 3 back-to-back runs (off/on interleaved per round); peak = `peak
 memory footprint` from `/usr/bin/time -l`; check/total from `--extendedDiagnostics`, wall = `real`. Go runs use
 `--incremental false` (see DEBUGGING.md). `tsgo-pr-a` / `tsgo-pr-b` are tsgo at b85298b6 with #64475 / #64475+#64526
@@ -118,7 +118,7 @@ Go peak: -15% / -17% from #64475, -23% / -26% with both, the same shape as tsrs 
 (19.1 -> 15.3 GiB, -20%, 4 checkers). Go check time on 4 checkers: -3% / -8%; single-threaded #64475 alone was not
 faster in these three runs (GC work is a larger share there; noisy).
 
-### Per-path counts (tsrs, Project, both PRs; single / 4 checkers)
+### Per-path counts (tsrs, the private monorepo, both PRs; single / 4 checkers)
 
 | counter | single | 4 checkers |
 | --- | --- | --- |

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Regenerate tools/project-types-sample.txt: ~2,000 Project files for `tsrs-test types-dump --sample`.
+"""Write a ~2,000-file sample of a large project for `tsrs-test types-dump --sample`.
 
-  project-types-sample.py <project-dir> > tools/project-types-sample.txt
+  project-types-sample.py <project-dir> > target/project-types-sample.txt
+
+The list names files of the measured (private) project, so it is not committed.
 
 Deterministic (sorted paths, fixed strides). Over-represents the shapes that stress the checker: zod schemas
 (heaviest by `z.` call count first), ORM entities, Temporal workflows, router endpoints; plus a spread of the rest.
-Paths are relative to the Project tsconfig directory, as in the types-dump manifests.
+Paths are relative to the project's tsconfig directory, as in the types-dump manifests.
 """
 import os
 import re
@@ -52,7 +54,7 @@ def main():
         for f in picked:
             seen.add(f)
             chosen.append((name, f))
-    print("# tsrs-test types-dump --sample list for apps/project; regenerate with tools/project-types-sample.py")
+    print("# tsrs-test types-dump --sample list for " + os.path.basename(os.path.abspath(root)) + "; regenerate with tools/project-types-sample.py")
     print("# groups: " + ", ".join(f"{name} {sum(1 for g, _ in chosen if g == name)}" for name, _ in QUOTAS))
     for f in sorted(f for _, f in chosen):
         print(f)

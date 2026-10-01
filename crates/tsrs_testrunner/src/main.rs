@@ -48,7 +48,7 @@ const USAGE: &str = "usage:
                                       the .types/.symbols walk over every non-node_modules, non-lib file of a project
                                       (single-threaded, like tools/oracle/project-types): <out>/manifest.<kind>
                                       (hash, lines, path per file) and <out>/<kind>/<path>.<kind>; --sample walks only
-                                      the listed files (e.g. tools/project-types-sample.txt), in program order
+                                      the listed files (e.g. from tools/project-types-sample.py), in program order
   --syntax-only (any command): no checker; only config/program/syntactic diagnostics; results in target/test-results-syntax
                 (implied when built without the `checker` feature)
 dev options (any command): --oracle <diags.jsonl> render Go-captured diagnostics instead of compiling;

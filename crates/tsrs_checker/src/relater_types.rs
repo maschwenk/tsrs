@@ -124,7 +124,7 @@ pub struct Relation {
 pub(crate) const RELATION_RESULT_BITS: u32 = 6;
 
 /// A relation cache key. Go hashes the key bytes of `getRelationKey` to a 128-bit `CacheHashKey`. Almost every key
-/// (99.7% on Project) is the simple form `'s', source id, target id, intersection state`, which is a triple of
+/// (99.7% on the private monorepo) is the simple form `'s', source id, target id, intersection state`, which is a triple of
 /// small numbers: when the ids are below 2^28 and the state below 2^2 it is packed into 58 bits as `Pair` (an
 /// injective mapping, no hashing). Every other key (the `'g'` form of generic references, larger ids) is
 /// `Hashed`, the same 128-bit hash Go uses. The two forms never denote the same Go key, since the simple form only

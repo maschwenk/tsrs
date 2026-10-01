@@ -326,7 +326,7 @@ def main() -> None:
         "date": now.strftime("%Y-%m-%d %H:%M UTC"),
         "machine": machine_info(args.local, args.label),
         "tsrs": {"commit": commit, "dirty": dirty, "version": tsrs_version},
-        "tsgo": {"version": cfg["tsgo"]["version"], "binary": str(tsgo)},
+        "tsgo": {"version": cfg["tsgo"]["version"], "binary": str(tsgo).replace(str(Path.home()), "~")},
         "suite": cfg["suite"],
         "reference": ref_cfg,
         "reps": args.reps,

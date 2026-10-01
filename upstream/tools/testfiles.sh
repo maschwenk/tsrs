@@ -1,7 +1,7 @@
 #!/bin/bash
 # Symbols/types/instantiations on the PRs' tests and the new tests: tsgo builds vs tsrs switch settings.
 # BIN: directory with the ref-base / ref-prs / ref-L5 tsgo builds (see ../README.md); TF: directory holding the five test files.
-B=${BIN:?set BIN}; R=${TSRS:-$TSRS_WORK/wt/upstream-patches/target/release/tsrs}
+B=${BIN:?set BIN}; R=${TSRS:?set TSRS to a tsrs release binary}
 cd ${TF:?set TF}
 OFF="TSRS_LAZY_TUPLES=0 TSRS_LAZY_EMPTY=0 TSRS_LAZY_UNMATCHED=0 TSRS_LAZY_PROP_CACHE=0 TSRS_LAZY_COND_MAPPER=0"
 c(){ "$@" $args 2>&1 | awk '/^Symbols:/{s=$2}/^Types:/{t=$2}/^Instantiations:/{i=$2}END{printf "%s/%s/%s", s,t,i}'; }

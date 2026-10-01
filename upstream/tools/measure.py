@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run tsgo / tsrs on Project one process at a time and append one JSON line per run.
+"""Run tsgo / tsrs on a large project (PROJECT, a tsconfig directory) one process at a time and append one JSON line per run.
 
 usage: measure.py OUT.jsonl ROUNDS MODE[,MODE] LABEL=BIN[:ENV=V;ENV=V] ...
 MODE: single | multi (4 checkers; tsrs gets --checkerAssignment go)
@@ -7,7 +7,7 @@ Runs are interleaved per round (label order within a round).
 """
 import json, os, re, subprocess, sys, time
 
-PROJECT = "$PRIVATE_PROJECT_ROOT/apps/project"
+PROJECT = os.environ.get("PROJECT") or sys.exit("set PROJECT to the tsconfig directory to measure")
 SCR = os.environ.get("MEASURE_CWD", os.path.dirname(os.path.abspath(__file__)))  # cwd for the runs (nothing is written there)
 
 out, rounds, modes = sys.argv[1], int(sys.argv[2]), sys.argv[3].split(",")

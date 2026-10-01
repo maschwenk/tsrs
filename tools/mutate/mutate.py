@@ -8,11 +8,12 @@ copy of a real project.
   mutate.py restore                           restore every file a batch may have left mutated
   mutate.py summary                           table over all batches
 
-Environment (defaults fit the fix-project setup):
-  MUT_CLONE     project dir inside the disposable clone (files are mutated here)
-  MUT_PRISTINE  the same project dir in the read-only original (files are restored from here)
-  MUT_OUT       output directory for batches
-  MUT_REF / MUT_OURS  compiler binaries
+Environment:
+  MUT_CLONE     project dir inside the disposable clone (files are mutated here; required)
+  MUT_PRISTINE  the same project dir in the read-only original (files are restored from here; required)
+  MUT_OUT       output directory for batches (default <repo>/target/scratch/mutate)
+  MUT_REF / MUT_OURS  compiler binaries (default $TSRS_WORK/bin/tsgo-ref, <repo>/target/release/tsrs)
+  TSRS_WORK     directory holding the checkouts and bin/ (default ~/tsrs-work)
 """
 
 import argparse
@@ -32,13 +33,11 @@ from tslex import LexError  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-CLONE = os.environ.get("MUT_CLONE", "$TSRS_WORK/project-clone/apps/project")
-PRISTINE = os.environ.get(
-    "MUT_PRISTINE",
-    "$PRIVATE_PROJECT_ROOT/apps/project",
-)
-OUT = os.environ.get("MUT_OUT", os.path.join(REPO, "target/scratch/fix-project/mutate"))
-REF = os.environ.get("MUT_REF", "$TSRS_WORK/bin/tsgo-ref")
+WORK = os.environ.get("TSRS_WORK", os.path.expanduser("~/tsrs-work"))
+CLONE = os.environ.get("MUT_CLONE", "")
+PRISTINE = os.environ.get("MUT_PRISTINE", "")
+OUT = os.environ.get("MUT_OUT", os.path.join(REPO, "target/scratch/mutate"))
+REF = os.environ.get("MUT_REF", os.path.join(WORK, "bin/tsgo-ref"))
 OURS = os.environ.get("MUT_OURS", os.path.join(REPO, "target/release/tsrs"))
 
 HEAVY_PATH = re.compile(r"orm/entities|epositor|[Ww]orkflow|[Ss]chema|/router/|[Rr]oute|[Ee]ndpoint|/temporal/|[Cc]ontract|/activities/")
@@ -467,6 +466,8 @@ def cmd_summary(_a):
 
 
 def main():
+    if not CLONE or not PRISTINE:
+        sys.exit("set MUT_CLONE and MUT_PRISTINE (see the module docstring)")
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("batch")

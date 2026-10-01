@@ -1,4 +1,4 @@
-# perf-memory: peak memory on Project
+# perf-memory: peak memory on the private monorepo
 
 Targets (Go reference at the same checker count): 4 checkers <= 25 GB, `--singleThreaded` <= 17 GB.
 Acceptance per change: `--extendedDiagnostics` counters identical, conformance pass lists identical (errors,
@@ -19,7 +19,7 @@ Compiled out otherwise (`#[cfg_attr(feature, track_caller)]`, the counters are `
   check instead of 27 s) but fine for a profile run.
 - `TSRS_ALLOC_PROFILE_TOP` / `TSRS_HEAP_PROFILE_TOP` set N for the top-N tables. Output goes to stderr at exit.
 
-## Project, single-threaded, before (main at 5ca48f3)
+## The private monorepo, single-threaded, before (main at 5ca48f3)
 
 Peak footprint 19.53 GB. Arena: 13.1 GB requested (16.4 GB in chunks: bumpalo doubles chunk sizes, so the last
 8 GB chunk is partly untouched and not resident). Rust heap outside the arena: ~2.5 GB live (link-store hash maps,
@@ -97,7 +97,7 @@ Top live heap stacks (sampled, outside the arena): `SymbolArenaLinkStore::get` h
    second map). Ids are still assigned by `get_node_id`/`get_symbol_id` on every access, in the same order.
    -460 MB single, -940 MB on four checkers.
 
-## Project, single-threaded, after (3fe4280)
+## The private monorepo, single-threaded, after (3fe4280)
 
 Peak footprint 15.35 GB (Go 16.7 GB); 4 checkers 23.35 GB (Go 24.4 GB). Arena requested 9.57 GB (was 13.1 GB),
 heap outside the arena ~4.27 GB live (was ~4.7 GB).

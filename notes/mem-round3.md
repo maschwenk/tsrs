@@ -8,9 +8,9 @@ Gates for every step: the suite (errors and `--baselines types,symbols`) byte-id
 `target/test-results` trees, in the default mode, with `TSRS_LAZY_MEMBERS=0`, and with
 `TS_TEST_PROGRAM_SINGLE_THREADED=false`; opt-out counters 25,973,354 / 9,639,962 / 44,884,281 single and
 39,704,001 / 16,200,921 / 89,981,648 with `--checkers 4 --checkerAssignment go`; default counters unchanged
-(12,811,032 / 9,630,120 / 44,820,708 single, 16,549,988 / 13,788,912 / 76,888,800 on 4 checkers); Project 0 errors.
+(12,811,032 / 9,630,120 / 44,820,708 single, 16,549,988 / 13,788,912 / 76,888,800 on 4 checkers); the private monorepo 0 errors.
 
-Measurement: `/usr/bin/time -l` on the pristine Project checkout, rounds interleaved, medians of 3, "GiB" = peak
+Measurement: `/usr/bin/time -l` on the pristine private-monorepo checkout, rounds interleaved, medians of 3, "GiB" = peak
 memory footprint / 2^30. The machine was shared with two other agents (load 8 to 60), so wall and check times are
 noise; instructions retired are the CPU-work measure.
 
@@ -78,7 +78,7 @@ alias each other: Go's `'s'` and `'g'` byte strings differ, and a simple key is 
 
 ### A3. AST node header 32 -> 24 bytes
 
-23.0M nodes on Project (the AST is shared by all checkers). The header held the kind (`u16`), the data tag (`u8`),
+23.0M nodes on the private monorepo (the AST is shared by all checkers). The header held the kind (`u16`), the data tag (`u8`),
 flags, the range, the parent pointer and a 64-bit id, 32 bytes with padding. Now the kind (9 bits), the data tag
 (8 bits) and the parent (address / 8 in 45 bits: nodes are 8-aligned and user-space addresses are below 2^48;
 asserted when a parent is set) share one word, and the id is stored in 32 bits like symbol ids (a 64-bit counter,
@@ -99,7 +99,7 @@ file), as before.
 
 ### A4. Symbol table entries 16 -> 8 bytes
 
-Counted once (capacity deltas of every `SymbolMap`): 465 MB of entry capacity and 74 MB of hash index on Project
+Counted once (capacity deltas of every `SymbolMap`): 465 MB of entry capacity and 74 MB of hash index on the private monorepo
 single, 19.7M inserts. An entry was (symbol pointer, 32-bit key hash, 32-bit key length). It is now one word: the
 symbol's address / 8 in 45 bits (same platform assumption and provenance handling as A3), an odd-key flag, the
 key length capped at 63 (6 bits) and 12 bits of the key hash. Linear scans (tables up to 16 entries) still compare
@@ -135,7 +135,7 @@ allocates the slot with its page either way, so this is tsrs-only.
 
 ### A6. Instantiated type aliases allocated only when a type is created with them
 
-Of the 2.34M `TypeAlias` records `instantiateTypeAlias` made on Project single, 0.55M ended up on a type: the
+Of the 2.34M `TypeAlias` records `instantiateTypeAlias` made on the private monorepo single, 0.55M ended up on a type: the
 union/intersection (1.12M made, 0.17M kept), indexed-access (0.11M, 5K kept) and object-instantiation (0.83M,
 0.10M kept) paths build the alias before the constructor's cache lookup, and a hit drops it. The constructors that
 look up a cache first (`get_union_type_ex` and its worker / sorted-list part, `get_intersection_type_ex`,
@@ -158,7 +158,7 @@ one record its call made, as before. Call sites that pass `None` or an existing 
 Same conventions as notes/mem-lazy.md: every candidate has a `TSRS_LAZY_*` switch in `tsrs_core::lazymembers`
 that only acts when the master switch is on, so `TSRS_LAZY_MEMBERS=0` stays reference-identical.
 
-### Attribution (Project single, default mode, `--features site-counts`)
+### Attribution (the private monorepo single, default mode, `--features site-counts`)
 
 Types (9.63M) by creating call, with `track_caller` added (locally, not committed) through the union, intersection
 and reference constructors so each row names the code that asked:
@@ -192,7 +192,7 @@ throwaway instrumentation: of the eagerly typed properties, 159K are ever read t
 unread ones made 339K new intersection types (541K properties) and 25K new unions (67K properties). Deferring the
 two-constituent case as well (`len > 2 || len == 2`) gave 9,630,120 -> 9,275,217 types (-3.7%) but peak only
 6.289 -> 6.275 GiB (the deferred-symbol links and constituent lists cost nearly what the types did), and it changed
-results: Project reports TS2578 (unused `@ts-expect-error`) in `handler.test.ts`, because code that
+results: the private monorepo reports TS2578 (unused `@ts-expect-error`) in one test file, because code that
 reads `links.resolvedType` directly (e.g. `isSymbolUnaffectedByInstantiation`) and the deferred-type paths behave
 differently. Not pursued.
 
@@ -201,8 +201,8 @@ differently. Not pursued.
 Go's `newInferenceContextWorker` creates `context.mapper` and `context.nonFixingMapper` with every context. Now
 `InferenceContext::mapper()` / `non_fixing_mapper()` create them on the first call (once, so the identity that
 `findActiveMapper` and `compareTypeMappers` see is stable; nothing else about a mapper is observable). Of 1.43M
-contexts on Project, 0.93M ever use the non-fixing mapper and 0.80M the fixing one: inference mappers 2.86M ->
-1.73M. Upstream this saves the same 1.13M allocations per Project check (Go: allocation/GC work, not retained
+contexts on the private monorepo, 0.93M ever use the non-fixing mapper and 0.80M the fixing one: inference mappers 2.86M ->
+1.73M. Upstream this saves the same 1.13M allocations per private-monorepo check (Go: allocation/GC work, not retained
 memory).
 
 ```go
@@ -234,7 +234,7 @@ Gates: suite trees identical in all three modes, counters unchanged (mappers are
 
 ### A7. Reference instantiation tables store only the references
 
-After A1-A6 the instantiation caches are the largest heap item (Project 4 checkers: conditional 135 MB, references
+After A1-A6 the instantiation caches are the largest heap item (the private monorepo 4 checkers: conditional 135 MB, references
 112 MB, object types 99 MB). For generic class, interface and tuple targets the map is keyed by
 `getTypeListKey(typeArguments)` and every value is a non-deferred reference whose `resolved_type_arguments` are
 exactly that list (the target itself for its type parameters) and never change. `InterfaceType.instantiations` is
@@ -289,7 +289,7 @@ pay 48 bytes for the tail instead of 32.
 ### A10. Pointer-keyed link stores: 12-byte slots, values in chunks
 
 Go's `core.LinkStore` is `map[K]*V`; ours was `FxHashMap<P<K>, P<V>>` with each value a separate arena
-allocation. Sizes at exit on Project single (entries / table slots): signature links 1.47M / 1.84M, mapped-symbol
+allocation. Sizes at exit on the private monorepo single (entries / table slots): signature links 1.47M / 1.84M, mapped-symbol
 links 1.14M / 1.84M, type-node links 0.87M / 0.92M, symbol-reference links 0.68M / 0.92M, members-and-exports
 0.27M, node links 0.24M, alias links 0.20M, 19 smaller stores; 5.1M links. Ids are not an option here (Go assigns
 none for these keys, and node ids are observable). A slot is now the key address plus the value's `u32` index
@@ -307,7 +307,7 @@ a miss and bounds-checked the chunk access retired +0.6% instructions; this one 
 
 ### A11. Symbol table header 32 -> 24 bytes
 
-3.49M `SymbolTable`s on Project single (arena, 32 bytes each: a `Vec` of entries plus the boxed index/odd-key
+3.49M `SymbolTable`s on the private monorepo single (arena, 32 bytes each: a `Vec` of entries plus the boxed index/odd-key
 extra). The entries are now an `EntryVec`: pointer plus `u32` length and capacity, same growth as `Vec` (`push`
 doubles from 4, `reserve_exact` adds exactly, `clone` allocates the length). `SymbolMap` 24 bytes.
 

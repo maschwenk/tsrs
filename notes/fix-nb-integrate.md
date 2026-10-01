@@ -10,7 +10,7 @@
   `declarations().clone()` in the node-builder files (now `&'static [P<Node>]`).
 - First full run: **13,398 pass / 2 codes / 62 fail / 0 timeout / 0 crash** (main: 10,519 / 2,876 / 67 / 0 / 0), no
   previous pass lost. Landed as a merge on main (657bc02).
-- Project counters now equal tsgo-ref exactly (single-threaded and 4 checkers), 0 errors; peak memory is unchanged
+- private-monorepo counters now equal tsgo-ref exactly (single-threaded and 4 checkers), 0 errors; peak memory is unchanged
   versus main (19.5 GB vs 19.4 GB single-threaded, same machine, same hour).
 
 ## Nil children audit

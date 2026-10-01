@@ -8,7 +8,7 @@
 # and the diagnostic count. Differing files are listed in <out>/<project>/diff.<kind>.
 ROOT=$1; LIST=$2; RS=$3; OUT=$4
 TOOLS=$(cd "$(dirname "$0")" && pwd)
-ORACLE=${ORACLE:-$TSRS_WORK/bin/tsrs-oracle-project-types}
+ORACLE=${ORACLE:-${TSRS_WORK:-$HOME/tsrs-work}/bin/tsrs-oracle-project-types}
 mkdir -p "$OUT"
 while read -r p; do
   n=$(basename "$p"); o=$OUT/$n

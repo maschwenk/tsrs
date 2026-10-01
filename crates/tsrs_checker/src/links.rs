@@ -5,7 +5,7 @@ use crate::*;
 ///
 /// Keyed by the key's address like Go's `map[K]*V`. A slot is the key address and the value's index (12 bytes,
 /// 4-aligned) instead of two pointers, and the values live in fixed-size arena chunks in first-access order (stable
-/// addresses, as before). 5.1M links in 26 stores on Project single.
+/// addresses, as before). 5.1M links in 26 stores on the private monorepo single.
 pub struct LinkStore<K: 'static, V: 'static> {
     slots: hashbrown::HashTable<LinkSlot>,
     chunks: Vec<&'static [V]>,
@@ -93,7 +93,7 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
 
 /// Links keyed by a node/symbol id (Go `PagedLinkStore`-backed stores). Like Go, the id is looked up in pages of
 /// `ID_PAGE` consecutive ids (4 bytes per id: slot + 1, 0 = no links), found by indexing a vector by page number
-/// (8 bytes per page of the id space below the highest id seen, ~0.2 MB for Project' 26M symbol ids; pages without
+/// (8 bytes per page of the id space below the highest id seen, ~0.2 MB for the private monorepo's 26M symbol ids; pages without
 /// links stay unallocated). The values live in fixed-size chunks in the arena (stable addresses, `P<V>` handed out
 /// as before), in first-access order.
 pub struct IdLinkStore<V: 'static> {

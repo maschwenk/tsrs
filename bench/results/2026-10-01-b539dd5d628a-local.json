@@ -14,7 +14,7 @@
  },
  "tsgo": {
   "version": "7.0.2",
-  "binary": "$TSRS_WORK/bench-cache/tsgo/7.0.2/node_modules/@typescript/typescript-darwin-arm64/lib/tsc"
+  "binary": "~/Developer/tsrs-work/bench-cache/tsgo/7.0.2/node_modules/@typescript/typescript-darwin-arm64/lib/tsc"
  },
  "suite": {
   "repo": "https://github.com/microsoft/typescript-benchmarking.git",

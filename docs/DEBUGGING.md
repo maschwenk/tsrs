@@ -5,6 +5,11 @@ Several agents fix different failure clusters at the same time. This is how they
 
 ## Your worktree
 
+`$TSRS_WORK` below is the directory that holds the main checkout (`$TSRS_WORK/tsrs`), the agent worktrees
+(`$TSRS_WORK/wt/`) and the reference binaries (`$TSRS_WORK/bin/`). `$PRIVATE_PROJECT` is the tsconfig directory of
+the large project used for the end-to-end checks: a 38k-file private TypeScript monorepo (5.9M lines), not part of
+this repository.
+
 - You get a private git worktree `$TSRS_WORK/wt/<agent-name>` on branch `fix/<agent-name>`,
   created from `origin/main`. Work only there (never in the main checkout `$TSRS_WORK/tsrs`
   or another agent's worktree). `ts-ref` inside it is a symlink to the Go reference checkout.
@@ -59,7 +64,7 @@ do not depend on it, but multi-checker symbol/type/instantiation counters and pe
 against `tsgo-ref` with `--checkerAssignment go` (or `TSRS_CHECKER_ASSIGNMENT=go`). Single-threaded runs are
 unaffected.
 
-## Project `.types` / `.symbols` equivalence against the cached reference
+## `.types` / `.symbols` equivalence on the private monorepo against the cached reference
 
 Running the Go oracle (`tools/oracle/project-types`) takes hours per side. Cache its equivalent instead (not
 populated yet; the first full opt-out run creates it):
@@ -67,24 +72,24 @@ populated yet; the first full opt-out run creates it):
 per file, plus the `#counts` line), produced by `tsrs-test types-dump --mode <kind> --text none` in the opt-out
 mode (`TSRS_LAZY_MEMBERS=0`; ~30 min and ~122 GB peak for `types`). That mode's `.types` walk was verified identical to the Go oracle on all 28,213 files
 (notes/fix-project-types.md); `.symbols` only on the first 5,558 files (the Go run was stopped). Reference commit b85298b6 (nightly
-7.1.0-dev.20260929); project: the pristine Project checkout
-`$PRIVATE_PROJECT_ROOT/apps/project`
+7.1.0-dev.20260929); project: the pristine private-monorepo checkout
+`$PRIVATE_PROJECT`
 (read-only; never write there — run `tsgo-ref` on it only with `--incremental false`, or it rewrites
 `dist/tsconfig.tsbuildinfo` and later runs skip checking). If either changes, the cache is stale.
 
 - Quick tier (minutes): `tsrs-test types-dump -p tsconfig.json --out <dir> --mode types --text none --sample
-  <repo>/tools/project-types-sample.txt` (run from the Project directory), then `tools/project-types-compare.py
+  <repo>/target/project-types-sample.txt` (run from `$PRIVATE_PROJECT`), then `tools/project-types-compare.py
   $TSRS_WORK/project-ref-dump/types <dir> --subset`. The sample is ~2,000 files
   weighted toward zod schemas, ORM entities, workflows and router endpoints (`tools/project-types-sample.py`
-  regenerates it). The checker has fully checked the program before the walk either way, but the walk itself can
+  writes it; the list names private files, so it is not committed). The checker has fully checked the program before the walk either way, but the walk itself can
   create types and assign symbol ids, so a file that differs only in a sample run should be confirmed with a full run.
 - Full tier (pre-landing for checker changes that can affect printing; ~40 min, up to ~125 GB peak, one at a time):
   the same without `--sample` and without `--subset`.
 
-## The pristine Project checkout is read-only
+## The pristine private-monorepo checkout is read-only
 
-`$PRIVATE_PROJECT_ROOT/apps/project`
-belongs to Max's monorepo worktree. Two agents have already written into it by accident (a `tsbuildinfo` from a `tsgo-ref`
+`$PRIVATE_PROJECT`
+belongs to a working checkout of the private monorepo. Two agents have already written into it by accident (a `tsbuildinfo` from a `tsgo-ref`
 run without `--incremental false`; a bench script's results file). Rules: run only `tsrs` there, with its cwd elsewhere
 and every output path pointing into your worktree's `target/`; run `tsgo-ref` there only with `--noEmit --incremental false`;
 anything that writes (mutation testing, scripts that create files) uses the disposable clone at

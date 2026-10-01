@@ -16,7 +16,10 @@ Conformance (`tsrs-test run --suite all`, 15,197 variants, 1,735 skipped as unsu
 | timeout | 1 | `compiler/intersectionConstructorReductionCrash` |
 | crash | 0 | |
 
-Project (`tsrs -p apps/project`, release build, single checker thread, placeholder printer), against
+"The private monorepo" throughout this file is a 38k-file private TypeScript monorepo (5.9M lines) used as the
+end-to-end test project; its source is not part of this repository, only the measurements.
+
+The private monorepo (`tsrs -p <project>`, release build, single checker thread, placeholder printer), against
 `tsgo-ref --singleThreaded` at the same commit:
 
 | | tsrs | tsgo (single-threaded) |
@@ -42,8 +45,8 @@ Of the 67 fails: 59 are declaration diagnostics (TS2883/TS4xxx/TS9xxx… from th
 2 (`mutuallyRecursiveInference`, `recursiveMappedTypes`) depend on the Go test harness running JS emit before collecting
 diagnostics (the `tsgo` CLI itself reports what we report).
 
-Project error injection (same 15 errors appended to 3 files in a clone): identical (file, line, col, code) sets and
-exit code versus the reference. A mutation-testing campaign is in progress (`tools/mutate`, `notes/fix-project.md`).
+The private monorepo error injection (same 15 errors appended to 3 files in a clone): identical (file, line, col, code) sets and
+exit code versus the reference. A mutation-testing campaign is in progress (`tools/mutate`, `notes/fix-mutation.md`).
 
 In flight: node-builder body wave (branches `body/nb-1..6`) replacing the placeholder type printer.
 
@@ -55,7 +58,7 @@ assignment, one OS thread per checker; the conformance harness stays single-thre
 PORTING.md "Threading". Conformance with parallel programs is identical to single-threaded (same pass list; every
 non-passing output equal modulo placeholder type/symbol ids).
 
-Project (release, 18-core machine shared with other agents, one run each unless noted; peak = `peak memory footprint`):
+The private monorepo (release, 18-core machine shared with other agents, one run each unless noted; peak = `peak memory footprint`):
 
 | | wall | check time | peak memory | symbols | types |
 | --- | --- | --- | --- | --- | --- |
@@ -82,7 +85,7 @@ harness runs JS emit, whose const-enum inliner type-checks every property access
 errors are first reported from a different current node; the `tsgo` CLI reports what we report. Details and the
 clustering tool (`tools/cluster-diffs.py`): `notes/fix-nb-integrate.md`.
 
-Project (release, 0 errors): counters now equal the reference exactly; peak memory unchanged versus main (19.5 vs
+The private monorepo (release, 0 errors): counters now equal the reference exactly; peak memory unchanged versus main (19.5 vs
 19.4 GB single-threaded, measured back to back).
 
 | | symbols | types | instantiations | check time | wall | peak memory |
@@ -124,16 +127,16 @@ diagnostic fails pass, no previous pass lost; same with `TS_TEST_PROGRAM_SINGLE_
 12,779 / 12,779 (`declarationEmitObjectAssignedDefaultExport` fixed with its diagnostic). The remaining 2 fails and
 2 codes are the known Go-harness emit-order artifacts.
 
-Project (`declaration: false`, so the pipeline does not run): 0 errors, counters unchanged (39,704,001 symbols /
+The private monorepo (`declaration: false`, so the pipeline does not run): 0 errors, counters unchanged (39,704,001 symbols /
 16,200,921 types / 89,981,648 instantiations with 4 checkers). Wall times versus main measured back to back on a
 loaded machine (load average ~14) were within noise in both directions (4 checkers: 22.3/27.0 s main vs 39.4/34.2 s;
 single-threaded: 58.9/56.3 s main vs 43.9/46.7 s).
 
-## 2026-09-30 (later): Project `.types` / `.symbols` walk
+## 2026-09-30 (later): the private monorepo `.types` / `.symbols` walk
 
 `tsrs-test types-dump` and the Go oracle `tools/oracle/project-types` run the conformance `.types`/`.symbols` walk
 (printed type / resolved symbol of every expression and declaration) over every non-`node_modules` file of a tsconfig
-project, single-threaded, after `tsc`-style checking; `tools/project-types-compare.py` compares them. Project: 28,213
+project, single-threaded, after `tsc`-style checking; `tools/project-types-compare.py` compares them. The private monorepo: 28,213
 files, 16.5M baseline lines; first run **28,207 / 28,213 files identical** (18 lines in 6 files differ), symbol and
 type counters equal. The 6 files print >1 MB `vi.mocked(..., { partial: true, deep: true })` types whose truncation
 point depended on **symbol ids**: Go assigns ids on every `valueSymbolLinks` / `symbolNodeLinks` access (those stores
@@ -141,12 +144,12 @@ are id-keyed) and binds files in reverse order when single-threaded (LIFO work g
 internal name embeds the id and counts toward the node builder's length budget. Both fixed (regression
 `testdata/regressions/unique-symbol-name-truncation`); conformance unchanged (13,458 / types 12,779 / symbols
 12,779). Go's own ids are not deterministic across runs (map iteration), so ids agree as a multiset, not exactly.
-`.symbols` on Project: the first 5,558 files identical (run stopped, hours per side). All 51 workspace packages
-Project depends on: types and symbols identical (1,526 files), counters equal. Details: `notes/fix-project-types.md`.
+`.symbols` on the private monorepo: the first 5,558 files identical (run stopped, hours per side). All 51 workspace packages
+the private monorepo depends on: types and symbols identical (1,526 files), counters equal. Details: `notes/fix-project-types.md`.
 
 ## 2026-09-30 (later): peak memory
 
-Project peak footprint is now below the Go reference: 15.35 GB `--singleThreaded` (was 19.5; tsgo 16.7) and
+The private monorepo's peak footprint is now below the Go reference: 15.35 GB `--singleThreaded` (was 19.5; tsgo 16.7) and
 23.35 GB with 4 checkers (was 28.3; tsgo 24.4), counters and conformance unchanged. The largest item was lazy JSDoc
 parsing copying the whole file text per node (3 GB). Opt-in arena/heap allocation profile:
 `--features alloc-profile` on `tsrs_cli` (+ `TSRS_HEAP_PROFILE=1`). Details: `notes/fix-perf-memory.md`.
@@ -156,10 +159,10 @@ parsing copying the whole file text per node (3 GB). Opt-in arena/heap allocatio
 tsrs now runs ports of microsoft/TypeScript#64475 (lazy member tables of instantiated class/interface references) and
 #64526 (lazy members of `keyof` mapped types) by default; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0` restores the
 reference behavior exactly. **tsrs's default is therefore no longer counter-identical to `tsgo-ref`**: it matches tsgo
-with both PRs applied (Project symbols/types/instantiations equal to that build exactly). The no-regression check of
-DEBUGGING.md applies to the opt-out mode (reference-identical: suite pass lists and artifacts, Project counters) and the
+with both PRs applied (private-monorepo symbols/types/instantiations equal to that build exactly). The no-regression check of
+DEBUGGING.md applies to the opt-out mode (reference-identical: suite pass lists and artifacts, private-monorepo counters) and the
 default mode must not lose passes either. Conformance with the flag on: no output change in any variant (errors,
-`.types`, `.symbols`). Project, medians of 3 (flag off -> on): single-threaded peak 15.34 -> 11.77 GB, check
+`.types`, `.symbols`). The private monorepo, medians of 3 (flag off -> on): single-threaded peak 15.34 -> 11.77 GB, check
 26.3 -> 22.9 s; 4 checkers peak 23.32 -> 17.49 GB, check 13.2 -> 11.1 s. Details: `notes/lazy-members.md`.
 
 ## 2026-10-01: checker assignment by locality (multi-checker memory)
@@ -170,7 +173,7 @@ unchanged and the assignment cannot change any file's diagnostics or their order
 file order): conformance with parallel test programs is identical under both assignments and both lazy modes
 (13,458 pass, `.types` / `.symbols` 12,779 / 12,779, all artifacts byte-identical to single-threaded).
 
-Project (go -> locality, same commit 52ef5a9, medians of 3): 4 checkers peak 14.99 -> 13.37 GB (-10.8%), check
+The private monorepo (go -> locality, same commit 52ef5a9, medians of 3): 4 checkers peak 14.99 -> 13.37 GB (-10.8%), check
 9.5 -> 8.0 s, symbols 19.6M -> 17.3M; reference mode 20.08 -> 17.70 GB. Full curve on 7d96945 (2-8 checkers:
 -4% to -13% peak, faster at every count; 3 checkers with locality beat Go's 4 on both axes) in the notes.
 Single-threaded unchanged (no assignment with one checker). Of the remaining multi-checker excess, most is library instantiations (zod,
@@ -183,14 +186,14 @@ Layout and allocation changes only (counters, suite pass lists and artifacts ide
 arena allocation per AST node and per type (32-byte headers), `SymbolTable` as an insertion-ordered `Vec` with an
 index only past 8 entries, rarely set `ValueSymbolLinks` and `Symbol` fields in lazily allocated tails, 24-byte
 `TypeMapper`, packed slice cells in structured types and signatures, 20-byte relation cache slots, id-keyed link
-stores paged by id. Project, reference mode (isolates these changes; medians of 3, interleaved): single-threaded
+stores paged by id. The private monorepo, reference mode (isolates these changes; medians of 3, interleaved): single-threaded
 peak 13.94 -> 11.08 GB, check 21.2 -> 18.2 s; 4 checkers 21.21 -> 17.06 GB, check 10.07 -> 8.66 s. Default mode
 (with lazy tuples and locality assignment landed meanwhile): 10.80 -> 8.39 GB / 20.0 -> 17.1 s single, 16.09 ->
 11.33 GB / 9.1 -> 6.7 s on 4 checkers. Details and per-change numbers: `notes/mem-layout.md`.
 
 ## 2026-10-01: frontend wall time (program construction, config, statistics)
 
-Everything outside the checkers on Project (4 checkers, medians of 5): 1.90 -> 1.00 s, wall 9.72 -> 8.63 s,
+Everything outside the checkers on the private monorepo (4 checkers, medians of 5): 1.90 -> 1.00 s, wall 9.72 -> 8.63 s,
 checker semantics untouched (suite identical in default, opt-out and parallel-program modes; counters,
 `--listFiles`, `--explainFiles`, `--traceResolution` unchanged). The file loader's parallel prefetch now also
 computes metadata and resolves imports / type references / triple-slash references (was sequential, 0.6 s),
@@ -208,7 +211,7 @@ counters unchanged; AST oracle unchanged): `Symbol` 72 -> 56 bytes (packed name 
 literal text in one word (`PackedStr`), inference contexts / infos, signatures, emit-context entries and union /
 intersection types with rare fields in tails or packed cells, rarely used per-type caches (base constraints of
 structured types, object-type instantiation maps, the node builder's abstract-construct cache) in checker maps,
-lazy member tables without duplicate lists, 17-byte relation cache slots. Project, default mode (medians of 3,
+lazy member tables without duplicate lists, 17-byte relation cache slots. The private monorepo, default mode (medians of 3,
 interleaved, base e8d4196): single-threaded peak 8.13 -> 7.02 GiB (-13.7%), check 17.6 s both; 4 checkers
 10.93 -> 9.38 GiB (-14.2%), check 6.9 -> 7.0 s. Opt-out mode: 11.08 -> 9.47 / 17.11 -> 14.52 GiB. Rejected:
 mapper and type-list interning (mapper identity is observable; 5.3M distinct of 10M type lists, the table would
@@ -224,7 +227,7 @@ stored slices / strings instead of copies where Go returns them (`getTypeArgumen
 `getSignaturesOfType`, `getIndexInfosOfType`, `getStringLiteralValue`, property-name helpers). One port
 divergence fixed: Rust's `sort_by` / `binary_search_by` compared different pairs than Go's
 `slices.SortStableFunc` / `BinarySearchFunc` (CompareTypes ran 12% more often than in tsgo, counted in both);
-`tsrs_core::goslices` ports Go's algorithms. Project instructions retired (default mode, medians): single
+`tsrs_core::goslices` ports Go's algorithms. Private-monorepo instructions retired (default mode, medians): single
 325 -> 294 G (-9.5%), 4 checkers 434 -> 401 G (-7.6%); wall not confirmed on a quiet machine. Go-vs-tsrs call
 counts for ~110 hot functions, cache hit rates, profiles before/after: `notes/cpu-checker.md`.
 
@@ -240,7 +243,7 @@ type aliases allocated only when a cached constructor creates a type, reference 
 the references' own type arguments, 12-byte pointer-keyed link slots, one read-only link access through
 `try_get`. Track B (lazy creation, Go-portable): inference context mappers created on first use
 (`TSRS_LAZY_INFERENCE_MAPPERS`, default on; -1.13M mappers); deferring two-constituent union/intersection
-property types was rejected (-3.7% types but it changes results). Project, default mode (medians of 3,
+property types was rejected (-3.7% types but it changes results). The private monorepo, default mode (medians of 3,
 interleaved, base dc59d8e): single-threaded peak 7.02 -> 6.02 GiB (-14.2%), 4 checkers 9.38 -> 8.07 GiB
 (-14.0%); opt-out 9.47 -> 8.01 / 14.53 -> 12.35 GiB. Details, per-step numbers and rejected candidates:
 `notes/mem-round3.md`.

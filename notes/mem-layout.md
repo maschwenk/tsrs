@@ -5,7 +5,7 @@ allocation changes: no checker semantics, evaluation order, or type/symbol creat
 must stay identical in both modes).
 
 Measurement: `/usr/bin/time -l tsrs -p tsconfig.json [--singleThreaded] --extendedDiagnostics` on the pristine
-Project checkout, one heavy process at a time, 18-core machine shared with other agents. "GB" in the tables below
+the private monorepo checkout, one heavy process at a time, 18-core machine shared with other agents. "GB" in the tables below
 is GiB of `peak memory footprint` (same convention as the earlier notes: 11,586,069,456 B = 10.79 GB).
 
 Profile build: `CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile`
@@ -95,7 +95,7 @@ instructions retired (from `/usr/bin/time -l`) are the stable CPU-work measure a
 
 ## Step 3: link records
 
-Occupancy (one-off count over all link chunks at exit, Project single, default mode): 13,568,293
+Occupancy (one-off count over all link chunks at exit, the private monorepo single, default mode): 13,568,293
 `ValueSymbolLinks` records; `target` set in 68%, `resolved_type` 59%, `mapper` 56%, `containing_type` 17%,
 `name_type` 11%, `write_type` 1.6%, `function_or_constructor_checked` 0.25%; 81% set none of the last four.
 `write_type`, `name_type`, `containing_type` and `function_or_constructor_checked` moved into a tail
@@ -118,7 +118,7 @@ Opt-out counters identical; suite pass lists identical in both modes.
 
 ## Step 4: map overhead
 
-Counts at exit (Project single, default mode, one-off instrumentation):
+Counts at exit (the private monorepo single, default mode, one-off instrumentation):
 
 | map | count | entries | size distribution |
 | --- | --- | --- | --- |
@@ -150,7 +150,7 @@ test `symbol_table_indexed_order_and_delete`.
 
 ### `Symbol` 88 -> 72 bytes
 
-Occupancy at exit (Project single, default mode): 3.78M binder symbols, of which 617K have `members`, 56K
+Occupancy at exit (the private monorepo single, default mode): 3.78M binder symbols, of which 617K have `members`, 56K
 `exports`, 115K `export_symbol`; 11.55M transient symbols, of which 301 have `members` and 144 `exports`. The three
 fields moved into a tail (`SymbolTables`) allocated on the first non-nil write; `members()` / `exports()` /
 `export_symbol()` read through it (nil when absent) and `set_members()` / `set_exports()` / `set_export_symbol()`

@@ -4,10 +4,10 @@ Goal: make checking itself cheaper without changing semantics. Gates for every c
 `--baselines types,symbols`) byte-identical to the base in the default mode and with `TSRS_LAZY_MEMBERS=0`
 (whole `target/test-results` trees compared); counters opt-out 25,973,354 / 9,639,962 / 44,884,281 single and
 39,704,001 / 16,200,921 / 89,981,648 on 4 checkers (`--checkerAssignment go`), default 12,811,032 / 9,630,120 /
-44,820,708 single and 16,549,988 / 13,788,912 / 76,888,800 on 4 checkers; Project 0 errors.
+44,820,708 single and 16,549,988 / 13,788,912 / 76,888,800 on 4 checkers; the private monorepo 0 errors.
 
 Measurement: the machine was shared with agents running Go test suites (load 7 to 90), so wall time was not
-usable; the metric is instructions retired from `/usr/bin/time -l` on Project `--singleThreaded` (default mode),
+usable; the metric is instructions retired from `/usr/bin/time -l` on the private monorepo `--singleThreaded` (default mode),
 medians of 3 (5 where the difference was small), interleaved with the previous binary. Run-to-run spread is
 about +-0.5% (rayon parse threads spin). Scripts used (not committed): `samply record --unstable-presymbolicate`
 (installed with `cargo install samply`; works on macOS without sudo) plus a small reader of the Firefox profile
@@ -39,7 +39,7 @@ went 17.5-19 s -> 16.8-18 s at load 10-15, 4 checkers 7.9-8.5 s -> 7.6 s, both w
 4. Active type-mapper caches: Go's `popActiveMapper` clears the map and keeps it for the next push; the port
    dropped it and started from an empty map each push. Popped maps now go to a pool (cleared, or dropped when one
    instantiation grew them past 4x). 308.1 -> 304.9 G.
-5. `TSRS_HEAP_PROFILE=count` (alloc-profile feature): samples every 1024th heap allocation by stack. Project
+5. `TSRS_HEAP_PROFILE=count` (alloc-profile feature): samples every 1024th heap allocation by stack. The private monorepo
    single: 218M heap allocations at the start of the pass, 204M after change 6.
 6. `getStringLiteralValue` returned a `String` copy (Go returns the string); ~10M allocations, mostly from
    template-literal matching against string literal sources. 304.9 -> 301.9 G.
@@ -61,7 +61,7 @@ went 17.5-19 s -> 16.8-18 s at load 10-15, 4 checkers 7.9-8.5 s -> 7.6 s, both w
 
 Entry counters were added to ~110 hot functions in both a copy of the Go reference (`TypeScript/tsc` copied
 without testdata, built with the local go1.27 toolchain; the shared checkout untouched) and in tsrs (site-counts),
-and compared on Project single-threaded in the opt-out mode (where counters equal Go's). Nearly every function is
+and compared on the private monorepo single-threaded in the opt-out mode (where counters equal Go's). Nearly every function is
 called exactly as often (getPropertyOfTypeEx 67,608,533 both, recursiveTypeRelatedTo 12,925,359, getTypeOfSymbol
 54,653,970, inferFromTypes 14,513,973, isRelatedTo 22,397,251 vs 22,397,228, ...). Differences:
 
@@ -84,7 +84,7 @@ No case of Go doing less work than tsrs at the function level other than the sor
 
 ## Relation and instantiation caches (site-counts)
 
-Project single, default mode: `instantiateTypeWithAlias` 44.82M misses (= the instantiation counter; 20.0M with a
+The private monorepo single, default mode: `instantiateTypeWithAlias` 44.82M misses (= the instantiation counter; 20.0M with a
 new mapper, 24.8M with an active one), 6.64M hits; `recursiveTypeRelatedTo` 6.12M cache hits, 6.82M misses, 0.41M
 maybe-stack hits; `isTypeRelatedTo`'s object fast path 1.77M hits, 1.36M misses. In the opt-out mode the number of
 `recursiveTypeRelatedTo` / `structuredTypeRelatedTo` / `isRelatedTo` calls equals Go's exactly, so the hit rates do

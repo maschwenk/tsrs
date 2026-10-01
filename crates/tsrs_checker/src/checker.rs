@@ -303,7 +303,7 @@ bitflags! {
 
 // InferenceContext
 //
-// 1.43M contexts on Project single, so the four fields that fewer than 4% of them set (return mappers, inferred type
+// 1.43M contexts on the private monorepo single, so the four fields that fewer than 4% of them set (return mappers, inferred type
 // parameters, intra-expression sites) live in a tail allocated on the first non-default write (`InferenceContextRare`,
 // read through accessors that return the zero value when it is absent), and `inferences` packs with `flags`:
 // 64 bytes instead of 128.
@@ -419,7 +419,7 @@ impl InferenceContext {
     }
 }
 
-/// A Go slice field that most of its owners leave empty (inference candidate lists, 1.78M of them on Project, 64%
+/// A Go slice field that most of its owners leave empty (inference candidate lists, 1.78M of them on the private monorepo, 64%
 /// never get a covariant and 98% never a contravariant candidate): 8 bytes, and the list lives in an arena
 /// `RefCell<Vec>` allocated by the first `push` or a non-empty `from_vec`. Reads of an absent list see it empty.
 pub struct LazyVec<T: 'static>(Cell<Option<P<RefCell<Vec<T>>>>>);

@@ -1,7 +1,7 @@
-# fix-project-types: every expression's type on Project
+# fix-project-types: every expression's type on the private monorepo
 
 Goal: compare the printed type of every expression/declaration (the conformance `.types` walk) on the real
-Project project, not only its diagnostics and counters.
+the private monorepo project, not only its diagnostics and counters.
 
 ## Tooling
 
@@ -16,7 +16,7 @@ Project project, not only its diagnostics and counters.
   walk stops after the last listed file (earlier files still run, so checker state is the same).
 - `tools/project-types-compare.py <go-out> <rs-out> [--list diff.txt] [--show N]`: matching files, counters,
   differing lines.
-- Cost on Project (28,213 walked files, 16.5M baseline lines): ~42 min (tsrs) / ~71 min (Go) when run together;
+- Cost on the private monorepo (28,213 walked files, 16.5M baseline lines): ~42 min (tsrs) / ~71 min (Go) when run together;
   peak footprint ~125 GB (tsrs) / ~132 GB (Go): the walk prints >1 MB types (NoTruncation) and neither side frees
   much of what the node builder builds. Run the two sides one after the other.
 
@@ -26,12 +26,12 @@ Project project, not only its diagnostics and counters.
 | --- | --- | --- | --- |
 | types, main 7f683f4 | 28,207 / 28,213 | 18 (6 files) | equal / equal / tsrs +20 |
 | symbols, main 80684ca (stopped by the coordinator: memory) | 5,558 / 5,558 (the prefix both sides reached; 2.04M lines) | 0 | - |
-| 51 workspace packages Project depends on (`packages/*` with a tsconfig), `--mode both`, main 80684ca | types 1,526 / 1,526, symbols 1,526 / 1,526 | 0 (752k type lines, 618k symbol lines) | equal in every package |
+| 51 workspace packages the private monorepo depends on (`packages/*` with a tsconfig), `--mode both`, main 80684ca | types 1,526 / 1,526, symbols 1,526 / 1,526 | 0 (752k type lines, 618k symbol lines) | equal in every package |
 
-Not re-run on Project after the fix: the six files of the one cluster (a rerun of the tsrs side was made but its
+Not re-run on the private monorepo after the fix: the six files of the one cluster (a rerun of the tsrs side was made but its
 comparison was not read: a permission rule denied that step). The symbol walk is ~5x slower than the type walk on
 both sides (symbol accessibility chains for every identifier: `getAliasForSymbolInContainer`,
-`getSymbolIfSameReference`); tsrs walked ~130 files/min, Go ~55 files/min, so a full Project symbols run takes hours.
+`getSymbolIfSameReference`); tsrs walked ~130 files/min, Go ~55 files/min, so a full private-monorepo symbols run takes hours.
 
 Packages: `tools/project-types-packages.sh <root> <list> <tsrs-test> <out>` (one package at a time, both sides,
 both walks). `marketing-emails` has 1 diagnostic on both sides (so both print `any` for error types).

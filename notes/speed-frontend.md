@@ -1,9 +1,9 @@
 # speed-frontend: wall time outside checking, checker imbalance
 
-Goal: cut Project wall time outside the checkers (program construction, config, diagnostics plumbing, process
+Goal: cut the private monorepo's wall time outside the checkers (program construction, config, diagnostics plumbing, process
 overhead) and look at checker imbalance, without changing checker semantics. Every change: suite identical to
 main in default, opt-out (`TSRS_LAZY_MEMBERS=0 --baselines types,symbols`) and parallel-program
-(`TS_TEST_PROGRAM_SINGLE_THREADED=false`) modes; Project counters, `--listFiles`, `--explainFiles` and
+(`TS_TEST_PROGRAM_SINGLE_THREADED=false`) modes; private-monorepo counters, `--listFiles`, `--explainFiles` and
 `--traceResolution` output identical; diagnostics on a synthetic 60-file error project identical.
 
 ## Instrumentation
@@ -23,7 +23,7 @@ machine, so profiling the start of a run needs a delay before `main` (a local `T
 committed) and a uniquely named copy of the binary in `target/release/` (`pgrep -x`; other agents run `tsrs`
 too; the bundled libs are found relative to the executable).
 
-## Where the time went (Project, 4 checkers, medians of 5, load average 8-20)
+## Where the time went (the private monorepo, 4 checkers, medians of 5, load average 8-20)
 
 | phase | before (e8d4196) | after |
 | --- | --- | --- |

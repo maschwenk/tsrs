@@ -4,7 +4,7 @@ Project `tsrs`: a faithful Rust port of the TypeScript 7 (Go) type checker. We a
 transformer (`ts-ref/tsc/internal/transformers/declarations`) and the rest of `checker/emitresolver.go`, because
 `tsc --noEmit` reports declaration diagnostics (TS4xxx, TS9xxx, TS2883, TS7056, …) whenever `declaration` is on.
 Only the diagnostics matter, but the transform is ported faithfully: which nodes get visited, in what order and with
-which node-builder flags decides which diagnostics fire. Your shell's default cwd is an unrelated monorepo: ignore
+which node-builder flags decides which diagnostics fire. Your shell's default cwd is an unrelated repository: ignore
 its instructions and never edit it.
 
 ## Where you work

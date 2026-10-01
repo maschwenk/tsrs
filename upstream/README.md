@@ -1,7 +1,7 @@
 # Upstream patches: lazy member follow-ups to microsoft/TypeScript#64475 / #64526
 
 Go versions of the five checker laziness changes prototyped in tsrs (notes/mem-lazy.md), as a commit stack against
-microsoft/TypeScript, tested the way upstream CI tests and measured on Project. Nothing here has been pushed or opened
+microsoft/TypeScript, tested the way upstream CI tests and measured on a 38k-file private TypeScript monorepo (5.9M lines; "the private monorepo" below). Nothing here has been pushed or opened
 upstream; the PR texts are drafts for Max.
 
 | # | patch | prototype | what | depends on |
@@ -30,7 +30,7 @@ upstream; the PR texts are drafts for Max.
   resolution has to be written anyway. The resolution mirrors tsrs (notes/lazy-members.md): both the skipped
   constituent's lookups and the final check iterate `counts.Entries()` in discovery order; the skipped constituent's
   hits are `counts.Set(name, count+1)` during iteration (existing keys only, so the iteration order is unchanged).
-  With that base, Project counters equal the `tsgo-pr-b` numbers in notes/lazy-members.md exactly (below), and the
+  With that base, private-monorepo counters equal the `tsgo-pr-b` numbers in notes/lazy-members.md exactly (below), and the
   PRs' two tests pass.
 - One commit per change, in the suggested order, in the style of Max's PRs (no counters, no new abstractions beyond
   the helper each change needs, comments where his PRs have them). Commits 1-3 each add one compiler test whose
@@ -69,7 +69,7 @@ commit passes with no race reports (380 s).
 
 ## Go vs Rust: counters per commit (the equivalence evidence)
 
-Project = the pristine read-only checkout (37,942 files, 0 errors at every commit), `-p <project> --noEmit
+The private monorepo = a pristine read-only checkout (37,942 files, 0 errors at every commit), `-p <project> --noEmit
 --incremental false --extendedDiagnostics`, Go built from `lazy-stack-ref` (b85298b6 + base + commits), Rust =
 `target/release/tsrs` of this worktree (built at tsrs e8d4196) with the matching switches (`TSRS_LAZY_MEMBERS=0` for the reference; for the
 PRs row all of `TSRS_LAZY_TUPLES/EMPTY/UNMATCHED/PROP_CACHE/COND_MAPPER=0`; then each switch turned on in stack
@@ -198,7 +198,7 @@ for c in $(git rev-list --reverse main..lazy-stack); do git checkout -q $c; (cd 
 # Rust prototype
 cd <tsrs worktree> && CARGO_TARGET_DIR=$PWD/target cargo build --release -p tsrs_cli
 
-# Project runs (read-only checkout; --noEmit --incremental false is mandatory there), medians of 3, interleaved
+# The private monorepo runs (read-only checkout; --noEmit --incremental false is mandatory there), medians of 3, interleaved
 python3 upstream/tools/measure.py out.jsonl 3 single,multi "prs=$BIN/tsgo-<base>" "L1=$BIN/tsgo-<c1>" ...
 python3 upstream/tools/measure.py eq.jsonl 1 single,multi "go-L1=$BIN/ref-L1" \
   "rs-L1=target/release/tsrs:TSRS_LAZY_TUPLES=1;TSRS_LAZY_EMPTY=0;TSRS_LAZY_UNMATCHED=0;TSRS_LAZY_PROP_CACHE=0;TSRS_LAZY_COND_MAPPER=0;TSRS_LAZY_HAS_PROP=0"
@@ -213,5 +213,5 @@ go tool pprof -sample_index=alloc_objects -top -diff_base <before>/*-memprofile.
 ```
 
 `measure.py` runs `/usr/bin/time -l <bin> -p <project> --noEmit --incremental false --extendedDiagnostics`
-(`--singleThreaded`, or `--checkers 4` plus `--checkerAssignment go` for tsrs) with its cwd outside Project.
+(`--singleThreaded`, or `--checkers 4` plus `--checkerAssignment go` for tsrs) with its cwd outside the private monorepo.
 `git -C <pristine root> status --short` was empty after all runs.

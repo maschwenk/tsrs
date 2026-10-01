@@ -14,7 +14,7 @@ use crate::*;
 
 // Symbol
 //
-// Go's `Symbol` holds `Members`, `Exports` and `ExportSymbol` inline. Few symbols have any of them (on Project 5%
+// Go's `Symbol` holds `Members`, `Exports` and `ExportSymbol` inline. Few symbols have any of them (on the private monorepo 5%
 // of 15.3M: binder symbols of classes, interfaces, modules and exported locals; almost no transient symbols), so
 // they live in a tail allocated on the first write of a non-nil value (`members()` / `set_members()` & co.):
 // 72 bytes per symbol instead of 88. Reads of an absent tail return nil, like the unset Go field. `name` is a
@@ -182,13 +182,13 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
 // a Go nil table is `None`. Iteration is in insertion order and returns snapshots.
 //
 // Representation: the entries in insertion order in a `Vec`, plus a hash index of entry positions once a table
-// has more than `SYMBOL_TABLE_LINEAR_MAX` entries (most tables are tiny: on Project 82% of the 3.9M tables hold at
+// has more than `SYMBOL_TABLE_LINEAR_MAX` entries (most tables are tiny: on the private monorepo 82% of the 3.9M tables hold at
 // most 8 entries); smaller tables are searched linearly, which compares only the entries' stored lengths and hashes
-// until one matches (16 rather than 8 entries: -0.03 GiB on Project, the same instructions). Same observable behavior as the insertion-ordered map it
+// until one matches (16 rather than 8 entries: -0.03 GiB on the private monorepo, the same instructions). Same observable behavior as the insertion-ordered map it
 // replaces (`IndexMap`): `set` of an existing name keeps the entry's position and stored key, `delete` shifts the
 // later entries down.
 //
-// An entry does not store its key: the key is almost always the symbol's own name (on Project all but 1 of 16.7M
+// An entry does not store its key: the key is almost always the symbol's own name (on the private monorepo all but 1 of 16.7M
 // inserts; symbol names never change), so an entry is one word: the symbol plus a fingerprint of the key (its
 // length up to 63 and 12 bits of its hash), which rejects non-matching entries without reading the symbol (see
 // `SymbolMapEntry`). A key with other text than its symbol's name is kept in `SymbolMapExtra::odd_keys`. Keys
@@ -207,7 +207,7 @@ struct SymbolMap {
 
 const _: () = assert!(std::mem::size_of::<SymbolMap>() == 24);
 
-/// `Vec<SymbolMapEntry>` with a `u32` length and capacity (16 bytes instead of 24; 3.5M symbol tables on Project).
+/// `Vec<SymbolMapEntry>` with a `u32` length and capacity (16 bytes instead of 24; 3.5M symbol tables on the private monorepo).
 /// Grows like `Vec` (`push` doubles from 4; `reserve_exact` adds exactly).
 struct EntryVec {
     ptr: std::ptr::NonNull<SymbolMapEntry>,
@@ -321,7 +321,7 @@ unsafe impl Sync for EntryVec {}
 /// One word: the symbol's address / 8 in the low 45 bits (symbols are 8-aligned and user-space addresses are below
 /// 2^48; checked on store), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
 /// and the top 12 bits of `hash_name(key)`. 8 bytes instead of 16 (pointer + 32-bit hash + length): symbol table
-/// entries are 465 MB of capacity on Project. The symbol's provenance is exposed on store and recovered with
+/// entries are 465 MB of capacity on the private monorepo. The symbol's provenance is exposed on store and recovered with
 /// `with_exposed_provenance`.
 #[derive(Clone, Copy)]
 struct SymbolMapEntry(u64);

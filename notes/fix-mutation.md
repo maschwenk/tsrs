@@ -1,6 +1,6 @@
-# fix-project: mutation testing against Project
+# fix-mutation: mutation testing against the private monorepo
 
-Goal: show that `tsrs` reports the same diagnostics as `tsgo-ref` on *wrong* code, not just 0 errors on Project.
+Goal: show that `tsrs` reports the same diagnostics as `tsgo-ref` on *wrong* code, not just 0 errors on the private monorepo.
 
 ## Harness (`tools/mutate/`)
 
@@ -54,20 +54,20 @@ prop_type_change 58, remove_as 48, drop_type_args 22, remove_case 12, remove_nul
 Both clusters are artifacts of the placeholder printer; neither is a checker bug.
 
 1. **TS2345/TS2322 head kept where Go reports TS2740/TS2739 alone** (6 sites: MikroORM `em.getReference` overload
-   failures in `orm/mongoMigration/translations/*`, `checkoutSettingsCollectionService.ts`; `Response` vs `Promise`
-   in `get.test.ts`). `reportRelationError` (relater.go:4855) drops the head message when the next chain entry is a
+   failures in a directory of data-migration modules and a collection-service module; `Response` vs `Promise`
+   in an endpoint test). `reportRelationError` (relater.go:4855) drops the head message when the next chain entry is a
    missing-properties message and `chainArgsMatch(generalizedSourceType, targetType)` holds; that compares *printed
    strings*. The source that fails is a different type object than the argument type (e.g. the union from the
    failed-overload return vs its `{ id: string } & Reference<...>` member) but prints identically in Go; the
    placeholder printer prints `type#<id>`, so the strings differ and the head survives. Standalone repro:
    `testdata/regressions/missing-props-head-suppression/` (expected output from tsgo-ref; the node-builder build
    matches it byte for byte, main does not yet).
-2. **Duplicate TS2741** (`locationSplits.module.ts`): two identical messages at one position except for placeholder
+2. **Duplicate TS2741** (in one feature module): two identical messages at one position except for placeholder
    ids; Go's `SortAndDeduplicateDiagnostics` compares message text, so it keeps one.
 
 Divergences left open: none.
 
-## Counter delta (unmutated Project)
+## Counter delta (unmutated private monorepo)
 
 `--extendedDiagnostics`, reference `--singleThreaded`:
 

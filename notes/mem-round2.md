@@ -5,9 +5,9 @@ step: the suite (errors and `--baselines types,symbols`) byte-identical to the b
 with `TSRS_LAZY_MEMBERS=0` (whole `target/test-results` trees compared); opt-out counters 25,973,354 / 9,639,962 /
 44,884,281 single and 39,704,001 / 16,200,921 / 89,981,648 with `--checkers 4 --checkerAssignment go`; default
 counters unchanged (12,811,032 / 9,630,120 / 44,820,708 single, 16,549,988 / 13,788,912 / 76,888,800 on 4
-checkers); Project 0 errors.
+checkers); the private monorepo 0 errors.
 
-Measurement: `/usr/bin/time -l` on the pristine Project checkout, interleaved rounds, "GiB" = peak memory
+Measurement: `/usr/bin/time -l` on the pristine private-monorepo checkout, interleaved rounds, "GiB" = peak memory
 footprint / 2^30. The machine was shared with other agents (load 8 to 70), so check times are noisy; instructions
 retired are the stable CPU-work measure.
 
@@ -51,7 +51,7 @@ changed.
 
 ### 2. `SymbolTable` entries 24 -> 16 bytes
 
-Instrumented once: of 16.7M new symbol-table entries on Project single, 16,684,348 store the symbol's own name
+Instrumented once: of 16.7M new symbol-table entries on the private monorepo single, 16,684,348 store the symbol's own name
 string as the key, 4,399 an equal string at another address, 1 a different text. Symbol names never change after
 `Symbol::new`. So an entry is now (symbol, `u32` hash of the key, `u32` key length) and the key is read from the
 symbol; a key with other text than its symbol's name (an insert, or a `set` that replaces the symbol of an
@@ -118,7 +118,7 @@ binaries were indistinguishable on the shared machine (load 10-40). The opt-out 
 The brief's candidate 4 (recycling contexts through a free list) is out: a context escapes through its fixing /
 non-fixing mappers (`TypeMapperData::Inference` holds the context), and those mappers end up in instantiated
 types (`ObjectType.mapper`, symbol links), so a context cannot be proven dead after the call that made it.
-Its layout can shrink instead. Counted once on Project single (default mode): of 1.43M contexts, 45.5K set a
+Its layout can shrink instead. Counted once on the private monorepo single (default mode): of 1.43M contexts, 45.5K set a
 return mapper, 24.6K an outer return mapper, 8.7K collect intra-expression sites, and none gets inferred type
 parameters (only higher-order generic-function inference adds them); of 1.78M inference infos 635K ever get a covariant
 candidate and 40K a contravariant one.
@@ -221,7 +221,7 @@ copies and no hashing.
 
 `OwnedStrCell` (the symbol name) is now a `PackedStr` (8 bytes, from step 9) instead of a 12-byte packed slice,
 and the symbol id is stored in 32 bits (`AtomicU32`): ids still come from the process-wide 64-bit counter in
-`get_symbol_id` and are returned as the 64-bit `SymbolId`, with a panic past `u32::MAX` (Project uses 26M in the
+`get_symbol_id` and are returned as the 64-bit `SymbolId`, with a panic past `u32::MAX` (the private monorepo uses 26M in the
 opt-out mode). Flags, check flags, declarations and id pack into 24 bytes.
 
 | run (2 interleaved rounds) | peak GiB | instructions |

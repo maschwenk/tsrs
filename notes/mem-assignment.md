@@ -2,7 +2,7 @@
 
 With 4 checkers every checker re-creates the types, symbols and instantiations that its files need from shared
 declarations (libs, `node_modules`, workspace packages, shared project modules). This note quantifies that
-duplication on Project and replaces the file-to-checker assignment to reduce it. Checker code is unchanged; only
+duplication on the private monorepo and replaces the file-to-checker assignment to reduce it. Checker code is unchanged; only
 `tsrs_compiler::checkerpool` decides differently which checker gets which file.
 
 ## Go's assignment is already import-graph based
@@ -10,7 +10,7 @@ duplication on Project and replaces the file-to-checker assignment to reduce it.
 Go's `createCheckers` (ts-ref `compiler/checkerpool.go`, b85298b6) is not a plain split: it runs a weighted
 FENNEL streaming graph partition over the undirected import graph (one vertex per program file, base weight =
 node count + text length / 100 plus normalized import fanout, 4x source weight and penalty 16 for
-declaration-heavy projects with >= 4 checkers, a 101% load cap) in program order. On Project this regime applies
+declaration-heavy projects with >= 4 checkers, a 101% load cap) in program order. On the private monorepo this regime applies
 (declaration files are 27% of the base weight). Two properties hurt here:
 
 - Every file carries weight, including the 10,414 declaration files that `skipLibCheck` never checks. They take
@@ -35,7 +35,7 @@ declaration-heavy projects with >= 4 checkers, a 101% load cap) in program order
   offline partition experiments; `TSRS_CHECKER_ASSIGNMENT=file:<path>` runs with an assignment from a file (one
   checker index per program file).
 
-## Where the duplication is (Project, default mode, Go assignment, 4 checkers vs 1)
+## Where the duplication is (the private monorepo, default mode, Go assignment, 4 checkers vs 1)
 
 Totals: symbols 22.81M vs 15.33M (binder symbols 3.78M are shared, so checker-created 19.03M vs 11.55M = 1.65x),
 types 16.19M vs 9.63M (1.68x), instantiations 89.9M vs 44.8M (2.0x).
@@ -63,13 +63,13 @@ per-use instantiations, so they follow the files that use them, which is what ma
 
 Touched-file view (node/symbol links, Go assignment): each checker touches 11.6k-15.6k files; 13-19% of its links
 are in project files owned by another checker; 3,757 project files and 714 `node_modules` files are touched by all
-4 checkers (the hubs: `src/services/testing/database/index.ts` is imported by 3,215 files,
-`src/router/common/router/index.ts` by 3,117, `src/orm/db.ts` by 1,870, zod by 1,523).
+4 checkers (the hubs: a test-database helper module is imported by 3,215 files,
+the shared router module by 3,117, the ORM setup module by 1,870, zod by 1,523).
 
 The import graph cannot be clustered by transitive closure: there is a strongly connected component of 10,878
 files, and the median checked file's transitive import closure is 24.6k files (15.1k checked files).
 
-## Experiments (4 checkers, Project, peak = `peak memory footprint`)
+## Experiments (4 checkers, the private monorepo, peak = `peak memory footprint`)
 
 Peak memory is reproducible to +-0.02 GB run to run; check times move by 10-30% with machine load (other agents),
 so time comparisons below are same-round only. "cut" = share of checked->checked import edges across checkers.
@@ -112,7 +112,7 @@ with `go` (4) and `locality` (4 and 7).
 
 ## Memory / time trade-off (final code, commit 7d96945 + this change)
 
-Project, default mode, 0 errors in every run; medians of 3 interleaved rounds (load ~8-12 from other agents).
+The private monorepo, default mode, 0 errors in every run; medians of 3 interleaved rounds (load ~8-12 from other agents).
 Peak varies by <= 0.03 GB between rounds; check times are noisier (one round per row was 20-30% slower).
 
 | checkers | assignment | peak GB | check s | wall s | symbols | types | instantiations |
