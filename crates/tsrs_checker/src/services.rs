@@ -138,7 +138,7 @@ impl Checker {
         loop {
             let n = next.unwrap();
             if self.value_symbol_links.has(n) {
-                next = self.value_symbol_links.get(n).target.get();
+                next = self.value_symbol_links.get(n).target();
             } else if self.export_type_links.has(n) {
                 next = self.export_type_links.get(n).target.get();
             } else {

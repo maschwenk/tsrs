@@ -1816,8 +1816,8 @@ impl Checker {
             // If symbol being instantiated is itself a instantiation, fetch the original target and combine the
             // type mappers. This ensures that original type identities are properly preserved and that aliases
             // always reference a non-aliases.
-            symbol = links.target.get().unwrap();
-            m = Some(self.combine_type_mappers(links.mapper.get(), m.unwrap()));
+            symbol = links.target().unwrap();
+            m = Some(self.combine_type_mappers(links.mapper(), m.unwrap()));
         }
         // Keep the flags from the symbol we're instantiating.  Mark that is instantiated, and
         // also transient so that we can just store data on it directly.
@@ -1835,8 +1835,8 @@ impl Checker {
             tsrs_core::sitecount::hit("inst-symbol-created", "");
         }
         let result_links = self.value_symbol_links.get(result);
-        result_links.target.set(Some(symbol));
-        result_links.mapper.set(m);
+        result_links.set_target(Some(symbol));
+        result_links.set_mapper(m);
         result_links.set_name_type(links.name_type());
         result
     }

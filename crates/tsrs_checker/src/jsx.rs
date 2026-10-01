@@ -817,7 +817,7 @@ impl Checker {
                     }
                     let links = self.value_symbol_links.get(attribute_symbol);
                     links.resolved_type.set(Some(expr_type));
-                    links.target.set(Some(member));
+                    links.set_target(Some(member));
                     attributes_table.set(attribute_symbol.name(), attribute_symbol);
                     if let Some(all_attributes_table) = all_attributes_table {
                         all_attributes_table.set(attribute_symbol.name(), attribute_symbol);

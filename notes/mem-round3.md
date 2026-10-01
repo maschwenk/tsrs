@@ -250,3 +250,21 @@ conditional and object-type caches map keys to arbitrary result types, so they k
 | 4 checkers, before (B2) | 8.375-8.416 (8.398) | 433-434 G |
 | 4 checkers, after | 8.331-8.353 (8.336, -0.06) | 430-433 G |
 | opt-out single / 4 checkers (go assignment), after | 8.37 / 12.91 | 344 / 520 G |
+
+### A8. Synthetic symbols keep containing and name types in the words of target and mapper
+
+Walking the rare tails of the value-symbol links at exit: 2.15M of the 2.50M tails belong to records that set
+`containing_type` (and often `name_type`) but never `target` or `mapper`: union/intersection properties (0.88M,
+containing type only) and mapped type members (1.24M, both). Such a record now switches to "synthetic" mode
+(bit 0 of the tail word): the words that hold `target` and `mapper` hold `containing_type` and `name_type`, and it
+needs no tail. A later non-nil `target` / `mapper` write moves the two into the tail and switches back; a record
+that already has a target, a mapper or those fields in its tail keeps the old layout. `target` and `mapper` became
+accessors (`target()`, `set_target(..)`, 18 call sites). A unit test walks the mode changes.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before (A7) | 6.211-6.222 (6.218) | 316-317 G |
+| single, after | 6.142-6.155 (6.153, -0.07) | 316-317 G |
+| 4 checkers, before (A7) | 8.28-8.34 (8.321) | 432-433 G |
+| 4 checkers, after | 8.20-8.24 (8.240, -0.08) | 431-432 G |
+| opt-out single / 4 checkers (go assignment), after | 8.25 / 12.71 | 341 / 517 G |

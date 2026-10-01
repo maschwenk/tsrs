@@ -2373,7 +2373,7 @@ impl Checker {
         }
         let mut target = prop;
         if prop.check_flags.get().intersects(CheckFlags::Instantiated) {
-            target = self.value_symbol_links.get(prop).target.get().unwrap();
+            target = self.value_symbol_links.get(prop).target().unwrap();
         }
         let links = self.symbol_reference_links.get(target);
         links.reference_kinds.set(links.reference_kinds.get() | SymbolFlags::All);

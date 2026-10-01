@@ -848,7 +848,7 @@ impl NodeBuilderImpl {
                 let prop_declaration = ast::get_declaration_of_kind(property_symbol, Kind::PropertyDeclaration);
                 let parent_is_class = property_symbol.parent().is_some() && property_symbol.parent().unwrap().flags().intersects(SymbolFlags::Class);
                 if property_type != write_type || parent_is_class && prop_declaration.is_none() {
-                    let symbol_mapper = c.value_symbol_links.get(property_symbol).mapper.get();
+                    let symbol_mapper = c.value_symbol_links.get(property_symbol).mapper();
                     if let Some(getter_declaration) = ast::get_declaration_of_kind(property_symbol, Kind::GetAccessor) {
                         let mut getter_signature = c.get_signature_from_declaration(getter_declaration);
                         if symbol_mapper.is_some() {
@@ -2003,7 +2003,7 @@ impl NodeBuilderImpl {
             }
 
             let mut params = self.get_type_parameters_of_class_or_interface(c, target_symbol);
-            let target_mapper = c.value_symbol_links.get(next_symbol).mapper.get();
+            let target_mapper = c.value_symbol_links.get(next_symbol).mapper();
             if let Some(target_mapper) = target_mapper {
                 params = params.iter().map(|&p| target_mapper.map(c, p)).collect();
             }

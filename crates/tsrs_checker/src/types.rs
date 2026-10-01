@@ -256,13 +256,19 @@ pub struct SymbolReferenceLinks {
 // `mapper` (on Project 81% of the 13.6M records set none of the other four), so those four live in a tail
 // allocated on the first write of a non-default value: 32 bytes per record instead of 56. Reads of an absent tail
 // return the zero value, exactly like reading the unset field.
+//
+// Synthetic symbols (union/intersection properties, mapped type members: 2.15M of the 2.5M tails on Project) set
+// `containing_type` and often `name_type` but never `target` or `mapper`. Their record switches to "synthetic" mode
+// (bit 0 of the tail word): the two words that hold `target` and `mapper` hold `containing_type` and `name_type`
+// instead, and no tail is needed for them. A later non-nil `target` or `mapper` write moves the two into the tail
+// and switches back. Every getter returns what was last set either way.
 
 #[derive(Default)]
 pub struct ValueSymbolLinks {
     pub resolved_type: Cell<Option<P<Type>>>, // Type of value symbol
-    pub target: Cell<Option<P<Symbol>>>,
-    pub mapper: Cell<Option<P<TypeMapper>>>,
-    rare: Cell<Option<P<ValueSymbolLinksRare>>>,
+    first: Cell<Option<P<()>>>,  // target (P<Symbol>), or containing_type (P<Type>) in synthetic mode
+    second: Cell<Option<P<()>>>, // mapper (P<TypeMapper>), or name_type (P<Type>) in synthetic mode
+    rare: Cell<Option<P<()>>>,   // P<ValueSymbolLinksRare> or nil, address | SYNTHETIC_MODE in synthetic mode
 }
 
 #[derive(Default)]
@@ -275,56 +281,172 @@ struct ValueSymbolLinksRare {
 
 const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 32);
 
+/// The mode bit in the tail word (`ValueSymbolLinksRare` is 8-aligned, so bit 0 of its address is free).
+const SYNTHETIC_MODE: usize = 1;
+
+/// A pointer stored in a link word whose type depends on the mode.
+#[inline]
+fn erase<T>(p: Option<P<T>>) -> Option<P<()>> {
+    // A `&()` may point anywhere (zero-sized); the cast keeps the pointer's provenance.
+    p.map(|p| P::from_static(unsafe { &*(p.get() as *const T).cast::<()>() }))
+}
+
+/// SAFETY: `w` was stored by `erase` from a `P<T>` (arena values are never freed or moved), with any mode bit cleared.
+#[inline]
+unsafe fn restore<T: 'static>(w: Option<P<()>>) -> Option<P<T>> {
+    w.map(|w| P::from_static(unsafe { &*(w.get() as *const ()).cast::<T>() }))
+}
+
+/// `w` with its address mapped by `f` (`None` stands for address 0; a result of 0 is `None`).
+#[inline]
+fn map_word(w: Option<P<()>>, f: impl FnOnce(usize) -> usize) -> Option<P<()>> {
+    let ptr = w.map_or(std::ptr::null(), |w| w.get() as *const ()).map_addr(f);
+    // SAFETY: a `&()` only needs to be non-null.
+    (!ptr.is_null()).then(|| P::from_static(unsafe { &*ptr }))
+}
+
 impl ValueSymbolLinks {
     #[inline]
+    fn is_synthetic_mode(&self) -> bool {
+        self.rare.get().is_some_and(|w| (w.get() as *const ()).addr() & SYNTHETIC_MODE != 0)
+    }
+
+    #[inline]
+    fn set_synthetic_mode(&self, on: bool) {
+        self.rare.set(map_word(self.rare.get(), |a| if on { a | SYNTHETIC_MODE } else { a & !SYNTHETIC_MODE }));
+    }
+
+    #[inline]
+    fn rare(&self) -> Option<P<ValueSymbolLinksRare>> {
+        // SAFETY: the tail word is an erased `P<ValueSymbolLinksRare>` (or nil) plus the mode bit.
+        unsafe { restore(map_word(self.rare.get(), |a| a & !SYNTHETIC_MODE)) }
+    }
+
+    #[inline]
     fn rare_for_write(&self) -> P<ValueSymbolLinksRare> {
-        match self.rare.get() {
+        match self.rare() {
             Some(rare) => rare,
             None => {
                 let rare = P::new(ValueSymbolLinksRare::default());
-                self.rare.set(Some(rare));
+                let mode = self.is_synthetic_mode();
+                self.rare.set(erase(Some(rare)));
+                self.set_synthetic_mode(mode);
                 rare
             }
         }
     }
 
+    /// Leaves synthetic mode: `containing_type` and `name_type` move into the tail.
+    fn leave_synthetic_mode(&self) {
+        let (containing_type, name_type) = (self.containing_type(), self.name_type());
+        let rare = self.rare_for_write();
+        rare.containing_type.set(containing_type);
+        rare.name_type.set(name_type);
+        self.set_synthetic_mode(false);
+        self.first.set(None);
+        self.second.set(None);
+    }
+
+    /// Whether a `containing_type` / `name_type` write can use the synthetic-mode words: no `target`, no `mapper`, and
+    /// neither field in the tail.
+    fn can_enter_synthetic_mode(&self) -> bool {
+        self.first.get().is_none()
+            && self.second.get().is_none()
+            && self.rare().is_none_or(|r| r.containing_type.get().is_none() && r.name_type.get().is_none())
+    }
+
+    #[inline]
+    pub fn target(&self) -> Option<P<Symbol>> {
+        if self.is_synthetic_mode() {
+            return None;
+        }
+        // SAFETY: outside synthetic mode `first` is an erased `P<Symbol>` or nil.
+        unsafe { restore(self.first.get()) }
+    }
+    #[inline]
+    pub fn set_target(&self, target: Option<P<Symbol>>) {
+        if self.is_synthetic_mode() {
+            if target.is_none() {
+                return;
+            }
+            self.leave_synthetic_mode();
+        }
+        self.first.set(erase(target));
+    }
+    #[inline]
+    pub fn mapper(&self) -> Option<P<TypeMapper>> {
+        if self.is_synthetic_mode() {
+            return None;
+        }
+        // SAFETY: outside synthetic mode `second` is an erased `P<TypeMapper>` or nil.
+        unsafe { restore(self.second.get()) }
+    }
+    #[inline]
+    pub fn set_mapper(&self, mapper: Option<P<TypeMapper>>) {
+        if self.is_synthetic_mode() {
+            if mapper.is_none() {
+                return;
+            }
+            self.leave_synthetic_mode();
+        }
+        self.second.set(erase(mapper));
+    }
+
     #[inline]
     pub fn write_type(&self) -> Option<P<Type>> {
-        self.rare.get().and_then(|r| r.write_type.get())
+        self.rare().and_then(|r| r.write_type.get())
     }
     #[inline]
     pub fn set_write_type(&self, t: Option<P<Type>>) {
-        if t.is_some() || self.rare.get().is_some() {
+        if t.is_some() || self.rare().is_some() {
             self.rare_for_write().write_type.set(t);
         }
     }
     #[inline]
     pub fn name_type(&self) -> Option<P<Type>> {
-        self.rare.get().and_then(|r| r.name_type.get())
+        if self.is_synthetic_mode() {
+            // SAFETY: in synthetic mode `second` is an erased `P<Type>` or nil.
+            return unsafe { restore(self.second.get()) };
+        }
+        self.rare().and_then(|r| r.name_type.get())
     }
     #[inline]
     pub fn set_name_type(&self, t: Option<P<Type>>) {
-        if t.is_some() || self.rare.get().is_some() {
+        if self.is_synthetic_mode() {
+            self.second.set(erase(t));
+        } else if t.is_some() && self.can_enter_synthetic_mode() {
+            self.set_synthetic_mode(true);
+            self.second.set(erase(t));
+        } else if t.is_some() || self.rare().is_some() {
             self.rare_for_write().name_type.set(t);
         }
     }
     #[inline]
     pub fn containing_type(&self) -> Option<P<Type>> {
-        self.rare.get().and_then(|r| r.containing_type.get())
+        if self.is_synthetic_mode() {
+            // SAFETY: in synthetic mode `first` is an erased `P<Type>` or nil.
+            return unsafe { restore(self.first.get()) };
+        }
+        self.rare().and_then(|r| r.containing_type.get())
     }
     #[inline]
     pub fn set_containing_type(&self, t: Option<P<Type>>) {
-        if t.is_some() || self.rare.get().is_some() {
+        if self.is_synthetic_mode() {
+            self.first.set(erase(t));
+        } else if t.is_some() && self.can_enter_synthetic_mode() {
+            self.set_synthetic_mode(true);
+            self.first.set(erase(t));
+        } else if t.is_some() || self.rare().is_some() {
             self.rare_for_write().containing_type.set(t);
         }
     }
     #[inline]
     pub fn function_or_constructor_checked(&self) -> bool {
-        self.rare.get().is_some_and(|r| r.function_or_constructor_checked.get())
+        self.rare().is_some_and(|r| r.function_or_constructor_checked.get())
     }
     #[inline]
     pub fn set_function_or_constructor_checked(&self, v: bool) {
-        if v || self.rare.get().is_some() {
+        if v || self.rare().is_some() {
             self.rare_for_write().function_or_constructor_checked.set(v);
         }
     }
@@ -2431,3 +2553,42 @@ pub static LanguageFeatureMinimumTarget: LanguageFeatureMinimumTargetMap = Langu
 
 // Aliases for types
 pub type StringLiteralType = Type;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn value_symbol_links_synthetic_mode_keeps_every_field() {
+        let t1 = Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(1), IntrinsicType::default());
+        let t2 = Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(2), IntrinsicType::default());
+        let s = Symbol::new(SymbolFlags::Property, "p");
+        let m = new_simple_type_mapper(t1, t2);
+        let fields = |l: &ValueSymbolLinks| (l.target(), l.mapper(), l.containing_type(), l.name_type(), l.write_type(), l.function_or_constructor_checked());
+
+        // A synthetic property: containing and name type in the words of target and mapper, then a target moves them.
+        let l = ValueSymbolLinks::default();
+        l.set_containing_type(Some(t1));
+        l.set_name_type(Some(t2));
+        l.set_target(None);
+        assert_eq!(fields(&l), (None, None, Some(t1), Some(t2), None, false));
+        l.set_write_type(Some(t1));
+        l.set_function_or_constructor_checked(true);
+        assert_eq!(fields(&l), (None, None, Some(t1), Some(t2), Some(t1), true));
+        l.set_mapper(Some(m));
+        assert_eq!(fields(&l), (None, Some(m), Some(t1), Some(t2), Some(t1), true));
+        l.set_target(Some(s));
+        l.set_containing_type(None);
+        assert_eq!(fields(&l), (Some(s), Some(m), None, Some(t2), Some(t1), true));
+
+        // An instantiated symbol keeps containing/name types in the tail.
+        let l = ValueSymbolLinks::default();
+        l.set_target(Some(s));
+        l.set_name_type(Some(t2));
+        l.set_target(None);
+        l.set_containing_type(Some(t1));
+        assert_eq!(fields(&l), (None, None, Some(t1), Some(t2), None, false));
+        l.set_mapper(Some(m));
+        assert_eq!(fields(&l), (None, Some(m), Some(t1), Some(t2), None, false));
+    }
+}

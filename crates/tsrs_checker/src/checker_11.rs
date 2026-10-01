@@ -222,7 +222,7 @@ impl Checker {
             if single_prop.flags().intersects(SymbolFlags::Transient) {
                 let links = self.value_symbol_links.get(single_prop);
                 single_prop_type = links.resolved_type.get();
-                single_prop_mapper = links.mapper.get();
+                single_prop_mapper = links.mapper();
             }
             let clone = self.create_symbol_with_type(single_prop, single_prop_type);
             if let Some(value_declaration) = single_prop.value_declaration() {
@@ -230,7 +230,7 @@ impl Checker {
             }
             let links = self.value_symbol_links.get(clone);
             links.set_containing_type(Some(containing_type));
-            links.mapper.set(single_prop_mapper);
+            links.set_mapper(single_prop_mapper);
             let write_type = self.get_write_type_of_symbol(single_prop);
             links.set_write_type(write_type);
             return Some(clone);
@@ -318,7 +318,7 @@ impl Checker {
         // if symbol is instantiated its flags are not copied from the 'target'
         // so we'll need to get back original 'target' symbol to work with correct set of flags
         if s.check_flags.get().intersects(CheckFlags::Instantiated) {
-            return self.value_symbol_links.get(s).target.get();
+            return self.value_symbol_links.get(s).target();
         }
         Some(s)
     }
@@ -364,7 +364,7 @@ impl Checker {
         symbol.value_declaration.set(source.value_declaration());
         let links = self.value_symbol_links.get(symbol);
         links.resolved_type.set(t);
-        links.target.set(Some(source));
+        links.set_target(Some(source));
         links.set_name_type(self.value_symbol_links.get(source).name_type());
         symbol
     }

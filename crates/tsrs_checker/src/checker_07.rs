@@ -557,7 +557,7 @@ impl Checker {
                 prop.parent.set(member_symbol.parent());
                 prop.value_declaration.set(member_symbol.value_declaration());
                 links.resolved_type.set(Some(t));
-                links.target.set(Some(member_symbol));
+                links.set_target(Some(member_symbol));
                 member = Some(prop);
                 if let Some(all_properties_table) = all_properties_table {
                     all_properties_table.set(prop.name(), prop);
