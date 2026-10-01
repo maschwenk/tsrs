@@ -248,6 +248,13 @@ interleaved, base dc59d8e): single-threaded peak 7.02 -> 6.02 GiB (-14.2%), 4 ch
 (-14.0%); opt-out 9.47 -> 8.01 / 14.53 -> 12.35 GiB. Details, per-step numbers and rejected candidates:
 `notes/mem-round3.md`.
 
+## 2026-10-01: PGO release binaries
+
+Release binaries are built with PGO + fat LTO + one codegen unit (profile `dist`; training on the conformance suite
+and two open-source bench projects; `cargo build --release` unchanged). The private monorepo: CPU -6.9% single /
+-10.5% on 4 checkers, instructions -13.5% / -13.7%, cycles -8.4% / -13.2%; vscode and mui-docs -11% / -14% CPU;
+output and counters identical. Details, x86_64 handling and build cost: `notes/perf-pgo.md`.
+
 ## 2026-10-01: repository recreated
 
 The GitHub repository was deleted and recreated from a clean mirror of the rewritten history (no pull-request refs,
