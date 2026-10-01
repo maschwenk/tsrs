@@ -569,13 +569,13 @@ impl EmitContext {
 
     pub fn snippet_element(&self, node: P<Node>) -> Option<SnippetElement> {
         if let Some(emit_node) = self.emit_nodes.borrow().get(&node) {
-            return emit_node.snippet_element;
+            return emit_node.rare().and_then(|r| r.snippet_element);
         }
         None
     }
 
     pub fn set_snippet_element(&self, node: P<Node>, snippet_element: SnippetElement) {
-        self.emit_nodes.borrow_mut().entry(node).or_default().snippet_element = Some(snippet_element);
+        self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().snippet_element = Some(snippet_element);
     }
 
     // Gets the range to use for a node when emitting comments.
@@ -638,7 +638,7 @@ impl EmitContext {
     // Gets the range for a token of a node when emitting source maps.
     pub fn token_source_map_range(&self, node: P<Node>, kind: Kind) -> Option<TextRange> {
         if let Some(emit_node) = self.emit_nodes.borrow().get(&node) {
-            if let Some(ranges) = &emit_node.token_source_map_ranges {
+            if let Some(ranges) = emit_node.rare().and_then(|r| r.token_source_map_ranges.as_ref()) {
                 if let Some(loc) = ranges.get(&kind) {
                     return Some(*loc);
                 }
@@ -651,7 +651,7 @@ impl EmitContext {
     pub fn set_token_source_map_range(&self, node: P<Node>, kind: Kind, loc: TextRange) {
         let mut emit_nodes = self.emit_nodes.borrow_mut();
         let emit_node = emit_nodes.entry(node).or_default();
-        emit_node.token_source_map_ranges.get_or_insert_with(FxHashMap::default).insert(kind, loc);
+        emit_node.rare_mut().token_source_map_ranges.get_or_insert_with(FxHashMap::default).insert(kind, loc);
     }
 
     pub fn assigned_name(&self, node: P<Node>) -> Option<P<Node>> {
@@ -698,15 +698,15 @@ impl EmitContext {
         let mut emit_nodes = self.emit_nodes.borrow_mut();
         let emit_node = emit_nodes.entry(node).or_default();
         for h in helper {
-            if !emit_node.helpers.contains(h) {
-                emit_node.helpers.push(*h);
+            if !emit_node.rare().is_some_and(|r| r.helpers.contains(h)) {
+                emit_node.rare_mut().helpers.push(*h);
             }
         }
     }
 
     pub fn get_emit_helpers(&self, node: P<Node>) -> Vec<P<EmitHelper>> {
         if let Some(emit_node) = self.emit_nodes.borrow().get(&node) {
-            return emit_node.helpers.clone();
+            return emit_node.rare().map_or_else(Vec::new, |r| r.helpers.clone());
         }
         Vec::new()
     }
@@ -714,7 +714,7 @@ impl EmitContext {
     pub fn get_external_helpers_module_name(&self, node: P<SourceFile>) -> Option<P<Node>> {
         if let Some(parse_node) = self.parse_node(Some(node.as_node())) {
             if let Some(emit_node) = self.emit_nodes.borrow().get(&parse_node) {
-                return emit_node.external_helpers_module_name;
+                return emit_node.rare().and_then(|r| r.external_helpers_module_name);
             }
         }
         None
@@ -726,14 +726,14 @@ impl EmitContext {
             panic!("Node must be a parse tree node or have an Original pointer to a parse tree node.");
         };
 
-        self.emit_nodes.borrow_mut().entry(parse_node).or_default().external_helpers_module_name = Some(name);
+        self.emit_nodes.borrow_mut().entry(parse_node).or_default().rare_mut().external_helpers_module_name = Some(name);
     }
 
     pub fn has_recorded_external_helpers(&self, node: P<SourceFile>) -> bool {
         if let Some(parse_node) = self.parse_node(Some(node.as_node())) {
             let emit_nodes = self.emit_nodes.borrow();
             let emit_node = emit_nodes.get(&parse_node);
-            return emit_node.is_some_and(|emit_node| emit_node.external_helpers_module_name.is_some() || emit_node.emit_flags.intersects(EmitFlags::ExternalHelpers));
+            return emit_node.is_some_and(|emit_node| emit_node.rare().is_some_and(|r| r.external_helpers_module_name.is_some()) || emit_node.emit_flags.intersects(EmitFlags::ExternalHelpers));
         }
         false
     }
@@ -947,12 +947,12 @@ impl EmitContext {
     }
 
     pub fn set_synthetic_leading_comments(&self, node: P<Node>, comments: Vec<SynthesizedComment>) -> P<Node> {
-        self.emit_nodes.borrow_mut().entry(node).or_default().leading_comments = comments;
+        self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().leading_comments = comments;
         node
     }
 
     pub fn add_synthetic_leading_comment(&self, node: P<Node>, kind: Kind, text: &str, has_trailing_new_line: bool) -> P<Node> {
-        self.emit_nodes.borrow_mut().entry(node).or_default().leading_comments.push(SynthesizedComment {
+        self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().leading_comments.push(SynthesizedComment {
             kind,
             loc: TextRange::new(-1, -1),
             has_leading_new_line: false,
@@ -964,18 +964,18 @@ impl EmitContext {
 
     pub fn get_synthetic_leading_comments(&self, node: P<Node>) -> Vec<SynthesizedComment> {
         if let Some(emit_node) = self.emit_nodes.borrow().get(&node) {
-            return emit_node.leading_comments.clone();
+            return emit_node.rare().map_or_else(Vec::new, |r| r.leading_comments.clone());
         }
         Vec::new()
     }
 
     pub fn set_synthetic_trailing_comments(&self, node: P<Node>, comments: Vec<SynthesizedComment>) -> P<Node> {
-        self.emit_nodes.borrow_mut().entry(node).or_default().trailing_comments = comments;
+        self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().trailing_comments = comments;
         node
     }
 
     pub fn add_synthetic_trailing_comment(&self, node: P<Node>, kind: Kind, text: &str, has_trailing_new_line: bool) -> P<Node> {
-        self.emit_nodes.borrow_mut().entry(node).or_default().trailing_comments.push(SynthesizedComment {
+        self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().trailing_comments.push(SynthesizedComment {
             kind,
             loc: TextRange::new(-1, -1),
             has_leading_new_line: false,
@@ -987,7 +987,7 @@ impl EmitContext {
 
     pub fn get_synthetic_trailing_comments(&self, node: P<Node>) -> Vec<SynthesizedComment> {
         if let Some(emit_node) = self.emit_nodes.borrow().get(&node) {
-            return emit_node.trailing_comments.clone();
+            return emit_node.rare().map_or_else(Vec::new, |r| r.trailing_comments.clone());
         }
         Vec::new()
     }
@@ -995,13 +995,13 @@ impl EmitContext {
     // SetTypeNode stores the original type node on a name node when the type is erased,
     // so the emitter can use the type's position for comment preservation.
     pub fn set_type_node(&self, node: P<Node>, type_node: P<Node>) {
-        self.emit_nodes.borrow_mut().entry(node).or_default().type_node = Some(type_node);
+        self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().type_node = Some(type_node);
     }
 
     // GetTypeNode gets the type node stored on a name node by the type eraser.
     pub fn get_type_node(&self, node: P<Node>) -> Option<P<Node>> {
         if let Some(emit_node) = self.emit_nodes.borrow().get(&node) {
-            return emit_node.type_node;
+            return emit_node.rare().and_then(|r| r.type_node);
         }
         None
     }
@@ -1075,12 +1075,22 @@ pub struct SynthesizedComment {
     pub text: String,
 }
 
+// The checker's node builder sets emit flags on hundreds of thousands of synthesized nodes and nothing else, so the
+// other fields (emit helpers, synthesized comments, token ranges, ...) live in a tail allocated on the first write
+// (`rare_mut`); reads of an absent tail see Go's zero values. 32 bytes per map entry instead of 160.
 #[derive(Clone, Default)]
 pub(crate) struct emitNode {
     flags: emitNodeFlags,
     emit_flags: EmitFlags,
     comment_range: TextRange,
     source_map_range: TextRange,
+    rare: Option<Box<emitNodeRare>>,
+}
+
+const _: () = assert!(std::mem::size_of::<emitNode>() == 32);
+
+#[derive(Clone, Default)]
+struct emitNodeRare {
     token_source_map_ranges: Option<FxHashMap<Kind, TextRange>>,
     helpers: Vec<P<EmitHelper>>,
     external_helpers_module_name: Option<P<Node>>,
@@ -1091,17 +1101,33 @@ pub(crate) struct emitNode {
 }
 
 impl emitNode {
+    fn rare(&self) -> Option<&emitNodeRare> {
+        self.rare.as_deref()
+    }
+
+    fn rare_mut(&mut self) -> &mut emitNodeRare {
+        self.rare.get_or_insert_with(Default::default)
+    }
+
     // NOTE: This method is not guaranteed to be thread-safe
     fn copy_from(&mut self, source: &emitNode) {
         self.flags = source.flags;
         self.emit_flags = source.emit_flags;
         self.comment_range = source.comment_range;
         self.source_map_range = source.source_map_range;
-        self.token_source_map_ranges = source.token_source_map_ranges.clone();
-        self.helpers = source.helpers.clone();
-        self.external_helpers_module_name = source.external_helpers_module_name;
-        if let Some(snippet_element) = source.snippet_element {
-            self.snippet_element = Some(snippet_element);
+        let src = source.rare();
+        let token_source_map_ranges = src.and_then(|r| r.token_source_map_ranges.clone());
+        let helpers = src.map_or_else(Vec::new, |r| r.helpers.clone());
+        let external_helpers_module_name = src.and_then(|r| r.external_helpers_module_name);
+        let snippet_element = src.and_then(|r| r.snippet_element);
+        if self.rare.is_some() || token_source_map_ranges.is_some() || !helpers.is_empty() || external_helpers_module_name.is_some() || snippet_element.is_some() {
+            let rare = self.rare_mut();
+            rare.token_source_map_ranges = token_source_map_ranges;
+            rare.helpers = helpers;
+            rare.external_helpers_module_name = external_helpers_module_name;
+            if let Some(snippet_element) = snippet_element {
+                rare.snippet_element = Some(snippet_element);
+            }
         }
     }
 }

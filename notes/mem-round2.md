@@ -296,3 +296,19 @@ call sites changed mechanically from `.x.get()` / `.x.set(..)`).
 | 4 checkers, before | 9.46-9.52 (median 9.48) | 435-437 G |
 | 4 checkers, after | 9.42-9.45 (median 9.43, -0.05) | 435-436 G |
 | opt-out single / 4 checkers (go assignment), after | 9.50 / 14.55 | |
+
+### 15. Emit-context entries 160 -> 32 bytes
+
+Each checker's node builder keeps an `EmitContext` whose `emit_nodes` map gets an entry for every synthesized node
+it sets emit flags on (~250K single, a 40 MB table at exit: `set_emit_flags` from `clone_binding_name`); Go keeps
+them too. An `emitNode` held all of Go's fields inline (token ranges map, helper and comment vectors, ...). The ones
+besides flags and the two ranges moved into a boxed `emitNodeRare` allocated on the first write; `copy_from`
+copies the same fields as before (it leaves the tail absent when the source's copied fields are all zero).
+
+| run (2 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, before | 7.055-7.056 | 322 G |
+| single, after | 7.021 (-0.035) | 324 G |
+| 4 checkers, before | 9.44-9.49 | 437 G |
+| 4 checkers, after | 9.38-9.40 (-0.07) | 435 G |
+| opt-out single / 4 checkers (go assignment), after | 9.47 / 14.55 | |
