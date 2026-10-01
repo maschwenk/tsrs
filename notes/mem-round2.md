@@ -312,3 +312,49 @@ copies the same fields as before (it leaves the tail absent when the source's co
 | 4 checkers, before | 9.44-9.49 | 437 G |
 | 4 checkers, after | 9.38-9.40 (-0.07) | 435 G |
 | opt-out single / 4 checkers (go assignment), after | 9.47 / 14.55 | |
+
+## Result
+
+Interleaved, 3 rounds each (base = e8d4196, the start of this pass; final = 263f98b; the final binary also
+contains the concurrent upstream frontend commits, which on their own moved the single-threaded peak up by
+~0.1 GiB, see steps 9 and 10):
+
+| run | base peak GiB | final peak GiB | base check s | final check s | instructions |
+| --- | --- | --- | --- | --- | --- |
+| default, single | 8.133 | 7.020 (-13.7%) | 17.37-17.62 | 17.58-18.11 | 315-317 -> 322-324 G |
+| default, 4 checkers | 10.91-10.94 | 9.38-9.43 (-14.2%) | 6.88-6.90 | 6.96-7.19 | 424-425 -> 435-436 G |
+| opt-out, single | 11.08 | 9.47 (-14.6%) | | | 343 -> 348 G |
+| opt-out, 4 checkers (go assignment) | 17.11 | 14.52 (-15.1%) | | | 507 -> 521 G |
+
+Counters after every step: opt-out 25,973,354 / 9,639,962 / 44,884,281 single and 39,704,001 / 16,200,921 /
+89,981,648 on 4 checkers (go assignment); default 12,811,032 / 9,630,120 / 44,820,708 single and 16,549,988 /
+13,788,912 / 76,888,800 on 4 checkers. Most of the +2% instructions is step 2 (hashing in symbol-table lookups).
+
+Rejected (brief candidates): mapper interning (identity observable: `find_active_mapper`, `compare_type_mappers`);
+type-list interning (instrumented: 10.0M lists / 193 MB through `alloc_slice`, 5.35M / 113 MB distinct, so a
+hash-consing table of the distinct lists would cost more than the 80 MB it saves); recycling `InferenceContext`s
+(they escape through their mappers into instantiated types); a global identifier interner (step 9). Not done:
+`SymbolTable` header 32 -> 24 bytes (a custom vector with inline length, ~28 MB), pointer-keyed link stores keyed
+by id (ids are observable), `ValueSymbolLinks` read-only accesses through `try_get` (~40 MB; needs a careful audit
+of every read site).
+
+## Profile after (default mode, single)
+
+Arena 5,310 MB requested (was 6,027), heap outside the arena 1,783 MB live (was 2,094).
+
+| arena type | MB | count | B/each |
+| --- | --- | --- | --- |
+| Symbol | 684 | 12,811,033 | 56 |
+| NodeAlloc<Identifier> | 359 | 7,844,376 | 48 |
+| [ValueSymbolLinks] chunks | 337 | 10.5M values | 32 |
+| TypeAlloc<ObjectType> | 275 | 3,006,176 | 96 |
+| str (213 MB source text) | 274 | | |
+| TypeMapper | 264 | 17,294,526 | 16 |
+| TypeAlloc<TypeReference> | 241 | 2,106,919 | 120 |
+| [P<Type>] | 230 | 13,656,662 | 17 |
+| Signature | 156 -> 138 (step 14) | 1,574,006 | 88 |
+| TypeAlloc<UnionType> / <IntersectionType> | 156 / 147 | 1.02M / 1.13M | 160 / 136 |
+
+Heap live: `SymbolMap::insert` 365 MB (16-byte entries), relation caches 190 -> ~160 MB (step 13), instantiation
+`GoMap`s 158 MB plus the object-type instantiation maps 73 MB, pointer-keyed `LinkStore`s 104 MB, lazy member tables
+~100 MB. On 4 checkers the relation caches are ~390 MB (`Relation::set` + the inlined call in `reset_maybe_stack`).

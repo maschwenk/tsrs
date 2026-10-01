@@ -199,3 +199,18 @@ line count run in parallel ("Parse time" 1.56 -> 0.80 s). `--extendedDiagnostics
 (`tsrs_core::phases`). What remains: ~0.54 s of parallel parse + resolve bound by file-system calls; checker
 imbalance (slowest checker consistently ~10.5% above the mean; a syntactic cost model did not transfer, see
 the notes). Details: `notes/speed-frontend.md`.
+
+## 2026-10-01: representation pass (peak memory, round 2)
+
+Representation changes only (suite errors and `.types`/`.symbols` byte-identical to the base in both lazy modes;
+counters unchanged; AST oracle unchanged): `Symbol` 72 -> 56 bytes (packed name and declarations, 32-bit id),
+16-byte `SymbolTable` entries that read the key from the symbol, 16-byte `TypeMapper` (tagged words), identifier /
+literal text in one word (`PackedStr`), inference contexts / infos, signatures, emit-context entries and union /
+intersection types with rare fields in tails or packed cells, rarely used per-type caches (base constraints of
+structured types, object-type instantiation maps, the node builder's abstract-construct cache) in checker maps,
+lazy member tables without duplicate lists, 17-byte relation cache slots. Project, default mode (medians of 3,
+interleaved, base e8d4196): single-threaded peak 8.13 -> 7.02 GiB (-13.7%), check 17.6 s both; 4 checkers
+10.93 -> 9.38 GiB (-14.2%), check 6.9 -> 7.0 s. Opt-out mode: 11.08 -> 9.47 / 17.11 -> 14.52 GiB. Rejected:
+mapper and type-list interning (mapper identity is observable; 5.3M distinct of 10M type lists, the table would
+cost more than it saves), recycling inference contexts (they escape through their mappers), a global identifier
+interner (parse +9%). Details and per-step numbers: `notes/mem-round2.md`.
