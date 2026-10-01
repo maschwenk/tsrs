@@ -19,6 +19,7 @@ tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
 tsrs_compiler = { path = "../tsrs_compiler", default-features = false }
 rustc-hash.workspace = true
+mimalloc = "0.1.52"
 [features]
 default = ["checker"]
 checker = ["tsrs_compiler/checker"]
