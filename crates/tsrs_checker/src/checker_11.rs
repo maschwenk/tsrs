@@ -534,11 +534,10 @@ impl Checker {
         // A name that occurs in more than one constituent occurs in one other than skipped, so skipped
         // only needs its members looked up, which may not resolve them.
         let types = t.types();
-        let lazy_names = self.lazy_reduce_names;
         let skipped = if self.lazy_members {
             types.iter().position(|&t| {
                 t.object_flags() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) == ObjectFlags::Mapped
-                    || !lazy_names && may_have_lazy_members(t) && t.flags().intersects(TypeFlags::Object)
+                    || may_have_lazy_members(t) && t.flags().intersects(TypeFlags::Object)
             })
         } else {
             None
@@ -546,28 +545,6 @@ impl Checker {
         let mut counts: OrderedMap<&'static str, i32> = OrderedMap::default();
         for (i, &t) in types.iter().enumerate() {
             if Some(i) != skipped {
-                // notes/mem-lazy.md L2: names only, in getPropertiesOfType order, without creating members.
-                if lazy_names && t.flags().intersects(TypeFlags::Object) {
-                    let lazy = self.get_ready_lazy_member_table(t);
-                    let shape_target = if lazy.is_none() { self.get_anonymous_instantiation_shape_target_ex(t) } else { None };
-                    if lazy.is_some() || shape_target.is_some() {
-                        self.lazy_member_stats.reduce_names_lazy_constituents += 1;
-                        let mut count = |_: &mut Checker, p: P<Symbol>| {
-                            *counts.entry(p.name()).or_insert(0) += 1;
-                            true
-                        };
-                        match lazy {
-                            Some(lm) => {
-                                let mut seen: FxHashSet<&'static str> = FxHashSet::default();
-                                self.every_lazy_property(t, &lm, &mut seen, &mut count);
-                            }
-                            None => {
-                                self.every_property_of_structured_type(shape_target.unwrap(), &mut count);
-                            }
-                        }
-                        continue;
-                    }
-                }
                 for prop in self.get_properties_of_type(t) {
                     *counts.entry(prop.name()).or_insert(0) += 1;
                 }

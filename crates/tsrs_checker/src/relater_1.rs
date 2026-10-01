@@ -912,10 +912,6 @@ impl Checker {
     // and no required properties, call/construct signatures or index signatures
     pub(crate) fn is_weak_type(&mut self, t: P<Type>) -> bool {
         if t.flags().intersects(TypeFlags::Object) {
-            if let Some(target) = self.get_anonymous_instantiation_shape_target(t) {
-                self.lazy_member_stats.anon_shape_weak += 1;
-                return self.is_weak_type(target);
-            }
             return self.signatures_of_structured_type(t, SignatureKind::Call).is_empty()
                 && self.signatures_of_structured_type(t, SignatureKind::Construct).is_empty()
                 && self.index_infos_of_structured_type(t).is_empty()
@@ -1277,62 +1273,12 @@ impl Checker {
     // relater.go:977
     pub(crate) fn get_unmatched_properties_worker(&mut self, source: P<Type>, target: P<Type>, require_optional_properties: bool, match_discriminant_properties: bool, props_out: Option<&mut Vec<P<Symbol>>>) -> Option<P<Symbol>> {
         let mut props_out = props_out;
-        if self.lazy_unmatched {
-            let reduced = self.get_reduced_apparent_type(target);
-            if reduced.flags().intersects(TypeFlags::Object) {
-                if let Some(lm) = self.get_ready_lazy_member_table(reduced) {
-                    // notes/mem-lazy.md L10: the walk sees declared members in place of their instantiations (same
-                    // names and flags, same order as getPropertiesOfType); the real property is looked up only
-                    // where it is returned or its type is needed.
-                    self.lazy_member_stats.unmatched_lazy_walks += 1;
-                    let mut result: Option<P<Symbol>> = None;
-                    let mut seen: FxHashSet<&'static str> = FxHashSet::default();
-                    self.every_lazy_property(reduced, &lm, &mut seen, &mut |c, declared_prop| {
-                        if is_static_private_identifier_property(declared_prop) {
-                            return true;
-                        }
-                        if !(require_optional_properties
-                            || !declared_prop.flags().intersects(SymbolFlags::Optional) && !declared_prop.check_flags.get().intersects(CheckFlags::Partial))
-                        {
-                            return true;
-                        }
-                        let name = declared_prop.name();
-                        let unmatched = if !match_discriminant_properties {
-                            !c.has_property_of_type(source, name)
-                        } else {
-                            match c.get_property_of_type(source, name) {
-                                None => true,
-                                Some(source_prop) => {
-                                    let target_prop = c.get_property_of_type(target, name).unwrap();
-                                    let target_type = c.get_type_of_symbol(target_prop);
-                                    target_type.flags().intersects(TypeFlags::Unit) && {
-                                        let source_type = c.get_type_of_symbol(source_prop);
-                                        !(source_type.flags().intersects(TypeFlags::Any) || {
-                                            let a = c.get_regular_type_of_literal_type(source_type);
-                                            let b = c.get_regular_type_of_literal_type(target_type);
-                                            a == b
-                                        })
-                                    }
-                                }
-                            }
-                        };
-                        if unmatched {
-                            let target_prop = c.get_property_of_type(target, name).unwrap();
-                            match props_out.as_deref_mut() {
-                                None => {
-                                    result = Some(target_prop);
-                                    return false;
-                                }
-                                Some(out) => out.push(target_prop),
-                            }
-                        }
-                        true
-                    });
-                    return result;
-                }
-            }
-        }
-        let properties = self.get_properties_of_type(target);
+        let lazy_properties = if self.lazy_unmatched { self.get_lazy_properties_in_order(target) } else { None };
+        let lazy = lazy_properties.is_some();
+        let properties = match lazy_properties {
+            Some(properties) => properties,
+            None => self.get_properties_of_type(target),
+        };
         for target_prop in properties {
             // TODO: remove this when we support static private identifier fields and find other solutions to get privateNamesAndStaticFields test to pass
             if is_static_private_identifier_property(target_prop) {
@@ -1342,19 +1288,30 @@ impl Checker {
                 || !target_prop.flags().intersects(SymbolFlags::Optional)
                     && !target_prop.check_flags.get().intersects(CheckFlags::Partial)
             {
-                let source_prop = if self.lazy_has_prop && !match_discriminant_properties {
-                    // notes/mem-lazy.md L9: only whether the source has the property matters below.
+                let source_prop = if (lazy || self.lazy_has_prop) && !match_discriminant_properties {
+                    // notes/mem-lazy.md L9/L10: only whether the source has the property matters below.
                     if self.has_property_of_type(source, target_prop.name()) { Some(target_prop) } else { None }
                 } else {
                     self.get_property_of_type(source, target_prop.name())
                 };
+                // notes/mem-lazy.md L10: a declared member stands in for the target property until the property
+                // itself is returned or its type is needed.
+                let mut target_prop = target_prop;
                 match source_prop {
-                    None => match props_out.as_deref_mut() {
-                        None => return Some(target_prop),
-                        Some(out) => out.push(target_prop),
-                    },
+                    None => {
+                        if lazy {
+                            target_prop = self.get_property_of_type(target, target_prop.name()).unwrap();
+                        }
+                        match props_out.as_deref_mut() {
+                            None => return Some(target_prop),
+                            Some(out) => out.push(target_prop),
+                        }
+                    }
                     Some(source_prop) => {
                         if match_discriminant_properties {
+                            if lazy {
+                                target_prop = self.get_property_of_type(target, target_prop.name()).unwrap();
+                            }
                             let target_type = self.get_type_of_symbol(target_prop);
                             if target_type.flags().intersects(TypeFlags::Unit) {
                                 let source_type = self.get_type_of_symbol(source_prop);
@@ -1375,6 +1332,63 @@ impl Checker {
             }
         }
         None
+    }
+}
+
+impl Checker {
+    // notes/mem-lazy.md L10: the properties getPropertiesOfType(t) would return, in the same order, but with declared
+    // members in place of the instantiations a lazy member table has not created; None when t has no such table.
+    // Mirrors resolveLazyMembers (declared named members, then addInheritedMembers over each base type's
+    // properties) and getNamedMembers (members declared in the class or interface first, each part sorted with
+    // compareSymbols). A declared member has its instantiation's name, flags and declarations, and names are unique
+    // in a member table, so the order is the same. Kept in the table: bases share it instead of being walked again.
+    pub(crate) fn get_lazy_properties_in_order(&mut self, t: P<Type>) -> Option<Vec<P<Symbol>>> {
+        let reduced = self.get_reduced_apparent_type(t);
+        if !reduced.flags().intersects(TypeFlags::Object) {
+            return None;
+        }
+        let lm = self.get_ready_lazy_member_table(reduced)?;
+        self.lazy_member_stats.unmatched_lazy_walks += 1;
+        if let Some(properties) = lm.ordered_properties.get() {
+            return Some(properties.clone());
+        }
+        let mut members: Vec<P<Symbol>> = Vec::new();
+        let mut seen: FxHashSet<&'static str> = FxHashSet::default();
+        if let Some(declared_members) = self.resolve_declared_members(reduced.target().unwrap()).unwrap().declared_members.get() {
+            for (id, symbol) in declared_members.entries() {
+                if self.is_named_member(symbol, id) {
+                    seen.insert(id);
+                    members.push(lm.declared.borrow().get(id).copied().unwrap_or(symbol));
+                }
+            }
+        }
+        for &base_type in &lm.ready.get().unwrap().base_types {
+            let base_properties = match self.get_lazy_properties_in_order(base_type) {
+                Some(properties) => properties,
+                None => self.get_properties_of_type(base_type),
+            };
+            for p in base_properties {
+                if !is_static_private_identifier_property(p) && seen.insert(p.name()) {
+                    members.push(p);
+                }
+            }
+        }
+        let container = reduced.symbol();
+        let is_class_or_interface_container = container.is_some_and(|c| c.flags().intersects(SymbolFlags::Class | SymbolFlags::Interface));
+        let mut contained: Vec<P<Symbol>> = Vec::new();
+        let mut rest: Vec<P<Symbol>> = Vec::new();
+        for p in members {
+            if is_class_or_interface_container && self.is_declaration_contained_by(p, container.unwrap()) {
+                contained.push(p);
+            } else {
+                rest.push(p);
+            }
+        }
+        self.sort_symbols(&mut contained);
+        self.sort_symbols(&mut rest);
+        contained.extend(rest);
+        let _ = lm.ordered_properties.set(contained.clone());
+        Some(contained)
     }
 }
 

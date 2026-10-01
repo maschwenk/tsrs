@@ -942,10 +942,6 @@ impl Checker {
             if self.is_generic_mapped_type(t) {
                 return false;
             }
-            if let Some(target) = self.get_anonymous_instantiation_shape_target(t) {
-                self.lazy_member_stats.anon_shape_empty += 1;
-                return self.is_empty_object_type(target);
-            }
             return self.is_empty_structured_type(t);
         } else if t.flags().intersects(TypeFlags::NonPrimitive) {
             return true;
