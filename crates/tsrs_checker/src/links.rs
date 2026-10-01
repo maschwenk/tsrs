@@ -92,11 +92,12 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
 }
 
 /// Links keyed by a node/symbol id (Go `PagedLinkStore`-backed stores). Like Go, the id is looked up in pages of
-/// `ID_PAGE` consecutive ids (4 bytes per id: slot + 1, 0 = no links), found through a small map keyed by page
-/// number (ids are process-wide, so a checker's ids need not start near 0). The values live in fixed-size chunks
-/// in the arena (stable addresses, `P<V>` handed out as before), in first-access order.
+/// `ID_PAGE` consecutive ids (4 bytes per id: slot + 1, 0 = no links), found by indexing a vector by page number
+/// (8 bytes per page of the id space below the highest id seen, ~0.2 MB for Project' 26M symbol ids; pages without
+/// links stay unallocated). The values live in fixed-size chunks in the arena (stable addresses, `P<V>` handed out
+/// as before), in first-access order.
 pub struct IdLinkStore<V: 'static> {
-    pages: FxHashMap<u32, Box<[u32; ID_PAGE]>>,
+    pages: Vec<Option<Box<[u32; ID_PAGE]>>>,
     wide_slots: FxHashMap<u64, u32>, // ids >= 2^32 (long-running processes such as the test runner)
     chunks: Vec<&'static [V]>,
     len: u32,
@@ -109,7 +110,7 @@ const ID_PAGE: usize = 1 << ID_PAGE_SHIFT;
 
 impl<V: 'static> Default for IdLinkStore<V> {
     fn default() -> Self {
-        IdLinkStore { pages: FxHashMap::default(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0 }
+        IdLinkStore { pages: Vec::new(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0 }
     }
 }
 
@@ -122,7 +123,7 @@ impl<V: 'static> IdLinkStore<V> {
     #[inline]
     fn slot(&self, id: u64) -> Option<u32> {
         if id <= u32::MAX as u64 {
-            let page = self.pages.get(&((id >> ID_PAGE_SHIFT) as u32))?;
+            let page = self.pages.get((id >> ID_PAGE_SHIFT) as usize)?.as_deref()?;
             page[id as usize & (ID_PAGE - 1)].checked_sub(1)
         } else {
             self.wide_slots.get(&id).copied()
@@ -147,6 +148,12 @@ impl<V: Default + 'static> IdLinkStore<V> {
         if let Some(slot) = self.slot(id) {
             return self.at(slot);
         }
+        self.create(id)
+    }
+
+    #[inline(never)]
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    fn create(&mut self, id: u64) -> P<V> {
         tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
         let slot = self.len;
         if slot as usize % ID_LINK_CHUNK == 0 {
@@ -154,7 +161,11 @@ impl<V: Default + 'static> IdLinkStore<V> {
         }
         self.len += 1;
         if id <= u32::MAX as u64 {
-            let page = self.pages.entry((id >> ID_PAGE_SHIFT) as u32).or_insert_with(|| Box::new([0; ID_PAGE]));
+            let page_index = (id >> ID_PAGE_SHIFT) as usize;
+            if page_index >= self.pages.len() {
+                self.pages.resize_with(page_index + 1, || None);
+            }
+            let page = self.pages[page_index].get_or_insert_with(|| Box::new([0; ID_PAGE]));
             page[id as usize & (ID_PAGE - 1)] = slot + 1;
         } else {
             self.wide_slots.insert(id, slot);

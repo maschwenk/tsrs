@@ -10,30 +10,44 @@ use crate::*;
 static NEXT_NODE_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_SYMBOL_ID: AtomicU64 = AtomicU64::new(0);
 
+#[inline]
 pub fn get_node_id(node: P<Node>) -> NodeId {
-    let mut id = node.id.load(Ordering::Relaxed);
-    if id == 0 {
-        // Worst case, we burn a few ids if we have to CAS.
-        let next = NEXT_NODE_ID.fetch_add(1, Ordering::Relaxed) + 1;
-        // Nodes store their id in 32 bits (memory); Go's ids are 64-bit but no program gets near 2^32.
-        id = u32::try_from(next).expect("more than u32::MAX node ids");
-        if node.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_err() {
-            id = node.id.load(Ordering::Relaxed);
-        }
+    let id = node.id.load(Ordering::Relaxed);
+    if id != 0 {
+        return NodeId(id as u64);
+    }
+    assign_node_id(node)
+}
+
+#[inline(never)]
+fn assign_node_id(node: P<Node>) -> NodeId {
+    // Worst case, we burn a few ids if we have to CAS.
+    let next = NEXT_NODE_ID.fetch_add(1, Ordering::Relaxed) + 1;
+    // Nodes store their id in 32 bits (memory); Go's ids are 64-bit but no program gets near 2^32.
+    let mut id = u32::try_from(next).expect("more than u32::MAX node ids");
+    if node.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_err() {
+        id = node.id.load(Ordering::Relaxed);
     }
     NodeId(id as u64)
 }
 
+#[inline]
 pub fn get_symbol_id(symbol: P<Symbol>) -> SymbolId {
-    let mut id = symbol.id.load(Ordering::Relaxed);
-    if id == 0 {
-        // Worst case, we burn a few ids if we have to CAS.
-        let next = NEXT_SYMBOL_ID.fetch_add(1, Ordering::Relaxed) + 1;
-        // Symbols store their id in 32 bits (memory); Go's ids are 64-bit but no program gets near 2^32.
-        id = u32::try_from(next).expect("more than u32::MAX symbol ids");
-        if symbol.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_err() {
-            id = symbol.id.load(Ordering::Relaxed);
-        }
+    let id = symbol.id.load(Ordering::Relaxed);
+    if id != 0 {
+        return SymbolId(id as u64);
+    }
+    assign_symbol_id(symbol)
+}
+
+#[inline(never)]
+fn assign_symbol_id(symbol: P<Symbol>) -> SymbolId {
+    // Worst case, we burn a few ids if we have to CAS.
+    let next = NEXT_SYMBOL_ID.fetch_add(1, Ordering::Relaxed) + 1;
+    // Symbols store their id in 32 bits (memory); Go's ids are 64-bit but no program gets near 2^32.
+    let mut id = u32::try_from(next).expect("more than u32::MAX symbol ids");
+    if symbol.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_err() {
+        id = symbol.id.load(Ordering::Relaxed);
     }
     SymbolId(id as u64)
 }
