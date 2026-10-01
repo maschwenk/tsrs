@@ -2337,7 +2337,7 @@ impl Checker {
                 // in the type. It will just be "__computed", which does not appear in any
                 // SymbolTable.
                 let symbol = self.get_symbol_of_declaration(element).unwrap();
-                let name_type = self.value_symbol_links.get(symbol).name_type.get();
+                let name_type = self.value_symbol_links.get(symbol).name_type();
                 return self.get_type_of_property_of_contextual_type_ex(t, symbol.name(), name_type);
             }
             if has_dynamic_name(element) {

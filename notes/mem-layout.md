@@ -92,3 +92,23 @@ Checks: AST oracle 113/113 libs and 17,318/17,319 test units identical (the one 
 
 Wall/check times on this shared machine vary by +-20% between rounds (load ~8 from other agents);
 instructions retired (from `/usr/bin/time -l`) are the stable CPU-work measure and did not change.
+
+## Step 3: link records
+
+Occupancy (one-off count over all link chunks at exit, Project single, default mode): 13,568,293
+`ValueSymbolLinks` records; `target` set in 68%, `resolved_type` 59%, `mapper` 56%, `containing_type` 17%,
+`name_type` 11%, `write_type` 1.6%, `function_or_constructor_checked` 0.25%; 81% set none of the last four.
+`write_type`, `name_type`, `containing_type` and `function_or_constructor_checked` moved into a tail
+(`ValueSymbolLinksRare`, 32 bytes) allocated on the first non-default write; reads of an absent tail return the
+zero value. Record 56 -> 32 bytes (compile-time assert). Callers use `x()` / `set_x(..)` for the four moved fields
+(54 sites, mechanical). The other link records are too small to matter here: `SignatureLinks` 34 MB,
+`TypeNodeLinks` 20 MB, `MappedSymbolLinks` 18 MB, `NodeLinks` 2 MB (single).
+
+| run (2 interleaved rounds) | check s | instructions | peak GB |
+| --- | --- | --- | --- |
+| single, before | 22.43-24.88 | 318-320 G | 10.46 |
+| single, after | 19.82-22.59 | 318-320 G | 10.22 (-0.23) |
+| 4 checkers, before | 9.27-10.16 | 478-479 G | 15.76 |
+| 4 checkers, after | 10.24-10.36 | 478 G | 15.43 (-0.33) |
+
+Opt-out counters identical; suite pass lists identical in both modes.

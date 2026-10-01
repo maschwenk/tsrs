@@ -1527,7 +1527,7 @@ impl Checker {
         if !prop.check_flags().intersects(CheckFlags::Synthetic) {
             return callback(self, prop);
         }
-        let types = self.value_symbol_links.get(prop).containing_type.get().unwrap().types();
+        let types = self.value_symbol_links.get(prop).containing_type().unwrap().types();
         for &t in types {
             let p = self.get_property_of_type(t, prop.name());
             if let Some(p) = p {

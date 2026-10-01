@@ -755,7 +755,7 @@ impl NodeBuilderImpl {
         if !c.value_symbol_links.has(symbol) {
             return None;
         }
-        let name_type = c.value_symbol_links.try_get(symbol).unwrap().name_type.get();
+        let name_type = c.value_symbol_links.try_get(symbol).unwrap().name_type();
         let name_type = name_type?;
         let mut enum_enclosing_declaration = enclosing_declaration;
         if enum_enclosing_declaration.is_none() {

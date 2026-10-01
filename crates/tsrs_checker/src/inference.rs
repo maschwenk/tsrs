@@ -1266,8 +1266,8 @@ impl Checker {
             let check_flags = CheckFlags::ReverseMapped | if readonly_mask && self.is_readonly_symbol(prop) { CheckFlags::Readonly } else { CheckFlags::None };
             let inferred_prop = self.new_symbol_ex(SymbolFlags::Property | (prop.flags.get() & optional_mask), prop.name.get(), check_flags);
             inferred_prop.declarations.set(prop.declarations());
-            let name_type = self.value_symbol_links.get(prop).name_type.get();
-            self.value_symbol_links.get(inferred_prop).name_type.set(name_type);
+            let name_type = self.value_symbol_links.get(prop).name_type();
+            self.value_symbol_links.get(inferred_prop).set_name_type(name_type);
             let links = self.reverse_mapped_symbol_links.get(inferred_prop);
             links.property_type.set(Some(self.get_type_of_symbol(prop)));
             let constraint_target = r_constraint_type.as_index_type().target().unwrap();

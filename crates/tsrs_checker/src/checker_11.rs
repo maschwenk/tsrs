@@ -191,10 +191,10 @@ impl Checker {
                 clone.parent.set(value_declaration.symbol().unwrap().parent());
             }
             let links = self.value_symbol_links.get(clone);
-            links.containing_type.set(Some(containing_type));
+            links.set_containing_type(Some(containing_type));
             links.mapper.set(single_prop_mapper);
             let write_type = self.get_write_type_of_symbol(single_prop);
-            links.write_type.set(write_type);
+            links.set_write_type(write_type);
             return Some(clone);
         }
         if prop_set.size() == 0 {
@@ -220,7 +220,7 @@ impl Checker {
             let t = self.get_type_of_symbol(prop);
             if first_type.is_none() {
                 first_type = Some(t);
-                name_type = self.value_symbol_links.get(prop).name_type.get();
+                name_type = self.value_symbol_links.get(prop).name_type();
             }
             let write_type = self.get_write_type_of_symbol(prop);
             if write_types.is_some() || write_type != Some(t) {
@@ -249,8 +249,8 @@ impl Checker {
             }
         }
         let links = self.value_symbol_links.get(result);
-        links.containing_type.set(Some(containing_type));
-        links.name_type.set(name_type);
+        links.set_containing_type(Some(containing_type));
+        links.set_name_type(name_type);
         if prop_types.len() > 2 {
             // When `propTypes` has the potential to explode in size when normalized, defer normalization until absolutely needed
             result.check_flags.set(result.check_flags.get() | CheckFlags::DeferredType);
@@ -267,9 +267,9 @@ impl Checker {
         }
         if let Some(write_types) = write_types {
             if is_union {
-                links.write_type.set(Some(self.get_union_type(&write_types)));
+                links.set_write_type(Some(self.get_union_type(&write_types)));
             } else {
-                links.write_type.set(Some(self.get_intersection_type(&write_types)));
+                links.set_write_type(Some(self.get_intersection_type(&write_types)));
             }
         }
         Some(result)
@@ -327,7 +327,7 @@ impl Checker {
         let links = self.value_symbol_links.get(symbol);
         links.resolved_type.set(t);
         links.target.set(Some(source));
-        links.name_type.set(self.value_symbol_links.get(source).name_type.get());
+        links.set_name_type(self.value_symbol_links.get(source).name_type());
         symbol
     }
 

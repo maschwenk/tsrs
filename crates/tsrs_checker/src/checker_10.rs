@@ -1795,7 +1795,7 @@ impl Checker {
                     return true;
                 }
                 // If we're a setter, check writeType.
-                if let Some(write_type) = links.write_type.get() {
+                if let Some(write_type) = links.write_type() {
                     if !self.could_contain_type_variables(write_type) {
                         return true;
                     }
@@ -1830,7 +1830,7 @@ impl Checker {
         let result_links = self.value_symbol_links.get(result);
         result_links.target.set(Some(symbol));
         result_links.mapper.set(m);
-        result_links.name_type.set(links.name_type.get());
+        result_links.set_name_type(links.name_type());
         result
     }
 }
@@ -2062,8 +2062,8 @@ impl Checker {
                 | if strip_optional { CheckFlags::StripOptional } else { CheckFlags::None },
         );
         let value_links = self.value_symbol_links.get(prop);
-        value_links.containing_type.set(Some(t));
-        value_links.name_type.set(Some(prop_name_type));
+        value_links.set_containing_type(Some(t));
+        value_links.set_name_type(Some(prop_name_type));
         let mapped_links = self.mapped_symbol_links.get(prop);
         mapped_links.key_type.set(Some(key_type));
         if let Some(modifiers_prop) = modifiers_prop {
@@ -2226,8 +2226,8 @@ fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTy
         // property symbol's name type be the union of those enum member types.
         if let Some(existing_prop) = st.members.lookup(&prop_name) {
             let value_links = c.value_symbol_links.get(existing_prop);
-            let name_type = c.get_union_type(&[value_links.name_type.get().unwrap(), prop_name_type]);
-            value_links.name_type.set(Some(name_type));
+            let name_type = c.get_union_type(&[value_links.name_type().unwrap(), prop_name_type]);
+            value_links.set_name_type(Some(name_type));
             let mapped_links = c.mapped_symbol_links.get(existing_prop);
             let key_type_union = c.get_union_type(&[mapped_links.key_type.get().unwrap(), key_type]);
             mapped_links.key_type.set(Some(key_type_union));
@@ -2265,7 +2265,7 @@ impl Checker {
     pub(crate) fn get_type_of_mapped_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.resolved_type.get().is_none() {
-            let mapped_type = links.containing_type.get().unwrap();
+            let mapped_type = links.containing_type().unwrap();
             if !self.push_type_resolution(symbol.into(), TypeSystemPropertyName::Type) {
                 mapped_type.as_mapped_type().contains_error.set(true);
                 return self.error_type;

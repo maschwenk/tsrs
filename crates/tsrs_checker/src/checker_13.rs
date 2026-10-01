@@ -1225,7 +1225,7 @@ impl Checker {
     pub(crate) fn get_literal_type_from_property(&mut self, prop: P<Symbol>, include: TypeFlags, include_non_public: bool) -> P<Type> {
         if include_non_public || !get_declaration_modifier_flags_from_symbol(prop).intersects(ModifierFlags::NonPublicAccessibilityModifier) {
             let late_bound = self.get_late_bound_symbol(prop);
-            let mut t = self.value_symbol_links.get(late_bound).name_type.get();
+            let mut t = self.value_symbol_links.get(late_bound).name_type();
             if t.is_none() {
                 if prop.name() == InternalSymbolNameDefault {
                     t = Some(self.get_string_literal_type("default"));

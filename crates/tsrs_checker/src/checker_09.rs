@@ -1789,7 +1789,7 @@ impl Checker {
     // checker.go:18910
     pub(crate) fn get_write_type_of_accessors(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
-        if links.write_type.get().is_none() {
+        if links.write_type().is_none() {
             if !self.push_type_resolution(symbol.into(), TypeSystemPropertyName::WriteType) {
                 return self.error_type;
             }
@@ -1811,16 +1811,16 @@ impl Checker {
                 write_type = Some(self.any_type);
             }
             // Absent an explicit setter type annotation we use the read type of the accessor.
-            if links.write_type.get().is_none() {
+            if links.write_type().is_none() {
                 if write_type.is_some() {
-                    links.write_type.set(write_type);
+                    links.set_write_type(write_type);
                 } else {
                     let t = self.get_type_of_accessors(symbol);
-                    links.write_type.set(Some(t));
+                    links.set_write_type(Some(t));
                 }
             }
         }
-        links.write_type.get().unwrap()
+        links.write_type().unwrap()
     }
 
     // checker.go:18942
@@ -2055,7 +2055,7 @@ impl Checker {
             (TypeSystemPropertyName::InitializerIsUndefined, TypeSystemEntity::Node(n)) => {
                 self.node_links.get(n).flags.get().intersects(NodeCheckFlags::InitializerIsUndefinedComputed)
             }
-            (TypeSystemPropertyName::WriteType, TypeSystemEntity::Symbol(s)) => self.value_symbol_links.get(s).write_type.get().is_some(),
+            (TypeSystemPropertyName::WriteType, TypeSystemEntity::Symbol(s)) => self.value_symbol_links.get(s).write_type().is_some(),
             (TypeSystemPropertyName::AliasTarget, TypeSystemEntity::Symbol(s)) => self.alias_symbol_links.get(s).alias_target.get().is_some(),
             // Go: a failed type assertion on r.target
             _ => panic!("interface conversion: unexpected TypeSystemEntity in typeResolutionHasProperty"),

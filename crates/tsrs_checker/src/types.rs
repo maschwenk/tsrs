@@ -236,16 +236,83 @@ pub struct SymbolReferenceLinks {
 }
 
 // Links for value symbols
+//
+// Go's `ValueSymbolLinks` holds all seven fields inline. Most links only ever get `resolved_type`, `target` and
+// `mapper` (on Project 81% of the 13.6M records set none of the other four), so those four live in a tail
+// allocated on the first write of a non-default value: 32 bytes per record instead of 56. Reads of an absent tail
+// return the zero value, exactly like reading the unset field.
 
 #[derive(Default)]
 pub struct ValueSymbolLinks {
     pub resolved_type: Cell<Option<P<Type>>>, // Type of value symbol
-    pub write_type: Cell<Option<P<Type>>>,
     pub target: Cell<Option<P<Symbol>>>,
     pub mapper: Cell<Option<P<TypeMapper>>>,
-    pub name_type: Cell<Option<P<Type>>>,
-    pub containing_type: Cell<Option<P<Type>>>, // Mapped type for mapped type property, containing union or intersection type for synthetic property
-    pub function_or_constructor_checked: Cell<bool>,
+    rare: Cell<Option<P<ValueSymbolLinksRare>>>,
+}
+
+#[derive(Default)]
+struct ValueSymbolLinksRare {
+    write_type: Cell<Option<P<Type>>>,
+    name_type: Cell<Option<P<Type>>>,
+    containing_type: Cell<Option<P<Type>>>, // Mapped type for mapped type property, containing union or intersection type for synthetic property
+    function_or_constructor_checked: Cell<bool>,
+}
+
+const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 32);
+
+impl ValueSymbolLinks {
+    #[inline]
+    fn rare_for_write(&self) -> P<ValueSymbolLinksRare> {
+        match self.rare.get() {
+            Some(rare) => rare,
+            None => {
+                let rare = P::new(ValueSymbolLinksRare::default());
+                self.rare.set(Some(rare));
+                rare
+            }
+        }
+    }
+
+    #[inline]
+    pub fn write_type(&self) -> Option<P<Type>> {
+        self.rare.get().and_then(|r| r.write_type.get())
+    }
+    #[inline]
+    pub fn set_write_type(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.rare.get().is_some() {
+            self.rare_for_write().write_type.set(t);
+        }
+    }
+    #[inline]
+    pub fn name_type(&self) -> Option<P<Type>> {
+        self.rare.get().and_then(|r| r.name_type.get())
+    }
+    #[inline]
+    pub fn set_name_type(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.rare.get().is_some() {
+            self.rare_for_write().name_type.set(t);
+        }
+    }
+    #[inline]
+    pub fn containing_type(&self) -> Option<P<Type>> {
+        self.rare.get().and_then(|r| r.containing_type.get())
+    }
+    #[inline]
+    pub fn set_containing_type(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.rare.get().is_some() {
+            self.rare_for_write().containing_type.set(t);
+        }
+    }
+    #[inline]
+    pub fn function_or_constructor_checked(&self) -> bool {
+        self.rare.get().is_some_and(|r| r.function_or_constructor_checked.get())
+    }
+    #[inline]
+    pub fn set_function_or_constructor_checked(&self, v: bool) {
+        if v || self.rare.get().is_some() {
+            self.rare_for_write().function_or_constructor_checked.set(v);
+        }
+    }
 }
 
 // Additional links for mapped symbols

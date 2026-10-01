@@ -575,7 +575,7 @@ impl NodeBuilderImpl {
                 }
             }
             if c.value_symbol_links.has(symbol) {
-                let name_type = c.value_symbol_links.get(symbol).name_type.get();
+                let name_type = c.value_symbol_links.get(symbol).name_type();
                 if let Some(name_type) = name_type {
                     if name_type.flags().intersects(TypeFlags::EnumLiteral | TypeFlags::UniqueESSymbol) {
                         let old_enclosing = self.ctx().enclosing_declaration.get();
@@ -956,7 +956,7 @@ impl NodeBuilderImpl {
     // nodebuilderimpl.go:936
     pub(crate) fn get_name_of_symbol_from_name_type(&self, c: &mut Checker, symbol: P<Symbol>) -> String {
         if c.value_symbol_links.has(symbol) {
-            let Some(name_type) = c.value_symbol_links.get(symbol).name_type.get() else {
+            let Some(name_type) = c.value_symbol_links.get(symbol).name_type() else {
                 return String::new();
             };
             if name_type.flags().intersects(TypeFlags::StringOrNumberLiteral) {
@@ -1019,8 +1019,8 @@ impl NodeBuilderImpl {
                 // }
                 if is_computed_property_name(name) && !symbol.check_flags().intersects(CheckFlags::Late) {
                     if c.value_symbol_links.has(symbol)
-                        && c.value_symbol_links.get(symbol).name_type.get().is_some()
-                        && c.value_symbol_links.get(symbol).name_type.get().unwrap().flags().intersects(TypeFlags::StringOrNumberLiteral)
+                        && c.value_symbol_links.get(symbol).name_type().is_some()
+                        && c.value_symbol_links.get(symbol).name_type().unwrap().flags().intersects(TypeFlags::StringOrNumberLiteral)
                     {
                         let result = self.get_name_of_symbol_from_name_type(c, symbol);
                         if !result.is_empty() {

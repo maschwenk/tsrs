@@ -830,7 +830,7 @@ impl Checker {
         let new_symbol = self.new_symbol(SymbolFlags::Alias, InternalSymbolNameDefault);
         new_symbol.parent.set(original_symbol);
         let name_type = self.get_string_literal_type("default");
-        self.value_symbol_links.get(new_symbol).name_type.set(Some(name_type));
+        self.value_symbol_links.get(new_symbol).set_name_type(Some(name_type));
         let alias_target = self.resolve_symbol(symbol);
         self.alias_symbol_links.get(new_symbol).alias_target.set(Some(alias_target));
         member_table.set(InternalSymbolNameDefault, new_symbol);
@@ -1189,7 +1189,7 @@ impl Checker {
                     }
                     late_symbol = self.new_symbol_ex(SymbolFlags::None, alloc_str(&member_name), CheckFlags::Late);
                 }
-                self.value_symbol_links.get(late_symbol).name_type.set(Some(t));
+                self.value_symbol_links.get(late_symbol).set_name_type(Some(t));
                 self.add_declaration_to_late_bound_symbol(late_symbol, decl, symbol_flags);
                 if late_symbol.parent().is_none() {
                     late_symbol.parent.set(Some(parent));
@@ -1608,7 +1608,7 @@ impl Checker {
     // checker.go:16737
     pub(crate) fn get_write_type_of_symbol_with_deferred_type(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
-        if links.write_type.get().is_none() {
+        if links.write_type().is_none() {
             let deferred = self.deferred_symbol_links.get(symbol);
             let t = if !deferred.write_constituents.get().is_empty() {
                 if deferred.parent.get().unwrap().flags().intersects(TypeFlags::Union) {
@@ -1619,9 +1619,9 @@ impl Checker {
             } else {
                 self.get_type_of_symbol_with_deferred_type(symbol)
             };
-            links.write_type.set(Some(t));
+            links.set_write_type(Some(t));
         }
-        links.write_type.get().unwrap()
+        links.write_type().unwrap()
     }
 
     // Distinct write types come only from set accessors, but synthetic union and intersection
@@ -1635,7 +1635,7 @@ impl Checker {
                 return Some(self.get_write_type_of_symbol_with_deferred_type(symbol));
             }
             let links = self.value_symbol_links.get(symbol);
-            return links.write_type.get().or(links.resolved_type.get());
+            return links.write_type().or(links.resolved_type.get());
         }
         if symbol.flags().intersects(SymbolFlags::Property) {
             let t = self.get_type_of_symbol(symbol);
@@ -1745,12 +1745,12 @@ impl Checker {
     // checker.go:16859
     pub(crate) fn get_write_type_of_instantiated_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
-        if links.write_type.get().is_none() {
+        if links.write_type().is_none() {
             let target_type = self.get_write_type_of_symbol(links.target.get().unwrap()).unwrap();
             let t = self.instantiate_type(target_type, links.mapper.get());
-            links.write_type.set(Some(t));
+            links.set_write_type(Some(t));
         }
-        links.write_type.get().unwrap()
+        links.write_type().unwrap()
     }
 
     // checker.go:16867

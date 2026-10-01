@@ -92,7 +92,7 @@ impl Checker {
     // services.go:415
     pub fn get_mapped_type_symbol_of_property(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> {
         if let Some(value_links) = self.value_symbol_links.try_get(symbol) {
-            return value_links.containing_type.get().unwrap().symbol();
+            return value_links.containing_type().unwrap().symbol();
         }
         None
     }
@@ -100,7 +100,7 @@ impl Checker {
     // services.go:422
     pub(crate) fn get_immediate_root_symbols(&mut self, symbol: P<Symbol>) -> Vec<P<Symbol>> {
         if symbol.check_flags().intersects(CheckFlags::Synthetic) {
-            let types = self.value_symbol_links.get(symbol).containing_type.get().unwrap().types().to_vec();
+            let types = self.value_symbol_links.get(symbol).containing_type().unwrap().types().to_vec();
             let mut result = Vec::new();
             for t in types {
                 if let Some(p) = self.get_property_of_type(t, symbol.name()) {

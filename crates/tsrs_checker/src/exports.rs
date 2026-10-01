@@ -96,7 +96,7 @@ impl Checker {
     // exports.go:84
     pub fn get_name_type_of_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Type>> {
         if let Some(links) = self.value_symbol_links.try_get(symbol) {
-            return links.name_type.get();
+            return links.name_type();
         }
         None
     }

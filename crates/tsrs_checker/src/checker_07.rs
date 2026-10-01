@@ -531,7 +531,7 @@ impl Checker {
                 };
                 let links = self.value_symbol_links.get(prop);
                 if name_type.is_some() {
-                    links.name_type.set(name_type);
+                    links.set_name_type(name_type);
                 }
                 if in_destructuring_pattern && self.has_default_value(member_decl) {
                     // If object literal is an assignment pattern and if the assignment pattern specifies a default value
@@ -808,7 +808,7 @@ impl Checker {
                     self.spread_links.get(result).left_spread.set(Some(left_prop));
                     self.spread_links.get(result).right_spread.set(Some(right_prop));
                     result.set_declarations(&declarations);
-                    links.name_type.set(self.value_symbol_links.get(left_prop).name_type.get());
+                    links.set_name_type(self.value_symbol_links.get(left_prop).name_type());
                     members.set(left_prop.name(), result);
                 }
             } else {
@@ -902,7 +902,7 @@ impl Checker {
                     links.resolved_type.set(Some(self.add_optionality_ex(prop_type, true /*isProperty*/, true /*isOptional*/)));
                 }
                 result.declarations.set(prop.declarations());
-                links.name_type.set(self.value_symbol_links.get(prop).name_type.get());
+                links.set_name_type(self.value_symbol_links.get(prop).name_type());
                 self.mapped_symbol_links.get(result).synthetic_origin.set(Some(prop));
                 members.set(prop.name(), result);
             }
@@ -941,7 +941,7 @@ impl Checker {
             links.resolved_type.set(Some(self.get_type_of_symbol(prop)));
         }
         result.declarations.set(prop.declarations());
-        links.name_type.set(self.value_symbol_links.get(prop).name_type.get());
+        links.set_name_type(self.value_symbol_links.get(prop).name_type());
         self.mapped_symbol_links.get(result).synthetic_origin.set(Some(prop));
         result
     }
