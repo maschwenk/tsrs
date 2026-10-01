@@ -226,7 +226,7 @@ jobs:
           cp "$table" /tmp/bench-table.md
           for attempt in 1 2 3 4 5; do
             git fetch -q origin main
-            git checkout -q -B main origin/main
+            git checkout -q -f -B main origin/main # drops the run's README.md edit; the table is re-applied below
             cp /tmp/bench-results/* bench/results/
             python3 bench/run.py --apply-table /tmp/bench-table.md --readme README.md
             git add README.md bench/results

@@ -112,3 +112,9 @@ Job duration split, 2026-10-01:
 
 The first Depot run (cold caches: clone, install and cache save for all projects) took 11 min 3 s. What is left in
 a warm run is the tsrs build (it changes with every commit) and the measurement.
+
+Since the bench measures the PGO `dist` build (2026-10-01), the 28-34 s `cargo build --release` step is replaced by
+the PGO pipeline, measured on Depot run `ps_h83310tmld`: TypeScript testdata sparse checkout ~14 s, instrumented build
+of tsrs + tsrs-test 100 s, training run 15 s, profile merge < 1 s, final build 74 s, so ~3 min more per run (job 7 min
+13 s -> 10 min 4 s). The dependencies, the only part rust-cache can reuse, compile in ~3 s; the time is the
+workspace crates with one codegen unit and fat LTO, which change with every commit.
