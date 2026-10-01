@@ -2,7 +2,7 @@
 
 use std::any::Any;
 
-use tsrs_core::{OwnedCell, P};
+use tsrs_core::{OwnedCell, PackedStr, P};
 
 use crate::ast::*;
 use crate::flow::*;
@@ -283,14 +283,14 @@ impl ClassLikeBase {
 }
 
 pub struct LiteralLikeNodeBase {
-    pub text: &'static str,
+    pub text: PackedStr,
     pub token_flags: OwnedCell<TokenFlags>,
 }
 
 impl LiteralLikeNodeBase {
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.text
+        self.text.as_str()
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
@@ -319,7 +319,7 @@ impl TemplateLiteralLikeNodeBase {
     }
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.literal_like_node_base.text
+        self.literal_like_node_base.text.as_str()
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
@@ -400,13 +400,13 @@ pub struct Token;
 
 pub struct Identifier {
     pub flow_node_base: FlowNodeBase,
-    pub text: &'static str,
+    pub text: PackedStr,
 }
 
 impl Identifier {
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.text
+        self.text.as_str()
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -419,13 +419,13 @@ impl Identifier {
 }
 
 pub struct PrivateIdentifier {
-    pub text: &'static str,
+    pub text: PackedStr,
 }
 
 impl PrivateIdentifier {
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.text
+        self.text.as_str()
     }
 }
 
@@ -3003,7 +3003,7 @@ pub struct StringLiteral {
 impl StringLiteral {
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.literal_like_node_base.text
+        self.literal_like_node_base.text.as_str()
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
@@ -3022,7 +3022,7 @@ pub struct NumericLiteral {
 impl NumericLiteral {
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.literal_like_node_base.text
+        self.literal_like_node_base.text.as_str()
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
@@ -3041,7 +3041,7 @@ pub struct BigIntLiteral {
 impl BigIntLiteral {
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.literal_like_node_base.text
+        self.literal_like_node_base.text.as_str()
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
@@ -3060,7 +3060,7 @@ pub struct RegularExpressionLiteral {
 impl RegularExpressionLiteral {
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.literal_like_node_base.text
+        self.literal_like_node_base.text.as_str()
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
@@ -3088,7 +3088,7 @@ impl NoSubstitutionTemplateLiteral {
     }
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.template_literal_like_node_base.literal_like_node_base.text
+        self.template_literal_like_node_base.literal_like_node_base.text.as_str()
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
@@ -4516,7 +4516,7 @@ impl TemplateHead {
     }
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.template_literal_like_node_base.literal_like_node_base.text
+        self.template_literal_like_node_base.literal_like_node_base.text.as_str()
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
@@ -4543,7 +4543,7 @@ impl TemplateMiddle {
     }
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.template_literal_like_node_base.literal_like_node_base.text
+        self.template_literal_like_node_base.literal_like_node_base.text.as_str()
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
@@ -4570,7 +4570,7 @@ impl TemplateTail {
     }
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.template_literal_like_node_base.literal_like_node_base.text
+        self.template_literal_like_node_base.literal_like_node_base.text.as_str()
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
@@ -4854,7 +4854,7 @@ impl JsxText {
     }
     #[inline]
     pub fn text(&self) -> &'static str {
-        self.literal_like_node_base.text
+        self.literal_like_node_base.text.as_str()
     }
     #[inline]
     pub fn token_flags(&self) -> TokenFlags {
@@ -9351,14 +9351,14 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            text: text,
+            text: PackedStr::new(text),
         })
     }
 
     pub fn new_private_identifier(&self, text: &'static str) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::PrivateIdentifier, PrivateIdentifier {
-            text: text,
+            text: PackedStr::new(text),
         })
     }
 
@@ -10776,7 +10776,7 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::StringLiteral, StringLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
-                text: text,
+                text: PackedStr::new(text),
                 token_flags: OwnedCell::new(token_flags & TokenFlags::StringLiteralFlags),
             },
         })
@@ -10786,7 +10786,7 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::NumericLiteral, NumericLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
-                text: text,
+                text: PackedStr::new(text),
                 token_flags: OwnedCell::new(token_flags & TokenFlags::NumericLiteralFlags),
             },
         })
@@ -10796,7 +10796,7 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::BigIntLiteral, BigIntLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
-                text: text,
+                text: PackedStr::new(text),
                 token_flags: OwnedCell::new(token_flags & TokenFlags::NumericLiteralFlags),
             },
         })
@@ -10806,7 +10806,7 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::RegularExpressionLiteral, RegularExpressionLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
-                text: text,
+                text: PackedStr::new(text),
                 token_flags: OwnedCell::new(token_flags & TokenFlags::RegularExpressionLiteralFlags),
             },
         })
@@ -10817,7 +10817,7 @@ impl NodeFactory {
         self.new_node(Kind::NoSubstitutionTemplateLiteral, NoSubstitutionTemplateLiteral {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
-                    text: text,
+                    text: PackedStr::new(text),
                     token_flags: OwnedCell::new(TokenFlags::None),
                 },
                 raw_text: "",
@@ -11796,7 +11796,7 @@ impl NodeFactory {
         self.new_node(Kind::TemplateHead, TemplateHead {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
-                    text: text,
+                    text: PackedStr::new(text),
                     token_flags: OwnedCell::new(TokenFlags::None),
                 },
                 raw_text: raw_text,
@@ -11810,7 +11810,7 @@ impl NodeFactory {
         self.new_node(Kind::TemplateMiddle, TemplateMiddle {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
-                    text: text,
+                    text: PackedStr::new(text),
                     token_flags: OwnedCell::new(TokenFlags::None),
                 },
                 raw_text: raw_text,
@@ -11824,7 +11824,7 @@ impl NodeFactory {
         self.new_node(Kind::TemplateTail, TemplateTail {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
-                    text: text,
+                    text: PackedStr::new(text),
                     token_flags: OwnedCell::new(TokenFlags::None),
                 },
                 raw_text: raw_text,
@@ -12065,7 +12065,7 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::JsxText, JsxText {
             literal_like_node_base: LiteralLikeNodeBase {
-                text: text,
+                text: PackedStr::new(text),
                 token_flags: OwnedCell::new(TokenFlags::None),
             },
             contains_only_trivia_white_spaces: contains_only_trivia_white_spaces,

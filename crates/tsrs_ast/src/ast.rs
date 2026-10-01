@@ -452,8 +452,8 @@ impl Node {
     /// Go `Text()`. Joined texts (JsxNamespacedName, JSDoc text) are allocated in the arena.
     pub fn text(&self) -> &'static str {
         match self.kind {
-            Kind::Identifier => self.as_identifier().text,
-            Kind::PrivateIdentifier => self.as_private_identifier().text,
+            Kind::Identifier => self.as_identifier().text(),
+            Kind::PrivateIdentifier => self.as_private_identifier().text(),
             Kind::StringLiteral => self.as_string_literal().text(),
             Kind::NumericLiteral => self.as_numeric_literal().text(),
             Kind::BigIntLiteral => self.as_big_int_literal().text(),

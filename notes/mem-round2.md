@@ -186,3 +186,33 @@ the hash index pays off later. Tables with 9-16 entries no longer get one (a box
 | 4 checkers, 32 | 9.77-9.78 (-0.07) | 434-435 G |
 
 16 landed (32 retired +0.6% instructions on 4 checkers for the extra 0.03 GiB). Opt-out after: 9.87 / 15.18 GiB.
+
+### 9. Identifier and literal text in 8 bytes (`PackedStr`)
+
+7.84M identifiers and 1.43M string/numeric literals single; their `text` was a 16-byte `&'static str` (pointing
+into the source text). It is now a `tsrs_core::PackedStr`: the data pointer in the low 48 bits and the length in
+the high 16 of one word; text of 65,535 bytes or more (or at an address above 2^48, which no supported platform
+hands out) is copied into the arena behind a `u32` length. `text()` still returns `&'static str` (the same slice
+for every short text). Generated code: `tools/gen-ast/gen-ast.ts` stores `Identifier.Text`,
+`PrivateIdentifier.Text` and `LiteralLikeNodeBase.Text` as `PackedStr` (getters `.as_str()`, factories
+`PackedStr::new(text)`); 12 hand-written reads of the field became `text()`. NodeAlloc<Identifier> 56 -> 48,
+<StringLiteral> / <NumericLiteral> 56 -> 48.
+
+AST oracle: 113/113 libs and 17,318/17,319 test units identical (the one is the known non-UTF-8 file), as before.
+
+The brief's version, a global interner (sharded mutex tables of length-prefixed copies, 8-byte pointers to
+them), was built first: -0.075 GiB single, but parse time +9% (2.6 -> 2.8 s) and +1% instructions from hashing
+and locking 7.8M identifiers, and the shared copies eat part of the win. The packed pointer needs no table, no
+copies and no hashing.
+
+| run (2 interleaved rounds) | peak GiB | instructions | parse s (3 runs) |
+| --- | --- | --- | --- |
+| single, before | 7.357-7.359 | 320-321 G | 2.58-2.61 |
+| single, after | 7.261-7.264 (-0.10) | 321-323 G | 2.55-2.60 |
+| single, global interner instead | 7.283-7.284 | 324 G | 2.79-2.86 |
+| 4 checkers, before | 9.84-9.87 | 432-433 G | |
+| 4 checkers, after | 9.76 (-0.10) | 433 G | |
+| opt-out single / 4 checkers (go assignment), after | 9.81 / 15.10 | | |
+
+(The base here includes upstream compiler commits 1c2d9cc..9a5fd13, which moved the single-threaded peak from
+7.316 to 7.358 GiB.)

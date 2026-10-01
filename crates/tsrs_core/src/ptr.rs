@@ -210,6 +210,64 @@ impl<T> StaticSlicePtr<T> {
 unsafe impl<T> Send for StaticSlicePtr<T> {}
 unsafe impl<T> Sync for StaticSlicePtr<T> {}
 
+/// A `&'static str` in 8 bytes: the data pointer in the low 48 bits and the length in the high 16. A string of
+/// `u16::MAX` bytes or more (or one whose address does not fit in 48 bits) is copied into the arena after a `u32`
+/// length, and the length bits hold `u16::MAX`. `as_str` returns the same text (for short strings, the same slice).
+#[derive(Clone, Copy)]
+pub struct PackedStr(std::ptr::NonNull<u8>);
+
+const PACKED_STR_LEN_SHIFT: u32 = 48;
+const PACKED_STR_LONG: usize = u16::MAX as usize;
+
+impl PackedStr {
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn new(s: &'static str) -> PackedStr {
+        let p = std::ptr::NonNull::from(s).cast::<u8>();
+        if s.len() < PACKED_STR_LONG && p.addr().get() >> PACKED_STR_LEN_SHIFT == 0 {
+            return PackedStr(p.map_addr(|a| a | (s.len() << PACKED_STR_LEN_SHIFT)));
+        }
+        PackedStr::new_long(s)
+    }
+
+    #[cold]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    fn new_long(s: &str) -> PackedStr {
+        let len = u32::try_from(s.len()).expect("string longer than u32::MAX");
+        let layout = std::alloc::Layout::from_size_align(4 + s.len(), 4).unwrap();
+        profile!(PackedStr, layout.size());
+        let p = with_arena(|a| a.alloc_layout(layout));
+        // SAFETY: `p` points to `4 + len` fresh bytes, 4-byte aligned.
+        unsafe {
+            p.cast::<u32>().as_ptr().write(len);
+            std::ptr::copy_nonoverlapping(s.as_ptr(), p.as_ptr().add(4), s.len());
+        }
+        assert!(p.addr().get() >> PACKED_STR_LEN_SHIFT == 0, "arena address above 2^48");
+        PackedStr(p.map_addr(|a| a | (PACKED_STR_LONG << PACKED_STR_LEN_SHIFT)))
+    }
+
+    #[inline]
+    pub fn as_str(self) -> &'static str {
+        let len = self.0.addr().get() >> PACKED_STR_LEN_SHIFT;
+        let p = self.0.as_ptr().map_addr(|a| a & ((1 << PACKED_STR_LEN_SHIFT) - 1));
+        // SAFETY: built by `new` from a `&'static str` of this length, or by `new_long` (length prefix + bytes).
+        unsafe {
+            let (p, len) = if len == PACKED_STR_LONG { (p.add(4) as *const u8, *(p as *const u32) as usize) } else { (p as *const u8, len) };
+            std::str::from_utf8_unchecked(std::slice::from_raw_parts(p, len))
+        }
+    }
+}
+
+// Same contract as `P`.
+unsafe impl Send for PackedStr {}
+unsafe impl Sync for PackedStr {}
+
+impl fmt::Debug for PackedStr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_str().fmt(f)
+    }
+}
+
 #[repr(C, packed(4))]
 struct PackedSlice<T: 'static> {
     ptr: std::ptr::NonNull<T>,
@@ -402,5 +460,16 @@ mod tests {
         let v = alloc_vec(vec![String::from("a"), String::from("b")]);
         assert_eq!(v.len(), 2);
         assert_eq!(alloc_str("hello"), "hello");
+    }
+
+    #[test]
+    fn packed_str() {
+        let short: &'static str = "identifier";
+        assert!(std::ptr::eq(PackedStr::new(short).as_str(), short));
+        assert_eq!(PackedStr::new("").as_str(), "");
+        let long: &'static str = Box::leak("x".repeat(u16::MAX as usize + 3).into_boxed_str());
+        assert_eq!(PackedStr::new(long).as_str(), long);
+        let exact: &'static str = Box::leak("é".repeat(u16::MAX as usize / 2 + 1).into_boxed_str());
+        assert_eq!(PackedStr::new(exact).as_str(), exact);
     }
 }

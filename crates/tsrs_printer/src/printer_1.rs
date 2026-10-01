@@ -1167,7 +1167,7 @@ impl Printer {
             }
             if self.unique_helper_names.is_some() {
                 // Substitute `__helper` with `__helper_1` if there is a conflict in an ES module.
-                let helper_name = self.get_unique_helper_name(node.as_identifier().text);
+                let helper_name = self.get_unique_helper_name(node.as_identifier().text());
                 self.emit_context.assign_comment_and_source_map_ranges(helper_name, node);
                 node = helper_name;
             }
@@ -1182,7 +1182,7 @@ impl Printer {
         let mut node = node;
         if self.unique_helper_names.is_some() && self.emit_context.emit_flags(node).intersects(EmitFlags::HelperName) {
             // Substitute `__helper` with `__helper_1` if there is a conflict in an ES module.
-            let helper_name = self.get_unique_helper_name(node.as_identifier().text);
+            let helper_name = self.get_unique_helper_name(node.as_identifier().text());
             self.emit_context.assign_comment_and_source_map_ranges(helper_name, node);
             node = helper_name;
         }

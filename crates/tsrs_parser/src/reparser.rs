@@ -37,7 +37,7 @@ impl Parser {
     pub(crate) fn check_non_identifier_name(&mut self, name: Option<P<Node>>) -> Option<P<Node>> {
         // Handles the case of anonymous functions
         let name = name?;
-        if ast::is_identifier(name) && !scanner::is_valid_identifier(name.as_identifier().text) {
+        if ast::is_identifier(name) && !scanner::is_valid_identifier(name.as_identifier().text()) {
             let mut err_loc = name.loc();
             if err_loc.len() == 0 {
                 // missing name, emit error on the character before the missing name node
@@ -222,10 +222,10 @@ impl Parser {
                     }
                 }
                 let mut name = param.name().unwrap();
-                if ast::is_identifier(name) && !scanner::is_valid_identifier(name.as_identifier().text) {
+                if ast::is_identifier(name) && !scanner::is_valid_identifier(name.as_identifier().text()) {
                     // drop invalid chars for _, if empty, write _0, etc., so we have a valid param name to emit later
                     let mut result = String::new();
-                    for (i, ch) in name.as_identifier().text.char_indices() {
+                    for (i, ch) in name.as_identifier().text().char_indices() {
                         if i == 0 {
                             if !scanner::is_identifier_start(ch as i32) {
                                 result.push('_');
@@ -290,8 +290,8 @@ impl Parser {
                 if name.kind == Kind::QualifiedName {
                     name = name.as_qualified_name().right;
                 }
-                if ast::is_identifier(name) && !scanner::is_valid_identifier(name.as_identifier().text) {
-                    let literal = self.factory.new_string_literal(name.as_identifier().text, TokenFlags::None);
+                if ast::is_identifier(name) && !scanner::is_valid_identifier(name.as_identifier().text()) {
+                    let literal = self.factory.new_string_literal(name.as_identifier().text(), TokenFlags::None);
                     name = self.add_transformed_reparse(literal, name);
                 } else {
                     name = self.add_deep_clone_reparse(Some(name)).unwrap();

@@ -273,7 +273,16 @@ function w(s = "") {
     out.push(s);
 }
 
+// Identifier and literal text is stored as a `PackedStr` (8 bytes: pointer and length in one word, tsrs_core::ptr); the getter
+// and the factory parameter stay `&'static str`.
+const PACKED_STR_FIELDS = new Set(["Identifier.Text", "PrivateIdentifier.Text", "LiteralLikeNodeBase.Text"]);
+
+function isPackedStr(f: { owner: string; name: string; }): boolean {
+    return PACKED_STR_FIELDS.has(`${f.owner}.${f.name}`);
+}
+
 function fieldDecl(f: Field): string {
+    if (isPackedStr(f)) return "PackedStr";
     return f.cell ? `OwnedCell<${f.ty}>` : f.ty;
 }
 
@@ -322,7 +331,7 @@ function header() {
     w();
     w("use std::any::Any;");
     w();
-    w("use tsrs_core::{OwnedCell, P};");
+    w("use tsrs_core::{OwnedCell, PackedStr, P};");
     w();
     w("use crate::ast::*;");
     w("use crate::flow::*;");
@@ -357,7 +366,7 @@ function genGetters(l: Layout) {
         const fnName = f.rust;
         w(`    #[inline]`);
         w(`    pub fn ${fnName}(&self) -> ${f.ty} {`);
-        w(`        self.${f.path}${f.cell ? ".get()" : ""}`);
+        w(`        self.${f.path}${f.cell ? ".get()" : isPackedStr(f) ? ".as_str()" : ""}`);
         w(`    }`);
         if (f.cell) {
             w(`    #[inline]`);
@@ -394,7 +403,7 @@ function structLiteral(l: Layout, values: Map<string, string>, indent: string): 
     }
     for (const f of l.fields) {
         const v = values.get(f.name) ?? defaultValue(f.ty);
-        lines.push(`${indent}    ${f.rust}: ${f.cell ? `OwnedCell::new(${v})` : v},`);
+        lines.push(`${indent}    ${f.rust}: ${f.cell ? `OwnedCell::new(${v})` : isPackedStr(f) ? `PackedStr::new(${v})` : v},`);
     }
     lines.push(`${indent}}`);
     return lines.join("\n");

@@ -9,7 +9,7 @@ pub(crate) fn token_is_identifier_or_keyword(token: Kind) -> bool {
 }
 
 pub fn identifier_to_keyword_kind(node: P<Node>) -> Kind {
-    text_to_keyword(node.as_identifier().text)
+    text_to_keyword(node.as_identifier().text())
 }
 
 pub fn get_source_text_of_node_from_source_file(source_file: P<SourceFile>, node: P<Node>, include_trivia: bool) -> String {

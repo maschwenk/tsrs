@@ -1074,7 +1074,7 @@ impl Checker {
                     // Keep this in sync with serializeUnionOrIntersectionType
                     // Verify if they refer to same entity and is identifier
                     // return undefined if they dont match because we would emit object
-                    if !is_identifier(common) || !is_identifier(individual_entity_name) || common.as_identifier().text != individual_entity_name.as_identifier().text {
+                    if !is_identifier(common) || !is_identifier(individual_entity_name) || common.as_identifier().text() != individual_entity_name.as_identifier().text() {
                         return None;
                     }
                 }

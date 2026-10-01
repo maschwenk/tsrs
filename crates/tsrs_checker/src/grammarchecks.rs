@@ -2238,7 +2238,7 @@ impl Checker {
         // 1) when `node` represents an integer <= 2 ** 53 - 1, `node.text` is its exact string representation and thus `value` precisely represents the integer.
         // 2) otherwise, although `node.text` may be imprecise string representation, its mathematical value and consequently `value` cannot be less than 2 ** 53,
         //    thus the result of the predicate won't be affected.
-        let value = jsnum::from_string(numeric_literal.literal_like_node_base.text);
+        let value = jsnum::from_string(numeric_literal.literal_like_node_base.text.as_str());
         if value <= jsnum::MaxSafeInteger {
             return;
         }
