@@ -38,8 +38,8 @@ secrets, private data, legal files, GitHub Actions and repository settings.
 | Path of the private monorepo checkout (in DEBUGGING.md, `tools/mutate/mutate.py`, `upstream/tools/measure.py`) | `$PRIVATE_PROJECT` in docs; in code, required environment variables with no default (`MUT_CLONE`, `MUT_PRISTINE`, `PROJECT`). |
 | Private defaults in `tools/project-types-packages.sh`, `upstream/tools/testfiles.sh`, `tools/mutate/mutate.py` (`MUT_REF`) | `${TSRS_WORK:-~/tsrs-work}`-relative defaults or required variables. |
 | The private project's name (≈190 occurrences in docs, notes, upstream README, code comments, tool names) | "a 38k-file private TypeScript monorepo (5.9M lines)" at first mention, "the private monorepo" after. |
-| `tools/project-types-*`, `tools/oracle/project-types`, `notes/fix-project*.md` | Renamed to `tools/project-types-*`, `tools/oracle/project-types`, `notes/fix-mutation.md`, `notes/fix-project-types.md`. |
-| `tools/project-types-sample.txt`: 2,000 file paths of the private project | Deleted. `tools/project-types-sample.py` regenerates it into `target/`. |
+| Tool and note files named after the private project | Renamed to `tools/project-types-*`, `tools/oracle/project-types`, `notes/fix-mutation.md`, `notes/fix-project-types.md`. |
+| The committed `--sample` list: 2,000 file paths of the private project | Deleted. `tools/project-types-sample.py` regenerates it into `target/`. |
 | Internal file names in notes (`notes/fix-mutation.md`, `notes/mem-assignment.md`, `notes/mem-round3.md`) | Described generically ("a collection-service module", "a test-database helper module imported by 3,215 files"). Numbers kept. |
 | `npm/README.md` "Adopting it in the ... monorepo" (named the private repository, its app, its scripts and dependency versions) | Replaced with generic pnpm-workspace steps. |
 | Agent briefs saying the shell's cwd is "an unrelated monorepo" | "an unrelated repository". |
@@ -53,13 +53,13 @@ returns nothing in the working tree.
 
 1. **Git history still contains everything in (b).** 85 commit messages name the private project; earlier versions
    of the files above contain the local paths including the private monorepo checkout path, the 2,000 private file
-   paths (`tools/project-types-sample.txt`, 2 commits), internal file names, and the old npm README section. Tags
+   paths (the deleted `tools/*-types-sample.txt`, 2 commits), internal file names, and the old npm README section. Tags
    `body-base`, `nb-base`, `v0.1.0`, `v0.1.1` and the branches `chore/depot-ci-migration` and `probe/depot` point
    into that history. Making the repository public publishes all of it. Options:
    - Publish squashed history: a single root commit of the current tree, either in this repository (force-push;
      disable the ruleset first) or in a new public repository. Simplest and complete. Commit SHAs cited in
      `docs/STATUS.md` and `notes/` stop resolving.
-   - Rewrite: `git filter-repo --replace-text <patterns> --replace-message <patterns> --path tools/project-types-sample.txt --invert-paths`,
+   - Rewrite: `git filter-repo --replace-text <patterns> --replace-message <patterns> --path <deleted sample list> --invert-paths`,
      then force-push every ref and delete or recreate the tags. Keeps the history shape, rewrites every SHA, and
      needs a careful pattern list (project name, paths, file names).
    - Accept the history as is.
