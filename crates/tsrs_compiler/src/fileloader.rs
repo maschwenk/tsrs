@@ -430,8 +430,15 @@ pub(crate) fn parse_options_for(
 // sequential load consumes them exactly as if it had resolved on the spot.
 pub(crate) struct prefetchedResolutions {
     pub(crate) referenced_files: Vec<(String, Option<sourceFileFromReferenceDiagnostic>)>,
-    pub(crate) imports: Vec<Option<Result<(P<ResolvedModule>, Vec<DiagAndArgs>), String>>>,
+    pub(crate) imports: Vec<Option<prefetchedImport>>,
     pub(crate) type_references: Vec<(P<ResolvedTypeReferenceDirective>, Vec<DiagAndArgs>)>,
+}
+
+pub(crate) struct prefetchedImport {
+    pub(crate) resolution: Result<(P<ResolvedModule>, Vec<DiagAndArgs>), String>,
+    // For a resolved module: the normalized resolved file name and its path, as add_sub_task and
+    // filesParser::start would compute them.
+    pub(crate) normalized: Option<(String, Path)>,
 }
 
 // The parts of the file loader that the parallel prefetch reads (the loader itself is not Sync).
@@ -511,7 +518,16 @@ pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, m
                 continue;
             }
             let mode = get_mode_for_usage_location(file.file_name(), meta, entry, Some(&options_for_file));
-            imports.push(Some(resolver.resolve_module_name(module_name, &file_name, mode, redirect)));
+            let resolution = resolver.resolve_module_name(module_name, &file_name, mode, redirect);
+            let normalized = match &resolution {
+                Ok((resolved, _)) if resolved.is_resolved() => {
+                    let normalized_file_path = tspath::normalize_path(resolved.resolved_file_name);
+                    let path = tspath::to_path(&normalized_file_path, ctx.host.get_current_directory(), ctx.host.fs().use_case_sensitive_file_names());
+                    Some((normalized_file_path, path))
+                }
+                _ => None,
+            };
+            imports.push(Some(prefetchedImport { resolution, normalized }));
         }
     }
     prefetchedResolutions { referenced_files, imports, type_references }
@@ -686,9 +702,9 @@ impl fileLoader {
                 }
 
                 let mode = get_mode_for_usage_location(file.file_name(), &meta, entry, Some(&options_for_file));
-                let resolution = match prefetched_resolution {
-                    Some(resolution) => resolution,
-                    None => self.resolver.resolve_module_name(module_name, &file_name, mode, redirect),
+                let (resolution, normalized) = match prefetched_resolution {
+                    Some(prefetched) => (prefetched.resolution, prefetched.normalized),
+                    None => (self.resolver.resolve_module_name(module_name, &file_name, mode, redirect), None),
                 };
                 let (resolved_module, trace) = match resolution {
                     Ok((resolved_module, trace)) => (resolved_module, trace),
@@ -741,7 +757,7 @@ impl fileLoader {
                         import_index,
                         if import_index < 0 { Some(entry) } else { None },
                     );
-                    self.add_sub_task(
+                    self.add_sub_task_normalized(
                         t,
                         resolvedRef {
                             file_name: resolved_file_name.to_string(),
@@ -751,6 +767,7 @@ impl fileLoader {
                             package_id: resolved_module.package_id,
                         },
                         None,
+                        normalized,
                     );
                 }
             }
@@ -805,8 +822,23 @@ impl fileLoader {
     }
 
     pub(crate) fn add_sub_task(&mut self, t: TaskId, ref_: resolvedRef, lib_file: Option<P<LibFile>>) {
-        let normalized_file_path = tspath::normalize_path(&ref_.file_name);
+        self.add_sub_task_normalized(t, ref_, lib_file, None);
+    }
+
+    // `normalized` is the normalized file name and path of `ref_.file_name` when the caller already has them.
+    pub(crate) fn add_sub_task_normalized(
+        &mut self,
+        t: TaskId,
+        ref_: resolvedRef,
+        lib_file: Option<P<LibFile>>,
+        normalized: Option<(String, Path)>,
+    ) {
+        let (normalized_file_path, path) = match normalized {
+            Some((normalized_file_path, path)) => (normalized_file_path, path),
+            None => (tspath::normalize_path(&ref_.file_name), Path::default()),
+        };
         let mut sub_task = parseTask::new(normalized_file_path);
+        sub_task.path = path;
         sub_task.lib_file = lib_file;
         sub_task.increase_depth = ref_.increase_depth;
         sub_task.elide_on_depth = ref_.elide_on_depth;

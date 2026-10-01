@@ -313,8 +313,11 @@ impl filesParser {
 
     fn start(loader: &mut fileLoader, tasks: &[TaskId], depth: i32) {
         for &task in tasks {
-            let path = loader.to_path(&loader.tasks[task].normalized_file_path);
-            loader.tasks[task].path = path.clone();
+            // A sub task created from a prefetched resolution already carries this path.
+            if loader.tasks[task].path.as_str().is_empty() {
+                loader.tasks[task].path = loader.to_path(&loader.tasks[task].normalized_file_path);
+            }
+            let path = loader.tasks[task].path.clone();
             let w = &mut loader.files_parser;
             let (data, loaded) = match w.task_data_by_path.get(&path) {
                 Some(&data) => (data, true),
