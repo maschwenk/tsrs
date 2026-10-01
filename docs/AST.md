@@ -15,15 +15,16 @@ Import everything with `use tsrs_ast::*;` (or `use tsrs_ast as ast;` and `ast::i
 ## Node
 
 ```rust
-pub struct Node {
+pub struct Node {                         // 32 bytes; the data struct is allocated right after it (NodeAlloc)
     pub kind: Kind,                       // never changes
+    pub(crate) data_tag: NodeDataTag,     // which data struct follows the header
     pub flags: OwnedCell<NodeFlags>,     // OwnedCell = Cell written only by the node's owner, see PORTING.md "Threading"
     pub loc: OwnedCell<TextRange>,
     pub parent: OwnedCell<Option<P<Node>>>,
     pub(crate) id: AtomicU64,             // lazily assigned, see get_node_id (utilities)
-    pub data: NodeData,
 }
 
+// node.data() -> NodeData: a Copy view of the data struct to match on
 #[derive(Clone, Copy)]
 pub enum NodeData {
     Token,                                // payload-less: the struct has no Rust fields
@@ -39,7 +40,10 @@ pub enum NodeData {
 
 Payload-less variants (structs with no Rust fields; `as_x()` still returns `&'static X` of the unit
 struct): `Token`, `OmittedExpression`, `KeywordTypeNode`, `ThisTypeNode`, `JsxOpeningFragment`,
-`JsxClosingFragment`, `JSDocAllType`.
+`JsxClosingFragment`, `JSDocAllType`. Their nodes allocate only the 32-byte header; every other node is one
+arena allocation `NodeAlloc<T> { node: Node, data: T }` (`repr(C)`), and `as_x()` / the generated dispatchers
+check `data_tag` and read the data struct at `offset_of!(NodeAlloc<T>, data)` from the header (Go has the
+same single allocation: the data struct embeds `NodeBase`).
 
 Nodes are always handled as `P<Node>`. A Go function that takes a typed data pointer
 (`*ast.BinaryExpression`) takes `P<Node>` in Rust. `Node` can only be created by `NodeFactory`, so

@@ -2,7 +2,7 @@
 
 use std::any::Any;
 
-use tsrs_core::{alloc, OwnedCell, P};
+use tsrs_core::{OwnedCell, P};
 
 use crate::ast::*;
 use crate::flow::*;
@@ -5910,6 +5910,7 @@ impl JSDocParameterOrPropertyTag {
 
 // ── NodeData ──────────────────────────────────────────────────────────────
 
+/// The node's data struct, as returned by `Node::data()` (the data itself lives right after the header).
 #[derive(Clone, Copy)]
 pub enum NodeData {
     Token,
@@ -6108,2267 +6109,3229 @@ pub enum NodeData {
     FlowReduceLabelData(&'static FlowReduceLabelData),
 }
 
+/// Which data struct follows a node's header (one variant per `NodeData` variant).
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum NodeDataTag {
+    Token,
+    Identifier,
+    PrivateIdentifier,
+    QualifiedName,
+    ComputedPropertyName,
+    Decorator,
+    EmptyStatement,
+    IfStatement,
+    DoStatement,
+    WhileStatement,
+    ForStatement,
+    ForInOrOfStatement,
+    BreakStatement,
+    ContinueStatement,
+    ReturnStatement,
+    WithStatement,
+    SwitchStatement,
+    CaseBlock,
+    CaseOrDefaultClause,
+    ThrowStatement,
+    TryStatement,
+    CatchClause,
+    DebuggerStatement,
+    LabeledStatement,
+    ExpressionStatement,
+    Block,
+    VariableStatement,
+    VariableDeclaration,
+    VariableDeclarationList,
+    BindingPattern,
+    ParameterDeclaration,
+    BindingElement,
+    MissingDeclaration,
+    FunctionDeclaration,
+    ClassDeclaration,
+    ClassExpression,
+    HeritageClause,
+    InterfaceDeclaration,
+    TypeAliasDeclaration,
+    EnumMember,
+    EnumDeclaration,
+    ModuleBlock,
+    NotEmittedStatement,
+    NotEmittedTypeElement,
+    ImportDeclaration,
+    ExternalModuleReference,
+    NamespaceImport,
+    NamedImports,
+    ExportAssignment,
+    NamespaceExportDeclaration,
+    NamespaceExport,
+    NamedExports,
+    ExportSpecifier,
+    CallSignatureDeclaration,
+    ConstructSignatureDeclaration,
+    ConstructorDeclaration,
+    GetAccessorDeclaration,
+    SetAccessorDeclaration,
+    IndexSignatureDeclaration,
+    MethodSignatureDeclaration,
+    MethodDeclaration,
+    PropertySignatureDeclaration,
+    PropertyDeclaration,
+    SemicolonClassElement,
+    ClassStaticBlockDeclaration,
+    OmittedExpression,
+    KeywordExpression,
+    StringLiteral,
+    NumericLiteral,
+    BigIntLiteral,
+    RegularExpressionLiteral,
+    NoSubstitutionTemplateLiteral,
+    BinaryExpression,
+    PrefixUnaryExpression,
+    PostfixUnaryExpression,
+    YieldExpression,
+    ArrowFunction,
+    FunctionExpression,
+    AsExpression,
+    SatisfiesExpression,
+    ConditionalExpression,
+    PropertyAccessExpression,
+    ElementAccessExpression,
+    CallExpression,
+    NewExpression,
+    MetaProperty,
+    NonNullExpression,
+    SpreadElement,
+    TemplateExpression,
+    TemplateSpan,
+    TaggedTemplateExpression,
+    ParenthesizedExpression,
+    ArrayLiteralExpression,
+    ObjectLiteralExpression,
+    SpreadAssignment,
+    PropertyAssignment,
+    ShorthandPropertyAssignment,
+    DeleteExpression,
+    TypeOfExpression,
+    VoidExpression,
+    AwaitExpression,
+    TypeAssertion,
+    KeywordTypeNode,
+    UnionTypeNode,
+    IntersectionTypeNode,
+    ConditionalTypeNode,
+    TypeOperatorNode,
+    InferTypeNode,
+    ArrayTypeNode,
+    IndexedAccessTypeNode,
+    TypeReferenceNode,
+    ExpressionWithTypeArguments,
+    LiteralTypeNode,
+    ThisTypeNode,
+    TypePredicateNode,
+    ImportAttribute,
+    ImportAttributes,
+    TypeQueryNode,
+    MappedTypeNode,
+    TypeLiteralNode,
+    TupleTypeNode,
+    NamedTupleMember,
+    OptionalTypeNode,
+    RestTypeNode,
+    ParenthesizedTypeNode,
+    FunctionTypeNode,
+    ConstructorTypeNode,
+    TemplateHead,
+    TemplateMiddle,
+    TemplateTail,
+    TemplateLiteralTypeNode,
+    TemplateLiteralTypeSpan,
+    SyntheticExpression,
+    PartiallyEmittedExpression,
+    JsxElement,
+    JsxAttributes,
+    JsxNamespacedName,
+    JsxOpeningElement,
+    JsxSelfClosingElement,
+    JsxFragment,
+    JsxOpeningFragment,
+    JsxClosingFragment,
+    JsxAttribute,
+    JsxSpreadAttribute,
+    JsxClosingElement,
+    JsxExpression,
+    JsxText,
+    SyntaxList,
+    JSDoc,
+    JSDocTypeExpression,
+    JSDocNonNullableType,
+    JSDocNullableType,
+    JSDocAllType,
+    JSDocVariadicType,
+    JSDocOptionalType,
+    JSDocTypeTag,
+    JSDocUnknownTag,
+    JSDocTemplateTag,
+    JSDocReturnTag,
+    JSDocPublicTag,
+    JSDocPrivateTag,
+    JSDocProtectedTag,
+    JSDocReadonlyTag,
+    JSDocOverrideTag,
+    JSDocDeprecatedTag,
+    JSDocSeeTag,
+    JSDocImplementsTag,
+    JSDocAugmentsTag,
+    JSDocSatisfiesTag,
+    JSDocThrowsTag,
+    JSDocThisTag,
+    JSDocImportTag,
+    JSDocCallbackTag,
+    JSDocOverloadTag,
+    JSDocTypedefTag,
+    JSDocSignature,
+    JSDocNameReference,
+    SourceFile,
+    ModuleDeclaration,
+    ImportEqualsDeclaration,
+    ExportDeclaration,
+    ImportTypeNode,
+    ImportClause,
+    ImportSpecifier,
+    JSDocText,
+    JSDocLink,
+    JSDocLinkPlain,
+    JSDocLinkCode,
+    TypeParameterDeclaration,
+    SyntheticReferenceExpression,
+    JSDocTypeLiteral,
+    JSDocParameterOrPropertyTag,
+    FlowSwitchClauseData,
+    FlowReduceLabelData,
+}
+
+impl NodePayload for Identifier {
+    const TAG: NodeDataTag = NodeDataTag::Identifier;
+}
+impl NodePayload for PrivateIdentifier {
+    const TAG: NodeDataTag = NodeDataTag::PrivateIdentifier;
+}
+impl NodePayload for QualifiedName {
+    const TAG: NodeDataTag = NodeDataTag::QualifiedName;
+}
+impl NodePayload for ComputedPropertyName {
+    const TAG: NodeDataTag = NodeDataTag::ComputedPropertyName;
+}
+impl NodePayload for Decorator {
+    const TAG: NodeDataTag = NodeDataTag::Decorator;
+}
+impl NodePayload for EmptyStatement {
+    const TAG: NodeDataTag = NodeDataTag::EmptyStatement;
+}
+impl NodePayload for IfStatement {
+    const TAG: NodeDataTag = NodeDataTag::IfStatement;
+}
+impl NodePayload for DoStatement {
+    const TAG: NodeDataTag = NodeDataTag::DoStatement;
+}
+impl NodePayload for WhileStatement {
+    const TAG: NodeDataTag = NodeDataTag::WhileStatement;
+}
+impl NodePayload for ForStatement {
+    const TAG: NodeDataTag = NodeDataTag::ForStatement;
+}
+impl NodePayload for ForInOrOfStatement {
+    const TAG: NodeDataTag = NodeDataTag::ForInOrOfStatement;
+}
+impl NodePayload for BreakStatement {
+    const TAG: NodeDataTag = NodeDataTag::BreakStatement;
+}
+impl NodePayload for ContinueStatement {
+    const TAG: NodeDataTag = NodeDataTag::ContinueStatement;
+}
+impl NodePayload for ReturnStatement {
+    const TAG: NodeDataTag = NodeDataTag::ReturnStatement;
+}
+impl NodePayload for WithStatement {
+    const TAG: NodeDataTag = NodeDataTag::WithStatement;
+}
+impl NodePayload for SwitchStatement {
+    const TAG: NodeDataTag = NodeDataTag::SwitchStatement;
+}
+impl NodePayload for CaseBlock {
+    const TAG: NodeDataTag = NodeDataTag::CaseBlock;
+}
+impl NodePayload for CaseOrDefaultClause {
+    const TAG: NodeDataTag = NodeDataTag::CaseOrDefaultClause;
+}
+impl NodePayload for ThrowStatement {
+    const TAG: NodeDataTag = NodeDataTag::ThrowStatement;
+}
+impl NodePayload for TryStatement {
+    const TAG: NodeDataTag = NodeDataTag::TryStatement;
+}
+impl NodePayload for CatchClause {
+    const TAG: NodeDataTag = NodeDataTag::CatchClause;
+}
+impl NodePayload for DebuggerStatement {
+    const TAG: NodeDataTag = NodeDataTag::DebuggerStatement;
+}
+impl NodePayload for LabeledStatement {
+    const TAG: NodeDataTag = NodeDataTag::LabeledStatement;
+}
+impl NodePayload for ExpressionStatement {
+    const TAG: NodeDataTag = NodeDataTag::ExpressionStatement;
+}
+impl NodePayload for Block {
+    const TAG: NodeDataTag = NodeDataTag::Block;
+}
+impl NodePayload for VariableStatement {
+    const TAG: NodeDataTag = NodeDataTag::VariableStatement;
+}
+impl NodePayload for VariableDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::VariableDeclaration;
+}
+impl NodePayload for VariableDeclarationList {
+    const TAG: NodeDataTag = NodeDataTag::VariableDeclarationList;
+}
+impl NodePayload for BindingPattern {
+    const TAG: NodeDataTag = NodeDataTag::BindingPattern;
+}
+impl NodePayload for ParameterDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::ParameterDeclaration;
+}
+impl NodePayload for BindingElement {
+    const TAG: NodeDataTag = NodeDataTag::BindingElement;
+}
+impl NodePayload for MissingDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::MissingDeclaration;
+}
+impl NodePayload for FunctionDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::FunctionDeclaration;
+}
+impl NodePayload for ClassDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::ClassDeclaration;
+}
+impl NodePayload for ClassExpression {
+    const TAG: NodeDataTag = NodeDataTag::ClassExpression;
+}
+impl NodePayload for HeritageClause {
+    const TAG: NodeDataTag = NodeDataTag::HeritageClause;
+}
+impl NodePayload for InterfaceDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::InterfaceDeclaration;
+}
+impl NodePayload for TypeAliasDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::TypeAliasDeclaration;
+}
+impl NodePayload for EnumMember {
+    const TAG: NodeDataTag = NodeDataTag::EnumMember;
+}
+impl NodePayload for EnumDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::EnumDeclaration;
+}
+impl NodePayload for ModuleBlock {
+    const TAG: NodeDataTag = NodeDataTag::ModuleBlock;
+}
+impl NodePayload for NotEmittedStatement {
+    const TAG: NodeDataTag = NodeDataTag::NotEmittedStatement;
+}
+impl NodePayload for NotEmittedTypeElement {
+    const TAG: NodeDataTag = NodeDataTag::NotEmittedTypeElement;
+}
+impl NodePayload for ImportDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::ImportDeclaration;
+}
+impl NodePayload for ExternalModuleReference {
+    const TAG: NodeDataTag = NodeDataTag::ExternalModuleReference;
+}
+impl NodePayload for NamespaceImport {
+    const TAG: NodeDataTag = NodeDataTag::NamespaceImport;
+}
+impl NodePayload for NamedImports {
+    const TAG: NodeDataTag = NodeDataTag::NamedImports;
+}
+impl NodePayload for ExportAssignment {
+    const TAG: NodeDataTag = NodeDataTag::ExportAssignment;
+}
+impl NodePayload for NamespaceExportDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::NamespaceExportDeclaration;
+}
+impl NodePayload for NamespaceExport {
+    const TAG: NodeDataTag = NodeDataTag::NamespaceExport;
+}
+impl NodePayload for NamedExports {
+    const TAG: NodeDataTag = NodeDataTag::NamedExports;
+}
+impl NodePayload for ExportSpecifier {
+    const TAG: NodeDataTag = NodeDataTag::ExportSpecifier;
+}
+impl NodePayload for CallSignatureDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::CallSignatureDeclaration;
+}
+impl NodePayload for ConstructSignatureDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::ConstructSignatureDeclaration;
+}
+impl NodePayload for ConstructorDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::ConstructorDeclaration;
+}
+impl NodePayload for GetAccessorDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::GetAccessorDeclaration;
+}
+impl NodePayload for SetAccessorDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::SetAccessorDeclaration;
+}
+impl NodePayload for IndexSignatureDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::IndexSignatureDeclaration;
+}
+impl NodePayload for MethodSignatureDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::MethodSignatureDeclaration;
+}
+impl NodePayload for MethodDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::MethodDeclaration;
+}
+impl NodePayload for PropertySignatureDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::PropertySignatureDeclaration;
+}
+impl NodePayload for PropertyDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::PropertyDeclaration;
+}
+impl NodePayload for SemicolonClassElement {
+    const TAG: NodeDataTag = NodeDataTag::SemicolonClassElement;
+}
+impl NodePayload for ClassStaticBlockDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::ClassStaticBlockDeclaration;
+}
+impl NodePayload for KeywordExpression {
+    const TAG: NodeDataTag = NodeDataTag::KeywordExpression;
+}
+impl NodePayload for StringLiteral {
+    const TAG: NodeDataTag = NodeDataTag::StringLiteral;
+}
+impl NodePayload for NumericLiteral {
+    const TAG: NodeDataTag = NodeDataTag::NumericLiteral;
+}
+impl NodePayload for BigIntLiteral {
+    const TAG: NodeDataTag = NodeDataTag::BigIntLiteral;
+}
+impl NodePayload for RegularExpressionLiteral {
+    const TAG: NodeDataTag = NodeDataTag::RegularExpressionLiteral;
+}
+impl NodePayload for NoSubstitutionTemplateLiteral {
+    const TAG: NodeDataTag = NodeDataTag::NoSubstitutionTemplateLiteral;
+}
+impl NodePayload for BinaryExpression {
+    const TAG: NodeDataTag = NodeDataTag::BinaryExpression;
+}
+impl NodePayload for PrefixUnaryExpression {
+    const TAG: NodeDataTag = NodeDataTag::PrefixUnaryExpression;
+}
+impl NodePayload for PostfixUnaryExpression {
+    const TAG: NodeDataTag = NodeDataTag::PostfixUnaryExpression;
+}
+impl NodePayload for YieldExpression {
+    const TAG: NodeDataTag = NodeDataTag::YieldExpression;
+}
+impl NodePayload for ArrowFunction {
+    const TAG: NodeDataTag = NodeDataTag::ArrowFunction;
+}
+impl NodePayload for FunctionExpression {
+    const TAG: NodeDataTag = NodeDataTag::FunctionExpression;
+}
+impl NodePayload for AsExpression {
+    const TAG: NodeDataTag = NodeDataTag::AsExpression;
+}
+impl NodePayload for SatisfiesExpression {
+    const TAG: NodeDataTag = NodeDataTag::SatisfiesExpression;
+}
+impl NodePayload for ConditionalExpression {
+    const TAG: NodeDataTag = NodeDataTag::ConditionalExpression;
+}
+impl NodePayload for PropertyAccessExpression {
+    const TAG: NodeDataTag = NodeDataTag::PropertyAccessExpression;
+}
+impl NodePayload for ElementAccessExpression {
+    const TAG: NodeDataTag = NodeDataTag::ElementAccessExpression;
+}
+impl NodePayload for CallExpression {
+    const TAG: NodeDataTag = NodeDataTag::CallExpression;
+}
+impl NodePayload for NewExpression {
+    const TAG: NodeDataTag = NodeDataTag::NewExpression;
+}
+impl NodePayload for MetaProperty {
+    const TAG: NodeDataTag = NodeDataTag::MetaProperty;
+}
+impl NodePayload for NonNullExpression {
+    const TAG: NodeDataTag = NodeDataTag::NonNullExpression;
+}
+impl NodePayload for SpreadElement {
+    const TAG: NodeDataTag = NodeDataTag::SpreadElement;
+}
+impl NodePayload for TemplateExpression {
+    const TAG: NodeDataTag = NodeDataTag::TemplateExpression;
+}
+impl NodePayload for TemplateSpan {
+    const TAG: NodeDataTag = NodeDataTag::TemplateSpan;
+}
+impl NodePayload for TaggedTemplateExpression {
+    const TAG: NodeDataTag = NodeDataTag::TaggedTemplateExpression;
+}
+impl NodePayload for ParenthesizedExpression {
+    const TAG: NodeDataTag = NodeDataTag::ParenthesizedExpression;
+}
+impl NodePayload for ArrayLiteralExpression {
+    const TAG: NodeDataTag = NodeDataTag::ArrayLiteralExpression;
+}
+impl NodePayload for ObjectLiteralExpression {
+    const TAG: NodeDataTag = NodeDataTag::ObjectLiteralExpression;
+}
+impl NodePayload for SpreadAssignment {
+    const TAG: NodeDataTag = NodeDataTag::SpreadAssignment;
+}
+impl NodePayload for PropertyAssignment {
+    const TAG: NodeDataTag = NodeDataTag::PropertyAssignment;
+}
+impl NodePayload for ShorthandPropertyAssignment {
+    const TAG: NodeDataTag = NodeDataTag::ShorthandPropertyAssignment;
+}
+impl NodePayload for DeleteExpression {
+    const TAG: NodeDataTag = NodeDataTag::DeleteExpression;
+}
+impl NodePayload for TypeOfExpression {
+    const TAG: NodeDataTag = NodeDataTag::TypeOfExpression;
+}
+impl NodePayload for VoidExpression {
+    const TAG: NodeDataTag = NodeDataTag::VoidExpression;
+}
+impl NodePayload for AwaitExpression {
+    const TAG: NodeDataTag = NodeDataTag::AwaitExpression;
+}
+impl NodePayload for TypeAssertion {
+    const TAG: NodeDataTag = NodeDataTag::TypeAssertion;
+}
+impl NodePayload for UnionTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::UnionTypeNode;
+}
+impl NodePayload for IntersectionTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::IntersectionTypeNode;
+}
+impl NodePayload for ConditionalTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::ConditionalTypeNode;
+}
+impl NodePayload for TypeOperatorNode {
+    const TAG: NodeDataTag = NodeDataTag::TypeOperatorNode;
+}
+impl NodePayload for InferTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::InferTypeNode;
+}
+impl NodePayload for ArrayTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::ArrayTypeNode;
+}
+impl NodePayload for IndexedAccessTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::IndexedAccessTypeNode;
+}
+impl NodePayload for TypeReferenceNode {
+    const TAG: NodeDataTag = NodeDataTag::TypeReferenceNode;
+}
+impl NodePayload for ExpressionWithTypeArguments {
+    const TAG: NodeDataTag = NodeDataTag::ExpressionWithTypeArguments;
+}
+impl NodePayload for LiteralTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::LiteralTypeNode;
+}
+impl NodePayload for TypePredicateNode {
+    const TAG: NodeDataTag = NodeDataTag::TypePredicateNode;
+}
+impl NodePayload for ImportAttribute {
+    const TAG: NodeDataTag = NodeDataTag::ImportAttribute;
+}
+impl NodePayload for ImportAttributes {
+    const TAG: NodeDataTag = NodeDataTag::ImportAttributes;
+}
+impl NodePayload for TypeQueryNode {
+    const TAG: NodeDataTag = NodeDataTag::TypeQueryNode;
+}
+impl NodePayload for MappedTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::MappedTypeNode;
+}
+impl NodePayload for TypeLiteralNode {
+    const TAG: NodeDataTag = NodeDataTag::TypeLiteralNode;
+}
+impl NodePayload for TupleTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::TupleTypeNode;
+}
+impl NodePayload for NamedTupleMember {
+    const TAG: NodeDataTag = NodeDataTag::NamedTupleMember;
+}
+impl NodePayload for OptionalTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::OptionalTypeNode;
+}
+impl NodePayload for RestTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::RestTypeNode;
+}
+impl NodePayload for ParenthesizedTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::ParenthesizedTypeNode;
+}
+impl NodePayload for FunctionTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::FunctionTypeNode;
+}
+impl NodePayload for ConstructorTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::ConstructorTypeNode;
+}
+impl NodePayload for TemplateHead {
+    const TAG: NodeDataTag = NodeDataTag::TemplateHead;
+}
+impl NodePayload for TemplateMiddle {
+    const TAG: NodeDataTag = NodeDataTag::TemplateMiddle;
+}
+impl NodePayload for TemplateTail {
+    const TAG: NodeDataTag = NodeDataTag::TemplateTail;
+}
+impl NodePayload for TemplateLiteralTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::TemplateLiteralTypeNode;
+}
+impl NodePayload for TemplateLiteralTypeSpan {
+    const TAG: NodeDataTag = NodeDataTag::TemplateLiteralTypeSpan;
+}
+impl NodePayload for SyntheticExpression {
+    const TAG: NodeDataTag = NodeDataTag::SyntheticExpression;
+}
+impl NodePayload for PartiallyEmittedExpression {
+    const TAG: NodeDataTag = NodeDataTag::PartiallyEmittedExpression;
+}
+impl NodePayload for JsxElement {
+    const TAG: NodeDataTag = NodeDataTag::JsxElement;
+}
+impl NodePayload for JsxAttributes {
+    const TAG: NodeDataTag = NodeDataTag::JsxAttributes;
+}
+impl NodePayload for JsxNamespacedName {
+    const TAG: NodeDataTag = NodeDataTag::JsxNamespacedName;
+}
+impl NodePayload for JsxOpeningElement {
+    const TAG: NodeDataTag = NodeDataTag::JsxOpeningElement;
+}
+impl NodePayload for JsxSelfClosingElement {
+    const TAG: NodeDataTag = NodeDataTag::JsxSelfClosingElement;
+}
+impl NodePayload for JsxFragment {
+    const TAG: NodeDataTag = NodeDataTag::JsxFragment;
+}
+impl NodePayload for JsxAttribute {
+    const TAG: NodeDataTag = NodeDataTag::JsxAttribute;
+}
+impl NodePayload for JsxSpreadAttribute {
+    const TAG: NodeDataTag = NodeDataTag::JsxSpreadAttribute;
+}
+impl NodePayload for JsxClosingElement {
+    const TAG: NodeDataTag = NodeDataTag::JsxClosingElement;
+}
+impl NodePayload for JsxExpression {
+    const TAG: NodeDataTag = NodeDataTag::JsxExpression;
+}
+impl NodePayload for JsxText {
+    const TAG: NodeDataTag = NodeDataTag::JsxText;
+}
+impl NodePayload for SyntaxList {
+    const TAG: NodeDataTag = NodeDataTag::SyntaxList;
+}
+impl NodePayload for JSDoc {
+    const TAG: NodeDataTag = NodeDataTag::JSDoc;
+}
+impl NodePayload for JSDocTypeExpression {
+    const TAG: NodeDataTag = NodeDataTag::JSDocTypeExpression;
+}
+impl NodePayload for JSDocNonNullableType {
+    const TAG: NodeDataTag = NodeDataTag::JSDocNonNullableType;
+}
+impl NodePayload for JSDocNullableType {
+    const TAG: NodeDataTag = NodeDataTag::JSDocNullableType;
+}
+impl NodePayload for JSDocVariadicType {
+    const TAG: NodeDataTag = NodeDataTag::JSDocVariadicType;
+}
+impl NodePayload for JSDocOptionalType {
+    const TAG: NodeDataTag = NodeDataTag::JSDocOptionalType;
+}
+impl NodePayload for JSDocTypeTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocTypeTag;
+}
+impl NodePayload for JSDocUnknownTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocUnknownTag;
+}
+impl NodePayload for JSDocTemplateTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocTemplateTag;
+}
+impl NodePayload for JSDocReturnTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocReturnTag;
+}
+impl NodePayload for JSDocPublicTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocPublicTag;
+}
+impl NodePayload for JSDocPrivateTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocPrivateTag;
+}
+impl NodePayload for JSDocProtectedTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocProtectedTag;
+}
+impl NodePayload for JSDocReadonlyTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocReadonlyTag;
+}
+impl NodePayload for JSDocOverrideTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocOverrideTag;
+}
+impl NodePayload for JSDocDeprecatedTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocDeprecatedTag;
+}
+impl NodePayload for JSDocSeeTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocSeeTag;
+}
+impl NodePayload for JSDocImplementsTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocImplementsTag;
+}
+impl NodePayload for JSDocAugmentsTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocAugmentsTag;
+}
+impl NodePayload for JSDocSatisfiesTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocSatisfiesTag;
+}
+impl NodePayload for JSDocThrowsTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocThrowsTag;
+}
+impl NodePayload for JSDocThisTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocThisTag;
+}
+impl NodePayload for JSDocImportTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocImportTag;
+}
+impl NodePayload for JSDocCallbackTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocCallbackTag;
+}
+impl NodePayload for JSDocOverloadTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocOverloadTag;
+}
+impl NodePayload for JSDocTypedefTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocTypedefTag;
+}
+impl NodePayload for JSDocSignature {
+    const TAG: NodeDataTag = NodeDataTag::JSDocSignature;
+}
+impl NodePayload for JSDocNameReference {
+    const TAG: NodeDataTag = NodeDataTag::JSDocNameReference;
+}
+impl NodePayload for SourceFile {
+    const TAG: NodeDataTag = NodeDataTag::SourceFile;
+}
+impl NodePayload for ModuleDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::ModuleDeclaration;
+}
+impl NodePayload for ImportEqualsDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::ImportEqualsDeclaration;
+}
+impl NodePayload for ExportDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::ExportDeclaration;
+}
+impl NodePayload for ImportTypeNode {
+    const TAG: NodeDataTag = NodeDataTag::ImportTypeNode;
+}
+impl NodePayload for ImportClause {
+    const TAG: NodeDataTag = NodeDataTag::ImportClause;
+}
+impl NodePayload for ImportSpecifier {
+    const TAG: NodeDataTag = NodeDataTag::ImportSpecifier;
+}
+impl NodePayload for JSDocText {
+    const TAG: NodeDataTag = NodeDataTag::JSDocText;
+}
+impl NodePayload for JSDocLink {
+    const TAG: NodeDataTag = NodeDataTag::JSDocLink;
+}
+impl NodePayload for JSDocLinkPlain {
+    const TAG: NodeDataTag = NodeDataTag::JSDocLinkPlain;
+}
+impl NodePayload for JSDocLinkCode {
+    const TAG: NodeDataTag = NodeDataTag::JSDocLinkCode;
+}
+impl NodePayload for TypeParameterDeclaration {
+    const TAG: NodeDataTag = NodeDataTag::TypeParameterDeclaration;
+}
+impl NodePayload for SyntheticReferenceExpression {
+    const TAG: NodeDataTag = NodeDataTag::SyntheticReferenceExpression;
+}
+impl NodePayload for JSDocTypeLiteral {
+    const TAG: NodeDataTag = NodeDataTag::JSDocTypeLiteral;
+}
+impl NodePayload for JSDocParameterOrPropertyTag {
+    const TAG: NodeDataTag = NodeDataTag::JSDocParameterOrPropertyTag;
+}
+impl NodePayload for FlowSwitchClauseData {
+    const TAG: NodeDataTag = NodeDataTag::FlowSwitchClauseData;
+}
+impl NodePayload for FlowReduceLabelData {
+    const TAG: NodeDataTag = NodeDataTag::FlowReduceLabelData;
+}
+
 // ── Node casts and generic dispatch ──────────────────────────────────────
 
 impl Node {
-    #[inline]
-    pub fn as_token(&self) -> &'static Token {
-        match self.data {
-            NodeData::Token => &Token,
-            _ => panic!("as_token called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_identifier(&self) -> &'static Identifier {
-        match self.data {
-            NodeData::Identifier(d) => d,
-            _ => panic!("as_identifier called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_private_identifier(&self) -> &'static PrivateIdentifier {
-        match self.data {
-            NodeData::PrivateIdentifier(d) => d,
-            _ => panic!("as_private_identifier called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_qualified_name(&self) -> &'static QualifiedName {
-        match self.data {
-            NodeData::QualifiedName(d) => d,
-            _ => panic!("as_qualified_name called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_computed_property_name(&self) -> &'static ComputedPropertyName {
-        match self.data {
-            NodeData::ComputedPropertyName(d) => d,
-            _ => panic!("as_computed_property_name called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_decorator(&self) -> &'static Decorator {
-        match self.data {
-            NodeData::Decorator(d) => d,
-            _ => panic!("as_decorator called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_empty_statement(&self) -> &'static EmptyStatement {
-        match self.data {
-            NodeData::EmptyStatement(d) => d,
-            _ => panic!("as_empty_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_if_statement(&self) -> &'static IfStatement {
-        match self.data {
-            NodeData::IfStatement(d) => d,
-            _ => panic!("as_if_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_do_statement(&self) -> &'static DoStatement {
-        match self.data {
-            NodeData::DoStatement(d) => d,
-            _ => panic!("as_do_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_while_statement(&self) -> &'static WhileStatement {
-        match self.data {
-            NodeData::WhileStatement(d) => d,
-            _ => panic!("as_while_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_for_statement(&self) -> &'static ForStatement {
-        match self.data {
-            NodeData::ForStatement(d) => d,
-            _ => panic!("as_for_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_for_in_or_of_statement(&self) -> &'static ForInOrOfStatement {
-        match self.data {
-            NodeData::ForInOrOfStatement(d) => d,
-            _ => panic!("as_for_in_or_of_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_break_statement(&self) -> &'static BreakStatement {
-        match self.data {
-            NodeData::BreakStatement(d) => d,
-            _ => panic!("as_break_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_continue_statement(&self) -> &'static ContinueStatement {
-        match self.data {
-            NodeData::ContinueStatement(d) => d,
-            _ => panic!("as_continue_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_return_statement(&self) -> &'static ReturnStatement {
-        match self.data {
-            NodeData::ReturnStatement(d) => d,
-            _ => panic!("as_return_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_with_statement(&self) -> &'static WithStatement {
-        match self.data {
-            NodeData::WithStatement(d) => d,
-            _ => panic!("as_with_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_switch_statement(&self) -> &'static SwitchStatement {
-        match self.data {
-            NodeData::SwitchStatement(d) => d,
-            _ => panic!("as_switch_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_case_block(&self) -> &'static CaseBlock {
-        match self.data {
-            NodeData::CaseBlock(d) => d,
-            _ => panic!("as_case_block called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_case_or_default_clause(&self) -> &'static CaseOrDefaultClause {
-        match self.data {
-            NodeData::CaseOrDefaultClause(d) => d,
-            _ => panic!("as_case_or_default_clause called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_throw_statement(&self) -> &'static ThrowStatement {
-        match self.data {
-            NodeData::ThrowStatement(d) => d,
-            _ => panic!("as_throw_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_try_statement(&self) -> &'static TryStatement {
-        match self.data {
-            NodeData::TryStatement(d) => d,
-            _ => panic!("as_try_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_catch_clause(&self) -> &'static CatchClause {
-        match self.data {
-            NodeData::CatchClause(d) => d,
-            _ => panic!("as_catch_clause called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_debugger_statement(&self) -> &'static DebuggerStatement {
-        match self.data {
-            NodeData::DebuggerStatement(d) => d,
-            _ => panic!("as_debugger_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_labeled_statement(&self) -> &'static LabeledStatement {
-        match self.data {
-            NodeData::LabeledStatement(d) => d,
-            _ => panic!("as_labeled_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_expression_statement(&self) -> &'static ExpressionStatement {
-        match self.data {
-            NodeData::ExpressionStatement(d) => d,
-            _ => panic!("as_expression_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_block(&self) -> &'static Block {
-        match self.data {
-            NodeData::Block(d) => d,
-            _ => panic!("as_block called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_variable_statement(&self) -> &'static VariableStatement {
-        match self.data {
-            NodeData::VariableStatement(d) => d,
-            _ => panic!("as_variable_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_variable_declaration(&self) -> &'static VariableDeclaration {
-        match self.data {
-            NodeData::VariableDeclaration(d) => d,
-            _ => panic!("as_variable_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_variable_declaration_list(&self) -> &'static VariableDeclarationList {
-        match self.data {
-            NodeData::VariableDeclarationList(d) => d,
-            _ => panic!("as_variable_declaration_list called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_binding_pattern(&self) -> &'static BindingPattern {
-        match self.data {
-            NodeData::BindingPattern(d) => d,
-            _ => panic!("as_binding_pattern called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_parameter_declaration(&self) -> &'static ParameterDeclaration {
-        match self.data {
-            NodeData::ParameterDeclaration(d) => d,
-            _ => panic!("as_parameter_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_binding_element(&self) -> &'static BindingElement {
-        match self.data {
-            NodeData::BindingElement(d) => d,
-            _ => panic!("as_binding_element called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_missing_declaration(&self) -> &'static MissingDeclaration {
-        match self.data {
-            NodeData::MissingDeclaration(d) => d,
-            _ => panic!("as_missing_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_function_declaration(&self) -> &'static FunctionDeclaration {
-        match self.data {
-            NodeData::FunctionDeclaration(d) => d,
-            _ => panic!("as_function_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_class_declaration(&self) -> &'static ClassDeclaration {
-        match self.data {
-            NodeData::ClassDeclaration(d) => d,
-            _ => panic!("as_class_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_class_expression(&self) -> &'static ClassExpression {
-        match self.data {
-            NodeData::ClassExpression(d) => d,
-            _ => panic!("as_class_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_heritage_clause(&self) -> &'static HeritageClause {
-        match self.data {
-            NodeData::HeritageClause(d) => d,
-            _ => panic!("as_heritage_clause called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_interface_declaration(&self) -> &'static InterfaceDeclaration {
-        match self.data {
-            NodeData::InterfaceDeclaration(d) => d,
-            _ => panic!("as_interface_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_type_alias_declaration(&self) -> &'static TypeAliasDeclaration {
-        match self.data {
-            NodeData::TypeAliasDeclaration(d) => d,
-            _ => panic!("as_type_alias_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_enum_member(&self) -> &'static EnumMember {
-        match self.data {
-            NodeData::EnumMember(d) => d,
-            _ => panic!("as_enum_member called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_enum_declaration(&self) -> &'static EnumDeclaration {
-        match self.data {
-            NodeData::EnumDeclaration(d) => d,
-            _ => panic!("as_enum_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_module_block(&self) -> &'static ModuleBlock {
-        match self.data {
-            NodeData::ModuleBlock(d) => d,
-            _ => panic!("as_module_block called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_not_emitted_statement(&self) -> &'static NotEmittedStatement {
-        match self.data {
-            NodeData::NotEmittedStatement(d) => d,
-            _ => panic!("as_not_emitted_statement called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_not_emitted_type_element(&self) -> &'static NotEmittedTypeElement {
-        match self.data {
-            NodeData::NotEmittedTypeElement(d) => d,
-            _ => panic!("as_not_emitted_type_element called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_import_declaration(&self) -> &'static ImportDeclaration {
-        match self.data {
-            NodeData::ImportDeclaration(d) => d,
-            _ => panic!("as_import_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_external_module_reference(&self) -> &'static ExternalModuleReference {
-        match self.data {
-            NodeData::ExternalModuleReference(d) => d,
-            _ => panic!("as_external_module_reference called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_namespace_import(&self) -> &'static NamespaceImport {
-        match self.data {
-            NodeData::NamespaceImport(d) => d,
-            _ => panic!("as_namespace_import called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_named_imports(&self) -> &'static NamedImports {
-        match self.data {
-            NodeData::NamedImports(d) => d,
-            _ => panic!("as_named_imports called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_export_assignment(&self) -> &'static ExportAssignment {
-        match self.data {
-            NodeData::ExportAssignment(d) => d,
-            _ => panic!("as_export_assignment called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_namespace_export_declaration(&self) -> &'static NamespaceExportDeclaration {
-        match self.data {
-            NodeData::NamespaceExportDeclaration(d) => d,
-            _ => panic!("as_namespace_export_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_namespace_export(&self) -> &'static NamespaceExport {
-        match self.data {
-            NodeData::NamespaceExport(d) => d,
-            _ => panic!("as_namespace_export called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_named_exports(&self) -> &'static NamedExports {
-        match self.data {
-            NodeData::NamedExports(d) => d,
-            _ => panic!("as_named_exports called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_export_specifier(&self) -> &'static ExportSpecifier {
-        match self.data {
-            NodeData::ExportSpecifier(d) => d,
-            _ => panic!("as_export_specifier called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_call_signature_declaration(&self) -> &'static CallSignatureDeclaration {
-        match self.data {
-            NodeData::CallSignatureDeclaration(d) => d,
-            _ => panic!("as_call_signature_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_construct_signature_declaration(&self) -> &'static ConstructSignatureDeclaration {
-        match self.data {
-            NodeData::ConstructSignatureDeclaration(d) => d,
-            _ => panic!("as_construct_signature_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_constructor_declaration(&self) -> &'static ConstructorDeclaration {
-        match self.data {
-            NodeData::ConstructorDeclaration(d) => d,
-            _ => panic!("as_constructor_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_get_accessor_declaration(&self) -> &'static GetAccessorDeclaration {
-        match self.data {
-            NodeData::GetAccessorDeclaration(d) => d,
-            _ => panic!("as_get_accessor_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_set_accessor_declaration(&self) -> &'static SetAccessorDeclaration {
-        match self.data {
-            NodeData::SetAccessorDeclaration(d) => d,
-            _ => panic!("as_set_accessor_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_index_signature_declaration(&self) -> &'static IndexSignatureDeclaration {
-        match self.data {
-            NodeData::IndexSignatureDeclaration(d) => d,
-            _ => panic!("as_index_signature_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_method_signature_declaration(&self) -> &'static MethodSignatureDeclaration {
-        match self.data {
-            NodeData::MethodSignatureDeclaration(d) => d,
-            _ => panic!("as_method_signature_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_method_declaration(&self) -> &'static MethodDeclaration {
-        match self.data {
-            NodeData::MethodDeclaration(d) => d,
-            _ => panic!("as_method_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_property_signature_declaration(&self) -> &'static PropertySignatureDeclaration {
-        match self.data {
-            NodeData::PropertySignatureDeclaration(d) => d,
-            _ => panic!("as_property_signature_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_property_declaration(&self) -> &'static PropertyDeclaration {
-        match self.data {
-            NodeData::PropertyDeclaration(d) => d,
-            _ => panic!("as_property_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_semicolon_class_element(&self) -> &'static SemicolonClassElement {
-        match self.data {
-            NodeData::SemicolonClassElement(d) => d,
-            _ => panic!("as_semicolon_class_element called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_class_static_block_declaration(&self) -> &'static ClassStaticBlockDeclaration {
-        match self.data {
-            NodeData::ClassStaticBlockDeclaration(d) => d,
-            _ => panic!("as_class_static_block_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_omitted_expression(&self) -> &'static OmittedExpression {
-        match self.data {
-            NodeData::OmittedExpression => &OmittedExpression,
-            _ => panic!("as_omitted_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_keyword_expression(&self) -> &'static KeywordExpression {
-        match self.data {
-            NodeData::KeywordExpression(d) => d,
-            _ => panic!("as_keyword_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_string_literal(&self) -> &'static StringLiteral {
-        match self.data {
-            NodeData::StringLiteral(d) => d,
-            _ => panic!("as_string_literal called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_numeric_literal(&self) -> &'static NumericLiteral {
-        match self.data {
-            NodeData::NumericLiteral(d) => d,
-            _ => panic!("as_numeric_literal called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_big_int_literal(&self) -> &'static BigIntLiteral {
-        match self.data {
-            NodeData::BigIntLiteral(d) => d,
-            _ => panic!("as_big_int_literal called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_regular_expression_literal(&self) -> &'static RegularExpressionLiteral {
-        match self.data {
-            NodeData::RegularExpressionLiteral(d) => d,
-            _ => panic!("as_regular_expression_literal called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_no_substitution_template_literal(&self) -> &'static NoSubstitutionTemplateLiteral {
-        match self.data {
-            NodeData::NoSubstitutionTemplateLiteral(d) => d,
-            _ => panic!("as_no_substitution_template_literal called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_binary_expression(&self) -> &'static BinaryExpression {
-        match self.data {
-            NodeData::BinaryExpression(d) => d,
-            _ => panic!("as_binary_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_prefix_unary_expression(&self) -> &'static PrefixUnaryExpression {
-        match self.data {
-            NodeData::PrefixUnaryExpression(d) => d,
-            _ => panic!("as_prefix_unary_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_postfix_unary_expression(&self) -> &'static PostfixUnaryExpression {
-        match self.data {
-            NodeData::PostfixUnaryExpression(d) => d,
-            _ => panic!("as_postfix_unary_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_yield_expression(&self) -> &'static YieldExpression {
-        match self.data {
-            NodeData::YieldExpression(d) => d,
-            _ => panic!("as_yield_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_arrow_function(&self) -> &'static ArrowFunction {
-        match self.data {
-            NodeData::ArrowFunction(d) => d,
-            _ => panic!("as_arrow_function called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_function_expression(&self) -> &'static FunctionExpression {
-        match self.data {
-            NodeData::FunctionExpression(d) => d,
-            _ => panic!("as_function_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_as_expression(&self) -> &'static AsExpression {
-        match self.data {
-            NodeData::AsExpression(d) => d,
-            _ => panic!("as_as_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_satisfies_expression(&self) -> &'static SatisfiesExpression {
-        match self.data {
-            NodeData::SatisfiesExpression(d) => d,
-            _ => panic!("as_satisfies_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_conditional_expression(&self) -> &'static ConditionalExpression {
-        match self.data {
-            NodeData::ConditionalExpression(d) => d,
-            _ => panic!("as_conditional_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_property_access_expression(&self) -> &'static PropertyAccessExpression {
-        match self.data {
-            NodeData::PropertyAccessExpression(d) => d,
-            _ => panic!("as_property_access_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_element_access_expression(&self) -> &'static ElementAccessExpression {
-        match self.data {
-            NodeData::ElementAccessExpression(d) => d,
-            _ => panic!("as_element_access_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_call_expression(&self) -> &'static CallExpression {
-        match self.data {
-            NodeData::CallExpression(d) => d,
-            _ => panic!("as_call_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_new_expression(&self) -> &'static NewExpression {
-        match self.data {
-            NodeData::NewExpression(d) => d,
-            _ => panic!("as_new_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_meta_property(&self) -> &'static MetaProperty {
-        match self.data {
-            NodeData::MetaProperty(d) => d,
-            _ => panic!("as_meta_property called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_non_null_expression(&self) -> &'static NonNullExpression {
-        match self.data {
-            NodeData::NonNullExpression(d) => d,
-            _ => panic!("as_non_null_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_spread_element(&self) -> &'static SpreadElement {
-        match self.data {
-            NodeData::SpreadElement(d) => d,
-            _ => panic!("as_spread_element called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_template_expression(&self) -> &'static TemplateExpression {
-        match self.data {
-            NodeData::TemplateExpression(d) => d,
-            _ => panic!("as_template_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_template_span(&self) -> &'static TemplateSpan {
-        match self.data {
-            NodeData::TemplateSpan(d) => d,
-            _ => panic!("as_template_span called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_tagged_template_expression(&self) -> &'static TaggedTemplateExpression {
-        match self.data {
-            NodeData::TaggedTemplateExpression(d) => d,
-            _ => panic!("as_tagged_template_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_parenthesized_expression(&self) -> &'static ParenthesizedExpression {
-        match self.data {
-            NodeData::ParenthesizedExpression(d) => d,
-            _ => panic!("as_parenthesized_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_array_literal_expression(&self) -> &'static ArrayLiteralExpression {
-        match self.data {
-            NodeData::ArrayLiteralExpression(d) => d,
-            _ => panic!("as_array_literal_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_object_literal_expression(&self) -> &'static ObjectLiteralExpression {
-        match self.data {
-            NodeData::ObjectLiteralExpression(d) => d,
-            _ => panic!("as_object_literal_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_spread_assignment(&self) -> &'static SpreadAssignment {
-        match self.data {
-            NodeData::SpreadAssignment(d) => d,
-            _ => panic!("as_spread_assignment called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_property_assignment(&self) -> &'static PropertyAssignment {
-        match self.data {
-            NodeData::PropertyAssignment(d) => d,
-            _ => panic!("as_property_assignment called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_shorthand_property_assignment(&self) -> &'static ShorthandPropertyAssignment {
-        match self.data {
-            NodeData::ShorthandPropertyAssignment(d) => d,
-            _ => panic!("as_shorthand_property_assignment called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_delete_expression(&self) -> &'static DeleteExpression {
-        match self.data {
-            NodeData::DeleteExpression(d) => d,
-            _ => panic!("as_delete_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_type_of_expression(&self) -> &'static TypeOfExpression {
-        match self.data {
-            NodeData::TypeOfExpression(d) => d,
-            _ => panic!("as_type_of_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_void_expression(&self) -> &'static VoidExpression {
-        match self.data {
-            NodeData::VoidExpression(d) => d,
-            _ => panic!("as_void_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_await_expression(&self) -> &'static AwaitExpression {
-        match self.data {
-            NodeData::AwaitExpression(d) => d,
-            _ => panic!("as_await_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_type_assertion(&self) -> &'static TypeAssertion {
-        match self.data {
-            NodeData::TypeAssertion(d) => d,
-            _ => panic!("as_type_assertion called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_keyword_type_node(&self) -> &'static KeywordTypeNode {
-        match self.data {
-            NodeData::KeywordTypeNode => &KeywordTypeNode,
-            _ => panic!("as_keyword_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_union_type_node(&self) -> &'static UnionTypeNode {
-        match self.data {
-            NodeData::UnionTypeNode(d) => d,
-            _ => panic!("as_union_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_intersection_type_node(&self) -> &'static IntersectionTypeNode {
-        match self.data {
-            NodeData::IntersectionTypeNode(d) => d,
-            _ => panic!("as_intersection_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_conditional_type_node(&self) -> &'static ConditionalTypeNode {
-        match self.data {
-            NodeData::ConditionalTypeNode(d) => d,
-            _ => panic!("as_conditional_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_type_operator_node(&self) -> &'static TypeOperatorNode {
-        match self.data {
-            NodeData::TypeOperatorNode(d) => d,
-            _ => panic!("as_type_operator_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_infer_type_node(&self) -> &'static InferTypeNode {
-        match self.data {
-            NodeData::InferTypeNode(d) => d,
-            _ => panic!("as_infer_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_array_type_node(&self) -> &'static ArrayTypeNode {
-        match self.data {
-            NodeData::ArrayTypeNode(d) => d,
-            _ => panic!("as_array_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_indexed_access_type_node(&self) -> &'static IndexedAccessTypeNode {
-        match self.data {
-            NodeData::IndexedAccessTypeNode(d) => d,
-            _ => panic!("as_indexed_access_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_type_reference_node(&self) -> &'static TypeReferenceNode {
-        match self.data {
-            NodeData::TypeReferenceNode(d) => d,
-            _ => panic!("as_type_reference_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_expression_with_type_arguments(&self) -> &'static ExpressionWithTypeArguments {
-        match self.data {
-            NodeData::ExpressionWithTypeArguments(d) => d,
-            _ => panic!("as_expression_with_type_arguments called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_literal_type_node(&self) -> &'static LiteralTypeNode {
-        match self.data {
-            NodeData::LiteralTypeNode(d) => d,
-            _ => panic!("as_literal_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_this_type_node(&self) -> &'static ThisTypeNode {
-        match self.data {
-            NodeData::ThisTypeNode => &ThisTypeNode,
-            _ => panic!("as_this_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_type_predicate_node(&self) -> &'static TypePredicateNode {
-        match self.data {
-            NodeData::TypePredicateNode(d) => d,
-            _ => panic!("as_type_predicate_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_import_attribute(&self) -> &'static ImportAttribute {
-        match self.data {
-            NodeData::ImportAttribute(d) => d,
-            _ => panic!("as_import_attribute called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_import_attributes(&self) -> &'static ImportAttributes {
-        match self.data {
-            NodeData::ImportAttributes(d) => d,
-            _ => panic!("as_import_attributes called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_type_query_node(&self) -> &'static TypeQueryNode {
-        match self.data {
-            NodeData::TypeQueryNode(d) => d,
-            _ => panic!("as_type_query_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_mapped_type_node(&self) -> &'static MappedTypeNode {
-        match self.data {
-            NodeData::MappedTypeNode(d) => d,
-            _ => panic!("as_mapped_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_type_literal_node(&self) -> &'static TypeLiteralNode {
-        match self.data {
-            NodeData::TypeLiteralNode(d) => d,
-            _ => panic!("as_type_literal_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_tuple_type_node(&self) -> &'static TupleTypeNode {
-        match self.data {
-            NodeData::TupleTypeNode(d) => d,
-            _ => panic!("as_tuple_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_named_tuple_member(&self) -> &'static NamedTupleMember {
-        match self.data {
-            NodeData::NamedTupleMember(d) => d,
-            _ => panic!("as_named_tuple_member called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_optional_type_node(&self) -> &'static OptionalTypeNode {
-        match self.data {
-            NodeData::OptionalTypeNode(d) => d,
-            _ => panic!("as_optional_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_rest_type_node(&self) -> &'static RestTypeNode {
-        match self.data {
-            NodeData::RestTypeNode(d) => d,
-            _ => panic!("as_rest_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_parenthesized_type_node(&self) -> &'static ParenthesizedTypeNode {
-        match self.data {
-            NodeData::ParenthesizedTypeNode(d) => d,
-            _ => panic!("as_parenthesized_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_function_type_node(&self) -> &'static FunctionTypeNode {
-        match self.data {
-            NodeData::FunctionTypeNode(d) => d,
-            _ => panic!("as_function_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_constructor_type_node(&self) -> &'static ConstructorTypeNode {
-        match self.data {
-            NodeData::ConstructorTypeNode(d) => d,
-            _ => panic!("as_constructor_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_template_head(&self) -> &'static TemplateHead {
-        match self.data {
-            NodeData::TemplateHead(d) => d,
-            _ => panic!("as_template_head called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_template_middle(&self) -> &'static TemplateMiddle {
-        match self.data {
-            NodeData::TemplateMiddle(d) => d,
-            _ => panic!("as_template_middle called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_template_tail(&self) -> &'static TemplateTail {
-        match self.data {
-            NodeData::TemplateTail(d) => d,
-            _ => panic!("as_template_tail called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_template_literal_type_node(&self) -> &'static TemplateLiteralTypeNode {
-        match self.data {
-            NodeData::TemplateLiteralTypeNode(d) => d,
-            _ => panic!("as_template_literal_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_template_literal_type_span(&self) -> &'static TemplateLiteralTypeSpan {
-        match self.data {
-            NodeData::TemplateLiteralTypeSpan(d) => d,
-            _ => panic!("as_template_literal_type_span called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_synthetic_expression(&self) -> &'static SyntheticExpression {
-        match self.data {
-            NodeData::SyntheticExpression(d) => d,
-            _ => panic!("as_synthetic_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_partially_emitted_expression(&self) -> &'static PartiallyEmittedExpression {
-        match self.data {
-            NodeData::PartiallyEmittedExpression(d) => d,
-            _ => panic!("as_partially_emitted_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_element(&self) -> &'static JsxElement {
-        match self.data {
-            NodeData::JsxElement(d) => d,
-            _ => panic!("as_jsx_element called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_attributes(&self) -> &'static JsxAttributes {
-        match self.data {
-            NodeData::JsxAttributes(d) => d,
-            _ => panic!("as_jsx_attributes called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_namespaced_name(&self) -> &'static JsxNamespacedName {
-        match self.data {
-            NodeData::JsxNamespacedName(d) => d,
-            _ => panic!("as_jsx_namespaced_name called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_opening_element(&self) -> &'static JsxOpeningElement {
-        match self.data {
-            NodeData::JsxOpeningElement(d) => d,
-            _ => panic!("as_jsx_opening_element called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_self_closing_element(&self) -> &'static JsxSelfClosingElement {
-        match self.data {
-            NodeData::JsxSelfClosingElement(d) => d,
-            _ => panic!("as_jsx_self_closing_element called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_fragment(&self) -> &'static JsxFragment {
-        match self.data {
-            NodeData::JsxFragment(d) => d,
-            _ => panic!("as_jsx_fragment called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_opening_fragment(&self) -> &'static JsxOpeningFragment {
-        match self.data {
-            NodeData::JsxOpeningFragment => &JsxOpeningFragment,
-            _ => panic!("as_jsx_opening_fragment called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_closing_fragment(&self) -> &'static JsxClosingFragment {
-        match self.data {
-            NodeData::JsxClosingFragment => &JsxClosingFragment,
-            _ => panic!("as_jsx_closing_fragment called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_attribute(&self) -> &'static JsxAttribute {
-        match self.data {
-            NodeData::JsxAttribute(d) => d,
-            _ => panic!("as_jsx_attribute called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_spread_attribute(&self) -> &'static JsxSpreadAttribute {
-        match self.data {
-            NodeData::JsxSpreadAttribute(d) => d,
-            _ => panic!("as_jsx_spread_attribute called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_closing_element(&self) -> &'static JsxClosingElement {
-        match self.data {
-            NodeData::JsxClosingElement(d) => d,
-            _ => panic!("as_jsx_closing_element called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_expression(&self) -> &'static JsxExpression {
-        match self.data {
-            NodeData::JsxExpression(d) => d,
-            _ => panic!("as_jsx_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsx_text(&self) -> &'static JsxText {
-        match self.data {
-            NodeData::JsxText(d) => d,
-            _ => panic!("as_jsx_text called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_syntax_list(&self) -> &'static SyntaxList {
-        match self.data {
-            NodeData::SyntaxList(d) => d,
-            _ => panic!("as_syntax_list called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc(&self) -> &'static JSDoc {
-        match self.data {
-            NodeData::JSDoc(d) => d,
-            _ => panic!("as_jsdoc called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_type_expression(&self) -> &'static JSDocTypeExpression {
-        match self.data {
-            NodeData::JSDocTypeExpression(d) => d,
-            _ => panic!("as_jsdoc_type_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_non_nullable_type(&self) -> &'static JSDocNonNullableType {
-        match self.data {
-            NodeData::JSDocNonNullableType(d) => d,
-            _ => panic!("as_jsdoc_non_nullable_type called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_nullable_type(&self) -> &'static JSDocNullableType {
-        match self.data {
-            NodeData::JSDocNullableType(d) => d,
-            _ => panic!("as_jsdoc_nullable_type called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_all_type(&self) -> &'static JSDocAllType {
-        match self.data {
-            NodeData::JSDocAllType => &JSDocAllType,
-            _ => panic!("as_jsdoc_all_type called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_variadic_type(&self) -> &'static JSDocVariadicType {
-        match self.data {
-            NodeData::JSDocVariadicType(d) => d,
-            _ => panic!("as_jsdoc_variadic_type called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_optional_type(&self) -> &'static JSDocOptionalType {
-        match self.data {
-            NodeData::JSDocOptionalType(d) => d,
-            _ => panic!("as_jsdoc_optional_type called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_type_tag(&self) -> &'static JSDocTypeTag {
-        match self.data {
-            NodeData::JSDocTypeTag(d) => d,
-            _ => panic!("as_jsdoc_type_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_unknown_tag(&self) -> &'static JSDocUnknownTag {
-        match self.data {
-            NodeData::JSDocUnknownTag(d) => d,
-            _ => panic!("as_jsdoc_unknown_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_template_tag(&self) -> &'static JSDocTemplateTag {
-        match self.data {
-            NodeData::JSDocTemplateTag(d) => d,
-            _ => panic!("as_jsdoc_template_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_return_tag(&self) -> &'static JSDocReturnTag {
-        match self.data {
-            NodeData::JSDocReturnTag(d) => d,
-            _ => panic!("as_jsdoc_return_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_public_tag(&self) -> &'static JSDocPublicTag {
-        match self.data {
-            NodeData::JSDocPublicTag(d) => d,
-            _ => panic!("as_jsdoc_public_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_private_tag(&self) -> &'static JSDocPrivateTag {
-        match self.data {
-            NodeData::JSDocPrivateTag(d) => d,
-            _ => panic!("as_jsdoc_private_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_protected_tag(&self) -> &'static JSDocProtectedTag {
-        match self.data {
-            NodeData::JSDocProtectedTag(d) => d,
-            _ => panic!("as_jsdoc_protected_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_readonly_tag(&self) -> &'static JSDocReadonlyTag {
-        match self.data {
-            NodeData::JSDocReadonlyTag(d) => d,
-            _ => panic!("as_jsdoc_readonly_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_override_tag(&self) -> &'static JSDocOverrideTag {
-        match self.data {
-            NodeData::JSDocOverrideTag(d) => d,
-            _ => panic!("as_jsdoc_override_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_deprecated_tag(&self) -> &'static JSDocDeprecatedTag {
-        match self.data {
-            NodeData::JSDocDeprecatedTag(d) => d,
-            _ => panic!("as_jsdoc_deprecated_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_see_tag(&self) -> &'static JSDocSeeTag {
-        match self.data {
-            NodeData::JSDocSeeTag(d) => d,
-            _ => panic!("as_jsdoc_see_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_implements_tag(&self) -> &'static JSDocImplementsTag {
-        match self.data {
-            NodeData::JSDocImplementsTag(d) => d,
-            _ => panic!("as_jsdoc_implements_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_augments_tag(&self) -> &'static JSDocAugmentsTag {
-        match self.data {
-            NodeData::JSDocAugmentsTag(d) => d,
-            _ => panic!("as_jsdoc_augments_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_satisfies_tag(&self) -> &'static JSDocSatisfiesTag {
-        match self.data {
-            NodeData::JSDocSatisfiesTag(d) => d,
-            _ => panic!("as_jsdoc_satisfies_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_throws_tag(&self) -> &'static JSDocThrowsTag {
-        match self.data {
-            NodeData::JSDocThrowsTag(d) => d,
-            _ => panic!("as_jsdoc_throws_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_this_tag(&self) -> &'static JSDocThisTag {
-        match self.data {
-            NodeData::JSDocThisTag(d) => d,
-            _ => panic!("as_jsdoc_this_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_import_tag(&self) -> &'static JSDocImportTag {
-        match self.data {
-            NodeData::JSDocImportTag(d) => d,
-            _ => panic!("as_jsdoc_import_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_callback_tag(&self) -> &'static JSDocCallbackTag {
-        match self.data {
-            NodeData::JSDocCallbackTag(d) => d,
-            _ => panic!("as_jsdoc_callback_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_overload_tag(&self) -> &'static JSDocOverloadTag {
-        match self.data {
-            NodeData::JSDocOverloadTag(d) => d,
-            _ => panic!("as_jsdoc_overload_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_typedef_tag(&self) -> &'static JSDocTypedefTag {
-        match self.data {
-            NodeData::JSDocTypedefTag(d) => d,
-            _ => panic!("as_jsdoc_typedef_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_signature(&self) -> &'static JSDocSignature {
-        match self.data {
-            NodeData::JSDocSignature(d) => d,
-            _ => panic!("as_jsdoc_signature called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_name_reference(&self) -> &'static JSDocNameReference {
-        match self.data {
-            NodeData::JSDocNameReference(d) => d,
-            _ => panic!("as_jsdoc_name_reference called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_source_file(&self) -> &'static SourceFile {
-        match self.data {
-            NodeData::SourceFile(d) => d,
-            _ => panic!("as_source_file called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_module_declaration(&self) -> &'static ModuleDeclaration {
-        match self.data {
-            NodeData::ModuleDeclaration(d) => d,
-            _ => panic!("as_module_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_import_equals_declaration(&self) -> &'static ImportEqualsDeclaration {
-        match self.data {
-            NodeData::ImportEqualsDeclaration(d) => d,
-            _ => panic!("as_import_equals_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_export_declaration(&self) -> &'static ExportDeclaration {
-        match self.data {
-            NodeData::ExportDeclaration(d) => d,
-            _ => panic!("as_export_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_import_type_node(&self) -> &'static ImportTypeNode {
-        match self.data {
-            NodeData::ImportTypeNode(d) => d,
-            _ => panic!("as_import_type_node called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_import_clause(&self) -> &'static ImportClause {
-        match self.data {
-            NodeData::ImportClause(d) => d,
-            _ => panic!("as_import_clause called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_import_specifier(&self) -> &'static ImportSpecifier {
-        match self.data {
-            NodeData::ImportSpecifier(d) => d,
-            _ => panic!("as_import_specifier called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_text(&self) -> &'static JSDocText {
-        match self.data {
-            NodeData::JSDocText(d) => d,
-            _ => panic!("as_jsdoc_text called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_link(&self) -> &'static JSDocLink {
-        match self.data {
-            NodeData::JSDocLink(d) => d,
-            _ => panic!("as_jsdoc_link called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_link_plain(&self) -> &'static JSDocLinkPlain {
-        match self.data {
-            NodeData::JSDocLinkPlain(d) => d,
-            _ => panic!("as_jsdoc_link_plain called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_link_code(&self) -> &'static JSDocLinkCode {
-        match self.data {
-            NodeData::JSDocLinkCode(d) => d,
-            _ => panic!("as_jsdoc_link_code called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_type_parameter_declaration(&self) -> &'static TypeParameterDeclaration {
-        match self.data {
-            NodeData::TypeParameterDeclaration(d) => d,
-            _ => panic!("as_type_parameter_declaration called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_synthetic_reference_expression(&self) -> &'static SyntheticReferenceExpression {
-        match self.data {
-            NodeData::SyntheticReferenceExpression(d) => d,
-            _ => panic!("as_synthetic_reference_expression called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_type_literal(&self) -> &'static JSDocTypeLiteral {
-        match self.data {
-            NodeData::JSDocTypeLiteral(d) => d,
-            _ => panic!("as_jsdoc_type_literal called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_jsdoc_parameter_or_property_tag(&self) -> &'static JSDocParameterOrPropertyTag {
-        match self.data {
-            NodeData::JSDocParameterOrPropertyTag(d) => d,
-            _ => panic!("as_jsdoc_parameter_or_property_tag called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_flow_switch_clause_data(&self) -> &'static FlowSwitchClauseData {
-        match self.data {
-            NodeData::FlowSwitchClauseData(d) => d,
-            _ => panic!("as_flow_switch_clause_data called on {:?}", self.kind),
-        }
-    }
-    #[inline]
-    pub fn as_flow_reduce_label_data(&self) -> &'static FlowReduceLabelData {
-        match self.data {
-            NodeData::FlowReduceLabelData(d) => d,
-            _ => panic!("as_flow_reduce_label_data called on {:?}", self.kind),
+    /// The node's data struct.
+    pub fn data(&self) -> NodeData {
+        match self.data_tag {
+            NodeDataTag::Token => NodeData::Token,
+            NodeDataTag::Identifier => NodeData::Identifier(self.payload()),
+            NodeDataTag::PrivateIdentifier => NodeData::PrivateIdentifier(self.payload()),
+            NodeDataTag::QualifiedName => NodeData::QualifiedName(self.payload()),
+            NodeDataTag::ComputedPropertyName => NodeData::ComputedPropertyName(self.payload()),
+            NodeDataTag::Decorator => NodeData::Decorator(self.payload()),
+            NodeDataTag::EmptyStatement => NodeData::EmptyStatement(self.payload()),
+            NodeDataTag::IfStatement => NodeData::IfStatement(self.payload()),
+            NodeDataTag::DoStatement => NodeData::DoStatement(self.payload()),
+            NodeDataTag::WhileStatement => NodeData::WhileStatement(self.payload()),
+            NodeDataTag::ForStatement => NodeData::ForStatement(self.payload()),
+            NodeDataTag::ForInOrOfStatement => NodeData::ForInOrOfStatement(self.payload()),
+            NodeDataTag::BreakStatement => NodeData::BreakStatement(self.payload()),
+            NodeDataTag::ContinueStatement => NodeData::ContinueStatement(self.payload()),
+            NodeDataTag::ReturnStatement => NodeData::ReturnStatement(self.payload()),
+            NodeDataTag::WithStatement => NodeData::WithStatement(self.payload()),
+            NodeDataTag::SwitchStatement => NodeData::SwitchStatement(self.payload()),
+            NodeDataTag::CaseBlock => NodeData::CaseBlock(self.payload()),
+            NodeDataTag::CaseOrDefaultClause => NodeData::CaseOrDefaultClause(self.payload()),
+            NodeDataTag::ThrowStatement => NodeData::ThrowStatement(self.payload()),
+            NodeDataTag::TryStatement => NodeData::TryStatement(self.payload()),
+            NodeDataTag::CatchClause => NodeData::CatchClause(self.payload()),
+            NodeDataTag::DebuggerStatement => NodeData::DebuggerStatement(self.payload()),
+            NodeDataTag::LabeledStatement => NodeData::LabeledStatement(self.payload()),
+            NodeDataTag::ExpressionStatement => NodeData::ExpressionStatement(self.payload()),
+            NodeDataTag::Block => NodeData::Block(self.payload()),
+            NodeDataTag::VariableStatement => NodeData::VariableStatement(self.payload()),
+            NodeDataTag::VariableDeclaration => NodeData::VariableDeclaration(self.payload()),
+            NodeDataTag::VariableDeclarationList => NodeData::VariableDeclarationList(self.payload()),
+            NodeDataTag::BindingPattern => NodeData::BindingPattern(self.payload()),
+            NodeDataTag::ParameterDeclaration => NodeData::ParameterDeclaration(self.payload()),
+            NodeDataTag::BindingElement => NodeData::BindingElement(self.payload()),
+            NodeDataTag::MissingDeclaration => NodeData::MissingDeclaration(self.payload()),
+            NodeDataTag::FunctionDeclaration => NodeData::FunctionDeclaration(self.payload()),
+            NodeDataTag::ClassDeclaration => NodeData::ClassDeclaration(self.payload()),
+            NodeDataTag::ClassExpression => NodeData::ClassExpression(self.payload()),
+            NodeDataTag::HeritageClause => NodeData::HeritageClause(self.payload()),
+            NodeDataTag::InterfaceDeclaration => NodeData::InterfaceDeclaration(self.payload()),
+            NodeDataTag::TypeAliasDeclaration => NodeData::TypeAliasDeclaration(self.payload()),
+            NodeDataTag::EnumMember => NodeData::EnumMember(self.payload()),
+            NodeDataTag::EnumDeclaration => NodeData::EnumDeclaration(self.payload()),
+            NodeDataTag::ModuleBlock => NodeData::ModuleBlock(self.payload()),
+            NodeDataTag::NotEmittedStatement => NodeData::NotEmittedStatement(self.payload()),
+            NodeDataTag::NotEmittedTypeElement => NodeData::NotEmittedTypeElement(self.payload()),
+            NodeDataTag::ImportDeclaration => NodeData::ImportDeclaration(self.payload()),
+            NodeDataTag::ExternalModuleReference => NodeData::ExternalModuleReference(self.payload()),
+            NodeDataTag::NamespaceImport => NodeData::NamespaceImport(self.payload()),
+            NodeDataTag::NamedImports => NodeData::NamedImports(self.payload()),
+            NodeDataTag::ExportAssignment => NodeData::ExportAssignment(self.payload()),
+            NodeDataTag::NamespaceExportDeclaration => NodeData::NamespaceExportDeclaration(self.payload()),
+            NodeDataTag::NamespaceExport => NodeData::NamespaceExport(self.payload()),
+            NodeDataTag::NamedExports => NodeData::NamedExports(self.payload()),
+            NodeDataTag::ExportSpecifier => NodeData::ExportSpecifier(self.payload()),
+            NodeDataTag::CallSignatureDeclaration => NodeData::CallSignatureDeclaration(self.payload()),
+            NodeDataTag::ConstructSignatureDeclaration => NodeData::ConstructSignatureDeclaration(self.payload()),
+            NodeDataTag::ConstructorDeclaration => NodeData::ConstructorDeclaration(self.payload()),
+            NodeDataTag::GetAccessorDeclaration => NodeData::GetAccessorDeclaration(self.payload()),
+            NodeDataTag::SetAccessorDeclaration => NodeData::SetAccessorDeclaration(self.payload()),
+            NodeDataTag::IndexSignatureDeclaration => NodeData::IndexSignatureDeclaration(self.payload()),
+            NodeDataTag::MethodSignatureDeclaration => NodeData::MethodSignatureDeclaration(self.payload()),
+            NodeDataTag::MethodDeclaration => NodeData::MethodDeclaration(self.payload()),
+            NodeDataTag::PropertySignatureDeclaration => NodeData::PropertySignatureDeclaration(self.payload()),
+            NodeDataTag::PropertyDeclaration => NodeData::PropertyDeclaration(self.payload()),
+            NodeDataTag::SemicolonClassElement => NodeData::SemicolonClassElement(self.payload()),
+            NodeDataTag::ClassStaticBlockDeclaration => NodeData::ClassStaticBlockDeclaration(self.payload()),
+            NodeDataTag::OmittedExpression => NodeData::OmittedExpression,
+            NodeDataTag::KeywordExpression => NodeData::KeywordExpression(self.payload()),
+            NodeDataTag::StringLiteral => NodeData::StringLiteral(self.payload()),
+            NodeDataTag::NumericLiteral => NodeData::NumericLiteral(self.payload()),
+            NodeDataTag::BigIntLiteral => NodeData::BigIntLiteral(self.payload()),
+            NodeDataTag::RegularExpressionLiteral => NodeData::RegularExpressionLiteral(self.payload()),
+            NodeDataTag::NoSubstitutionTemplateLiteral => NodeData::NoSubstitutionTemplateLiteral(self.payload()),
+            NodeDataTag::BinaryExpression => NodeData::BinaryExpression(self.payload()),
+            NodeDataTag::PrefixUnaryExpression => NodeData::PrefixUnaryExpression(self.payload()),
+            NodeDataTag::PostfixUnaryExpression => NodeData::PostfixUnaryExpression(self.payload()),
+            NodeDataTag::YieldExpression => NodeData::YieldExpression(self.payload()),
+            NodeDataTag::ArrowFunction => NodeData::ArrowFunction(self.payload()),
+            NodeDataTag::FunctionExpression => NodeData::FunctionExpression(self.payload()),
+            NodeDataTag::AsExpression => NodeData::AsExpression(self.payload()),
+            NodeDataTag::SatisfiesExpression => NodeData::SatisfiesExpression(self.payload()),
+            NodeDataTag::ConditionalExpression => NodeData::ConditionalExpression(self.payload()),
+            NodeDataTag::PropertyAccessExpression => NodeData::PropertyAccessExpression(self.payload()),
+            NodeDataTag::ElementAccessExpression => NodeData::ElementAccessExpression(self.payload()),
+            NodeDataTag::CallExpression => NodeData::CallExpression(self.payload()),
+            NodeDataTag::NewExpression => NodeData::NewExpression(self.payload()),
+            NodeDataTag::MetaProperty => NodeData::MetaProperty(self.payload()),
+            NodeDataTag::NonNullExpression => NodeData::NonNullExpression(self.payload()),
+            NodeDataTag::SpreadElement => NodeData::SpreadElement(self.payload()),
+            NodeDataTag::TemplateExpression => NodeData::TemplateExpression(self.payload()),
+            NodeDataTag::TemplateSpan => NodeData::TemplateSpan(self.payload()),
+            NodeDataTag::TaggedTemplateExpression => NodeData::TaggedTemplateExpression(self.payload()),
+            NodeDataTag::ParenthesizedExpression => NodeData::ParenthesizedExpression(self.payload()),
+            NodeDataTag::ArrayLiteralExpression => NodeData::ArrayLiteralExpression(self.payload()),
+            NodeDataTag::ObjectLiteralExpression => NodeData::ObjectLiteralExpression(self.payload()),
+            NodeDataTag::SpreadAssignment => NodeData::SpreadAssignment(self.payload()),
+            NodeDataTag::PropertyAssignment => NodeData::PropertyAssignment(self.payload()),
+            NodeDataTag::ShorthandPropertyAssignment => NodeData::ShorthandPropertyAssignment(self.payload()),
+            NodeDataTag::DeleteExpression => NodeData::DeleteExpression(self.payload()),
+            NodeDataTag::TypeOfExpression => NodeData::TypeOfExpression(self.payload()),
+            NodeDataTag::VoidExpression => NodeData::VoidExpression(self.payload()),
+            NodeDataTag::AwaitExpression => NodeData::AwaitExpression(self.payload()),
+            NodeDataTag::TypeAssertion => NodeData::TypeAssertion(self.payload()),
+            NodeDataTag::KeywordTypeNode => NodeData::KeywordTypeNode,
+            NodeDataTag::UnionTypeNode => NodeData::UnionTypeNode(self.payload()),
+            NodeDataTag::IntersectionTypeNode => NodeData::IntersectionTypeNode(self.payload()),
+            NodeDataTag::ConditionalTypeNode => NodeData::ConditionalTypeNode(self.payload()),
+            NodeDataTag::TypeOperatorNode => NodeData::TypeOperatorNode(self.payload()),
+            NodeDataTag::InferTypeNode => NodeData::InferTypeNode(self.payload()),
+            NodeDataTag::ArrayTypeNode => NodeData::ArrayTypeNode(self.payload()),
+            NodeDataTag::IndexedAccessTypeNode => NodeData::IndexedAccessTypeNode(self.payload()),
+            NodeDataTag::TypeReferenceNode => NodeData::TypeReferenceNode(self.payload()),
+            NodeDataTag::ExpressionWithTypeArguments => NodeData::ExpressionWithTypeArguments(self.payload()),
+            NodeDataTag::LiteralTypeNode => NodeData::LiteralTypeNode(self.payload()),
+            NodeDataTag::ThisTypeNode => NodeData::ThisTypeNode,
+            NodeDataTag::TypePredicateNode => NodeData::TypePredicateNode(self.payload()),
+            NodeDataTag::ImportAttribute => NodeData::ImportAttribute(self.payload()),
+            NodeDataTag::ImportAttributes => NodeData::ImportAttributes(self.payload()),
+            NodeDataTag::TypeQueryNode => NodeData::TypeQueryNode(self.payload()),
+            NodeDataTag::MappedTypeNode => NodeData::MappedTypeNode(self.payload()),
+            NodeDataTag::TypeLiteralNode => NodeData::TypeLiteralNode(self.payload()),
+            NodeDataTag::TupleTypeNode => NodeData::TupleTypeNode(self.payload()),
+            NodeDataTag::NamedTupleMember => NodeData::NamedTupleMember(self.payload()),
+            NodeDataTag::OptionalTypeNode => NodeData::OptionalTypeNode(self.payload()),
+            NodeDataTag::RestTypeNode => NodeData::RestTypeNode(self.payload()),
+            NodeDataTag::ParenthesizedTypeNode => NodeData::ParenthesizedTypeNode(self.payload()),
+            NodeDataTag::FunctionTypeNode => NodeData::FunctionTypeNode(self.payload()),
+            NodeDataTag::ConstructorTypeNode => NodeData::ConstructorTypeNode(self.payload()),
+            NodeDataTag::TemplateHead => NodeData::TemplateHead(self.payload()),
+            NodeDataTag::TemplateMiddle => NodeData::TemplateMiddle(self.payload()),
+            NodeDataTag::TemplateTail => NodeData::TemplateTail(self.payload()),
+            NodeDataTag::TemplateLiteralTypeNode => NodeData::TemplateLiteralTypeNode(self.payload()),
+            NodeDataTag::TemplateLiteralTypeSpan => NodeData::TemplateLiteralTypeSpan(self.payload()),
+            NodeDataTag::SyntheticExpression => NodeData::SyntheticExpression(self.payload()),
+            NodeDataTag::PartiallyEmittedExpression => NodeData::PartiallyEmittedExpression(self.payload()),
+            NodeDataTag::JsxElement => NodeData::JsxElement(self.payload()),
+            NodeDataTag::JsxAttributes => NodeData::JsxAttributes(self.payload()),
+            NodeDataTag::JsxNamespacedName => NodeData::JsxNamespacedName(self.payload()),
+            NodeDataTag::JsxOpeningElement => NodeData::JsxOpeningElement(self.payload()),
+            NodeDataTag::JsxSelfClosingElement => NodeData::JsxSelfClosingElement(self.payload()),
+            NodeDataTag::JsxFragment => NodeData::JsxFragment(self.payload()),
+            NodeDataTag::JsxOpeningFragment => NodeData::JsxOpeningFragment,
+            NodeDataTag::JsxClosingFragment => NodeData::JsxClosingFragment,
+            NodeDataTag::JsxAttribute => NodeData::JsxAttribute(self.payload()),
+            NodeDataTag::JsxSpreadAttribute => NodeData::JsxSpreadAttribute(self.payload()),
+            NodeDataTag::JsxClosingElement => NodeData::JsxClosingElement(self.payload()),
+            NodeDataTag::JsxExpression => NodeData::JsxExpression(self.payload()),
+            NodeDataTag::JsxText => NodeData::JsxText(self.payload()),
+            NodeDataTag::SyntaxList => NodeData::SyntaxList(self.payload()),
+            NodeDataTag::JSDoc => NodeData::JSDoc(self.payload()),
+            NodeDataTag::JSDocTypeExpression => NodeData::JSDocTypeExpression(self.payload()),
+            NodeDataTag::JSDocNonNullableType => NodeData::JSDocNonNullableType(self.payload()),
+            NodeDataTag::JSDocNullableType => NodeData::JSDocNullableType(self.payload()),
+            NodeDataTag::JSDocAllType => NodeData::JSDocAllType,
+            NodeDataTag::JSDocVariadicType => NodeData::JSDocVariadicType(self.payload()),
+            NodeDataTag::JSDocOptionalType => NodeData::JSDocOptionalType(self.payload()),
+            NodeDataTag::JSDocTypeTag => NodeData::JSDocTypeTag(self.payload()),
+            NodeDataTag::JSDocUnknownTag => NodeData::JSDocUnknownTag(self.payload()),
+            NodeDataTag::JSDocTemplateTag => NodeData::JSDocTemplateTag(self.payload()),
+            NodeDataTag::JSDocReturnTag => NodeData::JSDocReturnTag(self.payload()),
+            NodeDataTag::JSDocPublicTag => NodeData::JSDocPublicTag(self.payload()),
+            NodeDataTag::JSDocPrivateTag => NodeData::JSDocPrivateTag(self.payload()),
+            NodeDataTag::JSDocProtectedTag => NodeData::JSDocProtectedTag(self.payload()),
+            NodeDataTag::JSDocReadonlyTag => NodeData::JSDocReadonlyTag(self.payload()),
+            NodeDataTag::JSDocOverrideTag => NodeData::JSDocOverrideTag(self.payload()),
+            NodeDataTag::JSDocDeprecatedTag => NodeData::JSDocDeprecatedTag(self.payload()),
+            NodeDataTag::JSDocSeeTag => NodeData::JSDocSeeTag(self.payload()),
+            NodeDataTag::JSDocImplementsTag => NodeData::JSDocImplementsTag(self.payload()),
+            NodeDataTag::JSDocAugmentsTag => NodeData::JSDocAugmentsTag(self.payload()),
+            NodeDataTag::JSDocSatisfiesTag => NodeData::JSDocSatisfiesTag(self.payload()),
+            NodeDataTag::JSDocThrowsTag => NodeData::JSDocThrowsTag(self.payload()),
+            NodeDataTag::JSDocThisTag => NodeData::JSDocThisTag(self.payload()),
+            NodeDataTag::JSDocImportTag => NodeData::JSDocImportTag(self.payload()),
+            NodeDataTag::JSDocCallbackTag => NodeData::JSDocCallbackTag(self.payload()),
+            NodeDataTag::JSDocOverloadTag => NodeData::JSDocOverloadTag(self.payload()),
+            NodeDataTag::JSDocTypedefTag => NodeData::JSDocTypedefTag(self.payload()),
+            NodeDataTag::JSDocSignature => NodeData::JSDocSignature(self.payload()),
+            NodeDataTag::JSDocNameReference => NodeData::JSDocNameReference(self.payload()),
+            NodeDataTag::SourceFile => NodeData::SourceFile(self.payload()),
+            NodeDataTag::ModuleDeclaration => NodeData::ModuleDeclaration(self.payload()),
+            NodeDataTag::ImportEqualsDeclaration => NodeData::ImportEqualsDeclaration(self.payload()),
+            NodeDataTag::ExportDeclaration => NodeData::ExportDeclaration(self.payload()),
+            NodeDataTag::ImportTypeNode => NodeData::ImportTypeNode(self.payload()),
+            NodeDataTag::ImportClause => NodeData::ImportClause(self.payload()),
+            NodeDataTag::ImportSpecifier => NodeData::ImportSpecifier(self.payload()),
+            NodeDataTag::JSDocText => NodeData::JSDocText(self.payload()),
+            NodeDataTag::JSDocLink => NodeData::JSDocLink(self.payload()),
+            NodeDataTag::JSDocLinkPlain => NodeData::JSDocLinkPlain(self.payload()),
+            NodeDataTag::JSDocLinkCode => NodeData::JSDocLinkCode(self.payload()),
+            NodeDataTag::TypeParameterDeclaration => NodeData::TypeParameterDeclaration(self.payload()),
+            NodeDataTag::SyntheticReferenceExpression => NodeData::SyntheticReferenceExpression(self.payload()),
+            NodeDataTag::JSDocTypeLiteral => NodeData::JSDocTypeLiteral(self.payload()),
+            NodeDataTag::JSDocParameterOrPropertyTag => NodeData::JSDocParameterOrPropertyTag(self.payload()),
+            NodeDataTag::FlowSwitchClauseData => NodeData::FlowSwitchClauseData(self.payload()),
+            NodeDataTag::FlowReduceLabelData => NodeData::FlowReduceLabelData(self.payload()),
         }
     }
 
+    #[inline]
+    pub fn as_token(&self) -> &'static Token {
+        if self.data_tag != NodeDataTag::Token {
+            panic!("as_token called on {:?}", self.kind);
+        }
+        &Token
+    }
+    #[inline]
+    pub fn as_identifier(&self) -> &'static Identifier {
+        if self.data_tag != NodeDataTag::Identifier {
+            panic!("as_identifier called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_private_identifier(&self) -> &'static PrivateIdentifier {
+        if self.data_tag != NodeDataTag::PrivateIdentifier {
+            panic!("as_private_identifier called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_qualified_name(&self) -> &'static QualifiedName {
+        if self.data_tag != NodeDataTag::QualifiedName {
+            panic!("as_qualified_name called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_computed_property_name(&self) -> &'static ComputedPropertyName {
+        if self.data_tag != NodeDataTag::ComputedPropertyName {
+            panic!("as_computed_property_name called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_decorator(&self) -> &'static Decorator {
+        if self.data_tag != NodeDataTag::Decorator {
+            panic!("as_decorator called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_empty_statement(&self) -> &'static EmptyStatement {
+        if self.data_tag != NodeDataTag::EmptyStatement {
+            panic!("as_empty_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_if_statement(&self) -> &'static IfStatement {
+        if self.data_tag != NodeDataTag::IfStatement {
+            panic!("as_if_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_do_statement(&self) -> &'static DoStatement {
+        if self.data_tag != NodeDataTag::DoStatement {
+            panic!("as_do_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_while_statement(&self) -> &'static WhileStatement {
+        if self.data_tag != NodeDataTag::WhileStatement {
+            panic!("as_while_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_for_statement(&self) -> &'static ForStatement {
+        if self.data_tag != NodeDataTag::ForStatement {
+            panic!("as_for_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_for_in_or_of_statement(&self) -> &'static ForInOrOfStatement {
+        if self.data_tag != NodeDataTag::ForInOrOfStatement {
+            panic!("as_for_in_or_of_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_break_statement(&self) -> &'static BreakStatement {
+        if self.data_tag != NodeDataTag::BreakStatement {
+            panic!("as_break_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_continue_statement(&self) -> &'static ContinueStatement {
+        if self.data_tag != NodeDataTag::ContinueStatement {
+            panic!("as_continue_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_return_statement(&self) -> &'static ReturnStatement {
+        if self.data_tag != NodeDataTag::ReturnStatement {
+            panic!("as_return_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_with_statement(&self) -> &'static WithStatement {
+        if self.data_tag != NodeDataTag::WithStatement {
+            panic!("as_with_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_switch_statement(&self) -> &'static SwitchStatement {
+        if self.data_tag != NodeDataTag::SwitchStatement {
+            panic!("as_switch_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_case_block(&self) -> &'static CaseBlock {
+        if self.data_tag != NodeDataTag::CaseBlock {
+            panic!("as_case_block called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_case_or_default_clause(&self) -> &'static CaseOrDefaultClause {
+        if self.data_tag != NodeDataTag::CaseOrDefaultClause {
+            panic!("as_case_or_default_clause called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_throw_statement(&self) -> &'static ThrowStatement {
+        if self.data_tag != NodeDataTag::ThrowStatement {
+            panic!("as_throw_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_try_statement(&self) -> &'static TryStatement {
+        if self.data_tag != NodeDataTag::TryStatement {
+            panic!("as_try_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_catch_clause(&self) -> &'static CatchClause {
+        if self.data_tag != NodeDataTag::CatchClause {
+            panic!("as_catch_clause called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_debugger_statement(&self) -> &'static DebuggerStatement {
+        if self.data_tag != NodeDataTag::DebuggerStatement {
+            panic!("as_debugger_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_labeled_statement(&self) -> &'static LabeledStatement {
+        if self.data_tag != NodeDataTag::LabeledStatement {
+            panic!("as_labeled_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_expression_statement(&self) -> &'static ExpressionStatement {
+        if self.data_tag != NodeDataTag::ExpressionStatement {
+            panic!("as_expression_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_block(&self) -> &'static Block {
+        if self.data_tag != NodeDataTag::Block {
+            panic!("as_block called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_variable_statement(&self) -> &'static VariableStatement {
+        if self.data_tag != NodeDataTag::VariableStatement {
+            panic!("as_variable_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_variable_declaration(&self) -> &'static VariableDeclaration {
+        if self.data_tag != NodeDataTag::VariableDeclaration {
+            panic!("as_variable_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_variable_declaration_list(&self) -> &'static VariableDeclarationList {
+        if self.data_tag != NodeDataTag::VariableDeclarationList {
+            panic!("as_variable_declaration_list called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_binding_pattern(&self) -> &'static BindingPattern {
+        if self.data_tag != NodeDataTag::BindingPattern {
+            panic!("as_binding_pattern called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_parameter_declaration(&self) -> &'static ParameterDeclaration {
+        if self.data_tag != NodeDataTag::ParameterDeclaration {
+            panic!("as_parameter_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_binding_element(&self) -> &'static BindingElement {
+        if self.data_tag != NodeDataTag::BindingElement {
+            panic!("as_binding_element called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_missing_declaration(&self) -> &'static MissingDeclaration {
+        if self.data_tag != NodeDataTag::MissingDeclaration {
+            panic!("as_missing_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_function_declaration(&self) -> &'static FunctionDeclaration {
+        if self.data_tag != NodeDataTag::FunctionDeclaration {
+            panic!("as_function_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_class_declaration(&self) -> &'static ClassDeclaration {
+        if self.data_tag != NodeDataTag::ClassDeclaration {
+            panic!("as_class_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_class_expression(&self) -> &'static ClassExpression {
+        if self.data_tag != NodeDataTag::ClassExpression {
+            panic!("as_class_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_heritage_clause(&self) -> &'static HeritageClause {
+        if self.data_tag != NodeDataTag::HeritageClause {
+            panic!("as_heritage_clause called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_interface_declaration(&self) -> &'static InterfaceDeclaration {
+        if self.data_tag != NodeDataTag::InterfaceDeclaration {
+            panic!("as_interface_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_type_alias_declaration(&self) -> &'static TypeAliasDeclaration {
+        if self.data_tag != NodeDataTag::TypeAliasDeclaration {
+            panic!("as_type_alias_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_enum_member(&self) -> &'static EnumMember {
+        if self.data_tag != NodeDataTag::EnumMember {
+            panic!("as_enum_member called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_enum_declaration(&self) -> &'static EnumDeclaration {
+        if self.data_tag != NodeDataTag::EnumDeclaration {
+            panic!("as_enum_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_module_block(&self) -> &'static ModuleBlock {
+        if self.data_tag != NodeDataTag::ModuleBlock {
+            panic!("as_module_block called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_not_emitted_statement(&self) -> &'static NotEmittedStatement {
+        if self.data_tag != NodeDataTag::NotEmittedStatement {
+            panic!("as_not_emitted_statement called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_not_emitted_type_element(&self) -> &'static NotEmittedTypeElement {
+        if self.data_tag != NodeDataTag::NotEmittedTypeElement {
+            panic!("as_not_emitted_type_element called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_import_declaration(&self) -> &'static ImportDeclaration {
+        if self.data_tag != NodeDataTag::ImportDeclaration {
+            panic!("as_import_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_external_module_reference(&self) -> &'static ExternalModuleReference {
+        if self.data_tag != NodeDataTag::ExternalModuleReference {
+            panic!("as_external_module_reference called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_namespace_import(&self) -> &'static NamespaceImport {
+        if self.data_tag != NodeDataTag::NamespaceImport {
+            panic!("as_namespace_import called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_named_imports(&self) -> &'static NamedImports {
+        if self.data_tag != NodeDataTag::NamedImports {
+            panic!("as_named_imports called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_export_assignment(&self) -> &'static ExportAssignment {
+        if self.data_tag != NodeDataTag::ExportAssignment {
+            panic!("as_export_assignment called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_namespace_export_declaration(&self) -> &'static NamespaceExportDeclaration {
+        if self.data_tag != NodeDataTag::NamespaceExportDeclaration {
+            panic!("as_namespace_export_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_namespace_export(&self) -> &'static NamespaceExport {
+        if self.data_tag != NodeDataTag::NamespaceExport {
+            panic!("as_namespace_export called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_named_exports(&self) -> &'static NamedExports {
+        if self.data_tag != NodeDataTag::NamedExports {
+            panic!("as_named_exports called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_export_specifier(&self) -> &'static ExportSpecifier {
+        if self.data_tag != NodeDataTag::ExportSpecifier {
+            panic!("as_export_specifier called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_call_signature_declaration(&self) -> &'static CallSignatureDeclaration {
+        if self.data_tag != NodeDataTag::CallSignatureDeclaration {
+            panic!("as_call_signature_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_construct_signature_declaration(&self) -> &'static ConstructSignatureDeclaration {
+        if self.data_tag != NodeDataTag::ConstructSignatureDeclaration {
+            panic!("as_construct_signature_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_constructor_declaration(&self) -> &'static ConstructorDeclaration {
+        if self.data_tag != NodeDataTag::ConstructorDeclaration {
+            panic!("as_constructor_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_get_accessor_declaration(&self) -> &'static GetAccessorDeclaration {
+        if self.data_tag != NodeDataTag::GetAccessorDeclaration {
+            panic!("as_get_accessor_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_set_accessor_declaration(&self) -> &'static SetAccessorDeclaration {
+        if self.data_tag != NodeDataTag::SetAccessorDeclaration {
+            panic!("as_set_accessor_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_index_signature_declaration(&self) -> &'static IndexSignatureDeclaration {
+        if self.data_tag != NodeDataTag::IndexSignatureDeclaration {
+            panic!("as_index_signature_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_method_signature_declaration(&self) -> &'static MethodSignatureDeclaration {
+        if self.data_tag != NodeDataTag::MethodSignatureDeclaration {
+            panic!("as_method_signature_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_method_declaration(&self) -> &'static MethodDeclaration {
+        if self.data_tag != NodeDataTag::MethodDeclaration {
+            panic!("as_method_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_property_signature_declaration(&self) -> &'static PropertySignatureDeclaration {
+        if self.data_tag != NodeDataTag::PropertySignatureDeclaration {
+            panic!("as_property_signature_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_property_declaration(&self) -> &'static PropertyDeclaration {
+        if self.data_tag != NodeDataTag::PropertyDeclaration {
+            panic!("as_property_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_semicolon_class_element(&self) -> &'static SemicolonClassElement {
+        if self.data_tag != NodeDataTag::SemicolonClassElement {
+            panic!("as_semicolon_class_element called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_class_static_block_declaration(&self) -> &'static ClassStaticBlockDeclaration {
+        if self.data_tag != NodeDataTag::ClassStaticBlockDeclaration {
+            panic!("as_class_static_block_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_omitted_expression(&self) -> &'static OmittedExpression {
+        if self.data_tag != NodeDataTag::OmittedExpression {
+            panic!("as_omitted_expression called on {:?}", self.kind);
+        }
+        &OmittedExpression
+    }
+    #[inline]
+    pub fn as_keyword_expression(&self) -> &'static KeywordExpression {
+        if self.data_tag != NodeDataTag::KeywordExpression {
+            panic!("as_keyword_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_string_literal(&self) -> &'static StringLiteral {
+        if self.data_tag != NodeDataTag::StringLiteral {
+            panic!("as_string_literal called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_numeric_literal(&self) -> &'static NumericLiteral {
+        if self.data_tag != NodeDataTag::NumericLiteral {
+            panic!("as_numeric_literal called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_big_int_literal(&self) -> &'static BigIntLiteral {
+        if self.data_tag != NodeDataTag::BigIntLiteral {
+            panic!("as_big_int_literal called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_regular_expression_literal(&self) -> &'static RegularExpressionLiteral {
+        if self.data_tag != NodeDataTag::RegularExpressionLiteral {
+            panic!("as_regular_expression_literal called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_no_substitution_template_literal(&self) -> &'static NoSubstitutionTemplateLiteral {
+        if self.data_tag != NodeDataTag::NoSubstitutionTemplateLiteral {
+            panic!("as_no_substitution_template_literal called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_binary_expression(&self) -> &'static BinaryExpression {
+        if self.data_tag != NodeDataTag::BinaryExpression {
+            panic!("as_binary_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_prefix_unary_expression(&self) -> &'static PrefixUnaryExpression {
+        if self.data_tag != NodeDataTag::PrefixUnaryExpression {
+            panic!("as_prefix_unary_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_postfix_unary_expression(&self) -> &'static PostfixUnaryExpression {
+        if self.data_tag != NodeDataTag::PostfixUnaryExpression {
+            panic!("as_postfix_unary_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_yield_expression(&self) -> &'static YieldExpression {
+        if self.data_tag != NodeDataTag::YieldExpression {
+            panic!("as_yield_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_arrow_function(&self) -> &'static ArrowFunction {
+        if self.data_tag != NodeDataTag::ArrowFunction {
+            panic!("as_arrow_function called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_function_expression(&self) -> &'static FunctionExpression {
+        if self.data_tag != NodeDataTag::FunctionExpression {
+            panic!("as_function_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_as_expression(&self) -> &'static AsExpression {
+        if self.data_tag != NodeDataTag::AsExpression {
+            panic!("as_as_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_satisfies_expression(&self) -> &'static SatisfiesExpression {
+        if self.data_tag != NodeDataTag::SatisfiesExpression {
+            panic!("as_satisfies_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_conditional_expression(&self) -> &'static ConditionalExpression {
+        if self.data_tag != NodeDataTag::ConditionalExpression {
+            panic!("as_conditional_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_property_access_expression(&self) -> &'static PropertyAccessExpression {
+        if self.data_tag != NodeDataTag::PropertyAccessExpression {
+            panic!("as_property_access_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_element_access_expression(&self) -> &'static ElementAccessExpression {
+        if self.data_tag != NodeDataTag::ElementAccessExpression {
+            panic!("as_element_access_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_call_expression(&self) -> &'static CallExpression {
+        if self.data_tag != NodeDataTag::CallExpression {
+            panic!("as_call_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_new_expression(&self) -> &'static NewExpression {
+        if self.data_tag != NodeDataTag::NewExpression {
+            panic!("as_new_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_meta_property(&self) -> &'static MetaProperty {
+        if self.data_tag != NodeDataTag::MetaProperty {
+            panic!("as_meta_property called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_non_null_expression(&self) -> &'static NonNullExpression {
+        if self.data_tag != NodeDataTag::NonNullExpression {
+            panic!("as_non_null_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_spread_element(&self) -> &'static SpreadElement {
+        if self.data_tag != NodeDataTag::SpreadElement {
+            panic!("as_spread_element called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_template_expression(&self) -> &'static TemplateExpression {
+        if self.data_tag != NodeDataTag::TemplateExpression {
+            panic!("as_template_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_template_span(&self) -> &'static TemplateSpan {
+        if self.data_tag != NodeDataTag::TemplateSpan {
+            panic!("as_template_span called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_tagged_template_expression(&self) -> &'static TaggedTemplateExpression {
+        if self.data_tag != NodeDataTag::TaggedTemplateExpression {
+            panic!("as_tagged_template_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_parenthesized_expression(&self) -> &'static ParenthesizedExpression {
+        if self.data_tag != NodeDataTag::ParenthesizedExpression {
+            panic!("as_parenthesized_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_array_literal_expression(&self) -> &'static ArrayLiteralExpression {
+        if self.data_tag != NodeDataTag::ArrayLiteralExpression {
+            panic!("as_array_literal_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_object_literal_expression(&self) -> &'static ObjectLiteralExpression {
+        if self.data_tag != NodeDataTag::ObjectLiteralExpression {
+            panic!("as_object_literal_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_spread_assignment(&self) -> &'static SpreadAssignment {
+        if self.data_tag != NodeDataTag::SpreadAssignment {
+            panic!("as_spread_assignment called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_property_assignment(&self) -> &'static PropertyAssignment {
+        if self.data_tag != NodeDataTag::PropertyAssignment {
+            panic!("as_property_assignment called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_shorthand_property_assignment(&self) -> &'static ShorthandPropertyAssignment {
+        if self.data_tag != NodeDataTag::ShorthandPropertyAssignment {
+            panic!("as_shorthand_property_assignment called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_delete_expression(&self) -> &'static DeleteExpression {
+        if self.data_tag != NodeDataTag::DeleteExpression {
+            panic!("as_delete_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_type_of_expression(&self) -> &'static TypeOfExpression {
+        if self.data_tag != NodeDataTag::TypeOfExpression {
+            panic!("as_type_of_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_void_expression(&self) -> &'static VoidExpression {
+        if self.data_tag != NodeDataTag::VoidExpression {
+            panic!("as_void_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_await_expression(&self) -> &'static AwaitExpression {
+        if self.data_tag != NodeDataTag::AwaitExpression {
+            panic!("as_await_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_type_assertion(&self) -> &'static TypeAssertion {
+        if self.data_tag != NodeDataTag::TypeAssertion {
+            panic!("as_type_assertion called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_keyword_type_node(&self) -> &'static KeywordTypeNode {
+        if self.data_tag != NodeDataTag::KeywordTypeNode {
+            panic!("as_keyword_type_node called on {:?}", self.kind);
+        }
+        &KeywordTypeNode
+    }
+    #[inline]
+    pub fn as_union_type_node(&self) -> &'static UnionTypeNode {
+        if self.data_tag != NodeDataTag::UnionTypeNode {
+            panic!("as_union_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_intersection_type_node(&self) -> &'static IntersectionTypeNode {
+        if self.data_tag != NodeDataTag::IntersectionTypeNode {
+            panic!("as_intersection_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_conditional_type_node(&self) -> &'static ConditionalTypeNode {
+        if self.data_tag != NodeDataTag::ConditionalTypeNode {
+            panic!("as_conditional_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_type_operator_node(&self) -> &'static TypeOperatorNode {
+        if self.data_tag != NodeDataTag::TypeOperatorNode {
+            panic!("as_type_operator_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_infer_type_node(&self) -> &'static InferTypeNode {
+        if self.data_tag != NodeDataTag::InferTypeNode {
+            panic!("as_infer_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_array_type_node(&self) -> &'static ArrayTypeNode {
+        if self.data_tag != NodeDataTag::ArrayTypeNode {
+            panic!("as_array_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_indexed_access_type_node(&self) -> &'static IndexedAccessTypeNode {
+        if self.data_tag != NodeDataTag::IndexedAccessTypeNode {
+            panic!("as_indexed_access_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_type_reference_node(&self) -> &'static TypeReferenceNode {
+        if self.data_tag != NodeDataTag::TypeReferenceNode {
+            panic!("as_type_reference_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_expression_with_type_arguments(&self) -> &'static ExpressionWithTypeArguments {
+        if self.data_tag != NodeDataTag::ExpressionWithTypeArguments {
+            panic!("as_expression_with_type_arguments called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_literal_type_node(&self) -> &'static LiteralTypeNode {
+        if self.data_tag != NodeDataTag::LiteralTypeNode {
+            panic!("as_literal_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_this_type_node(&self) -> &'static ThisTypeNode {
+        if self.data_tag != NodeDataTag::ThisTypeNode {
+            panic!("as_this_type_node called on {:?}", self.kind);
+        }
+        &ThisTypeNode
+    }
+    #[inline]
+    pub fn as_type_predicate_node(&self) -> &'static TypePredicateNode {
+        if self.data_tag != NodeDataTag::TypePredicateNode {
+            panic!("as_type_predicate_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_import_attribute(&self) -> &'static ImportAttribute {
+        if self.data_tag != NodeDataTag::ImportAttribute {
+            panic!("as_import_attribute called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_import_attributes(&self) -> &'static ImportAttributes {
+        if self.data_tag != NodeDataTag::ImportAttributes {
+            panic!("as_import_attributes called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_type_query_node(&self) -> &'static TypeQueryNode {
+        if self.data_tag != NodeDataTag::TypeQueryNode {
+            panic!("as_type_query_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_mapped_type_node(&self) -> &'static MappedTypeNode {
+        if self.data_tag != NodeDataTag::MappedTypeNode {
+            panic!("as_mapped_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_type_literal_node(&self) -> &'static TypeLiteralNode {
+        if self.data_tag != NodeDataTag::TypeLiteralNode {
+            panic!("as_type_literal_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_tuple_type_node(&self) -> &'static TupleTypeNode {
+        if self.data_tag != NodeDataTag::TupleTypeNode {
+            panic!("as_tuple_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_named_tuple_member(&self) -> &'static NamedTupleMember {
+        if self.data_tag != NodeDataTag::NamedTupleMember {
+            panic!("as_named_tuple_member called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_optional_type_node(&self) -> &'static OptionalTypeNode {
+        if self.data_tag != NodeDataTag::OptionalTypeNode {
+            panic!("as_optional_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_rest_type_node(&self) -> &'static RestTypeNode {
+        if self.data_tag != NodeDataTag::RestTypeNode {
+            panic!("as_rest_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_parenthesized_type_node(&self) -> &'static ParenthesizedTypeNode {
+        if self.data_tag != NodeDataTag::ParenthesizedTypeNode {
+            panic!("as_parenthesized_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_function_type_node(&self) -> &'static FunctionTypeNode {
+        if self.data_tag != NodeDataTag::FunctionTypeNode {
+            panic!("as_function_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_constructor_type_node(&self) -> &'static ConstructorTypeNode {
+        if self.data_tag != NodeDataTag::ConstructorTypeNode {
+            panic!("as_constructor_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_template_head(&self) -> &'static TemplateHead {
+        if self.data_tag != NodeDataTag::TemplateHead {
+            panic!("as_template_head called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_template_middle(&self) -> &'static TemplateMiddle {
+        if self.data_tag != NodeDataTag::TemplateMiddle {
+            panic!("as_template_middle called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_template_tail(&self) -> &'static TemplateTail {
+        if self.data_tag != NodeDataTag::TemplateTail {
+            panic!("as_template_tail called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_template_literal_type_node(&self) -> &'static TemplateLiteralTypeNode {
+        if self.data_tag != NodeDataTag::TemplateLiteralTypeNode {
+            panic!("as_template_literal_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_template_literal_type_span(&self) -> &'static TemplateLiteralTypeSpan {
+        if self.data_tag != NodeDataTag::TemplateLiteralTypeSpan {
+            panic!("as_template_literal_type_span called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_synthetic_expression(&self) -> &'static SyntheticExpression {
+        if self.data_tag != NodeDataTag::SyntheticExpression {
+            panic!("as_synthetic_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_partially_emitted_expression(&self) -> &'static PartiallyEmittedExpression {
+        if self.data_tag != NodeDataTag::PartiallyEmittedExpression {
+            panic!("as_partially_emitted_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsx_element(&self) -> &'static JsxElement {
+        if self.data_tag != NodeDataTag::JsxElement {
+            panic!("as_jsx_element called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsx_attributes(&self) -> &'static JsxAttributes {
+        if self.data_tag != NodeDataTag::JsxAttributes {
+            panic!("as_jsx_attributes called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsx_namespaced_name(&self) -> &'static JsxNamespacedName {
+        if self.data_tag != NodeDataTag::JsxNamespacedName {
+            panic!("as_jsx_namespaced_name called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsx_opening_element(&self) -> &'static JsxOpeningElement {
+        if self.data_tag != NodeDataTag::JsxOpeningElement {
+            panic!("as_jsx_opening_element called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsx_self_closing_element(&self) -> &'static JsxSelfClosingElement {
+        if self.data_tag != NodeDataTag::JsxSelfClosingElement {
+            panic!("as_jsx_self_closing_element called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsx_fragment(&self) -> &'static JsxFragment {
+        if self.data_tag != NodeDataTag::JsxFragment {
+            panic!("as_jsx_fragment called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsx_opening_fragment(&self) -> &'static JsxOpeningFragment {
+        if self.data_tag != NodeDataTag::JsxOpeningFragment {
+            panic!("as_jsx_opening_fragment called on {:?}", self.kind);
+        }
+        &JsxOpeningFragment
+    }
+    #[inline]
+    pub fn as_jsx_closing_fragment(&self) -> &'static JsxClosingFragment {
+        if self.data_tag != NodeDataTag::JsxClosingFragment {
+            panic!("as_jsx_closing_fragment called on {:?}", self.kind);
+        }
+        &JsxClosingFragment
+    }
+    #[inline]
+    pub fn as_jsx_attribute(&self) -> &'static JsxAttribute {
+        if self.data_tag != NodeDataTag::JsxAttribute {
+            panic!("as_jsx_attribute called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsx_spread_attribute(&self) -> &'static JsxSpreadAttribute {
+        if self.data_tag != NodeDataTag::JsxSpreadAttribute {
+            panic!("as_jsx_spread_attribute called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsx_closing_element(&self) -> &'static JsxClosingElement {
+        if self.data_tag != NodeDataTag::JsxClosingElement {
+            panic!("as_jsx_closing_element called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsx_expression(&self) -> &'static JsxExpression {
+        if self.data_tag != NodeDataTag::JsxExpression {
+            panic!("as_jsx_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsx_text(&self) -> &'static JsxText {
+        if self.data_tag != NodeDataTag::JsxText {
+            panic!("as_jsx_text called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_syntax_list(&self) -> &'static SyntaxList {
+        if self.data_tag != NodeDataTag::SyntaxList {
+            panic!("as_syntax_list called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc(&self) -> &'static JSDoc {
+        if self.data_tag != NodeDataTag::JSDoc {
+            panic!("as_jsdoc called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_type_expression(&self) -> &'static JSDocTypeExpression {
+        if self.data_tag != NodeDataTag::JSDocTypeExpression {
+            panic!("as_jsdoc_type_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_non_nullable_type(&self) -> &'static JSDocNonNullableType {
+        if self.data_tag != NodeDataTag::JSDocNonNullableType {
+            panic!("as_jsdoc_non_nullable_type called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_nullable_type(&self) -> &'static JSDocNullableType {
+        if self.data_tag != NodeDataTag::JSDocNullableType {
+            panic!("as_jsdoc_nullable_type called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_all_type(&self) -> &'static JSDocAllType {
+        if self.data_tag != NodeDataTag::JSDocAllType {
+            panic!("as_jsdoc_all_type called on {:?}", self.kind);
+        }
+        &JSDocAllType
+    }
+    #[inline]
+    pub fn as_jsdoc_variadic_type(&self) -> &'static JSDocVariadicType {
+        if self.data_tag != NodeDataTag::JSDocVariadicType {
+            panic!("as_jsdoc_variadic_type called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_optional_type(&self) -> &'static JSDocOptionalType {
+        if self.data_tag != NodeDataTag::JSDocOptionalType {
+            panic!("as_jsdoc_optional_type called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_type_tag(&self) -> &'static JSDocTypeTag {
+        if self.data_tag != NodeDataTag::JSDocTypeTag {
+            panic!("as_jsdoc_type_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_unknown_tag(&self) -> &'static JSDocUnknownTag {
+        if self.data_tag != NodeDataTag::JSDocUnknownTag {
+            panic!("as_jsdoc_unknown_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_template_tag(&self) -> &'static JSDocTemplateTag {
+        if self.data_tag != NodeDataTag::JSDocTemplateTag {
+            panic!("as_jsdoc_template_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_return_tag(&self) -> &'static JSDocReturnTag {
+        if self.data_tag != NodeDataTag::JSDocReturnTag {
+            panic!("as_jsdoc_return_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_public_tag(&self) -> &'static JSDocPublicTag {
+        if self.data_tag != NodeDataTag::JSDocPublicTag {
+            panic!("as_jsdoc_public_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_private_tag(&self) -> &'static JSDocPrivateTag {
+        if self.data_tag != NodeDataTag::JSDocPrivateTag {
+            panic!("as_jsdoc_private_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_protected_tag(&self) -> &'static JSDocProtectedTag {
+        if self.data_tag != NodeDataTag::JSDocProtectedTag {
+            panic!("as_jsdoc_protected_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_readonly_tag(&self) -> &'static JSDocReadonlyTag {
+        if self.data_tag != NodeDataTag::JSDocReadonlyTag {
+            panic!("as_jsdoc_readonly_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_override_tag(&self) -> &'static JSDocOverrideTag {
+        if self.data_tag != NodeDataTag::JSDocOverrideTag {
+            panic!("as_jsdoc_override_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_deprecated_tag(&self) -> &'static JSDocDeprecatedTag {
+        if self.data_tag != NodeDataTag::JSDocDeprecatedTag {
+            panic!("as_jsdoc_deprecated_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_see_tag(&self) -> &'static JSDocSeeTag {
+        if self.data_tag != NodeDataTag::JSDocSeeTag {
+            panic!("as_jsdoc_see_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_implements_tag(&self) -> &'static JSDocImplementsTag {
+        if self.data_tag != NodeDataTag::JSDocImplementsTag {
+            panic!("as_jsdoc_implements_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_augments_tag(&self) -> &'static JSDocAugmentsTag {
+        if self.data_tag != NodeDataTag::JSDocAugmentsTag {
+            panic!("as_jsdoc_augments_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_satisfies_tag(&self) -> &'static JSDocSatisfiesTag {
+        if self.data_tag != NodeDataTag::JSDocSatisfiesTag {
+            panic!("as_jsdoc_satisfies_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_throws_tag(&self) -> &'static JSDocThrowsTag {
+        if self.data_tag != NodeDataTag::JSDocThrowsTag {
+            panic!("as_jsdoc_throws_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_this_tag(&self) -> &'static JSDocThisTag {
+        if self.data_tag != NodeDataTag::JSDocThisTag {
+            panic!("as_jsdoc_this_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_import_tag(&self) -> &'static JSDocImportTag {
+        if self.data_tag != NodeDataTag::JSDocImportTag {
+            panic!("as_jsdoc_import_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_callback_tag(&self) -> &'static JSDocCallbackTag {
+        if self.data_tag != NodeDataTag::JSDocCallbackTag {
+            panic!("as_jsdoc_callback_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_overload_tag(&self) -> &'static JSDocOverloadTag {
+        if self.data_tag != NodeDataTag::JSDocOverloadTag {
+            panic!("as_jsdoc_overload_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_typedef_tag(&self) -> &'static JSDocTypedefTag {
+        if self.data_tag != NodeDataTag::JSDocTypedefTag {
+            panic!("as_jsdoc_typedef_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_signature(&self) -> &'static JSDocSignature {
+        if self.data_tag != NodeDataTag::JSDocSignature {
+            panic!("as_jsdoc_signature called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_name_reference(&self) -> &'static JSDocNameReference {
+        if self.data_tag != NodeDataTag::JSDocNameReference {
+            panic!("as_jsdoc_name_reference called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_source_file(&self) -> &'static SourceFile {
+        if self.data_tag != NodeDataTag::SourceFile {
+            panic!("as_source_file called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_module_declaration(&self) -> &'static ModuleDeclaration {
+        if self.data_tag != NodeDataTag::ModuleDeclaration {
+            panic!("as_module_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_import_equals_declaration(&self) -> &'static ImportEqualsDeclaration {
+        if self.data_tag != NodeDataTag::ImportEqualsDeclaration {
+            panic!("as_import_equals_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_export_declaration(&self) -> &'static ExportDeclaration {
+        if self.data_tag != NodeDataTag::ExportDeclaration {
+            panic!("as_export_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_import_type_node(&self) -> &'static ImportTypeNode {
+        if self.data_tag != NodeDataTag::ImportTypeNode {
+            panic!("as_import_type_node called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_import_clause(&self) -> &'static ImportClause {
+        if self.data_tag != NodeDataTag::ImportClause {
+            panic!("as_import_clause called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_import_specifier(&self) -> &'static ImportSpecifier {
+        if self.data_tag != NodeDataTag::ImportSpecifier {
+            panic!("as_import_specifier called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_text(&self) -> &'static JSDocText {
+        if self.data_tag != NodeDataTag::JSDocText {
+            panic!("as_jsdoc_text called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_link(&self) -> &'static JSDocLink {
+        if self.data_tag != NodeDataTag::JSDocLink {
+            panic!("as_jsdoc_link called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_link_plain(&self) -> &'static JSDocLinkPlain {
+        if self.data_tag != NodeDataTag::JSDocLinkPlain {
+            panic!("as_jsdoc_link_plain called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_link_code(&self) -> &'static JSDocLinkCode {
+        if self.data_tag != NodeDataTag::JSDocLinkCode {
+            panic!("as_jsdoc_link_code called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_type_parameter_declaration(&self) -> &'static TypeParameterDeclaration {
+        if self.data_tag != NodeDataTag::TypeParameterDeclaration {
+            panic!("as_type_parameter_declaration called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_synthetic_reference_expression(&self) -> &'static SyntheticReferenceExpression {
+        if self.data_tag != NodeDataTag::SyntheticReferenceExpression {
+            panic!("as_synthetic_reference_expression called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_type_literal(&self) -> &'static JSDocTypeLiteral {
+        if self.data_tag != NodeDataTag::JSDocTypeLiteral {
+            panic!("as_jsdoc_type_literal called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_jsdoc_parameter_or_property_tag(&self) -> &'static JSDocParameterOrPropertyTag {
+        if self.data_tag != NodeDataTag::JSDocParameterOrPropertyTag {
+            panic!("as_jsdoc_parameter_or_property_tag called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_flow_switch_clause_data(&self) -> &'static FlowSwitchClauseData {
+        if self.data_tag != NodeDataTag::FlowSwitchClauseData {
+            panic!("as_flow_switch_clause_data called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+    #[inline]
+    pub fn as_flow_reduce_label_data(&self) -> &'static FlowReduceLabelData {
+        if self.data_tag != NodeDataTag::FlowReduceLabelData {
+            panic!("as_flow_reduce_label_data called on {:?}", self.kind);
+        }
+        self.payload()
+    }
+
     pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
-        match self.data {
-            NodeData::QualifiedName(d) => d.for_each_child(v),
-            NodeData::ComputedPropertyName(d) => d.for_each_child(v),
-            NodeData::Decorator(d) => d.for_each_child(v),
-            NodeData::IfStatement(d) => d.for_each_child(v),
-            NodeData::DoStatement(d) => d.for_each_child(v),
-            NodeData::WhileStatement(d) => d.for_each_child(v),
-            NodeData::ForStatement(d) => d.for_each_child(v),
-            NodeData::ForInOrOfStatement(d) => d.for_each_child(v),
-            NodeData::BreakStatement(d) => d.for_each_child(v),
-            NodeData::ContinueStatement(d) => d.for_each_child(v),
-            NodeData::ReturnStatement(d) => d.for_each_child(v),
-            NodeData::WithStatement(d) => d.for_each_child(v),
-            NodeData::SwitchStatement(d) => d.for_each_child(v),
-            NodeData::CaseBlock(d) => d.for_each_child(v),
-            NodeData::CaseOrDefaultClause(d) => d.for_each_child(v),
-            NodeData::ThrowStatement(d) => d.for_each_child(v),
-            NodeData::TryStatement(d) => d.for_each_child(v),
-            NodeData::CatchClause(d) => d.for_each_child(v),
-            NodeData::LabeledStatement(d) => d.for_each_child(v),
-            NodeData::ExpressionStatement(d) => d.for_each_child(v),
-            NodeData::Block(d) => d.for_each_child(v),
-            NodeData::VariableStatement(d) => d.for_each_child(v),
-            NodeData::VariableDeclaration(d) => d.for_each_child(v),
-            NodeData::VariableDeclarationList(d) => d.for_each_child(v),
-            NodeData::BindingPattern(d) => d.for_each_child(v),
-            NodeData::ParameterDeclaration(d) => d.for_each_child(v),
-            NodeData::BindingElement(d) => d.for_each_child(v),
-            NodeData::MissingDeclaration(d) => d.for_each_child(v),
-            NodeData::FunctionDeclaration(d) => d.for_each_child(v),
-            NodeData::ClassDeclaration(d) => d.for_each_child(v),
-            NodeData::ClassExpression(d) => d.for_each_child(v),
-            NodeData::HeritageClause(d) => d.for_each_child(v),
-            NodeData::InterfaceDeclaration(d) => d.for_each_child(v),
-            NodeData::TypeAliasDeclaration(d) => d.for_each_child(v),
-            NodeData::EnumMember(d) => d.for_each_child(v),
-            NodeData::EnumDeclaration(d) => d.for_each_child(v),
-            NodeData::ModuleBlock(d) => d.for_each_child(v),
-            NodeData::ImportDeclaration(d) => d.for_each_child(v),
-            NodeData::ExternalModuleReference(d) => d.for_each_child(v),
-            NodeData::NamespaceImport(d) => d.for_each_child(v),
-            NodeData::NamedImports(d) => d.for_each_child(v),
-            NodeData::ExportAssignment(d) => d.for_each_child(v),
-            NodeData::NamespaceExportDeclaration(d) => d.for_each_child(v),
-            NodeData::NamespaceExport(d) => d.for_each_child(v),
-            NodeData::NamedExports(d) => d.for_each_child(v),
-            NodeData::ExportSpecifier(d) => d.for_each_child(v),
-            NodeData::CallSignatureDeclaration(d) => d.for_each_child(v),
-            NodeData::ConstructSignatureDeclaration(d) => d.for_each_child(v),
-            NodeData::ConstructorDeclaration(d) => d.for_each_child(v),
-            NodeData::GetAccessorDeclaration(d) => d.for_each_child(v),
-            NodeData::SetAccessorDeclaration(d) => d.for_each_child(v),
-            NodeData::IndexSignatureDeclaration(d) => d.for_each_child(v),
-            NodeData::MethodSignatureDeclaration(d) => d.for_each_child(v),
-            NodeData::MethodDeclaration(d) => d.for_each_child(v),
-            NodeData::PropertySignatureDeclaration(d) => d.for_each_child(v),
-            NodeData::PropertyDeclaration(d) => d.for_each_child(v),
-            NodeData::ClassStaticBlockDeclaration(d) => d.for_each_child(v),
-            NodeData::BinaryExpression(d) => d.for_each_child(v),
-            NodeData::PrefixUnaryExpression(d) => d.for_each_child(v),
-            NodeData::PostfixUnaryExpression(d) => d.for_each_child(v),
-            NodeData::YieldExpression(d) => d.for_each_child(v),
-            NodeData::ArrowFunction(d) => d.for_each_child(v),
-            NodeData::FunctionExpression(d) => d.for_each_child(v),
-            NodeData::AsExpression(d) => d.for_each_child(v),
-            NodeData::SatisfiesExpression(d) => d.for_each_child(v),
-            NodeData::ConditionalExpression(d) => d.for_each_child(v),
-            NodeData::PropertyAccessExpression(d) => d.for_each_child(v),
-            NodeData::ElementAccessExpression(d) => d.for_each_child(v),
-            NodeData::CallExpression(d) => d.for_each_child(v),
-            NodeData::NewExpression(d) => d.for_each_child(v),
-            NodeData::MetaProperty(d) => d.for_each_child(v),
-            NodeData::NonNullExpression(d) => d.for_each_child(v),
-            NodeData::SpreadElement(d) => d.for_each_child(v),
-            NodeData::TemplateExpression(d) => d.for_each_child(v),
-            NodeData::TemplateSpan(d) => d.for_each_child(v),
-            NodeData::TaggedTemplateExpression(d) => d.for_each_child(v),
-            NodeData::ParenthesizedExpression(d) => d.for_each_child(v),
-            NodeData::ArrayLiteralExpression(d) => d.for_each_child(v),
-            NodeData::ObjectLiteralExpression(d) => d.for_each_child(v),
-            NodeData::SpreadAssignment(d) => d.for_each_child(v),
-            NodeData::PropertyAssignment(d) => d.for_each_child(v),
-            NodeData::ShorthandPropertyAssignment(d) => d.for_each_child(v),
-            NodeData::DeleteExpression(d) => d.for_each_child(v),
-            NodeData::TypeOfExpression(d) => d.for_each_child(v),
-            NodeData::VoidExpression(d) => d.for_each_child(v),
-            NodeData::AwaitExpression(d) => d.for_each_child(v),
-            NodeData::TypeAssertion(d) => d.for_each_child(v),
-            NodeData::UnionTypeNode(d) => d.for_each_child(v),
-            NodeData::IntersectionTypeNode(d) => d.for_each_child(v),
-            NodeData::ConditionalTypeNode(d) => d.for_each_child(v),
-            NodeData::TypeOperatorNode(d) => d.for_each_child(v),
-            NodeData::InferTypeNode(d) => d.for_each_child(v),
-            NodeData::ArrayTypeNode(d) => d.for_each_child(v),
-            NodeData::IndexedAccessTypeNode(d) => d.for_each_child(v),
-            NodeData::TypeReferenceNode(d) => d.for_each_child(v),
-            NodeData::ExpressionWithTypeArguments(d) => d.for_each_child(v),
-            NodeData::LiteralTypeNode(d) => d.for_each_child(v),
-            NodeData::TypePredicateNode(d) => d.for_each_child(v),
-            NodeData::ImportAttribute(d) => d.for_each_child(v),
-            NodeData::ImportAttributes(d) => d.for_each_child(v),
-            NodeData::TypeQueryNode(d) => d.for_each_child(v),
-            NodeData::MappedTypeNode(d) => d.for_each_child(v),
-            NodeData::TypeLiteralNode(d) => d.for_each_child(v),
-            NodeData::TupleTypeNode(d) => d.for_each_child(v),
-            NodeData::NamedTupleMember(d) => d.for_each_child(v),
-            NodeData::OptionalTypeNode(d) => d.for_each_child(v),
-            NodeData::RestTypeNode(d) => d.for_each_child(v),
-            NodeData::ParenthesizedTypeNode(d) => d.for_each_child(v),
-            NodeData::FunctionTypeNode(d) => d.for_each_child(v),
-            NodeData::ConstructorTypeNode(d) => d.for_each_child(v),
-            NodeData::TemplateLiteralTypeNode(d) => d.for_each_child(v),
-            NodeData::TemplateLiteralTypeSpan(d) => d.for_each_child(v),
-            NodeData::SyntheticExpression(d) => d.for_each_child(v),
-            NodeData::PartiallyEmittedExpression(d) => d.for_each_child(v),
-            NodeData::JsxElement(d) => d.for_each_child(v),
-            NodeData::JsxAttributes(d) => d.for_each_child(v),
-            NodeData::JsxNamespacedName(d) => d.for_each_child(v),
-            NodeData::JsxOpeningElement(d) => d.for_each_child(v),
-            NodeData::JsxSelfClosingElement(d) => d.for_each_child(v),
-            NodeData::JsxFragment(d) => d.for_each_child(v),
-            NodeData::JsxAttribute(d) => d.for_each_child(v),
-            NodeData::JsxSpreadAttribute(d) => d.for_each_child(v),
-            NodeData::JsxClosingElement(d) => d.for_each_child(v),
-            NodeData::JsxExpression(d) => d.for_each_child(v),
-            NodeData::SyntaxList(d) => d.for_each_child(v),
-            NodeData::JSDoc(d) => d.for_each_child(v),
-            NodeData::JSDocTypeExpression(d) => d.for_each_child(v),
-            NodeData::JSDocNonNullableType(d) => d.for_each_child(v),
-            NodeData::JSDocNullableType(d) => d.for_each_child(v),
-            NodeData::JSDocVariadicType(d) => d.for_each_child(v),
-            NodeData::JSDocOptionalType(d) => d.for_each_child(v),
-            NodeData::JSDocTypeTag(d) => d.for_each_child(v),
-            NodeData::JSDocUnknownTag(d) => d.for_each_child(v),
-            NodeData::JSDocTemplateTag(d) => d.for_each_child(v),
-            NodeData::JSDocReturnTag(d) => d.for_each_child(v),
-            NodeData::JSDocPublicTag(d) => d.for_each_child(v),
-            NodeData::JSDocPrivateTag(d) => d.for_each_child(v),
-            NodeData::JSDocProtectedTag(d) => d.for_each_child(v),
-            NodeData::JSDocReadonlyTag(d) => d.for_each_child(v),
-            NodeData::JSDocOverrideTag(d) => d.for_each_child(v),
-            NodeData::JSDocDeprecatedTag(d) => d.for_each_child(v),
-            NodeData::JSDocSeeTag(d) => d.for_each_child(v),
-            NodeData::JSDocImplementsTag(d) => d.for_each_child(v),
-            NodeData::JSDocAugmentsTag(d) => d.for_each_child(v),
-            NodeData::JSDocSatisfiesTag(d) => d.for_each_child(v),
-            NodeData::JSDocThrowsTag(d) => d.for_each_child(v),
-            NodeData::JSDocThisTag(d) => d.for_each_child(v),
-            NodeData::JSDocImportTag(d) => d.for_each_child(v),
-            NodeData::JSDocCallbackTag(d) => d.for_each_child(v),
-            NodeData::JSDocOverloadTag(d) => d.for_each_child(v),
-            NodeData::JSDocTypedefTag(d) => d.for_each_child(v),
-            NodeData::JSDocSignature(d) => d.for_each_child(v),
-            NodeData::JSDocNameReference(d) => d.for_each_child(v),
-            NodeData::SourceFile(d) => d.for_each_child(v),
-            NodeData::ModuleDeclaration(d) => d.for_each_child(v),
-            NodeData::ImportEqualsDeclaration(d) => d.for_each_child(v),
-            NodeData::ExportDeclaration(d) => d.for_each_child(v),
-            NodeData::ImportTypeNode(d) => d.for_each_child(v),
-            NodeData::ImportClause(d) => d.for_each_child(v),
-            NodeData::ImportSpecifier(d) => d.for_each_child(v),
-            NodeData::JSDocLink(d) => d.for_each_child(v),
-            NodeData::JSDocLinkPlain(d) => d.for_each_child(v),
-            NodeData::JSDocLinkCode(d) => d.for_each_child(v),
-            NodeData::TypeParameterDeclaration(d) => d.for_each_child(v),
-            NodeData::SyntheticReferenceExpression(d) => d.for_each_child(v),
-            NodeData::JSDocTypeLiteral(d) => d.for_each_child(v),
-            NodeData::JSDocParameterOrPropertyTag(d) => d.for_each_child(v),
+        match self.data_tag {
+            NodeDataTag::QualifiedName => self.payload::<QualifiedName>().for_each_child(v),
+            NodeDataTag::ComputedPropertyName => self.payload::<ComputedPropertyName>().for_each_child(v),
+            NodeDataTag::Decorator => self.payload::<Decorator>().for_each_child(v),
+            NodeDataTag::IfStatement => self.payload::<IfStatement>().for_each_child(v),
+            NodeDataTag::DoStatement => self.payload::<DoStatement>().for_each_child(v),
+            NodeDataTag::WhileStatement => self.payload::<WhileStatement>().for_each_child(v),
+            NodeDataTag::ForStatement => self.payload::<ForStatement>().for_each_child(v),
+            NodeDataTag::ForInOrOfStatement => self.payload::<ForInOrOfStatement>().for_each_child(v),
+            NodeDataTag::BreakStatement => self.payload::<BreakStatement>().for_each_child(v),
+            NodeDataTag::ContinueStatement => self.payload::<ContinueStatement>().for_each_child(v),
+            NodeDataTag::ReturnStatement => self.payload::<ReturnStatement>().for_each_child(v),
+            NodeDataTag::WithStatement => self.payload::<WithStatement>().for_each_child(v),
+            NodeDataTag::SwitchStatement => self.payload::<SwitchStatement>().for_each_child(v),
+            NodeDataTag::CaseBlock => self.payload::<CaseBlock>().for_each_child(v),
+            NodeDataTag::CaseOrDefaultClause => self.payload::<CaseOrDefaultClause>().for_each_child(v),
+            NodeDataTag::ThrowStatement => self.payload::<ThrowStatement>().for_each_child(v),
+            NodeDataTag::TryStatement => self.payload::<TryStatement>().for_each_child(v),
+            NodeDataTag::CatchClause => self.payload::<CatchClause>().for_each_child(v),
+            NodeDataTag::LabeledStatement => self.payload::<LabeledStatement>().for_each_child(v),
+            NodeDataTag::ExpressionStatement => self.payload::<ExpressionStatement>().for_each_child(v),
+            NodeDataTag::Block => self.payload::<Block>().for_each_child(v),
+            NodeDataTag::VariableStatement => self.payload::<VariableStatement>().for_each_child(v),
+            NodeDataTag::VariableDeclaration => self.payload::<VariableDeclaration>().for_each_child(v),
+            NodeDataTag::VariableDeclarationList => self.payload::<VariableDeclarationList>().for_each_child(v),
+            NodeDataTag::BindingPattern => self.payload::<BindingPattern>().for_each_child(v),
+            NodeDataTag::ParameterDeclaration => self.payload::<ParameterDeclaration>().for_each_child(v),
+            NodeDataTag::BindingElement => self.payload::<BindingElement>().for_each_child(v),
+            NodeDataTag::MissingDeclaration => self.payload::<MissingDeclaration>().for_each_child(v),
+            NodeDataTag::FunctionDeclaration => self.payload::<FunctionDeclaration>().for_each_child(v),
+            NodeDataTag::ClassDeclaration => self.payload::<ClassDeclaration>().for_each_child(v),
+            NodeDataTag::ClassExpression => self.payload::<ClassExpression>().for_each_child(v),
+            NodeDataTag::HeritageClause => self.payload::<HeritageClause>().for_each_child(v),
+            NodeDataTag::InterfaceDeclaration => self.payload::<InterfaceDeclaration>().for_each_child(v),
+            NodeDataTag::TypeAliasDeclaration => self.payload::<TypeAliasDeclaration>().for_each_child(v),
+            NodeDataTag::EnumMember => self.payload::<EnumMember>().for_each_child(v),
+            NodeDataTag::EnumDeclaration => self.payload::<EnumDeclaration>().for_each_child(v),
+            NodeDataTag::ModuleBlock => self.payload::<ModuleBlock>().for_each_child(v),
+            NodeDataTag::ImportDeclaration => self.payload::<ImportDeclaration>().for_each_child(v),
+            NodeDataTag::ExternalModuleReference => self.payload::<ExternalModuleReference>().for_each_child(v),
+            NodeDataTag::NamespaceImport => self.payload::<NamespaceImport>().for_each_child(v),
+            NodeDataTag::NamedImports => self.payload::<NamedImports>().for_each_child(v),
+            NodeDataTag::ExportAssignment => self.payload::<ExportAssignment>().for_each_child(v),
+            NodeDataTag::NamespaceExportDeclaration => self.payload::<NamespaceExportDeclaration>().for_each_child(v),
+            NodeDataTag::NamespaceExport => self.payload::<NamespaceExport>().for_each_child(v),
+            NodeDataTag::NamedExports => self.payload::<NamedExports>().for_each_child(v),
+            NodeDataTag::ExportSpecifier => self.payload::<ExportSpecifier>().for_each_child(v),
+            NodeDataTag::CallSignatureDeclaration => self.payload::<CallSignatureDeclaration>().for_each_child(v),
+            NodeDataTag::ConstructSignatureDeclaration => self.payload::<ConstructSignatureDeclaration>().for_each_child(v),
+            NodeDataTag::ConstructorDeclaration => self.payload::<ConstructorDeclaration>().for_each_child(v),
+            NodeDataTag::GetAccessorDeclaration => self.payload::<GetAccessorDeclaration>().for_each_child(v),
+            NodeDataTag::SetAccessorDeclaration => self.payload::<SetAccessorDeclaration>().for_each_child(v),
+            NodeDataTag::IndexSignatureDeclaration => self.payload::<IndexSignatureDeclaration>().for_each_child(v),
+            NodeDataTag::MethodSignatureDeclaration => self.payload::<MethodSignatureDeclaration>().for_each_child(v),
+            NodeDataTag::MethodDeclaration => self.payload::<MethodDeclaration>().for_each_child(v),
+            NodeDataTag::PropertySignatureDeclaration => self.payload::<PropertySignatureDeclaration>().for_each_child(v),
+            NodeDataTag::PropertyDeclaration => self.payload::<PropertyDeclaration>().for_each_child(v),
+            NodeDataTag::ClassStaticBlockDeclaration => self.payload::<ClassStaticBlockDeclaration>().for_each_child(v),
+            NodeDataTag::BinaryExpression => self.payload::<BinaryExpression>().for_each_child(v),
+            NodeDataTag::PrefixUnaryExpression => self.payload::<PrefixUnaryExpression>().for_each_child(v),
+            NodeDataTag::PostfixUnaryExpression => self.payload::<PostfixUnaryExpression>().for_each_child(v),
+            NodeDataTag::YieldExpression => self.payload::<YieldExpression>().for_each_child(v),
+            NodeDataTag::ArrowFunction => self.payload::<ArrowFunction>().for_each_child(v),
+            NodeDataTag::FunctionExpression => self.payload::<FunctionExpression>().for_each_child(v),
+            NodeDataTag::AsExpression => self.payload::<AsExpression>().for_each_child(v),
+            NodeDataTag::SatisfiesExpression => self.payload::<SatisfiesExpression>().for_each_child(v),
+            NodeDataTag::ConditionalExpression => self.payload::<ConditionalExpression>().for_each_child(v),
+            NodeDataTag::PropertyAccessExpression => self.payload::<PropertyAccessExpression>().for_each_child(v),
+            NodeDataTag::ElementAccessExpression => self.payload::<ElementAccessExpression>().for_each_child(v),
+            NodeDataTag::CallExpression => self.payload::<CallExpression>().for_each_child(v),
+            NodeDataTag::NewExpression => self.payload::<NewExpression>().for_each_child(v),
+            NodeDataTag::MetaProperty => self.payload::<MetaProperty>().for_each_child(v),
+            NodeDataTag::NonNullExpression => self.payload::<NonNullExpression>().for_each_child(v),
+            NodeDataTag::SpreadElement => self.payload::<SpreadElement>().for_each_child(v),
+            NodeDataTag::TemplateExpression => self.payload::<TemplateExpression>().for_each_child(v),
+            NodeDataTag::TemplateSpan => self.payload::<TemplateSpan>().for_each_child(v),
+            NodeDataTag::TaggedTemplateExpression => self.payload::<TaggedTemplateExpression>().for_each_child(v),
+            NodeDataTag::ParenthesizedExpression => self.payload::<ParenthesizedExpression>().for_each_child(v),
+            NodeDataTag::ArrayLiteralExpression => self.payload::<ArrayLiteralExpression>().for_each_child(v),
+            NodeDataTag::ObjectLiteralExpression => self.payload::<ObjectLiteralExpression>().for_each_child(v),
+            NodeDataTag::SpreadAssignment => self.payload::<SpreadAssignment>().for_each_child(v),
+            NodeDataTag::PropertyAssignment => self.payload::<PropertyAssignment>().for_each_child(v),
+            NodeDataTag::ShorthandPropertyAssignment => self.payload::<ShorthandPropertyAssignment>().for_each_child(v),
+            NodeDataTag::DeleteExpression => self.payload::<DeleteExpression>().for_each_child(v),
+            NodeDataTag::TypeOfExpression => self.payload::<TypeOfExpression>().for_each_child(v),
+            NodeDataTag::VoidExpression => self.payload::<VoidExpression>().for_each_child(v),
+            NodeDataTag::AwaitExpression => self.payload::<AwaitExpression>().for_each_child(v),
+            NodeDataTag::TypeAssertion => self.payload::<TypeAssertion>().for_each_child(v),
+            NodeDataTag::UnionTypeNode => self.payload::<UnionTypeNode>().for_each_child(v),
+            NodeDataTag::IntersectionTypeNode => self.payload::<IntersectionTypeNode>().for_each_child(v),
+            NodeDataTag::ConditionalTypeNode => self.payload::<ConditionalTypeNode>().for_each_child(v),
+            NodeDataTag::TypeOperatorNode => self.payload::<TypeOperatorNode>().for_each_child(v),
+            NodeDataTag::InferTypeNode => self.payload::<InferTypeNode>().for_each_child(v),
+            NodeDataTag::ArrayTypeNode => self.payload::<ArrayTypeNode>().for_each_child(v),
+            NodeDataTag::IndexedAccessTypeNode => self.payload::<IndexedAccessTypeNode>().for_each_child(v),
+            NodeDataTag::TypeReferenceNode => self.payload::<TypeReferenceNode>().for_each_child(v),
+            NodeDataTag::ExpressionWithTypeArguments => self.payload::<ExpressionWithTypeArguments>().for_each_child(v),
+            NodeDataTag::LiteralTypeNode => self.payload::<LiteralTypeNode>().for_each_child(v),
+            NodeDataTag::TypePredicateNode => self.payload::<TypePredicateNode>().for_each_child(v),
+            NodeDataTag::ImportAttribute => self.payload::<ImportAttribute>().for_each_child(v),
+            NodeDataTag::ImportAttributes => self.payload::<ImportAttributes>().for_each_child(v),
+            NodeDataTag::TypeQueryNode => self.payload::<TypeQueryNode>().for_each_child(v),
+            NodeDataTag::MappedTypeNode => self.payload::<MappedTypeNode>().for_each_child(v),
+            NodeDataTag::TypeLiteralNode => self.payload::<TypeLiteralNode>().for_each_child(v),
+            NodeDataTag::TupleTypeNode => self.payload::<TupleTypeNode>().for_each_child(v),
+            NodeDataTag::NamedTupleMember => self.payload::<NamedTupleMember>().for_each_child(v),
+            NodeDataTag::OptionalTypeNode => self.payload::<OptionalTypeNode>().for_each_child(v),
+            NodeDataTag::RestTypeNode => self.payload::<RestTypeNode>().for_each_child(v),
+            NodeDataTag::ParenthesizedTypeNode => self.payload::<ParenthesizedTypeNode>().for_each_child(v),
+            NodeDataTag::FunctionTypeNode => self.payload::<FunctionTypeNode>().for_each_child(v),
+            NodeDataTag::ConstructorTypeNode => self.payload::<ConstructorTypeNode>().for_each_child(v),
+            NodeDataTag::TemplateLiteralTypeNode => self.payload::<TemplateLiteralTypeNode>().for_each_child(v),
+            NodeDataTag::TemplateLiteralTypeSpan => self.payload::<TemplateLiteralTypeSpan>().for_each_child(v),
+            NodeDataTag::SyntheticExpression => self.payload::<SyntheticExpression>().for_each_child(v),
+            NodeDataTag::PartiallyEmittedExpression => self.payload::<PartiallyEmittedExpression>().for_each_child(v),
+            NodeDataTag::JsxElement => self.payload::<JsxElement>().for_each_child(v),
+            NodeDataTag::JsxAttributes => self.payload::<JsxAttributes>().for_each_child(v),
+            NodeDataTag::JsxNamespacedName => self.payload::<JsxNamespacedName>().for_each_child(v),
+            NodeDataTag::JsxOpeningElement => self.payload::<JsxOpeningElement>().for_each_child(v),
+            NodeDataTag::JsxSelfClosingElement => self.payload::<JsxSelfClosingElement>().for_each_child(v),
+            NodeDataTag::JsxFragment => self.payload::<JsxFragment>().for_each_child(v),
+            NodeDataTag::JsxAttribute => self.payload::<JsxAttribute>().for_each_child(v),
+            NodeDataTag::JsxSpreadAttribute => self.payload::<JsxSpreadAttribute>().for_each_child(v),
+            NodeDataTag::JsxClosingElement => self.payload::<JsxClosingElement>().for_each_child(v),
+            NodeDataTag::JsxExpression => self.payload::<JsxExpression>().for_each_child(v),
+            NodeDataTag::SyntaxList => self.payload::<SyntaxList>().for_each_child(v),
+            NodeDataTag::JSDoc => self.payload::<JSDoc>().for_each_child(v),
+            NodeDataTag::JSDocTypeExpression => self.payload::<JSDocTypeExpression>().for_each_child(v),
+            NodeDataTag::JSDocNonNullableType => self.payload::<JSDocNonNullableType>().for_each_child(v),
+            NodeDataTag::JSDocNullableType => self.payload::<JSDocNullableType>().for_each_child(v),
+            NodeDataTag::JSDocVariadicType => self.payload::<JSDocVariadicType>().for_each_child(v),
+            NodeDataTag::JSDocOptionalType => self.payload::<JSDocOptionalType>().for_each_child(v),
+            NodeDataTag::JSDocTypeTag => self.payload::<JSDocTypeTag>().for_each_child(v),
+            NodeDataTag::JSDocUnknownTag => self.payload::<JSDocUnknownTag>().for_each_child(v),
+            NodeDataTag::JSDocTemplateTag => self.payload::<JSDocTemplateTag>().for_each_child(v),
+            NodeDataTag::JSDocReturnTag => self.payload::<JSDocReturnTag>().for_each_child(v),
+            NodeDataTag::JSDocPublicTag => self.payload::<JSDocPublicTag>().for_each_child(v),
+            NodeDataTag::JSDocPrivateTag => self.payload::<JSDocPrivateTag>().for_each_child(v),
+            NodeDataTag::JSDocProtectedTag => self.payload::<JSDocProtectedTag>().for_each_child(v),
+            NodeDataTag::JSDocReadonlyTag => self.payload::<JSDocReadonlyTag>().for_each_child(v),
+            NodeDataTag::JSDocOverrideTag => self.payload::<JSDocOverrideTag>().for_each_child(v),
+            NodeDataTag::JSDocDeprecatedTag => self.payload::<JSDocDeprecatedTag>().for_each_child(v),
+            NodeDataTag::JSDocSeeTag => self.payload::<JSDocSeeTag>().for_each_child(v),
+            NodeDataTag::JSDocImplementsTag => self.payload::<JSDocImplementsTag>().for_each_child(v),
+            NodeDataTag::JSDocAugmentsTag => self.payload::<JSDocAugmentsTag>().for_each_child(v),
+            NodeDataTag::JSDocSatisfiesTag => self.payload::<JSDocSatisfiesTag>().for_each_child(v),
+            NodeDataTag::JSDocThrowsTag => self.payload::<JSDocThrowsTag>().for_each_child(v),
+            NodeDataTag::JSDocThisTag => self.payload::<JSDocThisTag>().for_each_child(v),
+            NodeDataTag::JSDocImportTag => self.payload::<JSDocImportTag>().for_each_child(v),
+            NodeDataTag::JSDocCallbackTag => self.payload::<JSDocCallbackTag>().for_each_child(v),
+            NodeDataTag::JSDocOverloadTag => self.payload::<JSDocOverloadTag>().for_each_child(v),
+            NodeDataTag::JSDocTypedefTag => self.payload::<JSDocTypedefTag>().for_each_child(v),
+            NodeDataTag::JSDocSignature => self.payload::<JSDocSignature>().for_each_child(v),
+            NodeDataTag::JSDocNameReference => self.payload::<JSDocNameReference>().for_each_child(v),
+            NodeDataTag::SourceFile => self.payload::<SourceFile>().for_each_child(v),
+            NodeDataTag::ModuleDeclaration => self.payload::<ModuleDeclaration>().for_each_child(v),
+            NodeDataTag::ImportEqualsDeclaration => self.payload::<ImportEqualsDeclaration>().for_each_child(v),
+            NodeDataTag::ExportDeclaration => self.payload::<ExportDeclaration>().for_each_child(v),
+            NodeDataTag::ImportTypeNode => self.payload::<ImportTypeNode>().for_each_child(v),
+            NodeDataTag::ImportClause => self.payload::<ImportClause>().for_each_child(v),
+            NodeDataTag::ImportSpecifier => self.payload::<ImportSpecifier>().for_each_child(v),
+            NodeDataTag::JSDocLink => self.payload::<JSDocLink>().for_each_child(v),
+            NodeDataTag::JSDocLinkPlain => self.payload::<JSDocLinkPlain>().for_each_child(v),
+            NodeDataTag::JSDocLinkCode => self.payload::<JSDocLinkCode>().for_each_child(v),
+            NodeDataTag::TypeParameterDeclaration => self.payload::<TypeParameterDeclaration>().for_each_child(v),
+            NodeDataTag::SyntheticReferenceExpression => self.payload::<SyntheticReferenceExpression>().for_each_child(v),
+            NodeDataTag::JSDocTypeLiteral => self.payload::<JSDocTypeLiteral>().for_each_child(v),
+            NodeDataTag::JSDocParameterOrPropertyTag => self.payload::<JSDocParameterOrPropertyTag>().for_each_child(v),
             _ => false,
         }
     }
 
     pub fn visit_each_child(&self, v: &mut NodeVisitor) -> P<Node> {
         let node = self.as_p();
-        match self.data {
-            NodeData::QualifiedName(d) => d.visit_each_child(node, v),
-            NodeData::ComputedPropertyName(d) => d.visit_each_child(node, v),
-            NodeData::Decorator(d) => d.visit_each_child(node, v),
-            NodeData::IfStatement(d) => d.visit_each_child(node, v),
-            NodeData::DoStatement(d) => d.visit_each_child(node, v),
-            NodeData::WhileStatement(d) => d.visit_each_child(node, v),
-            NodeData::ForStatement(d) => d.visit_each_child(node, v),
-            NodeData::ForInOrOfStatement(d) => d.visit_each_child(node, v),
-            NodeData::BreakStatement(d) => d.visit_each_child(node, v),
-            NodeData::ContinueStatement(d) => d.visit_each_child(node, v),
-            NodeData::ReturnStatement(d) => d.visit_each_child(node, v),
-            NodeData::WithStatement(d) => d.visit_each_child(node, v),
-            NodeData::SwitchStatement(d) => d.visit_each_child(node, v),
-            NodeData::CaseBlock(d) => d.visit_each_child(node, v),
-            NodeData::CaseOrDefaultClause(d) => d.visit_each_child(node, v),
-            NodeData::ThrowStatement(d) => d.visit_each_child(node, v),
-            NodeData::TryStatement(d) => d.visit_each_child(node, v),
-            NodeData::CatchClause(d) => d.visit_each_child(node, v),
-            NodeData::LabeledStatement(d) => d.visit_each_child(node, v),
-            NodeData::ExpressionStatement(d) => d.visit_each_child(node, v),
-            NodeData::Block(d) => d.visit_each_child(node, v),
-            NodeData::VariableStatement(d) => d.visit_each_child(node, v),
-            NodeData::VariableDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::VariableDeclarationList(d) => d.visit_each_child(node, v),
-            NodeData::BindingPattern(d) => d.visit_each_child(node, v),
-            NodeData::ParameterDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::BindingElement(d) => d.visit_each_child(node, v),
-            NodeData::MissingDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::FunctionDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::ClassDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::ClassExpression(d) => d.visit_each_child(node, v),
-            NodeData::HeritageClause(d) => d.visit_each_child(node, v),
-            NodeData::InterfaceDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::TypeAliasDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::EnumMember(d) => d.visit_each_child(node, v),
-            NodeData::EnumDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::ModuleBlock(d) => d.visit_each_child(node, v),
-            NodeData::ImportDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::ExternalModuleReference(d) => d.visit_each_child(node, v),
-            NodeData::NamespaceImport(d) => d.visit_each_child(node, v),
-            NodeData::NamedImports(d) => d.visit_each_child(node, v),
-            NodeData::ExportAssignment(d) => d.visit_each_child(node, v),
-            NodeData::NamespaceExportDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::NamespaceExport(d) => d.visit_each_child(node, v),
-            NodeData::NamedExports(d) => d.visit_each_child(node, v),
-            NodeData::ExportSpecifier(d) => d.visit_each_child(node, v),
-            NodeData::CallSignatureDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::ConstructSignatureDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::ConstructorDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::GetAccessorDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::SetAccessorDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::IndexSignatureDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::MethodSignatureDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::MethodDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::PropertySignatureDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::PropertyDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::ClassStaticBlockDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::BinaryExpression(d) => d.visit_each_child(node, v),
-            NodeData::PrefixUnaryExpression(d) => d.visit_each_child(node, v),
-            NodeData::PostfixUnaryExpression(d) => d.visit_each_child(node, v),
-            NodeData::YieldExpression(d) => d.visit_each_child(node, v),
-            NodeData::ArrowFunction(d) => d.visit_each_child(node, v),
-            NodeData::FunctionExpression(d) => d.visit_each_child(node, v),
-            NodeData::AsExpression(d) => d.visit_each_child(node, v),
-            NodeData::SatisfiesExpression(d) => d.visit_each_child(node, v),
-            NodeData::ConditionalExpression(d) => d.visit_each_child(node, v),
-            NodeData::PropertyAccessExpression(d) => d.visit_each_child(node, v),
-            NodeData::ElementAccessExpression(d) => d.visit_each_child(node, v),
-            NodeData::CallExpression(d) => d.visit_each_child(node, v),
-            NodeData::NewExpression(d) => d.visit_each_child(node, v),
-            NodeData::MetaProperty(d) => d.visit_each_child(node, v),
-            NodeData::NonNullExpression(d) => d.visit_each_child(node, v),
-            NodeData::SpreadElement(d) => d.visit_each_child(node, v),
-            NodeData::TemplateExpression(d) => d.visit_each_child(node, v),
-            NodeData::TemplateSpan(d) => d.visit_each_child(node, v),
-            NodeData::TaggedTemplateExpression(d) => d.visit_each_child(node, v),
-            NodeData::ParenthesizedExpression(d) => d.visit_each_child(node, v),
-            NodeData::ArrayLiteralExpression(d) => d.visit_each_child(node, v),
-            NodeData::ObjectLiteralExpression(d) => d.visit_each_child(node, v),
-            NodeData::SpreadAssignment(d) => d.visit_each_child(node, v),
-            NodeData::PropertyAssignment(d) => d.visit_each_child(node, v),
-            NodeData::ShorthandPropertyAssignment(d) => d.visit_each_child(node, v),
-            NodeData::DeleteExpression(d) => d.visit_each_child(node, v),
-            NodeData::TypeOfExpression(d) => d.visit_each_child(node, v),
-            NodeData::VoidExpression(d) => d.visit_each_child(node, v),
-            NodeData::AwaitExpression(d) => d.visit_each_child(node, v),
-            NodeData::TypeAssertion(d) => d.visit_each_child(node, v),
-            NodeData::UnionTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::IntersectionTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::ConditionalTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::TypeOperatorNode(d) => d.visit_each_child(node, v),
-            NodeData::InferTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::ArrayTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::IndexedAccessTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::TypeReferenceNode(d) => d.visit_each_child(node, v),
-            NodeData::ExpressionWithTypeArguments(d) => d.visit_each_child(node, v),
-            NodeData::LiteralTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::TypePredicateNode(d) => d.visit_each_child(node, v),
-            NodeData::ImportAttribute(d) => d.visit_each_child(node, v),
-            NodeData::ImportAttributes(d) => d.visit_each_child(node, v),
-            NodeData::TypeQueryNode(d) => d.visit_each_child(node, v),
-            NodeData::MappedTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::TypeLiteralNode(d) => d.visit_each_child(node, v),
-            NodeData::TupleTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::NamedTupleMember(d) => d.visit_each_child(node, v),
-            NodeData::OptionalTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::RestTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::ParenthesizedTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::FunctionTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::ConstructorTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::TemplateLiteralTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::TemplateLiteralTypeSpan(d) => d.visit_each_child(node, v),
-            NodeData::SyntheticExpression(d) => d.visit_each_child(node, v),
-            NodeData::PartiallyEmittedExpression(d) => d.visit_each_child(node, v),
-            NodeData::JsxElement(d) => d.visit_each_child(node, v),
-            NodeData::JsxAttributes(d) => d.visit_each_child(node, v),
-            NodeData::JsxNamespacedName(d) => d.visit_each_child(node, v),
-            NodeData::JsxOpeningElement(d) => d.visit_each_child(node, v),
-            NodeData::JsxSelfClosingElement(d) => d.visit_each_child(node, v),
-            NodeData::JsxFragment(d) => d.visit_each_child(node, v),
-            NodeData::JsxAttribute(d) => d.visit_each_child(node, v),
-            NodeData::JsxSpreadAttribute(d) => d.visit_each_child(node, v),
-            NodeData::JsxClosingElement(d) => d.visit_each_child(node, v),
-            NodeData::JsxExpression(d) => d.visit_each_child(node, v),
-            NodeData::SyntaxList(d) => d.visit_each_child(node, v),
-            NodeData::JSDoc(d) => d.visit_each_child(node, v),
-            NodeData::JSDocTypeExpression(d) => d.visit_each_child(node, v),
-            NodeData::JSDocNonNullableType(d) => d.visit_each_child(node, v),
-            NodeData::JSDocNullableType(d) => d.visit_each_child(node, v),
-            NodeData::JSDocVariadicType(d) => d.visit_each_child(node, v),
-            NodeData::JSDocOptionalType(d) => d.visit_each_child(node, v),
-            NodeData::JSDocTypeTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocUnknownTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocTemplateTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocReturnTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocPublicTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocPrivateTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocProtectedTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocReadonlyTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocOverrideTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocDeprecatedTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocSeeTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocImplementsTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocAugmentsTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocSatisfiesTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocThrowsTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocThisTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocImportTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocCallbackTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocOverloadTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocTypedefTag(d) => d.visit_each_child(node, v),
-            NodeData::JSDocSignature(d) => d.visit_each_child(node, v),
-            NodeData::JSDocNameReference(d) => d.visit_each_child(node, v),
-            NodeData::SourceFile(d) => d.visit_each_child(node, v),
-            NodeData::ModuleDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::ImportEqualsDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::ExportDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::ImportTypeNode(d) => d.visit_each_child(node, v),
-            NodeData::ImportClause(d) => d.visit_each_child(node, v),
-            NodeData::ImportSpecifier(d) => d.visit_each_child(node, v),
-            NodeData::JSDocLink(d) => d.visit_each_child(node, v),
-            NodeData::JSDocLinkPlain(d) => d.visit_each_child(node, v),
-            NodeData::JSDocLinkCode(d) => d.visit_each_child(node, v),
-            NodeData::TypeParameterDeclaration(d) => d.visit_each_child(node, v),
-            NodeData::SyntheticReferenceExpression(d) => d.visit_each_child(node, v),
-            NodeData::JSDocTypeLiteral(d) => d.visit_each_child(node, v),
-            NodeData::JSDocParameterOrPropertyTag(d) => d.visit_each_child(node, v),
+        match self.data_tag {
+            NodeDataTag::QualifiedName => self.payload::<QualifiedName>().visit_each_child(node, v),
+            NodeDataTag::ComputedPropertyName => self.payload::<ComputedPropertyName>().visit_each_child(node, v),
+            NodeDataTag::Decorator => self.payload::<Decorator>().visit_each_child(node, v),
+            NodeDataTag::IfStatement => self.payload::<IfStatement>().visit_each_child(node, v),
+            NodeDataTag::DoStatement => self.payload::<DoStatement>().visit_each_child(node, v),
+            NodeDataTag::WhileStatement => self.payload::<WhileStatement>().visit_each_child(node, v),
+            NodeDataTag::ForStatement => self.payload::<ForStatement>().visit_each_child(node, v),
+            NodeDataTag::ForInOrOfStatement => self.payload::<ForInOrOfStatement>().visit_each_child(node, v),
+            NodeDataTag::BreakStatement => self.payload::<BreakStatement>().visit_each_child(node, v),
+            NodeDataTag::ContinueStatement => self.payload::<ContinueStatement>().visit_each_child(node, v),
+            NodeDataTag::ReturnStatement => self.payload::<ReturnStatement>().visit_each_child(node, v),
+            NodeDataTag::WithStatement => self.payload::<WithStatement>().visit_each_child(node, v),
+            NodeDataTag::SwitchStatement => self.payload::<SwitchStatement>().visit_each_child(node, v),
+            NodeDataTag::CaseBlock => self.payload::<CaseBlock>().visit_each_child(node, v),
+            NodeDataTag::CaseOrDefaultClause => self.payload::<CaseOrDefaultClause>().visit_each_child(node, v),
+            NodeDataTag::ThrowStatement => self.payload::<ThrowStatement>().visit_each_child(node, v),
+            NodeDataTag::TryStatement => self.payload::<TryStatement>().visit_each_child(node, v),
+            NodeDataTag::CatchClause => self.payload::<CatchClause>().visit_each_child(node, v),
+            NodeDataTag::LabeledStatement => self.payload::<LabeledStatement>().visit_each_child(node, v),
+            NodeDataTag::ExpressionStatement => self.payload::<ExpressionStatement>().visit_each_child(node, v),
+            NodeDataTag::Block => self.payload::<Block>().visit_each_child(node, v),
+            NodeDataTag::VariableStatement => self.payload::<VariableStatement>().visit_each_child(node, v),
+            NodeDataTag::VariableDeclaration => self.payload::<VariableDeclaration>().visit_each_child(node, v),
+            NodeDataTag::VariableDeclarationList => self.payload::<VariableDeclarationList>().visit_each_child(node, v),
+            NodeDataTag::BindingPattern => self.payload::<BindingPattern>().visit_each_child(node, v),
+            NodeDataTag::ParameterDeclaration => self.payload::<ParameterDeclaration>().visit_each_child(node, v),
+            NodeDataTag::BindingElement => self.payload::<BindingElement>().visit_each_child(node, v),
+            NodeDataTag::MissingDeclaration => self.payload::<MissingDeclaration>().visit_each_child(node, v),
+            NodeDataTag::FunctionDeclaration => self.payload::<FunctionDeclaration>().visit_each_child(node, v),
+            NodeDataTag::ClassDeclaration => self.payload::<ClassDeclaration>().visit_each_child(node, v),
+            NodeDataTag::ClassExpression => self.payload::<ClassExpression>().visit_each_child(node, v),
+            NodeDataTag::HeritageClause => self.payload::<HeritageClause>().visit_each_child(node, v),
+            NodeDataTag::InterfaceDeclaration => self.payload::<InterfaceDeclaration>().visit_each_child(node, v),
+            NodeDataTag::TypeAliasDeclaration => self.payload::<TypeAliasDeclaration>().visit_each_child(node, v),
+            NodeDataTag::EnumMember => self.payload::<EnumMember>().visit_each_child(node, v),
+            NodeDataTag::EnumDeclaration => self.payload::<EnumDeclaration>().visit_each_child(node, v),
+            NodeDataTag::ModuleBlock => self.payload::<ModuleBlock>().visit_each_child(node, v),
+            NodeDataTag::ImportDeclaration => self.payload::<ImportDeclaration>().visit_each_child(node, v),
+            NodeDataTag::ExternalModuleReference => self.payload::<ExternalModuleReference>().visit_each_child(node, v),
+            NodeDataTag::NamespaceImport => self.payload::<NamespaceImport>().visit_each_child(node, v),
+            NodeDataTag::NamedImports => self.payload::<NamedImports>().visit_each_child(node, v),
+            NodeDataTag::ExportAssignment => self.payload::<ExportAssignment>().visit_each_child(node, v),
+            NodeDataTag::NamespaceExportDeclaration => self.payload::<NamespaceExportDeclaration>().visit_each_child(node, v),
+            NodeDataTag::NamespaceExport => self.payload::<NamespaceExport>().visit_each_child(node, v),
+            NodeDataTag::NamedExports => self.payload::<NamedExports>().visit_each_child(node, v),
+            NodeDataTag::ExportSpecifier => self.payload::<ExportSpecifier>().visit_each_child(node, v),
+            NodeDataTag::CallSignatureDeclaration => self.payload::<CallSignatureDeclaration>().visit_each_child(node, v),
+            NodeDataTag::ConstructSignatureDeclaration => self.payload::<ConstructSignatureDeclaration>().visit_each_child(node, v),
+            NodeDataTag::ConstructorDeclaration => self.payload::<ConstructorDeclaration>().visit_each_child(node, v),
+            NodeDataTag::GetAccessorDeclaration => self.payload::<GetAccessorDeclaration>().visit_each_child(node, v),
+            NodeDataTag::SetAccessorDeclaration => self.payload::<SetAccessorDeclaration>().visit_each_child(node, v),
+            NodeDataTag::IndexSignatureDeclaration => self.payload::<IndexSignatureDeclaration>().visit_each_child(node, v),
+            NodeDataTag::MethodSignatureDeclaration => self.payload::<MethodSignatureDeclaration>().visit_each_child(node, v),
+            NodeDataTag::MethodDeclaration => self.payload::<MethodDeclaration>().visit_each_child(node, v),
+            NodeDataTag::PropertySignatureDeclaration => self.payload::<PropertySignatureDeclaration>().visit_each_child(node, v),
+            NodeDataTag::PropertyDeclaration => self.payload::<PropertyDeclaration>().visit_each_child(node, v),
+            NodeDataTag::ClassStaticBlockDeclaration => self.payload::<ClassStaticBlockDeclaration>().visit_each_child(node, v),
+            NodeDataTag::BinaryExpression => self.payload::<BinaryExpression>().visit_each_child(node, v),
+            NodeDataTag::PrefixUnaryExpression => self.payload::<PrefixUnaryExpression>().visit_each_child(node, v),
+            NodeDataTag::PostfixUnaryExpression => self.payload::<PostfixUnaryExpression>().visit_each_child(node, v),
+            NodeDataTag::YieldExpression => self.payload::<YieldExpression>().visit_each_child(node, v),
+            NodeDataTag::ArrowFunction => self.payload::<ArrowFunction>().visit_each_child(node, v),
+            NodeDataTag::FunctionExpression => self.payload::<FunctionExpression>().visit_each_child(node, v),
+            NodeDataTag::AsExpression => self.payload::<AsExpression>().visit_each_child(node, v),
+            NodeDataTag::SatisfiesExpression => self.payload::<SatisfiesExpression>().visit_each_child(node, v),
+            NodeDataTag::ConditionalExpression => self.payload::<ConditionalExpression>().visit_each_child(node, v),
+            NodeDataTag::PropertyAccessExpression => self.payload::<PropertyAccessExpression>().visit_each_child(node, v),
+            NodeDataTag::ElementAccessExpression => self.payload::<ElementAccessExpression>().visit_each_child(node, v),
+            NodeDataTag::CallExpression => self.payload::<CallExpression>().visit_each_child(node, v),
+            NodeDataTag::NewExpression => self.payload::<NewExpression>().visit_each_child(node, v),
+            NodeDataTag::MetaProperty => self.payload::<MetaProperty>().visit_each_child(node, v),
+            NodeDataTag::NonNullExpression => self.payload::<NonNullExpression>().visit_each_child(node, v),
+            NodeDataTag::SpreadElement => self.payload::<SpreadElement>().visit_each_child(node, v),
+            NodeDataTag::TemplateExpression => self.payload::<TemplateExpression>().visit_each_child(node, v),
+            NodeDataTag::TemplateSpan => self.payload::<TemplateSpan>().visit_each_child(node, v),
+            NodeDataTag::TaggedTemplateExpression => self.payload::<TaggedTemplateExpression>().visit_each_child(node, v),
+            NodeDataTag::ParenthesizedExpression => self.payload::<ParenthesizedExpression>().visit_each_child(node, v),
+            NodeDataTag::ArrayLiteralExpression => self.payload::<ArrayLiteralExpression>().visit_each_child(node, v),
+            NodeDataTag::ObjectLiteralExpression => self.payload::<ObjectLiteralExpression>().visit_each_child(node, v),
+            NodeDataTag::SpreadAssignment => self.payload::<SpreadAssignment>().visit_each_child(node, v),
+            NodeDataTag::PropertyAssignment => self.payload::<PropertyAssignment>().visit_each_child(node, v),
+            NodeDataTag::ShorthandPropertyAssignment => self.payload::<ShorthandPropertyAssignment>().visit_each_child(node, v),
+            NodeDataTag::DeleteExpression => self.payload::<DeleteExpression>().visit_each_child(node, v),
+            NodeDataTag::TypeOfExpression => self.payload::<TypeOfExpression>().visit_each_child(node, v),
+            NodeDataTag::VoidExpression => self.payload::<VoidExpression>().visit_each_child(node, v),
+            NodeDataTag::AwaitExpression => self.payload::<AwaitExpression>().visit_each_child(node, v),
+            NodeDataTag::TypeAssertion => self.payload::<TypeAssertion>().visit_each_child(node, v),
+            NodeDataTag::UnionTypeNode => self.payload::<UnionTypeNode>().visit_each_child(node, v),
+            NodeDataTag::IntersectionTypeNode => self.payload::<IntersectionTypeNode>().visit_each_child(node, v),
+            NodeDataTag::ConditionalTypeNode => self.payload::<ConditionalTypeNode>().visit_each_child(node, v),
+            NodeDataTag::TypeOperatorNode => self.payload::<TypeOperatorNode>().visit_each_child(node, v),
+            NodeDataTag::InferTypeNode => self.payload::<InferTypeNode>().visit_each_child(node, v),
+            NodeDataTag::ArrayTypeNode => self.payload::<ArrayTypeNode>().visit_each_child(node, v),
+            NodeDataTag::IndexedAccessTypeNode => self.payload::<IndexedAccessTypeNode>().visit_each_child(node, v),
+            NodeDataTag::TypeReferenceNode => self.payload::<TypeReferenceNode>().visit_each_child(node, v),
+            NodeDataTag::ExpressionWithTypeArguments => self.payload::<ExpressionWithTypeArguments>().visit_each_child(node, v),
+            NodeDataTag::LiteralTypeNode => self.payload::<LiteralTypeNode>().visit_each_child(node, v),
+            NodeDataTag::TypePredicateNode => self.payload::<TypePredicateNode>().visit_each_child(node, v),
+            NodeDataTag::ImportAttribute => self.payload::<ImportAttribute>().visit_each_child(node, v),
+            NodeDataTag::ImportAttributes => self.payload::<ImportAttributes>().visit_each_child(node, v),
+            NodeDataTag::TypeQueryNode => self.payload::<TypeQueryNode>().visit_each_child(node, v),
+            NodeDataTag::MappedTypeNode => self.payload::<MappedTypeNode>().visit_each_child(node, v),
+            NodeDataTag::TypeLiteralNode => self.payload::<TypeLiteralNode>().visit_each_child(node, v),
+            NodeDataTag::TupleTypeNode => self.payload::<TupleTypeNode>().visit_each_child(node, v),
+            NodeDataTag::NamedTupleMember => self.payload::<NamedTupleMember>().visit_each_child(node, v),
+            NodeDataTag::OptionalTypeNode => self.payload::<OptionalTypeNode>().visit_each_child(node, v),
+            NodeDataTag::RestTypeNode => self.payload::<RestTypeNode>().visit_each_child(node, v),
+            NodeDataTag::ParenthesizedTypeNode => self.payload::<ParenthesizedTypeNode>().visit_each_child(node, v),
+            NodeDataTag::FunctionTypeNode => self.payload::<FunctionTypeNode>().visit_each_child(node, v),
+            NodeDataTag::ConstructorTypeNode => self.payload::<ConstructorTypeNode>().visit_each_child(node, v),
+            NodeDataTag::TemplateLiteralTypeNode => self.payload::<TemplateLiteralTypeNode>().visit_each_child(node, v),
+            NodeDataTag::TemplateLiteralTypeSpan => self.payload::<TemplateLiteralTypeSpan>().visit_each_child(node, v),
+            NodeDataTag::SyntheticExpression => self.payload::<SyntheticExpression>().visit_each_child(node, v),
+            NodeDataTag::PartiallyEmittedExpression => self.payload::<PartiallyEmittedExpression>().visit_each_child(node, v),
+            NodeDataTag::JsxElement => self.payload::<JsxElement>().visit_each_child(node, v),
+            NodeDataTag::JsxAttributes => self.payload::<JsxAttributes>().visit_each_child(node, v),
+            NodeDataTag::JsxNamespacedName => self.payload::<JsxNamespacedName>().visit_each_child(node, v),
+            NodeDataTag::JsxOpeningElement => self.payload::<JsxOpeningElement>().visit_each_child(node, v),
+            NodeDataTag::JsxSelfClosingElement => self.payload::<JsxSelfClosingElement>().visit_each_child(node, v),
+            NodeDataTag::JsxFragment => self.payload::<JsxFragment>().visit_each_child(node, v),
+            NodeDataTag::JsxAttribute => self.payload::<JsxAttribute>().visit_each_child(node, v),
+            NodeDataTag::JsxSpreadAttribute => self.payload::<JsxSpreadAttribute>().visit_each_child(node, v),
+            NodeDataTag::JsxClosingElement => self.payload::<JsxClosingElement>().visit_each_child(node, v),
+            NodeDataTag::JsxExpression => self.payload::<JsxExpression>().visit_each_child(node, v),
+            NodeDataTag::SyntaxList => self.payload::<SyntaxList>().visit_each_child(node, v),
+            NodeDataTag::JSDoc => self.payload::<JSDoc>().visit_each_child(node, v),
+            NodeDataTag::JSDocTypeExpression => self.payload::<JSDocTypeExpression>().visit_each_child(node, v),
+            NodeDataTag::JSDocNonNullableType => self.payload::<JSDocNonNullableType>().visit_each_child(node, v),
+            NodeDataTag::JSDocNullableType => self.payload::<JSDocNullableType>().visit_each_child(node, v),
+            NodeDataTag::JSDocVariadicType => self.payload::<JSDocVariadicType>().visit_each_child(node, v),
+            NodeDataTag::JSDocOptionalType => self.payload::<JSDocOptionalType>().visit_each_child(node, v),
+            NodeDataTag::JSDocTypeTag => self.payload::<JSDocTypeTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocUnknownTag => self.payload::<JSDocUnknownTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocTemplateTag => self.payload::<JSDocTemplateTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocReturnTag => self.payload::<JSDocReturnTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocPublicTag => self.payload::<JSDocPublicTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocPrivateTag => self.payload::<JSDocPrivateTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocProtectedTag => self.payload::<JSDocProtectedTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocReadonlyTag => self.payload::<JSDocReadonlyTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocOverrideTag => self.payload::<JSDocOverrideTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocDeprecatedTag => self.payload::<JSDocDeprecatedTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocSeeTag => self.payload::<JSDocSeeTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocImplementsTag => self.payload::<JSDocImplementsTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocAugmentsTag => self.payload::<JSDocAugmentsTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocSatisfiesTag => self.payload::<JSDocSatisfiesTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocThrowsTag => self.payload::<JSDocThrowsTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocThisTag => self.payload::<JSDocThisTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocImportTag => self.payload::<JSDocImportTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocCallbackTag => self.payload::<JSDocCallbackTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocOverloadTag => self.payload::<JSDocOverloadTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocTypedefTag => self.payload::<JSDocTypedefTag>().visit_each_child(node, v),
+            NodeDataTag::JSDocSignature => self.payload::<JSDocSignature>().visit_each_child(node, v),
+            NodeDataTag::JSDocNameReference => self.payload::<JSDocNameReference>().visit_each_child(node, v),
+            NodeDataTag::SourceFile => self.payload::<SourceFile>().visit_each_child(node, v),
+            NodeDataTag::ModuleDeclaration => self.payload::<ModuleDeclaration>().visit_each_child(node, v),
+            NodeDataTag::ImportEqualsDeclaration => self.payload::<ImportEqualsDeclaration>().visit_each_child(node, v),
+            NodeDataTag::ExportDeclaration => self.payload::<ExportDeclaration>().visit_each_child(node, v),
+            NodeDataTag::ImportTypeNode => self.payload::<ImportTypeNode>().visit_each_child(node, v),
+            NodeDataTag::ImportClause => self.payload::<ImportClause>().visit_each_child(node, v),
+            NodeDataTag::ImportSpecifier => self.payload::<ImportSpecifier>().visit_each_child(node, v),
+            NodeDataTag::JSDocLink => self.payload::<JSDocLink>().visit_each_child(node, v),
+            NodeDataTag::JSDocLinkPlain => self.payload::<JSDocLinkPlain>().visit_each_child(node, v),
+            NodeDataTag::JSDocLinkCode => self.payload::<JSDocLinkCode>().visit_each_child(node, v),
+            NodeDataTag::TypeParameterDeclaration => self.payload::<TypeParameterDeclaration>().visit_each_child(node, v),
+            NodeDataTag::SyntheticReferenceExpression => self.payload::<SyntheticReferenceExpression>().visit_each_child(node, v),
+            NodeDataTag::JSDocTypeLiteral => self.payload::<JSDocTypeLiteral>().visit_each_child(node, v),
+            NodeDataTag::JSDocParameterOrPropertyTag => self.payload::<JSDocParameterOrPropertyTag>().visit_each_child(node, v),
             _ => node,
         }
     }
 
     pub fn clone_node(&self, f: &NodeFactory) -> P<Node> {
         let node = self.as_p();
-        match self.data {
-            NodeData::Token => Token.clone_node(node, f),
-            NodeData::Identifier(d) => d.clone_node(node, f),
-            NodeData::PrivateIdentifier(d) => d.clone_node(node, f),
-            NodeData::QualifiedName(d) => d.clone_node(node, f),
-            NodeData::ComputedPropertyName(d) => d.clone_node(node, f),
-            NodeData::Decorator(d) => d.clone_node(node, f),
-            NodeData::EmptyStatement(d) => d.clone_node(node, f),
-            NodeData::IfStatement(d) => d.clone_node(node, f),
-            NodeData::DoStatement(d) => d.clone_node(node, f),
-            NodeData::WhileStatement(d) => d.clone_node(node, f),
-            NodeData::ForStatement(d) => d.clone_node(node, f),
-            NodeData::ForInOrOfStatement(d) => d.clone_node(node, f),
-            NodeData::BreakStatement(d) => d.clone_node(node, f),
-            NodeData::ContinueStatement(d) => d.clone_node(node, f),
-            NodeData::ReturnStatement(d) => d.clone_node(node, f),
-            NodeData::WithStatement(d) => d.clone_node(node, f),
-            NodeData::SwitchStatement(d) => d.clone_node(node, f),
-            NodeData::CaseBlock(d) => d.clone_node(node, f),
-            NodeData::CaseOrDefaultClause(d) => d.clone_node(node, f),
-            NodeData::ThrowStatement(d) => d.clone_node(node, f),
-            NodeData::TryStatement(d) => d.clone_node(node, f),
-            NodeData::CatchClause(d) => d.clone_node(node, f),
-            NodeData::DebuggerStatement(d) => d.clone_node(node, f),
-            NodeData::LabeledStatement(d) => d.clone_node(node, f),
-            NodeData::ExpressionStatement(d) => d.clone_node(node, f),
-            NodeData::Block(d) => d.clone_node(node, f),
-            NodeData::VariableStatement(d) => d.clone_node(node, f),
-            NodeData::VariableDeclaration(d) => d.clone_node(node, f),
-            NodeData::VariableDeclarationList(d) => d.clone_node(node, f),
-            NodeData::BindingPattern(d) => d.clone_node(node, f),
-            NodeData::ParameterDeclaration(d) => d.clone_node(node, f),
-            NodeData::BindingElement(d) => d.clone_node(node, f),
-            NodeData::MissingDeclaration(d) => d.clone_node(node, f),
-            NodeData::FunctionDeclaration(d) => d.clone_node(node, f),
-            NodeData::ClassDeclaration(d) => d.clone_node(node, f),
-            NodeData::ClassExpression(d) => d.clone_node(node, f),
-            NodeData::HeritageClause(d) => d.clone_node(node, f),
-            NodeData::InterfaceDeclaration(d) => d.clone_node(node, f),
-            NodeData::TypeAliasDeclaration(d) => d.clone_node(node, f),
-            NodeData::EnumMember(d) => d.clone_node(node, f),
-            NodeData::EnumDeclaration(d) => d.clone_node(node, f),
-            NodeData::ModuleBlock(d) => d.clone_node(node, f),
-            NodeData::NotEmittedStatement(d) => d.clone_node(node, f),
-            NodeData::NotEmittedTypeElement(d) => d.clone_node(node, f),
-            NodeData::ImportDeclaration(d) => d.clone_node(node, f),
-            NodeData::ExternalModuleReference(d) => d.clone_node(node, f),
-            NodeData::NamespaceImport(d) => d.clone_node(node, f),
-            NodeData::NamedImports(d) => d.clone_node(node, f),
-            NodeData::ExportAssignment(d) => d.clone_node(node, f),
-            NodeData::NamespaceExportDeclaration(d) => d.clone_node(node, f),
-            NodeData::NamespaceExport(d) => d.clone_node(node, f),
-            NodeData::NamedExports(d) => d.clone_node(node, f),
-            NodeData::ExportSpecifier(d) => d.clone_node(node, f),
-            NodeData::CallSignatureDeclaration(d) => d.clone_node(node, f),
-            NodeData::ConstructSignatureDeclaration(d) => d.clone_node(node, f),
-            NodeData::ConstructorDeclaration(d) => d.clone_node(node, f),
-            NodeData::GetAccessorDeclaration(d) => d.clone_node(node, f),
-            NodeData::SetAccessorDeclaration(d) => d.clone_node(node, f),
-            NodeData::IndexSignatureDeclaration(d) => d.clone_node(node, f),
-            NodeData::MethodSignatureDeclaration(d) => d.clone_node(node, f),
-            NodeData::MethodDeclaration(d) => d.clone_node(node, f),
-            NodeData::PropertySignatureDeclaration(d) => d.clone_node(node, f),
-            NodeData::PropertyDeclaration(d) => d.clone_node(node, f),
-            NodeData::SemicolonClassElement(d) => d.clone_node(node, f),
-            NodeData::ClassStaticBlockDeclaration(d) => d.clone_node(node, f),
-            NodeData::OmittedExpression => OmittedExpression.clone_node(node, f),
-            NodeData::KeywordExpression(d) => d.clone_node(node, f),
-            NodeData::StringLiteral(d) => d.clone_node(node, f),
-            NodeData::NumericLiteral(d) => d.clone_node(node, f),
-            NodeData::BigIntLiteral(d) => d.clone_node(node, f),
-            NodeData::RegularExpressionLiteral(d) => d.clone_node(node, f),
-            NodeData::NoSubstitutionTemplateLiteral(d) => d.clone_node(node, f),
-            NodeData::BinaryExpression(d) => d.clone_node(node, f),
-            NodeData::PrefixUnaryExpression(d) => d.clone_node(node, f),
-            NodeData::PostfixUnaryExpression(d) => d.clone_node(node, f),
-            NodeData::YieldExpression(d) => d.clone_node(node, f),
-            NodeData::ArrowFunction(d) => d.clone_node(node, f),
-            NodeData::FunctionExpression(d) => d.clone_node(node, f),
-            NodeData::AsExpression(d) => d.clone_node(node, f),
-            NodeData::SatisfiesExpression(d) => d.clone_node(node, f),
-            NodeData::ConditionalExpression(d) => d.clone_node(node, f),
-            NodeData::PropertyAccessExpression(d) => d.clone_node(node, f),
-            NodeData::ElementAccessExpression(d) => d.clone_node(node, f),
-            NodeData::CallExpression(d) => d.clone_node(node, f),
-            NodeData::NewExpression(d) => d.clone_node(node, f),
-            NodeData::MetaProperty(d) => d.clone_node(node, f),
-            NodeData::NonNullExpression(d) => d.clone_node(node, f),
-            NodeData::SpreadElement(d) => d.clone_node(node, f),
-            NodeData::TemplateExpression(d) => d.clone_node(node, f),
-            NodeData::TemplateSpan(d) => d.clone_node(node, f),
-            NodeData::TaggedTemplateExpression(d) => d.clone_node(node, f),
-            NodeData::ParenthesizedExpression(d) => d.clone_node(node, f),
-            NodeData::ArrayLiteralExpression(d) => d.clone_node(node, f),
-            NodeData::ObjectLiteralExpression(d) => d.clone_node(node, f),
-            NodeData::SpreadAssignment(d) => d.clone_node(node, f),
-            NodeData::PropertyAssignment(d) => d.clone_node(node, f),
-            NodeData::ShorthandPropertyAssignment(d) => d.clone_node(node, f),
-            NodeData::DeleteExpression(d) => d.clone_node(node, f),
-            NodeData::TypeOfExpression(d) => d.clone_node(node, f),
-            NodeData::VoidExpression(d) => d.clone_node(node, f),
-            NodeData::AwaitExpression(d) => d.clone_node(node, f),
-            NodeData::TypeAssertion(d) => d.clone_node(node, f),
-            NodeData::KeywordTypeNode => KeywordTypeNode.clone_node(node, f),
-            NodeData::UnionTypeNode(d) => d.clone_node(node, f),
-            NodeData::IntersectionTypeNode(d) => d.clone_node(node, f),
-            NodeData::ConditionalTypeNode(d) => d.clone_node(node, f),
-            NodeData::TypeOperatorNode(d) => d.clone_node(node, f),
-            NodeData::InferTypeNode(d) => d.clone_node(node, f),
-            NodeData::ArrayTypeNode(d) => d.clone_node(node, f),
-            NodeData::IndexedAccessTypeNode(d) => d.clone_node(node, f),
-            NodeData::TypeReferenceNode(d) => d.clone_node(node, f),
-            NodeData::ExpressionWithTypeArguments(d) => d.clone_node(node, f),
-            NodeData::LiteralTypeNode(d) => d.clone_node(node, f),
-            NodeData::ThisTypeNode => ThisTypeNode.clone_node(node, f),
-            NodeData::TypePredicateNode(d) => d.clone_node(node, f),
-            NodeData::ImportAttribute(d) => d.clone_node(node, f),
-            NodeData::ImportAttributes(d) => d.clone_node(node, f),
-            NodeData::TypeQueryNode(d) => d.clone_node(node, f),
-            NodeData::MappedTypeNode(d) => d.clone_node(node, f),
-            NodeData::TypeLiteralNode(d) => d.clone_node(node, f),
-            NodeData::TupleTypeNode(d) => d.clone_node(node, f),
-            NodeData::NamedTupleMember(d) => d.clone_node(node, f),
-            NodeData::OptionalTypeNode(d) => d.clone_node(node, f),
-            NodeData::RestTypeNode(d) => d.clone_node(node, f),
-            NodeData::ParenthesizedTypeNode(d) => d.clone_node(node, f),
-            NodeData::FunctionTypeNode(d) => d.clone_node(node, f),
-            NodeData::ConstructorTypeNode(d) => d.clone_node(node, f),
-            NodeData::TemplateHead(d) => d.clone_node(node, f),
-            NodeData::TemplateMiddle(d) => d.clone_node(node, f),
-            NodeData::TemplateTail(d) => d.clone_node(node, f),
-            NodeData::TemplateLiteralTypeNode(d) => d.clone_node(node, f),
-            NodeData::TemplateLiteralTypeSpan(d) => d.clone_node(node, f),
-            NodeData::SyntheticExpression(d) => d.clone_node(node, f),
-            NodeData::PartiallyEmittedExpression(d) => d.clone_node(node, f),
-            NodeData::JsxElement(d) => d.clone_node(node, f),
-            NodeData::JsxAttributes(d) => d.clone_node(node, f),
-            NodeData::JsxNamespacedName(d) => d.clone_node(node, f),
-            NodeData::JsxOpeningElement(d) => d.clone_node(node, f),
-            NodeData::JsxSelfClosingElement(d) => d.clone_node(node, f),
-            NodeData::JsxFragment(d) => d.clone_node(node, f),
-            NodeData::JsxOpeningFragment => JsxOpeningFragment.clone_node(node, f),
-            NodeData::JsxClosingFragment => JsxClosingFragment.clone_node(node, f),
-            NodeData::JsxAttribute(d) => d.clone_node(node, f),
-            NodeData::JsxSpreadAttribute(d) => d.clone_node(node, f),
-            NodeData::JsxClosingElement(d) => d.clone_node(node, f),
-            NodeData::JsxExpression(d) => d.clone_node(node, f),
-            NodeData::JsxText(d) => d.clone_node(node, f),
-            NodeData::SyntaxList(d) => d.clone_node(node, f),
-            NodeData::JSDoc(d) => d.clone_node(node, f),
-            NodeData::JSDocTypeExpression(d) => d.clone_node(node, f),
-            NodeData::JSDocNonNullableType(d) => d.clone_node(node, f),
-            NodeData::JSDocNullableType(d) => d.clone_node(node, f),
-            NodeData::JSDocAllType => JSDocAllType.clone_node(node, f),
-            NodeData::JSDocVariadicType(d) => d.clone_node(node, f),
-            NodeData::JSDocOptionalType(d) => d.clone_node(node, f),
-            NodeData::JSDocTypeTag(d) => d.clone_node(node, f),
-            NodeData::JSDocUnknownTag(d) => d.clone_node(node, f),
-            NodeData::JSDocTemplateTag(d) => d.clone_node(node, f),
-            NodeData::JSDocReturnTag(d) => d.clone_node(node, f),
-            NodeData::JSDocPublicTag(d) => d.clone_node(node, f),
-            NodeData::JSDocPrivateTag(d) => d.clone_node(node, f),
-            NodeData::JSDocProtectedTag(d) => d.clone_node(node, f),
-            NodeData::JSDocReadonlyTag(d) => d.clone_node(node, f),
-            NodeData::JSDocOverrideTag(d) => d.clone_node(node, f),
-            NodeData::JSDocDeprecatedTag(d) => d.clone_node(node, f),
-            NodeData::JSDocSeeTag(d) => d.clone_node(node, f),
-            NodeData::JSDocImplementsTag(d) => d.clone_node(node, f),
-            NodeData::JSDocAugmentsTag(d) => d.clone_node(node, f),
-            NodeData::JSDocSatisfiesTag(d) => d.clone_node(node, f),
-            NodeData::JSDocThrowsTag(d) => d.clone_node(node, f),
-            NodeData::JSDocThisTag(d) => d.clone_node(node, f),
-            NodeData::JSDocImportTag(d) => d.clone_node(node, f),
-            NodeData::JSDocCallbackTag(d) => d.clone_node(node, f),
-            NodeData::JSDocOverloadTag(d) => d.clone_node(node, f),
-            NodeData::JSDocTypedefTag(d) => d.clone_node(node, f),
-            NodeData::JSDocSignature(d) => d.clone_node(node, f),
-            NodeData::JSDocNameReference(d) => d.clone_node(node, f),
-            NodeData::SourceFile(d) => d.clone_node(node, f),
-            NodeData::ModuleDeclaration(d) => d.clone_node(node, f),
-            NodeData::ImportEqualsDeclaration(d) => d.clone_node(node, f),
-            NodeData::ExportDeclaration(d) => d.clone_node(node, f),
-            NodeData::ImportTypeNode(d) => d.clone_node(node, f),
-            NodeData::ImportClause(d) => d.clone_node(node, f),
-            NodeData::ImportSpecifier(d) => d.clone_node(node, f),
-            NodeData::JSDocText(d) => d.clone_node(node, f),
-            NodeData::JSDocLink(d) => d.clone_node(node, f),
-            NodeData::JSDocLinkPlain(d) => d.clone_node(node, f),
-            NodeData::JSDocLinkCode(d) => d.clone_node(node, f),
-            NodeData::TypeParameterDeclaration(d) => d.clone_node(node, f),
-            NodeData::SyntheticReferenceExpression(d) => d.clone_node(node, f),
-            NodeData::JSDocTypeLiteral(d) => d.clone_node(node, f),
-            NodeData::JSDocParameterOrPropertyTag(d) => d.clone_node(node, f),
+        match self.data_tag {
+            NodeDataTag::Token => Token.clone_node(node, f),
+            NodeDataTag::Identifier => self.payload::<Identifier>().clone_node(node, f),
+            NodeDataTag::PrivateIdentifier => self.payload::<PrivateIdentifier>().clone_node(node, f),
+            NodeDataTag::QualifiedName => self.payload::<QualifiedName>().clone_node(node, f),
+            NodeDataTag::ComputedPropertyName => self.payload::<ComputedPropertyName>().clone_node(node, f),
+            NodeDataTag::Decorator => self.payload::<Decorator>().clone_node(node, f),
+            NodeDataTag::EmptyStatement => self.payload::<EmptyStatement>().clone_node(node, f),
+            NodeDataTag::IfStatement => self.payload::<IfStatement>().clone_node(node, f),
+            NodeDataTag::DoStatement => self.payload::<DoStatement>().clone_node(node, f),
+            NodeDataTag::WhileStatement => self.payload::<WhileStatement>().clone_node(node, f),
+            NodeDataTag::ForStatement => self.payload::<ForStatement>().clone_node(node, f),
+            NodeDataTag::ForInOrOfStatement => self.payload::<ForInOrOfStatement>().clone_node(node, f),
+            NodeDataTag::BreakStatement => self.payload::<BreakStatement>().clone_node(node, f),
+            NodeDataTag::ContinueStatement => self.payload::<ContinueStatement>().clone_node(node, f),
+            NodeDataTag::ReturnStatement => self.payload::<ReturnStatement>().clone_node(node, f),
+            NodeDataTag::WithStatement => self.payload::<WithStatement>().clone_node(node, f),
+            NodeDataTag::SwitchStatement => self.payload::<SwitchStatement>().clone_node(node, f),
+            NodeDataTag::CaseBlock => self.payload::<CaseBlock>().clone_node(node, f),
+            NodeDataTag::CaseOrDefaultClause => self.payload::<CaseOrDefaultClause>().clone_node(node, f),
+            NodeDataTag::ThrowStatement => self.payload::<ThrowStatement>().clone_node(node, f),
+            NodeDataTag::TryStatement => self.payload::<TryStatement>().clone_node(node, f),
+            NodeDataTag::CatchClause => self.payload::<CatchClause>().clone_node(node, f),
+            NodeDataTag::DebuggerStatement => self.payload::<DebuggerStatement>().clone_node(node, f),
+            NodeDataTag::LabeledStatement => self.payload::<LabeledStatement>().clone_node(node, f),
+            NodeDataTag::ExpressionStatement => self.payload::<ExpressionStatement>().clone_node(node, f),
+            NodeDataTag::Block => self.payload::<Block>().clone_node(node, f),
+            NodeDataTag::VariableStatement => self.payload::<VariableStatement>().clone_node(node, f),
+            NodeDataTag::VariableDeclaration => self.payload::<VariableDeclaration>().clone_node(node, f),
+            NodeDataTag::VariableDeclarationList => self.payload::<VariableDeclarationList>().clone_node(node, f),
+            NodeDataTag::BindingPattern => self.payload::<BindingPattern>().clone_node(node, f),
+            NodeDataTag::ParameterDeclaration => self.payload::<ParameterDeclaration>().clone_node(node, f),
+            NodeDataTag::BindingElement => self.payload::<BindingElement>().clone_node(node, f),
+            NodeDataTag::MissingDeclaration => self.payload::<MissingDeclaration>().clone_node(node, f),
+            NodeDataTag::FunctionDeclaration => self.payload::<FunctionDeclaration>().clone_node(node, f),
+            NodeDataTag::ClassDeclaration => self.payload::<ClassDeclaration>().clone_node(node, f),
+            NodeDataTag::ClassExpression => self.payload::<ClassExpression>().clone_node(node, f),
+            NodeDataTag::HeritageClause => self.payload::<HeritageClause>().clone_node(node, f),
+            NodeDataTag::InterfaceDeclaration => self.payload::<InterfaceDeclaration>().clone_node(node, f),
+            NodeDataTag::TypeAliasDeclaration => self.payload::<TypeAliasDeclaration>().clone_node(node, f),
+            NodeDataTag::EnumMember => self.payload::<EnumMember>().clone_node(node, f),
+            NodeDataTag::EnumDeclaration => self.payload::<EnumDeclaration>().clone_node(node, f),
+            NodeDataTag::ModuleBlock => self.payload::<ModuleBlock>().clone_node(node, f),
+            NodeDataTag::NotEmittedStatement => self.payload::<NotEmittedStatement>().clone_node(node, f),
+            NodeDataTag::NotEmittedTypeElement => self.payload::<NotEmittedTypeElement>().clone_node(node, f),
+            NodeDataTag::ImportDeclaration => self.payload::<ImportDeclaration>().clone_node(node, f),
+            NodeDataTag::ExternalModuleReference => self.payload::<ExternalModuleReference>().clone_node(node, f),
+            NodeDataTag::NamespaceImport => self.payload::<NamespaceImport>().clone_node(node, f),
+            NodeDataTag::NamedImports => self.payload::<NamedImports>().clone_node(node, f),
+            NodeDataTag::ExportAssignment => self.payload::<ExportAssignment>().clone_node(node, f),
+            NodeDataTag::NamespaceExportDeclaration => self.payload::<NamespaceExportDeclaration>().clone_node(node, f),
+            NodeDataTag::NamespaceExport => self.payload::<NamespaceExport>().clone_node(node, f),
+            NodeDataTag::NamedExports => self.payload::<NamedExports>().clone_node(node, f),
+            NodeDataTag::ExportSpecifier => self.payload::<ExportSpecifier>().clone_node(node, f),
+            NodeDataTag::CallSignatureDeclaration => self.payload::<CallSignatureDeclaration>().clone_node(node, f),
+            NodeDataTag::ConstructSignatureDeclaration => self.payload::<ConstructSignatureDeclaration>().clone_node(node, f),
+            NodeDataTag::ConstructorDeclaration => self.payload::<ConstructorDeclaration>().clone_node(node, f),
+            NodeDataTag::GetAccessorDeclaration => self.payload::<GetAccessorDeclaration>().clone_node(node, f),
+            NodeDataTag::SetAccessorDeclaration => self.payload::<SetAccessorDeclaration>().clone_node(node, f),
+            NodeDataTag::IndexSignatureDeclaration => self.payload::<IndexSignatureDeclaration>().clone_node(node, f),
+            NodeDataTag::MethodSignatureDeclaration => self.payload::<MethodSignatureDeclaration>().clone_node(node, f),
+            NodeDataTag::MethodDeclaration => self.payload::<MethodDeclaration>().clone_node(node, f),
+            NodeDataTag::PropertySignatureDeclaration => self.payload::<PropertySignatureDeclaration>().clone_node(node, f),
+            NodeDataTag::PropertyDeclaration => self.payload::<PropertyDeclaration>().clone_node(node, f),
+            NodeDataTag::SemicolonClassElement => self.payload::<SemicolonClassElement>().clone_node(node, f),
+            NodeDataTag::ClassStaticBlockDeclaration => self.payload::<ClassStaticBlockDeclaration>().clone_node(node, f),
+            NodeDataTag::OmittedExpression => OmittedExpression.clone_node(node, f),
+            NodeDataTag::KeywordExpression => self.payload::<KeywordExpression>().clone_node(node, f),
+            NodeDataTag::StringLiteral => self.payload::<StringLiteral>().clone_node(node, f),
+            NodeDataTag::NumericLiteral => self.payload::<NumericLiteral>().clone_node(node, f),
+            NodeDataTag::BigIntLiteral => self.payload::<BigIntLiteral>().clone_node(node, f),
+            NodeDataTag::RegularExpressionLiteral => self.payload::<RegularExpressionLiteral>().clone_node(node, f),
+            NodeDataTag::NoSubstitutionTemplateLiteral => self.payload::<NoSubstitutionTemplateLiteral>().clone_node(node, f),
+            NodeDataTag::BinaryExpression => self.payload::<BinaryExpression>().clone_node(node, f),
+            NodeDataTag::PrefixUnaryExpression => self.payload::<PrefixUnaryExpression>().clone_node(node, f),
+            NodeDataTag::PostfixUnaryExpression => self.payload::<PostfixUnaryExpression>().clone_node(node, f),
+            NodeDataTag::YieldExpression => self.payload::<YieldExpression>().clone_node(node, f),
+            NodeDataTag::ArrowFunction => self.payload::<ArrowFunction>().clone_node(node, f),
+            NodeDataTag::FunctionExpression => self.payload::<FunctionExpression>().clone_node(node, f),
+            NodeDataTag::AsExpression => self.payload::<AsExpression>().clone_node(node, f),
+            NodeDataTag::SatisfiesExpression => self.payload::<SatisfiesExpression>().clone_node(node, f),
+            NodeDataTag::ConditionalExpression => self.payload::<ConditionalExpression>().clone_node(node, f),
+            NodeDataTag::PropertyAccessExpression => self.payload::<PropertyAccessExpression>().clone_node(node, f),
+            NodeDataTag::ElementAccessExpression => self.payload::<ElementAccessExpression>().clone_node(node, f),
+            NodeDataTag::CallExpression => self.payload::<CallExpression>().clone_node(node, f),
+            NodeDataTag::NewExpression => self.payload::<NewExpression>().clone_node(node, f),
+            NodeDataTag::MetaProperty => self.payload::<MetaProperty>().clone_node(node, f),
+            NodeDataTag::NonNullExpression => self.payload::<NonNullExpression>().clone_node(node, f),
+            NodeDataTag::SpreadElement => self.payload::<SpreadElement>().clone_node(node, f),
+            NodeDataTag::TemplateExpression => self.payload::<TemplateExpression>().clone_node(node, f),
+            NodeDataTag::TemplateSpan => self.payload::<TemplateSpan>().clone_node(node, f),
+            NodeDataTag::TaggedTemplateExpression => self.payload::<TaggedTemplateExpression>().clone_node(node, f),
+            NodeDataTag::ParenthesizedExpression => self.payload::<ParenthesizedExpression>().clone_node(node, f),
+            NodeDataTag::ArrayLiteralExpression => self.payload::<ArrayLiteralExpression>().clone_node(node, f),
+            NodeDataTag::ObjectLiteralExpression => self.payload::<ObjectLiteralExpression>().clone_node(node, f),
+            NodeDataTag::SpreadAssignment => self.payload::<SpreadAssignment>().clone_node(node, f),
+            NodeDataTag::PropertyAssignment => self.payload::<PropertyAssignment>().clone_node(node, f),
+            NodeDataTag::ShorthandPropertyAssignment => self.payload::<ShorthandPropertyAssignment>().clone_node(node, f),
+            NodeDataTag::DeleteExpression => self.payload::<DeleteExpression>().clone_node(node, f),
+            NodeDataTag::TypeOfExpression => self.payload::<TypeOfExpression>().clone_node(node, f),
+            NodeDataTag::VoidExpression => self.payload::<VoidExpression>().clone_node(node, f),
+            NodeDataTag::AwaitExpression => self.payload::<AwaitExpression>().clone_node(node, f),
+            NodeDataTag::TypeAssertion => self.payload::<TypeAssertion>().clone_node(node, f),
+            NodeDataTag::KeywordTypeNode => KeywordTypeNode.clone_node(node, f),
+            NodeDataTag::UnionTypeNode => self.payload::<UnionTypeNode>().clone_node(node, f),
+            NodeDataTag::IntersectionTypeNode => self.payload::<IntersectionTypeNode>().clone_node(node, f),
+            NodeDataTag::ConditionalTypeNode => self.payload::<ConditionalTypeNode>().clone_node(node, f),
+            NodeDataTag::TypeOperatorNode => self.payload::<TypeOperatorNode>().clone_node(node, f),
+            NodeDataTag::InferTypeNode => self.payload::<InferTypeNode>().clone_node(node, f),
+            NodeDataTag::ArrayTypeNode => self.payload::<ArrayTypeNode>().clone_node(node, f),
+            NodeDataTag::IndexedAccessTypeNode => self.payload::<IndexedAccessTypeNode>().clone_node(node, f),
+            NodeDataTag::TypeReferenceNode => self.payload::<TypeReferenceNode>().clone_node(node, f),
+            NodeDataTag::ExpressionWithTypeArguments => self.payload::<ExpressionWithTypeArguments>().clone_node(node, f),
+            NodeDataTag::LiteralTypeNode => self.payload::<LiteralTypeNode>().clone_node(node, f),
+            NodeDataTag::ThisTypeNode => ThisTypeNode.clone_node(node, f),
+            NodeDataTag::TypePredicateNode => self.payload::<TypePredicateNode>().clone_node(node, f),
+            NodeDataTag::ImportAttribute => self.payload::<ImportAttribute>().clone_node(node, f),
+            NodeDataTag::ImportAttributes => self.payload::<ImportAttributes>().clone_node(node, f),
+            NodeDataTag::TypeQueryNode => self.payload::<TypeQueryNode>().clone_node(node, f),
+            NodeDataTag::MappedTypeNode => self.payload::<MappedTypeNode>().clone_node(node, f),
+            NodeDataTag::TypeLiteralNode => self.payload::<TypeLiteralNode>().clone_node(node, f),
+            NodeDataTag::TupleTypeNode => self.payload::<TupleTypeNode>().clone_node(node, f),
+            NodeDataTag::NamedTupleMember => self.payload::<NamedTupleMember>().clone_node(node, f),
+            NodeDataTag::OptionalTypeNode => self.payload::<OptionalTypeNode>().clone_node(node, f),
+            NodeDataTag::RestTypeNode => self.payload::<RestTypeNode>().clone_node(node, f),
+            NodeDataTag::ParenthesizedTypeNode => self.payload::<ParenthesizedTypeNode>().clone_node(node, f),
+            NodeDataTag::FunctionTypeNode => self.payload::<FunctionTypeNode>().clone_node(node, f),
+            NodeDataTag::ConstructorTypeNode => self.payload::<ConstructorTypeNode>().clone_node(node, f),
+            NodeDataTag::TemplateHead => self.payload::<TemplateHead>().clone_node(node, f),
+            NodeDataTag::TemplateMiddle => self.payload::<TemplateMiddle>().clone_node(node, f),
+            NodeDataTag::TemplateTail => self.payload::<TemplateTail>().clone_node(node, f),
+            NodeDataTag::TemplateLiteralTypeNode => self.payload::<TemplateLiteralTypeNode>().clone_node(node, f),
+            NodeDataTag::TemplateLiteralTypeSpan => self.payload::<TemplateLiteralTypeSpan>().clone_node(node, f),
+            NodeDataTag::SyntheticExpression => self.payload::<SyntheticExpression>().clone_node(node, f),
+            NodeDataTag::PartiallyEmittedExpression => self.payload::<PartiallyEmittedExpression>().clone_node(node, f),
+            NodeDataTag::JsxElement => self.payload::<JsxElement>().clone_node(node, f),
+            NodeDataTag::JsxAttributes => self.payload::<JsxAttributes>().clone_node(node, f),
+            NodeDataTag::JsxNamespacedName => self.payload::<JsxNamespacedName>().clone_node(node, f),
+            NodeDataTag::JsxOpeningElement => self.payload::<JsxOpeningElement>().clone_node(node, f),
+            NodeDataTag::JsxSelfClosingElement => self.payload::<JsxSelfClosingElement>().clone_node(node, f),
+            NodeDataTag::JsxFragment => self.payload::<JsxFragment>().clone_node(node, f),
+            NodeDataTag::JsxOpeningFragment => JsxOpeningFragment.clone_node(node, f),
+            NodeDataTag::JsxClosingFragment => JsxClosingFragment.clone_node(node, f),
+            NodeDataTag::JsxAttribute => self.payload::<JsxAttribute>().clone_node(node, f),
+            NodeDataTag::JsxSpreadAttribute => self.payload::<JsxSpreadAttribute>().clone_node(node, f),
+            NodeDataTag::JsxClosingElement => self.payload::<JsxClosingElement>().clone_node(node, f),
+            NodeDataTag::JsxExpression => self.payload::<JsxExpression>().clone_node(node, f),
+            NodeDataTag::JsxText => self.payload::<JsxText>().clone_node(node, f),
+            NodeDataTag::SyntaxList => self.payload::<SyntaxList>().clone_node(node, f),
+            NodeDataTag::JSDoc => self.payload::<JSDoc>().clone_node(node, f),
+            NodeDataTag::JSDocTypeExpression => self.payload::<JSDocTypeExpression>().clone_node(node, f),
+            NodeDataTag::JSDocNonNullableType => self.payload::<JSDocNonNullableType>().clone_node(node, f),
+            NodeDataTag::JSDocNullableType => self.payload::<JSDocNullableType>().clone_node(node, f),
+            NodeDataTag::JSDocAllType => JSDocAllType.clone_node(node, f),
+            NodeDataTag::JSDocVariadicType => self.payload::<JSDocVariadicType>().clone_node(node, f),
+            NodeDataTag::JSDocOptionalType => self.payload::<JSDocOptionalType>().clone_node(node, f),
+            NodeDataTag::JSDocTypeTag => self.payload::<JSDocTypeTag>().clone_node(node, f),
+            NodeDataTag::JSDocUnknownTag => self.payload::<JSDocUnknownTag>().clone_node(node, f),
+            NodeDataTag::JSDocTemplateTag => self.payload::<JSDocTemplateTag>().clone_node(node, f),
+            NodeDataTag::JSDocReturnTag => self.payload::<JSDocReturnTag>().clone_node(node, f),
+            NodeDataTag::JSDocPublicTag => self.payload::<JSDocPublicTag>().clone_node(node, f),
+            NodeDataTag::JSDocPrivateTag => self.payload::<JSDocPrivateTag>().clone_node(node, f),
+            NodeDataTag::JSDocProtectedTag => self.payload::<JSDocProtectedTag>().clone_node(node, f),
+            NodeDataTag::JSDocReadonlyTag => self.payload::<JSDocReadonlyTag>().clone_node(node, f),
+            NodeDataTag::JSDocOverrideTag => self.payload::<JSDocOverrideTag>().clone_node(node, f),
+            NodeDataTag::JSDocDeprecatedTag => self.payload::<JSDocDeprecatedTag>().clone_node(node, f),
+            NodeDataTag::JSDocSeeTag => self.payload::<JSDocSeeTag>().clone_node(node, f),
+            NodeDataTag::JSDocImplementsTag => self.payload::<JSDocImplementsTag>().clone_node(node, f),
+            NodeDataTag::JSDocAugmentsTag => self.payload::<JSDocAugmentsTag>().clone_node(node, f),
+            NodeDataTag::JSDocSatisfiesTag => self.payload::<JSDocSatisfiesTag>().clone_node(node, f),
+            NodeDataTag::JSDocThrowsTag => self.payload::<JSDocThrowsTag>().clone_node(node, f),
+            NodeDataTag::JSDocThisTag => self.payload::<JSDocThisTag>().clone_node(node, f),
+            NodeDataTag::JSDocImportTag => self.payload::<JSDocImportTag>().clone_node(node, f),
+            NodeDataTag::JSDocCallbackTag => self.payload::<JSDocCallbackTag>().clone_node(node, f),
+            NodeDataTag::JSDocOverloadTag => self.payload::<JSDocOverloadTag>().clone_node(node, f),
+            NodeDataTag::JSDocTypedefTag => self.payload::<JSDocTypedefTag>().clone_node(node, f),
+            NodeDataTag::JSDocSignature => self.payload::<JSDocSignature>().clone_node(node, f),
+            NodeDataTag::JSDocNameReference => self.payload::<JSDocNameReference>().clone_node(node, f),
+            NodeDataTag::SourceFile => self.payload::<SourceFile>().clone_node(node, f),
+            NodeDataTag::ModuleDeclaration => self.payload::<ModuleDeclaration>().clone_node(node, f),
+            NodeDataTag::ImportEqualsDeclaration => self.payload::<ImportEqualsDeclaration>().clone_node(node, f),
+            NodeDataTag::ExportDeclaration => self.payload::<ExportDeclaration>().clone_node(node, f),
+            NodeDataTag::ImportTypeNode => self.payload::<ImportTypeNode>().clone_node(node, f),
+            NodeDataTag::ImportClause => self.payload::<ImportClause>().clone_node(node, f),
+            NodeDataTag::ImportSpecifier => self.payload::<ImportSpecifier>().clone_node(node, f),
+            NodeDataTag::JSDocText => self.payload::<JSDocText>().clone_node(node, f),
+            NodeDataTag::JSDocLink => self.payload::<JSDocLink>().clone_node(node, f),
+            NodeDataTag::JSDocLinkPlain => self.payload::<JSDocLinkPlain>().clone_node(node, f),
+            NodeDataTag::JSDocLinkCode => self.payload::<JSDocLinkCode>().clone_node(node, f),
+            NodeDataTag::TypeParameterDeclaration => self.payload::<TypeParameterDeclaration>().clone_node(node, f),
+            NodeDataTag::SyntheticReferenceExpression => self.payload::<SyntheticReferenceExpression>().clone_node(node, f),
+            NodeDataTag::JSDocTypeLiteral => self.payload::<JSDocTypeLiteral>().clone_node(node, f),
+            NodeDataTag::JSDocParameterOrPropertyTag => self.payload::<JSDocParameterOrPropertyTag>().clone_node(node, f),
             _ => panic!("clone_node: unsupported node data for {:?}", self.kind),
         }
     }
 
     pub fn name(&self) -> Option<P<Node>> {
-        match self.data {
-            NodeData::VariableDeclaration(d) => Some(d.name()),
-            NodeData::ParameterDeclaration(d) => Some(d.name()),
-            NodeData::BindingElement(d) => d.name(),
-            NodeData::FunctionDeclaration(d) => d.name(),
-            NodeData::ClassDeclaration(d) => d.name(),
-            NodeData::ClassExpression(d) => d.name(),
-            NodeData::InterfaceDeclaration(d) => Some(d.name()),
-            NodeData::TypeAliasDeclaration(d) => Some(d.name()),
-            NodeData::EnumMember(d) => Some(d.name()),
-            NodeData::EnumDeclaration(d) => Some(d.name()),
-            NodeData::NamespaceImport(d) => Some(d.name()),
-            NodeData::NamespaceExportDeclaration(d) => Some(d.name()),
-            NodeData::NamespaceExport(d) => Some(d.name()),
-            NodeData::ExportSpecifier(d) => Some(d.name()),
-            NodeData::GetAccessorDeclaration(d) => Some(d.name()),
-            NodeData::SetAccessorDeclaration(d) => Some(d.name()),
-            NodeData::MethodSignatureDeclaration(d) => Some(d.name()),
-            NodeData::MethodDeclaration(d) => Some(d.name()),
-            NodeData::PropertySignatureDeclaration(d) => Some(d.name()),
-            NodeData::PropertyDeclaration(d) => Some(d.name()),
-            NodeData::FunctionExpression(d) => d.name(),
-            NodeData::PropertyAccessExpression(d) => Some(d.name()),
-            NodeData::MetaProperty(d) => Some(d.name()),
-            NodeData::PropertyAssignment(d) => Some(d.name()),
-            NodeData::ShorthandPropertyAssignment(d) => Some(d.name()),
-            NodeData::ImportAttribute(d) => d.name(),
-            NodeData::NamedTupleMember(d) => Some(d.name()),
-            NodeData::JsxNamespacedName(d) => Some(d.name()),
-            NodeData::JsxAttribute(d) => Some(d.name()),
-            NodeData::JSDocCallbackTag(d) => d.name(),
-            NodeData::JSDocTypedefTag(d) => d.name(),
-            NodeData::JSDocNameReference(d) => Some(d.name()),
-            NodeData::ModuleDeclaration(d) => Some(d.name()),
-            NodeData::ImportEqualsDeclaration(d) => Some(d.name()),
-            NodeData::ImportClause(d) => d.name(),
-            NodeData::ImportSpecifier(d) => Some(d.name()),
-            NodeData::JSDocLink(d) => d.name(),
-            NodeData::JSDocLinkPlain(d) => d.name(),
-            NodeData::JSDocLinkCode(d) => d.name(),
-            NodeData::TypeParameterDeclaration(d) => Some(d.name()),
-            NodeData::JSDocParameterOrPropertyTag(d) => Some(d.name()),
+        match self.data_tag {
+            NodeDataTag::VariableDeclaration => Some(self.payload::<VariableDeclaration>().name()),
+            NodeDataTag::ParameterDeclaration => Some(self.payload::<ParameterDeclaration>().name()),
+            NodeDataTag::BindingElement => self.payload::<BindingElement>().name(),
+            NodeDataTag::FunctionDeclaration => self.payload::<FunctionDeclaration>().name(),
+            NodeDataTag::ClassDeclaration => self.payload::<ClassDeclaration>().name(),
+            NodeDataTag::ClassExpression => self.payload::<ClassExpression>().name(),
+            NodeDataTag::InterfaceDeclaration => Some(self.payload::<InterfaceDeclaration>().name()),
+            NodeDataTag::TypeAliasDeclaration => Some(self.payload::<TypeAliasDeclaration>().name()),
+            NodeDataTag::EnumMember => Some(self.payload::<EnumMember>().name()),
+            NodeDataTag::EnumDeclaration => Some(self.payload::<EnumDeclaration>().name()),
+            NodeDataTag::NamespaceImport => Some(self.payload::<NamespaceImport>().name()),
+            NodeDataTag::NamespaceExportDeclaration => Some(self.payload::<NamespaceExportDeclaration>().name()),
+            NodeDataTag::NamespaceExport => Some(self.payload::<NamespaceExport>().name()),
+            NodeDataTag::ExportSpecifier => Some(self.payload::<ExportSpecifier>().name()),
+            NodeDataTag::GetAccessorDeclaration => Some(self.payload::<GetAccessorDeclaration>().name()),
+            NodeDataTag::SetAccessorDeclaration => Some(self.payload::<SetAccessorDeclaration>().name()),
+            NodeDataTag::MethodSignatureDeclaration => Some(self.payload::<MethodSignatureDeclaration>().name()),
+            NodeDataTag::MethodDeclaration => Some(self.payload::<MethodDeclaration>().name()),
+            NodeDataTag::PropertySignatureDeclaration => Some(self.payload::<PropertySignatureDeclaration>().name()),
+            NodeDataTag::PropertyDeclaration => Some(self.payload::<PropertyDeclaration>().name()),
+            NodeDataTag::FunctionExpression => self.payload::<FunctionExpression>().name(),
+            NodeDataTag::PropertyAccessExpression => Some(self.payload::<PropertyAccessExpression>().name()),
+            NodeDataTag::MetaProperty => Some(self.payload::<MetaProperty>().name()),
+            NodeDataTag::PropertyAssignment => Some(self.payload::<PropertyAssignment>().name()),
+            NodeDataTag::ShorthandPropertyAssignment => Some(self.payload::<ShorthandPropertyAssignment>().name()),
+            NodeDataTag::ImportAttribute => self.payload::<ImportAttribute>().name(),
+            NodeDataTag::NamedTupleMember => Some(self.payload::<NamedTupleMember>().name()),
+            NodeDataTag::JsxNamespacedName => Some(self.payload::<JsxNamespacedName>().name()),
+            NodeDataTag::JsxAttribute => Some(self.payload::<JsxAttribute>().name()),
+            NodeDataTag::JSDocCallbackTag => self.payload::<JSDocCallbackTag>().name(),
+            NodeDataTag::JSDocTypedefTag => self.payload::<JSDocTypedefTag>().name(),
+            NodeDataTag::JSDocNameReference => Some(self.payload::<JSDocNameReference>().name()),
+            NodeDataTag::ModuleDeclaration => Some(self.payload::<ModuleDeclaration>().name()),
+            NodeDataTag::ImportEqualsDeclaration => Some(self.payload::<ImportEqualsDeclaration>().name()),
+            NodeDataTag::ImportClause => self.payload::<ImportClause>().name(),
+            NodeDataTag::ImportSpecifier => Some(self.payload::<ImportSpecifier>().name()),
+            NodeDataTag::JSDocLink => self.payload::<JSDocLink>().name(),
+            NodeDataTag::JSDocLinkPlain => self.payload::<JSDocLinkPlain>().name(),
+            NodeDataTag::JSDocLinkCode => self.payload::<JSDocLinkCode>().name(),
+            NodeDataTag::TypeParameterDeclaration => Some(self.payload::<TypeParameterDeclaration>().name()),
+            NodeDataTag::JSDocParameterOrPropertyTag => Some(self.payload::<JSDocParameterOrPropertyTag>().name()),
             _ => None,
         }
     }
 
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
-        match self.data {
-            NodeData::VariableStatement(d) => d.modifiers(),
-            NodeData::ParameterDeclaration(d) => d.modifiers(),
-            NodeData::MissingDeclaration(d) => d.modifiers(),
-            NodeData::FunctionDeclaration(d) => d.modifiers(),
-            NodeData::ClassDeclaration(d) => d.modifiers(),
-            NodeData::ClassExpression(d) => d.modifiers(),
-            NodeData::InterfaceDeclaration(d) => d.modifiers(),
-            NodeData::TypeAliasDeclaration(d) => d.modifiers(),
-            NodeData::EnumMember(d) => d.modifiers(),
-            NodeData::EnumDeclaration(d) => d.modifiers(),
-            NodeData::ImportDeclaration(d) => d.modifiers(),
-            NodeData::ExportAssignment(d) => d.modifiers(),
-            NodeData::NamespaceExportDeclaration(d) => d.modifiers(),
-            NodeData::ConstructorDeclaration(d) => d.modifiers(),
-            NodeData::GetAccessorDeclaration(d) => d.modifiers(),
-            NodeData::SetAccessorDeclaration(d) => d.modifiers(),
-            NodeData::IndexSignatureDeclaration(d) => d.modifiers(),
-            NodeData::MethodSignatureDeclaration(d) => d.modifiers(),
-            NodeData::MethodDeclaration(d) => d.modifiers(),
-            NodeData::PropertySignatureDeclaration(d) => d.modifiers(),
-            NodeData::PropertyDeclaration(d) => d.modifiers(),
-            NodeData::ClassStaticBlockDeclaration(d) => d.modifiers(),
-            NodeData::BinaryExpression(d) => d.modifiers(),
-            NodeData::ArrowFunction(d) => d.modifiers(),
-            NodeData::FunctionExpression(d) => d.modifiers(),
-            NodeData::PropertyAssignment(d) => d.modifiers(),
-            NodeData::ShorthandPropertyAssignment(d) => d.modifiers(),
-            NodeData::FunctionTypeNode(d) => d.modifiers(),
-            NodeData::ConstructorTypeNode(d) => d.modifiers(),
-            NodeData::ModuleDeclaration(d) => d.modifiers(),
-            NodeData::ImportEqualsDeclaration(d) => d.modifiers(),
-            NodeData::ExportDeclaration(d) => d.modifiers(),
-            NodeData::TypeParameterDeclaration(d) => d.modifiers(),
+        match self.data_tag {
+            NodeDataTag::VariableStatement => self.payload::<VariableStatement>().modifiers(),
+            NodeDataTag::ParameterDeclaration => self.payload::<ParameterDeclaration>().modifiers(),
+            NodeDataTag::MissingDeclaration => self.payload::<MissingDeclaration>().modifiers(),
+            NodeDataTag::FunctionDeclaration => self.payload::<FunctionDeclaration>().modifiers(),
+            NodeDataTag::ClassDeclaration => self.payload::<ClassDeclaration>().modifiers(),
+            NodeDataTag::ClassExpression => self.payload::<ClassExpression>().modifiers(),
+            NodeDataTag::InterfaceDeclaration => self.payload::<InterfaceDeclaration>().modifiers(),
+            NodeDataTag::TypeAliasDeclaration => self.payload::<TypeAliasDeclaration>().modifiers(),
+            NodeDataTag::EnumMember => self.payload::<EnumMember>().modifiers(),
+            NodeDataTag::EnumDeclaration => self.payload::<EnumDeclaration>().modifiers(),
+            NodeDataTag::ImportDeclaration => self.payload::<ImportDeclaration>().modifiers(),
+            NodeDataTag::ExportAssignment => self.payload::<ExportAssignment>().modifiers(),
+            NodeDataTag::NamespaceExportDeclaration => self.payload::<NamespaceExportDeclaration>().modifiers(),
+            NodeDataTag::ConstructorDeclaration => self.payload::<ConstructorDeclaration>().modifiers(),
+            NodeDataTag::GetAccessorDeclaration => self.payload::<GetAccessorDeclaration>().modifiers(),
+            NodeDataTag::SetAccessorDeclaration => self.payload::<SetAccessorDeclaration>().modifiers(),
+            NodeDataTag::IndexSignatureDeclaration => self.payload::<IndexSignatureDeclaration>().modifiers(),
+            NodeDataTag::MethodSignatureDeclaration => self.payload::<MethodSignatureDeclaration>().modifiers(),
+            NodeDataTag::MethodDeclaration => self.payload::<MethodDeclaration>().modifiers(),
+            NodeDataTag::PropertySignatureDeclaration => self.payload::<PropertySignatureDeclaration>().modifiers(),
+            NodeDataTag::PropertyDeclaration => self.payload::<PropertyDeclaration>().modifiers(),
+            NodeDataTag::ClassStaticBlockDeclaration => self.payload::<ClassStaticBlockDeclaration>().modifiers(),
+            NodeDataTag::BinaryExpression => self.payload::<BinaryExpression>().modifiers(),
+            NodeDataTag::ArrowFunction => self.payload::<ArrowFunction>().modifiers(),
+            NodeDataTag::FunctionExpression => self.payload::<FunctionExpression>().modifiers(),
+            NodeDataTag::PropertyAssignment => self.payload::<PropertyAssignment>().modifiers(),
+            NodeDataTag::ShorthandPropertyAssignment => self.payload::<ShorthandPropertyAssignment>().modifiers(),
+            NodeDataTag::FunctionTypeNode => self.payload::<FunctionTypeNode>().modifiers(),
+            NodeDataTag::ConstructorTypeNode => self.payload::<ConstructorTypeNode>().modifiers(),
+            NodeDataTag::ModuleDeclaration => self.payload::<ModuleDeclaration>().modifiers(),
+            NodeDataTag::ImportEqualsDeclaration => self.payload::<ImportEqualsDeclaration>().modifiers(),
+            NodeDataTag::ExportDeclaration => self.payload::<ExportDeclaration>().modifiers(),
+            NodeDataTag::TypeParameterDeclaration => self.payload::<TypeParameterDeclaration>().modifiers(),
             _ => None,
         }
     }
 
     pub(crate) fn set_modifiers_data(&self, modifiers: Option<P<ModifierList>>) {
-        match self.data {
-            NodeData::VariableStatement(d) => d.set_modifiers(modifiers),
-            NodeData::ParameterDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::MissingDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::FunctionDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::ClassDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::ClassExpression(d) => d.set_modifiers(modifiers),
-            NodeData::InterfaceDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::TypeAliasDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::EnumMember(d) => d.set_modifiers(modifiers),
-            NodeData::EnumDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::ImportDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::ExportAssignment(d) => d.set_modifiers(modifiers),
-            NodeData::NamespaceExportDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::ConstructorDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::GetAccessorDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::SetAccessorDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::IndexSignatureDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::MethodSignatureDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::MethodDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::PropertySignatureDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::PropertyDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::ClassStaticBlockDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::BinaryExpression(d) => d.set_modifiers(modifiers),
-            NodeData::ArrowFunction(d) => d.set_modifiers(modifiers),
-            NodeData::FunctionExpression(d) => d.set_modifiers(modifiers),
-            NodeData::PropertyAssignment(d) => d.set_modifiers(modifiers),
-            NodeData::ShorthandPropertyAssignment(d) => d.set_modifiers(modifiers),
-            NodeData::FunctionTypeNode(d) => d.set_modifiers(modifiers),
-            NodeData::ConstructorTypeNode(d) => d.set_modifiers(modifiers),
-            NodeData::ModuleDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::ImportEqualsDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::ExportDeclaration(d) => d.set_modifiers(modifiers),
-            NodeData::TypeParameterDeclaration(d) => d.set_modifiers(modifiers),
+        match self.data_tag {
+            NodeDataTag::VariableStatement => self.payload::<VariableStatement>().set_modifiers(modifiers),
+            NodeDataTag::ParameterDeclaration => self.payload::<ParameterDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::MissingDeclaration => self.payload::<MissingDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::FunctionDeclaration => self.payload::<FunctionDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::ClassDeclaration => self.payload::<ClassDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::ClassExpression => self.payload::<ClassExpression>().set_modifiers(modifiers),
+            NodeDataTag::InterfaceDeclaration => self.payload::<InterfaceDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::TypeAliasDeclaration => self.payload::<TypeAliasDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::EnumMember => self.payload::<EnumMember>().set_modifiers(modifiers),
+            NodeDataTag::EnumDeclaration => self.payload::<EnumDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::ImportDeclaration => self.payload::<ImportDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::ExportAssignment => self.payload::<ExportAssignment>().set_modifiers(modifiers),
+            NodeDataTag::NamespaceExportDeclaration => self.payload::<NamespaceExportDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::ConstructorDeclaration => self.payload::<ConstructorDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::GetAccessorDeclaration => self.payload::<GetAccessorDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::SetAccessorDeclaration => self.payload::<SetAccessorDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::IndexSignatureDeclaration => self.payload::<IndexSignatureDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::MethodSignatureDeclaration => self.payload::<MethodSignatureDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::MethodDeclaration => self.payload::<MethodDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::PropertySignatureDeclaration => self.payload::<PropertySignatureDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::PropertyDeclaration => self.payload::<PropertyDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::ClassStaticBlockDeclaration => self.payload::<ClassStaticBlockDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::BinaryExpression => self.payload::<BinaryExpression>().set_modifiers(modifiers),
+            NodeDataTag::ArrowFunction => self.payload::<ArrowFunction>().set_modifiers(modifiers),
+            NodeDataTag::FunctionExpression => self.payload::<FunctionExpression>().set_modifiers(modifiers),
+            NodeDataTag::PropertyAssignment => self.payload::<PropertyAssignment>().set_modifiers(modifiers),
+            NodeDataTag::ShorthandPropertyAssignment => self.payload::<ShorthandPropertyAssignment>().set_modifiers(modifiers),
+            NodeDataTag::FunctionTypeNode => self.payload::<FunctionTypeNode>().set_modifiers(modifiers),
+            NodeDataTag::ConstructorTypeNode => self.payload::<ConstructorTypeNode>().set_modifiers(modifiers),
+            NodeDataTag::ModuleDeclaration => self.payload::<ModuleDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::ImportEqualsDeclaration => self.payload::<ImportEqualsDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::ExportDeclaration => self.payload::<ExportDeclaration>().set_modifiers(modifiers),
+            NodeDataTag::TypeParameterDeclaration => self.payload::<TypeParameterDeclaration>().set_modifiers(modifiers),
             _ => {}
         }
     }
 
     pub fn flow_node_data(&self) -> Option<&'static FlowNodeBase> {
-        match self.data {
-            NodeData::Identifier(d) => Some(&d.flow_node_base),
-            NodeData::QualifiedName(d) => Some(&d.flow_node_base),
-            NodeData::EmptyStatement(d) => Some(&d.flow_node_base),
-            NodeData::IfStatement(d) => Some(&d.flow_node_base),
-            NodeData::DoStatement(d) => Some(&d.iteration_statement_base.flow_node_base),
-            NodeData::WhileStatement(d) => Some(&d.iteration_statement_base.flow_node_base),
-            NodeData::ForStatement(d) => Some(&d.iteration_statement_base.flow_node_base),
-            NodeData::ForInOrOfStatement(d) => Some(&d.flow_node_base),
-            NodeData::BreakStatement(d) => Some(&d.flow_node_base),
-            NodeData::ContinueStatement(d) => Some(&d.flow_node_base),
-            NodeData::ReturnStatement(d) => Some(&d.flow_node_base),
-            NodeData::WithStatement(d) => Some(&d.flow_node_base),
-            NodeData::SwitchStatement(d) => Some(&d.flow_node_base),
-            NodeData::ThrowStatement(d) => Some(&d.flow_node_base),
-            NodeData::TryStatement(d) => Some(&d.flow_node_base),
-            NodeData::DebuggerStatement(d) => Some(&d.flow_node_base),
-            NodeData::LabeledStatement(d) => Some(&d.flow_node_base),
-            NodeData::ExpressionStatement(d) => Some(&d.flow_node_base),
-            NodeData::Block(d) => Some(&d.flow_node_base),
-            NodeData::VariableStatement(d) => Some(&d.flow_node_base),
-            NodeData::BindingElement(d) => Some(&d.flow_node_base),
-            NodeData::MissingDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::FunctionDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::ClassDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::InterfaceDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::TypeAliasDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::EnumDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::ModuleBlock(d) => Some(&d.flow_node_base),
-            NodeData::NotEmittedStatement(d) => Some(&d.flow_node_base),
-            NodeData::ImportDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::ExportAssignment(d) => Some(&d.flow_node_base),
-            NodeData::NamespaceExportDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::GetAccessorDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::SetAccessorDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::MethodDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::KeywordExpression(d) => Some(&d.flow_node_base),
-            NodeData::ArrowFunction(d) => Some(&d.flow_node_base),
-            NodeData::FunctionExpression(d) => Some(&d.flow_node_base),
-            NodeData::PropertyAccessExpression(d) => Some(&d.flow_node_base),
-            NodeData::ElementAccessExpression(d) => Some(&d.flow_node_base),
-            NodeData::MetaProperty(d) => Some(&d.flow_node_base),
-            NodeData::ModuleDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::ImportEqualsDeclaration(d) => Some(&d.flow_node_base),
-            NodeData::ExportDeclaration(d) => Some(&d.flow_node_base),
+        match self.data_tag {
+            NodeDataTag::Identifier => Some(&self.payload::<Identifier>().flow_node_base),
+            NodeDataTag::QualifiedName => Some(&self.payload::<QualifiedName>().flow_node_base),
+            NodeDataTag::EmptyStatement => Some(&self.payload::<EmptyStatement>().flow_node_base),
+            NodeDataTag::IfStatement => Some(&self.payload::<IfStatement>().flow_node_base),
+            NodeDataTag::DoStatement => Some(&self.payload::<DoStatement>().iteration_statement_base.flow_node_base),
+            NodeDataTag::WhileStatement => Some(&self.payload::<WhileStatement>().iteration_statement_base.flow_node_base),
+            NodeDataTag::ForStatement => Some(&self.payload::<ForStatement>().iteration_statement_base.flow_node_base),
+            NodeDataTag::ForInOrOfStatement => Some(&self.payload::<ForInOrOfStatement>().flow_node_base),
+            NodeDataTag::BreakStatement => Some(&self.payload::<BreakStatement>().flow_node_base),
+            NodeDataTag::ContinueStatement => Some(&self.payload::<ContinueStatement>().flow_node_base),
+            NodeDataTag::ReturnStatement => Some(&self.payload::<ReturnStatement>().flow_node_base),
+            NodeDataTag::WithStatement => Some(&self.payload::<WithStatement>().flow_node_base),
+            NodeDataTag::SwitchStatement => Some(&self.payload::<SwitchStatement>().flow_node_base),
+            NodeDataTag::ThrowStatement => Some(&self.payload::<ThrowStatement>().flow_node_base),
+            NodeDataTag::TryStatement => Some(&self.payload::<TryStatement>().flow_node_base),
+            NodeDataTag::DebuggerStatement => Some(&self.payload::<DebuggerStatement>().flow_node_base),
+            NodeDataTag::LabeledStatement => Some(&self.payload::<LabeledStatement>().flow_node_base),
+            NodeDataTag::ExpressionStatement => Some(&self.payload::<ExpressionStatement>().flow_node_base),
+            NodeDataTag::Block => Some(&self.payload::<Block>().flow_node_base),
+            NodeDataTag::VariableStatement => Some(&self.payload::<VariableStatement>().flow_node_base),
+            NodeDataTag::BindingElement => Some(&self.payload::<BindingElement>().flow_node_base),
+            NodeDataTag::MissingDeclaration => Some(&self.payload::<MissingDeclaration>().flow_node_base),
+            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().flow_node_base),
+            NodeDataTag::ClassDeclaration => Some(&self.payload::<ClassDeclaration>().flow_node_base),
+            NodeDataTag::InterfaceDeclaration => Some(&self.payload::<InterfaceDeclaration>().flow_node_base),
+            NodeDataTag::TypeAliasDeclaration => Some(&self.payload::<TypeAliasDeclaration>().flow_node_base),
+            NodeDataTag::EnumDeclaration => Some(&self.payload::<EnumDeclaration>().flow_node_base),
+            NodeDataTag::ModuleBlock => Some(&self.payload::<ModuleBlock>().flow_node_base),
+            NodeDataTag::NotEmittedStatement => Some(&self.payload::<NotEmittedStatement>().flow_node_base),
+            NodeDataTag::ImportDeclaration => Some(&self.payload::<ImportDeclaration>().flow_node_base),
+            NodeDataTag::ExportAssignment => Some(&self.payload::<ExportAssignment>().flow_node_base),
+            NodeDataTag::NamespaceExportDeclaration => Some(&self.payload::<NamespaceExportDeclaration>().flow_node_base),
+            NodeDataTag::GetAccessorDeclaration => Some(&self.payload::<GetAccessorDeclaration>().flow_node_base),
+            NodeDataTag::SetAccessorDeclaration => Some(&self.payload::<SetAccessorDeclaration>().flow_node_base),
+            NodeDataTag::MethodDeclaration => Some(&self.payload::<MethodDeclaration>().flow_node_base),
+            NodeDataTag::KeywordExpression => Some(&self.payload::<KeywordExpression>().flow_node_base),
+            NodeDataTag::ArrowFunction => Some(&self.payload::<ArrowFunction>().flow_node_base),
+            NodeDataTag::FunctionExpression => Some(&self.payload::<FunctionExpression>().flow_node_base),
+            NodeDataTag::PropertyAccessExpression => Some(&self.payload::<PropertyAccessExpression>().flow_node_base),
+            NodeDataTag::ElementAccessExpression => Some(&self.payload::<ElementAccessExpression>().flow_node_base),
+            NodeDataTag::MetaProperty => Some(&self.payload::<MetaProperty>().flow_node_base),
+            NodeDataTag::ModuleDeclaration => Some(&self.payload::<ModuleDeclaration>().flow_node_base),
+            NodeDataTag::ImportEqualsDeclaration => Some(&self.payload::<ImportEqualsDeclaration>().flow_node_base),
+            NodeDataTag::ExportDeclaration => Some(&self.payload::<ExportDeclaration>().flow_node_base),
             _ => None,
         }
     }
 
     pub fn declaration_data(&self) -> Option<&'static DeclarationBase> {
-        match self.data {
-            NodeData::VariableDeclaration(d) => Some(&d.declaration_base),
-            NodeData::ParameterDeclaration(d) => Some(&d.declaration_base),
-            NodeData::BindingElement(d) => Some(&d.declaration_base),
-            NodeData::MissingDeclaration(d) => Some(&d.declaration_base),
-            NodeData::FunctionDeclaration(d) => Some(&d.declaration_base),
-            NodeData::ClassDeclaration(d) => Some(&d.declaration_base),
-            NodeData::ClassExpression(d) => Some(&d.declaration_base),
-            NodeData::InterfaceDeclaration(d) => Some(&d.declaration_base),
-            NodeData::TypeAliasDeclaration(d) => Some(&d.declaration_base),
-            NodeData::EnumMember(d) => Some(&d.declaration_base),
-            NodeData::EnumDeclaration(d) => Some(&d.declaration_base),
-            NodeData::NotEmittedTypeElement(d) => Some(&d.declaration_base),
-            NodeData::ImportDeclaration(d) => Some(&d.declaration_base),
-            NodeData::NamespaceImport(d) => Some(&d.declaration_base),
-            NodeData::ExportAssignment(d) => Some(&d.declaration_base),
-            NodeData::NamespaceExportDeclaration(d) => Some(&d.declaration_base),
-            NodeData::NamespaceExport(d) => Some(&d.declaration_base),
-            NodeData::ExportSpecifier(d) => Some(&d.declaration_base),
-            NodeData::CallSignatureDeclaration(d) => Some(&d.declaration_base),
-            NodeData::ConstructSignatureDeclaration(d) => Some(&d.declaration_base),
-            NodeData::ConstructorDeclaration(d) => Some(&d.declaration_base),
-            NodeData::GetAccessorDeclaration(d) => Some(&d.declaration_base),
-            NodeData::SetAccessorDeclaration(d) => Some(&d.declaration_base),
-            NodeData::IndexSignatureDeclaration(d) => Some(&d.declaration_base),
-            NodeData::MethodSignatureDeclaration(d) => Some(&d.declaration_base),
-            NodeData::MethodDeclaration(d) => Some(&d.declaration_base),
-            NodeData::PropertySignatureDeclaration(d) => Some(&d.declaration_base),
-            NodeData::PropertyDeclaration(d) => Some(&d.declaration_base),
-            NodeData::SemicolonClassElement(d) => Some(&d.declaration_base),
-            NodeData::ClassStaticBlockDeclaration(d) => Some(&d.declaration_base),
-            NodeData::NoSubstitutionTemplateLiteral(d) => Some(&d.declaration_base),
-            NodeData::BinaryExpression(d) => Some(&d.declaration_base),
-            NodeData::ArrowFunction(d) => Some(&d.declaration_base),
-            NodeData::FunctionExpression(d) => Some(&d.declaration_base),
-            NodeData::CallExpression(d) => Some(&d.declaration_base),
-            NodeData::ObjectLiteralExpression(d) => Some(&d.declaration_base),
-            NodeData::SpreadAssignment(d) => Some(&d.declaration_base),
-            NodeData::PropertyAssignment(d) => Some(&d.declaration_base),
-            NodeData::ShorthandPropertyAssignment(d) => Some(&d.declaration_base),
-            NodeData::MappedTypeNode(d) => Some(&d.declaration_base),
-            NodeData::TypeLiteralNode(d) => Some(&d.declaration_base),
-            NodeData::NamedTupleMember(d) => Some(&d.declaration_base),
-            NodeData::FunctionTypeNode(d) => Some(&d.declaration_base),
-            NodeData::ConstructorTypeNode(d) => Some(&d.declaration_base),
-            NodeData::JsxAttributes(d) => Some(&d.declaration_base),
-            NodeData::JsxAttribute(d) => Some(&d.declaration_base),
-            NodeData::JsxSpreadAttribute(d) => Some(&d.declaration_base),
-            NodeData::JSDocSignature(d) => Some(&d.declaration_base),
-            NodeData::SourceFile(d) => Some(&d.declaration_base),
-            NodeData::ModuleDeclaration(d) => Some(&d.declaration_base),
-            NodeData::ImportEqualsDeclaration(d) => Some(&d.declaration_base),
-            NodeData::ExportDeclaration(d) => Some(&d.declaration_base),
-            NodeData::ImportClause(d) => Some(&d.declaration_base),
-            NodeData::ImportSpecifier(d) => Some(&d.declaration_base),
-            NodeData::TypeParameterDeclaration(d) => Some(&d.declaration_base),
-            NodeData::JSDocTypeLiteral(d) => Some(&d.declaration_base),
+        match self.data_tag {
+            NodeDataTag::VariableDeclaration => Some(&self.payload::<VariableDeclaration>().declaration_base),
+            NodeDataTag::ParameterDeclaration => Some(&self.payload::<ParameterDeclaration>().declaration_base),
+            NodeDataTag::BindingElement => Some(&self.payload::<BindingElement>().declaration_base),
+            NodeDataTag::MissingDeclaration => Some(&self.payload::<MissingDeclaration>().declaration_base),
+            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().declaration_base),
+            NodeDataTag::ClassDeclaration => Some(&self.payload::<ClassDeclaration>().declaration_base),
+            NodeDataTag::ClassExpression => Some(&self.payload::<ClassExpression>().declaration_base),
+            NodeDataTag::InterfaceDeclaration => Some(&self.payload::<InterfaceDeclaration>().declaration_base),
+            NodeDataTag::TypeAliasDeclaration => Some(&self.payload::<TypeAliasDeclaration>().declaration_base),
+            NodeDataTag::EnumMember => Some(&self.payload::<EnumMember>().declaration_base),
+            NodeDataTag::EnumDeclaration => Some(&self.payload::<EnumDeclaration>().declaration_base),
+            NodeDataTag::NotEmittedTypeElement => Some(&self.payload::<NotEmittedTypeElement>().declaration_base),
+            NodeDataTag::ImportDeclaration => Some(&self.payload::<ImportDeclaration>().declaration_base),
+            NodeDataTag::NamespaceImport => Some(&self.payload::<NamespaceImport>().declaration_base),
+            NodeDataTag::ExportAssignment => Some(&self.payload::<ExportAssignment>().declaration_base),
+            NodeDataTag::NamespaceExportDeclaration => Some(&self.payload::<NamespaceExportDeclaration>().declaration_base),
+            NodeDataTag::NamespaceExport => Some(&self.payload::<NamespaceExport>().declaration_base),
+            NodeDataTag::ExportSpecifier => Some(&self.payload::<ExportSpecifier>().declaration_base),
+            NodeDataTag::CallSignatureDeclaration => Some(&self.payload::<CallSignatureDeclaration>().declaration_base),
+            NodeDataTag::ConstructSignatureDeclaration => Some(&self.payload::<ConstructSignatureDeclaration>().declaration_base),
+            NodeDataTag::ConstructorDeclaration => Some(&self.payload::<ConstructorDeclaration>().declaration_base),
+            NodeDataTag::GetAccessorDeclaration => Some(&self.payload::<GetAccessorDeclaration>().declaration_base),
+            NodeDataTag::SetAccessorDeclaration => Some(&self.payload::<SetAccessorDeclaration>().declaration_base),
+            NodeDataTag::IndexSignatureDeclaration => Some(&self.payload::<IndexSignatureDeclaration>().declaration_base),
+            NodeDataTag::MethodSignatureDeclaration => Some(&self.payload::<MethodSignatureDeclaration>().declaration_base),
+            NodeDataTag::MethodDeclaration => Some(&self.payload::<MethodDeclaration>().declaration_base),
+            NodeDataTag::PropertySignatureDeclaration => Some(&self.payload::<PropertySignatureDeclaration>().declaration_base),
+            NodeDataTag::PropertyDeclaration => Some(&self.payload::<PropertyDeclaration>().declaration_base),
+            NodeDataTag::SemicolonClassElement => Some(&self.payload::<SemicolonClassElement>().declaration_base),
+            NodeDataTag::ClassStaticBlockDeclaration => Some(&self.payload::<ClassStaticBlockDeclaration>().declaration_base),
+            NodeDataTag::NoSubstitutionTemplateLiteral => Some(&self.payload::<NoSubstitutionTemplateLiteral>().declaration_base),
+            NodeDataTag::BinaryExpression => Some(&self.payload::<BinaryExpression>().declaration_base),
+            NodeDataTag::ArrowFunction => Some(&self.payload::<ArrowFunction>().declaration_base),
+            NodeDataTag::FunctionExpression => Some(&self.payload::<FunctionExpression>().declaration_base),
+            NodeDataTag::CallExpression => Some(&self.payload::<CallExpression>().declaration_base),
+            NodeDataTag::ObjectLiteralExpression => Some(&self.payload::<ObjectLiteralExpression>().declaration_base),
+            NodeDataTag::SpreadAssignment => Some(&self.payload::<SpreadAssignment>().declaration_base),
+            NodeDataTag::PropertyAssignment => Some(&self.payload::<PropertyAssignment>().declaration_base),
+            NodeDataTag::ShorthandPropertyAssignment => Some(&self.payload::<ShorthandPropertyAssignment>().declaration_base),
+            NodeDataTag::MappedTypeNode => Some(&self.payload::<MappedTypeNode>().declaration_base),
+            NodeDataTag::TypeLiteralNode => Some(&self.payload::<TypeLiteralNode>().declaration_base),
+            NodeDataTag::NamedTupleMember => Some(&self.payload::<NamedTupleMember>().declaration_base),
+            NodeDataTag::FunctionTypeNode => Some(&self.payload::<FunctionTypeNode>().declaration_base),
+            NodeDataTag::ConstructorTypeNode => Some(&self.payload::<ConstructorTypeNode>().declaration_base),
+            NodeDataTag::JsxAttributes => Some(&self.payload::<JsxAttributes>().declaration_base),
+            NodeDataTag::JsxAttribute => Some(&self.payload::<JsxAttribute>().declaration_base),
+            NodeDataTag::JsxSpreadAttribute => Some(&self.payload::<JsxSpreadAttribute>().declaration_base),
+            NodeDataTag::JSDocSignature => Some(&self.payload::<JSDocSignature>().declaration_base),
+            NodeDataTag::SourceFile => Some(&self.payload::<SourceFile>().declaration_base),
+            NodeDataTag::ModuleDeclaration => Some(&self.payload::<ModuleDeclaration>().declaration_base),
+            NodeDataTag::ImportEqualsDeclaration => Some(&self.payload::<ImportEqualsDeclaration>().declaration_base),
+            NodeDataTag::ExportDeclaration => Some(&self.payload::<ExportDeclaration>().declaration_base),
+            NodeDataTag::ImportClause => Some(&self.payload::<ImportClause>().declaration_base),
+            NodeDataTag::ImportSpecifier => Some(&self.payload::<ImportSpecifier>().declaration_base),
+            NodeDataTag::TypeParameterDeclaration => Some(&self.payload::<TypeParameterDeclaration>().declaration_base),
+            NodeDataTag::JSDocTypeLiteral => Some(&self.payload::<JSDocTypeLiteral>().declaration_base),
             _ => None,
         }
     }
 
     pub fn exportable_data(&self) -> Option<&'static ExportableBase> {
-        match self.data {
-            NodeData::VariableDeclaration(d) => Some(&d.exportable_base),
-            NodeData::BindingElement(d) => Some(&d.exportable_base),
-            NodeData::FunctionDeclaration(d) => Some(&d.exportable_base),
-            NodeData::ClassDeclaration(d) => Some(&d.class_like_base.exportable_base),
-            NodeData::ClassExpression(d) => Some(&d.class_like_base.exportable_base),
-            NodeData::InterfaceDeclaration(d) => Some(&d.exportable_base),
-            NodeData::TypeAliasDeclaration(d) => Some(&d.exportable_base),
-            NodeData::EnumDeclaration(d) => Some(&d.exportable_base),
-            NodeData::NamespaceImport(d) => Some(&d.exportable_base),
-            NodeData::ExportSpecifier(d) => Some(&d.exportable_base),
-            NodeData::ModuleDeclaration(d) => Some(&d.exportable_base),
-            NodeData::ImportEqualsDeclaration(d) => Some(&d.exportable_base),
-            NodeData::ImportClause(d) => Some(&d.exportable_base),
-            NodeData::ImportSpecifier(d) => Some(&d.exportable_base),
+        match self.data_tag {
+            NodeDataTag::VariableDeclaration => Some(&self.payload::<VariableDeclaration>().exportable_base),
+            NodeDataTag::BindingElement => Some(&self.payload::<BindingElement>().exportable_base),
+            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().exportable_base),
+            NodeDataTag::ClassDeclaration => Some(&self.payload::<ClassDeclaration>().class_like_base.exportable_base),
+            NodeDataTag::ClassExpression => Some(&self.payload::<ClassExpression>().class_like_base.exportable_base),
+            NodeDataTag::InterfaceDeclaration => Some(&self.payload::<InterfaceDeclaration>().exportable_base),
+            NodeDataTag::TypeAliasDeclaration => Some(&self.payload::<TypeAliasDeclaration>().exportable_base),
+            NodeDataTag::EnumDeclaration => Some(&self.payload::<EnumDeclaration>().exportable_base),
+            NodeDataTag::NamespaceImport => Some(&self.payload::<NamespaceImport>().exportable_base),
+            NodeDataTag::ExportSpecifier => Some(&self.payload::<ExportSpecifier>().exportable_base),
+            NodeDataTag::ModuleDeclaration => Some(&self.payload::<ModuleDeclaration>().exportable_base),
+            NodeDataTag::ImportEqualsDeclaration => Some(&self.payload::<ImportEqualsDeclaration>().exportable_base),
+            NodeDataTag::ImportClause => Some(&self.payload::<ImportClause>().exportable_base),
+            NodeDataTag::ImportSpecifier => Some(&self.payload::<ImportSpecifier>().exportable_base),
             _ => None,
         }
     }
 
     pub fn locals_container_data(&self) -> Option<&'static LocalsContainerBase> {
-        match self.data {
-            NodeData::ForStatement(d) => Some(&d.locals_container_base),
-            NodeData::ForInOrOfStatement(d) => Some(&d.locals_container_base),
-            NodeData::CaseBlock(d) => Some(&d.locals_container_base),
-            NodeData::CatchClause(d) => Some(&d.locals_container_base),
-            NodeData::Block(d) => Some(&d.locals_container_base),
-            NodeData::FunctionDeclaration(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::ClassDeclaration(d) => Some(&d.class_like_base.locals_container_base),
-            NodeData::ClassExpression(d) => Some(&d.class_like_base.locals_container_base),
-            NodeData::TypeAliasDeclaration(d) => Some(&d.locals_container_base),
-            NodeData::CallSignatureDeclaration(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::ConstructSignatureDeclaration(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::ConstructorDeclaration(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::GetAccessorDeclaration(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::SetAccessorDeclaration(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::IndexSignatureDeclaration(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::MethodSignatureDeclaration(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::MethodDeclaration(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::ClassStaticBlockDeclaration(d) => Some(&d.locals_container_base),
-            NodeData::ArrowFunction(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::FunctionExpression(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::ConditionalTypeNode(d) => Some(&d.locals_container_base),
-            NodeData::MappedTypeNode(d) => Some(&d.locals_container_base),
-            NodeData::FunctionTypeNode(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::ConstructorTypeNode(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::JSDocSignature(d) => Some(&d.function_like_base.locals_container_base),
-            NodeData::SourceFile(d) => Some(&d.locals_container_base),
-            NodeData::ModuleDeclaration(d) => Some(&d.locals_container_base),
+        match self.data_tag {
+            NodeDataTag::ForStatement => Some(&self.payload::<ForStatement>().locals_container_base),
+            NodeDataTag::ForInOrOfStatement => Some(&self.payload::<ForInOrOfStatement>().locals_container_base),
+            NodeDataTag::CaseBlock => Some(&self.payload::<CaseBlock>().locals_container_base),
+            NodeDataTag::CatchClause => Some(&self.payload::<CatchClause>().locals_container_base),
+            NodeDataTag::Block => Some(&self.payload::<Block>().locals_container_base),
+            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().function_like_base.locals_container_base),
+            NodeDataTag::ClassDeclaration => Some(&self.payload::<ClassDeclaration>().class_like_base.locals_container_base),
+            NodeDataTag::ClassExpression => Some(&self.payload::<ClassExpression>().class_like_base.locals_container_base),
+            NodeDataTag::TypeAliasDeclaration => Some(&self.payload::<TypeAliasDeclaration>().locals_container_base),
+            NodeDataTag::CallSignatureDeclaration => Some(&self.payload::<CallSignatureDeclaration>().function_like_base.locals_container_base),
+            NodeDataTag::ConstructSignatureDeclaration => Some(&self.payload::<ConstructSignatureDeclaration>().function_like_base.locals_container_base),
+            NodeDataTag::ConstructorDeclaration => Some(&self.payload::<ConstructorDeclaration>().function_like_base.locals_container_base),
+            NodeDataTag::GetAccessorDeclaration => Some(&self.payload::<GetAccessorDeclaration>().function_like_base.locals_container_base),
+            NodeDataTag::SetAccessorDeclaration => Some(&self.payload::<SetAccessorDeclaration>().function_like_base.locals_container_base),
+            NodeDataTag::IndexSignatureDeclaration => Some(&self.payload::<IndexSignatureDeclaration>().function_like_base.locals_container_base),
+            NodeDataTag::MethodSignatureDeclaration => Some(&self.payload::<MethodSignatureDeclaration>().function_like_base.locals_container_base),
+            NodeDataTag::MethodDeclaration => Some(&self.payload::<MethodDeclaration>().function_like_base.locals_container_base),
+            NodeDataTag::ClassStaticBlockDeclaration => Some(&self.payload::<ClassStaticBlockDeclaration>().locals_container_base),
+            NodeDataTag::ArrowFunction => Some(&self.payload::<ArrowFunction>().function_like_base.locals_container_base),
+            NodeDataTag::FunctionExpression => Some(&self.payload::<FunctionExpression>().function_like_base.locals_container_base),
+            NodeDataTag::ConditionalTypeNode => Some(&self.payload::<ConditionalTypeNode>().locals_container_base),
+            NodeDataTag::MappedTypeNode => Some(&self.payload::<MappedTypeNode>().locals_container_base),
+            NodeDataTag::FunctionTypeNode => Some(&self.payload::<FunctionTypeNode>().function_like_base.locals_container_base),
+            NodeDataTag::ConstructorTypeNode => Some(&self.payload::<ConstructorTypeNode>().function_like_base.locals_container_base),
+            NodeDataTag::JSDocSignature => Some(&self.payload::<JSDocSignature>().function_like_base.locals_container_base),
+            NodeDataTag::SourceFile => Some(&self.payload::<SourceFile>().locals_container_base),
+            NodeDataTag::ModuleDeclaration => Some(&self.payload::<ModuleDeclaration>().locals_container_base),
             _ => None,
         }
     }
 
     pub fn function_like_data(&self) -> Option<&'static FunctionLikeBase> {
-        match self.data {
-            NodeData::FunctionDeclaration(d) => Some(&d.function_like_base),
-            NodeData::CallSignatureDeclaration(d) => Some(&d.function_like_base),
-            NodeData::ConstructSignatureDeclaration(d) => Some(&d.function_like_base),
-            NodeData::ConstructorDeclaration(d) => Some(&d.function_like_base),
-            NodeData::GetAccessorDeclaration(d) => Some(&d.function_like_base),
-            NodeData::SetAccessorDeclaration(d) => Some(&d.function_like_base),
-            NodeData::IndexSignatureDeclaration(d) => Some(&d.function_like_base),
-            NodeData::MethodSignatureDeclaration(d) => Some(&d.function_like_base),
-            NodeData::MethodDeclaration(d) => Some(&d.function_like_base),
-            NodeData::ArrowFunction(d) => Some(&d.function_like_base),
-            NodeData::FunctionExpression(d) => Some(&d.function_like_base),
-            NodeData::FunctionTypeNode(d) => Some(&d.function_like_base),
-            NodeData::ConstructorTypeNode(d) => Some(&d.function_like_base),
-            NodeData::JSDocSignature(d) => Some(&d.function_like_base),
+        match self.data_tag {
+            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().function_like_base),
+            NodeDataTag::CallSignatureDeclaration => Some(&self.payload::<CallSignatureDeclaration>().function_like_base),
+            NodeDataTag::ConstructSignatureDeclaration => Some(&self.payload::<ConstructSignatureDeclaration>().function_like_base),
+            NodeDataTag::ConstructorDeclaration => Some(&self.payload::<ConstructorDeclaration>().function_like_base),
+            NodeDataTag::GetAccessorDeclaration => Some(&self.payload::<GetAccessorDeclaration>().function_like_base),
+            NodeDataTag::SetAccessorDeclaration => Some(&self.payload::<SetAccessorDeclaration>().function_like_base),
+            NodeDataTag::IndexSignatureDeclaration => Some(&self.payload::<IndexSignatureDeclaration>().function_like_base),
+            NodeDataTag::MethodSignatureDeclaration => Some(&self.payload::<MethodSignatureDeclaration>().function_like_base),
+            NodeDataTag::MethodDeclaration => Some(&self.payload::<MethodDeclaration>().function_like_base),
+            NodeDataTag::ArrowFunction => Some(&self.payload::<ArrowFunction>().function_like_base),
+            NodeDataTag::FunctionExpression => Some(&self.payload::<FunctionExpression>().function_like_base),
+            NodeDataTag::FunctionTypeNode => Some(&self.payload::<FunctionTypeNode>().function_like_base),
+            NodeDataTag::ConstructorTypeNode => Some(&self.payload::<ConstructorTypeNode>().function_like_base),
+            NodeDataTag::JSDocSignature => Some(&self.payload::<JSDocSignature>().function_like_base),
             _ => None,
         }
     }
 
     pub fn class_like_data(&self) -> Option<&'static ClassLikeBase> {
-        match self.data {
-            NodeData::ClassDeclaration(d) => Some(&d.class_like_base),
-            NodeData::ClassExpression(d) => Some(&d.class_like_base),
+        match self.data_tag {
+            NodeDataTag::ClassDeclaration => Some(&self.payload::<ClassDeclaration>().class_like_base),
+            NodeDataTag::ClassExpression => Some(&self.payload::<ClassExpression>().class_like_base),
             _ => None,
         }
     }
 
     pub fn body_data(&self) -> Option<&'static BodyBase> {
-        match self.data {
-            NodeData::FunctionDeclaration(d) => Some(&d.body_base),
-            NodeData::ConstructorDeclaration(d) => Some(&d.body_base),
-            NodeData::GetAccessorDeclaration(d) => Some(&d.body_base),
-            NodeData::SetAccessorDeclaration(d) => Some(&d.body_base),
-            NodeData::MethodDeclaration(d) => Some(&d.body_base),
-            NodeData::ArrowFunction(d) => Some(&d.body_base),
-            NodeData::FunctionExpression(d) => Some(&d.body_base),
-            NodeData::ModuleDeclaration(d) => Some(&d.body_base),
+        match self.data_tag {
+            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().body_base),
+            NodeDataTag::ConstructorDeclaration => Some(&self.payload::<ConstructorDeclaration>().body_base),
+            NodeDataTag::GetAccessorDeclaration => Some(&self.payload::<GetAccessorDeclaration>().body_base),
+            NodeDataTag::SetAccessorDeclaration => Some(&self.payload::<SetAccessorDeclaration>().body_base),
+            NodeDataTag::MethodDeclaration => Some(&self.payload::<MethodDeclaration>().body_base),
+            NodeDataTag::ArrowFunction => Some(&self.payload::<ArrowFunction>().body_base),
+            NodeDataTag::FunctionExpression => Some(&self.payload::<FunctionExpression>().body_base),
+            NodeDataTag::ModuleDeclaration => Some(&self.payload::<ModuleDeclaration>().body_base),
             _ => None,
         }
     }
 
     pub fn literal_like_data(&self) -> Option<&'static LiteralLikeNodeBase> {
-        match self.data {
-            NodeData::StringLiteral(d) => Some(&d.literal_like_node_base),
-            NodeData::NumericLiteral(d) => Some(&d.literal_like_node_base),
-            NodeData::BigIntLiteral(d) => Some(&d.literal_like_node_base),
-            NodeData::RegularExpressionLiteral(d) => Some(&d.literal_like_node_base),
-            NodeData::NoSubstitutionTemplateLiteral(d) => Some(&d.template_literal_like_node_base.literal_like_node_base),
-            NodeData::TemplateHead(d) => Some(&d.template_literal_like_node_base.literal_like_node_base),
-            NodeData::TemplateMiddle(d) => Some(&d.template_literal_like_node_base.literal_like_node_base),
-            NodeData::TemplateTail(d) => Some(&d.template_literal_like_node_base.literal_like_node_base),
-            NodeData::JsxText(d) => Some(&d.literal_like_node_base),
+        match self.data_tag {
+            NodeDataTag::StringLiteral => Some(&self.payload::<StringLiteral>().literal_like_node_base),
+            NodeDataTag::NumericLiteral => Some(&self.payload::<NumericLiteral>().literal_like_node_base),
+            NodeDataTag::BigIntLiteral => Some(&self.payload::<BigIntLiteral>().literal_like_node_base),
+            NodeDataTag::RegularExpressionLiteral => Some(&self.payload::<RegularExpressionLiteral>().literal_like_node_base),
+            NodeDataTag::NoSubstitutionTemplateLiteral => Some(&self.payload::<NoSubstitutionTemplateLiteral>().template_literal_like_node_base.literal_like_node_base),
+            NodeDataTag::TemplateHead => Some(&self.payload::<TemplateHead>().template_literal_like_node_base.literal_like_node_base),
+            NodeDataTag::TemplateMiddle => Some(&self.payload::<TemplateMiddle>().template_literal_like_node_base.literal_like_node_base),
+            NodeDataTag::TemplateTail => Some(&self.payload::<TemplateTail>().template_literal_like_node_base.literal_like_node_base),
+            NodeDataTag::JsxText => Some(&self.payload::<JsxText>().literal_like_node_base),
             _ => None,
         }
     }
 
     pub fn template_literal_like_data(&self) -> Option<&'static TemplateLiteralLikeNodeBase> {
-        match self.data {
-            NodeData::NoSubstitutionTemplateLiteral(d) => Some(&d.template_literal_like_node_base),
-            NodeData::TemplateHead(d) => Some(&d.template_literal_like_node_base),
-            NodeData::TemplateMiddle(d) => Some(&d.template_literal_like_node_base),
-            NodeData::TemplateTail(d) => Some(&d.template_literal_like_node_base),
+        match self.data_tag {
+            NodeDataTag::NoSubstitutionTemplateLiteral => Some(&self.payload::<NoSubstitutionTemplateLiteral>().template_literal_like_node_base),
+            NodeDataTag::TemplateHead => Some(&self.payload::<TemplateHead>().template_literal_like_node_base),
+            NodeDataTag::TemplateMiddle => Some(&self.payload::<TemplateMiddle>().template_literal_like_node_base),
+            NodeDataTag::TemplateTail => Some(&self.payload::<TemplateTail>().template_literal_like_node_base),
             _ => None,
         }
     }
@@ -8379,34 +9342,34 @@ impl Node {
 
 impl NodeFactory {
     pub fn new_token(&self, kind: Kind) -> P<Node> {
-        self.new_node(kind, NodeData::Token)
+        self.new_empty_node(kind, NodeDataTag::Token)
     }
 
     pub fn new_identifier(&self, text: &'static str) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::Identifier, NodeData::Identifier(alloc(Identifier {
+        self.new_node(Kind::Identifier, Identifier {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             text: text,
-        })))
+        })
     }
 
     pub fn new_private_identifier(&self, text: &'static str) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::PrivateIdentifier, NodeData::PrivateIdentifier(alloc(PrivateIdentifier {
+        self.new_node(Kind::PrivateIdentifier, PrivateIdentifier {
             text: text,
-        })))
+        })
     }
 
     pub fn new_qualified_name(&self, left: P<Node>, right: P<Node>) -> P<Node> {
-        self.new_node(Kind::QualifiedName, NodeData::QualifiedName(alloc(QualifiedName {
+        self.new_node(Kind::QualifiedName, QualifiedName {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             left: left,
             right: right,
-        })))
+        })
     }
 
     pub fn update_qualified_name(&self, node: P<Node>, left: P<Node>, right: P<Node>) -> P<Node> {
@@ -8418,9 +9381,9 @@ impl NodeFactory {
     }
 
     pub fn new_computed_property_name(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::ComputedPropertyName, NodeData::ComputedPropertyName(alloc(ComputedPropertyName {
+        self.new_node(Kind::ComputedPropertyName, ComputedPropertyName {
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_computed_property_name(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -8432,9 +9395,9 @@ impl NodeFactory {
     }
 
     pub fn new_decorator(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::Decorator, NodeData::Decorator(alloc(Decorator {
+        self.new_node(Kind::Decorator, Decorator {
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_decorator(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -8446,22 +9409,22 @@ impl NodeFactory {
     }
 
     pub fn new_empty_statement(&self) -> P<Node> {
-        self.new_node(Kind::EmptyStatement, NodeData::EmptyStatement(alloc(EmptyStatement {
+        self.new_node(Kind::EmptyStatement, EmptyStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn new_if_statement(&self, expression: P<Node>, then_statement: P<Node>, else_statement: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::IfStatement, NodeData::IfStatement(alloc(IfStatement {
+        self.new_node(Kind::IfStatement, IfStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             expression: expression,
             then_statement: then_statement,
             else_statement: else_statement,
-        })))
+        })
     }
 
     pub fn update_if_statement(&self, node: P<Node>, expression: P<Node>, then_statement: P<Node>, else_statement: Option<P<Node>>) -> P<Node> {
@@ -8473,7 +9436,7 @@ impl NodeFactory {
     }
 
     pub fn new_do_statement(&self, statement: P<Node>, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::DoStatement, NodeData::DoStatement(alloc(DoStatement {
+        self.new_node(Kind::DoStatement, DoStatement {
             iteration_statement_base: IterationStatementBase {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
@@ -8481,7 +9444,7 @@ impl NodeFactory {
                 statement: statement,
             },
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_do_statement(&self, node: P<Node>, statement: P<Node>, expression: P<Node>) -> P<Node> {
@@ -8493,7 +9456,7 @@ impl NodeFactory {
     }
 
     pub fn new_while_statement(&self, expression: P<Node>, statement: P<Node>) -> P<Node> {
-        self.new_node(Kind::WhileStatement, NodeData::WhileStatement(alloc(WhileStatement {
+        self.new_node(Kind::WhileStatement, WhileStatement {
             iteration_statement_base: IterationStatementBase {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
@@ -8501,7 +9464,7 @@ impl NodeFactory {
                 statement: statement,
             },
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_while_statement(&self, node: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
@@ -8513,7 +9476,7 @@ impl NodeFactory {
     }
 
     pub fn new_for_statement(&self, initializer: Option<P<Node>>, condition: Option<P<Node>>, incrementor: Option<P<Node>>, statement: P<Node>) -> P<Node> {
-        self.new_node(Kind::ForStatement, NodeData::ForStatement(alloc(ForStatement {
+        self.new_node(Kind::ForStatement, ForStatement {
             iteration_statement_base: IterationStatementBase {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
@@ -8527,7 +9490,7 @@ impl NodeFactory {
             initializer: initializer,
             condition: condition,
             incrementor: incrementor,
-        })))
+        })
     }
 
     pub fn update_for_statement(&self, node: P<Node>, initializer: Option<P<Node>>, condition: Option<P<Node>>, incrementor: Option<P<Node>>, statement: P<Node>) -> P<Node> {
@@ -8539,7 +9502,7 @@ impl NodeFactory {
     }
 
     pub fn new_for_in_or_of_statement(&self, kind: Kind, await_modifier: Option<P<Node>>, initializer: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
-        self.new_node(kind, NodeData::ForInOrOfStatement(alloc(ForInOrOfStatement {
+        self.new_node(kind, ForInOrOfStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -8551,7 +9514,7 @@ impl NodeFactory {
             initializer: initializer,
             expression: expression,
             statement: statement,
-        })))
+        })
     }
 
     pub fn update_for_in_or_of_statement(&self, node: P<Node>, await_modifier: Option<P<Node>>, initializer: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
@@ -8563,12 +9526,12 @@ impl NodeFactory {
     }
 
     pub fn new_break_statement(&self, label: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::BreakStatement, NodeData::BreakStatement(alloc(BreakStatement {
+        self.new_node(Kind::BreakStatement, BreakStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             label: label,
-        })))
+        })
     }
 
     pub fn update_break_statement(&self, node: P<Node>, label: Option<P<Node>>) -> P<Node> {
@@ -8580,12 +9543,12 @@ impl NodeFactory {
     }
 
     pub fn new_continue_statement(&self, label: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::ContinueStatement, NodeData::ContinueStatement(alloc(ContinueStatement {
+        self.new_node(Kind::ContinueStatement, ContinueStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             label: label,
-        })))
+        })
     }
 
     pub fn update_continue_statement(&self, node: P<Node>, label: Option<P<Node>>) -> P<Node> {
@@ -8597,12 +9560,12 @@ impl NodeFactory {
     }
 
     pub fn new_return_statement(&self, expression: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::ReturnStatement, NodeData::ReturnStatement(alloc(ReturnStatement {
+        self.new_node(Kind::ReturnStatement, ReturnStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             expression: OwnedCell::new(expression),
-        })))
+        })
     }
 
     pub fn update_return_statement(&self, node: P<Node>, expression: Option<P<Node>>) -> P<Node> {
@@ -8614,13 +9577,13 @@ impl NodeFactory {
     }
 
     pub fn new_with_statement(&self, expression: P<Node>, statement: P<Node>) -> P<Node> {
-        self.new_node(Kind::WithStatement, NodeData::WithStatement(alloc(WithStatement {
+        self.new_node(Kind::WithStatement, WithStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             expression: expression,
             statement: statement,
-        })))
+        })
     }
 
     pub fn update_with_statement(&self, node: P<Node>, expression: P<Node>, statement: P<Node>) -> P<Node> {
@@ -8632,13 +9595,13 @@ impl NodeFactory {
     }
 
     pub fn new_switch_statement(&self, expression: P<Node>, case_block: P<Node>) -> P<Node> {
-        self.new_node(Kind::SwitchStatement, NodeData::SwitchStatement(alloc(SwitchStatement {
+        self.new_node(Kind::SwitchStatement, SwitchStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             expression: expression,
             case_block: case_block,
-        })))
+        })
     }
 
     pub fn update_switch_statement(&self, node: P<Node>, expression: P<Node>, case_block: P<Node>) -> P<Node> {
@@ -8650,13 +9613,13 @@ impl NodeFactory {
     }
 
     pub fn new_case_block(&self, clauses: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::CaseBlock, NodeData::CaseBlock(alloc(CaseBlock {
+        self.new_node(Kind::CaseBlock, CaseBlock {
             locals_container_base: LocalsContainerBase {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
             clauses: clauses,
-        })))
+        })
     }
 
     pub fn update_case_block(&self, node: P<Node>, clauses: P<NodeList>) -> P<Node> {
@@ -8668,11 +9631,11 @@ impl NodeFactory {
     }
 
     pub fn new_case_or_default_clause(&self, kind: Kind, expression: Option<P<Node>>, statements: P<NodeList>) -> P<Node> {
-        self.new_node(kind, NodeData::CaseOrDefaultClause(alloc(CaseOrDefaultClause {
+        self.new_node(kind, CaseOrDefaultClause {
             expression: expression,
             statements: statements,
             fallthrough_flow_node: OwnedCell::new(None),
-        })))
+        })
     }
 
     pub fn update_case_or_default_clause(&self, node: P<Node>, expression: Option<P<Node>>, statements: P<NodeList>) -> P<Node> {
@@ -8684,12 +9647,12 @@ impl NodeFactory {
     }
 
     pub fn new_throw_statement(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::ThrowStatement, NodeData::ThrowStatement(alloc(ThrowStatement {
+        self.new_node(Kind::ThrowStatement, ThrowStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_throw_statement(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -8701,14 +9664,14 @@ impl NodeFactory {
     }
 
     pub fn new_try_statement(&self, try_block: P<Node>, catch_clause: Option<P<Node>>, finally_block: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::TryStatement, NodeData::TryStatement(alloc(TryStatement {
+        self.new_node(Kind::TryStatement, TryStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             try_block: try_block,
             catch_clause: catch_clause,
             finally_block: finally_block,
-        })))
+        })
     }
 
     pub fn update_try_statement(&self, node: P<Node>, try_block: P<Node>, catch_clause: Option<P<Node>>, finally_block: Option<P<Node>>) -> P<Node> {
@@ -8720,14 +9683,14 @@ impl NodeFactory {
     }
 
     pub fn new_catch_clause(&self, variable_declaration: Option<P<Node>>, block: P<Node>) -> P<Node> {
-        self.new_node(Kind::CatchClause, NodeData::CatchClause(alloc(CatchClause {
+        self.new_node(Kind::CatchClause, CatchClause {
             locals_container_base: LocalsContainerBase {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
             variable_declaration: variable_declaration,
             block: block,
-        })))
+        })
     }
 
     pub fn update_catch_clause(&self, node: P<Node>, variable_declaration: Option<P<Node>>, block: P<Node>) -> P<Node> {
@@ -8739,21 +9702,21 @@ impl NodeFactory {
     }
 
     pub fn new_debugger_statement(&self) -> P<Node> {
-        self.new_node(Kind::DebuggerStatement, NodeData::DebuggerStatement(alloc(DebuggerStatement {
+        self.new_node(Kind::DebuggerStatement, DebuggerStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn new_labeled_statement(&self, label: P<Node>, statement: P<Node>) -> P<Node> {
-        self.new_node(Kind::LabeledStatement, NodeData::LabeledStatement(alloc(LabeledStatement {
+        self.new_node(Kind::LabeledStatement, LabeledStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             label: label,
             statement: statement,
-        })))
+        })
     }
 
     pub fn update_labeled_statement(&self, node: P<Node>, label: P<Node>, statement: P<Node>) -> P<Node> {
@@ -8765,12 +9728,12 @@ impl NodeFactory {
     }
 
     pub fn new_expression_statement(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::ExpressionStatement, NodeData::ExpressionStatement(alloc(ExpressionStatement {
+        self.new_node(Kind::ExpressionStatement, ExpressionStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_expression_statement(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -8782,7 +9745,7 @@ impl NodeFactory {
     }
 
     pub fn new_block(&self, statements: P<NodeList>, multi_line: bool) -> P<Node> {
-        self.new_node(Kind::Block, NodeData::Block(alloc(Block {
+        self.new_node(Kind::Block, Block {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -8792,7 +9755,7 @@ impl NodeFactory {
             },
             statements: statements,
             multi_line: multi_line,
-        })))
+        })
     }
 
     pub fn update_block(&self, node: P<Node>, statements: P<NodeList>, multi_line: bool) -> P<Node> {
@@ -8804,7 +9767,7 @@ impl NodeFactory {
     }
 
     pub fn new_variable_statement(&self, modifiers: Option<P<ModifierList>>, declaration_list: P<Node>) -> P<Node> {
-        self.new_node(Kind::VariableStatement, NodeData::VariableStatement(alloc(VariableStatement {
+        self.new_node(Kind::VariableStatement, VariableStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -8812,7 +9775,7 @@ impl NodeFactory {
                 modifiers: OwnedCell::new(modifiers),
             },
             declaration_list: declaration_list,
-        })))
+        })
     }
 
     pub fn update_variable_statement(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, declaration_list: P<Node>) -> P<Node> {
@@ -8824,7 +9787,7 @@ impl NodeFactory {
     }
 
     pub fn new_variable_declaration(&self, name: P<Node>, exclamation_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::VariableDeclaration, NodeData::VariableDeclaration(alloc(VariableDeclaration {
+        self.new_node(Kind::VariableDeclaration, VariableDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -8835,7 +9798,7 @@ impl NodeFactory {
             exclamation_token: exclamation_token,
             type_: OwnedCell::new(type_node),
             initializer: OwnedCell::new(initializer),
-        })))
+        })
     }
 
     pub fn update_variable_declaration(&self, node: P<Node>, name: P<Node>, exclamation_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
@@ -8847,9 +9810,9 @@ impl NodeFactory {
     }
 
     pub fn new_variable_declaration_list(&self, declarations: P<NodeList>, flags: NodeFlags) -> P<Node> {
-        let node = self.new_node(Kind::VariableDeclarationList, NodeData::VariableDeclarationList(alloc(VariableDeclarationList {
+        let node = self.new_node(Kind::VariableDeclarationList, VariableDeclarationList {
             declarations: declarations,
-        })));
+        });
         node.flags.set(flags);
         node
     }
@@ -8863,9 +9826,9 @@ impl NodeFactory {
     }
 
     pub fn new_binding_pattern(&self, kind: Kind, elements: P<NodeList>) -> P<Node> {
-        self.new_node(kind, NodeData::BindingPattern(alloc(BindingPattern {
+        self.new_node(kind, BindingPattern {
             elements: elements,
-        })))
+        })
     }
 
     pub fn update_binding_pattern(&self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
@@ -8877,7 +9840,7 @@ impl NodeFactory {
     }
 
     pub fn new_parameter_declaration(&self, modifiers: Option<P<ModifierList>>, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::Parameter, NodeData::ParameterDeclaration(alloc(ParameterDeclaration {
+        self.new_node(Kind::Parameter, ParameterDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -8889,7 +9852,7 @@ impl NodeFactory {
             question_token: OwnedCell::new(question_token),
             type_: OwnedCell::new(type_node),
             initializer: initializer,
-        })))
+        })
     }
 
     pub fn update_parameter_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
@@ -8901,7 +9864,7 @@ impl NodeFactory {
     }
 
     pub fn new_binding_element(&self, dot_dot_dot_token: Option<P<Node>>, property_name: Option<P<Node>>, name: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::BindingElement, NodeData::BindingElement(alloc(BindingElement {
+        self.new_node(Kind::BindingElement, BindingElement {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -8915,7 +9878,7 @@ impl NodeFactory {
             property_name: property_name,
             name: name,
             initializer: initializer,
-        })))
+        })
     }
 
     pub fn update_binding_element(&self, node: P<Node>, dot_dot_dot_token: Option<P<Node>>, property_name: Option<P<Node>>, name: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
@@ -8927,7 +9890,7 @@ impl NodeFactory {
     }
 
     pub fn new_missing_declaration(&self, modifiers: Option<P<ModifierList>>) -> P<Node> {
-        self.new_node(Kind::MissingDeclaration, NodeData::MissingDeclaration(alloc(MissingDeclaration {
+        self.new_node(Kind::MissingDeclaration, MissingDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -8937,7 +9900,7 @@ impl NodeFactory {
             modifiers_base: ModifiersBase {
                 modifiers: OwnedCell::new(modifiers),
             },
-        })))
+        })
     }
 
     pub fn update_missing_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>) -> P<Node> {
@@ -8949,7 +9912,7 @@ impl NodeFactory {
     }
 
     pub fn new_function_declaration(&self, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::FunctionDeclaration, NodeData::FunctionDeclaration(alloc(FunctionDeclaration {
+        self.new_node(Kind::FunctionDeclaration, FunctionDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -8979,7 +9942,7 @@ impl NodeFactory {
             },
             name: name,
             return_flow_node: OwnedCell::new(None),
-        })))
+        })
     }
 
     pub fn update_function_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
@@ -8991,7 +9954,7 @@ impl NodeFactory {
     }
 
     pub fn new_class_declaration(&self, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::ClassDeclaration, NodeData::ClassDeclaration(alloc(ClassDeclaration {
+        self.new_node(Kind::ClassDeclaration, ClassDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -9014,7 +9977,7 @@ impl NodeFactory {
                 heritage_clauses: OwnedCell::new(heritage_clauses),
                 members: members,
             },
-        })))
+        })
     }
 
     pub fn update_class_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
@@ -9026,7 +9989,7 @@ impl NodeFactory {
     }
 
     pub fn new_class_expression(&self, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::ClassExpression, NodeData::ClassExpression(alloc(ClassExpression {
+        self.new_node(Kind::ClassExpression, ClassExpression {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9046,7 +10009,7 @@ impl NodeFactory {
                 heritage_clauses: OwnedCell::new(heritage_clauses),
                 members: members,
             },
-        })))
+        })
     }
 
     pub fn update_class_expression(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
@@ -9058,10 +10021,10 @@ impl NodeFactory {
     }
 
     pub fn new_heritage_clause(&self, token: Kind, types: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::HeritageClause, NodeData::HeritageClause(alloc(HeritageClause {
+        self.new_node(Kind::HeritageClause, HeritageClause {
             token: token,
             types: OwnedCell::new(types),
-        })))
+        })
     }
 
     pub fn update_heritage_clause(&self, node: P<Node>, token: Kind, types: P<NodeList>) -> P<Node> {
@@ -9073,7 +10036,7 @@ impl NodeFactory {
     }
 
     pub fn new_interface_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::InterfaceDeclaration, NodeData::InterfaceDeclaration(alloc(InterfaceDeclaration {
+        self.new_node(Kind::InterfaceDeclaration, InterfaceDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -9090,7 +10053,7 @@ impl NodeFactory {
             type_parameters: type_parameters,
             heritage_clauses: heritage_clauses,
             members: members,
-        })))
+        })
     }
 
     pub fn update_interface_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, heritage_clauses: Option<P<NodeList>>, members: P<NodeList>) -> P<Node> {
@@ -9102,7 +10065,7 @@ impl NodeFactory {
     }
 
     pub fn new_type_alias_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::TypeAliasDeclaration, NodeData::TypeAliasDeclaration(alloc(TypeAliasDeclaration {
+        self.new_node(Kind::TypeAliasDeclaration, TypeAliasDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -9122,11 +10085,11 @@ impl NodeFactory {
             name: name,
             type_parameters: OwnedCell::new(type_parameters),
             type_: OwnedCell::new(type_node),
-        })))
+        })
     }
 
     pub fn new_js_type_alias_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::JSTypeAliasDeclaration, NodeData::TypeAliasDeclaration(alloc(TypeAliasDeclaration {
+        self.new_node(Kind::JSTypeAliasDeclaration, TypeAliasDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -9146,7 +10109,7 @@ impl NodeFactory {
             name: name,
             type_parameters: OwnedCell::new(type_parameters),
             type_: OwnedCell::new(type_node),
-        })))
+        })
     }
 
     pub fn update_type_alias_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
@@ -9163,7 +10126,7 @@ impl NodeFactory {
     }
 
     pub fn new_enum_member(&self, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::EnumMember, NodeData::EnumMember(alloc(EnumMember {
+        self.new_node(Kind::EnumMember, EnumMember {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9175,7 +10138,7 @@ impl NodeFactory {
                 postfix_token: None,
             },
             initializer: initializer,
-        })))
+        })
     }
 
     pub fn update_enum_member(&self, node: P<Node>, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
@@ -9187,7 +10150,7 @@ impl NodeFactory {
     }
 
     pub fn new_enum_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, members: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::EnumDeclaration, NodeData::EnumDeclaration(alloc(EnumDeclaration {
+        self.new_node(Kind::EnumDeclaration, EnumDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -9202,7 +10165,7 @@ impl NodeFactory {
             },
             name: name,
             members: members,
-        })))
+        })
     }
 
     pub fn update_enum_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, members: P<NodeList>) -> P<Node> {
@@ -9214,12 +10177,12 @@ impl NodeFactory {
     }
 
     pub fn new_module_block(&self, statements: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::ModuleBlock, NodeData::ModuleBlock(alloc(ModuleBlock {
+        self.new_node(Kind::ModuleBlock, ModuleBlock {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             statements: statements,
-        })))
+        })
     }
 
     pub fn update_module_block(&self, node: P<Node>, statements: P<NodeList>) -> P<Node> {
@@ -9231,23 +10194,23 @@ impl NodeFactory {
     }
 
     pub fn new_not_emitted_statement(&self) -> P<Node> {
-        self.new_node(Kind::NotEmittedStatement, NodeData::NotEmittedStatement(alloc(NotEmittedStatement {
+        self.new_node(Kind::NotEmittedStatement, NotEmittedStatement {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn new_not_emitted_type_element(&self) -> P<Node> {
-        self.new_node(Kind::NotEmittedTypeElement, NodeData::NotEmittedTypeElement(alloc(NotEmittedTypeElement {
+        self.new_node(Kind::NotEmittedTypeElement, NotEmittedTypeElement {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn new_import_declaration(&self, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::ImportDeclaration, NodeData::ImportDeclaration(alloc(ImportDeclaration {
+        self.new_node(Kind::ImportDeclaration, ImportDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -9260,11 +10223,11 @@ impl NodeFactory {
             import_clause: import_clause,
             module_specifier: module_specifier,
             attributes: attributes,
-        })))
+        })
     }
 
     pub fn new_js_import_declaration(&self, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::JSImportDeclaration, NodeData::ImportDeclaration(alloc(ImportDeclaration {
+        self.new_node(Kind::JSImportDeclaration, ImportDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -9277,7 +10240,7 @@ impl NodeFactory {
             import_clause: import_clause,
             module_specifier: module_specifier,
             attributes: attributes,
-        })))
+        })
     }
 
     pub fn update_import_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
@@ -9294,9 +10257,9 @@ impl NodeFactory {
     }
 
     pub fn new_external_module_reference(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::ExternalModuleReference, NodeData::ExternalModuleReference(alloc(ExternalModuleReference {
+        self.new_node(Kind::ExternalModuleReference, ExternalModuleReference {
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_external_module_reference(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -9308,7 +10271,7 @@ impl NodeFactory {
     }
 
     pub fn new_namespace_import(&self, name: P<Node>) -> P<Node> {
-        self.new_node(Kind::NamespaceImport, NodeData::NamespaceImport(alloc(NamespaceImport {
+        self.new_node(Kind::NamespaceImport, NamespaceImport {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9316,7 +10279,7 @@ impl NodeFactory {
                 local_symbol: OwnedCell::new(None),
             },
             name: name,
-        })))
+        })
     }
 
     pub fn update_namespace_import(&self, node: P<Node>, name: P<Node>) -> P<Node> {
@@ -9328,9 +10291,9 @@ impl NodeFactory {
     }
 
     pub fn new_named_imports(&self, elements: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::NamedImports, NodeData::NamedImports(alloc(NamedImports {
+        self.new_node(Kind::NamedImports, NamedImports {
             elements: elements,
-        })))
+        })
     }
 
     pub fn update_named_imports(&self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
@@ -9342,7 +10305,7 @@ impl NodeFactory {
     }
 
     pub fn new_export_assignment(&self, modifiers: Option<P<ModifierList>>, is_export_equals: bool, type_node: Option<P<Node>>, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::ExportAssignment, NodeData::ExportAssignment(alloc(ExportAssignment {
+        self.new_node(Kind::ExportAssignment, ExportAssignment {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -9355,7 +10318,7 @@ impl NodeFactory {
             is_export_equals: is_export_equals,
             type_: OwnedCell::new(type_node),
             expression: OwnedCell::new(expression),
-        })))
+        })
     }
 
     pub fn update_export_assignment(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, is_export_equals: bool, type_node: Option<P<Node>>, expression: P<Node>) -> P<Node> {
@@ -9367,7 +10330,7 @@ impl NodeFactory {
     }
 
     pub fn new_namespace_export_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>) -> P<Node> {
-        self.new_node(Kind::NamespaceExportDeclaration, NodeData::NamespaceExportDeclaration(alloc(NamespaceExportDeclaration {
+        self.new_node(Kind::NamespaceExportDeclaration, NamespaceExportDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -9378,7 +10341,7 @@ impl NodeFactory {
                 modifiers: OwnedCell::new(modifiers),
             },
             name: name,
-        })))
+        })
     }
 
     pub fn update_namespace_export_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>) -> P<Node> {
@@ -9390,12 +10353,12 @@ impl NodeFactory {
     }
 
     pub fn new_namespace_export(&self, name: P<Node>) -> P<Node> {
-        self.new_node(Kind::NamespaceExport, NodeData::NamespaceExport(alloc(NamespaceExport {
+        self.new_node(Kind::NamespaceExport, NamespaceExport {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
             name: name,
-        })))
+        })
     }
 
     pub fn update_namespace_export(&self, node: P<Node>, name: P<Node>) -> P<Node> {
@@ -9407,9 +10370,9 @@ impl NodeFactory {
     }
 
     pub fn new_named_exports(&self, elements: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::NamedExports, NodeData::NamedExports(alloc(NamedExports {
+        self.new_node(Kind::NamedExports, NamedExports {
             elements: elements,
-        })))
+        })
     }
 
     pub fn update_named_exports(&self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
@@ -9421,7 +10384,7 @@ impl NodeFactory {
     }
 
     pub fn new_export_specifier(&self, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
-        self.new_node(Kind::ExportSpecifier, NodeData::ExportSpecifier(alloc(ExportSpecifier {
+        self.new_node(Kind::ExportSpecifier, ExportSpecifier {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9431,7 +10394,7 @@ impl NodeFactory {
             is_type_only: is_type_only,
             property_name: property_name,
             name: name,
-        })))
+        })
     }
 
     pub fn update_export_specifier(&self, node: P<Node>, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
@@ -9443,7 +10406,7 @@ impl NodeFactory {
     }
 
     pub fn new_call_signature_declaration(&self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::CallSignature, NodeData::CallSignatureDeclaration(alloc(CallSignatureDeclaration {
+        self.new_node(Kind::CallSignature, CallSignatureDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9457,7 +10420,7 @@ impl NodeFactory {
                 type_: OwnedCell::new(type_node),
                 full_signature: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn update_call_signature_declaration(&self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
@@ -9469,7 +10432,7 @@ impl NodeFactory {
     }
 
     pub fn new_construct_signature_declaration(&self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::ConstructSignature, NodeData::ConstructSignatureDeclaration(alloc(ConstructSignatureDeclaration {
+        self.new_node(Kind::ConstructSignature, ConstructSignatureDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9483,7 +10446,7 @@ impl NodeFactory {
                 type_: OwnedCell::new(type_node),
                 full_signature: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn update_construct_signature_declaration(&self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
@@ -9495,7 +10458,7 @@ impl NodeFactory {
     }
 
     pub fn new_constructor_declaration(&self, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::Constructor, NodeData::ConstructorDeclaration(alloc(ConstructorDeclaration {
+        self.new_node(Kind::Constructor, ConstructorDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9518,7 +10481,7 @@ impl NodeFactory {
                 end_flow_node: OwnedCell::new(None),
             },
             return_flow_node: OwnedCell::new(None),
-        })))
+        })
     }
 
     pub fn update_constructor_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
@@ -9530,7 +10493,7 @@ impl NodeFactory {
     }
 
     pub fn new_get_accessor_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::GetAccessor, NodeData::GetAccessorDeclaration(alloc(GetAccessorDeclaration {
+        self.new_node(Kind::GetAccessor, GetAccessorDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9559,7 +10522,7 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn update_get_accessor_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
@@ -9571,7 +10534,7 @@ impl NodeFactory {
     }
 
     pub fn new_set_accessor_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::SetAccessor, NodeData::SetAccessorDeclaration(alloc(SetAccessorDeclaration {
+        self.new_node(Kind::SetAccessor, SetAccessorDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9600,7 +10563,7 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn update_set_accessor_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
@@ -9612,7 +10575,7 @@ impl NodeFactory {
     }
 
     pub fn new_index_signature_declaration(&self, modifiers: Option<P<ModifierList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::IndexSignature, NodeData::IndexSignatureDeclaration(alloc(IndexSignatureDeclaration {
+        self.new_node(Kind::IndexSignature, IndexSignatureDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9629,7 +10592,7 @@ impl NodeFactory {
                 type_: OwnedCell::new(type_node),
                 full_signature: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn update_index_signature_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
@@ -9641,7 +10604,7 @@ impl NodeFactory {
     }
 
     pub fn new_method_signature_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::MethodSignature, NodeData::MethodSignatureDeclaration(alloc(MethodSignatureDeclaration {
+        self.new_node(Kind::MethodSignature, MethodSignatureDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9662,7 +10625,7 @@ impl NodeFactory {
                 type_: OwnedCell::new(type_node),
                 full_signature: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn update_method_signature_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
@@ -9674,7 +10637,7 @@ impl NodeFactory {
     }
 
     pub fn new_method_declaration(&self, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::MethodDeclaration, NodeData::MethodDeclaration(alloc(MethodDeclaration {
+        self.new_node(Kind::MethodDeclaration, MethodDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9703,7 +10666,7 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn update_method_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: P<Node>, postfix_token: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
@@ -9715,7 +10678,7 @@ impl NodeFactory {
     }
 
     pub fn new_property_signature_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::PropertySignature, NodeData::PropertySignatureDeclaration(alloc(PropertySignatureDeclaration {
+        self.new_node(Kind::PropertySignature, PropertySignatureDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9728,7 +10691,7 @@ impl NodeFactory {
             },
             type_: OwnedCell::new(type_node),
             initializer: initializer,
-        })))
+        })
     }
 
     pub fn update_property_signature_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
@@ -9740,7 +10703,7 @@ impl NodeFactory {
     }
 
     pub fn new_property_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::PropertyDeclaration, NodeData::PropertyDeclaration(alloc(PropertyDeclaration {
+        self.new_node(Kind::PropertyDeclaration, PropertyDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9753,7 +10716,7 @@ impl NodeFactory {
             },
             type_: OwnedCell::new(type_node),
             initializer: OwnedCell::new(initializer),
-        })))
+        })
     }
 
     pub fn update_property_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
@@ -9765,15 +10728,15 @@ impl NodeFactory {
     }
 
     pub fn new_semicolon_class_element(&self) -> P<Node> {
-        self.new_node(Kind::SemicolonClassElement, NodeData::SemicolonClassElement(alloc(SemicolonClassElement {
+        self.new_node(Kind::SemicolonClassElement, SemicolonClassElement {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn new_class_static_block_declaration(&self, modifiers: Option<P<ModifierList>>, body: P<Node>) -> P<Node> {
-        self.new_node(Kind::ClassStaticBlockDeclaration, NodeData::ClassStaticBlockDeclaration(alloc(ClassStaticBlockDeclaration {
+        self.new_node(Kind::ClassStaticBlockDeclaration, ClassStaticBlockDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9786,7 +10749,7 @@ impl NodeFactory {
             },
             body: body,
             return_flow_node: OwnedCell::new(None),
-        })))
+        })
     }
 
     pub fn update_class_static_block_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, body: P<Node>) -> P<Node> {
@@ -9798,60 +10761,60 @@ impl NodeFactory {
     }
 
     pub fn new_omitted_expression(&self) -> P<Node> {
-        self.new_node(Kind::OmittedExpression, NodeData::OmittedExpression)
+        self.new_empty_node(Kind::OmittedExpression, NodeDataTag::OmittedExpression)
     }
 
     pub fn new_keyword_expression(&self, kind: Kind) -> P<Node> {
-        self.new_node(kind, NodeData::KeywordExpression(alloc(KeywordExpression {
+        self.new_node(kind, KeywordExpression {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn new_string_literal(&self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::StringLiteral, NodeData::StringLiteral(alloc(StringLiteral {
+        self.new_node(Kind::StringLiteral, StringLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
                 token_flags: OwnedCell::new(token_flags & TokenFlags::StringLiteralFlags),
             },
-        })))
+        })
     }
 
     pub fn new_numeric_literal(&self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::NumericLiteral, NodeData::NumericLiteral(alloc(NumericLiteral {
+        self.new_node(Kind::NumericLiteral, NumericLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
                 token_flags: OwnedCell::new(token_flags & TokenFlags::NumericLiteralFlags),
             },
-        })))
+        })
     }
 
     pub fn new_big_int_literal(&self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::BigIntLiteral, NodeData::BigIntLiteral(alloc(BigIntLiteral {
+        self.new_node(Kind::BigIntLiteral, BigIntLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
                 token_flags: OwnedCell::new(token_flags & TokenFlags::NumericLiteralFlags),
             },
-        })))
+        })
     }
 
     pub fn new_regular_expression_literal(&self, text: &'static str, token_flags: TokenFlags) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::RegularExpressionLiteral, NodeData::RegularExpressionLiteral(alloc(RegularExpressionLiteral {
+        self.new_node(Kind::RegularExpressionLiteral, RegularExpressionLiteral {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
                 token_flags: OwnedCell::new(token_flags & TokenFlags::RegularExpressionLiteralFlags),
             },
-        })))
+        })
     }
 
     pub fn new_no_substitution_template_literal(&self, text: &'static str, template_flags: TokenFlags) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::NoSubstitutionTemplateLiteral, NodeData::NoSubstitutionTemplateLiteral(alloc(NoSubstitutionTemplateLiteral {
+        self.new_node(Kind::NoSubstitutionTemplateLiteral, NoSubstitutionTemplateLiteral {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
                     text: text,
@@ -9863,11 +10826,11 @@ impl NodeFactory {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn new_binary_expression(&self, modifiers: Option<P<ModifierList>>, left: P<Node>, type_node: Option<P<Node>>, operator_token: P<Node>, right: P<Node>) -> P<Node> {
-        self.new_node(Kind::BinaryExpression, NodeData::BinaryExpression(alloc(BinaryExpression {
+        self.new_node(Kind::BinaryExpression, BinaryExpression {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9878,7 +10841,7 @@ impl NodeFactory {
             type_: OwnedCell::new(type_node),
             operator_token: operator_token,
             right: OwnedCell::new(right),
-        })))
+        })
     }
 
     pub fn update_binary_expression(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, left: P<Node>, type_node: Option<P<Node>>, operator_token: P<Node>, right: P<Node>) -> P<Node> {
@@ -9890,10 +10853,10 @@ impl NodeFactory {
     }
 
     pub fn new_prefix_unary_expression(&self, operator: Kind, operand: P<Node>) -> P<Node> {
-        self.new_node(Kind::PrefixUnaryExpression, NodeData::PrefixUnaryExpression(alloc(PrefixUnaryExpression {
+        self.new_node(Kind::PrefixUnaryExpression, PrefixUnaryExpression {
             operator: operator,
             operand: operand,
-        })))
+        })
     }
 
     pub fn update_prefix_unary_expression(&self, node: P<Node>, operator: Kind, operand: P<Node>) -> P<Node> {
@@ -9905,10 +10868,10 @@ impl NodeFactory {
     }
 
     pub fn new_postfix_unary_expression(&self, operand: P<Node>, operator: Kind) -> P<Node> {
-        self.new_node(Kind::PostfixUnaryExpression, NodeData::PostfixUnaryExpression(alloc(PostfixUnaryExpression {
+        self.new_node(Kind::PostfixUnaryExpression, PostfixUnaryExpression {
             operand: operand,
             operator: operator,
-        })))
+        })
     }
 
     pub fn update_postfix_unary_expression(&self, node: P<Node>, operand: P<Node>, operator: Kind) -> P<Node> {
@@ -9920,10 +10883,10 @@ impl NodeFactory {
     }
 
     pub fn new_yield_expression(&self, asterisk_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::YieldExpression, NodeData::YieldExpression(alloc(YieldExpression {
+        self.new_node(Kind::YieldExpression, YieldExpression {
             asterisk_token: asterisk_token,
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_yield_expression(&self, node: P<Node>, asterisk_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
@@ -9935,7 +10898,7 @@ impl NodeFactory {
     }
 
     pub fn new_arrow_function(&self, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, equals_greater_than_token: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::ArrowFunction, NodeData::ArrowFunction(alloc(ArrowFunction {
+        self.new_node(Kind::ArrowFunction, ArrowFunction {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -9961,7 +10924,7 @@ impl NodeFactory {
                 flow_node: OwnedCell::new(None),
             },
             equals_greater_than_token: equals_greater_than_token,
-        })))
+        })
     }
 
     pub fn update_arrow_function(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, equals_greater_than_token: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
@@ -9973,7 +10936,7 @@ impl NodeFactory {
     }
 
     pub fn new_function_expression(&self, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::FunctionExpression, NodeData::FunctionExpression(alloc(FunctionExpression {
+        self.new_node(Kind::FunctionExpression, FunctionExpression {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -10000,7 +10963,7 @@ impl NodeFactory {
             },
             name: name,
             return_flow_node: OwnedCell::new(None),
-        })))
+        })
     }
 
     pub fn update_function_expression(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, name: Option<P<Node>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>, full_signature: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
@@ -10012,10 +10975,10 @@ impl NodeFactory {
     }
 
     pub fn new_as_expression(&self, expression: P<Node>, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::AsExpression, NodeData::AsExpression(alloc(AsExpression {
+        self.new_node(Kind::AsExpression, AsExpression {
             expression: expression,
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_as_expression(&self, node: P<Node>, expression: P<Node>, type_node: P<Node>) -> P<Node> {
@@ -10027,10 +10990,10 @@ impl NodeFactory {
     }
 
     pub fn new_satisfies_expression(&self, expression: P<Node>, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::SatisfiesExpression, NodeData::SatisfiesExpression(alloc(SatisfiesExpression {
+        self.new_node(Kind::SatisfiesExpression, SatisfiesExpression {
             expression: expression,
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_satisfies_expression(&self, node: P<Node>, expression: P<Node>, type_node: P<Node>) -> P<Node> {
@@ -10042,13 +11005,13 @@ impl NodeFactory {
     }
 
     pub fn new_conditional_expression(&self, condition: P<Node>, question_token: P<Node>, when_true: P<Node>, colon_token: P<Node>, when_false: P<Node>) -> P<Node> {
-        self.new_node(Kind::ConditionalExpression, NodeData::ConditionalExpression(alloc(ConditionalExpression {
+        self.new_node(Kind::ConditionalExpression, ConditionalExpression {
             condition: condition,
             question_token: question_token,
             when_true: when_true,
             colon_token: colon_token,
             when_false: when_false,
-        })))
+        })
     }
 
     pub fn update_conditional_expression(&self, node: P<Node>, condition: P<Node>, question_token: P<Node>, when_true: P<Node>, colon_token: P<Node>, when_false: P<Node>) -> P<Node> {
@@ -10060,14 +11023,14 @@ impl NodeFactory {
     }
 
     pub fn new_property_access_expression(&self, expression: P<Node>, question_dot_token: Option<P<Node>>, name: P<Node>, flags: NodeFlags) -> P<Node> {
-        let node = self.new_node(Kind::PropertyAccessExpression, NodeData::PropertyAccessExpression(alloc(PropertyAccessExpression {
+        let node = self.new_node(Kind::PropertyAccessExpression, PropertyAccessExpression {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             expression: expression,
             question_dot_token: question_dot_token,
             name: name,
-        })));
+        });
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
         node
     }
@@ -10081,14 +11044,14 @@ impl NodeFactory {
     }
 
     pub fn new_element_access_expression(&self, expression: P<Node>, question_dot_token: Option<P<Node>>, argument_expression: P<Node>, flags: NodeFlags) -> P<Node> {
-        let node = self.new_node(Kind::ElementAccessExpression, NodeData::ElementAccessExpression(alloc(ElementAccessExpression {
+        let node = self.new_node(Kind::ElementAccessExpression, ElementAccessExpression {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             expression: expression,
             question_dot_token: question_dot_token,
             argument_expression: argument_expression,
-        })));
+        });
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
         node
     }
@@ -10102,7 +11065,7 @@ impl NodeFactory {
     }
 
     pub fn new_call_expression(&self, expression: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, arguments: P<NodeList>, flags: NodeFlags) -> P<Node> {
-        let node = self.new_node(Kind::CallExpression, NodeData::CallExpression(alloc(CallExpression {
+        let node = self.new_node(Kind::CallExpression, CallExpression {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -10110,7 +11073,7 @@ impl NodeFactory {
             question_dot_token: question_dot_token,
             type_arguments: type_arguments,
             arguments: arguments,
-        })));
+        });
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
         node
     }
@@ -10124,11 +11087,11 @@ impl NodeFactory {
     }
 
     pub fn new_new_expression(&self, expression: P<Node>, type_arguments: Option<P<NodeList>>, arguments: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::NewExpression, NodeData::NewExpression(alloc(NewExpression {
+        self.new_node(Kind::NewExpression, NewExpression {
             expression: expression,
             type_arguments: type_arguments,
             arguments: arguments,
-        })))
+        })
     }
 
     pub fn update_new_expression(&self, node: P<Node>, expression: P<Node>, type_arguments: Option<P<NodeList>>, arguments: Option<P<NodeList>>) -> P<Node> {
@@ -10140,13 +11103,13 @@ impl NodeFactory {
     }
 
     pub fn new_meta_property(&self, keyword_token: Kind, name: P<Node>) -> P<Node> {
-        self.new_node(Kind::MetaProperty, NodeData::MetaProperty(alloc(MetaProperty {
+        self.new_node(Kind::MetaProperty, MetaProperty {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
             keyword_token: keyword_token,
             name: name,
-        })))
+        })
     }
 
     pub fn update_meta_property(&self, node: P<Node>, keyword_token: Kind, name: P<Node>) -> P<Node> {
@@ -10158,9 +11121,9 @@ impl NodeFactory {
     }
 
     pub fn new_non_null_expression(&self, expression: P<Node>, flags: NodeFlags) -> P<Node> {
-        let node = self.new_node(Kind::NonNullExpression, NodeData::NonNullExpression(alloc(NonNullExpression {
+        let node = self.new_node(Kind::NonNullExpression, NonNullExpression {
             expression: expression,
-        })));
+        });
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
         node
     }
@@ -10174,9 +11137,9 @@ impl NodeFactory {
     }
 
     pub fn new_spread_element(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::SpreadElement, NodeData::SpreadElement(alloc(SpreadElement {
+        self.new_node(Kind::SpreadElement, SpreadElement {
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_spread_element(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -10188,10 +11151,10 @@ impl NodeFactory {
     }
 
     pub fn new_template_expression(&self, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::TemplateExpression, NodeData::TemplateExpression(alloc(TemplateExpression {
+        self.new_node(Kind::TemplateExpression, TemplateExpression {
             head: head,
             template_spans: template_spans,
-        })))
+        })
     }
 
     pub fn update_template_expression(&self, node: P<Node>, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
@@ -10203,10 +11166,10 @@ impl NodeFactory {
     }
 
     pub fn new_template_span(&self, expression: P<Node>, literal: P<Node>) -> P<Node> {
-        self.new_node(Kind::TemplateSpan, NodeData::TemplateSpan(alloc(TemplateSpan {
+        self.new_node(Kind::TemplateSpan, TemplateSpan {
             expression: expression,
             literal: literal,
-        })))
+        })
     }
 
     pub fn update_template_span(&self, node: P<Node>, expression: P<Node>, literal: P<Node>) -> P<Node> {
@@ -10218,12 +11181,12 @@ impl NodeFactory {
     }
 
     pub fn new_tagged_template_expression(&self, tag: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, template: P<Node>, flags: NodeFlags) -> P<Node> {
-        let node = self.new_node(Kind::TaggedTemplateExpression, NodeData::TaggedTemplateExpression(alloc(TaggedTemplateExpression {
+        let node = self.new_node(Kind::TaggedTemplateExpression, TaggedTemplateExpression {
             tag: tag,
             question_dot_token: question_dot_token,
             type_arguments: type_arguments,
             template: template,
-        })));
+        });
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
         node
     }
@@ -10237,9 +11200,9 @@ impl NodeFactory {
     }
 
     pub fn new_parenthesized_expression(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::ParenthesizedExpression, NodeData::ParenthesizedExpression(alloc(ParenthesizedExpression {
+        self.new_node(Kind::ParenthesizedExpression, ParenthesizedExpression {
             expression: OwnedCell::new(expression),
-        })))
+        })
     }
 
     pub fn update_parenthesized_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -10251,10 +11214,10 @@ impl NodeFactory {
     }
 
     pub fn new_array_literal_expression(&self, elements: P<NodeList>, multi_line: bool) -> P<Node> {
-        self.new_node(Kind::ArrayLiteralExpression, NodeData::ArrayLiteralExpression(alloc(ArrayLiteralExpression {
+        self.new_node(Kind::ArrayLiteralExpression, ArrayLiteralExpression {
             elements: elements,
             multi_line: multi_line,
-        })))
+        })
     }
 
     pub fn update_array_literal_expression(&self, node: P<Node>, elements: P<NodeList>, multi_line: bool) -> P<Node> {
@@ -10266,13 +11229,13 @@ impl NodeFactory {
     }
 
     pub fn new_object_literal_expression(&self, properties: P<NodeList>, multi_line: bool) -> P<Node> {
-        self.new_node(Kind::ObjectLiteralExpression, NodeData::ObjectLiteralExpression(alloc(ObjectLiteralExpression {
+        self.new_node(Kind::ObjectLiteralExpression, ObjectLiteralExpression {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
             properties: properties,
             multi_line: multi_line,
-        })))
+        })
     }
 
     pub fn update_object_literal_expression(&self, node: P<Node>, properties: P<NodeList>, multi_line: bool) -> P<Node> {
@@ -10284,12 +11247,12 @@ impl NodeFactory {
     }
 
     pub fn new_spread_assignment(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::SpreadAssignment, NodeData::SpreadAssignment(alloc(SpreadAssignment {
+        self.new_node(Kind::SpreadAssignment, SpreadAssignment {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_spread_assignment(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -10301,7 +11264,7 @@ impl NodeFactory {
     }
 
     pub fn new_property_assignment(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: P<Node>) -> P<Node> {
-        self.new_node(Kind::PropertyAssignment, NodeData::PropertyAssignment(alloc(PropertyAssignment {
+        self.new_node(Kind::PropertyAssignment, PropertyAssignment {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -10314,7 +11277,7 @@ impl NodeFactory {
             },
             type_: OwnedCell::new(type_node),
             initializer: OwnedCell::new(initializer),
-        })))
+        })
     }
 
     pub fn update_property_assignment(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: P<Node>) -> P<Node> {
@@ -10326,7 +11289,7 @@ impl NodeFactory {
     }
 
     pub fn new_shorthand_property_assignment(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, equals_token: Option<P<Node>>, object_assignment_initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::ShorthandPropertyAssignment, NodeData::ShorthandPropertyAssignment(alloc(ShorthandPropertyAssignment {
+        self.new_node(Kind::ShorthandPropertyAssignment, ShorthandPropertyAssignment {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -10340,7 +11303,7 @@ impl NodeFactory {
             type_: OwnedCell::new(type_node),
             equals_token: equals_token,
             object_assignment_initializer: OwnedCell::new(object_assignment_initializer),
-        })))
+        })
     }
 
     pub fn update_shorthand_property_assignment(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, equals_token: Option<P<Node>>, object_assignment_initializer: Option<P<Node>>) -> P<Node> {
@@ -10352,9 +11315,9 @@ impl NodeFactory {
     }
 
     pub fn new_delete_expression(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::DeleteExpression, NodeData::DeleteExpression(alloc(DeleteExpression {
+        self.new_node(Kind::DeleteExpression, DeleteExpression {
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_delete_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -10366,9 +11329,9 @@ impl NodeFactory {
     }
 
     pub fn new_type_of_expression(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::TypeOfExpression, NodeData::TypeOfExpression(alloc(TypeOfExpression {
+        self.new_node(Kind::TypeOfExpression, TypeOfExpression {
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_type_of_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -10380,9 +11343,9 @@ impl NodeFactory {
     }
 
     pub fn new_void_expression(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::VoidExpression, NodeData::VoidExpression(alloc(VoidExpression {
+        self.new_node(Kind::VoidExpression, VoidExpression {
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_void_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -10394,9 +11357,9 @@ impl NodeFactory {
     }
 
     pub fn new_await_expression(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::AwaitExpression, NodeData::AwaitExpression(alloc(AwaitExpression {
+        self.new_node(Kind::AwaitExpression, AwaitExpression {
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_await_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -10408,10 +11371,10 @@ impl NodeFactory {
     }
 
     pub fn new_type_assertion(&self, type_node: P<Node>, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::TypeAssertionExpression, NodeData::TypeAssertion(alloc(TypeAssertion {
+        self.new_node(Kind::TypeAssertionExpression, TypeAssertion {
             type_: type_node,
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_type_assertion(&self, node: P<Node>, type_node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -10423,15 +11386,15 @@ impl NodeFactory {
     }
 
     pub fn new_keyword_type_node(&self, kind: Kind) -> P<Node> {
-        self.new_node(kind, NodeData::KeywordTypeNode)
+        self.new_empty_node(kind, NodeDataTag::KeywordTypeNode)
     }
 
     pub fn new_union_type_node(&self, types: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::UnionType, NodeData::UnionTypeNode(alloc(UnionTypeNode {
+        self.new_node(Kind::UnionType, UnionTypeNode {
             union_or_intersection_type_node_base: UnionOrIntersectionTypeNodeBase {
                 types: types,
             },
-        })))
+        })
     }
 
     pub fn update_union_type_node(&self, node: P<Node>, types: P<NodeList>) -> P<Node> {
@@ -10443,11 +11406,11 @@ impl NodeFactory {
     }
 
     pub fn new_intersection_type_node(&self, types: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::IntersectionType, NodeData::IntersectionTypeNode(alloc(IntersectionTypeNode {
+        self.new_node(Kind::IntersectionType, IntersectionTypeNode {
             union_or_intersection_type_node_base: UnionOrIntersectionTypeNodeBase {
                 types: types,
             },
-        })))
+        })
     }
 
     pub fn update_intersection_type_node(&self, node: P<Node>, types: P<NodeList>) -> P<Node> {
@@ -10459,7 +11422,7 @@ impl NodeFactory {
     }
 
     pub fn new_conditional_type_node(&self, check_type: P<Node>, extends_type: P<Node>, true_type: P<Node>, false_type: P<Node>) -> P<Node> {
-        self.new_node(Kind::ConditionalType, NodeData::ConditionalTypeNode(alloc(ConditionalTypeNode {
+        self.new_node(Kind::ConditionalType, ConditionalTypeNode {
             locals_container_base: LocalsContainerBase {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
@@ -10468,7 +11431,7 @@ impl NodeFactory {
             extends_type: extends_type,
             true_type: true_type,
             false_type: false_type,
-        })))
+        })
     }
 
     pub fn update_conditional_type_node(&self, node: P<Node>, check_type: P<Node>, extends_type: P<Node>, true_type: P<Node>, false_type: P<Node>) -> P<Node> {
@@ -10480,10 +11443,10 @@ impl NodeFactory {
     }
 
     pub fn new_type_operator_node(&self, operator: Kind, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::TypeOperator, NodeData::TypeOperatorNode(alloc(TypeOperatorNode {
+        self.new_node(Kind::TypeOperator, TypeOperatorNode {
             operator: operator,
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_type_operator_node(&self, node: P<Node>, operator: Kind, type_node: P<Node>) -> P<Node> {
@@ -10495,9 +11458,9 @@ impl NodeFactory {
     }
 
     pub fn new_infer_type_node(&self, type_parameter: P<Node>) -> P<Node> {
-        self.new_node(Kind::InferType, NodeData::InferTypeNode(alloc(InferTypeNode {
+        self.new_node(Kind::InferType, InferTypeNode {
             type_parameter: type_parameter,
-        })))
+        })
     }
 
     pub fn update_infer_type_node(&self, node: P<Node>, type_parameter: P<Node>) -> P<Node> {
@@ -10509,9 +11472,9 @@ impl NodeFactory {
     }
 
     pub fn new_array_type_node(&self, element_type: P<Node>) -> P<Node> {
-        self.new_node(Kind::ArrayType, NodeData::ArrayTypeNode(alloc(ArrayTypeNode {
+        self.new_node(Kind::ArrayType, ArrayTypeNode {
             element_type: element_type,
-        })))
+        })
     }
 
     pub fn update_array_type_node(&self, node: P<Node>, element_type: P<Node>) -> P<Node> {
@@ -10523,10 +11486,10 @@ impl NodeFactory {
     }
 
     pub fn new_indexed_access_type_node(&self, object_type: P<Node>, index_type: P<Node>) -> P<Node> {
-        self.new_node(Kind::IndexedAccessType, NodeData::IndexedAccessTypeNode(alloc(IndexedAccessTypeNode {
+        self.new_node(Kind::IndexedAccessType, IndexedAccessTypeNode {
             object_type: object_type,
             index_type: index_type,
-        })))
+        })
     }
 
     pub fn update_indexed_access_type_node(&self, node: P<Node>, object_type: P<Node>, index_type: P<Node>) -> P<Node> {
@@ -10538,12 +11501,12 @@ impl NodeFactory {
     }
 
     pub fn new_type_reference_node(&self, type_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::TypeReference, NodeData::TypeReferenceNode(alloc(TypeReferenceNode {
+        self.new_node(Kind::TypeReference, TypeReferenceNode {
             node_with_type_arguments_base: NodeWithTypeArgumentsBase {
                 type_arguments: type_arguments,
             },
             type_name: type_name,
-        })))
+        })
     }
 
     pub fn update_type_reference_node(&self, node: P<Node>, type_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
@@ -10555,10 +11518,10 @@ impl NodeFactory {
     }
 
     pub fn new_expression_with_type_arguments(&self, expression: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::ExpressionWithTypeArguments, NodeData::ExpressionWithTypeArguments(alloc(ExpressionWithTypeArguments {
+        self.new_node(Kind::ExpressionWithTypeArguments, ExpressionWithTypeArguments {
             expression: expression,
             type_arguments: OwnedCell::new(type_arguments),
-        })))
+        })
     }
 
     pub fn update_expression_with_type_arguments(&self, node: P<Node>, expression: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
@@ -10570,9 +11533,9 @@ impl NodeFactory {
     }
 
     pub fn new_literal_type_node(&self, literal: P<Node>) -> P<Node> {
-        self.new_node(Kind::LiteralType, NodeData::LiteralTypeNode(alloc(LiteralTypeNode {
+        self.new_node(Kind::LiteralType, LiteralTypeNode {
             literal: literal,
-        })))
+        })
     }
 
     pub fn update_literal_type_node(&self, node: P<Node>, literal: P<Node>) -> P<Node> {
@@ -10584,15 +11547,15 @@ impl NodeFactory {
     }
 
     pub fn new_this_type_node(&self) -> P<Node> {
-        self.new_node(Kind::ThisType, NodeData::ThisTypeNode)
+        self.new_empty_node(Kind::ThisType, NodeDataTag::ThisTypeNode)
     }
 
     pub fn new_type_predicate_node(&self, asserts_modifier: Option<P<Node>>, parameter_name: P<Node>, type_node: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::TypePredicate, NodeData::TypePredicateNode(alloc(TypePredicateNode {
+        self.new_node(Kind::TypePredicate, TypePredicateNode {
             asserts_modifier: asserts_modifier,
             parameter_name: parameter_name,
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_type_predicate_node(&self, node: P<Node>, asserts_modifier: Option<P<Node>>, parameter_name: P<Node>, type_node: Option<P<Node>>) -> P<Node> {
@@ -10604,10 +11567,10 @@ impl NodeFactory {
     }
 
     pub fn new_import_attribute(&self, name: Option<P<Node>>, value: P<Node>) -> P<Node> {
-        self.new_node(Kind::ImportAttribute, NodeData::ImportAttribute(alloc(ImportAttribute {
+        self.new_node(Kind::ImportAttribute, ImportAttribute {
             name: name,
             value: value,
-        })))
+        })
     }
 
     pub fn update_import_attribute(&self, node: P<Node>, name: Option<P<Node>>, value: P<Node>) -> P<Node> {
@@ -10619,11 +11582,11 @@ impl NodeFactory {
     }
 
     pub fn new_import_attributes(&self, token: Kind, attributes: P<NodeList>, multi_line: bool) -> P<Node> {
-        self.new_node(Kind::ImportAttributes, NodeData::ImportAttributes(alloc(ImportAttributes {
+        self.new_node(Kind::ImportAttributes, ImportAttributes {
             token: token,
             attributes: attributes,
             multi_line: multi_line,
-        })))
+        })
     }
 
     pub fn update_import_attributes(&self, node: P<Node>, token: Kind, attributes: P<NodeList>, multi_line: bool) -> P<Node> {
@@ -10635,12 +11598,12 @@ impl NodeFactory {
     }
 
     pub fn new_type_query_node(&self, expr_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::TypeQuery, NodeData::TypeQueryNode(alloc(TypeQueryNode {
+        self.new_node(Kind::TypeQuery, TypeQueryNode {
             node_with_type_arguments_base: NodeWithTypeArgumentsBase {
                 type_arguments: type_arguments,
             },
             expr_name: expr_name,
-        })))
+        })
     }
 
     pub fn update_type_query_node(&self, node: P<Node>, expr_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
@@ -10652,7 +11615,7 @@ impl NodeFactory {
     }
 
     pub fn new_mapped_type_node(&self, readonly_token: Option<P<Node>>, type_parameter: P<Node>, name_type: Option<P<Node>>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, members: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::MappedType, NodeData::MappedTypeNode(alloc(MappedTypeNode {
+        self.new_node(Kind::MappedType, MappedTypeNode {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -10666,7 +11629,7 @@ impl NodeFactory {
             question_token: question_token,
             type_: type_node,
             members: members,
-        })))
+        })
     }
 
     pub fn update_mapped_type_node(&self, node: P<Node>, readonly_token: Option<P<Node>>, type_parameter: P<Node>, name_type: Option<P<Node>>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, members: Option<P<NodeList>>) -> P<Node> {
@@ -10678,12 +11641,12 @@ impl NodeFactory {
     }
 
     pub fn new_type_literal_node(&self, members: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::TypeLiteral, NodeData::TypeLiteralNode(alloc(TypeLiteralNode {
+        self.new_node(Kind::TypeLiteral, TypeLiteralNode {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
             members: members,
-        })))
+        })
     }
 
     pub fn update_type_literal_node(&self, node: P<Node>, members: P<NodeList>) -> P<Node> {
@@ -10695,9 +11658,9 @@ impl NodeFactory {
     }
 
     pub fn new_tuple_type_node(&self, elements: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::TupleType, NodeData::TupleTypeNode(alloc(TupleTypeNode {
+        self.new_node(Kind::TupleType, TupleTypeNode {
             elements: elements,
-        })))
+        })
     }
 
     pub fn update_tuple_type_node(&self, node: P<Node>, elements: P<NodeList>) -> P<Node> {
@@ -10709,7 +11672,7 @@ impl NodeFactory {
     }
 
     pub fn new_named_tuple_member(&self, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::NamedTupleMember, NodeData::NamedTupleMember(alloc(NamedTupleMember {
+        self.new_node(Kind::NamedTupleMember, NamedTupleMember {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -10717,7 +11680,7 @@ impl NodeFactory {
             name: name,
             question_token: question_token,
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_named_tuple_member(&self, node: P<Node>, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: P<Node>) -> P<Node> {
@@ -10729,9 +11692,9 @@ impl NodeFactory {
     }
 
     pub fn new_optional_type_node(&self, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::OptionalType, NodeData::OptionalTypeNode(alloc(OptionalTypeNode {
+        self.new_node(Kind::OptionalType, OptionalTypeNode {
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_optional_type_node(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
@@ -10743,9 +11706,9 @@ impl NodeFactory {
     }
 
     pub fn new_rest_type_node(&self, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::RestType, NodeData::RestTypeNode(alloc(RestTypeNode {
+        self.new_node(Kind::RestType, RestTypeNode {
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_rest_type_node(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
@@ -10757,9 +11720,9 @@ impl NodeFactory {
     }
 
     pub fn new_parenthesized_type_node(&self, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::ParenthesizedType, NodeData::ParenthesizedTypeNode(alloc(ParenthesizedTypeNode {
+        self.new_node(Kind::ParenthesizedType, ParenthesizedTypeNode {
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_parenthesized_type_node(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
@@ -10771,7 +11734,7 @@ impl NodeFactory {
     }
 
     pub fn new_function_type_node(&self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::FunctionType, NodeData::FunctionTypeNode(alloc(FunctionTypeNode {
+        self.new_node(Kind::FunctionType, FunctionTypeNode {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -10788,7 +11751,7 @@ impl NodeFactory {
                 type_: OwnedCell::new(type_node),
                 full_signature: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn update_function_type_node(&self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
@@ -10800,7 +11763,7 @@ impl NodeFactory {
     }
 
     pub fn new_constructor_type_node(&self, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::ConstructorType, NodeData::ConstructorTypeNode(alloc(ConstructorTypeNode {
+        self.new_node(Kind::ConstructorType, ConstructorTypeNode {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -10817,7 +11780,7 @@ impl NodeFactory {
                 type_: OwnedCell::new(type_node),
                 full_signature: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn update_constructor_type_node(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
@@ -10830,7 +11793,7 @@ impl NodeFactory {
 
     pub fn new_template_head(&self, text: &'static str, raw_text: &'static str, template_flags: TokenFlags) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::TemplateHead, NodeData::TemplateHead(alloc(TemplateHead {
+        self.new_node(Kind::TemplateHead, TemplateHead {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
                     text: text,
@@ -10839,12 +11802,12 @@ impl NodeFactory {
                 raw_text: raw_text,
                 template_flags: template_flags & TokenFlags::TemplateLiteralLikeFlags,
             },
-        })))
+        })
     }
 
     pub fn new_template_middle(&self, text: &'static str, raw_text: &'static str, template_flags: TokenFlags) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::TemplateMiddle, NodeData::TemplateMiddle(alloc(TemplateMiddle {
+        self.new_node(Kind::TemplateMiddle, TemplateMiddle {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
                     text: text,
@@ -10853,12 +11816,12 @@ impl NodeFactory {
                 raw_text: raw_text,
                 template_flags: template_flags & TokenFlags::TemplateLiteralLikeFlags,
             },
-        })))
+        })
     }
 
     pub fn new_template_tail(&self, text: &'static str, raw_text: &'static str, template_flags: TokenFlags) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::TemplateTail, NodeData::TemplateTail(alloc(TemplateTail {
+        self.new_node(Kind::TemplateTail, TemplateTail {
             template_literal_like_node_base: TemplateLiteralLikeNodeBase {
                 literal_like_node_base: LiteralLikeNodeBase {
                     text: text,
@@ -10867,14 +11830,14 @@ impl NodeFactory {
                 raw_text: raw_text,
                 template_flags: template_flags & TokenFlags::TemplateLiteralLikeFlags,
             },
-        })))
+        })
     }
 
     pub fn new_template_literal_type_node(&self, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::TemplateLiteralType, NodeData::TemplateLiteralTypeNode(alloc(TemplateLiteralTypeNode {
+        self.new_node(Kind::TemplateLiteralType, TemplateLiteralTypeNode {
             head: head,
             template_spans: template_spans,
-        })))
+        })
     }
 
     pub fn update_template_literal_type_node(&self, node: P<Node>, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
@@ -10886,10 +11849,10 @@ impl NodeFactory {
     }
 
     pub fn new_template_literal_type_span(&self, type_node: P<Node>, literal: P<Node>) -> P<Node> {
-        self.new_node(Kind::TemplateLiteralTypeSpan, NodeData::TemplateLiteralTypeSpan(alloc(TemplateLiteralTypeSpan {
+        self.new_node(Kind::TemplateLiteralTypeSpan, TemplateLiteralTypeSpan {
             type_: type_node,
             literal: literal,
-        })))
+        })
     }
 
     pub fn update_template_literal_type_span(&self, node: P<Node>, type_node: P<Node>, literal: P<Node>) -> P<Node> {
@@ -10901,11 +11864,11 @@ impl NodeFactory {
     }
 
     pub fn new_synthetic_expression(&self, type_node: &'static dyn Any, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::SyntheticExpression, NodeData::SyntheticExpression(alloc(SyntheticExpression {
+        self.new_node(Kind::SyntheticExpression, SyntheticExpression {
             type_: type_node,
             is_spread: is_spread,
             tuple_name_source: tuple_name_source,
-        })))
+        })
     }
 
     pub fn update_synthetic_expression(&self, node: P<Node>, type_node: &'static dyn Any, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
@@ -10917,9 +11880,9 @@ impl NodeFactory {
     }
 
     pub fn new_partially_emitted_expression(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::PartiallyEmittedExpression, NodeData::PartiallyEmittedExpression(alloc(PartiallyEmittedExpression {
+        self.new_node(Kind::PartiallyEmittedExpression, PartiallyEmittedExpression {
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_partially_emitted_expression(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -10931,11 +11894,11 @@ impl NodeFactory {
     }
 
     pub fn new_jsx_element(&self, opening_element: P<Node>, children: P<NodeList>, closing_element: P<Node>) -> P<Node> {
-        self.new_node(Kind::JsxElement, NodeData::JsxElement(alloc(JsxElement {
+        self.new_node(Kind::JsxElement, JsxElement {
             opening_element: opening_element,
             children: children,
             closing_element: closing_element,
-        })))
+        })
     }
 
     pub fn update_jsx_element(&self, node: P<Node>, opening_element: P<Node>, children: P<NodeList>, closing_element: P<Node>) -> P<Node> {
@@ -10947,12 +11910,12 @@ impl NodeFactory {
     }
 
     pub fn new_jsx_attributes(&self, properties: P<NodeList>) -> P<Node> {
-        self.new_node(Kind::JsxAttributes, NodeData::JsxAttributes(alloc(JsxAttributes {
+        self.new_node(Kind::JsxAttributes, JsxAttributes {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
             properties: properties,
-        })))
+        })
     }
 
     pub fn update_jsx_attributes(&self, node: P<Node>, properties: P<NodeList>) -> P<Node> {
@@ -10964,10 +11927,10 @@ impl NodeFactory {
     }
 
     pub fn new_jsx_namespaced_name(&self, namespace: P<Node>, name: P<Node>) -> P<Node> {
-        self.new_node(Kind::JsxNamespacedName, NodeData::JsxNamespacedName(alloc(JsxNamespacedName {
+        self.new_node(Kind::JsxNamespacedName, JsxNamespacedName {
             namespace: namespace,
             name: name,
-        })))
+        })
     }
 
     pub fn update_jsx_namespaced_name(&self, node: P<Node>, namespace: P<Node>, name: P<Node>) -> P<Node> {
@@ -10979,11 +11942,11 @@ impl NodeFactory {
     }
 
     pub fn new_jsx_opening_element(&self, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
-        self.new_node(Kind::JsxOpeningElement, NodeData::JsxOpeningElement(alloc(JsxOpeningElement {
+        self.new_node(Kind::JsxOpeningElement, JsxOpeningElement {
             tag_name: tag_name,
             type_arguments: type_arguments,
             attributes: attributes,
-        })))
+        })
     }
 
     pub fn update_jsx_opening_element(&self, node: P<Node>, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
@@ -10995,11 +11958,11 @@ impl NodeFactory {
     }
 
     pub fn new_jsx_self_closing_element(&self, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
-        self.new_node(Kind::JsxSelfClosingElement, NodeData::JsxSelfClosingElement(alloc(JsxSelfClosingElement {
+        self.new_node(Kind::JsxSelfClosingElement, JsxSelfClosingElement {
             tag_name: tag_name,
             type_arguments: type_arguments,
             attributes: attributes,
-        })))
+        })
     }
 
     pub fn update_jsx_self_closing_element(&self, node: P<Node>, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
@@ -11011,11 +11974,11 @@ impl NodeFactory {
     }
 
     pub fn new_jsx_fragment(&self, opening_fragment: P<Node>, children: P<NodeList>, closing_fragment: P<Node>) -> P<Node> {
-        self.new_node(Kind::JsxFragment, NodeData::JsxFragment(alloc(JsxFragment {
+        self.new_node(Kind::JsxFragment, JsxFragment {
             opening_fragment: opening_fragment,
             children: children,
             closing_fragment: closing_fragment,
-        })))
+        })
     }
 
     pub fn update_jsx_fragment(&self, node: P<Node>, opening_fragment: P<Node>, children: P<NodeList>, closing_fragment: P<Node>) -> P<Node> {
@@ -11027,21 +11990,21 @@ impl NodeFactory {
     }
 
     pub fn new_jsx_opening_fragment(&self) -> P<Node> {
-        self.new_node(Kind::JsxOpeningFragment, NodeData::JsxOpeningFragment)
+        self.new_empty_node(Kind::JsxOpeningFragment, NodeDataTag::JsxOpeningFragment)
     }
 
     pub fn new_jsx_closing_fragment(&self) -> P<Node> {
-        self.new_node(Kind::JsxClosingFragment, NodeData::JsxClosingFragment)
+        self.new_empty_node(Kind::JsxClosingFragment, NodeDataTag::JsxClosingFragment)
     }
 
     pub fn new_jsx_attribute(&self, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::JsxAttribute, NodeData::JsxAttribute(alloc(JsxAttribute {
+        self.new_node(Kind::JsxAttribute, JsxAttribute {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
             name: name,
             initializer: initializer,
-        })))
+        })
     }
 
     pub fn update_jsx_attribute(&self, node: P<Node>, name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
@@ -11053,12 +12016,12 @@ impl NodeFactory {
     }
 
     pub fn new_jsx_spread_attribute(&self, expression: P<Node>) -> P<Node> {
-        self.new_node(Kind::JsxSpreadAttribute, NodeData::JsxSpreadAttribute(alloc(JsxSpreadAttribute {
+        self.new_node(Kind::JsxSpreadAttribute, JsxSpreadAttribute {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_jsx_spread_attribute(&self, node: P<Node>, expression: P<Node>) -> P<Node> {
@@ -11070,9 +12033,9 @@ impl NodeFactory {
     }
 
     pub fn new_jsx_closing_element(&self, tag_name: P<Node>) -> P<Node> {
-        self.new_node(Kind::JsxClosingElement, NodeData::JsxClosingElement(alloc(JsxClosingElement {
+        self.new_node(Kind::JsxClosingElement, JsxClosingElement {
             tag_name: tag_name,
-        })))
+        })
     }
 
     pub fn update_jsx_closing_element(&self, node: P<Node>, tag_name: P<Node>) -> P<Node> {
@@ -11084,10 +12047,10 @@ impl NodeFactory {
     }
 
     pub fn new_jsx_expression(&self, dot_dot_dot_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::JsxExpression, NodeData::JsxExpression(alloc(JsxExpression {
+        self.new_node(Kind::JsxExpression, JsxExpression {
             dot_dot_dot_token: dot_dot_dot_token,
             expression: expression,
-        })))
+        })
     }
 
     pub fn update_jsx_expression(&self, node: P<Node>, dot_dot_dot_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
@@ -11100,19 +12063,19 @@ impl NodeFactory {
 
     pub fn new_jsx_text(&self, text: &'static str, contains_only_trivia_white_spaces: bool) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::JsxText, NodeData::JsxText(alloc(JsxText {
+        self.new_node(Kind::JsxText, JsxText {
             literal_like_node_base: LiteralLikeNodeBase {
                 text: text,
                 token_flags: OwnedCell::new(TokenFlags::None),
             },
             contains_only_trivia_white_spaces: contains_only_trivia_white_spaces,
-        })))
+        })
     }
 
     pub fn new_syntax_list(&self, children: &'static [P<Node>]) -> P<Node> {
-        self.new_node(Kind::SyntaxList, NodeData::SyntaxList(alloc(SyntaxList {
+        self.new_node(Kind::SyntaxList, SyntaxList {
             children: children,
-        })))
+        })
     }
 
     pub fn update_syntax_list(&self, node: P<Node>, children: &'static [P<Node>]) -> P<Node> {
@@ -11124,10 +12087,10 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc(&self, comment: P<NodeList>, tags: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDoc, NodeData::JSDoc(alloc(JSDoc {
+        self.new_node(Kind::JSDoc, JSDoc {
             comment: comment,
             tags: tags,
-        })))
+        })
     }
 
     pub fn update_jsdoc(&self, node: P<Node>, comment: P<NodeList>, tags: Option<P<NodeList>>) -> P<Node> {
@@ -11139,9 +12102,9 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_type_expression(&self, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::JSDocTypeExpression, NodeData::JSDocTypeExpression(alloc(JSDocTypeExpression {
+        self.new_node(Kind::JSDocTypeExpression, JSDocTypeExpression {
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_jsdoc_type_expression(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
@@ -11153,9 +12116,9 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_non_nullable_type(&self, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::JSDocNonNullableType, NodeData::JSDocNonNullableType(alloc(JSDocNonNullableType {
+        self.new_node(Kind::JSDocNonNullableType, JSDocNonNullableType {
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_jsdoc_non_nullable_type(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
@@ -11167,9 +12130,9 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_nullable_type(&self, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::JSDocNullableType, NodeData::JSDocNullableType(alloc(JSDocNullableType {
+        self.new_node(Kind::JSDocNullableType, JSDocNullableType {
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_jsdoc_nullable_type(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
@@ -11181,13 +12144,13 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_all_type(&self) -> P<Node> {
-        self.new_node(Kind::JSDocAllType, NodeData::JSDocAllType)
+        self.new_empty_node(Kind::JSDocAllType, NodeDataTag::JSDocAllType)
     }
 
     pub fn new_jsdoc_variadic_type(&self, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::JSDocVariadicType, NodeData::JSDocVariadicType(alloc(JSDocVariadicType {
+        self.new_node(Kind::JSDocVariadicType, JSDocVariadicType {
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_jsdoc_variadic_type(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
@@ -11199,9 +12162,9 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_optional_type(&self, type_node: P<Node>) -> P<Node> {
-        self.new_node(Kind::JSDocOptionalType, NodeData::JSDocOptionalType(alloc(JSDocOptionalType {
+        self.new_node(Kind::JSDocOptionalType, JSDocOptionalType {
             type_: type_node,
-        })))
+        })
     }
 
     pub fn update_jsdoc_optional_type(&self, node: P<Node>, type_node: P<Node>) -> P<Node> {
@@ -11213,13 +12176,13 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_type_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocTypeTag, NodeData::JSDocTypeTag(alloc(JSDocTypeTag {
+        self.new_node(Kind::JSDocTypeTag, JSDocTypeTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             type_expression: type_expression,
-        })))
+        })
     }
 
     pub fn update_jsdoc_type_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11231,12 +12194,12 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_unknown_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocUnknownTag, NodeData::JSDocUnknownTag(alloc(JSDocUnknownTag {
+        self.new_node(Kind::JSDocUnknownTag, JSDocUnknownTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
-        })))
+        })
     }
 
     pub fn update_jsdoc_unknown_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11248,14 +12211,14 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_template_tag(&self, tag_name: P<Node>, constraint: Option<P<Node>>, type_parameters: P<NodeList>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocTemplateTag, NodeData::JSDocTemplateTag(alloc(JSDocTemplateTag {
+        self.new_node(Kind::JSDocTemplateTag, JSDocTemplateTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             constraint: constraint,
             type_parameters: type_parameters,
-        })))
+        })
     }
 
     pub fn update_jsdoc_template_tag(&self, node: P<Node>, tag_name: P<Node>, constraint: Option<P<Node>>, type_parameters: P<NodeList>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11267,13 +12230,13 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_return_tag(&self, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocReturnTag, NodeData::JSDocReturnTag(alloc(JSDocReturnTag {
+        self.new_node(Kind::JSDocReturnTag, JSDocReturnTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             type_expression: type_expression,
-        })))
+        })
     }
 
     pub fn update_jsdoc_return_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11285,12 +12248,12 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_public_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocPublicTag, NodeData::JSDocPublicTag(alloc(JSDocPublicTag {
+        self.new_node(Kind::JSDocPublicTag, JSDocPublicTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
-        })))
+        })
     }
 
     pub fn update_jsdoc_public_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11302,12 +12265,12 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_private_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocPrivateTag, NodeData::JSDocPrivateTag(alloc(JSDocPrivateTag {
+        self.new_node(Kind::JSDocPrivateTag, JSDocPrivateTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
-        })))
+        })
     }
 
     pub fn update_jsdoc_private_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11319,12 +12282,12 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_protected_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocProtectedTag, NodeData::JSDocProtectedTag(alloc(JSDocProtectedTag {
+        self.new_node(Kind::JSDocProtectedTag, JSDocProtectedTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
-        })))
+        })
     }
 
     pub fn update_jsdoc_protected_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11336,12 +12299,12 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_readonly_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocReadonlyTag, NodeData::JSDocReadonlyTag(alloc(JSDocReadonlyTag {
+        self.new_node(Kind::JSDocReadonlyTag, JSDocReadonlyTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
-        })))
+        })
     }
 
     pub fn update_jsdoc_readonly_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11353,12 +12316,12 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_override_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocOverrideTag, NodeData::JSDocOverrideTag(alloc(JSDocOverrideTag {
+        self.new_node(Kind::JSDocOverrideTag, JSDocOverrideTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
-        })))
+        })
     }
 
     pub fn update_jsdoc_override_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11370,12 +12333,12 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_deprecated_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocDeprecatedTag, NodeData::JSDocDeprecatedTag(alloc(JSDocDeprecatedTag {
+        self.new_node(Kind::JSDocDeprecatedTag, JSDocDeprecatedTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
-        })))
+        })
     }
 
     pub fn update_jsdoc_deprecated_tag(&self, node: P<Node>, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11387,13 +12350,13 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_see_tag(&self, tag_name: P<Node>, name_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocSeeTag, NodeData::JSDocSeeTag(alloc(JSDocSeeTag {
+        self.new_node(Kind::JSDocSeeTag, JSDocSeeTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             name_expression: name_expression,
-        })))
+        })
     }
 
     pub fn update_jsdoc_see_tag(&self, node: P<Node>, tag_name: P<Node>, name_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11405,13 +12368,13 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_implements_tag(&self, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocImplementsTag, NodeData::JSDocImplementsTag(alloc(JSDocImplementsTag {
+        self.new_node(Kind::JSDocImplementsTag, JSDocImplementsTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             class_name: class_name,
-        })))
+        })
     }
 
     pub fn update_jsdoc_implements_tag(&self, node: P<Node>, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11423,13 +12386,13 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_augments_tag(&self, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocAugmentsTag, NodeData::JSDocAugmentsTag(alloc(JSDocAugmentsTag {
+        self.new_node(Kind::JSDocAugmentsTag, JSDocAugmentsTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             class_name: class_name,
-        })))
+        })
     }
 
     pub fn update_jsdoc_augments_tag(&self, node: P<Node>, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11441,13 +12404,13 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_satisfies_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocSatisfiesTag, NodeData::JSDocSatisfiesTag(alloc(JSDocSatisfiesTag {
+        self.new_node(Kind::JSDocSatisfiesTag, JSDocSatisfiesTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             type_expression: type_expression,
-        })))
+        })
     }
 
     pub fn update_jsdoc_satisfies_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11459,13 +12422,13 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_throws_tag(&self, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocThrowsTag, NodeData::JSDocThrowsTag(alloc(JSDocThrowsTag {
+        self.new_node(Kind::JSDocThrowsTag, JSDocThrowsTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             type_expression: type_expression,
-        })))
+        })
     }
 
     pub fn update_jsdoc_throws_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11477,13 +12440,13 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_this_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocThisTag, NodeData::JSDocThisTag(alloc(JSDocThisTag {
+        self.new_node(Kind::JSDocThisTag, JSDocThisTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             type_expression: type_expression,
-        })))
+        })
     }
 
     pub fn update_jsdoc_this_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11495,7 +12458,7 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_import_tag(&self, tag_name: P<Node>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocImportTag, NodeData::JSDocImportTag(alloc(JSDocImportTag {
+        self.new_node(Kind::JSDocImportTag, JSDocImportTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
@@ -11503,7 +12466,7 @@ impl NodeFactory {
             import_clause: import_clause,
             module_specifier: module_specifier,
             attributes: attributes,
-        })))
+        })
     }
 
     pub fn update_jsdoc_import_tag(&self, node: P<Node>, tag_name: P<Node>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11515,14 +12478,14 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_callback_tag(&self, tag_name: P<Node>, type_expression: P<Node>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocCallbackTag, NodeData::JSDocCallbackTag(alloc(JSDocCallbackTag {
+        self.new_node(Kind::JSDocCallbackTag, JSDocCallbackTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             type_expression: type_expression,
             name: name,
-        })))
+        })
     }
 
     pub fn update_jsdoc_callback_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11534,13 +12497,13 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_overload_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocOverloadTag, NodeData::JSDocOverloadTag(alloc(JSDocOverloadTag {
+        self.new_node(Kind::JSDocOverloadTag, JSDocOverloadTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             type_expression: type_expression,
-        })))
+        })
     }
 
     pub fn update_jsdoc_overload_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11552,14 +12515,14 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_typedef_tag(&self, tag_name: P<Node>, type_expression: Option<P<Node>>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::JSDocTypedefTag, NodeData::JSDocTypedefTag(alloc(JSDocTypedefTag {
+        self.new_node(Kind::JSDocTypedefTag, JSDocTypedefTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
             },
             type_expression: type_expression,
             name: name,
-        })))
+        })
     }
 
     pub fn update_jsdoc_typedef_tag(&self, node: P<Node>, tag_name: P<Node>, type_expression: Option<P<Node>>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
@@ -11571,7 +12534,7 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_signature(&self, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::JSDocSignature, NodeData::JSDocSignature(alloc(JSDocSignature {
+        self.new_node(Kind::JSDocSignature, JSDocSignature {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -11585,7 +12548,7 @@ impl NodeFactory {
                 type_: OwnedCell::new(type_node),
                 full_signature: OwnedCell::new(None),
             },
-        })))
+        })
     }
 
     pub fn update_jsdoc_signature(&self, node: P<Node>, type_parameters: Option<P<NodeList>>, parameters: Option<P<NodeList>>, type_node: Option<P<Node>>) -> P<Node> {
@@ -11597,9 +12560,9 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_name_reference(&self, name: P<Node>) -> P<Node> {
-        self.new_node(Kind::JSDocNameReference, NodeData::JSDocNameReference(alloc(JSDocNameReference {
+        self.new_node(Kind::JSDocNameReference, JSDocNameReference {
             name: name,
-        })))
+        })
     }
 
     pub fn update_jsdoc_name_reference(&self, node: P<Node>, name: P<Node>) -> P<Node> {
@@ -11611,7 +12574,7 @@ impl NodeFactory {
     }
 
     pub fn new_module_declaration(&self, modifiers: Option<P<ModifierList>>, keyword: Kind, name: P<Node>, attributes: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::ModuleDeclaration, NodeData::ModuleDeclaration(alloc(ModuleDeclaration {
+        self.new_node(Kind::ModuleDeclaration, ModuleDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -11636,7 +12599,7 @@ impl NodeFactory {
             keyword: keyword,
             name: name,
             attributes: attributes,
-        })))
+        })
     }
 
     pub fn update_module_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, keyword: Kind, name: P<Node>, attributes: Option<P<Node>>, body: Option<P<Node>>) -> P<Node> {
@@ -11648,7 +12611,7 @@ impl NodeFactory {
     }
 
     pub fn new_import_equals_declaration(&self, modifiers: Option<P<ModifierList>>, is_type_only: bool, name: P<Node>, module_reference: P<Node>) -> P<Node> {
-        self.new_node(Kind::ImportEqualsDeclaration, NodeData::ImportEqualsDeclaration(alloc(ImportEqualsDeclaration {
+        self.new_node(Kind::ImportEqualsDeclaration, ImportEqualsDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -11664,7 +12627,7 @@ impl NodeFactory {
             is_type_only: is_type_only,
             name: name,
             module_reference: module_reference,
-        })))
+        })
     }
 
     pub fn update_import_equals_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, is_type_only: bool, name: P<Node>, module_reference: P<Node>) -> P<Node> {
@@ -11676,7 +12639,7 @@ impl NodeFactory {
     }
 
     pub fn new_export_declaration(&self, modifiers: Option<P<ModifierList>>, is_type_only: bool, export_clause: Option<P<Node>>, module_specifier: Option<P<Node>>, attributes: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::ExportDeclaration, NodeData::ExportDeclaration(alloc(ExportDeclaration {
+        self.new_node(Kind::ExportDeclaration, ExportDeclaration {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
@@ -11690,7 +12653,7 @@ impl NodeFactory {
             export_clause: export_clause,
             module_specifier: module_specifier,
             attributes: attributes,
-        })))
+        })
     }
 
     pub fn update_export_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, is_type_only: bool, export_clause: Option<P<Node>>, module_specifier: Option<P<Node>>, attributes: Option<P<Node>>) -> P<Node> {
@@ -11702,7 +12665,7 @@ impl NodeFactory {
     }
 
     pub fn new_import_type_node(&self, is_type_of: bool, argument: P<Node>, attributes: Option<P<Node>>, qualifier: Option<P<Node>>, type_arguments: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::ImportType, NodeData::ImportTypeNode(alloc(ImportTypeNode {
+        self.new_node(Kind::ImportType, ImportTypeNode {
             node_with_type_arguments_base: NodeWithTypeArgumentsBase {
                 type_arguments: type_arguments,
             },
@@ -11710,7 +12673,7 @@ impl NodeFactory {
             argument: argument,
             attributes: attributes,
             qualifier: qualifier,
-        })))
+        })
     }
 
     pub fn update_import_type_node(&self, node: P<Node>, is_type_of: bool, argument: P<Node>, attributes: Option<P<Node>>, qualifier: Option<P<Node>>, type_arguments: Option<P<NodeList>>) -> P<Node> {
@@ -11722,7 +12685,7 @@ impl NodeFactory {
     }
 
     pub fn new_import_clause(&self, phase_modifier: Kind, name: Option<P<Node>>, named_bindings: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::ImportClause, NodeData::ImportClause(alloc(ImportClause {
+        self.new_node(Kind::ImportClause, ImportClause {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -11732,7 +12695,7 @@ impl NodeFactory {
             phase_modifier: OwnedCell::new(phase_modifier),
             name: name,
             named_bindings: named_bindings,
-        })))
+        })
     }
 
     pub fn update_import_clause(&self, node: P<Node>, phase_modifier: Kind, name: Option<P<Node>>, named_bindings: Option<P<Node>>) -> P<Node> {
@@ -11744,7 +12707,7 @@ impl NodeFactory {
     }
 
     pub fn new_import_specifier(&self, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
-        self.new_node(Kind::ImportSpecifier, NodeData::ImportSpecifier(alloc(ImportSpecifier {
+        self.new_node(Kind::ImportSpecifier, ImportSpecifier {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -11754,7 +12717,7 @@ impl NodeFactory {
             is_type_only: is_type_only,
             property_name: property_name,
             name: name,
-        })))
+        })
     }
 
     pub fn update_import_specifier(&self, node: P<Node>, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
@@ -11767,21 +12730,21 @@ impl NodeFactory {
 
     pub fn new_jsdoc_text(&self, text: &'static [&'static str]) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::JSDocText, NodeData::JSDocText(alloc(JSDocText {
+        self.new_node(Kind::JSDocText, JSDocText {
             jsdoc_comment_base: JSDocCommentBase {
                 text: text,
             },
-        })))
+        })
     }
 
     pub fn new_jsdoc_link(&self, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::JSDocLink, NodeData::JSDocLink(alloc(JSDocLink {
+        self.new_node(Kind::JSDocLink, JSDocLink {
             jsdoc_comment_base: JSDocCommentBase {
                 text: text,
             },
             name: name,
-        })))
+        })
     }
 
     pub fn update_jsdoc_link(&self, node: P<Node>, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
@@ -11794,12 +12757,12 @@ impl NodeFactory {
 
     pub fn new_jsdoc_link_plain(&self, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::JSDocLinkPlain, NodeData::JSDocLinkPlain(alloc(JSDocLinkPlain {
+        self.new_node(Kind::JSDocLinkPlain, JSDocLinkPlain {
             jsdoc_comment_base: JSDocCommentBase {
                 text: text,
             },
             name: name,
-        })))
+        })
     }
 
     pub fn update_jsdoc_link_plain(&self, node: P<Node>, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
@@ -11812,12 +12775,12 @@ impl NodeFactory {
 
     pub fn new_jsdoc_link_code(&self, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::JSDocLinkCode, NodeData::JSDocLinkCode(alloc(JSDocLinkCode {
+        self.new_node(Kind::JSDocLinkCode, JSDocLinkCode {
             jsdoc_comment_base: JSDocCommentBase {
                 text: text,
             },
             name: name,
-        })))
+        })
     }
 
     pub fn update_jsdoc_link_code(&self, node: P<Node>, name: Option<P<Node>>, text: &'static [&'static str]) -> P<Node> {
@@ -11829,7 +12792,7 @@ impl NodeFactory {
     }
 
     pub fn new_type_parameter_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, constraint: Option<P<Node>>, expression: Option<P<Node>>, default_type: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::TypeParameter, NodeData::TypeParameterDeclaration(alloc(TypeParameterDeclaration {
+        self.new_node(Kind::TypeParameter, TypeParameterDeclaration {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
@@ -11840,7 +12803,7 @@ impl NodeFactory {
             constraint: constraint,
             expression: expression,
             default_type: default_type,
-        })))
+        })
     }
 
     pub fn update_type_parameter_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, constraint: Option<P<Node>>, expression: Option<P<Node>>, default_type: Option<P<Node>>) -> P<Node> {
@@ -11852,10 +12815,10 @@ impl NodeFactory {
     }
 
     pub fn new_synthetic_reference_expression(&self, expression: P<Node>, this_arg: P<Node>) -> P<Node> {
-        self.new_node(Kind::SyntheticReferenceExpression, NodeData::SyntheticReferenceExpression(alloc(SyntheticReferenceExpression {
+        self.new_node(Kind::SyntheticReferenceExpression, SyntheticReferenceExpression {
             expression: expression,
             this_arg: this_arg,
-        })))
+        })
     }
 
     pub fn update_synthetic_reference_expression(&self, node: P<Node>, expression: P<Node>, this_arg: P<Node>) -> P<Node> {
@@ -11867,13 +12830,13 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_type_literal(&self, jsdoc_property_tags: &'static [P<Node>], is_array_type: bool) -> P<Node> {
-        self.new_node(Kind::JSDocTypeLiteral, NodeData::JSDocTypeLiteral(alloc(JSDocTypeLiteral {
+        self.new_node(Kind::JSDocTypeLiteral, JSDocTypeLiteral {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
             jsdoc_property_tags: jsdoc_property_tags,
             is_array_type: is_array_type,
-        })))
+        })
     }
 
     pub fn update_jsdoc_type_literal(&self, node: P<Node>, jsdoc_property_tags: &'static [P<Node>], is_array_type: bool) -> P<Node> {
@@ -11885,7 +12848,7 @@ impl NodeFactory {
     }
 
     pub fn new_jsdoc_parameter_or_property_tag(&self, kind: Kind, tag_name: P<Node>, name: P<Node>, is_bracketed: bool, type_expression: Option<P<Node>>, is_name_first: bool, comment: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(kind, NodeData::JSDocParameterOrPropertyTag(alloc(JSDocParameterOrPropertyTag {
+        self.new_node(kind, JSDocParameterOrPropertyTag {
             jsdoc_tag_base: JSDocTagBase {
                 tag_name: tag_name,
                 comment: comment,
@@ -11894,7 +12857,7 @@ impl NodeFactory {
             is_bracketed: is_bracketed,
             type_expression: type_expression,
             is_name_first: is_name_first,
-        })))
+        })
     }
 
     pub fn update_jsdoc_parameter_or_property_tag(&self, node: P<Node>, tag_name: P<Node>, name: P<Node>, is_bracketed: bool, type_expression: Option<P<Node>>, is_name_first: bool, comment: Option<P<NodeList>>) -> P<Node> {

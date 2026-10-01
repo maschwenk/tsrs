@@ -165,7 +165,7 @@ impl Node {
 
     fn compute_subtree_facts(&self) -> SubtreeFacts {
         use SubtreeFacts as F;
-        match self.data {
+        match self.data() {
             // TypeSyntaxBase
             NodeData::InterfaceDeclaration(_)
             | NodeData::TypeAliasDeclaration(_)
@@ -608,7 +608,7 @@ impl Node {
 
     fn propagate_subtree_facts(&self) -> SubtreeFacts {
         use SubtreeFacts as F;
-        match self.data {
+        match self.data() {
             // TypeSyntaxBase.propagateSubtreeFacts
             NodeData::InterfaceDeclaration(_)
             | NodeData::TypeAliasDeclaration(_)

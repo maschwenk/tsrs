@@ -5,7 +5,7 @@ use tsrs_ast::{Node, NodeData};
 use crate::Dumper;
 
 pub(crate) fn dump_fields(n: &Node, d: &mut Dumper) {
-    match n.data {
+    match n.data() {
         NodeData::Identifier(x) => {
             d.field_string("Text", x.text());
         }

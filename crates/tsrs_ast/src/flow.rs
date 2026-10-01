@@ -71,8 +71,8 @@ pub struct FlowSwitchClauseData {
 }
 
 pub fn new_flow_switch_clause_data(switch_statement: P<Node>, clause_start: usize, clause_end: usize) -> P<Node> {
-    let node = alloc(FlowSwitchClauseData { switch_statement, clause_start: clause_start as i32, clause_end: clause_end as i32 });
-    new_node(Kind::Unknown, NodeData::FlowSwitchClauseData(node), &NodeFactoryHooks::default())
+    let data = FlowSwitchClauseData { switch_statement, clause_start: clause_start as i32, clause_end: clause_end as i32 };
+    new_node(Kind::Unknown, data, &NodeFactoryHooks::default())
 }
 
 impl FlowSwitchClauseData {
@@ -89,6 +89,5 @@ pub struct FlowReduceLabelData {
 }
 
 pub fn new_flow_reduce_label_data(target: P<FlowLabel>, antecedents: Option<P<FlowList>>) -> P<Node> {
-    let node = alloc(FlowReduceLabelData { target, antecedents });
-    new_node(Kind::Unknown, NodeData::FlowReduceLabelData(node), &NodeFactoryHooks::default())
+    new_node(Kind::Unknown, FlowReduceLabelData { target, antecedents }, &NodeFactoryHooks::default())
 }

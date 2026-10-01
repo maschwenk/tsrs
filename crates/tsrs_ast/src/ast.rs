@@ -95,15 +95,32 @@ pub fn new_node_factory(hooks: NodeFactoryHooks) -> NodeFactory {
     NodeFactory { hooks, node_count: Rc::default(), text_count: Rc::default() }
 }
 
-pub(crate) fn new_node(kind: Kind, data: NodeData, hooks: &NodeFactoryHooks) -> P<Node> {
-    let n = P::new(Node {
+fn node_header(kind: Kind, data_tag: NodeDataTag) -> Node {
+    Node {
         kind,
+        data_tag,
         flags: OwnedCell::new(NodeFlags::None),
         loc: OwnedCell::new(undefined_text_range()),
         parent: OwnedCell::new(None),
         id: AtomicU64::new(0),
-        data,
-    });
+    }
+}
+
+/// Creates a node whose data struct is `data` (Go: the data struct embeds `NodeBase`, one allocation).
+pub(crate) fn new_node<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks) -> P<Node> {
+    let a: &'static NodeAlloc<T> = P::new(NodeAlloc { node: node_header(kind, T::TAG), data }).get();
+    // SAFETY: `NodeAlloc` is `repr(C)` with the header first, so the pointer to the allocation is a pointer to
+    // its header; the header is never moved or freed (leak arena).
+    let n = P::from_static(unsafe { &*(a as *const NodeAlloc<T>).cast::<Node>() });
+    if let Some(on_create) = &hooks.on_create {
+        on_create(n);
+    }
+    n
+}
+
+/// Creates a node whose data struct has no fields (`Token`, `KeywordTypeNode`, ...): just the header.
+pub(crate) fn new_empty_node(kind: Kind, data_tag: NodeDataTag, hooks: &NodeFactoryHooks) -> P<Node> {
+    let n = P::new(node_header(kind, data_tag));
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -116,9 +133,15 @@ impl NodeFactory {
     }
 
     #[inline]
-    pub(crate) fn new_node(&self, kind: Kind, data: NodeData) -> P<Node> {
+    pub(crate) fn new_node<T: NodePayload>(&self, kind: Kind, data: T) -> P<Node> {
         self.node_count.set(self.node_count.get() + 1);
         new_node(kind, data, &self.hooks)
+    }
+
+    #[inline]
+    pub(crate) fn new_empty_node(&self, kind: Kind, data_tag: NodeDataTag) -> P<Node> {
+        self.node_count.set(self.node_count.get() + 1);
+        new_empty_node(kind, data_tag, &self.hooks)
     }
 
     pub fn node_count(&self) -> usize {
@@ -258,19 +281,47 @@ impl ModifierList {
 
 // AST Node
 
+/// Go `ast.Node`. The node's data struct (Go: the struct that embeds `NodeBase`) is allocated together with the
+/// header, right after it (`NodeAlloc`); `data_tag` says which struct it is. `node.data()` returns it as a
+/// `NodeData`, `as_*()` and the generated accessors read it in place. Data structs without fields (`Token`,
+/// `KeywordTypeNode`, ...) allocate only the header.
 pub struct Node {
     pub kind: Kind,
+    pub(crate) data_tag: NodeDataTag,
     pub flags: OwnedCell<NodeFlags>,
     pub loc: OwnedCell<TextRange>,
     pub parent: OwnedCell<Option<P<Node>>>,
     pub(crate) id: AtomicU64,
-    pub data: NodeData,
+}
+
+const _: () = assert!(std::mem::size_of::<Node>() == 32);
+
+/// One arena allocation per node: the header, then the data struct. `repr(C)` puts the header at offset 0 and
+/// the data at `offset_of!(NodeAlloc<T>, data)` (32 for every data struct: none is aligned to more than 8).
+#[repr(C)]
+pub(crate) struct NodeAlloc<T> {
+    node: Node,
+    data: T,
+}
+
+/// A node data struct with fields, stored after the header of nodes tagged `TAG` (impls are generated).
+pub(crate) trait NodePayload: Sized + 'static {
+    const TAG: NodeDataTag;
 }
 
 // Node accessors. Accessors that dispatch over the node data (name(), modifiers(), *_data(), as_*(),
 // for_each_child(), ...) are generated in generated.rs.
 
 impl Node {
+    /// The data struct after this node's header. Callers check `data_tag == T::TAG` first.
+    #[inline(always)]
+    pub(crate) fn payload<T: NodePayload>(&self) -> &'static T {
+        debug_assert!(self.data_tag == T::TAG);
+        // SAFETY: a node tagged `T::TAG` was allocated by `new_node::<T>` as a `NodeAlloc<T>` whose header is
+        // `self`, so its data struct lives at this offset from the header, for the rest of the process.
+        unsafe { &*(self as *const Node).cast::<u8>().add(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<T>() }
+    }
+
     /// The arena pointer for this node. Every `Node` is created by `NodeFactory`/`new_node` in the leak
     /// arena (Node has a crate-private field, so it cannot be constructed elsewhere), so `&self` is
     /// always a reference to a `'static` arena value.
@@ -717,7 +768,7 @@ impl Node {
     }
 
     fn jsdoc_tag_base(&self) -> &'static JSDocTagBase {
-        match self.data {
+        match self.data() {
             NodeData::JSDocUnknownTag(d) => &d.jsdoc_tag_base,
             NodeData::JSDocAugmentsTag(d) => &d.jsdoc_tag_base,
             NodeData::JSDocImplementsTag(d) => &d.jsdoc_tag_base,
@@ -1433,7 +1484,7 @@ impl NodeFactory {
         {
             panic!("fileName should be normalized and absolute: {:?}", opts.file_name);
         }
-        let data: &'static SourceFile = tsrs_core::alloc(SourceFile {
+        let node = self.new_node(Kind::SourceFile, SourceFile {
             node: OwnedCell::new(None),
             declaration_base: DeclarationBase { symbol: OwnedCell::new(None) },
             locals_container_base: LocalsContainerBase { locals: OwnedCell::new(None), next_container: OwnedCell::new(None) },
@@ -1476,8 +1527,7 @@ impl NodeFactory {
             ecma_line_map: OnceLock::new(),
             position_map: OnceLock::new(),
         });
-        let node = self.new_node(Kind::SourceFile, NodeData::SourceFile(data));
-        data.node.set(Some(node));
+        node.as_source_file().node.set(Some(node));
         node
     }
 }
@@ -2101,6 +2151,6 @@ mod tests {
         assert_eq!(NodeFlags::BlockScoped, NodeFlags::Let | NodeFlags::Const | NodeFlags::Using);
         assert!(SymbolFlags::Value.contains(SymbolFlags::Function));
         assert!(!SymbolFlags::FunctionScopedVariableExcludes.intersects(SymbolFlags::FunctionScopedVariable));
-        assert_eq!(std::mem::size_of::<Node>(), 48);
+        assert_eq!(std::mem::size_of::<Node>(), 32);
     }
 }

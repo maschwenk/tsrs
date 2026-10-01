@@ -66,3 +66,29 @@ Rust heap outside the arena, live at exit, by allocating function (sampled, MB):
 | `get_ready_lazy_member_table_worker` + `resolve_lazy_members` | 251 | 442 | lazy member tables |
 | `LinkStore::get` (pointer-keyed) | 104 | 154 | |
 | `SymbolTable::with_capacity` | 76 | 117 | |
+
+## Step 2: one allocation per AST node
+
+`Node` was a 48-byte header holding `NodeData`, an enum of `&'static` pointers to a separately allocated data
+struct (two arena allocations per node, 16 bytes of the header for the enum). Now the generator
+(`tools/gen-ast/gen-ast.ts`) allocates `NodeAlloc<T> { node: Node, data: T }` (`repr(C)`) in one `P::new`; the
+header is 32 bytes (`kind`, a `u8` `data_tag` in the former padding, `flags`, `loc`, `parent`, `id`;
+compile-time assert), and the data struct sits at `offset_of!(NodeAlloc<T>, data)` = 32. Field-less data
+structs (`Token`, `KeywordTypeNode`, ...) allocate only the header. `as_*()` and the generated dispatchers
+(`for_each_child`, `visit_each_child`, `clone_node`, `name()`, `modifiers()`, `*_data()`) match on `data_tag`
+and read the data in place (one pointer chase less); `node.data()` returns the old `NodeData` view for the four
+hand-written matches (subtreefacts.rs, ast.rs, the AST oracle). Public accessors unchanged.
+
+Checks: AST oracle 113/113 libs and 17,318/17,319 test units identical (the one is the known non-UTF-8 file),
+`cargo test -p tsrs_ast -p tsrs_parser`, suite pass lists identical in both modes, counters identical (opt-out:
+25,973,354 / 9,639,962 / 44,884,281 single, 39,704,001 / 16,200,921 / 89,981,648 on 4 checkers).
+
+| run (3 interleaved rounds, median) | check s | instructions | peak GB |
+| --- | --- | --- | --- |
+| single, before | 22.03 | 320 G | 10.79 |
+| single, after | 21.92 | 320 G | 10.46 (-0.34) |
+| 4 checkers, before | 10.03 | 480 G | 16.09 |
+| 4 checkers, after | 10.53 | 479 G | 15.81 (-0.29) |
+
+Wall/check times on this shared machine vary by +-20% between rounds (load ~8 from other agents);
+instructions retired (from `/usr/bin/time -l`) are the stable CPU-work measure and did not change.

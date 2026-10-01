@@ -3,7 +3,8 @@
 //
 // Usage: node tools/gen-ast/gen-ast.ts
 //
-// Emits node data structs, base structs, the NodeData enum, NodeFactory::new_*/update_* constructors,
+// Emits node data structs, base structs, the NodeData enum and its NodeDataTag (the data struct of a node is
+// co-allocated right after its header, see `NodeAlloc` in ast.rs), NodeFactory::new_*/update_* constructors,
 // Node::as_* casts, is_* predicates, for_each_child/visit_each_child/clone_node, per-struct field getters,
 // the Node-level base accessors (declaration_data(), name(), modifiers(), ...) and the kind alias guards.
 // Subtree facts, the encoder and TS output are intentionally not generated.
@@ -321,7 +322,7 @@ function header() {
     w();
     w("use std::any::Any;");
     w();
-    w("use tsrs_core::{alloc, OwnedCell, P};");
+    w("use tsrs_core::{OwnedCell, P};");
     w();
     w("use crate::ast::*;");
     w("use crate::flow::*;");
@@ -428,9 +429,11 @@ function genNewFactory(node: NodeType) {
         }
         if (hasTextContent(node)) w(`        self.text_count.set(self.text_count.get() + 1);`);
         const kindArg = kindMember ? "kind" : `Kind::${kindName}`;
-        const dataExpr = isEmptyLayout(l) ? `NodeData::${node.name}` : `NodeData::${node.name}(alloc(${structLiteral(l, values, "        ")}))`;
+        const newNode = isEmptyLayout(l)
+            ? `self.new_empty_node(${kindArg}, NodeDataTag::${node.name})`
+            : `self.new_node(${kindArg}, ${structLiteral(l, values, "        ")})`;
         if (flagsMembers.length > 0) {
-            w(`        let node = self.new_node(${kindArg}, ${dataExpr});`);
+            w(`        let node = ${newNode};`);
             for (const f of flagsMembers) {
                 if (f.m.bitmask) w(`        node.flags.set(node.flags.get() | (${f.name} & ${flagConst(f.m.bitmask)}));`);
                 else w(`        node.flags.set(${f.name});`);
@@ -438,7 +441,7 @@ function genNewFactory(node: NodeType) {
             w(`        node`);
         }
         else {
-            w(`        self.new_node(${kindArg}, ${dataExpr})`);
+            w(`        ${newNode}`);
         }
         w(`    }`);
         w();
@@ -627,6 +630,7 @@ const EXTRA_DATA = ["FlowSwitchClauseData", "FlowReduceLabelData"];
 function genNodeDataEnum() {
     w("// ── NodeData ──────────────────────────────────────────────────────────────");
     w();
+    w("/// The node's data struct, as returned by `Node::data()` (the data itself lives right after the header).");
     w("#[derive(Clone, Copy)]");
     w("pub enum NodeData {");
     for (const n of nodes) {
@@ -636,41 +640,78 @@ function genNodeDataEnum() {
     for (const e of EXTRA_DATA) w(`    ${e}(&'static ${e}),`);
     w("}");
     w();
+    w("/// Which data struct follows a node's header (one variant per `NodeData` variant).");
+    w("#[repr(u8)]");
+    w("#[derive(Clone, Copy, PartialEq, Eq, Debug)]");
+    w("pub(crate) enum NodeDataTag {");
+    for (const n of nodes) w(`    ${n.name},`);
+    for (const e of EXTRA_DATA) w(`    ${e},`);
+    w("}");
+    w();
+    for (const n of nodes) {
+        if (isEmptyLayout(layouts.get(n.name)!)) continue;
+        w(`impl NodePayload for ${n.name} {`);
+        w(`    const TAG: NodeDataTag = NodeDataTag::${n.name};`);
+        w(`}`);
+    }
+    for (const e of EXTRA_DATA) {
+        w(`impl NodePayload for ${e} {`);
+        w(`    const TAG: NodeDataTag = NodeDataTag::${e};`);
+        w(`}`);
+    }
+    w();
+}
+
+// One match arm over `self.data_tag`; `d.` in `expr` stands for the node's data struct.
+function arm(name: string, expr: string): string {
+    if (isEmptyLayout(layouts.get(name)!)) return `            NodeDataTag::${name} => ${expr},`;
+    return `            NodeDataTag::${name} => ${expr.replace(/\bd\./g, `self.payload::<${name}>().`)},`;
 }
 
 function genNodeImpl() {
     w("// ── Node casts and generic dispatch ──────────────────────────────────────");
     w();
     w("impl Node {");
+    w(`    /// The node's data struct.`);
+    w(`    pub fn data(&self) -> NodeData {`);
+    w(`        match self.data_tag {`);
+    for (const n of nodes) {
+        if (isEmptyLayout(layouts.get(n.name)!)) w(`            NodeDataTag::${n.name} => NodeData::${n.name},`);
+        else w(`            NodeDataTag::${n.name} => NodeData::${n.name}(self.payload()),`);
+    }
+    for (const e of EXTRA_DATA) w(`            NodeDataTag::${e} => NodeData::${e}(self.payload()),`);
+    w(`        }`);
+    w(`    }`);
+    w();
     for (const n of nodes) {
         const fn = `as_${snake(n.name)}`;
         const empty = isEmptyLayout(layouts.get(n.name)!);
         w(`    #[inline]`);
         w(`    pub fn ${fn}(&self) -> &'static ${n.name} {`);
-        w(`        match self.data {`);
-        w(empty ? `            NodeData::${n.name} => &${n.name},` : `            NodeData::${n.name}(d) => d,`);
-        w(`            _ => panic!("${fn} called on {:?}", self.kind),`);
+        w(`        if self.data_tag != NodeDataTag::${n.name} {`);
+        w(`            panic!("${fn} called on {:?}", self.kind);`);
         w(`        }`);
+        w(empty ? `        &${n.name}` : `        self.payload()`);
         w(`    }`);
     }
     for (const e of EXTRA_DATA) {
         const fn = `as_${snake(e)}`;
         w(`    #[inline]`);
         w(`    pub fn ${fn}(&self) -> &'static ${e} {`);
-        w(`        match self.data {`);
-        w(`            NodeData::${e}(d) => d,`);
-        w(`            _ => panic!("${fn} called on {:?}", self.kind),`);
+        w(`        if self.data_tag != NodeDataTag::${e} {`);
+        w(`            panic!("${fn} called on {:?}", self.kind);`);
         w(`        }`);
+        w(`        self.payload()`);
         w(`    }`);
     }
     w();
 
     // for_each_child dispatch
     w(`    pub fn for_each_child(&self, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {`);
-    w(`        match self.data {`);
+    w(`        match self.data_tag {`);
     for (const n of nodes) {
         if (!hasForEachChild(n)) continue;
-        w(`            NodeData::${n.name}(d) => d.for_each_child(v),`);
+        w(arm(n.name, `d.for_each_child(v)`));
     }
     w(`            _ => false,`);
     w(`        }`);
@@ -680,10 +721,10 @@ function genNodeImpl() {
     // visit_each_child dispatch
     w(`    pub fn visit_each_child(&self, v: &mut NodeVisitor) -> P<Node> {`);
     w(`        let node = self.as_p();`);
-    w(`        match self.data {`);
+    w(`        match self.data_tag {`);
     for (const n of nodes) {
         if (!hasForEachChild(n)) continue;
-        w(`            NodeData::${n.name}(d) => d.visit_each_child(node, v),`);
+        w(arm(n.name, `d.visit_each_child(node, v)`));
     }
     w(`            _ => node,`);
     w(`        }`);
@@ -693,10 +734,10 @@ function genNodeImpl() {
     // clone_node dispatch
     w(`    pub fn clone_node(&self, f: &NodeFactory) -> P<Node> {`);
     w(`        let node = self.as_p();`);
-    w(`        match self.data {`);
+    w(`        match self.data_tag {`);
     for (const n of nodes) {
-        if (isEmptyLayout(layouts.get(n.name)!)) w(`            NodeData::${n.name} => ${n.name}.clone_node(node, f),`);
-        else w(`            NodeData::${n.name}(d) => d.clone_node(node, f),`);
+        if (isEmptyLayout(layouts.get(n.name)!)) w(arm(n.name, `${n.name}.clone_node(node, f)`));
+        else w(arm(n.name, `d.clone_node(node, f)`));
     }
     w(`            _ => panic!("clone_node: unsupported node data for {:?}", self.kind),`);
     w(`        }`);
@@ -707,25 +748,25 @@ function genNodeImpl() {
     const withField = (fieldName: string) =>
         nodes.filter(n => n.name !== "SourceFile" && promoted(layouts.get(n.name)!).some(f => f.name === fieldName));
     w(`    pub fn name(&self) -> Option<P<Node>> {`);
-    w(`        match self.data {`);
+    w(`        match self.data_tag {`);
     for (const n of withField("name")) {
         const f = findFlat(layouts.get(n.name)!, "name");
-        w(`            NodeData::${n.name}(d) => ${f.ty.startsWith("Option") ? `d.${f.rust}()` : `Some(d.${f.rust}())`},`);
+        w(arm(n.name, f.ty.startsWith("Option") ? `d.${f.rust}()` : `Some(d.${f.rust}())`));
     }
     w(`            _ => None,`);
     w(`        }`);
     w(`    }`);
     w();
     w(`    pub fn modifiers(&self) -> Option<P<ModifierList>> {`);
-    w(`        match self.data {`);
-    for (const n of withField("modifiers")) w(`            NodeData::${n.name}(d) => d.modifiers(),`);
+    w(`        match self.data_tag {`);
+    for (const n of withField("modifiers")) w(arm(n.name, `d.modifiers()`));
     w(`            _ => None,`);
     w(`        }`);
     w(`    }`);
     w();
     w(`    pub(crate) fn set_modifiers_data(&self, modifiers: Option<P<ModifierList>>) {`);
-    w(`        match self.data {`);
-    for (const n of withField("modifiers")) w(`            NodeData::${n.name}(d) => d.set_modifiers(modifiers),`);
+    w(`        match self.data_tag {`);
+    for (const n of withField("modifiers")) w(arm(n.name, `d.set_modifiers(modifiers)`));
     w(`            _ => {}`);
     w(`        }`);
     w(`    }`);
@@ -744,10 +785,10 @@ function genNodeImpl() {
     ];
     for (const [fn, base] of baseAccessors) {
         w(`    pub fn ${fn}(&self) -> Option<&'static ${base}> {`);
-        w(`        match self.data {`);
+        w(`        match self.data_tag {`);
         for (const n of nodes) {
             const p = basePath(layouts.get(n.name)!, base);
-            if (p) w(`            NodeData::${n.name}(d) => Some(&d.${p}),`);
+            if (p) w(arm(n.name, `Some(&d.${p})`));
         }
         w(`            _ => None,`);
         w(`        }`);
