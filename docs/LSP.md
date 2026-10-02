@@ -148,9 +148,9 @@ completion requests on xstate and on the private monorepo (registry updates incl
 | phase | content | state |
 | --- | --- | --- |
 | 1 | transport, protocol types, session skeleton, document sync, project discovery, program update, push + pull diagnostics, hover, definition; LSP oracle | done (2026-10-02, below) |
-| 2 | fourslash harness + generated tests | harness drives the in-process server; hover, definitions, diagnostics, formatting (ls/format.go ported), document sync / edits done; completions, references in progress (below) |
-| 3 | references, rename, completions, signature help, symbols, semantic tokens, folding, selection ranges, inlay hints, code actions, formatting | code actions, organize imports, auto-imports, file rename done (actions wave); see Fourslash |
-| 4 | watchers, multi-project, program reuse, cancellation, memory regions, editor setup | cancellation, builtin watcher, watched-file invalidation and state baselines done (robust wave, notes/lsp-robust.md); memory regions done (mem wave, notes/lsp-mem.md: RSS flat under edits); watched-file / multi-project oracle sessions identical |
+| 2 | fourslash harness + generated tests | done: all 4,546 Go tests generated and run on the in-process server (below) |
+| 3 | references, rename, completions, signature help, symbols, semantic tokens, folding, selection ranges, inlay hints, code actions, formatting | done: fourslash 4,066 / 4,546 pass; the 63 failures are 55 content-mapper + 8 `@tsc` (emit) tests |
+| 4 | watchers, multi-project, program reuse, cancellation, memory regions, editor setup | cancellation, builtin watcher, watched-file invalidation and state baselines done (robust wave, notes/lsp-robust.md); memory regions done (mem + memfix waves: RSS flat under edits, census 0 violations); watched-file / multi-project oracle sessions identical; exit behavior identical (`exit_check.py`); editor setup documented, Neovim verified headless |
 
 ### Phase 1 gates (2026-10-02, `lsp` 3c95d59+)
 
