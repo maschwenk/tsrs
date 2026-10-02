@@ -33,6 +33,8 @@ pub(crate) struct ClientMock {
     pub(crate) refresh_code_lens_calls: Mutex<usize>,
     pub(crate) publish_diagnostics_calls: Mutex<Vec<lsproto::PublishDiagnosticsParams>>,
     pub(crate) locale: Mutex<String>,
+    pub(crate) set_locale_calls: Mutex<Vec<String>>,
+    pub(crate) refresh_code_lens_func: Mutex<Option<Box<dyn Fn(&Context) + Send + Sync>>>,
     pub(crate) watch_files_func: Mutex<Option<Box<dyn Fn(&WatcherID) -> Result<(), lsproto::Error> + Send + Sync>>>,
 }
 
@@ -78,8 +80,11 @@ impl Client for ClientMock {
         *self.refresh_inlay_hints_calls.lock().unwrap() += 1;
         Ok(())
     }
-    fn refresh_code_lens(&self, _ctx: &Context) -> Result<(), lsproto::Error> {
+    fn refresh_code_lens(&self, ctx: &Context) -> Result<(), lsproto::Error> {
         *self.refresh_code_lens_calls.lock().unwrap() += 1;
+        if let Some(f) = &*self.refresh_code_lens_func.lock().unwrap() {
+            f(ctx);
+        }
         Ok(())
     }
     fn progress_start(&self, _message: &'static Message, _args: &[&dyn Display]) {}
@@ -91,7 +96,7 @@ impl Client for ClientMock {
         true
     }
     fn set_locale(&self, locale: &str) {
-        *self.locale.lock().unwrap() = locale.to_string();
+        self.set_locale_calls.lock().unwrap().push(locale.to_string());
     }
     fn get_locale(&self) -> Locale {
         Locale(self.locale.lock().unwrap().clone())

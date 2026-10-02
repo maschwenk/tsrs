@@ -1156,3 +1156,238 @@ fn did_change_watched_files_skips_irrelevant_extensions() {
     ]);
     assert_eq!(refreshes(), baseline_refresh_count, "package install noise should not trigger refresh");
 }
+
+// session_test.go:1481 TestSession/refreshes code lenses and inlay hints when relevant user preferences change
+#[test]
+fn refreshes_code_lenses_and_inlay_hints_when_relevant_user_preferences_change() {
+    let files: &[(&str, &str)] = &[("/src/tsconfig.json", "{}"), ("/src/index.ts", "export const x = 1;")];
+    let (session, utils) = setup(files);
+    open(&session, files, "/src/index.ts");
+    let _ = ls_program(&session, "/src/index.ts");
+
+    session.configure(tsrs_ls::lsutil::new_default_user_preferences());
+    // Change user preferences for code lens and inlay hints.
+    let mut new_prefs = session.config();
+    new_prefs.code_lens.references_code_lens_enabled = tsrs_core::Tristate::True;
+    new_prefs.inlay_hints.include_inlay_function_like_return_type_hints = tsrs_core::Tristate::True;
+
+    session.configure(new_prefs);
+
+    assert_eq!(*utils.client().refresh_code_lens_calls.lock().unwrap(), 1, "expected one RefreshCodeLens call after code lens preference change");
+    assert_eq!(*utils.client().refresh_inlay_hints_calls.lock().unwrap(), 1, "expected one RefreshInlayHints call after inlay hints preference change");
+}
+
+// session_test.go:1506 TestSession/sets locale when configured
+#[test]
+fn sets_locale_when_configured() {
+    let (session, utils) = setup(&[]);
+    let mut prefs = tsrs_ls::lsutil::new_default_user_preferences();
+    prefs.locale = "fr".to_string();
+
+    session.configure(prefs);
+
+    let set_locale_calls = utils.client().set_locale_calls.lock().unwrap().clone();
+    assert_eq!(set_locale_calls, vec!["fr".to_string()]);
+}
+
+// session_test.go:1519 TestSession/locale change invalidates programs
+#[test]
+fn locale_change_invalidates_programs() {
+    let files: &[(&str, &str)] = &[("/src/tsconfig.json", "{}"), ("/src/index.ts", "export const x = 1;")];
+    let (session, _) = setup(files);
+    let config_path = Path("/src/tsconfig.json".to_string());
+    open(&session, files, "/src/index.ts");
+    let _ = ls_program(&session, "/src/index.ts");
+    let program_of = || session.snapshot().project_collection.configured_project(&config_path).unwrap().program.unwrap();
+    let initial_program = program_of();
+
+    let mut preferences = session.config();
+    preferences.code_lens.references_code_lens_enabled = tsrs_core::Tristate::True;
+    session.configure(preferences.clone());
+    let _ = ls_program(&session, "/src/index.ts");
+    assert!(std::ptr::eq(program_of(), initial_program));
+
+    preferences.locale = "fr".to_string();
+    session.configure(preferences);
+    let _ = ls_program(&session, "/src/index.ts");
+    assert!(!std::ptr::eq(program_of(), initial_program));
+    session.close();
+}
+
+// session_test.go:1551 TestSession/adds locale to background contexts
+#[test]
+fn adds_locale_to_background_contexts() {
+    let (session, utils) = setup(&[]);
+    *utils.client().locale.lock().unwrap() = "fr".to_string();
+    *utils.client().refresh_code_lens_func.lock().unwrap() = Some(Box::new(|ctx: &Context| {
+        assert_eq!(tsrs_core::context::locale_from_context(ctx).0, "fr");
+    }));
+    let mut prefs = tsrs_ls::lsutil::new_default_user_preferences();
+    prefs.code_lens.references_code_lens_enabled = tsrs_core::Tristate::True;
+
+    session.configure(prefs);
+
+    assert_eq!(*utils.client().refresh_code_lens_calls.lock().unwrap(), 1);
+}
+
+// session_test.go:1571 TestSession/schedules diagnostics refresh when reportStyleChecksAsWarnings changes
+#[test]
+fn schedules_diagnostics_refresh_when_report_style_checks_as_warnings_changes() {
+    let files: &[(&str, &str)] = &[("/src/tsconfig.json", "{}"), ("/src/index.ts", "export const x = 1;")];
+    let (session, utils) = setup(files);
+    open(&session, files, "/src/index.ts");
+    let _ = ls_program(&session, "/src/index.ts");
+    session.wait_for_background_tasks();
+
+    // Record the baseline count of RefreshDiagnostics calls.
+    let baseline_refresh_count = utils.client().refresh_diagnostics_calls();
+
+    // Toggle reportStyleChecksAsWarnings (default is true, so set it to false).
+    let mut prefs = tsrs_ls::lsutil::new_default_user_preferences();
+    prefs.report_style_checks_as_warnings = tsrs_core::Tristate::False;
+    session.configure(prefs);
+    session.wait_for_background_tasks();
+
+    assert!(utils.client().refresh_diagnostics_calls() > baseline_refresh_count);
+}
+
+// session_test.go:1598 TestSession/config parsing
+#[test]
+fn config_parsing() {
+    use tsrs_ls::lsutil::{new_default_user_preferences, parse_user_preferences, OrganizeImportsSort, QuotePreference};
+    let files: &[(&str, &str)] = &[("/src/tsconfig.json", "{}"), ("/src/index.ts", "export const x = 1;")];
+    let (session, _) = setup(files);
+    open(&session, files, "/src/index.ts");
+    let _ = ls_program(&session, "/src/index.ts");
+
+    let parse = |text: &str| match tsrs_core::json::unmarshal(text).unwrap() {
+        tsrs_core::json::Value::Object(map) => parse_user_preferences(&map),
+        _ => unreachable!(),
+    };
+
+    session.configure(parse(r#"{"js/ts": {"preferences": {"useAliasesForRenames": true, "quoteStyle": "single"}, "unstable": {"organizeImportsSort": "ordinalIgnoreCase"}}}"#));
+    let mut expected_prefs1 = new_default_user_preferences();
+    expected_prefs1.use_aliases_for_rename = tsrs_core::Tristate::True;
+    expected_prefs1.quote_preference = QuotePreference::Single;
+    expected_prefs1.organize_imports_sort = OrganizeImportsSort::OrdinalIgnoreCase;
+    assert_eq!(session.config(), expected_prefs1);
+
+    session.configure(parse(r#"{"js/ts": {"preferences": {"useAliasesForRenames": false, "quoteStyle": "double"}, "unstable": {"organizeImportsSort": "ordinal"}}}"#));
+    let mut expected_prefs2 = new_default_user_preferences();
+    expected_prefs2.use_aliases_for_rename = tsrs_core::Tristate::False;
+    expected_prefs2.quote_preference = QuotePreference::Double;
+    expected_prefs2.organize_imports_sort = OrganizeImportsSort::Ordinal;
+    assert_eq!(session.config(), expected_prefs2);
+}
+
+// session_test.go:1649 TestSession/language service for closed files/closed file in configured project not yet opened
+#[test]
+fn language_service_for_closed_file_in_configured_project() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+					"compilerOptions": {
+						"noLib": true,
+						"strict": true
+					},
+					"include": ["src"]
+				}"#,
+        ),
+        ("/home/projects/TS/p1/src/index.ts", "export const x: number = 1;"),
+    ];
+    let (session, _) = setup(files);
+
+    // Do NOT open any file. Directly request language service for a closed file
+    // that belongs to the configured project.
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(program.get_source_file("/home/projects/TS/p1/src/index.ts").unwrap().text(), "export const x: number = 1;");
+}
+
+// session_test.go:1678 TestSession/language service for closed files/closed file with no configured project creates inferred project
+#[test]
+fn language_service_for_closed_file_without_configured_project() {
+    let files: &[(&str, &str)] = &[("/home/projects/TS/loose/index.ts", r#"const greeting: string = "hello";"#)];
+    let (session, _) = setup(files);
+
+    let program = ls_program(&session, "/home/projects/TS/loose/index.ts");
+    assert_eq!(program.get_source_file("/home/projects/TS/loose/index.ts").unwrap().text(), r#"const greeting: string = "hello";"#);
+}
+
+// session_test.go:1700 TestSession/jsconfig.json used for JS files when tsconfig.json exists in same directory
+#[test]
+fn jsconfig_used_for_js_files_when_tsconfig_exists_in_same_directory() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+				"compilerOptions": {
+					"noLib": true,
+					"strict": true
+				}
+			}"#,
+        ),
+        (
+            "/home/projects/TS/p1/jsconfig.json",
+            r#"{
+				"compilerOptions": {
+					"noLib": true,
+					"checkJs": true
+				}
+			}"#,
+        ),
+        ("/home/projects/TS/p1/index.ts", "export const x: number = 1;"),
+        ("/home/projects/TS/p1/app.js", r#"/** @type {number} */ var y = "not a number";"#),
+    ];
+    let (session, _) = setup(files);
+
+    // Open the JS file - it should be assigned to the jsconfig.json project, not tsconfig.json
+    session.did_open_file(&ctx(), uri("file:///home/projects/TS/p1/app.js"), 1, file(files, "/home/projects/TS/p1/app.js"), lsproto::LanguageKind::JavaScript);
+
+    let default_project = session.snapshot().get_default_project(&uri("file:///home/projects/TS/p1/app.js")).expect("JS file should have a default project");
+    assert_eq!(default_project.config_file_name(), "/home/projects/TS/p1/jsconfig.json", "JS file should belong to jsconfig.json project, not tsconfig.json");
+
+    // Open the TS file - it should be assigned to tsconfig.json project
+    open(&session, files, "/home/projects/TS/p1/index.ts");
+
+    let default_ts_project = session.snapshot().get_default_project(&uri("file:///home/projects/TS/p1/index.ts")).expect("TS file should have a default project");
+    assert_eq!(default_ts_project.config_file_name(), "/home/projects/TS/p1/tsconfig.json", "TS file should belong to tsconfig.json project");
+}
+
+// session_test.go:662 TestSession/DidChangeWatchedFiles/change program file not in tsconfig root files
+#[test]
+fn did_change_watched_files_change_program_file_not_in_tsconfig_root_files() {
+    for workspace_dir in ["/", "/home/projects/TS/p1", "/somewhere/else/entirely"] {
+        let files: &[(&str, &str)] = &[
+            (
+                "/home/projects/TS/p1/tsconfig.json",
+                r#"{
+							"compilerOptions": {
+								"noLib": true,
+								"module": "nodenext",
+								"strict": true
+							},
+							"files": ["src/index.ts"]
+						}"#,
+            ),
+            ("/home/projects/TS/p1/src/index.ts", r#"import { x } from "../../x";"#),
+            ("/home/projects/TS/x.ts", "export const x = 1;"),
+        ];
+
+        let mut options = projecttestutil::default_session_options();
+        options.current_directory = workspace_dir.to_string();
+        options.push_diagnostics_enabled = false;
+        let (session, utils) = projecttestutil::setup_with_options(files, Some(options));
+        open(&session, files, "/home/projects/TS/p1/src/index.ts");
+        let program_before = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+        session.wait_for_background_tasks();
+
+        assert!(utils.watches_file("/home/projects/ts/x.ts"), "workspaceDir={workspace_dir}");
+
+        utils.fs().write_file("/home/projects/TS/x.ts", "export const x = 2;").unwrap();
+
+        watch_changed(&session, "/home/projects/TS/x.ts", lsproto::FileChangeType::Changed);
+
+        assert!(!std::ptr::eq(ls_program(&session, "/home/projects/TS/p1/src/index.ts"), program_before), "workspaceDir={workspace_dir}");
+    }
+}
