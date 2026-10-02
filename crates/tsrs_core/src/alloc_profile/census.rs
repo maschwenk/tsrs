@@ -840,9 +840,9 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         let (packed, tags, padding, born, heap) = match from {
             Some(j) => {
                 let rb = table.blocks[j];
-                let empty_slice = class_is(rb.class, "TypeAlloc<tsrs_checker::types::TypeReference>")
-                    && off == 40
-                    && read(rb.start as usize + 32) == 0; // empty tail slice in `resolved_type_arguments`
+                // `resolved_type_arguments` (a `ThinSlice` at +56): an empty list (length bits 0) is not a reference,
+                // though its data pointer may be the end of the list it was cut from, i.e. the next block's start.
+                let empty_slice = class_is(rb.class, "TypeAlloc<tsrs_checker::types::TypeReference>") && off == 56 && w >> 48 == 0;
                 (
                     class_is(rb.class, "TypeMapper"),
                     class_is(rb.class, "TypeMapper") || class_is(rb.class, "InferenceContext"),
@@ -873,11 +873,19 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             // Interior pointers: hash tables point at their control bytes (heap blocks), sub-slices into arena
             // lists (8-byte elements).
             let slice = matches!(&classes[b.class as usize], Class::Arena { ty, .. } if ty.starts_with('['));
+            // Tails behind a word with a bit-0 tag (an intersection's `IntersectionRare`, a signature's
+            // `SignatureRare` with the no-predicate bit, a long `ThinSlice`'s `&[T]` record).
+            let bit0 = off_t == 1
+                && (class_is(b.class, "IntersectionRare")
+                    || class_is(b.class, "SignatureRare")
+                    || matches!(&classes[b.class as usize], Class::Arena { ty, .. } if ty.starts_with("&[")));
             let aimed = off_t == 0
                 || (tags && off_t < 8 && (class_is(b.class, "TypeMapper") || class_is(b.class, "InferenceContext") || class_is(b.class, "InferenceContextRare")))
+                || bit0
                 || is_heap(b.class)
                 || (slice && off_t % 8 == 0);
-            if aimed && (w >> 48 == 0 || packed) {
+            // A `ThinSlice` keeps the length of the list it points to in the top 16 bits.
+            if aimed && (w >> 48 == 0 || packed || (slice && off_t == 0)) {
                 match wf_seq.get(&i) {
                     None => return Some(i),
                     Some(&freed) if c & 0xffff != 0 && born.is_none_or(|b| b <= freed) => return Some(i),
