@@ -24,7 +24,7 @@ mod bfs;
 mod binarysearch;
 mod buildoptions;
 mod compileroptions;
-mod context;
+pub mod context;
 #[path = "core.rs"]
 mod core_go;
 mod languagevariant;

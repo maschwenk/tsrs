@@ -86,7 +86,7 @@ impl Checker {
     }
 
     // checker.go:2237
-    pub(crate) fn check_source_file(&mut self, ctx: Context, source_file: P<SourceFile>, check_unused: bool) {
+    pub(crate) fn check_source_file(&mut self, ctx: &Context, source_file: P<SourceFile>, check_unused: bool) {
         let _ = ctx;
         let links = self.source_file_links.get(source_file);
         if !links.type_checked.get() {

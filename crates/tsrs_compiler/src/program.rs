@@ -1350,7 +1350,7 @@ impl Program {
 
         // Checker creation forces binding, so bind diagnostics will be populated.
         let mut diags: Vec<P<Diagnostic>> = source_file.bind_diagnostics().to_vec();
-        diags.extend(file_checker.get_diagnostics_exported(Context, source_file));
+        diags.extend(file_checker.get_diagnostics_exported(&Context::default(), source_file));
 
         if include_deferred_globals {
             let current_globals = file_checker.get_global_diagnostics();
@@ -1393,7 +1393,7 @@ impl Program {
         if self.skip_type_checking(source_file, false) {
             return Vec::new();
         }
-        file_checker.get_suggestion_diagnostics(Context, source_file)
+        file_checker.get_suggestion_diagnostics(&Context::default(), source_file)
     }
 
     fn get_diagnostics_with_preceding_directives(

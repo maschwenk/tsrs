@@ -24,18 +24,16 @@ pub struct Checker {
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
 }
 
-// Go `context.Context` (see tsrs_checker::Context).
 #[cfg(not(feature = "checker"))]
-#[derive(Clone, Copy, Default)]
-pub struct Context;
+pub use tsrs_core::context::Context;
 
 #[cfg(not(feature = "checker"))]
 impl Checker {
-    pub fn get_diagnostics_exported(&mut self, _ctx: Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    pub fn get_diagnostics_exported(&mut self, _ctx: &Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         unimplemented!("tsrs_compiler was built without the `checker` feature")
     }
 
-    pub fn get_suggestion_diagnostics(&mut self, _ctx: Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    pub fn get_suggestion_diagnostics(&mut self, _ctx: &Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         unimplemented!("tsrs_compiler was built without the `checker` feature")
     }
 

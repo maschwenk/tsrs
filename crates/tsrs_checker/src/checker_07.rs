@@ -1432,19 +1432,19 @@ impl Checker {
     }
 
     // checker.go:14186
-    pub fn get_diagnostics_exported(&mut self, ctx: Context, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    pub fn get_diagnostics_exported(&mut self, ctx: &Context, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         self.get_diagnostics(ctx, source_file, false)
     }
 
     // checker.go:14190
-    pub fn get_suggestion_diagnostics(&mut self, ctx: Context, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    pub fn get_suggestion_diagnostics(&mut self, ctx: &Context, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         self.get_diagnostics(ctx, source_file, true)
     }
 
     // checker.go:14194
     // Go passes `&c.diagnostics` / `&c.suggestionDiagnostics`; the collections are plain Checker fields, so the
     // Rust port selects the collection with `suggestions` (true = `c.suggestionDiagnostics`).
-    pub(crate) fn get_diagnostics(&mut self, ctx: Context, source_file: P<SourceFile>, suggestions: bool) -> Vec<P<Diagnostic>> {
+    pub(crate) fn get_diagnostics(&mut self, ctx: &Context, source_file: P<SourceFile>, suggestions: bool) -> Vec<P<Diagnostic>> {
         self.check_not_canceled();
         let check_unused = self.compiler_options.no_unused_locals.is_true() || self.compiler_options.no_unused_parameters.is_true() || suggestions;
         self.check_source_file(ctx, source_file, check_unused);

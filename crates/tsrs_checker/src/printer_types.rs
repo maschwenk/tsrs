@@ -225,9 +225,8 @@ impl SymbolTracker for SymbolTrackerImpl {
     }
 }
 
-/// Go `context.Context` parameters (cancellation is not ported; pass `Context`).
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Context;
+// Go `context.Context`.
+pub use tsrs_core::context::Context;
 
 /// Go `iter.Seq[T]`: materialized as a `Vec`.
 pub type Seq<T> = Vec<T>;
