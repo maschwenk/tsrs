@@ -52,3 +52,5 @@ pub use snapshothost::*;
 mod projecttestutil;
 #[cfg(test)]
 mod session_test;
+#[cfg(test)]
+mod projectcollectionbuilder_test;
