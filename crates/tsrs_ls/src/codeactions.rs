@@ -87,6 +87,7 @@ fn code_fix_providers() -> &'static [&'static CodeFixProvider] {
     static PROVIDERS: std::sync::LazyLock<Vec<&'static CodeFixProvider>> = std::sync::LazyLock::new(|| {
         vec![
             &*crate::codeactions_importfixes::IMPORT_FIX_PROVIDER,
+            &*crate::codeactions_fixmissingtypeannotation::ISOLATED_DECLARATIONS_FIX_PROVIDER,
             &*crate::codeactions_fixclassincorrectlyimplementsinterface::FIX_CLASS_INCORRECTLY_IMPLEMENTS_INTERFACE_PROVIDER,
             // Add more code fix providers here as they are implemented
         ]

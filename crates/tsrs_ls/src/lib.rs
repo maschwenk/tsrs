@@ -9,6 +9,7 @@ mod codelens;
 pub mod change;
 mod codeactions;
 mod codeactions_fixclassincorrectlyimplementsinterface;
+mod codeactions_fixmissingtypeannotation;
 mod codeactions_importfixes;
 mod codeactions_missingmemberfixer;
 mod completions;
