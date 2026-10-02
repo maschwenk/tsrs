@@ -5,7 +5,13 @@
 // registry, `IsPreparedForImportingFile` is always false, `NodeModulesDirectories` is empty. Replace this module
 // with the real port in phase 3.
 
+mod export;
+mod fix;
+mod import_adder;
 mod registry;
 mod view;
+pub use export::*;
+pub use fix::*;
+pub use import_adder::*;
 pub use registry::*;
 pub use view::*;
