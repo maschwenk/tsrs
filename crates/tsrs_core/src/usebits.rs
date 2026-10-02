@@ -250,9 +250,13 @@ pub fn mark_value<T>(v: &T) {
             mark(w[0]);
         }
     } else if std::mem::size_of::<T>() == 24 && std::mem::align_of::<T>() == 8 {
-        // An enum with a slice or string payload after its tag (`LiteralValue::String`, `PseudoBigInt`).
+        // An enum or struct with a slice or string payload (`LiteralValue::String`, `PseudoBigInt`), at either
+        // word: a word followed by a small length is marked (`mark` ignores what is not an arena address).
         // SAFETY: a 24-byte, 8-aligned value; only its three words are inspected.
         let w = unsafe { *(v as *const T as *const [usize; 3]) };
+        if w[1] < 1 << 32 {
+            mark(w[0]);
+        }
         if w[2] < 1 << 32 {
             mark(w[1]);
         }
