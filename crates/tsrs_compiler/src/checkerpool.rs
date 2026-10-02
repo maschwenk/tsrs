@@ -130,6 +130,42 @@ impl Drop for CheckerHandle {
     }
 }
 
+// A checker owned by a pool outside this crate (Go's project pool keeps `[]*checker.Checker` behind its mutex).
+// `Checker` is not `Send` (it keeps `Rc`s and non-`Send` deferred closures, all reachable only from the checker
+// itself), so a pool that shares checkers between threads stores them in this wrapper and, like the built-in pool,
+// lets only the thread that holds a checker touch it.
+pub struct PooledChecker(Box<Checker>);
+unsafe impl Send for PooledChecker {}
+unsafe impl Sync for PooledChecker {}
+
+impl PooledChecker {
+    pub fn new(checker: Box<Checker>) -> PooledChecker {
+        PooledChecker(checker)
+    }
+
+    // The checker's stable address, for `CheckerHandle::from_raw`.
+    pub fn as_non_null(&mut self) -> NonNull<Checker> {
+        NonNull::from(&mut *self.0)
+    }
+
+    pub fn into_inner(self) -> Box<Checker> {
+        self.0
+    }
+}
+
+impl std::ops::Deref for PooledChecker {
+    type Target = Checker;
+    fn deref(&self) -> &Checker {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for PooledChecker {
+    fn deref_mut(&mut self) -> &mut Checker {
+        &mut self.0
+    }
+}
+
 // Checkers recurse deeply (the single-threaded CLI runs on a 512 MB stack); each checker thread gets the same.
 pub const CHECKER_STACK_SIZE: usize = 512 << 20;
 

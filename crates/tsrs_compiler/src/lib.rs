@@ -17,9 +17,11 @@ mod processing_diagnostic;
 mod program;
 mod projectreferencefilemapper;
 #[cfg(all(test, feature = "checker"))]
+mod program_test;
+#[cfg(all(test, feature = "checker"))]
 mod modulespecifiers_oracle_test;
 
-pub use checkerpool::{assignment_stats_enabled, set_checker_assignment_from_cli, Checker, CheckerHandle, CheckerPool, Context};
+pub use checkerpool::{assignment_stats_enabled, set_checker_assignment_from_cli, Checker, CheckerHandle, CheckerPool, Context, PooledChecker};
 pub use file_include::FileIncludeReason;
 pub use fileloader::{DuplicateSourceFile, LibFile};
 pub use host::{new_cached_fs_compiler_host, new_compiler_host, CompilerHost, TraceFn};

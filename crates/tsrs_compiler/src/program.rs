@@ -135,7 +135,7 @@ pub struct Program {
     pub(crate) opts: ProgramConfig,
     host: Arc<dyn CompilerHost>,
     resolution_host: &'static dyn ResolutionHost,
-    resolution_data: P<module::ResolutionData>,
+    pub(crate) resolution_data: P<module::ResolutionData>,
     // Always set once the program is constructed (see `init_checker_pool`).
     checker_pool: OnceLock<programCheckerPool>,
     pub(crate) include_processor: includeProcessor,
