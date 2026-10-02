@@ -54,9 +54,10 @@
 //!
 //! Not ported: source map emit (guards kept, generator paths unreachable), the transform helpers of `factory.go`
 //! other than the four listed above, the helper definitions of
-//! `helpers.go` (only `EmitHelper` and its ordering), `changetrackerwriter.go`, `syntheticfile.go`, `emithost.go`,
+//! `helpers.go` (only `EmitHelper` and its ordering), `emithost.go`,
 //! `emitresolver.go`, JSDoc emit (`emitJSDocNode` panics like Go).
 
+mod changetrackerwriter;
 mod emitcontext;
 mod emitflags;
 mod emittextwriter;
@@ -69,9 +70,11 @@ mod printer_2;
 mod printer_3;
 mod semicolon_writer;
 mod singlelinestringwriter;
+mod syntheticfile;
 mod textwriter;
 mod utilities;
 
+pub use changetrackerwriter::*;
 pub use emitcontext::*;
 pub use emitflags::*;
 pub use emittextwriter::*;
@@ -84,6 +87,7 @@ pub use printer_2::*;
 pub use printer_3::*;
 pub(crate) use semicolon_writer::*;
 pub use singlelinestringwriter::*;
+pub use syntheticfile::*;
 pub use textwriter::*;
 pub use utilities::*;
 
