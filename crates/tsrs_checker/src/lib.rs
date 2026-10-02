@@ -119,6 +119,7 @@ mod nodebuilder_hover;
 pub(crate) use nodebuilder_hover::*;
 mod services;
 pub(crate) use services::*;
+pub mod astnav;
 
 // Exported Go functions the conformance harness's `.types`/`.symbols` baseline writer calls (tsrs_testrunner).
 pub use nodebuilder::new_node_builder;
