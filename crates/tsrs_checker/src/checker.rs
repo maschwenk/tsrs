@@ -1023,6 +1023,7 @@ pub struct Checker {
     /// notes/mem-lazy.md L10: getUnmatchedProperties walks lazy targets.
     pub lazy_unmatched: bool,
     pub lazy_discriminants: bool,
+    pub lazy_bases: bool,
     /// notes/mem-lazy.md L11: empty-object tests on lazy tables.
     pub lazy_empty: bool,
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
@@ -1384,6 +1385,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_has_prop: tsrs_core::lazymembers::lazy_has_prop(),
         lazy_unmatched: tsrs_core::lazymembers::lazy_unmatched(),
         lazy_discriminants: tsrs_core::lazymembers::lazy_discriminants(),
+        lazy_bases: tsrs_core::lazymembers::lazy_bases(),
         lazy_empty: tsrs_core::lazymembers::lazy_empty(),
         lazy_member_stats: Default::default(),
         #[cfg(feature = "assignment-stats")]

@@ -75,6 +75,15 @@ pub fn lazy_discriminants() -> bool {
     env_flag(&F, "TSRS_LAZY_DISCRIMINANTS", true)
 }
 
+/// Candidate U2 (notes/mem-use-census.md): a lazy member table resolved in full takes the members it inherits from
+/// a base type that has a lazy table of its own by looking each one up there, in `getPropertiesOfType(base)` order
+/// (the L10 list), instead of resolving the base in full: only the inherited members it keeps are instantiated.
+/// `TSRS_LAZY_BASES=0|1`.
+pub fn lazy_bases() -> bool {
+    static F: OnceLock<bool> = OnceLock::new();
+    env_flag(&F, "TSRS_LAZY_BASES", true)
+}
+
 /// Candidate L11 (notes/mem-lazy.md): "is this an empty object type" (`isEmptyObjectType`, the empty-object test in
 /// `removeSubtypes`) answers from a lazy member table instead of resolving it. `TSRS_LAZY_EMPTY=0|1`.
 pub fn lazy_empty() -> bool {
@@ -135,4 +144,5 @@ lazy_member_stats! {
     unmatched_lazy_walks: "Lazy property-order lists requested",
     empty_lazy_queries: "Empty-object queries answered by lazy tables",
     discriminant_source_lookups_avoided: "Discriminant source lookups avoided",
+    lazy_base_walks: "Bases inherited without resolving them",
 }

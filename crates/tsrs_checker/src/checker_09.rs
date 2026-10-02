@@ -2750,6 +2750,24 @@ impl Checker {
         }
         let ready = lm.ready.get().unwrap();
         for &base_type in tsrs_core::usebits::used(ready.base_types) {
+            if self.lazy_bases {
+                // notes/mem-use-census.md U2: addInheritedMembers over the base's properties in the same order, with
+                // declared members standing in until a member is kept (same name and flags as its instantiation).
+                if let Some(stand_ins) = self.get_lazy_properties_in_order(base_type) {
+                    self.lazy_member_stats.lazy_base_walks += 1;
+                    for base in stand_ins {
+                        if is_static_private_identifier_property(base) {
+                            continue;
+                        }
+                        let s = members.and_then(|table| table.lookup(base.name()));
+                        if s.is_none() || !s.unwrap().flags().intersects(SymbolFlags::Value) {
+                            let base = self.get_property_of_type(base_type, base.name()).unwrap();
+                            members.get_or_insert_with(SymbolTable::new).set(base.name.peek(), base);
+                        }
+                    }
+                    continue;
+                }
+            }
             let base_properties = self.get_properties_of_type(base_type);
             members = self.add_inherited_members(members, &base_properties);
         }
