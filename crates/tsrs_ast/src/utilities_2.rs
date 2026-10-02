@@ -1401,6 +1401,17 @@ pub fn is_variable_declaration_initialized_to_require(mut node: P<Node>) -> bool
     is_variable_declaration_initialized_with_require_helper(node, false /*allowAccessedRequire*/)
 }
 
+// utilities.go:2811
+pub fn is_require_variable_statement(node: P<Node>) -> bool {
+    if is_variable_statement(node) {
+        let declarations = node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes;
+        if !declarations.is_empty() {
+            return declarations.iter().all(|&d| is_variable_declaration_initialized_to_require(d));
+        }
+    }
+    false
+}
+
 pub fn is_variable_declaration_initialized_to_bare_or_accessed_require(node: P<Node>) -> bool {
     is_variable_declaration_initialized_with_require_helper(node, true /*allowAccessedRequire*/)
 }
