@@ -112,7 +112,7 @@ impl FormattingScanner {
     }
 }
 
-// scanner.go:100
+// scanner.go:99
 fn should_rescan_greater_than_token(node: P<Node>) -> bool {
     matches!(
         node.kind(),
@@ -124,7 +124,7 @@ fn should_rescan_greater_than_token(node: P<Node>) -> bool {
     )
 }
 
-// scanner.go:112
+// scanner.go:111
 fn should_rescan_jsx_identifier(node: P<Node>) -> bool {
     if let Some(parent) = node.parent() {
         match parent.kind() {
@@ -142,7 +142,7 @@ fn should_rescan_jsx_identifier(node: P<Node>) -> bool {
     false
 }
 
-// scanner.go:130
+// scanner.go:129
 fn is_leftmost_jsx_tag_name(node: P<Node>) -> bool {
     ast::find_ancestor_or_quit(node, |n| {
         if n.parent().is_none() {
@@ -159,7 +159,7 @@ fn is_leftmost_jsx_tag_name(node: P<Node>) -> bool {
 }
 
 impl FormattingScanner {
-    // scanner.go:145
+    // scanner.go:144
     fn should_rescan_jsx_text(&self, node: P<Node>) -> bool {
         if ast::is_jsx_text(node) {
             return true;
@@ -172,27 +172,27 @@ impl FormattingScanner {
     }
 }
 
-// scanner.go:156
+// scanner.go:155
 fn should_rescan_slash_token(container: P<Node>) -> bool {
     container.kind() == Kind::RegularExpressionLiteral
 }
 
-// scanner.go:160
+// scanner.go:159
 fn should_rescan_template_token(container: P<Node>) -> bool {
     container.kind() == Kind::TemplateMiddle || container.kind() == Kind::TemplateTail
 }
 
-// scanner.go:165
+// scanner.go:164
 fn should_rescan_jsx_attribute_value(node: P<Node>) -> bool {
     node.parent().is_some_and(|p| ast::is_jsx_attribute(p) && p.initializer() == Some(node))
 }
 
-// scanner.go:169
+// scanner.go:168
 fn starts_with_slash_token(t: Kind) -> bool {
     t == Kind::SlashToken || t == Kind::SlashEqualsToken
 }
 
-// scanner.go:173
+// scanner.go:172
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum ScanAction {
     Scan,
@@ -204,7 +204,7 @@ enum ScanAction {
     RescanJsxAttributeValue,
 }
 
-// scanner.go:185
+// scanner.go:184
 fn fix_token_kind(mut token_info: TokenInfo, container: P<Node>) -> TokenInfo {
     if ast::is_token_kind(container.kind()) && token_info.token.kind != container.kind() {
         token_info.token.kind = container.kind();
@@ -213,7 +213,7 @@ fn fix_token_kind(mut token_info: TokenInfo, container: P<Node>) -> TokenInfo {
 }
 
 impl FormattingScanner {
-    // scanner.go:192
+    // scanner.go:191
     pub(crate) fn read_token_info(&mut self, n: P<Node>) -> TokenInfo {
         assert!(self.is_on_token());
 
@@ -283,7 +283,7 @@ impl FormattingScanner {
         self.last_token_info.clone()
     }
 
-    // scanner.go:267
+    // scanner.go:272
     fn get_next_token(&mut self, n: P<Node>, expected_scan_action: ScanAction) -> Kind {
         let token = self.s.token();
         self.last_scan_action = ScanAction::Scan;
@@ -329,13 +329,13 @@ impl FormattingScanner {
         token
     }
 
-    // scanner.go:310
+    // scanner.go:312
     pub(crate) fn read_eof_token_range(&self) -> TextRangeWithKind {
         assert!(self.is_on_eof());
         new_text_range_with_kind(self.s.token_full_start(), self.s.token_end(), Kind::EndOfFile)
     }
 
-    // scanner.go:319
+    // scanner.go:321
     pub(crate) fn is_on_token(&self) -> bool {
         let mut current = self.s.token();
         if self.has_last_token_info {
@@ -344,7 +344,7 @@ impl FormattingScanner {
         current != Kind::EndOfFile && !ast::is_trivia(current)
     }
 
-    // scanner.go:327
+    // scanner.go:329
     pub(crate) fn is_on_eof(&self) -> bool {
         let mut current = self.s.token();
         if self.has_last_token_info {
@@ -353,7 +353,7 @@ impl FormattingScanner {
         current == Kind::EndOfFile
     }
 
-    // scanner.go:335
+    // scanner.go:337
     pub(crate) fn skip_to_end_of(&mut self, r: &TextRange) {
         self.s.reset_token_state(r.end());
         self.saved_pos = self.s.token_full_start();
@@ -364,7 +364,7 @@ impl FormattingScanner {
         self.trailing_trivia = Vec::new();
     }
 
-    // scanner.go:345
+    // scanner.go:347
     pub(crate) fn skip_to_start_of(&mut self, r: &TextRange) {
         self.s.reset_token_state(r.pos());
         self.saved_pos = self.s.token_full_start();
@@ -375,17 +375,17 @@ impl FormattingScanner {
         self.trailing_trivia = Vec::new();
     }
 
-    // scanner.go:355
+    // scanner.go:357
     pub(crate) fn get_current_leading_trivia(&self) -> Vec<TextRangeWithKind> {
         self.leading_trivia.clone()
     }
 
-    // scanner.go:359
+    // scanner.go:361
     pub(crate) fn last_trailing_trivia_was_new_line(&self) -> bool {
         self.was_new_line
     }
 
-    // scanner.go:363
+    // scanner.go:365
     pub(crate) fn get_token_full_start(&self) -> i32 {
         if self.has_last_token_info {
             return self.last_token_info.token.loc.pos();
@@ -393,7 +393,7 @@ impl FormattingScanner {
         self.s.token_full_start()
     }
 
-    // scanner.go:370
+    // scanner.go:372
     pub(crate) fn get_start_pos(&self) -> i32 {
         // TODO: redundant?
         self.get_token_full_start()

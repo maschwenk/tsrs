@@ -31,7 +31,7 @@ pub fn get_last_child(node: P<Node>, source_file: P<SourceFile>) -> Option<P<Nod
     if last_token.is_some() { last_token } else { last_child_node }
 }
 
-// children.go:38
+// children.go:37
 pub fn get_last_token(node: Option<P<Node>>, source_file: P<SourceFile>) -> Option<P<Node>> {
     let node = node?;
 

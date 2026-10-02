@@ -59,7 +59,7 @@ pub fn get_new_line_or_default_from_context(ctx: &FormatContext) -> String {
     "\n".to_string()
 }
 
-// api.go:59
+// api.go:58
 pub fn format_span(ctx: &FormatContext, span: TextRange, file: P<SourceFile>, kind: FormatRequestKind) -> Vec<TextChange> {
     // find the smallest node that fully wraps the range and compute the initial indentation for the node
     let enclosing_node = find_enclosing_node(span, file);
@@ -78,7 +78,7 @@ pub fn format_span(ctx: &FormatContext, span: TextRange, file: P<SourceFile>, ki
     new_formatting_scanner(file.text(), file.language_variant(), get_scan_start_position(enclosing_node, span, file), span.end(), &mut worker)
 }
 
-// api.go:83
+// api.go:81
 pub fn format_node_given_indentation(
     ctx: &FormatContext,
     node: P<Node>,
@@ -101,7 +101,7 @@ pub fn format_node_given_indentation(
     new_formatting_scanner(file.text(), language_variant, text_range.pos(), text_range.end(), &mut worker)
 }
 
-// api.go:103
+// api.go:101
 fn format_node_lines(ctx: &FormatContext, source_file: P<SourceFile>, node: Option<P<Node>>, request_kind: FormatRequestKind) -> Vec<TextChange> {
     let Some(node) = node else {
         return Vec::new();
@@ -112,12 +112,12 @@ fn format_node_lines(ctx: &FormatContext, source_file: P<SourceFile>, node: Opti
     format_span(ctx, span, source_file, request_kind)
 }
 
-// api.go:113
+// api.go:111
 pub fn format_document(ctx: &FormatContext, source_file: P<SourceFile>) -> Vec<TextChange> {
     format_span(ctx, TextRange::new(0, source_file.as_node().end()), source_file, FormatRequestKind::FormatDocument)
 }
 
-// api.go:117
+// api.go:115
 pub fn format_selection(ctx: &FormatContext, source_file: P<SourceFile>, start: i32, end: i32) -> Vec<TextChange> {
     format_span(
         ctx,
@@ -127,7 +127,7 @@ pub fn format_selection(ctx: &FormatContext, source_file: P<SourceFile>, start: 
     )
 }
 
-// api.go:121
+// api.go:119
 pub fn format_on_opening_curly(ctx: &FormatContext, source_file: P<SourceFile>, position: i32) -> Vec<TextChange> {
     let Some(opening_curly) = find_immediately_preceding_token_of_kind(position, Kind::OpenBraceToken, source_file) else {
         return Vec::new();
@@ -153,19 +153,19 @@ pub fn format_on_opening_curly(ctx: &FormatContext, source_file: P<SourceFile>, 
     format_span(ctx, text_range, source_file, FormatRequestKind::FormatOnOpeningCurlyBrace)
 }
 
-// api.go:144
+// api.go:142
 pub fn format_on_closing_curly(ctx: &FormatContext, source_file: P<SourceFile>, position: i32) -> Vec<TextChange> {
     let preceding_token = find_immediately_preceding_token_of_kind(position, Kind::CloseBraceToken, source_file);
     format_node_lines(ctx, source_file, find_outermost_node_within_list_level(preceding_token), FormatRequestKind::FormatOnClosingCurlyBrace)
 }
 
-// api.go:149
+// api.go:147
 pub fn format_on_semicolon(ctx: &FormatContext, source_file: P<SourceFile>, position: i32) -> Vec<TextChange> {
     let semicolon = find_immediately_preceding_token_of_kind(position, Kind::SemicolonToken, source_file);
     format_node_lines(ctx, source_file, find_outermost_node_within_list_level(semicolon), FormatRequestKind::FormatOnSemicolon)
 }
 
-// api.go:154
+// api.go:152
 pub fn format_on_enter(ctx: &FormatContext, source_file: P<SourceFile>, position: i32) -> Vec<TextChange> {
     let line = scanner::get_ecma_line_of_position(source_file.get(), position);
     if line == 0 {

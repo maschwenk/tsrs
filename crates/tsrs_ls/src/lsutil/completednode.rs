@@ -136,7 +136,7 @@ pub fn is_completed_node(n: Option<P<Node>>, source_file: P<SourceFile>) -> bool
     }
 }
 
-// completednode.go:160
+// completednode.go:162
 // Checks if node ends with 'expectedLastToken'.
 // If child at position 'length - 1' is 'SemicolonToken' it is skipped and 'expectedLastToken' is compared with child at position 'length - 2'.
 fn node_ends_with(n: P<Node>, expected_last_token: Kind, source_file: P<SourceFile>) -> bool {
@@ -171,7 +171,7 @@ fn node_ends_with(n: P<Node>, expected_last_token: Kind, source_file: P<SourceFi
     false
 }
 
-// completednode.go:193
+// completednode.go:194
 fn has_child_of_kind(containing_node: P<Node>, kind: Kind, source_file: P<SourceFile>) -> bool {
     astnav::find_child_of_kind(containing_node, kind, source_file).is_some()
 }

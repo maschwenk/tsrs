@@ -8,12 +8,6 @@ use tsrs_core::tspath;
 
 use super::*;
 
-// generator.go is not declared in sourcemap/mod.rs; it is declared here because source_mapper.go needs its types
-// (RawSourceMap, SourceIndex, NameIndex).
-#[path = "generator.rs"]
-mod generator;
-pub use generator::*;
-
 // source_mapper.go:16
 pub trait Host {
     fn use_case_sensitive_file_names(&self) -> bool;

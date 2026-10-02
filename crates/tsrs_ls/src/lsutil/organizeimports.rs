@@ -190,12 +190,12 @@ fn compare_strings_numeric(a: &str, b: &str) -> i32 {
     go_cmp(a.len(), b.len())
 }
 
-// organizeimports.go:180
+// organizeimports.go:181
 fn is_ascii_digit(ch: u8) -> bool {
     ch.is_ascii_digit()
 }
 
-// organizeimports.go:184
+// organizeimports.go:185
 fn ascii_digit_run_end(s: &[u8]) -> usize {
     let mut i = 0;
     while i < s.len() && is_ascii_digit(s[i]) {
@@ -204,7 +204,7 @@ fn ascii_digit_run_end(s: &[u8]) -> usize {
     i
 }
 
-// organizeimports.go:192
+// organizeimports.go:193
 fn compare_numeric_text(a: &[u8], b: &[u8]) -> i32 {
     let mut a_digits: &[u8] = &a[a.iter().position(|&c| c != b'0').unwrap_or(a.len())..];
     let mut b_digits: &[u8] = &b[b.iter().position(|&c| c != b'0').unwrap_or(b.len())..];
@@ -317,7 +317,7 @@ fn get_module_specifier_expression(declaration: P<Node>) -> Option<P<Node>> {
     }
 }
 
-// organizeimports.go:300
+// organizeimports.go:299
 // GetExternalModuleName returns the module name from a module specifier expression.
 pub fn get_external_module_name(specifier: Option<P<Node>>) -> &'static str {
     if let Some(specifier) = specifier {
@@ -328,7 +328,7 @@ pub fn get_external_module_name(specifier: Option<P<Node>>) -> &'static str {
     ""
 }
 
-// organizeimports.go:308
+// organizeimports.go:307
 // CompareModuleSpecifiers compares two module specifiers using the given comparer.
 pub fn compare_module_specifiers(m1: Option<P<Node>>, m2: Option<P<Node>>, comparer: &dyn Fn(&str, &str) -> i32) -> i32 {
     let name1 = get_external_module_name(m1);
@@ -344,7 +344,7 @@ pub fn compare_module_specifiers(m1: Option<P<Node>>, m2: Option<P<Node>>, compa
     comparer(name1, name2)
 }
 
-// organizeimports.go:320
+// organizeimports.go:319
 fn compare_import_kind(s1: P<Node>, s2: P<Node>) -> i32 {
     go_cmp(get_import_kind_order(s1), get_import_kind_order(s2))
 }
@@ -367,7 +367,7 @@ const IMPORT_KIND_ORDER_IMPORT_EQUALS: i32 = 5;
 const IMPORT_KIND_ORDER_REQUIRE: i32 = 6;
 const IMPORT_KIND_ORDER_UNKNOWN: i32 = 7;
 
-// organizeimports.go:343
+// organizeimports.go:342
 fn get_import_kind_order(s1: P<Node>) -> i32 {
     match s1.kind() {
         Kind::ImportDeclaration => {
@@ -435,7 +435,7 @@ fn compare_import_or_export_specifiers(
     }
 }
 
-// organizeimports.go:401
+// organizeimports.go:400
 // GetNamedImportSpecifierComparer returns a comparer function for sorting import specifiers.
 pub fn get_named_import_specifier_comparer(preferences: &UserPreferences, comparer: Option<StringComparer>) -> NodeComparer {
     let comparer = match comparer {
@@ -452,19 +452,19 @@ pub fn get_named_import_specifier_comparer(preferences: &UserPreferences, compar
     Rc::new(move |s1: P<Node>, s2: P<Node>| compare_import_or_export_specifiers(s1, s2, &*comparer, &preferences))
 }
 
-// organizeimports.go:415
+// organizeimports.go:414
 // GetImportSpecifierInsertionIndex returns the index at which to insert a new import specifier.
 pub fn get_import_specifier_insertion_index(sorted_imports: &[P<Node>], new_import: P<Node>, comparer: &dyn Fn(P<Node>, P<Node>) -> i32) -> usize {
     binary_search_unique_func(sorted_imports, |_, &value| comparer(value, new_import)).0
 }
 
-// organizeimports.go:422
+// organizeimports.go:421
 // GetImportDeclarationInsertIndex returns the index at which to insert a new import declaration.
 pub fn get_import_declaration_insert_index(sorted_imports: &[P<Node>], new_import: P<Node>, comparer: &dyn Fn(P<Node>, P<Node>) -> i32) -> usize {
     binary_search_unique_func(sorted_imports, |_, &value| comparer(value, new_import)).0
 }
 
-// organizeimports.go:429
+// organizeimports.go:428
 // GetOrganizeImportsStringComparerWithDetection returns a string comparer based on detecting the order of import statements by the module specifier
 pub fn get_organize_imports_string_comparer_with_detection(
     original_import_decls: &[P<Node>],
@@ -474,7 +474,7 @@ pub fn get_organize_imports_string_comparer_with_detection(
     (result, sorted)
 }
 
-// organizeimports.go:434
+// organizeimports.go:433
 fn get_comparers(preferences: &UserPreferences) -> Vec<StringComparer> {
     if preferences.organize_imports_sort != OrganizeImportsSort::Auto || !preferences.organize_imports_ignore_case.is_unknown() {
         let mut ignore_case = false;
@@ -486,14 +486,14 @@ fn get_comparers(preferences: &UserPreferences) -> Vec<StringComparer> {
     vec![get_organize_imports_string_comparer(preferences, true), get_organize_imports_string_comparer(preferences, false)]
 }
 
-// organizeimports.go:448
+// organizeimports.go:447
 struct NamedImportSortResult {
     named_import_comparer: Option<StringComparer>,
     type_order: OrganizeImportsTypeOrder,
     is_sorted: bool,
 }
 
-// organizeimports.go:455
+// organizeimports.go:454
 // DetectNamedImportOrganizationBySort detects the order of named imports throughout the file by considering the named imports in each statement as a group
 pub fn detect_named_import_organization_by_sort(
     original_groups: &[P<Node>],
@@ -507,7 +507,7 @@ pub fn detect_named_import_organization_by_sort(
     }
 }
 
-// organizeimports.go:467
+// organizeimports.go:466
 fn detect_named_import_organization_by_sort_worker(
     original_groups: &[P<Node>],
     comparers_to_test: &[StringComparer],
@@ -630,13 +630,13 @@ fn detect_named_import_organization_by_sort_worker(
     })
 }
 
-// organizeimports.go:592
+// organizeimports.go:597
 struct CaseSensitivityDetectionResult {
     comparer: Option<StringComparer>,
     is_sorted: bool,
 }
 
-// organizeimports.go:598
+// organizeimports.go:603
 // DetectModuleSpecifierCaseBySort detects the order of module specifiers based on import statements throughout the module/file
 pub fn detect_module_specifier_case_by_sort(
     import_decls_by_group: &[Vec<P<Node>>],
@@ -658,7 +658,7 @@ pub fn detect_module_specifier_case_by_sort(
     (result.comparer, result.is_sorted)
 }
 
-// organizeimports.go:616
+// organizeimports.go:620
 fn detect_case_sensitivity_by_sort(original_groups: &[Vec<String>], comparers_to_test: &[StringComparer]) -> CaseSensitivityDetectionResult {
     let mut best_comparer: Option<StringComparer> = None;
     let mut best_diff = i64::MAX;
@@ -687,7 +687,7 @@ fn detect_case_sensitivity_by_sort(original_groups: &[Vec<String>], comparers_to
     CaseSensitivityDetectionResult { comparer: best_comparer, is_sorted: best_diff == 0 }
 }
 
-// organizeimports.go:646
+// organizeimports.go:651
 fn measure_sortedness<T>(arr: &[T], comparer: impl Fn(&T, &T) -> i32) -> usize {
     let mut i = 0;
     for j in 0..arr.len().saturating_sub(1) {
@@ -698,7 +698,7 @@ fn measure_sortedness<T>(arr: &[T], comparer: impl Fn(&T, &T) -> i32) -> usize {
     i
 }
 
-// organizeimports.go:657
+// organizeimports.go:662
 // GetNamedImportSpecifierComparerWithDetection returns a specifier comparer based on detecting the existing sort order within a single import statement
 pub fn get_named_import_specifier_comparer_with_detection(
     import_decl: P<Node>,

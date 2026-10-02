@@ -1,10 +1,12 @@
 mod decoder;
-mod source_mapper;
+mod generator;
 mod lineinfo;
-mod util;
 mod source;
+mod source_mapper;
+mod util;
 pub use decoder::*;
-pub use source_mapper::*;
+pub use generator::*;
 pub use lineinfo::*;
-pub use util::*;
 pub use source::*;
+pub use source_mapper::*;
+pub use util::*;

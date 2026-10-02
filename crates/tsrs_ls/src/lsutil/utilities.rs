@@ -64,7 +64,7 @@ pub fn probably_uses_semicolons(file: P<SourceFile>) -> bool {
     with_semicolon * n_statements_to_observe > without_semicolon
 }
 
-// utilities.go:76
+// utilities.go:77
 pub fn should_use_uri_style_node_core_modules(file: P<SourceFile>, program: &Program) -> Tristate {
     for &node in file.imports() {
         if tsrs_core::node_core_modules().contains(node.text()) && !tsrs_core::is_exclusively_prefixed_node_core_module(node.text()) {
@@ -79,7 +79,7 @@ pub fn should_use_uri_style_node_core_modules(file: P<SourceFile>, program: &Pro
     program.uses_uri_style_node_core_modules()
 }
 
-// utilities.go:90
+// utilities.go:91
 pub fn quote_preference_from_string(str: P<Node>) -> QuotePreference {
     if str.as_string_literal().token_flags().intersects(TokenFlags::SingleQuote) {
         return QuotePreference::Single;
@@ -87,7 +87,7 @@ pub fn quote_preference_from_string(str: P<Node>) -> QuotePreference {
     QuotePreference::Double
 }
 
-// utilities.go:97
+// utilities.go:98
 pub fn get_quote_preference(source_file: P<SourceFile>, preferences: &UserPreferences) -> QuotePreference {
     if preferences.quote_preference != QuotePreference::Unknown && preferences.quote_preference != QuotePreference::Auto {
         if preferences.quote_preference == QuotePreference::Single {
@@ -104,7 +104,7 @@ pub fn get_quote_preference(source_file: P<SourceFile>, preferences: &UserPrefer
     QuotePreference::Double
 }
 
-// utilities.go:114
+// utilities.go:115
 pub fn module_symbol_to_valid_identifier(module_symbol: P<Symbol>, force_capitalize: bool) -> String {
     let mut module_name = module_symbol.name();
     if let Some(ambient_module_name) = ast::try_get_ambient_module_name_from_symbol_name(module_name) {
@@ -113,7 +113,7 @@ pub fn module_symbol_to_valid_identifier(module_symbol: P<Symbol>, force_capital
     module_specifier_to_valid_identifier(module_name, force_capitalize)
 }
 
-// utilities.go:122
+// utilities.go:123
 pub fn module_specifier_to_valid_identifier(module_specifier: &str, force_capitalize: bool) -> String {
     let without_ext = tspath::remove_any_file_extension(module_specifier);
     let base_name = tspath::get_base_file_name(without_ext.strip_suffix("/index").unwrap_or(without_ext));
@@ -149,7 +149,7 @@ pub fn module_specifier_to_valid_identifier(module_specifier: &str, force_capita
     format!("_{res}")
 }
 
-// utilities.go:157
+// utilities.go:158
 pub fn is_non_contextual_keyword(token: Kind) -> bool {
     ast::is_keyword_kind(token) && !ast::is_contextual_keyword(token)
 }

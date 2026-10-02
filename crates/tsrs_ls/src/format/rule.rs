@@ -81,7 +81,7 @@ impl ToTokenRange for &TokenRange {
     }
 }
 
-// rule.go:52
+// rule.go:51
 /**
  * A rule takes a two tokens (left/right) and a particular context
  * for which you're meant to look at them. You then declare what should the

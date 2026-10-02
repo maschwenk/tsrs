@@ -33,7 +33,7 @@ fn get_rule_bucket_index(row: Kind, column: Kind) -> usize {
     (row as usize * MAP_ROW_LENGTH) + column as usize
 }
 
-// rulesmap.go:39
+// rulesmap.go:40
 const MASK_BIT_SIZE: i32 = 5;
 const MASK: i32 = 0b11111; // MaskBitSize bits
 const MAP_ROW_LENGTH: usize = Kind::LastToken as usize + 1;
@@ -86,7 +86,7 @@ fn build_rules_map() -> Vec<Vec<&'static RuleImpl>> {
     m
 }
 
-// rulesmap.go:86
+// rulesmap.go:87
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct RulesPosition(pub i32);
 
@@ -99,7 +99,7 @@ impl RulesPosition {
     pub const NoContextRulesAny: RulesPosition = RulesPosition(MASK_BIT_SIZE * 5);
 }
 
-// rulesmap.go:112
+// rulesmap.go:114
 // The Rules list contains all the inserted rules into a rulebucket in the following order:
 //
 //	1- Ignore rules with specific token combination
@@ -139,7 +139,7 @@ fn add_rule(
     construction_state[rules_bucket_index] = increase_insertion_index(state, position);
 }
 
-// rulesmap.go:140
+// rulesmap.go:143
 fn get_rule_insertion_index(mut index_bitmap: i32, mask_position: RulesPosition) -> usize {
     let mut index = 0;
     let mut pos = 0;
@@ -151,7 +151,7 @@ fn get_rule_insertion_index(mut index_bitmap: i32, mask_position: RulesPosition)
     index as usize
 }
 
-// rulesmap.go:149
+// rulesmap.go:152
 fn increase_insertion_index(index_bitmap: i32, mask_position: RulesPosition) -> i32 {
     let value = ((index_bitmap >> mask_position.0) & MASK) + 1;
     assert!((value & MASK) == value, "Adding more rules into the sub-bucket than allowed. Maximum allowed is 32 rules.");

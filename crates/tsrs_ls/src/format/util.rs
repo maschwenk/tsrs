@@ -56,7 +56,7 @@ pub(crate) fn get_open_token_for_list(node: P<Node>, list: P<NodeList>) -> Kind 
     Kind::Unknown
 }
 
-// util.go:62
+// util.go:63
 pub(crate) fn get_close_token_for_open_token(kind: Kind) -> Kind {
     // TODO: matches strada - seems like it could handle more pairs of braces, though? [] notably missing
     match kind {
@@ -67,14 +67,14 @@ pub(crate) fn get_close_token_for_open_token(kind: Kind) -> Kind {
     }
 }
 
-// util.go:75
+// util.go:76
 pub fn get_line_start_position_for_position(position: i32, source_file: P<SourceFile>) -> i32 {
     let line_starts = scanner::get_ecma_line_starts(source_file.get());
     let line = scanner::get_ecma_line_of_position(source_file.get(), position);
     line_starts[line as usize] as i32
 }
 
-// util.go:85
+// util.go:86
 /**
  * Validating `expectedTokenKind` ensures the token was typed in the context we expect (eg: not a comment).
  * @param expectedTokenKind The kind of the last token constituting the desired parent node.
@@ -87,7 +87,7 @@ pub(crate) fn find_immediately_preceding_token_of_kind(end: i32, expected_token_
     Some(preceding_token)
 }
 
-// util.go:106
+// util.go:107
 /**
  * Finds the highest node enclosing `node` at the same list level as `node`
  * and whose end does not exceed `node.end`.
@@ -116,7 +116,7 @@ pub(crate) fn find_outermost_node_within_list_level(node: Option<P<Node>>) -> Op
     current
 }
 
-// util.go:120
+// util.go:121
 // Returns true if node is a element in some list in parent
 // i.e. parent is class declaration with the list of members and node is one of members.
 fn is_list_element(parent: P<Node>, node: P<Node>) -> bool {
@@ -132,7 +132,7 @@ fn is_list_element(parent: P<Node>, node: P<Node>) -> bool {
     }
 }
 
-// util.go:136
+// util.go:137
 pub(crate) fn is_member_list_element(parent: P<Node>, node: P<Node>) -> bool {
     match parent.kind() {
         Kind::ClassDeclaration

@@ -124,7 +124,7 @@ pub fn get_indentation(position: i32, source_file: P<SourceFile>, options: &Form
     get_smart_indent(source_file, position, preceding_token, line_at_position, assume_new_line_before_close_brace, options)
 }
 
-// indent.go:119
+// indent.go:111
 fn get_comment_indent(source_file: P<SourceFile>, position: i32, options: &FormatCodeSettings, enclosing_comment_range: &CommentRange) -> i32 {
     let previous_line = scanner::get_ecma_line_of_position(source_file.get(), position) - 1;
     let comment_start_line = scanner::get_ecma_line_of_position(source_file.get(), enclosing_comment_range.pos());
@@ -151,7 +151,7 @@ fn get_comment_indent(source_file: P<SourceFile>, position: i32, options: &Forma
     column
 }
 
-// indent.go:145
+// indent.go:137
 fn get_leading_comment_ranges_of_node(node: P<Node>, file: P<SourceFile>) -> Option<scanner::CommentRangeIter> {
     if node.kind() == Kind::JsxText {
         return None;
@@ -159,7 +159,7 @@ fn get_leading_comment_ranges_of_node(node: P<Node>, file: P<SourceFile>) -> Opt
     Some(scanner::get_leading_comment_ranges(file.text(), node.pos()))
 }
 
-// indent.go:152
+// indent.go:144
 fn get_range_of_enclosing_comment(source_file: P<SourceFile>, position: i32, preceding_token: Option<P<Node>>) -> Option<CommentRange> {
     let mut token_at_position = astnav::get_token_at_position(source_file, position);
     let jsdoc = ast::find_ancestor(token_at_position, |n| n.is_jsdoc());
@@ -187,7 +187,7 @@ fn get_range_of_enclosing_comment(source_file: P<SourceFile>, position: i32, pre
     None
 }
 
-// indent.go:183
+// indent.go:177
 fn get_block_indent(source_file: P<SourceFile>, position: i32, options: &FormatCodeSettings) -> i32 {
     // move backwards until we find a line with a non-whitespace character,
     // then find the first non-whitespace character for that line.
@@ -204,7 +204,7 @@ fn get_block_indent(source_file: P<SourceFile>, position: i32, options: &FormatC
     find_first_non_whitespace_column(line_start, current, source_file, options)
 }
 
-// indent.go:199
+// indent.go:193
 fn get_actual_indentation_for_list_item_before_comma(comma_token: P<Node>, source_file: P<SourceFile>, options: &FormatCodeSettings) -> i32 {
     // previous token is comma that separates items in list - find the previous item and try to derive indentation from it
     if comma_token.parent().is_none() {
@@ -220,7 +220,7 @@ fn get_actual_indentation_for_list_item_before_comma(comma_token: P<Node>, sourc
     -1
 }
 
-// indent.go:215
+// indent.go:209
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum NextTokenKind {
     Unknown = 0,
@@ -228,7 +228,7 @@ enum NextTokenKind {
     CloseBrace = 2,
 }
 
-// indent.go:223
+// indent.go:217
 fn next_token_is_curly_brace_on_same_line_as_cursor(
     preceding_token: P<Node>,
     current: P<Node>,
@@ -254,7 +254,7 @@ fn next_token_is_curly_brace_on_same_line_as_cursor(
     NextTokenKind::Unknown
 }
 
-// indent.go:245
+// indent.go:238
 fn get_smart_indent(
     source_file: P<SourceFile>,
     position: i32,
@@ -312,7 +312,7 @@ fn get_smart_indent(
     options.base_indent_size
 }
 
-// indent.go:287
+// indent.go:279
 fn get_indentation_for_node_worker(
     mut current: P<Node>,
     mut current_start_line: i32,
@@ -421,7 +421,7 @@ fn get_indentation_for_node_worker(
     indentation_delta + options.base_indent_size
 }
 
-// indent.go:383
+// indent.go:378
 /*
 * Function returns -1 if actual indentation for node should not be used (i.e because node is nested expression)
  */
@@ -447,7 +447,7 @@ fn get_actual_indentation_for_node(
     find_column_for_first_non_whitespace_character_in_line(cuurent_line, current_char, source_file, options)
 }
 
-// indent.go:396
+// indent.go:391
 fn is_argument_and_start_line_overlaps_expression_being_called(
     parent: P<Node>,
     child: P<Node>,
@@ -462,7 +462,7 @@ fn is_argument_and_start_line_overlaps_expression_being_called(
     expression_of_call_expression_end_line == child_start_line
 }
 
-// indent.go:405
+// indent.go:400
 fn get_actual_indentation_for_list_item(node: P<Node>, source_file: P<SourceFile>, options: &FormatCodeSettings, list_indents_child: bool) -> i32 {
     if node.parent().is_some_and(|p| p.kind() == Kind::VariableDeclarationList) {
         // VariableDeclarationList has no wrapping tokens
@@ -653,7 +653,7 @@ fn get_list_by_range(start: i32, end: i32, node: P<Node>, source_file: P<SourceF
     }
 }
 
-// indent.go:577
+// indent.go:579
 fn get_list(list: Option<P<NodeList>>, r: TextRange, node: P<Node>, source_file: P<SourceFile>) -> Option<P<NodeList>> {
     let list = list?;
     if r.contained_by(get_visual_list_range(node, list.loc.get(), source_file)) {
@@ -662,7 +662,7 @@ fn get_list(list: Option<P<NodeList>>, r: TextRange, node: P<Node>, source_file:
     None
 }
 
-// indent.go:587
+// indent.go:589
 fn get_visual_list_range(_node: P<Node>, list: TextRange, source_file: P<SourceFile>) -> TextRange {
     // In strada, this relied on the services .getChildren method, which manifested synthetic token nodes
     // _however_, the logic boils down to "find the child with the matching span and adjust its start to the
@@ -680,7 +680,7 @@ fn get_visual_list_range(_node: P<Node>, list: TextRange, source_file: P<SourceF
     TextRange::new(prior_end, next_start)
 }
 
-// indent.go:611
+// indent.go:613
 fn get_containing_list_or_parent_start(parent: P<Node>, child: P<Node>, source_file: P<SourceFile>) -> (i32, i32) {
     let containing_list = get_containing_list(child, source_file);
     let start_pos = match containing_list {
@@ -690,7 +690,7 @@ fn get_containing_list_or_parent_start(parent: P<Node>, child: P<Node>, source_f
     scanner::get_ecma_line_and_byte_offset_of_position(source_file.get(), start_pos)
 }
 
-// indent.go:622
+// indent.go:624
 fn is_control_flow_ending_statement(kind: Kind, parent_kind: Kind) -> bool {
     match kind {
         Kind::ReturnStatement | Kind::ThrowStatement | Kind::ContinueStatement | Kind::BreakStatement => parent_kind != Kind::Block,
@@ -698,7 +698,7 @@ fn is_control_flow_ending_statement(kind: Kind, parent_kind: Kind) -> bool {
     }
 }
 
-// indent.go:635
+// indent.go:637
 /**
 * True when the parent node should indent the given child by an explicit rule.
 * @param isNextChild If true, we are judging indent of a hypothetical child *after* this one, not the current child.
@@ -714,7 +714,7 @@ pub fn should_indent_child_node(
         && !(is_next_child && child.is_some_and(|c| is_control_flow_ending_statement(c.kind(), parent.kind())))
 }
 
-// indent.go:644
+// indent.go:646
 pub fn node_will_indent_child(
     settings: &FormatCodeSettings,
     parent: P<Node>,
@@ -836,7 +836,7 @@ pub fn node_will_indent_child(
     indent_by_default
 }
 
-// indent.go:778
+// indent.go:779
 // A multiline conditional typically increases the indentation of its whenTrue and whenFalse children:
 //
 // condition
@@ -890,7 +890,7 @@ pub(crate) fn child_is_unindented_branch_of_conditional_expression(
     false
 }
 
-// indent.go:799
+// indent.go:800
 pub(crate) fn argument_starts_on_same_line_as_previous_argument(
     parent: P<Node>,
     child: P<Node>,
