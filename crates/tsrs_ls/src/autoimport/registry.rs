@@ -5,6 +5,7 @@ use rustc_hash::FxHashMap;
 use tsrs_ast::SourceFile;
 use tsrs_compiler::Program;
 use tsrs_core::collections::{new_set_from_items, Set, SyncMap};
+use tsrs_core::arena::Region;
 use tsrs_core::context::Context;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{Tristate, P};
@@ -401,6 +402,10 @@ pub struct Registry {
 
     // specifierCache maps from importing file to target file to specifier.
     pub(crate) specifier_cache: Arc<FxHashMap<Path, SpecifierCache>>,
+
+    // Memory regions (docs/LSP.md "Memory plan"), not in Go: the regions holding the arena values this version
+    // refers to (its directories' package.json entries), shared with the older and newer versions that keep them.
+    regions: Vec<Region>,
 }
 
 // registry.go:360
@@ -414,6 +419,7 @@ pub fn new_registry(to_path: ToPath, preferences: UserPreferences) -> Arc<Regist
         unique_package_count: 0,
         entrypoints: Arc::default(),
         specifier_cache: Arc::default(),
+        regions: Vec::new(),
     })
 }
 
@@ -474,10 +480,22 @@ impl Registry {
     }
 
     // registry.go:407
-    // Go's `Clone` (`clone` is taken by Rust). The host only lives for the duration of the call; the resolvers,
-    // alias resolvers and checkers built from it are dropped (leaked) before it returns and nothing in the new
-    // registry refers to them.
+    // Go's `Clone` (`clone` is taken by Rust). The host only lives for the duration of the call.
+    //
+    // Memory regions (not in Go, where the GC collects an update's garbage): everything the update allocates in
+    // the arena (module and alias resolvers, the extraction checkers' types and symbols, resolution caches) goes
+    // to a scratch region freed before this returns; the finished registry holds no reference into it. The
+    // package.json entries the new version keeps in `directories` go to a region of their own (`regions`).
     pub fn clone_registry(&self, ctx: &Context, change: RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
+        let scratch = Region::new(SCRATCH_REGION_FIRST_CHUNK);
+        let scratch_scope = scratch.enter();
+        let registry = self.clone_registry_in_scratch(ctx, change, host, logger);
+        drop(scratch_scope);
+        drop(scratch);
+        registry
+    }
+
+    fn clone_registry_in_scratch(&self, ctx: &Context, change: RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
         let start = Instant::now();
         let mut logger = logger;
         if !logger.is_nil() {
@@ -551,11 +569,25 @@ impl Registry {
     }
 }
 
+const SCRATCH_REGION_FIRST_CHUNK: usize = 1 << 20;
+
+// The regions holding the package.json entries of `directories` (each entry was allocated in the package.json
+// region of the update that read it).
+fn regions_of_directories(directories: &SharedMap<Path, directory>) -> Vec<Region> {
+    let mut regions: Vec<Region> = Vec::new();
+    for region in Region::containing_all(directories.iter().map(|(_, dir)| dir.package_json.addr())).into_iter().flatten() {
+        if !regions.iter().any(|r| r.ptr_eq(&region)) {
+            regions.push(region);
+        }
+    }
+    regions
+}
+
 // The registry builder keeps the clone host for the duration of `clone_registry` only (see there).
 fn assume_static(host: &dyn RegistryCloneHost) -> &'static dyn RegistryCloneHost {
-    // SAFETY: every value built from the host (resolvers, alias resolvers, checkers, extractors) is used only
-    // inside `clone_registry`, which returns before the caller's host goes away; the finished registry holds no
-    // reference to any of them.
+    // SAFETY: every value built from the host (resolvers, alias resolvers, checkers, extractors) lives in the
+    // update's scratch region or on the stack of `clone_registry`, which frees them before it returns, before the
+    // caller's host goes away; the finished registry holds no reference to any of them.
     unsafe { std::mem::transmute::<&dyn RegistryCloneHost, &'static dyn RegistryCloneHost>(host) }
 }
 
@@ -617,6 +649,10 @@ struct registryBuilder<'r> {
 
     unique_package_count: usize,
     entrypoints: EntrypointsBuilder,
+
+    // Memory regions, not in Go: where this update's new package.json entries for `directories` go (created on
+    // first use; see `clone_registry`).
+    package_json_region: Option<Region>,
 }
 
 // registry.go:539
@@ -632,6 +668,7 @@ fn new_registry_builder<'r>(registry: &'r Registry, host: &'static dyn RegistryC
         specifier_cache: dirty::new_map_builder(registry.specifier_cache.clone(), |v: &SpecifierCache| v.clone(), |v| v),
         unique_package_count: registry.unique_package_count,
         entrypoints: dirty::new_map_builder(registry.entrypoints.clone(), |v: &Vec<Arc<ResolvedEntrypoint>>| v.clone(), |v| v),
+        package_json_region: None,
     }
 }
 
@@ -656,16 +693,26 @@ struct nodeModulesBucketTask {
 impl registryBuilder<'_> {
     // registry.go:555
     fn build(&self) -> Registry {
+        let directories = self.directories.finalize().0;
+        let regions = regions_of_directories(&directories);
         Registry {
             to_path: self.base.to_path.clone(),
             user_preferences: self.user_preferences.clone(),
-            directories: self.directories.finalize().0,
+            directories,
             node_modules: self.node_modules.finalize().0,
             projects: self.projects.finalize().0,
             specifier_cache: self.specifier_cache.build(),
             unique_package_count: self.unique_package_count,
             entrypoints: self.entrypoints.build(),
+            regions,
         }
+    }
+
+    // Allocates `get_package_json`'s entry for `directories` in this update's package.json region.
+    fn get_directory_package_json(&mut self, package_json_file_name: &str) -> P<InfoCacheEntry> {
+        let region = self.package_json_region.get_or_insert_with(|| Region::new(0));
+        let _scope = region.enter();
+        self.host.get_package_json(package_json_file_name)
     }
 
     // registry.go:568
@@ -747,18 +794,21 @@ impl registryBuilder<'_> {
             let package_json_file_name = tspath::combine_paths(dir_name, &["package.json"]);
             let has_node_modules = host.fs().directory_exists(&tspath::combine_paths(dir_name, &["node_modules"]));
             if let Some(entry) = b.directories.get(dir_path) {
-                entry.change_if(
-                    |dir| package_json_changed || dir.has_node_modules != has_node_modules,
-                    |dir| {
-                        dir.package_json = host.get_package_json(&package_json_file_name);
-                        dir.has_node_modules = has_node_modules;
-                    },
-                );
+                // (Go reads the package.json inside the apply function; it is read first here so that the entry is
+                // allocated in this update's package.json region.)
+                if entry.value().is_some_and(|dir| package_json_changed || dir.has_node_modules != has_node_modules) {
+                    let package_json = b.get_directory_package_json(&package_json_file_name);
+                    entry.change_if(
+                        |dir| package_json_changed || dir.has_node_modules != has_node_modules,
+                        |dir| {
+                            dir.package_json = package_json;
+                            dir.has_node_modules = has_node_modules;
+                        },
+                    );
+                }
             } else {
-                b.directories.add(
-                    dir_path.clone(),
-                    Shared::new(directory { name: dir_name.to_string(), package_json: host.get_package_json(&package_json_file_name), has_node_modules }),
-                );
+                let package_json = b.get_directory_package_json(&package_json_file_name);
+                b.directories.add(dir_path.clone(), Shared::new(directory { name: dir_name.to_string(), package_json, has_node_modules }));
             }
 
             if has_node_modules {
@@ -1224,10 +1274,8 @@ impl registryBuilder<'_> {
                 }
             }
             if !root_files.is_empty() {
-                let module_resolver: &'static DefaultResolver = Box::leak(Box::new(module::new_resolver(ResolverOptions::new(
-                    self.host,
-                    P::from_static(&*tsrs_core::EMPTY_COMPILER_OPTIONS),
-                ))));
+                let module_resolver: &'static DefaultResolver =
+                    tsrs_core::alloc(module::new_resolver(ResolverOptions::new(self.host, P::from_static(&*tsrs_core::EMPTY_COMPILER_OPTIONS))));
                 // Go collects `maps.Values(rootFiles)` (random order, nil files included; the checker skips nothing).
                 let files: Vec<P<SourceFile>> = root_file_order.iter().filter_map(|f| root_files[f]).collect();
                 let alias_resolver = new_alias_resolver(
@@ -1240,7 +1288,7 @@ impl registryBuilder<'_> {
                         // no-op
                     }),
                 );
-                let alias_resolver: &'static super::aliasresolver::aliasResolver = Box::leak(Box::new(alias_resolver));
+                let alias_resolver: &'static super::aliasresolver::aliasResolver = tsrs_core::alloc(alias_resolver);
                 let mut ch = tsrs_checker::new_checker(alias_resolver);
                 let sources = br.possible_failed_ambient_module_lookup_sources.to_map();
                 let bucket = br.bucket.as_mut().unwrap();
@@ -1393,7 +1441,15 @@ impl bucketBuildResult {
     }
 
     fn replace_bucket(&self) {
-        let bucket = Shared::new(self.bucket.clone().unwrap_or_default());
+        let mut bucket = self.bucket.clone().unwrap_or_default();
+        // Census builds: registry versions keep the bucket after the update's scratch region is freed.
+        tsrs_core::census_scrub_none(&mut bucket.package_files);
+        tsrs_core::census_scrub_none(&mut bucket.resolved_package_names);
+        tsrs_core::census_scrub_none(&mut bucket.dependency_names);
+        tsrs_core::census_scrub_none(&mut bucket.index);
+        tsrs_core::census_scrub_none(&mut bucket.state.dirty_packages);
+        tsrs_core::census_scrub_none(&mut bucket.state.recursive_search_packages);
+        let bucket = Shared::new(bucket);
         match &self.replace_bucket {
             bucketTarget::NodeModules(e) => e.replace(bucket),
             bucketTarget::Project(e) => e.replace(bucket),
@@ -1419,10 +1475,8 @@ impl registryBuilder<'_> {
         let start = Instant::now();
         let file_exclude_patterns = self.user_preferences.parsed_auto_import_file_exclude_patterns(self.host.fs().use_case_sensitive_file_names());
         result.bucket = Some(RegistryBucket::default());
-        let module_resolver: &'static DefaultResolver = Box::leak(Box::new(module::new_resolver(ResolverOptions::new(
-            self.host,
-            P::from_static(&*tsrs_core::EMPTY_COMPILER_OPTIONS),
-        ))));
+        let module_resolver: &'static DefaultResolver =
+            tsrs_core::alloc(module::new_resolver(ResolverOptions::new(self.host, P::from_static(&*tsrs_core::EMPTY_COMPILER_OPTIONS))));
         let program = self.host.get_program_for_project(project_id).unwrap();
         let project_root_path = (self.base.to_path)(program.get_current_directory());
         let symlink_cache = Some(program.get_symlink_cache());
@@ -1646,7 +1700,7 @@ impl registryBuilder<'_> {
             return None;
         }
         let (to_realpath, to_symlink) = get_package_realpath_funcs(self.host.fs(), package_json.package_directory);
-        let resolver: &'static DefaultResolver = Box::leak(Box::new(get_module_resolver(self.host, to_realpath.clone())));
+        let resolver: &'static DefaultResolver = tsrs_core::alloc(get_module_resolver(self.host, to_realpath.clone()));
         let mut package_entrypoints = resolver.get_entrypoints_from_package_json_info(package_json, package_name, enable_directory_search)?;
 
         let mut skipped_entrypoints = 0;
@@ -1659,7 +1713,15 @@ impl registryBuilder<'_> {
             return None;
         }
 
-        let package_entrypoints: Vec<Arc<ResolvedEntrypoint>> = package_entrypoints.into_iter().map(Arc::new).collect();
+        let package_entrypoints: Vec<Arc<ResolvedEntrypoint>> = package_entrypoints
+            .into_iter()
+            .map(|mut entrypoint| {
+                // Census builds: the registry keeps these after the update's scratch region is freed.
+                tsrs_core::census_scrub_none(&mut entrypoint.include_conditions);
+                tsrs_core::census_scrub_none(&mut entrypoint.exclude_conditions);
+                Arc::new(entrypoint)
+            })
+            .collect();
         let failed_targets: Arc<Mutex<Set<String>>> = Arc::new(Mutex::new(Set::new()));
         let failed_sources: Arc<Mutex<FxHashMap<Path, Arc<Mutex<failedAmbientModuleLookupSource>>>>> = Arc::new(Mutex::new(FxHashMap::default()));
         let mut result = perPackageExtractionResult {
@@ -1721,7 +1783,7 @@ impl registryBuilder<'_> {
                 });
             }),
         );
-        let alias_resolver: &'static super::aliasresolver::aliasResolver = Box::leak(Box::new(alias_resolver));
+        let alias_resolver: &'static super::aliasresolver::aliasResolver = tsrs_core::alloc(alias_resolver);
 
         let mut ch = tsrs_checker::new_checker(alias_resolver);
         let mut extractor = new_export_extractor(package_name, &mut ch, resolver, self.base.to_path.clone(), Some(to_realpath));

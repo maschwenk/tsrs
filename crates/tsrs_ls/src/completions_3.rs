@@ -421,8 +421,34 @@ pub(crate) fn all_keyword_completions() -> &'static [lsproto::CompletionItem] {
                 ..Default::default()
             });
         }
+        census_scrub_cached_items(&mut result);
         result
     })
+}
+
+// Census builds: the unset (`None`) fields of process-wide cached items keep uninitialized payload bytes, copied from
+// whatever stack slot or heap block each item was built or cloned in (`CompletionItem::data` alone is 192 bytes).
+fn census_scrub_cached_items(items: &mut [lsproto::CompletionItem]) {
+    for item in items {
+        tsrs_core::census_scrub_none(&mut item.label_details);
+        tsrs_core::census_scrub_none(&mut item.kind);
+        tsrs_core::census_scrub_none(&mut item.tags);
+        tsrs_core::census_scrub_none(&mut item.detail);
+        tsrs_core::census_scrub_none(&mut item.documentation);
+        tsrs_core::census_scrub_none(&mut item.deprecated);
+        tsrs_core::census_scrub_none(&mut item.preselect);
+        tsrs_core::census_scrub_none(&mut item.sort_text);
+        tsrs_core::census_scrub_none(&mut item.filter_text);
+        tsrs_core::census_scrub_none(&mut item.insert_text);
+        tsrs_core::census_scrub_none(&mut item.insert_text_format);
+        tsrs_core::census_scrub_none(&mut item.insert_text_mode);
+        tsrs_core::census_scrub_none(&mut item.text_edit);
+        tsrs_core::census_scrub_none(&mut item.text_edit_text);
+        tsrs_core::census_scrub_none(&mut item.additional_text_edits);
+        tsrs_core::census_scrub_none(&mut item.commit_characters);
+        tsrs_core::census_scrub_none(&mut item.command);
+        tsrs_core::census_scrub_none(&mut item.data);
+    }
 }
 
 // completions.go:3861
@@ -432,8 +458,6 @@ pub(crate) fn clone_items(items: &[lsproto::CompletionItem]) -> Vec<CompletionIt
 
 // completions.go:3873
 pub(crate) fn get_keyword_completions(keyword_filter: KeywordCompletionFilters, filter_out_ts_only_keywords: bool) -> Vec<CompletionItem> {
-    // Census builds: the items are cached process-wide; clear the stack their unset fields are copied from.
-    tsrs_core::census_scrub_stack();
     if !filter_out_ts_only_keywords {
         return clone_items(&get_typescript_keyword_completions(keyword_filter));
     }
@@ -442,8 +466,9 @@ pub(crate) fn get_keyword_completions(keyword_filter: KeywordCompletionFilters, 
     if let Some(cached) = keyword_completions_cache().lock().unwrap().get(&index) {
         return clone_items(cached);
     }
-    let result: Vec<lsproto::CompletionItem> =
+    let mut result: Vec<lsproto::CompletionItem> =
         get_typescript_keyword_completions(keyword_filter).into_iter().filter(|ci| !is_type_script_only_keyword(scanner::string_to_token(&ci.label))).collect();
+    census_scrub_cached_items(&mut result);
     let items = clone_items(&result);
     keyword_completions_cache().lock().unwrap().insert(index, result);
     items
@@ -481,7 +506,9 @@ fn get_typescript_keyword_completions(keyword_filter: KeywordCompletionFilters) 
         .cloned()
         .collect();
 
-    keyword_completions_cache().lock().unwrap().insert(keyword_filter as i32, result.clone());
+    let mut cached = result.clone();
+    census_scrub_cached_items(&mut cached);
+    keyword_completions_cache().lock().unwrap().insert(keyword_filter as i32, cached);
     result
 }
 

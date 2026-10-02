@@ -44,6 +44,17 @@ pub(crate) fn run_lsp(server: &std::sync::Arc<tsrs_lsp::Server>) {
     }
 }
 
+// Before the server starts: a process-wide lazily initialized static keeps the uninitialized payload bytes of its
+// `None` fields, copied from the stack it was built on. The server first touches `EMPTY_COMPILER_OPTIONS` while
+// updating the auto-import registry, whose stack then holds pointers into the update's scratch region, freed right
+// after; initialized here, while no region exists, it cannot hold such a word (notes/lsp-memfix.md).
+pub(crate) fn prepare_lsp() {
+    if !census::active() {
+        return;
+    }
+    std::sync::LazyLock::force(&tsrs_core::EMPTY_COMPILER_OPTIONS);
+}
+
 #[derive(Default)]
 struct Tally {
     checked: u64,
