@@ -51,7 +51,7 @@ pub fn new_server(opts: ServerOptions) -> Arc<Server> {
         w: Mutex::new(opts.out),
         background_ctx: OnceLock::new(),
         stderr: Mutex::new(opts.err),
-        logger: new_logger(weak.clone()),
+        logger: Arc::new(new_logger(weak.clone())),
         init_started: AtomicBool::new(false),
         client_seq: AtomicI32::new(0),
         request_queue: new_dynamic_queue(),
@@ -205,7 +205,7 @@ pub struct Server {
 
     stderr: Mutex<Box<dyn Write + Send>>,
 
-    pub(crate) logger: logger,
+    pub(crate) logger: Arc<logger>,
     pub(crate) init_started: AtomicBool,
     client_seq: AtomicI32,
     request_queue: dynamicQueue<Arc<RequestMessage>>,
