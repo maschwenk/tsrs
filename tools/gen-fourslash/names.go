@@ -23,7 +23,10 @@ var (
 )
 
 // snake is the snake_case rule of the rest of the port (tools/gen-lsproto/generate.mts): acronym runs are one word.
+var wordReplacer = strings.NewReplacer("JSDoc", "Jsdoc", "NaN", "Nan", "IDs", "Ids", "URLs", "Urls")
+
 func snake(s string) string {
+	s = wordReplacer.Replace(s)
 	s = snakeRe1.ReplaceAllString(s, "${1}_${2}")
 	s = snakeRe2.ReplaceAllString(s, "${1}_${2}")
 	return strings.ToLower(s)

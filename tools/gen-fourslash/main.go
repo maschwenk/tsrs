@@ -1,5 +1,5 @@
 // gen-fourslash converts the Go fourslash tests (ts-ref/tsc/internal/fourslash/tests) into Rust test functions
-// for crates/tsrs_fourslash. See README.md.
+// for crates/tsrs_fourslash. See docs/LSP.md "Fourslash" and notes/lsp-fsgen.md.
 package main
 
 import (

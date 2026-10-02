@@ -175,6 +175,9 @@ func (g *gen) stmt(s ast.Stmt) {
 
 func (g *gen) localType(t types.Type) string {
 	if n, ok := types.Unalias(t).(*types.Named); ok {
+		if _, pkgLevel := objModule[n.Obj()]; pkgLevel {
+			return rtype(t, false)
+		}
 		if name, ok := g.localTypes[n.Obj()]; ok {
 			return name
 		}
@@ -258,8 +261,16 @@ func (g *gen) assign(s *ast.AssignStmt) {
 				g.line("let mut %s = %s;", name, code)
 				continue
 			}
-			val := g.expr(s.Rhs[i], obj.Type(), mOwned)
 			name := ident(id.Name)
+			if isOptionPtr(obj.Type()) {
+				if c, k := g.naturalIfPlace(s.Rhs[i]); k == kDeref {
+					vi := g.declare(obj, name)
+					vi.kind = kDeref
+					g.line("let mut %s = %s.clone();", name, parenIfNeeded(c))
+					continue
+				}
+			}
+			val := g.expr(s.Rhs[i], obj.Type(), mOwned)
 			vi := g.declare(obj, name)
 			if _, ok := types.Unalias(obj.Type()).(*types.Signature); ok {
 				vi.fclosure = true
@@ -291,6 +302,10 @@ func (g *gen) assign(s *ast.AssignStmt) {
 			// x = append(x, ...)
 			if call, ok := s.Rhs[i].(*ast.CallExpr); ok && g.isBuiltin(call.Fun, "append") && sameExpr(call.Args[0], l) {
 				g.line("%s", g.appendInPlace(l, call))
+				continue
+			}
+			if sel, ok := l.(*ast.SelectorExpr); ok && isOptionSliceField(g.typeOf(sel.X), sel.Sel.Name) {
+				g.line("%s = Some(%s);", g.lvalue(l), g.expr(s.Rhs[i], lt, mOwned))
 				continue
 			}
 			g.line("%s = %s;", g.lvalue(l), g.expr(s.Rhs[i], lt, mOwned))
@@ -404,6 +419,9 @@ func (g *gen) rangeStmt(s *ast.RangeStmt) {
 			g.indent--
 			g.declare(kObj, kName)
 			g.declare(vObj, vName)
+		}
+		if vObj != nil && isOptionPtr(u.Elem()) {
+			g.vars[vObj].kind = kDeref
 		}
 		_ = u
 	case *types.Map:

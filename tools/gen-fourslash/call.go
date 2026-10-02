@@ -45,7 +45,7 @@ func (g *gen) callExpr(e *ast.CallExpr, m mode) string {
 				return g.qualifiedCall(e, o)
 			}
 			sig := o.Type().(*types.Signature)
-			return ident(o.Name()) + "(" + strings.Join(g.args(e, sig, false), ", ") + ")"
+			return pkgRef(o, ident(o.Name())) + "(" + strings.Join(g.args(e, sig, false), ", ") + ")"
 		case *types.Var:
 			vi := g.vars[o]
 			if vi == nil {
@@ -134,7 +134,7 @@ func (g *gen) methodCall(e *ast.CallExpr, fun *ast.SelectorExpr, sel *types.Sele
 	recv, rk := g.natural(fun.X)
 	if rk == kOptArc {
 		recv = parenIfNeeded(recv) + ".as_ref().unwrap()"
-	} else if isOptionPtr(recvT) {
+	} else if isOptionPtr(recvT) && rk != kDeref {
 		recv = parenIfNeeded(recv) + ".as_ref().unwrap()"
 	} else {
 		recv = parenIfNeeded(recv)
@@ -167,11 +167,40 @@ func (g *gen) methodCall(e *ast.CallExpr, fun *ast.SelectorExpr, sel *types.Sele
 		}
 		fail("strings.Builder.%s", name)
 	}
+	if isNamed(derefType(recvT), collectionsPath, "MultiMap") {
+		var args []string
+		for i, a := range e.Args {
+			args = append(args, "&"+parenIfNeeded(g.expr(a, sig.Params().At(i).Type(), mOwned)))
+		}
+		return recv + "." + ident(name) + "(" + strings.Join(args, ", ") + ")"
+	}
 	harness := false
 	if p := sel.Obj().Pkg(); p != nil && p.Path() == fsPath {
 		harness = true
 	}
-	return recv + "." + ident(name) + "(" + strings.Join(g.args(e, sig, harness), ", ") + ")"
+	args := g.args(e, sig, harness)
+	if isFourslashTestPtr(recvT) && g.curF != "" {
+		// Arguments that pass the FourslashTest to a closure are evaluated before the receiver is borrowed.
+		hoist := false
+		for _, a := range args {
+			if strings.Contains(a, "&mut *"+g.curF) {
+				hoist = true
+			}
+		}
+		if hoist {
+			var b strings.Builder
+			b.WriteString("{ ")
+			var names []string
+			for i, a := range args {
+				n := sprintf("__arg%d", i)
+				names = append(names, n)
+				b.WriteString("let " + n + " = " + a + "; ")
+			}
+			b.WriteString(recv + "." + ident(name) + "(" + strings.Join(names, ", ") + ") }")
+			return b.String()
+		}
+	}
+	return recv + "." + ident(name) + "(" + strings.Join(args, ", ") + ")"
 }
 
 func derefType(t types.Type) types.Type {
@@ -217,7 +246,7 @@ func (g *gen) qualifiedCall(e *ast.CallExpr, f *types.Func) string {
 		switch name {
 		case "IfElse":
 			rt := g.typeOf(e)
-			return "(if " + g.expr(e.Args[0], types.Typ[types.Bool], mOwned) + " { " + g.expr(e.Args[1], rt, mOwned) + " } else { " + g.expr(e.Args[2], rt, mOwned) + " })"
+			return "if " + g.expr(e.Args[0], types.Typ[types.Bool], mOwned) + " { " + g.expr(e.Args[1], rt, mOwned) + " } else { " + g.expr(e.Args[2], rt, mOwned) + " }"
 		case "Filter":
 			fl, ok := e.Args[1].(*ast.FuncLit)
 			if !ok {
@@ -379,7 +408,7 @@ func (g *gen) builtin(name string, e *ast.CallExpr) string {
 	case "len":
 		c, k := g.natural(e.Args[0])
 		_ = k
-		return "(" + parenIfNeeded(c) + ".len() as i32)"
+		return parenIfNeeded(c) + ".len() as i32"
 	case "new":
 		inner, _ := g.ptrLiteral(e)
 		if isArcPtr(g.typeOf(e)) {
@@ -441,7 +470,7 @@ func (g *gen) conversion(e *ast.CallExpr, to types.Type) string {
 	}
 	if tb, ok := types.Unalias(to).Underlying().(*types.Basic); ok && tb.Info()&types.IsNumeric != 0 {
 		if fb, ok := types.Unalias(from).Underlying().(*types.Basic); ok && fb.Info()&types.IsNumeric != 0 {
-			return "(" + parenIfNeeded(g.expr(arg, from, mOwned)) + " as " + rtype(to, false) + ")"
+			return parenIfNeeded(g.expr(arg, from, mOwned)) + " as " + rtype(to, false)
 		}
 	}
 	fail("conversion %s -> %s", types.TypeString(from, nil), types.TypeString(to, nil))

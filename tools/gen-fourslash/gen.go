@@ -7,6 +7,7 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -24,6 +25,7 @@ const (
 	kStrSlice             // &[&str]
 	kRef                  // &rtype(T) (closure parameters of iterator helpers)
 	kOptArc               // Option<Arc<T>>: a harness-object pointer stored in a struct field
+	kDeref                // the pointee T of a Go *T that Rust stores unboxed (element of a []*T): never nil
 )
 
 type varInfo struct {
@@ -90,6 +92,8 @@ type fileOut struct {
 	tests  []testEntry
 }
 
+var modRefRe = regexp.MustCompile(`@@MOD:([a-z0-9_]+)@@`)
+
 func generate(l *Loaded, out string, perFile int) error {
 	if perFile <= 0 {
 		perFile = 150
@@ -101,21 +105,47 @@ func generate(l *Loaded, out string, perFile int) error {
 
 	var files []fileOut
 	modNames := map[string]bool{}
+	fileMods := map[*ast.File]string{}
 	for _, p := range l.Tests {
 		for i, f := range p.Files {
 			name := p.Names[i]
 			if name == "testmain_test.go" {
 				continue
 			}
-			mod := ident(strings.TrimSuffix(name, "_test.go"))
+			mod := moduleName(name)
 			for modNames[mod] {
 				mod += "_"
 			}
 			modNames[mod] = true
-			files = append(files, g.genFile(p, f, name, mod))
+			fileMods[f] = mod
+			for _, d := range f.Decls {
+				switch d := d.(type) {
+				case *ast.FuncDecl:
+					objModule[p.Info.Defs[d.Name]] = mod
+				case *ast.GenDecl:
+					for _, sp := range d.Specs {
+						switch sp := sp.(type) {
+						case *ast.ValueSpec:
+							for _, n := range sp.Names {
+								objModule[p.Info.Defs[n]] = mod
+							}
+						case *ast.TypeSpec:
+							objModule[p.Info.Defs[sp.Name]] = mod
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, p := range l.Tests {
+		for i, f := range p.Files {
+			if mod, ok := fileMods[f]; ok {
+				files = append(files, g.genFile(p, f, p.Names[i], mod))
+			}
 		}
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].module < files[j].module })
+	moduleChunk := map[string]string{}
 
 	genDir := filepath.Join(out, "gen")
 	if err := os.RemoveAll(genDir); err != nil {
@@ -129,20 +159,35 @@ func generate(l *Loaded, out string, perFile int) error {
 	mod.WriteString(header)
 	var reg strings.Builder
 	nTests, nSkip := 0, 0
-	chunk := 0
-	for start := 0; start < len(files); chunk++ {
-		var b strings.Builder
-		b.WriteString(header)
-		b.WriteString("#![allow(non_snake_case, unreachable_code, clippy::all)]\n\n")
+	// chunks: consecutive files, about perFile tests each
+	type span struct{ start, end int }
+	var chunks []span
+	for start := 0; start < len(files); {
 		count := 0
 		end := start
 		for end < len(files) && (count == 0 || count+len(files[end].tests) <= perFile) {
 			count += len(files[end].tests)
 			end++
 		}
+		for _, f := range files[start:end] {
+			moduleChunk[f.module] = fmt.Sprintf("gen_%02d", len(chunks))
+		}
+		chunks = append(chunks, span{start, end})
+		start = end
+	}
+	chunk := 0
+	for ; chunk < len(chunks); chunk++ {
+		start, end := chunks[chunk].start, chunks[chunk].end
+		var b strings.Builder
+		b.WriteString(header)
+		b.WriteString("#![allow(unreachable_code, unused_assignments)]\n\n")
 		chunkName := fmt.Sprintf("gen_%02d", chunk)
 		for _, f := range files[start:end] {
-			fmt.Fprintf(&b, "pub mod %s {\n    use crate::tests::prelude::*;\n\n%s}\n\n", f.module, f.code)
+			f.code = modRefRe.ReplaceAllStringFunc(f.code, func(m string) string {
+				mod := modRefRe.FindStringSubmatch(m)[1]
+				return "crate::tests::gen::" + moduleChunk[mod] + "::" + mod + "::"
+			})
+			fmt.Fprintf(&b, "pub mod %s {\nuse crate::tests::prelude::*;\n\n%s}\n\n", f.module, f.code)
 			for _, te := range f.tests {
 				skip := "None"
 				if te.skipped {
@@ -159,7 +204,6 @@ func generate(l *Loaded, out string, perFile int) error {
 			return err
 		}
 		fmt.Fprintf(&mod, "pub mod %s;\n", chunkName)
-		start = end
 	}
 	mod.WriteString("\nuse crate::runner::TestEntry;\n\n")
 	fmt.Fprintf(&mod, "pub static REGISTRY: &[TestEntry] = &[\n%s];\n", reg.String())
@@ -192,6 +236,19 @@ func generate(l *Loaded, out string, perFile int) error {
 	return nil
 }
 
+func moduleName(file string) string {
+	m := ident(strings.Map(func(r rune) rune {
+		if r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return '_'
+	}, strings.TrimSuffix(file, "_test.go")))
+	for strings.Contains(m, "__") {
+		m = strings.ReplaceAll(m, "__", "_")
+	}
+	return m
+}
+
 func (g *gen) setPackage(p *Package) {
 	g.p = p
 	g.info = p.Info
@@ -201,6 +258,7 @@ func (g *gen) setPackage(p *Package) {
 // genUtil emits the package-level variables of tests/util/util.go as statics.
 func (g *gen) genUtil(p *Package) string {
 	g.setPackage(p)
+	curModule = ""
 	var b strings.Builder
 	b.WriteString("use crate::tests::prelude::*;\nuse crate::tests::util::*;\n\n")
 	for _, d := range p.Files[0].Decls {
@@ -244,6 +302,7 @@ func (g *gen) protect(fn func() string) (s string) {
 
 func (g *gen) genFile(p *Package, f *ast.File, name, mod string) fileOut {
 	g.setPackage(p)
+	curModule = mod
 	fo := fileOut{module: mod}
 	var b strings.Builder
 	for _, d := range f.Decls {
@@ -277,7 +336,8 @@ func (g *gen) genFile(p *Package, f *ast.File, name, mod string) fileOut {
 			b.WriteString("\n")
 		}
 	}
-	fo.code = indentBlock(b.String(), 1)
+	// Not re-indented: multi-line raw strings must stay byte-exact.
+	fo.code = b.String()
 	return fo
 }
 
@@ -482,6 +542,9 @@ func (g *gen) params(sig *types.Signature, fl *ast.FieldList, closure bool) (par
 			if n != nil {
 				if obj := g.info.Defs[n]; obj != nil {
 					g.vars[obj] = vi
+					if g.assigned[obj] && vi.kind == kPlace {
+						prologue = append(prologue, sprintf("let mut %s = %s;", name, name))
+					}
 					if g.assigned[obj] && (vi.kind == kStr || vi.kind == kStrSlice || vi.kind == kSlice) {
 						switch vi.kind {
 						case kStr:

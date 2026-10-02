@@ -107,11 +107,9 @@ func rustEnumType(t types.Type) bool {
 	}
 	switch n.Obj().Pkg().Path() {
 	case lsutilPath:
-		switch n.Obj().Name() {
-		case "QuotePreference", "JsxAttributeCompletionStyle", "IncludeInlayParameterNameHints", "OrganizeImportsSort",
-			"OrganizeImportsCollation", "OrganizeImportsCaseFirst", "OrganizeImportsTypeOrder":
-			return true
-		}
+		// every named basic type of lsutil is a Rust enum (or a newtype with associated consts)
+		_, basic := n.Underlying().(*types.Basic)
+		return basic
 	case modspecPath:
 		switch n.Obj().Name() {
 		case "ImportModuleSpecifierPreference", "ImportModuleSpecifierEndingPreference":
@@ -149,6 +147,9 @@ func copyType(t types.Type) bool {
 	case *types.Basic:
 		return u.Info()&types.IsString == 0
 	case *types.Named:
+		if isNamed(t, lsutilPath, "WorkspaceSymbolsScope") || isNamed(t, lsprotoPath, "DocumentUri") || isNamed(t, lsprotoPath, "URI") {
+			return false
+		}
 		if rustEnumType(t) || stringNewtype(t) {
 			return true
 		}
@@ -195,13 +196,25 @@ func namedPath(n *types.Named) string {
 		return m + "::" + obj.Name()
 	}
 	if obj.Pkg().Path() == curPkgPath {
-		return obj.Name()
+		return pkgRef(obj, obj.Name())
 	}
 	fail("type %s.%s", obj.Pkg().Path(), obj.Name())
 	return ""
 }
 
 var curPkgPath string
+
+// Package-level declarations of the test packages live in the Rust module of their Go file; references from
+// other files get a placeholder that generate() resolves once the modules are assigned to files.
+var objModule = map[types.Object]string{}
+var curModule string
+
+func pkgRef(obj types.Object, name string) string {
+	if m, ok := objModule[obj]; ok && m != curModule {
+		return "@@MOD:" + m + "@@" + name
+	}
+	return name
+}
 
 // rtype maps a Go type to its Rust type. param: function parameter position (string -> &str, slices -> &[_]).
 func rtype(t types.Type, param bool) string {

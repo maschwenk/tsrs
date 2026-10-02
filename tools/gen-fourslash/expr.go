@@ -85,6 +85,12 @@ func (g *gen) elem(e ast.Expr, et types.Type) string {
 		if inner, ok := g.ptrLiteral(e); ok {
 			return inner
 		}
+		if g.isNil(e) {
+			fail("nil element of a pointer slice")
+		}
+		if c, k := g.natural(e); k == kDeref {
+			return parenIfNeeded(c) + ".clone()"
+		}
 		return parenIfNeeded(g.expr(e, et, mOwned)) + ".unwrap()"
 	}
 	return g.expr(e, et, mOwned)
@@ -261,7 +267,7 @@ func (g *gen) coerce(code string, k kind, have, want types.Type, m mode) string 
 			case kOptArc:
 				fail("string from Option<Arc>")
 			}
-			return "&" + parenIfNeeded(code)
+			return parenIfNeeded(code) + ".as_str()"
 		case isStringSlice(t):
 			switch k {
 			case kStrSlice:
@@ -301,6 +307,11 @@ func (g *gen) coerce(code string, k kind, have, want types.Type, m mode) string 
 	case kOptArc:
 		if isArcPtr(t) {
 			return parenIfNeeded(code) + ".clone().unwrap()"
+		}
+		return parenIfNeeded(code) + ".clone()"
+	case kDeref:
+		if isOptionPtr(t) {
+			return "Some(" + parenIfNeeded(code) + ".clone())"
 		}
 		return parenIfNeeded(code) + ".clone()"
 	}
@@ -359,6 +370,13 @@ func (g *gen) natural(e ast.Expr) (string, kind) {
 	case *ast.SelectorExpr:
 		return g.selectorExpr(e)
 	case *ast.CallExpr:
+		if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
+			if s := g.info.Selections[sel]; s != nil && isNamed(derefType(s.Recv()), collectionsPath, "MultiMap") {
+				if _, isSl := isSlice(g.typeOf(e)); isSl {
+					return g.callExpr(e, mOwned), kSlice
+				}
+			}
+		}
 		return g.callExpr(e, mOwned), kOwned
 	case *ast.CompositeLit:
 		t := g.typeOf(e)
@@ -428,11 +446,11 @@ func (g *gen) identExpr(e *ast.Ident) (string, kind) {
 	switch o := obj.(type) {
 	case *types.Const:
 		if o.Pkg() != nil && o.Pkg().Path() == g.p.Path {
-			// package-level constant of this file
+			// package-level constant
 			if isString(o.Type()) {
-				return screaming(o.Name()), kStr
+				return pkgRef(o, screaming(o.Name())), kStr
 			}
-			return screaming(o.Name()), kOwned
+			return pkgRef(o, screaming(o.Name())), kOwned
 		}
 		if o.Pkg() == nil {
 			return g.constLit(o.Val(), o.Type()), kOwned
@@ -440,7 +458,7 @@ func (g *gen) identExpr(e *ast.Ident) (string, kind) {
 		return g.qualified(o)
 	case *types.Var:
 		if o.Pkg() != nil && o.Pkg().Path() == g.p.Path && o.Parent() == o.Pkg().Scope() {
-			return screaming(o.Name()), kPlace
+			return pkgRef(o, screaming(o.Name())), kPlace
 		}
 		if o.Pkg() != nil && o.Pkg().Path() != g.p.Path {
 			return g.qualified(o)
@@ -452,7 +470,7 @@ func (g *gen) identExpr(e *ast.Ident) (string, kind) {
 		if o.Pkg() != nil && o.Pkg().Path() != g.p.Path {
 			return g.qualified(o)
 		}
-		return ident(o.Name()), kOwned
+		return pkgRef(o, ident(o.Name())), kOwned
 	}
 	fail("identifier %s (%T)", e.Name, obj)
 	return "", 0
@@ -520,7 +538,7 @@ func (g *gen) selectorExpr(e *ast.SelectorExpr) (string, kind) {
 	base, bk := g.natural(e.X)
 	xt := g.typeOf(e.X)
 	field := ident(e.Sel.Name)
-	if isOptionPtr(xt) {
+	if isOptionPtr(xt) && bk != kDeref {
 		if bk == kOptArc {
 			fail("field of Option<Arc>")
 		}
@@ -531,6 +549,9 @@ func (g *gen) selectorExpr(e *ast.SelectorExpr) (string, kind) {
 		base = parenIfNeeded(base)
 	}
 	base += embeddedPath(xt, sel.Index())
+	if isOptionSliceField(xt, e.Sel.Name) {
+		fail("read of an Option<Vec> field")
+	}
 	ft := sel.Obj().Type()
 	if isArcPtr(ft) {
 		return base + "." + field, kOptArc
@@ -543,15 +564,21 @@ func (g *gen) indexExpr(e *ast.IndexExpr) (string, kind) {
 	switch u := xt.Underlying().(type) {
 	case *types.Slice:
 		base, _ := g.natural(e.X)
+		if isOptionPtr(u.Elem()) {
+			return parenIfNeeded(base) + "[" + g.index(e.Index) + "]", kDeref
+		}
 		return parenIfNeeded(base) + "[" + g.index(e.Index) + "]", kPlace
 	case *types.Map:
 		base, _ := g.natural(e.X)
 		return parenIfNeeded(base) + ".get(" + g.expr(e.Index, u.Key(), mParamKey(u.Key())) + ").cloned().unwrap_or_default()", kOwned
 	case *types.Pointer:
 		if s, ok := u.Elem().Underlying().(*types.Slice); ok {
-			_ = s
 			base, _ := g.natural(e.X)
-			return parenIfNeeded(base) + ".as_ref().unwrap()[" + g.index(e.Index) + "]", kPlace
+			k := kPlace
+			if isOptionPtr(s.Elem()) {
+				k = kDeref
+			}
+			return parenIfNeeded(base) + ".as_ref().unwrap()[" + g.index(e.Index) + "]", k
 		}
 	}
 	fail("index of %s", types.TypeString(xt, nil))
@@ -616,6 +643,12 @@ func (g *gen) binaryExpr(e *ast.BinaryExpr) (string, kind) {
 			c, k := g.natural(x)
 			var test string
 			switch {
+			case k == kDeref:
+				test = "false"
+				if neg {
+					return "true", kOwned
+				}
+				return test, kOwned
 			case isAny(xt):
 				test = parenIfNeeded(c) + ".is_nil()"
 			case isOptionPtr(xt) || k == kOptArc:
@@ -639,6 +672,12 @@ func (g *gen) binaryExpr(e *ast.BinaryExpr) (string, kind) {
 		}
 		if isString(lt) && isString(rt) {
 			return g.strOperand(e.X) + op + g.strOperand(e.Y), kOwned
+		}
+		if isAny(lt) && !isInterface(rt) {
+			return parenIfNeeded(g.cmpOperand(e.X, lt)) + op + g.wrapInterface(e.Y, lt), kOwned
+		}
+		if isAny(rt) && !isInterface(lt) {
+			return g.wrapInterface(e.X, rt) + op + parenIfNeeded(g.cmpOperand(e.Y, rt)), kOwned
 		}
 		return parenIfNeeded(g.cmpOperand(e.X, rt)) + op + parenIfNeeded(g.cmpOperand(e.Y, lt)), kOwned
 	case token.LAND, token.LOR:
@@ -743,6 +782,9 @@ func (g *gen) constLit(v constant.Value, t types.Type) string {
 				c, _ := g.qualified(obj)
 				return c
 			}
+			if isNamed(n, lsprotoPath, "DocumentUri") || isNamed(n, lsprotoPath, "URI") {
+				return namedPath(n) + "(" + g.constLit(v, n.Underlying()) + ".to_string())"
+			}
 			if stringNewtype(n) || isLsprotoIntEnum(n) {
 				return namedPath(n) + "(" + g.constLit(v, n.Underlying()) + ")"
 			}
@@ -821,6 +863,14 @@ func (g *gen) compositeLit(e *ast.CompositeLit, t types.Type) string {
 				val = el
 			}
 			set++
+			if isOptionSliceField(t, fl.Name()) {
+				if g.isNil(val) {
+					fields = append(fields, ident(fl.Name())+": None")
+				} else {
+					fields = append(fields, ident(fl.Name())+": Some("+g.fieldValue(val, fl.Type())+")")
+				}
+				continue
+			}
 			fields = append(fields, ident(fl.Name())+": "+g.fieldValue(val, fl.Type()))
 		}
 		if set < u.NumFields() {
@@ -849,6 +899,18 @@ func (g *gen) compositeLit(e *ast.CompositeLit, t types.Type) string {
 	}
 	fail("composite literal of %s", types.TypeString(t, nil))
 	return ""
+}
+
+// Fields of hand-ported structs whose Rust type is Option<Vec<_>> although Go has a plain slice (nil and empty
+// mean different things there).
+var optionSliceFields = map[string]bool{
+	"UserPreferences.AutoImportSpecifierExcludeRegexes": true,
+	"UserPreferences.AutoImportFileExcludePatterns":     true,
+}
+
+func isOptionSliceField(structT types.Type, field string) bool {
+	n, ok := types.Unalias(derefType(structT)).(*types.Named)
+	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == lsutilPath && optionSliceFields[n.Obj().Name()+"."+field]
 }
 
 // fieldValue: a struct field value. Harness-object pointer fields are Option<Arc<T>>.
@@ -891,4 +953,13 @@ func embeddedPath(t types.Type, index []int) string {
 		}
 	}
 	return path
+}
+
+// naturalIfPlace translates e only when it is an index / identifier (cheap, no side effects to duplicate).
+func (g *gen) naturalIfPlace(e ast.Expr) (string, kind) {
+	switch e.(type) {
+	case *ast.IndexExpr, *ast.Ident:
+		return g.natural(e)
+	}
+	return "", kOwned
 }
