@@ -62,7 +62,7 @@ impl ImportAdder for importAdder {
 // import_adder.go:382
 pub fn type_to_auto_importable_type_node(
     c: &mut Checker,
-    import_adder: Option<&mut dyn ImportAdder>,
+    import_adder: Option<&mut (dyn ImportAdder + 'static)>,
     t: P<Type>,
     context_node: P<Node>, // !!! flags
 ) -> Option<P<Node>> {
@@ -74,7 +74,7 @@ pub fn type_to_auto_importable_type_node(
 // TypeNodeToAutoImportableTypeNode converts import type references in a type node to
 // simple type references and registers needed imports with the import adder.
 // import_adder.go:398
-pub fn type_node_to_auto_importable_type_node(mut type_node: P<Node>, import_adder: Option<&mut dyn ImportAdder>, id_to_symbol: IdToSymbol) -> Option<P<Node>> {
+pub fn type_node_to_auto_importable_type_node(mut type_node: P<Node>, import_adder: Option<&mut (dyn ImportAdder + 'static)>, id_to_symbol: IdToSymbol) -> Option<P<Node>> {
     let (reference_type_node, importable_symbols) = try_get_auto_importable_reference_from_type_node(Some(type_node), id_to_symbol);
     if let Some(reference_type_node) = reference_type_node {
         if let Some(import_adder) = import_adder {

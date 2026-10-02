@@ -184,7 +184,7 @@ impl LanguageService {
     }
 
     // hover.go:174
-    fn get_quick_info_and_documentation_for_symbol(
+    pub(crate) fn get_quick_info_and_documentation_for_symbol(
         &self,
         c: &mut Checker,
         symbol: Option<P<Symbol>>,

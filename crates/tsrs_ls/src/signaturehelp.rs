@@ -46,7 +46,7 @@ pub(crate) struct argumentListInfo {
     pub(crate) invocation: invocation,
     pub(crate) arguments_span: TextRange,
     pub(crate) argument_index: i32,
-    /** argumentCount is the *apparent* number of arguments. */
+    // argumentCount is the *apparent* number of arguments.
     pub(crate) argument_count: i32,
 }
 
