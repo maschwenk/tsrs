@@ -167,10 +167,10 @@ pub fn worker(registry: &'static [TestEntry], include_skipped: bool) {
             Outcome::Fail(m) => ("FAIL", m.lines().next().unwrap_or("").to_string()),
             Outcome::Skip(m) => ("SKIP", m.lines().next().unwrap_or("").to_string()),
         };
-        if std::env::var_os("TSRS_FOURSLASH_FULL_MESSAGE").is_some() {
-            if let Outcome::Fail(m) = &outcome {
-                eprintln!("{name}: {m}");
-            }
+        // fail.txt keeps the first line of a failure; the whole message goes to failures/<name>.txt.
+        match &outcome {
+            Outcome::Fail(m) => write_failure_file(name, m),
+            _ => remove_failure_file(name),
         }
         let mut out = std::io::stdout().lock();
         let _ = writeln!(out, "{name}\t{tag}\t{msg}");
@@ -263,7 +263,22 @@ fn run_in_worker(worker: &mut Option<WorkerProcess>, entry: &TestEntry, include_
     }
 }
 
-// Runs the selected tests in parallel and writes target/fourslash-results/{pass,fail,skip}.txt.
+fn failure_file(name: &str) -> PathBuf {
+    results_dir().join("failures").join(format!("{name}.txt"))
+}
+
+fn write_failure_file(name: &str, msg: &str) {
+    let path = failure_file(name);
+    let _ = fs::create_dir_all(path.parent().unwrap());
+    let _ = fs::write(path, format!("{msg}\n"));
+}
+
+fn remove_failure_file(name: &str) {
+    let _ = fs::remove_file(failure_file(name));
+}
+
+// Runs the selected tests in parallel and writes target/fourslash-results/{pass,fail,skip}.txt (and the full
+// message of each failure to failures/<name>.txt).
 // Returns the number of failures.
 pub fn run(registry: &'static [TestEntry], opts: &RunOptions) -> usize {
     install_panic_hook();
@@ -306,13 +321,23 @@ pub fn run(registry: &'static [TestEntry], opts: &RunOptions) -> usize {
     let mut reasons: BTreeMap<String, usize> = BTreeMap::new();
     for (e, r) in selected.iter().zip(results) {
         match r.unwrap() {
-            Outcome::Pass => pass.push(e.name.to_string()),
+            Outcome::Pass => {
+                remove_failure_file(e.name);
+                pass.push(e.name.to_string())
+            }
             Outcome::Fail(msg) => {
+                // Crashes and timeouts never reach the worker's own report.
+                if msg.starts_with("crash: ") || msg.starts_with("timeout: ") || msg == "worker process unavailable" {
+                    write_failure_file(e.name, &msg);
+                }
                 let first = msg.lines().next().unwrap_or("").to_string();
                 *reasons.entry(first.clone()).or_default() += 1;
                 fail.push(format!("{}\t{}", e.name, first));
             }
-            Outcome::Skip(msg) => skip.push(format!("{}\t{}", e.name, msg.lines().next().unwrap_or(""))),
+            Outcome::Skip(msg) => {
+                remove_failure_file(e.name);
+                skip.push(format!("{}\t{}", e.name, msg.lines().next().unwrap_or("")))
+            }
         }
     }
     let dir = results_dir();
