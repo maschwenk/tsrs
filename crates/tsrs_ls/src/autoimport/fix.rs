@@ -307,7 +307,7 @@ pub(crate) fn add_to_existing_import(
                             .iter()
                             .map(|&e| {
                                 let spec = e.as_import_specifier();
-                                let property_name = spec.property_name;
+                                let property_name = spec.property_name();
                                 ct.node_factory.new_import_specifier(
                                     true, // isTypeOnly
                                     property_name,
@@ -1222,7 +1222,7 @@ fn promote_from_type_only(
                     let elements = named_imports_node.elements.nodes;
                     if elements.len() > 1 {
                         // Create a synthetic specifier with isTypeOnly=false to compute sorted position
-                        let property_name = spec.property_name.map(|p| changes.node_factory.new_identifier(p.text()));
+                        let property_name = spec.property_name().map(|p| changes.node_factory.new_identifier(p.text()));
                         let new_specifier = changes.node_factory.new_import_specifier(
                             false, // isTypeOnly = false
                             property_name,
@@ -1244,7 +1244,7 @@ fn promote_from_type_only(
                     // If no re-sorting needed, just remove the 'type' keyword
                     let first_token = lsutil::get_first_token(alias_declaration, source_file).unwrap();
                     let type_keyword_pos = scanner::get_token_pos_of_node(first_token, source_file, false);
-                    let target_node = spec.property_name.unwrap_or_else(|| spec.name());
+                    let target_node = spec.property_name().unwrap_or_else(|| spec.name());
                     let target_pos = scanner::get_token_pos_of_node(target_node, source_file, false);
                     changes.delete_range(source_file, TextRange::new(type_keyword_pos, target_pos));
                 }

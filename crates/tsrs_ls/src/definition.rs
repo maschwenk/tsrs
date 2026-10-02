@@ -359,7 +359,7 @@ pub(crate) fn get_declarations_from_location(c: &mut Checker, node: P<Node>) -> 
         //      bar<Test>(({ prop1 }) => {});  => should navigate to prop1 in Test
         let parent = node.parent().unwrap();
         let binding_el = parent.as_binding_element();
-        if binding_el.dot_dot_dot_token.is_none() && Some(node) == binding_el.property_name.or(parent.name()) {
+        if binding_el.dot_dot_dot_token().is_none() && Some(node) == binding_el.property_name().or(parent.name()) {
             if let Some(name) = ast::try_get_text_of_property_name(node) {
                 let t = c.get_type_at_location(parent.parent().unwrap());
                 let types: Vec<P<Type>> = if t.is_union() { t.types().to_vec() } else { vec![t] };

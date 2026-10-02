@@ -824,7 +824,7 @@ pub(crate) fn has_any_binding_initializers(binding_pattern: P<Node>) -> bool {
             continue;
         }
         let e = elem.as_binding_element();
-        if e.initializer.is_some() {
+        if e.initializer().is_some() {
             return true;
         }
         if let Some(name) = e.name {

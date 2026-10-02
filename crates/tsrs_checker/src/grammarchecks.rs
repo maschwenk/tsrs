@@ -170,9 +170,9 @@ impl Checker {
                     if !can_have_call_expression {
                         error_node = Some(node);
                     }
-                    if call_expr.question_dot_token.is_some() {
+                    if call_expr.question_dot_token().is_some() {
                         // Even if we already have an error node, error at the `?.` token since it appears earlier.
-                        error_node = call_expr.question_dot_token;
+                        error_node = call_expr.question_dot_token();
                     }
                     node = call_expr.expression;
                     can_have_call_expression = false;
@@ -186,9 +186,9 @@ impl Checker {
 
                 if is_property_access_expression(node) {
                     let property_access_expr = node.as_property_access_expression();
-                    if property_access_expr.question_dot_token.is_some() {
+                    if property_access_expr.question_dot_token().is_some() {
                         // Even if we already have an error node, error at the `?.` token since it appears earlier.
-                        error_node = property_access_expr.question_dot_token;
+                        error_node = property_access_expr.question_dot_token();
                     }
                     node = property_access_expr.expression;
                     can_have_call_expression = false;
@@ -591,7 +591,7 @@ impl Checker {
             return self.grammar_error_on_node(last_declare.unwrap(), &diagnostics::A_0_modifier_cannot_be_used_with_an_import_declaration, &[&"declare"]);
         } else if node.kind() == Kind::Parameter && flags.intersects(ModifierFlags::ParameterPropertyModifier) && node.name().is_some_and(ast::is_binding_pattern) {
             return self.grammar_error_on_node(node, &diagnostics::A_parameter_property_may_not_be_declared_using_a_binding_pattern, &[]);
-        } else if node.kind() == Kind::Parameter && flags.intersects(ModifierFlags::ParameterPropertyModifier) && node.as_parameter_declaration().dot_dot_dot_token.is_some() {
+        } else if node.kind() == Kind::Parameter && flags.intersects(ModifierFlags::ParameterPropertyModifier) && node.as_parameter_declaration().dot_dot_dot_token().is_some() {
             return self.grammar_error_on_node(node, &diagnostics::A_parameter_property_cannot_be_declared_using_a_rest_parameter, &[]);
         }
         if flags.intersects(ModifierFlags::Async) {
@@ -723,7 +723,7 @@ impl Checker {
         for i in 0..parameter_count {
             let parameter_node = parameters.nodes[i];
             let parameter = parameter_node.as_parameter_declaration();
-            if let Some(dot_dot_dot_token) = parameter.dot_dot_dot_token {
+            if let Some(dot_dot_dot_token) = parameter.dot_dot_dot_token() {
                 if i != parameter_count - 1 {
                     return self.grammar_error_on_node(dot_dot_dot_token, &diagnostics::A_rest_parameter_must_be_last_in_a_parameter_list, &[]);
                 }
@@ -735,16 +735,16 @@ impl Checker {
                     return self.grammar_error_on_node(question_token, &diagnostics::A_rest_parameter_cannot_be_optional, &[]);
                 }
 
-                if parameter.initializer.is_some() {
+                if parameter.initializer().is_some() {
                     return self.grammar_error_on_node(parameter.name, &diagnostics::A_rest_parameter_cannot_have_an_initializer, &[]);
                 }
             } else if crate::is_optional_declaration(parameter_node) {
                 seen_optional_parameter = true;
                 // A reparsed '?' token indicates a bracketed name in @param tag
-                if parameter.question_token().is_some_and(|q| !q.flags().intersects(NodeFlags::Reparsed)) && parameter.initializer.is_some() {
+                if parameter.question_token().is_some_and(|q| !q.flags().intersects(NodeFlags::Reparsed)) && parameter.initializer().is_some() {
                     return self.grammar_error_on_node(parameter.name, &diagnostics::Parameter_cannot_have_question_mark_and_initializer, &[]);
                 }
-            } else if seen_optional_parameter && parameter.initializer.is_none() {
+            } else if seen_optional_parameter && parameter.initializer().is_none() {
                 return self.grammar_error_on_node(parameter.name, &diagnostics::A_required_parameter_cannot_follow_an_optional_parameter, &[]);
             }
         }
@@ -769,7 +769,7 @@ impl Checker {
                     .copied()
                     .filter(|&n| {
                         let parameter = n.as_parameter_declaration();
-                        parameter.initializer.is_some() || ast::is_binding_pattern(parameter.name) || crate::is_rest_parameter(n)
+                        parameter.initializer().is_some() || ast::is_binding_pattern(parameter.name) || crate::is_rest_parameter(n)
                     })
                     .collect();
                 if !non_simple_parameters.is_empty() {
@@ -850,7 +850,7 @@ impl Checker {
         }
 
         self.check_grammar_for_disallowed_trailing_comma(Some(parameters), &diagnostics::An_index_signature_cannot_have_a_trailing_comma);
-        if let Some(dot_dot_dot_token) = parameter.dot_dot_dot_token {
+        if let Some(dot_dot_dot_token) = parameter.dot_dot_dot_token() {
             return self.grammar_error_on_node(dot_dot_dot_token, &diagnostics::An_index_signature_cannot_have_a_rest_parameter, &[]);
         }
         if parameter_node.modifiers().is_some() {
@@ -859,7 +859,7 @@ impl Checker {
         if let Some(question_token) = parameter.question_token() {
             return self.grammar_error_on_node(question_token, &diagnostics::An_index_signature_parameter_cannot_have_a_question_mark, &[]);
         }
-        if parameter.initializer.is_some() {
+        if parameter.initializer().is_some() {
             return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_parameter_cannot_have_an_initializer, &[]);
         }
         let Some(type_node) = parameter.type_() else {
@@ -1401,13 +1401,13 @@ impl Checker {
                 panic!("Return value does not match parameter count assertion.");
             };
             let parameter = parameter_node.as_parameter_declaration();
-            if let Some(dot_dot_dot_token) = parameter.dot_dot_dot_token {
+            if let Some(dot_dot_dot_token) = parameter.dot_dot_dot_token() {
                 return self.grammar_error_on_node(dot_dot_dot_token, &diagnostics::A_set_accessor_cannot_have_rest_parameter, &[]);
             }
             if let Some(question_token) = parameter.question_token() {
                 return self.grammar_error_on_node(question_token, &diagnostics::A_set_accessor_cannot_have_an_optional_parameter, &[]);
             }
-            if parameter.initializer.is_some() {
+            if parameter.initializer().is_some() {
                 return self.grammar_error_on_node(accessor.name().unwrap(), &diagnostics::A_set_accessor_parameter_cannot_have_an_initializer, &[]);
             }
         }
@@ -1612,20 +1612,20 @@ impl Checker {
     // grammarchecks.go:1518
     pub(crate) fn check_grammar_binding_element(&mut self, node: P<Node>) -> bool {
         let binding_element = node.as_binding_element();
-        if binding_element.dot_dot_dot_token.is_some() {
+        if binding_element.dot_dot_dot_token().is_some() {
             let elements = node.parent().unwrap().element_list();
             if Some(node) != elements.nodes.last().copied() {
                 return self.grammar_error_on_node(node, &diagnostics::A_rest_element_must_be_last_in_a_destructuring_pattern, &[]);
             }
             self.check_grammar_for_disallowed_trailing_comma(Some(elements), &diagnostics::A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma);
 
-            if binding_element.property_name.is_some() {
+            if binding_element.property_name().is_some() {
                 return self.grammar_error_on_node(binding_element.name.unwrap(), &diagnostics::A_rest_element_cannot_have_a_property_name, &[]);
             }
         }
 
-        if binding_element.dot_dot_dot_token.is_some() {
-            if let Some(initializer) = binding_element.initializer {
+        if binding_element.dot_dot_dot_token().is_some() {
+            if let Some(initializer) = binding_element.initializer() {
                 // Error on equals token which immediately precedes the initializer
                 return self.grammar_error_at_pos(node, initializer.pos() - 1, 1, &diagnostics::A_rest_element_cannot_have_an_initializer, &[]);
             }
@@ -1666,7 +1666,7 @@ impl Checker {
             }
         }
 
-        if let Some(exclamation_token) = decl.exclamation_token {
+        if let Some(exclamation_token) = decl.exclamation_token() {
             if grandparent.kind() != Kind::VariableStatement || decl.type_().is_none() || decl.initializer().is_some() || node_flags.intersects(NodeFlags::Ambient) {
                 let message = if decl.initializer().is_some() {
                     &diagnostics::Declarations_with_initializers_cannot_also_have_definite_assignment_assertions
@@ -2071,7 +2071,7 @@ impl Checker {
             }
             Kind::PropertySignature => {
                 let prop_sig = node.as_property_signature_declaration();
-                initializer = prop_sig.initializer;
+                initializer = prop_sig.initializer();
                 type_node = prop_sig.type_();
             }
             _ => panic!("Unexpected node kind {:?}", node.kind()),
@@ -2344,7 +2344,7 @@ impl Checker {
         }
 
         let node_as_call = node.as_call_expression();
-        if node_as_call.type_arguments.is_some() {
+        if node_as_call.type_arguments().is_some() {
             return self.grammar_error_on_node(node, &diagnostics::This_use_of_import_is_invalid_import_calls_can_be_written_but_they_must_have_parentheses_and_cannot_have_type_arguments, &[]);
         }
 

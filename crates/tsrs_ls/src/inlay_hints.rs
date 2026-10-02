@@ -527,7 +527,7 @@ impl LabelPartsBuilder<'_, '_> {
                 if !node.modifier_nodes().is_empty() {
                     self.visit_display_part_list(node.modifier_nodes(), " ");
                 }
-                if node.as_parameter_declaration().dot_dot_dot_token.is_some() {
+                if node.as_parameter_declaration().dot_dot_dot_token().is_some() {
                     self.parts.push(part("..."));
                 }
                 self.visit_for_display_parts(node.name());
@@ -913,7 +913,7 @@ impl InlayHintState<'_> {
                     let is_rest_tuple_element = if ast::is_named_tuple_member(associated_name) {
                         associated_name.as_named_tuple_member().dot_dot_dot_token.is_some()
                     } else {
-                        associated_name.as_parameter_declaration().dot_dot_dot_token.is_some()
+                        associated_name.as_parameter_declaration().dot_dot_dot_token().is_some()
                     };
                     return Some(ParameterInfo { parameter: name, name: name.text().to_string(), is_rest_parameter: is_rest_tuple_element });
                 }

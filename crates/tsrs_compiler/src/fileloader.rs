@@ -1058,7 +1058,7 @@ pub(crate) fn get_mode_for_usage_location(
         let is_type_only = ast::is_exclusively_type_only_import_or_export(parent);
         if is_type_only {
             let attributes = match parent.kind() {
-                Kind::ImportDeclaration | Kind::JSImportDeclaration => parent.as_import_declaration().attributes,
+                Kind::ImportDeclaration | Kind::JSImportDeclaration => parent.as_import_declaration().attributes(),
                 Kind::ExportDeclaration => parent.as_export_declaration().attributes,
                 Kind::JSDocImportTag => parent.as_jsdoc_import_tag().attributes,
                 _ => None,

@@ -431,7 +431,7 @@ pub fn has_import_attributes(node: P<Node>) -> bool {
 
 pub fn get_import_attributes(node: P<Node>) -> Option<P<Node>> {
     match node.kind() {
-        Kind::ImportDeclaration | Kind::JSImportDeclaration => node.as_import_declaration().attributes,
+        Kind::ImportDeclaration | Kind::JSImportDeclaration => node.as_import_declaration().attributes(),
         Kind::ExportDeclaration => node.as_export_declaration().attributes,
         Kind::ImportType => node.as_import_type_node().attributes,
         _ => panic!("Unhandled case in getImportAttributes: {:?}", node.kind()),

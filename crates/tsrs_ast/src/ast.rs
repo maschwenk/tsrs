@@ -116,6 +116,39 @@ pub(crate) fn new_node<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryH
     n
 }
 
+/// Creates a node whose data struct `data` is followed by its rare tail `rare` (`NodeAllocRare`; the header's
+/// rare bit says the tail is there). The factory uses it when one of the struct's rare fields is set.
+pub(crate) fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks: &NodeFactoryHooks) -> P<Node> {
+    #[allow(clippy::let_unit_value)]
+    let () = T::SAME_OFFSET;
+    let mut header = node_header(kind, T::TAG);
+    header.header = OwnedCell::new(header.header.get().with_rare_tail());
+    let a: &'static NodeAllocRare<T, T::Rare> = P::new(NodeAllocRare { node: header, data, rare }).get();
+    // SAFETY: as in `new_node` (`NodeAllocRare` is `repr(C)` with the header first).
+    let n = P::from_static(unsafe { &*(a as *const NodeAllocRare<T, T::Rare>).cast::<Node>() });
+    if let Some(on_create) = &hooks.on_create {
+        on_create(n);
+    }
+    n
+}
+
+/// The rare tail of the node whose data struct is `data`, if it was allocated with one.
+#[inline]
+pub(crate) fn rare_tail<T: NodeRareTail>(data: &T) -> Option<&'static T::Rare> {
+    #[allow(clippy::let_unit_value)]
+    let () = T::SAME_OFFSET;
+    let at = data as *const T as *const u8;
+    // SAFETY: data structs are created only inside a `NodeAlloc<T>` or `NodeAllocRare<T, _>` (both `repr(C)`, header
+    // first, data at the same offset: asserted in `NodeRareTail`), which is never moved or freed while reachable.
+    let node = unsafe { &*at.sub(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<Node>() };
+    if !node.header.get().has_rare_tail() {
+        return None;
+    }
+    let off = std::mem::offset_of!(NodeAllocRare<T, T::Rare>, rare) - std::mem::offset_of!(NodeAllocRare<T, T::Rare>, data);
+    // SAFETY: the rare bit is set only by `new_node_with_rare`, which allocated the tail at this offset.
+    Some(unsafe { &*at.add(off).cast::<T::Rare>() })
+}
+
 /// Creates a node whose data struct has no fields (`Token`, `KeywordTypeNode`, ...): just the header.
 pub(crate) fn new_empty_node(kind: Kind, data_tag: NodeDataTag, hooks: &NodeFactoryHooks) -> P<Node> {
     let n = P::new(node_header(kind, data_tag));
@@ -134,6 +167,12 @@ impl NodeFactory {
     pub(crate) fn new_node<T: NodePayload>(&self, kind: Kind, data: T) -> P<Node> {
         self.node_count.set(self.node_count.get() + 1);
         new_node(kind, data, &self.hooks)
+    }
+
+    #[inline]
+    pub(crate) fn new_node_with_rare<T: NodeRareTail>(&self, kind: Kind, data: T, rare: T::Rare) -> P<Node> {
+        self.node_count.set(self.node_count.get() + 1);
+        new_node_with_rare(kind, data, rare, &self.hooks)
     }
 
     #[inline]
@@ -305,8 +344,9 @@ const _: () = assert!(std::mem::size_of::<Node>() == 24);
 
 /// A node's kind, data tag and parent in one word: the parent's address divided by 8 in the low 45 bits (nodes are
 /// 8-aligned and user-space addresses are below 2^48 on every supported platform; checked when the parent is set),
-/// the kind in the next 9 bits and the data tag in the 8 above. Only the parent changes after creation. The parent's
-/// provenance is exposed when it is stored and recovered with `with_exposed_provenance`.
+/// the kind in the next 9 bits, the data tag in the 8 above and then the rare bit (the data struct is followed by its
+/// rare tail, `NodeRareTail`). Only the parent changes after creation. The parent's provenance is exposed when it is
+/// stored and recovered with `with_exposed_provenance`.
 #[derive(Clone, Copy)]
 struct NodeHeaderWord(u64);
 
@@ -316,6 +356,7 @@ impl NodeHeaderWord {
     const KIND_SHIFT: u32 = Self::PARENT_BITS;
     const KIND_BITS: u32 = 9;
     const TAG_SHIFT: u32 = Self::KIND_SHIFT + Self::KIND_BITS;
+    const RARE_BIT: u64 = 1 << (Self::TAG_SHIFT + 8);
 
     #[inline]
     fn new(kind: Kind, data_tag: NodeDataTag) -> NodeHeaderWord {
@@ -327,6 +368,16 @@ impl NodeHeaderWord {
         let v = (self.0 >> Self::KIND_SHIFT) as u16 & ((1 << Self::KIND_BITS) - 1);
         // SAFETY: the bits were stored from a `Kind` (repr(i16), contiguous discriminants 0..=Count < 2^9).
         unsafe { std::mem::transmute::<i16, Kind>(v as i16) }
+    }
+
+    #[inline]
+    fn with_rare_tail(self) -> NodeHeaderWord {
+        NodeHeaderWord(self.0 | Self::RARE_BIT)
+    }
+
+    #[inline]
+    fn has_rare_tail(self) -> bool {
+        self.0 & Self::RARE_BIT != 0
     }
 
     #[inline]
@@ -352,7 +403,7 @@ impl NodeHeaderWord {
 }
 
 const _: () = assert!((Kind::Count as u64) < 1 << NodeHeaderWord::KIND_BITS);
-const _: () = assert!(NodeHeaderWord::TAG_SHIFT + 8 <= 64);
+const _: () = assert!(NodeHeaderWord::TAG_SHIFT + 8 < 64);
 
 /// One arena allocation per node: the header, then the data struct. `repr(C)` puts the header at offset 0 and
 /// the data at `offset_of!(NodeAlloc<T>, data)` (24 for every data struct: none is aligned to more than 8).
@@ -365,6 +416,25 @@ pub(crate) struct NodeAlloc<T> {
 /// A node data struct with fields, stored after the header of nodes tagged `TAG` (impls are generated).
 pub(crate) trait NodePayload: Sized + 'static {
     const TAG: NodeDataTag;
+}
+
+/// `NodeAlloc` for a node with a rare tail: fields that are almost never set (on the private monorepo, e.g. 0.1%
+/// of call expressions have a `?.` token and 0.5% type arguments) live in `rare`, allocated only when one of them is
+/// set at construction, and read as `None` otherwise. Only fields that are never written after construction can be
+/// rare (tools/gen-ast/gen-ast.ts `RARE_FIELDS`).
+#[repr(C)]
+pub(crate) struct NodeAllocRare<T, R> {
+    pub(crate) node: Node,
+    pub(crate) data: T,
+    pub(crate) rare: R,
+}
+
+/// A node data struct with a rare tail (impls are generated).
+pub(crate) trait NodeRareTail: NodePayload {
+    type Rare: 'static;
+    /// Compile-time check that the data struct sits at the same offset in both allocations.
+    const SAME_OFFSET: () =
+        assert!(std::mem::offset_of!(NodeAlloc<Self>, data) == std::mem::offset_of!(NodeAllocRare<Self, Self::Rare>, data));
 }
 
 // Node accessors. Accessors that dispatch over the node data (name(), modifiers(), *_data(), as_*(),
@@ -645,8 +715,8 @@ impl Node {
 
     pub fn type_argument_list(&self) -> Option<P<NodeList>> {
         match self.kind() {
-            Kind::CallExpression => self.as_call_expression().type_arguments,
-            Kind::NewExpression => self.as_new_expression().type_arguments,
+            Kind::CallExpression => self.as_call_expression().type_arguments(),
+            Kind::NewExpression => self.as_new_expression().type_arguments(),
             Kind::TaggedTemplateExpression => self.as_tagged_template_expression().type_arguments,
             Kind::TypeReference => self.as_type_reference_node().type_arguments(),
             Kind::ExpressionWithTypeArguments => self.as_expression_with_type_arguments().type_arguments.get(),
@@ -805,10 +875,10 @@ impl Node {
     pub fn initializer(&self) -> Option<P<Node>> {
         match self.kind() {
             Kind::VariableDeclaration => self.as_variable_declaration().initializer.get(),
-            Kind::Parameter => self.as_parameter_declaration().initializer,
-            Kind::BindingElement => self.as_binding_element().initializer,
+            Kind::Parameter => self.as_parameter_declaration().initializer(),
+            Kind::BindingElement => self.as_binding_element().initializer(),
             Kind::PropertyDeclaration => self.as_property_declaration().initializer.get(),
-            Kind::PropertySignature => self.as_property_signature_declaration().initializer,
+            Kind::PropertySignature => self.as_property_signature_declaration().initializer(),
             Kind::PropertyAssignment => Some(self.as_property_assignment().initializer.get()),
             Kind::EnumMember => self.as_enum_member().initializer,
             Kind::ForStatement => self.as_for_statement().initializer,
@@ -888,9 +958,9 @@ impl Node {
 
     pub fn property_name(&self) -> Option<P<Node>> {
         match self.kind() {
-            Kind::ImportSpecifier => self.as_import_specifier().property_name,
+            Kind::ImportSpecifier => self.as_import_specifier().property_name(),
             Kind::ExportSpecifier => self.as_export_specifier().property_name,
-            Kind::BindingElement => self.as_binding_element().property_name,
+            Kind::BindingElement => self.as_binding_element().property_name(),
             _ => None,
         }
     }
@@ -1067,9 +1137,9 @@ impl Node {
 
     pub fn question_dot_token(&self) -> Option<P<Node>> {
         match self.kind() {
-            Kind::ElementAccessExpression => self.as_element_access_expression().question_dot_token,
-            Kind::PropertyAccessExpression => self.as_property_access_expression().question_dot_token,
-            Kind::CallExpression => self.as_call_expression().question_dot_token,
+            Kind::ElementAccessExpression => self.as_element_access_expression().question_dot_token(),
+            Kind::PropertyAccessExpression => self.as_property_access_expression().question_dot_token(),
+            Kind::CallExpression => self.as_call_expression().question_dot_token(),
             Kind::TaggedTemplateExpression => self.as_tagged_template_expression().question_dot_token,
             _ => panic!("Unhandled case in Node.QuestionDotToken: {:?}", self.kind()),
         }

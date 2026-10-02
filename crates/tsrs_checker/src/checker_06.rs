@@ -584,7 +584,7 @@ impl Checker {
                 ast::is_variable_declaration(imm)
                     && !ast::is_for_in_or_of_statement(imm.parent().unwrap().parent())
                     && imm.initializer().is_none()
-                    && imm.as_variable_declaration().exclamation_token.is_none()
+                    && imm.as_variable_declaration().exclamation_token().is_none()
                     && self.is_mutable_local_variable_declaration(imm)
                     && !self.is_symbol_assigned_definitely(symbol)
             }
@@ -604,7 +604,7 @@ impl Checker {
                     || self.is_in_ambient_or_type_node(node)
                     || node.parent().unwrap().kind() == Kind::ExportSpecifier)
             || ast::is_non_null_expression(node.parent().unwrap())
-            || ast::is_variable_declaration(declaration) && declaration.as_variable_declaration().exclamation_token.is_some()
+            || ast::is_variable_declaration(declaration) && declaration.as_variable_declaration().exclamation_token().is_some()
             || declaration.flags().intersects(NodeFlags::Ambient);
         let initial_type = if is_automatic_type_in_non_null {
             self.undefined_type
