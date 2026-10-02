@@ -803,3 +803,356 @@ fn did_change_watched_files_create_explicitly_included_file() {
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
     assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
 }
+
+// session_test.go:1064 TestSession/DidChangeWatchedFiles/create failed lookup location
+#[test]
+fn did_change_watched_files_create_failed_lookup_location() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"files": ["src/index.ts"]
+				}"#,
+        ),
+        ("/home/projects/TS/p1/src/index.ts", r#"import { z } from "./z";"#),
+    ];
+    let (session, utils) = setup(files);
+    open(&session, files, "/home/projects/TS/p1/src/index.ts");
+
+    // Initially should have an error because z.ts is missing
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+
+    // Add a new file through failed lookup watch
+    utils.fs().write_file("/home/projects/TS/p1/src/z.ts", "export const z = 1;").unwrap();
+    watch_changed(&session, "/home/projects/TS/p1/src/z.ts", lsproto::FileChangeType::Created);
+
+    // Error should be resolved and the new file should be included in the program
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    assert!(program.get_source_file("/home/projects/TS/p1/src/z.ts").is_some());
+}
+
+// session_test.go:1104 TestSession/DidChangeWatchedFiles/create wildcard included file
+#[test]
+fn did_change_watched_files_create_wildcard_included_file() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"include": ["src"]
+				}"#,
+        ),
+        ("/home/projects/TS/p1/src/index.ts", "a;"),
+    ];
+    let (session, utils) = setup(files);
+    open(&session, files, "/home/projects/TS/p1/src/index.ts");
+
+    // Initially should have an error because declaration for 'a' is missing
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+
+    // Add a new file through wildcard watch
+    utils.fs().write_file("/home/projects/TS/p1/src/a.ts", "const a = 1;").unwrap();
+    watch_changed(&session, "/home/projects/TS/p1/src/a.ts", lsproto::FileChangeType::Created);
+
+    // Error should be resolved and the new file should be included in the program
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    assert!(program.get_source_file("/home/projects/TS/p1/src/a.ts").is_some());
+}
+
+// session_test.go:1144 TestSession/DidChangeWatchedFiles/irrelevant extension changes are filtered out
+#[test]
+fn did_change_watched_files_irrelevant_extension_changes_are_filtered_out() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"include": ["src"]
+				}"#,
+        ),
+        ("/home/projects/TS/p1/src/index.ts", "export const x = 1;"),
+        ("/home/projects/TS/p1/src/data.txt", "some text"),
+    ];
+    let (session, utils) = setup(files);
+    open(&session, files, "/home/projects/TS/p1/src/index.ts");
+
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    let old_program = program;
+
+    // Modify an irrelevant file and send change/create events for files with
+    // extensions that are not relevant to TypeScript compilation.
+    utils.fs().write_file("/home/projects/TS/p1/src/data.txt", "updated text").unwrap();
+
+    session.did_change_watched_files(
+        &ctx(),
+        &[
+            lsproto::FileEvent { type_: lsproto::FileChangeType::Changed, uri: uri("file:///home/projects/TS/p1/src/data.txt") },
+            lsproto::FileEvent { type_: lsproto::FileChangeType::Created, uri: uri("file:///home/projects/TS/p1/src/styles.css") },
+            lsproto::FileEvent { type_: lsproto::FileChangeType::Created, uri: uri("file:///home/projects/TS/p1/src/image.png") },
+        ],
+    );
+
+    // The program should not have been rebuilt since all events had irrelevant extensions.
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert!(std::ptr::eq(program, old_program), "program should not be rebuilt for irrelevant extension changes");
+}
+
+// session_test.go:1192 TestSession/DidChangeWatchedFiles/pnpm install links local package
+#[test]
+fn did_change_watched_files_pnpm_install_links_local_package() {
+    let files: &[(&str, &str)] = &[
+        ("/home/projects/pnpm/pnpm-workspace.yaml", "packages:\n  - 'packages/*'"),
+        ("/home/projects/pnpm/packages/alpha/package.json", r#"{ "name": "@repo/alpha", "main": "index.ts" }"#),
+        (
+            "/home/projects/pnpm/packages/alpha/tsconfig.json",
+            r#"{
+					"compilerOptions": { "noLib": true, "composite": true }
+				}"#,
+        ),
+        ("/home/projects/pnpm/packages/alpha/index.ts", "export const alpha = 1;"),
+        ("/home/projects/pnpm/packages/beta/package.json", r#"{ "name": "@repo/beta" }"#),
+        (
+            "/home/projects/pnpm/packages/beta/tsconfig.json",
+            r#"{
+					"compilerOptions": { "noLib": true }
+				}"#,
+        ),
+        ("/home/projects/pnpm/packages/beta/index.ts", r#"import { alpha } from "@repo/alpha";"#),
+    ];
+    let (session, utils) = setup(files);
+    open(&session, files, "/home/projects/pnpm/packages/beta/index.ts");
+
+    // Before pnpm install: the import is unresolved because node_modules/@repo/alpha doesn't exist.
+    let program = ls_program(&session, "/home/projects/pnpm/packages/beta/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/pnpm/packages/beta/index.ts"), 1);
+
+    // Simulate pnpm install: create a symlink from beta's node_modules/@repo/alpha to packages/alpha.
+    utils.map_fs().mkdir_all("home/projects/pnpm/packages/beta/node_modules/@repo", tsrs_vfs::FileMode::Perm).unwrap();
+    utils.map_fs().add_symlink("home/projects/pnpm/packages/beta/node_modules/@repo/alpha", "home/projects/pnpm/packages/alpha");
+
+    // Fire watch events mimicking what VS Code sends for a pnpm install.
+    let ev = |type_, u: &str| lsproto::FileEvent { type_, uri: uri(u) };
+    session.did_change_watched_files(
+        &ctx(),
+        &[
+            ev(lsproto::FileChangeType::Created, "file:///home/projects/pnpm/packages/beta/node_modules"),
+            ev(lsproto::FileChangeType::Created, "file:///home/projects/pnpm/packages/beta/node_modules/%40repo"),
+            ev(lsproto::FileChangeType::Created, "file:///home/projects/pnpm/packages/beta/node_modules/%40repo/alpha"),
+            ev(lsproto::FileChangeType::Created, "file:///home/projects/pnpm/pnpm-lock.yaml"),
+            ev(lsproto::FileChangeType::Changed, "file:///home/projects/pnpm/packages/beta/node_modules/.bin/tsc"),
+            ev(lsproto::FileChangeType::Changed, "file:///home/projects/pnpm/packages/beta/node_modules/.bin/tsserver"),
+        ],
+    );
+
+    // After pnpm install: the import should resolve.
+    let program = ls_program(&session, "/home/projects/pnpm/packages/beta/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/pnpm/packages/beta/index.ts"), 0);
+}
+
+// session_test.go:1244 TestSession/DidChangeWatchedFiles/symlinked node_modules package.json change invalidates resolution
+#[test]
+fn did_change_watched_files_symlinked_node_modules_package_json_change_invalidates_resolution() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/myproject/tsconfig.json",
+            r#"{
+					"compilerOptions": {
+						"noLib": true,
+						"module": "nodenext",
+						"moduleResolution": "nodenext"
+					},
+					"files": ["src/index.ts"]
+				}"#,
+        ),
+        ("/home/projects/myproject/src/index.ts", r#"import { foo } from "mylib";"#),
+        // The real package lives as a sibling directory
+        (
+            "/home/projects/mylib/package.json",
+            r#"{
+					"name": "mylib",
+					"main": "dist/index.js"
+				}"#,
+        ),
+        ("/home/projects/mylib/dist/index.js", "exports.foo = function() { return 1; };"),
+        ("/home/projects/mylib/dist/index.d.ts", "export declare function foo(): number;"),
+        // node_modules/mylib is a symlink to the sibling
+        ("/home/projects/myproject/node_modules/mylib", "symlink:/home/projects/mylib"),
+    ];
+
+    let mut options = projecttestutil::default_session_options();
+    options.current_directory = "/home/projects/myproject".to_string();
+    options.push_diagnostics_enabled = false;
+    let (session, utils) = projecttestutil::setup_with_options(files, Some(options));
+    open(&session, files, "/home/projects/myproject/src/index.ts");
+
+    // Initial state: import resolves successfully via package.json main -> dist/index.d.ts
+    let program = ls_program(&session, "/home/projects/myproject/src/index.ts");
+    session.wait_for_background_tasks();
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/myproject/src/index.ts"), 0, "import should resolve initially");
+
+    // Assert: watched file globs cover the realpath of package.json and dist/index.d.ts.
+    assert!(utils.watches_file("/home/projects/mylib/package.json"), "realpath of package.json should be watched");
+    assert!(utils.watches_file("/home/projects/mylib/dist/index.d.ts"), "realpath of dist/index.d.ts should be watched");
+
+    // Edit package.json to remove "main" field
+    utils.fs().write_file("/home/projects/mylib/package.json", "{\n\t\t\t\t\"name\": \"mylib\"\n\t\t\t}").unwrap();
+
+    // Fire watch event for the realpath of the changed package.json.
+    watch_changed(&session, "/home/projects/mylib/package.json", lsproto::FileChangeType::Changed);
+
+    // After removing "main" from package.json, the import should no longer resolve.
+    let program = ls_program(&session, "/home/projects/myproject/src/index.ts");
+    assert!(semantic_diagnostics_count(program, "/home/projects/myproject/src/index.ts") > 0, "import should fail after removing main from package.json");
+}
+
+// session_test.go:1318 TestSession/DidChangeWatchedFiles/create file in non-existent directory
+#[test]
+fn did_change_watched_files_create_file_in_non_existent_directory() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"files": ["src/index.ts"]
+				}"#,
+        ),
+        ("/home/projects/TS/p1/src/index.ts", r#"import { helper } from "./lib/helper";"#),
+    ];
+    let (session, utils) = setup(files);
+    open(&session, files, "/home/projects/TS/p1/src/index.ts");
+
+    // Initially should have an error because lib/helper.ts doesn't exist
+    // and src/lib/ directory doesn't exist either.
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+
+    // Create the directory and file.
+    utils.fs().write_file("/home/projects/TS/p1/src/lib/helper.ts", "export const helper = 1;").unwrap();
+    watch_changed(&session, "/home/projects/TS/p1/src/lib/helper.ts", lsproto::FileChangeType::Created);
+
+    // Error should be resolved.
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    assert!(program.get_source_file("/home/projects/TS/p1/src/lib/helper.ts").is_some());
+}
+
+// session_test.go:1358 TestSession/DidChangeWatchedFiles/create symlink directory matching include pattern
+#[test]
+fn did_change_watched_files_create_symlink_directory_matching_include_pattern() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"include": ["src"]
+				}"#,
+        ),
+        ("/home/projects/TS/p1/src/index.ts", "export const x = 1;"),
+        ("/home/projects/TS/shared/utils.ts", r#"export const util = "hello";"#),
+        ("/home/projects/TS/shared/helpers.ts", "export const helper = 42;"),
+    ];
+    let (session, utils) = setup(files);
+    open(&session, files, "/home/projects/TS/p1/src/index.ts");
+
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+
+    // Initially, project only has the one file in src/.
+    let names = root_file_names(program);
+    assert!(names.contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
+    assert!(!names.contains(&"/home/projects/TS/p1/src/linked/utils.ts".to_string()));
+    assert!(!names.contains(&"/home/projects/TS/p1/src/linked/helpers.ts".to_string()));
+
+    // Create a symlink directory inside src/ that points to the shared directory.
+    utils.map_fs().add_symlink("home/projects/TS/p1/src/linked", "home/projects/TS/shared");
+
+    // Send directory creation event (what VS Code sends when a symlink directory appears).
+    watch_changed(&session, "/home/projects/TS/p1/src/linked", lsproto::FileChangeType::Created);
+
+    // After the symlink directory is created, the files inside it should be
+    // picked up by the wildcard include pattern.
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    let names = root_file_names(program);
+    assert!(names.contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
+    assert!(names.contains(&"/home/projects/TS/p1/src/linked/utils.ts".to_string()));
+    assert!(names.contains(&"/home/projects/TS/p1/src/linked/helpers.ts".to_string()));
+}
+
+// session_test.go:1405 TestSession/DidChangeWatchedFiles/skips irrelevant extensions
+#[test]
+fn did_change_watched_files_skips_irrelevant_extensions() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+					"compilerOptions": {},
+					"include": ["src"]
+				}"#,
+        ),
+        ("/home/projects/TS/p1/src/index.ts", "export const x = 1;"),
+    ];
+    let (session, utils) = setup(files);
+
+    open(&session, files, "/home/projects/TS/p1/src/index.ts");
+    session.wait_for_background_tasks();
+
+    let refreshes = || utils.client().refresh_diagnostics_calls();
+    let send = |events: &[(lsproto::FileChangeType, &str)]| {
+        let events: Vec<lsproto::FileEvent> = events.iter().map(|(t, u)| lsproto::FileEvent { type_: *t, uri: uri(u) }).collect();
+        session.did_change_watched_files(&ctx(), &events);
+        session.wait_for_background_tasks();
+    };
+    let mut baseline_refresh_count = refreshes();
+
+    // Scenario A: irrelevant .svg
+    send(&[(lsproto::FileChangeType::Created, "file:///home/projects/TS/p1/icon.svg")]);
+    assert_eq!(refreshes(), baseline_refresh_count, "irrelevant .svg should not trigger refresh");
+
+    // Scenario B: relevant .ts
+    send(&[(lsproto::FileChangeType::Created, "file:///home/projects/TS/p1/src/new.ts")]);
+    assert!(refreshes() > baseline_refresh_count, "relevant .ts should trigger refresh");
+    baseline_refresh_count = refreshes();
+
+    // Scenario C: tsconfig.json
+    send(&[(lsproto::FileChangeType::Changed, "file:///home/projects/TS/p1/tsconfig.json")]);
+    assert!(refreshes() > baseline_refresh_count, "tsconfig.json should trigger refresh");
+    baseline_refresh_count = refreshes();
+
+    // Scenario D: directory creation (no extension)
+    utils.map_fs().mkdir_all("home/projects/TS/p1/node_modules/@types", tsrs_vfs::FileMode::Perm).unwrap();
+    send(&[(lsproto::FileChangeType::Created, "file:///home/projects/TS/p1/node_modules/@types")]);
+    assert!(refreshes() > baseline_refresh_count, "directory change should trigger refresh");
+    baseline_refresh_count = refreshes();
+
+    // Scenario E: mixed batch
+    send(&[
+        (lsproto::FileChangeType::Created, "file:///home/projects/TS/p1/icon.png"),
+        (lsproto::FileChangeType::Changed, "file:///home/projects/TS/p1/src/index.ts"),
+    ]);
+    assert!(refreshes() > baseline_refresh_count, "mixed batch with relevant file should trigger refresh");
+    baseline_refresh_count = refreshes();
+
+    // Scenario F: package install noise
+    send(&[
+        (lsproto::FileChangeType::Created, "file:///home/projects/TS/p1/node_modules/pkg/LICENSE"),
+        (lsproto::FileChangeType::Created, "file:///home/projects/TS/p1/README.md"),
+        (lsproto::FileChangeType::Created, "file:///home/projects/TS/p1/LICENSE.txt"),
+        (lsproto::FileChangeType::Created, "file:///home/projects/TS/p1/style.css"),
+    ]);
+    assert_eq!(refreshes(), baseline_refresh_count, "package install noise should not trigger refresh");
+}

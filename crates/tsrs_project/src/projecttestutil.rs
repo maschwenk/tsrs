@@ -100,12 +100,49 @@ impl Client for ClientMock {
 
 pub(crate) struct SessionUtils {
     current_directory: String,
+    fs_from_file_map: Arc<tsrs_vfs::iovfs::IoVFS<vfstest::MapFS>>,
     fs: Arc<dyn FS>,
     client: Arc<ClientMock>,
     logger: Arc<dyn LogCollector>,
 }
 
 impl SessionUtils {
+    pub(crate) fn map_fs(&self) -> &vfstest::MapFS {
+        self.fs_from_file_map.fsys()
+    }
+
+    // projecttestutil.go:127
+    // WatchesFile reports whether any registered file watcher would match the given
+    // file path. It handles both absolute glob patterns and relative patterns with
+    // a base URI. On case-insensitive file systems the paths in glob patterns are
+    // lowercased, so callers should pass the lowercased path.
+    pub(crate) fn watches_file(&self, file_path: &str) -> bool {
+        for call in self.client.watch_files_calls() {
+            for watcher in &call.watchers {
+                if let Some(pattern) = &watcher.glob_pattern.pattern {
+                    if let Ok(g) = tsrs_core::glob::parse(pattern) {
+                        if g.match_(file_path) {
+                            return true;
+                        }
+                    }
+                } else if let Some(rp) = &watcher.glob_pattern.relative_pattern {
+                    let base_uri = rp.base_uri.uri.as_ref().unwrap().0.clone();
+                    // Convert base URI (e.g. "file:///home/projects") to a directory path
+                    // with trailing separator for proper prefix matching on path boundaries.
+                    let base_dir = tspath::ensure_trailing_directory_separator(&lsproto::DocumentUri(base_uri).file_name());
+                    if let Some(relative_path) = file_path.strip_prefix(base_dir.as_str()) {
+                        if let Ok(g) = tsrs_core::glob::parse(&rp.pattern) {
+                            if g.match_(relative_path) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
     pub(crate) fn client(&self) -> &Arc<ClientMock> {
         &self.client
     }
@@ -149,11 +186,17 @@ pub(crate) fn setup_with_options(files: &[(&str, &str)], options: Option<Session
 
 // projecttestutil.go:285
 pub(crate) fn get_session_init_options(files: &[(&str, &str)], options: Option<SessionOptions>) -> (SessionInit, SessionUtils) {
-    let fs_from_file_map = vfstest::from_map(files.iter().map(|(k, v)| (k.to_string(), v.to_string())), false /*useCaseSensitiveFileNames*/);
-    let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(fs_from_file_map));
+    let fs_from_file_map = Arc::new(vfstest::from_map(
+        files.iter().map(|(k, v)| match v.strip_prefix("symlink:") {
+            Some(target) => (k.to_string(), vfstest::symlink(target)),
+            None => (k.to_string(), vfstest::MapFile::from(v.to_string())),
+        }),
+        false, /*useCaseSensitiveFileNames*/
+    ));
+    let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(fs_from_file_map.clone()));
     let client_mock = Arc::new(ClientMock::default());
     let logger = new_test_logger();
-    let session_utils = SessionUtils { current_directory: "/".to_string(), fs: fs.clone(), client: client_mock.clone(), logger: logger.clone() };
+    let session_utils = SessionUtils { fs_from_file_map, current_directory: "/".to_string(), fs: fs.clone(), client: client_mock.clone(), logger: logger.clone() };
 
     // Use provided options or create default ones
     let options = options.unwrap_or_else(default_session_options);
