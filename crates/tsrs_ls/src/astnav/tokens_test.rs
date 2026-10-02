@@ -20,7 +20,7 @@ fn test_files() -> Vec<PathBuf> {
     vec![repo_root().join("ts-ref/tsc/testdata/fixtures/services/mapCode.ts")]
 }
 
-pub(crate) fn parse(file_name: &str, text: &str, script_kind: ScriptKind) -> P<SourceFile> {
+pub(crate) fn parse_for_test(file_name: &str, text: &str, script_kind: ScriptKind) -> P<SourceFile> {
     tsrs_parser::parse_source_file(
         SourceFileParseOptions { file_name: file_name.to_string(), path: file_name.into(), ..Default::default() },
         text,
@@ -72,7 +72,7 @@ struct TokenRun {
 fn baseline_go_tokens_json(test_name: &str, get_go_token: impl Fn(P<SourceFile>, i32) -> Option<TokenInfo>) {
     for file_name in test_files() {
         let file_text = std::fs::read_to_string(&file_name).unwrap();
-        let file = parse("/file.ts", &file_text, ScriptKind::TS);
+        let file = parse_for_test("/file.ts", &file_text, ScriptKind::TS);
 
         let max_pos = file_text.len();
         let mut runs: Vec<TokenRun> = Vec::new();
@@ -194,7 +194,7 @@ fn baseline_tokens(test_name: &str, include_eof: bool, get_go_token: impl Fn(P<S
             eprintln!("skipping {test_name} TS comparison: TSRS_TYPESCRIPT_JS not set");
             return;
         };
-        let file = parse("/file.ts", &file_text, ScriptKind::TS);
+        let file = parse_for_test("/file.ts", &file_text, ScriptKind::TS);
 
         let mut output = String::new();
         let mut current_range = TextRange::new(0, 0);
@@ -338,7 +338,7 @@ fn test_get_token_at_position_go_baseline_json() {
 #[test]
 fn test_get_token_at_position_jsdoc_type_assertion() {
     let file_text = "function foo(x) {\n    const s = /**@type {string}*/(x)\n}";
-    let file = parse("/test.js", file_text, ScriptKind::JS);
+    let file = parse_for_test("/test.js", file_text, ScriptKind::JS);
 
     // Position of 'x' inside the parenthesized expression (position 52)
     let position = 52;
@@ -360,7 +360,7 @@ fn test_get_token_at_position_jsdoc_type_assertion() {
 fn test_get_token_at_position_jsdoc_type_assertion_with_comment() {
     // Exact code from the issue report
     let file_text = "function foo(x) {\n    const s = /**@type {string}*/(x)  // Go-to-definition on x causes panic\n}";
-    let file = parse("/test.js", file_text, ScriptKind::JS);
+    let file = parse_for_test("/test.js", file_text, ScriptKind::JS);
 
     // Find position of 'x' in the type assertion
     let x_pos = 52; // Position of 'x' in (x)
@@ -372,7 +372,7 @@ fn test_get_token_at_position_jsdoc_type_assertion_with_comment() {
 #[test]
 fn test_get_token_at_position_pointer_equality() {
     let file_text = "\n\t\t\tfunction foo() {\n\t\t\t\treturn 0;\n\t\t\t}\n\t\t";
-    let file = parse("/file.ts", file_text, ScriptKind::TS);
+    let file = parse_for_test("/file.ts", file_text, ScriptKind::TS);
     assert_eq!(get_token_at_position(file, 0), get_token_at_position(file, 0));
 }
 
@@ -478,7 +478,7 @@ export function isAnyDirectorySeparator(charCode: number): boolean {
         TestCase { name: "after comma in parameter list", file_content: "takesCb((n, s, ))", position: 15, expected_kind: Kind::CommaToken },
     ];
     for test_case in test_cases {
-        let file = parse("/file.ts", test_case.file_content, ScriptKind::TS);
+        let file = parse_for_test("/file.ts", test_case.file_content, ScriptKind::TS);
         let token = find_preceding_token(file, test_case.position).unwrap();
         assert_eq!(token.kind(), test_case.expected_kind, "{}", test_case.name);
     }

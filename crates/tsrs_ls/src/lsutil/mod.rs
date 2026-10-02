@@ -12,3 +12,6 @@ pub use completednode::*;
 pub use userpreferences::*;
 pub use organizeimports::*;
 pub use formatcodeoptions::*;
+
+#[cfg(test)]
+mod utilities_test;
