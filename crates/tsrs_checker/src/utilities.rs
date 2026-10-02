@@ -1393,7 +1393,7 @@ pub(crate) fn is_literal_expression_of_object(node: P<Node>) -> bool {
 
 // utilities.go:1116
 pub(crate) fn can_have_flow_node(node: P<Node>) -> bool {
-    node.flow_node_data().is_some()
+    node.has_flow_node_data()
 }
 
 // utilities.go:1120

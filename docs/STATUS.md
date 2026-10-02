@@ -284,7 +284,9 @@ on the monorepo and the corpus). Details: `notes/mem-recycle.md`.
 ## 2026-10-01: small representation items (Symbol, Identifier)
 
 `Symbol` 56 -> 48 bytes (the member/export tail shares a word with `parent`): private monorepo peak -0.08 GiB single,
--0.14 GiB on 4 checkers, output and counters identical. Details: `notes/mem-small.md`.
+-0.14 GiB on 4 checkers. Parser identifiers 40 -> 32 bytes (text derived from the source text and the node's end, flow
+node and text in one word): -0.07 / -0.05 GiB, instructions +0.3%. Output, counters and AST oracle identical.
+Details: `notes/mem-small.md`.
 
 ## 2026-10-01: checker balance (opt-in cost cache)
 

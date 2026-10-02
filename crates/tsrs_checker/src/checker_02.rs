@@ -297,7 +297,7 @@ impl Checker {
                 Kind::ModuleDeclaration => return ast::is_instantiated_module(node, self.compiler_options.should_preserve_const_enums()),
                 _ => return true,
             }
-        } else if let Some(flow_node) = node.flow_node_data().unwrap().flow_node() {
+        } else if let Some(flow_node) = { assert!(node.has_flow_node_data()); node.flow_node() } {
             // For code the binder doesn't know is unreachable, use control flow / types.
             return !self.is_reachable_flow_node(flow_node);
         }

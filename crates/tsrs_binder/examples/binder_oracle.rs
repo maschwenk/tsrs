@@ -119,7 +119,7 @@ impl Dumper {
                 let _ = write!(self.sb, " next={}", node_ref(Some(next)));
             }
         }
-        if let Some(flow) = n.flow_node_data().and_then(|d| d.flow_node.get()) {
+        if let Some(flow) = n.flow_node() {
             let r = self.flow_ref(Some(flow));
             let _ = write!(self.sb, " f={}", r);
         }

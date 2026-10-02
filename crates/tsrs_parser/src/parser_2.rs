@@ -737,6 +737,17 @@ impl Parser {
         id
     }
 
+    /// `new_identifier` for the current token's text, which ends at `loc.end()` (the factory keeps only its length
+    /// when it is a slice of the source text).
+    pub(crate) fn new_source_identifier(&mut self, text: &'static str, loc: TextRange) -> P<Node> {
+        self.identifier_count += 1;
+        let id = self.factory.new_source_identifier(text, self.source_text_index, loc);
+        if text == "await" {
+            self.statement_has_await_identifier = true;
+        }
+        id
+    }
+
     pub(crate) fn create_missing_identifier(&mut self) -> P<Node> {
         let node = self.new_identifier("");
         let pos = self.node_pos();

@@ -1948,8 +1948,8 @@ impl Checker {
         // If a containing class does not have extends clause or the class extends null
         // skip checking whether super statement is called before "this" accessing.
         if base_type_node.is_some() && !self.class_declaration_extends_null(containing_class_decl) {
-            if let Some(flow_node_data) = node.flow_node_data() {
-                if !self.is_post_super_flow_node(flow_node_data.flow_node.get().unwrap(), false /*noCacheCheck*/) {
+            if node.has_flow_node_data() {
+                if !self.is_post_super_flow_node(node.flow_node().unwrap(), false /*noCacheCheck*/) {
                     self.error(Some(node), diagnostic_message, &[]);
                 }
             }

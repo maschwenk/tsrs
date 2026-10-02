@@ -63,8 +63,8 @@ pub fn is_original_node_single_line(emit_context: P<EmitContext>, node: Option<P
     let Some(source) = ast::get_source_file_of_node(Some(original)) else {
         return false;
     };
-    let start_line = scanner::get_ecma_line_of_position(&*source, original.loc.get().pos());
-    let end_line = scanner::get_ecma_line_of_position(&*source, original.loc.get().end());
+    let start_line = scanner::get_ecma_line_of_position(&*source, original.pos());
+    let end_line = scanner::get_ecma_line_of_position(&*source, original.end());
     start_line == end_line
 }
 

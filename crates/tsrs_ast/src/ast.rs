@@ -298,7 +298,7 @@ pub struct Node {
     header: OwnedCell<NodeHeaderWord>,
     pub flags: OwnedCell<NodeFlags>,
     pub(crate) id: AtomicU32,
-    pub loc: OwnedCell<TextRange>,
+    pub(crate) loc: OwnedCell<TextRange>, // set_loc() (compact identifiers derive their text from the end)
 }
 
 const _: () = assert!(std::mem::size_of::<Node>() == 24);
@@ -358,8 +358,8 @@ const _: () = assert!(NodeHeaderWord::TAG_SHIFT + 8 <= 64);
 /// the data at `offset_of!(NodeAlloc<T>, data)` (24 for every data struct: none is aligned to more than 8).
 #[repr(C)]
 pub(crate) struct NodeAlloc<T> {
-    node: Node,
-    data: T,
+    pub(crate) node: Node,
+    pub(crate) data: T,
 }
 
 /// A node data struct with fields, stored after the header of nodes tagged `TAG` (impls are generated).
@@ -418,6 +418,9 @@ impl Node {
     }
     #[inline]
     pub fn set_loc(&self, loc: TextRange) {
+        if self.data_tag() == NodeDataTag::Identifier && loc.end() != self.end() {
+            crate::identifier::check_source_identifier_loc(self, loc);
+        }
         self.loc.set(loc)
     }
     #[inline]
@@ -504,11 +507,31 @@ impl Node {
         }
     }
 
+    /// Go `node.FlowNodeData() != nil`.
+    #[inline]
+    pub fn has_flow_node_data(&self) -> bool {
+        self.data_tag() == NodeDataTag::Identifier || self.flow_node_base().is_some()
+    }
+
+    /// Go `node.FlowNodeData().FlowNode` (nil when the node has no flow node data).
+    #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
-        match self.flow_node_data() {
+        if self.data_tag() == NodeDataTag::Identifier {
+            return self.as_identifier().flow_node();
+        }
+        match self.flow_node_base() {
             Some(data) => data.flow_node.get(),
             None => None,
         }
+    }
+
+    /// Go `node.FlowNodeData().FlowNode = flow`; panics when the node has no flow node data (Go: nil dereference).
+    #[inline]
+    pub fn set_flow_node(&self, flow: Option<P<FlowNode>>) {
+        if self.data_tag() == NodeDataTag::Identifier {
+            return self.as_identifier().set_flow_node(flow);
+        }
+        self.flow_node_base().expect("node has no flow node data").flow_node.set(flow)
     }
 
     pub fn body(&self) -> Option<P<Node>> {
@@ -1503,6 +1526,7 @@ pub struct SourceFile {
     pub is_declaration_file: OwnedCell<bool>,
     pub uses_uri_style_node_core_modules: OwnedCell<Tristate>,
     pub identifier_count: OwnedCell<usize>,
+    pub text_index: OwnedCell<u32>, // `register_source_text` index of `text` (compact identifiers, identifier.rs)
     pub imports: OwnedCell<&'static [P<Node>]>,              // []LiteralLikeNode
     pub module_augmentations: OwnedCell<&'static [P<Node>]>, // []ModuleName
     pub ambient_module_names: OwnedCell<&'static [&'static str]>,
@@ -1569,6 +1593,7 @@ impl NodeFactory {
             is_declaration_file: OwnedCell::new(false),
             uses_uri_style_node_core_modules: OwnedCell::new(Tristate::Unknown),
             identifier_count: OwnedCell::new(0),
+            text_index: OwnedCell::new(crate::identifier::NO_SOURCE_TEXT),
             imports: OwnedCell::new(&[]),
             module_augmentations: OwnedCell::new(&[]),
             ambient_module_names: OwnedCell::new(&[]),
@@ -2091,7 +2116,7 @@ mod tests {
         assert!(block.contains(Some(a)));
         assert!(block.locals_container_data().is_some());
         assert!(bin.declaration_data().is_some());
-        assert!(a.flow_node_data().is_some());
+        assert!(a.has_flow_node_data());
         assert!(plus.declaration_data().is_none());
         assert_eq!(a.loc(), TextRange::new(-1, -1));
 

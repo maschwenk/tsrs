@@ -38,6 +38,9 @@ pub struct FlowNode {
     pub node: OwnedCell<Option<P<Node>>>,            // Associated AST node
     pub antecedent: OwnedCell<Option<P<FlowNode>>>,  // Antecedent for all but FlowLabel
     pub antecedents: OwnedCell<Option<P<FlowList>>>, // Linked list of antecedents for FlowLabel
+    // Not in Go: the text index of the file whose binder made this flow node (`NO_SOURCE_TEXT` for the checker's);
+    // compact identifiers read their text index from their flow node (identifier.rs).
+    pub text_index: u32,
 }
 
 impl FlowNode {

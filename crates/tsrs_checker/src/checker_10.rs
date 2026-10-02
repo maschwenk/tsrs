@@ -1561,6 +1561,7 @@ impl Checker {
                 node: tsrs_core::OwnedCell::new(None),
                 antecedent: tsrs_core::OwnedCell::new(None),
                 antecedents: tsrs_core::OwnedCell::new(None),
+                text_index: ast::NO_SOURCE_TEXT,
             }));
         }
         let true_condition = P::new(FlowNode {
@@ -1568,6 +1569,7 @@ impl Checker {
             node: tsrs_core::OwnedCell::new(Some(expr)),
             antecedent: tsrs_core::OwnedCell::new(antecedent),
             antecedents: tsrs_core::OwnedCell::new(None),
+            text_index: ast::NO_SOURCE_TEXT,
         });
         let true_type = self.get_flow_type_of_reference_ex(param.name().unwrap(), init_type, init_type, Some(fn_), Some(true_condition));
         if true_type == init_type {
@@ -1580,6 +1582,7 @@ impl Checker {
             node: tsrs_core::OwnedCell::new(Some(expr)),
             antecedent: tsrs_core::OwnedCell::new(antecedent),
             antecedents: tsrs_core::OwnedCell::new(None),
+            text_index: ast::NO_SOURCE_TEXT,
         });
         let false_flow_type = self.get_flow_type_of_reference_ex(param.name().unwrap(), init_type, true_type, Some(fn_), Some(false_condition));
         let false_subtype = self.get_reduced_type(false_flow_type);

@@ -20,7 +20,7 @@ pub struct Node {                         // 24 bytes; the data struct is alloca
                                           // node.kind(), node.data_tag() (crate), node.parent() / set_parent()
     pub flags: OwnedCell<NodeFlags>,     // OwnedCell = Cell written only by the node's owner, see PORTING.md "Threading"
     pub(crate) id: AtomicU32,             // lazily assigned, see get_node_id (utilities); NodeId is still u64
-    pub loc: OwnedCell<TextRange>,
+    pub(crate) loc: OwnedCell<TextRange>, // node.loc() / set_loc()
 }
 
 // node.data() -> NodeData: a Copy view of the data struct to match on
@@ -72,14 +72,19 @@ Methods on `Node` (all `&self`), hand-written in `ast.rs` unless noted:
   - `Option<P<ModifierList>>`: `modifiers()` (generated); `modifier_flags() -> ModifierFlags`;
     `decorators() -> Vec<P<Node>>`
   - `Option<P<Symbol>>`: `symbol()`, `local_symbol()`; `locals() -> Option<P<SymbolTable>>`;
-    `flow_node() -> Option<P<FlowNode>>`
+    `flow_node() -> Option<P<FlowNode>>`, `set_flow_node(Option<P<FlowNode>>)` (panics without flow node data, like Go's
+    nil dereference), `has_flow_node_data()` (Go `FlowNodeData() != nil`)
   - `text() -> &'static str` (joined texts for JsxNamespacedName/JSDoc text are arena-allocated),
     `raw_text() -> &'static str`, `is_type_only()`, `can_have_statements()`, `is_jsdoc()`,
     `contains(Option<P<Node>>) -> bool`, `iter_children() -> Vec<P<Node>>`
   - `jsdoc(file: Option<&'static SourceFile>) -> &'static [P<Node>]`, `eager_jsdoc(file)`
 - Base-struct accessors (generated) return `Option<&'static XxxBase>`: `declaration_data()`,
   `exportable_data()`, `locals_container_data()`, `function_like_data()`, `class_like_data()`,
-  `body_data()`, `flow_node_data()`, `literal_like_data()`, `template_literal_like_data()`.
+  `body_data()`, `literal_like_data()`, `template_literal_like_data()`. The flow node is read and written only through
+  the node-level accessors above: `Identifier` (hand-written, `identifier.rs`) packs its flow node and its text into
+  one word. A parser identifier keeps only its text's length and its file's text index (`register_source_text`;
+  `SourceFile.text_index`, `FlowNode.text_index`): the text is the source slice ending at the node's end, so the end
+  of such an identifier cannot change (`set_loc` panics). `as_identifier().text()` returns the same slice as before.
 - Mutators (Go `node.AsMutable().SetX`; `as_mutable()` exists and returns `&Node`):
   `set_modifiers(Option<P<ModifierList>>)`, `set_type(Option<P<Node>>)`, `set_expression(P<Node>)`,
   `set_initializer(P<Node>)`. Only the kinds the reparser mutates are supported (see the Cell list);
