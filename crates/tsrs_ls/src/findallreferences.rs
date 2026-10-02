@@ -1904,12 +1904,14 @@ pub(crate) fn get_possible_symbol_reference_nodes(source_file: P<SourceFile>, sy
         .collect()
 }
 
-// Go `strings.Index` over bytes (offsets need not be char boundaries).
-fn index_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.len() > haystack.len() {
-        return None;
+// Go `strings.Index(text[start:], needle)`: `start` need not be a char boundary. A match never starts at a UTF-8
+// continuation byte (the needle is valid UTF-8), so searching from the next char boundary finds the same index.
+fn index_from(text: &str, start: usize, needle: &str) -> Option<usize> {
+    let mut boundary = start;
+    while boundary < text.len() && !text.is_char_boundary(boundary) {
+        boundary += 1;
     }
-    haystack.windows(needle.len()).position(|w| w == needle)
+    text[boundary..].find(needle).map(|i| i + boundary - start)
 }
 
 // findallreferences.go:1646
@@ -1924,14 +1926,15 @@ pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>
         return positions;
     }
 
-    let text = source_file.text().as_bytes();
+    let text_str = source_file.text();
+    let text = text_str.as_bytes();
     let source_length = text.len();
     let symbol_name_length = symbol_name.len();
 
     let container = container.unwrap_or_else(|| source_file.as_node());
 
     // Go quirk kept: the index is relative to container.Pos() but is used as an absolute position.
-    let mut position: isize = index_bytes(&text[container.pos() as usize..], symbol_name.as_bytes()).map_or(-1, |i| i as isize);
+    let mut position: isize = index_from(text_str, container.pos() as usize, symbol_name).map_or(-1, |i| i as isize);
     let end_pos = container.end() as isize;
     while position >= 0 && position < end_pos {
         // We found a match.  Make sure it's not part of a larger word (i.e. the char
@@ -1947,7 +1950,7 @@ pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>
         if start_index > text.len() {
             break;
         }
-        if let Some(found_index) = index_bytes(&text[start_index..], symbol_name.as_bytes()) {
+        if let Some(found_index) = index_from(text_str, start_index, symbol_name) {
             position = (start_index + found_index) as isize;
         } else {
             break;

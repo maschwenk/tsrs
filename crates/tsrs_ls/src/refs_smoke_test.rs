@@ -21,11 +21,25 @@ use crate::lsutil::{new_default_user_preferences, UserPreferences};
 use crate::sourcemap::ECMALineInfo;
 use crate::{new_language_service, Host, LanguageService};
 
-const A: &str = include_str!("../testdata/refs_smoke/a.ts");
-const B: &str = include_str!("../testdata/refs_smoke/b.ts");
-const TSCONFIG: &str = include_str!("../testdata/refs_smoke/tsconfig.json");
-const REQS: &str = include_str!("../testdata/refs_smoke/reqs.json");
-const EXPECTED: &str = include_str!("../testdata/refs_smoke/expected.txt");
+struct dataset {
+    a: &'static str,
+    b: &'static str,
+    tsconfig: &'static str,
+    reqs: &'static str,
+    expected: &'static str,
+}
+
+macro_rules! dataset {
+    ($dir:literal) => {
+        dataset {
+            a: include_str!(concat!("../testdata/", $dir, "/a.ts")),
+            b: include_str!(concat!("../testdata/", $dir, "/b.ts")),
+            tsconfig: include_str!(concat!("../testdata/", $dir, "/tsconfig.json")),
+            reqs: include_str!(concat!("../testdata/", $dir, "/reqs.json")),
+            expected: include_str!(concat!("../testdata/", $dir, "/expected.txt")),
+        }
+    };
+}
 
 struct testHost {
     fs: Arc<dyn FS>,
@@ -112,8 +126,8 @@ impl CheckerPool for testPool {
     }
 }
 
-fn setup() -> (LanguageService, Context) {
-    let files = [("/tsconfig.json", TSCONFIG), ("/a.ts", A), ("/b.ts", B)];
+fn setup(d: &dataset) -> (LanguageService, Context) {
+    let files = [("/tsconfig.json", d.tsconfig), ("/a.ts", d.a), ("/b.ts", d.b)];
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files.iter().map(|&(k, v)| (k, v)), true)));
     let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: fs.clone() }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, config_host, None);
@@ -127,8 +141,15 @@ fn setup() -> (LanguageService, Context) {
     let program: &'static Program = new_program(options);
     program.bind_source_files();
     let fs_for_lines = fs.clone();
+    // Cached like the project system's snapshot line maps (keyword references land thousands of times in the libs).
+    let line_maps: Mutex<rustc_hash::FxHashMap<String, Arc<lsconv::LSPLineMap>>> = Mutex::new(Default::default());
     let converters = lsconv::new_converters(lsproto::PositionEncodingKind::UTF16, move |file_name| {
-        fs_for_lines.read_file(file_name).map(|text| compute_lsp_line_starts(&text))
+        if let Some(line_map) = line_maps.lock().unwrap().get(file_name) {
+            return Some(line_map.clone());
+        }
+        let line_map = fs_for_lines.read_file(file_name).map(|text| compute_lsp_line_starts(&text))?;
+        line_maps.lock().unwrap().insert(file_name.to_string(), line_map.clone());
+        Some(line_map)
     });
     let host = Arc::new(testHost { fs, converters });
     let ls = new_language_service(ProjectID("/tsconfig.json".to_string()), program, host, "/b.ts");
@@ -169,12 +190,27 @@ fn str_of(v: &Value) -> &str {
     }
 }
 
+// a.ts/b.ts: cross-file references through named/namespace/default imports and aliases, shorthand properties,
+// labels, `this`; rename of import aliases, shorthand properties, parameter properties; highlights (semantic,
+// if/else, return/throw, break/label, multi-document); implementations; call hierarchy.
 #[test]
 fn references_rename_highlights_call_hierarchy() {
-    let (ls, ctx) = setup();
-    let reqs = json::unmarshal(REQS).unwrap();
+    run(&dataset!("refs_smoke"));
+}
+
+// Classes (constructor/super/static/private/parameter properties), export specifiers with aliases, anonymous
+// default export, string literal types, keyword references into the lib, destructuring, namespaces, structural
+// property references; renames through export aliases, binding elements and string literals.
+#[test]
+fn references_rename_classes_exports_destructuring() {
+    run(&dataset!("refs_smoke2"));
+}
+
+fn run(d: &dataset) {
+    let (ls, ctx) = setup(d);
+    let reqs = json::unmarshal(d.reqs).unwrap();
     let Value::Array(reqs) = reqs else { panic!() };
-    let expected: Vec<&str> = EXPECTED.lines().collect();
+    let expected: Vec<&str> = d.expected.lines().collect();
     assert_eq!(reqs.len(), expected.len());
     let mut failures = Vec::new();
     for (r, want) in reqs.iter().zip(expected) {
@@ -182,7 +218,7 @@ fn references_rename_highlights_call_hierarchy() {
         let file = str_of(get(r, "f").unwrap());
         let at = str_of(get(r, "at").unwrap());
         let off = get(r, "off").map_or(0, |v| if let Value::Number(n) = v { *n as usize } else { 0 });
-        let text = if file == "a.ts" { A } else { B };
+        let text = if file == "a.ts" { d.a } else { d.b };
         let mut params = tsrs_core::collections::OrderedMap::default();
         let mut text_document = tsrs_core::collections::OrderedMap::default();
         text_document.insert("uri".to_string(), Value::String(format!("file:///{}", file)));
@@ -194,6 +230,7 @@ fn references_rename_highlights_call_hierarchy() {
             }
         }
         let params = Value::Object(params);
+        let started = std::time::Instant::now();
         let got = match method {
             "textDocument/references" => to_line(&ls.provide_references(&ctx, &decode(&params), None).unwrap()),
             "textDocument/rename" => to_line(&ls.provide_rename(&ctx, &decode(&params), None).unwrap()),
@@ -230,13 +267,10 @@ fn references_rename_highlights_call_hierarchy() {
             }
             _ => panic!("unknown method {}", method),
         };
+        if std::env::var("REFS_SMOKE_TIMES").is_ok() { eprintln!("{:?} {} {}", started.elapsed(), method, at); }
         if got != want {
             failures.push(format!("{} {} {:?}\n  want: {}\n  got:  {}", method, file, at, want, got));
         }
     }
-    assert!(failures.is_empty(), "{} of {} responses differ:\n{}", failures.len(), expected_len(), failures.join("\n"));
-}
-
-fn expected_len() -> usize {
-    EXPECTED.lines().count()
+    assert!(failures.is_empty(), "{} of {} responses differ:\n{}", failures.len(), d.expected.lines().count(), failures.join("\n"));
 }
