@@ -31,6 +31,9 @@ pub(crate) fn run_lsp(server: &std::sync::Arc<tsrs_lsp::Server>) {
     if !census::active() {
         return;
     }
+    // The census's own frames take the stack area the server's work used on this thread; their unset slots would
+    // keep its words (pointers into freed regions).
+    tsrs_core::census_scrub_stack();
     let session = server.session();
     let snapshot = session.snapshot();
     let programs: Vec<&'static Program> = snapshot.project_collection.projects().iter().filter_map(|p| p.program).collect();
