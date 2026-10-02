@@ -157,7 +157,7 @@ impl Checker {
     }
 
     // printer.go:132
-    pub(crate) fn symbol_to_string_ex(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, flags: SymbolFormatFlags) -> String {
+    pub fn symbol_to_string_ex(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, flags: SymbolFormatFlags) -> String {
         let (mut writer, put_writer) = get_single_line_string_writer();
 
         let mut node_flags = Flags::IgnoreErrors;
@@ -213,7 +213,7 @@ impl Checker {
     }
 
     // printer.go:187
-    pub(crate) fn signature_to_string_ex(&mut self, signature: P<Signature>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
+    pub fn signature_to_string_ex(&mut self, signature: P<Signature>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
         let is_constructor = signature.flags.get().intersects(SignatureFlags::Construct) && !flags.intersects(TypeFormatFlags::WriteCallStyleSignature);
         let sig_output = if flags.intersects(TypeFormatFlags::WriteArrowStyleSignature) {
             if is_constructor {
