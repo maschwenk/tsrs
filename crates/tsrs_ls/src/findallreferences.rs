@@ -3106,7 +3106,8 @@ impl<'a> RefState<'a> {
         }
 
         if let Some(value_declaration) = symbol.value_declaration() {
-            if ast::is_parameter_property_declaration(value_declaration, value_declaration.parent().unwrap()) {
+            // (Go passes a possibly nil parent; IsParameterPropertyDeclaration reads it only for parameters, which have one.)
+            if value_declaration.parent().is_some_and(|parent| ast::is_parameter_property_declaration(value_declaration, parent)) {
                 let (param_prop1, param_prop2) = self.checker.get_symbols_of_parameter_property_declaration(value_declaration, symbol.name());
                 assert!(
                     param_prop1.flags().intersects(SymbolFlags::FunctionScopedVariable) && param_prop2.flags().intersects(SymbolFlags::ClassMember),

@@ -1,6 +1,6 @@
 # lsp-refs: references, rename, highlights, implementations, call hierarchy (`tsrs_ls`)
 
-Wave agent `refs`, branch `lsp-refs` (merged `lsp` at 88c3089 to build on tsrs_lsp/tsrs_project).
+Wave agent `refs`, branch `lsp-refs` (merged `lsp` at 88c3089 and ddd5f64).
 
 ## Ported
 
@@ -31,8 +31,41 @@ Go's nil interface = `None`):
 - Exported for other packages: `get_referenced_symbols_for_node_exported` (Go `GetReferencedSymbolsForNode`),
   `get_signature_usages`, `SymbolAndEntries` / `ReferenceEntry` / `Definition` / `SignatureUsage` / `SymbolAndEntriesData`.
 
-The server (tsrs_lsp, not edited here) still answers these methods with `not_yet_ported`; wiring is e.g.
-`register_multi_project_reference_request_handler(TEXT_DOCUMENT_REFERENCES_INFO, |ls, ctx, p, o| ls.provide_references(ctx, &p, Some(&*o)))`.
+Server (tsrs_lsp `server.rs`) wired as Go registers them: references, `_vs_references`, implementation
+(multi-project handlers), rename (incl. the `FileToRename` branch: `willRenameFiles` capability -> `RenameFile`
+document change, otherwise `handle_will_rename_files_worker`, which still stops at the unported
+`GetEditsForFileRename`), prepareRename, documentHighlight, multiDocumentHighlight, prepareCallHierarchy,
+incoming/outgoing calls.
+
+## Fourslash
+
+`tsrs_fourslash/src/fourslash.rs`: ported `VerifyBaselineFindAllReferences`, `VerifyBaselineVSFindAllReferences`,
+`VerifyBaselineGoToImplementation`, `VerifyBaselineDocumentHighlights(WithOptions)` + `verifyBaselineDocumentHighlights`,
+`VerifyBaselineCallHierarchy` + `formatCallHierarchyItem(Span|Spans)` / `computeLineStarts` / `symbolKindToLowercase`,
+`VerifyBaselineRename` + `verifyBaselineRename`, `VerifyRenameSucceeded`, `VerifyRenameRange`, `RenameAtCaret`,
+`VerifyRename`, `VerifyRenameFailed`, `VerifyBaselineRenameAtRangesWithText`, `getPathUpdater`,
+`renameFileOrDirectory`. Still `feature not ported: willRenameFiles` (needs ls/file_rename.go): `WillRenameFiles`,
+`willRenameFilesWorker`, `VerifyWillRenameFilesEdits`.
+
+`tsrs-fourslash run` (2026-10-02): 4,546 tests, 1,954 pass (was 1,172), 2,175 fail, 417 skip; no previously passing
+test fails. Per family (passing / calling tests, skipped ones included in the denominator):
+
+| method | pass / calling |
+| --- | --- |
+| VerifyBaselineFindAllReferences | 357 / 366 |
+| VerifyBaselineVSFindAllReferences | 5 / 6 |
+| VerifyBaselineRename | 107 / 108 |
+| VerifyBaselineRenameAtRangesWithText | 66 / 66 |
+| VerifyRenameSucceeded | 20 / 20 |
+| VerifyRenameFailed | 10 / 11 |
+| VerifyRenameRange | 1 / 1 |
+| VerifyRename / RenameAtCaret | 0 / 6, 0 / 1 (file renames need willRenameFiles; content mappers) |
+| VerifyBaselineDocumentHighlights(WithOptions) | 143 / 145, 8 / 8 |
+| VerifyBaselineGoToImplementation | 67 / 69 |
+| VerifyBaselineCallHierarchy | 38 / 39 |
+
+Every non-passing test of these families is skipped in Go ("Known failing"), a content-mapper test, a state-baseline
+test, a willRenameFiles test, or stops at completions.
 
 ### Tests
 
@@ -57,6 +90,10 @@ The server (tsrs_lsp, not edited here) still answers these methods with `not_yet
 - `crates/tsrs_ast/src/ast.rs`: `SourceFile.name_table` (`OnceLock`) + `SourceFile::get_name_table` (ast.go:2857).
 - `crates/tsrs_checker/src/checker_04.rs`: two calls qualified as `crate::utilities::get_super_container` (the glob
   import of tsrs_ast made the name ambiguous; no behavior change).
+- `crates/tsrs_ls/src/utilities.rs` `get_adjusted_location`: a parentless node (SourceFile) returns itself (lscore's port
+  unwrapped `node.Parent`; Go reads it only for keywords). Found by fourslash (references at a position in a comment).
+- `crates/tsrs_lsp/src/server.rs`: the handlers above (were `not_yet_ported`).
+- `crates/tsrs_fourslash/src/fourslash.rs`: the methods above (were `server_unavailable`).
 - `crates/tsrs_ls`: `hover.rs` (`SymbolDisplayInfo`, its `display_parts`, `get_quick_info_and_declaration_at_location` ->
   `pub(crate)`), `definition.rs` (`lsp_range_contains` -> `pub(crate)`), `languageservice.rs` (`project_id` ->
   `pub(crate)`), `lib.rs` (modules, re-exports). `sourcedefinition.rs` keeps its private `is_default_import` copy.
@@ -91,9 +128,7 @@ The server (tsrs_lsp, not edited here) still answers these methods with `not_yet
 
 ## Needs from others
 
-- Server wiring (tsrs_lsp): replace the `not_yet_ported` handlers for references, `_vs_references`, implementation,
-  rename (incl. the `FileToRename` path, which needs `GetEditsForFileRename` from file_rename.go), prepareRename,
-  documentHighlight, multiDocumentHighlight, prepareCallHierarchy, incoming/outgoing calls.
+- ls/file_rename.go (`GetEditsForFileRename`): willRenameFiles and the module-specifier rename branch of `handleRename`.
 - symbols wave: `symbols.rs` currently holds only `is_inside_node_modules` and `get_symbol_kind_from_node`.
 
 ## Doubts

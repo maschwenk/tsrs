@@ -29,6 +29,8 @@ struct dataset {
     expected: &'static str,
     // Client capabilities: Visual Studio extensions and implementation links (recorded with CAPS set).
     vs: bool,
+    // The first file's name (a JS file for JS-only behavior).
+    a_name: &'static str,
 }
 
 macro_rules! dataset {
@@ -40,6 +42,7 @@ macro_rules! dataset {
             reqs: include_str!(concat!("../testdata/", $dir, "/reqs.json")),
             expected: include_str!(concat!("../testdata/", $dir, "/expected.txt")),
             vs: false,
+            a_name: "a.ts",
         }
     };
 }
@@ -130,7 +133,8 @@ impl CheckerPool for testPool {
 }
 
 fn setup(d: &dataset) -> (LanguageService, Context) {
-    let files = [("/tsconfig.json", d.tsconfig), ("/a.ts", d.a), ("/b.ts", d.b)];
+    let a_path = format!("/{}", d.a_name);
+    let files = [("/tsconfig.json", d.tsconfig), (a_path.as_str(), d.a), ("/b.ts", d.b)];
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files.iter().map(|&(k, v)| (k, v)), true)));
     let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: fs.clone() }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, config_host, None);
@@ -231,7 +235,7 @@ fn run(d: &dataset) {
         let file = str_of(get(r, "f").unwrap());
         let at = str_of(get(r, "at").unwrap());
         let off = get(r, "off").map_or(0, |v| if let Value::Number(n) = v { *n as usize } else { 0 });
-        let text = if file == "a.ts" { d.a } else { d.b };
+        let text = if file == d.a_name { d.a } else { d.b };
         let mut params = tsrs_core::collections::OrderedMap::default();
         let mut text_document = tsrs_core::collections::OrderedMap::default();
         text_document.insert("uri".to_string(), Value::String(format!("file:///{}", file)));
