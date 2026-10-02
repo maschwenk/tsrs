@@ -1,0 +1,93 @@
+{
+ "capabilities": {
+  "textDocument": {
+   "hover": {
+    "contentFormat": [
+     "markdown"
+    ]
+   },
+   "completion": {
+    "completionItem": {
+     "snippetSupport": true,
+     "commitCharactersSupport": true,
+     "documentationFormat": [
+      "markdown",
+      "plaintext"
+     ],
+     "deprecatedSupport": true,
+     "preselectSupport": true,
+     "tagSupport": {
+      "valueSet": [
+       1
+      ]
+     },
+     "insertReplaceSupport": true,
+     "resolveSupport": {
+      "properties": [
+       "documentation",
+       "detail",
+       "additionalTextEdits"
+      ]
+     },
+     "labelDetailsSupport": true
+    },
+    "contextSupport": true,
+    "completionList": {
+     "itemDefaults": [
+      "commitCharacters",
+      "editRange",
+      "insertTextFormat",
+      "insertTextMode",
+      "data"
+     ]
+    }
+   }
+  }
+ },
+ "preferences": {
+  "unstable": {
+   "includeCompletionsForModuleExports": false,
+   "includeCompletionsWithObjectLiteralMethodSnippets": true,
+   "jsxAttributeCompletionStyle": "braces",
+   "includeCompletionsForImportStatements": true
+  }
+ },
+ "files": [
+  "index.ts",
+  "other.ts",
+  "app.tsx",
+  "plain.js",
+  "docsnip.ts",
+  "jsx2.tsx"
+ ],
+ "cases": [
+  {
+   "id": "pref-member",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "p.|x;",
+   "context": {
+    "triggerKind": 2,
+    "triggerCharacter": "."
+   }
+  },
+  {
+   "id": "pref-object-literal",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "{ x: 1, |};"
+  },
+  {
+   "id": "pref-jsx-attr",
+   "file": "app.tsx",
+   "method": "textDocument/completion",
+   "caret": "className=\"x\" |>"
+  },
+  {
+   "id": "pref-import-keyword",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "import * as |other"
+  }
+ ]
+}

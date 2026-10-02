@@ -1,0 +1,83 @@
+{
+ "capabilities": {
+  "textDocument": {
+   "hover": {
+    "contentFormat": [
+     "markdown"
+    ]
+   },
+   "completion": {
+    "completionItem": {
+     "snippetSupport": true,
+     "commitCharactersSupport": true,
+     "documentationFormat": [
+      "markdown",
+      "plaintext"
+     ],
+     "deprecatedSupport": true,
+     "preselectSupport": true,
+     "tagSupport": {
+      "valueSet": [
+       1
+      ]
+     },
+     "insertReplaceSupport": true,
+     "resolveSupport": {
+      "properties": [
+       "documentation",
+       "detail",
+       "additionalTextEdits"
+      ]
+     },
+     "labelDetailsSupport": true
+    },
+    "contextSupport": true,
+    "completionList": {
+     "itemDefaults": [
+      "commitCharacters",
+      "editRange",
+      "insertTextFormat",
+      "insertTextMode",
+      "data"
+     ]
+    }
+   }
+  }
+ },
+ "preferences": {
+  "unstable": {
+   "includeCompletionsWithClassMemberSnippets": true
+  }
+ },
+ "files": [
+  "index.ts",
+  "other.ts",
+  "app.tsx",
+  "plain.js",
+  "docsnip.ts",
+  "jsx2.tsx"
+ ],
+ "cases": [
+  {
+   "id": "needs-global",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "[1, |\"\"]",
+   "expect_error": "completion list needs auto imports"
+  },
+  {
+   "id": "needs-class-member-snippet",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "radius = 1;\n    |\n}",
+   "expect_error": "completion list needs auto imports"
+  },
+  {
+   "id": "member-unaffected",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "p.|x;",
+   "expect_same_as": "member"
+  }
+ ]
+}

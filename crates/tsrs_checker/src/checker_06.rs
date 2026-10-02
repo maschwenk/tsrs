@@ -1788,7 +1788,7 @@ impl Checker {
     }
 
     // checker.go:12341
-    pub fn try_get_this_type_at_ex_exported(&mut self, node: P<Node>, include_global_this: bool, container: P<Node>) -> Option<P<Type>> {
+    pub fn try_get_this_type_at_ex_exported(&mut self, node: P<Node>, include_global_this: bool, container: Option<P<Node>>) -> Option<P<Type>> {
         let reparsed = ast::get_reparsed_node_for_node(node).unwrap();
         if reparsed.flags().intersects(NodeFlags::JSDoc) && !reparsed.flags().intersects(NodeFlags::Reparsed) {
             return None; // Binder doesn't process non-reparsed JSDoc nodes

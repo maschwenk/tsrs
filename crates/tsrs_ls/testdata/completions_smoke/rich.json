@@ -1,0 +1,261 @@
+{
+ "capabilities": {
+  "textDocument": {
+   "hover": {
+    "contentFormat": [
+     "markdown"
+    ]
+   },
+   "completion": {
+    "completionItem": {
+     "snippetSupport": true,
+     "commitCharactersSupport": true,
+     "documentationFormat": [
+      "markdown",
+      "plaintext"
+     ],
+     "deprecatedSupport": true,
+     "preselectSupport": true,
+     "tagSupport": {
+      "valueSet": [
+       1
+      ]
+     },
+     "insertReplaceSupport": true,
+     "resolveSupport": {
+      "properties": [
+       "documentation",
+       "detail",
+       "additionalTextEdits"
+      ]
+     },
+     "labelDetailsSupport": true
+    },
+    "contextSupport": true,
+    "completionList": {
+     "itemDefaults": [
+      "commitCharacters",
+      "editRange",
+      "insertTextFormat",
+      "insertTextMode",
+      "data"
+     ]
+    }
+   }
+  }
+ },
+ "preferences": {
+  "unstable": {
+   "includeCompletionsForModuleExports": false
+  }
+ },
+ "files": [
+  "index.ts",
+  "other.ts",
+  "app.tsx",
+  "plain.js",
+  "docsnip.ts",
+  "jsx2.tsx"
+ ],
+ "cases": [
+  {
+   "id": "member",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "p.|x;",
+   "context": {
+    "triggerKind": 2,
+    "triggerCharacter": "."
+   }
+  },
+  {
+   "id": "member-partial",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "p.x|;"
+  },
+  {
+   "id": "optional-chain",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "maybe.|y;"
+  },
+  {
+   "id": "enum",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "Color.|Red;"
+  },
+  {
+   "id": "namespace",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "NS.|inner;"
+  },
+  {
+   "id": "string-member",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "s.|length;"
+  },
+  {
+   "id": "object-literal",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "{ x: 1, |};"
+  },
+  {
+   "id": "string-literal",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "kind = \"|large\";"
+  },
+  {
+   "id": "element-access",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "rec[\"|c\"];"
+  },
+  {
+   "id": "call-arg-literal",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "call(\"|on\");"
+  },
+  {
+   "id": "type-position",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "let typed: Poi|;"
+  },
+  {
+   "id": "this-member",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "return this.|area();"
+  },
+  {
+   "id": "class-body",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "radius = 1;\n    |\n}"
+  },
+  {
+   "id": "label",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "break |outer;"
+  },
+  {
+   "id": "jsdoc-tag",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": " * @par|"
+  },
+  {
+   "id": "import-path",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "from \"./|other\";\ninterface",
+   "context": {
+    "triggerKind": 2,
+    "triggerCharacter": "/"
+   }
+  },
+  {
+   "id": "import-specifier",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "import { | } from"
+  },
+  {
+   "id": "namespace-import-member",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "other.|beta;"
+  },
+  {
+   "id": "tuple-member",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "[1, |\"\"]"
+  },
+  {
+   "id": "jsx-open",
+   "file": "app.tsx",
+   "method": "textDocument/completion",
+   "caret": "const c = <di|"
+  },
+  {
+   "id": "jsx-attr",
+   "file": "app.tsx",
+   "method": "textDocument/completion",
+   "caret": "className=\"x\" |>"
+  },
+  {
+   "id": "jsx-close",
+   "file": "app.tsx",
+   "method": "textDocument/completion",
+   "caret": "<span></|span>"
+  },
+  {
+   "id": "js-file",
+   "file": "plain.js",
+   "method": "textDocument/completion",
+   "caret": "someLocal|;\n"
+  },
+  {
+   "id": "jsdoc-snippet",
+   "file": "docsnip.ts",
+   "method": "textDocument/completion",
+   "caret": "/**|\nfunction",
+   "context": {
+    "triggerKind": 2,
+    "triggerCharacter": "*"
+   }
+  },
+  {
+   "id": "resolve-member",
+   "method": "completionItem/resolve",
+   "from": "member",
+   "label": "x"
+  },
+  {
+   "id": "resolve-deprecated",
+   "method": "completionItem/resolve",
+   "from": "member",
+   "label": "oldX"
+  },
+  {
+   "id": "resolve-literal",
+   "method": "completionItem/resolve",
+   "from": "string-literal",
+   "label": "small"
+  },
+  {
+   "id": "resolve-keyword",
+   "method": "completionItem/resolve",
+   "from": "class-body",
+   "label": "private"
+  },
+  {
+   "id": "linked-editing",
+   "file": "app.tsx",
+   "method": "textDocument/linkedEditingRange",
+   "caret": "<sp|an></span>"
+  },
+  {
+   "id": "auto-insert",
+   "file": "jsx2.tsx",
+   "method": "textDocument/_vs_onAutoInsert",
+   "caret": "const e = <div>|",
+   "ch": ">"
+  },
+  {
+   "id": "jsdoc-resolve-snippet",
+   "method": "completionItem/resolve",
+   "from": "jsdoc-snippet",
+   "label": "/** */"
+  }
+ ]
+}
