@@ -51,6 +51,8 @@ npx -y @maschwenk/tsrs -p . --singleThreaded     # one checker thread (less memo
 ```
 
 or `pnpm add -D @maschwenk/tsrs` and run `tsrs` from scripts. `--extendedDiagnostics` prints the usual counters.
+`--checkerCostCache <file>` (opt-in) records per-file check times in `<file>` and balances the checker threads on
+them in the next run (a few percent to ~15% less wall time on repeated runs; it never changes diagnostics).
 By default tsrs also runs with checker changes that are not merged upstream yet; `--noLazyMembers` turns them
 off and gives the reference-identical mode. None of them changes any diagnostic (verified on the whole conformance
 suite, errors, types and symbols):

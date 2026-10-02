@@ -87,6 +87,10 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
             let times: Vec<String> = run.iter().map(|(t, n)| format!("{:.2}s/{}", t, n)).collect();
             let _ = writeln!(out, "checker group seconds/files: {}", times.join(" "));
         }
+        for run in state.group_cpu.lock().unwrap().iter() {
+            let times: Vec<String> = run.iter().map(|t| format!("{t:.2}")).collect();
+            let _ = writeln!(out, "checker group cpu seconds: {}", times.join(" "));
+        }
         return out;
     }
     let categories: Vec<Category> = files.iter().map(|&f| category(program, f, &project_dir)).collect();

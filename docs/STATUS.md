@@ -285,3 +285,7 @@ on the monorepo and the corpus). Details: `notes/mem-recycle.md`.
 
 `Symbol` 56 -> 48 bytes (the member/export tail shares a word with `parent`): private monorepo peak -0.08 GiB single,
 -0.14 GiB on 4 checkers, output and counters identical. Details: `notes/mem-small.md`.
+
+## 2026-10-01: checker balance (opt-in cost cache)
+
+`--checkerCostCache <file>` balances the 4 checkers on per-file CPU times from the previous run (default unchanged; ordering and static cost models gave nothing): wall -3.7% on the private monorepo (slowest checker 10.4% -> 2.1% above the mean), -12.5% vscode, -15% mui-docs; output identical. Details: `notes/perf-balance.md`.

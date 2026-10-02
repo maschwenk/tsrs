@@ -19,7 +19,7 @@ mod projectreferencefilemapper;
 #[cfg(all(test, feature = "checker"))]
 mod modulespecifiers_oracle_test;
 
-pub use checkerpool::{assignment_stats_enabled, set_checker_assignment_from_cli, CheckerGuard};
+pub use checkerpool::{assignment_stats_enabled, set_checker_assignment_from_cli, set_checker_cost_cache_from_cli, CheckerGuard};
 pub use file_include::FileIncludeReason;
 pub use fileloader::LibFile;
 pub use host::{new_cached_fs_compiler_host, new_compiler_host, CompilerHost, TraceFn};
