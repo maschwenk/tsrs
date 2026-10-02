@@ -23,6 +23,7 @@ mod lsformat;
 pub mod lsconv;
 pub mod lsutil;
 pub mod sourcemap;
+mod selectionranges;
 mod source_map;
 mod sourcedefinition;
 pub mod spanmap;

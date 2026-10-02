@@ -1732,7 +1732,124 @@ impl FourslashTest {
 
     // fourslash.go:3283
     pub fn verify_baseline_selection_ranges(&mut self, t: &T) {
-        Self::server_unavailable(t, "feature not ported: selection ranges (VerifyBaselineSelectionRanges)")
+        let markers = self.markers();
+        let mut result = String::new();
+        let new_line = "\n";
+
+        for (i, marker) in markers.iter().enumerate() {
+            if i > 0 {
+                result.push_str(new_line);
+                result.push_str(&"=".repeat(80));
+                result.push_str(new_line);
+                result.push_str(new_line);
+            }
+
+            let script = self.get_script_info(&marker.file_name());
+            let file_content = script.content.clone();
+
+            // Add the marker position indicator
+            let marker_pos = marker.position as usize;
+            let baseline_content = format!("{}/**/{}{}", &file_content[..marker_pos], &file_content[marker_pos..], new_line);
+            result.push_str(&baseline_content);
+
+            // Get selection ranges at this marker
+            let params = lsproto::SelectionRangeParams {
+                text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&marker.file_name()) },
+                positions: vec![marker.ls_position],
+                ..Default::default()
+            };
+
+            let selection_range_result = self.send_request(t, lsproto::TEXT_DOCUMENT_SELECTION_RANGE_INFO, params);
+
+            let selection_ranges = selection_range_result.selection_ranges.unwrap_or_default();
+            if selection_ranges.is_empty() {
+                result.push_str("No selection ranges available\n");
+                continue;
+            }
+
+            let mut selection_range = Some(&selection_ranges[0]);
+
+            // Add blank line after source code section
+            result.push_str(new_line);
+
+            // Walk through the selection range chain
+            while let Some(sr) = selection_range {
+                let start = self.converters.line_and_character_to_position(script.clone(), sr.range.start) as usize;
+                let end = self.converters.line_and_character_to_position(script.clone(), sr.range.end) as usize;
+
+                // Create a masked version of the file showing only this range
+                // (Go compares rune indices with the byte offsets above.)
+                let masked: String = file_content
+                    .chars()
+                    .enumerate()
+                    .map(|(i, ch)| {
+                        if i >= start && i < end {
+                            // Keep characters in the selection range
+                            if ch == ' ' {
+                                '•'
+                            } else {
+                                ch
+                            }
+                        } else if ch == '\n' || ch == '\r' {
+                            // Replace characters outside the range
+                            ch
+                        } else {
+                            ' '
+                        }
+                    })
+                    .collect();
+
+                let mut masked_str = masked;
+
+                // Add line break arrows
+                masked_str = masked_str.replace('\n', "↲\n");
+                masked_str = masked_str.replace('\r', "↲\r");
+
+                // Remove blank lines
+                let mut non_blank_lines: Vec<&str> = Vec::new();
+                for line in masked_str.split('\n') {
+                    let trimmed = line.trim_matches(go_is_space);
+                    if !trimmed.is_empty() && trimmed != "↲" {
+                        non_blank_lines.push(line);
+                    }
+                }
+                masked_str = non_blank_lines.join("\n");
+
+                // Find leading and trailing width of non-whitespace characters
+                let masked_runes: Vec<char> = masked_str.chars().collect();
+                let is_real_character = |ch: char| ch != '•' && ch != '↲' && !stringutil::is_white_space_like(ch);
+
+                let leading_width = masked_runes.iter().position(|&ch| is_real_character(ch));
+                let trailing_width = masked_runes.iter().rposition(|&ch| is_real_character(ch));
+
+                if let (Some(leading_width), Some(trailing_width)) = (leading_width, trailing_width) {
+                    if leading_width <= trailing_width {
+                        // Clean up middle section
+                        let prefix: String = masked_runes[..leading_width].iter().collect();
+                        let middle: String = masked_runes[leading_width..trailing_width + 1].iter().collect();
+                        let suffix: String = masked_runes[trailing_width + 1..].iter().collect();
+
+                        let middle = middle.replace('•', " ").replace('↲', "");
+
+                        masked_str = prefix + &middle + &suffix;
+                    }
+                }
+
+                // Add blank line before multi-line ranges
+                if masked_str.contains('\n') {
+                    result.push_str(new_line);
+                }
+
+                result.push_str(&masked_str);
+                if !masked_str.ends_with('\n') {
+                    result.push_str(new_line);
+                }
+
+                selection_range = sr.parent.as_deref();
+            }
+        }
+        let result = result.strip_suffix('\n').unwrap_or(&result).to_string();
+        self.add_result_to_baseline(t, SMART_SELECTION_CMD, &result);
     }
 
     // fourslash.go:3421
@@ -3110,4 +3227,9 @@ struct DocumentSpanKey {
     uri: lsproto::DocumentUri,
     text_span: lsproto::Range,
     context_span: lsproto::Range,
+}
+
+// Go unicode.IsSpace (strings.TrimSpace).
+fn go_is_space(r: char) -> bool {
+    matches!(r, '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{85}' | '\u{A0}') || (!r.is_ascii() && r.is_whitespace())
 }

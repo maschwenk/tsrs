@@ -1952,7 +1952,7 @@ impl Server {
 
     // server.go:2196
     fn handle_selection_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::SelectionRangeParams) -> Result<lsproto::SelectionRangeResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentSelectionRange))
+        ls.provide_selection_ranges(ctx, &params)
     }
 
     // server.go:2200
