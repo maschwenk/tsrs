@@ -1,13 +1,12 @@
 // Port of Go's fourslash/baselineutil.go: baseline commands, file names and the text formatting of location
-// baselines. The parts that walk the server's virtual file system (getBaselineForGroupedSpansWithFileContents,
-// getAccessibleFilePaths, textOfFile) wait for the in-process server.
+// baselines.
 
 use std::fmt::Write as _;
 use std::sync::{Arc, LazyLock};
 
 use regex::Regex;
 use rustc_hash::FxHashMap;
-use tsrs_core::collections::OrderedMap;
+use tsrs_core::collections::{group_by, MultiMap, OrderedMap};
 use tsrs_core::stringutil;
 use tsrs_core::TextPos;
 use tsrs_ls::lsconv::{self, LSPLineMap, Script};
@@ -132,6 +131,141 @@ pub(crate) struct BaselineFourslashLocationsOptions {
 // baselineutil.go:134
 pub(crate) fn location_to_span(loc: &lsproto::Location) -> DocumentSpan {
     DocumentSpan { uri: loc.uri.clone(), text_span: loc.range, context_span: None }
+}
+
+impl FourslashTest {
+    // baselineutil.go:141
+    pub(crate) fn get_baseline_for_locations_with_file_contents(&self, locations: &[lsproto::Location], options: BaselineFourslashLocationsOptions) -> String {
+        self.get_baseline_for_spans_with_file_contents(&locations.iter().map(location_to_span).collect::<Vec<_>>(), options)
+    }
+
+    // baselineutil.go:148
+    pub(crate) fn get_baseline_for_spans_with_file_contents(&self, spans: &[DocumentSpan], mut options: BaselineFourslashLocationsOptions) -> String {
+        let spans_by_file = group_by(spans, |span: &DocumentSpan| span.uri.clone());
+        if options.preserve_result_order {
+            options.ordered_files = unique_files_in_span_order(spans);
+        }
+        self.get_baseline_for_grouped_spans_with_file_contents(&spans_by_file, &options)
+    }
+
+    // baselineutil.go:159
+    pub(crate) fn get_baseline_for_grouped_spans_with_file_contents(
+        &self,
+        grouped_ranges: &MultiMap<lsproto::DocumentUri, DocumentSpan>,
+        options: &BaselineFourslashLocationsOptions,
+    ) -> String {
+        // We must always print the file containing the marker,
+        // but don't want to print it twice at the end if it already
+        // found in a file with ranges.
+        let mut found_marker = false;
+        let mut found_additional_location = false;
+        let mut span_to_context_id: FxHashMap<DocumentSpan, i32> = FxHashMap::default();
+
+        let mut baseline_entries: Vec<String> = Vec::new();
+        let mut add_file_entry = |path: &str, found_marker: &mut bool, found_additional_location: &mut bool, baseline_entries: &mut Vec<String>| {
+            let file_name = lsconv::file_name_to_document_uri(path);
+            let ranges = grouped_ranges.get(&file_name);
+            if ranges.is_empty() {
+                return;
+            }
+
+            let Some(content) = self.text_of_file(path) else {
+                return;
+            };
+
+            if let Some(marker) = &options.marker {
+                if marker.file_name() == path {
+                    *found_marker = true;
+                }
+            }
+
+            if let Some(additional_span) = &options.additional_span {
+                if additional_span.uri == file_name {
+                    *found_additional_location = true;
+                }
+            }
+
+            baseline_entries.push(self.get_baseline_content_for_file(path, &content, ranges, &mut span_to_context_id, options));
+        };
+        if options.preserve_result_order {
+            for uri in &options.ordered_files {
+                add_file_entry(&uri.file_name(), &mut found_marker, &mut found_additional_location, &mut baseline_entries);
+            }
+        } else {
+            for path in get_accessible_file_paths(&*self.vfs, "/") {
+                add_file_entry(&path, &mut found_marker, &mut found_additional_location, &mut baseline_entries);
+            }
+            for path in get_accessible_file_paths(&*self.vfs, &tsrs_vfs::bundled::lib_path()) {
+                add_file_entry(&path, &mut found_marker, &mut found_additional_location, &mut baseline_entries);
+            }
+        }
+        drop(add_file_entry);
+
+        // In Strada, there is a bug where we only ever add additional spans to baselines if we haven't
+        // already added the file to the baseline.
+        if let Some(additional_span) = &options.additional_span {
+            if !found_additional_location {
+                let file_name = additional_span.uri.file_name();
+                if let Some(content) = self.text_of_file(&file_name) {
+                    baseline_entries.push(self.get_baseline_content_for_file(
+                        &file_name,
+                        &content,
+                        std::slice::from_ref(additional_span),
+                        &mut span_to_context_id,
+                        options,
+                    ));
+                    if let Some(marker) = &options.marker {
+                        if marker.file_name() == file_name {
+                            found_marker = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if !found_marker {
+            if let Some(marker) = &options.marker {
+                // If we didn't find the marker in any file, we need to add it.
+                let marker_file_name = marker.file_name();
+                if let Some(content) = self.text_of_file(&marker_file_name) {
+                    baseline_entries.push(self.get_baseline_content_for_file(&marker_file_name, &content, &[], &mut span_to_context_id, options));
+                }
+            }
+        }
+
+        // !!! skipDocumentContainingOnlyMarker
+
+        baseline_entries.join("\n\n")
+    }
+
+    // baselineutil.go:267
+    pub(crate) fn text_of_file(&self, file_name: &str) -> Option<String> {
+        if self.open_files.contains_key(file_name) {
+            return Some(self.get_script_info(file_name).content);
+        }
+        self.vfs.read_file(file_name)
+    }
+}
+
+// baselineutil.go:231
+pub(crate) fn get_accessible_file_paths(file_system: &dyn tsrs_vfs::FS, root: &str) -> Vec<String> {
+    if !file_system.directory_exists(root) {
+        return Vec::new();
+    }
+    let mut files = Vec::new();
+    let err = tsrs_vfs::walk_dir(file_system, root, &mut |path, entry, err| {
+        if let Some(err) = err {
+            return Err(tsrs_vfs::WalkDirError::Err(err.clone()));
+        }
+        if entry.is_some_and(|e| e.type_().is_regular()) {
+            files.push(path.to_string());
+        }
+        Ok(())
+    });
+    if let Err(err) = err {
+        panic!("walkdir error during fourslash baseline: {err:?}");
+    }
+    files
 }
 
 // baselineutil.go:251

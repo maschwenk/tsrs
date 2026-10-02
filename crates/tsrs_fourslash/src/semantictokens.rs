@@ -15,7 +15,7 @@ pub struct SemanticToken {
 impl FourslashTest {
     // semantictokens.go:17
     pub fn verify_semantic_tokens(&mut self, t: &T, expected: &[SemanticToken]) {
-        FourslashTest::server_unavailable(t, "VerifySemanticTokens")
+        FourslashTest::server_unavailable(t, "feature not ported: semantic tokens (VerifySemanticTokens)")
     }
 }
 
