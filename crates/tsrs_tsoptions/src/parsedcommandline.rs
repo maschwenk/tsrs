@@ -146,6 +146,12 @@ impl ParsedCommandLine {
 
     // Go method on *ParsedCommandLine; the maps point back at the command line, so it takes the arena pointer.
     pub fn parse_input_output_names(this: P<ParsedCommandLine>) {
+        if this.get().source_and_output_maps.get().is_some() {
+            return;
+        }
+        // The maps live as long as the command line, not in the language server's region of whichever program or
+        // checker asks first (docs/LSP.md memory regions).
+        let _region = tsrs_core::arena::enter_owner(this.addr());
         this.get().source_and_output_maps.get_or_init(|| {
             let p = this.get();
             let mut source_to_output: FxHashMap<Path, P<SourceOutputAndProjectReference>> = FxHashMap::default();

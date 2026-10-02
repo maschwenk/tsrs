@@ -88,30 +88,41 @@ for directories that do not exist yet, synthetic creates on promotion, 75 ms bat
 ## Memory plan for a long-lived server
 
 The batch compiler never frees arena memory (PORTING.md "Memory model"): `P<T>` points into per-thread leak arenas,
-and destructors of arena values never run. A server that rebuilds programs on every edit cannot live with that
-forever. What Go frees (by GC) on an edit of one file, and what that means here:
+and destructors of arena values never run. A server that rebuilds programs on every edit cannot live with that.
+Phase 4 (notes/lsp-mem.md) frees what Go's GC frees after an edit, with **regions**: arenas that are freed as a
+whole. The CLI never creates one and allocates exactly as before.
 
-| object | Go lifetime | tsrs phase 1 | plan (phase 4) |
-| --- | --- | --- | --- |
-| old version of the edited file (AST, symbols, flow nodes) | until no snapshot's program refers to it (`ParseCache` refcount -> 0) | leaked | **per-file region**: `ParseCache`'s parse function runs parse + bind with the current thread's allocation target set to a fresh region owned by the cache entry; the entry's final `Deref` frees the region |
-| types, signatures, links, transient symbols of the old program's checkers | until the program's checker pool is unreachable | leaked (in the worker thread's arena) | **per-checker region**: a checker owns a region; acquiring a checker from the pool sets it as the thread's allocation target until release; disposing the checker (idle timeout, cancellation, program replaced) frees it |
-| `Program` (file lists, maps, resolution data; cloned per edit by `ReuseProgram`) | GC | leaked (`Box::leak`, `&'static Program`) | owned by its project through a counted handle; freed after its pool and checkers are gone |
-| request-scoped results (lsproto values, strings) | GC | ordinary Rust ownership, freed | same |
+| object | Go lifetime | tsrs (phase 4) |
+| --- | --- | --- |
+| a parsed file version (text, AST, symbols, flow nodes, and its lazily filled data) | until neither the parse cache nor a live program refers to it | **file region**: the parse cache's parse function runs parse + bind in a fresh region; the cache entry owns it until its final `Deref`, and so does every program owner whose program contains the file |
+| types, signatures, links, transient symbols, synthetic nodes of a program's checkers | until the program's pool is unreachable | **checker region** per pooled checker: the holder's allocation target while it is created and while it is held; freed with the pool when the program is freed (a disposed checker is parked until then, see below) |
+| `Program` (file lists, maps, resolution data; cloned per edit by `ReuseProgram`) | GC | **program owner** (`tsrs_project` memregions.rs), held by every `Project` value that refers to the program; what `CreateProgram` allocates is in the version's region, the full build's region is shared by its clones (they share its processed-file data); dropping the owner frees the checkers, the `Program` (`tsrs_compiler::free_program`) and the regions |
+| auto-import registry data | GC | thread arena (never freed); files the registry acquires stay parsed for the session (see notes) |
+| request-scoped results (lsproto values, strings) | GC | ordinary Rust ownership |
 
-The region mechanism is an extension of `tsrs_core::arena` (a thread-local "current arena" override, set by a
-scope guard), plus a drop list per region for the few arena types whose `needs_drop` is true (heap `Vec`s and maps
-inside links and tables), so freeing a region also releases the heap memory those values own. It is safe only if no
-pointer into a region outlives it. The contract already guarantees most of that (checkers never write shared
-objects; a file's AST points only into itself and into the libs). The known exceptions that must be routed to the
-owning file's region, not the current checker's: lazily parsed JSDoc (`jsdoc_mu` cache) and every other lazily
-initialized shared field filled while checking (`OnceLock`s on `SourceFile`, symbol ids are atomics and harmless).
-The census build (notes/mem-recycle.md: precise walk + strong mark) is the gate: mark a disposed region would-free
-instead of freeing it and assert that nothing reachable points into it. Free lists stay per thread; a block freed
-on one thread into another region's chunk is only reused while that region is alive, so recycling sites must free
-into the region that allocated the block (the region, not the thread, owns the free lists once regions exist).
+Mechanism (`tsrs_core::arena`): `Region::enter` makes a region the thread's allocation target until the returned
+scope is dropped (scopes nest; `with_arena` reads one thread-local pointer, as before). A region is an `Arena` of its
+own, so its free lists and checkpoints are its own (a recycling site frees into the arena that allocated the block;
+debug builds assert it). It keeps a drop list of the values allocated in it whose type needs drop, and freeing it
+runs those drops, so heap memory owned by links and tables goes too. Lazily filled data of a shared object is routed
+to the object's own region (`arena::enter_owner(addr)`: `SourceFile`'s JSDoc cache, line and position maps, name
+table, identifier set, token cache, declaration map; the program's symlink cache goes to the full build's region);
+process-wide statics allocate in the thread arena (`arena::enter_thread_arena`). Regions bump upwards and their
+chunks are carved from per-thread slabs, and a file region is trimmed after binding: tens of thousands of file
+regions would otherwise each cost a partly used page.
 
-Until phase 4, RSS grows with the number of program versions times the checker work done per version; that is
-measured on the private monorepo in phase 4 (open a file, edit 200 times, RSS vs `tsgo-ref`).
+Two corrections to the original plan:
+
+- A program is not freed when Go's refcount drops it (snapshot dispose -> `ParseCache.Deref`): a request that got a
+  language service from an older snapshot holds no snapshot reference in Go either and relies on the GC. The owner
+  is therefore tied to Rust ownership of the `Project` values (snapshots and language services hold them), and file
+  regions are owned by program owners as well as by the cache entry.
+- Checker regions are not freed when a checker is disposed (idle timeout, cancellation): its data can be referenced
+  from pool- and program-lifetime structures (global diagnostics, the declaration diagnostics cache). Disposed
+  checkers are parked with their regions until the pool is freed; holding a checker keeps the program owner alive.
+
+The census build is the gate (notes/mem-recycle.md; at server exit with `TSRS_CENSUS=1`, roots = server, session,
+snapshot): a freed region is recorded as would-free and kept, and nothing reachable may point into it.
 
 ## Gates
 
@@ -129,7 +140,7 @@ measured on the private monorepo in phase 4 (open a file, edit 200 times, RSS vs
 | 1 | transport, protocol types, session skeleton, document sync, project discovery, program update, push + pull diagnostics, hover, definition; LSP oracle | done (2026-10-02, below) |
 | 2 | fourslash harness + generated tests | harness drives the in-process server; hover, definitions, diagnostics, formatting (ls/format.go ported), document sync / edits done; completions, references in progress (below) |
 | 3 | references, rename, completions, signature help, symbols, semantic tokens, folding, selection ranges, inlay hints, code actions, formatting | code actions, organize imports, auto-imports, file rename done (actions wave); see Fourslash |
-| 4 | watchers, multi-project, program reuse, cancellation, memory regions, editor setup | cancellation, builtin watcher, watched-file invalidation and state baselines done (robust wave, notes/lsp-robust.md); memory regions in progress; watched-file / multi-project oracle sessions identical |
+| 4 | watchers, multi-project, program reuse, cancellation, memory regions, editor setup | cancellation, builtin watcher, watched-file invalidation and state baselines done (robust wave, notes/lsp-robust.md); memory regions done (mem wave, notes/lsp-mem.md: RSS flat under edits); watched-file / multi-project oracle sessions identical |
 
 ### Phase 1 gates (2026-10-02, `lsp` 3c95d59+)
 

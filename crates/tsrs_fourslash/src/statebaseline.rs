@@ -30,6 +30,9 @@ pub struct StateBaseline {
     pub(crate) is_initialized: bool,
 
     serialized_projects: HashMap<String, projectInfo>,
+    // Go's `*compiler.Program` keeps the program alive (GC); the project values that own the serialized programs
+    // (docs/LSP.md memory regions) are kept until the next diff.
+    serialized_programs_owner: Option<Box<dyn std::any::Any>>,
     serialized_open_files: HashMap<String, openFileInfo>,
     serialized_config_file_registry: Option<Arc<ConfigFileRegistry>>,
 }
@@ -42,6 +45,7 @@ pub(crate) fn new_state_baseline(fs_from_map: Arc<IoVFS<MapFS>>) -> StateBaselin
         fs_differ: FSDiffer::new(fs_from_map),
         is_initialized: false,
         serialized_projects: HashMap::new(),
+        serialized_programs_owner: None,
         serialized_open_files: HashMap::new(),
         serialized_config_file_registry: None,
     };
@@ -379,6 +383,7 @@ impl FourslashTest {
             }
         }
         state_baseline.serialized_projects = current_projects;
+        state_baseline.serialized_programs_owner = Some(Box::new(snapshot.project_collection.projects()));
         projects_diff_table.print(w);
     }
 
