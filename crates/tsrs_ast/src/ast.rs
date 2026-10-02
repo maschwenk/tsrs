@@ -342,6 +342,27 @@ pub struct Node {
 
 const _: () = assert!(std::mem::size_of::<Node>() == 24);
 
+/// Census builds (`TSRS_CENSUS=1`): registers the fields of AST arena types that the census's strong mark must not
+/// read as plain pointers (`tsrs_core::census_layout`), from the current layouts: node headers (flags, id and range;
+/// the parent word is not decoded), identifier words, symbol parent words, diagnostics' scalars. Once per process;
+/// nothing in other builds.
+pub fn census_layouts() {
+    if !tsrs_core::census_recording() {
+        return;
+    }
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let header = tsrs_core::CensusField::all_but(0, std::mem::size_of::<Node>(), &[std::mem::offset_of!(Node, header)]);
+        tsrs_core::census_layout(std::any::type_name::<Node>(), &header);
+        for name in [std::any::type_name::<NodeAlloc<Node>>(), std::any::type_name::<NodeAllocRare<Node, Node>>()] {
+            tsrs_core::census_layout(&name[..=name.find('<').unwrap()], &header);
+        }
+        crate::identifier::census_layout();
+        crate::symbol::census_layout();
+        crate::diagnostic::census_layout();
+    });
+}
+
 /// A node's kind, data tag and parent in one word: the parent's address divided by 8 in the low 45 bits (nodes are
 /// 8-aligned and user-space addresses are below 2^48 on every supported platform; checked when the parent is set),
 /// the kind in the next 9 bits, the data tag in the 8 above and then the rare bit (the data struct is followed by its

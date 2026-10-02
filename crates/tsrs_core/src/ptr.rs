@@ -526,6 +526,82 @@ macro_rules! free_slice {
     }};
 }
 
+/// One field of an arena type that the census's strong mark (alloc-profile builds, `TSRS_CENSUS=1`, the would-free
+/// check) would misread as a plain 48-bit pointer, or miss. Offsets are from the start of the arena block. The crate
+/// that owns the type registers them with `census_layout`, computed with `offset_of!`, so they follow layout changes.
+#[derive(Clone, Copy, Debug)]
+pub enum CensusField {
+    /// `len` bytes at `off` never hold a pointer: scalar fields, padding, header words, enum payload that some variants
+    /// leave uninitialized (copied from the stack with stale words). No scan step that overlaps them is a reference.
+    NoPointer { off: usize, len: usize },
+    /// The word at `off` keeps an address in its low 48 bits and flag bits above them.
+    Tagged { off: usize },
+    /// The word at `off` keeps an address / 8 in its low 45 bits when bit `word >> 62` is set in `modes`, else none.
+    X8 { off: usize, modes: u8 },
+    /// A slice's pointer word at `ptr`: a reference only while the length word at `len` is non-zero (an empty slice's
+    /// pointer is dangling and may equal the address of the next block).
+    Slice { ptr: usize, len: usize },
+}
+
+impl CensusField {
+    /// `NoPointer` for the scalar field at `off` and the padding after it, up to the next field (`offsets`: every field
+    /// offset of the struct) or the struct's end (`size`); `base` is the struct's offset in the arena block.
+    pub fn scalar(base: usize, off: usize, offsets: &[usize], size: usize) -> CensusField {
+        let end = offsets.iter().copied().filter(|&o| o > off).min().unwrap_or(size);
+        CensusField::NoPointer { off: base + off, len: end - off }
+    }
+
+    /// `NoPointer` for every byte of `[0, size)` outside the 8-byte words at `words` (a header whose other words hold
+    /// flags and ids); `base` as in `scalar`.
+    pub fn all_but(base: usize, size: usize, words: &[usize]) -> Vec<CensusField> {
+        let mut words = words.to_vec();
+        words.sort_unstable();
+        let mut out = Vec::new();
+        let mut at = 0;
+        for w in words.into_iter().chain([size]) {
+            if w > at {
+                out.push(CensusField::NoPointer { off: base + at, len: w - at });
+            }
+            at = w + 8;
+        }
+        out
+    }
+
+    /// The (pointer, length) word offsets of `Option<&'static [T]>` (a slice reference with the `None` niche).
+    pub fn slice_words() -> (usize, usize) {
+        static ONE: [u64; 1] = [0];
+        let s: Option<&'static [u64]> = Some(&ONE[..]);
+        // SAFETY: `Option<&[u64]>` is two words: the pointer (non-null, the niche) and the length.
+        let w: [usize; 2] = unsafe { std::mem::transmute(s) };
+        if w[0] == ONE.as_ptr() as usize {
+            (0, 8)
+        } else {
+            (8, 0)
+        }
+    }
+}
+
+/// Whether the census records (alloc-profile build with `TSRS_CENSUS=1`); a constant `false` in other builds, so
+/// census-only work behind it compiles to nothing.
+#[inline(always)]
+pub fn census_recording() -> bool {
+    #[cfg(feature = "alloc-profile")]
+    return crate::alloc_profile::census::recording();
+    #[cfg(not(feature = "alloc-profile"))]
+    false
+}
+
+/// Census builds: registers the fields of the arena type named `type_name` (`std::any::type_name` of the allocated
+/// value, or a prefix ending in `<` for every instance of a generic, such as `TypeAlloc<`) that the strong mark must
+/// read specially. Call before the census runs. Compiled to nothing otherwise.
+#[inline(always)]
+pub fn census_layout(type_name: &'static str, fields: &[CensusField]) {
+    #[cfg(feature = "alloc-profile")]
+    crate::alloc_profile::census::register_layout(type_name, fields);
+    #[cfg(not(feature = "alloc-profile"))]
+    let _ = (type_name, fields);
+}
+
 /// Census builds (`TSRS_CENSUS=1`): zeroes the unused capacity of a pooled vector after elements were removed, so
 /// stale pointers there do not count as references in the would-free check. Compiled to nothing otherwise.
 #[inline(always)]
@@ -538,6 +614,20 @@ pub fn census_scrub_slack<T>(v: &mut Vec<T>) {
     }
     #[cfg(not(feature = "alloc-profile"))]
     let _ = v;
+}
+
+/// Census builds (`TSRS_CENSUS=1`): replaces a cleared pooled table with a new one. Clearing a hash table resets only
+/// its control bytes, so the removed entries stay in its buckets, and an entry type with uninitialized bytes (an enum
+/// whose variants differ in size) keeps stale words there that the census reads as references. Compiled to nothing
+/// otherwise.
+#[inline(always)]
+pub fn census_reset<T: Default>(t: &mut T) {
+    #[cfg(feature = "alloc-profile")]
+    if crate::alloc_profile::census::recording() {
+        *t = T::default();
+    }
+    #[cfg(not(feature = "alloc-profile"))]
+    let _ = t;
 }
 
 /// Census builds (`TSRS_CENSUS=1`): a `None` option keeps uninitialized payload bytes (copied from the stack slot or

@@ -98,6 +98,35 @@ anything that writes (mutation testing, scripts that create files) uses the disp
 `$TSRS_WORK/project-clone`. Before you finish, run `git -C <pristine root> status --short`
 (read-only) and confirm it prints nothing.
 
+## The census free-gate (run it after any memory or layout change)
+
+tsrs gives some arena memory back (free lists for dead mappers, inference contexts, type lists, flow labels;
+parser rewinds; language-server regions; notes/mem-recycle.md, notes/lsp-mem.md). A freed block that something
+still points to is a use-after-free. The alloc-profile build checks that at exit: frees are recorded, never reused,
+and every freed block must be unreachable.
+
+```sh
+CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile
+cd $PWD/target && TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1 TSRS_CENSUS_TOP=5 \
+  ./prof/release/tsrs -p $PRIVATE_PROJECT/tsconfig.json --noEmit --checkers 1 2> census.err
+grep -E "census verify \(recycling\)|strongly reachable freed blocks|violation class" census.err
+```
+
+Both numbers must be 0: the precise walk (`census verify (recycling): ... 0 to freed or rewound blocks`) and the
+strong mark (`strongly reachable freed blocks (violations): 0`). Also run `--checkers 4` and `TSRS_LAZY_MEMBERS=0`.
+A run takes 2-3 minutes and ~15 GB (more with 4 checkers): run one at a time. `TSRS_CENSUS_ASSERT=1` exits with
+status 3 on a violation; `TSRS_CENSUS_CHAINS=N` prints N referrer chains (default 20).
+
+Each `violation class` line names the freed block's site and the referrer's type and field offset. Look the offset
+up in the referrer's current layout (`offset_of!`) before believing it: the strong mark reads every 4-byte step as a
+48-bit pointer unless the type registered its padding, scalar, tagged and x8-encoded words with
+`tsrs_core::census_layout` (`tsrs_checker::types::census_layouts`, `tsrs_ast::census_layouts`). **A layout change
+must update those registrations** (they are computed with `offset_of!`, so reordering fields is covered, but a new
+packed word, flag bits above an address or a new enum payload is not). Stale registrations both invent violations
+(padding read as pointers) and hide real ones (pointer fields skipped); notes/census-regress.md is what happened
+when they were hard-coded offsets. A violation that survives that check is a real bug: fix the escape tracking or
+stop freeing that class.
+
 ## How to fix
 
 - The Go source (`ts-ref/tsc/internal/…`) is the specification. Find the Go function behind the wrong behavior, read it

@@ -52,6 +52,39 @@ pub struct Diagnostic {
     repopulate_info: OwnedCell<Option<&'static RepopulateDiagnosticInfo>>,
 }
 
+/// Census builds: the scalar fields and the padding after them (`crate::census_layouts`).
+pub(crate) fn census_layout() {
+    use std::mem::{offset_of, size_of};
+    let offsets = [
+        offset_of!(Diagnostic, file),
+        offset_of!(Diagnostic, loc),
+        offset_of!(Diagnostic, code),
+        offset_of!(Diagnostic, category),
+        offset_of!(Diagnostic, source),
+        offset_of!(Diagnostic, message),
+        offset_of!(Diagnostic, message_text),
+        offset_of!(Diagnostic, message_key),
+        offset_of!(Diagnostic, message_args),
+        offset_of!(Diagnostic, message_chain),
+        offset_of!(Diagnostic, related_information),
+        offset_of!(Diagnostic, reports_unnecessary),
+        offset_of!(Diagnostic, reports_deprecated),
+        offset_of!(Diagnostic, skipped_on_no_emit),
+        offset_of!(Diagnostic, repopulate_info),
+    ];
+    let size = size_of::<Diagnostic>();
+    let scalars = [
+        offset_of!(Diagnostic, loc),
+        offset_of!(Diagnostic, code),
+        offset_of!(Diagnostic, category),
+        offset_of!(Diagnostic, reports_unnecessary),
+        offset_of!(Diagnostic, reports_deprecated),
+        offset_of!(Diagnostic, skipped_on_no_emit),
+    ];
+    let fields: Vec<_> = scalars.iter().map(|&o| tsrs_core::CensusField::scalar(0, o, &offsets, size)).collect();
+    tsrs_core::census_layout(std::any::type_name::<Diagnostic>(), &fields);
+}
+
 impl Diagnostic {
     pub fn file(&self) -> Option<P<SourceFile>> {
         self.file.get()
