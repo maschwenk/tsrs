@@ -69,9 +69,8 @@ Where Go tests such a field against nil (`c.globalObjectType != nil`), compare w
 - **Program**: `pub trait Program: Send + Sync` (program.rs) with the Go `checker.Program` methods the checker uses plus
   the four host methods it calls (`use_case_sensitive_file_names`, `get_current_directory`,
   `get_default_resolution_mode_for_file`, `get_mode_for_usage_location`). The checker holds `program: &'static dyn Program`.
-  `ast.HasFileName` parameters are `P<SourceFile>`, `tspath.Path` parameters `&Path`. Project-reference results use a
-  placeholder: `SourceOutputAndProjectReference { source, output_dts, resolved: &'static dyn ProjectReferenceCommandLine }`
-  (`compiler_options()`, `common_source_directory()`) instead of `*tsoptions.ParsedCommandLine`.
+  `ast.HasFileName` parameters are `P<SourceFile>`, `tspath.Path` parameters `&Path`. Project-reference results are
+  the tsoptions types (`P<tsrs_tsoptions::SourceOutputAndProjectReference>`, `P<ParsedCommandLine>`), as in Go.
 - Arena objects never point back to the checker (Go's `Type.checker` field is dropped; Go `t.checker.foo()` becomes a
   call on the checker you already have, e.g. `keyBuilder::write_generic_type_references` needs a `c` argument).
 - **Helper structs that hold `c *Checker`** (`Relater`, `TypeDiscriminator`, `ObjectLiteralDiscriminator`,

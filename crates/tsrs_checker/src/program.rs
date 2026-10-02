@@ -4,18 +4,7 @@ use tsrs_module::{ModeAwareCacheKey, ResolvedModule};
 
 use crate::*;
 
-/// Placeholder for `*tsoptions.ParsedCommandLine`: only project-reference features reach it from the checker.
-pub trait ProjectReferenceCommandLine: Send + Sync {
-    fn compiler_options(&self) -> P<CompilerOptions>;
-    fn common_source_directory(&self) -> String;
-}
-
-/// Go `tsoptions.SourceOutputAndProjectReference`.
-pub struct SourceOutputAndProjectReference {
-    pub source: String,
-    pub output_dts: String,
-    pub resolved: &'static dyn ProjectReferenceCommandLine,
-}
+pub use tsrs_tsoptions::{ParsedCommandLine, SourceOutputAndProjectReference};
 
 /// Go `checker.Program` (plus the `modulespecifiers.ModuleSpecifierGenerationHost` methods the checker calls).
 /// `ast.HasFileName` parameters are `P<SourceFile>`.
@@ -38,10 +27,10 @@ pub trait Program: Send + Sync {
     fn get_import_helpers_import_specifier(&self, path: &Path) -> Option<P<Node>>;
     fn source_file_may_be_emitted(&self, source_file: P<SourceFile>, force_dts_emit: bool) -> bool;
     fn is_source_file_default_library(&self, path: &Path) -> bool;
-    fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference>;
+    fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>>;
     /// Go `modulespecifiers.ModuleSpecifierGenerationHost.GetProjectReferenceFromSource`.
-    fn get_project_reference_from_source(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference>;
-    fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<&'static dyn ProjectReferenceCommandLine>;
+    fn get_project_reference_from_source(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>>;
+    fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<P<ParsedCommandLine>>;
     fn common_source_directory(&self) -> String;
 
     // Host (modulespecifiers.ModuleSpecifierGenerationHost) methods used by checker code

@@ -162,6 +162,17 @@ pub fn worker(registry: &'static [TestEntry], include_skipped: bool) {
             std::thread::Builder::new().stack_size(256 << 20).spawn_scoped(s, || run_test(entry, include_skipped)).expect("spawn test thread").join()
         });
         let outcome = outcome.unwrap_or_else(|_| Outcome::Fail("panic outside the test".to_string()));
+        // Full failure messages: target/fourslash-results/failures/<name>.txt.
+        let failure_file = results_dir().join("failures").join(format!("{name}.txt"));
+        match &outcome {
+            Outcome::Fail(m) => {
+                let _ = fs::create_dir_all(failure_file.parent().unwrap());
+                let _ = fs::write(&failure_file, m);
+            }
+            _ => {
+                let _ = fs::remove_file(&failure_file);
+            }
+        }
         let (tag, msg) = match &outcome {
             Outcome::Pass => ("PASS", String::new()),
             Outcome::Fail(m) => ("FAIL", m.lines().next().unwrap_or("").to_string()),

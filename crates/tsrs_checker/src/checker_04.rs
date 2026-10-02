@@ -657,7 +657,7 @@ impl Checker {
                 if let Some(const_enum_declaration) = const_enum_declaration {
                     if const_enum_declaration.flags().intersects(NodeFlags::Ambient) {
                         let redirect = self.program.get_project_reference_from_output_dts(get_source_file_of_node(const_enum_declaration).unwrap().path());
-                        if redirect.is_none() || !redirect.unwrap().resolved.compiler_options().should_preserve_const_enums() {
+                        if redirect.is_none() || !redirect.unwrap().resolved.compiler_options().unwrap().should_preserve_const_enums() {
                             let flag_name = self.get_isolated_modules_like_flag_name();
                             self.error(Some(node), &diagnostics::Cannot_access_ambient_const_enums_when_0_is_enabled, &[&flag_name]);
                         }
@@ -1553,7 +1553,7 @@ impl Checker {
             let redirect = self.program.get_project_reference_from_output_dts(get_source_file_of_node(const_enum_declaration).unwrap().path());
             if const_enum_declaration.flags().intersects(NodeFlags::Ambient)
                 && !is_valid_type_only_alias_use_site(node)
-                && (redirect.is_none() || !redirect.unwrap().resolved.compiler_options().should_preserve_const_enums())
+                && (redirect.is_none() || !redirect.unwrap().resolved.compiler_options().unwrap().should_preserve_const_enums())
             {
                 let flag_name = self.get_isolated_modules_like_flag_name();
                 self.error(Some(node), &diagnostics::Cannot_access_ambient_const_enums_when_0_is_enabled, &[&flag_name]);

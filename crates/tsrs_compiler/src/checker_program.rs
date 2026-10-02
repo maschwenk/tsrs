@@ -2,7 +2,7 @@
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::{Node, SourceFile, SourceFileMetaData};
-use tsrs_checker::{ProjectReferenceCommandLine, SourceOutputAndProjectReference};
+use tsrs_tsoptions::{ParsedCommandLine, SourceOutputAndProjectReference};
 use tsrs_core::tspath::Path;
 use tsrs_core::{CompilerOptions, ModuleKind, ResolutionMode, P};
 use tsrs_module::symlinks::KnownSymlinks;
@@ -79,20 +79,16 @@ impl tsrs_checker::Program for Program {
         Program::is_source_file_default_library(self, path)
     }
 
-    // Project references are not ported: there are never output-dts mappings or redirects.
-    fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference> {
-        let _ = Program::get_project_reference_from_output_dts(self, path);
-        None
+    fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
+        Program::get_project_reference_from_output_dts(self, path)
     }
 
-    fn get_project_reference_from_source(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference> {
-        let _ = Program::get_project_reference_from_source(self, path);
-        None
+    fn get_project_reference_from_source(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
+        Program::get_project_reference_from_source(self, path)
     }
 
-    fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<&'static dyn ProjectReferenceCommandLine> {
-        let _ = Program::get_redirect_for_resolution(self, file);
-        None
+    fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<P<ParsedCommandLine>> {
+        Program::get_redirect_for_resolution(self, file)
     }
 
     fn common_source_directory(&self) -> String {
@@ -133,9 +129,7 @@ impl tsrs_modulespecifiers::ModuleSpecifierGenerationHost for Program {
     }
 
     fn get_project_reference_from_source(&self, path: &Path) -> Option<P<tsrs_tsoptions::SourceOutputAndProjectReference>> {
-        // Project references are not ported: the compiler's mapper never returns one, and its placeholder
-        // `SourceOutputAndProjectReference` cannot be converted to the tsoptions struct the host interface uses.
-        Program::get_project_reference_from_source(self, path).map(|_| todo!("compiler: project references"))
+        Program::get_project_reference_from_source(self, path)
     }
 
     fn get_redirect_targets(&self, path: &Path) -> Vec<String> {

@@ -13,7 +13,8 @@ use crate::filesparser::{filesParser, parseTask, resolvedRef, TaskId};
 use crate::host::CompilerHost;
 use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic, processingDiagnosticKind};
 use crate::program::{ProgramConfig, ProgramOptions};
-use crate::projectreferencefilemapper::{projectReferenceFileMapper, projectReferenceFileMapperBuilder};
+use crate::projectreferencefilemapper::{projectReferenceFileMapper, projectReferenceFileMapperBuilder, resolution_host_for};
+use crate::projectreferenceparser::projectReferenceParser;
 use crate::includeprocessor::fileIncludeData;
 
 pub(crate) struct libResolution {
@@ -85,7 +86,7 @@ pub struct processedFiles {
     // the program is disposed.
     pub(crate) duplicate_source_files: Vec<DuplicateSourceFile>,
     pub(crate) files_by_path: FxHashMap<Path, P<SourceFile>>,
-    pub(crate) project_reference_file_mapper: Option<projectReferenceFileMapper>,
+    pub(crate) project_reference_file_mapper: Option<&'static projectReferenceFileMapper>,
     pub(crate) missing_files: Vec<String>,
     pub(crate) resolved_modules: FxHashMap<Path, ModeAwareCache<P<ResolvedModule>>>,
     pub(crate) type_resolutions_in_file: FxHashMap<Path, ModeAwareCache<P<ResolvedTypeReferenceDirective>>>,
@@ -111,6 +112,23 @@ pub(crate) struct jsxRuntimeImportSpecifier {
     pub(crate) specifier: P<Node>,
 }
 
+// fileloader.go:337 (Go runs it on the loader before creating the resolver; it only needs the options and the host,
+// and returns the builder the loader keeps)
+fn add_project_reference_tasks(opts: &ProgramConfig, host: std::sync::Arc<dyn CompilerHost>, _single_threaded: bool) -> projectReferenceFileMapperBuilder {
+    let mut mapper = projectReferenceFileMapper::new(opts.config, opts.can_use_project_reference_source());
+    let resolution_host = resolution_host_for(host.clone());
+    let project_references = opts.config.resolved_project_reference_paths();
+    if project_references.is_empty() {
+        return projectReferenceFileMapperBuilder { mapper: Box::leak(Box::new(mapper)), host: resolution_host };
+    }
+
+    let mut parser = projectReferenceParser::new(&*host);
+    let mut root_tasks = parser.create_project_reference_parse_tasks(project_references);
+    parser.parse(&mut root_tasks, &mut mapper);
+    let mapper: &'static projectReferenceFileMapper = Box::leak(Box::new(mapper));
+    projectReferenceFileMapperBuilder { mapper, host: mapper.resolution_host(resolution_host) }
+}
+
 pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: bool) -> (processedFiles, P<module::ResolutionData>, Option<String>) {
     let compiler_options = opts.config.compiler_options().unwrap();
     let root_files = opts.config.file_names();
@@ -119,7 +137,7 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
         tsoptions::get_supported_extensions_with_json_if_resolve_json_module(Some(&compiler_options), &supported_extensions);
     let max_node_module_js_depth = compiler_options.max_node_module_js_depth.unwrap_or(0);
     let host = opts.host.clone();
-    let project_references = projectReferenceFileMapperBuilder::new(&opts.program_config(), host.clone());
+    let project_references = add_project_reference_tasks(&opts.program_config(), host.clone(), single_threaded);
     let resolver_options = module::ResolverOptions {
         host: project_references.host,
         compiler_options,
@@ -154,7 +172,6 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
         supported_extensions_with_json_if_resolve_json_module,
         module_resolution_error: None,
     };
-    loader.add_project_reference_tasks(single_threaded);
     let roots_start = std::time::Instant::now();
     // The lookups (a file_exists per root file) are independent; tasks are still created in root order.
     let curr_dir = host.get_current_directory().to_string();
@@ -335,11 +352,6 @@ impl fileLoader {
         (to_parse, type_resolutions_in_file, type_resolutions_trace, p_diagnostics)
     }
 
-    fn add_project_reference_tasks(&mut self, _single_threaded: bool) {
-        // Project references are not supported yet: ResolvedProjectReferencePaths is never consulted,
-        // so the mapper behaves as if the config had no references.
-    }
-
     pub(crate) fn sort_libs(&self, lib_files: &mut [P<SourceFile>]) {
         lib_files.sort_by_key(|f| self.get_default_lib_file_priority(*f));
     }
@@ -510,6 +522,7 @@ pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, m
     let (opts, resolver, project_references) = (ctx.opts, ctx.resolver, ctx.project_references);
     let compiler_options = opts.config.compiler_options().unwrap();
     let (redirect, file_name) = project_references.get_redirect_for_resolution(file.file_name(), &file.path());
+    let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
     let options_for_file = module::get_compiler_options_with_redirect(compiler_options, redirect);
     let mut referenced_files = Vec::new();
     let mut type_references = Vec::new();
@@ -619,6 +632,7 @@ impl fileLoader {
         let mut type_resolutions_trace = Vec::new();
         for (index, ref_) in type_reference_directives.iter().enumerate() {
             let (redirect, file_name) = self.project_references.get_redirect_for_resolution(file.file_name(), &file.path());
+            let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
             let resolution_mode = get_mode_for_type_reference_directive_in_file(
                 *ref_,
                 file,
@@ -667,6 +681,7 @@ impl fileLoader {
         let is_external_module_file = ast::is_external_module(file);
 
         let (redirect, file_name) = self.project_references.get_redirect_for_resolution(file.file_name(), &file.path());
+        let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
         let options_for_file = module::get_compiler_options_with_redirect(self.opts.config.compiler_options().unwrap(), redirect);
         if is_java_script_file || (!file.is_declaration_file.get() && (options_for_file.get_isolated_modules() || is_external_module_file)) {
             if options_for_file.import_helpers.is_true() {
