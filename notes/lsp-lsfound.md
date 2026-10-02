@@ -74,8 +74,6 @@ formatcodeoptions.go (need lsproto).
 - Go `strings.Compare`/`cmp.Compare` -> a local `go_cmp`; `strings.ToLower` -> `go_strings_to_lower`.
 - `norm_nfd_string` does not reproduce x/text's Stream-Safe Text Format (U+034F inserted after 30 consecutive
   non-starters); irrelevant for module specifiers / import names.
-- `lsutil::get_quote_preference`: Go compares the string preference to `""`/`"auto"`/`"single"`; with the enum, an
-  unrecognised configured string parses to `Unknown` (auto-detect) instead of Go's "any other string = double".
 
 ## Needs from others
 
@@ -91,7 +89,6 @@ formatcodeoptions.go (need lsproto).
 
 - `GetOrCreateToken` creates tokens on whichever thread asks; they live in that thread's arena (like every other LS
   allocation for now), the cache entry outlives nothing that matters until the phase-4 region work.
-- Quote preference parsing (see Deviations).
 - Sub-agent doubts: `RawSourceMap.version` accepts `3.0`; decoder counters are `i32`.
 
 
