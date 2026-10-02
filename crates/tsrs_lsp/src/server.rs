@@ -863,7 +863,7 @@ impl Server {
 
         // Go logs json.MarshalIndent(&s.clientCapabilities, "", "\t"); the Resolved* views have no JSON codec in
         // tsrs_lsproto, so the log shows their Debug form.
-        self.logger.info(&format!("Resolved client capabilities: {:#?}", self.client_capabilities()));
+        self.logger.info(&format!("Resolved client capabilities: {:?}", self.client_capabilities()));
 
         let mut position_encoding = lsproto::PositionEncodingKind::UTF16;
         if self.client_capabilities().general.position_encodings.contains(&lsproto::PositionEncodingKind::UTF8) {

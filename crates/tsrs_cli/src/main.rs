@@ -6,11 +6,17 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[cfg(feature = "alloc-profile")]
 mod census;
 mod execute;
+mod lsp;
 mod sys;
 mod tsc;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // main.go:21: `--lsp` runs the language server (its threads have their own stacks). `--api` (the IPC API) is
+    // not ported and falls through to the command line like any other argument.
+    if args.first().map(String::as_str) == Some("--lsp") {
+        std::process::exit(lsp::run_lsp(&args[1..]));
+    }
     // Type checking recurses deeply; run on a thread with a large stack
     // (Go's goroutine stacks grow on demand).
     let status = std::thread::Builder::new()
