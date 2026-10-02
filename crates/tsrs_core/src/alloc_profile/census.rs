@@ -873,11 +873,12 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             // Interior pointers: hash tables point at their control bytes (heap blocks), sub-slices into arena
             // lists (8-byte elements).
             let slice = matches!(&classes[b.class as usize], Class::Arena { ty, .. } if ty.starts_with('['));
-            // Tails behind a word with a bit-0 tag (an intersection's `IntersectionRare`, a signature's
-            // `SignatureRare` with the no-predicate bit, a long `ThinSlice`'s `&[T]` record).
+            // Blocks behind a word with a bit-0 tag (an intersection's `IntersectionRare`, a signature's
+            // `SignatureRare` with the no-predicate bit, a label's antecedent list, a long `ThinSlice`'s `&[T]` record).
             let bit0 = off_t == 1
                 && (class_is(b.class, "IntersectionRare")
                     || class_is(b.class, "SignatureRare")
+                    || class_is(b.class, "FlowList")
                     || matches!(&classes[b.class as usize], Class::Arena { ty, .. } if ty.starts_with("&[")));
             let aimed = off_t == 0
                 || (tags && off_t < 8 && (class_is(b.class, "TypeMapper") || class_is(b.class, "InferenceContext") || class_is(b.class, "InferenceContextRare")))

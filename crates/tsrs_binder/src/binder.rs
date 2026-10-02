@@ -113,13 +113,7 @@ fn bind_source_file_worker(file: P<SourceFile>) {
 }
 
 fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32) -> P<FlowNode> {
-    P::new_recycled(FlowNode {
-        flags: OwnedCell::new(flags),
-        node: OwnedCell::new(node),
-        antecedent: OwnedCell::new(antecedent),
-        antecedents: OwnedCell::new(None),
-        text_index,
-    })
+    P::new_recycled(FlowNode::new(flags, node, antecedent, text_index))
 }
 
 impl Binder {
@@ -642,7 +636,7 @@ impl Binder {
         let label = label.unwrap();
         // If antecedent isn't already on the Antecedents list, add it to the end of the list
         let mut last: Option<P<FlowList>> = None;
-        let mut list = label.antecedents.get();
+        let mut list = label.antecedents();
         while let Some(l) = list {
             if l.flow == antecedent {
                 return;
@@ -652,14 +646,14 @@ impl Binder {
         }
         let new_list = self.new_flow_list(antecedent, None);
         match last {
-            None => label.antecedents.set(Some(new_list)),
+            None => label.set_antecedents(Some(new_list)),
             Some(last) => last.next.set(Some(new_list)),
         }
         set_flow_node_referenced(antecedent);
     }
 
     pub(crate) fn finish_flow_label(&mut self, label: P<FlowNode>) -> P<FlowNode> {
-        let Some(antecedents) = label.antecedents.get() else {
+        let Some(antecedents) = label.antecedents() else {
             return self.unreachable_flow;
         };
         if antecedents.next.get().is_none() {
@@ -697,7 +691,7 @@ impl Binder {
         {
             return;
         }
-        let mut list = label.antecedents.get();
+        let mut list = label.antecedents();
         while let Some(l) = list {
             list = l.next.get();
             // SAFETY: a label's antecedent list cells are referenced only by the label (combineFlowLists copies
@@ -2319,9 +2313,9 @@ impl Binder {
             // set of antecedents for the pre-finally label. As control flow analysis passes by a ReduceLabel
             // node, the pre-finally label is temporarily switched to the reduced antecedent set.
             let finally_label = self.create_branch_label();
-            let rest = self.combine_flow_lists(exception_label.antecedents.get(), return_label.antecedents.get());
-            let combined = self.combine_flow_lists(normal_exit_label.antecedents.get(), rest);
-            finally_label.antecedents.set(combined);
+            let rest = self.combine_flow_lists(exception_label.antecedents(), return_label.antecedents());
+            let combined = self.combine_flow_lists(normal_exit_label.antecedents(), rest);
+            finally_label.set_antecedents(combined);
             self.current_flow = Some(finally_label);
             self.bind(stmt.finally_block());
             if self.current_flow().flags.get().intersects(FlowFlags::Unreachable) {
@@ -2330,21 +2324,21 @@ impl Binder {
             } else {
                 // If we have an IIFE return target and return statements in the try or catch blocks, add a control
                 // flow that goes back through the finally block and back through only the return statements.
-                if self.current_return_target.is_some() && return_label.antecedents.get().is_some() {
-                    let reduce = self.create_reduce_label(finally_label, return_label.antecedents.get(), self.current_flow());
+                if self.current_return_target.is_some() && return_label.antecedents().is_some() {
+                    let reduce = self.create_reduce_label(finally_label, return_label.antecedents(), self.current_flow());
                     self.add_antecedent(self.current_return_target, reduce);
                 }
                 // If we have an outer exception target (i.e. a containing try-finally or try-catch-finally), add a
                 // control flow that goes back through the finally block and back through each possible exception source.
-                if self.current_exception_target.is_some() && exception_label.antecedents.get().is_some() {
-                    let reduce = self.create_reduce_label(finally_label, exception_label.antecedents.get(), self.current_flow());
+                if self.current_exception_target.is_some() && exception_label.antecedents().is_some() {
+                    let reduce = self.create_reduce_label(finally_label, exception_label.antecedents(), self.current_flow());
                     self.add_antecedent(self.current_exception_target, reduce);
                 }
                 // If the end of the finally block is reachable, but the end of the try and catch blocks are not,
                 // convert the current flow to unreachable. For example, 'try { return 1; } finally { ... }' should
                 // result in an unreachable current control flow.
-                if normal_exit_label.antecedents.get().is_some() {
-                    self.current_flow = Some(self.create_reduce_label(finally_label, normal_exit_label.antecedents.get(), self.current_flow()));
+                if normal_exit_label.antecedents().is_some() {
+                    self.current_flow = Some(self.create_reduce_label(finally_label, normal_exit_label.antecedents(), self.current_flow()));
                 } else {
                     self.current_flow = Some(self.unreachable_flow);
                 }

@@ -33,28 +33,51 @@ bitflags! {
 
 // FlowNode
 
+/// Go's `Antecedent` (all but labels; set at creation) and `Antecedents` (labels; Go's binder creates labels without
+/// an antecedent) are never both set, so they share one word (`link`): the antecedent, or the list with bit 0 set.
+/// 24 bytes; 1.9M flow nodes on the private monorepo.
 pub struct FlowNode {
     pub flags: OwnedCell<FlowFlags>,
-    pub node: OwnedCell<Option<P<Node>>>,            // Associated AST node
-    pub antecedent: OwnedCell<Option<P<FlowNode>>>,  // Antecedent for all but FlowLabel
-    pub antecedents: OwnedCell<Option<P<FlowList>>>, // Linked list of antecedents for FlowLabel
     // Not in Go: the text index of the file whose binder made this flow node (`NO_SOURCE_TEXT` for the checker's);
     // compact identifiers read their text index from their flow node (identifier.rs).
     pub text_index: u32,
+    pub node: OwnedCell<Option<P<Node>>>, // Associated AST node
+    link: OwnedCell<*const ()>,
 }
 
+const _: () = assert!(std::mem::size_of::<FlowNode>() == 24);
+
+const FLOW_LINK_LIST: usize = 1;
+
 impl FlowNode {
+    pub fn new(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32) -> FlowNode {
+        let link = antecedent.map_or(std::ptr::null(), |a| (a.get() as *const FlowNode).cast::<()>());
+        FlowNode { flags: OwnedCell::new(flags), text_index, node: OwnedCell::new(node), link: OwnedCell::new(link) }
+    }
     pub fn flags(&self) -> FlowFlags {
         self.flags.get()
     }
     pub fn node(&self) -> Option<P<Node>> {
         self.node.get()
     }
+    /// Go `Antecedent` (antecedent for all but FlowLabel).
+    #[inline]
     pub fn antecedent(&self) -> Option<P<FlowNode>> {
-        self.antecedent.get()
+        let p = self.link.get();
+        // SAFETY: an untagged non-null link is the antecedent stored by `new`.
+        (!p.is_null() && p.addr() & FLOW_LINK_LIST == 0).then(|| P::from_static(unsafe { &*p.cast::<FlowNode>() }))
     }
+    /// Go `Antecedents` (linked list of antecedents for FlowLabel).
+    #[inline]
     pub fn antecedents(&self) -> Option<P<FlowList>> {
-        self.antecedents.get()
+        let p = self.link.get();
+        // SAFETY: a tagged link is the list stored by `set_antecedents`.
+        (p.addr() & FLOW_LINK_LIST != 0).then(|| P::from_static(unsafe { &*p.map_addr(|a| a & !FLOW_LINK_LIST).cast::<FlowList>() }))
+    }
+    /// Go `Antecedents = list`. Panics on a flow node that has an antecedent (Go never gives one both).
+    pub fn set_antecedents(&self, list: Option<P<FlowList>>) {
+        assert!(self.antecedent().is_none(), "flow node with both an antecedent and antecedents");
+        self.link.set(list.map_or(std::ptr::null(), |l| (l.get() as *const FlowList).cast::<()>().map_addr(|a| a | FLOW_LINK_LIST)));
     }
 }
 
