@@ -128,30 +128,44 @@ node, antecedent, text_index)`, `antecedent()`, `antecedents()`, `set_antecedent
 antecedent). 1.93M flow nodes, 15 MB expected; the peak delta is inside the noise (the census was running beside
 this measurement).
 
-## Census
+## Census free-gate
 
-`TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1` (both lazy modes, 1 and 4 checkers on the private monorepo): the precise walk
-checks 50.4M program references, 0 to freed or rewound blocks, in all four runs. The strong mark needed two kinds of
-update:
+Main's census now takes field layouts registered with `tsrs_core::census_layout` (b0602ae, docs/DEBUGGING.md "census
+free-gate"); the merge replaced this branch's earlier hard-coded census edits. The branch registers its encodings
+instead, with two new `CensusField` kinds: `Thin { off }` (a `ThinSlice` word: a reference only while the length bits
+are non-zero, or with bit 0 the long list's `&[T]` record) and `LowTag { off, mask }` (an address with low tag bits).
+Registered: `NodeList` / `ModifierList`, the slices of `Signature`, `StructuredMembers` (and its index-info tail),
+unions / intersections and their tails, `TypeReference` / `InterfaceType` / `TupleType` type arguments, `TypeAlias`,
+and the tagged words of the union / intersection tail, the signature tail and the flow node link. All from
+`offset_of!`.
 
-- this branch's encodings: a `ThinSlice` word (length bits accepted only when they equal the target list's element
-  count), bit-0-tagged tails (`IntersectionRare`, `SignatureRare`, a label's `FlowList`, a long slice's record);
-- stale offsets from mem-small step 3b (type header 32 -> 24 bytes): the header words and the padding words of
-  `TypeAlloc<TypeParameter>` / `<LiteralType>` / `<MappedType>` were still those of the 32-byte header, and
-  `InferenceInfo`'s 6 padding bytes were missing. With the base's census binary the private monorepo reports **25**
-  strong-mark "violations" on the base (de3beaf) already, single checker, default mode.
-
-After both, the strong mark reports 5 / 41 (default, 1 / 4 checkers) and 7 / 50 (opt-out). Every one whose path
-was printed starts at offset 16 mod 24 of a heap buffer allocated under `Relater::recursive_type_related_to`: the
-relater's maybe-key vector or set, whose `RelationKey::Pair` entries leave their third word uninitialized (stack
-bytes copied by the push), and the freed blocks reached that way are dead mappers. A false positive of the
-conservative scan, present on the base too; making it 0 means giving `RelationKey` a defined third word or teaching
-the census that buffer's element layout (not done here: it is outside this branch's changes). Conformance corpus
-(12,758 files through `tsrs --strict --target esnext`): see the PR for the result.
+Final head, the private monorepo, `TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1`, default and `TSRS_LAZY_MEMBERS=0`, 1 and 4
+checkers: precise walk 50,362,689 references, 0 to freed or rewound blocks; strong mark **0 violations** in all four
+runs (27 registered layouts, 208 arena classes covered). Positive control: with the escape barrier removed from
+`MapperCell::set`, single checker reports 835,737 violations (freed mappers held by `ConditionalType.mapper` /
+`combinedMapper`), so the registrations do not hide real pointer fields. Conformance corpus (12,758 files, before the
+merge with main's census, i.e. with this branch's earlier census edits): precise walk 0 in every file. (The old strong mark
+flagged 11 files, all through the relater's maybe-key buffers whose `RelationKey::Pair` entries leave a word
+uninitialized, also on the base binary; main's census now resets those buffers. The corpus was not rerun after the
+merge.)
 
 ## Result
 
-See the PR description (numbers on the merged head against current main).
+Interleaved, medians of 3 (opt-out: 1 run), base = current main (b0602ae; 0.2.2 differs only in version strings),
+final = this branch merged with main. The machine was otherwise idle for this measurement.
+
+| run | main peak GiB | final peak GiB | main instructions | final instructions |
+| --- | --- | --- | --- | --- |
+| default, single | 5.474 | 5.272 (-0.203, -3.7%) | 309.0 G | 311.0 G (+0.6%) |
+| default, 4 checkers | 7.304 | 7.022 (-0.282, -3.9%) | 422.8 G | 425.3 G (+0.6%) |
+| opt-out, single | 7.312 | 7.094 (-0.218, -3.0%) | 332.9 G | 335.2 G (+0.7%) |
+| opt-out, 4 checkers (go assignment) | 11.166 | 10.813 (-0.353, -3.2%) | 502.2 G | 505.8 G (+0.7%) |
+
+Against the branch point de3beaf (before main's front-end pass), the same comparison was -0.270 GiB (-4.7%) single
+and -0.359 GiB (-4.7%) on 4 checkers; the difference is the two steps main landed independently (5 and 6) and
+overlap with main's NodeList-adjacent front-end savings. Cost: ~0.16% instructions per 1% of peak overall; steps 3
+(+0.5% single / +0.3% on 4 checkers for 1.3%) and 7 (single-threaded instruction medians 310.3 G vs 310.0 G, i.e.
+within noise, for 0-0.2%) are the ones closest to the stop rule.
 
 ## Not done, and the floor
 
