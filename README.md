@@ -34,8 +34,9 @@ Runner: Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EP
 
 # tsrs
 
-A Rust port of the TypeScript 7 type checker. It is `tsc --noEmit`: same flags, same tsconfig, same diagnostics,
-byte for byte. No emit, no language service.
+A Rust port of the TypeScript 7 type checker and language server. As a compiler it is `tsc --noEmit`: same flags,
+same tsconfig, same diagnostics, byte for byte. As a language server it is `tsgo --lsp`: `tsrs --lsp -stdio`. No emit
+(`docs/EMIT.md` has the plan).
 
 It ports the Go implementation in [microsoft/TypeScript](https://github.com/microsoft/TypeScript) (`tsc/internal`)
 at commit `b85298b6a81f` function for function, and the Go code is the specification: on the TypeScript conformance
@@ -67,15 +68,45 @@ suite, errors, types and symbols):
 
 The last five are Go patches prepared from this port, not yet opened upstream (`upstream/`).
 
+## Language server
+
+`tsrs --lsp -stdio` is a port of the TypeScript 7 language server (Go's `internal/lsp`, `internal/ls`,
+`internal/project`): diagnostics, hover, definitions, references, rename, completions with auto-imports, signature
+help, symbols, semantic tokens, folding, inlay hints, call hierarchy, code fixes, organize imports, formatting,
+file watching and cancellation.
+
+* TypeScript's fourslash tests: 4,066 of 4,546 pass; the 63 failures need content mappers (not ported) or `tsc -b`
+  with emit, and the other 417 are skipped in the Go implementation too.
+* Replaying the same editor session against the Go server and comparing the JSON responses: 13,869 of 13,869
+  identical on xstate (diagnostics, hover, definition, references, completion, signature help, symbols, with edits).
+* Memory on the 38k-file codebase over a 200-edit session: 2.9 GiB and flat (0.01 MiB per edit); the Go server goes
+  from 4.9 to 7.4 GiB in the same session.
+
+Neovim 0.11+:
+
+```lua
+vim.lsp.config('tsrs', {
+  cmd = { 'tsrs', '--lsp', '-stdio' },
+  filetypes = { 'typescript', 'typescriptreact', 'javascript', 'javascriptreact' },
+  root_markers = { 'tsconfig.json', 'jsconfig.json', 'package.json', '.git' },
+})
+vim.lsp.enable('tsrs')
+```
+
+VS Code: the TypeScript 7 extension starts whatever executable named `tsgo` it finds in `js/ts.tsdk.path`, so point
+that setting at a directory holding a `tsgo` symlink to the tsrs binary. `docs/LSP.md` has both setups in full, the
+design, the test tables and the known gaps.
+
 ## Build from source
 
 ```sh
 cargo build --release -p tsrs_cli -p tsrs_testrunner
 ./target/release/tsrs -p path/to/project
 ./target/release/tsrs-test run --suite all --baselines types,symbols   # conformance suite, ~20 s
+cargo build --release -p tsrs_fourslash && ./target/release/tsrs-fourslash run   # language-service tests, ~5 s
 ```
 
-`CONTRIBUTING.md` covers the workflow; `docs/PORTING.md`, `docs/AST.md` and `docs/CHECKER.md` the conventions;
+`CONTRIBUTING.md` covers the workflow; `docs/PORTING.md`, `docs/AST.md`, `docs/CHECKER.md` and `docs/LSP.md` the conventions;
 `tools/oracle/` the Go oracle programs that compare each stage against the reference.
 
 ## Provenance

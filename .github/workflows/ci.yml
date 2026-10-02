@@ -60,10 +60,13 @@ jobs:
           -p tsrs_tsoptions -p tsrs_printer -p tsrs_modulespecifiers -p tsrs_compiler -p tsrs_testrunner
 
       - name: Build release binaries
-        run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner
+        run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash
 
       - name: Conformance suite
         run: .github/scripts/conformance-gate.sh
+
+      - name: Fourslash (language service) suite
+        run: .github/scripts/fourslash-gate.sh
 
       - name: npm packaging smoke test
         run: |

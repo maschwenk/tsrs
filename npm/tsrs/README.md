@@ -1,8 +1,8 @@
 # @maschwenk/tsrs
 
-`tsrs` is a Rust port of the TypeScript 7 type checker (the Go implementation in microsoft/TypeScript). It does what
-`tsc --noEmit` does: same diagnostics, same exit codes, same `tsconfig.json` handling, no emit and no language
-service. The package version names the TypeScript commit it ports: `0.1.0-ts7.1.0-dev.20260929` is tsrs 0.1.0
+`tsrs` is a Rust port of the TypeScript 7 type checker and language server (the Go implementation in
+microsoft/TypeScript). It does what `tsc --noEmit` does: same diagnostics, same exit codes, same `tsconfig.json`
+handling, no emit. `tsrs --lsp -stdio` is the language server (what `tsgo --lsp -stdio` is). The package version names the TypeScript commit it ports: `0.1.0-ts7.1.0-dev.20260929` is tsrs 0.1.0
 following TypeScript `7.1.0-dev.20260929`.
 
 ```sh
@@ -11,6 +11,7 @@ pnpm exec tsrs -p path/to/project              # like `tsc --noEmit -p path/to/p
 pnpm exec tsrs -p . --extendedDiagnostics      # counters and timings, like tsc
 pnpm exec tsrs --checkers 8                    # checker threads (default 4); --singleThreaded = 1
 pnpm exec tsrs --version
+pnpm exec tsrs --lsp -stdio                    # language server; editor setup: docs/LSP.md in the repository
 ```
 
 Supported platforms: macOS arm64/x64, Linux x64/arm64 (glibc). The binary comes from the optional
