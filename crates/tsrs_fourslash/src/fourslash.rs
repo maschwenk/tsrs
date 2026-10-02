@@ -2374,8 +2374,7 @@ impl FourslashTest {
 
         // Save the original content before any edits
         let active = self.active_filename.clone();
-        let script = self.get_script_info(&active);
-        let original_content = script.content.clone();
+        let original_content = self.get_script_info(&active).content;
         // For each import action, apply it and check the result
         let mut actual_text_array: Vec<String> = Vec::with_capacity(import_actions.len());
         for action in import_actions {
@@ -2405,8 +2404,9 @@ impl FourslashTest {
             actual_text_array.push(text);
 
             // Restore original content for next fix
-            // (Go passes len(script.content), the length when the script info was read before the edits.)
-            self.edit_script_and_update_markers(t, &active, 0, script.content.len() as i32, &original_content);
+            // (Go's `script` is the shared *scriptInfo, so len(script.content) is the edited length.)
+            let current_len = self.get_script_info(&active).content.len() as i32;
+            self.edit_script_and_update_markers(t, &active, 0, current_len, &original_content);
             self.current_caret_position = current_caret_position;
         }
 
