@@ -813,7 +813,7 @@ impl ExistingNodeTree {
                 }
                 Kind::Parameter => {
                     let pd = node.as_parameter_declaration();
-                    return Some(factory.update_parameter_declaration(node, None, pd.dot_dot_dot_token, node.name().unwrap(), pd.question_token.get(), Some(new_type), None));
+                    return Some(factory.update_parameter_declaration(node, None, pd.dot_dot_dot_token(), node.name().unwrap(), pd.question_token.get(), Some(new_type), None));
                 }
                 Kind::MethodSignature => {
                     return Some(factory.update_method_signature_declaration(

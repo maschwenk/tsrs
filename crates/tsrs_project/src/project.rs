@@ -41,7 +41,7 @@ impl ConfiguredProjectID {
 
     // project.go:54
     pub fn as_id(&self) -> ID {
-        ID(self.0 .0.clone())
+        ID(self.0.to_string())
     }
 }
 
@@ -93,7 +93,7 @@ impl ID {
 
     // project.go:58
     pub fn configured(&self) -> Option<ConfiguredProjectID> {
-        parse_configured_project_id(&Path(self.0.clone()))
+        parse_configured_project_id(&Path::new(self.0.clone()))
     }
 
     // project.go:76
@@ -113,7 +113,7 @@ impl ID {
 
 // project.go:62
 pub fn parse_configured_project_id(value: &Path) -> Option<ConfiguredProjectID> {
-    let id = ID(value.0.clone());
+    let id = ID(value.to_string());
     if id.0.is_empty() {
         return None;
     }

@@ -150,6 +150,15 @@ the reparser builds a new list with the old list's `loc` and stores it in the ow
 (`heritage_clause.set_types(...)`, `class.heritage_clauses.set(...)`). A Go `*NodeList` is only ever held by its
 owning node, so nothing else can observe the difference.
 
+**Rare fields.** A few nil-able, never-reassigned fields that are almost never set (`tools/gen-ast/gen-ast.ts`
+`RARE_FIELDS`: the `?.` token of call / property / element access, call and `new` type arguments, a parameter's `...`
+and initializer, a property signature's initializer, a variable declaration's `!`, an import specifier's property
+name, a binding element's `...` / property name / initializer, import attributes) are not fields of the data struct:
+they live in `<Struct>Rare`, allocated right after the data struct (`NodeAllocRare`) only when the factory gets a
+non-nil value for one of them; a header bit says the tail is there. Read them through the getter
+(`call.question_dot_token()`); there is no field and no setter. A field can be made rare only if nothing writes it
+after construction (the generator rejects Cell fields).
+
 **Getter methods — prefer these.** Every data struct (and every base struct) has one getter per Go
 field it has, *including fields promoted from embedded bases* (Go-style: `decl.body()` works on
 `FunctionDeclaration` although the field lives in `body_base`), returning the value with any `Cell`

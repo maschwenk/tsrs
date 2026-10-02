@@ -16,7 +16,7 @@ fn create_overlay_fs() -> overlayFS {
         [("/test1.ts", "// existing content"), ("/test2.ts", "// existing content"), ("/script", "// extensionless content")],
         false, /* useCaseSensitiveFileNames */
     );
-    new_overlay_fs(FsRef::Host(Arc::new(test_fs)), Arc::default(), lsproto::PositionEncodingKind::UTF16, Arc::new(|file_name: &str| Path(file_name.to_string())))
+    new_overlay_fs(FsRef::Host(Arc::new(test_fs)), Arc::default(), lsproto::PositionEncodingKind::UTF16, Arc::new(|file_name: &str| Path::from(file_name)))
 }
 
 fn test_uri1() -> lsproto::DocumentUri {
@@ -217,10 +217,10 @@ fn process_changes_close_then_open_in_same_batch_marks_as_changed() {
 #[test]
 fn overlay_fs_file_system() {
     let host = vfstest::from_map([("/virtual", "host file")], false /* useCaseSensitiveFileNames */);
-    let to_path: ToPath = Arc::new(|file_name: &str| Path(file_name.to_string()));
+    let to_path: ToPath = Arc::new(|file_name: &str| Path::from(file_name));
     let mut overlays: FxHashMap<Path, Arc<Overlay>> = FxHashMap::default();
     overlays.insert(
-        Path("/virtual/nested/file.ts".to_string()),
+        Path::from("/virtual/nested/file.ts"),
         Arc::new(new_overlay("/virtual/nested/file.ts".to_string(), "overlay".to_string(), 1, ScriptKind::TS)),
     );
     let file_system = new_overlay_fs(FsRef::Host(Arc::new(host)), Arc::new(overlays), lsproto::PositionEncodingKind::UTF16, to_path);

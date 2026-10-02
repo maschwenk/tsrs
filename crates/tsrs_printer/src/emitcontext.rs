@@ -801,7 +801,7 @@ impl EmitContext {
         let p = parameter.as_parameter_declaration();
         // A rest parameter cannot have a binding pattern or an initializer,
         // so let's just ignore it.
-        if p.dot_dot_dot_token.is_some() {
+        if p.dot_dot_dot_token().is_some() {
             parameter
         } else if is_binding_pattern(p.name()) {
             self.add_default_value_assignment_for_binding_pattern(parameter)
@@ -835,7 +835,7 @@ impl EmitContext {
         self.factory.update_parameter_declaration(
             parameter,
             parameter.modifiers(),
-            p.dot_dot_dot_token,
+            p.dot_dot_dot_token(),
             self.factory.new_generated_name_for_node(parameter),
             p.question_token(),
             p.type_(),
@@ -855,7 +855,7 @@ impl EmitContext {
         init_block.set_loc(parameter.loc());
         self.add_emit_flags(init_block, EmitFlags::SingleLine | EmitFlags::NoTrailingSourceMap | EmitFlags::NoTokenSourceMaps | EmitFlags::NoComments);
         self.add_initialization_statement(self.factory.new_if_statement(self.factory.new_type_check(name.clone_node(&self.factory), "undefined"), init_block, None));
-        self.factory.update_parameter_declaration(parameter, parameter.modifiers(), p.dot_dot_dot_token, p.name(), p.question_token(), p.type_(), None)
+        self.factory.update_parameter_declaration(parameter, parameter.modifiers(), p.dot_dot_dot_token(), p.name(), p.question_token(), p.type_(), None)
     }
 
     pub fn add_initialization_statement(&self, node: P<Node>) {

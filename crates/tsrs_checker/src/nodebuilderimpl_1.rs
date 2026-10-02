@@ -1323,7 +1323,7 @@ impl NodeBuilderImpl {
         } else if resolution_mode == RESOLUTION_MODE_NONE {
             resolution_mode = c.program.get_default_resolution_mode_for_file(context_file);
         }
-        let cache_key = tsrs_module::ModeAwareCacheKey { name: &context_file.get().path().0, mode: resolution_mode };
+        let cache_key = tsrs_module::ModeAwareCacheKey { name: context_file.get().path().as_str(), mode: resolution_mode };
         let links = self.symbol_links.get(symbol);
         if links.specifier_cache.is_nil() {
             links.specifier_cache.make();
@@ -1871,8 +1871,8 @@ impl NodeBuilderImpl {
             let binding_element = visited.as_binding_element();
             visited = self.f.update_binding_element(
                 visited,
-                binding_element.dot_dot_dot_token,
-                binding_element.property_name,
+                binding_element.dot_dot_dot_token(),
+                binding_element.property_name(),
                 binding_element.name,
                 None, // remove initializer
             );

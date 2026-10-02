@@ -1038,9 +1038,17 @@ pub struct VariableDeclaration {
     pub declaration_base: DeclarationBase,
     pub exportable_base: ExportableBase,
     pub name: P<Node>,
-    pub exclamation_token: Option<P<Node>>,
     pub type_: OwnedCell<Option<P<Node>>>,
     pub initializer: OwnedCell<Option<P<Node>>>,
+}
+
+/// The rare tail of `VariableDeclaration` (`NodeAllocRare`): allocated only when one of these is set.
+pub struct VariableDeclarationRare {
+    pub exclamation_token: Option<P<Node>>,
+}
+
+impl NodeRareTail for VariableDeclaration {
+    type Rare = VariableDeclarationRare;
 }
 
 impl VariableDeclaration {
@@ -1050,7 +1058,7 @@ impl VariableDeclaration {
     }
     #[inline]
     pub fn exclamation_token(&self) -> Option<P<Node>> {
-        self.exclamation_token
+        rare_tail(self).and_then(|r| r.exclamation_token)
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -1111,17 +1119,25 @@ impl BindingPattern {
 pub struct ParameterDeclaration {
     pub declaration_base: DeclarationBase,
     pub modifiers_base: ModifiersBase,
-    pub dot_dot_dot_token: Option<P<Node>>,
     pub name: P<Node>,
     pub question_token: OwnedCell<Option<P<Node>>>,
     pub type_: OwnedCell<Option<P<Node>>>,
+}
+
+/// The rare tail of `ParameterDeclaration` (`NodeAllocRare`): allocated only when one of these is set.
+pub struct ParameterDeclarationRare {
+    pub dot_dot_dot_token: Option<P<Node>>,
     pub initializer: Option<P<Node>>,
+}
+
+impl NodeRareTail for ParameterDeclaration {
+    type Rare = ParameterDeclarationRare;
 }
 
 impl ParameterDeclaration {
     #[inline]
     pub fn dot_dot_dot_token(&self) -> Option<P<Node>> {
-        self.dot_dot_dot_token
+        rare_tail(self).and_then(|r| r.dot_dot_dot_token)
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -1145,7 +1161,7 @@ impl ParameterDeclaration {
     }
     #[inline]
     pub fn initializer(&self) -> Option<P<Node>> {
-        self.initializer
+        rare_tail(self).and_then(|r| r.initializer)
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1169,20 +1185,28 @@ pub struct BindingElement {
     pub declaration_base: DeclarationBase,
     pub exportable_base: ExportableBase,
     pub flow_node_base: FlowNodeBase,
+    pub name: Option<P<Node>>,
+}
+
+/// The rare tail of `BindingElement` (`NodeAllocRare`): allocated only when one of these is set.
+pub struct BindingElementRare {
     pub dot_dot_dot_token: Option<P<Node>>,
     pub property_name: Option<P<Node>>,
-    pub name: Option<P<Node>>,
     pub initializer: Option<P<Node>>,
+}
+
+impl NodeRareTail for BindingElement {
+    type Rare = BindingElementRare;
 }
 
 impl BindingElement {
     #[inline]
     pub fn dot_dot_dot_token(&self) -> Option<P<Node>> {
-        self.dot_dot_dot_token
+        rare_tail(self).and_then(|r| r.dot_dot_dot_token)
     }
     #[inline]
     pub fn property_name(&self) -> Option<P<Node>> {
-        self.property_name
+        rare_tail(self).and_then(|r| r.property_name)
     }
     #[inline]
     pub fn name(&self) -> Option<P<Node>> {
@@ -1190,7 +1214,7 @@ impl BindingElement {
     }
     #[inline]
     pub fn initializer(&self) -> Option<P<Node>> {
-        self.initializer
+        rare_tail(self).and_then(|r| r.initializer)
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1835,7 +1859,15 @@ pub struct ImportDeclaration {
     pub declaration_base: DeclarationBase,
     pub import_clause: Option<P<Node>>,
     pub module_specifier: P<Node>,
+}
+
+/// The rare tail of `ImportDeclaration` (`NodeAllocRare`): allocated only when one of these is set.
+pub struct ImportDeclarationRare {
     pub attributes: Option<P<Node>>,
+}
+
+impl NodeRareTail for ImportDeclaration {
+    type Rare = ImportDeclarationRare;
 }
 
 impl ImportDeclaration {
@@ -1849,7 +1881,7 @@ impl ImportDeclaration {
     }
     #[inline]
     pub fn attributes(&self) -> Option<P<Node>> {
-        self.attributes
+        rare_tail(self).and_then(|r| r.attributes)
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -2798,7 +2830,15 @@ pub struct PropertySignatureDeclaration {
     pub declaration_base: DeclarationBase,
     pub named_member_base: NamedMemberBase,
     pub type_: OwnedCell<Option<P<Node>>>,
+}
+
+/// The rare tail of `PropertySignatureDeclaration` (`NodeAllocRare`): allocated only when one of these is set.
+pub struct PropertySignatureDeclarationRare {
     pub initializer: Option<P<Node>>,
+}
+
+impl NodeRareTail for PropertySignatureDeclaration {
+    type Rare = PropertySignatureDeclarationRare;
 }
 
 impl PropertySignatureDeclaration {
@@ -2812,7 +2852,7 @@ impl PropertySignatureDeclaration {
     }
     #[inline]
     pub fn initializer(&self) -> Option<P<Node>> {
-        self.initializer
+        rare_tail(self).and_then(|r| r.initializer)
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -3472,8 +3512,16 @@ impl ConditionalExpression {
 pub struct PropertyAccessExpression {
     pub flow_node_base: FlowNodeBase,
     pub expression: P<Node>,
-    pub question_dot_token: Option<P<Node>>,
     pub name: P<Node>,
+}
+
+/// The rare tail of `PropertyAccessExpression` (`NodeAllocRare`): allocated only when one of these is set.
+pub struct PropertyAccessExpressionRare {
+    pub question_dot_token: Option<P<Node>>,
+}
+
+impl NodeRareTail for PropertyAccessExpression {
+    type Rare = PropertyAccessExpressionRare;
 }
 
 impl PropertyAccessExpression {
@@ -3483,7 +3531,7 @@ impl PropertyAccessExpression {
     }
     #[inline]
     pub fn question_dot_token(&self) -> Option<P<Node>> {
-        self.question_dot_token
+        rare_tail(self).and_then(|r| r.question_dot_token)
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -3502,8 +3550,16 @@ impl PropertyAccessExpression {
 pub struct ElementAccessExpression {
     pub flow_node_base: FlowNodeBase,
     pub expression: P<Node>,
-    pub question_dot_token: Option<P<Node>>,
     pub argument_expression: P<Node>,
+}
+
+/// The rare tail of `ElementAccessExpression` (`NodeAllocRare`): allocated only when one of these is set.
+pub struct ElementAccessExpressionRare {
+    pub question_dot_token: Option<P<Node>>,
+}
+
+impl NodeRareTail for ElementAccessExpression {
+    type Rare = ElementAccessExpressionRare;
 }
 
 impl ElementAccessExpression {
@@ -3513,7 +3569,7 @@ impl ElementAccessExpression {
     }
     #[inline]
     pub fn question_dot_token(&self) -> Option<P<Node>> {
-        self.question_dot_token
+        rare_tail(self).and_then(|r| r.question_dot_token)
     }
     #[inline]
     pub fn argument_expression(&self) -> P<Node> {
@@ -3532,9 +3588,17 @@ impl ElementAccessExpression {
 pub struct CallExpression {
     pub declaration_base: DeclarationBase,
     pub expression: P<Node>,
+    pub arguments: P<NodeList>,
+}
+
+/// The rare tail of `CallExpression` (`NodeAllocRare`): allocated only when one of these is set.
+pub struct CallExpressionRare {
     pub question_dot_token: Option<P<Node>>,
     pub type_arguments: Option<P<NodeList>>,
-    pub arguments: P<NodeList>,
+}
+
+impl NodeRareTail for CallExpression {
+    type Rare = CallExpressionRare;
 }
 
 impl CallExpression {
@@ -3544,11 +3608,11 @@ impl CallExpression {
     }
     #[inline]
     pub fn question_dot_token(&self) -> Option<P<Node>> {
-        self.question_dot_token
+        rare_tail(self).and_then(|r| r.question_dot_token)
     }
     #[inline]
     pub fn type_arguments(&self) -> Option<P<NodeList>> {
-        self.type_arguments
+        rare_tail(self).and_then(|r| r.type_arguments)
     }
     #[inline]
     pub fn arguments(&self) -> P<NodeList> {
@@ -3566,8 +3630,16 @@ impl CallExpression {
 
 pub struct NewExpression {
     pub expression: P<Node>,
-    pub type_arguments: Option<P<NodeList>>,
     pub arguments: Option<P<NodeList>>,
+}
+
+/// The rare tail of `NewExpression` (`NodeAllocRare`): allocated only when one of these is set.
+pub struct NewExpressionRare {
+    pub type_arguments: Option<P<NodeList>>,
+}
+
+impl NodeRareTail for NewExpression {
+    type Rare = NewExpressionRare;
 }
 
 impl NewExpression {
@@ -3577,7 +3649,7 @@ impl NewExpression {
     }
     #[inline]
     pub fn type_arguments(&self) -> Option<P<NodeList>> {
-        self.type_arguments
+        rare_tail(self).and_then(|r| r.type_arguments)
     }
     #[inline]
     pub fn arguments(&self) -> Option<P<NodeList>> {
@@ -5675,8 +5747,16 @@ pub struct ImportSpecifier {
     pub declaration_base: DeclarationBase,
     pub exportable_base: ExportableBase,
     pub is_type_only: bool,
-    pub property_name: Option<P<Node>>,
     pub name: P<Node>,
+}
+
+/// The rare tail of `ImportSpecifier` (`NodeAllocRare`): allocated only when one of these is set.
+pub struct ImportSpecifierRare {
+    pub property_name: Option<P<Node>>,
+}
+
+impl NodeRareTail for ImportSpecifier {
+    type Rare = ImportSpecifierRare;
 }
 
 impl ImportSpecifier {
@@ -5686,7 +5766,7 @@ impl ImportSpecifier {
     }
     #[inline]
     pub fn property_name(&self) -> Option<P<Node>> {
-        self.property_name
+        rare_tail(self).and_then(|r| r.property_name)
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -9763,18 +9843,33 @@ impl NodeFactory {
     }
 
     pub fn new_variable_declaration(&self, name: P<Node>, exclamation_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::VariableDeclaration, VariableDeclaration {
-            declaration_base: DeclarationBase {
-                symbol: OwnedCell::new(None),
-            },
-            exportable_base: ExportableBase {
-                local_symbol: OwnedCell::new(None),
-            },
-            name: name,
-            exclamation_token: exclamation_token,
-            type_: OwnedCell::new(type_node),
-            initializer: OwnedCell::new(initializer),
-        })
+        if exclamation_token.is_some() {
+            self.new_node_with_rare(Kind::VariableDeclaration, VariableDeclaration {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                exportable_base: ExportableBase {
+                    local_symbol: OwnedCell::new(None),
+                },
+                name: name,
+                type_: OwnedCell::new(type_node),
+                initializer: OwnedCell::new(initializer),
+            }, VariableDeclarationRare {
+                exclamation_token: exclamation_token,
+            })
+        } else {
+            self.new_node(Kind::VariableDeclaration, VariableDeclaration {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                exportable_base: ExportableBase {
+                    local_symbol: OwnedCell::new(None),
+                },
+                name: name,
+                type_: OwnedCell::new(type_node),
+                initializer: OwnedCell::new(initializer),
+            })
+        }
     }
 
     pub fn update_variable_declaration(&self, node: P<Node>, name: P<Node>, exclamation_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
@@ -9816,19 +9911,34 @@ impl NodeFactory {
     }
 
     pub fn new_parameter_declaration(&self, modifiers: Option<P<ModifierList>>, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::Parameter, ParameterDeclaration {
-            declaration_base: DeclarationBase {
-                symbol: OwnedCell::new(None),
-            },
-            modifiers_base: ModifiersBase {
-                modifiers: OwnedCell::new(modifiers),
-            },
-            dot_dot_dot_token: dot_dot_dot_token,
-            name: name,
-            question_token: OwnedCell::new(question_token),
-            type_: OwnedCell::new(type_node),
-            initializer: initializer,
-        })
+        if dot_dot_dot_token.is_some() || initializer.is_some() {
+            self.new_node_with_rare(Kind::Parameter, ParameterDeclaration {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                modifiers_base: ModifiersBase {
+                    modifiers: OwnedCell::new(modifiers),
+                },
+                name: name,
+                question_token: OwnedCell::new(question_token),
+                type_: OwnedCell::new(type_node),
+            }, ParameterDeclarationRare {
+                dot_dot_dot_token: dot_dot_dot_token,
+                initializer: initializer,
+            })
+        } else {
+            self.new_node(Kind::Parameter, ParameterDeclaration {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                modifiers_base: ModifiersBase {
+                    modifiers: OwnedCell::new(modifiers),
+                },
+                name: name,
+                question_token: OwnedCell::new(question_token),
+                type_: OwnedCell::new(type_node),
+            })
+        }
     }
 
     pub fn update_parameter_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, dot_dot_dot_token: Option<P<Node>>, name: P<Node>, question_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
@@ -9840,21 +9950,37 @@ impl NodeFactory {
     }
 
     pub fn new_binding_element(&self, dot_dot_dot_token: Option<P<Node>>, property_name: Option<P<Node>>, name: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::BindingElement, BindingElement {
-            declaration_base: DeclarationBase {
-                symbol: OwnedCell::new(None),
-            },
-            exportable_base: ExportableBase {
-                local_symbol: OwnedCell::new(None),
-            },
-            flow_node_base: FlowNodeBase {
-                flow_node: OwnedCell::new(None),
-            },
-            dot_dot_dot_token: dot_dot_dot_token,
-            property_name: property_name,
-            name: name,
-            initializer: initializer,
-        })
+        if dot_dot_dot_token.is_some() || property_name.is_some() || initializer.is_some() {
+            self.new_node_with_rare(Kind::BindingElement, BindingElement {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                exportable_base: ExportableBase {
+                    local_symbol: OwnedCell::new(None),
+                },
+                flow_node_base: FlowNodeBase {
+                    flow_node: OwnedCell::new(None),
+                },
+                name: name,
+            }, BindingElementRare {
+                dot_dot_dot_token: dot_dot_dot_token,
+                property_name: property_name,
+                initializer: initializer,
+            })
+        } else {
+            self.new_node(Kind::BindingElement, BindingElement {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                exportable_base: ExportableBase {
+                    local_symbol: OwnedCell::new(None),
+                },
+                flow_node_base: FlowNodeBase {
+                    flow_node: OwnedCell::new(None),
+                },
+                name: name,
+            })
+        }
     }
 
     pub fn update_binding_element(&self, node: P<Node>, dot_dot_dot_token: Option<P<Node>>, property_name: Option<P<Node>>, name: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
@@ -10186,37 +10312,71 @@ impl NodeFactory {
     }
 
     pub fn new_import_declaration(&self, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::ImportDeclaration, ImportDeclaration {
-            flow_node_base: FlowNodeBase {
-                flow_node: OwnedCell::new(None),
-            },
-            modifiers_base: ModifiersBase {
-                modifiers: OwnedCell::new(modifiers),
-            },
-            declaration_base: DeclarationBase {
-                symbol: OwnedCell::new(None),
-            },
-            import_clause: import_clause,
-            module_specifier: module_specifier,
-            attributes: attributes,
-        })
+        if attributes.is_some() {
+            self.new_node_with_rare(Kind::ImportDeclaration, ImportDeclaration {
+                flow_node_base: FlowNodeBase {
+                    flow_node: OwnedCell::new(None),
+                },
+                modifiers_base: ModifiersBase {
+                    modifiers: OwnedCell::new(modifiers),
+                },
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                import_clause: import_clause,
+                module_specifier: module_specifier,
+            }, ImportDeclarationRare {
+                attributes: attributes,
+            })
+        } else {
+            self.new_node(Kind::ImportDeclaration, ImportDeclaration {
+                flow_node_base: FlowNodeBase {
+                    flow_node: OwnedCell::new(None),
+                },
+                modifiers_base: ModifiersBase {
+                    modifiers: OwnedCell::new(modifiers),
+                },
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                import_clause: import_clause,
+                module_specifier: module_specifier,
+            })
+        }
     }
 
     pub fn new_js_import_declaration(&self, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::JSImportDeclaration, ImportDeclaration {
-            flow_node_base: FlowNodeBase {
-                flow_node: OwnedCell::new(None),
-            },
-            modifiers_base: ModifiersBase {
-                modifiers: OwnedCell::new(modifiers),
-            },
-            declaration_base: DeclarationBase {
-                symbol: OwnedCell::new(None),
-            },
-            import_clause: import_clause,
-            module_specifier: module_specifier,
-            attributes: attributes,
-        })
+        if attributes.is_some() {
+            self.new_node_with_rare(Kind::JSImportDeclaration, ImportDeclaration {
+                flow_node_base: FlowNodeBase {
+                    flow_node: OwnedCell::new(None),
+                },
+                modifiers_base: ModifiersBase {
+                    modifiers: OwnedCell::new(modifiers),
+                },
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                import_clause: import_clause,
+                module_specifier: module_specifier,
+            }, ImportDeclarationRare {
+                attributes: attributes,
+            })
+        } else {
+            self.new_node(Kind::JSImportDeclaration, ImportDeclaration {
+                flow_node_base: FlowNodeBase {
+                    flow_node: OwnedCell::new(None),
+                },
+                modifiers_base: ModifiersBase {
+                    modifiers: OwnedCell::new(modifiers),
+                },
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                import_clause: import_clause,
+                module_specifier: module_specifier,
+            })
+        }
     }
 
     pub fn update_import_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>) -> P<Node> {
@@ -10654,20 +10814,37 @@ impl NodeFactory {
     }
 
     pub fn new_property_signature_declaration(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
-        self.new_node(Kind::PropertySignature, PropertySignatureDeclaration {
-            declaration_base: DeclarationBase {
-                symbol: OwnedCell::new(None),
-            },
-            named_member_base: NamedMemberBase {
-                modifiers_base: ModifiersBase {
-                    modifiers: OwnedCell::new(modifiers),
+        if initializer.is_some() {
+            self.new_node_with_rare(Kind::PropertySignature, PropertySignatureDeclaration {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
                 },
-                name: name,
-                postfix_token: postfix_token,
-            },
-            type_: OwnedCell::new(type_node),
-            initializer: initializer,
-        })
+                named_member_base: NamedMemberBase {
+                    modifiers_base: ModifiersBase {
+                        modifiers: OwnedCell::new(modifiers),
+                    },
+                    name: name,
+                    postfix_token: postfix_token,
+                },
+                type_: OwnedCell::new(type_node),
+            }, PropertySignatureDeclarationRare {
+                initializer: initializer,
+            })
+        } else {
+            self.new_node(Kind::PropertySignature, PropertySignatureDeclaration {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                named_member_base: NamedMemberBase {
+                    modifiers_base: ModifiersBase {
+                        modifiers: OwnedCell::new(modifiers),
+                    },
+                    name: name,
+                    postfix_token: postfix_token,
+                },
+                type_: OwnedCell::new(type_node),
+            })
+        }
     }
 
     pub fn update_property_signature_declaration(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, postfix_token: Option<P<Node>>, type_node: Option<P<Node>>, initializer: Option<P<Node>>) -> P<Node> {
@@ -10999,14 +11176,25 @@ impl NodeFactory {
     }
 
     pub fn new_property_access_expression(&self, expression: P<Node>, question_dot_token: Option<P<Node>>, name: P<Node>, flags: NodeFlags) -> P<Node> {
-        let node = self.new_node(Kind::PropertyAccessExpression, PropertyAccessExpression {
-            flow_node_base: FlowNodeBase {
-                flow_node: OwnedCell::new(None),
-            },
-            expression: expression,
-            question_dot_token: question_dot_token,
-            name: name,
-        });
+        let node = if question_dot_token.is_some() {
+            self.new_node_with_rare(Kind::PropertyAccessExpression, PropertyAccessExpression {
+                flow_node_base: FlowNodeBase {
+                    flow_node: OwnedCell::new(None),
+                },
+                expression: expression,
+                name: name,
+            }, PropertyAccessExpressionRare {
+                question_dot_token: question_dot_token,
+            })
+        } else {
+            self.new_node(Kind::PropertyAccessExpression, PropertyAccessExpression {
+                flow_node_base: FlowNodeBase {
+                    flow_node: OwnedCell::new(None),
+                },
+                expression: expression,
+                name: name,
+            })
+        };
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
         node
     }
@@ -11020,14 +11208,25 @@ impl NodeFactory {
     }
 
     pub fn new_element_access_expression(&self, expression: P<Node>, question_dot_token: Option<P<Node>>, argument_expression: P<Node>, flags: NodeFlags) -> P<Node> {
-        let node = self.new_node(Kind::ElementAccessExpression, ElementAccessExpression {
-            flow_node_base: FlowNodeBase {
-                flow_node: OwnedCell::new(None),
-            },
-            expression: expression,
-            question_dot_token: question_dot_token,
-            argument_expression: argument_expression,
-        });
+        let node = if question_dot_token.is_some() {
+            self.new_node_with_rare(Kind::ElementAccessExpression, ElementAccessExpression {
+                flow_node_base: FlowNodeBase {
+                    flow_node: OwnedCell::new(None),
+                },
+                expression: expression,
+                argument_expression: argument_expression,
+            }, ElementAccessExpressionRare {
+                question_dot_token: question_dot_token,
+            })
+        } else {
+            self.new_node(Kind::ElementAccessExpression, ElementAccessExpression {
+                flow_node_base: FlowNodeBase {
+                    flow_node: OwnedCell::new(None),
+                },
+                expression: expression,
+                argument_expression: argument_expression,
+            })
+        };
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
         node
     }
@@ -11041,15 +11240,26 @@ impl NodeFactory {
     }
 
     pub fn new_call_expression(&self, expression: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, arguments: P<NodeList>, flags: NodeFlags) -> P<Node> {
-        let node = self.new_node(Kind::CallExpression, CallExpression {
-            declaration_base: DeclarationBase {
-                symbol: OwnedCell::new(None),
-            },
-            expression: expression,
-            question_dot_token: question_dot_token,
-            type_arguments: type_arguments,
-            arguments: arguments,
-        });
+        let node = if question_dot_token.is_some() || type_arguments.is_some() {
+            self.new_node_with_rare(Kind::CallExpression, CallExpression {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                expression: expression,
+                arguments: arguments,
+            }, CallExpressionRare {
+                question_dot_token: question_dot_token,
+                type_arguments: type_arguments,
+            })
+        } else {
+            self.new_node(Kind::CallExpression, CallExpression {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                expression: expression,
+                arguments: arguments,
+            })
+        };
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
         node
     }
@@ -11063,11 +11273,19 @@ impl NodeFactory {
     }
 
     pub fn new_new_expression(&self, expression: P<Node>, type_arguments: Option<P<NodeList>>, arguments: Option<P<NodeList>>) -> P<Node> {
-        self.new_node(Kind::NewExpression, NewExpression {
-            expression: expression,
-            type_arguments: type_arguments,
-            arguments: arguments,
-        })
+        if type_arguments.is_some() {
+            self.new_node_with_rare(Kind::NewExpression, NewExpression {
+                expression: expression,
+                arguments: arguments,
+            }, NewExpressionRare {
+                type_arguments: type_arguments,
+            })
+        } else {
+            self.new_node(Kind::NewExpression, NewExpression {
+                expression: expression,
+                arguments: arguments,
+            })
+        }
     }
 
     pub fn update_new_expression(&self, node: P<Node>, expression: P<Node>, type_arguments: Option<P<NodeList>>, arguments: Option<P<NodeList>>) -> P<Node> {
@@ -12683,17 +12901,31 @@ impl NodeFactory {
     }
 
     pub fn new_import_specifier(&self, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {
-        self.new_node(Kind::ImportSpecifier, ImportSpecifier {
-            declaration_base: DeclarationBase {
-                symbol: OwnedCell::new(None),
-            },
-            exportable_base: ExportableBase {
-                local_symbol: OwnedCell::new(None),
-            },
-            is_type_only: is_type_only,
-            property_name: property_name,
-            name: name,
-        })
+        if property_name.is_some() {
+            self.new_node_with_rare(Kind::ImportSpecifier, ImportSpecifier {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                exportable_base: ExportableBase {
+                    local_symbol: OwnedCell::new(None),
+                },
+                is_type_only: is_type_only,
+                name: name,
+            }, ImportSpecifierRare {
+                property_name: property_name,
+            })
+        } else {
+            self.new_node(Kind::ImportSpecifier, ImportSpecifier {
+                declaration_base: DeclarationBase {
+                    symbol: OwnedCell::new(None),
+                },
+                exportable_base: ExportableBase {
+                    local_symbol: OwnedCell::new(None),
+                },
+                is_type_only: is_type_only,
+                name: name,
+            })
+        }
     }
 
     pub fn update_import_specifier(&self, node: P<Node>, is_type_only: bool, property_name: Option<P<Node>>, name: P<Node>) -> P<Node> {

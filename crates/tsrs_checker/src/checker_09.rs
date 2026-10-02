@@ -78,7 +78,7 @@ impl Checker {
                                     }
                                 }
                             }
-                        } else if is_parameter_declaration(parent) && parent.as_parameter_declaration().dot_dot_dot_token.is_some()
+                        } else if is_parameter_declaration(parent) && parent.as_parameter_declaration().dot_dot_dot_token().is_some()
                             || is_rest_type_node(parent)
                             || is_named_tuple_member(parent) && parent.as_named_tuple_member().dot_dot_dot_token.is_some()
                         {
@@ -1394,7 +1394,7 @@ impl Checker {
             return self.get_widened_type(t);
         }
         // Rest parameters default to type any[], other parameters default to type any
-        let t = if is_parameter_declaration(declaration) && declaration.as_parameter_declaration().dot_dot_dot_token.is_some() {
+        let t = if is_parameter_declaration(declaration) && declaration.as_parameter_declaration().dot_dot_dot_token().is_some() {
             self.any_array_type
         } else {
             self.any_type
@@ -1441,7 +1441,7 @@ impl Checker {
                         let index = parent.parameters().iter().position(|&p| p == declaration).map_or(-1, |i| i as i32);
                         let new_name = format!("arg{}", index);
                         let type_name = tsrs_scanner::declaration_name_to_string(Some(param.name()))
-                            + if param.dot_dot_dot_token.is_some() { "[]" } else { "" };
+                            + if param.dot_dot_dot_token().is_some() { "[]" } else { "" };
                         self.error_or_suggestion(
                             self.no_implicit_any,
                             Some(declaration),
@@ -1451,7 +1451,7 @@ impl Checker {
                         return;
                     }
                 }
-                if param.dot_dot_dot_token.is_some() {
+                if param.dot_dot_dot_token().is_some() {
                     if self.no_implicit_any {
                         diagnostic = &diagnostics::Rest_parameter_0_implicitly_has_an_any_type;
                     } else {

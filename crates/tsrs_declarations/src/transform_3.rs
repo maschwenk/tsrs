@@ -113,7 +113,7 @@ impl DeclarationTransformer {
         let result = self.factory().update_parameter_declaration(
             p,
             None,
-            param.dot_dot_dot_token,
+            param.dot_dot_dot_token(),
             self.binding_name_visitor().visit_node(p.name()).unwrap(),
             question_token,
             self.ensure_type(p, true),
@@ -147,7 +147,7 @@ impl DeclarationTransformer {
                     }
                 }
                 let elem = node.as_binding_element();
-                self.factory().update_binding_element(node, elem.dot_dot_dot_token, node.property_name(), self.binding_name_visitor().visit_node(node.name()), None /*initializer*/)
+                self.factory().update_binding_element(node, elem.dot_dot_dot_token(), node.property_name(), self.binding_name_visitor().visit_node(node.name()), None /*initializer*/)
             }
             _ => node,
         }
@@ -188,7 +188,7 @@ impl DeclarationTransformer {
                 decl.modifiers(),
                 import_decl.import_clause,
                 self.rewrite_module_specifier(decl, Some(import_decl.module_specifier)).unwrap(),
-                import_decl.attributes,
+                import_decl.attributes(),
             ));
         };
         let clause = import_clause.as_import_clause();
@@ -209,7 +209,7 @@ impl DeclarationTransformer {
                 decl.modifiers(),
                 Some(self.factory().update_import_clause(import_clause, phase_modifier, visible_default_binding, None /*namedBindings*/)),
                 self.rewrite_module_specifier(decl, Some(import_decl.module_specifier)).unwrap(),
-                import_decl.attributes,
+                import_decl.attributes(),
             ));
         };
         if named_bindings.kind() == Kind::NamespaceImport {
@@ -226,7 +226,7 @@ impl DeclarationTransformer {
                 decl.modifiers(),
                 Some(self.factory().update_import_clause(import_clause, phase_modifier, visible_default_binding, named_bindings_result)),
                 self.rewrite_module_specifier(decl, Some(import_decl.module_specifier)).unwrap(),
-                import_decl.attributes,
+                import_decl.attributes(),
             ));
         }
         // Named imports (optionally with visible default)
@@ -241,7 +241,7 @@ impl DeclarationTransformer {
                 decl.modifiers(),
                 Some(self.factory().update_import_clause(import_clause, phase_modifier, visible_default_binding, named_imports)),
                 self.rewrite_module_specifier(decl, Some(import_decl.module_specifier)).unwrap(),
-                import_decl.attributes,
+                import_decl.attributes(),
             ));
         }
         // Augmentation of export depends on import
@@ -254,7 +254,7 @@ impl DeclarationTransformer {
                 decl.modifiers(),
                 None, /*importClause*/
                 self.rewrite_module_specifier(decl, Some(import_decl.module_specifier)).unwrap(),
-                import_decl.attributes,
+                import_decl.attributes(),
             ));
         }
         // Nothing visible

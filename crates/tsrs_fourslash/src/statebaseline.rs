@@ -466,7 +466,7 @@ impl FourslashTest {
         let old_registry = state_baseline.serialized_config_file_registry.clone();
         let options = diffTableOptions { indent: "    ", sort_keys: true };
         let project_ids = |ids: &[tsrs_project::ID]| ids.iter().map(|id| id.0.clone()).collect::<Vec<String>>();
-        let paths = |ps: &[tspath::Path]| ps.iter().map(|p| p.0.clone()).collect::<Vec<String>>();
+        let paths = |ps: &[tspath::Path]| ps.iter().map(|p| p.to_string()).collect::<Vec<String>>();
         config_file_registry.for_each_test_config_entry(|path, entry| {
             let mut config_change = "";
             let old_entry = old_registry.as_ref().and_then(|r| r.get_test_config_entry(path));

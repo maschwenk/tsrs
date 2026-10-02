@@ -1416,7 +1416,7 @@ impl Checker {
 
 // checker.go:5530
 pub(crate) fn has_type_json_import_attribute(node: P<Node>) -> bool {
-    let attributes = node.as_import_declaration().attributes;
+    let attributes = node.as_import_declaration().attributes();
     attributes.is_some_and(|attributes| {
         attributes.as_import_attributes().attributes.nodes().iter().any(|&attr| {
             attr.name().unwrap().text() == "type" && is_string_literal_like(attr.as_import_attribute().value) && attr.as_import_attribute().value.text() == "json"

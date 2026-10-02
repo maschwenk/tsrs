@@ -534,7 +534,7 @@ impl<H: 'static> NameResolver<H> {
 
     pub(crate) fn requires_scope_change(&self, node: P<Node>) -> bool {
         let d = node.as_parameter_declaration();
-        self.requires_scope_change_worker(node.name().unwrap()) || d.initializer.is_some_and(|initializer| self.requires_scope_change_worker(initializer))
+        self.requires_scope_change_worker(node.name().unwrap()) || d.initializer().is_some_and(|initializer| self.requires_scope_change_worker(initializer))
     }
 
     pub(crate) fn requires_scope_change_worker(&self, node: P<Node>) -> bool {

@@ -281,7 +281,7 @@ fn would_rename_in_other_node_modules(original_file: P<SourceFile>, symbol: P<Sy
     if !preferences.use_aliases_for_rename.is_true_or_unknown() && sym.flags().intersects(SymbolFlags::Alias) {
         let import_specifier = sym.declarations().iter().copied().find(|&d| ast::is_import_specifier(d));
         if let Some(import_specifier) = import_specifier {
-            if import_specifier.as_import_specifier().property_name.is_none() {
+            if import_specifier.as_import_specifier().property_name().is_none() {
                 sym = ch.get_aliased_symbol(sym);
             }
         }
@@ -414,7 +414,7 @@ impl LanguageService {
             let name = original_node.text();
             let is_shorthand_assignment = ast::is_shorthand_property_assignment(parent);
             if is_shorthand_assignment
-                || (is_object_binding_element_without_property_name(parent) && parent.name() == Some(node) && parent.as_binding_element().dot_dot_dot_token.is_none())
+                || (is_object_binding_element_without_property_name(parent) && parent.name() == Some(node) && parent.as_binding_element().dot_dot_dot_token().is_none())
             {
                 if kind == EntryKind::SearchedLocalFoundProperty {
                     return format!("{}: {}", name, new_text);

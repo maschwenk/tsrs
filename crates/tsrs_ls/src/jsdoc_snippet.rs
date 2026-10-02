@@ -313,7 +313,7 @@ fn parameter_doc_comments(parameters: &[P<Node>], is_java_script_file: bool, ind
         }
         let mut param_type = "";
         if is_java_script_file {
-            if parameter.as_parameter_declaration().dot_dot_dot_token.is_some() {
+            if parameter.as_parameter_declaration().dot_dot_dot_token().is_some() {
                 param_type = "{...any} ";
             } else {
                 param_type = "{any} ";

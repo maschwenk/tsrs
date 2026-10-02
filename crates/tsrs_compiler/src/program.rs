@@ -1678,7 +1678,7 @@ impl Program {
                 let emit_file_key = if !self.host().fs().use_case_sensitive_file_names() {
                     tspath::to_file_name_lower_case(&emit_file_path)
                 } else {
-                    emit_file_path.0.clone()
+                    emit_file_path.as_str().to_string()
                 };
 
                 // Report error if multiple files write into same file
@@ -1957,11 +1957,12 @@ impl Program {
     }
 
     pub fn line_count(&self) -> usize {
-        // Most line maps are first computed here (--diagnostics / --extendedDiagnostics); they are independent.
+        // Go builds (and keeps) every file's line map here; counting the line starts gives the same number without
+        // keeping 4 bytes per line of the program at the end of the run.
         if self.single_threaded() {
-            return self.files.iter().map(|f| f.ecma_line_map().len()).sum();
+            return self.files.iter().map(|f| f.ecma_line_count()).sum();
         }
-        worker_pool().install(|| self.files.par_iter().map(|f| f.ecma_line_map().len()).sum())
+        worker_pool().install(|| self.files.par_iter().map(|f| f.ecma_line_count()).sum())
     }
 
     pub fn identifier_count(&self) -> usize {
@@ -2149,6 +2150,10 @@ impl Program {
     }
 
     pub fn get_source_file_by_path(&self, path: &Path) -> Option<P<SourceFile>> {
+        self.files_by_path.get(path).copied()
+    }
+
+    pub(crate) fn get_source_file_by_path_str(&self, path: &str) -> Option<P<SourceFile>> {
         self.files_by_path.get(path).copied()
     }
 

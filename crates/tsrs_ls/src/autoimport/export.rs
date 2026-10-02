@@ -147,7 +147,7 @@ pub fn symbol_to_export(symbol: P<Symbol>, ch: &mut Checker) -> Option<Arc<Expor
     let file_symbol = file.symbol()?;
 
     let module_symbol = ch.get_merged_symbol(file_symbol);
-    let module_id = ModuleID(file.path().0.clone());
+    let module_id = ModuleID(file.path().to_string());
     let module_file_name = file.file_name().to_string();
     let skipped = ch.skip_alias(symbol);
     let target = ch.get_merged_symbol(skipped);
