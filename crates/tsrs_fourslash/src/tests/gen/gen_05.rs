@@ -3,89 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod completion_list_class_this_js {
-use crate::tests::prelude::*;
-
-// completionListClassThisJS_test.go:13
-pub fn test_completion_list_class_this_js(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: completionListClassThisJS.js
-// @allowJs: true
-/** @typedef {number} CallbackContext */
-class Foo {
-    bar() {
-       this/**/
-    }
-    /** @param {function (this: CallbackContext): any} cb */
-    baz(cb) {
-    }
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "this".to_string(), kind: Some(lsproto::CompletionItemKind::Keyword), sort_text: Some("15".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod completion_list_default_type_argument_position_type_only {
-use crate::tests::prelude::*;
-
-// completionListDefaultTypeArgumentPositionTypeOnly_test.go:11
-pub fn test_completion_list_default_type_argument_position_type_only(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
-const foo = "foo";
-function test1<T = /*1*/>() {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { exact: util::COMPLETION_GLOBAL_TYPES.clone(), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod completion_list_enum_members {
-use crate::tests::prelude::*;
-
-// completionListEnumMembers_test.go:11
-pub fn test_completion_list_enum_members(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"enum Foo {
-    bar,
-    baz
-}
-
-var v = Foo./*valueReference*/ba;
-var t :Foo./*typeReference*/ba;
-Foo.bar./*enumValueReference*/;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["valueReference".to_string(), "typeReference".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("bar".to_string()), Any::String("baz".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("enumValueReference".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: vec![Any::String("toString".to_string()), Any::String("toFixed".to_string()), Any::String("toExponential".to_string()), Any::String("toPrecision".to_string()), Any::String("valueOf".to_string()), Any::String("toLocaleString".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod completion_list_enum_values {
 use crate::tests::prelude::*;
 
@@ -4387,6 +4304,82 @@ function foo(x: string, y: number, z: boolean) {
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod completion_list_in_unclosed_function18 {
+use crate::tests::prelude::*;
+
+// completionListInUnclosedFunction18_test.go:11
+pub fn test_completion_list_in_unclosed_function18(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface MyType {
+}
+
+function foo(x: string, y: number, z: boolean) {
+    function bar(a: number, b: string = "hello", c: typeof x = "hello") {
+        var v = (p: MyType) => y + /*1*/
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod completion_list_in_unclosed_function19 {
+use crate::tests::prelude::*;
+
+// completionListInUnclosedFunction19_test.go:11
+pub fn test_completion_list_in_unclosed_function19(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface MyType {
+}
+
+function foo(x: string, y: number, z: boolean) {
+    function bar(a: number, b: string = "hello", c: typeof x = "hello") {
+        var v = (p: MyType) => { return y + /*1*/"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod completion_list_in_unclosed_index_signature01 {
+use crate::tests::prelude::*;
+
+// completionListInUnclosedIndexSignature01_test.go:11
+pub fn test_completion_list_in_unclosed_index_signature01(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"class C {
+    [foo: string]: typeof /*1*/
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("C".to_string())], ..Default::default() }), ..Default::default() }));
         });
         done(&mut *f, t);
         go::resume(__defer2);

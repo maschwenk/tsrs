@@ -3,393 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod rename_js_this_property03 {
-use crate::tests::prelude::*;
-
-// renameJsThisProperty03_test.go:10
-pub fn test_rename_js_this_property03(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
-// @Filename: a.js
-class C {
-  constructor(y) {
-    [|this.[|{| "contextRangeIndex": 0 |}x|] = y;|]
-  }
-}
-var t = new C(12);
-[|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_js_this_property05 {
-use crate::tests::prelude::*;
-
-// renameJsThisProperty05_test.go:10
-pub fn test_rename_js_this_property05(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
-// @Filename: a.js
-class C {
-  constructor(y) {
-    this.x = y;
-  }
-}
-[|C.prototype.[|{| "contextRangeIndex": 0 |}z|] = 1;|]
-var t = new C(12);
-[|t.[|{| "contextRangeIndex": 2 |}z|] = 11;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename_at_ranges_with_text(t, None, &["z"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_js_this_property06 {
-use crate::tests::prelude::*;
-
-// renameJsThisProperty06_test.go:10
-pub fn test_rename_js_this_property06(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
-// @Filename: a.js
-var C = class {
-  constructor(y) {
-    this.x = y;
-  }
-}
-[|C.prototype.[|{| "contextRangeIndex": 0 |}z|] = 1;|]
-var t = new C(12);
-[|t.[|{| "contextRangeIndex": 2 |}z|] = 11;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename_at_ranges_with_text(t, None, &["z"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_jsdoc_namepath {
-use crate::tests::prelude::*;
-
-// renameJSDocNamepath_test.go:10
-pub fn test_rename_jsdoc_namepath(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @noLib: true
-/**
- * @type {module:foo/A} x
- */
-var x = 1
-var /*0*/A = 0;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &[Any::String("0".to_string())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_label1 {
-use crate::tests::prelude::*;
-
-// renameLabel1_test.go:10
-pub fn test_rename_label1(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"foo: {
-    break /**/foo;
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_label2 {
-use crate::tests::prelude::*;
-
-// renameLabel2_test.go:10
-pub fn test_rename_label2(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/**/foo: {
-    break foo;
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_label3 {
-use crate::tests::prelude::*;
-
-// renameLabel3_test.go:10
-pub fn test_rename_label3(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/**/loop:
-for (let i = 0; i <= 10; i++) {
-   if (i === 0) continue loop;
-   if (i === 1) continue loop;
-   if (i === 10) break loop;
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_label4 {
-use crate::tests::prelude::*;
-
-// renameLabel4_test.go:10
-pub fn test_rename_label4(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"loop:
-for (let i = 0; i <= 10; i++) {
-   if (i === 0) continue loop;
-   if (i === 1) continue /**/loop;
-   if (i === 10) break loop;
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_label5 {
-use crate::tests::prelude::*;
-
-// renameLabel5_test.go:10
-pub fn test_rename_label5(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"loop1: for (let i = 0; i <= 10; i++) {
-    loop2: for (let j = 0; j <= 10; j++) {
-        if (i === 5) continue /**/loop1;
-        if (j === 5) break loop2;
-    }
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_label6 {
-use crate::tests::prelude::*;
-
-// renameLabel6_test.go:10
-pub fn test_rename_label6(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"loop1: for (let i = 0; i <= 10; i++) {
-    loop2: for (let j = 0; j <= 10; j++) {
-        if (i === 5) continue loop1;
-        if (j === 5) break /**/loop2;
-    }
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_locations_for_class_expression01 {
-use crate::tests::prelude::*;
-
-// renameLocationsForClassExpression01_test.go:10
-pub fn test_rename_locations_for_class_expression01(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class Foo {
-}
-
-var x = [|class [|{| "contextRangeIndex": 0 |}Foo|] {
-    doIt() {
-        return [|Foo|];
-    }
-
-    static doItStatically() {
-        return [|Foo|].y;
-    }
-}|]
-
-var y = class {
-   getSomeName() {
-      return Foo
-   }
-}
-var z = class Foo {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename_at_ranges_with_text(t, None, &["Foo"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_locations_for_function_expression01 {
-use crate::tests::prelude::*;
-
-// renameLocationsForFunctionExpression01_test.go:10
-pub fn test_rename_locations_for_function_expression01(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"var x = [|function [|{| "contextRangeIndex": 0 |}f|](g: any, h: any) {
-    [|f|]([|f|], g);
-}|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename_at_ranges_with_text(t, None, &["f"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_locations_for_function_expression02 {
-use crate::tests::prelude::*;
-
-// renameLocationsForFunctionExpression02_test.go:10
-pub fn test_rename_locations_for_function_expression02(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"function f() {
-
-}
-var x = [|function [|{| "contextRangeIndex": 0 |}f|](g: any, h: any) {
-
-    let helper = function f(): any { f(); }
-
-    let foo = () => [|f|]([|f|], g);
-}|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename_at_ranges_with_text(t, None, &["f"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod rename_modifiers {
-use crate::tests::prelude::*;
-
-// renameModifiers_test.go:10
-pub fn test_rename_modifiers(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"[|[|declare|] [|abstract|] class [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -3 |}C1|] {
-    [|[|static|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}a|];|]
-    [|[|readonly|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}b|];|]
-    [|[|public|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}c|];|]
-    [|[|protected|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}d|];|]
-    [|[|private|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}e|];|]
-}|]
-[|[|const|] enum [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}E|] {
-}|]
-[|[|async|] function [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}fn|]() {}|]
-[|[|export|] [|default|] class [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -3 |}C2|] {}|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[2].clone()), Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[8].clone()), Any::RangeMarker(f.ranges()[11].clone()), Any::RangeMarker(f.ranges()[14].clone()), Any::RangeMarker(f.ranges()[17].clone()), Any::RangeMarker(f.ranges()[20].clone()), Any::RangeMarker(f.ranges()[23].clone()), Any::RangeMarker(f.ranges()[26].clone()), Any::RangeMarker(f.ranges()[27].clone())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod rename_module_exports_properties1 {
 use crate::tests::prelude::*;
 
@@ -5349,6 +4962,399 @@ f(/*1*/"#;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
             f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f(p?: Thing): void".to_string(), ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_for_optional_methods {
+use crate::tests::prelude::*;
+
+// signatureHelpForOptionalMethods_test.go:10
+pub fn test_signature_help_for_optional_methods(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @strict: true
+interface Obj {
+    optionalMethod?: (current: any) => any;
+};
+
+const o: Obj = {
+  optionalMethod(/*1*/) {
+    return {};
+  }
+};"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "1");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "optionalMethod(current: any): any".to_string(), parameter_name: "current".to_string(), parameter_span: "current: any".to_string(), ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_for_signature_with_unreachable_type {
+use crate::tests::prelude::*;
+
+// signatureHelpForSignatureWithUnreachableType_test.go:10
+pub fn test_signature_help_for_signature_with_unreachable_type(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: /node_modules/foo/node_modules/bar/index.d.ts
+export interface SomeType {
+    x?: number;
+}
+// @Filename: /node_modules/foo/index.d.ts
+import { SomeType } from "bar";
+export function func<T extends SomeType>(param: T): void;
+export function func<T extends SomeType>(param: T, other: T): void;
+// @Filename: /usage.ts
+import { func } from "foo";
+func({/*1*/});"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "1");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "func(param: {}): void".to_string(), overloads_count: 2, ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_for_super_calls1 {
+use crate::tests::prelude::*;
+
+// signatureHelpForSuperCalls1_test.go:10
+pub fn test_signature_help_for_super_calls1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"class A { }
+class B extends A { }
+class C extends B {
+    constructor() {
+        super(/*1*/ // sig help here?
+    }
+}
+class A2 { }
+class B2 extends A2 {
+    constructor(x:number) {}
+ }
+class C2 extends B2 {
+    constructor() {
+        super(/*2*/ // sig help here?
+    }
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "1");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "B(): B".to_string(), ..Default::default() });
+            f.go_to_marker(t, "2");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "B2(x: number): B2".to_string(), ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_function_overload {
+use crate::tests::prelude::*;
+
+// signatureHelpFunctionOverload_test.go:10
+pub fn test_signature_help_function_overload(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"function functionOverload();
+function functionOverload(test: string);
+function functionOverload(test?: string) { }
+functionOverload(/*functionOverload1*/);
+functionOverload(""/*functionOverload2*/);"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "functionOverload1");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "functionOverload(): any".to_string(), parameter_count: 0, overloads_count: 2, ..Default::default() });
+            f.go_to_marker(t, "functionOverload2");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "functionOverload(test: string): any".to_string(), parameter_name: "test".to_string(), parameter_span: "test: string".to_string(), overloads_count: 2, ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_function_parameter {
+use crate::tests::prelude::*;
+
+// signatureHelpFunctionParameter_test.go:10
+pub fn test_signature_help_function_parameter(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"function parameterFunction(callback: (a: number, b: string) => void) {
+    callback(/*parameterFunction1*/5, /*parameterFunction2*/"");
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "parameterFunction1");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(a: number, b: string): void".to_string(), parameter_count: 2, parameter_name: "a".to_string(), parameter_span: "a: number".to_string(), ..Default::default() });
+            f.go_to_marker(t, "parameterFunction2");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(a: number, b: string): void".to_string(), parameter_name: "b".to_string(), parameter_span: "b: string".to_string(), ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_implicit_constructor {
+use crate::tests::prelude::*;
+
+// signatureHelpImplicitConstructor_test.go:10
+pub fn test_signature_help_implicit_constructor(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"class ImplicitConstructor {
+}
+var implicitConstructor = new ImplicitConstructor(/**/);"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "ImplicitConstructor(): ImplicitConstructor".to_string(), parameter_count: 0, ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_import_star_from_export_equals {
+use crate::tests::prelude::*;
+
+// signatureHelpImportStarFromExportEquals_test.go:10
+pub fn test_signature_help_import_star_from_export_equals(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @allowJs: true
+// @Filename: /node_modules/@types/abs/index.d.ts
+declare function abs(str: string): string;
+export = abs;
+// @Filename: /a.js
+import * as abs from "abs";
+abs.default/**/;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "");
+            f.insert(t, "(");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "default(str: string): string".to_string(), ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_in_adjacent_block_body {
+use crate::tests::prelude::*;
+
+// signatureHelpInAdjacentBlockBody_test.go:11
+pub fn test_signature_help_in_adjacent_block_body(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"declare function foo(...args);
+
+foo(() => {/*1*/}/*2*/)"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "1");
+            f.verify_signature_help_present(t, Some(lsproto::SignatureHelpContext { trigger_kind: lsproto::SignatureHelpTriggerKind::Invoked, ..Default::default() }));
+            f.go_to_marker(t, "2");
+            f.verify_signature_help_present(t, Some(lsproto::SignatureHelpContext { trigger_kind: lsproto::SignatureHelpTriggerKind::Invoked, ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_in_callback {
+use crate::tests::prelude::*;
+
+// signatureHelpInCallback_test.go:10
+pub fn test_signature_help_in_callback(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"declare function forEach(f: () => void);
+forEach(/*1*/() => {
+    /*2*/
+});"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "1");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "forEach(f: () => void): any".to_string(), ..Default::default() });
+            f.verify_no_signature_help_for_markers(t, &["2"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_in_complete_generics_call {
+use crate::tests::prelude::*;
+
+// signatureHelpInCompleteGenericsCall_test.go:10
+pub fn test_signature_help_in_complete_generics_call(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"function foo<T>(x: number, callback: (x: T) => number) {
+}
+foo(/*1*/"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "1");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo(x: number, callback: (x: unknown) => number): void".to_string(), ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_in_function_call {
+use crate::tests::prelude::*;
+
+// signatureHelpInFunctionCall_test.go:10
+pub fn test_signature_help_in_function_call(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"var items = [];
+items.forEach(item => {
+    for (/**/
+});"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_no_signature_help_for_markers(t, &[""]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_in_function_call_on_function_declaration_in_multiple_files {
+use crate::tests::prelude::*;
+
+// signatureHelpInFunctionCallOnFunctionDeclarationInMultipleFiles_test.go:10
+pub fn test_signature_help_in_function_call_on_function_declaration_in_multiple_files(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: signatureHelpInFunctionCallOnFunctionDeclarationInMultipleFiles_file0.ts
+declare function fn(x: string, y: number);
+// @Filename: signatureHelpInFunctionCallOnFunctionDeclarationInMultipleFiles_file1.ts
+declare function fn(x: string);
+// @Filename: signatureHelpInFunctionCallOnFunctionDeclarationInMultipleFiles_file2.ts
+fn(/*1*/"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "1");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_in_parenthetical {
+use crate::tests::prelude::*;
+
+// signatureHelpInParenthetical_test.go:10
+pub fn test_signature_help_in_parenthetical(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"class base { constructor (public n: number, public y: string) { } }
+(new base(/**/"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "n".to_string(), ..Default::default() });
+            f.insert(t, "0, ");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "y".to_string(), ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod signature_help_in_recursive_type {
+use crate::tests::prelude::*;
+
+// signatureHelpInRecursiveType_test.go:10
+pub fn test_signature_help_in_recursive_type(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"type Tail<T extends any[]> =
+	((...args: T) => any) extends ((head: any, ...tail: infer R) => any) ? R : never;
+
+type Reverse<List extends any[]> = _Reverse<List, []>;
+
+type _Reverse<Source extends any[], Result extends any[] = []> = {
+	1: Result,
+	0: _Reverse<Tail<Source>, 0>,
+}[Source extends [] ? 1 : 0];
+
+type Foo = Reverse<[0,/**/]>;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "Reverse<List extends any[]>".to_string(), ..Default::default() });
         });
         done(&mut *f, t);
         go::resume(__defer2);

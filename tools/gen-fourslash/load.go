@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/importer"
 	"go/parser"
 	"go/token"
@@ -67,6 +68,11 @@ func load(tscDir string) (*Loaded, error) {
 	var testNames []string
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), "_test.go") {
+			// Files `go test` does not build (file name GOOS/GOARCH suffixes such as `_js_test.go`, build tags)
+			// hold tests that never run in Go.
+			if ok, err := build.Default.MatchFile(testsDir, e.Name()); err != nil || !ok {
+				continue
+			}
 			testNames = append(testNames, e.Name())
 		}
 	}

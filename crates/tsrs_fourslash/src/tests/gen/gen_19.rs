@@ -3,415 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod import_type_node_go_to_definition {
-use crate::tests::prelude::*;
-
-// importTypeNodeGoToDefinition_test.go:10
-pub fn test_import_type_node_go_to_definition(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /ns.ts
-/*refFile*/export namespace /*refFoo*/Foo {
-    export namespace /*refBar*/Bar {
-        export class /*refBaz*/Baz {}
-    }
-}
-// @Filename: /usage.ts
-type A = typeof import([|/*1*/"./ns"|]).[|/*2*/Foo|].[|/*3*/Bar|];
-type B = import([|/*4*/"./ns"|]).[|/*5*/Foo|].[|/*6*/Bar|].[|/*7*/Baz|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_definition(t, true, &["1", "2", "3", "4", "5", "6", "7"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod import_types_declaration_diagnostics_no_server_error {
-use crate::tests::prelude::*;
-
-// importTypesDeclarationDiagnosticsNoServerError_test.go:10
-pub fn test_import_types_declaration_diagnostics_no_server_error(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @declaration: true
-// @Filename: node_modules/foo/index.d.ts
-export function f(): I;
-export interface I {
-  x: number;
-}
-// @Filename: a.ts
-import { f } from "foo";
-export const x = f();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file_number(t, 1);
-            f.verify_non_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod import_value_used_as_type {
-use crate::tests::prelude::*;
-
-// importValueUsedAsType_test.go:10
-pub fn test_import_value_used_as_type(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/**/
-namespace A {
-    export var X;
-    import Z = A.X;
-    var v: Z;
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, " ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod incompatible_override {
-use crate::tests::prelude::*;
-
-// incompatibleOverride_test.go:10
-pub fn test_incompatible_override(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: false
-class Foo { xyz: string; }
-class Bar extends Foo { /*1*/xyz/*2*/: number = 1; }
-class Baz extends Foo { public /*3*/xyz/*4*/: number = 2; }
-class /*5*/Baf/*6*/ extends Foo {
-   constructor(public xyz: number) {
-      super();
-   }
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_error_exists_between_markers(t, "1", "2");
-            f.verify_error_exists_between_markers(t, "3", "4");
-            f.verify_error_exists_between_markers(t, "5", "6");
-            f.verify_number_of_errors_in_current_file(t, 3);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod incremental_edit_invocation_expression_above_interface_declaration {
-use crate::tests::prelude::*;
-
-// incrementalEditInvocationExpressionAboveInterfaceDeclaration_test.go:10
-pub fn test_incremental_edit_invocation_expression_above_interface_declaration(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
-declare function alert(message?: any): void;
-/*1*/
-interface Foo {
-    setISO8601(dString): Date;
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, "alert(");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "alert(message?: any): void".to_string(), ..Default::default() });
-            f.verify_error_exists_after_marker(t, "1");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod incremental_js_doc_adjusts_lengths_right {
-use crate::tests::prelude::*;
-
-// incrementalJsDocAdjustsLengthsRight_test.go:10
-pub fn test_incremental_js_doc_adjusts_lengths_right(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @noLib: true
-
-/**
- * Pad `str` to `width`.
- *
- * @param {String} str
- * @param {Number} wid/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, r#"th
-@"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod incremental_parsing_dynamic_import1 {
-use crate::tests::prelude::*;
-
-// incrementalParsingDynamicImport1_test.go:10
-pub fn test_incremental_parsing_dynamic_import1(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es6
-// @module: commonjs
-// @Filename: ./foo.ts
-export function bar() { return 1; }
-var x1 = import("./foo");
-x1.then(foo => {
-   var s: string = foo.bar();
-})
-/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_number_of_errors_in_current_file(t, 1);
-            f.go_to_marker(t, "1");
-            f.insert(t, "  ");
-            f.verify_number_of_errors_in_current_file(t, 1);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod incremental_parsing_dynamic_import2 {
-use crate::tests::prelude::*;
-
-// incrementalParsingDynamicImport2_test.go:10
-pub fn test_incremental_parsing_dynamic_import2(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es2015
-// @Filename: ./foo.ts
-export function bar() { return 1; }
-// @Filename: ./0.ts
-/*1*/ import { bar } from "./foo""#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_number_of_errors_in_current_file(t, 0);
-            f.go_to_marker(t, "1");
-            f.insert(t, "var x = ");
-            f.verify_number_of_errors_in_current_file(t, 1);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod incremental_parsing_dynamic_import3 {
-use crate::tests::prelude::*;
-
-// incrementalParsingDynamicImport3_test.go:10
-pub fn test_incremental_parsing_dynamic_import3(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es2015
-// @Filename: ./foo.ts
-export function bar() { return 1; }
-// @Filename: ./0.ts
-var x = import/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_number_of_errors_in_current_file(t, 0);
-            f.go_to_marker(t, "1");
-            f.insert(t, "(");
-            f.verify_number_of_errors_in_current_file(t, 1);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod incremental_parsing_dynamic_import4 {
-use crate::tests::prelude::*;
-
-// incrementalParsingDynamicImport4_test.go:10
-pub fn test_incremental_parsing_dynamic_import4(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es2015
-// @Filename: ./foo.ts
-export function bar() { return 1; }
-// @Filename: ./0.ts
-/*1*/
-import { bar } from "./foo""#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_number_of_errors_in_current_file(t, 0);
-            f.go_to_marker(t, "1");
-            f.insert(t, "import");
-            f.verify_number_of_errors_in_current_file(t, 1);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod incremental_parsing_insert_into_method1 {
-use crate::tests::prelude::*;
-
-// incrementalParsingInsertIntoMethod1_test.go:10
-pub fn test_incremental_parsing_insert_into_method1(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class C {
-    public foo1() { }
-    public foo2() {
-        return 1/*1*/;
-    }
-    public foo3() { }
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, " + 1");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod incremental_parsing_top_level_await1 {
-use crate::tests::prelude::*;
-
-// incrementalParsingTopLevelAwait1_test.go:10
-pub fn test_incremental_parsing_top_level_await1(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @target: esnext
-// @module: esnext
-// @Filename: ./foo.ts
-await(1);
-/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_number_of_errors_in_current_file(t, 1);
-            f.go_to_marker(t, "1");
-            f.insert(t, "export {};");
-            f.verify_number_of_errors_in_current_file(t, 0);
-            f.replace_line(t, 1, "");
-            f.verify_number_of_errors_in_current_file(t, 1);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod incremental_parsing_top_level_await2 {
-use crate::tests::prelude::*;
-
-// incrementalParsingTopLevelAwait2_test.go:10
-pub fn test_incremental_parsing_top_level_await2(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @target: esnext
-// @module: esnext
-// @Filename: ./foo.ts
-export {};
-/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_number_of_errors_in_current_file(t, 0);
-            f.go_to_marker(t, "1");
-            f.insert(t, "await(1);");
-            f.verify_number_of_errors_in_current_file(t, 0);
-            f.replace_line(t, 1, "");
-            f.verify_number_of_errors_in_current_file(t, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod incremental_parsing_with_js_doc {
-use crate::tests::prelude::*;
-
-// incrementalParsingWithJsDoc_test.go:10
-pub fn test_incremental_parsing_with_js_doc(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"[|import a from 'a/aaaaaaa/aaaaaaa/aaaaaa/aaaaaaa';
-/**/import b from 'b';
-import c from 'c';|]
-[|/** @internal */|]
-export class LanguageIdentifier[| { }|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_outlining_spans(t, &[]);
-            f.go_to_marker(t, "");
-            f.backspace(t, 1);
-            f.verify_outlining_spans(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod incremental_resolve_accessor {
 use crate::tests::prelude::*;
 
@@ -5003,6 +4594,481 @@ function updateCalendarEvent() {
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: util::COMPLETION_GLOBAL_TYPES.clone(), ..Default::default() }), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_generics1 {
+use crate::tests::prelude::*;
+
+// jsDocGenerics1_test.go:12
+pub fn test_js_doc_generics1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @allowNonTsExtensions: true
+// @Filename: ref.d.ts
+namespace Thing {
+    export interface Thung {
+        a: number;
+    ]
+]
+// @Filename: Foo.js
+
+/** @type {Array<number>} */
+var v;
+v[0]./*1*/
+
+/** @type {{x: Array<Array<number>>}} */
+var w;
+w.x[0][0]./*2*/
+
+/** @type {Array<Thing.Thung>} */
+var x;
+x[0].a./*3*/"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_completions(t, Any::MarkerSlice(f.markers()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toFixed".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_generics2 {
+use crate::tests::prelude::*;
+
+// jsDocGenerics2_test.go:10
+pub fn test_js_doc_generics2(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @allowNonTsExtensions: true
+// @Filename: Foo.js
+/**
+ * @param {T[]} arr
+ * @param {(function(T):T)} valuator
+ * @template T
+ */
+function SortFilter(arr,valuator)
+{
+    return arr;
+}
+var a/*1*/ = SortFilter([0, 1, 2], q/*2*/ => q);
+var b/*3*/ = SortFilter([0, 1, 2], undefined);"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "var a: number[]", "");
+            f.verify_quick_info_at(t, "2", "(parameter) q: number", "");
+            f.verify_quick_info_at(t, "3", "var b: number[]", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_indentation_preservation1 {
+use crate::tests::prelude::*;
+
+// jsDocIndentationPreservation1_test.go:10
+pub fn test_js_doc_indentation_preservation1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @allowJs: true
+// @Filename: Foo.js
+/**
+ * Does some stuff.
+ *     Second line.
+ * 	Third line.
+ */
+function foo/**/(){}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "");
+            f.verify_quick_info_is(t, "function foo(): void", r#"Does some stuff.
+    Second line.
+	Third line."#);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_indentation_preservation2 {
+use crate::tests::prelude::*;
+
+// jsDocIndentationPreservation2_test.go:10
+pub fn test_js_doc_indentation_preservation2(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @allowJs: true
+// @Filename: Foo.js
+/**
+	Does some stuff.
+	    Second line.
+		Third line.
+*/
+function foo/**/(){}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "");
+            f.verify_quick_info_is(t, "function foo(): void", r#"Does some stuff.
+    Second line.
+	Third line."#);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_indentation_preservation3 {
+use crate::tests::prelude::*;
+
+// jsDocIndentationPreservation3_test.go:10
+pub fn test_js_doc_indentation_preservation3(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @allowJs: true
+// @Filename: Foo.js
+/**
+    Does some stuff.
+        Second line.
+    	Third line.
+*/
+function foo/**/(){}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "");
+            f.verify_quick_info_is(t, "function foo(): void", r#"Does some stuff.
+    Second line.
+	Third line."#);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_inherit_doc {
+use crate::tests::prelude::*;
+
+// jsDocInheritDoc_test.go:10
+pub fn test_js_doc_inherit_doc(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: inheritDoc.ts
+class Foo {
+    /**
+     * Foo constructor documentation
+     */
+    constructor(value: number) {}
+    /**
+     * Foo#method1 documentation
+     */
+    static method1() {}
+    /**
+     * Foo#method2 documentation
+     */
+    method2() {}
+    /**
+     * Foo#property1 documentation
+     */
+    property1: string;
+    /**
+     * Foo#property3 documentation
+     */
+    property3 = "instance prop";
+}
+interface Baz {
+    /** Baz#property1 documentation */
+    property1: string;
+    /**
+     * Baz#property2 documentation
+     */
+    property2: object;
+}
+class Bar extends Foo implements Baz {
+    ctorValue: number;
+    /** @inheritDoc */
+    constructor(value: number) {
+        super(value);
+        this.ctorValue = value;
+    }
+    /** @inheritDoc */
+    static method1() {}
+    method2() {}
+    /** @inheritDoc */
+    property1: string;
+    /**
+     * Bar#property2
+     * @inheritDoc
+     */
+    property2: object;
+
+    static /*6*/property3 = "class prop";
+}
+const b = new Bar/*1*/(5);
+b.method2/*2*/();
+Bar.method1/*3*/();
+const p1 = b.property1/*4*/;
+const p2 = b.property2/*5*/;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "constructor Bar(value: number): Bar", "");
+            f.verify_quick_info_at(t, "2", "(method) Bar.method2(): void", "Foo#method2 documentation");
+            f.verify_quick_info_at(t, "3", "(method) Bar.method1(): void", "Foo#method1 documentation");
+            f.verify_quick_info_at(t, "4", "(property) Bar.property1: string", "Foo#property1 documentation");
+            f.verify_quick_info_at(t, "5", "(property) Bar.property2: object", r#"Baz#property2 documentation
+Bar#property2"#);
+            f.verify_quick_info_at(t, "6", "(property) Bar.property3: string", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_property_description1 {
+use crate::tests::prelude::*;
+
+// jsDocPropertyDescription1_test.go:10
+pub fn test_js_doc_property_description1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface StringExample {
+    /** Something generic */
+    [p: string]: any; 
+    /** Something specific */
+    property: number;
+}
+function stringExample(e: StringExample) {
+    console.log(e./*property*/property);
+    console.log(e./*string*/anything); 
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "property", "(property) StringExample.property: number", "Something specific");
+            f.verify_quick_info_at(t, "string", "(index) StringExample[string]: any", "Something generic");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_property_description10 {
+use crate::tests::prelude::*;
+
+// jsDocPropertyDescription10_test.go:10
+pub fn test_js_doc_property_description10(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"class MultipleClass {
+    /** Something generic */
+    [key: number | symbol | `data-${string}` | `data-${number}`]: string;
+}
+function multipleClass(e: typeof MultipleClass) {
+    console.log(e./*multipleClass*/anything);
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "multipleClass", "any", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_property_description11 {
+use crate::tests::prelude::*;
+
+// jsDocPropertyDescription11_test.go:10
+pub fn test_js_doc_property_description11(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"type AliasExample = {
+    /** Something generic */
+    [p: string]: string;
+    /** Something else */
+    [key: `any${string}`]: string;
+}
+function aliasExample(e: AliasExample) {
+    console.log(e./*alias*/anything);
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "alias", "(index) AliasExample[string | `any${string}`]: string", r#"Something generic
+Something else"#);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_property_description12 {
+use crate::tests::prelude::*;
+
+// jsDocPropertyDescription12_test.go:10
+pub fn test_js_doc_property_description12(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"type SymbolAlias = {
+    /** Something generic */
+    [p: symbol]: string;
+}
+function symbolAlias(e: SymbolAlias) {
+    console.log(e./*symbolAlias*/anything);
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "symbolAlias", "any", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_property_description2 {
+use crate::tests::prelude::*;
+
+// jsDocPropertyDescription2_test.go:10
+pub fn test_js_doc_property_description2(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface SymbolExample {
+    /** Something generic */
+    [key: symbol]: string;
+}
+function symbolExample(e: SymbolExample) {
+    console.log(e./*symbol*/anything);
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "symbol", "any", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_property_description3 {
+use crate::tests::prelude::*;
+
+// jsDocPropertyDescription3_test.go:10
+pub fn test_js_doc_property_description3(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface LiteralExample {
+    /** Something generic */
+    [key: `data-${string}`]: string;
+     /** Something else */
+    [key: `prefix${number}`]: number;
+}
+function literalExample(e: LiteralExample) {
+    console.log(e./*literal*/anything);
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "literal", "any", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_property_description4 {
+use crate::tests::prelude::*;
+
+// jsDocPropertyDescription4_test.go:10
+pub fn test_js_doc_property_description4(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface MultipleExample {
+    /** Something generic */
+    [key: string | number | symbol]: string;
+}
+function multipleExample(e: MultipleExample) {
+    console.log(e./*multiple*/anything);
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "multiple", "(index) MultipleExample[string | number | symbol]: string", "Something generic");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod js_doc_property_description5 {
+use crate::tests::prelude::*;
+
+// jsDocPropertyDescription5_test.go:10
+pub fn test_js_doc_property_description5(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface Multiple1Example {
+    /** Something generic */
+    [key: number | symbol | `data-${string}` | `data-${number}`]: string;
+}
+function multiple1Example(e: Multiple1Example) {
+    console.log(e./*multiple1*/anything);
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "multiple1", "any", "");
         });
         done(&mut *f, t);
         go::resume(__defer2);

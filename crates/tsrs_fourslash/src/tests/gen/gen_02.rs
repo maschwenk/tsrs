@@ -3,126 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod code_fix_class_implement_class_abstract_getters_and_setters {
-use crate::tests::prelude::*;
-
-// codeFixClassImplementClassAbstractGettersAndSetters_test.go:10
-pub fn test_code_fix_class_implement_class_abstract_getters_and_setters(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"abstract class A {
-    abstract get a(): string;
-    abstract set a(newName: string);
-
-    abstract get b(): number;
-
-    abstract set c(arg: number | string);
-
-    abstract accessor d: string;
-}
-
-class C implements A {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"abstract class A {
-    abstract get a(): string;
-    abstract set a(newName: string);
-
-    abstract get b(): number;
-
-    abstract set c(arg: number | string);
-
-    abstract accessor d: string;
-}
-
-class C implements A {
-    get a(): string {
-        throw new Error("Method not implemented.");
-    }
-    set a(newName: string) {
-        throw new Error("Method not implemented.");
-    }
-    get b(): number {
-        throw new Error("Method not implemented.");
-    }
-    set c(arg: string | number) {
-        throw new Error("Method not implemented.");
-    }
-    accessor d: string;
-}"#.to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod code_fix_class_implement_class_function_void_inferred {
-use crate::tests::prelude::*;
-
-// codeFixClassImplementClassFunctionVoidInferred_test.go:10
-pub fn test_code_fix_class_implement_class_function_void_inferred(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class A {
-    f() {}
-}
-
-class B implements A {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"class A {
-    f() {}
-}
-
-class B implements A {
-    f(): void {
-        throw new Error("Method not implemented.");
-    }
-}"#.to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod code_fix_class_implement_class_member_anonymous_class {
-use crate::tests::prelude::*;
-
-// codeFixClassImplementClassMemberAnonymousClass_test.go:10
-pub fn test_code_fix_class_implement_class_member_anonymous_class(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: false
-class A {
-    foo() {
-        return class { x: number; }
-    }
-    bar() {
-        return new class { x: number; }
-    }
-}
-class C implements A {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod code_fix_class_implement_class_method_via_heritage {
 use crate::tests::prelude::*;
 
@@ -5251,6 +5131,108 @@ export const exp = {
 export const exp = {
   person: getPerson() satisfies Person as Person
 };"#.to_string(), index: 1, ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod code_fix_missing_type_annotation_on_exports31_inline_import_default {
+use crate::tests::prelude::*;
+
+// codeFixMissingTypeAnnotationOnExports31-inline-import-default_test.go:10
+pub fn test_code_fix_missing_type_annotation_on_exports31_inline_import_default(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @isolatedDeclarations: true
+// @declaration: true
+// @Filename: /person-code.ts
+export type Person = { x: string; }
+export function getPerson() : Person {
+  return null!
+}
+// @Filename: /code.ts
+import { getPerson } from "./person-code";
+export default {
+  person: getPerson()
+};"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_file(t, "/code.ts");
+            f.verify_code_fix_available(t, &["Extract default export to variable", "Add satisfies and an inline type assertion with 'Person'", "Extract to variable and replace with 'newLocal as typeof newLocal'"]);
+            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add satisfies and an inline type assertion with 'Person'".to_string(), new_file_content: r#"import { getPerson, Person } from "./person-code";
+export default {
+  person: getPerson() satisfies Person as Person
+};"#.to_string(), index: 1, ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod code_fix_missing_type_annotation_on_exports32_inline_short_hand {
+use crate::tests::prelude::*;
+
+// codeFixMissingTypeAnnotationOnExports32-inline-short-hand_test.go:10
+pub fn test_code_fix_missing_type_annotation_on_exports32_inline_short_hand(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @isolatedDeclarations: true
+// @declaration: true
+// @Filename: /code.ts
+const x = 1;
+export default {
+  x
+};"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add satisfies and an inline type assertion with 'number'".to_string(), new_file_content: r#"const x = 1;
+export default {
+  x: x as number
+};"#.to_string(), index: 1, ..Default::default() });
+            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add satisfies and an inline type assertion with 'typeof x'".to_string(), new_file_content: r#"const x = 1;
+export default {
+  x: x as typeof x
+};"#.to_string(), index: 2, ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod code_fix_missing_type_annotation_on_exports33_methods {
+use crate::tests::prelude::*;
+
+// codeFixMissingTypeAnnotationOnExports33-methods_test.go:10
+pub fn test_code_fix_missing_type_annotation_on_exports33_methods(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @isolatedDeclarations: true
+// @declaration: true
+// @Filename: /code.ts
+export class Foo {
+  m() {
+  }
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_code_fix_available(t, &["Add return type 'void'"]);
+            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'void'".to_string(), new_file_content: r#"export class Foo {
+  m(): void {
+  }
+}"#.to_string(), index: 0, ..Default::default() });
         });
         done(&mut *f, t);
         go::resume(__defer2);

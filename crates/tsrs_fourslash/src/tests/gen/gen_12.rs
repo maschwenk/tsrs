@@ -3,272 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod format_on_enter_in_comment {
-use crate::tests::prelude::*;
-
-// formatOnEnterInComment_test.go:10
-pub fn test_format_on_enter_in_comment(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"   /**
-    * /*1*/
-    */"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert_line(t, "");
-            f.verify_current_file_content(t, r#"  /**
-   * 
-
-   */"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod format_on_enter_open_brace_add_new_line {
-use crate::tests::prelude::*;
-
-// formatOnEnterOpenBraceAddNewLine_test.go:11
-pub fn test_format_on_enter_open_brace_add_new_line(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"if(true) {/*0*/}
-if(false)/*1*/{
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts148 = f.get_options();
-            opts148.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
-            f.configure(t, opts148.clone());
-            f.go_to_marker(t, "0");
-            f.insert_line(t, "");
-            f.verify_current_file_content(t, r#"if (true)
-{
-}
-if(false){
-}"#);
-            f.go_to_marker(t, "1");
-            f.insert_line(t, "");
-            f.verify_current_file_content(t, r#"if (true)
-{
-}
-if (false)
-{
-}"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod format_on_open_curly_brace_remove_new_line {
-use crate::tests::prelude::*;
-
-// formatOnOpenCurlyBraceRemoveNewLine_test.go:11
-pub fn test_format_on_open_curly_brace_remove_new_line(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"if(true)
-/**/ }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts124 = f.get_options();
-            opts124.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::False;
-            f.configure(t, opts124.clone());
-            f.go_to_marker(t, "");
-            f.insert(t, "{");
-            f.verify_current_file_content(t, "if (true) { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod format_on_semi_colon_after_break {
-use crate::tests::prelude::*;
-
-// formatOnSemiColonAfterBreak_test.go:10
-pub fn test_format_on_semi_colon_after_break(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"for (var a in b) {
-break/**/
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "    break;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod format_parameter {
-use crate::tests::prelude::*;
-
-// formatParameter_test.go:10
-pub fn test_format_parameter(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"function foo(
-    first:
-    number,/*first*/
-    second: (
-    string/*second*/
-    ),
-    third:
-    (
-    boolean/*third*/
-    )
-) {
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "first");
-            f.verify_current_line_content(t, "        number,");
-            f.go_to_marker(t, "second");
-            f.verify_current_line_content(t, "        string");
-            f.go_to_marker(t, "third");
-            f.verify_current_line_content(t, "            boolean");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod format_range_ending_after_comma_of_call {
-use crate::tests::prelude::*;
-
-// formatRangeEndingAfterCommaOfCall_test.go:10
-pub fn test_format_range_ending_after_comma_of_call(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"someCall(
-    /*start*/"firstParameter",/*end*/
-    "something else"
-);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "start", "end");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod format_remove_new_line_after_open_brace {
-use crate::tests::prelude::*;
-
-// formatRemoveNewLineAfterOpenBrace_test.go:10
-pub fn test_format_remove_new_line_after_open_brace(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"function foo()
-{
-}
-if (true)
-{
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r#"function foo() {
-}
-if (true) {
-}"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod format_remove_space_between_dot_dot_dot_and_type_name {
-use crate::tests::prelude::*;
-
-// formatRemoveSpaceBetweenDotDotDotAndTypeName_test.go:10
-pub fn test_format_remove_space_between_dot_dot_dot_and_type_name(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"let a: [... any[]];
-let b: [...   number[]];
-let c: [...     string[]];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r#"let a: [...any[]];
-let b: [...number[]];
-let c: [...string[]];"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod format_satisfies_expression {
-use crate::tests::prelude::*;
-
-// formatSatisfiesExpression_test.go:10
-pub fn test_format_satisfies_expression(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"type Foo = "a" | "b" | "c";
-const foo1 = ["a"] satisfies Foo[];
-const foo2 = ["a"]satisfies Foo[];
-const foo3 = ["a"]  satisfies Foo[];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r#"type Foo = "a" | "b" | "c";
-const foo1 = ["a"] satisfies Foo[];
-const foo2 = ["a"] satisfies Foo[];
-const foo3 = ["a"] satisfies Foo[];"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod format_selection_after_template_literal1 {
 use crate::tests::prelude::*;
 
@@ -6406,6 +6140,313 @@ var v = function    *() { };/*2*/"#;
             f.verify_current_line_content(t, "function* g() { }");
             f.go_to_marker(t, "2");
             f.verify_current_line_content(t, "var v = function*() { };");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod generic_arity_enforcement_after_edit {
+use crate::tests::prelude::*;
+
+// genericArityEnforcementAfterEdit_test.go:10
+pub fn test_generic_arity_enforcement_after_edit(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface G<T, U> { }
+/**/
+var v4: G<G<any>, any>;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_number_of_errors_in_current_file(t, 1);
+            f.go_to_marker(t, "");
+            f.insert(t, " ");
+            f.verify_number_of_errors_in_current_file(t, 1);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod generic_assignment_compat {
+use crate::tests::prelude::*;
+
+// genericAssignmentCompat_test.go:10
+pub fn test_generic_assignment_compat(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface Int<T> {
+
+    val<U>(f: (t: T) => U): Int<U>;
+
+}
+
+declare var v1: Int<string>;
+
+var /*1*/v2/*2*/: Int<number> = v1;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_error_exists_between_markers(t, "1", "2");
+            f.verify_number_of_errors_in_current_file(t, 1);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod generic_call_signatures_in_non_generic_types1 {
+use crate::tests::prelude::*;
+
+// genericCallSignaturesInNonGenericTypes1_test.go:10
+pub fn test_generic_call_signatures_in_non_generic_types1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface WrappedObject<T> { }
+interface WrappedArray<T> { }
+interface Underscore {
+    <T>(list: T[]): WrappedArray<T>;
+    <T>(obj: T): WrappedObject<T>;
+}
+var _: Underscore;
+var a: number[];
+var /**/b = _(a); "#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "", "var b: WrappedArray<number>", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod generic_call_signatures_in_non_generic_types2 {
+use crate::tests::prelude::*;
+
+// genericCallSignaturesInNonGenericTypes2_test.go:10
+pub fn test_generic_call_signatures_in_non_generic_types2(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface WrappedArray<T> { }
+interface Underscore {
+    <T>(list: T[]): WrappedArray<T>;
+}
+var _: Underscore;
+var a: number[];
+var /**/b = _(a);  // WrappedArray<any>, should be WrappedArray<number>"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "", "var b: WrappedArray<number>", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod generic_calls_with_optional_params1 {
+use crate::tests::prelude::*;
+
+// genericCallsWithOptionalParams1_test.go:10
+pub fn test_generic_calls_with_optional_params1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"class Collection<T> {
+    public add(x: T) { }
+}
+interface Utils {
+    fold<T, S>(c: Collection<T>, folder: (s: S, t: T) => T, init?: S): T;
+}
+var c = new Collection<string>();
+var utils: Utils;
+var /*1*/r = utils.fold(c, (s, t) => t, "");
+var /*2*/r2 = utils.fold(c, (s, t) => t);"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "var r: string", "");
+            f.verify_quick_info_at(t, "2", "var r2: string", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod generic_clodule_completion_list {
+use crate::tests::prelude::*;
+
+// genericCloduleCompletionList_test.go:11
+pub fn test_generic_clodule_completion_list(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"class D<T> { x: number }
+namespace D { export function f() { } }
+var d: D<number>;
+d./**/"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("x".to_string())], ..Default::default() }), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod generic_combinator_with_constraints1 {
+use crate::tests::prelude::*;
+
+// genericCombinatorWithConstraints1_test.go:10
+pub fn test_generic_combinator_with_constraints1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"function apply<T, U extends Date>(source: T[], selector: (x: T) => U) {
+    var /*1*/xs = source.map(selector); // any[]
+    var /*2*/xs2 = source.map((x: T, a, b): U => { return null }); // any[] 
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "(local var) xs: U[]", "");
+            f.verify_quick_info_at(t, "2", "(local var) xs2: U[]", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod generic_combinators1 {
+use crate::tests::prelude::*;
+
+// genericCombinators1_test.go:10
+pub fn test_generic_combinators1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface Collection<T> {
+    length: number;
+    add(x: T): void;
+    remove(x: T): boolean;
+}
+interface Combinators {
+    map<T, U>(c: Collection<T>, f: (x: T) => U): Collection<U>;
+    map<T>(c: Collection<T>, f: (x: T) => any): Collection<any>;
+}
+class A {
+    foo<T>() { return this; }
+}
+class B<T> {
+    foo(x: T): T { return null; }
+}
+var c2: Collection<number>;
+var c3: Collection<Collection<number>>;
+var c4: Collection<A>;
+var c5: Collection<B<any>>;
+var _: Combinators;
+var rf1 = (x: number) => { return x.toFixed() };
+var rf2 = (x: Collection<number>) => { return x.length };
+var rf3 = (x: A) => { return x.foo() };
+var /*9*/r1a = _.map(c2, (/*1*/x) => { return x.toFixed() });
+var /*10*/r1b = _.map(c2, rf1);
+var /*11*/r2a = _.map(c3, (/*2*/x: Collection<number>) => { return x.length });
+var /*12*/r2b = _.map(c3, rf2);
+var /*13*/r3a = _.map(c4, (/*3*/x) => { return x.foo() });
+var /*14*/r3b = _.map(c4, rf3);
+var /*15*/r4a = _.map(c5, (/*4*/x) => { return x.foo(1) });
+var /*17*/r5a = _.map<number, string>(c2, (/*5*/x) => { return x.toFixed() });
+var /*18*/r5b = _.map<number, string>(c2, rf1);
+var /*19*/r6a = _.map<Collection<number>, number>(/*6*/c3, (x: Collection<number>) => { return x.length });
+var /*20*/r6b = _.map<Collection<number>, number>(c3, rf2);
+var /*21*/r7a = _.map<A, A>(c4, (/*7*/x: A) => { return x.foo() });
+var /*22*/r7b = _.map<A, A>(c4, rf3);
+var /*23*/r8a = _.map</*error1*/B/*error2*/, string>(c5, (/*8*/x) => { return x.foo() });"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "(parameter) x: number", "");
+            f.verify_quick_info_at(t, "2", "(parameter) x: Collection<number>", "");
+            f.verify_quick_info_at(t, "3", "(parameter) x: A", "");
+            f.verify_quick_info_at(t, "4", "(parameter) x: B<any>", "");
+            f.verify_quick_info_at(t, "5", "(parameter) x: number", "");
+            f.verify_quick_info_at(t, "6", "var c3: Collection<Collection<number>>", "");
+            f.verify_quick_info_at(t, "7", "(parameter) x: A", "");
+            f.verify_quick_info_at(t, "8", "(parameter) x: any", "");
+            f.verify_quick_info_at(t, "9", "var r1a: Collection<string>", "");
+            f.verify_quick_info_at(t, "10", "var r1b: Collection<string>", "");
+            f.verify_quick_info_at(t, "11", "var r2a: Collection<number>", "");
+            f.verify_quick_info_at(t, "12", "var r2b: Collection<number>", "");
+            f.verify_quick_info_at(t, "13", "var r3a: Collection<A>", "");
+            f.verify_quick_info_at(t, "14", "var r3b: Collection<A>", "");
+            f.verify_quick_info_at(t, "15", "var r4a: Collection<any>", "");
+            f.verify_quick_info_at(t, "17", "var r5a: Collection<string>", "");
+            f.verify_quick_info_at(t, "18", "var r5b: Collection<string>", "");
+            f.verify_quick_info_at(t, "19", "var r6a: Collection<number>", "");
+            f.verify_quick_info_at(t, "20", "var r6b: Collection<number>", "");
+            f.verify_quick_info_at(t, "21", "var r7a: Collection<A>", "");
+            f.verify_quick_info_at(t, "22", "var r7b: Collection<A>", "");
+            f.verify_quick_info_at(t, "23", "var r8a: Collection<string>", "");
+            f.verify_error_exists_between_markers(t, "error1", "error2");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod generic_combinators3 {
+use crate::tests::prelude::*;
+
+// genericCombinators3_test.go:10
+pub fn test_generic_combinators3(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface Collection<T, U> {
+}
+
+interface Combinators {
+    map<T, U, V>(c: Collection<T,U>, f: (x: T, y: U) => V): Collection<T, V>;
+    map<T, U>(c: Collection<T,U>, f: (x: T, y: U) => any): Collection<any, any>;
+}
+
+var c2: Collection<number, string>;
+
+var _: Combinators;
+
+var /*9*/r1a  = _.ma/*1c*/p(c2, (/*1a*/x,/*1b*/y) => { return x + "" });  // check quick info of map here"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1a", "(parameter) x: number", "");
+            f.verify_quick_info_at(t, "1b", "(parameter) y: string", "");
+            f.verify_quick_info_at(t, "1c", "(method) Combinators.map<number, string, string>(c: Collection<number, string>, f: (x: number, y: string) => string): Collection<number, string> (+1 overload)", "");
+            f.verify_quick_info_at(t, "9", "var r1a: Collection<number, string>", "");
         });
         done(&mut *f, t);
         go::resume(__defer2);

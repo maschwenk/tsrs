@@ -3,399 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod signature_help_for_optional_methods {
-use crate::tests::prelude::*;
-
-// signatureHelpForOptionalMethods_test.go:10
-pub fn test_signature_help_for_optional_methods(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: true
-interface Obj {
-    optionalMethod?: (current: any) => any;
-};
-
-const o: Obj = {
-  optionalMethod(/*1*/) {
-    return {};
-  }
-};"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "optionalMethod(current: any): any".to_string(), parameter_name: "current".to_string(), parameter_span: "current: any".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_for_signature_with_unreachable_type {
-use crate::tests::prelude::*;
-
-// signatureHelpForSignatureWithUnreachableType_test.go:10
-pub fn test_signature_help_for_signature_with_unreachable_type(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /node_modules/foo/node_modules/bar/index.d.ts
-export interface SomeType {
-    x?: number;
-}
-// @Filename: /node_modules/foo/index.d.ts
-import { SomeType } from "bar";
-export function func<T extends SomeType>(param: T): void;
-export function func<T extends SomeType>(param: T, other: T): void;
-// @Filename: /usage.ts
-import { func } from "foo";
-func({/*1*/});"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "func(param: {}): void".to_string(), overloads_count: 2, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_for_super_calls1 {
-use crate::tests::prelude::*;
-
-// signatureHelpForSuperCalls1_test.go:10
-pub fn test_signature_help_for_super_calls1(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class A { }
-class B extends A { }
-class C extends B {
-    constructor() {
-        super(/*1*/ // sig help here?
-    }
-}
-class A2 { }
-class B2 extends A2 {
-    constructor(x:number) {}
- }
-class C2 extends B2 {
-    constructor() {
-        super(/*2*/ // sig help here?
-    }
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "B(): B".to_string(), ..Default::default() });
-            f.go_to_marker(t, "2");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "B2(x: number): B2".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_function_overload {
-use crate::tests::prelude::*;
-
-// signatureHelpFunctionOverload_test.go:10
-pub fn test_signature_help_function_overload(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"function functionOverload();
-function functionOverload(test: string);
-function functionOverload(test?: string) { }
-functionOverload(/*functionOverload1*/);
-functionOverload(""/*functionOverload2*/);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "functionOverload1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "functionOverload(): any".to_string(), parameter_count: 0, overloads_count: 2, ..Default::default() });
-            f.go_to_marker(t, "functionOverload2");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "functionOverload(test: string): any".to_string(), parameter_name: "test".to_string(), parameter_span: "test: string".to_string(), overloads_count: 2, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_function_parameter {
-use crate::tests::prelude::*;
-
-// signatureHelpFunctionParameter_test.go:10
-pub fn test_signature_help_function_parameter(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"function parameterFunction(callback: (a: number, b: string) => void) {
-    callback(/*parameterFunction1*/5, /*parameterFunction2*/"");
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "parameterFunction1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(a: number, b: string): void".to_string(), parameter_count: 2, parameter_name: "a".to_string(), parameter_span: "a: number".to_string(), ..Default::default() });
-            f.go_to_marker(t, "parameterFunction2");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(a: number, b: string): void".to_string(), parameter_name: "b".to_string(), parameter_span: "b: string".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_implicit_constructor {
-use crate::tests::prelude::*;
-
-// signatureHelpImplicitConstructor_test.go:10
-pub fn test_signature_help_implicit_constructor(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class ImplicitConstructor {
-}
-var implicitConstructor = new ImplicitConstructor(/**/);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "ImplicitConstructor(): ImplicitConstructor".to_string(), parameter_count: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_import_star_from_export_equals {
-use crate::tests::prelude::*;
-
-// signatureHelpImportStarFromExportEquals_test.go:10
-pub fn test_signature_help_import_star_from_export_equals(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
-// @Filename: /node_modules/@types/abs/index.d.ts
-declare function abs(str: string): string;
-export = abs;
-// @Filename: /a.js
-import * as abs from "abs";
-abs.default/**/;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, "(");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "default(str: string): string".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_in_adjacent_block_body {
-use crate::tests::prelude::*;
-
-// signatureHelpInAdjacentBlockBody_test.go:11
-pub fn test_signature_help_in_adjacent_block_body(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"declare function foo(...args);
-
-foo(() => {/*1*/}/*2*/)"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help_present(t, Some(lsproto::SignatureHelpContext { trigger_kind: lsproto::SignatureHelpTriggerKind::Invoked, ..Default::default() }));
-            f.go_to_marker(t, "2");
-            f.verify_signature_help_present(t, Some(lsproto::SignatureHelpContext { trigger_kind: lsproto::SignatureHelpTriggerKind::Invoked, ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_in_callback {
-use crate::tests::prelude::*;
-
-// signatureHelpInCallback_test.go:10
-pub fn test_signature_help_in_callback(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"declare function forEach(f: () => void);
-forEach(/*1*/() => {
-    /*2*/
-});"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "forEach(f: () => void): any".to_string(), ..Default::default() });
-            f.verify_no_signature_help_for_markers(t, &["2"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_in_complete_generics_call {
-use crate::tests::prelude::*;
-
-// signatureHelpInCompleteGenericsCall_test.go:10
-pub fn test_signature_help_in_complete_generics_call(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"function foo<T>(x: number, callback: (x: T) => number) {
-}
-foo(/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo(x: number, callback: (x: unknown) => number): void".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_in_function_call {
-use crate::tests::prelude::*;
-
-// signatureHelpInFunctionCall_test.go:10
-pub fn test_signature_help_in_function_call(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"var items = [];
-items.forEach(item => {
-    for (/**/
-});"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_signature_help_for_markers(t, &[""]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_in_function_call_on_function_declaration_in_multiple_files {
-use crate::tests::prelude::*;
-
-// signatureHelpInFunctionCallOnFunctionDeclarationInMultipleFiles_test.go:10
-pub fn test_signature_help_in_function_call_on_function_declaration_in_multiple_files(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: signatureHelpInFunctionCallOnFunctionDeclarationInMultipleFiles_file0.ts
-declare function fn(x: string, y: number);
-// @Filename: signatureHelpInFunctionCallOnFunctionDeclarationInMultipleFiles_file1.ts
-declare function fn(x: string);
-// @Filename: signatureHelpInFunctionCallOnFunctionDeclarationInMultipleFiles_file2.ts
-fn(/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_in_parenthetical {
-use crate::tests::prelude::*;
-
-// signatureHelpInParenthetical_test.go:10
-pub fn test_signature_help_in_parenthetical(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class base { constructor (public n: number, public y: string) { } }
-(new base(/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "n".to_string(), ..Default::default() });
-            f.insert(t, "0, ");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "y".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod signature_help_in_recursive_type {
-use crate::tests::prelude::*;
-
-// signatureHelpInRecursiveType_test.go:10
-pub fn test_signature_help_in_recursive_type(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"type Tail<T extends any[]> =
-	((...args: T) => any) extends ((head: any, ...tail: infer R) => any) ? R : never;
-
-type Reverse<List extends any[]> = _Reverse<List, []>;
-
-type _Reverse<Source extends any[], Result extends any[] = []> = {
-	1: Result,
-	0: _Reverse<Tail<Source>, 0>,
-}[Source extends [] ? 1 : 0];
-
-type Foo = Reverse<[0,/**/]>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "Reverse<List extends any[]>".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod signature_help_incomplete_calls {
 use crate::tests::prelude::*;
 
@@ -4514,6 +4121,1593 @@ import { a, b } from "./indexdef";
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1", "2"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod statefindallrefs {
+use crate::tests::prelude::*;
+
+// statefindallrefs_test.go:14
+pub fn test_find_all_refs_solution_referencing_default_project_directly(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true 
+// @tsc: --build /myproject/tsconfig.json
+// @Filename: dummy/dummy.ts
+/*dummy*/const x = 1;
+// @Filename: dummy/tsconfig.json
+{ }
+// @Filename: myproject/tsconfig.json
+{
+	"files": [],
+	"references": [{ "path": "./tsconfig-src.json" }]
+}
+// @Filename: myproject/tsconfig-src.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target",
+		"declarationMap": true,
+	},
+	"include": ["./src/\**/*"]
+}
+// @Filename: myproject/src/main.ts
+import { foo } from './helpers/functions';
+export { /*mainFoo*/foo };
+// @Filename: myproject/src/helpers/functions.ts
+export function foo() { return 1; }
+// @Filename: myproject/indirect3/tsconfig.json
+{ }
+// @Filename: myproject/indirect3/main.ts
+import { /*fooIndirect3Import*/foo } from '../target/src/main';
+foo()
+export function bar() {}
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.close_file_of_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.verify_baseline_find_all_references(t, &["mainFoo"]);
+            f.close_file_of_marker(t, "mainFoo");
+            f.verify_baseline_find_all_references(t, &["fooIndirect3Import"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// statefindallrefs_test.go:73
+pub fn test_find_all_refs_solution_referencing_default_project_indirectly(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true 
+// @tsc: --build /myproject/tsconfig.json
+// @Filename: dummy/dummy.ts
+/*dummy*/const x = 1;
+// @Filename: dummy/tsconfig.json
+{ }
+// @Filename: myproject/tsconfig.json
+{
+	"files": [],
+	"references":  [
+		{ "path": "./tsconfig-indirect1.json" },
+		{ "path": "./tsconfig-indirect2.json" },
+	]
+}
+// @Filename: myproject/tsconfig-src.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target",
+		"declarationMap": true,
+	},
+	"include": ["./src/\**/*"]
+}
+// @Filename: myproject/src/main.ts
+import { foo } from './helpers/functions';
+export { /*mainFoo*/foo };
+// @Filename: myproject/src/helpers/functions.ts
+export function foo() { return 1; }
+// @Filename: myproject/indirect3/tsconfig.json
+{ }
+// @Filename: myproject/indirect3/main.ts
+import { /*fooIndirect3Import*/foo } from '../target/src/main';
+foo()
+export function bar() {}
+// @FileName: myproject/indirect1/main.ts
+export const indirect = 1;
+// @Filename: myproject/tsconfig-indirect1.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target/",
+	},
+	"files": [
+		"./indirect1/main.ts"
+	],
+	"references": [
+		{
+			"path": "./tsconfig-src.json"
+		}
+	]
+}
+// @FileName: myproject/indirect2/main.ts
+export const indirect = 1;
+// @Filename: myproject/tsconfig-indirect2.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target/",
+	},
+	"files": [
+		"./indirect2/main.ts"
+	],
+	"references": [
+		{
+			"path": "./tsconfig-src.json"
+		}
+	]
+}
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.close_file_of_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.verify_baseline_find_all_references(t, &["mainFoo"]);
+            f.close_file_of_marker(t, "mainFoo");
+            f.verify_baseline_find_all_references(t, &["fooIndirect3Import"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// statefindallrefs_test.go:169
+pub fn test_find_all_refs_solution_with_disable_referenced_project_load_referencing_default_project_directly(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true 
+// @tsc: --build /myproject/tsconfig.json
+// @Filename: dummy/dummy.ts
+/*dummy*/const x = 1;
+// @Filename: dummy/tsconfig.json
+{ }
+// @Filename: myproject/tsconfig.json
+{
+	"compilerOptions": {
+		"disableReferencedProjectLoad": true
+	},
+	"files": [],
+	"references": [{ "path": "./tsconfig-src.json" }]
+}
+// @Filename: myproject/tsconfig-src.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target",
+		"declarationMap": true,
+	},
+	"include": ["./src/\**/*"]
+}
+// @Filename: myproject/src/main.ts
+import { foo } from './helpers/functions';
+export { /*mainFoo*/foo };
+// @Filename: myproject/src/helpers/functions.ts
+export function foo() { return 1; }
+// @Filename: myproject/indirect3/tsconfig.json
+{ }
+// @Filename: myproject/indirect3/main.ts
+import { /*fooIndirect3Import*/foo } from '../target/src/main';
+foo()
+export function bar() {}
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.close_file_of_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.verify_baseline_find_all_references(t, &["mainFoo"]);
+            f.close_file_of_marker(t, "mainFoo");
+            f.verify_baseline_find_all_references(t, &["fooIndirect3Import"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// statefindallrefs_test.go:231
+pub fn test_find_all_refs_solution_referencing_default_project_indirectly_through_disable_referenced_project_load(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true 
+// @tsc: --build /myproject/tsconfig.json
+// @Filename: dummy/dummy.ts
+/*dummy*/const x = 1;
+// @Filename: dummy/tsconfig.json
+{ }
+// @Filename: myproject/tsconfig.json
+{
+	"files": [],
+	"references":  [
+		{ "path": "./tsconfig-indirect1.json" },
+		{ "path": "./tsconfig-indirect2.json" },
+	]
+}
+// @Filename: myproject/tsconfig-src.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target",
+		"declarationMap": true,
+	},
+	"include": ["./src/\**/*"]
+}
+// @Filename: myproject/src/main.ts
+import { foo } from './helpers/functions';
+export { /*mainFoo*/foo };
+// @Filename: myproject/src/helpers/functions.ts
+export function foo() { return 1; }
+// @Filename: myproject/indirect3/tsconfig.json
+{ }
+// @Filename: myproject/indirect3/main.ts
+import { /*fooIndirect3Import*/foo } from '../target/src/main';
+foo()
+export function bar() {}
+// @FileName: myproject/indirect1/main.ts
+export const indirect = 1;
+// @Filename: myproject/tsconfig-indirect1.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target/",
+		"disableReferencedProjectLoad": true,
+	},
+	"files": [
+		"./indirect1/main.ts"
+	],
+	"references": [
+		{
+			"path": "./tsconfig-src.json"
+		}
+	]
+}
+// @FileName: myproject/indirect2/main.ts
+export const indirect = 1;
+// @Filename: myproject/tsconfig-indirect2.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target/",
+		"disableReferencedProjectLoad": true,
+	},
+	"files": [
+		"./indirect2/main.ts"
+	],
+	"references": [
+		{
+			"path": "./tsconfig-src.json"
+		}
+	]
+}
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.close_file_of_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.verify_baseline_find_all_references(t, &["mainFoo"]);
+            f.close_file_of_marker(t, "mainFoo");
+            f.verify_baseline_find_all_references(t, &["fooIndirect3Import"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// statefindallrefs_test.go:329
+pub fn test_find_all_refs_solution_referencing_default_project_indirectly_through_disable_referenced_project_load_in_one_but_without_it_in_another(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true 
+// @tsc: --build /myproject/tsconfig.json
+// @Filename: dummy/dummy.ts
+/*dummy*/const x = 1;
+// @Filename: dummy/tsconfig.json
+{ }
+// @Filename: myproject/tsconfig.json
+{
+	"files": [],
+	"references":  [
+		{ "path": "./tsconfig-indirect1.json" },
+		{ "path": "./tsconfig-indirect2.json" },
+	]
+}
+// @Filename: myproject/tsconfig-src.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target",
+		"declarationMap": true,
+	},
+	"include": ["./src/\**/*"]
+}
+// @Filename: myproject/src/main.ts
+import { foo } from './helpers/functions';
+export { /*mainFoo*/foo };
+// @Filename: myproject/src/helpers/functions.ts
+export function foo() { return 1; }
+// @Filename: myproject/indirect3/tsconfig.json
+{ }
+// @Filename: myproject/indirect3/main.ts
+import { /*fooIndirect3Import*/foo } from '../target/src/main';
+foo()
+export function bar() {}
+// @FileName: myproject/indirect1/main.ts
+export const indirect = 1;
+// @Filename: myproject/tsconfig-indirect1.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target/",
+		"disableReferencedProjectLoad": true,
+	},
+	"files": [
+		"./indirect1/main.ts"
+	],
+	"references": [
+		{
+			"path": "./tsconfig-src.json"
+		}
+	]
+}
+// @FileName: myproject/indirect2/main.ts
+export const indirect = 1;
+// @Filename: myproject/tsconfig-indirect2.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target/",
+	},
+	"files": [
+		"./indirect2/main.ts"
+	],
+	"references": [
+		{
+			"path": "./tsconfig-src.json"
+		}
+	]
+}
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.close_file_of_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.verify_baseline_find_all_references(t, &["mainFoo"]);
+            f.close_file_of_marker(t, "mainFoo");
+            f.verify_baseline_find_all_references(t, &["fooIndirect3Import"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// statefindallrefs_test.go:426
+pub fn test_find_all_refs_project_with_own_files_referencing_file_from_referenced_project(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true 
+// @tsc: --build /myproject/tsconfig.json
+// @Filename: dummy/dummy.ts
+/*dummy*/const x = 1;
+// @Filename: dummy/tsconfig.json
+{ }
+// @Filename: myproject/tsconfig.json
+{
+	"files": ["./own/main.ts"],
+	"references": [{ "path": "./tsconfig-src.json" }]
+}
+// @Filename: myproject/own/main.ts
+import { foo } from '../target/src/main';
+foo();
+export function bar() {}
+// @Filename: myproject/tsconfig-src.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"outDir": "./target",
+		"declarationMap": true,
+	},
+	"include": ["./src/\**/*"]
+}
+// @Filename: myproject/src/main.ts
+import { foo } from './helpers/functions';
+export { /*mainFoo*/foo };
+// @Filename: myproject/src/helpers/functions.ts
+export function foo() { return 1; }
+// @Filename: myproject/indirect3/tsconfig.json
+{ }
+// @Filename: myproject/indirect3/main.ts
+import { /*fooIndirect3Import*/foo } from '../target/src/main';
+foo()
+export function bar() {}
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.close_file_of_marker(t, "mainFoo");
+            f.go_to_marker(t, "dummy");
+            f.close_file_of_marker(t, "dummy");
+            f.verify_baseline_find_all_references(t, &["mainFoo"]);
+            f.close_file_of_marker(t, "mainFoo");
+            f.verify_baseline_find_all_references(t, &["fooIndirect3Import"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// statefindallrefs_test.go:489
+pub fn test_find_all_refs_root_of_referenced_project(t: &T) {
+    t.parallel();
+    for disable_source_of_project_reference_redirect in vec![false, true] {
+        t.run(format!("TestFindAllRefsRootOfReferencedProject{}", (if disable_source_of_project_reference_redirect { "DeclarationMaps".to_string() } else { "".to_string() }).as_str()).as_str(), |t: &T| {
+            t.parallel();
+            let __defer1 = go::run(|| {
+                let mut content = format!(r#"
+// @stateBaseline: true
+{}
+// @Filename: src/common/input/keyboard.ts
+function bar() {{ return "just a random function so .d.ts location doesnt match"; }}
+export function /*keyboard*/evaluateKeyboardEvent() {{ }}
+// @Filename: src/common/input/keyboard.test.ts
+import {{ evaluateKeyboardEvent }} from 'common/input/keyboard';
+function testEvaluateKeyboardEvent() {{
+	return evaluateKeyboardEvent();
+}}
+// @Filename: src/terminal.ts
+/*terminal*/import {{ evaluateKeyboardEvent }} from 'common/input/keyboard';
+function foo() {{
+	return evaluateKeyboardEvent();
+}}
+// @Filename: /src/common/tsconfig.json
+{{
+	"compilerOptions": {{
+		"composite": true,
+		"declarationMap": true,
+		"outDir": "../../out",
+		"disableSourceOfProjectReferenceRedirect": {},
+		"paths": {{
+			"*": ["../*"],
+		}},
+	}},
+	"include": ["./\**/*"]
+}}
+// @Filename: src/tsconfig.json
+{{
+	"compilerOptions": {{
+		"composite": true,
+		"declarationMap": true,
+		"outDir": "../out",
+		"disableSourceOfProjectReferenceRedirect": {},
+		"paths": {{
+			"common/*": ["./common/*"],
+		}},
+		"tsBuildInfoFile": "../out/src.tsconfig.tsbuildinfo"
+	}},
+	"include": ["./\**/*"],
+	"references": [
+		{{ "path": "./common" }},
+	],
+}}"#, (if disable_source_of_project_reference_redirect { "// @tsc: --build /src/tsconfig.json".to_string() } else { "".to_string() }).as_str(), disable_source_of_project_reference_redirect, disable_source_of_project_reference_redirect);
+                let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+                let f = &mut f;
+                let __defer2 = go::run(|| {
+                    f.go_to_marker(t, "keyboard");
+                    f.go_to_marker(t, "terminal");
+                    f.verify_baseline_find_all_references(t, &["keyboard"]);
+                });
+                done(&mut *f, t);
+                go::resume(__defer2);
+            });
+            testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+        });
+    }
+}
+
+// statefindallrefs_test.go:551
+pub fn test_find_all_refs_ancestor_sibling_projects_loading(t: &T) {
+    t.parallel();
+    for disable_solution_searching in vec![false, true] {
+        t.run(format!("TestFindAllRefsAncestorSiblingProjectsLoading{}", (if disable_solution_searching { "DisableSolutionSearching".to_string() } else { "".to_string() }).as_str()).as_str(), |t: &T| {
+            t.parallel();
+            let __defer1 = go::run(|| {
+                let mut content = format!(r#"
+// @stateBaseline: true
+// @Filename: solution/tsconfig.json
+{{
+	"files": [],
+	"include": [],
+	"references": [
+		{{ "path": "./compiler" }},
+		{{ "path": "./services" }},
+	],
+}}
+// @Filename: solution/compiler/tsconfig.json
+{{
+	"compilerOptions": {{ 
+		"composite": true,
+		"disableSolutionSearching": {},
+	}},
+	"files": ["./types.ts", "./program.ts"]
+}}
+// @Filename: solution/compiler/types.ts
+namespace ts {{
+	export interface Program {{
+		getSourceFiles(): string[];
+	}}
+}}
+// @Filename: solution/compiler/program.ts
+namespace ts {{
+	export const program: Program = {{
+		/*notLocal*/getSourceFiles: () => [/*local*/getSourceFile()]
+	}};
+	function getSourceFile() {{ return "something"; }}
+}}
+// @Filename: solution/services/tsconfig.json
+{{
+	"compilerOptions": {{
+		"composite": true
+	}},
+	"files": ["./services.ts"],
+	"references": [
+		{{ "path": "../compiler" }},
+	],
+}}
+// @Filename: solution/services/services.ts
+/// <reference path="../compiler/types.ts" />
+/// <reference path="../compiler/program.ts" />
+namespace ts {{
+	const result = program.getSourceFiles();
+}}"#, disable_solution_searching);
+                let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+                let f = &mut f;
+                let __defer2 = go::run(|| {
+                    f.verify_baseline_find_all_references(t, &["local"]);
+                    f.verify_baseline_find_all_references(t, &["notLocal"]);
+                });
+                done(&mut *f, t);
+                go::resume(__defer2);
+            });
+            testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+        });
+    }
+}
+
+// statefindallrefs_test.go:618
+pub fn test_find_all_refs_overlapping_projects(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true 
+// @Filename: solution/tsconfig.json
+{
+	"files": [],
+	"include": [],
+	"references": [
+		{ "path": "./a" },
+		{ "path": "./b" },
+		{ "path": "./c" },
+		{ "path": "./d" },
+	],
+}
+// @Filename: solution/a/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	"files": ["./index.ts"]
+}
+// @Filename: solution/a/index.ts
+export interface I {
+	M(): void;
+}
+// @Filename: solution/b/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true
+	},
+	"files": ["./index.ts"],
+	"references": [
+		{ "path": "../a" },
+	],
+}
+// @Filename: solution/b/index.ts
+import { I } from "../a";
+export class B implements /**/I {
+	M() {}
+}
+// @Filename: solution/c/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true
+	},
+	"files": ["./index.ts"],
+	"references": [
+		{ "path": "../b" },
+	],
+}
+// @Filename: solution/c/index.ts
+import { I } from "../a";
+import { B } from "../b";
+export const C: I = new B();
+// @Filename: solution/d/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true
+	},
+	"files": ["./index.ts"],
+	"references": [
+		{ "path": "../c" },
+	],
+}
+// @Filename: solution/d/index.ts
+import { I } from "../a";
+import { C } from "../c";
+export const D: I = C;
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_find_all_references(t, &[""]);
+            f.verify_baseline_find_all_references(t, &[""]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// statefindallrefs_test.go:700
+pub fn test_find_all_refs_two_projects_open_and_one_project_references(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true
+// @Filename: /myproject/main/src/file1.ts
+/*main*/export const mainConst = 10;
+// @Filename: /myproject/main/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	"references": [
+		{ "path": "../core" },
+		{ "path": "../indirect" },
+		{ "path": "../noCoreRef1" },
+		{ "path": "../indirectDisabledChildLoad1" },
+		{ "path": "../indirectDisabledChildLoad2" },
+		{ "path": "../refToCoreRef3" },
+		{ "path": "../indirectNoCoreRef" }
+	]
+}
+// @Filename: /myproject/core/src/file1.ts
+export const /*find*/coreConst = 10;
+// @Filename: /myproject/core/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+}
+// @Filename: /myproject/noCoreRef1/src/file1.ts
+export const noCoreRef1Const = 10;
+// @Filename: /myproject/noCoreRef1/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+}
+// @Filename: /myproject/indirect/src/file1.ts
+export const indirectConst = 10;
+// @Filename: /myproject/indirect/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	"references": [
+		{ "path": "../coreRef1" },
+	]
+}
+// @Filename: /myproject/coreRef1/src/file1.ts
+export const coreRef1Const = 10;
+// @Filename: /myproject/coreRef1/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	"references": [
+		{ "path": "../core" },
+	]
+}
+// @Filename: /myproject/indirectDisabledChildLoad1/src/file1.ts
+export const indirectDisabledChildLoad1Const = 10;
+// @Filename: /myproject/indirectDisabledChildLoad1/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"disableReferencedProjectLoad": true,
+	},
+	"references": [
+		{ "path": "../coreRef2" },
+	]
+}
+// @Filename: /myproject/coreRef2/src/file1.ts
+export const coreRef2Const = 10;
+// @Filename: /myproject/coreRef2/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	"references": [
+		{ "path": "../core" },
+	]
+}
+// @Filename: /myproject/indirectDisabledChildLoad2/src/file1.ts
+export const indirectDisabledChildLoad2Const = 10;
+// @Filename: /myproject/indirectDisabledChildLoad2/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+		"disableReferencedProjectLoad": true,
+	},
+	"references": [
+		{ "path": "../coreRef3" },
+	]
+}
+// @Filename: /myproject/coreRef3/src/file1.ts
+export const coreRef3Const = 10;
+// @Filename: /myproject/coreRef3/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	"references": [
+		{ "path": "../core" },
+	]
+}
+// @Filename: /myproject/refToCoreRef3/src/file1.ts
+export const refToCoreRef3Const = 10;
+// @Filename: /myproject/refToCoreRef3/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	"references": [
+		{ "path": "../coreRef3" },
+	]
+}
+// @Filename: /myproject/indirectNoCoreRef/src/file1.ts
+export const indirectNoCoreRefConst = 10;
+// @Filename: /myproject/indirectNoCoreRef/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	"references": [
+		{ "path": "../noCoreRef2" },
+	]
+}
+// @Filename: /myproject/noCoreRef2/src/file1.ts
+export const noCoreRef2Const = 10;
+// @Filename: /myproject/noCoreRef2/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+}"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "main");
+            f.verify_baseline_find_all_references(t, &["find"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// statefindallrefs_test.go:842
+pub fn test_find_all_refs_does_not_try_to_search_project_after_its_update_does_not_include_the_file(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true 
+// @Filename: /packages/babel-loader/tsconfig.json
+{
+	"compilerOptions": {
+		"target": "ES2018",
+		"module": "commonjs",
+		"strict": true,
+		"esModuleInterop": true,
+		"composite": true,
+		"rootDir": "src",
+		"outDir": "dist"
+	},
+	"include": ["src"],
+	"references": [{"path": "../core"}]
+}
+// @Filename: /packages/babel-loader/src/index.ts
+/*change*/import type { Foo } from "../../core/src/index.js";
+// @Filename: /packages/core/tsconfig.json
+{
+	"compilerOptions": {
+		"target": "ES2018",
+		"module": "commonjs",
+		"strict": true,
+		"esModuleInterop": true,
+		"composite": true,
+		"rootDir": "./src",
+		"outDir": "./dist",
+	},
+	"include": ["./src"]
+}
+// @Filename: /packages/core/src/index.ts
+import { Bar } from "./loading-indicator.js";
+export type Foo = {};
+const bar: Bar = {
+	/*prop*/prop: 0
+}
+// @Filename: /packages/core/src/loading-indicator.ts
+export interface Bar {
+	prop: number;
+}
+const bar: Bar = {
+	prop: 1
+}"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "change");
+            f.go_to_marker(t, "prop");
+            f.go_to_marker(t, "change");
+            f.insert(t, "// comment");
+            f.verify_baseline_find_all_references(t, &["prop"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// statefindallrefs_test.go:905
+pub fn test_find_all_refs_open_file_in_configured_project_that_will_be_removed(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true
+// @Filename: /myproject/playground/tsconfig.json
+{}
+// @Filename: /myproject/playground/tests.ts
+/*tests*/export function foo() {}
+// @Filename: /myproject/playground/tsconfig-json/tsconfig.json
+{
+	"include": ["./src"]
+}
+// @Filename: /myproject/playground/tsconfig-json/src/src.ts
+export function foobar() {}
+// @Filename: /myproject/playground/tsconfig-json/tests/spec.ts
+export function /*find*/bar() { }
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "tests");
+            f.close_file_of_marker(t, "tests");
+            f.verify_baseline_find_all_references(t, &["find"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// statefindallrefs_test.go:930
+pub fn test_find_all_refs_special_handling_of_localness(t: &T) {
+    t.parallel();
+    #[derive(Clone, Debug, Default)]
+    struct testCase {
+        pub name: String,
+        pub definition: String,
+        pub usage: String,
+        pub reference_term: String,
+    }
+    for tc in vec![testCase { name: "ArrowFunctionAssignment".to_string(), definition: "export const dog = () => { };".to_string(), usage: "shared.dog();".to_string(), reference_term: "dog".to_string() }, testCase { name: "ArrowFunctionAsObjectLiteralPropertyTypes".to_string(), definition: "export const foo = { bar: () => { } };".to_string(), usage: "shared.foo.bar();".to_string(), reference_term: "bar".to_string() }, testCase { name: "ObjectLiteralProperty".to_string(), definition: r#"export const foo = {  baz: "BAZ" };"#.to_string(), usage: "shared.foo.baz;".to_string(), reference_term: "baz".to_string() }, testCase { name: "MethodOfClassExpression".to_string(), definition: "export const foo = class { fly() {} };".to_string(), usage: stringtestutil::dedent(r#"
+					const instance = new shared.foo();
+					instance.fly();"#), reference_term: "fly".to_string() }, testCase { name: "ArrowFunctionAsObjectLiteralProperty".to_string(), definition: stringtestutil::dedent(r#"
+					const local = { bar: () => { } };
+					export const foo = local;"#), usage: "shared.foo.bar();".to_string(), reference_term: "bar".to_string() }] {
+        t.run(format!("TestFindAllRefsSpecialHandlingOfLocalness{}", tc.name.as_str()).as_str(), |t: &T| {
+            t.parallel();
+            let __defer1 = go::run(|| {
+                let mut usage_with_marker = format!("{}/*ref*/{}", go::slice_str(&tc.usage, None, Some(go::strings::index(tc.usage.as_str(), tc.reference_term.as_str()) as usize)).as_str(), go::slice_str(&tc.usage, Some(go::strings::index(tc.usage.as_str(), tc.reference_term.as_str()) as usize), None).as_str());
+                let mut content = format!(r#"
+// @stateBaseline: true
+// @Filename: /solution/tsconfig.json
+{{
+	"files": [],
+	"references": [
+		{{ "path": "./api" }},
+		{{ "path": "./app" }},
+	],
+}}
+// @Filename: /solution/api/tsconfig.json
+{{
+	"compilerOptions": {{
+		"composite": true,
+		"outDir": "dist",
+		"rootDir": "src"
+	}},
+	"include": ["src"],
+	"references": [{{ "path": "../shared" }}],
+}}
+// @Filename: /solution/api/src/server.ts
+import * as shared from "../../shared/dist"
+{}
+// @Filename: /solution/app/tsconfig.json
+{{
+	"compilerOptions": {{
+		"composite": true,
+		"outDir": "dist",
+		"rootDir": "src"
+	}},
+	"include": ["src"],
+	"references": [{{ "path": "../shared" }}],
+}}
+// @Filename: /solution/app/src/app.ts
+import * as shared from "../../shared/dist"
+{}
+// @Filename: /solution/app/tsconfig.json
+{{
+	"compilerOptions": {{
+		"composite": true,
+		"outDir": "dist",
+		"rootDir": "src"
+	}},
+	"include": ["src"],
+	"references": [{{ "path": "../shared" }}],
+}}
+// @Filename: /solution/shared/tsconfig.json
+{{
+    "compilerOptions": {{
+        "composite": true,
+        "outDir": "dist",
+        "rootDir": "src"
+    }},
+    "include": ["src"],
+}}
+// @Filename: /solution/shared/src/index.ts
+{}"#, usage_with_marker.as_str(), tc.usage.as_str(), tc.definition.as_str());
+                let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+                let f = &mut f;
+                let __defer2 = go::run(|| {
+                    f.verify_baseline_find_all_references(t, &["ref"]);
+                });
+                done(&mut *f, t);
+                go::resume(__defer2);
+            });
+            testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+        });
+    }
+}
+
+// statefindallrefs_test.go:1044
+pub fn test_find_all_refs_re_export_in_multi_project_solution(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true
+// @Filename: /tsconfig.base.json
+{
+	"compilerOptions": {
+		"rootDir": ".",
+		"outDir": "target",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"composite": true,
+		"declaration": true,
+		"strict": true
+	},
+	"include": []
+}
+// @Filename: /tsconfig.json
+{
+	"extends": "./tsconfig.base.json",
+	"references": [
+		{ "path": "project-a" },
+		{ "path": "project-b" },
+		{ "path": "project-c" },
+	]
+}
+// @Filename: /project-a/tsconfig.json
+{
+	"extends": "../tsconfig.base.json",
+	"include": ["*"]
+}
+// @Filename: /project-a/private.ts
+export const /*symbolA*/symbolA = 'some-symbol';
+console.log(symbolA);
+// @Filename: /project-a/public.ts
+export { symbolA } from './private';
+// @Filename: /project-b/tsconfig.json
+{
+	"extends": "../tsconfig.base.json",
+	"include": ["*"]
+}
+// @Filename: /project-b/public.ts
+export const /*symbolB*/symbolB = 'symbol-b';
+// @Filename: /project-c/tsconfig.json
+{
+	"extends": "../tsconfig.base.json",
+	"include": ["*"],
+	"references": [
+		{ "path": "../project-a" },
+		{ "path": "../project-b" },
+	]
+}
+// @Filename: /project-c/index.ts
+import { symbolB } from '../project-b/public';
+import { /*symbolAUsage*/symbolA } from '../project-a/public';
+console.log(symbolB);
+console.log(symbolA);
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_find_all_references(t, &["symbolA"]);
+            f.verify_baseline_find_all_references(t, &["symbolB"]);
+            f.verify_baseline_find_all_references(t, &["symbolAUsage"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// statefindallrefs_test.go:1116
+pub fn test_find_all_refs_declaration_in_other_project(t: &T) {
+    t.parallel();
+    #[derive(Clone, Debug, Default)]
+    struct testCase {
+        pub project_already_loaded: bool,
+        pub disable_referenced_project_load: bool,
+        pub disable_source_of_project_reference_redirect: bool,
+        pub dts_map_present: bool,
+    }
+    for tc in vec![testCase { project_already_loaded: true, disable_referenced_project_load: true, disable_source_of_project_reference_redirect: true, dts_map_present: true }, testCase { project_already_loaded: true, disable_referenced_project_load: true, disable_source_of_project_reference_redirect: true, dts_map_present: false }, testCase { project_already_loaded: true, disable_referenced_project_load: true, disable_source_of_project_reference_redirect: false, dts_map_present: true }, testCase { project_already_loaded: true, disable_referenced_project_load: true, disable_source_of_project_reference_redirect: false, dts_map_present: false }, testCase { project_already_loaded: true, disable_referenced_project_load: false, disable_source_of_project_reference_redirect: true, dts_map_present: true }, testCase { project_already_loaded: true, disable_referenced_project_load: false, disable_source_of_project_reference_redirect: true, dts_map_present: false }, testCase { project_already_loaded: true, disable_referenced_project_load: false, disable_source_of_project_reference_redirect: false, dts_map_present: true }, testCase { project_already_loaded: true, disable_referenced_project_load: false, disable_source_of_project_reference_redirect: false, dts_map_present: false }, testCase { project_already_loaded: false, disable_referenced_project_load: true, disable_source_of_project_reference_redirect: true, dts_map_present: true }, testCase { project_already_loaded: false, disable_referenced_project_load: true, disable_source_of_project_reference_redirect: true, dts_map_present: false }, testCase { project_already_loaded: false, disable_referenced_project_load: true, disable_source_of_project_reference_redirect: false, dts_map_present: true }, testCase { project_already_loaded: false, disable_referenced_project_load: true, disable_source_of_project_reference_redirect: false, dts_map_present: false }, testCase { project_already_loaded: false, disable_referenced_project_load: false, disable_source_of_project_reference_redirect: true, dts_map_present: true }, testCase { project_already_loaded: false, disable_referenced_project_load: false, disable_source_of_project_reference_redirect: true, dts_map_present: false }, testCase { project_already_loaded: false, disable_referenced_project_load: false, disable_source_of_project_reference_redirect: false, dts_map_present: true }, testCase { project_already_loaded: false, disable_referenced_project_load: false, disable_source_of_project_reference_redirect: false, dts_map_present: false }] {
+        let mut sub_scenario = format!("{}RefdProjLoadingIs{}ProjRefRedirectsAre{}DeclMapIs{}", format!("Proj{}Loaded", (if tc.project_already_loaded { "Is".to_string() } else { "IsNot".to_string() }).as_str()).as_str(), (if tc.disable_referenced_project_load { "Disabled".to_string() } else { "Enabled".to_string() }).as_str(), (if tc.disable_source_of_project_reference_redirect { "Disabled".to_string() } else { "Enabled".to_string() }).as_str(), (if tc.dts_map_present { "Present".to_string() } else { "Missing".to_string() }).as_str());
+        t.run(format!("TestFindAllRefsDeclarationInOtherProject{}", sub_scenario.as_str()).as_str(), |t: &T| {
+            t.parallel();
+            let __defer1 = go::run(|| {
+                let mut content = format!(r#"
+// @stateBaseline: true
+// @Filename: /myproject/a/tsconfig.json
+{{
+	"disableReferencedProjectLoad": {},
+	"disableSourceOfProjectReferenceRedirect": {},
+	"composite": true
+}}
+// @Filename: /myproject/a/index.ts
+import {{ B }} from "../b/lib";
+const b: /*ref*/B = new B();
+// @Filename: /myproject/b/tsconfig.json
+{{
+	"declarationMap": true,
+	"outDir": "lib",
+	"composite": true,
+}}
+// @Filename: /myproject/b/index.ts
+export class B {{
+	M() {{}}
+}}
+// @Filename: /myproject/b/helper.ts
+/*bHelper*/import {{ B }} from ".";
+const b: B = new B();
+// @Filename: /myproject/b/lib/index.d.ts
+export declare class B {{
+	M(): void;
+}}
+//# sourceMappingURL=index.d.ts.map"#, tc.disable_referenced_project_load, tc.disable_source_of_project_reference_redirect);
+                if tc.dts_map_present {
+                    content.push_str(r#"
+// @Filename: /myproject/b/lib/index.d.ts.map
+{
+	"version": 3,
+	"file": "index.d.ts",
+	"sourceRoot": "",
+	"sources": ["../index.ts"],
+	"names": [],
+	"mappings": "AAAA,qBAAa,CAAC;IACV,CAAC;CACJ"
+}"#);
+                }
+                let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+                let f = &mut f;
+                let __defer2 = go::run(|| {
+                    if tc.project_already_loaded {
+                        f.go_to_marker(t, "ref");
+                        f.go_to_marker(t, "bHelper");
+                    }
+                    f.verify_baseline_find_all_references(t, &["ref"]);
+                });
+                done(&mut *f, t);
+                go::resume(__defer2);
+            });
+            testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+        });
+    }
+}
+
+}
+
+pub mod stateimplementations {
+use crate::tests::prelude::*;
+
+// stateimplementations_test.go:10
+pub fn test_implementations_across_projects(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true
+// @Filename: /projects/temp/temp.ts
+/*temp*/let x = 10
+// @Filename: /projects/temp/tsconfig.json
+{}
+// @Filename: /projects/container/lib/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	references: [],
+	files: [
+		"index.ts",
+		"bar.ts"
+	],
+}
+// @Filename: /projects/container/lib/index.ts
+export interface /*impl*/Foo {
+    func();
+}
+export const val = 42;
+// @Filename: /projects/container/lib/bar.ts
+import {Foo} from './index'
+class A implements Foo {
+    func() {}
+}
+class B implements Foo {
+    func() {}
+}
+// @Filename: /projects/container/exec/tsconfig.json
+{
+	"files": ["./index.ts"],
+	"references": [
+		{ "path": "../lib" },
+	],
+}
+// @Filename: /projects/container/exec/index.ts
+import { Foo } from "../lib";
+class A1 implements Foo {
+    func() {}
+}
+class B1 implements Foo {
+    func() {}
+}
+// @Filename: /projects/container/compositeExec/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	"files": ["./index.ts"],
+	"references": [
+		{ "path": "../lib" },
+	],
+}
+// @Filename: /projects/container/compositeExec/index.ts
+import { Foo } from "../lib";
+class A2 implements Foo {
+    func() {}
+}
+class B2 implements Foo {
+    func() {}
+}
+// @Filename: /projects/container/tsconfig.json
+{
+	"files": [],
+	"include": [],
+	"references": [
+		{ "path": "./exec" },
+		{ "path": "./compositeExec" },
+	],
+}
+// @Filename: /projects/container/tsconfig.json
+{
+	"files": [],
+	"include": [],
+	"references": [
+		{ "path": "./exec" },
+		{ "path": "./compositeExec" },
+	],
+}
+// @Filename: /projects/container/tsconfig.json
+{
+	"files": [],
+	"include": [],
+	"references": [
+		{ "path": "./exec" },
+		{ "path": "./compositeExec" },
+	],
+}
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "impl");
+            f.go_to_marker(t, "temp");
+            f.verify_baseline_go_to_implementation(t, &["impl"]);
+            f.close_file_of_marker(t, "temp");
+            f.go_to_marker(t, "temp");
+            f.close_file_of_marker(t, "impl");
+            f.close_file_of_marker(t, "temp");
+            f.go_to_marker(t, "temp");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod staterename {
+use crate::tests::prelude::*;
+
+// staterename_test.go:10
+pub fn test_rename_ancestor_project_ref_mangement(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true
+// @Filename: /projects/temp/temp.ts
+/*temp*/let x = 10
+// @Filename: /projects/temp/tsconfig.json
+{}
+// @Filename: /projects/container/lib/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	references: [],
+	files: [
+		"index.ts",
+	],
+}
+// @Filename: /projects/container/lib/index.ts
+export const myConst = 30;
+// @Filename: /projects/container/exec/tsconfig.json
+{
+	"files": ["./index.ts"],
+	"references": [
+		{ "path": "../lib" },
+	],
+}
+// @Filename: /projects/container/exec/index.ts
+import { myConst } from "../lib";
+export function getMyConst() {
+	return myConst;
+}
+// @Filename: /projects/container/compositeExec/tsconfig.json
+{
+	"compilerOptions": {
+		"composite": true,
+	},
+	"files": ["./index.ts"],
+	"references": [
+		{ "path": "../lib" },
+	],
+}
+// @Filename: /projects/container/compositeExec/index.ts
+import { /*find*/myConst } from "../lib";
+export function getMyConst() {
+	return myConst;
+}
+// @Filename: /projects/container/tsconfig.json
+{
+	"files": [],
+	"include": [],
+	"references": [
+		{ "path": "./exec" },
+		{ "path": "./compositeExec" },
+	],
+}
+// @Filename: /projects/container/tsconfig.json
+{
+	"files": [],
+	"include": [],
+	"references": [
+		{ "path": "./exec" },
+		{ "path": "./compositeExec" },
+	],
+}
+// @Filename: /projects/container/tsconfig.json
+{
+	"files": [],
+	"include": [],
+	"references": [
+		{ "path": "./exec" },
+		{ "path": "./compositeExec" },
+	],
+}
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "find");
+            f.go_to_marker(t, "temp");
+            f.verify_baseline_rename(t, None, &[Any::String("find".to_string())]);
+            f.close_file_of_marker(t, "temp");
+            f.go_to_marker(t, "temp");
+            f.close_file_of_marker(t, "find");
+            f.close_file_of_marker(t, "temp");
+            f.go_to_marker(t, "temp");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// staterename_test.go:105
+pub fn test_rename_in_common_file(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let mut content = r#"
+// @stateBaseline: true
+// @Filename: /projects/a/a.ts
+/*aTs*/import {C} from "./c/fc";
+console.log(C)
+// @Filename: /projects/a/tsconfig.json
+{}
+// @link:  /projects/c -> /projects/a/c
+// @Filename: /projects/b/b.ts
+/*bTs*/import {C} from "../c/fc";
+console.log(C)
+// @Filename: /projects/b/tsconfig.json
+{}
+// @link:  /projects/c -> /projects/b/c
+// @Filename: /projects/c/fc.ts
+export const /*find*/C = 42;
+"#.to_string();
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "aTs");
+            f.go_to_marker(t, "bTs");
+            let mut find_marker = f.marker_by_name(t, "find");
+            let mut a_fc_marker = find_marker.maker_with_symlink("/projects/a/c/fc.ts");
+            f.go_to_marker_or_range(t, fourslash::MarkerOrRange::Marker(a_fc_marker.clone()));
+            f.go_to_marker_or_range(t, fourslash::MarkerOrRange::Marker(find_marker.maker_with_symlink("/projects/b/c/fc.ts")));
+            f.verify_baseline_rename(t, None, &[Any::Marker(a_fc_marker.clone())]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod static_generic_overloads1 {
+use crate::tests::prelude::*;
+
+// staticGenericOverloads1_test.go:10
+pub fn test_static_generic_overloads1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"class A<T> {
+    static B<S>(v: A<S>): A<S>;
+    static B<S>(v: S): A<S>;
+    static B<S>(v: any): A<S> {
+        return null;
+    }
+}
+var a = new A<number>();
+A.B(/**/"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+            f.insert(t, "a");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "B(v: A<number>): A<number>".to_string(), overloads_count: 2, ..Default::default() });
+            f.insert(t, "); A.B(");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "B(v: A<unknown>): A<unknown>".to_string(), overloads_count: 2, ..Default::default() });
+            f.insert(t, "a");
+            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "B(v: A<number>): A<number>".to_string(), overloads_count: 2, ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod string_completion_details {
+use crate::tests::prelude::*;
+
+// stringCompletionDetails_test.go:12
+pub fn test_string_completion_details(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"const a: "aa" | "bb" = "/**/";"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "aa".to_string(), kind: Some(lsproto::CompletionItemKind::Constant), detail: Some("aa".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { range: lsproto::Range { start: lsproto::Position { line: 0, character: 24 }, end: lsproto::Position { line: 0, character: 24 } }, new_text: "aa".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod string_completions_from_generic_conditional_types_using_template_literal_types {
+use crate::tests::prelude::*;
+
+// stringCompletionsFromGenericConditionalTypesUsingTemplateLiteralTypes_test.go:11
+pub fn test_string_completions_from_generic_conditional_types_using_template_literal_types(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @stableTypeOrdering: true
+// @strict: true
+type keyword = "foo" | "bar" | "baz"
+
+type validateString<s> = s extends keyword
+    ? s
+    : s extends `${infer left extends keyword}|${infer right}`
+    ? right extends keyword
+        ? s
+        : `${left}|${keyword}`
+    : keyword
+
+type isUnknown<t> = unknown extends t
+    ? [t] extends [{}]
+        ? false
+        : true
+    : false
+
+type validate<def> = def extends string
+    ? validateString<def>
+    : isUnknown<def> extends true
+    ? keyword
+    : {
+          [k in keyof def]: validate<def[k]>
+      }
+const parse = <def>(def: validate<def>) => def
+const shallowExpression = parse("foo|/*ts*/")
+const nestedExpression = parse({ prop: "foo|/*ts2*/" })"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_completions(t, Any::StringSlice(vec!["ts".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("bar".to_string()), Any::String("baz".to_string()), Any::String("foo".to_string()), Any::String("foo|bar".to_string()), Any::String("foo|baz".to_string()), Any::String("foo|foo".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::StringSlice(vec!["ts2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("foo|bar".to_string()), Any::String("foo|baz".to_string()), Any::String("foo|foo".to_string())], ..Default::default() }), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod string_completions_import_or_export_specifier {
+use crate::tests::prelude::*;
+
+// stringCompletionsImportOrExportSpecifier_test.go:11
+pub fn test_string_completions_import_or_export_specifier(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: exports.ts
+export let foo = 1;
+let someValue = 2;
+let someType = 3;
+export {
+  someValue as "__some value",
+  someType as "__some type",
+};
+// @Filename: values.ts
+import { "/*valueImport0*/" } from "./exports";
+import { "/*valueImport1*/" as valueImport1 } from "./exports";
+import { foo as "/*valueImport2*/" } from "./exports";
+import { foo, "/*valueImport3*/" as valueImport3 } from "./exports";
+
+export { "/*valueExport0*/" } from "./exports";
+export { "/*valueExport1*/" as valueExport1 } from "./exports";
+export { foo as "/*valueExport2*/" } from "./exports";
+export { foo, "/*valueExport3*/" } from "./exports";
+// @Filename: types.ts
+import { type "/*typeImport0*/" } from "./exports";
+import { type "/*typeImport1*/" as typeImport1 } from "./exports";
+import { type foo as "/*typeImport2*/" } from "./exports";
+import { type foo, type "/*typeImport3*/" as typeImport3 } from "./exports";
+
+export { type "/*typeExport0*/" } from "./exports";
+export { type "/*typeExport1*/" as typeExport1 } from "./exports";
+export { type foo as "/*typeExport2*/" } from "./exports";
+export { type foo, type "/*typeExport3*/" } from "./exports";"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_completions(t, Any::String("valueImport0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string()), Any::String("foo".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("valueImport1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string()), Any::String("foo".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("valueImport2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("valueImport3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("valueExport0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string()), Any::String("foo".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("valueExport1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string()), Any::String("foo".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("valueExport2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("valueExport3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("typeImport0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string()), Any::String("foo".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("typeImport1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string()), Any::String("foo".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("typeImport2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("typeImport3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("typeExport0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string()), Any::String("foo".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("typeExport1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string()), Any::String("foo".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("typeExport2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("typeExport3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("__some type".to_string()), Any::String("__some value".to_string())], ..Default::default() }), ..Default::default() }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
