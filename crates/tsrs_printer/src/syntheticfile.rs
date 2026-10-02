@@ -10,7 +10,7 @@ use crate::{new_change_tracker_writer, new_printer, EmitContext, EmitTextWriter,
 // preservation.
 // The returned text is the printed source, and positioned is the node with
 // concrete source positions assigned to it and all descendants.
-// syntheticfile.go:18
+// syntheticfile.go:17
 pub fn print_and_position_node(
     factory: &NodeFactory,
     node: P<Node>,
@@ -44,7 +44,7 @@ pub fn print_and_position_node(
 // CreateSyntheticSourceFile wraps a positioned node in a synthetic source file
 // suitable for use with the formatter. The node must already have valid source
 // positions assigned (e.g. via PrintAndPositionNode or AssignPositionsToNode).
-// syntheticfile.go:42
+// syntheticfile.go:39
 pub fn create_synthetic_source_file(factory: &NodeFactory, node: P<Node>, text: &str, parse_options: SourceFileParseOptions) -> P<SourceFile> {
     let eof = factory.new_token(Kind::EndOfFile);
     eof.set_loc(TextRange::new(text.len() as i32, text.len() as i32));

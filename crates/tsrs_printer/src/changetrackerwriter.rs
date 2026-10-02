@@ -87,17 +87,17 @@ impl ChangeTrackerWriter {
         }
     }
 
-    // changetrackerwriter.go:84
+    // changetrackerwriter.go:82
     fn get_pos(&self, node: triviaPositionKey) -> i32 {
         self.positions.borrow().pos.get(&node).copied().unwrap_or(0)
     }
 
-    // changetrackerwriter.go:88
+    // changetrackerwriter.go:86
     fn get_end(&self, node: triviaPositionKey) -> i32 {
         self.positions.borrow().end.get(&node).copied().unwrap_or(0)
     }
 
-    // changetrackerwriter.go:92
+    // changetrackerwriter.go:90
     fn set_last_non_trivia_position(&mut self, s: &str, force: bool) {
         if force || scanner::skip_trivia(s, 0) as usize != s.len() {
             let mut last = self.text_writer.get_text_pos();
@@ -116,7 +116,7 @@ impl ChangeTrackerWriter {
         }
     }
 
-    // changetrackerwriter.go:109
+    // changetrackerwriter.go:107
     pub fn assign_positions_to_node(&self, node: P<Node>, factory: &NodeFactory) -> P<Node> {
         let positions = self.positions.clone();
         let p_visit = positions.clone();
@@ -148,21 +148,21 @@ impl ChangeTrackerWriter {
     }
 }
 
-// changetrackerwriter.go:76
+// changetrackerwriter.go:74
 fn set_pos(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) {
     let mut p = positions.borrow_mut();
     let last = p.last_non_trivia_position;
     p.pos.insert(node, last);
 }
 
-// changetrackerwriter.go:80
+// changetrackerwriter.go:78
 fn set_end(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) {
     let mut p = positions.borrow_mut();
     let last = p.last_non_trivia_position;
     p.end.insert(node, last);
 }
 
-// changetrackerwriter.go:131
+// changetrackerwriter.go:130
 fn assign_positions_to_node_worker(positions: &Rc<RefCell<changeTrackerPositions>>, node: Option<P<Node>>, v: &mut NodeVisitor) -> Option<P<Node>> {
     let node = node?;
     let visited = node.visit_each_child(v);
@@ -185,7 +185,7 @@ fn assign_positions_to_node_worker(positions: &Rc<RefCell<changeTrackerPositions
     Some(new_node)
 }
 
-// changetrackerwriter.go:156
+// changetrackerwriter.go:154
 fn assign_positions_to_node_array(positions: &Rc<RefCell<changeTrackerPositions>>, nodes: Option<P<NodeList>>, v: &mut NodeVisitor) -> Option<P<NodeList>> {
     let visited = v.visit_nodes(nodes)?;
     let Some(nodes) = nodes else {
@@ -205,131 +205,131 @@ fn assign_positions_to_node_array(positions: &Rc<RefCell<changeTrackerPositions>
 }
 
 impl EmitTextWriter for ChangeTrackerWriter {
-    // changetrackerwriter.go:177
+    // changetrackerwriter.go:176
     fn write(&mut self, text: &str) {
         self.text_writer.write(text);
         self.set_last_non_trivia_position(text, false);
     }
 
-    // changetrackerwriter.go:182
+    // changetrackerwriter.go:181
     fn write_trailing_semicolon(&mut self, text: &str) {
         self.text_writer.write_trailing_semicolon(text);
         self.set_last_non_trivia_position(text, false);
     }
-    // changetrackerwriter.go:186
+    // changetrackerwriter.go:185
     fn write_comment(&mut self, text: &str) {
         self.text_writer.write_comment(text)
     }
-    // changetrackerwriter.go:187
+    // changetrackerwriter.go:186
     fn write_keyword(&mut self, text: &str) {
         self.text_writer.write_keyword(text);
         self.set_last_non_trivia_position(text, false);
     }
 
-    // changetrackerwriter.go:192
+    // changetrackerwriter.go:191
     fn write_operator(&mut self, text: &str) {
         self.text_writer.write_operator(text);
         self.set_last_non_trivia_position(text, false);
     }
 
-    // changetrackerwriter.go:197
+    // changetrackerwriter.go:196
     fn write_punctuation(&mut self, text: &str) {
         self.text_writer.write_punctuation(text);
         self.set_last_non_trivia_position(text, false);
     }
 
-    // changetrackerwriter.go:202
+    // changetrackerwriter.go:201
     fn write_space(&mut self, text: &str) {
         self.text_writer.write_space(text);
         self.set_last_non_trivia_position(text, false);
     }
 
-    // changetrackerwriter.go:207
+    // changetrackerwriter.go:206
     fn write_string_literal(&mut self, text: &str) {
         self.text_writer.write_string_literal(text);
         self.set_last_non_trivia_position(text, false);
     }
 
-    // changetrackerwriter.go:212
+    // changetrackerwriter.go:211
     fn write_parameter(&mut self, text: &str) {
         self.text_writer.write_parameter(text);
         self.set_last_non_trivia_position(text, false);
     }
 
-    // changetrackerwriter.go:217
+    // changetrackerwriter.go:216
     fn write_property(&mut self, text: &str) {
         self.text_writer.write_property(text);
         self.set_last_non_trivia_position(text, false);
     }
 
-    // changetrackerwriter.go:222
+    // changetrackerwriter.go:221
     fn write_symbol(&mut self, text: &str, symbol: P<Symbol>) {
         self.text_writer.write_symbol(text, symbol);
         self.set_last_non_trivia_position(text, false);
     }
-    // changetrackerwriter.go:226
+    // changetrackerwriter.go:225
     fn write_line(&mut self) {
         self.text_writer.write_line()
     }
-    // changetrackerwriter.go:227
+    // changetrackerwriter.go:226
     fn write_line_force(&mut self, force: bool) {
         self.text_writer.write_line_force(force)
     }
-    // changetrackerwriter.go:228
+    // changetrackerwriter.go:227
     fn increase_indent(&mut self) {
         self.text_writer.increase_indent()
     }
-    // changetrackerwriter.go:229
+    // changetrackerwriter.go:228
     fn decrease_indent(&mut self) {
         self.text_writer.decrease_indent()
     }
-    // changetrackerwriter.go:230
+    // changetrackerwriter.go:229
     fn clear(&mut self) {
         self.text_writer.clear();
         self.positions.borrow_mut().last_non_trivia_position = 0;
     }
-    // changetrackerwriter.go:231
+    // changetrackerwriter.go:230
     fn string(&self) -> String {
         self.text_writer.string()
     }
-    // changetrackerwriter.go:232
+    // changetrackerwriter.go:231
     fn raw_write(&mut self, s: &str) {
         self.text_writer.raw_write(s);
         self.set_last_non_trivia_position(s, false);
     }
 
-    // changetrackerwriter.go:237
+    // changetrackerwriter.go:236
     fn write_literal(&mut self, s: &str) {
         self.text_writer.write_literal(s);
         self.set_last_non_trivia_position(s, true);
     }
-    // changetrackerwriter.go:241
+    // changetrackerwriter.go:240
     fn get_text_pos(&self) -> i32 {
         self.text_writer.get_text_pos()
     }
-    // changetrackerwriter.go:242
+    // changetrackerwriter.go:241
     fn get_line(&self) -> i32 {
         self.text_writer.get_line()
     }
-    // changetrackerwriter.go:243
+    // changetrackerwriter.go:242
     fn get_column(&self) -> UTF16Offset {
         self.text_writer.get_column()
     }
-    // changetrackerwriter.go:244
+    // changetrackerwriter.go:243
     fn get_indent(&self) -> i32 {
         self.text_writer.get_indent()
     }
-    // changetrackerwriter.go:245
+    // changetrackerwriter.go:244
     fn is_at_start_of_line(&self) -> bool {
         self.text_writer.is_at_start_of_line()
     }
 
-    // changetrackerwriter.go:247
+    // changetrackerwriter.go:246
     fn has_trailing_comment(&self) -> bool {
         self.text_writer.has_trailing_comment()
     }
 
-    // changetrackerwriter.go:249
+    // changetrackerwriter.go:248
     fn has_trailing_whitespace(&self) -> bool {
         self.text_writer.has_trailing_whitespace()
     }

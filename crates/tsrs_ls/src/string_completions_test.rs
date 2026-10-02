@@ -8,7 +8,7 @@ use super::try_remove_directory_prefix;
 // case-insensitively prefixed by prefix's canonical form. Slicing path[len(prefix):] used to
 // panic with "slice bounds out of range [15:12]"; tryRemoveDirectoryPrefix must instead trim by
 // rune count via tspath.TrimFilePathPrefix.
-// string_completions_test.go:18
+// string_completions_test.go:17
 #[test]
 fn test_try_remove_directory_prefix_case_folding_shrinks_prefix() {
     let prefix = "/a/\u{212A}\u{212A}\u{212A}\u{212A}";

@@ -11,7 +11,7 @@ use crate::completions::with_format_code_settings;
 use crate::lsconv::Converters;
 use crate::lsutil::FormatCodeSettings;
 
-// tracker.go:86 (partial: the change lists, deleted nodes and insertion state are not ported yet)
+// tracker.go:83 (partial: the change lists, deleted nodes and insertion state are not ported yet)
 pub struct Tracker {
     // initialized with
     pub(crate) format_settings: FormatCodeSettings,
@@ -23,7 +23,7 @@ pub struct Tracker {
     pub node_factory: NodeFactory,
 }
 
-// tracker.go:115
+// tracker.go:112
 pub fn new_tracker(ctx: &Context, compiler_options: &CompilerOptions, format_options: FormatCodeSettings, converters: Arc<Converters>) -> Tracker {
     let emit_context = printer::new_emit_context();
     let new_line = compiler_options.new_line.get_new_line_character().to_string();

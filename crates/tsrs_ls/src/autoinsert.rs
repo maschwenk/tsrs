@@ -75,7 +75,7 @@ impl LanguageService {
     }
 }
 
-// autoinsert.go:76
+// autoinsert.go:77
 fn is_unclosed_tag(node: P<Node>) -> bool {
     let opening_element = node.as_jsx_element().opening_element;
     let closing_element = node.as_jsx_element().closing_element;
@@ -91,7 +91,7 @@ fn is_unclosed_tag(node: P<Node>) -> bool {
     false
 }
 
-// autoinsert.go:91
+// autoinsert.go:93
 fn is_unclosed_fragment(node: P<Node>) -> bool {
     let closing_fragment = node.as_jsx_fragment().closing_fragment;
     if closing_fragment.flags().intersects(NodeFlags::ThisNodeHasError) {

@@ -1493,3 +1493,21 @@ pub fn try_get_import_from_module_specifier(node: P<Node>) -> Option<P<Node>> {
 pub fn is_template_literal_token(node: P<Node>) -> bool {
     is_template_literal_kind(node.kind())
 }
+
+// ast.go:3092
+pub fn get_declaration_name(declaration: P<Node>) -> String {
+    let name = get_non_assigned_name_of_declaration(declaration);
+    if let Some(name) = name {
+        if is_computed_property_name(name) {
+            if is_string_or_numeric_literal_like(name.expression().unwrap()) {
+                return name.expression().unwrap().text().to_string();
+            }
+            if is_property_access_expression(name.expression().unwrap()) {
+                return name.expression().unwrap().name().unwrap().text().to_string();
+            }
+        } else if is_property_name(name) {
+            return name.text().to_string();
+        }
+    }
+    String::new()
+}

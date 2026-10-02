@@ -5,14 +5,14 @@ use tsrs_core::tspath::Path;
 
 use crate::lsutil::{ScriptElementKind, ScriptElementKindModifier};
 
-// export.go:16 (placeholder: the module id is the string Go stores)
+// export.go:19 (placeholder: the module id is the string Go stores)
 #[derive(Clone, Default, PartialEq, Eq, Hash, Debug)]
 pub struct ExportID {
     pub module_id: String,
     pub export_name: String,
 }
 
-// export.go:26
+// export.go:24
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum ExportSyntax {
     #[default]
