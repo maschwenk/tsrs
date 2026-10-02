@@ -3,6 +3,7 @@
 mod api;
 pub mod astnav;
 pub mod autoimport;
+pub mod change;
 mod callhierarchy;
 mod completions;
 mod constants;

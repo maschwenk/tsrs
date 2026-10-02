@@ -1585,3 +1585,8 @@ pub fn try_get_import_from_module_specifier(node: P<Node> /*StringLiteralLike*/)
         _ => None,
     }
 }
+
+// utilities.go:3127
+pub fn is_class_or_type_element(node: P<Node>) -> bool {
+    is_class_element(node) || is_type_element(node)
+}

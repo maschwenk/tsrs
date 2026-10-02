@@ -29,6 +29,12 @@ pub struct textWriter {
 }
 
 impl textWriter {
+    // Go builds the struct literal directly (changetrackerwriter.go `NewChangeTrackerWriter`).
+    pub(crate) fn set_new_line_and_indent_size(&mut self, new_line: &str, indent_size: usize) {
+        self.new_line = new_line.to_string();
+        self.indent_size = indent_size;
+    }
+
     fn set_last_written(&mut self, s: &str) {
         self.last_written_is_white_space_like = last_rune_is_white_space_like(s);
     }
