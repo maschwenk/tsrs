@@ -54,7 +54,7 @@
 //!
 //! Not ported: source map emit (guards kept, generator paths unreachable), the transform helpers of `factory.go`
 //! other than the four listed above, the helper definitions of
-//! `helpers.go` (only `EmitHelper` and its ordering), `changetrackerwriter.go`, `syntheticfile.go`, `emithost.go`,
+//! `helpers.go` (only `EmitHelper` and its ordering), `emithost.go`,
 //! `emitresolver.go`, JSDoc emit (`emitJSDocNode` panics like Go).
 
 mod changetrackerwriter;

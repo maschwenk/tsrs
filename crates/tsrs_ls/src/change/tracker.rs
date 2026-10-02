@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rustc_hash::FxHashSet;
-use tsrs_ast::{self as ast, Kind, Node, NodeList, SourceFile};
+use tsrs_ast::{self as ast, Kind, Node, NodeFactory, NodeList, SourceFile};
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::stringutil;
@@ -93,10 +93,10 @@ pub struct Tracker {
     pub(crate) format_settings: FormatCodeSettings,
     pub(crate) new_line: String,
     pub(crate) converters: Arc<Converters>,
-    pub(crate) ctx: format::FormatContext,
+    pub(crate) ctx: Context,
     pub emit_context: P<EmitContext>,
 
-    pub node_factory: printer::NodeFactory,
+    pub node_factory: NodeFactory,
 
     // Go `collections.MultiMap` (random iteration order; the edits are sorted per file afterwards).
     pub(crate) changes: OrderedMap<P<SourceFile>, Vec<trackerEdit>>,
@@ -110,8 +110,8 @@ pub struct Tracker {
 }
 
 impl std::ops::Deref for Tracker {
-    type Target = printer::NodeFactory;
-    fn deref(&self) -> &printer::NodeFactory {
+    type Target = NodeFactory;
+    fn deref(&self) -> &NodeFactory {
         &self.node_factory
     }
 }
@@ -124,12 +124,12 @@ pub(crate) struct deletedNode {
 }
 
 // tracker.go:112
-pub fn new_tracker(_ctx: &Context, compiler_options: &CompilerOptions, format_options: FormatCodeSettings, converters: Arc<Converters>) -> Tracker {
+pub fn new_tracker(ctx: &Context, compiler_options: &CompilerOptions, format_options: FormatCodeSettings, converters: Arc<Converters>) -> Tracker {
     let emit_context = printer::new_emit_context();
     let new_line = compiler_options.new_line.get_new_line_character().to_string();
-    let ctx = format::with_format_code_settings(&format::FormatContext::default(), format_options.clone(), &new_line); // !!! formatSettings in context?
+    let ctx = with_format_code_settings(ctx, format_options.clone(), &new_line); // !!! formatSettings in context?
     Tracker {
-        node_factory: emit_context.factory.clone(),
+        node_factory: emit_context.factory.as_node_factory().clone(),
         emit_context,
         changes: OrderedMap::default(),
         deleted_nodes: Vec::new(),
@@ -140,6 +140,17 @@ pub fn new_tracker(_ctx: &Context, compiler_options: &CompilerOptions, format_op
         nodes_with_insertions_at_start: OrderedMap::default(),
         unmappable_files: FxHashSet::default(),
     }
+}
+
+// Go `format.WithFormatCodeSettings(ctx, ...)`: the formatter settings travel in the request context as a
+// `format::FormatContext` value.
+fn with_format_code_settings(ctx: &Context, options: FormatCodeSettings, new_line: &str) -> Context {
+    let base = format_context(ctx);
+    ctx.with_value(format::with_format_code_settings(&base, options, new_line))
+}
+
+pub(crate) fn format_context(ctx: &Context) -> format::FormatContext {
+    ctx.value::<format::FormatContext>().cloned().unwrap_or_default()
 }
 
 impl Tracker {

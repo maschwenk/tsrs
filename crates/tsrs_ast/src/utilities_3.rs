@@ -1586,7 +1586,83 @@ pub fn try_get_import_from_module_specifier(node: P<Node> /*StringLiteralLike*/)
     }
 }
 
+// utilities.go:3021
+pub fn node_has_kind(node: Option<P<Node>>, kind: Kind) -> bool {
+    let Some(node) = node else {
+        return false;
+    };
+    node.kind() == kind
+}
+
+// utilities.go:3106
+pub fn get_type_annotation_node(node: P<Node>) -> Option<P<Node>> {
+    match node.kind() {
+        Kind::VariableDeclaration
+        | Kind::Parameter
+        | Kind::PropertySignature
+        | Kind::PropertyDeclaration
+        | Kind::TypePredicate
+        | Kind::ParenthesizedType
+        | Kind::TypeOperator
+        | Kind::MappedType
+        | Kind::TypeAssertionExpression
+        | Kind::AsExpression
+        | Kind::SatisfiesExpression
+        | Kind::TypeAliasDeclaration
+        | Kind::JSTypeAliasDeclaration
+        | Kind::NamedTupleMember
+        | Kind::OptionalType
+        | Kind::RestType
+        | Kind::TemplateLiteralTypeSpan
+        | Kind::JSDocTypeExpression
+        | Kind::JSDocPropertyTag
+        | Kind::JSDocNullableType
+        | Kind::JSDocNonNullableType
+        | Kind::JSDocOptionalType => node.type_node(),
+        _ => {
+            let func_like = node.function_like_data();
+            if let Some(func_like) = func_like {
+                return func_like.type_();
+            }
+            None
+        }
+    }
+}
+
+// utilities.go:3123
+pub fn is_object_type_declaration(node: P<Node>) -> bool {
+    is_class_like(node) || is_interface_declaration(node) || is_type_literal_node(node)
+}
+
 // utilities.go:3127
 pub fn is_class_or_type_element(node: P<Node>) -> bool {
     is_class_element(node) || is_type_element(node)
+}
+
+// utilities.go:3139
+pub fn is_type_keyword_token(node: P<Node>) -> bool {
+    node.kind() == Kind::TypeKeyword
+}
+
+// utilities.go:3282
+pub fn is_template_literal_token(node: P<Node>) -> bool {
+    is_template_literal_kind(node.kind())
+}
+
+// ast.go:3092
+pub fn get_declaration_name(declaration: P<Node>) -> String {
+    let name = get_non_assigned_name_of_declaration(declaration);
+    if let Some(name) = name {
+        if is_computed_property_name(name) {
+            if is_string_or_numeric_literal_like(name.expression().unwrap()) {
+                return name.expression().unwrap().text().to_string();
+            }
+            if is_property_access_expression(name.expression().unwrap()) {
+                return name.expression().unwrap().name().unwrap().text().to_string();
+            }
+        } else if is_property_name(name) {
+            return name.text().to_string();
+        }
+    }
+    String::new()
 }

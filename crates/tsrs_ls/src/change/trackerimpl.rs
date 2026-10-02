@@ -209,7 +209,7 @@ impl Tracker {
     ) -> String {
         let (text, source_file_like) = self.get_nonformatted_text(node_in, target_source_file);
         // !!! if (validate) validate(node, text);
-        let format_options = get_format_code_settings_for_writing(&self.format_settings, target_source_file);
+        let format_options = get_format_code_settings_for_writing(self.format_settings.clone(), target_source_file);
 
         let initial_indentation = match options.indentation {
             None => format::get_indentation(
@@ -229,7 +229,7 @@ impl Tracker {
         }
 
         let changes = format::format_node_given_indentation(
-            &self.ctx,
+            &format_context(&self.ctx),
             source_file_like,
             source_file_like.as_source_file_p(),
             target_source_file.language_variant(),
@@ -247,7 +247,7 @@ impl Tracker {
             Some(source_file),
             &self.new_line,
             self.format_settings.indent_size,
-            self.emit_context,
+            Some(self.emit_context),
         );
         let source_file_like = printer::create_synthetic_source_file(
             &self.node_factory,
@@ -290,7 +290,7 @@ impl Tracker {
     ) -> i32 {
         let text = source_file.text();
         if leading_option == LeadingTriviaOption::JSDoc {
-            let mut f = self.node_factory.as_node_factory().clone();
+            let mut f = self.node_factory.clone();
             let jsdoc_comments = tsrs_parser::get_jsdoc_comment_ranges(&mut f, &[], node, text);
             if !jsdoc_comments.is_empty() {
                 return format::get_line_start_position_for_position(jsdoc_comments[0].pos(), source_file);
@@ -571,8 +571,8 @@ fn leading_indentation(text: &str) -> &str {
 }
 
 // trackerimpl.go:285
-pub fn get_format_code_settings_for_writing(options: &FormatCodeSettings, source_file: P<SourceFile>) -> FormatCodeSettings {
-    let mut options = options.clone();
+pub fn get_format_code_settings_for_writing(options: FormatCodeSettings, source_file: P<SourceFile>) -> FormatCodeSettings {
+    let mut options = options;
     let should_auto_detect_semicolon_preference = options.semicolons == SemicolonPreference::Ignore;
     let should_remove_semicolons = options.semicolons == SemicolonPreference::Remove
         || should_auto_detect_semicolon_preference && !lsutil::probably_uses_semicolons(source_file);
