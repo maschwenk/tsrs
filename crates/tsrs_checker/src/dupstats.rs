@@ -772,6 +772,38 @@ impl Census<'_> {
         out.push(LinkKeys { name: "symbol_node_links (by node id)", record_bytes: size_of::<SymbolNodeLinks>() + 4, keys: Self::id_keys(c.symbol_node_links.stats_keys()) });
         // Value links of checker-created symbols are counted with the symbols; these are all records by symbol id.
         out.push(LinkKeys { name: "value_symbol_links (by symbol id)", record_bytes: size_of::<ValueSymbolLinks>() + 4, keys: Self::id_keys(c.value_symbol_links.stats_keys()) });
+        // Export / member tables that a checker built for a shared symbol (not the binder's own table): keyed like
+        // the link records, one "record" per table entry (8 bytes) plus the table header (24 bytes) on the first.
+        let mut table_keys = Vec::new();
+        for (a, cat, shared) in self.symbol_keys(c.module_symbol_links.stats_keys()) {
+            // SAFETY: as in `symbol_keys`.
+            let s: P<Symbol> = P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(a as usize) });
+            let l = c.module_symbol_links.try_get(s).unwrap();
+            if let Some(t) = l.resolved_exports.get() {
+                if Some(t) != s.exports() {
+                    for i in 0..(t.len() + 3) as u64 {
+                        table_keys.push((a.wrapping_mul(4096) + i, cat, shared));
+                    }
+                }
+            }
+        }
+        out.push(LinkKeys { name: "resolved export tables (8 B units)", record_bytes: 8, keys: table_keys });
+        let mut table_keys = Vec::new();
+        for (a, cat, shared) in self.symbol_keys(c.members_and_exports_links.stats_keys()) {
+            // SAFETY: as in `symbol_keys`.
+            let s: P<Symbol> = P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(a as usize) });
+            let l = c.members_and_exports_links.try_get(s).unwrap();
+            for (kind, own) in [(0usize, s.exports()), (1, s.members())] {
+                if let Some(t) = l[kind].get() {
+                    if Some(t) != own {
+                        for i in 0..(t.len() + 3) as u64 {
+                            table_keys.push((a.wrapping_mul(4096) + (kind as u64) * 2048 + i, cat, shared));
+                        }
+                    }
+                }
+            }
+        }
+        out.push(LinkKeys { name: "late-bound member/export tables (8 B units)", record_bytes: 8, keys: table_keys });
         let merged: Vec<u64> = c.merged_symbols.keys().map(|&s| addr(s) as u64).collect();
         let merged = self.symbol_keys(merged);
         out.push(LinkKeys { name: "merged_symbols (map entries)", record_bytes: 24, keys: merged });

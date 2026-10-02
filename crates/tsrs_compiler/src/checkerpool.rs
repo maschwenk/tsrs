@@ -534,6 +534,8 @@ impl checkerPool {
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
             let create_start = std::time::Instant::now();
+            #[cfg(feature = "checker")]
+            tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
             let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
             run_work_group(self.single_threaded, self.checker_count, |i| {
                 *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));

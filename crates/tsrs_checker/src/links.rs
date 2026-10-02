@@ -104,11 +104,95 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
 /// (8 bytes per page of the id space below the highest id seen, ~0.2 MB for the private monorepo's 26M symbol ids; pages without
 /// links stay unallocated). The values live in fixed-size chunks in the arena (stable addresses, `P<V>` handed out
 /// as before), in first-access order.
+///
+/// Node and symbol ids come from process-wide counters, so with several checkers one checker's ids are spread
+/// thinly over the whole id space (on the private monorepo with 4 checkers each checker holds links for ~25% of
+/// the ids of the pages it touches, and the pages cost ~4x what one checker's do). With `TSRS_SPARSE_ID_PAGES=1`
+/// (notes/mem-shared-base.md) a page starts sparse: a bitmap of the ids present plus their slots in id order, and
+/// becomes a dense page once it is `ID_PAGE_DENSE_AT` full. Slots and their first-access order are the same in both
+/// forms; only the lookup structure differs.
 pub struct IdLinkStore<V: 'static> {
-    pages: Vec<Option<Box<[u32; ID_PAGE]>>>,
+    pages: Vec<Option<IdPage>>,
     wide_slots: FxHashMap<u64, u32>, // ids >= 2^32 (long-running processes such as the test runner)
     chunks: Vec<&'static [V]>,
     len: u32,
+    sparse: bool,
+}
+
+enum IdPage {
+    Dense(Box<[u32; ID_PAGE]>),
+    Sparse(Box<SparseIdPage>),
+}
+
+/// The ids of a page that have links (bit `i % 64` of word `i / 64`), the number of set bits before each word, and
+/// the slots of the present ids in id order.
+struct SparseIdPage {
+    bits: [u64; ID_PAGE / 64],
+    before: [u16; ID_PAGE / 64],
+    slots: Vec<u32>,
+}
+
+impl SparseIdPage {
+    #[inline]
+    fn rank(&self, i: usize) -> Option<usize> {
+        let word = self.bits[i >> 6];
+        let bit = 1u64 << (i & 63);
+        (word & bit != 0).then(|| self.before[i >> 6] as usize + (word & (bit - 1)).count_ones() as usize)
+    }
+
+    #[inline]
+    fn slot(&self, i: usize) -> Option<u32> {
+        // SAFETY: `rank` counts set bits, and `slots` holds one entry per set bit.
+        self.rank(i).map(|r| unsafe { *self.slots.get_unchecked(r) })
+    }
+
+    fn insert(&mut self, i: usize, slot: u32) {
+        let w = i >> 6;
+        let bit = 1u64 << (i & 63);
+        debug_assert!(self.bits[w] & bit == 0);
+        let rank = self.before[w] as usize + (self.bits[w] & (bit - 1)).count_ones() as usize;
+        self.bits[w] |= bit;
+        for before in &mut self.before[w + 1..] {
+            *before += 1;
+        }
+        if self.slots.len() == self.slots.capacity() {
+            // Grow by a quarter: the slack stays small next to the 4 bytes per entry.
+            self.slots.reserve_exact((self.slots.len() / 4).max(8));
+        }
+        self.slots.insert(rank, slot);
+    }
+
+    fn to_dense(&self) -> Box<[u32; ID_PAGE]> {
+        let mut dense = Box::new([0u32; ID_PAGE]);
+        let mut r = 0;
+        for (w, &word) in self.bits.iter().enumerate() {
+            let mut bits = word;
+            while bits != 0 {
+                let b = bits.trailing_zeros() as usize;
+                dense[w * 64 + b] = self.slots[r] + 1;
+                r += 1;
+                bits &= bits - 1;
+            }
+        }
+        dense
+    }
+}
+
+/// A sparse page becomes dense at this many entries (its size is then about that of a dense page).
+const ID_PAGE_DENSE_AT: usize = 768;
+
+static MULTIPLE_CHECKERS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Called by a checker pool before it creates its checkers: sparse pages pay off only when several checkers
+/// share the id space (a single checker's pages are dense).
+pub fn set_multiple_checkers(multiple: bool) {
+    MULTIPLE_CHECKERS.store(multiple, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn sparse_id_pages() -> bool {
+    static SPARSE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    MULTIPLE_CHECKERS.load(std::sync::atomic::Ordering::Relaxed)
+        && *SPARSE.get_or_init(|| std::env::var("TSRS_SPARSE_ID_PAGES").is_ok_and(|v| v == "1"))
 }
 
 const ID_LINK_CHUNK_SHIFT: u32 = 12;
@@ -118,7 +202,7 @@ const ID_PAGE: usize = 1 << ID_PAGE_SHIFT;
 
 impl<V: 'static> Default for IdLinkStore<V> {
     fn default() -> Self {
-        IdLinkStore { pages: Vec::new(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0 }
+        IdLinkStore { pages: Vec::new(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0, sparse: sparse_id_pages() }
     }
 }
 
@@ -131,8 +215,10 @@ impl<V: 'static> IdLinkStore<V> {
     #[inline]
     fn slot(&self, id: u64) -> Option<u32> {
         if id <= u32::MAX as u64 {
-            let page = self.pages.get((id >> ID_PAGE_SHIFT) as usize)?.as_deref()?;
-            page[id as usize & (ID_PAGE - 1)].checked_sub(1)
+            match self.pages.get((id >> ID_PAGE_SHIFT) as usize)?.as_ref()? {
+                IdPage::Dense(page) => page[id as usize & (ID_PAGE - 1)].checked_sub(1),
+                IdPage::Sparse(page) => page.slot(id as usize & (ID_PAGE - 1)),
+            }
         } else {
             self.wide_slots.get(&id).copied()
         }
@@ -155,11 +241,14 @@ impl<V: 'static> IdLinkStore<V> {
     pub fn stats_keys(&self) -> Vec<u64> {
         let mut keys: Vec<u64> = self.wide_slots.keys().copied().collect();
         for (page_index, page) in self.pages.iter().enumerate() {
-            if let Some(page) = page {
-                for (i, &slot) in page.iter().enumerate() {
-                    if slot != 0 {
-                        keys.push(((page_index << ID_PAGE_SHIFT) + i) as u64);
-                    }
+            let page = match page {
+                Some(IdPage::Dense(page)) => &**page,
+                Some(IdPage::Sparse(page)) => &*page.to_dense(),
+                None => continue,
+            };
+            for (i, &slot) in page.iter().enumerate() {
+                if slot != 0 {
+                    keys.push(((page_index << ID_PAGE_SHIFT) + i) as u64);
                 }
             }
         }
@@ -191,8 +280,24 @@ impl<V: Default + 'static> IdLinkStore<V> {
             if page_index >= self.pages.len() {
                 self.pages.resize_with(page_index + 1, || None);
             }
-            let page = self.pages[page_index].get_or_insert_with(|| Box::new([0; ID_PAGE]));
-            page[id as usize & (ID_PAGE - 1)] = slot + 1;
+            let sparse = self.sparse;
+            let page = self.pages[page_index].get_or_insert_with(|| {
+                if sparse {
+                    IdPage::Sparse(Box::new(SparseIdPage { bits: [0; ID_PAGE / 64], before: [0; ID_PAGE / 64], slots: Vec::new() }))
+                } else {
+                    IdPage::Dense(Box::new([0; ID_PAGE]))
+                }
+            });
+            let i = id as usize & (ID_PAGE - 1);
+            match page {
+                IdPage::Dense(page) => page[i] = slot + 1,
+                IdPage::Sparse(sparse_page) => {
+                    sparse_page.insert(i, slot);
+                    if sparse_page.slots.len() >= ID_PAGE_DENSE_AT {
+                        *page = IdPage::Dense(sparse_page.to_dense());
+                    }
+                }
+            }
         } else {
             self.wide_slots.insert(id, slot);
         }
@@ -277,5 +382,39 @@ impl<V: 'static> SymbolArenaLinkStore<V> {
 impl<V: 'static> SymbolArenaLinkStore<V> {
     pub fn stats_keys(&self) -> Vec<u64> {
         self.store.stats_keys()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A wrong rank in a sparse page hands out another id's links: the checker would read a foreign symbol's type
+    // without any visible error. Every id must map to the slot it was given, before and after densification.
+    #[test]
+    fn sparse_pages_map_ids_like_dense_pages() {
+        let mut sparse: IdLinkStore<Cell<u32>> = IdLinkStore { sparse: true, ..IdLinkStore::default() };
+        let mut dense: IdLinkStore<Cell<u32>> = IdLinkStore { sparse: false, ..IdLinkStore::default() };
+        // Ids of two pages in a scrambled order: page 0 stays sparse (300 ids), page 3 becomes dense (900 ids).
+        let mut ids: Vec<u64> = (0..300u64).map(|i| (i * 337) % 1024).chain((0..900u64).map(|i| 3 * 1024 + (i * 613) % 1024)).collect();
+        let mut x = 12345u64;
+        for i in (1..ids.len()).rev() {
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ids.swap(i, (x >> 33) as usize % (i + 1));
+        }
+        for &id in &ids {
+            let s = sparse.get(id);
+            let d = dense.get(id);
+            s.set(id as u32 + 1);
+            d.set(id as u32 + 1);
+        }
+        assert!(matches!(sparse.pages[0], Some(IdPage::Sparse(_))));
+        assert!(matches!(sparse.pages[3], Some(IdPage::Dense(_))));
+        for id in 0..4 * 1024u64 {
+            assert_eq!(sparse.slot(id), dense.slot(id), "id {id}");
+            if let Some(links) = sparse.try_get(id) {
+                assert_eq!(links.get().get(), id as u32 + 1);
+            }
+        }
     }
 }
