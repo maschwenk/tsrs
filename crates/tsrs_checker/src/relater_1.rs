@@ -2637,40 +2637,40 @@ impl Checker {
 
     // relater.go:2049
     pub fn get_type_predicate_of_signature(&mut self, sig: P<Signature>) -> Option<P<TypePredicate>> {
-        if sig.resolved_type_predicate.get().is_none() {
+        if sig.resolved_type_predicate(self.no_type_predicate).is_none() {
             if let Some(target) = sig.target() {
                 let target_type_predicate = self.get_type_predicate_of_signature(target);
                 if let Some(target_type_predicate) = target_type_predicate {
                     let predicate = self.instantiate_type_predicate(target_type_predicate, sig.mapper.get().unwrap());
-                    sig.resolved_type_predicate.set(Some(predicate));
+                    sig.set_resolved_type_predicate(Some(predicate), self.no_type_predicate);
                 }
             } else if let Some(composite) = sig.composite() {
                 let predicate = self.get_union_or_intersection_type_predicate(composite.signatures.get(), composite.is_union.get());
-                sig.resolved_type_predicate.set(predicate);
+                sig.set_resolved_type_predicate(predicate, self.no_type_predicate);
             } else if let Some(declaration) = sig.declaration() {
                 let type_node = declaration.type_node();
                 if let Some(type_node) = type_node {
                     if is_type_predicate_node(type_node) {
                         let predicate = self.create_type_predicate_from_type_predicate_node(type_node, sig);
-                        sig.resolved_type_predicate.set(Some(predicate));
+                        sig.set_resolved_type_predicate(Some(predicate), self.no_type_predicate);
                     }
                 } else if is_function_like_declaration(declaration)
                     && sig.resolved_return_type.get().is_none_or(|t| t.flags().intersects(TypeFlags::Boolean))
                     && self.get_parameter_count(sig) > 0
                 {
-                    sig.resolved_type_predicate.set(Some(self.no_type_predicate)); // avoid infinite loop
+                    sig.set_resolved_type_predicate(Some(self.no_type_predicate), self.no_type_predicate); // avoid infinite loop
                     let predicate = self.get_type_predicate_from_body(declaration);
-                    sig.resolved_type_predicate.set(predicate);
+                    sig.set_resolved_type_predicate(predicate, self.no_type_predicate);
                 }
             }
-            if sig.resolved_type_predicate.get().is_none() {
-                sig.resolved_type_predicate.set(Some(self.no_type_predicate));
+            if sig.resolved_type_predicate(self.no_type_predicate).is_none() {
+                sig.set_resolved_type_predicate(Some(self.no_type_predicate), self.no_type_predicate);
             }
         }
-        if sig.resolved_type_predicate.get() == Some(self.no_type_predicate) {
+        if sig.resolved_type_predicate(self.no_type_predicate) == Some(self.no_type_predicate) {
             return None;
         }
-        sig.resolved_type_predicate.get()
+        sig.resolved_type_predicate(self.no_type_predicate)
     }
 
     // relater.go:2083

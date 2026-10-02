@@ -2181,7 +2181,7 @@ impl Checker {
         sig.parameters.set(alloc_slice(parameters));
         sig.set_this_parameter(this_parameter);
         sig.resolved_return_type.set(resolved_return_type);
-        sig.resolved_type_predicate.set(resolved_type_predicate);
+        sig.set_resolved_type_predicate(resolved_type_predicate, self.no_type_predicate);
         sig.min_argument_count.set(min_argument_count);
         sig.resolved_min_argument_count.set(-1);
         sig

@@ -2399,21 +2399,56 @@ pub struct Signature {
     pub type_parameters: ThinSliceCell<P<Type>>, // one word each (`tsrs_core::ThinSlice`)
     pub parameters: ThinSliceCell<P<Symbol>>,
     pub resolved_return_type: Cell<Option<P<Type>>>,
-    pub resolved_type_predicate: Cell<Option<P<TypePredicate>>>,
     pub target: Cell<Option<P<Signature>>>,
     pub mapper: MapperCell,
-    // `thisParameter`, `isolatedSignatureType` and `composite` (few signatures have any) live in a tail allocated on
-    // the first non-nil write; `this_parameter()` / `set_this_parameter()` & co. read nil when it is absent.
-    rare: Cell<Option<P<SignatureRare>>>,
+    // `thisParameter`, `isolatedSignatureType`, `composite` and a resolved type predicate other than the checker's
+    // `noTypePredicate` (few signatures have any) live in a tail allocated on the first non-nil write;
+    // `this_parameter()` / `set_this_parameter()` & co. read nil when it is absent. `resolvedTypePredicate ==
+    // c.noTypePredicate` (every resolved signature without a predicate) is bit 0 of the same word.
+    rare: SignatureRareWord,
 }
 
-const _: () = assert!(std::mem::size_of::<Signature>() == 80);
+const _: () = assert!(std::mem::size_of::<Signature>() == 72);
 
 #[derive(Default)]
 struct SignatureRare {
     this_parameter: Cell<Option<P<Symbol>>>,
     isolated_signature_type: Cell<Option<P<Type>>>,
     composite: Cell<Option<P<CompositeSignature>>>,
+    resolved_type_predicate: Cell<Option<P<TypePredicate>>>, // never the checker's `noTypePredicate` (that is the bit)
+}
+
+/// `Signature`'s tail pointer (8-aligned, null when absent) with the "no type predicate" bit in bit 0.
+struct SignatureRareWord(Cell<*const SignatureRare>);
+
+const SIGNATURE_NO_TYPE_PREDICATE: usize = 1;
+
+impl Default for SignatureRareWord {
+    fn default() -> Self {
+        SignatureRareWord(Cell::new(std::ptr::null()))
+    }
+}
+
+impl SignatureRareWord {
+    #[inline]
+    fn tail(&self) -> Option<P<SignatureRare>> {
+        let p = self.0.get().map_addr(|a| a & !SIGNATURE_NO_TYPE_PREDICATE);
+        // SAFETY: a non-null address is a `P<SignatureRare>` stored by `set_tail`.
+        (!p.is_null()).then(|| P::from_static(unsafe { &*p }))
+    }
+    #[inline]
+    fn no_type_predicate(&self) -> bool {
+        self.0.get().addr() & SIGNATURE_NO_TYPE_PREDICATE != 0
+    }
+    #[inline]
+    fn set_tail(&self, tail: P<SignatureRare>) {
+        let bit = self.0.get().addr() & SIGNATURE_NO_TYPE_PREDICATE;
+        self.0.set((tail.get() as *const SignatureRare).map_addr(|a| a | bit));
+    }
+    #[inline]
+    fn set_no_type_predicate(&self, on: bool) {
+        self.0.set(self.0.get().map_addr(|a| if on { a | SIGNATURE_NO_TYPE_PREDICATE } else { a & !SIGNATURE_NO_TYPE_PREDICATE }));
+    }
 }
 
 impl Signature {
@@ -2433,36 +2468,53 @@ impl Signature {
         self.target.get()
     }
     fn rare_for_write(&self) -> P<SignatureRare> {
-        match self.rare.get() {
+        match self.rare.tail() {
             Some(rare) => rare,
             None => {
                 let rare = P::new(SignatureRare::default());
-                self.rare.set(Some(rare));
+                self.rare.set_tail(rare);
                 rare
             }
         }
     }
+    /// Go `sig.resolvedTypePredicate`; `no_type_predicate` is the checker's `noTypePredicate`.
+    #[inline]
+    pub fn resolved_type_predicate(&self, no_type_predicate: P<TypePredicate>) -> Option<P<TypePredicate>> {
+        if self.rare.no_type_predicate() {
+            return Some(no_type_predicate);
+        }
+        self.rare.tail().and_then(|r| r.resolved_type_predicate.get())
+    }
+    /// Go `sig.resolvedTypePredicate = predicate`; `no_type_predicate` is the checker's `noTypePredicate`.
+    pub fn set_resolved_type_predicate(&self, predicate: Option<P<TypePredicate>>, no_type_predicate: P<TypePredicate>) {
+        let none = predicate == Some(no_type_predicate);
+        self.rare.set_no_type_predicate(none);
+        let stored = if none { None } else { predicate };
+        if stored.is_some() || self.rare.tail().is_some() {
+            self.rare_for_write().resolved_type_predicate.set(stored);
+        }
+    }
     pub fn this_parameter(&self) -> Option<P<Symbol>> {
-        self.rare.get().and_then(|r| r.this_parameter.get())
+        self.rare.tail().and_then(|r| r.this_parameter.get())
     }
     pub fn set_this_parameter(&self, this_parameter: Option<P<Symbol>>) {
-        if this_parameter.is_some() || self.rare.get().is_some() {
+        if this_parameter.is_some() || self.rare.tail().is_some() {
             self.rare_for_write().this_parameter.set(this_parameter);
         }
     }
     pub fn isolated_signature_type(&self) -> Option<P<Type>> {
-        self.rare.get().and_then(|r| r.isolated_signature_type.get())
+        self.rare.tail().and_then(|r| r.isolated_signature_type.get())
     }
     pub fn set_isolated_signature_type(&self, t: Option<P<Type>>) {
-        if t.is_some() || self.rare.get().is_some() {
+        if t.is_some() || self.rare.tail().is_some() {
             self.rare_for_write().isolated_signature_type.set(t);
         }
     }
     pub fn composite(&self) -> Option<P<CompositeSignature>> {
-        self.rare.get().and_then(|r| r.composite.get())
+        self.rare.tail().and_then(|r| r.composite.get())
     }
     pub fn set_composite(&self, composite: Option<P<CompositeSignature>>) {
-        if composite.is_some() || self.rare.get().is_some() {
+        if composite.is_some() || self.rare.tail().is_some() {
             self.rare_for_write().composite.set(composite);
         }
     }
