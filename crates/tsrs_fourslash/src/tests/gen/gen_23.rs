@@ -3,532 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod path_completions_package_json_imports_wildcard12 {
-use crate::tests::prelude::*;
-
-// pathCompletionsPackageJsonImportsWildcard12_test.go:12
-pub fn test_path_completions_package_json_imports_wildcard12(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r##"// @module: node18
-// @Filename: /package.json
- {
-   "name": "repo",
-   "imports": {
-     "#foo/_*/suffix": "./src/*.ts"
-   }
- }
-// @Filename: /src/b.ts
-export const x = 0;
-// @Filename: /src/dir/x.ts
-/export const x = 0;
-// @Filename: /src/a.ts
-import {} from "#foo//*0*/";
-import {} from "#foo/dir//*1*/"; // invalid
-import {} from "#foo/[|_|]/*2*/";
-import {} from "#foo/_dir//*3*/";"##;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "_a/suffix".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("_a/suffix.ts".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "_b/suffix".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("_b/suffix.ts".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "_dir".to_string(), kind: Some(lsproto::CompletionItemKind::Folder), detail: Some("_dir".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("1".to_string()), None);
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "_a/suffix".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("_a/suffix.ts".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { range: f.ranges()[0].ls_range, new_text: "_a/suffix".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "_b/suffix".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("_b/suffix.ts".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { range: f.ranges()[0].ls_range, new_text: "_b/suffix".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "_dir".to_string(), kind: Some(lsproto::CompletionItemKind::Folder), detail: Some("_dir".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { range: f.ranges()[0].ls_range, new_text: "_dir".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "x/suffix".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("x/suffix.ts".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod path_completions_package_json_imports_wildcard2 {
-use crate::tests::prelude::*;
-
-// pathCompletionsPackageJsonImportsWildcard2_test.go:12
-pub fn test_path_completions_package_json_imports_wildcard2(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r##"// @module: node18
-// @Filename: /package.json
-{
-  "name": "salesforce-pageobjects",
-  "version": "1.0.0",
-  "imports": {
-    "#*": {
-      "types": "./dist/*.d.ts",
-      "import": "./dist/*.mjs",
-      "default": "./dist/*.js"
-    }
-  }
-}
-// @Filename: /dist/action/pageObjects/actionRenderer.d.ts
-export const actionRenderer = 0;
-// @Filename: /index.mts
-import { } from "/**/";"##;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#action".to_string(), kind: Some(lsproto::CompletionItemKind::Folder), detail: Some("#action".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.insert(t, "#action/");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "pageObjects".to_string(), kind: Some(lsproto::CompletionItemKind::Folder), detail: Some("pageObjects".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.insert(t, "pageObjects/");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "actionRenderer".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("actionRenderer.d.ts".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod path_completions_package_json_imports_wildcard3 {
-use crate::tests::prelude::*;
-
-// pathCompletionsPackageJsonImportsWildcard3_test.go:12
-pub fn test_path_completions_package_json_imports_wildcard3(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r##"// @module: node18
-// @Filename: /package.json
-{
-  "types": "index.d.ts",
-  "imports": {
-    "#component-*": {
-      "types@>=4.3.5": "types/components/*.d.ts"
-    }
-  }
-}
-// @Filename: /nope.d.ts
-export const nope = 0;
-// @Filename: /types/components/index.d.ts
-export const index = 0;
-// @Filename: /types/components/blah.d.ts
-export const blah = 0;
-// @Filename: /types/components/subfolder/one.d.ts
-export const one = 0;
-// @Filename: /a.ts
-import { } from "/**/";"##;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#component-blah".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("#component-blah.d.ts".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "#component-index".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("#component-index.d.ts".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "#component-subfolder".to_string(), kind: Some(lsproto::CompletionItemKind::Folder), detail: Some("#component-subfolder".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.insert(t, "#component-subfolder/");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "one".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("one.d.ts".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod path_completions_package_json_imports_wildcard4 {
-use crate::tests::prelude::*;
-
-// pathCompletionsPackageJsonImportsWildcard4_test.go:12
-pub fn test_path_completions_package_json_imports_wildcard4(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r##"// @module: node18
-// @Filename: /package.json
-{
-  "types": "index.d.ts",
-  "imports": {
-    "#*": "dist/*",
-    "#foo/*": "dist/*",
-    "#bar/*": "dist/*",
-    "#exact-match": "dist/index.d.ts"
-  }
-}
-// @Filename: /nope.d.ts
-export const nope = 0;
-// @Filename: /dist/index.d.ts
-export const index = 0;
-// @Filename: /dist/blah.d.ts
-export const blah = 0;
-// @Filename: /dist/foo/onlyInFooFolder.d.ts
-export const foo = 0;
-// @Filename: /dist/subfolder/one.d.ts
-export const one = 0;
-// @Filename: /a.mts
-import { } from "/**/";"##;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#blah.js".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("#blah.js".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "#index.js".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("#index.js".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "#foo".to_string(), kind: Some(lsproto::CompletionItemKind::Folder), detail: Some("#foo".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "#subfolder".to_string(), kind: Some(lsproto::CompletionItemKind::Folder), detail: Some("#subfolder".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Folder), detail: Some("#bar".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "#exact-match".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("#exact-match.d.ts".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.insert(t, "#foo/");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: vec![Any::CompletionItem(lsproto::CompletionItem { label: "blah.js".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("blah.js".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "index.js".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("index.js".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), kind: Some(lsproto::CompletionItemKind::Folder), detail: Some("foo".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "subfolder".to_string(), kind: Some(lsproto::CompletionItemKind::Folder), detail: Some("subfolder".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.insert(t, "foo/");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: vec![Any::CompletionItem(lsproto::CompletionItem { label: "onlyInFooFolder.js".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("onlyInFooFolder.js".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod path_completions_package_json_imports_wildcard5 {
-use crate::tests::prelude::*;
-
-// pathCompletionsPackageJsonImportsWildcard5_test.go:12
-pub fn test_path_completions_package_json_imports_wildcard5(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r##"// @module: node18
-// @Filename: /package.json
-{
-  "name": "foo",
-  "main": "dist/index.js",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
-  "imports": {
-    "#*": {
-      "import": {
-        "types": "./dist/types/*.d.mts",
-        "default": "./dist/esm/*.mjs"
-      },
-      "default": {
-        "types": "./dist/types/*.d.ts",
-        "default": "./dist/cjs/*.js"
-      }
-    },
-    "#only-in-cjs": {
-      "require": {
-        "types": "./dist/types/only-in-cjs/index.d.ts",
-        "default": "./dist/cjs/only-in-cjs/index.js"
-      }
-    }
-  }
-}
-// @Filename: /dist/types/index.d.mts
-export const index = 0;
-// @Filename: /dist/types/index.d.ts
-export const index = 0;
-// @Filename: /dist/types/blah.d.mts
-export const blah = 0;
-// @Filename: /dist/types/blah.d.ts
-export const blah = 0;
-// @Filename: /dist/types/only-in-cjs/index.d.ts
-export const onlyInCjs = 0;
-// @Filename: /index.mts
-import { } from "/**/";"##;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#blah".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("#blah.d.mts".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "#index".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("#index.d.mts".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod path_completions_package_json_imports_wildcard6 {
-use crate::tests::prelude::*;
-
-// pathCompletionsPackageJsonImportsWildcard6_test.go:12
-pub fn test_path_completions_package_json_imports_wildcard6(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r##"// @module: node18
-// @Filename: /package.json
-{
-  "name": "foo",
-  "main": "dist/index.js",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
-  "imports": {
-    "#*": "./dist/*?.d.ts"
-  }
-}
-// @Filename: /dist/index.d.ts
-export const index = 0;
-// @Filename: /dist/blah?.d.ts
-export const blah = 0;
-// @Filename: /index.mts
-import { } from "/**/";"##;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#blah".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("#blah.d.ts".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod path_completions_package_json_imports_wildcard7 {
-use crate::tests::prelude::*;
-
-// pathCompletionsPackageJsonImportsWildcard7_test.go:12
-pub fn test_path_completions_package_json_imports_wildcard7(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r##"// @module: node18
-// @Filename: /package.json
-{
-  "name": "foo",
-  "imports": {
-    "#*": "./dist/*.js"
-  }
-}
-// @Filename: /dist/blah.d.ts
-export const blah = 0;
-// @Filename: /index.mts
-import { } from "/**/";"##;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#blah".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("#blah.d.ts".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod path_completions_package_json_imports_wildcard8 {
-use crate::tests::prelude::*;
-
-// pathCompletionsPackageJsonImportsWildcard8_test.go:12
-pub fn test_path_completions_package_json_imports_wildcard8(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r##"// @module: node18
-// @Filename: /package.json
-{
-  "name": "foo",
-  "imports": {
-    "#*": "./dist/*.js"
-  }
-}
-// @Filename: /dist/blah.js
-export const blah = 0;
-// @Filename: /dist/blah.d.ts
-export declare const blah: 0;
-// @Filename: /index.mts
-import { } from "/**/";"##;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#blah".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("#blah.d.ts".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod path_completions_package_json_imports_wildcard9 {
-use crate::tests::prelude::*;
-
-// pathCompletionsPackageJsonImportsWildcard9_test.go:12
-pub fn test_path_completions_package_json_imports_wildcard9(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r##"// @module: node18
-// @allowJs: true
-// @Filename: /package.json
-{
-  "name": "foo",
-  "imports": {
-    "#*": "./dist/*.js"
-  }
-}
-// @Filename: /dist/blah.js
-export const blah = 0;
-// @Filename: /index.mts
-import { } from "/**/";"##;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#blah".to_string(), kind: Some(lsproto::CompletionItemKind::File), detail: Some("#blah.js".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod path_completions_partial_path {
-use crate::tests::prelude::*;
-
-// pathCompletionsPartialPath_test.go:11
-pub fn test_path_completions_partial_path_relative_import(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /src/main.ts
-import { } from "./foo//*$*/";
-// @Filename: /src/foo/async.ts
-export const asyncApi = "async";
-// @Filename: /src/foo/fs.ts
-export const fsApi = "fs";
-// @Filename: /src/foo/sync.ts
-export const syncApi = "sync";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("$".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("async".to_string()), Any::String("fs".to_string()), Any::String("sync".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-// pathCompletionsPartialPath_test.go:42
-pub fn test_path_completions_partial_path_package_no_exports(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @moduleResolution: bundler
-// @Filename: /node_modules/@typescript/typescript/package.json
-{ "name": "@typescript/typescript", "version": "0.0.0" }
-// @Filename: /node_modules/@typescript/typescript/unstable/async.ts
-export const asyncApi = "async";
-// @Filename: /node_modules/@typescript/typescript/unstable/fs.ts
-export const fsApi = "fs";
-// @Filename: /node_modules/@typescript/typescript/unstable/sync.ts
-export const syncApi = "sync";
-// @Filename: /package.json
-{ "dependencies": { "@typescript/typescript": "0.0.0" } }
-// @Filename: /src/main.ts
-import { } from "@typescript/typescript/unstable//*$*/";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("$".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("async".to_string()), Any::String("fs".to_string()), Any::String("sync".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-// pathCompletionsPartialPath_test.go:78
-pub fn test_path_completions_partial_path_package_exports(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @moduleResolution: bundler
-// @Filename: /node_modules/@typescript/typescript/package.json
-{
-	"name": "@typescript/typescript",
-	"version": "0.0.0",
-	"exports": {
-		"./unstable/sync": "./dist/api/sync/api.js",
-		"./unstable/async": "./dist/api/async/api.js",
-		"./unstable/fs": "./dist/api/fs.js"
-	}
-}
-// @Filename: /node_modules/@typescript/typescript/index.d.ts
-export {};
-// @Filename: /node_modules/@typescript/typescript/dist/api/async/api.js
-export const asyncApi = "async";
-// @Filename: /node_modules/@typescript/typescript/dist/api/fs.js
-export const fsApi = "fs";
-// @Filename: /node_modules/@typescript/typescript/dist/api/sync/api.js
-export const syncApi = "sync";
-// @Filename: /package.json
-{ "dependencies": { "@typescript/typescript": "0.0.0" } }
-// @Filename: /src/main.ts
-import { } from "@typescript/typescript/unstable//*$*/";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("$".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("async".to_string()), Any::String("fs".to_string()), Any::String("sync".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-// pathCompletionsPartialPath_test.go:124
-pub fn test_path_completions_partial_path_package_exports_ending_star(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @moduleResolution: bundler
-// @Filename: /node_modules/@typescript/typescript/package.json
-{
-	"name": "@typescript/typescript",
-	"version": "0.0.0",
-	"exports": {
-		"./unstable/*": "./dist/unstable/*.d.ts"
-	}
-}
-// @Filename: /node_modules/@typescript/typescript/dist/unstable/async.d.ts
-export declare const asyncApi: string;
-// @Filename: /node_modules/@typescript/typescript/dist/unstable/fs.d.ts
-export declare const fsApi: string;
-// @Filename: /node_modules/@typescript/typescript/dist/unstable/sync.d.ts
-export declare const syncApi: string;
-// @Filename: /package.json
-{ "dependencies": { "@typescript/typescript": "0.0.0" } }
-// @Filename: /src/main.ts
-import { } from "@typescript/typescript/unstable//*$*/";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("$".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("async".to_string()), Any::String("fs".to_string()), Any::String("sync".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-// pathCompletionsPartialPath_test.go:166
-pub fn test_path_completions_partial_path_package_exports_middle_star(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @moduleResolution: bundler
-// @Filename: /node_modules/@typescript/typescript/package.json
-{
-	"name": "@typescript/typescript",
-	"version": "0.0.0",
-	"exports": {
-		"./unstable/_*/api": "./dist/api/*.d.ts"
-	}
-}
-// @Filename: /node_modules/@typescript/typescript/dist/api/async.d.ts
-export declare const asyncApi: string;
-// @Filename: /node_modules/@typescript/typescript/dist/api/fs.d.ts
-export declare const fsApi: string;
-// @Filename: /node_modules/@typescript/typescript/dist/api/sync.d.ts
-export declare const syncApi: string;
-// @Filename: /package.json
-{ "dependencies": { "@typescript/typescript": "0.0.0" } }
-// @Filename: /src/main.ts
-import { } from "@typescript/typescript/unstable//*$*/";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("$".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("_async/api".to_string()), Any::String("_fs/api".to_string()), Any::String("_sync/api".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod path_completions_types_versions_local {
 use crate::tests::prelude::*;
 
@@ -6147,6 +5621,542 @@ export as namespace /*0*/myLib;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "0", "export namespace myLib", "");
             f.verify_quick_info_at(t, "1", "export namespace myLib", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_from_contextual_type {
+use crate::tests::prelude::*;
+
+// quickInfoFromContextualType_test.go:10
+pub fn test_quick_info_from_contextual_type(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: quickInfoExportAssignmentOfGenericInterface_0.ts
+interface I {
+    /** Documentation */
+    x: number;
+}
+const i: I = { /**/x: 0 };"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "", "(property) I.x: number", "Documentation");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_from_contextual_union_type1 {
+use crate::tests::prelude::*;
+
+// quickInfoFromContextualUnionType1_test.go:10
+pub fn test_quick_info_from_contextual_union_type1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @strict: true
+// based on https://github.com/microsoft/TypeScript/issues/55495
+type X =
+  | {
+      name: string;
+      [key: string]: any;
+    }
+  | {
+      name: "john";
+      someProp: boolean;
+    };
+
+const obj = { name: "john", /*1*/someProp: "foo" } satisfies X;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "(property) someProp: string", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_from_contextual_union_type2 {
+use crate::tests::prelude::*;
+
+// quickInfoFromContextualUnionType2_test.go:10
+pub fn test_quick_info_from_contextual_union_type2(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @strict: true
+function test1(arg: { prop: "foo" }) {}
+test1({ /*1*/prop: "bar" });
+
+function test2(arg: { prop: "foo" } | undefined) {}
+test2({ /*2*/prop: "bar" });"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", r#"(property) prop: "foo""#, "");
+            f.verify_quick_info_at(t, "2", r#"(property) prop: "foo""#, "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_from_contextual_union_type3 {
+use crate::tests::prelude::*;
+
+// quickInfoFromContextualUnionType3_test.go:10
+pub fn test_quick_info_from_contextual_union_type3(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @strict: true
+declare const foo1: <D extends Foo1<D>>(definition: D) => D;
+
+type Foo1<D, Bar = Prop<D, "bar">> = {
+  bar: {
+    [K in keyof Bar]: Bar[K] extends boolean
+      ? Bar[K]
+      : "Error: bar should be boolean";
+  };
+};
+
+declare const foo2: <D extends Foo2<D>>(definition: D) => D;
+
+type Foo2<D, Bar = Prop<D, "bar">> = {
+  bar?: {
+    [K in keyof Bar]: Bar[K] extends boolean
+      ? Bar[K]
+      : "Error: bar should be boolean";
+  };
+};
+
+type Prop<T, K> = K extends keyof T ? T[K] : never;
+
+foo1({ bar: { /*1*/X: "test" } });
+
+foo2({ bar: { /*2*/X: "test" } });"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", r#"(property) X: "Error: bar should be boolean""#, "");
+            f.verify_quick_info_at(t, "2", r#"(property) X: "Error: bar should be boolean""#, "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_from_empty_block_comment {
+use crate::tests::prelude::*;
+
+// quickInfoFromEmptyBlockComment_test.go:10
+pub fn test_quick_info_from_empty_block_comment(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"/**/
+class Foo {
+}
+var f/*A*/ff = new Foo();"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "A", "var fff: Foo", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_function {
+use crate::tests::prelude::*;
+
+// quickInfoFunction_test.go:10
+pub fn test_quick_info_function(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"/**/function foo() { return "hi"; }"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "", "function foo(): string", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_function_check_type {
+use crate::tests::prelude::*;
+
+// quickInfoFunctionCheckType_test.go:10
+pub fn test_quick_info_function_check_type(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = "export type /**/Tail<T extends any[]> = ((...t: T) => void) extends (h: any, ...rest: infer R) => void ? R : never;";
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "", "type Tail<T extends any[]> = ((...t: T) => void) extends (h: any, ...rest: infer R) => void ? R : never", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_function_keyword {
+use crate::tests::prelude::*;
+
+// quickInfoFunctionKeyword_test.go:10
+pub fn test_quick_info_function_keyword(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"[1].forEach(fu/*1*/nction() {});
+[1].map(x =/*2*/> x + 1);"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "(local function)(): void", "");
+            f.verify_quick_info_at(t, "2", "function(x: number): number", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_generic_combinators2 {
+use crate::tests::prelude::*;
+
+// quickInfoGenericCombinators2_test.go:10
+pub fn test_quick_info_generic_combinators2(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface Collection<T, U> {
+   length: number;
+   add(x: T, y: U): void ;
+   remove(x: T, y: U): boolean;
+}
+
+interface Combinators {
+   map<T, U, V>(c: Collection<T, U>, f: (x: T, y: U) => V): Collection<T, V>;
+   map<T, U>(c: Collection<T, U>, f: (x: T, y: U) => any): Collection<any, any>;
+}
+
+class A {
+   foo<T>(): T { return null; }
+}
+
+class B<T> {
+   foo(x: T): T { return null; }
+}
+
+var c1: Collection<any, any>;
+var c2: Collection<number, string>;
+var c3: Collection<Collection<number, number>, string>;
+var c4: Collection<number, A>;
+var c5: Collection<number, B<any>>;
+
+var _: Combinators;
+// param help on open paren for arg 2 should show 'number' not T or 'any'
+// x should be contextually typed to number
+var rf1 = (x: number, y: string) => { return x.toFixed() };
+var rf2 = (x: Collection<number, number>, y: string) => { return x.length };
+var rf3 = (x: number, y: A) => { return y.foo() };
+
+var /*9*/r1a  = _.map/*1c*/(c2, (/*1a*/x, /*1b*/y) => { return x.toFixed() });
+var /*10*/r1b = _.map(c2, rf1);
+
+var /*11*/r2a = _.map(c3, (/*2a*/x, /*2b*/y) => { return x.length });
+var /*12*/r2b = _.map(c3, rf2);
+
+var /*13*/r3a = _.map(c4, (/*3a*/x, /*3b*/y) => { return y.foo() });
+var /*14*/r3b = _.map(c4, rf3);
+
+var /*15*/r4a = _.map(c5, (/*4a*/x, /*4b*/y) => { return y.foo() });
+
+var /*17*/r5a = _.map<number, string, Date>(c2, /*17error1*/(/*5a*/x, /*5b*/y) => { return x.toFixed() }/*17error2*/); 
+var rf1b = (x: number, y: string) => { return new Date() };
+var /*18*/r5b = _.map<number, string, Date>(c2, rf1b);
+
+var /*19*/r6a = _.map<Collection<number, number>, string, Date>(c3, (/*6a*/x,/*6b*/y) => { return new Date(); });
+var rf2b = (x: Collection<number, number>, y: string) => { return new Date(); };
+var /*20*/r6b = _.map<Collection<number, number>, string, Date>(c3, rf2b);
+
+var /*21*/r7a = _.map<number, A, string>(c4, (/*7a*/x,/*7b*/y) => { return y.foo() });
+var /*22*/r7b = _.map<number, A, string>(c4, /*22error1*/rf3/*22error2*/);
+
+var /*23*/r8a = _.map<number, /*error1*/B/*error2*/, string>(c5, (/*8a*/x,/*8b*/y) => { return y.foo() }); "#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "2a", "(parameter) x: Collection<number, number>", "");
+            f.verify_quick_info_at(t, "2b", "(parameter) y: string", "");
+            f.verify_quick_info_at(t, "3a", "(parameter) x: number", "");
+            f.verify_quick_info_at(t, "3b", "(parameter) y: A", "");
+            f.verify_quick_info_at(t, "4a", "(parameter) x: number", "");
+            f.verify_quick_info_at(t, "4b", "(parameter) y: B<any>", "");
+            f.verify_quick_info_at(t, "5a", "(parameter) x: number", "");
+            f.verify_quick_info_at(t, "5b", "(parameter) y: string", "");
+            f.verify_quick_info_at(t, "6a", "(parameter) x: Collection<number, number>", "");
+            f.verify_quick_info_at(t, "6b", "(parameter) y: string", "");
+            f.verify_quick_info_at(t, "7a", "(parameter) x: number", "");
+            f.verify_quick_info_at(t, "7b", "(parameter) y: A", "");
+            f.verify_quick_info_at(t, "8a", "(parameter) x: number", "");
+            f.verify_quick_info_at(t, "8b", "(parameter) y: any", "");
+            f.verify_quick_info_at(t, "9", "var r1a: Collection<number, string>", "");
+            f.verify_quick_info_at(t, "10", "var r1b: Collection<number, string>", "");
+            f.verify_quick_info_at(t, "11", "var r2a: Collection<Collection<number, number>, number>", "");
+            f.verify_quick_info_at(t, "12", "var r2b: Collection<Collection<number, number>, number>", "");
+            f.verify_quick_info_at(t, "13", "var r3a: Collection<number, unknown>", "");
+            f.verify_quick_info_at(t, "14", "var r3b: Collection<number, unknown>", "");
+            f.verify_quick_info_at(t, "15", "var r4a: Collection<number, any>", "");
+            f.verify_quick_info_at(t, "17", "var r5a: Collection<number, Date>", "");
+            f.verify_quick_info_at(t, "18", "var r5b: Collection<number, Date>", "");
+            f.verify_quick_info_at(t, "19", "var r6a: Collection<Collection<number, number>, Date>", "");
+            f.verify_quick_info_at(t, "20", "var r6b: Collection<Collection<number, number>, Date>", "");
+            f.verify_quick_info_at(t, "21", "var r7a: Collection<number, string>", "");
+            f.verify_quick_info_at(t, "22", "var r7b: Collection<number, string>", "");
+            f.verify_quick_info_at(t, "23", "var r8a: Collection<number, string>", "");
+            f.verify_error_exists_between_markers(t, "error1", "error2");
+            f.verify_error_exists_between_markers(t, "17error1", "17error2");
+            f.verify_error_exists_between_markers(t, "22error1", "22error2");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_generic_property_accessor {
+use crate::tests::prelude::*;
+
+// quickInfoGenericPropertyAccessor_test.go:10
+pub fn test_quick_info_generic_property_accessor(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"
+declare const o: {
+    f: <T>(x: T) => T
+    get g(): <T>(x: T) => T
+}
+
+declare const x: number
+
+o.f/*1*/(x)
+o.g/*2*/(x)
+"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "(property) f: <number>(x: number) => number", "");
+            f.verify_quick_info_at(t, "2", "(accessor) g: <number>(x: number) => number", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_generic_type_argument_inference1 {
+use crate::tests::prelude::*;
+
+// quickInfoGenericTypeArgumentInference1_test.go:10
+pub fn test_quick_info_generic_type_argument_inference1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @strict: false
+namespace Underscore {
+    export interface Iterator<T, U> {
+        (value: T, index: any, list: any): U;
+    }
+
+    export interface Static {
+        all<T>(list: T[], iterator?: Iterator<T, boolean>, context?: any): T;
+        identity<T>(value: T): T;
+    }
+}
+
+declare var _: Underscore.Static;
+var /*1*/r = _./*11*/all([true, 1, null, 'yes'], x => !x);
+var /*2*/r2 = _./*21*/all([true], _.identity);
+var /*3*/r3 = _./*31*/all([], _.identity);
+var /*4*/r4 = _./*41*/all([<any>true], _.identity);"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "var r: string | number | boolean", "");
+            f.verify_quick_info_at(t, "11", "(method) Underscore.Static.all<string | number | boolean>(list: (string | number | boolean)[], iterator?: Underscore.Iterator<string | number | boolean, boolean>, context?: any): string | number | boolean", "");
+            f.verify_quick_info_at(t, "2", "var r2: boolean", "");
+            f.verify_quick_info_at(t, "21", "(method) Underscore.Static.all<boolean>(list: boolean[], iterator?: Underscore.Iterator<boolean, boolean>, context?: any): boolean", "");
+            f.verify_quick_info_at(t, "3", "var r3: any", "");
+            f.verify_quick_info_at(t, "31", "(method) Underscore.Static.all<any>(list: any[], iterator?: Underscore.Iterator<any, boolean>, context?: any): any", "");
+            f.verify_quick_info_at(t, "4", "var r4: any", "");
+            f.verify_quick_info_at(t, "41", "(method) Underscore.Static.all<any>(list: any[], iterator?: Underscore.Iterator<any, boolean>, context?: any): any", "");
+            f.verify_no_errors(t);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_generic_type_path {
+use crate::tests::prelude::*;
+
+// quickInfoGenericTypePath_test.go:10
+pub fn test_quick_info_generic_type_path(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"
+function f<T>(x: T) {
+  class C {
+    value = x
+  }
+  return new C()
+}
+
+class Box<T> {
+  public value: T;
+  constructor(value: T) {
+    this.value = value;
+  }
+}
+
+const instance = f/*callF*/("hello");
+const b1/*b1*/ = new Box/*newBox*/(instance);
+declare const b2/*b2*/: Box<typeof instance>;
+"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_hover(t);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_generics {
+use crate::tests::prelude::*;
+
+// quickInfoGenerics_test.go:10
+pub fn test_quick_info_generics(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"class Con/*1*/tainer<T> {
+    x: T;
+}
+interface IList</*2*/T> {
+    getItem(i: number): /*3*/T;
+}
+class List2</*4*/T extends IList<number>> implements IList<T> {
+    private __it/*6*/em: /*5*/T[];
+    public get/*7*/Item(i: number) {
+        return this.__item[i];
+    }
+    public /*8*/method</*9*/S extends IList<T>>(s: S, p: /*10*/T[]) {
+        return s;
+    }
+}
+function foo4</*11*/T extends Date>(test: T): T;
+function foo4</*12*/S extends string>(test: S): S;
+function foo4(test: any): any;
+function foo4</*13*/T extends Date>(test: any): any { return null; }
+var x: List2<IList<number>>;
+var y = x./*14*/getItem(10);
+var x2: IList<IList<number>>;
+var x3: IList<number>;
+var y2 = x./*15*/method(x2, [x3, x3]);"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "class Container<T>", "");
+            f.verify_quick_info_at(t, "2", "(type parameter) T in IList<T>", "");
+            f.verify_quick_info_at(t, "3", "(type parameter) T in IList<T>", "");
+            f.verify_quick_info_at(t, "4", "(type parameter) T in List2<T extends IList<number>>", "");
+            f.verify_quick_info_at(t, "5", "(type parameter) T in List2<T extends IList<number>>", "");
+            f.verify_quick_info_at(t, "6", "(property) List2<T extends IList<number>>.__item: T[]", "");
+            f.verify_quick_info_at(t, "7", "(method) List2<T extends IList<number>>.getItem(i: number): T", "");
+            f.verify_quick_info_at(t, "8", "(method) List2<T extends IList<number>>.method<S extends IList<T>>(s: S, p: T[]): S", "");
+            f.verify_quick_info_at(t, "9", "(type parameter) S in List2<T extends IList<number>>.method<S extends IList<T>>(s: S, p: T[]): S", "");
+            f.verify_quick_info_at(t, "10", "(type parameter) T in List2<T extends IList<number>>", "");
+            f.verify_quick_info_at(t, "11", "(type parameter) T in foo4<T extends Date>(test: T): T", "");
+            f.verify_quick_info_at(t, "12", "(type parameter) S in foo4<S extends string>(test: S): S", "");
+            f.verify_quick_info_at(t, "13", "(type parameter) T in foo4<T extends Date>(test: any): any", "");
+            f.verify_quick_info_at(t, "14", "(method) List2<IList<number>>.getItem(i: number): IList<number>", "");
+            f.verify_quick_info_at(t, "15", "(method) List2<IList<number>>.method<IList<IList<number>>>(s: IList<IList<number>>, p: IList<number>[]): IList<IList<number>>", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_getter_setter {
+use crate::tests::prelude::*;
+
+// quickInfoGetterSetter_test.go:10
+pub fn test_quick_info_getter_setter(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @target: es2015
+class C {
+    #x = Promise.resolve("")
+    set /*setterDef*/myValue(x: Promise<string> | string) {
+        this.#x = Promise.resolve(x);
+    }
+    get /*getterDef*/myValue(): Promise<string> {
+        return this.#x;
+    }
+}
+let instance = new C();
+instance./*setterUse*/myValue = instance./*getterUse*/myValue;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "getterUse", "(property) C.myValue: Promise<string>", "");
+            f.verify_quick_info_at(t, "getterDef", "(getter) C.myValue: Promise<string>", "");
+            f.verify_quick_info_at(t, "setterUse", "(property) C.myValue: string | Promise<string>", "");
+            f.verify_quick_info_at(t, "setterDef", "(setter) C.myValue: string | Promise<string>", "");
         });
         done(&mut *f, t);
         go::resume(__defer2);

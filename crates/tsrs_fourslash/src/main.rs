@@ -52,6 +52,10 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             }
         }
+        "worker" => {
+            runner::worker(REGISTRY, include_skipped);
+            ExitCode::SUCCESS
+        }
         "list" => {
             for e in REGISTRY.iter().filter(|e| filter.as_ref().is_none_or(|re| re.is_match(e.name))) {
                 match e.skip {

@@ -3,82 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod completion_list_in_unclosed_function18 {
-use crate::tests::prelude::*;
-
-// completionListInUnclosedFunction18_test.go:11
-pub fn test_completion_list_in_unclosed_function18(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface MyType {
-}
-
-function foo(x: string, y: number, z: boolean) {
-    function bar(a: number, b: string = "hello", c: typeof x = "hello") {
-        var v = (p: MyType) => y + /*1*/
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod completion_list_in_unclosed_function19 {
-use crate::tests::prelude::*;
-
-// completionListInUnclosedFunction19_test.go:11
-pub fn test_completion_list_in_unclosed_function19(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface MyType {
-}
-
-function foo(x: string, y: number, z: boolean) {
-    function bar(a: number, b: string = "hello", c: typeof x = "hello") {
-        var v = (p: MyType) => { return y + /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod completion_list_in_unclosed_index_signature01 {
-use crate::tests::prelude::*;
-
-// completionListInUnclosedIndexSignature01_test.go:11
-pub fn test_completion_list_in_unclosed_index_signature01(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class C {
-    [foo: string]: typeof /*1*/
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("C".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod completion_list_in_unclosed_index_signature02 {
 use crate::tests::prelude::*;
 
@@ -4400,6 +4324,110 @@ export function helper() {}
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: Vec::new(), ..Default::default() }), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod completions_generator_functions {
+use crate::tests::prelude::*;
+
+// completionsGeneratorFunctions_test.go:13
+pub fn test_completions_generator_functions(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"function /*a*/ ;
+function* /*b*/ ;
+interface I {
+    abstract baseMethod(): Iterable<number>;
+}
+class C implements I {
+    */*c*/ ;
+    public */*d*/
+}
+const o: I = {
+    */*e*/
+};
+1 * /*f*/"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_completions(t, Any::StringSlice(vec!["a".to_string(), "b".to_string()]), None);
+            f.verify_completions(t, Any::StringSlice(vec!["c".to_string(), "d".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("baseMethod".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("e".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("baseMethod".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("f".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "Number".to_string(), sort_text: Some("15".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod completions_generic_indexed_access1 {
+use crate::tests::prelude::*;
+
+// completionsGenericIndexedAccess1_test.go:12
+pub fn test_completions_generic_indexed_access1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface Sample {
+  addBook: { name: string, year: number }
+}
+
+export declare function testIt<T>(method: T[keyof T]): any
+testIt<Sample>({ /**/ });"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "name".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "year".to_string(), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod completions_generic_indexed_access2 {
+use crate::tests::prelude::*;
+
+// completionsGenericIndexedAccess2_test.go:12
+pub fn test_completions_generic_indexed_access2(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"export type GetMethodsForType<T, G extends string> = { [K in keyof T]:
+  T[K] extends () => any ? { name: K, group: G, } : T[K] extends (s: infer U) => any ? { name: K, group: G, payload: U } : never }[keyof T];
+
+
+class Sample {
+  count = 0;
+  books: { name: string, year: number }[] = []
+  increment() {
+      this.count++
+      this.count++
+  }
+
+  addBook(book: Sample["books"][0]) {
+      this.books.push(book)
+  }
+}
+export declare function testIt<T, G extends string>(): (input: any, method: GetMethodsForType<T, G>) => any
+
+
+const t = testIt<Sample, "Sample">()
+
+const i = t(null, { name: "addBook", group: "Sample", payload: { /**/ } })"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::CompletionItem(lsproto::CompletionItem { label: "name".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "year".to_string(), ..Default::default() })], ..Default::default() }), ..Default::default() }));
         });
         done(&mut *f, t);
         go::resume(__defer2);

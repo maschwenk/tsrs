@@ -1,6 +1,8 @@
 // The test registry runner (`tsrs-fourslash run`): Go's `go test ./internal/fourslash/tests` with t.Parallel().
-// Tests run on a fixed pool of worker threads with 256 MB stacks (the checker recurses deeply; a thread per test
-// would leak one arena chunk per test, see docs/LSP.md), each under catch_unwind.
+// Tests run in worker processes (`tsrs-fourslash worker`), one test at a time per process, each under
+// catch_unwind on a thread with a 256 MB stack. Processes because the in-process language server ends the process
+// on an unrecovered panic in one of its threads (like a Go program), and because programs and checkers are never
+// freed (docs/LSP.md "Memory plan"): a worker is replaced after a crash, a timeout, or WORKER_TESTS tests.
 
 use std::any::Any as StdAny;
 use std::cell::RefCell;
@@ -8,9 +10,13 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::panic::{self, AssertUnwindSafe};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Mutex, Once};
-use std::time::Instant;
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{mpsc, Arc, Mutex, Once};
+use std::time::{Duration, Instant};
+
+use rustc_hash::FxHashMap;
 
 use crate::testing::{FatalPanic, SkipPanic, T};
 
@@ -62,6 +68,11 @@ pub fn install_panic_hook() {
             let msg = payload_message(payload);
             let loc = info.location().map(|l| format!(" at {}:{}", l.file(), l.line())).unwrap_or_default();
             let bt = std::backtrace::Backtrace::force_capture().to_string();
+            if WORKER_MODE.load(Ordering::Relaxed) {
+                // The parent reports the last stderr line when the worker dies (a server thread's panic ends it).
+                let thread = std::thread::current().name().unwrap_or("").to_string();
+                eprintln!("panic in thread '{thread}': {msg}{loc}");
+            }
             LAST_PANIC.with(|p| *p.borrow_mut() = Some((format!("{msg}{loc}"), bt)));
         }));
     });
@@ -124,6 +135,129 @@ pub struct RunOptions {
     pub verbose: bool,
 }
 
+// Tests a worker process runs before it is replaced (bounds the memory the leaked programs take).
+const WORKER_TESTS: usize = 200;
+// A test that takes longer is reported as failed and its worker is killed.
+const TEST_TIMEOUT: Duration = Duration::from_secs(120);
+
+// `tsrs-fourslash worker`: reads test names from stdin, runs each, and writes one result line per test:
+// `<name>\t<PASS|FAIL|SKIP>\t<first line of the message>`.
+pub fn worker(registry: &'static [TestEntry], include_skipped: bool) {
+    install_panic_hook();
+    WORKER_MODE.store(true, Ordering::Relaxed);
+    let by_name: FxHashMap<&str, &'static TestEntry> = registry.iter().map(|e| (e.name, e)).collect();
+    let stdin = std::io::stdin();
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if stdin.lock().read_line(&mut line).unwrap_or(0) == 0 {
+            return;
+        }
+        let name = line.trim_end();
+        let Some(entry) = by_name.get(name) else {
+            continue;
+        };
+        let entry: &'static TestEntry = entry;
+        let outcome = std::thread::scope(|s| {
+            std::thread::Builder::new().stack_size(256 << 20).spawn_scoped(s, || run_test(entry, include_skipped)).expect("spawn test thread").join()
+        });
+        let outcome = outcome.unwrap_or_else(|_| Outcome::Fail("panic outside the test".to_string()));
+        let (tag, msg) = match &outcome {
+            Outcome::Pass => ("PASS", String::new()),
+            Outcome::Fail(m) => ("FAIL", m.lines().next().unwrap_or("").to_string()),
+            Outcome::Skip(m) => ("SKIP", m.lines().next().unwrap_or("").to_string()),
+        };
+        let mut out = std::io::stdout().lock();
+        let _ = writeln!(out, "{name}\t{tag}\t{msg}");
+        let _ = out.flush();
+    }
+}
+
+static WORKER_MODE: AtomicBool = AtomicBool::new(false);
+
+struct WorkerProcess {
+    child: Child,
+    stdin: ChildStdin,
+    results: mpsc::Receiver<String>,
+    last_stderr: Arc<Mutex<String>>,
+    tests_run: usize,
+}
+
+fn spawn_worker(include_skipped: bool) -> WorkerProcess {
+    let exe = std::env::current_exe().expect("current exe");
+    let mut cmd = Command::new(exe);
+    cmd.arg("worker");
+    if include_skipped {
+        cmd.arg("--include-skipped");
+    }
+    let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().expect("spawn fourslash worker");
+    let stdin = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            let Ok(line) = line else { break };
+            if tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    let last_stderr = Arc::new(Mutex::new(String::new()));
+    let last = last_stderr.clone();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stderr).lines() {
+            let Ok(line) = line else { break };
+            if !line.trim().is_empty() {
+                *last.lock().unwrap() = line;
+            }
+        }
+    });
+    WorkerProcess { child, stdin, results: rx, last_stderr, tests_run: 0 }
+}
+
+fn run_in_worker(worker: &mut Option<WorkerProcess>, entry: &TestEntry, include_skipped: bool) -> Outcome {
+    if worker.as_ref().is_some_and(|w| w.tests_run >= WORKER_TESTS) {
+        let mut w = worker.take().unwrap();
+        drop(w.stdin);
+        let _ = w.child.wait();
+    }
+    let w = worker.get_or_insert_with(|| spawn_worker(include_skipped));
+    w.tests_run += 1;
+    if writeln!(w.stdin, "{}", entry.name).and_then(|_| w.stdin.flush()).is_err() {
+        let mut w = worker.take().unwrap();
+        let _ = w.child.kill();
+        let _ = w.child.wait();
+        return Outcome::Fail("worker process unavailable".to_string());
+    }
+    match w.results.recv_timeout(TEST_TIMEOUT) {
+        Ok(line) => {
+            let mut parts = line.splitn(3, '\t');
+            let _name = parts.next();
+            let tag = parts.next().unwrap_or("");
+            let msg = parts.next().unwrap_or("").to_string();
+            match tag {
+                "PASS" => Outcome::Pass,
+                "SKIP" => Outcome::Skip(msg),
+                _ => Outcome::Fail(msg),
+            }
+        }
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            let mut w = worker.take().unwrap();
+            let _ = w.child.kill();
+            let _ = w.child.wait();
+            Outcome::Fail(format!("timeout: no result after {}s", TEST_TIMEOUT.as_secs()))
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            let mut w = worker.take().unwrap();
+            let status = w.child.wait().map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
+            std::thread::sleep(Duration::from_millis(20));
+            let last = w.last_stderr.lock().unwrap().clone();
+            Outcome::Fail(format!("crash: worker exited with status {status}: {last}"))
+        }
+    }
+}
+
 // Runs the selected tests in parallel and writes target/fourslash-results/{pass,fail,skip}.txt.
 // Returns the number of failures.
 pub fn run(registry: &'static [TestEntry], opts: &RunOptions) -> usize {
@@ -135,20 +269,28 @@ pub fn run(registry: &'static [TestEntry], opts: &RunOptions) -> usize {
     let jobs = opts.jobs.max(1).min(selected.len().max(1));
     std::thread::scope(|s| {
         for _ in 0..jobs {
-            std::thread::Builder::new()
-                .stack_size(256 << 20)
-                .spawn_scoped(s, || loop {
+            s.spawn(|| {
+                let mut worker: Option<WorkerProcess> = None;
+                loop {
                     let i = next.fetch_add(1, Ordering::Relaxed);
                     if i >= selected.len() {
                         break;
                     }
-                    let outcome = run_test(selected[i], opts.include_skipped);
+                    let entry = selected[i];
+                    let outcome = match entry.skip {
+                        Some(reason) if !opts.include_skipped => Outcome::Skip(reason.to_string()),
+                        _ => run_in_worker(&mut worker, entry, opts.include_skipped),
+                    };
                     if opts.verbose {
-                        eprintln!("{} {}", outcome_tag(&outcome), selected[i].name);
+                        eprintln!("{} {}", outcome_tag(&outcome), entry.name);
                     }
                     results.lock().unwrap()[i] = Some(outcome);
-                })
-                .expect("spawn test worker");
+                }
+                if let Some(mut w) = worker {
+                    drop(w.stdin);
+                    let _ = w.child.wait();
+                }
+            });
         }
     });
     let results = results.into_inner().unwrap();

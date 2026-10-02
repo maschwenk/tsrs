@@ -3,281 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod go_to_definition_yield3 {
-use crate::tests::prelude::*;
-
-// goToDefinitionYield3_test.go:10
-pub fn test_go_to_definition_yield3(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class C {
-    notAGenerator() {
-      [|/*start1*/yield|] 0;
-    }
-
-    foo*/*end2*/() {
-      [|/*start2*/yield|] 0;
-    }
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_definition(t, true, &["start1", "start2"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod go_to_definition_yield4 {
-use crate::tests::prelude::*;
-
-// goToDefinitionYield4_test.go:10
-pub fn test_go_to_definition_yield4(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"function* gen() {
-    class C { [/*start*/yield 10]() {} }
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_definition(t, true, &["start"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod go_to_implementation_class_method_00 {
-use crate::tests::prelude::*;
-
-// goToImplementationClassMethod_00_test.go:10
-pub fn test_go_to_implementation_class_method_00(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class Bar {
-    [|{|"parts": ["(","method",")"," ","Bar",".","hello","(",")",":"," ","void"], "kind": "method"|}hello|]() {}
-}
-
-new Bar().hel/*reference*/lo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_implementation(t, &["reference"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod go_to_implementation_class_method_01 {
-use crate::tests::prelude::*;
-
-// goToImplementationClassMethod_01_test.go:10
-pub fn test_go_to_implementation_class_method_01(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"abstract class AbstractBar {
-    abstract he/*declaration*/llo(): void;
-}
-
-class Bar extends AbstractBar{
-    [|hello|]() {}
-}
-
-function whatever(x: AbstractBar) {
-    x.he/*reference*/llo();
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_implementation(t, &["reference", "declaration"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod go_to_implementation_enum_00 {
-use crate::tests::prelude::*;
-
-// goToImplementationEnum_00_test.go:10
-pub fn test_go_to_implementation_enum_00(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"enum Foo {
-    [|Foo1|] = function initializer() { return 5 } (),
-    Foo2 = 6
-}
-
-Foo.Fo/*reference*/o1;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_implementation(t, &["reference"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod go_to_implementation_enum_01 {
-use crate::tests::prelude::*;
-
-// goToImplementationEnum_01_test.go:10
-pub fn test_go_to_implementation_enum_01(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"enum [|Foo|] {
-    Foo1 = function initializer() { return 5 } (),
-    Foo2 = 6
-}
-
-Fo/*reference*/o;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_implementation(t, &["reference"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod go_to_implementation_in_different_files {
-use crate::tests::prelude::*;
-
-// goToImplementation_inDifferentFiles_test.go:10
-pub fn test_go_to_implementation_in_different_files(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
-// @Filename: /home/src/workspaces/project/bar.ts
-import {Foo} from './foo'
-
-class [|A|] implements Foo {
-    func() {}
-}
-
-class [|B|] implements Foo {
-    func() {}
-}
-// @Filename: /home/src/workspaces/project/foo.ts
-export interface /**/Foo {
-    func();
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_baseline_go_to_implementation(t, &[""]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod go_to_implementation_interface_00 {
-use crate::tests::prelude::*;
-
-// goToImplementationInterface_00_test.go:10
-pub fn test_go_to_implementation_interface_00(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface Fo/*interface_definition*/o {
-    hello: () => void
-}
-
-interface Baz extends Foo {}
-
-var bar: Foo = [|{|"parts": ["(","object literal",")"], "kind": "interface"|}{ hello: helloImpl /**0*/ }|];
-var baz: Foo[] = [|[{ hello: helloImpl /**4*/ }]|];
-
-function helloImpl () {}
-
-function whatever(x: Foo = [|{|"parts": ["(","object literal",")"], "kind": "interface"|}{ hello() {/**1*/} }|] ) {
-}
-
-class Bar {
-    x: Foo = [|{ hello() {/*2*/} }|]
-
-    constructor(public f: Foo = [|{ hello() {/**3*/} }|] ) {}
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod go_to_implementation_interface_01 {
-use crate::tests::prelude::*;
-
-// goToImplementationInterface_01_test.go:10
-pub fn test_go_to_implementation_interface_01(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface Fo/*interface_definition*/o { hello(): void }
-
-class [|SuperBar|] implements Foo {
-    hello () {}
-}
-
-abstract class [|AbstractBar|] implements Foo {
-    abstract hello (): void;
-}
-
-class [|Bar|] extends SuperBar {
-}
-
-class [|NotAbstractBar|] extends AbstractBar {
-    hello () {}
-}
-
-var x = new SuperBar();
-var y: SuperBar = new SuperBar();
-var z: AbstractBar = new NotAbstractBar();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod go_to_implementation_interface_02 {
 use crate::tests::prelude::*;
 
@@ -4899,6 +4624,270 @@ declare function helper(): string;"#;
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["refPath"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_source_definition_triple_slash_unresolved {
+use crate::tests::prelude::*;
+
+// goToSourceDefinitionTripleSlashUnresolved_test.go:10
+pub fn test_go_to_source_definition_unresolved_triple_slash(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: /home/src/workspaces/project/index.ts
+/// <reference /*marker*/path="nonexistent.ts" />
+export {};"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_source_definition(t, &["marker"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_source_definition_type_only_symbol {
+use crate::tests::prelude::*;
+
+// goToSourceDefinitionTypeOnlySymbol_test.go:10
+pub fn test_go_to_source_definition_type_only_import_falls_back_to_declaration(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @moduleResolution: bundler
+// @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
+{ "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
+export interface /*targetDecl*/Config {
+    name: string;
+    value: number;
+}
+export declare function create(config: Config): void;
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.js
+export function create(config) { return config; }
+// @Filename: /home/src/workspaces/project/index.ts
+import { /*importConfig*/Config, create } from "pkg";
+const c: Config = { name: "test", value: 1 };
+create(c);"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_source_definition(t, &["importConfig"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// goToSourceDefinitionTypeOnlySymbol_test.go:37
+pub fn test_go_to_source_definition_type_only_usage_falls_back_to_declaration(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @moduleResolution: bundler
+// @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
+{ "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
+export interface /*targetDecl*/Config {
+    name: string;
+}
+export declare function create(config: Config): void;
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.js
+export function create(config) { return config; }
+// @Filename: /home/src/workspaces/project/index.ts
+import { Config, create } from "pkg";
+const c: /*usageSite*/Config = { name: "test" };
+create(c);"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_source_definition(t, &["usageSite"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// goToSourceDefinitionTypeOnlySymbol_test.go:63
+pub fn test_go_to_source_definition_value_import_still_works(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @moduleResolution: bundler
+// @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
+{ "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
+export declare function /*dtsCreate*/create(): void;
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.js
+export function /*targetCreate*/create() {}
+// @Filename: /home/src/workspaces/project/index.ts
+import { /*importCreate*/create } from "pkg";
+create();"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_source_definition(t, &["importCreate"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_source_definition_types {
+use crate::tests::prelude::*;
+
+// goToSourceDefinitionTypes_test.go:10
+pub fn test_go_to_source_fallbacks_to_definition_for_interface(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @moduleResolution: bundler
+// @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
+{ "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
+export interface /*target*/Config {
+    enabled: boolean;
+}
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.js
+exports.makeConfig = () => ({ enabled: true });
+// @Filename: /home/src/workspaces/project/index.ts
+import type { /*importName*/Config } from "pkg";
+let value: /*typeRef*/Config;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_source_definition(t, &["importName", "typeRef"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// goToSourceDefinitionTypes_test.go:30
+pub fn test_go_to_source_type_only_symbol_fallback(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @moduleResolution: bundler
+// @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
+{ "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
+// @Filename: /home/src/workspaces/project/node_modules/pkg/types.d.ts
+export interface Config { enabled: boolean; }
+// @Filename: /home/src/workspaces/project/node_modules/pkg/types.js
+// no runtime content for Config interface
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
+export { Config } from "./types";
+export declare function makeConfig(): Config;
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.js
+export { Config } from "./types.js";
+export function makeConfig() { return { enabled: true }; }
+// @Filename: /home/src/workspaces/project/index.ts
+import { Config, makeConfig } from "pkg";
+let c: /*typeRef*/Config;
+makeConfig/*callRef*/();"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_source_definition(t, &["typeRef", "callRef"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+// goToSourceDefinitionTypes_test.go:58
+pub fn test_go_to_source_forwarded_non_concrete_merge(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @moduleResolution: bundler
+// @allowJs: true
+// @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
+{ "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
+export { Config } from "./types";
+// @Filename: /home/src/workspaces/project/node_modules/pkg/types.d.ts
+export interface Config { enabled: boolean; }
+// @Filename: /home/src/workspaces/project/node_modules/pkg/index.js
+export { Config } from "./types.js";
+// @Filename: /home/src/workspaces/project/node_modules/pkg/types.js
+// Config is a type, no runtime value
+// @Filename: /home/src/workspaces/project/index.ts
+import { /*importName*/Config } from "pkg";
+let c: Config;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_source_definition(t, &["importName"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_type_definition {
+use crate::tests::prelude::*;
+
+// goToTypeDefinition_test.go:10
+pub fn test_go_to_type_definition(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: goToTypeDefinition_Definition.ts
+class /*definition*/C {
+    p;
+}
+var c: C;
+// @Filename: goToTypeDefinition_Consumption.ts
+/*reference*/c = undefined;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_type_definition(t, &["reference"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_type_definition2 {
+use crate::tests::prelude::*;
+
+// goToTypeDefinition2_test.go:10
+pub fn test_go_to_type_definition2(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: goToTypeDefinition2_Definition.ts
+interface /*definition*/I1 {
+    p;
+}
+type propertyType = I1;
+interface I2 {
+    property: propertyType;
+}
+// @Filename: goToTypeDefinition2_Consumption.ts
+var i2: I2;
+i2.prop/*reference*/erty;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_type_definition(t, &["reference"]);
         });
         done(&mut *f, t);
         go::resume(__defer2);

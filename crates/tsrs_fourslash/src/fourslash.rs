@@ -252,7 +252,10 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
     let fs_from_map = tsrs_vfs::vfstest::from_map(entries, harness_options.use_case_sensitive_file_names);
     let fs: Arc<dyn FS> = Arc::new(tsrs_vfs::bundled::wrap_fs(fs_from_map));
 
-    // Content mappers are out of scope: `options.content_mapper_spawner` is never passed to the server.
+    if options.content_mapper_spawner.is_some() {
+        // serverOpts.Spawn = options.ContentMapperSpawner.Spawn: content mappers are out of scope (docs/LSP.md).
+        t.fatal("feature not ported: content mappers (out of scope)");
+    }
     let server_opts = tsrs_lsp::ServerOptions {
         in_: tsrs_lsp::to_reader(std::io::empty()),
         out: tsrs_lsp::to_writer(std::io::sink()),
@@ -1984,7 +1987,25 @@ impl FourslashTest {
 
     // fourslash.go:5489
     pub fn verify_baseline_non_suggestion_diagnostics(&mut self, t: &T) {
-        Self::server_unavailable(t, "VerifyBaselineNonSuggestionDiagnostics")
+        let mut diagnostics: Vec<FourslashDiagnostic> = Vec::new();
+        let mut files: Vec<crate::tsbaseline::TestFile> = Vec::new();
+        // (Go ranges over the map in random order; files and diagnostics are sorted below.)
+        let mut script_infos: Vec<ScriptInfo> = self.script_infos.read().unwrap().values().cloned().collect();
+        script_infos.sort_by(|a, b| a.file_name.cmp(&b.file_name));
+        for script_info in &script_infos {
+            let file_name = &script_info.file_name;
+            if tspath::has_json_file_extension(file_name) {
+                continue;
+            }
+            files.push(crate::tsbaseline::TestFile { unit_name: file_name.clone(), content: script_info.content.clone() });
+            let lsp_diagnostics: Vec<lsproto::Diagnostic> = self.get_diagnostics(t, file_name).into_iter().filter(|d| !is_suggestion_diagnostic(d)).collect();
+            for d in &lsp_diagnostics {
+                diagnostics.push(self.to_diagnostic(script_info, d));
+            }
+        }
+        files.sort_by(|a, b| a.unit_name.cmp(&b.unit_name));
+        let result = crate::tsbaseline::get_error_baseline(t, &files, &diagnostics, compare_diagnostics);
+        self.add_result_to_baseline(t, NON_SUGGESTION_DIAGNOSTICS_CMD, &result);
     }
 
     // fourslash.go:5698
@@ -2765,4 +2786,117 @@ pub(crate) fn marker_to_json(marker: &Marker) -> Value {
     // json/v2 marshals a nil map as {}.
     o.insert("Data".to_string(), Value::Object(crate::go::json_object(&marker.data)));
     Value::Object(o)
+}
+
+// fourslash.go:5514
+pub(crate) struct FourslashDiagnostic {
+    pub(crate) file: Arc<FourslashDiagnosticFile>,
+    pub(crate) loc: TextRange,
+    pub(crate) code: i32,
+    pub(crate) category: tsrs_diagnostics::Category,
+    pub(crate) message: String,
+    pub(crate) related_diagnostics: Vec<FourslashDiagnostic>,
+    pub(crate) reports_unnecessary: bool,
+    pub(crate) reports_deprecated: bool,
+}
+
+// fourslash.go:5525 (file = harnessutil.TestFile{UnitName, Content}; the ECMA line map is computed eagerly)
+pub(crate) struct FourslashDiagnosticFile {
+    pub(crate) file_name: String,
+    pub(crate) content: String,
+    pub(crate) ecma_line_map: Vec<TextPos>,
+}
+
+fn new_fourslash_diagnostic_file(unit_name: &str, content: &str) -> Arc<FourslashDiagnosticFile> {
+    Arc::new(FourslashDiagnosticFile {
+        file_name: unit_name.to_string(),
+        content: content.to_string(),
+        ecma_line_map: tsrs_core::compute_ecma_line_starts(content).to_vec(),
+    })
+}
+
+impl FourslashTest {
+    // fourslash.go:5597
+    fn to_diagnostic(&self, script_info: &ScriptInfo, lsp_diagnostic: &lsproto::Diagnostic) -> FourslashDiagnostic {
+        use tsrs_diagnostics::Category;
+        let category = match lsp_diagnostic.severity.unwrap() {
+            lsproto::DiagnosticSeverity::Error => Category::Error,
+            lsproto::DiagnosticSeverity::Warning => Category::Warning,
+            lsproto::DiagnosticSeverity::Information => Category::Message,
+            lsproto::DiagnosticSeverity::Hint => Category::Suggestion,
+            _ => Category::Error,
+        };
+        let code = lsp_diagnostic.code.as_ref().unwrap().integer.unwrap();
+
+        let mut related_diagnostics = Vec::new();
+        if let Some(related_information) = &lsp_diagnostic.related_information {
+            for info in related_information {
+                let Some(related_script_info) = self.try_get_script_info(&info.location.uri.file_name()) else {
+                    continue;
+                };
+                let related_diagnostic = FourslashDiagnostic {
+                    file: new_fourslash_diagnostic_file(&related_script_info.file_name, &related_script_info.content),
+                    loc: self.from_lsp_range(&related_script_info, info.location.range),
+                    code,
+                    category,
+                    message: info.message.clone(),
+                    related_diagnostics: Vec::new(),
+                    reports_unnecessary: false,
+                    reports_deprecated: false,
+                };
+                related_diagnostics.push(related_diagnostic);
+            }
+        }
+
+        FourslashDiagnostic {
+            file: new_fourslash_diagnostic_file(&script_info.file_name, &script_info.content),
+            loc: self.from_lsp_range(script_info, lsp_diagnostic.range),
+            code,
+            category,
+            message: lsp_diagnostic.message.as_string(),
+            related_diagnostics,
+            reports_unnecessary: false,
+            reports_deprecated: false,
+        }
+    }
+}
+
+// fourslash.go:5647
+fn compare_diagnostics(d1: &FourslashDiagnostic, d2: &FourslashDiagnostic) -> i32 {
+    let mut c = d1.file.file_name.cmp(&d2.file.file_name) as i32;
+    if c != 0 {
+        return c;
+    }
+    c = d1.loc.pos() - d2.loc.pos();
+    if c != 0 {
+        return c;
+    }
+    c = d1.loc.end() - d2.loc.end();
+    if c != 0 {
+        return c;
+    }
+    c = d1.code - d2.code;
+    if c != 0 {
+        return c;
+    }
+    c = d1.message.cmp(&d2.message) as i32;
+    if c != 0 {
+        return c;
+    }
+    compare_related_diagnostics(&d1.related_diagnostics, &d2.related_diagnostics)
+}
+
+// fourslash.go:5671
+fn compare_related_diagnostics(d1: &[FourslashDiagnostic], d2: &[FourslashDiagnostic]) -> i32 {
+    let c = d2.len() as i32 - d1.len() as i32;
+    if c != 0 {
+        return c;
+    }
+    for i in 0..d1.len() {
+        let c = compare_diagnostics(&d1[i], &d2[i]);
+        if c != 0 {
+            return c;
+        }
+    }
+    0
 }

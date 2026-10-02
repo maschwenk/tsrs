@@ -255,10 +255,11 @@ impl configFileRegistryBuilder {
         let mut include_workspace = false;
         let mut include_tsconfig_dir = false;
         let tsconfig_dir = tspath::get_directory_path(file_name);
-        let command_line = entry.command_line.unwrap();
+        // (Go calls these methods on a possibly nil *ParsedCommandLine; they return nil for it.)
+        let command_line = entry.command_line;
         let compare_paths_options =
             ComparePathsOptions { current_directory: self.session_options.current_directory.clone(), use_case_sensitive_file_names: self.fs.use_case_sensitive_file_names() };
-        if let Some(wildcard_directories) = command_line.wildcard_directories() {
+        if let Some(wildcard_directories) = command_line.as_ref().and_then(|c| c.wildcard_directories()) {
             for dir in wildcard_directories.keys() {
                 if tspath::contains_path(&self.session_options.current_directory, dir, &compare_paths_options) {
                     include_workspace = true;
@@ -269,7 +270,7 @@ impl configFileRegistryBuilder {
                 }
             }
         }
-        for file_name in command_line.literal_file_names() {
+        for file_name in command_line.as_ref().map(|c| c.literal_file_names()).unwrap_or_default() {
             if tspath::contains_path(&self.session_options.current_directory, file_name, &compare_paths_options) {
                 include_workspace = true;
             } else if tspath::contains_path(&tsconfig_dir, file_name, &compare_paths_options) {
@@ -285,7 +286,7 @@ impl configFileRegistryBuilder {
         if include_tsconfig_dir {
             globs.push(get_recursive_glob_pattern(&tsconfig_dir));
         }
-        for file_name in command_line.extended_source_files() {
+        for file_name in command_line.as_ref().map(|c| c.extended_source_files()).unwrap_or_default() {
             if include_workspace && tspath::contains_path(&self.session_options.current_directory, &file_name, &compare_paths_options) {
                 continue;
             }
