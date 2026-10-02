@@ -55,6 +55,7 @@ pub fn run_lsp(args: &[String]) -> i32 {
         fs: Some(fs),
         default_library_path,
         typings_location,
+        parse_cache: None,
         npm_install: Some(Arc::new(|cwd: &str, args: &[String]| {
             let output = std::process::Command::new("npm").args(args).current_dir(cwd).stderr(std::process::Stdio::piped()).output();
             match output {

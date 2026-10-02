@@ -12,7 +12,13 @@ use tsrs_lsproto as lsproto;
 use tsrs_lsproto::jsonrpc::{self, MessageKind, ID};
 use tsrs_lsproto::{Error, ErrorCode, ErrorTag, Json, Message, Method, RequestMessage, ResponseMessage};
 use tsrs_core::collections::OrderedMap;
-use tsrs_ls::lsutil;
+use tsrs_core::CompilerOptions;
+use tsrs_core::collections::Set;
+use tsrs_core::tspath::{self, Path};
+use tsrs_core::P;
+use tsrs_ls::{lsutil, LanguageService};
+use tsrs_project as project;
+use tsrs_project::logging;
 use tsrs_vfs::FS;
 
 use crate::dynamic_queue::{dynamicQueue, new_dynamic_queue, wait_until};
@@ -32,6 +38,7 @@ pub struct ServerOptions {
     pub fs: Option<Arc<dyn FS>>,
     pub default_library_path: String,
     pub typings_location: String,
+    pub parse_cache: Option<Arc<project::ParseCache>>,
     pub npm_install: Option<npmInstallFunc>,
     // Spawn (content mappers) is not ported: content mappers are out of scope (docs/LSP.md).
     pub progress_delay: Duration, // delay before showing progress UI; 0 means no delay
@@ -76,6 +83,9 @@ pub fn new_server(opts: ServerOptions) -> Arc<Server> {
         builtin_watcher: None,
         last_request_time_ms: AtomicI64::new(0),
         init_complete: Context::background().with_cancel(),
+        session: OnceLock::new(),
+        compiler_options_for_inferred_projects: Mutex::new(None),
+        parse_cache: opts.parse_cache,
         npm_install: opts.npm_install,
         progress_delay: opts.progress_delay,
         project_progress: OnceLock::new(),
@@ -251,6 +261,13 @@ pub struct Server {
     // Used by tests to wait for full initialization. (A context canceled when it is "closed".)
     init_complete: (Context, CancelFunc),
 
+    session: OnceLock<Arc<project::Session>>,
+
+    // !!! temporary; remove when we have `handleDidChangeConfiguration`/implicit project config support
+    compiler_options_for_inferred_projects: Mutex<Option<P<CompilerOptions>>>,
+    // parseCache can be passed in so separate tests can share ASTs
+    parse_cache: Option<Arc<project::ParseCache>>,
+
     npm_install: Option<npmInstallFunc>,
 
     progress_delay: Duration,
@@ -337,6 +354,15 @@ impl Server {
 
     fn flake_logging(&self) -> lsproto::DiagnosticFlakeLogLevel {
         self.flake_logging.get().copied().unwrap_or_default()
+    }
+
+    // server.go:255
+    pub fn session(&self) -> &Arc<project::Session> {
+        self.session.get().expect("the session is created by the initialized notification")
+    }
+
+    pub(crate) fn logger_arc(&self) -> Arc<logger> {
+        self.logger.clone()
     }
 
     // server.go:257
@@ -1251,6 +1277,23 @@ impl Server {
         Ok(None)
     }
 
+    // server.go:1468
+    fn get_language_service_and_cross_project_orchestrator(
+        self: &Arc<Self>,
+        ctx: &Context,
+        uri: &lsproto::DocumentUri,
+        req: &RequestMessage,
+    ) -> Result<(Arc<LanguageService>, Arc<dyn tsrs_ls::CrossProjectOrchestrator>), Error> {
+        let (default_project, default_ls, all_projects) = self.session().get_language_service_and_projects_for_file(ctx, uri)?;
+        let orchestrator: Arc<dyn tsrs_ls::CrossProjectOrchestrator> = Arc::new(crossProjectOrchestrator {
+            server: self.clone(),
+            req: Arc::new(req.clone()),
+            default_project: default_project.arc().clone(),
+            all_projects,
+        });
+        Ok((default_ls, orchestrator))
+    }
+
     // server.go:1477: `defer s.recover(req)` around `f`. A panic in `f` is logged and answered with an internal
     // error; the work then returns nil like Go's function after a recovered panic.
     pub(crate) fn with_recover(&self, req: &RequestMessage, f: impl FnOnce() -> Result<(), Error>) -> Result<(), Error> {
@@ -1463,9 +1506,180 @@ impl Server {
         Ok(response)
     }
 
+    // server.go:1677
+    fn handle_initialized(self: &Arc<Self>, ctx: &Context, _params: lsproto::InitializedParams) -> Result<(), Error> {
+        let mut disable_push_diagnostics = false;
+        let mut enable_telemetry = false;
+        let opts = self.initialization_options();
+        if let Some(v) = opts.disable_push_diagnostics {
+            disable_push_diagnostics = v;
+        }
+        if let Some(v) = opts.enable_telemetry {
+            enable_telemetry = v;
+        }
+        let mut run_external_code = false;
+        if let Some(v) = opts.run_external_code {
+            run_external_code = v;
+        }
+        let has_dynamic_watch_registration = self.client_capabilities().workspace.did_change_watched_files.dynamic_registration;
+        if has_dynamic_watch_registration {
+            self.logger.logf(format_args!("file watching: using LSP client-side watching (client supports dynamic registration)"));
+            self.watch_enabled.store(true, Ordering::SeqCst);
+        } else if builtin_watcher_has_fast_recursive_backend() {
+            // The client cannot watch files itself, but the builtin watcher has a
+            // backend with efficient recursive watching (Windows or FSEvents), so
+            // fall back to watching files in-process.
+            // (Phase 4: lspwatcher is not ported, so this branch is never taken; Go logs
+            // "file watching: using builtin in-process watcher (client lacks dynamic watch registration)", enables
+            // watching and creates the watcher here.)
+        } else {
+            // The client cannot watch files and the builtin watcher backend lacks
+            // efficient recursive watching, so file watching is disabled.
+            // (tsrs: the builtin watcher (lspwatcher) is not ported yet, phase 4, so this branch is also taken where
+            // Go would watch in-process.)
+            self.logger.logf(format_args!(
+                "file watching: disabled (client lacks dynamic watch registration and builtin watcher backend is not fast-recursive; the builtin watcher is not ported)"
+            ));
+        }
+
+        let initialize_params = self.initialize_params.get().unwrap().clone();
+        let mut cwd = self.cwd.clone();
+        if self.client_capabilities().workspace.workspace_folders
+            && matches!(&initialize_params.workspace_folders, Some(lsproto::WorkspaceFoldersOrNull { workspace_folders: Some(folders), .. }) if folders.len() == 1)
+        {
+            let folders = initialize_params.workspace_folders.as_ref().unwrap().workspace_folders.as_ref().unwrap();
+            cwd = lsproto::DocumentUri(folders[0].uri.0.clone()).file_name();
+        } else if let Some(root_uri) = &initialize_params.root_uri.document_uri {
+            cwd = root_uri.file_name();
+        } else if let Some(lsproto::StringOrNull { string: Some(root_path), .. }) = &initialize_params.root_path {
+            cwd = root_path.clone();
+        }
+        if !tspath::path_is_absolute(&cwd) {
+            cwd = self.cwd.clone();
+        }
+
+        self.telemetry_enabled.store(enable_telemetry, Ordering::SeqCst);
+
+        let client: Arc<dyn project::Client> = self.clone();
+        let logger: Arc<dyn logging::Logger> = self.logger_arc();
+        let npm_executor: Arc<dyn project::NpmExecutor> = self.clone();
+        let session = project::new_session(project::SessionInit {
+            background_ctx: lsproto::with_client_capabilities(&self.background_ctx(), self.client_capabilities_arc()),
+            options: Arc::new(project::SessionOptions {
+                current_directory: cwd,
+                default_library_path: self.default_library_path.clone(),
+                typings_location: self.typings_location.clone(),
+                position_encoding: self.position_encoding(),
+                watch_enabled: self.watch_enabled.load(Ordering::SeqCst),
+                logging_enabled: true,
+                telemetry_enabled: enable_telemetry,
+                debounce_delay: Duration::from_millis(500),
+                push_diagnostics_enabled: !disable_push_diagnostics,
+                run_external_code,
+                ..Default::default()
+            }),
+            fs: self.fs.clone().expect("FS is required"),
+            logger: Some(logger),
+            client: Some(client),
+            npm_executor: Some(npm_executor),
+            parse_cache: self.parse_cache.clone(),
+            content_mapped_parse_cache: None,
+        });
+        let _ = self.session.set(session.clone());
+
+        let user_preferences = self.request_configuration(ctx)?;
+        session.initialize_with_user_config(user_preferences);
+
+        let result = self.send_client_request(
+            ctx,
+            lsproto::CLIENT_REGISTER_CAPABILITY_INFO,
+            lsproto::RegistrationParams {
+                registrations: vec![lsproto::Registration {
+                    id: "typescript-config-watch-id".to_string(),
+                    register_options: Some(lsproto::RegisterOptions {
+                        workspace_did_change_configuration: Some(lsproto::DidChangeConfigurationRegistrationOptions {
+                            section: Some(lsproto::StringOrStrings {
+                                strings: Some(vec!["js/ts".to_string(), "typescript".to_string(), "javascript".to_string(), "editor".to_string()]),
+                                ..Default::default()
+                            }),
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }],
+            },
+        );
+        if let Err(err) = result {
+            return Err(Error::wrap("failed to register configuration change watcher: ", err));
+        }
+
+        // !!! temporary.
+        // Remove when we have `handleDidChangeConfiguration`/implicit project config support
+        // derived from 'js/ts.implicitProjectConfig.*'.
+        let options = *self.compiler_options_for_inferred_projects.lock().unwrap();
+        if options.is_some() {
+            session.did_change_compiler_options_for_inferred_projects(ctx, options);
+        }
+
+        session.start_performance_telemetry();
+
+        self.init_complete.1.call();
+        Ok(())
+    }
+
+    // server.go:1788
+    fn handle_shutdown(self: &Arc<Self>, ctx: &Context, _params: lsproto::NoParams, _req: &RequestMessage) -> Result<lsproto::ShutdownResponse, Error> {
+        if let Some(builtin_watcher) = &self.builtin_watcher {
+            match *builtin_watcher {}
+        }
+        self.session().close();
+        Ok(lsproto::Null)
+    }
+
     // server.go:1796
     fn handle_exit(self: &Arc<Self>, ctx: &Context, _params: lsproto::NoParams) -> Result<(), Error> {
         Err(Error::tagged(ErrorTag::EOF, "EOF"))
+    }
+
+    // server.go:1800
+    fn handle_did_change_workspace_configuration(self: &Arc<Self>, ctx: &Context, params: lsproto::DidChangeConfigurationParams) -> Result<(), Error> {
+        if let lsproto::Value::Null = params.settings {
+            return Ok(());
+        } else if let lsproto::Value::Object(settings) = &params.settings {
+            self.session().configure(lsutil::parse_user_preferences(settings));
+        }
+        Ok(())
+    }
+
+    // server.go:1809
+    fn handle_did_open(self: &Arc<Self>, ctx: &Context, params: lsproto::DidOpenTextDocumentParams) -> Result<(), Error> {
+        let doc = params.text_document;
+        self.session().did_open_file(ctx, doc.uri, doc.version, doc.text, doc.language_id);
+        Ok(())
+    }
+
+    // server.go:1814
+    fn handle_did_change(self: &Arc<Self>, ctx: &Context, params: lsproto::DidChangeTextDocumentParams) -> Result<(), Error> {
+        self.session().did_change_file(ctx, params.text_document.uri, params.text_document.version, params.content_changes);
+        Ok(())
+    }
+
+    // server.go:1819
+    fn handle_did_save(self: &Arc<Self>, ctx: &Context, params: lsproto::DidSaveTextDocumentParams) -> Result<(), Error> {
+        self.session().did_save_file(ctx, params.text_document.uri);
+        Ok(())
+    }
+
+    // server.go:1824
+    fn handle_did_close(self: &Arc<Self>, ctx: &Context, params: lsproto::DidCloseTextDocumentParams) -> Result<(), Error> {
+        self.session().did_close_file(ctx, params.text_document.uri);
+        Ok(())
+    }
+
+    // server.go:1829
+    fn handle_did_change_watched_files(self: &Arc<Self>, ctx: &Context, params: lsproto::DidChangeWatchedFilesParams) -> Result<(), Error> {
+        self.session().did_change_watched_files(ctx, &params.changes);
+        Ok(())
     }
 
     // server.go:1834
@@ -1483,6 +1697,362 @@ impl Server {
         }
         self.logger.set_verbosity(params.verbosity);
         Ok(())
+    }
+
+    // server.go:1849
+    fn handle_document_diagnostic(
+        self: &Arc<Self>,
+        ctx: &Context,
+        language_service: &Arc<LanguageService>,
+        params: lsproto::DocumentDiagnosticParams,
+    ) -> Result<lsproto::DocumentDiagnosticResponse, Error> {
+        let ctx = context::with_checker_lifetime(ctx, context::CheckerLifetime::Diagnostics);
+        if self.flake_logging() == lsproto::DiagnosticFlakeLogLevel::Off {
+            return language_service.provide_diagnostics(&ctx, &params.text_document.uri);
+        }
+        let direct = language_service.provide_diagnostics(&ctx, &params.text_document.uri)?;
+        // Go runs a full `Program.Emit` (writing nothing) between the two diagnostics requests to provoke checker
+        // state changes; emit is not ported, so the second request runs right after the first.
+        let secondary = match language_service.provide_diagnostics(&ctx, &params.text_document.uri) {
+            Ok(secondary) => secondary,
+            Err(_) => return Ok(direct),
+        };
+        let empty = Vec::new();
+        let direct_items = direct.full_document_diagnostic_report.as_ref().map(|r| &r.items).unwrap_or(&empty);
+        let secondary_items = secondary.full_document_diagnostic_report.as_ref().map(|r| &r.items).unwrap_or(&empty);
+        let (missing_from_pre, missing_from_post) = lsproto::compare_diagnostics(direct_items, secondary_items);
+        if missing_from_pre.is_empty() && missing_from_post.is_empty() {
+            return Ok(direct);
+        }
+
+        let diff = generate_diagnostic_diff_string(&missing_from_pre, &missing_from_post, lsproto::Diagnostic::as_string);
+
+        self.logger.error(&diff);
+
+        if self.telemetry_enabled.load(Ordering::SeqCst) {
+            let sanitized_diff = generate_diagnostic_diff_string(&missing_from_pre, &missing_from_post, lsproto::Diagnostic::code_as_string);
+            let _ = self.send_notification(
+                lsproto::TELEMETRY_EVENT_INFO,
+                lsproto::TelemetryEvent {
+                    request_failure_telemetry_event: Some(lsproto::RequestFailureTelemetryEvent {
+                        properties: lsproto::RequestFailureTelemetryProperties {
+                            error_code: ErrorCode::InternalError.string(),
+                            request_method: "textDocument.diagnostic.flakeLog".to_string(),
+                            stack: sanitized_diff,
+                        },
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            );
+        }
+
+        if self.flake_logging() == lsproto::DiagnosticFlakeLogLevel::Panic {
+            panic!("flaky diagnostic(s) logged:\n{}", diff);
+        }
+        Ok(direct)
+    }
+
+    // server.go:1907
+    fn handle_hover(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::HoverParams) -> Result<lsproto::HoverResponse, Error> {
+        ls.provide_hover(ctx, &params)
+    }
+
+    // server.go:1911
+    fn handle_prepare_rename(
+        self: &Arc<Self>,
+        ctx: &Context,
+        language_service: &Arc<LanguageService>,
+        params: lsproto::PrepareRenameParams,
+    ) -> Result<lsproto::PrepareRenameResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentPrepareRename))
+    }
+
+    // server.go:1924
+    fn handle_rename(self: &Arc<Self>, ctx: &Context, params: lsproto::RenameParams, req: &RequestMessage) -> Result<lsproto::RenameResponse, Error> {
+        let (default_ls, orchestrator) = self.get_language_service_and_cross_project_orchestrator(ctx, &params.text_document.uri, req)?;
+        Err(not_yet_ported(Method::TextDocumentRename))
+    }
+
+    // server.go:1961
+    fn handle_will_rename_files(self: &Arc<Self>, ctx: &Context, params: lsproto::RenameFilesParams, msg: &RequestMessage) -> Result<lsproto::WillRenameFilesResponse, Error> {
+        self.handle_will_rename_files_worker(ctx, params, msg, false /*sendRenameFile*/)
+    }
+
+    // server.go:1968
+    // If `sendRenameFile` is true, the original `willRenameFiles` request is being handled as part of a rename operation
+    // where the client doesn't support `willRenameFiles`,
+    // so we should include the file rename in the edits we return
+    fn handle_will_rename_files_worker(
+        self: &Arc<Self>,
+        ctx: &Context,
+        params: lsproto::RenameFilesParams,
+        _req: &RequestMessage,
+        send_rename_file: bool,
+    ) -> Result<lsproto::WillRenameFilesResponse, Error> {
+        if params.files.is_empty() {
+            return Ok(lsproto::WillRenameFilesResponse::default());
+        }
+
+        let mut uris = Vec::with_capacity(params.files.len());
+        for file in &params.files {
+            uris.push(file.old_uri.clone());
+        }
+
+        if uris.is_empty() {
+            return Ok(lsproto::WillRenameFilesResponse::default());
+        }
+
+        // The rest of the worker collects `LanguageService.GetEditsForFileRename` results (phase 3).
+        Err(not_yet_ported(Method::WorkspaceWillRenameFiles))
+    }
+
+    // server.go:2070
+    fn handle_signature_help(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::SignatureHelpParams) -> Result<lsproto::SignatureHelpResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentSignatureHelp))
+    }
+
+    // server.go:2079
+    fn handle_folding_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::FoldingRangeParams) -> Result<lsproto::FoldingRangeResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentFoldingRange))
+    }
+
+    // server.go:2083
+    fn handle_vs_on_auto_insert(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::VSOnAutoInsertParams) -> Result<lsproto::VSOnAutoInsertResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentVSOnAutoInsert))
+    }
+
+    // server.go:2087
+    fn handle_linked_editing_range(
+        self: &Arc<Self>,
+        ctx: &Context,
+        ls: &Arc<LanguageService>,
+        params: lsproto::LinkedEditingRangeParams,
+    ) -> Result<lsproto::LinkedEditingRangeResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentLinkedEditingRange))
+    }
+
+    // server.go:2091
+    fn handle_definition(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::DefinitionParams) -> Result<lsproto::DefinitionResponse, Error> {
+        ls.provide_definition(ctx, &params.text_document.uri, params.position)
+    }
+
+    // server.go:2095
+    fn handle_source_definition(
+        self: &Arc<Self>,
+        ctx: &Context,
+        ls: &Arc<LanguageService>,
+        params: lsproto::TextDocumentPositionParams,
+    ) -> Result<lsproto::CustomTextDocumentSourceDefinitionResponse, Error> {
+        let resp = ls.provide_source_definition(ctx, &params.text_document.uri, params.position)?;
+        Ok(resp)
+    }
+
+    // server.go:2103
+    fn handle_type_definition(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::TypeDefinitionParams) -> Result<lsproto::TypeDefinitionResponse, Error> {
+        ls.provide_type_definition(ctx, &params.text_document.uri, params.position)
+    }
+
+    // server.go:2107
+    fn handle_completion(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: lsproto::CompletionParams) -> Result<lsproto::CompletionResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentCompletion))
+    }
+
+    // server.go:2116
+    fn handle_completion_item_resolve(self: &Arc<Self>, ctx: &Context, params: lsproto::CompletionItem, req_msg: &RequestMessage) -> Result<lsproto::CompletionResolveResponse, Error> {
+        Err(not_yet_ported(Method::CompletionItemResolve))
+    }
+
+    // server.go:2129
+    fn handle_document_format(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::DocumentFormattingParams) -> Result<lsproto::DocumentFormattingResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentFormatting))
+    }
+
+    // server.go:2137
+    fn handle_document_range_format(
+        self: &Arc<Self>,
+        ctx: &Context,
+        ls: &Arc<LanguageService>,
+        params: lsproto::DocumentRangeFormattingParams,
+    ) -> Result<lsproto::DocumentRangeFormattingResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentRangeFormatting))
+    }
+
+    // server.go:2146
+    fn handle_document_on_type_format(
+        self: &Arc<Self>,
+        ctx: &Context,
+        ls: &Arc<LanguageService>,
+        params: lsproto::DocumentOnTypeFormattingParams,
+    ) -> Result<lsproto::DocumentOnTypeFormattingResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentOnTypeFormatting))
+    }
+
+    // server.go:2156
+    fn handle_workspace_symbol(self: &Arc<Self>, ctx: &Context, params: lsproto::WorkspaceSymbolParams, req_msg: &RequestMessage) -> Result<lsproto::WorkspaceSymbolResponse, Error> {
+        Err(not_yet_ported(Method::WorkspaceSymbol))
+    }
+
+    // server.go:2184
+    fn handle_document_symbol(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::DocumentSymbolParams) -> Result<lsproto::DocumentSymbolResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentDocumentSymbol))
+    }
+
+    // server.go:2188
+    fn handle_document_highlight(
+        self: &Arc<Self>,
+        ctx: &Context,
+        ls: &Arc<LanguageService>,
+        params: lsproto::DocumentHighlightParams,
+    ) -> Result<lsproto::DocumentHighlightResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentDocumentHighlight))
+    }
+
+    // server.go:2192
+    fn handle_multi_document_highlight(
+        self: &Arc<Self>,
+        ctx: &Context,
+        ls: &Arc<LanguageService>,
+        params: lsproto::MultiDocumentHighlightParams,
+    ) -> Result<lsproto::CustomMultiDocumentHighlightResponse, Error> {
+        Err(not_yet_ported(Method::CustomTextDocumentMultiDocumentHighlight))
+    }
+
+    // server.go:2196
+    fn handle_selection_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::SelectionRangeParams) -> Result<lsproto::SelectionRangeResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentSelectionRange))
+    }
+
+    // server.go:2200
+    fn handle_code_action(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::CodeActionParams) -> Result<lsproto::CodeActionResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentCodeAction))
+    }
+
+    // server.go:2204
+    fn handle_inlay_hint(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: lsproto::InlayHintParams) -> Result<lsproto::InlayHintResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentInlayHint))
+    }
+
+    // server.go:2212
+    fn handle_code_lens(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::CodeLensParams) -> Result<lsproto::CodeLensResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentCodeLens))
+    }
+
+    // server.go:2216
+    fn handle_code_lens_resolve(self: &Arc<Self>, ctx: &Context, code_lens: lsproto::CodeLens, req_msg: &RequestMessage) -> Result<lsproto::CodeLensResolveResponse, Error> {
+        Err(not_yet_ported(Method::CodeLensResolve))
+    }
+
+    // server.go:2240
+    fn handle_prepare_call_hierarchy(
+        self: &Arc<Self>,
+        ctx: &Context,
+        language_service: &Arc<LanguageService>,
+        params: lsproto::CallHierarchyPrepareParams,
+    ) -> Result<lsproto::CallHierarchyPrepareResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentPrepareCallHierarchy))
+    }
+
+    // server.go:2248
+    fn handle_call_hierarchy_incoming_calls(
+        self: &Arc<Self>,
+        ctx: &Context,
+        params: lsproto::CallHierarchyIncomingCallsParams,
+        req_msg: &RequestMessage,
+    ) -> Result<lsproto::CallHierarchyIncomingCallsResponse, Error> {
+        let (default_ls, orchestrator) = self.get_language_service_and_cross_project_orchestrator(ctx, &params.item.uri, req_msg)?;
+        Err(not_yet_ported(Method::CallHierarchyIncomingCalls))
+    }
+
+    // server.go:2260
+    fn handle_call_hierarchy_outgoing_calls(
+        self: &Arc<Self>,
+        ctx: &Context,
+        params: lsproto::CallHierarchyOutgoingCallsParams,
+        _req: &RequestMessage,
+    ) -> Result<lsproto::CallHierarchyOutgoingCallsResponse, Error> {
+        let language_service = self.session().get_language_service(ctx, &params.item.uri)?;
+        Err(not_yet_ported(Method::CallHierarchyOutgoingCalls))
+    }
+
+    // server.go:2272
+    fn handle_semantic_tokens_full(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::SemanticTokensParams) -> Result<lsproto::SemanticTokensResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentSemanticTokensFull))
+    }
+
+    // server.go:2276
+    fn handle_semantic_tokens_range(
+        self: &Arc<Self>,
+        ctx: &Context,
+        ls: &Arc<LanguageService>,
+        params: lsproto::SemanticTokensRangeParams,
+    ) -> Result<lsproto::SemanticTokensRangeResponse, Error> {
+        Err(not_yet_ported(Method::TextDocumentSemanticTokensRange))
+    }
+
+    // server.go:2280 (the `api` package is out of scope)
+    fn handle_initialize_api_session(
+        self: &Arc<Self>,
+        ctx: &Context,
+        params: lsproto::InitializeAPISessionParams,
+        _req: &RequestMessage,
+    ) -> Result<lsproto::CustomInitializeAPISessionResponse, Error> {
+        Err(not_yet_ported(Method::CustomInitializeAPISession))
+    }
+
+    // server.go:2363
+    // !!! temporary; remove when we have `handleDidChangeConfiguration`/implicit project config support
+    pub fn set_compiler_options_for_inferred_projects(&self, ctx: &Context, options: Option<P<CompilerOptions>>) {
+        *self.compiler_options_for_inferred_projects.lock().unwrap() = options;
+        if let Some(session) = self.session.get() {
+            session.did_change_compiler_options_for_inferred_projects(ctx, options);
+        }
+    }
+
+    // server.go:2394 (pprof is out of scope)
+    fn handle_run_gc(self: &Arc<Self>, _ctx: &Context, _params: lsproto::NoParams, _req: &RequestMessage) -> Result<lsproto::RunGCResponse, Error> {
+        Err(not_yet_ported(Method::CustomRunGC))
+    }
+
+    // server.go:2400
+    fn handle_save_heap_profile(self: &Arc<Self>, _ctx: &Context, params: lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveHeapProfileResponse, Error> {
+        Err(not_yet_ported(Method::CustomSaveHeapProfile))
+    }
+
+    // server.go:2409
+    fn handle_save_alloc_profile(self: &Arc<Self>, _ctx: &Context, params: lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveAllocProfileResponse, Error> {
+        Err(not_yet_ported(Method::CustomSaveAllocProfile))
+    }
+
+    // server.go:2418
+    fn handle_start_cpu_profile(self: &Arc<Self>, _ctx: &Context, params: lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::StartCPUProfileResponse, Error> {
+        Err(not_yet_ported(Method::CustomStartCPUProfile))
+    }
+
+    // server.go:2427
+    fn handle_stop_cpu_profile(self: &Arc<Self>, _ctx: &Context, _params: lsproto::NoParams, _req: &RequestMessage) -> Result<lsproto::StopCPUProfileResponse, Error> {
+        Err(not_yet_ported(Method::CustomStopCPUProfile))
+    }
+
+    // server.go:2436
+    fn handle_project_info(self: &Arc<Self>, ctx: &Context, params: lsproto::ProjectInfoParams, _req: &RequestMessage) -> Result<lsproto::CustomProjectInfoResponse, Error> {
+        let uri = &params.text_document.uri;
+        let (default_project, _, _) = self.session().get_language_service_and_projects_for_file(ctx, uri)?;
+        let mut config_file_path = String::new();
+        if default_project.kind == project::Kind::Configured {
+            config_file_path = default_project.config_file_name().to_string();
+        }
+        Ok(lsproto::ProjectInfoResult { config_file_path })
+    }
+
+    // server.go:2451 (content mappers are out of scope)
+    fn handle_set_content_mapper_contributions(
+        self: &Arc<Self>,
+        ctx: &Context,
+        params: lsproto::SetContentMapperContributionsParams,
+        _req: &RequestMessage,
+    ) -> Result<lsproto::CustomSetContentMapperContributionsResponse, Error> {
+        Err(not_yet_ported(Method::CustomSetContentMapperContributions))
     }
 }
 
@@ -1532,16 +2102,13 @@ pub(crate) fn user_facing_request_failed_error(message: impl Into<String>) -> Er
     Error { message: message.into(), tags: vec![USER_FACING_REQUEST_FAILED_ERROR, ErrorTag::Code(ErrorCode::RequestFailed)] }
 }
 
-// project.ErrNoProjectForUnknownScriptKind (`errors.Is`).
-pub(crate) const ERR_NO_PROJECT_FOR_UNKNOWN_SCRIPT_KIND: ErrorTag = ErrorTag::Sentinel("ErrNoProjectForUnknownScriptKind");
-
 // server.go:1198
 // contentMapperFallbackResponse returns an empty response for requests made for
 // unknown file types not handled by any content mapper. This typically serves a
 // short window in time between when the server has unregistered content mapper
 // extensions and when the client has stopped sending requests for those file types.
 fn content_mapper_fallback_response(method: Method, err: &Error) -> Option<lsproto::Value> {
-    if !err.is(ERR_NO_PROJECT_FOR_UNKNOWN_SCRIPT_KIND) {
+    if !project::is_err_no_project_for_unknown_script_kind(err) {
         return None;
     }
     match method {
@@ -1580,10 +2147,76 @@ fn handlers() -> &'static handlerMap {
         let mut handlers = handlerMap(FxHashMap::default());
 
         handlers.register_request_handler(lsproto::INITIALIZE_INFO, |s, ctx, params, req| s.handle_initialize(ctx, params, req));
+        handlers.register_notification_handler(lsproto::INITIALIZED_INFO, Server::handle_initialized);
+        handlers.register_request_handler(lsproto::SHUTDOWN_INFO, Server::handle_shutdown);
         handlers.register_notification_handler(lsproto::EXIT_INFO, Server::handle_exit);
+
+        handlers.register_notification_handler(lsproto::WORKSPACE_DID_CHANGE_CONFIGURATION_INFO, Server::handle_did_change_workspace_configuration);
+        handlers.register_notification_handler(lsproto::TEXT_DOCUMENT_DID_OPEN_INFO, Server::handle_did_open);
+        handlers.register_notification_handler(lsproto::TEXT_DOCUMENT_DID_CHANGE_INFO, Server::handle_did_change);
+        handlers.register_notification_handler(lsproto::TEXT_DOCUMENT_DID_SAVE_INFO, Server::handle_did_save);
+        handlers.register_notification_handler(lsproto::TEXT_DOCUMENT_DID_CLOSE_INFO, Server::handle_did_close);
+        handlers.register_notification_handler(lsproto::WORKSPACE_DID_CHANGE_WATCHED_FILES_INFO, Server::handle_did_change_watched_files);
         handlers.register_notification_handler(lsproto::SET_TRACE_INFO, Server::handle_set_trace);
         handlers.register_notification_handler(lsproto::CUSTOM_SET_LOG_VERBOSITY_INFO, Server::handle_set_log_verbosity);
+        handlers.register_request_handler(lsproto::WORKSPACE_WILL_RENAME_FILES_INFO, Server::handle_will_rename_files);
 
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_DIAGNOSTIC_INFO, Server::handle_document_diagnostic);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_HOVER_INFO, Server::handle_hover);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_DEFINITION_INFO, Server::handle_definition);
+        handlers.register_language_service_document_request_handler(lsproto::CUSTOM_TEXT_DOCUMENT_SOURCE_DEFINITION_INFO, Server::handle_source_definition);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_TYPE_DEFINITION_INFO, Server::handle_type_definition);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_SIGNATURE_HELP_INFO, Server::handle_signature_help);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_FORMATTING_INFO, Server::handle_document_format);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_RANGE_FORMATTING_INFO, Server::handle_document_range_format);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_ON_TYPE_FORMATTING_INFO, Server::handle_document_on_type_format);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_DOCUMENT_SYMBOL_INFO, Server::handle_document_symbol);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_DOCUMENT_HIGHLIGHT_INFO, Server::handle_document_highlight);
+        handlers.register_language_service_document_request_handler(lsproto::CUSTOM_TEXT_DOCUMENT_MULTI_DOCUMENT_HIGHLIGHT_INFO, Server::handle_multi_document_highlight);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_SELECTION_RANGE_INFO, Server::handle_selection_range);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_INLAY_HINT_INFO, Server::handle_inlay_hint);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_CODE_LENS_INFO, Server::handle_code_lens);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_CODE_ACTION_INFO, Server::handle_code_action);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_PREPARE_CALL_HIERARCHY_INFO, Server::handle_prepare_call_hierarchy);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_FOLDING_RANGE_INFO, Server::handle_folding_range);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_PREPARE_RENAME_INFO, Server::handle_prepare_rename);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_LINKED_EDITING_RANGE_INFO, Server::handle_linked_editing_range);
+
+        handlers.register_language_service_with_auto_imports_request_handler(lsproto::TEXT_DOCUMENT_COMPLETION_INFO, Server::handle_completion);
+        handlers.register_language_service_with_auto_imports_request_handler(lsproto::TEXT_DOCUMENT_CODE_ACTION_INFO, Server::handle_code_action);
+
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_VS_ON_AUTO_INSERT_INFO, Server::handle_vs_on_auto_insert);
+
+        handlers.register_multi_project_reference_request_handler(lsproto::TEXT_DOCUMENT_REFERENCES_INFO, |_ls, _ctx, _params, _orchestrator| {
+            Err(not_yet_ported(Method::TextDocumentReferences))
+        });
+        handlers.register_multi_project_reference_request_handler(lsproto::TEXT_DOCUMENT_VS_REFERENCES_INFO, |_ls, _ctx, _params, _orchestrator| {
+            Err(not_yet_ported(Method::TextDocumentVSReferences))
+        });
+        handlers.register_request_handler(lsproto::TEXT_DOCUMENT_RENAME_INFO, Server::handle_rename);
+        handlers.register_multi_project_reference_request_handler(lsproto::TEXT_DOCUMENT_IMPLEMENTATION_INFO, |_ls, _ctx, _params, _orchestrator| {
+            Err(not_yet_ported(Method::TextDocumentImplementation))
+        });
+
+        handlers.register_request_handler(lsproto::CALL_HIERARCHY_INCOMING_CALLS_INFO, Server::handle_call_hierarchy_incoming_calls);
+        handlers.register_request_handler(lsproto::CALL_HIERARCHY_OUTGOING_CALLS_INFO, Server::handle_call_hierarchy_outgoing_calls);
+
+        handlers.register_request_handler(lsproto::WORKSPACE_SYMBOL_INFO, Server::handle_workspace_symbol);
+        handlers.register_request_handler(lsproto::COMPLETION_ITEM_RESOLVE_INFO, Server::handle_completion_item_resolve);
+        handlers.register_request_handler(lsproto::CODE_LENS_RESOLVE_INFO, Server::handle_code_lens_resolve);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_SEMANTIC_TOKENS_FULL_INFO, Server::handle_semantic_tokens_full);
+        handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_SEMANTIC_TOKENS_RANGE_INFO, Server::handle_semantic_tokens_range);
+
+        // Developer/debugging commands
+        handlers.register_request_handler(lsproto::CUSTOM_RUN_GC_INFO, Server::handle_run_gc);
+        handlers.register_request_handler(lsproto::CUSTOM_SAVE_HEAP_PROFILE_INFO, Server::handle_save_heap_profile);
+        handlers.register_request_handler(lsproto::CUSTOM_SAVE_ALLOC_PROFILE_INFO, Server::handle_save_alloc_profile);
+        handlers.register_request_handler(lsproto::CUSTOM_START_CPU_PROFILE_INFO, Server::handle_start_cpu_profile);
+        handlers.register_request_handler(lsproto::CUSTOM_STOP_CPU_PROFILE_INFO, Server::handle_stop_cpu_profile);
+
+        handlers.register_request_handler(lsproto::CUSTOM_INITIALIZE_API_SESSION_INFO, Server::handle_initialize_api_session);
+        handlers.register_request_handler(lsproto::CUSTOM_PROJECT_INFO_INFO, Server::handle_project_info);
+        handlers.register_request_handler(lsproto::CUSTOM_SET_CONTENT_MAPPER_CONTRIBUTIONS_INFO, Server::handle_set_content_mapper_contributions);
         handlers
     })
 }
@@ -1598,7 +2231,7 @@ impl handlerMap {
         self.0.insert(
             info.method,
             Box::new(move |s, ctx, req| {
-                if !s.has_session() && req.method != Method::Initialized {
+                if s.session.get().is_none() && req.method != Method::Initialized {
                     return Err(ErrorCode::ServerNotInitialized.into());
                 }
 
@@ -1621,7 +2254,7 @@ impl handlerMap {
         self.0.insert(
             info.method,
             Box::new(move |s, ctx, req| {
-                if !s.has_session() && req.method != Method::Initialize {
+                if s.session.get().is_none() && req.method != Method::Initialize {
                     return Err(ErrorCode::ServerNotInitialized.into());
                 }
 
@@ -1635,11 +2268,233 @@ impl handlerMap {
             }),
         );
     }
+
+    // server.go:1341
+    fn register_language_service_document_request_handler<Req, Resp>(
+        &mut self,
+        info: lsproto::RequestInfo<Req, Resp>,
+        f: fn(&Arc<Server>, &Context, &Arc<LanguageService>, Req) -> Result<Resp, Error>,
+    ) where
+        Req: Json + Default + lsproto::HasTextDocumentURI + Send + 'static,
+        Resp: Json + 'static,
+    {
+        self.0.insert(
+            info.method,
+            Box::new(move |s, ctx, req| {
+                let params = req.unmarshal_params::<Req>()?;
+                let ls = s.session().get_language_service(ctx, params.text_document_uri())?;
+                let (s, ctx, req) = (s.clone(), ctx.clone(), req.clone());
+                Ok(Some(Box::new(move || {
+                    s.with_recover(&req, || {
+                        let resp = f(&s, &ctx, &ls, params);
+                        // After any language service request, check if new global diagnostics were
+                        // discovered during checking and push updated tsconfig diagnostics if so.
+                        s.session().enqueue_publish_global_diagnostics();
+                        let resp = resp?;
+                        if let Some(err) = ctx.err() {
+                            return Err(err.into());
+                        }
+                        s.send_result(req.id.as_ref(), resp)
+                    })
+                })))
+            }),
+        );
+    }
+
+    // server.go:1368
+    fn register_language_service_with_auto_imports_request_handler<Req, Resp>(
+        &mut self,
+        info: lsproto::RequestInfo<Req, Resp>,
+        f: fn(&Arc<Server>, &Context, &Arc<LanguageService>, Req) -> Result<Resp, Error>,
+    ) where
+        Req: Json + Default + Clone + lsproto::HasTextDocumentURI + Send + 'static,
+        Resp: Json + 'static,
+    {
+        self.0.insert(
+            info.method,
+            Box::new(move |s, ctx, req| {
+                let params = req.unmarshal_params::<Req>()?;
+                let uri = params.text_document_uri().clone();
+                s.session().with_language_service_and_snapshot(ctx, &uri, |language_service, snapshot| {
+                    let (s, ctx, req) = (s.clone(), ctx.clone(), req.clone());
+                    Ok(Some(Box::new(move || {
+                        s.with_recover(&req, || {
+                            let mut language_service = language_service;
+                            let mut resp = f(&s, &ctx, &language_service, params.clone());
+                            if matches!(&resp, Err(err) if tsrs_ls::is_err_needs_auto_imports(err)) {
+                                language_service = s.session().get_language_service_with_auto_imports(&ctx, &snapshot, params.text_document_uri())?;
+                                if let Some(err) = ctx.err() {
+                                    return Err(err.into());
+                                }
+                                resp = f(&s, &ctx, &language_service, params);
+                                if matches!(&resp, Err(err) if tsrs_ls::is_err_needs_auto_imports(err)) {
+                                    panic!("{} returned ErrNeedsAutoImports even after enabling auto imports", info.method);
+                                }
+                            }
+                            let resp = resp?;
+                            if let Some(err) = ctx.err() {
+                                return Err(err.into());
+                            }
+                            s.send_result(req.id.as_ref(), resp)
+                        })
+                    }) as project::AsyncWork))
+                })
+            }),
+        );
+    }
+
+    // server.go:1403
+    fn register_multi_project_reference_request_handler<Req, Resp>(
+        &mut self,
+        info: lsproto::RequestInfo<Req, Resp>,
+        f: fn(&LanguageService, &Context, Req, Arc<dyn tsrs_ls::CrossProjectOrchestrator>) -> Result<Resp, Error>,
+    ) where
+        Req: Json + Default + lsproto::HasTextDocumentPosition + Send + 'static,
+        Resp: Json + 'static,
+    {
+        self.0.insert(
+            info.method,
+            Box::new(move |s, ctx, req| {
+                let params = req.unmarshal_params::<Req>()?;
+                // !!! sheetal: multiple projects that contain the file through symlinks
+                let (default_ls, orchestrator) = s.get_language_service_and_cross_project_orchestrator(ctx, params.text_document_uri(), req)?;
+                let (s, ctx, req) = (s.clone(), ctx.clone(), req.clone());
+                Ok(Some(Box::new(move || {
+                    s.with_recover(&req, || {
+                        let resp = f(&default_ls, &ctx, params, orchestrator)?;
+                        if let Some(err) = ctx.err() {
+                            return Err(err.into());
+                        }
+                        s.send_result(req.id.as_ref(), resp)
+                    })
+                })))
+            }),
+        );
+    }
 }
 
-impl Server {
-    fn has_session(&self) -> bool {
-        false
+// server.go:1431
+struct crossProjectOrchestrator {
+    server: Arc<Server>,
+    req: Arc<RequestMessage>,
+    default_project: Arc<dyn tsrs_ls::Project>,
+    all_projects: Vec<Arc<dyn tsrs_ls::Project>>,
+}
+
+impl tsrs_ls::CrossProjectOrchestrator for crossProjectOrchestrator {
+    // server.go:1440
+    fn get_default_project(&self) -> Arc<dyn tsrs_ls::Project> {
+        self.default_project.clone()
+    }
+
+    // server.go:1444
+    fn get_all_projects_for_initial_request(&self) -> Vec<Arc<dyn tsrs_ls::Project>> {
+        self.all_projects.clone()
+    }
+
+    // server.go:1448
+    fn get_language_service_for_project_with_file(&self, ctx: &Context, p: &Arc<dyn tsrs_ls::Project>, uri: &lsproto::DocumentUri) -> Option<Arc<LanguageService>> {
+        // Go type-asserts `p.(*project.Project)`; `ls::Project` has no downcast, so the project is found by its
+        // id in the current snapshot (the session looks it up by id in a fresh snapshot either way).
+        let snapshot = self.server.session().snapshot();
+        let project = snapshot.project_collection.get_project(&project::ID(p.id()))?;
+        self.server.session().get_language_service_for_project_with_file(ctx, &project, uri)
+    }
+
+    // server.go:1452
+    fn get_projects_for_file(&self, ctx: &Context, uri: &lsproto::DocumentUri) -> Result<Vec<Arc<dyn tsrs_ls::Project>>, Error> {
+        self.server.session().get_projects_for_file(ctx, uri)
+    }
+
+    // server.go:1456. Go returns an iterator that loads the snapshot while it is consumed; the projects are
+    // collected while the snapshot is held.
+    fn get_projects_loading_project_tree(&self, ctx: &Context, requested_project_trees: &Set<Path>) -> Box<dyn Iterator<Item = Arc<dyn tsrs_ls::Project>> + '_> {
+        let mut projects = Vec::new();
+        self.server.session().with_snapshot_loading_project_tree(ctx, Some(requested_project_trees.clone()), |snapshot| {
+            for p in snapshot.project_collection.language_service_projects() {
+                projects.push(p.arc().clone() as Arc<dyn tsrs_ls::Project>);
+            }
+        });
+        Box::new(projects.into_iter())
+    }
+}
+
+// The handlers of methods whose language-service functions are not ported yet (phase 3) and of out-of-scope
+// features (content mappers, the api package, pprof) answer with this error.
+pub(crate) fn not_yet_ported(method: Method) -> Error {
+    Error::wrap_code(ErrorCode::MethodNotFound, Error::new(format!("{} is not ported yet", method)))
+}
+
+// server.go:1896
+fn generate_diagnostic_diff_string(missing_from_pre: &[&lsproto::Diagnostic], missing_from_post: &[&lsproto::Diagnostic], stringifier: fn(&lsproto::Diagnostic) -> String) -> String {
+    let mut b = String::new();
+    for elem in missing_from_pre {
+        b.push_str(&format!("Diagnostic {} was present after emit but not before emit\n", stringifier(elem)));
+    }
+    for elem in missing_from_post {
+        b.push_str(&format!("Diagnostic {} was present before emit but not after emit\n", stringifier(elem)));
+    }
+    b
+}
+
+// fswatch.Default().HasFastRecursiveBackend(): the builtin watcher (lspwatcher, fswatch) is phase 4, so no
+// backend is available yet.
+fn builtin_watcher_has_fast_recursive_backend() -> bool {
+    false
+}
+
+// server.go:99: `_ project.Client = (*Server)(nil)`.
+impl project::Client for Server {
+    fn watch_files(&self, ctx: &Context, id: project::WatcherID, watchers: Vec<lsproto::FileSystemWatcher>) -> Result<(), Error> {
+        Server::watch_files(self, ctx, &id.0, watchers)
+    }
+    fn unwatch_files(&self, ctx: &Context, id: project::WatcherID) -> Result<(), Error> {
+        Server::unwatch_files(self, ctx, &id.0)
+    }
+    fn register_content_mapper_extensions(&self, ctx: &Context, extensions: Vec<String>) -> Result<(), Error> {
+        Server::register_content_mapper_extensions(self, ctx, extensions)
+    }
+    fn refresh_diagnostics(&self, ctx: &Context) -> Result<(), Error> {
+        Server::refresh_diagnostics(self, ctx)
+    }
+    fn publish_diagnostics(&self, ctx: &Context, params: lsproto::PublishDiagnosticsParams) -> Result<(), Error> {
+        Server::publish_diagnostics(self, ctx, params)
+    }
+    fn refresh_inlay_hints(&self, ctx: &Context) -> Result<(), Error> {
+        Server::refresh_inlay_hints(self, ctx)
+    }
+    fn refresh_code_lens(&self, ctx: &Context) -> Result<(), Error> {
+        Server::refresh_code_lens(self, ctx)
+    }
+    fn progress_start(&self, message: &'static tsrs_diagnostics::Message, args: &[&dyn std::fmt::Display]) {
+        Server::progress_start(self, message, args)
+    }
+    fn progress_finish(&self, message: &'static tsrs_diagnostics::Message, args: &[&dyn std::fmt::Display]) {
+        Server::progress_finish(self, message, args)
+    }
+    fn send_telemetry(&self, ctx: &Context, telemetry: lsproto::TelemetryEvent) -> Result<(), Error> {
+        Server::send_telemetry(self, ctx, telemetry)
+    }
+    fn is_active(&self) -> bool {
+        Server::is_active(self)
+    }
+    fn set_locale(&self, locale: &str) {
+        Server::set_locale(self, locale)
+    }
+    fn get_locale(&self) -> Locale {
+        Server::get_locale(self)
+    }
+}
+
+// server.go:98: `_ ata.NpmExecutor = (*Server)(nil)`.
+impl project::NpmExecutor for Server {
+    // server.go:2371
+    // NpmInstall implements ata.NpmExecutor
+    fn npm_install(&self, cwd: &str, args: &[String]) -> Result<Vec<u8>, String> {
+        match &self.npm_install {
+            Some(npm_install) => npm_install(cwd, args),
+            None => panic!("NpmInstall called without an npm executor"),
+        }
     }
 }
 

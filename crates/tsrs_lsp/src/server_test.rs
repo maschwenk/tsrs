@@ -53,6 +53,7 @@ fn options(out: Box<dyn Writer>) -> ServerOptions {
         fs: None,
         default_library_path: String::new(),
         typings_location: String::new(),
+        parse_cache: None,
         npm_install: None,
         progress_delay: std::time::Duration::ZERO,
         set_parent_process_id: None,
