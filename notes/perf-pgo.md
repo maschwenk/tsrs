@@ -109,3 +109,17 @@ above were rerun on this binary with the same result.
 - The bench CI table (README) measures the shipped binary: (c), built and trained on the bench runner with the
   release workflow's commands for x86_64-unknown-linux-gnu (before 2026-10-01 it measured (a)).
 - Linux release targets train natively on their own runners; they were not measured here.
+
+## Language-service training (2026-10-02)
+
+The training set above never ran `tsrs --lsp`, so the language service (`tsrs_ls`, `tsrs_project`, `tsrs_lsp`) was
+laid out as cold code. `pgo-train.sh` now also runs the fourslash suite with an instrumented `tsrs-fourslash`
+(4,546 tests through the in-process server; worker processes exit normally, `%m` merges their counts), and the
+release and bench workflows build that binary in the instrumented step.
+
+Same source and instrumented build, final binaries differing only in the profile, 200-edit editor session on
+xstate-main (`tools/lsp-mem/lsp_mem.py --completion`: diagnostics, hover and completion after every edit), server
+process: 94.4 G -> 85.0 G instructions (-10%), ~34.9 G -> ~31.5 G cycles (2 rounds each, machine under load). The
+checker is unaffected on the private monorepo: 269.2 G vs 268.9 G instructions with one checker, 365.9 G vs
+363.7 G with four; identical output. A `workflow_dispatch` dry run of the release produced a fourslash profile on
+all four targets (macOS x86_64 under Rosetta included).
