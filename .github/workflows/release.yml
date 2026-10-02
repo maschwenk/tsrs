@@ -50,7 +50,7 @@ jobs:
           echo "ts_commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
 
   # Release binaries are PGO builds with the `dist` profile (fat LTO, one codegen unit; Cargo.toml): an instrumented
-  # build of tsrs + tsrs-test, the training workload (.github/scripts/pgo-train.sh: the conformance suite and two
+  # build of tsrs + tsrs-test + tsrs-fourslash, the training workload (.github/scripts/pgo-train.sh: the conformance suite and two
   # open-source bench projects), then the final build with the merged profile. Numbers: notes/perf-pgo.md.
   build:
     name: build ${{ matrix.target }}
@@ -112,7 +112,7 @@ jobs:
           RUSTFLAGS: -Cprofile-generate=${{ runner.temp }}/pgo/raw
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-generate' || '' }}
           CARGO_TARGET_DIR: ${{ runner.temp }}/pgo/target
-        run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner --target ${{ matrix.target }}
+        run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target ${{ matrix.target }}
       - name: Training run
         shell: bash
         run: .github/scripts/pgo-train.sh "$RUNNER_TEMP/pgo/target/${{ matrix.target }}/dist" "$RUNNER_TEMP/pgo/raw" "$RUNNER_TEMP/pgo/bench"

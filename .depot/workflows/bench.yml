@@ -181,7 +181,7 @@ jobs:
       - name: PGO instrumented build
         env:
           RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw
-        run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner --target x86_64-unknown-linux-gnu
+        run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target x86_64-unknown-linux-gnu
 
       - name: PGO training run
         run: .github/scripts/pgo-train.sh target/x86_64-unknown-linux-gnu/dist /tmp/tsrs-pgo/raw bench/.work
