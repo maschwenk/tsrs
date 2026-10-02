@@ -1405,3 +1405,86 @@ pub fn is_right_side_of_property_access(node: P<Node>) -> bool {
     let parent = node.parent().unwrap();
     parent.kind() == Kind::PropertyAccessExpression && parent.name() == Some(node)
 }
+
+// utilities.go:3021
+pub fn node_has_kind(node: Option<P<Node>>, kind: Kind) -> bool {
+    let Some(node) = node else {
+        return false;
+    };
+    node.kind() == kind
+}
+
+// utilities.go:3106
+pub fn get_type_annotation_node(node: P<Node>) -> Option<P<Node>> {
+    match node.kind() {
+        Kind::VariableDeclaration
+        | Kind::Parameter
+        | Kind::PropertySignature
+        | Kind::PropertyDeclaration
+        | Kind::TypePredicate
+        | Kind::ParenthesizedType
+        | Kind::TypeOperator
+        | Kind::MappedType
+        | Kind::TypeAssertionExpression
+        | Kind::AsExpression
+        | Kind::SatisfiesExpression
+        | Kind::TypeAliasDeclaration
+        | Kind::JSTypeAliasDeclaration
+        | Kind::NamedTupleMember
+        | Kind::OptionalType
+        | Kind::RestType
+        | Kind::TemplateLiteralTypeSpan
+        | Kind::JSDocTypeExpression
+        | Kind::JSDocPropertyTag
+        | Kind::JSDocNullableType
+        | Kind::JSDocNonNullableType
+        | Kind::JSDocOptionalType => node.type_node(),
+        _ => {
+            let func_like = node.function_like_data();
+            if let Some(func_like) = func_like {
+                return func_like.type_();
+            }
+            None
+        }
+    }
+}
+
+// utilities.go:3123
+pub fn is_object_type_declaration(node: P<Node>) -> bool {
+    is_class_like(node) || is_interface_declaration(node) || is_type_literal_node(node)
+}
+
+// utilities.go:3127
+pub fn is_class_or_type_element(node: P<Node>) -> bool {
+    is_class_element(node) || is_type_element(node)
+}
+
+// utilities.go:3139
+pub fn is_type_keyword_token(node: P<Node>) -> bool {
+    node.kind() == Kind::TypeKeyword
+}
+
+// utilities.go:4203
+pub fn try_get_import_from_module_specifier(node: P<Node>) -> Option<P<Node>> {
+    let parent = node.parent().unwrap();
+    match parent.kind() {
+        Kind::ImportDeclaration | Kind::JSImportDeclaration | Kind::ExportDeclaration => Some(parent),
+        Kind::ExternalModuleReference => parent.parent(),
+        Kind::CallExpression => {
+            if is_import_call(parent) || is_require_call(parent, false /*requireStringLiteralLikeArgument*/) {
+                return Some(parent);
+            }
+            None
+        }
+        Kind::LiteralType => {
+            if !is_string_literal(node) {
+                return None;
+            }
+            if is_import_type_node(parent.parent().unwrap()) {
+                return parent.parent();
+            }
+            None
+        }
+        _ => None,
+    }
+}
