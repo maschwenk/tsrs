@@ -17,3 +17,10 @@ pub use import_adder::*;
 pub use index::{Index, Named};
 pub use registry::*;
 pub use view::*;
+
+#[cfg(test)]
+mod aliasresolver_crash_test;
+#[cfg(test)]
+mod index_test;
+#[cfg(test)]
+mod util_test;

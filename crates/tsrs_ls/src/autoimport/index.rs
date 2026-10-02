@@ -13,10 +13,16 @@ pub trait Named {
 // Index stores entries with an index mapping uppercase letters to entries whose name
 // starts with that letter, and lowercase letters to entries whose name contains a
 // word starting with that letter.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Index<T: Named + Clone> {
     pub(crate) entries: Vec<T>,
     index: FxHashMap<Rune, Vec<usize>>,
+}
+
+impl<T: Named + Clone> Default for Index<T> {
+    fn default() -> Index<T> {
+        Index { entries: Vec::new(), index: FxHashMap::default() }
+    }
 }
 
 const RUNE_ERROR: Rune = 0xFFFD;
@@ -111,6 +117,11 @@ impl<T: Named + Clone> Index<T> {
             }
         }
         results
+    }
+
+    #[cfg(test)]
+    pub(crate) fn index_len(&self) -> usize {
+        self.index.len()
     }
 
     // index.go:122
