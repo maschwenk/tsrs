@@ -158,6 +158,7 @@ rules and deviations: notes/lsp-fsgen.md, notes/lsp-fswire.md.
 | --- | --- | --- | --- | --- |
 | 2026-10-01 (no server yet) | 4,559 | 0 | 4,173 | 386 |
 | 2026-10-02 (in-process server; hover, definition, diagnostics, formatting, edits) | 4,546 | 1,172 | 2,957 | 417 |
+| 2026-10-02 (+ refs wave; completions, signature help, linked editing, closing tags; notes/lsp-compl.md) | 4,546 | 3,037 | 1,092 | 417 |
 
 Skips: 386 known failing in Go (registry) + 31 `SkipUnsupportedCompilerOptions` (module UMD/System, moduleResolution
 node10/classic, `esModuleInterop`/`allowSyntheticDefaultImports` false, `baseUrl`, ES5 target, `alwaysStrict` false).
@@ -205,10 +206,12 @@ no error).
 - Content mappers, `api`, ATA, telemetry, pprof requests: not ported (see above).
 - Memory: everything allocated by programs and checkers is leaked until phase 4 (see the memory plan).
 - Cancellation: only before a request starts (phase 4).
-- `tsrs_ls::autoimport` is a PLACEHOLDER until phase 3: only the types/functions `project` and the phase-1 `ls` files
-  call, behaving like an empty registry that is never prepared for any file (`Clone` builds nothing,
-  `IsPreparedForImportingFile` is false, no node_modules directories). `autoimport.ProjectID` (a Go `fmt.Stringer`
-  interface) is a string newtype.
+- `tsrs_ls::autoimport` is a PLACEHOLDER until phase 3: only the types/functions `project` and the ported `ls` files
+  call, behaving like an empty registry. A registry is not prepared for a file until `Clone` is asked for it; then
+  it records the requested file's default project with no exports (no node_modules directories), so completions
+  first return `ErrNeedsAutoImports` like Go and the server's retry with auto-imports succeeds with no auto-import
+  entries (Go would panic on a retry that is still unprepared). Import fixes, `Fix.Edits` and the import adder
+  produce nothing. `autoimport.ProjectID` (a Go `fmt.Stringer` interface) is a string newtype.
 - `tsrs_ls::spanmap` is a PLACEHOLDER for Go `internal/spanmap`: value types only; `SpanMap` is uninhabited (no
   content mapper ever builds one), so content-mapped branches are kept but statically unreachable.
 - Nested checker acquisition (decided 2026-10-02): Go's call hierarchy (and a few other ls paths) acquires a second
