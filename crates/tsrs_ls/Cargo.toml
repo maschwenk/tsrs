@@ -18,6 +18,7 @@ tsrs_vfs.workspace = true
 tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
 tsrs_checker.workspace = true
+tsrs_astnav.workspace = true
 tsrs_modulespecifiers.workspace = true
 tsrs_printer.workspace = true
 tsrs_compiler.workspace = true

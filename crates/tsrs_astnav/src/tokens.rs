@@ -316,7 +316,7 @@ pub(crate) fn get_token_at_position_worker(
     }
 }
 
-// tokens.go:252
+// tokens.go:276
 fn get_position(node: P<Node>, source_file: P<SourceFile>, allow_position_in_leading_trivia: bool) -> i32 {
     if allow_position_in_leading_trivia {
         return node.pos();
@@ -324,7 +324,7 @@ fn get_position(node: P<Node>, source_file: P<SourceFile>, allow_position_in_lea
     scanner::get_token_pos_of_node(node, source_file, true /*includeJSDoc*/)
 }
 
-// tokens.go:259
+// tokens.go:283
 pub fn find_rightmost_node(node: P<Node>) -> P<Node> {
     let next: Rc<Cell<Option<P<Node>>>> = Rc::new(Cell::new(None));
     let mut current = node;
@@ -360,7 +360,7 @@ pub fn find_rightmost_node(node: P<Node>) -> P<Node> {
     }
 }
 
-// tokens.go:290
+// tokens.go:312
 pub fn visit_each_child_and_jsdoc(
     node: P<Node>,
     source_file: P<SourceFile>,
@@ -378,12 +378,12 @@ pub fn visit_each_child_and_jsdoc(
     node.visit_each_child(&mut visitor);
 }
 
-// tokens.go:307
+// tokens.go:330
 const COMPARISON_LESS_THAN: i32 = -1;
 const COMPARISON_EQUAL_TO: i32 = 0;
 const COMPARISON_GREATER_THAN: i32 = 1;
 
-// tokens.go:317
+// tokens.go:339
 // Finds the leftmost token satisfying `position < token.End()`.
 // If the leftmost token satisfying `position < token.End()` is invalid, or if position
 // is in the trivia of that leftmost token,
@@ -392,7 +392,7 @@ pub fn find_preceding_token(source_file: P<SourceFile>, position: i32) -> Option
     find_preceding_token_ex(source_file, position, None, false)
 }
 
-// tokens.go:321
+// tokens.go:343
 pub fn find_preceding_token_ex(
     source_file: P<SourceFile>,
     position: i32,
@@ -538,7 +538,7 @@ pub fn find_preceding_token_ex(
     result
 }
 
-// tokens.go:450
+// tokens.go:465
 fn is_valid_preceding_node(node: P<Node>, source_file: P<SourceFile>) -> bool {
     if node.kind() == Kind::EndOfFile {
         return !node.jsdoc(Some(source_file.get())).is_empty();
@@ -548,12 +548,12 @@ fn is_valid_preceding_node(node: P<Node>, source_file: P<SourceFile>) -> bool {
     !(ast::is_whitespace_only_jsx_text(node) || width == 0)
 }
 
-// tokens.go:459
+// tokens.go:474
 pub fn get_start_of_node(node: P<Node>, file: P<SourceFile>, include_jsdoc: bool) -> i32 {
     scanner::get_token_pos_of_node(node, file, include_jsdoc)
 }
 
-// tokens.go:465
+// tokens.go:480
 // Looks for rightmost valid token in the range [startPos, endPos).
 // If position is >= 0, looks for rightmost valid token that precedes or touches that position.
 fn find_rightmost_valid_token(
@@ -730,7 +730,7 @@ fn find_rightmost_valid_token(
     find(Some(containing_node), end_pos, source_file, containing_node, position, exclude_jsdoc)
 }
 
-// tokens.go:610
+// tokens.go:622
 pub fn find_next_token(previous_token: P<Node>, parent: P<Node>, file: P<SourceFile>) -> Option<P<Node>> {
     fn find(n: P<Node>, previous_token: P<Node>, file: P<SourceFile>) -> Option<P<Node>> {
         if ast::is_token_kind(n.kind()) && n.pos() == previous_token.end() {
@@ -808,7 +808,7 @@ pub fn find_next_token(previous_token: P<Node>, parent: P<Node>, file: P<SourceF
     find(parent, previous_token, file)
 }
 
-// tokens.go:690
+// tokens.go:691
 fn get_node_visitor(visit_node: Option<VisitNodeFn>, visit_nodes: Option<VisitNodesFn>) -> NodeVisitor {
     let wrapped_visit_node: Option<VisitNodeFn> = visit_node.map(|visit_node| -> VisitNodeFn {
         Rc::new(move |n: Option<P<Node>>, v: &mut NodeVisitor| {
@@ -851,7 +851,7 @@ fn get_node_visitor(visit_node: Option<VisitNodeFn>, visit_nodes: Option<VisitNo
     )
 }
 
-// tokens.go:727
+// tokens.go:728
 fn should_skip_child(node: P<Node>) -> bool {
     node.kind() == Kind::JSDoc
         || node.kind() == Kind::JSDocText
@@ -861,7 +861,7 @@ fn should_skip_child(node: P<Node>) -> bool {
         || ast::is_jsdoc_tag(node)
 }
 
-// tokens.go:738
+// tokens.go:739
 // FindChildOfKind searches for a child node or token of the specified kind within a containing node.
 // This function scans through both AST nodes and intervening tokens to find the first match.
 pub fn find_child_of_kind(containing_node: P<Node>, kind: Kind, source_file: P<SourceFile>) -> Option<P<Node>> {
