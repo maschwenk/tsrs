@@ -1459,7 +1459,26 @@ impl FourslashTest {
 
     // fourslash.go:2825
     pub fn verify_baseline_workspace_symbol(&mut self, t: &T, query: &str) {
-        Self::server_unavailable(t, "feature not ported: workspace symbols (VerifyBaselineWorkspaceSymbol)")
+        let result = self.send_request(t, lsproto::WORKSPACE_SYMBOL_INFO, lsproto::WorkspaceSymbolParams { query: query.to_string(), ..Default::default() });
+
+        let mut location_to_text: FxHashMap<DocumentSpan, lsproto::SymbolInformation> = FxHashMap::default();
+        let mut grouped_ranges: MultiMap<lsproto::DocumentUri, DocumentSpan> = MultiMap::default();
+        let symbol_informations = result.symbol_informations.unwrap_or_default();
+        for symbol in symbol_informations {
+            let uri = symbol.location.uri.clone();
+            let span = location_to_span(&symbol.location);
+            grouped_ranges.add(uri, span.clone());
+            location_to_text.insert(span, symbol);
+        }
+
+        let baseline = self.get_baseline_for_grouped_spans_with_file_contents(
+            &grouped_ranges,
+            &BaselineFourslashLocationsOptions {
+                get_location_data: Some(Box::new(move |span: &DocumentSpan| symbol_information_to_data(&location_to_text[span]))),
+                ..Default::default()
+            },
+        );
+        self.add_result_to_baseline(t, BaselineCommand("workspaceSymbol"), &baseline);
     }
 
     // fourslash.go:2850
@@ -2015,12 +2034,73 @@ impl FourslashTest {
 
     // fourslash.go:5726
     pub fn verify_workspace_symbol(&mut self, t: &T, cases: &[VerifyWorkspaceSymbolCase]) {
-        Self::server_unavailable(t, "feature not ported: workspace symbols (VerifyWorkspaceSymbol)")
+        let original_preferences = self.user_preferences.clone();
+        for test_case in cases {
+            let preferences = test_case.preferences.clone().unwrap_or_else(lsutil::new_default_user_preferences);
+            self.configure(t, preferences);
+            let result = self.send_request(
+                t,
+                lsproto::WORKSPACE_SYMBOL_INFO,
+                lsproto::WorkspaceSymbolParams {
+                    query: test_case.pattern.clone(),
+                    text_document: Some(lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) }),
+                    ..Default::default()
+                },
+            );
+            let Some(symbol_informations) = result.symbol_informations else {
+                t.fatal("Expected non-nil symbol information array from workspace symbol request");
+            };
+            if let Some(includes) = &test_case.includes {
+                if test_case.exact.is_some() {
+                    t.fatal("Test case cannot have both 'Includes' and 'Exact' fields set");
+                }
+                verify_includes_symbols(t, &symbol_informations, includes, &format!("Workspace symbols mismatch with pattern '{}'", test_case.pattern));
+            } else {
+                let Some(exact) = &test_case.exact else {
+                    t.fatal("Test case must have either 'Includes' or 'Exact' field set");
+                };
+                verify_exact_symbols(t, &symbol_informations, exact, &format!("Workspace symbols mismatch with pattern '{}'", test_case.pattern));
+            }
+        }
+        self.configure(t, original_preferences);
     }
 
     // fourslash.go:5796
     pub fn verify_baseline_document_symbol(&mut self, t: &T) {
-        Self::server_unavailable(t, "feature not ported: document symbols (VerifyBaselineDocumentSymbol)")
+        let params = lsproto::DocumentSymbolParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_DOCUMENT_SYMBOL_INFO, params);
+        let uri = lsconv::file_name_to_document_uri(&self.active_filename);
+        // Go collects into a map (random iteration order); the baseline orders spans by position.
+        let mut symbol_by_span: OrderedMap<DocumentSpanKey, lsproto::DocumentSymbol> = OrderedMap::default();
+        if let Some(document_symbols) = &result.document_symbols {
+            for symbol in document_symbols {
+                collect_document_symbol_spans(&uri, symbol, &mut symbol_by_span);
+            }
+        }
+        let mut spans = Vec::with_capacity(symbol_by_span.len());
+        for (key, symbol) in symbol_by_span.iter() {
+            spans.push(DocumentSpan { uri: key.uri.clone(), text_span: key.text_span, context_span: Some(symbol.range) });
+        }
+        let baseline = self.get_baseline_for_spans_with_file_contents(
+            &spans,
+            BaselineFourslashLocationsOptions {
+                get_location_data: Some(Box::new(move |span: &DocumentSpan| {
+                    let symbol = &symbol_by_span[&DocumentSpanKey { uri: span.uri.clone(), text_span: span.text_span, context_span: span.context_span.unwrap() }];
+                    format!("{{| name: {}, kind: {} |}}", symbol.name, symbol.kind.string())
+                })),
+                ..Default::default()
+            },
+        );
+        self.add_result_to_baseline(t, DOCUMENT_SYMBOLS_CMD, &baseline);
+
+        let mut details_builder = String::new();
+        if let Some(document_symbols) = &result.document_symbols {
+            write_document_symbol_details(document_symbols, 0, &mut details_builder);
+        }
+        self.write_to_baseline(DOCUMENT_SYMBOLS_CMD, &format!("\n\n// === Details ===\n{details_builder}"));
     }
 
     // fourslash.go:5871
@@ -2899,4 +2979,67 @@ fn compare_related_diagnostics(d1: &[FourslashDiagnostic], d2: &[FourslashDiagno
         }
     }
     0
+}
+
+// fourslash.go:5757
+fn verify_exact_symbols(t: &T, actual: &[lsproto::SymbolInformation], expected: &[lsproto::SymbolInformation], prefix: &str) {
+    if actual.len() != expected.len() {
+        t.fatal(&format!("{}: Expected {} symbols, but got {}:\n{:?}\n{:?}", prefix, expected.len(), actual.len(), actual, expected));
+    }
+    for i in 0..actual.len() {
+        assert_deep_equal(t, &actual[i], &expected[i], prefix);
+    }
+}
+
+// fourslash.go:5771
+fn verify_includes_symbols(t: &T, actual: &[lsproto::SymbolInformation], includes: &[lsproto::SymbolInformation], prefix: &str) {
+    let mut name_and_loc_to_actual_symbol: FxHashMap<(String, lsproto::Location), &lsproto::SymbolInformation> = FxHashMap::default();
+    for sym in actual {
+        name_and_loc_to_actual_symbol.insert((sym.name.clone(), sym.location.clone()), sym);
+    }
+
+    for sym in includes {
+        let Some(actual_sym) = name_and_loc_to_actual_symbol.get(&(sym.name.clone(), sym.location.clone())) else {
+            t.fatal(&format!("{}: Expected symbol '{}' at location '{:?}' not found", prefix, sym.name, sym.location));
+        };
+        assert_deep_equal(t, *actual_sym, sym, &format!("{}: Symbol '{}' at location '{:?}' mismatch", prefix, sym.name, sym.location));
+    }
+}
+
+// fourslash.go:5830
+fn write_document_symbol_details(symbols: &[lsproto::DocumentSymbol], indent: usize, builder: &mut String) {
+    for symbol in symbols {
+        builder.push_str(&format!("{}({}) {}\n", "  ".repeat(indent), symbol.kind.string(), symbol.name));
+        if let Some(children) = &symbol.children {
+            write_document_symbol_details(children, indent + 1, builder);
+        }
+    }
+}
+
+// fourslash.go:5839
+fn collect_document_symbol_spans(uri: &lsproto::DocumentUri, symbol: &lsproto::DocumentSymbol, symbol_by_span: &mut OrderedMap<DocumentSpanKey, lsproto::DocumentSymbol>) {
+    // Deduplicate by value rather than by the documentSpan key, which holds a pointer to
+    // the symbol's Range. The same logical symbol can be reached more than once
+    // (e.g. a merged declaration), and depending on transport those occurrences may
+    // be the same object (shared *Range) or independent copies (distinct *Range
+    // after a JSON round-trip). A value-based key collapses them consistently.
+    let key = DocumentSpanKey { uri: uri.clone(), text_span: symbol.selection_range, context_span: symbol.range };
+    if !symbol_by_span.contains_key(&key) {
+        symbol_by_span.insert(key, symbol.clone());
+    }
+    if let Some(children) = &symbol.children {
+        for child in children {
+            collect_document_symbol_spans(uri, child, symbol_by_span);
+        }
+    }
+}
+
+// documentSpanKey is a value-comparable variant of documentSpan used to deduplicate
+// document symbols regardless of pointer identity.
+// fourslash.go:5863
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct DocumentSpanKey {
+    uri: lsproto::DocumentUri,
+    text_span: lsproto::Range,
+    context_span: lsproto::Range,
 }

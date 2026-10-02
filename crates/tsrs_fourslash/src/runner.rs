@@ -167,6 +167,11 @@ pub fn worker(registry: &'static [TestEntry], include_skipped: bool) {
             Outcome::Fail(m) => ("FAIL", m.lines().next().unwrap_or("").to_string()),
             Outcome::Skip(m) => ("SKIP", m.lines().next().unwrap_or("").to_string()),
         };
+        if std::env::var_os("TSRS_FOURSLASH_FULL_MESSAGE").is_some() {
+            if let Outcome::Fail(m) = &outcome {
+                eprintln!("{name}: {m}");
+            }
+        }
         let mut out = std::io::stdout().lock();
         let _ = writeln!(out, "{name}\t{tag}\t{msg}");
         let _ = out.flush();

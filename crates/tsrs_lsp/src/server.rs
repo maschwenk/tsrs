@@ -1895,12 +1895,39 @@ impl Server {
 
     // server.go:2156
     fn handle_workspace_symbol(self: &Arc<Self>, ctx: &Context, params: lsproto::WorkspaceSymbolParams, req_msg: &RequestMessage) -> Result<lsproto::WorkspaceSymbolResponse, Error> {
-        Err(not_yet_ported(Method::WorkspaceSymbol))
+        let mut resp = lsproto::WorkspaceSymbolResponse::default();
+        let mut ls_err: Option<Error> = None;
+        let mut provide_symbols = |snapshot: &Arc<project::Snapshot>, programs: Vec<&'static tsrs_compiler::Program>| {
+            let _ = self.with_recover(req_msg, || {
+                match tsrs_ls::provide_workspace_symbols(ctx, &programs, &snapshot.converters(), snapshot.user_preferences(), &params.query) {
+                    Ok(r) => resp = r,
+                    Err(e) => ls_err = Some(e),
+                }
+                Ok(())
+            });
+        };
+        if params.text_document.is_some() && self.session().config().workspace_symbols_scope == lsutil::WorkspaceSymbolsScope::CurrentProject {
+            let uri = params.text_document.as_ref().unwrap().uri.clone();
+            self.session().with_snapshot_for_document(ctx, &uri, |snapshot| {
+                // Go maps `ls.Project.GetProgram` (a nil program is dereferenced by ProvideWorkspaceSymbols).
+                let programs = snapshot.get_language_service_projects_containing_file(&uri).iter().map(|p| p.get_program().unwrap()).collect();
+                provide_symbols(snapshot, programs);
+            });
+        } else {
+            self.session().with_snapshot_loading_project_tree(ctx, None, |snapshot| {
+                let programs = snapshot.project_collection.language_service_projects().iter().map(|p| p.get_program().unwrap()).collect();
+                provide_symbols(snapshot, programs);
+            });
+        }
+        match ls_err {
+            Some(e) => Err(e),
+            None => Ok(resp),
+        }
     }
 
     // server.go:2184
     fn handle_document_symbol(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::DocumentSymbolParams) -> Result<lsproto::DocumentSymbolResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentDocumentSymbol))
+        ls.provide_document_symbols(ctx, &params.text_document.uri)
     }
 
     // server.go:2188

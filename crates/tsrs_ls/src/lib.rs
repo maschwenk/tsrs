@@ -25,6 +25,7 @@ pub mod sourcemap;
 mod source_map;
 mod sourcedefinition;
 pub mod spanmap;
+mod symbols;
 mod utilities;
 
 pub use api::{ERR_NO_SOURCE_FILE, ERR_NO_TOKEN_AT_POSITION};
@@ -33,4 +34,5 @@ pub use crossproject::*;
 pub use host::*;
 pub use jsdoc::{get_symbol_documentation_comment, get_symbol_jsdoc_tags, JSDocTagInfo};
 pub use languageservice::*;
+pub use symbols::provide_workspace_symbols;
 pub use utilities::{is_in_string, range_contains_range};
