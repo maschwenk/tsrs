@@ -11,7 +11,7 @@ if you call into the checker.
 
 ## Where you work
 
-- Your git worktree `$TSRS_WORK/wt/lsp-<wave>` on branch `lsp/<wave>` (created for you from branch `lsp`).
+- Your git worktree `$TSRS_WORK/wt/lsp-<wave>` on branch `lsp-<wave>` (created for you from branch `lsp`).
   Work only there. `ts-ref` inside it is a symlink to the Go reference checkout (read-only). `$TSRS_WORK` =
   `/Users/maxschwenk/Developer/tsrs-work`.
 - Build with your own target dir: `CARGO_TARGET_DIR=$PWD/target cargo check -p <crate> --message-format short`.
