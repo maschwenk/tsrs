@@ -2,7 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Node, SourceFile};
-use tsrs_checker::{self as checker, ProjectReferenceCommandLine, SourceOutputAndProjectReference};
+use tsrs_checker as checker;
+use tsrs_tsoptions::{ParsedCommandLine, SourceOutputAndProjectReference};
 use tsrs_modulespecifiers::ModuleSpecifierGenerationHost;
 use tsrs_core::tspath::{self, Path};
 use tsrs_core::{alloc_str, CompilerOptions, ModuleKind, ResolutionMode, Tristate, P};
@@ -175,17 +176,17 @@ impl checker::Program for aliasResolver {
     }
 
     // aliasresolver.go:196
-    fn get_project_reference_from_output_dts(&self, _path: &Path) -> Option<&'static SourceOutputAndProjectReference> {
+    fn get_project_reference_from_output_dts(&self, _path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
         panic!("unimplemented")
     }
 
     // aliasresolver.go:201
-    fn get_project_reference_from_source(&self, _path: &Path) -> Option<&'static SourceOutputAndProjectReference> {
+    fn get_project_reference_from_source(&self, _path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
         panic!("unimplemented")
     }
 
     // aliasresolver.go:206
-    fn get_redirect_for_resolution(&self, _file: P<SourceFile>) -> Option<&'static dyn ProjectReferenceCommandLine> {
+    fn get_redirect_for_resolution(&self, _file: P<SourceFile>) -> Option<P<ParsedCommandLine>> {
         panic!("unimplemented")
     }
 
@@ -253,7 +254,7 @@ impl ModuleSpecifierGenerationHost for aliasResolver {
     }
 
     // aliasresolver.go:201
-    fn get_project_reference_from_source(&self, _path: &Path) -> Option<P<tsrs_tsoptions::SourceOutputAndProjectReference>> {
+    fn get_project_reference_from_source(&self, _path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
         panic!("unimplemented")
     }
 

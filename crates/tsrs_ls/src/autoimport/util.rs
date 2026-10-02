@@ -208,6 +208,9 @@ pub(crate) fn get_resolved_package_names(ctx: &Context, program: &'static Progra
 pub(crate) fn add_project_reference_output_mappings(program: &'static Program, result: &mut FxHashMap<Path, String>) {
     let refs = program.get_resolved_project_references();
     for r in refs {
+        let Some(r) = r else {
+            continue;
+        };
         tsrs_tsoptions::ParsedCommandLine::parse_input_output_names(r);
         if let Some(mappings) = r.output_dts_to_project_reference() {
             for (output_dts_path, mapping) in mappings {
