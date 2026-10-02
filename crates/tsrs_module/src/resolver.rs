@@ -2054,21 +2054,23 @@ impl<'r> ResolutionState<'r> {
             let parsed = packagejson::parse(&contents);
             trace!(self.tracer, diagnostics::Found_package_json_at_0, package_json_path);
             let parseable = parsed.is_ok();
+            let owner = tsrs_core::arena::enter_table_owner(self.resolver.package_json_info_cache.owner_addr());
             let result = P::new(InfoCacheEntry {
                 package_directory: tsrs_core::alloc_str(package_directory),
                 directory_exists: true,
                 contents: Some(P::new(PackageJson::new(parsed.unwrap_or_default(), parseable))),
             });
+            drop(owner);
             let result = self.resolver.package_json_info_cache.set(&package_json_path, result);
             return Some(with_package_directory(result, package_directory));
         } else {
             if directory_exists {
                 trace!(self.tracer, diagnostics::File_0_does_not_exist, package_json_path);
             }
-            self.resolver.package_json_info_cache.set(
-                &package_json_path,
-                P::new(InfoCacheEntry { package_directory: tsrs_core::alloc_str(package_directory), directory_exists, contents: None }),
-            );
+            let owner = tsrs_core::arena::enter_table_owner(self.resolver.package_json_info_cache.owner_addr());
+            let entry = P::new(InfoCacheEntry { package_directory: tsrs_core::alloc_str(package_directory), directory_exists, contents: None });
+            drop(owner);
+            self.resolver.package_json_info_cache.set(&package_json_path, entry);
         }
         None
     }

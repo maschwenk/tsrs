@@ -203,15 +203,31 @@ pub struct InfoCache {
     cache: SyncMap<Path, P<InfoCacheEntry>>,
     current_directory: String,
     use_case_sensitive_file_names: bool,
+    // Memory regions (docs/LSP.md "Memory plan"), not in Go: the address of the cache this one was cloned from,
+    // transitively (0: none). Clones share their entries, so new entries live with the original (`owner_addr`).
+    origin: usize,
 }
 
 pub fn new_info_cache(current_directory: &str, use_case_sensitive_file_names: bool) -> InfoCache {
-    InfoCache { cache: SyncMap::default(), current_directory: current_directory.to_string(), use_case_sensitive_file_names }
+    InfoCache { cache: SyncMap::default(), current_directory: current_directory.to_string(), use_case_sensitive_file_names, origin: 0 }
 }
 
 impl InfoCache {
+    // The address that decides where a new entry is allocated (`arena::enter_table_owner`): the original cache's. A
+    // program's clones copy their predecessor's entries (`ResolutionData::clone_data`), so an entry added to one of
+    // them must outlive it: entries stay in the region that allocates the original cache (a full build's region,
+    // which every clone keeps; an auto-import update's scratch region) and go to the never-freed thread arena when
+    // added from anywhere else (a clone's construction, a checker, a parse worker).
+    pub fn owner_addr(&self) -> usize {
+        if self.origin != 0 {
+            return self.origin;
+        }
+        self as *const InfoCache as usize
+    }
+
     pub fn clone_cache(&self) -> InfoCache {
-        let clone = new_info_cache(&self.current_directory, self.use_case_sensitive_file_names);
+        let mut clone = new_info_cache(&self.current_directory, self.use_case_sensitive_file_names);
+        clone.origin = self.owner_addr();
         self.cache.range(|key, value| {
             clone.cache.store(key.clone(), *value);
             true
