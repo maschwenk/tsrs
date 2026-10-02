@@ -180,7 +180,7 @@ func generate(l *Loaded, out string, perFile int) error {
 		start, end := chunks[chunk].start, chunks[chunk].end
 		var b strings.Builder
 		b.WriteString(header)
-		b.WriteString("#![allow(unreachable_code, unused_assignments)]\n\n")
+		b.WriteString("// `var x T` is zero-initialized as in Go, even where every branch assigns it before use.\n#![allow(unused_assignments)]\n\n")
 		chunkName := fmt.Sprintf("gen_%02d", chunk)
 		for _, f := range files[start:end] {
 			f.code = modRefRe.ReplaceAllStringFunc(f.code, func(m string) string {
