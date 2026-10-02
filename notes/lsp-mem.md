@@ -125,6 +125,10 @@ Gates:
   collect them): the registry keeps arena data (its checkers' symbols, alias resolver caches) that refers to them,
   with no owner object. Registry updates allocate in the thread arena (never freed).
 - `exit` alone does not end `tsrs --lsp` (pre-existing, also on the base): the driver closes the server's input.
+  (Lead, 2026-10-02: not a divergence. The driver does not answer the server's `client/registerCapability` request
+  sent while handling `initialized`; Go blocks its dispatch loop on it the same way, so `tsgo-ref` does not exit
+  either. With a client that answers, both exit with status 1 and "context canceled". `tools/oracle/lsp/exit_check.py`
+  compares the four combinations.)
 
 ## Needs from others
 
