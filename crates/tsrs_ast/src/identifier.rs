@@ -119,6 +119,17 @@ impl NodePayload for IdentifierWithText {
 
 const _: () = assert!(std::mem::size_of::<NodeAlloc<Identifier>>() == 32);
 
+/// Census builds: the identifier word holds a flow node's address / 8 in the modes that keep one
+/// (`crate::census_layouts`).
+pub(crate) fn census_layout() {
+    use std::mem::offset_of;
+    let word = offset_of!(Identifier, word);
+    let field = |data: usize| tsrs_core::CensusField::X8 { off: data + word, modes: 1 << MODE_SOURCE_FLOW | 1 << MODE_TEXT };
+    tsrs_core::census_layout(std::any::type_name::<NodeAlloc<Identifier>>(), &[field(offset_of!(NodeAlloc<Identifier>, data))]);
+    let data = offset_of!(NodeAlloc<IdentifierWithText>, data) + offset_of!(IdentifierWithText, identifier);
+    tsrs_core::census_layout(std::any::type_name::<NodeAlloc<IdentifierWithText>>(), &[field(data)]);
+}
+
 #[inline]
 fn flow_slot(flow: Option<P<FlowNode>>) -> u64 {
     let addr = flow.map_or(0, |f| (f.get() as *const FlowNode).expose_provenance()) as u64;

@@ -1140,6 +1140,134 @@ struct TypeAlloc<T> {
     data: T,
 }
 
+/// Census builds (`TSRS_CENSUS=1`): registers the fields of checker arena types that the census's strong mark must
+/// not read as plain pointers (`tsrs_core::census_layout`), from the current layouts: type headers (flags, ids and
+/// the data tag; the symbol word may carry the record bit), literal values, type parameter and mapped type flags,
+/// empty type-argument slices, conditional roots, inference infos. Once per process (with the AST's); nothing in
+/// other builds.
+pub(crate) fn census_layouts() {
+    use std::any::type_name;
+    use std::mem::{offset_of, size_of};
+    use tsrs_core::CensusField;
+    if !tsrs_core::census_recording() {
+        return;
+    }
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        tsrs_ast::census_layouts();
+        let sym = offset_of!(Type, symbol_or_alias);
+        let mut header = CensusField::all_but(0, size_of::<Type>(), &[sym]);
+        header.push(CensusField::Tagged { off: sym });
+        let name = type_name::<TypeAlloc<LiteralType>>();
+        tsrs_core::census_layout(&name[..=name.find('<').unwrap()], &header);
+        // The number and boolean variants leave the rest of the value uninitialized (its strings are never freed).
+        let d = offset_of!(TypeAlloc<LiteralType>, data);
+        let value = CensusField::NoPointer { off: d + offset_of!(LiteralType, value), len: size_of::<Option<LiteralValue>>() };
+        tsrs_core::census_layout(name, &[value]);
+        let d = offset_of!(TypeAlloc<TypeParameter>, data);
+        let offsets = [
+            offset_of!(TypeParameter, constrained_type),
+            offset_of!(TypeParameter, constraint),
+            offset_of!(TypeParameter, target),
+            offset_of!(TypeParameter, mapper),
+            offset_of!(TypeParameter, is_this_type),
+            offset_of!(TypeParameter, is_distributed),
+            offset_of!(TypeParameter, resolved_default_type),
+            offset_of!(TypeParameter, distributed_type),
+        ];
+        let size = size_of::<TypeParameter>();
+        tsrs_core::census_layout(
+            type_name::<TypeAlloc<TypeParameter>>(),
+            &[
+                CensusField::scalar(d, offset_of!(TypeParameter, is_this_type), &offsets, size),
+                CensusField::scalar(d, offset_of!(TypeParameter, is_distributed), &offsets, size),
+            ],
+        );
+        let d = offset_of!(TypeAlloc<MappedType>, data);
+        let offsets = [
+            offset_of!(MappedType, object_type),
+            offset_of!(MappedType, declaration),
+            offset_of!(MappedType, type_parameter),
+            offset_of!(MappedType, constraint_type),
+            offset_of!(MappedType, name_type),
+            offset_of!(MappedType, template_type),
+            offset_of!(MappedType, modifiers_type),
+            offset_of!(MappedType, resolved_apparent_type),
+            offset_of!(MappedType, contains_error),
+        ];
+        let contains_error = CensusField::scalar(d, offset_of!(MappedType, contains_error), &offsets, size_of::<MappedType>());
+        tsrs_core::census_layout(type_name::<TypeAlloc<MappedType>>(), &[contains_error]);
+        // One-word slices (`ThinSlice`) and bit-0-tagged tails (notes/mem-layout3.md).
+        let thin = |off: usize| CensusField::Thin { off };
+        let r = offset_of!(TypeReference, resolved_type_arguments);
+        tsrs_core::census_layout(type_name::<TypeAlloc<TypeReference>>(), &[thin(offset_of!(TypeAlloc<TypeReference>, data) + r)]);
+        let r = offset_of!(InterfaceType, type_reference) + r;
+        tsrs_core::census_layout(type_name::<TypeAlloc<InterfaceType>>(), &[thin(offset_of!(TypeAlloc<InterfaceType>, data) + r)]);
+        let r = offset_of!(TupleType, interface_type) + r;
+        tsrs_core::census_layout(type_name::<TypeAlloc<TupleType>>(), &[thin(offset_of!(TypeAlloc<TupleType>, data) + r)]);
+        tsrs_core::census_layout(type_name::<TypeAlias>(), &[thin(offset_of!(TypeAlias, type_arguments))]);
+        let u = |d: usize| {
+            let base = d + offset_of!(UnionType, union_or_intersection_type);
+            [
+                thin(base + offset_of!(UnionOrIntersectionType, types)),
+                CensusField::LowTag { off: base + offset_of!(UnionOrIntersectionType, rare), mask: RARE_INTERSECTION as u8 },
+            ]
+        };
+        tsrs_core::census_layout(type_name::<TypeAlloc<UnionType>>(), &u(offset_of!(TypeAlloc<UnionType>, data)));
+        const _: () = assert!(offset_of!(UnionType, union_or_intersection_type) == offset_of!(IntersectionType, union_or_intersection_type));
+        tsrs_core::census_layout(type_name::<TypeAlloc<IntersectionType>>(), &u(offset_of!(TypeAlloc<IntersectionType>, data)));
+        let rp = offset_of!(UnionOrIntersectionRare, resolved_properties);
+        tsrs_core::census_layout(type_name::<UnionRare>(), &[thin(offset_of!(UnionRare, shared) + rp)]);
+        tsrs_core::census_layout(type_name::<IntersectionRare>(), &[thin(offset_of!(IntersectionRare, shared) + rp)]);
+        tsrs_core::census_layout(
+            type_name::<StructuredMembers>(),
+            &[thin(offset_of!(StructuredMembers, properties)), thin(offset_of!(StructuredMembers, signatures))],
+        );
+        tsrs_core::census_layout(type_name::<IndexInfosTail>(), &[thin(offset_of!(IndexInfosTail, index_infos))]);
+        tsrs_core::census_layout(
+            type_name::<Signature>(),
+            &[
+                thin(offset_of!(Signature, type_parameters)),
+                thin(offset_of!(Signature, parameters)),
+                CensusField::LowTag { off: offset_of!(Signature, rare), mask: SIGNATURE_NO_TYPE_PREDICATE as u8 },
+            ],
+        );
+        let offsets = [
+            offset_of!(ConditionalRoot, node),
+            offset_of!(ConditionalRoot, check_type),
+            offset_of!(ConditionalRoot, extends_type),
+            offset_of!(ConditionalRoot, is_distributive),
+            offset_of!(ConditionalRoot, infer_type_parameters),
+            offset_of!(ConditionalRoot, outer_type_parameters),
+            offset_of!(ConditionalRoot, instantiations),
+            offset_of!(ConditionalRoot, alias),
+        ];
+        let is_distributive = CensusField::scalar(0, offset_of!(ConditionalRoot, is_distributive), &offsets, size_of::<ConditionalRoot>());
+        tsrs_core::census_layout(type_name::<ConditionalRoot>(), &[is_distributive]);
+        let offsets = [
+            offset_of!(InferenceInfo, type_parameter),
+            offset_of!(InferenceInfo, candidates),
+            offset_of!(InferenceInfo, contra_candidates),
+            offset_of!(InferenceInfo, inferred_type),
+            offset_of!(InferenceInfo, priority),
+            offset_of!(InferenceInfo, top_level),
+            offset_of!(InferenceInfo, is_fixed),
+            offset_of!(InferenceInfo, implied_arity),
+        ];
+        let size = size_of::<InferenceInfo>();
+        let scalars: Vec<CensusField> = [
+            offset_of!(InferenceInfo, priority),
+            offset_of!(InferenceInfo, top_level),
+            offset_of!(InferenceInfo, is_fixed),
+            offset_of!(InferenceInfo, implied_arity),
+        ]
+        .iter()
+        .map(|&o| CensusField::scalar(0, o, &offsets, size))
+        .collect();
+        tsrs_core::census_layout(type_name::<InferenceInfo>(), &scalars);
+    });
+}
+
 /// A type data struct, stored after the header of types tagged `TAG`.
 pub trait TypePayload: Sized + 'static {
     const TAG: TypeDataTag;

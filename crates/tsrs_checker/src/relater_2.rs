@@ -36,11 +36,14 @@ impl Checker {
     // relater.go:2608
     pub(crate) fn put_relater(&mut self, r: P<Relater>) {
         r.maybe_keys_set.borrow_mut().clear();
+        // `RelationKey::Pair` leaves the last word of a key uninitialized (copied from the stack).
+        tsrs_core::census_reset(&mut *r.maybe_keys_set.borrow_mut());
         r.relation.set(None);
         r.error_node.set(None);
         r.error_chain.set(None);
         *r.related_info.borrow_mut() = Vec::new();
         r.maybe_keys.borrow_mut().clear();
+        tsrs_core::census_scrub_slack(&mut r.maybe_keys.borrow_mut());
         r.source_stack.borrow_mut().clear();
         r.target_stack.borrow_mut().clear();
         r.maybe_count.set(0);

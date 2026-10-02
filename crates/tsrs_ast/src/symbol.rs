@@ -47,6 +47,12 @@ struct SymbolTables {
 
 const _: () = assert!(std::mem::size_of::<Symbol>() == 40);
 
+/// Census builds: the parent word keeps flag bits above the address (`crate::census_layouts`).
+pub(crate) fn census_layout() {
+    let off = std::mem::offset_of!(Symbol, parent_or_tables);
+    tsrs_core::census_layout(std::any::type_name::<Symbol>(), &[tsrs_core::CensusField::Tagged { off }]);
+}
+
 /// `Symbol.parent` or, once the symbol has a `SymbolTables` tail, the tail: an address (provenance exposed when
 /// stored, recovered with `with_exposed_provenance`) in the low 48 bits (user-space addresses are below 2^48), with
 /// bit 63 set for the tail. Bit 62: the value declaration is the first declaration. 0 = no parent, no tail, no value

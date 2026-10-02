@@ -731,35 +731,75 @@ fn run_frozen(roots: &[usize]) {
     *RESULT.lock().unwrap() = Some(table);
 }
 
-/// Offsets (in 4-byte scan steps) of words that overlap struct padding in arena types whose padding showed up as
-/// would-free references: `P::new` copies the value with its padding, so stale stack words land there.
-/// Also the non-pointer header words of types and nodes (ids and text positions that can look like arena
-/// addresses). Type offsets are after the 24-byte type header. `TypeAlloc<TypeParameter>`: two bools then 6 padding
-/// bytes at +72; `TypeAlloc<LiteralType>`: the 24-byte value enum, whose number / boolean variants leave bytes after
-/// the value uninitialized (+28..+48); `TypeAlloc<MappedType>` and `Diagnostic`: a trailing bool (+104, +144).
-fn padding_words(c: &Class) -> &'static [usize] {
-    match c {
-        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::TypeParameter>") => &[68, 72],
-        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::LiteralType>") => &[28, 32, 36, 40, 44],
-        // (96: a 4-byte field followed by the padding at 100.)
-        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::MappedType>") => &[96, 100, 104],
-        Class::Arena { ty, .. } if ty.ends_with("tsrs_ast::diagnostic::Diagnostic") => &[140, 144],
-        Class::Arena { ty, .. } if ty.ends_with("tsrs_checker::types::ConditionalRoot") => &[68, 72],
-        // Two bools then 6 padding bytes at +40.
-        Class::Arena { ty, .. } if ty.ends_with("tsrs_checker::checker::InferenceInfo") => &[36, 40, 44],
-        _ => &[],
-    }
+/// Field layouts the crates that own arena types registered (`tsrs_core::census_layout`): by full type name, or by
+/// a prefix ending in `<` for every instance of a generic.
+static LAYOUTS: Mutex<Vec<(&'static str, Vec<crate::CensusField>)>> = Mutex::new(Vec::new());
+
+pub fn register_layout(type_name: &'static str, fields: &[crate::CensusField]) {
+    with_guard(|| LAYOUTS.lock().unwrap().push((type_name, fields.to_vec())));
 }
 
-/// Header words that never hold pointers: in types (24-byte header) flags and object flags at +8, the id at +16, the
-/// data tag and 3 padding bytes at +20 (and the words straddling them); in nodes flags, range and id at +8..+24
-/// (word 0 holds the parent, x8-encoded).
-fn header_words(c: &Class) -> &'static [usize] {
-    match c {
-        Class::Arena { ty, .. } if ty.starts_with("tsrs_checker::types::TypeAlloc<") => &[8, 12, 16, 20],
-        Class::Arena { ty, .. } if ty.starts_with("tsrs_ast::ast::NodeAlloc<") || *ty == "tsrs_ast::ast::Node" => &[4, 8, 12, 16, 20],
-        _ => &[],
-    }
+/// How the strong mark reads the words of one arena class (from the registered layouts).
+#[derive(Default)]
+struct ClassLayout {
+    /// Scan offsets (4-byte steps) whose 8 bytes overlap a `NoPointer` range, or straddle a `Tagged` / `X8` word.
+    skip: Vec<u32>,
+    tagged: Vec<u32>,
+    x8: Vec<(u32, u8)>,
+    /// (pointer offset, length offset)
+    slices: Vec<(u32, u32)>,
+    thin: Vec<u32>,
+    low_tag: Vec<(u32, u8)>,
+}
+
+fn class_layouts(classes: &[Class]) -> Vec<Option<ClassLayout>> {
+    let layouts = LAYOUTS.lock().unwrap();
+    classes
+        .iter()
+        .map(|c| {
+            let Class::Arena { ty, .. } = c else { return None };
+            let mut l = ClassLayout::default();
+            let mut any = false;
+            for (name, fields) in layouts.iter() {
+                let applies = if name.ends_with('<') { ty.starts_with(name) } else { ty == name };
+                if !applies {
+                    continue;
+                }
+                any = true;
+                for f in fields {
+                    match *f {
+                        crate::CensusField::NoPointer { off, len } => {
+                            // Every 4-byte step `o` with [o, o + 8) overlapping [off, off + len).
+                            let first = (off + 1).saturating_sub(8).div_ceil(4) * 4;
+                            l.skip.extend((first..off + len).step_by(4).map(|o| o as u32));
+                        }
+                        crate::CensusField::Tagged { off } => {
+                            l.tagged.push(off as u32);
+                            l.skip.extend([off.wrapping_sub(4) as u32, off as u32 + 4]);
+                        }
+                        crate::CensusField::X8 { off, modes } => {
+                            l.x8.push((off as u32, modes));
+                            l.skip.extend([off.wrapping_sub(4) as u32, off as u32 + 4]);
+                        }
+                        crate::CensusField::Slice { ptr, len } => l.slices.push((ptr as u32, len as u32)),
+                        crate::CensusField::Thin { off } => {
+                            l.thin.push(off as u32);
+                            l.skip.extend([off.wrapping_sub(4) as u32, off as u32 + 4]);
+                        }
+                        crate::CensusField::LowTag { off, mask } => {
+                            l.low_tag.push((off as u32, mask));
+                            l.skip.extend([off.wrapping_sub(4) as u32, off as u32 + 4]);
+                        }
+                    }
+                }
+            }
+            any.then(|| {
+                l.skip.sort_unstable();
+                l.skip.dedup();
+                l
+            })
+        })
+        .collect()
 }
 
 fn class_name(c: &Class) -> String {
@@ -820,10 +860,11 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     // objects whose addresses linger in dead stack slots, struct padding and pooled vectors. So reachability is
     // recomputed with only the references the program actually stores ("strong" edges): a plain 48-bit pointer to
     // the start of a block (mappers and inference contexts may carry tag bits; mapper slice words keep a length in
-    // the top 16 bits), not in a known padding word (`padding_words`), x8-encoded words only for symbol table
-    // entries in heap blocks. An edge into a freed block must also come from a block allocated before the free
-    // (later blocks can only hold stale copies) and not be 64 KiB-aligned (a stale pointer whose low bytes a small
-    // field overwrote). A freed block reached this way is a violation.
+    // the top 16 bits), read as the registered layout of the referrer's type says (`register_layout`: padding, scalar
+    // and header words are skipped, tagged and x8-encoded fields decoded, empty slices ignored), x8-encoded words
+    // otherwise only for symbol table entries in heap blocks. An edge into a freed block must also come from a block
+    // allocated before the free (later blocks can only hold stale copies) and not be 64 KiB-aligned (a stale pointer
+    // whose low bytes a small field overwrote). A freed block reached this way is a violation.
     let wf_seq: FxHashMap<usize, u32> = would_free
         .iter()
         .filter_map(|&(a, _, seq)| table.lookup(a).filter(|&i| table.blocks[i].start == a).map(|i| (i, seq)))
@@ -838,27 +879,61 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     let mut work: Vec<u32> = Vec::new();
     // SAFETY (all reads): inside a recorded live block or a mapped root range; the bytes are only inspected.
     let read = |p: usize| u64::from_ne_bytes(unsafe { std::ptr::read_volatile(p as *const [u8; 8]) });
+    let layouts = class_layouts(classes);
+    eprintln!(
+        "  registered layouts: {} entries, {} arena classes covered",
+        LAYOUTS.lock().unwrap().len(),
+        layouts.iter().filter(|l| l.is_some()).count()
+    );
     // Decides whether `w` (at `off` in block `from`, or in a root) is a strong edge; returns the target.
     let edge = |from: Option<usize>, off: usize, w: u64| -> Option<usize> {
-        let (packed, tags, padding, born, heap) = match from {
+        let mut c = w & MASK48;
+        // The word is a registered tagged / x8 field, whose high bits are flags.
+        let mut flagged = false;
+        let (packed, tags, born, heap) = match from {
             Some(j) => {
                 let rb = table.blocks[j];
-                // `resolved_type_arguments` (a `ThinSlice` at +56): an empty list (length bits 0) is not a reference,
-                // though its data pointer may be the end of the list it was cut from, i.e. the next block's start.
-                let empty_slice = class_is(rb.class, "TypeAlloc<tsrs_checker::types::TypeReference>") && off == 56 && w >> 48 == 0;
+                if let Some(l) = &layouts[rb.class as usize] {
+                    let o = off as u32;
+                    if l.skip.binary_search(&o).is_ok() {
+                        return None;
+                    }
+                    if let Some(&(_, len)) = l.slices.iter().find(|s| s.0 == o) {
+                        if len as usize + 8 <= rb.size as usize && read(rb.start as usize + len as usize) == 0 {
+                            return None;
+                        }
+                    }
+                    if l.tagged.contains(&o) {
+                        flagged = true;
+                    }
+                    if l.thin.contains(&o) {
+                        if w & 1 != 0 {
+                            c = w & MASK48 & !1;
+                        } else if w >> 48 == 0 {
+                            return None;
+                        }
+                        flagged = true;
+                    }
+                    if let Some(&(_, mask)) = l.low_tag.iter().find(|x| x.0 == o) {
+                        c = w & MASK48 & !(mask as u64);
+                    }
+                    if let Some(&(_, modes)) = l.x8.iter().find(|x| x.0 == o) {
+                        if modes & (1 << (w >> 62)) == 0 {
+                            return None;
+                        }
+                        c = (w & MASK45) << 3;
+                        flagged = true;
+                    }
+                }
                 (
                     class_is(rb.class, "TypeMapper"),
                     class_is(rb.class, "TypeMapper") || class_is(rb.class, "InferenceContext"),
-                    padding_words(&classes[rb.class as usize]).contains(&off) || header_words(&classes[rb.class as usize]).contains(&off) || empty_slice,
                     Some(rb.seq),
                     is_heap(rb.class),
                 )
             }
-            None => (false, false, false, None, false),
+            None => (false, false, None, false),
         };
-        if padding {
-            return None;
-        }
         // An `Option<Vec<_>>` / `Option<String>` that is `None` keeps the capacity niche (2^63, or 2^63 + k for
         // nested options) in its first word, and its pointer and length words are uninitialized bytes (copied from
         // the stack): not references.
@@ -869,32 +944,17 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
                 return None;
             }
         }
-        let c = w & MASK48;
         if let Some(i) = table.lookup(c) {
             let b = table.blocks[i];
             let off_t = c - b.start;
             // Interior pointers: hash tables point at their control bytes (heap blocks), sub-slices into arena
             // lists (8-byte elements).
             let slice = matches!(&classes[b.class as usize], Class::Arena { ty, .. } if ty.starts_with('['));
-            // Blocks behind a word with a bit-0 tag (an intersection's `IntersectionRare`, a signature's
-            // `SignatureRare` with the no-predicate bit, a label's antecedent list, a long `ThinSlice`'s `&[T]` record).
-            let bit0 = off_t == 1
-                && (class_is(b.class, "IntersectionRare")
-                    || class_is(b.class, "SignatureRare")
-                    || class_is(b.class, "FlowList")
-                    || matches!(&classes[b.class as usize], Class::Arena { ty, .. } if ty.starts_with("&[")));
             let aimed = off_t == 0
                 || (tags && off_t < 8 && (class_is(b.class, "TypeMapper") || class_is(b.class, "InferenceContext") || class_is(b.class, "InferenceContextRare")))
-                || bit0
                 || is_heap(b.class)
                 || (slice && off_t % 8 == 0);
-            // A `ThinSlice` keeps the length of the list it points to in the top 16 bits: accept those bits only when
-            // they are that list's element count (4- to 16-byte elements), not stray bytes over a pointer.
-            let thin = slice && off_t == 0 && {
-                let len = w >> 48;
-                len != 0 && b.size as u64 % len == 0 && matches!(b.size as u64 / len, 4 | 8 | 12 | 16)
-            };
-            if aimed && (w >> 48 == 0 || packed || thin) {
+            if aimed && (w >> 48 == 0 || packed || flagged) {
                 match wf_seq.get(&i) {
                     None => return Some(i),
                     Some(&freed) if c & 0xffff != 0 && born.is_none_or(|b| b <= freed) => return Some(i),
@@ -1006,7 +1066,9 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             _ => None,
         }
     };
-    for &i in strong.keys().take(20) {
+    // `TSRS_CENSUS_CHAINS=N`: how many violations are printed with their referrer chain (default 20).
+    let chains: usize = std::env::var("TSRS_CENSUS_CHAINS").ok().and_then(|s| s.parse().ok()).unwrap_or(20);
+    for &i in strong.keys().take(chains) {
         let mut k = via[i];
         let mut n = 0;
         while k != u32::MAX && n < 12 {
@@ -1065,7 +1127,22 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     for (k, n) in rows.iter().take(25) {
         eprintln!("    violations {n:>8} from {k}");
     }
-    for (&i, r) in strong.iter().take(20) {
+    // By freed block's class and referrer field (class + offset): one row per violation class.
+    let mut by_edge: FxHashMap<String, u64> = FxHashMap::default();
+    for (&i, r) in strong.iter() {
+        let referrer = r.split(" (words").next().unwrap_or(r).split(" [").next().unwrap_or(r);
+        let referrer = match heap_frames(r) {
+            Some(f) => format!("{referrer} {{{}}}", f.join(" <- ")),
+            None => referrer.to_string(),
+        };
+        *by_edge.entry(format!("{}  <-  {referrer}", class_name(&classes[table.blocks[i].class as usize]))).or_default() += 1;
+    }
+    let mut rows: Vec<(String, u64)> = by_edge.into_iter().collect();
+    rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    for (k, n) in &rows {
+        eprintln!("    violation class {n:>6}: {k}");
+    }
+    for (&i, r) in strong.iter().take(chains) {
         let b = table.blocks[i];
         let mut r = r.clone();
         if let Some(f) = heap_frames(&r) {

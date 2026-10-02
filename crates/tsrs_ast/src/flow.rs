@@ -49,6 +49,12 @@ const _: () = assert!(std::mem::size_of::<FlowNode>() == 24);
 
 const FLOW_LINK_LIST: usize = 1;
 
+/// Census builds: the link word is an antecedent or a list tagged with bit 0 (`crate::census_layouts`).
+pub(crate) fn census_layout() {
+    let off = std::mem::offset_of!(FlowNode, link);
+    tsrs_core::census_layout(std::any::type_name::<FlowNode>(), &[tsrs_core::CensusField::LowTag { off, mask: FLOW_LINK_LIST as u8 }]);
+}
+
 impl FlowNode {
     pub fn new(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32) -> FlowNode {
         let link = antecedent.map_or(std::ptr::null(), |a| (a.get() as *const FlowNode).cast::<()>());
