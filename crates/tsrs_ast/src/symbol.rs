@@ -124,6 +124,10 @@ impl Symbol {
     pub fn declarations(&self) -> &'static [P<Node>] {
         self.declarations.get()
     }
+    /// Bytes of the members/exports tail, if the symbol has one (allocation census).
+    pub fn stats_tail_bytes(&self) -> usize {
+        if self.parent_or_tables.get().0 & SymbolParentWord::TABLES != 0 { std::mem::size_of::<SymbolTables>() } else { 0 }
+    }
     /// Go `symbol.Declarations = slices.Clone(declarations)`-like: stores a copy.
     #[inline]
     pub fn set_declarations(&self, declarations: &[P<Node>]) {

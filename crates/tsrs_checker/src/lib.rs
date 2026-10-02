@@ -23,6 +23,8 @@ pub(crate) use tsrs_pseudochecker::{new_pseudo_checker, PseudoChecker, PseudoObj
 
 // Data model (checker-foundation).
 pub mod checker;
+#[cfg(feature = "assignment-stats")]
+pub mod dupstats;
 pub mod evaluator;
 pub mod flow_types;
 pub mod inference_types;

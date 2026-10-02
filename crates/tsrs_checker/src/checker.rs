@@ -1028,6 +1028,12 @@ pub struct Checker {
     /// Instrumentation (feature `assignment-stats`): every type / symbol this checker created.
     #[cfg(feature = "assignment-stats")]
     pub stats_created: (Vec<P<Type>>, Vec<P<Symbol>>),
+    /// Instrumentation (feature `assignment-stats`): every signature this checker created.
+    #[cfg(feature = "assignment-stats")]
+    pub stats_signatures: Vec<P<Signature>>,
+    /// Instrumentation (feature `assignment-stats`): type / symbol / signature counts when initialization ended.
+    #[cfg(feature = "assignment-stats")]
+    pub stats_init: (u32, usize, usize),
     pub context_free_types: FxHashMap<P<Node>, P<Type>>,
     pub any_type: P<Type>,
     pub auto_type: P<Type>,
@@ -1385,6 +1391,10 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_member_stats: Default::default(),
         #[cfg(feature = "assignment-stats")]
         stats_created: Default::default(),
+        #[cfg(feature = "assignment-stats")]
+        stats_signatures: Default::default(),
+        #[cfg(feature = "assignment-stats")]
+        stats_init: Default::default(),
         context_free_types: FxHashMap::default(),
         any_type: dummy_type,
         auto_type: dummy_type,
@@ -1709,6 +1719,10 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         must_have_a_value_diagnostic: &diagnostics::The_type_returned_by_the_0_method_of_an_async_iterator_must_be_a_promise_for_a_type_with_a_value_property,
     });
     c.initialize_checker();
+    #[cfg(feature = "assignment-stats")]
+    {
+        c.stats_init = (c.type_count, c.stats_created.1.len(), c.stats_signatures.len());
+    }
     c
 }
 

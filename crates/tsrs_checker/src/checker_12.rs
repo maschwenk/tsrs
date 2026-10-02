@@ -2184,6 +2184,8 @@ impl Checker {
         sig.resolved_type_predicate.set(resolved_type_predicate);
         sig.min_argument_count.set(min_argument_count);
         sig.resolved_min_argument_count.set(-1);
+        #[cfg(feature = "assignment-stats")]
+        self.stats_signatures.push(sig);
         sig
     }
 

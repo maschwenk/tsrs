@@ -3,6 +3,8 @@ mod checker_program;
 mod checkerpool;
 #[cfg(feature = "checker")]
 mod checkerpool_stats;
+#[cfg(feature = "assignment-stats")]
+mod checkerpool_dupstats;
 pub mod diagnosticwriter;
 mod emitter;
 #[cfg(feature = "checker")]

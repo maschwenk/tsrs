@@ -68,6 +68,14 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
     }
 }
 
+#[cfg(feature = "assignment-stats")]
+impl<K: 'static, V: 'static> LinkStore<K, V> {
+    /// The keys' addresses (census, notes/mem-shared-base.md).
+    pub fn stats_keys(&self) -> Vec<u64> {
+        self.slots.iter().map(|slot| ({ slot.key }) as u64).collect()
+    }
+}
+
 impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
     /// Returns the links for `key`, creating them on first use.
     #[inline]
@@ -141,6 +149,24 @@ impl<V: 'static> IdLinkStore<V> {
     }
 }
 
+#[cfg(feature = "assignment-stats")]
+impl<V: 'static> IdLinkStore<V> {
+    /// The ids that have links (census, notes/mem-shared-base.md).
+    pub fn stats_keys(&self) -> Vec<u64> {
+        let mut keys: Vec<u64> = self.wide_slots.keys().copied().collect();
+        for (page_index, page) in self.pages.iter().enumerate() {
+            if let Some(page) = page {
+                for (i, &slot) in page.iter().enumerate() {
+                    if slot != 0 {
+                        keys.push(((page_index << ID_PAGE_SHIFT) + i) as u64);
+                    }
+                }
+            }
+        }
+        keys
+    }
+}
+
 impl<V: Default + 'static> IdLinkStore<V> {
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
@@ -206,6 +232,13 @@ impl<V: 'static> NodeLinkStore<V> {
     }
 }
 
+#[cfg(feature = "assignment-stats")]
+impl<V: 'static> NodeLinkStore<V> {
+    pub fn stats_keys(&self) -> Vec<u64> {
+        self.store.stats_keys()
+    }
+}
+
 /// Go `symbolArenaLinkStore`: keyed by the symbol id, so every access assigns the symbol its id
 /// (`ast.GetSymbolId`) the way Go does. Symbol ids are observable (the internal names of unique-symbol-keyed
 /// properties embed them, and the node builder counts their length toward truncation), so the assignment order
@@ -237,5 +270,12 @@ impl<V: 'static> SymbolArenaLinkStore<V> {
     #[inline]
     pub fn has(&self, symbol: P<Symbol>) -> bool {
         self.store.has(ast::get_symbol_id(symbol).0)
+    }
+}
+
+#[cfg(feature = "assignment-stats")]
+impl<V: 'static> SymbolArenaLinkStore<V> {
+    pub fn stats_keys(&self) -> Vec<u64> {
+        self.store.stats_keys()
     }
 }

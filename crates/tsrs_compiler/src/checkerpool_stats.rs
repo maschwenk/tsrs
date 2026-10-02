@@ -93,6 +93,10 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
         }
         return out;
     }
+    #[cfg(feature = "assignment-stats")]
+    if std::env::var("TSRS_ASSIGNMENT_STATS").is_ok_and(|v| v == "dup") {
+        return crate::checkerpool_dupstats::report(program, pool, &project_dir);
+    }
     let categories: Vec<Category> = files.iter().map(|&f| category(program, f, &project_dir)).collect();
 
     // work[c][file] = linked nodes + linked symbols
@@ -239,7 +243,7 @@ fn created_by_file(program: &'static Program, pool: &crate::checkerpool::checker
         let mut symbols = vec![0u64; files.len()];
         let (mut no_type_file, mut no_symbol_file) = (0, 0);
         for &t in &c.stats_created.0 {
-            let symbol = t.symbol.get().or_else(|| t.alias.get().and_then(|a| a.symbol.get()));
+            let symbol = t.symbol().or_else(|| t.alias().and_then(|a| a.symbol.get()));
             match file_of(symbol) {
                 Some(i) => types[i] += 1,
                 None => no_type_file += 1,

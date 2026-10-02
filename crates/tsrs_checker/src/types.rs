@@ -455,6 +455,11 @@ impl ValueSymbolLinks {
             self.tail_for_write().write_type.set(t);
         }
     }
+    /// Bytes of the record's tail, if it has one (census).
+    #[cfg(feature = "assignment-stats")]
+    pub fn stats_tail_bytes(&self) -> usize {
+        if self.mode() == LinksMode::Tail { std::mem::size_of::<ValueSymbolLinksTail>() } else { 0 }
+    }
     #[inline]
     pub fn function_or_constructor_checked(&self) -> bool {
         self.mode() == LinksMode::Tail && self.tail().function_or_constructor_checked.get()
@@ -1283,6 +1288,36 @@ impl Type {
     }
 }
 
+#[cfg(feature = "assignment-stats")]
+impl Type {
+    /// Bytes of the type's arena allocation (header + data struct), for notes/mem-shared-base.md's census.
+    pub fn stats_alloc_bytes(&self) -> usize {
+        use std::mem::size_of;
+        match self.data_tag {
+            TypeDataTag::Intrinsic => size_of::<TypeAlloc<IntrinsicType>>(),
+            TypeDataTag::Literal => size_of::<TypeAlloc<LiteralType>>(),
+            TypeDataTag::UniqueESSymbol => size_of::<TypeAlloc<UniqueESSymbolType>>(),
+            TypeDataTag::Object => size_of::<TypeAlloc<ObjectType>>(),
+            TypeDataTag::TypeReference => size_of::<TypeAlloc<TypeReference>>(),
+            TypeDataTag::Interface => size_of::<TypeAlloc<InterfaceType>>(),
+            TypeDataTag::Tuple => size_of::<TypeAlloc<TupleType>>(),
+            TypeDataTag::InstantiationExpression => size_of::<TypeAlloc<InstantiationExpressionType>>(),
+            TypeDataTag::Mapped => size_of::<TypeAlloc<MappedType>>(),
+            TypeDataTag::ReverseMapped => size_of::<TypeAlloc<ReverseMappedType>>(),
+            TypeDataTag::EvolvingArray => size_of::<TypeAlloc<EvolvingArrayType>>(),
+            TypeDataTag::Union => size_of::<TypeAlloc<UnionType>>(),
+            TypeDataTag::Intersection => size_of::<TypeAlloc<IntersectionType>>(),
+            TypeDataTag::TypeParameter => size_of::<TypeAlloc<TypeParameter>>(),
+            TypeDataTag::Index => size_of::<TypeAlloc<IndexType>>(),
+            TypeDataTag::IndexedAccess => size_of::<TypeAlloc<IndexedAccessType>>(),
+            TypeDataTag::TemplateLiteral => size_of::<TypeAlloc<TemplateLiteralType>>(),
+            TypeDataTag::StringMapping => size_of::<TypeAlloc<StringMappingType>>(),
+            TypeDataTag::Substitution => size_of::<TypeAlloc<SubstitutionType>>(),
+            TypeDataTag::Conditional => size_of::<TypeAlloc<ConditionalType>>(),
+        }
+    }
+}
+
 impl Type {
     pub fn id(&self) -> TypeId {
         self.id
@@ -1877,6 +1912,14 @@ impl StructuredType {
     }
     pub fn call_signatures(&self) -> &'static [P<Signature>] {
         &self.signatures()[..self.call_signature_count() as usize]
+    }
+    /// Bytes of the resolved-members record and what only it holds (slices, member table), for the census.
+    #[cfg(feature = "assignment-stats")]
+    pub fn stats_resolved_bytes(&self) -> usize {
+        self.resolved.get().map_or(0, |r| {
+            48 + 8 * (r.properties.get().len() + r.signatures.get().len() + r.index_infos.get().len())
+                + r.members.get().map_or(0, |m| 24 + 8 * m.len())
+        })
     }
     pub fn construct_signatures(&self) -> &'static [P<Signature>] {
         &self.signatures()[self.call_signature_count() as usize..]
