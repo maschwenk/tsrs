@@ -44,8 +44,17 @@ static SOURCE_TEXT_COUNT: AtomicU32 = AtomicU32::new(0);
 /// Registers a file's text for compact identifiers; `NO_SOURCE_TEXT` once the table is full (identifiers of later
 /// files then store their text).
 pub fn register_source_text(text: &'static str) -> u32 {
-    let Ok(index) = SOURCE_TEXT_COUNT.fetch_update(Relaxed, Relaxed, |n| ((n as usize) < SOURCE_TEXTS_CAP).then_some(n + 1)) else {
-        return NO_SOURCE_TEXT;
+    // A compare-exchange loop rather than `fetch_update`: that method is deprecated in favor of `try_update` on
+    // newer toolchains, and the replacement does not exist on older ones.
+    let mut n = SOURCE_TEXT_COUNT.load(Relaxed);
+    let index = loop {
+        if n as usize >= SOURCE_TEXTS_CAP {
+            return NO_SOURCE_TEXT;
+        }
+        match SOURCE_TEXT_COUNT.compare_exchange_weak(n, n + 1, Relaxed, Relaxed) {
+            Ok(_) => break n,
+            Err(current) => n = current,
+        }
     };
     let slot = &SOURCE_TEXTS[index as usize];
     slot.ptr.store(text.as_ptr().cast_mut(), Relaxed);
