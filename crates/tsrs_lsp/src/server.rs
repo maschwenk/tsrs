@@ -1964,7 +1964,7 @@ impl Server {
 
     // server.go:2200
     fn handle_code_action(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::CodeActionParams) -> Result<lsproto::CodeActionResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentCodeAction))
+        ls.provide_code_actions(ctx, &params)
     }
 
     // server.go:2204

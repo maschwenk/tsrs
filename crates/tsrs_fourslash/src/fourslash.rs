@@ -1353,7 +1353,71 @@ impl FourslashTest {
         expected_kind: lsproto::CodeActionKind,
         preferences: Option<lsutil::UserPreferences>,
     ) {
-        Self::server_unavailable(t, "feature not ported: code actions (VerifyOrganizeImportsWithRequestKind)")
+        self.verify_organize_imports_worker(t, expected_content, requested_kind, expected_kind, preferences);
+    }
+
+    // fourslash.go:2151
+    fn verify_organize_imports_worker(
+        &mut self,
+        t: &T,
+        expected_content: &str,
+        requested_kind: lsproto::CodeActionKind,
+        expected_kind: lsproto::CodeActionKind,
+        preferences: Option<lsutil::UserPreferences>,
+    ) {
+        t.helper();
+
+        let reset = preferences.map(|preferences| self.configure_with_reset(t, preferences));
+
+        let active = self.active_filename.clone();
+        let script = self.get_script_info(&active);
+        let params = lsproto::CodeActionParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&active) },
+            range: lsproto::Range {
+                start: lsproto::Position { line: 0, character: 0 },
+                end: self.converters.position_to_line_and_character(&script, script.content.len() as TextPos),
+            },
+            context: lsproto::CodeActionContext { only: Some(vec![requested_kind]), ..Default::default() },
+            ..Default::default()
+        };
+
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_CODE_ACTION_INFO, params);
+
+        let Some(items) = result.command_or_code_action_array.filter(|a| !a.is_empty()) else {
+            t.fatal("No organize imports code action found");
+        };
+
+        let mut organize_action: Option<lsproto::CodeAction> = None;
+        for item in items {
+            if let Some(code_action) = item.code_action {
+                if code_action.kind == Some(expected_kind) {
+                    organize_action = Some(code_action);
+                    break;
+                }
+            }
+        }
+
+        let Some(organize_action) = organize_action else {
+            t.fatal("No organize imports code action found");
+        };
+
+        let expected_uri = lsconv::file_name_to_document_uri(&active);
+        if let Some(changes) = organize_action.edit.and_then(|e| e.changes) {
+            for (uri, edits) in changes {
+                if uri != expected_uri {
+                    t.fatal(&format!("Organize imports changed unexpected file: {} (expected {})", uri, expected_uri));
+                }
+                self.apply_text_edits(t, edits);
+            }
+        }
+
+        let actual_content = self.get_script_info(&active).content;
+        if actual_content != expected_content {
+            t.fatal(&format!("Organize imports result doesn't match.\nExpected:\n{}\n\nActual:\n{}", expected_content, actual_content));
+        }
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
     }
 
     // fourslash.go:2241
