@@ -1344,3 +1344,25 @@ fn has_comment(kind: Kind) -> bool {
             | Kind::JSDocImportTag
     )
 }
+
+// Used by the checker's language-service API (services.go).
+// utilities.go:3017
+pub fn is_call_like_or_function_like_expression(node: P<Node>) -> bool {
+    is_call_like_expression(node) || is_function_expression_or_arrow_function(node)
+}
+
+// utilities.go:3063
+pub fn has_type_arguments(node: P<Node>) -> bool {
+    matches!(
+        node.kind(),
+        Kind::CallExpression
+            | Kind::NewExpression
+            | Kind::TaggedTemplateExpression
+            | Kind::TypeReference
+            | Kind::ExpressionWithTypeArguments
+            | Kind::ImportType
+            | Kind::TypeQuery
+            | Kind::JsxOpeningElement
+            | Kind::JsxSelfClosingElement
+    )
+}
