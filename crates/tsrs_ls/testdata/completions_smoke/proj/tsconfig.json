@@ -1,0 +1,1 @@
+{"compilerOptions":{"strict":true,"target":"es2015","lib":["es2015"],"jsx":"preserve","allowJs":true,"checkJs":false,"types":[]},"files":["index.ts","other.ts","sub/deep.ts","app.tsx","plain.js","docsnip.ts","jsx2.tsx"]}

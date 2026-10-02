@@ -5,7 +5,7 @@ use tsrs_core::stringutil;
 use tsrs_lsproto as lsproto;
 
 use crate::go::{self, Any};
-use crate::ls_shim as ls;
+use tsrs_ls as ls;
 
 pub use super::util_gen::*;
 

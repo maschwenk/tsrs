@@ -6,7 +6,6 @@ pub mod contentmapper;
 pub mod contentmappertest;
 pub mod fourslash;
 pub mod go;
-pub mod ls_shim;
 pub mod runner;
 pub mod semantictokens;
 pub mod statebaseline;
