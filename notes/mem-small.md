@@ -163,3 +163,31 @@ before.
 
 Gates: suite trees identical to step 3 in all three modes, also with a dev build and `TSRS_CHECK_SHARED=1`;
 private-monorepo output and counters identical in all four runs.
+
+## Result
+
+Interleaved, 3 rounds each, base = 493358a (start of this pass), final = 509c052:
+
+| run | base peak GiB | final peak GiB | base instructions | final instructions |
+| --- | --- | --- | --- | --- |
+| default, single | 5.910-5.914 (5.914) | 5.601-5.607 (5.606, -0.308, -5.2%) | 304.4-307.1 G | 307.3-308.1 G (+1.1%) |
+| default, 4 checkers | 7.906-7.910 (7.909) | 7.525-7.535 (7.526, -0.383, -4.8%) | 415.0-416.9 G | 417.8-418.6 G (+0.8%) |
+
+Per step (single / 4 checkers, GiB): Symbol tail word -0.08 / -0.14, compact identifiers -0.07 / -0.05, value
+declaration bit -0.09 / -0.11, type header -0.07 / -0.10. Counters unchanged after every step (default 13,212,573 /
+9,945,857 / 46,135,905 single and 17,187,182 / 14,365,514 / 79,522,288 on 4 checkers; opt-out 26,900,867 /
+9,955,103 / 46,192,430 and 40,743,802 / 16,630,033 / 90,406,448). The instruction cost is mostly the identifier text
+lookup (+0.3%) and the value declaration read (+0.2%).
+
+## Not done
+
+- `Symbol` 40 -> 32 bytes: the 4-byte id is written lazily by any checker (atomic), the flag words are public
+  `OwnedCell`s that call sites assign whole, and the declarations need a length; a packed 8-byte declarations
+  slice still leaves 36 bytes.
+- `TypeMapper` (255 MB), type lists (217 MB), value-symbol links (24 bytes per record): their size is already
+  minimal for what they hold; their count is checker semantics.
+- Smaller layout candidates, each <= ~20 MB: `NodeList` 24 -> 20 bytes (4-aligned slice), the rarely set
+  `question_dot_token` / `type_arguments` of call and property access expressions (~10 MB each), `Signature` rare
+  fields (13 MB at most).
+- The census strong mark's address choice (0x7c00_0000_0000) lets a pair of `u32` fields near 0x7c00 look like an
+  arena pointer (step 2's false positive); a base whose bytes 4-5 are less likely in `u32` arrays would avoid it.
