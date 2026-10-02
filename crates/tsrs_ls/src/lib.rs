@@ -12,6 +12,8 @@ mod diagnostics;
 mod displaypartswriter;
 mod documenthighlights;
 mod findallreferences;
+#[cfg(test)]
+mod findallreferences_test;
 pub mod format;
 mod host;
 mod hover;
@@ -22,6 +24,8 @@ mod languageservice;
 #[cfg(test)]
 mod ls_smoke_test;
 mod lsformat;
+#[cfg(test)]
+mod refs_smoke_test;
 mod rename;
 pub mod lsconv;
 pub mod lsutil;
