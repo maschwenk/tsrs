@@ -10,6 +10,7 @@ use tsrs_lsproto as lsproto;
 use tsrs_vfs::vfsmatch;
 
 use crate::autoimport::{self, ProjectID, RegistryExt as _};
+use crate::completions::err_needs_auto_imports;
 use crate::host::Host;
 use crate::lsconv::Converters;
 use crate::lsutil::{FormatCodeSettings, UserPreferences};
@@ -169,16 +170,4 @@ impl sourcemap::Host for LanguageService {
     fn read_file(&self, file_name: &str) -> Option<String> {
         LanguageService::read_file(self, file_name)
     }
-}
-
-// completions.go:35 `ErrNeedsAutoImports` (completions are phase 3; the sentinel lives here until then). Go
-// compares with `errors.Is`; `is_err_needs_auto_imports` compares the message.
-pub const ERR_NEEDS_AUTO_IMPORTS: &str = "completion list needs auto imports";
-
-pub fn err_needs_auto_imports() -> lsproto::Error {
-    lsproto::Error::new(ERR_NEEDS_AUTO_IMPORTS)
-}
-
-pub fn is_err_needs_auto_imports(err: &lsproto::Error) -> bool {
-    err.message == ERR_NEEDS_AUTO_IMPORTS
 }

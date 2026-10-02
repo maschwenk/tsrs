@@ -1366,3 +1366,42 @@ pub fn has_type_arguments(node: P<Node>) -> bool {
             | Kind::JsxSelfClosingElement
     )
 }
+
+// Used by tsrs_ls (lscore).
+// utilities.go:1240
+pub fn is_deprecated_declaration(declaration: P<Node>) -> bool {
+    is_deprecated_declaration_with_cached_flags(declaration, get_combined_node_flags(declaration))
+}
+
+// utilities.go:3043
+pub fn is_let(node: P<Node>) -> bool {
+    get_combined_node_flags(node) & NodeFlags::BlockScoped == NodeFlags::Let
+}
+
+// utilities.go:3086
+pub fn has_initializer(node: P<Node>) -> bool {
+    match node.kind() {
+        Kind::VariableDeclaration
+        | Kind::Parameter
+        | Kind::BindingElement
+        | Kind::PropertyDeclaration
+        | Kind::PropertyAssignment
+        | Kind::EnumMember
+        | Kind::ForStatement
+        | Kind::ForInStatement
+        | Kind::ForOfStatement
+        | Kind::JsxAttribute => node.initializer().is_some(),
+        _ => false,
+    }
+}
+
+// utilities.go:3274
+pub fn is_string_text_containing_node(node: P<Node>) -> bool {
+    node.kind() == Kind::StringLiteral || is_template_literal_kind(node.kind())
+}
+
+// utilities.go:3646
+pub fn is_right_side_of_property_access(node: P<Node>) -> bool {
+    let parent = node.parent().unwrap();
+    parent.kind() == Kind::PropertyAccessExpression && parent.name() == Some(node)
+}
