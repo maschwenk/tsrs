@@ -23,6 +23,27 @@ pub(crate) fn run(program: &'static Program, roots: &[usize]) {
     }
 }
 
+// Language server (`tsrs --lsp`, docs/LSP.md memory regions): at exit, the census marks from the server and its
+// session (and the main thread's stack and the data segments). Freed regions (old file versions, checkers, programs)
+// were recorded as would-free instead of released, so a strong reference into one is a region-lifetime bug. With
+// `TSRS_CENSUS_VERIFY=1`, the programs of the session's current snapshot are also walked precisely.
+pub(crate) fn run_lsp(server: &std::sync::Arc<tsrs_lsp::Server>) {
+    if !census::active() {
+        return;
+    }
+    let session = server.session();
+    let snapshot = session.snapshot();
+    let programs: Vec<&'static Program> = snapshot.project_collection.projects().iter().filter_map(|p| p.program).collect();
+    let roots = [std::sync::Arc::as_ptr(server) as usize, std::sync::Arc::as_ptr(session) as usize, std::sync::Arc::as_ptr(&snapshot) as usize];
+    eprintln!("census (lsp): {} programs in the current snapshot", programs.len());
+    census::run(&roots);
+    if std::env::var_os("TSRS_CENSUS_VERIFY").is_some_and(|v| v == "1") {
+        for program in programs {
+            verify(program);
+        }
+    }
+}
+
 #[derive(Default)]
 struct Tally {
     checked: u64,

@@ -68,7 +68,10 @@ pub fn run_lsp(args: &[String]) -> i32 {
         set_parent_process_id: new_parent_process_watchdog(&ctx, &stop, client_process_id),
     });
 
-    if let Err(err) = s.run(&ctx) {
+    let result = s.run(&ctx);
+    #[cfg(feature = "alloc-profile")]
+    crate::census::run_lsp(&s);
+    if let Err(err) = result {
         eprintln!("{}", err);
         return 1;
     }

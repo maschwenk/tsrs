@@ -62,12 +62,13 @@ pub fn new_parse_cache(options: RefCountCacheOptions) -> ParseCache {
         let text = fh.content();
         let region = Region::new(file_region_first_chunk(text.len()));
         let file = {
-            let _scope = if std::env::var_os("TSRS_NOFR").is_some() { None } else { Some(region.enter()) };
+            let _scope = region.enter();
             let file = tsrs_parser::parse_source_file(key.source_file_parse_options.clone(), text, key.script_kind);
             file.hash.set(fh.hash());
             tsrs_binder::bind_source_file(file);
             file
         };
+        region.trim();
         if std::env::var_os("TSRS_REGION_SIZES").is_some() {
             eprintln!("filesize {} {} {} {}", text.len(), region.used_bytes(), region.allocated_bytes(), region.drop_entries());
         }
@@ -88,10 +89,11 @@ pub fn new_parse_cache(options: RefCountCacheOptions) -> ParseCache {
     cache
 }
 
-// The text is copied into the region; text, AST and binder data take about 4-8 times the text (measured on the
-// private monorepo: 7.8x on average). Regions grow by a quarter when this is exceeded.
+// The text is copied into the region; text, AST and binder data take about 8 times the text (measured on the
+// private monorepo: 7.8x on average). Regions grow by a quarter when this is exceeded, and the region is trimmed to
+// what it used after binding.
 fn file_region_first_chunk(text_len: usize) -> usize {
-    text_len.saturating_mul(4).saturating_add(4 << 10).min(64 << 20)
+    text_len.saturating_mul(10).saturating_add(4 << 10).min(64 << 20)
 }
 
 // Content mappers are not ported (docs/LSP.md): the canonical/supplemental bundle type is reduced to the

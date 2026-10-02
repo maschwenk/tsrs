@@ -203,6 +203,11 @@ impl checkerPool {
         }
         drop(checkers);
         let regions = std::mem::take(&mut *self.regions.lock().unwrap());
+        if std::env::var_os("TSRS_REGION_SIZES").is_some() {
+            for r in regions.values() {
+                eprintln!("checkerregion used {} cap {} drops {}", r.used_bytes(), r.allocated_bytes(), r.drop_entries());
+            }
+        }
         drop(regions);
     }
 

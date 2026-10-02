@@ -27,7 +27,7 @@ use std::alloc::Layout;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, RwLock, Weak};
 
 const FIRST_CHUNK: usize = 1 << 20;
@@ -42,8 +42,12 @@ const CLASSES: usize = MAX_FREE_SIZE / 8 + 1;
 pub const POISON: u8 = 0xA5;
 
 pub struct Arena {
-    /// Bump finger in the current chunk (allocation moves it down towards `start`).
+    /// Bump finger in the current chunk (allocation moves it down towards `start`; in a region, up towards `end`).
     ptr: Cell<*mut u8>,
+    /// Regions bump upwards: the allocator that hands out a chunk writes its first word (mimalloc's free list), so
+    /// the start of every chunk is resident anyway, and the unused part of a region's last chunk (most regions are
+    /// small, one per parsed file) should be the untouched end.
+    up: bool,
     start: Cell<*mut u8>,
     end: Cell<*mut u8>,
     /// Older chunks: (start, end, finger when the chunk was retired).
@@ -56,6 +60,8 @@ pub struct Arena {
     region: Option<Weak<RegionInner>>,
     /// Regions only: values that need drop, dropped when the region is freed.
     drops: RefCell<Vec<DropEntry>>,
+    /// Regions only: the slab each chunk was carved from, in chunk order (retired chunks, then the current one).
+    slabs: RefCell<Vec<*const Slab>>,
 }
 
 struct DropEntry {
@@ -87,6 +93,7 @@ impl Arena {
     fn with_first_chunk(first_chunk: usize, region: Option<Weak<RegionInner>>) -> Arena {
         let a = Arena {
             ptr: Cell::new(std::ptr::null_mut()),
+            up: region.is_some(),
             start: Cell::new(std::ptr::null_mut()),
             end: Cell::new(std::ptr::null_mut()),
             retired: RefCell::new(Vec::new()),
@@ -95,6 +102,7 @@ impl Arena {
             free: [const { Cell::new(std::ptr::null_mut()) }; CLASSES],
             region,
             drops: RefCell::new(Vec::new()),
+            slabs: RefCell::new(Vec::new()),
         };
         a.new_chunk(first_chunk);
         a
@@ -122,6 +130,9 @@ impl Arena {
         if layout.size() == 0 {
             return NonNull::new(std::ptr::without_provenance_mut(layout.align())).unwrap();
         }
+        if self.up {
+            return self.alloc_layout_up(layout);
+        }
         let ptr = self.ptr.get();
         let new = ptr.addr().wrapping_sub(layout.size()) & !(layout.align() - 1);
         if new >= self.start.get().addr() && new <= ptr.addr() {
@@ -129,6 +140,19 @@ impl Arena {
             self.ptr.set(p);
             // SAFETY: `new` lies inside the current chunk (at or above `start`), which is never null.
             return unsafe { NonNull::new_unchecked(p) };
+        }
+        self.alloc_layout_slow(layout)
+    }
+
+    #[inline(always)]
+    fn alloc_layout_up(&self, layout: Layout) -> NonNull<u8> {
+        let ptr = self.ptr.get();
+        let aligned = (ptr.addr() + (layout.align() - 1)) & !(layout.align() - 1);
+        let next = aligned.wrapping_add(layout.size());
+        if next <= self.end.get().addr() && next >= aligned {
+            self.ptr.set(ptr.with_addr(next));
+            // SAFETY: `aligned` lies inside the current chunk, which is never null.
+            return unsafe { NonNull::new_unchecked(ptr.with_addr(aligned)) };
         }
         self.alloc_layout_slow(layout)
     }
@@ -142,6 +166,9 @@ impl Arena {
         // and the unused tail of a doubled chunk would dominate their footprint.
         let next = if self.is_region() { (self.capacity.get() / 4).max(PAGE) } else { prev * 2 };
         self.new_chunk(next.max(need));
+        if self.up {
+            return self.alloc_layout_up(layout);
+        }
         let ptr = self.ptr.get();
         let new = (ptr.addr() - layout.size()) & !(layout.align() - 1);
         debug_assert!(new >= self.start.get().addr());
@@ -152,16 +179,21 @@ impl Arena {
     }
 
     fn new_chunk(&self, size: usize) {
-        let size = size.div_ceil(PAGE) * PAGE;
-        let layout = Layout::from_size_align(size, CHUNK_ALIGN).expect("arena chunk layout");
-        #[cfg(feature = "alloc-profile")]
-        let base = census_chunk(size);
-        #[cfg(not(feature = "alloc-profile"))]
-        // SAFETY: non-zero size.
-        let base = unsafe { std::alloc::alloc(layout) };
-        if base.is_null() {
-            std::alloc::handle_alloc_error(layout);
-        }
+        let base = if self.up {
+            let size = size.next_multiple_of(CHUNK_ALIGN);
+            let (base, slab) = slab_carve(size);
+            self.slabs.borrow_mut().push(slab);
+            self.new_chunk_at(base, size);
+            return;
+        } else {
+            let size = size.div_ceil(PAGE) * PAGE;
+            let layout = Layout::from_size_align(size, CHUNK_ALIGN).expect("arena chunk layout");
+            (os_chunk(layout), size)
+        };
+        self.new_chunk_at(base.0, base.1);
+    }
+
+    fn new_chunk_at(&self, base: *mut u8, size: usize) {
         // Blocks given back by address (`free_block`) are written through this provenance.
         let _ = base.expose_provenance();
         if !self.start.get().is_null() {
@@ -170,10 +202,28 @@ impl Arena {
         self.start.set(base);
         // SAFETY: one past the end of the allocation.
         self.end.set(unsafe { base.add(size) });
-        self.ptr.set(self.end.get());
+        self.ptr.set(if self.up { base } else { self.end.get() });
         self.capacity.set(self.capacity.get() + size);
         if let Some(region) = &self.region {
             REGISTRY.write().unwrap().insert(base.addr(), (base.addr() + size, region.clone()));
+        }
+    }
+
+    /// Region only: gives the unused end of the current chunk back to the slab it was carved from, if it was the
+    /// last carve on this thread (a file region right after parse and bind).
+    fn trim(&self) {
+        let (start, end, ptr) = (self.start.get(), self.end.get(), self.ptr.get());
+        let new_end = ptr.addr().next_multiple_of(CHUNK_ALIGN).max(start.addr() + CHUNK_ALIGN);
+        let Some(&slab) = self.slabs.borrow().last() else {
+            return;
+        };
+        if new_end >= end.addr() || !slab_trim(slab, end.addr(), new_end) {
+            return;
+        }
+        self.end.set(end.with_addr(new_end));
+        self.capacity.set(self.capacity.get() - (end.addr() - new_end));
+        if let Some(region) = &self.region {
+            REGISTRY.write().unwrap().insert(start.addr(), (new_end, region.clone()));
         }
     }
 
@@ -238,6 +288,11 @@ impl Arena {
 
     /// The used part of every chunk, (start, len).
     pub(crate) fn used_ranges(&self) -> Vec<(usize, usize)> {
+        if self.up {
+            let mut out = vec![(self.start.get().addr(), self.ptr.get().addr() - self.start.get().addr())];
+            out.extend(self.retired.borrow().iter().map(|&(start, _, finger)| (start, finger - start)));
+            return out;
+        }
         let mut out = vec![(self.ptr.get().addr(), self.end.get().addr() - self.ptr.get().addr())];
         out.extend(self.retired.borrow().iter().map(|&(_, end, finger)| (finger, end - finger)));
         out
@@ -289,13 +344,17 @@ impl Arena {
         }
     }
 
-    /// The range allocated since `cp` when it can be discarded: same chunk and no free or pin since.
+    /// The range allocated since `cp` (lowest address, length) when it can be discarded: same chunk and no free or
+    /// pin since.
     #[inline]
     fn rewindable(&self, cp: &Checkpoint) -> Option<(*mut u8, usize)> {
         if cp.start != self.start.get() || cp.epoch != self.epoch.get() {
             return None;
         }
         let now = self.ptr.get();
+        if self.up {
+            return Some((cp.ptr, now.addr() - cp.ptr.addr()));
+        }
         Some((now, cp.ptr.addr() - now.addr()))
     }
 }
@@ -322,6 +381,96 @@ fn census_chunk(size: usize) -> *mut u8 {
         return std::ptr::null_mut();
     }
     p.cast()
+}
+
+/// A chunk for a thread's arena.
+fn os_chunk(layout: Layout) -> *mut u8 {
+    #[cfg(feature = "alloc-profile")]
+    let base = census_chunk(layout.size());
+    #[cfg(not(feature = "alloc-profile"))]
+    // SAFETY: non-zero size.
+    let base = unsafe { std::alloc::alloc(layout) };
+    if base.is_null() {
+        std::alloc::handle_alloc_error(layout);
+    }
+    base
+}
+
+/// Region chunks are carved from per-thread slabs, packed back to back: one region per parsed file means tens of
+/// thousands of small regions, and a separate allocation per chunk costs a partly used page at each end (the
+/// allocator writes the first word of the next block). A file region's chunk is trimmed to what parse and bind used
+/// (`Region::trim`). A slab is released when every chunk carved from it is freed and it is no longer the thread's
+/// current slab; large chunks get a slab of their own.
+struct Slab {
+    base: *mut u8,
+    size: usize,
+    /// Chunks carved and not yet released, plus one while the slab is a thread's current slab.
+    live: AtomicUsize,
+}
+
+const SLAB_SIZE: usize = 1 << 20;
+
+thread_local! {
+    /// The thread's current slab and its bump position (upwards).
+    static SLAB: Cell<(*const Slab, usize)> = const { Cell::new((std::ptr::null(), 0)) };
+}
+
+fn new_slab(size: usize, live: usize) -> *const Slab {
+    let size = size.div_ceil(PAGE) * PAGE;
+    let base = os_chunk(Layout::from_size_align(size, CHUNK_ALIGN).expect("arena slab layout"));
+    Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live) }))
+}
+
+fn slab_carve(size: usize) -> (*mut u8, *const Slab) {
+    if size > SLAB_SIZE / 4 {
+        let slab = new_slab(size, 1);
+        // SAFETY: just made.
+        return (unsafe { (*slab).base }, slab);
+    }
+    let (mut cur, mut bump) = SLAB.with(|s| s.get());
+    // SAFETY: the current slab is kept alive by the thread's reference.
+    if cur.is_null() || bump + size > unsafe { (*cur).base.addr() + (*cur).size } {
+        if !cur.is_null() {
+            slab_release(cur);
+        }
+        cur = new_slab(SLAB_SIZE, 1);
+        // SAFETY: just made.
+        bump = unsafe { (*cur).base.addr() };
+    }
+    // SAFETY: as above.
+    let slab = unsafe { &*cur };
+    slab.live.fetch_add(1, Ordering::Relaxed);
+    SLAB.with(|s| s.set((cur, bump + size)));
+    (slab.base.with_addr(bump), cur)
+}
+
+/// Moves the thread's slab position back from `end` to `new_end` if the chunk ending at `end` was its last carve.
+fn slab_trim(slab: *const Slab, end: usize, new_end: usize) -> bool {
+    SLAB.with(|s| {
+        let (cur, bump) = s.get();
+        if cur == slab && bump == end {
+            s.set((cur, new_end));
+            true
+        } else {
+            false
+        }
+    })
+}
+
+fn slab_release(slab: *const Slab) {
+    // SAFETY: the caller holds one of the slab's references.
+    let s = unsafe { &*slab };
+    if s.live.fetch_sub(1, Ordering::AcqRel) != 1 {
+        return;
+    }
+    // Profile builds map slabs with `mmap` (`census_chunk`) and keep them.
+    #[cfg(not(feature = "alloc-profile"))]
+    // SAFETY: allocated by `new_slab` with this layout; every chunk carved from it was released.
+    unsafe {
+        std::alloc::dealloc(s.base, Layout::from_size_align(s.size, CHUNK_ALIGN).expect("arena slab layout"))
+    };
+    // SAFETY: made by `Box::into_raw` in `new_slab`; this was the last reference.
+    drop(unsafe { Box::from_raw(slab as *mut Slab) });
 }
 
 /// Census only: clears `N` bytes of the stack below the caller. The frames that just used the freed or rewound
@@ -574,6 +723,13 @@ impl Region {
         self.0.arena.capacity()
     }
 
+    /// Gives the unused end of the region's current chunk back (call on the thread that last allocated in it, right
+    /// after a phase that will not allocate much more, such as parsing and binding a file).
+    pub fn trim(&self) {
+        let _scope = self.enter();
+        self.0.arena.trim();
+    }
+
     /// Bytes in use in the region's chunks (call while no other thread has the region entered).
     pub fn used_bytes(&self) -> usize {
         self.0.arena.used_ranges().iter().map(|&(_, len)| len).sum()
@@ -687,12 +843,9 @@ impl Drop for RegionInner {
             }
             return;
         }
-        // Profile builds map chunks with `mmap` (`census_chunk`) and keep them.
-        #[cfg(not(feature = "alloc-profile"))]
-        for (start, size) in chunks {
-            let layout = Layout::from_size_align(size, CHUNK_ALIGN).expect("arena chunk layout");
-            // SAFETY: allocated by `new_chunk` with this layout; nothing points into it any more.
-            unsafe { std::alloc::dealloc(std::ptr::with_exposed_provenance_mut::<u8>(start), layout) };
+        drop(chunks);
+        for &slab in arena.slabs.borrow().iter() {
+            slab_release(slab);
         }
     }
 }
@@ -804,5 +957,28 @@ mod tests {
         drop(region);
         // The rewound value lost its entry (not dropped, like a thread arena); `c` and `d` were dropped.
         assert_eq!(Rc::strong_count(&counter), 2);
+    }
+
+    #[test]
+    fn small_regions_share_slabs_and_trim() {
+        use super::Region;
+        let a = Region::new(64 << 10);
+        let x = {
+            let _s = a.enter();
+            P::new([7u64; 4])
+        };
+        a.trim();
+        assert!(a.allocated_bytes() < 1024);
+        let b = Region::new(64 << 10);
+        let y = {
+            let _s = b.enter();
+            P::new([8u64; 4])
+        };
+        // Carved right after `a`'s trimmed chunk.
+        assert!(y.addr() > x.addr() && y.addr() - x.addr() < 1024);
+        assert_eq!((*x, *y), ([7; 4], [8; 4]));
+        drop(a);
+        assert!(Region::containing(y.addr()).unwrap().ptr_eq(&b));
+        assert_eq!(*y, [8; 4]);
     }
 }
