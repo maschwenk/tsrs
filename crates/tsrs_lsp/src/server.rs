@@ -11,6 +11,8 @@ use tsrs_core::context::{self, CancelCauseFunc, CancelFunc, Context, ContextErro
 use tsrs_lsproto as lsproto;
 use tsrs_lsproto::jsonrpc::{self, MessageKind, ID};
 use tsrs_lsproto::{Error, ErrorCode, ErrorTag, Json, Message, Method, RequestMessage, ResponseMessage};
+use tsrs_core::collections::OrderedMap;
+use tsrs_ls::lsutil;
 use tsrs_vfs::FS;
 
 use crate::dynamic_queue::{dynamicQueue, new_dynamic_queue, wait_until};
@@ -345,6 +347,409 @@ impl Server {
         self.init_complete.0.clone()
     }
 
+    // server.go:263
+    // WatchFiles implements project.Client.
+    pub fn watch_files(&self, ctx: &Context, id: &str, watchers: Vec<lsproto::FileSystemWatcher>) -> Result<(), Error> {
+        if let Some(builtin_watcher) = &self.builtin_watcher {
+            match *builtin_watcher {}
+        }
+        let result = self.send_client_request(
+            ctx,
+            lsproto::CLIENT_REGISTER_CAPABILITY_INFO,
+            lsproto::RegistrationParams {
+                registrations: vec![lsproto::Registration {
+                    id: id.to_string(),
+                    register_options: Some(lsproto::RegisterOptions {
+                        workspace_did_change_watched_files: Some(lsproto::DidChangeWatchedFilesRegistrationOptions { watchers }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }],
+            },
+        );
+        if let Err(err) = result {
+            return Err(Error::wrap("failed to register file watcher: ", err));
+        }
+
+        self.watchers.lock().unwrap().insert(id.to_string());
+        Ok(())
+    }
+
+    // server.go:292
+    // UnwatchFiles implements project.Client.
+    pub fn unwatch_files(&self, ctx: &Context, id: &str) -> Result<(), Error> {
+        if let Some(builtin_watcher) = &self.builtin_watcher {
+            match *builtin_watcher {}
+        }
+        let has = self.watchers.lock().unwrap().contains(id);
+        if has {
+            let result = self.send_client_request(
+                ctx,
+                lsproto::CLIENT_UNREGISTER_CAPABILITY_INFO,
+                lsproto::UnregistrationParams {
+                    unregisterations: vec![lsproto::Unregistration { id: id.to_string(), method: Method::WorkspaceDidChangeWatchedFiles.0.to_string() }],
+                },
+            );
+            if let Err(err) = result {
+                return Err(Error::wrap("failed to unregister file watcher: ", err));
+            }
+
+            self.watchers.lock().unwrap().remove(id);
+            return Ok(());
+        }
+
+        Err(Error::new(format!("no file watcher exists with ID {}", id)))
+    }
+
+    // server.go:362
+    fn supports_content_mapper_registration(&self, id: &str) -> bool {
+        let caps = self.client_capabilities();
+        match id {
+            CONTENT_MAPPER_DID_OPEN_REGISTRATION_ID | CONTENT_MAPPER_DID_CHANGE_REGISTRATION_ID | CONTENT_MAPPER_DID_CLOSE_REGISTRATION_ID => {
+                caps.text_document.synchronization.dynamic_registration
+            }
+            CONTENT_MAPPER_DIAGNOSTIC_REGISTRATION_ID => caps.text_document.diagnostic.dynamic_registration,
+            CONTENT_MAPPER_HOVER_REGISTRATION_ID => caps.text_document.hover.dynamic_registration,
+            CONTENT_MAPPER_SIGNATURE_HELP_REGISTRATION_ID => caps.text_document.signature_help.dynamic_registration,
+            CONTENT_MAPPER_DEFINITION_REGISTRATION_ID => caps.text_document.definition.dynamic_registration,
+            CONTENT_MAPPER_TYPE_DEFINITION_REGISTRATION_ID => caps.text_document.type_definition.dynamic_registration,
+            CONTENT_MAPPER_IMPLEMENTATION_REGISTRATION_ID => caps.text_document.implementation.dynamic_registration,
+            CONTENT_MAPPER_REFERENCES_REGISTRATION_ID => caps.text_document.references.dynamic_registration,
+            CONTENT_MAPPER_DOCUMENT_HIGHLIGHT_REGISTRATION_ID => caps.text_document.document_highlight.dynamic_registration,
+            CONTENT_MAPPER_COMPLETION_REGISTRATION_ID => caps.text_document.completion.dynamic_registration,
+            CONTENT_MAPPER_RENAME_REGISTRATION_ID => caps.text_document.rename.dynamic_registration,
+            CONTENT_MAPPER_SEMANTIC_TOKENS_REGISTRATION_ID => caps.text_document.semantic_tokens.dynamic_registration,
+            CONTENT_MAPPER_DOCUMENT_SYMBOL_REGISTRATION_ID => caps.text_document.document_symbol.dynamic_registration,
+            CONTENT_MAPPER_FOLDING_RANGE_REGISTRATION_ID => caps.text_document.folding_range.dynamic_registration,
+            CONTENT_MAPPER_SELECTION_RANGE_REGISTRATION_ID => caps.text_document.selection_range.dynamic_registration,
+            CONTENT_MAPPER_INLAY_HINT_REGISTRATION_ID => caps.text_document.inlay_hint.dynamic_registration,
+            CONTENT_MAPPER_CODE_LENS_REGISTRATION_ID => caps.text_document.code_lens.dynamic_registration,
+            CONTENT_MAPPER_CODE_ACTION_REGISTRATION_ID => caps.text_document.code_action.dynamic_registration,
+            CONTENT_MAPPER_FORMATTING_REGISTRATION_ID => caps.text_document.formatting.dynamic_registration,
+            CONTENT_MAPPER_RANGE_FORMATTING_REGISTRATION_ID => caps.text_document.range_formatting.dynamic_registration,
+            CONTENT_MAPPER_ON_TYPE_FORMATTING_REGISTRATION_ID => caps.text_document.on_type_formatting.dynamic_registration,
+            CONTENT_MAPPER_LINKED_EDITING_REGISTRATION_ID => caps.text_document.linked_editing_range.dynamic_registration,
+            CONTENT_MAPPER_CALL_HIERARCHY_REGISTRATION_ID => caps.text_document.call_hierarchy.dynamic_registration,
+            CONTENT_MAPPER_WILL_RENAME_FILES_REGISTRATION_ID => caps.workspace.file_operations.dynamic_registration && caps.workspace.file_operations.will_rename,
+            _ => false,
+        }
+    }
+
+    // server.go:422
+    // RegisterContentMapperExtensions implements project.Client. It dynamically registers text document
+    // synchronization and pull diagnostics for the given otherwise unsupported file extensions so the editor forwards their
+    // open/change/close notifications to the server and requests diagnostics for them. It is called with the
+    // full desired set each time it changes; an empty slice removes any prior registration.
+    pub fn register_content_mapper_extensions(&self, ctx: &Context, extensions: Vec<String>) -> Result<(), Error> {
+        if !self.client_capabilities().text_document.synchronization.dynamic_registration {
+            return Ok(());
+        }
+
+        let mut content_mapper_extensions_registered = self.content_mapper_registration_mu.lock().unwrap();
+
+        if *content_mapper_extensions_registered {
+            let unregistration = |id: &str, method: Method| lsproto::Unregistration { id: id.to_string(), method: method.0.to_string() };
+            let mut unregistrations = vec![
+                unregistration(CONTENT_MAPPER_DID_OPEN_REGISTRATION_ID, Method::TextDocumentDidOpen),
+                unregistration(CONTENT_MAPPER_DID_CHANGE_REGISTRATION_ID, Method::TextDocumentDidChange),
+                unregistration(CONTENT_MAPPER_DID_CLOSE_REGISTRATION_ID, Method::TextDocumentDidClose),
+                unregistration(CONTENT_MAPPER_DIAGNOSTIC_REGISTRATION_ID, Method::TextDocumentDiagnostic),
+                unregistration(CONTENT_MAPPER_HOVER_REGISTRATION_ID, Method::TextDocumentHover),
+                unregistration(CONTENT_MAPPER_SIGNATURE_HELP_REGISTRATION_ID, Method::TextDocumentSignatureHelp),
+                unregistration(CONTENT_MAPPER_DEFINITION_REGISTRATION_ID, Method::TextDocumentDefinition),
+                unregistration(CONTENT_MAPPER_TYPE_DEFINITION_REGISTRATION_ID, Method::TextDocumentTypeDefinition),
+                unregistration(CONTENT_MAPPER_IMPLEMENTATION_REGISTRATION_ID, Method::TextDocumentImplementation),
+                unregistration(CONTENT_MAPPER_REFERENCES_REGISTRATION_ID, Method::TextDocumentReferences),
+                unregistration(CONTENT_MAPPER_DOCUMENT_HIGHLIGHT_REGISTRATION_ID, Method::TextDocumentDocumentHighlight),
+                unregistration(CONTENT_MAPPER_COMPLETION_REGISTRATION_ID, Method::TextDocumentCompletion),
+                unregistration(CONTENT_MAPPER_RENAME_REGISTRATION_ID, Method::TextDocumentRename),
+                unregistration(CONTENT_MAPPER_SEMANTIC_TOKENS_REGISTRATION_ID, Method::TextDocumentSemanticTokens),
+                unregistration(CONTENT_MAPPER_DOCUMENT_SYMBOL_REGISTRATION_ID, Method::TextDocumentDocumentSymbol),
+                unregistration(CONTENT_MAPPER_FOLDING_RANGE_REGISTRATION_ID, Method::TextDocumentFoldingRange),
+                unregistration(CONTENT_MAPPER_SELECTION_RANGE_REGISTRATION_ID, Method::TextDocumentSelectionRange),
+                unregistration(CONTENT_MAPPER_INLAY_HINT_REGISTRATION_ID, Method::TextDocumentInlayHint),
+                unregistration(CONTENT_MAPPER_CODE_LENS_REGISTRATION_ID, Method::TextDocumentCodeLens),
+                unregistration(CONTENT_MAPPER_CODE_ACTION_REGISTRATION_ID, Method::TextDocumentCodeAction),
+                unregistration(CONTENT_MAPPER_FORMATTING_REGISTRATION_ID, Method::TextDocumentFormatting),
+                unregistration(CONTENT_MAPPER_RANGE_FORMATTING_REGISTRATION_ID, Method::TextDocumentRangeFormatting),
+                unregistration(CONTENT_MAPPER_ON_TYPE_FORMATTING_REGISTRATION_ID, Method::TextDocumentOnTypeFormatting),
+                unregistration(CONTENT_MAPPER_LINKED_EDITING_REGISTRATION_ID, Method::TextDocumentLinkedEditingRange),
+                unregistration(CONTENT_MAPPER_CALL_HIERARCHY_REGISTRATION_ID, Method::TextDocumentPrepareCallHierarchy),
+                unregistration(CONTENT_MAPPER_WILL_RENAME_FILES_REGISTRATION_ID, Method::WorkspaceWillRenameFiles),
+            ];
+            unregistrations.retain(|registration| self.supports_content_mapper_registration(&registration.id));
+            if let Err(err) =
+                self.send_client_request(ctx, lsproto::CLIENT_UNREGISTER_CAPABILITY_INFO, lsproto::UnregistrationParams { unregisterations: unregistrations })
+            {
+                return Err(Error::wrap("failed to unregister content mapper text document sync: ", err));
+            }
+            *content_mapper_extensions_registered = false;
+        }
+
+        if extensions.is_empty() {
+            return Ok(());
+        }
+
+        let mut filters = Vec::with_capacity(extensions.len());
+        for ext in &extensions {
+            filters.push(lsproto::TextDocumentFilterLanguageOrSchemeOrPattern {
+                pattern: Some(lsproto::TextDocumentFilterPattern {
+                    pattern: lsproto::PatternOrRelativePattern { pattern: Some(format!("**/*{}", ext)), ..Default::default() },
+                    ..Default::default()
+                }),
+                ..Default::default()
+            });
+        }
+        let selector = lsproto::DocumentSelectorOrNull { document_selector: Some(filters) };
+        let mut content_mapper_file_rename_filters = Vec::with_capacity(extensions.len());
+        for extension in &extensions {
+            content_mapper_file_rename_filters.push(lsproto::FileOperationFilter {
+                scheme: Some("file".to_string()),
+                pattern: lsproto::FileOperationPattern { glob: format!("**/*{}", extension), ..Default::default() },
+            });
+        }
+
+        let registration = |id: &str, register_options: lsproto::RegisterOptions| lsproto::Registration {
+            id: id.to_string(),
+            register_options: Some(register_options),
+            ..Default::default()
+        };
+        let mut registrations = vec![
+            registration(
+                CONTENT_MAPPER_DID_OPEN_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_did_open: Some(lsproto::TextDocumentRegistrationOptions { document_selector: selector.clone() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_DID_CHANGE_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_did_change: Some(lsproto::TextDocumentChangeRegistrationOptions {
+                        document_selector: selector.clone(),
+                        sync_kind: lsproto::TextDocumentSyncKind::Incremental,
+                    }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_DID_CLOSE_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_did_close: Some(lsproto::TextDocumentRegistrationOptions { document_selector: selector.clone() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_DIAGNOSTIC_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_diagnostic: Some(lsproto::DiagnosticRegistrationOptions {
+                        document_selector: selector.clone(),
+                        identifier: Some("typescript".to_string()),
+                        inter_file_dependencies: true,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_HOVER_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_hover: Some(lsproto::HoverRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_SIGNATURE_HELP_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_signature_help: Some(lsproto::SignatureHelpRegistrationOptions {
+                        document_selector: selector.clone(),
+                        trigger_characters: Some(lsconsts::strings(&lsconsts::SIGNATURE_HELP_TRIGGER_CHARACTERS)),
+                        retrigger_characters: Some(lsconsts::strings(&lsconsts::SIGNATURE_HELP_RETRIGGER_CHARACTERS)),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_DEFINITION_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_definition: Some(lsproto::DefinitionRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_TYPE_DEFINITION_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_type_definition: Some(lsproto::TypeDefinitionRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_IMPLEMENTATION_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_implementation: Some(lsproto::ImplementationRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_REFERENCES_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_references: Some(lsproto::ReferenceRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_DOCUMENT_HIGHLIGHT_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_document_highlight: Some(lsproto::DocumentHighlightRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_COMPLETION_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_completion: Some(lsproto::CompletionRegistrationOptions {
+                        document_selector: selector.clone(),
+                        trigger_characters: Some(lsconsts::strings(&lsconsts::COMPLETION_TRIGGER_CHARACTERS)),
+                        resolve_provider: Some(true),
+                        completion_item: Some(lsproto::ServerCompletionItemOptions { label_details_support: Some(true) }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_RENAME_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_rename: Some(lsproto::RenameRegistrationOptions { document_selector: selector.clone(), prepare_provider: Some(true), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_SEMANTIC_TOKENS_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_semantic_tokens: Some(lsproto::SemanticTokensRegistrationOptions {
+                        document_selector: selector.clone(),
+                        legend: lsconsts::semantic_tokens_legend(&self.client_capabilities().text_document.semantic_tokens),
+                        full: Some(lsproto::BooleanOrSemanticTokensFullDelta { boolean: Some(true), ..Default::default() }),
+                        range: Some(lsproto::BooleanOrEmptyObject { boolean: Some(true), ..Default::default() }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_DOCUMENT_SYMBOL_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_document_symbol: Some(lsproto::DocumentSymbolRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_FOLDING_RANGE_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_folding_range: Some(lsproto::FoldingRangeRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_SELECTION_RANGE_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_selection_range: Some(lsproto::SelectionRangeRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_INLAY_HINT_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_inlay_hint: Some(lsproto::InlayHintRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_CODE_LENS_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_code_lens: Some(lsproto::CodeLensRegistrationOptions {
+                        document_selector: selector.clone(),
+                        resolve_provider: Some(true),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_CODE_ACTION_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_code_action: Some(lsproto::CodeActionRegistrationOptions {
+                        document_selector: selector.clone(),
+                        code_action_kinds: Some(supported_code_action_kinds()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_FORMATTING_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_formatting: Some(lsproto::DocumentFormattingRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_RANGE_FORMATTING_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_range_formatting: Some(lsproto::DocumentRangeFormattingRegistrationOptions {
+                        document_selector: selector.clone(),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_ON_TYPE_FORMATTING_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_on_type_formatting: Some(lsproto::DocumentOnTypeFormattingRegistrationOptions {
+                        document_selector: selector.clone(),
+                        first_trigger_character: "{".to_string(),
+                        more_trigger_character: Some(vec!["}".to_string(), ";".to_string(), "\n".to_string()]),
+                    }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_LINKED_EDITING_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_linked_editing_range: Some(lsproto::LinkedEditingRangeRegistrationOptions {
+                        document_selector: selector.clone(),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_CALL_HIERARCHY_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    text_document_prepare_call_hierarchy: Some(lsproto::CallHierarchyRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    ..Default::default()
+                },
+            ),
+            registration(
+                CONTENT_MAPPER_WILL_RENAME_FILES_REGISTRATION_ID,
+                lsproto::RegisterOptions {
+                    workspace_will_rename_files: Some(lsproto::FileOperationRegistrationOptions { filters: content_mapper_file_rename_filters }),
+                    ..Default::default()
+                },
+            ),
+        ];
+        registrations.retain(|registration| self.supports_content_mapper_registration(&registration.id));
+        if let Err(err) = self.send_client_request(ctx, lsproto::CLIENT_REGISTER_CAPABILITY_INFO, lsproto::RegistrationParams { registrations }) {
+            return Err(Error::wrap("failed to register content mapper text document sync: ", err));
+        }
+
+        *content_mapper_extensions_registered = true;
+        Ok(())
+    }
+
     // server.go:705
     // RefreshDiagnostics implements project.Client.
     pub fn refresh_diagnostics(&self, ctx: &Context) -> Result<(), Error> {
@@ -445,6 +850,66 @@ impl Server {
             new_locale = parsed;
         }
         *self.locale.write().unwrap() = new_locale;
+    }
+
+    // server.go:801
+    pub fn request_configuration(&self, ctx: &Context) -> Result<lsutil::UserPreferences, Error> {
+        let caps = lsproto::get_client_capabilities(ctx);
+        if !caps.workspace.configuration {
+            let opts = self.initialization_options();
+            if let Some(user_prefs) = &opts.user_preferences {
+                self.logger.logf(format_args!("received formatting options from initialization: {}\n{}", go_type_name(user_prefs), go_sprint_value(user_prefs)));
+                if let lsproto::Value::Object(config) = user_prefs {
+                    let mut items = OrderedMap::default();
+                    items.insert("js/ts".to_string(), lsproto::Value::Object(config.clone()));
+                    return Ok(lsutil::parse_user_preferences(&items));
+                }
+            }
+            return Ok(lsutil::new_default_user_preferences());
+        }
+        let configs = match self.send_client_request(
+            ctx,
+            lsproto::WORKSPACE_CONFIGURATION_INFO,
+            lsproto::ConfigurationParams {
+                items: vec![
+                    lsproto::ConfigurationItem { section: Some("js/ts".to_string()), ..Default::default() },
+                    lsproto::ConfigurationItem { section: Some("typescript".to_string()), ..Default::default() },
+                    lsproto::ConfigurationItem { section: Some("javascript".to_string()), ..Default::default() },
+                    lsproto::ConfigurationItem { section: Some("editor".to_string()), ..Default::default() },
+                ],
+                ..Default::default()
+            },
+        ) {
+            Ok(configs) => configs,
+            Err(err) => return Err(Error::wrap("configure request failed: ", err)),
+        };
+        let mut config_map: OrderedMap<String, lsproto::Value> = OrderedMap::default();
+        for (i, config) in configs.into_iter().enumerate() {
+            match i {
+                0 => {
+                    config_map.insert("js/ts".to_string(), config);
+                }
+                1 => {
+                    config_map.insert("typescript".to_string(), config);
+                }
+                2 => {
+                    config_map.insert("javascript".to_string(), config);
+                }
+                3 => {
+                    config_map.insert("editor".to_string(), config);
+                }
+                _ => {}
+            }
+        }
+        let show = |key: &str| config_map.get(key).map(go_sprint_value).unwrap_or_else(|| "<nil>".to_string());
+        self.logger.logf(format_args!(
+            "received options from workspace/configuration request:\njs/ts: {}\n\ntypescript: {}\n\njavascript: {}\n\neditor: {}\n",
+            show("js/ts"),
+            show("typescript"),
+            show("javascript"),
+            show("editor"),
+        ));
+        Ok(lsutil::parse_user_preferences(&config_map))
     }
 
     // server.go:859
@@ -1021,6 +1486,34 @@ impl Server {
     }
 }
 
+// server.go:323
+const CONTENT_MAPPER_DID_OPEN_REGISTRATION_ID: &str = "content-mapper-did-open";
+const CONTENT_MAPPER_DID_CHANGE_REGISTRATION_ID: &str = "content-mapper-did-change";
+const CONTENT_MAPPER_DID_CLOSE_REGISTRATION_ID: &str = "content-mapper-did-close";
+const CONTENT_MAPPER_DIAGNOSTIC_REGISTRATION_ID: &str = "content-mapper-diagnostic";
+const CONTENT_MAPPER_HOVER_REGISTRATION_ID: &str = "content-mapper-hover";
+const CONTENT_MAPPER_SIGNATURE_HELP_REGISTRATION_ID: &str = "content-mapper-signature-help";
+const CONTENT_MAPPER_DEFINITION_REGISTRATION_ID: &str = "content-mapper-definition";
+const CONTENT_MAPPER_TYPE_DEFINITION_REGISTRATION_ID: &str = "content-mapper-type-definition";
+const CONTENT_MAPPER_IMPLEMENTATION_REGISTRATION_ID: &str = "content-mapper-implementation";
+const CONTENT_MAPPER_REFERENCES_REGISTRATION_ID: &str = "content-mapper-references";
+const CONTENT_MAPPER_DOCUMENT_HIGHLIGHT_REGISTRATION_ID: &str = "content-mapper-document-highlight";
+const CONTENT_MAPPER_COMPLETION_REGISTRATION_ID: &str = "content-mapper-completion";
+const CONTENT_MAPPER_RENAME_REGISTRATION_ID: &str = "content-mapper-rename";
+const CONTENT_MAPPER_SEMANTIC_TOKENS_REGISTRATION_ID: &str = "content-mapper-semantic-tokens";
+const CONTENT_MAPPER_DOCUMENT_SYMBOL_REGISTRATION_ID: &str = "content-mapper-document-symbol";
+const CONTENT_MAPPER_FOLDING_RANGE_REGISTRATION_ID: &str = "content-mapper-folding-range";
+const CONTENT_MAPPER_SELECTION_RANGE_REGISTRATION_ID: &str = "content-mapper-selection-range";
+const CONTENT_MAPPER_INLAY_HINT_REGISTRATION_ID: &str = "content-mapper-inlay-hint";
+const CONTENT_MAPPER_CODE_LENS_REGISTRATION_ID: &str = "content-mapper-code-lens";
+const CONTENT_MAPPER_CODE_ACTION_REGISTRATION_ID: &str = "content-mapper-code-action";
+const CONTENT_MAPPER_FORMATTING_REGISTRATION_ID: &str = "content-mapper-formatting";
+const CONTENT_MAPPER_RANGE_FORMATTING_REGISTRATION_ID: &str = "content-mapper-range-formatting";
+const CONTENT_MAPPER_ON_TYPE_FORMATTING_REGISTRATION_ID: &str = "content-mapper-on-type-formatting";
+const CONTENT_MAPPER_LINKED_EDITING_REGISTRATION_ID: &str = "content-mapper-linked-editing";
+const CONTENT_MAPPER_CALL_HIERARCHY_REGISTRATION_ID: &str = "content-mapper-call-hierarchy";
+const CONTENT_MAPPER_WILL_RENAME_FILES_REGISTRATION_ID: &str = "content-mapper-will-rename-files";
+
 // server.go:352
 fn supported_code_action_kinds() -> Vec<lsproto::CodeActionKind> {
     vec![
@@ -1265,6 +1758,50 @@ fn recover_scope<R>(f: impl FnOnce() -> R) -> Result<R, (Box<dyn Any + Send>, St
     let result = std::panic::catch_unwind(AssertUnwindSafe(f));
     RECOVER_DEPTH.with(|d| d.set(d.get() - 1));
     result.map_err(|payload| (payload, PANIC_STACK.with(|s| s.borrow_mut().take()).unwrap_or_default()))
+}
+
+// Go `fmt.Sprintf("%+v", v)` of a decoded JSON value (`any`): nil, bool, float64, string, []any, map[string]any
+// (maps print with sorted keys).
+fn go_sprint_value(v: &lsproto::Value) -> String {
+    match v {
+        lsproto::Value::Null => "<nil>".to_string(),
+        lsproto::Value::Bool(b) => b.to_string(),
+        lsproto::Value::Number(n) => go_format_float(*n),
+        lsproto::Value::String(s) => s.clone(),
+        lsproto::Value::Array(items) => format!("[{}]", items.iter().map(go_sprint_value).collect::<Vec<_>>().join(" ")),
+        lsproto::Value::Object(members) => {
+            let mut keys: Vec<&String> = members.keys().collect();
+            keys.sort();
+            format!("map[{}]", keys.iter().map(|k| format!("{}:{}", k, go_sprint_value(&members[*k]))).collect::<Vec<_>>().join(" "))
+        }
+    }
+}
+
+// Go `%v` of a float64 (strconv 'g' with the shortest representation; exponent form for large/small values).
+fn go_format_float(f: f64) -> String {
+    if f == f.trunc() && f.abs() < 1e21 {
+        return format!("{}", f as i64);
+    }
+    let exp = if f == 0.0 { 0 } else { f.abs().log10().floor() as i32 };
+    if exp < -4 || exp >= 21 {
+        let s = format!("{:e}", f);
+        let (mantissa, exponent) = s.split_once('e').unwrap();
+        let exponent: i32 = exponent.parse().unwrap();
+        return format!("{}e{}{:02}", mantissa, if exponent < 0 { '-' } else { '+' }, exponent.abs());
+    }
+    format!("{}", f)
+}
+
+// Go `%T` of a decoded JSON value.
+fn go_type_name(v: &lsproto::Value) -> &'static str {
+    match v {
+        lsproto::Value::Null => "<nil>",
+        lsproto::Value::Bool(_) => "bool",
+        lsproto::Value::Number(_) => "float64",
+        lsproto::Value::String(_) => "string",
+        lsproto::Value::Array(_) => "[]interface {}",
+        lsproto::Value::Object(_) => "map[string]interface {}",
+    }
 }
 
 // Go `time.Duration.String()`.
