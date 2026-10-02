@@ -1377,7 +1377,7 @@ impl Checker {
         if alias.is_none() {
             alias = self.instantiate_type_alias(t.alias(), Some(m));
         }
-        result.alias.set(alias);
+        result.set_alias(alias);
         if let Some(alias) = alias {
             if !alias.type_arguments().is_empty() {
                 let propagating = self.get_propagating_flags_of_types(result.alias().unwrap().type_arguments(), TypeFlags::None);
@@ -1938,7 +1938,7 @@ impl Checker {
                 links.resolved_type.set(Some(self.empty_type_literal_type));
             } else {
                 let t = self.new_object_type(ObjectFlags::Anonymous, node.symbol());
-                t.alias.set(alias);
+                t.set_alias(alias);
                 links.resolved_type.set(Some(t));
             }
         }

@@ -141,3 +141,25 @@ mechanical). Same owner-only write contract as the other `Symbol` words.
 Gates: suite trees identical to step 2 in all three modes, also with a dev build (debug assertions) and
 `TSRS_CHECK_SHARED=1`; private-monorepo output and counters identical in all four runs (and the dev build, 4
 checkers, without panics).
+
+## 3b. Type header 32 -> 24 bytes: the alias shares a word with the symbol
+
+Every type (9.9M single, 14.4M on 4 checkers) carried Go's `alias` in its header, but only the 0.6M types created
+with an alias have one (`TypeAlias` records: 604,835, mem-round3 A6 allocates one only for a type created with
+it). Like step 1, `alias` now shares one word with `symbol` (`TypeSymbolWord`): the word holds the symbol until the
+first non-nil alias write, which allocates a `TypeSymbolAlias` record (symbol + alias, 16 bytes) and stores its
+address with bit 63 set. `symbol()` reads the word (or the record), `alias()` the record (nil without one);
+`set_symbol()` / `set_alias()` replace the 30 direct field accesses. Header: flags, object flags, id and data tag
+in 16 bytes plus that word; `TypeAlloc<T>` data now starts at offset 24. Types are checker-owned, plain `Cell`s as
+before.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, step 3 | 5.685-5.687 (5.686) | 306.7-307.5 G |
+| single, after | 5.618-5.622 (5.620, -0.066) | 307.2-307.8 G (+0.1%) |
+| 4 checkers, step 3 | 7.592-7.629 (7.628) | 417.0-419.2 G |
+| 4 checkers, after | 7.506-7.532 (7.526, -0.102) | 417.5-420.4 G (pairwise +3.4, -0.2, +0.3 G) |
+| opt-out single / 4 checkers, go assignment (1 run) | 7.498 -> 7.438 / 11.491 -> 11.428 | 333.4 -> 332.4 / 498.6 -> 497.5 G |
+
+Gates: suite trees identical to step 3 in all three modes, also with a dev build and `TSRS_CHECK_SHARED=1`;
+private-monorepo output and counters identical in all four runs.
