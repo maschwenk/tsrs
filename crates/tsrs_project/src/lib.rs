@@ -47,3 +47,8 @@ pub use projectcollectionbuilder::ProjectCollectionBuilder;
 pub use session::*;
 pub use snapshot::*;
 pub use snapshothost::*;
+
+#[cfg(test)]
+mod projecttestutil;
+#[cfg(test)]
+mod session_test;
