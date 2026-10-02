@@ -661,7 +661,7 @@ impl Server {
                 lsproto::RegisterOptions {
                     text_document_semantic_tokens: Some(lsproto::SemanticTokensRegistrationOptions {
                         document_selector: selector.clone(),
-                        legend: lsconsts::semantic_tokens_legend(&self.client_capabilities().text_document.semantic_tokens),
+                        legend: tsrs_ls::semantic_tokens_legend(&self.client_capabilities().text_document.semantic_tokens),
                         full: Some(lsproto::BooleanOrSemanticTokensFullDelta { boolean: Some(true), ..Default::default() }),
                         range: Some(lsproto::BooleanOrEmptyObject { boolean: Some(true), ..Default::default() }),
                         ..Default::default()
@@ -1497,7 +1497,7 @@ impl Server {
                 }),
                 semantic_tokens_provider: Some(lsproto::SemanticTokensOptionsOrRegistrationOptions {
                     options: Some(lsproto::SemanticTokensOptions {
-                        legend: lsconsts::semantic_tokens_legend(&self.client_capabilities().text_document.semantic_tokens),
+                        legend: tsrs_ls::semantic_tokens_legend(&self.client_capabilities().text_document.semantic_tokens),
                         full: Some(lsproto::BooleanOrSemanticTokensFullDelta { boolean: Some(true), ..Default::default() }),
                         range: Some(lsproto::BooleanOrEmptyObject { boolean: Some(true), ..Default::default() }),
                         ..Default::default()
@@ -2043,7 +2043,7 @@ impl Server {
 
     // server.go:2272
     fn handle_semantic_tokens_full(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::SemanticTokensParams) -> Result<lsproto::SemanticTokensResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentSemanticTokensFull))
+        ls.provide_semantic_tokens(ctx, &params.text_document.uri)
     }
 
     // server.go:2276
@@ -2053,7 +2053,7 @@ impl Server {
         ls: &Arc<LanguageService>,
         params: lsproto::SemanticTokensRangeParams,
     ) -> Result<lsproto::SemanticTokensRangeResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentSemanticTokensRange))
+        ls.provide_semantic_tokens_range(ctx, &params.text_document.uri, params.range)
     }
 
     // server.go:2280 (the `api` package is out of scope)

@@ -15,7 +15,47 @@ pub struct SemanticToken {
 impl FourslashTest {
     // semantictokens.go:17
     pub fn verify_semantic_tokens(&mut self, t: &T, expected: &[SemanticToken]) {
-        FourslashTest::server_unavailable(t, "feature not ported: semantic tokens (VerifySemanticTokens)")
+        let params = lsproto::SemanticTokensParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            ..Default::default()
+        };
+
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_SEMANTIC_TOKENS_FULL_INFO, params);
+
+        let Some(semantic_tokens) = result.semantic_tokens else {
+            if expected.is_empty() {
+                return;
+            }
+            t.fatal("Expected semantic tokens but got nil");
+        };
+
+        // Decode the semantic tokens using token types/modifiers from the test configuration
+        let actual = decode_semantic_tokens(self, &semantic_tokens.data, &self.semantic_token_types, &self.semantic_token_modifiers);
+
+        // Compare with expected
+        if actual.len() != expected.len() {
+            t.fatal(&format!(
+                "Expected {} semantic tokens, got {}\n\nExpected:\n{}\n\nActual:\n{}",
+                expected.len(),
+                actual.len(),
+                format_semantic_tokens(expected),
+                format_semantic_tokens(&actual)
+            ));
+        }
+
+        for (i, exp) in expected.iter().enumerate() {
+            let act = &actual[i];
+            if exp.type_ != act.type_ || exp.text != act.text {
+                t.error(&format!(
+                    "Token {} mismatch:\n  Expected: {{Type: {}, Text: {}}}\n  Actual:   {{Type: {}, Text: {}}}",
+                    i,
+                    quote(&exp.type_),
+                    quote(&exp.text),
+                    quote(&act.type_),
+                    quote(&act.text)
+                ));
+            }
+        }
     }
 }
 
