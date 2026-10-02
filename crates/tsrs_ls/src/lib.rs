@@ -23,6 +23,7 @@ pub mod lsconv;
 pub mod lsutil;
 pub mod sourcemap;
 mod source_map;
+mod signaturehelp;
 mod sourcedefinition;
 pub mod spanmap;
 mod utilities;

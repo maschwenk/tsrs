@@ -1488,3 +1488,8 @@ pub fn try_get_import_from_module_specifier(node: P<Node>) -> Option<P<Node>> {
         _ => None,
     }
 }
+
+// utilities.go:3282
+pub fn is_template_literal_token(node: P<Node>) -> bool {
+    is_template_literal_kind(node.kind())
+}
