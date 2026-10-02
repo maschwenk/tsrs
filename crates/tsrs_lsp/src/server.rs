@@ -1996,7 +1996,7 @@ impl Server {
 
     // server.go:2204
     fn handle_inlay_hint(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: lsproto::InlayHintParams) -> Result<lsproto::InlayHintResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentInlayHint))
+        language_service.provide_inlay_hint(ctx, &params)
     }
 
     // server.go:2212

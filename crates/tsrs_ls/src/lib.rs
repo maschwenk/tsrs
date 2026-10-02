@@ -20,6 +20,7 @@ mod host;
 mod hover;
 mod hovericon;
 mod import_tracker;
+mod inlay_hints;
 mod jsdoc;
 mod languageservice;
 #[cfg(test)]

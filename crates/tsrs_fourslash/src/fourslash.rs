@@ -2593,7 +2593,61 @@ impl FourslashTest {
 
     // fourslash.go:5267
     pub fn verify_baseline_inlay_hints(&mut self, t: &T, span: Option<lsproto::Range>, test_preferences: Option<lsutil::UserPreferences>) {
-        Self::server_unavailable(t, "feature not ported: inlay hints (VerifyBaselineInlayHints)")
+        let file_name = self.active_filename.clone();
+        let lsp_range = match span {
+            None => {
+                let script = self.get_script_info(&file_name);
+                let (r, _) = self.converters.converters.to_lsp_range(&script, TextRange::new(0, script.content.len() as i32));
+                r
+            }
+            Some(span) => span,
+        };
+
+        let params = lsproto::InlayHintParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&file_name) },
+            range: lsp_range,
+            ..Default::default()
+        };
+
+        let preferences = test_preferences.unwrap_or_else(lsutil::new_default_user_preferences);
+        let reset = self.configure_with_reset(t, preferences);
+
+        let prefix = format!("At position (Ln {}, Col {}): ", lsp_range.start.line, lsp_range.start.character);
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_INLAY_HINT_INFO, params);
+        let content = self.get_script_info(&file_name).content;
+        let file_lines: Vec<&str> = content.split('\n').collect();
+        let mut annotations: Vec<String> = Vec::new();
+        if let Some(mut inlay_hints) = result.inlay_hints {
+            tsrs_core::goslices::sort_func(&mut inlay_hints, |a, b| lsproto::compare_positions(a.position, b.position));
+            for mut hint in inlay_hints {
+                if let Some(parts) = &mut hint.label.inlay_hint_label_parts {
+                    for part in parts {
+                        // Avoid diffs caused by lib file updates.
+                        if let Some(location) = &mut part.location {
+                            if is_lib_file(&location.uri.file_name()) {
+                                location.range.start = lsproto::Position { line: 0, character: 0 };
+                                location.range.end = lsproto::Position { line: 0, character: 0 };
+                            }
+                        }
+                    }
+                }
+                let underline = format!("{}^", " ".repeat(hint.position.character as usize));
+                let hint_json = match tsrs_core::json::marshal_indent(&hint.to_json(), "", "  ") {
+                    Ok(j) => j,
+                    Err(err) => t.fatal(&format!("{prefix}Failed to stringify inlay hint for baseline: {err}")),
+                };
+                let mut annotation = file_lines[hint.position.line as usize].to_string();
+                annotation += &format!("\n{underline}\n{hint_json}");
+                annotations.push(annotation);
+            }
+        }
+
+        if annotations.is_empty() {
+            annotations.push("=== No inlay hints ===".to_string());
+        }
+
+        self.add_result_to_baseline(t, INLAY_HINTS_CMD, &annotations.join("\n\n"));
+        reset(self, t);
     }
 
     // fourslash.go:5328
