@@ -884,7 +884,7 @@ impl fileLoader {
         let mut shared_name: Option<std::sync::Arc<str>> = None;
         if let Some((known_path, &data)) = self.files_parser.task_data_by_path.get_key_value(&path) {
             path = known_path.clone();
-            shared_name = self.files_parser.datas[data].tasks.get_key_value(normalized_file_path.as_str()).map(|(name, _)| name.clone());
+            shared_name = self.files_parser.datas[data].tasks.get_key_value(&normalized_file_path).map(|(name, _)| name.clone());
         }
         let mut sub_task = match shared_name {
             Some(name) => parseTask::new(name),

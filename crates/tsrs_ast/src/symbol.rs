@@ -599,6 +599,10 @@ impl SymbolMap {
             // Grow by half instead of doubling: most large tables stop growing soon after (member tables,
             // property caches), and the slack of a doubled Vec is the larger part of their memory.
             self.entries.reserve_exact(i / 2);
+        } else if i == self.entries.capacity() && i < 2 {
+            // Capacity 1, then 2, then doubling from 4 (`push`): over half of the binder's tables hold one or two
+            // symbols (locals of small functions, members of small object literals).
+            self.entries.reserve_exact(1);
         }
         self.entries.push(SymbolMapEntry::new(symbol, KeyPrint::of(name, hash_name(name))));
         if symbol.name() != name {

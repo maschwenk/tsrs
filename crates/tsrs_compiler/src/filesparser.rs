@@ -292,10 +292,35 @@ pub(crate) struct resolvedRef {
 
 pub(crate) struct parseTaskData {
     // map of tasks by file casing
-    pub(crate) tasks: IndexMap<std::sync::Arc<str>, TaskId>,
+    pub(crate) tasks: TasksByCasing,
     lowest_depth: i32,
     started_sub_tasks: bool,
     package_id: PackageId,
+}
+
+/// Go's `map[string]*parseTask` of a file's casings, in insertion order (nearly always one entry; a map per
+/// file cost more than the tasks it indexes).
+#[derive(Default)]
+pub(crate) struct TasksByCasing(Vec<(std::sync::Arc<str>, TaskId)>);
+
+impl TasksByCasing {
+    pub(crate) fn get_key_value(&self, casing: &str) -> Option<(&std::sync::Arc<str>, TaskId)> {
+        self.0.iter().find(|(name, _)| &**name == casing).map(|(name, task)| (name, *task))
+    }
+    fn get(&self, casing: &str) -> Option<TaskId> {
+        self.get_key_value(casing).map(|(_, task)| task)
+    }
+    fn contains_key(&self, casing: &str) -> bool {
+        self.get_key_value(casing).is_some()
+    }
+    /// Callers insert only a casing that is not present yet.
+    fn insert(&mut self, casing: std::sync::Arc<str>, task: TaskId) {
+        debug_assert!(!self.contains_key(&casing));
+        self.0.push((casing, task));
+    }
+    fn values(&self) -> impl Iterator<Item = &TaskId> {
+        self.0.iter().map(|(_, task)| task)
+    }
 }
 
 struct queuedTask {
@@ -350,7 +375,7 @@ impl filesParser {
             let (data, loaded) = match w.task_data_by_path.get(&path) {
                 Some(&data) => (data, true),
                 None => {
-                    let mut tasks = IndexMap::new();
+                    let mut tasks = TasksByCasing::default();
                     tasks.insert(loader.tasks[task].normalized_file_path.clone(), task);
                     w.datas.push(parseTaskData { tasks, lowest_depth: i32::MAX, started_sub_tasks: false, package_id: PackageId::default() });
                     let id = w.datas.len() - 1;
@@ -367,7 +392,7 @@ impl filesParser {
         let mut start_subtasks = false;
         if loaded {
             let casing = loader.tasks[task].normalized_file_path.clone();
-            if let Some(&existing_task) = loader.files_parser.datas[data].tasks.get(&casing) {
+            if let Some(existing_task) = loader.files_parser.datas[data].tasks.get(&casing) {
                 loader.tasks[task].loaded_task = Some(existing_task);
             } else {
                 loader.files_parser.datas[data].tasks.insert(casing, task);
