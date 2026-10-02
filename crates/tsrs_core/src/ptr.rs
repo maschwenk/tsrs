@@ -35,11 +35,30 @@ macro_rules! profile {
     };
 }
 
+/// The current thread's own arena (never freed).
+pub(crate) fn own_arena() -> &'static Arena {
+    ARENA.with(|a| *a)
+}
+
+#[cold]
+#[inline(never)]
+fn init_current() -> &'static Arena {
+    let a = own_arena();
+    arena::CURRENT.with(|c| c.set(a));
+    a
+}
+
+/// The current allocation target: a region entered on this thread (`arena::Region::enter`), else the thread's own
+/// arena. A region is not `'static`, but it outlives every allocation made while it is entered by contract (see
+/// `arena`), like the thread arena outlives everything.
 #[inline]
 fn with_arena<R>(f: impl FnOnce(&'static Arena) -> R) -> R {
     #[cfg(feature = "alloc-profile")]
     let _chunk = crate::alloc_profile::ArenaScope::enter();
-    ARENA.with(|a| f(a))
+    let p = arena::CURRENT.with(|c| c.get());
+    // SAFETY: non-null `CURRENT` is the thread arena or a region kept alive by the entered scope.
+    let a = if p.is_null() { init_current() } else { unsafe { &*p } };
+    f(a)
 }
 
 /// Pointer to an arena value. Never null; use `Option<P<T>>` for Go's nil-able pointers
@@ -52,7 +71,11 @@ impl<T> P<T> {
     #[inline]
     #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(value: T) -> P<T> {
-        let p = with_arena(|a| P(a.alloc(value)));
+        let p = with_arena(|a| {
+            let r = a.alloc(value);
+            a.track_drop(r as *mut T, 1);
+            P(&*r)
+        });
         profile!(T, std::mem::size_of::<T>(), p.addr());
         p
     }
@@ -63,10 +86,11 @@ impl<T> P<T> {
     pub fn new_recycled(value: T) -> P<T> {
         let class = const { arena::free_class(std::mem::size_of::<T>(), std::mem::align_of::<T>()) };
         if class != 0 {
-            if let Some(block) = with_arena(|a| a.pop_free(class)) {
+            if let Some((block, a)) = with_arena(|a| a.pop_free(class).map(|b| (b, a))) {
                 let p = block.cast::<T>();
                 // SAFETY: a dead block of exactly `size_of::<T>()` bytes, 8-aligned (`free_class`).
                 unsafe { p.as_ptr().write(value) };
+                a.track_drop(p.as_ptr(), 1);
                 profile!(T, std::mem::size_of::<T>(), p.addr().get());
                 // SAFETY: as above; the block is now owned by the new value.
                 return P(unsafe { &*p.as_ptr() });
@@ -425,7 +449,11 @@ pub fn alloc_vec<T>(items: Vec<T>) -> &'static [T] {
         return &[];
     }
     let bytes = std::mem::size_of_val(&items[..]);
-    let s: &'static [T] = with_arena(|a| &*a.alloc_vec(items));
+    let s: &'static [T] = with_arena(|a| {
+        let s = a.alloc_vec(items);
+        a.track_drop(s.as_mut_ptr(), s.len());
+        &*s
+    });
     profile!([T], bytes, s.as_ptr() as usize);
     s
 }
@@ -465,14 +493,14 @@ pub fn alloc_slice_recycled<T: Copy>(items: &[T]) -> &'static [T] {
 /// No live object, local or cache may point into the block afterwards, and it must be an arena block of exactly
 /// `size` bytes.
 #[inline]
-pub unsafe fn free_raw(addr: usize, size: usize, align: usize) {
-    with_arena(|a| arena::free_block(a, addr, size, align));
+pub unsafe fn free_raw(addr: usize, size: usize, align: usize, needs_drop: bool) {
+    with_arena(|a| arena::free_block(a, addr, size, align, needs_drop));
 }
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn layout_of_pointee<T: ?Sized>(p: &T) -> (usize, usize) {
-    (std::mem::size_of_val(p), std::mem::align_of_val(p))
+pub fn layout_of_pointee<T: ?Sized>(p: &T) -> (usize, usize, bool) {
+    (std::mem::size_of_val(p), std::mem::align_of_val(p), std::mem::needs_drop::<T>())
 }
 
 /// `free!(p)`: gives the arena object `p: P<T>` back (`free_raw`). Unsafe: see `free_raw`.
@@ -480,8 +508,8 @@ pub fn layout_of_pointee<T: ?Sized>(p: &T) -> (usize, usize) {
 macro_rules! free {
     ($p:expr) => {{
         let p = $p;
-        let (size, align) = $crate::ptr::layout_of_pointee(p.get());
-        $crate::ptr::free_raw(p.addr(), size, align)
+        let (size, align, needs_drop) = $crate::ptr::layout_of_pointee(p.get());
+        $crate::ptr::free_raw(p.addr(), size, align, needs_drop)
     }};
 }
 
@@ -492,8 +520,8 @@ macro_rules! free_slice {
     ($s:expr) => {{
         let s = $s;
         if !s.is_empty() {
-            let (size, align) = $crate::ptr::layout_of_pointee(s);
-            $crate::ptr::free_raw(s.as_ptr() as usize, size, align)
+            let (size, align, needs_drop) = $crate::ptr::layout_of_pointee(s);
+            $crate::ptr::free_raw(s.as_ptr() as usize, size, align, needs_drop)
         }
     }};
 }
@@ -549,7 +577,11 @@ pub fn alloc_str(s: &str) -> &'static str {
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc<T>(value: T) -> &'static T {
-    let r: &'static T = with_arena(|a| &*a.alloc(value));
+    let r: &'static T = with_arena(|a| {
+        let r = a.alloc(value);
+        a.track_drop(r as *mut T, 1);
+        &*r
+    });
     profile!(T, std::mem::size_of::<T>(), r as *const T as usize);
     r
 }

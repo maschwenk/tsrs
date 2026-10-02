@@ -308,6 +308,8 @@ impl Table {
 }
 
 static RESULT: Mutex<Option<Table>> = Mutex::new(None);
+/// Used ranges of freed regions (`census_would_free_range`).
+pub(super) static REGION_FREES: Mutex<Vec<(u64, u64)>> = Mutex::new(Vec::new());
 static WOULD_FREE: Mutex<Vec<(u64, u32)>> = Mutex::new(Vec::new());
 
 /// After `run`: whether `addr` lies in a block the arena freed or rewound (see `check_would_free`).
@@ -513,6 +515,18 @@ fn run_frozen(roots: &[usize]) {
         would_free.extend(std::mem::take(&mut data.would_free));
     }
     let arena_classes = classes.len() as u32;
+    let mut ranges = std::mem::take(&mut *REGION_FREES.lock().unwrap());
+    ranges.sort_unstable();
+    let region_blocks_before = would_free.len();
+    if !ranges.is_empty() {
+        for b in &blocks {
+            let i = ranges.partition_point(|&(s, _)| s <= b.start);
+            if i > 0 && b.start < ranges[i - 1].0 + ranges[i - 1].1 {
+                would_free.push((b.start, b.size, u32::MAX));
+            }
+        }
+    }
+    eprintln!("census: {} freed regions' ranges, {} arena blocks in them", ranges.len(), would_free.len() - region_blocks_before);
     let stacks = STACKS.lock().unwrap().take().map_or_else(Vec::new, |t| t.stacks);
     classes.extend((0..stacks.len() as u32).map(|stack| Class::Heap { stack }));
     let mut oversized = 0u64;
