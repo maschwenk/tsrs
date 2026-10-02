@@ -16,3 +16,6 @@ pub mod testing;
 pub mod testrunner;
 pub mod tests;
 pub mod testutil;
+
+#[cfg(test)]
+mod test_parser_test;

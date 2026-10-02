@@ -14,6 +14,7 @@ func main() {
 	outDir := flag.String("out", "../../crates/tsrs_fourslash/src/tests", "output directory (gets gen/ and util_gen.rs)")
 	doSurvey := flag.Bool("survey", false, "print node kinds, call targets and interface conversions, then exit")
 	doSigs := flag.Bool("sigs", false, "print the fourslash API the tests use, then exit")
+	parserInputsOut := flag.String("parser-inputs", "", "write the constant test contents (JSON lines) for the parser oracle to this file, then exit")
 	perFile := flag.Int("per-file", 0, "tests per generated file (0 = default)")
 	flag.Parse()
 
@@ -21,6 +22,13 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if *parserInputsOut != "" {
+		if err := parserInputs(l, *parserInputsOut); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	}
 	if *doSigs {
 		sigs(l)
