@@ -11,7 +11,7 @@ use tsrs_tsoptions as tsoptions;
 use crate::file_include::{fileIncludeKind, FileIncludeReason};
 use crate::fileloader::{
     fileLoader, jsxRuntimeImportSpecifier, parse_options_for, prefetch_resolutions, prefetchedResolutions, processedFiles, redirectsFile,
-    source_file_meta_data, LibFile,
+    source_file_meta_data, DuplicateSourceFile, LibFile,
 };
 use crate::includeprocessor::fileIncludeData;
 use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic};
@@ -460,6 +460,7 @@ impl filesParser {
         let lib_file_count = loader.lib_file_count as usize;
 
         let mut missing_files: Vec<String> = Vec::new();
+        let mut duplicate_source_files: Vec<DuplicateSourceFile> = Vec::new();
         let mut files: Vec<P<SourceFile>> = Vec::with_capacity(total_file_count.saturating_sub(lib_file_count));
         let mut lib_files: Vec<P<SourceFile>> = Vec::with_capacity(total_file_count);
 
@@ -500,6 +501,14 @@ impl filesParser {
             After { task: TaskId, data: DataId },
         }
 
+        // recordedDuplicates tracks, per task data, the set of file-name casings that
+        // have already been recorded in duplicateSourceFiles. A file that is reached
+        // from multiple import sites is walked once per site, but each distinct casing
+        // is only parsed and acquired in the parse cache once. Recording the same casing
+        // as a duplicate more than once would cause it to be released more times than it
+        // was acquired when the snapshot is disposed, leaving a dangling cache entry that
+        // panics the next time it is referenced.
+        let mut recorded_duplicates: FxHashMap<DataId, FxHashSet<String>> = FxHashMap::default();
         let mut c = Collector { loader, seen: FxHashMap::default() };
         let mut stack: Vec<Frame> = vec![Frame::List { tasks: c.loader.root_tasks.clone(), next: 0 }];
 
@@ -582,6 +591,13 @@ impl filesParser {
 
                     // ensure we only walk each task once
                     if let Some(checked_name) = c.seen.get(&data) {
+                        if let Some(file) = loader.tasks[task].file {
+                            if *checked_name != loader.tasks[task].normalized_file_path
+                                && recorded_duplicates.entry(data).or_default().insert(loader.tasks[task].normalized_file_path.clone())
+                            {
+                                duplicate_source_files.push(duplicate_source_file(file));
+                            }
+                        }
                         // Identical names normalize identically; only differing ones need the comparison.
                         if force_consistent_casing && *checked_name != loader.tasks[task].normalized_file_path {
                             // Check if it differs only in drive letters its ok to ignore that error:
@@ -633,6 +649,12 @@ impl filesParser {
                     let data_package_id = loader.files_parser.datas[data].package_id.clone();
                     if dedupe && !data_package_id.name.is_empty() {
                         if let Some(&package_id_file) = package_id_to_source_file.get(&data_package_id) {
+                            if let Some(file) = file {
+                                // Package deduplication keeps the first package instance in the
+                                // program, but we still parsed this file and acquired it through
+                                // the host, so snapshot disposal must release that extra owner.
+                                duplicate_source_files.push(duplicate_source_file(file));
+                            }
                             redirect_targets_map
                                 .entry(package_id_file.path().clone())
                                 .or_default()
@@ -693,6 +715,7 @@ impl filesParser {
         processedFiles {
             finished_processing: true,
             files: tsrs_core::alloc_vec(all_files),
+            duplicate_source_files,
             files_by_path,
             project_reference_file_mapper: Some(loader.project_references.take_mapper()),
             resolved_modules,
@@ -709,6 +732,10 @@ impl filesParser {
             redirect_files_by_path,
         }
     }
+}
+
+fn duplicate_source_file(file: P<SourceFile>) -> DuplicateSourceFile {
+    DuplicateSourceFile { parse_options: file.parse_options().clone(), hash: file.hash.get(), script_kind: file.script_kind.get() }
 }
 
 fn add_include_reason(loader: &fileLoader, include_processor: &mut fileIncludeData, task: TaskId, reason: Option<P<FileIncludeReason>>) {

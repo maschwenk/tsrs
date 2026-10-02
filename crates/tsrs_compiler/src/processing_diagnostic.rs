@@ -16,6 +16,7 @@ pub(crate) enum processingDiagnosticKind {
     ExplainingFileInclude,
 }
 
+#[derive(Clone)]
 pub(crate) struct processingDiagnostic {
     pub(crate) kind: processingDiagnosticKind,
     pub(crate) reason: Option<P<FileIncludeReason>>,
@@ -40,6 +41,7 @@ impl processingDiagnostic {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct includeExplainingDiagnostic {
     pub(crate) file: Option<Path>,
     pub(crate) diagnostic_reason: Option<P<FileIncludeReason>>,

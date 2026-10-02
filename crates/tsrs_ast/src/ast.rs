@@ -1520,6 +1520,8 @@ pub struct SourceFile {
     pub check_js_directive: OwnedCell<Option<P<CheckJsDirective>>>,
     pub node_count: OwnedCell<usize>,
     pub text_count: OwnedCell<usize>,
+    // Go `Hash xxh3.Uint128`: the content hash the project system's parse cache keys files by (0 = unset).
+    pub hash: OwnedCell<u128>,
     pub common_js_module_indicator: OwnedCell<Option<P<Node>>>,
     // If this is the SourceFile itself, then this module was "forced"
     // to be an external module (previously "true").
@@ -1585,6 +1587,7 @@ impl NodeFactory {
             check_js_directive: OwnedCell::new(None),
             node_count: OwnedCell::new(0),
             text_count: OwnedCell::new(0),
+            hash: OwnedCell::new(0),
             common_js_module_indicator: OwnedCell::new(None),
             external_module_indicator: OwnedCell::new(None),
             is_bound: AtomicBool::new(false),

@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, FileReference, Kind, Node, NodeFactory, NodeFlags, SourceFile, SourceFileMetaData, SourceFileParseOptions, TokenFlags};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
-use tsrs_core::{alloc_str, CompilerOptions, ModuleKind, ModuleResolutionKind, ResolutionMode, P};
+use tsrs_core::{alloc_str, CompilerOptions, ModuleKind, ModuleResolutionKind, ResolutionMode, ScriptKind, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_module::{self as module, DiagAndArgs, ModeAwareCache, ModeAwareCacheKey, ResolvedModule, ResolvedTypeReferenceDirective, Resolver};
 use tsrs_tsoptions::{self as tsoptions, ParsedCommandLine};
@@ -67,9 +67,23 @@ pub(crate) struct redirectsFile {
     pub(crate) target: Path,
 }
 
+// fileloader.go:90 (content mappers are not ported: no content-mapper fields)
+#[derive(Clone, Debug)]
+pub struct DuplicateSourceFile {
+    pub parse_options: SourceFileParseOptions,
+    pub hash: u128,
+    pub script_kind: ScriptKind,
+}
+
 #[derive(Default)]
 pub struct processedFiles {
     pub(crate) files: &'static [P<SourceFile>],
+    // duplicateSourceFiles tracks parsed files loaded during program construction
+    // that were later dropped from the final program, such as losing filename
+    // casing variants for the same path or files hidden behind package redirect
+    // deduplication. Their parse-cache acquires still need to be balanced when
+    // the program is disposed.
+    pub(crate) duplicate_source_files: Vec<DuplicateSourceFile>,
     pub(crate) files_by_path: FxHashMap<Path, P<SourceFile>>,
     pub(crate) project_reference_file_mapper: Option<projectReferenceFileMapper>,
     pub(crate) missing_files: Vec<String>,

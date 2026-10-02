@@ -77,7 +77,7 @@ fn file_work(c: &Checker, file: P<SourceFile>) -> (u64, u64) {
 }
 
 pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::checkerPool) -> String {
-    let state = pool.state(program);
+    let state = pool.state();
     let files = &program.files;
     let k = pool.checker_count();
     let project_dir = format!("{}/", program.get_current_directory().trim_end_matches('/'));
@@ -94,7 +94,7 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
     // work[c][file] = linked nodes + linked symbols
     let work: Vec<Mutex<Vec<u64>>> = (0..k).map(|_| Mutex::new(Vec::new())).collect();
     let counters: Vec<Mutex<(u64, u64, u64)>> = (0..k).map(|_| Mutex::new((0, 0, 0))).collect();
-    pool.for_each_checker_parallel(program, |idx, c| {
+    pool.for_each_checker_parallel(|idx, c| {
         let w: Vec<u64> = files
             .iter()
             .map(|&f| {
@@ -230,7 +230,7 @@ fn created_by_file(program: &'static Program, pool: &crate::checkerpool::checker
     };
     let k = pool.checker_count();
     let result: Vec<Mutex<Created>> = (0..k).map(|_| Mutex::new((Vec::new(), Vec::new(), 0, 0))).collect();
-    pool.for_each_checker_parallel(program, |idx, c| {
+    pool.for_each_checker_parallel(|idx, c| {
         let mut types = vec![0u64; files.len()];
         let mut symbols = vec![0u64; files.len()];
         let (mut no_type_file, mut no_symbol_file) = (0, 0);

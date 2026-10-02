@@ -189,7 +189,7 @@ impl TypeWriterWalker {
         let source_text = scanner::get_source_text_of_node_from_source_file(sf, node, false /*includeTrivia*/);
         // If we don't use the right checker for the file, its contents won't be up to date
         // since the types/symbols baselines appear to depend on files having been checked.
-        let mut file_checker = self.program.get_type_checker_for_file(sf);
+        let mut file_checker = self.program.get_type_checker_for_file(&tsrs_compiler::Context::default(), sf);
         let c = &mut *file_checker;
         let parent = node.parent().unwrap();
 

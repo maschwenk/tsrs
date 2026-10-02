@@ -205,19 +205,20 @@ fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandL
     }
     let program = compiler::new_program(opts);
     let harness_options = harness_options.clone();
+    let ctx = &compiler::Context::default();
     let mut errors = Vec::new();
     errors.extend(program.get_config_file_parsing_diagnostics());
     errors.extend(program.get_program_diagnostics());
-    errors.extend(program.get_syntactic_diagnostics(None));
+    errors.extend(program.get_syntactic_diagnostics(ctx, None));
     if !crate::syntax_only() {
-        errors.extend(program.get_semantic_diagnostics(None));
-        errors.extend(program.get_global_diagnostics());
+        errors.extend(program.get_semantic_diagnostics(ctx, None));
+        errors.extend(program.get_global_diagnostics(ctx));
     }
     if harness_options.capture_suggestions && !crate::syntax_only() {
-        errors.extend(program.get_suggestion_diagnostics(None));
+        errors.extend(program.get_suggestion_diagnostics(ctx, None));
     }
     if program.options().get_emit_declarations() && !crate::syntax_only() {
-        errors.extend(program.get_declaration_diagnostics(None));
+        errors.extend(program.get_declaration_diagnostics(ctx, None));
     }
     let errors = compiler::sort_and_deduplicate_diagnostics(&errors);
     CompilationResult { diagnostics: errors, options: program.options().get(), program, harness_options }
