@@ -154,21 +154,52 @@ fn normalize(result: &Value) -> String {
     json::marshal(&result).unwrap()
 }
 
-fn run_profile(name: &str) {
-    let spec = json::unmarshal(&std::fs::read_to_string(format!("{DIR}/{name}.json")).unwrap()).unwrap();
-    let expected_text = std::fs::read_to_string(format!("{DIR}/{name}.out")).unwrap();
+fn uri_of(case: &Value) -> lsproto::DocumentUri {
+    lsconv::file_name_to_document_uri(&format!("/{}", str_field(case, "file")))
+}
+
+fn position_in(case: &Value, files: &[(String, String)]) -> lsproto::Position {
+    let file = str_field(case, "file");
+    let text = &files.iter().find(|(k, _)| k.trim_start_matches('/') == file).unwrap().1;
+    position_of(text, str_field(case, "caret"))
+}
+
+fn read_expected(name: &str) -> OrderedMap<String, Value> {
     let mut expected: OrderedMap<String, Value> = OrderedMap::default();
-    for line in expected_text.lines() {
+    let Ok(text) = std::fs::read_to_string(format!("{DIR}/{name}.out")) else {
+        return expected;
+    };
+    for line in text.lines() {
         let v = json::unmarshal(line).unwrap();
         expected.insert(str_field(&v, "id").to_string(), v);
     }
+    expected
+}
+
+fn rich_expected() -> OrderedMap<String, Value> {
+    read_expected("rich")
+}
+
+fn run_profile(name: &str) {
+    let spec = json::unmarshal(&std::fs::read_to_string(format!("{DIR}/{name}.json")).unwrap()).unwrap();
+    let expected = read_expected(name);
     let (ls, ctx, files) = setup(&spec);
     let Value::Array(cases) = field(&spec, "cases") else { panic!("cases") };
     let mut failures = Vec::new();
     for case in cases {
         let id = str_field(case, "id");
         let method = str_field(case, "method");
-        let want = &expected[id];
+        if let Value::String(message) = field(case, "expect_error") {
+            let err = ls.provide_completion(&ctx, &uri_of(case), position_in(case, &files), None).unwrap_err();
+            if err.message != *message {
+                failures.push(format!("{id}: want error {message:?}, got {:?}", err.message));
+            }
+            continue;
+        }
+        let want = match field(case, "expect_same_as") {
+            Value::String(other) => &rich_expected()[other.as_str()],
+            _ => &expected[id],
+        };
         let actual: Value = if method == "completionItem/resolve" {
             let from = &expected[str_field(case, "from")];
             let Value::Array(items) = field(field(from, "result"), "items") else { panic!("items") };
@@ -227,4 +258,12 @@ fn completions_minimal_client() {
 #[test]
 fn completions_preferences() {
     run_profile("pref");
+}
+
+// The auto-import registry is a placeholder that is never prepared (docs/LSP.md "Known gaps"), so completions
+// that would collect auto-imports or build an import adder take Go's ErrNeedsAutoImports path (the server then
+// asks the session for a language service with auto-imports and retries).
+#[test]
+fn completions_registry_not_prepared() {
+    run_profile("autoimports");
 }
