@@ -15,12 +15,20 @@ Inputs:
                                     into a temporary directory: `// @filename` splits files, the other `// @key:
                                     value` directives become tsconfig.json compilerOptions
 
+Watched files (phase 4): --closed GLOB... keeps matching files closed (not opened); --disk-edits N then, after the
+other rounds, edits the first N closed files on disk (a character inserted in an identifier), waits --watch-wait
+seconds (--disk-edit-at REGEX: insert after the first match instead), re-requests everything for the open files, reverts the file on disk and requests again. With --watch-client
+the client declares `workspace.didChangeWatchedFiles.dynamicRegistration` and sends `workspace/didChangeWatchedFiles`
+itself; without it the servers fall back to their builtin in-process watcher (FSEvents on macOS) and the harness only
+writes the file.
+
 Output: one line per request kind (requests, equal, different), the first --show differences as unified diffs of
 the pretty-printed JSON, exit status 1 if anything differs. --dump DIR writes both transcripts.
 """
 
 import argparse
 import difflib
+import fnmatch
 import glob
 import json
 import os
@@ -281,6 +289,11 @@ def language_id(path):
     return "typescript"
 
 
+def is_closed(root, f, patterns):
+    rel = os.path.relpath(f, root)
+    return any(fnmatch.fnmatch(rel, p) for p in (patterns or []))
+
+
 def run_session(server, root, files, args):
     """Runs the scripted session; returns [(key, response)] in request order."""
     results = []
@@ -296,6 +309,8 @@ def run_session(server, root, files, args):
         "workspace": {"configuration": True, "workspaceFolders": True},
         "general": {"positionEncodings": ["utf-16"]},
     }
+    if args.watch_client:
+        caps["workspace"]["didChangeWatchedFiles"] = {"dynamicRegistration": True}
     init = server.request("initialize", {
         "processId": None,
         "rootUri": file_uri(root),
@@ -305,6 +320,8 @@ def run_session(server, root, files, args):
     results.append(("initialize", init))
     server.notify("initialized", {})
     texts = {}
+    closed = [f for f in files if is_closed(root, f, args.closed)]
+    files = [f for f in files if f not in closed]
     for f in files:
         texts[f] = open(f, encoding="utf-8", errors="replace").read()
         server.notify("textDocument/didOpen", {"textDocument": {
@@ -353,6 +370,36 @@ def run_session(server, root, files, args):
                 {"range": {"start": pos, "end": end}, "text": ""}]})
             texts[f] = text
         per_file_requests("reverted ")
+    if args.disk_edits:
+        # Let the servers finish registering watchers (client requests / builtin subscriptions) first.
+        server.drain(args.watch_wait)
+
+        def changed_on_disk(f):
+            if args.watch_client:
+                server.notify("workspace/didChangeWatchedFiles", {"changes": [{"uri": file_uri(f), "type": 2}]})
+            server.drain(args.watch_wait)
+
+        for f in closed[: args.disk_edits]:
+            with open(f, encoding="utf-8") as fh:
+                text = fh.read()
+            if args.disk_edit_at:
+                m = re.search(args.disk_edit_at, text)
+                if not m:
+                    continue
+                off = m.end()
+            else:
+                offs = identifier_offsets(text, 3)
+                if not offs:
+                    continue
+                off = offs[len(offs) // 2]
+            with open(f, "w", encoding="utf-8") as fh:
+                fh.write(text[:off] + "x" + text[off:])
+            changed_on_disk(f)
+            per_file_requests(f"disk({os.path.relpath(f, root)}) ")
+            with open(f, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            changed_on_disk(f)
+        per_file_requests("disk-reverted ")
     for f in files:
         server.notify("textDocument/didClose", {"textDocument": {"uri": file_uri(f)}})
     server.drain(args.drain)
@@ -396,6 +443,11 @@ def main():
     ap.add_argument("--drain", type=float, default=1.0)
     ap.add_argument("--show", type=int, default=5)
     ap.add_argument("--dump")
+    ap.add_argument("--closed", nargs="*", help="globs (relative to the project) of files to keep closed")
+    ap.add_argument("--disk-edits", type=int, default=0, help="closed files to edit on disk mid-session")
+    ap.add_argument("--disk-edit-at", help="regex; the disk edit inserts its character after the first match")
+    ap.add_argument("--watch-client", action="store_true", help="client-side watching (dynamic registration)")
+    ap.add_argument("--watch-wait", type=float, default=2.0, help="seconds to wait after a disk edit")
     args = ap.parse_args()
     args.requests = set(args.requests.split(","))
 
@@ -432,7 +484,7 @@ def main():
         keys = [k for k, _ in out["a"]] + [k for k, _ in out["b"] if k not in a]
         for key in keys:
             kind = key.split(" ")[0]
-            if kind.startswith("edit(") or kind == "reverted":
+            if kind.startswith("edit(") or kind.startswith("disk(") or kind in ("reverted", "disk-reverted"):
                 kind = key.split(" ")[1]
             st = stats.setdefault(kind, [0, 0])
             st[0] += 1
