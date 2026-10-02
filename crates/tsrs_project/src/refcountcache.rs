@@ -1,0 +1,171 @@
+use std::hash::Hash;
+use std::sync::{Arc, Mutex};
+
+use tsrs_core::collections::SyncMap;
+
+struct refCountCacheEntry<V> {
+    mu: Mutex<refCountCacheEntryState<V>>,
+}
+
+struct refCountCacheEntryState<V> {
+    value: Option<V>,
+    ref_count: i32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RefCountCacheOptions {
+    // DisableDeletion prevents entries from being removed from the cache.
+    // Used for testing.
+    pub disable_deletion: bool,
+}
+
+pub struct RefCountCache<K: Hash + Eq, V, AcquireArgs> {
+    pub options: RefCountCacheOptions,
+    entries: SyncMap<K, Arc<refCountCacheEntry<V>>>,
+
+    parse: Box<dyn Fn(&K, AcquireArgs) -> V + Send + Sync>,
+}
+
+// refcountcache.go:28
+pub fn new_ref_count_cache<K: Hash + Eq, V, AcquireArgs>(
+    options: RefCountCacheOptions,
+    parse: impl Fn(&K, AcquireArgs) -> V + Send + Sync + 'static,
+) -> RefCountCache<K, V, AcquireArgs> {
+    RefCountCache { options, entries: SyncMap::default(), parse: Box::new(parse) }
+}
+
+impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArgs> {
+    // refcountcache.go:44
+    // Acquire retrieves or creates a cache entry for the given identity and hash.
+    // If an entry exists with matching identity and hash, its refcount is incremented
+    // and the cached value is returned. Otherwise, parse() is called to create the
+    // value, which is stored and returned with refcount 1.
+    //
+    // The caller is responsible for calling Deref when done with the value.
+    pub fn acquire(&self, identity: K, acquire_args: AcquireArgs) -> V {
+        self.load_or_store_new_locked_entry(&identity, |entry, loaded| {
+            if !loaded {
+                // New entry - parse the value
+                // phase 4 (docs/LSP.md memory plan): the parse function allocates the file's AST and binder data
+                // in a region owned by this cache entry; the entry's final Deref frees it.
+                let value = (self.parse)(&identity, acquire_args);
+                entry.value = Some(value.clone());
+                return value;
+            }
+            entry.value.clone().unwrap()
+        })
+    }
+
+    // refcountcache.go:55
+    pub fn has(&self, identity: &K) -> bool {
+        self.entries.load(identity).is_some()
+    }
+
+    // refcountcache.go:64
+    // AcquireExisting retrieves an existing entry and increments its reference count.
+    // It returns false without producing a value when no live entry exists.
+    //
+    // The caller is responsible for calling Deref when a value is returned.
+    pub fn acquire_existing(&self, identity: &K) -> Option<V> {
+        let entry = self.entries.load(identity)?;
+        let mut st = entry.mu.lock().unwrap();
+        if st.ref_count <= 0 && !self.options.disable_deletion {
+            return None;
+        }
+        st.ref_count += 1;
+        st.value.clone()
+    }
+
+    // refcountcache.go:86
+    // AcquireOrError retrieves an existing entry (incrementing its refcount) or produces a new one via
+    // produce. If produce returns an error, no entry is stored and the error is returned, so callers can
+    // cache only successful results. produce runs while holding the new entry's lock, so concurrent
+    // acquisitions of the same identity that miss serialize on it.
+    //
+    // The caller is responsible for calling Deref when a value is returned without error.
+    pub fn acquire_or_error<E>(&self, identity: K, produce: impl FnOnce() -> Result<V, E>) -> Result<V, E> {
+        self.load_or_store_new_locked_entry(&identity, |entry, loaded| {
+            if loaded {
+                return Ok(entry.value.clone().unwrap());
+            }
+            match produce() {
+                Err(err) => {
+                    // Undo the speculative entry so failures are not cached.
+                    entry.ref_count = 0;
+                    self.entries.delete(&identity);
+                    Err(err)
+                }
+                Ok(value) => {
+                    entry.value = Some(value.clone());
+                    Ok(value)
+                }
+            }
+        })
+    }
+
+    // refcountcache.go:105
+    // Ref increments the reference count for an existing entry.
+    // Panics if the entry does not exist.
+    pub fn ref_(&self, identity: K) {
+        let Some(entry) = self.entries.load(&identity) else {
+            panic!("cache entry not found");
+        };
+        let mut st = entry.mu.lock().unwrap();
+        if st.ref_count <= 0 && !self.options.disable_deletion {
+            // Entry was deleted while we were acquiring the lock
+            let value = st.value.clone();
+            self.load_or_store_new_locked_entry(&identity, |new_entry, _| {
+                new_entry.value = value;
+            });
+            return;
+        }
+        st.ref_count += 1;
+    }
+
+    // refcountcache.go:125
+    // Deref decrements the reference count for an entry.
+    // When the refcount reaches zero, the entry is removed from the cache
+    // (unless DisableDeletion is set).
+    pub fn deref(&self, identity: &K) {
+        let Some(entry) = self.entries.load(identity) else {
+            return;
+        };
+        let mut st = entry.mu.lock().unwrap();
+        st.ref_count -= 1;
+        if st.ref_count <= 0 && !self.options.disable_deletion {
+            // phase 4 (docs/LSP.md memory plan): the entry's file region is freed here.
+            self.entries.delete(identity);
+        }
+    }
+
+    // refcountcache.go:141
+    // loadOrStoreNewLockedEntry loads an existing entry or creates a new one.
+    // The returned entry's mutex is locked and its refCount is incremented
+    // (or initialized to 1 in the case of a new entry).
+    //
+    // Go returns the entry locked and the caller unlocks it with `defer`; here the caller's code runs as `f`
+    // while the lock is held.
+    fn load_or_store_new_locked_entry<R>(&self, key: &K, f: impl FnOnce(&mut refCountCacheEntryState<V>, bool) -> R) -> R {
+        loop {
+            let entry = Arc::new(refCountCacheEntry { mu: Mutex::new(refCountCacheEntryState { value: None, ref_count: 1 }) });
+            let mut guard = entry.mu.lock().unwrap();
+            let (existing, loaded) = self.entries.load_or_store(key.clone(), entry.clone());
+            if loaded {
+                drop(guard);
+                let mut existing_guard = existing.mu.lock().unwrap();
+                if existing_guard.ref_count <= 0 && !self.options.disable_deletion {
+                    // Existing entry was deleted while we were acquiring the lock
+                    continue;
+                }
+                existing_guard.ref_count += 1;
+                return f(&mut existing_guard, true);
+            }
+            return f(&mut guard, false);
+        }
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.entries.size()
+    }
+}
+
