@@ -186,7 +186,7 @@ pub(crate) fn missing_list_nodes() -> &'static [P<Node>] {
 
 pub(crate) fn is_missing_node_list(list: Option<P<NodeList>>) -> bool {
     match list {
-        Some(list) => std::ptr::eq(list.nodes.as_ptr(), missing_list_nodes().as_ptr()),
+        Some(list) => std::ptr::eq(list.nodes().as_ptr(), missing_list_nodes().as_ptr()),
         None => false,
     }
 }
@@ -281,8 +281,8 @@ impl Parser {
         node.as_source_file().text_index.set(self.source_text_index);
         let node = self.finish_node(node, pos);
         let result = P::from_static(node.as_source_file());
-        if !result.statements.nodes.is_empty() {
-            let value = result.statements.nodes[0].expression();
+        if !result.statements.nodes().is_empty() {
+            let value = result.statements.nodes()[0].expression();
             self.validate_json_value(result, value);
         }
         self.finish_source_file(result, false);
@@ -353,7 +353,7 @@ pub(crate) fn is_double_quoted_string(node: P<Node>) -> bool {
 impl Parser {
     // validateJsonObjectLiteral validates properties of a JSON object literal.
     pub(crate) fn validate_json_object_literal(&mut self, source_file: P<SourceFile>, node: P<Node>) {
-        for element in node.as_object_literal_expression().properties().nodes {
+        for element in node.as_object_literal_expression().properties().nodes() {
             let element = *element;
             if element.kind() != Kind::PropertyAssignment {
                 self.diagnostics.push(ast::new_diagnostic(
@@ -676,7 +676,7 @@ impl Parser {
         if self.possible_await_spans.len() % 2 == 1 {
             panic!("possibleAwaitSpans malformed: odd number of indices, not paired into spans.");
         }
-        let source_statements: &'static [P<Node>] = source_file.statements.nodes;
+        let source_statements: &'static [P<Node>] = source_file.statements.nodes();
         let mut statements: Vec<P<Node>> = Vec::new();
         let saved_parse_diagnostics = std::mem::take(&mut self.diagnostics);
 
@@ -2088,10 +2088,10 @@ impl Parser {
         if result.flags().intersects(NodeFlags::JavaScriptFile) {
             self.check_js_syntax(result);
             if let Some(heritage_clauses) = heritage_clauses {
-                for clause in heritage_clauses.nodes {
+                for clause in heritage_clauses.nodes() {
                     let clause = clause.as_heritage_clause();
                     if clause.token() == Kind::ExtendsKeyword {
-                        for expr in clause.types().nodes {
+                        for expr in clause.types().nodes() {
                             self.check_js_syntax(*expr);
                         }
                     }

@@ -593,9 +593,9 @@ pub(crate) fn get_adjusted_location(node: P<Node>, for_rename: bool, mut source_
     // /**/<var|let|const> [|name|] ...
     if (node.kind() == Kind::VarKeyword || node.kind() == Kind::ConstKeyword || node.kind() == Kind::LetKeyword)
         && ast::is_variable_declaration_list(parent)
-        && parent.as_variable_declaration_list().declarations.nodes.len() == 1
+        && parent.as_variable_declaration_list().declarations.nodes().len() == 1
     {
-        let declaration = parent.as_variable_declaration_list().declarations.nodes[0];
+        let declaration = parent.as_variable_declaration_list().declarations.nodes()[0];
         let name = declaration.name().unwrap();
         if ast::is_identifier(name) {
             return name;
@@ -698,8 +698,8 @@ pub(crate) fn get_adjusted_location(node: P<Node>, for_rename: bool, mut source_
             // /**/extends [|name|]
             // /**/implements [|name|]
             let types = node.as_heritage_clause().types();
-            if types.nodes.len() == 1 {
-                return Some(ast::get_heritage_clause_element_name(types.nodes[0]));
+            if types.nodes().len() == 1 {
+                return Some(ast::get_heritage_clause_element_name(types.nodes()[0]));
             }
 
             // fall through `getAdjustedLocation`

@@ -2143,7 +2143,7 @@ impl Checker {
     // checker.go:19205
     pub(crate) fn get_properties_of_union_or_intersection_type(&mut self, t: P<Type>) -> &'static [P<Symbol>] {
         let d = t.as_union_or_intersection_type();
-        if d.resolved_properties.get().is_none() {
+        if d.resolved_properties().is_none() {
             let mut checked: FxHashSet<&'static str> = FxHashSet::default();
             let mut props: Vec<P<Symbol>> = Vec::new();
             for &current in d.types.get() {
@@ -2166,9 +2166,9 @@ impl Checker {
                     break;
                 }
             }
-            d.resolved_properties.set(Some(alloc_vec(props)));
+            d.set_resolved_properties(Some(alloc_vec(props)));
         }
-        d.resolved_properties.get().unwrap()
+        d.resolved_properties().unwrap()
     }
 
     // checker.go:19231

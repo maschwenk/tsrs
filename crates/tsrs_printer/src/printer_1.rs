@@ -786,14 +786,14 @@ impl Printer {
             return false;
         }
 
-        if self.get_leading_line_terminator_count(Some(body), block.statements.nodes.first().copied(), ListFormat::PreserveLines) > 0
-            || self.get_closing_line_terminator_count(Some(body), block.statements.nodes.last().copied(), ListFormat::PreserveLines, block.statements.loc()) > 0
+        if self.get_leading_line_terminator_count(Some(body), block.statements.nodes().first().copied(), ListFormat::PreserveLines) > 0
+            || self.get_closing_line_terminator_count(Some(body), block.statements.nodes().last().copied(), ListFormat::PreserveLines, block.statements.loc()) > 0
         {
             return false;
         }
 
         let mut previous_statement: Option<P<Node>> = None;
-        for statement in block.statements.nodes {
+        for statement in block.statements.nodes() {
             if self.get_separating_line_terminator_count(previous_statement, Some(*statement), ListFormat::PreserveLines) > 0 {
                 return false;
             }
@@ -847,7 +847,7 @@ impl Printer {
 
         // Emit detached comment if there are no prologue directives or if the first node is synthesized.
         // The synthesized node will have no leading comment so some comments may be missed.
-        file.statements.nodes.is_empty() || !is_prologue_directive(file.statements.nodes[0]) || node_is_synthesized(file.statements.nodes[0])
+        file.statements.nodes().is_empty() || !is_prologue_directive(file.statements.nodes()[0]) || node_is_synthesized(file.statements.nodes()[0])
     }
 
     pub(crate) fn has_comments_at_position(&self, pos: i32) -> bool {
@@ -1530,12 +1530,12 @@ impl Printer {
 
 pub(crate) fn can_emit_simple_arrow_head(parent_node: P<Node>, parameters: P<NodeList>) -> bool {
     // only arrow functions with a single parameter may have simple arrow head
-    if !is_arrow_function(parent_node) || parameters.nodes.len() != 1 {
+    if !is_arrow_function(parent_node) || parameters.nodes().len() != 1 {
         return false;
     }
 
     let parent = parent_node.as_arrow_function();
-    let parameter_node = parameters.nodes[0];
+    let parameter_node = parameters.nodes()[0];
     let parameter = parameter_node.as_parameter_declaration();
 
     parameter_node.pos() == parent_node.pos() // may not have parsed tokens between start of parent and parameter
@@ -2166,7 +2166,7 @@ impl Printer {
         }
         self.write_trailing_semicolon();
         if let Some(members) = n.members() {
-            if !members.nodes.is_empty() {
+            if !members.nodes().is_empty() {
                 if single_line {
                     self.write_space();
                 } else {

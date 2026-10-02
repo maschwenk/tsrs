@@ -122,7 +122,7 @@ impl Checker {
         let type_arguments = node.type_arguments();
         if symbol.check_flags.get().intersects(CheckFlags::Unresolved) {
             let alias_type_arguments: Vec<P<Type>> = type_arguments.iter().map(|&n| self.get_type_from_type_node(n)).collect();
-            let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), type_arguments: Cell::new(alloc_vec(alias_type_arguments)) });
+            let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), type_arguments: ThinSliceCell::new(alloc_vec(alias_type_arguments)) });
             let key = get_alias_key(Some(alias).into());
             let mut error_type = self.error_types.get(&key).copied();
             if error_type.is_none() {
@@ -176,7 +176,7 @@ impl Checker {
             }
             let mut new_alias = None;
             if new_alias_symbol.is_some() {
-                new_alias = Some(P::new(TypeAlias { symbol: Cell::new(new_alias_symbol), type_arguments: Cell::new(alloc_vec(alias_type_arguments)) }));
+                new_alias = Some(P::new(TypeAlias { symbol: Cell::new(new_alias_symbol), type_arguments: ThinSliceCell::new(alloc_vec(alias_type_arguments)) }));
             }
             let type_arguments_from_node = self.get_type_arguments_from_node(node);
             return self.get_type_alias_instantiation(symbol, &type_arguments_from_node, new_alias);
@@ -277,7 +277,7 @@ impl Checker {
         let symbol = self.get_alias_symbol_for_type_node(node);
         if symbol.is_some() {
             let type_arguments = self.get_type_arguments_for_alias_symbol(symbol);
-            return Some(P::new(TypeAlias { symbol: Cell::new(symbol), type_arguments: Cell::new(alloc_vec(type_arguments)) }));
+            return Some(P::new(TypeAlias { symbol: Cell::new(symbol), type_arguments: ThinSliceCell::new(alloc_vec(type_arguments)) }));
         }
         None
     }
@@ -898,7 +898,7 @@ impl Checker {
         if links.resolved_type.get().is_none() {
             let alias = self.get_alias_for_type_node(node);
             let types: Vec<P<Type>> =
-                node.as_union_type_node().union_or_intersection_type_node_base.types.nodes.iter().map(|&n| self.get_type_from_type_node(n)).collect();
+                node.as_union_type_node().union_or_intersection_type_node_base.types.nodes().iter().map(|&n| self.get_type_from_type_node(n)).collect();
             links.resolved_type.set(Some(self.get_union_type_ex(&types, UnionReduction::Literal, alias.into(), None /*origin*/)));
         }
         links.resolved_type.get().unwrap()
@@ -910,7 +910,7 @@ impl Checker {
         if links.resolved_type.get().is_none() {
             let alias = self.get_alias_for_type_node(node);
             let types: Vec<P<Type>> =
-                node.as_intersection_type_node().union_or_intersection_type_node_base.types.nodes.iter().map(|&n| self.get_type_from_type_node(n)).collect();
+                node.as_intersection_type_node().union_or_intersection_type_node_base.types.nodes().iter().map(|&n| self.get_type_from_type_node(n)).collect();
             // We perform no supertype reduction for X & {} or {} & X, where X is one of string, number, bigint,
             // or a pattern literal template type. This enables union types like "a" | "b" | string & {} or
             // "aa" | "ab" | `a${string}` which preserve the literal types for purposes of statement completion.
@@ -933,10 +933,10 @@ impl Checker {
         let links = self.type_node_links.get(node);
         if links.resolved_type.get().is_none() {
             let spans = node.as_template_literal_type_node().template_spans;
-            let mut texts: Vec<&str> = vec![""; spans.nodes.len() + 1];
-            let mut types: Vec<P<Type>> = Vec::with_capacity(spans.nodes.len());
+            let mut texts: Vec<&str> = vec![""; spans.nodes().len() + 1];
+            let mut types: Vec<P<Type>> = Vec::with_capacity(spans.nodes().len());
             texts[0] = node.as_template_literal_type_node().head.text();
-            for (i, &span) in spans.nodes.iter().enumerate() {
+            for (i, &span) in spans.nodes().iter().enumerate() {
                 texts[i + 1] = span.as_template_literal_type_span().literal.text();
                 types.push(self.get_type_from_type_node(span.type_node().unwrap()));
             }
@@ -1780,10 +1780,10 @@ impl Checker {
     // checker.go:25407
     pub(crate) fn is_reducible_intersection(&mut self, t: P<Type>) -> bool {
         let d = t.as_intersection_type();
-        if d.unique_literal_filled_instantiation.get().is_none() {
-            d.unique_literal_filled_instantiation.set(Some(self.instantiate_type(t, Some(self.unique_literal_mapper))));
+        if d.unique_literal_filled_instantiation().is_none() {
+            d.set_unique_literal_filled_instantiation(Some(self.instantiate_type(t, Some(self.unique_literal_mapper))));
         }
-        let instantiation = d.unique_literal_filled_instantiation.get().unwrap();
+        let instantiation = d.unique_literal_filled_instantiation().unwrap();
         self.get_reduced_type(instantiation) != instantiation
     }
 
@@ -2181,7 +2181,7 @@ impl Checker {
         sig.parameters.set(alloc_slice(parameters));
         sig.set_this_parameter(this_parameter);
         sig.resolved_return_type.set(resolved_return_type);
-        sig.resolved_type_predicate.set(resolved_type_predicate);
+        sig.set_resolved_type_predicate(resolved_type_predicate, self.no_type_predicate);
         sig.min_argument_count.set(min_argument_count);
         sig.resolved_min_argument_count.set(-1);
         sig
@@ -2205,10 +2205,10 @@ impl Checker {
         }
         if t.flags().intersects(TypeFlags::Union) {
             let u = t.as_union_type();
-            if u.regular_type.get().is_none() {
-                u.regular_type.set(self.map_type(t, |c, t| Some(c.get_regular_type_of_literal_type(t))));
+            if u.regular_type().is_none() {
+                u.set_regular_type(self.map_type(t, |c, t| Some(c.get_regular_type_of_literal_type(t))));
             }
-            return u.regular_type.get().unwrap();
+            return u.regular_type().unwrap();
         }
         t
     }
@@ -2556,7 +2556,7 @@ impl Checker {
         }
         let u = t.as_union_type();
         let mut types = u.types.get();
-        if let Some(origin) = u.origin.get() {
+        if let Some(origin) = u.origin() {
             if origin.flags().intersects(TypeFlags::Union) {
                 types = origin.types();
             }

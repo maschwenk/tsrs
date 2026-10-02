@@ -157,11 +157,11 @@ fn verify(program: &'static Program) {
                 continue;
             }
             freed.check(flow.addr(), &|| format!("flow node {:?} in {}", flow.flags.get(), file.file_name()));
-            flow_work.extend(flow.antecedent.get());
+            flow_work.extend(flow.antecedent());
             if let Some(n) = flow.node.get() {
                 freed.check(n.addr(), &|| format!("node of flow node {:?} in {}", flow.flags.get(), file.file_name()));
             }
-            let mut list = flow.antecedents.get();
+            let mut list = flow.antecedents();
             while let Some(l) = list {
                 freed.check(l.addr(), &|| format!("antecedent list of {:?} in {}", flow.flags.get(), file.file_name()));
                 flow_work.push(l.flow);

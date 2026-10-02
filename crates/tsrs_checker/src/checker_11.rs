@@ -20,11 +20,7 @@ impl Checker {
         if self.lazy_prop_cache {
             return self.get_union_or_intersection_property_lazy_cache(t, name, skip_object_function_property_augment);
         }
-        let cache = if skip_object_function_property_augment {
-            ast::get_symbol_table(&t.as_union_or_intersection_type().property_cache_without_function_property_augment)
-        } else {
-            ast::get_symbol_table(&t.as_union_or_intersection_type().property_cache)
-        };
+        let cache = t.as_union_or_intersection_type().property_cache_for_write(skip_object_function_property_augment);
         if let Some(prop) = cache.lookup(name) {
             return Some(prop);
         }
@@ -36,7 +32,7 @@ impl Checker {
             cache.set(key, prop);
             // Propagate an entry from the non-augmented cache to the augmented cache unless the property is partial.
             if skip_object_function_property_augment && !prop.check_flags.get().intersects(CheckFlags::Partial) {
-                let augmented_cache = ast::get_symbol_table(&t.as_union_or_intersection_type().property_cache);
+                let augmented_cache = t.as_union_or_intersection_type().property_cache_for_write(false);
                 if augmented_cache.lookup(name).is_none() {
                     augmented_cache.set(key, prop);
                 }
@@ -51,12 +47,11 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_union_or_intersection_property_lazy_cache(&mut self, t: P<Type>, name: &str, skip_object_function_property_augment: bool) -> Option<P<Symbol>> {
         let d = t.as_union_or_intersection_type();
-        let cache_cell = if skip_object_function_property_augment { &d.property_cache_without_function_property_augment } else { &d.property_cache };
-        if let Some(prop) = cache_cell.get().and_then(|c| c.lookup(name)) {
+        if let Some(prop) = d.property_cache(skip_object_function_property_augment).and_then(|c| c.lookup(name)) {
             return Some(prop);
         }
         if !skip_object_function_property_augment {
-            if let Some(prop) = d.property_cache_without_function_property_augment.get().and_then(|c| c.lookup(name)) {
+            if let Some(prop) = d.property_cache(true).and_then(|c| c.lookup(name)) {
                 if !prop.check_flags.get().intersects(CheckFlags::Partial) {
                     self.lazy_member_stats.prop_cache_shared_hits += 1;
                     return Some(prop);
@@ -66,10 +61,10 @@ impl Checker {
         let prop = self.create_union_or_intersection_property(t, name, skip_object_function_property_augment);
         if let Some(prop) = prop {
             let key = if prop.name() == name { prop.name() } else { alloc_str(name) };
-            ast::get_symbol_table(cache_cell).set(key, prop);
+            d.property_cache_for_write(skip_object_function_property_augment).set(key, prop);
             if skip_object_function_property_augment
                 && !prop.check_flags.get().intersects(CheckFlags::Partial)
-                && d.property_cache.get().map_or(true, |c| c.lookup(name).is_none())
+                && d.property_cache(false).map_or(true, |c| c.lookup(name).is_none())
             {
                 self.lazy_member_stats.prop_cache_copies_avoided += 1;
             }
@@ -463,11 +458,11 @@ impl Checker {
     pub(crate) fn get_apparent_type_of_intersection_type(&mut self, t: P<Type>, this_argument: P<Type>) -> P<Type> {
         if t == this_argument {
             let d = t.as_intersection_type();
-            if d.resolved_apparent_type.get().is_none() {
+            if d.resolved_apparent_type().is_none() {
                 let resolved = self.get_type_with_this_argument(t, Some(this_argument), true /*needApparentType*/);
-                d.resolved_apparent_type.set(Some(resolved));
+                d.set_resolved_apparent_type(Some(resolved));
             }
-            return d.resolved_apparent_type.get().unwrap();
+            return d.resolved_apparent_type().unwrap();
         }
         let key = CachedTypeKey { kind: CachedTypeKind::ApparentType, type_id: this_argument.id };
         let result = match self.cached_types.get(&key).copied() {
@@ -491,11 +486,11 @@ impl Checker {
     pub fn get_reduced_type(&mut self, t: P<Type>) -> P<Type> {
         if t.flags().intersects(TypeFlags::Union) {
             if t.object_flags().intersects(ObjectFlags::ContainsIntersections) {
-                if let Some(reduced_type) = t.as_union_type().resolved_reduced_type.get() {
+                if let Some(reduced_type) = t.as_union_type().resolved_reduced_type() {
                     return reduced_type;
                 }
                 let reduced_type = self.get_reduced_union_type(t);
-                t.as_union_type().resolved_reduced_type.set(Some(reduced_type));
+                t.as_union_type().set_resolved_reduced_type(Some(reduced_type));
                 return reduced_type;
             }
         } else if t.flags().intersects(TypeFlags::Intersection) {
@@ -595,7 +590,7 @@ impl Checker {
         };
         let reduced = self.get_union_type(&reduced_types);
         if reduced.flags().intersects(TypeFlags::Union) {
-            reduced.as_union_type().resolved_reduced_type.set(Some(reduced));
+            reduced.as_union_type().set_resolved_reduced_type(Some(reduced));
         }
         reduced
     }
@@ -1107,7 +1102,7 @@ impl Checker {
         } else if flags.intersects(TypeFlags::UnionOrIntersection) {
             let mut source = t;
             if t.flags().intersects(TypeFlags::Union) {
-                if let Some(origin) = t.as_union_type().origin.get() {
+                if let Some(origin) = t.as_union_type().origin() {
                     if origin.flags().intersects(TypeFlags::UnionOrIntersection) {
                         source = origin;
                     }
@@ -1754,7 +1749,7 @@ impl Checker {
     pub(crate) fn instantiate_type_alias(&mut self, alias: Option<P<TypeAlias>>, m: Option<P<TypeMapper>>) -> Option<P<TypeAlias>> {
         let alias = alias?;
         let type_arguments = self.instantiate_types(alias.type_arguments(), m);
-        Some(P::new(TypeAlias { symbol: Cell::new(alias.symbol()), type_arguments: Cell::new(alloc_vec(type_arguments)) }))
+        Some(P::new(TypeAlias { symbol: Cell::new(alias.symbol()), type_arguments: ThinSliceCell::new(alloc_vec(type_arguments)) }))
     }
 
     /// `instantiate_type_alias` for the alias argument of a cached type constructor (`AliasArg::Pending`): the type
@@ -2379,8 +2374,8 @@ impl Checker {
                 let type_node = node.type_node().unwrap();
                 type_node.kind() != Kind::ArrayType || self.may_resolve_type_alias(type_node.as_array_type_node().element_type)
             }
-            Kind::UnionType => node.as_union_type_node().types().nodes.iter().any(|&t| self.may_resolve_type_alias(t)),
-            Kind::IntersectionType => node.as_intersection_type_node().types().nodes.iter().any(|&t| self.may_resolve_type_alias(t)),
+            Kind::UnionType => node.as_union_type_node().types().nodes().iter().any(|&t| self.may_resolve_type_alias(t)),
+            Kind::IntersectionType => node.as_intersection_type_node().types().nodes().iter().any(|&t| self.may_resolve_type_alias(t)),
             Kind::IndexedAccessType => self.may_resolve_type_alias(node.as_indexed_access_type_node().object_type) || self.may_resolve_type_alias(node.as_indexed_access_type_node().index_type),
             Kind::ConditionalType => {
                 let n = node.as_conditional_type_node();

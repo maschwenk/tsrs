@@ -375,7 +375,7 @@ fn is_default_import(node: P<Node>) -> bool {
 
 // sourcedefinition.go:324
 fn get_source_definition_entry_node(source_file: P<SourceFile>) -> P<Node> {
-    let statements = source_file.statements.nodes;
+    let statements = source_file.statements.nodes();
     if !statements.is_empty() {
         return statements[0];
     }

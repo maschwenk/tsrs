@@ -165,8 +165,8 @@ impl Dumper {
         } else {
             self.sb.push_str(&node_ref(f.node.get()));
         }
-        let antecedent = self.flow_ref(f.antecedent.get());
-        let antecedents = self.flow_list(f.antecedents.get());
+        let antecedent = self.flow_ref(f.antecedent());
+        let antecedents = self.flow_list(f.antecedents());
         let _ = writeln!(self.sb, " {} {}", antecedent, antecedents);
     }
 }

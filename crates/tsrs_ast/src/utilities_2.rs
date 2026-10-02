@@ -228,7 +228,7 @@ pub fn get_implements_heritage_clause_elements(node: P<Node>) -> &'static [P<Nod
 
 pub fn get_heritage_elements(node: P<Node>, kind: Kind) -> &'static [P<Node>] {
     if let Some(clause) = get_heritage_clause(node, kind) {
-        return clause.as_heritage_clause().types().nodes;
+        return clause.as_heritage_clause().types().nodes();
     }
     &[]
 }
@@ -251,7 +251,7 @@ pub fn is_name_of_heritage_clause_type_reference(mut node: P<Node>) -> bool {
 
 pub fn get_heritage_clause(node: P<Node>, kind: Kind) -> Option<P<Node>> {
     if let Some(clauses) = get_heritage_clauses(node) {
-        for &clause in clauses.nodes {
+        for &clause in clauses.nodes() {
             if clause.as_heritage_clause().token == kind {
                 return Some(clause);
             }
@@ -1051,7 +1051,7 @@ pub fn node_has_name(statement: P<Node>, id: P<Node>) -> bool {
         return is_identifier(name) && name.text() == id.text();
     }
     if is_variable_statement(statement) {
-        let declarations = statement.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes;
+        let declarations = statement.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes();
         return declarations.iter().any(|&d| node_has_name(d, id));
     }
     false
@@ -1333,10 +1333,10 @@ pub fn is_require_call(node: P<Node>, require_string_literal_like_argument: bool
     if !is_identifier(call.expression) || call.expression.text() != "require" {
         return false;
     }
-    if call.arguments.nodes.len() != 1 {
+    if call.arguments.nodes().len() != 1 {
         return false;
     }
-    !require_string_literal_like_argument || is_string_literal_like(call.arguments.nodes[0])
+    !require_string_literal_like_argument || is_string_literal_like(call.arguments.nodes()[0])
 }
 
 pub fn get_jsx_implicit_import_base(compiler_options: &CompilerOptions, file: Option<P<SourceFile>>) -> String {
@@ -1404,7 +1404,7 @@ pub fn is_variable_declaration_initialized_to_require(mut node: P<Node>) -> bool
 // utilities.go:2811
 pub fn is_require_variable_statement(node: P<Node>) -> bool {
     if is_variable_statement(node) {
-        let declarations = node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes;
+        let declarations = node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes();
         if !declarations.is_empty() {
             return declarations.iter().all(|&d| is_variable_declaration_initialized_to_require(d));
         }

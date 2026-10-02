@@ -118,7 +118,7 @@ pub fn is_completed_node(n: Option<P<Node>>, source_file: P<SourceFile>) -> bool
         Kind::TaggedTemplateExpression => is_completed_node(Some(n.as_tagged_template_expression().template), source_file),
 
         Kind::TemplateExpression => {
-            let last_span = tsrs_core::last_or_nil(n.as_template_expression().template_spans.nodes);
+            let last_span = tsrs_core::last_or_nil(n.as_template_expression().template_spans.nodes());
             is_completed_node(last_span, source_file)
         }
 

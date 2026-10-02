@@ -373,8 +373,8 @@ fn add_element_to_binding_pattern(ct: &mut change::Tracker, file: P<SourceFile>,
     let property = if property_name.is_empty() { None } else { Some(ct.node_factory.new_identifier(alloc_str(property_name))) };
     let element = ct.node_factory.new_binding_element(None, None, Some(ct.node_factory.new_identifier(alloc_str(name))), property);
     let elements = binding_pattern.as_binding_pattern().elements;
-    if !elements.nodes.is_empty() {
-        ct.insert_node_in_list_after(file, elements.nodes[elements.nodes.len() - 1], element, Some(elements));
+    if !elements.nodes().is_empty() {
+        ct.insert_node_in_list_after(file, elements.nodes()[elements.nodes().len() - 1], element, Some(elements));
     } else {
         let pattern = ct.node_factory.new_binding_pattern(Kind::ObjectBindingPattern, ct.node_factory.new_node_list(vec![element]));
         ct.replace_node(file, binding_pattern, pattern, None);
@@ -533,9 +533,9 @@ fn create_const_equals_require_declaration(change_tracker: &change::Tracker, nam
 // fix.go:503
 pub(crate) fn insert_imports(ct: &mut change::Tracker, source_file: P<SourceFile>, imports: &[P<Node>], blank_line_between: bool, preferences: &UserPreferences) {
     let existing_import_statements: Vec<P<Node>> = if imports[0].kind() == Kind::VariableStatement {
-        source_file.statements.nodes.iter().copied().filter(|&s| ast::is_require_variable_statement(s)).collect()
+        source_file.statements.nodes().iter().copied().filter(|&s| ast::is_require_variable_statement(s)).collect()
     } else {
-        source_file.statements.nodes.iter().copied().filter(|&s| ast::is_any_import_syntax(s)).collect()
+        source_file.statements.nodes().iter().copied().filter(|&s| ast::is_any_import_syntax(s)).collect()
     };
     let (comparer, is_sorted) = lsutil::get_organize_imports_string_comparer_with_detection(&existing_import_statements, preferences);
     let comparer = comparer.expect("nil comparer");
@@ -551,7 +551,7 @@ pub(crate) fn insert_imports(ct: &mut change::Tracker, source_file: P<SourceFile
             if insertion_index == 0 {
                 // If the first import is top-of-file, insert after the leading comment which is likely the header.
                 let mut leading_trivia_option = change::LeadingTriviaOption::None;
-                if existing_import_statements[0] == source_file.statements.nodes[0] {
+                if existing_import_statements[0] == source_file.statements.nodes()[0] {
                     leading_trivia_option = change::LeadingTriviaOption::Exclude;
                 }
                 ct.insert_node_before(source_file, existing_import_statements[0], new_import, false /*blankLineBetween*/, leading_trivia_option);
@@ -875,7 +875,7 @@ fn get_import_kind(importing_file: P<SourceFile>, export: &Export, program: &Pro
                 return lsproto::ImportKind::Named;
             }
             // !!! cache this?
-            for &statement in importing_file.statements.nodes {
+            for &statement in importing_file.statements.nodes() {
                 // `import foo` parses as an ImportEqualsDeclaration even though it could be an ImportDeclaration
                 if ast::is_import_equals_declaration(statement) && !ast::node_is_missing(Some(statement.as_import_equals_declaration().module_reference)) {
                     return lsproto::ImportKind::CommonJS;
@@ -1219,7 +1219,7 @@ fn promote_from_type_only(
             if spec.is_type_only {
                 if let Some(spec_parent) = alias_declaration.parent().filter(|p| p.kind() == Kind::NamedImports) {
                     let named_imports_node = spec_parent.as_named_imports();
-                    let elements = named_imports_node.elements.nodes;
+                    let elements = named_imports_node.elements.nodes();
                     if elements.len() > 1 {
                         // Create a synthetic specifier with isTypeOnly=false to compute sorted position
                         let property_name = spec.property_name().map(|p| changes.node_factory.new_identifier(p.text()));
@@ -1321,7 +1321,7 @@ fn promote_import_clause(
     if convert_existing_to_type_only.is_true() {
         if let Some(named_imports) = import_clause.named_bindings.filter(|n| n.kind() == Kind::NamedImports) {
             let named_imports_data = named_imports.as_named_imports();
-            if named_imports_data.elements.nodes.len() > 1 {
+            if named_imports_data.elements.nodes().len() > 1 {
                 // Check if the list is sorted and if we need to reorder
                 let (_, is_sorted) = lsutil::get_named_import_specifier_comparer_with_detection(import_clause_node.parent().unwrap(), Some(source_file), preferences);
 
@@ -1332,7 +1332,7 @@ fn promote_import_clause(
                 {
                     let alias_declaration = alias_declaration.unwrap();
                     // Find the index of the alias declaration
-                    let alias_index = named_imports_data.elements.nodes.iter().position(|&e| e == alias_declaration);
+                    let alias_index = named_imports_data.elements.nodes().iter().position(|&e| e == alias_declaration);
                     // If not already at index 0, move it there
                     if alias_index.is_some_and(|i| i > 0) {
                         // Delete the specifier from its current position
@@ -1343,7 +1343,7 @@ fn promote_import_clause(
                 }
 
                 // Add 'type' keyword to all other import specifiers that aren't already type-only
-                for &element in named_imports_data.elements.nodes {
+                for &element in named_imports_data.elements.nodes() {
                     let spec = element.as_import_specifier();
                     // Skip the specifier being promoted (if aliasDeclaration is an ImportSpecifier)
                     if let Some(alias_declaration) = alias_declaration {

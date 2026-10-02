@@ -748,6 +748,8 @@ struct ClassLayout {
     x8: Vec<(u32, u8)>,
     /// (pointer offset, length offset)
     slices: Vec<(u32, u32)>,
+    thin: Vec<u32>,
+    low_tag: Vec<(u32, u8)>,
 }
 
 fn class_layouts(classes: &[Class]) -> Vec<Option<ClassLayout>> {
@@ -780,6 +782,14 @@ fn class_layouts(classes: &[Class]) -> Vec<Option<ClassLayout>> {
                             l.skip.extend([off.wrapping_sub(4) as u32, off as u32 + 4]);
                         }
                         crate::CensusField::Slice { ptr, len } => l.slices.push((ptr as u32, len as u32)),
+                        crate::CensusField::Thin { off } => {
+                            l.thin.push(off as u32);
+                            l.skip.extend([off.wrapping_sub(4) as u32, off as u32 + 4]);
+                        }
+                        crate::CensusField::LowTag { off, mask } => {
+                            l.low_tag.push((off as u32, mask));
+                            l.skip.extend([off.wrapping_sub(4) as u32, off as u32 + 4]);
+                        }
                     }
                 }
             }
@@ -895,6 +905,17 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
                     }
                     if l.tagged.contains(&o) {
                         flagged = true;
+                    }
+                    if l.thin.contains(&o) {
+                        if w & 1 != 0 {
+                            c = w & MASK48 & !1;
+                        } else if w >> 48 == 0 {
+                            return None;
+                        }
+                        flagged = true;
+                    }
+                    if let Some(&(_, mask)) = l.low_tag.iter().find(|x| x.0 == o) {
+                        c = w & MASK48 & !(mask as u64);
                     }
                     if let Some(&(_, modes)) = l.x8.iter().find(|x| x.0 == o) {
                         if modes & (1 << (w >> 62)) == 0 {

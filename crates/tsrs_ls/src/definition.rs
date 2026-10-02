@@ -228,7 +228,7 @@ pub(crate) fn get_declaration_name_for_keyword(node: P<Node>) -> P<Node> {
     if node.kind() >= Kind::FirstKeyword && node.kind() <= Kind::LastKeyword {
         let parent = node.parent().unwrap();
         if ast::is_variable_declaration_list(parent) {
-            if let Some(&decl) = parent.as_variable_declaration_list().declarations.nodes.first() {
+            if let Some(&decl) = parent.as_variable_declaration_list().declarations.nodes().first() {
                 if let Some(name) = decl.name() {
                     return name;
                 }

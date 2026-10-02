@@ -181,7 +181,7 @@ pub fn get_single_variable_of_variable_statement(node: P<Node>) -> Option<P<Node
     if !ast::is_variable_statement(node) {
         return None;
     }
-    node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes.first().copied()
+    node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes().first().copied()
 }
 
 // utilities.go:161
@@ -677,8 +677,8 @@ pub fn compare_types(c: &mut Checker, t1: Option<P<Type>>, t2: Option<P<Type>>) 
         }
     } else if flags.intersects(TypeFlags::Union) {
         // Unions are ordered by origin and then constituent type lists.
-        let o1 = t1.as_union_type().origin.get();
-        let o2 = t2.as_union_type().origin.get();
+        let o1 = t1.as_union_type().origin();
+        let o2 = t2.as_union_type().origin();
         if o1.is_none() && o2.is_none() {
             let r = compare_type_lists(c, t1.types(), t2.types());
             if r != 0 {

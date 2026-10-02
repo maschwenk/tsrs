@@ -130,7 +130,7 @@ impl NodeBuilderImpl {
                 let members = t.as_pseudo_type_union().types;
                 fn append_type_node(node: P<Node>, res: &mut Vec<P<Node>>, has_undefined: &mut bool) {
                     if is_union_type_node(node) {
-                        for &node in node.as_union_type_node().types().nodes {
+                        for &node in node.as_union_type_node().types().nodes() {
                             append_type_node(node, res, has_undefined);
                         }
                         return;

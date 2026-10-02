@@ -1360,7 +1360,7 @@ impl NodeBuilderImpl {
                 let arity = c.get_type_reference_arity(t);
                 let tuple_constituent_nodes = self.map_to_type_nodes(c, &type_arguments[0..arity as usize], false /*isBareList*/);
                 if let Some(tuple_constituent_nodes) = tuple_constituent_nodes {
-                    let mut nodes: Vec<P<Node>> = tuple_constituent_nodes.nodes.to_vec();
+                    let mut nodes: Vec<P<Node>> = tuple_constituent_nodes.nodes().to_vec();
                     for i in 0..nodes.len() {
                         let flags = element_infos[i].flags;
                         let labeled_element_declaration = element_infos[i].labeled_declaration;
@@ -1767,8 +1767,8 @@ impl NodeBuilderImpl {
                 if is_reserved_member_name(sym.name()) && !sym.flags().intersects(SymbolFlags::Class) {
                     return Some(self.f.new_type_reference_node(self.f.new_identifier(""), type_argument_nodes));
                 }
-                if type_argument_nodes.is_some() && type_argument_nodes.unwrap().nodes.len() == 1 && Some(sym) == c.global_array_type.symbol() {
-                    return Some(self.f.new_array_type_node(type_argument_nodes.unwrap().nodes[0]));
+                if type_argument_nodes.is_some() && type_argument_nodes.unwrap().nodes().len() == 1 && Some(sym) == c.global_array_type.symbol() {
+                    return Some(self.f.new_array_type_node(type_argument_nodes.unwrap().nodes()[0]));
                 }
                 return self.symbol_to_type_node(c, sym, SymbolFlags::Type, type_argument_nodes);
             }
@@ -1838,8 +1838,8 @@ impl NodeBuilderImpl {
             };
             return Some(self.f.new_type_reference_node(self.new_identifier(c, &name, None /*symbol*/), None /*typeArguments*/));
         }
-        if t.flags().intersects(TypeFlags::Union) && t.as_union_type().origin.get().is_some() {
-            t = t.as_union_type().origin.get().unwrap();
+        if t.flags().intersects(TypeFlags::Union) && t.as_union_type().origin().is_some() {
+            t = t.as_union_type().origin().unwrap();
         }
         if t.flags().intersects(TypeFlags::Union | TypeFlags::Intersection) {
             let types: Vec<P<Type>> = if t.flags().intersects(TypeFlags::Union) {
@@ -1851,7 +1851,7 @@ impl NodeBuilderImpl {
                 return self.type_to_type_node(c, Some(types[0]));
             }
             let type_nodes = self.map_to_type_nodes(c, &types, true /*isBareList*/);
-            if type_nodes.is_some() && !type_nodes.unwrap().nodes.is_empty() {
+            if type_nodes.is_some() && !type_nodes.unwrap().nodes().is_empty() {
                 if t.flags().intersects(TypeFlags::Union) {
                     return Some(self.f.new_union_type_node(type_nodes.unwrap()));
                 } else {
@@ -1978,7 +1978,7 @@ impl NodeBuilderImpl {
     pub(crate) fn create_expression_with_type_arguments(&self, _c: &mut Checker, expr: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         match type_arguments {
             None => return expr,
-            Some(type_arguments) if type_arguments.nodes.is_empty() => return expr,
+            Some(type_arguments) if type_arguments.nodes().is_empty() => return expr,
             _ => {}
         }
         self.f.new_expression_with_type_arguments(expr, type_arguments)

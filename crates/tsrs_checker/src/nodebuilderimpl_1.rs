@@ -249,7 +249,7 @@ impl NodeBuilderImpl {
         } else if is_type_reference_node(root) {
             let type_ref = root.as_type_reference_node();
             let type_arguments = root.type_argument_list();
-            if self.ctx().flags.get().intersects(Flags::UseInstantiationExpressions) && type_arguments.is_some() && !type_arguments.unwrap().nodes.is_empty() {
+            if self.ctx().flags.get().intersects(Flags::UseInstantiationExpressions) && type_arguments.is_some() && !type_arguments.unwrap().nodes().is_empty() {
                 let access = self.create_access_expression(c, type_ref.type_name);
                 let mut expr = self.create_expression_with_type_arguments(c, access, type_arguments);
                 for id in get_access_stack(ref_) {
@@ -839,7 +839,7 @@ impl NodeBuilderImpl {
 
         if index > stopper {
             let lhs = self.create_access_from_symbol_chain(c, chain, index - 1, stopper, override_type_arguments);
-            if !self.ctx().flags.get().intersects(Flags::UseInstantiationExpressions) || is_entity_name(lhs) && (type_parameter_nodes.is_none() || type_parameter_nodes.unwrap().nodes.is_empty()) {
+            if !self.ctx().flags.get().intersects(Flags::UseInstantiationExpressions) || is_entity_name(lhs) && (type_parameter_nodes.is_none() || type_parameter_nodes.unwrap().nodes().is_empty()) {
                 return self.f.new_qualified_name(lhs, identifier);
             }
             let access = self.create_access_expression(c, lhs);

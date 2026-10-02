@@ -377,7 +377,7 @@ pub(crate) fn get_documentation_from_declaration(
             write_comments(get_mapped_location, &mut b, c, jsdoc.comments(), is_markdown);
             if jsdoc.kind() == Kind::JSDoc && !comment_only {
                 if let Some(tags) = jsdoc.as_jsdoc().tags {
-                    for &tag in tags.nodes {
+                    for &tag in tags.nodes() {
                         if tag.kind() == Kind::JSDocTypeTag || tag.kind() == Kind::JSDocTypedefTag || tag.kind() == Kind::JSDocCallbackTag {
                             continue;
                         }
@@ -1148,7 +1148,7 @@ fn get_call_or_new_expression(mut node: P<Node>) -> Option<P<Node>> {
 fn contains_typedef_tag(jsdoc: P<Node>) -> bool {
     if jsdoc.kind() == Kind::JSDoc {
         if let Some(tags) = jsdoc.as_jsdoc().tags {
-            for &tag in tags.nodes {
+            for &tag in tags.nodes() {
                 if tag.kind() == Kind::JSDocTypedefTag || tag.kind() == Kind::JSDocCallbackTag {
                     return true;
                 }

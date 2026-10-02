@@ -1556,34 +1556,16 @@ impl Checker {
             antecedent = get_flow_node_of_node(expr.parent().unwrap());
         }
         if antecedent.is_none() {
-            antecedent = Some(P::new(FlowNode {
-                flags: tsrs_core::OwnedCell::new(FlowFlags::Start),
-                node: tsrs_core::OwnedCell::new(None),
-                antecedent: tsrs_core::OwnedCell::new(None),
-                antecedents: tsrs_core::OwnedCell::new(None),
-                text_index: ast::NO_SOURCE_TEXT,
-            }));
+            antecedent = Some(P::new(FlowNode::new(FlowFlags::Start, None, None, ast::NO_SOURCE_TEXT)));
         }
-        let true_condition = P::new(FlowNode {
-            flags: tsrs_core::OwnedCell::new(FlowFlags::TrueCondition),
-            node: tsrs_core::OwnedCell::new(Some(expr)),
-            antecedent: tsrs_core::OwnedCell::new(antecedent),
-            antecedents: tsrs_core::OwnedCell::new(None),
-            text_index: ast::NO_SOURCE_TEXT,
-        });
+        let true_condition = P::new(FlowNode::new(FlowFlags::TrueCondition, Some(expr), antecedent, ast::NO_SOURCE_TEXT));
         let true_type = self.get_flow_type_of_reference_ex(param.name().unwrap(), init_type, init_type, Some(fn_), Some(true_condition));
         if true_type == init_type {
             return None;
         }
         // "x is T" means that x is T if and only if it returns true. If it returns false then x is not T.
         // This means that if the function is called with an argument of type trueType, there can't be anything left in the `else` branch. It must reduce to `never`.
-        let false_condition = P::new(FlowNode {
-            flags: tsrs_core::OwnedCell::new(FlowFlags::FalseCondition),
-            node: tsrs_core::OwnedCell::new(Some(expr)),
-            antecedent: tsrs_core::OwnedCell::new(antecedent),
-            antecedents: tsrs_core::OwnedCell::new(None),
-            text_index: ast::NO_SOURCE_TEXT,
-        });
+        let false_condition = P::new(FlowNode::new(FlowFlags::FalseCondition, Some(expr), antecedent, ast::NO_SOURCE_TEXT));
         let false_flow_type = self.get_flow_type_of_reference_ex(param.name().unwrap(), init_type, true_type, Some(fn_), Some(false_condition));
         let false_subtype = self.get_reduced_type(false_flow_type);
         if false_subtype.flags().intersects(TypeFlags::Never) {

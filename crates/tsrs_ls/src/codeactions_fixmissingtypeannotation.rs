@@ -547,7 +547,7 @@ impl isolatedDeclarationsFixer<'_> {
     // codeactions_fixmissingtypeannotation.go:633
     fn transform_extends_clause_with_expression(&mut self, class_decl: P<Node>) -> String {
         let mut extends_clause: Option<P<Node>> = None;
-        for &clause in class_decl.as_class_declaration().heritage_clauses().map_or(&[][..], |h| h.nodes) {
+        for &clause in class_decl.as_class_declaration().heritage_clauses().map_or(&[][..], |h| h.nodes()) {
             if clause.as_heritage_clause().token == Kind::ExtendsKeyword {
                 extends_clause = Some(clause);
                 break;
@@ -558,10 +558,10 @@ impl isolatedDeclarationsFixer<'_> {
         };
 
         let heritage_types = extends_clause.as_heritage_clause().types();
-        if heritage_types.nodes.is_empty() {
+        if heritage_types.nodes().is_empty() {
             return String::new();
         }
-        let heritage_expression = heritage_types.nodes[0];
+        let heritage_expression = heritage_types.nodes()[0];
         let expression = heritage_expression.as_expression_with_type_arguments().expression;
 
         let Some(heritage_type_node) = self.infer_type(expression, None) else {
@@ -635,8 +635,8 @@ impl isolatedDeclarationsFixer<'_> {
         // If the enclosing variable statement has multiple declarations, preserve the non-destructuring ones
         let decl_list_node = enclosing_var_stmt.as_variable_statement().declaration_list;
         let decl_list = decl_list_node.as_variable_declaration_list();
-        if decl_list.declarations.nodes.len() > 1 {
-            let remaining_decls: Vec<P<Node>> = decl_list.declarations.nodes.iter().copied().filter(|&d| d != enclosing_variable_declaration).collect();
+        if decl_list.declarations.nodes().len() > 1 {
+            let remaining_decls: Vec<P<Node>> = decl_list.declarations.nodes().iter().copied().filter(|&d| d != enclosing_variable_declaration).collect();
             if !remaining_decls.is_empty() {
                 new_nodes.push(factory.update_variable_statement(
                     enclosing_var_stmt,
@@ -655,7 +655,7 @@ impl isolatedDeclarationsFixer<'_> {
         let factory = self.factory();
 
         if ast::is_object_binding_pattern(binding_pattern) {
-            for &element in binding_pattern.as_binding_pattern().elements.nodes {
+            for &element in binding_pattern.as_binding_pattern().elements.nodes() {
                 if ast::is_omitted_expression(element) {
                     continue;
                 }
@@ -692,7 +692,7 @@ impl isolatedDeclarationsFixer<'_> {
                 }
             }
         } else if ast::is_array_binding_pattern(binding_pattern) {
-            for (i, &element) in binding_pattern.as_binding_pattern().elements.nodes.iter().enumerate() {
+            for (i, &element) in binding_pattern.as_binding_pattern().elements.nodes().iter().enumerate() {
                 if ast::is_omitted_expression(element) {
                     continue;
                 }
@@ -858,7 +858,7 @@ impl isolatedDeclarationsFixer<'_> {
             node,
             name,
             is_in_const_context,
-            &|n| n.as_array_literal_expression().elements.nodes.to_vec(),
+            &|n| n.as_array_literal_expression().elements.nodes().to_vec(),
             &|n| ast::is_spread_element(n),
             &move |expr| f1.new_spread_element(expr),
             &move |elements| f2.new_array_literal_expression(f2.new_node_list(elements), true),
@@ -883,7 +883,7 @@ impl isolatedDeclarationsFixer<'_> {
             node,
             name,
             is_in_const_context,
-            &|n| n.as_object_literal_expression().properties.nodes.to_vec(),
+            &|n| n.as_object_literal_expression().properties.nodes().to_vec(),
             &|n| ast::is_spread_assignment(n),
             &move |expr| f1.new_spread_assignment(expr),
             &move |elements| f2.new_object_literal_expression(f2.new_node_list(elements), true),
@@ -1143,7 +1143,7 @@ impl isolatedDeclarationsFixer<'_> {
         let symbol_name = sym.name();
 
         // Walk the source file's import declarations to find the one importing from the same module
-        for &stmt in self.source_file.statements.nodes {
+        for &stmt in self.source_file.statements.nodes() {
             if !ast::is_import_declaration(stmt) {
                 continue;
             }
@@ -1166,7 +1166,7 @@ impl isolatedDeclarationsFixer<'_> {
             let import_clause = import_clause_node.as_import_clause();
             if let Some(named_bindings) = import_clause.named_bindings.filter(|n| ast::is_named_imports(*n)) {
                 // Add to existing named imports
-                let existing_elements = named_bindings.as_named_imports().elements.nodes;
+                let existing_elements = named_bindings.as_named_imports().elements.nodes();
                 let factory = self.factory();
                 let new_specifier = factory.new_import_specifier(false, None, factory.new_identifier(symbol_name));
                 let mut new_elements = existing_elements.to_vec();

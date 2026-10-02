@@ -134,8 +134,8 @@ impl Checker {
     // grammarchecks.go:120
     pub(crate) fn check_grammar_mapped_type(&mut self, node: P<Node>) -> bool {
         let members = node.as_mapped_type_node().members.unwrap();
-        if !members.nodes.is_empty() {
-            return self.grammar_error_on_node(members.nodes[0], &diagnostics::A_mapped_type_may_not_declare_properties_or_methods, &[]);
+        if !members.nodes().is_empty() {
+            return self.grammar_error_on_node(members.nodes()[0], &diagnostics::A_mapped_type_may_not_declare_properties_or_methods, &[]);
         }
         false
     }
@@ -697,7 +697,7 @@ impl Checker {
     pub(crate) fn check_grammar_for_disallowed_trailing_comma(&mut self, list: Option<P<NodeList>>, diag: &'static Message) -> bool {
         if let Some(list) = list {
             if list.has_trailing_comma() {
-                return self.grammar_error_at_pos(list.nodes[0], list.end() - ",".len() as i32, ",".len() as i32, diag, &[]);
+                return self.grammar_error_at_pos(list.nodes()[0], list.end() - ",".len() as i32, ",".len() as i32, diag, &[]);
             }
         }
         false
@@ -706,7 +706,7 @@ impl Checker {
     // grammarchecks.go:678
     pub(crate) fn check_grammar_type_parameter_list(&mut self, type_parameters: Option<P<NodeList>>, file: P<SourceFile>) -> bool {
         if let Some(type_parameters) = type_parameters {
-            if type_parameters.nodes.is_empty() {
+            if type_parameters.nodes().is_empty() {
                 let start = type_parameters.pos() - "<".len() as i32;
                 let end = scanner::skip_trivia(file.text(), type_parameters.end()) + ">".len() as i32;
                 return self.grammar_error_at_pos(file.as_node(), start, end - start, &diagnostics::Type_parameter_list_cannot_be_empty, &[]);
@@ -718,10 +718,10 @@ impl Checker {
     // grammarchecks.go:687
     pub(crate) fn check_grammar_parameter_list(&mut self, parameters: P<NodeList>) -> bool {
         let mut seen_optional_parameter = false;
-        let parameter_count = parameters.nodes.len();
+        let parameter_count = parameters.nodes().len();
 
         for i in 0..parameter_count {
-            let parameter_node = parameters.nodes[i];
+            let parameter_node = parameters.nodes()[i];
             let parameter = parameter_node.as_parameter_declaration();
             if let Some(dot_dot_dot_token) = parameter.dot_dot_dot_token() {
                 if i != parameter_count - 1 {
@@ -818,12 +818,12 @@ impl Checker {
         let arrow_func = node.as_arrow_function();
         let type_parameters = arrow_func.function_like_base.type_parameters.get();
         if let Some(type_parameters) = type_parameters {
-            let type_param_nodes = type_parameters.nodes;
+            let type_param_nodes = type_parameters.nodes();
             let has_constraint = !type_param_nodes.is_empty() && type_param_nodes[0].as_type_parameter_declaration().constraint.is_some();
             if !(type_param_nodes.len() > 1 || type_parameters.has_trailing_comma() || has_constraint) {
                 if tspath::file_extension_is_one_of(file.file_name(), &[tspath::EXTENSION_MTS, tspath::EXTENSION_CTS]) {
                     // TODO(danielr): should we return early here?
-                    self.grammar_error_on_node(type_parameters.nodes[0], &diagnostics::This_syntax_is_reserved_in_files_with_the_mts_or_cts_extension_Add_a_trailing_comma_or_explicit_constraint, &[]);
+                    self.grammar_error_on_node(type_parameters.nodes()[0], &diagnostics::This_syntax_is_reserved_in_files_with_the_mts_or_cts_extension_Add_a_trailing_comma_or_explicit_constraint, &[]);
                 }
             }
         }
@@ -837,7 +837,7 @@ impl Checker {
     pub(crate) fn check_grammar_index_signature_parameters(&mut self, node: P<Node>) -> bool {
         let index_signature = node.as_index_signature_declaration();
         let parameters = index_signature.function_like_base.parameters.get().unwrap();
-        let param_nodes = parameters.nodes;
+        let param_nodes = parameters.nodes();
 
         if param_nodes.is_empty() {
             return self.grammar_error_on_node(node, &diagnostics::An_index_signature_must_have_exactly_one_parameter, &[]);
@@ -887,7 +887,7 @@ impl Checker {
     // grammarchecks.go:845
     pub(crate) fn check_grammar_for_at_least_one_type_argument(&mut self, node: P<Node>, type_arguments: Option<P<NodeList>>) -> bool {
         if let Some(type_arguments) = type_arguments {
-            if type_arguments.nodes.is_empty() {
+            if type_arguments.nodes().is_empty() {
                 let source_file = ast::get_source_file_of_node(node).unwrap();
                 let start = type_arguments.pos() - "<".len() as i32;
                 let end = scanner::skip_trivia(source_file.text(), type_arguments.end()) + ">".len() as i32;
@@ -918,13 +918,13 @@ impl Checker {
         if self.check_grammar_for_disallowed_trailing_comma(Some(types), &diagnostics::Trailing_comma_not_allowed) {
             return true;
         }
-        if types.nodes.is_empty() {
+        if types.nodes().is_empty() {
             let list_type = scanner::token_to_string(heritage_clause.token);
             // TODO(danielr): why not error on the token?
             return self.grammar_error_at_pos(node, types.pos(), 0, &diagnostics::X_0_list_cannot_be_empty, &[&list_type]);
         }
 
-        for &node in types.nodes {
+        for &node in types.nodes() {
             if self.check_grammar_expression_with_type_arguments(node) {
                 return true;
             }
@@ -949,7 +949,7 @@ impl Checker {
 
         if !self.check_grammar_modifiers(node) {
             if let Some(heritage_clauses) = class_like_data.heritage_clauses.get() {
-                for &heritage_clause_node in heritage_clauses.nodes {
+                for &heritage_clause_node in heritage_clauses.nodes() {
                     let heritage_clause = heritage_clause_node.as_heritage_clause();
                     if heritage_clause.token == Kind::ExtendsKeyword {
                         if seen_extends_clause {
@@ -960,7 +960,7 @@ impl Checker {
                             return self.grammar_error_on_first_token(heritage_clause_node, &diagnostics::X_extends_clause_must_precede_implements_clause, &[]);
                         }
 
-                        let type_nodes = heritage_clause.types.get().nodes;
+                        let type_nodes = heritage_clause.types.get().nodes();
                         if type_nodes.len() > 1 {
                             return self.grammar_error_on_first_token(type_nodes[1], &diagnostics::Classes_can_only_extend_a_single_class, &[]);
                         }
@@ -990,7 +990,7 @@ impl Checker {
     pub(crate) fn check_grammar_interface_declaration(&mut self, node: P<Node>) -> bool {
         if let Some(heritage_clauses) = node.as_interface_declaration().heritage_clauses {
             let mut seen_extends_clause = false;
-            for &heritage_clause_node in heritage_clauses.nodes {
+            for &heritage_clause_node in heritage_clauses.nodes() {
                 let heritage_clause = heritage_clause_node.as_heritage_clause();
 
                 match heritage_clause.token {
@@ -1067,7 +1067,7 @@ impl Checker {
     pub(crate) fn check_grammar_object_literal_expression(&mut self, node: P<Node>, in_destructuring: bool) -> bool {
         let mut seen: FxHashMap<String, DeclarationMeaning> = FxHashMap::default();
 
-        let properties = node.as_object_literal_expression().properties.nodes;
+        let properties = node.as_object_literal_expression().properties.nodes();
         for &prop in properties {
             if prop.kind() == Kind::SpreadAssignment {
                 let spread_assignment = prop.as_spread_assignment();
@@ -1321,20 +1321,20 @@ impl Checker {
                 //      for (let of [1,2,3]) {} // this is invalid ES6 syntax
                 //      for (let in [1,2,3]) {} // this is invalid ES6 syntax
                 // We will then want to skip on grammar checking on variableList declaration
-                if declarations.nodes.is_empty() {
+                if declarations.nodes().is_empty() {
                     return false;
                 }
 
-                if declarations.nodes.len() > 1 {
+                if declarations.nodes().len() > 1 {
                     let diagnostic = if for_in_or_of_statement.kind() == Kind::ForInStatement {
                         &diagnostics::Only_a_single_variable_declaration_is_allowed_in_a_for_in_statement
                     } else {
                         &diagnostics::Only_a_single_variable_declaration_is_allowed_in_a_for_of_statement
                     };
-                    return self.grammar_error_on_first_token(declarations.nodes[1], diagnostic, &[]);
+                    return self.grammar_error_on_first_token(declarations.nodes()[1], diagnostic, &[]);
                 }
 
-                let first_variable_declaration_node = declarations.nodes[0];
+                let first_variable_declaration_node = declarations.nodes()[0];
                 let first_variable_declaration = first_variable_declaration_node.as_variable_declaration();
                 if first_variable_declaration.initializer().is_some() {
                     let diagnostic = if for_in_or_of_statement.kind() == Kind::ForInStatement {
@@ -1614,7 +1614,7 @@ impl Checker {
         let binding_element = node.as_binding_element();
         if binding_element.dot_dot_dot_token().is_some() {
             let elements = node.parent().unwrap().element_list();
-            if Some(node) != elements.nodes.last().copied() {
+            if Some(node) != elements.nodes().last().copied() {
                 return self.grammar_error_on_node(node, &diagnostics::A_rest_element_must_be_last_in_a_destructuring_pattern, &[]);
             }
             self.check_grammar_for_disallowed_trailing_comma(Some(elements), &diagnostics::A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma);
@@ -1737,7 +1737,7 @@ impl Checker {
             return true;
         }
 
-        if declarations.nodes.is_empty() {
+        if declarations.nodes().is_empty() {
             return self.grammar_error_at_pos(declaration_list, declarations.pos(), declarations.end() - declarations.pos(), &diagnostics::Variable_declaration_list_cannot_be_empty, &[]);
         }
 
@@ -2167,7 +2167,7 @@ impl Checker {
 
     // grammarchecks.go:2014
     pub(crate) fn check_grammar_top_level_elements_for_required_declare_modifier(&mut self, file: P<SourceFile>) -> bool {
-        for &decl in file.statements.nodes {
+        for &decl in file.statements.nodes() {
             if ast::is_declaration_node(decl) || decl.kind() == Kind::VariableStatement {
                 if self.check_grammar_top_level_element_for_required_declare_modifier(decl) {
                     return true;
@@ -2296,7 +2296,7 @@ impl Checker {
     // grammarchecks.go:2123
     pub(crate) fn check_grammar_import_attribute_values(&mut self, node: P<Node>) -> bool {
         let mut has_error = false;
-        for &attribute in node.as_import_attributes().attributes.nodes {
+        for &attribute in node.as_import_attributes().attributes.nodes() {
             let value = attribute.as_import_attribute().value;
             if is_string_literal(value) {
                 continue;
@@ -2310,7 +2310,7 @@ impl Checker {
     // grammarchecks.go:2136
     pub(crate) fn check_grammar_type_only_named_imports_or_exports(&mut self, named_bindings: P<Node>) -> bool {
         let node_list = named_bindings.element_list();
-        for &specifier in node_list.nodes {
+        for &specifier in node_list.nodes() {
             let specifier_is_type_only: bool;
             let message: &'static Message;
             if specifier.kind() == Kind::ImportSpecifier {
@@ -2349,7 +2349,7 @@ impl Checker {
         }
 
         let node_arguments = node_as_call.arguments;
-        let argument_nodes = node_arguments.nodes;
+        let argument_nodes = node_arguments.nodes();
         if !(ModuleKind::Node16 <= self.module_kind && self.module_kind <= ModuleKind::NodeNext) && self.module_kind != ModuleKind::ESNext && self.module_kind != ModuleKind::Preserve {
             // We are allowed trailing comma after proposal-import-assertions.
             self.check_grammar_for_disallowed_trailing_comma(Some(node_arguments), &diagnostics::Trailing_comma_not_allowed);
@@ -2376,7 +2376,7 @@ impl Checker {
     // grammarchecks.go:2200
     pub(crate) fn check_grammar_import_attributes_type(&mut self, attributes: P<Node>) -> bool {
         let members = attributes.as_type_literal_node().members;
-        for &member in members.nodes {
+        for &member in members.nodes() {
             if member.kind() != Kind::PropertySignature {
                 return self.grammar_error_on_node(member, &diagnostics::An_import_attributes_type_may_only_contain_property_signatures, &[]);
             }

@@ -31,7 +31,7 @@ impl LanguageService {
         let should_sort = kind == lsproto::CodeActionKind::SourceSortImportsTs || kind == lsproto::CodeActionKind::SourceOrganizeImportsTs;
         let should_combine = should_sort;
         let should_remove = kind == lsproto::CodeActionKind::SourceRemoveUnusedImportsTs || kind == lsproto::CodeActionKind::SourceOrganizeImportsTs;
-        let top_level_import_decls = lsutil::filter_import_declarations(source_file.statements.nodes);
+        let top_level_import_decls = lsutil::filter_import_declarations(source_file.statements.nodes());
         let top_level_import_group_decls = group_by_newline_contiguous(source_file, &top_level_import_decls);
 
         let preferences = self.user_preferences();
@@ -78,7 +78,7 @@ impl LanguageService {
             }
         }
 
-        for &stmt in source_file.statements.nodes {
+        for &stmt in source_file.statements.nodes() {
             if !ast::is_ambient_module(stmt) {
                 continue;
             }
@@ -90,7 +90,7 @@ impl LanguageService {
 
             let module_body = body.as_module_block();
 
-            let ambient_module_import_decls = lsutil::filter_import_declarations(module_body.statements.nodes);
+            let ambient_module_import_decls = lsutil::filter_import_declarations(module_body.statements.nodes());
             let ambient_module_import_group_decls = group_by_newline_contiguous(source_file, &ambient_module_import_decls);
 
             for import_group_decl in &ambient_module_import_group_decls {
@@ -99,7 +99,7 @@ impl LanguageService {
 
             if kind != lsproto::CodeActionKind::SourceRemoveUnusedImportsTs {
                 let ambient_module_export_decls: Vec<P<Node>> =
-                    module_body.statements.nodes.iter().copied().filter(|s| s.kind() == Kind::ExportDeclaration).collect();
+                    module_body.statements.nodes().iter().copied().filter(|s| s.kind() == Kind::ExportDeclaration).collect();
                 organize_exports_worker(&ambient_module_export_decls, &comparer, source_file, &mut change_tracker);
             }
         }
@@ -275,7 +275,7 @@ fn remove_unused_imports(
                     let named_imports = nb.as_named_imports();
                     let original_bindings = nb;
                     let new_elements = filter_used_import_specifiers(
-                        named_imports.elements.nodes,
+                        named_imports.elements.nodes(),
                         type_checker,
                         source_file,
                         jsx_elements_present,
@@ -283,7 +283,7 @@ fn remove_unused_imports(
                     );
                     if new_elements.is_empty() {
                         named_bindings = None;
-                    } else if new_elements.len() < named_imports.elements.nodes.len() {
+                    } else if new_elements.len() < named_imports.elements.nodes().len() {
                         let new_list = factory.new_node_list(new_elements);
                         let updated_named_imports = factory.update_named_imports(nb, new_list);
                         named_bindings = Some(updated_named_imports);
@@ -382,7 +382,7 @@ fn get_import_attributes_key(attributes: Option<P<Node>>) -> String {
     key.push_str(&format!("{:?}", import_attrs.token));
     key.push(' ');
 
-    let mut attr_nodes: Vec<P<Node>> = import_attrs.attributes.nodes.to_vec();
+    let mut attr_nodes: Vec<P<Node>> = import_attrs.attributes.nodes().to_vec();
     goslices::sort_func(&mut attr_nodes, |a, b| {
         let a_name = a.as_import_attribute().name().unwrap().text();
         let b_name = b.as_import_attribute().name().unwrap().text();
@@ -748,7 +748,7 @@ fn try_get_named_binding_elements(named_import: P<Node>) -> Option<&'static [P<N
     if let Some(nb) = named_bindings {
         if nb.kind() == Kind::NamedImports {
             let named_imports_node = nb.as_named_imports();
-            return Some(named_imports_node.elements.nodes);
+            return Some(named_imports_node.elements.nodes());
         }
     }
 
@@ -758,7 +758,7 @@ fn try_get_named_binding_elements(named_import: P<Node>) -> Option<&'static [P<N
 // organizeimports.go:751
 fn get_top_level_export_groups(source_file: P<SourceFile>) -> Vec<Vec<P<Node>>> {
     let mut top_level_export_groups: Vec<Vec<P<Node>>> = Vec::new();
-    let statements = source_file.statements.nodes;
+    let statements = source_file.statements.nodes();
     let statements_len = statements.len();
 
     let mut i = 0;
@@ -903,7 +903,7 @@ fn coalesce_exports_worker(
                 if let Some(export_clause) = export_decl.as_export_declaration().export_clause {
                     if export_clause.kind() == Kind::NamedExports {
                         let named_exports = export_clause.as_named_exports();
-                        new_export_specifiers.extend_from_slice(named_exports.elements.nodes);
+                        new_export_specifiers.extend_from_slice(named_exports.elements.nodes());
                     }
                 }
             }

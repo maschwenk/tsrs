@@ -597,7 +597,7 @@ fn get_switch_case_default_occurrences(node: P<Node>, source_file: P<SourceFile>
     }
 
     let clauses = switch_statement.case_block.as_case_block().clauses;
-    for &clause in clauses.nodes {
+    for &clause in clauses.nodes() {
         let clause_token = lsutil::get_first_token(clause, source_file).unwrap();
         if clause_token.kind() == Kind::CaseKeyword || clause_token.kind() == Kind::DefaultKeyword {
             keywords.push(clause_token);

@@ -53,7 +53,7 @@ impl Checker {
             if !ast::is_template_expression(template) {
                 return vec![first_arg];
             }
-            let spans = template.as_template_expression().template_spans.nodes;
+            let spans = template.as_template_expression().template_spans.nodes();
             let mut args = Vec::with_capacity(spans.len() + 1);
             args.push(first_arg);
             for span in spans {
@@ -66,7 +66,7 @@ impl Checker {
             // Handles instanceof operator
             return vec![node.as_binary_expression().left];
         } else if ast::is_jsx_opening_like_element(node) {
-            if !node.attributes().unwrap().properties().is_empty() || (ast::is_jsx_opening_element(node) && !node.parent().unwrap().children().nodes.is_empty()) {
+            if !node.attributes().unwrap().properties().is_empty() || (ast::is_jsx_opening_element(node) && !node.parent().unwrap().children().nodes().is_empty()) {
                 return vec![node.attributes().unwrap()];
             }
             return Vec::new();
@@ -1072,7 +1072,7 @@ impl Checker {
             }
             Kind::JsxAttributes => {
                 return node.properties().iter().any(|&p| self.is_context_sensitive(p))
-                    || ast::is_jsx_opening_element(node.parent().unwrap()) && node.parent().unwrap().parent().unwrap().children().nodes.iter().any(|&c| self.is_context_sensitive(c));
+                    || ast::is_jsx_opening_element(node.parent().unwrap()) && node.parent().unwrap().parent().unwrap().children().nodes().iter().any(|&c| self.is_context_sensitive(c));
             }
             Kind::JsxAttribute => {
                 // If there is no initializer, JSX attribute has a boolean value of true which is not context sensitive.

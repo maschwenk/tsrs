@@ -111,7 +111,7 @@ impl NodeVisitor {
         if self.visit.is_none() {
             return Some(nodes);
         }
-        let (result, changed) = self.visit_slice(nodes.nodes);
+        let (result, changed) = self.visit_slice(nodes.nodes());
         if changed {
             let list = self.factory.new_node_list_from_static(result);
             list.loc.set(nodes.loc.get());
@@ -129,7 +129,7 @@ impl NodeVisitor {
         if self.visit.is_none() {
             return Some(nodes);
         }
-        let (result, changed) = self.visit_slice(nodes.list.nodes);
+        let (result, changed) = self.visit_slice(nodes.list.nodes());
         if changed {
             let list = self.factory.new_modifier_list(result.to_vec());
             list.list.loc.set(nodes.list.loc.get());

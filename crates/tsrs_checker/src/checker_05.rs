@@ -646,7 +646,7 @@ impl Checker {
             if is_template_expression(template) {
                 // If a tagged template expression lacks a tail literal, the call is incomplete.
                 // Specifically, a template only can end in a TemplateTail or a Missing literal.
-                let last_span = template.as_template_expression().template_spans.nodes.last().copied().unwrap();
+                let last_span = template.as_template_expression().template_spans.nodes().last().copied().unwrap();
                 // we should always have at least one span.
                 let literal = last_span.as_template_span().literal;
                 call_is_incomplete = node_is_missing(literal) || is_unterminated_literal(literal);

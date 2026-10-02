@@ -207,7 +207,7 @@ impl PseudoChecker {
         }
         let set = node.as_set_accessor_declaration();
         let params = match set.parameters() {
-            Some(params) => params.nodes,
+            Some(params) => params.nodes(),
             None => return None,
         };
         if params.is_empty() {
@@ -573,11 +573,11 @@ impl PseudoChecker {
         let Some(nodes) = nodes else {
             return Vec::new();
         };
-        if nodes.nodes.is_empty() {
+        if nodes.nodes().is_empty() {
             return Vec::new();
         }
-        let mut result = Vec::with_capacity(nodes.nodes.len());
-        for &e in nodes.nodes {
+        let mut result = Vec::with_capacity(nodes.nodes().len());
+        for &e in nodes.nodes() {
             e.as_type_parameter_declaration();
             result.push(e);
         }
@@ -602,9 +602,9 @@ pub(crate) fn type_node_could_refer_to_undefined(node: P<Node>) -> bool {
         Kind::IntersectionType => {
             // TODO: why is this not `core.Every`? strada treated unions and intersections the same, but logically every intersection member needs to contain a possible `undefined`
             // for the result type to contain `undefined`. Likely a bug persisting from strada.
-            node.as_intersection_type_node().types().nodes.iter().any(|n| type_node_could_refer_to_undefined(*n))
+            node.as_intersection_type_node().types().nodes().iter().any(|n| type_node_could_refer_to_undefined(*n))
         }
-        Kind::UnionType => node.as_union_type_node().types().nodes.iter().any(|n| type_node_could_refer_to_undefined(*n)),
+        Kind::UnionType => node.as_union_type_node().types().nodes().iter().any(|n| type_node_could_refer_to_undefined(*n)),
         Kind::ConditionalType => true, // suspect - should be treated as a union of both branches instead, likely a bug persisted from strada
         Kind::TypeOperator => true,    // suspect - always refers to a subset of `string | number | symbol` for `keyof` or `symbol` for `unique`
         Kind::TypePredicate => true,   // suspect - always refers to `never` or `boolean`, depending on kind - considered possibly-`undefined` referencing for strada compat
@@ -741,12 +741,12 @@ impl PseudoChecker {
         let Some(nodes) = nodes else {
             return Vec::new();
         };
-        if nodes.nodes.is_empty() {
+        if nodes.nodes().is_empty() {
             return Vec::new();
         }
-        let last_required = last_required_param_index(nodes.nodes);
-        let mut result = Vec::with_capacity(nodes.nodes.len());
-        for (i, &e) in nodes.nodes.iter().enumerate() {
+        let last_required = last_required_param_index(nodes.nodes());
+        let mut result = Vec::with_capacity(nodes.nodes().len());
+        for (i, &e) in nodes.nodes().iter().enumerate() {
             let p = e.as_parameter_declaration();
             let mut optional = p.question_token().is_some();
             if !optional && p.initializer().is_some() {

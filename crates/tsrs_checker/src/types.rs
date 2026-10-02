@@ -2,7 +2,7 @@ use std::fmt;
 use std::hash::Hash;
 
 use bitflags::bitflags;
-use tsrs_core::{OptionSliceCell, SliceCell, StrCell};
+use tsrs_core::{OptionThinSliceCell, StrCell, ThinSliceCell};
 
 use crate::*;
 
@@ -982,7 +982,7 @@ bitflags! {
 #[derive(Default)]
 pub struct TypeAlias {
     pub symbol: Cell<Option<P<Symbol>>>,
-    pub type_arguments: Cell<&'static [P<Type>]>,
+    pub type_arguments: ThinSliceCell<P<Type>>,
 }
 
 impl TypeAlias {
@@ -1046,7 +1046,7 @@ impl<'a> AliasArg<'a> {
             AliasArg::None => None,
             AliasArg::Some(a) => Some(a),
             AliasArg::Pending(p) => Some(p.alias.get().unwrap_or_else(|| {
-                let a = P::new(TypeAlias { symbol: Cell::new(p.symbol), type_arguments: Cell::new(alloc_slice(&p.type_arguments)) });
+                let a = P::new(TypeAlias { symbol: Cell::new(p.symbol), type_arguments: ThinSliceCell::new(alloc_slice(&p.type_arguments)) });
                 p.alias.set(Some(a));
                 a
             })),
@@ -1197,9 +1197,41 @@ pub(crate) fn census_layouts() {
         ];
         let contains_error = CensusField::scalar(d, offset_of!(MappedType, contains_error), &offsets, size_of::<MappedType>());
         tsrs_core::census_layout(type_name::<TypeAlloc<MappedType>>(), &[contains_error]);
-        let (ptr, len) = CensusField::slice_words();
-        let r = offset_of!(TypeAlloc<TypeReference>, data) + offset_of!(TypeReference, resolved_type_arguments);
-        tsrs_core::census_layout(type_name::<TypeAlloc<TypeReference>>(), &[CensusField::Slice { ptr: r + ptr, len: r + len }]);
+        // One-word slices (`ThinSlice`) and bit-0-tagged tails (notes/mem-layout3.md).
+        let thin = |off: usize| CensusField::Thin { off };
+        let r = offset_of!(TypeReference, resolved_type_arguments);
+        tsrs_core::census_layout(type_name::<TypeAlloc<TypeReference>>(), &[thin(offset_of!(TypeAlloc<TypeReference>, data) + r)]);
+        let r = offset_of!(InterfaceType, type_reference) + r;
+        tsrs_core::census_layout(type_name::<TypeAlloc<InterfaceType>>(), &[thin(offset_of!(TypeAlloc<InterfaceType>, data) + r)]);
+        let r = offset_of!(TupleType, interface_type) + r;
+        tsrs_core::census_layout(type_name::<TypeAlloc<TupleType>>(), &[thin(offset_of!(TypeAlloc<TupleType>, data) + r)]);
+        tsrs_core::census_layout(type_name::<TypeAlias>(), &[thin(offset_of!(TypeAlias, type_arguments))]);
+        let u = |d: usize| {
+            let base = d + offset_of!(UnionType, union_or_intersection_type);
+            [
+                thin(base + offset_of!(UnionOrIntersectionType, types)),
+                CensusField::LowTag { off: base + offset_of!(UnionOrIntersectionType, rare), mask: RARE_INTERSECTION as u8 },
+            ]
+        };
+        tsrs_core::census_layout(type_name::<TypeAlloc<UnionType>>(), &u(offset_of!(TypeAlloc<UnionType>, data)));
+        const _: () = assert!(offset_of!(UnionType, union_or_intersection_type) == offset_of!(IntersectionType, union_or_intersection_type));
+        tsrs_core::census_layout(type_name::<TypeAlloc<IntersectionType>>(), &u(offset_of!(TypeAlloc<IntersectionType>, data)));
+        let rp = offset_of!(UnionOrIntersectionRare, resolved_properties);
+        tsrs_core::census_layout(type_name::<UnionRare>(), &[thin(offset_of!(UnionRare, shared) + rp)]);
+        tsrs_core::census_layout(type_name::<IntersectionRare>(), &[thin(offset_of!(IntersectionRare, shared) + rp)]);
+        tsrs_core::census_layout(
+            type_name::<StructuredMembers>(),
+            &[thin(offset_of!(StructuredMembers, properties)), thin(offset_of!(StructuredMembers, signatures))],
+        );
+        tsrs_core::census_layout(type_name::<IndexInfosTail>(), &[thin(offset_of!(IndexInfosTail, index_infos))]);
+        tsrs_core::census_layout(
+            type_name::<Signature>(),
+            &[
+                thin(offset_of!(Signature, type_parameters)),
+                thin(offset_of!(Signature, parameters)),
+                CensusField::LowTag { off: offset_of!(Signature, rare), mask: SIGNATURE_NO_TYPE_PREDICATE as u8 },
+            ],
+        );
         let offsets = [
             offset_of!(ConditionalRoot, node),
             offset_of!(ConditionalRoot, check_type),
@@ -1898,7 +1930,8 @@ pub struct ConstrainedType {
 // structured types are never resolved (on the private monorepo 4.9M of 7.6M: type references answered by lazy member tables,
 // unions and intersections whose members nobody asks for), and those now carry one pointer instead of 48 bytes.
 // Reads of an absent record return the zero values (nil members, empty slices, count 0), exactly like reading the
-// unset fields; once allocated, every getter returns exactly what was last set.
+// unset fields; once allocated, every getter returns exactly what was last set (except that an empty index info
+// list reads as `&[]` until a non-empty one is set, see `CountOrIndexInfos`).
 #[derive(Default)]
 pub struct StructuredType {
     resolved: Cell<Option<P<StructuredMembers>>>,
@@ -1908,14 +1941,66 @@ pub struct StructuredType {
 #[derive(Default)]
 struct StructuredMembers {
     members: Cell<Option<P<SymbolTable>>>,
-    // `SliceCell`s (12 bytes, 4-aligned) pack with `call_signature_count`.
-    properties: SliceCell<P<Symbol>>,
-    signatures: SliceCell<P<Signature>>, // Signatures (call + construct)
-    call_signature_count: Cell<i32>,     // Count of call signatures
-    index_infos: SliceCell<P<IndexInfo>>,
+    // `ThinSliceCell`s are one word each (`tsrs_core::ThinSlice`).
+    properties: ThinSliceCell<P<Symbol>>,
+    signatures: ThinSliceCell<P<Signature>>, // Signatures (call + construct)
+    // Count of call signatures, and index infos (2% of the resolved types on the private monorepo have any).
+    count_or_index_infos: CountOrIndexInfos,
 }
 
 const _: () = assert!(std::mem::size_of::<StructuredType>() == 8);
+const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 32);
+
+/// Go's `CallSignatureCount` and `IndexInfos` in one word: `count << 1 | 1` while no non-empty index info list was
+/// set (the list reads empty, `&[]`), else a pointer to an `IndexInfosTail` holding both.
+struct CountOrIndexInfos(Cell<*const IndexInfosTail>);
+
+struct IndexInfosTail {
+    index_infos: ThinSliceCell<P<IndexInfo>>,
+    call_signature_count: Cell<i32>,
+}
+
+impl Default for CountOrIndexInfos {
+    fn default() -> Self {
+        CountOrIndexInfos(Cell::new(std::ptr::without_provenance(1)))
+    }
+}
+
+impl CountOrIndexInfos {
+    #[inline]
+    fn tail(&self) -> Option<&'static IndexInfosTail> {
+        let p = self.0.get();
+        // SAFETY: an even word is the tail allocated by `set_index_infos` (never freed).
+        (p.addr() & 1 == 0).then(|| unsafe { &*p })
+    }
+    #[inline]
+    fn call_signature_count(&self) -> i32 {
+        match self.tail() {
+            Some(t) => t.call_signature_count.get(),
+            None => (self.0.get().addr() >> 1) as u32 as i32,
+        }
+    }
+    #[inline]
+    fn set_call_signature_count(&self, count: i32) {
+        match self.tail() {
+            Some(t) => t.call_signature_count.set(count),
+            None => self.0.set(std::ptr::without_provenance(((count as u32 as usize) << 1) | 1)),
+        }
+    }
+    #[inline]
+    fn index_infos(&self) -> &'static [P<IndexInfo>] {
+        self.tail().map_or(&[], |t| t.index_infos.get())
+    }
+    fn set_index_infos(&self, index_infos: &'static [P<IndexInfo>]) {
+        if let Some(t) = self.tail() {
+            t.index_infos.set(index_infos);
+        } else if !index_infos.is_empty() {
+            let count = self.call_signature_count();
+            let t = P::new(IndexInfosTail { index_infos: ThinSliceCell::new(index_infos), call_signature_count: Cell::new(count) });
+            self.0.set(t.get());
+        }
+    }
+}
 
 impl StructuredType {
     #[inline]
@@ -1957,19 +2042,19 @@ impl StructuredType {
     }
     #[inline]
     pub fn call_signature_count(&self) -> i32 {
-        self.resolved.get().map_or(0, |r| r.call_signature_count.get())
+        self.resolved.get().map_or(0, |r| r.count_or_index_infos.call_signature_count())
     }
     #[inline]
     pub fn set_call_signature_count(&self, count: i32) {
-        self.resolved_for_write().call_signature_count.set(count);
+        self.resolved_for_write().count_or_index_infos.set_call_signature_count(count);
     }
     #[inline]
     pub fn index_infos(&self) -> &'static [P<IndexInfo>] {
-        self.resolved.get().map_or(&[], |r| r.index_infos.get())
+        self.resolved.get().map_or(&[], |r| r.count_or_index_infos.index_infos())
     }
     #[inline]
     pub fn set_index_infos(&self, index_infos: &'static [P<IndexInfo>]) {
-        self.resolved_for_write().index_infos.set(index_infos);
+        self.resolved_for_write().count_or_index_infos.set_index_infos(index_infos);
     }
     pub fn call_signatures(&self) -> &'static [P<Signature>] {
         &self.signatures()[..self.call_signature_count() as usize]
@@ -2030,7 +2115,7 @@ embeds!(ObjectType, structured_type, StructuredType);
 pub struct TypeReference {
     pub object_type: ObjectType,
     pub node: Cell<Option<P<Node>>>, // TypeReferenceNode | ArrayTypeNode | TupleTypeNode when deferred, else nil
-    pub resolved_type_arguments: Cell<Option<&'static [P<Type>]>>, // nil = not computed (Go tests against nil)
+    pub resolved_type_arguments: OptionThinSliceCell<P<Type>>, // nil = not computed (Go tests against nil)
 }
 embeds!(TypeReference, object_type, ObjectType);
 
@@ -2260,20 +2345,106 @@ embeds!(EvolvingArrayType, object_type, ObjectType);
 
 // UnionOrIntersectionTypeData
 
+/// Go's `UnionOrIntersectionType` / `UnionType` / `IntersectionType` fields other than `types` are set on few types
+/// (on the private monorepo single: of 1.07M unions 12% get an origin, 9.5% a key property name, ~6% each a
+/// property cache, resolved properties, a reduced or a regular type; of 1.17M intersections 21% a non-augmented
+/// property cache, 14% an apparent type, 4.4% resolved properties), so they live in a tail allocated on the first
+/// non-nil write: a `UnionRare` or an `IntersectionRare`, both starting with the shared `UnionOrIntersectionRare`.
+/// Reads of an absent tail return the zero value, like the unset Go field. The tail word keeps the kind in bit 0
+/// (set at construction) so the shared accessors allocate the right tail.
 #[derive(Default)]
 pub struct UnionOrIntersectionType {
     pub structured_type: StructuredType,
-    // Packed slice cells (12 bytes each), as in `StructuredType`.
-    pub types: SliceCell<P<Type>>,
-    pub resolved_properties: OptionSliceCell<P<Symbol>>, // nil = not computed (Go tests against nil)
-    pub property_cache: Cell<Option<P<SymbolTable>>>,
-    pub property_cache_without_function_property_augment: Cell<Option<P<SymbolTable>>>,
+    pub types: ThinSliceCell<P<Type>>,
+    rare: UnionOrIntersectionRareWord,
 }
 embeds!(UnionOrIntersectionType, structured_type, StructuredType);
+
+#[derive(Default)]
+#[repr(C)]
+struct UnionOrIntersectionRare {
+    resolved_properties: OptionThinSliceCell<P<Symbol>>, // nil = not computed (Go tests against nil)
+    property_cache: Cell<Option<P<SymbolTable>>>,
+    property_cache_without_function_property_augment: Cell<Option<P<SymbolTable>>>,
+}
+
+#[derive(Default)]
+#[repr(C)]
+struct UnionRare {
+    shared: UnionOrIntersectionRare,
+    resolved_reduced_type: Cell<Option<P<Type>>>,
+    regular_type: Cell<Option<P<Type>>>,
+    origin: Cell<Option<P<Type>>>, // Denormalized union, intersection, or index type in which union originates
+    key_property_name: StrCell,    // Property with unique unit type that exists in every object/intersection in union type
+    constituent_map: GoMap<P<Type>, P<Type>>, // Constituents keyed by unit type discriminants
+}
+
+#[derive(Default)]
+#[repr(C)]
+struct IntersectionRare {
+    shared: UnionOrIntersectionRare,
+    resolved_apparent_type: Cell<Option<P<Type>>>,
+    unique_literal_filled_instantiation: Cell<Option<P<Type>>>, // Instantiation with type parameters mapped to never type
+}
+
+/// The tail pointer (8-aligned, null while absent) with bit 0 set for an intersection.
+struct UnionOrIntersectionRareWord(Cell<*const UnionOrIntersectionRare>);
+
+const RARE_INTERSECTION: usize = 1;
+
+impl Default for UnionOrIntersectionRareWord {
+    fn default() -> Self {
+        UnionOrIntersectionRareWord(Cell::new(std::ptr::null()))
+    }
+}
 
 impl UnionOrIntersectionType {
     pub fn types(&self) -> &'static [P<Type>] {
         self.types.get()
+    }
+    #[inline]
+    fn rare(&self) -> Option<&'static UnionOrIntersectionRare> {
+        let p = self.rare.0.get().map_addr(|a| a & !RARE_INTERSECTION);
+        // SAFETY: a non-null address is the tail allocated by `rare_for_write` (never freed).
+        (!p.is_null()).then(|| unsafe { &*p })
+    }
+    fn is_intersection_data(&self) -> bool {
+        self.rare.0.get().addr() & RARE_INTERSECTION != 0
+    }
+    fn rare_for_write(&self) -> &'static UnionOrIntersectionRare {
+        if let Some(r) = self.rare() {
+            return r;
+        }
+        let kind = self.rare.0.get().addr() & RARE_INTERSECTION;
+        let p: *const UnionOrIntersectionRare = if kind != 0 {
+            (P::new(IntersectionRare::default()).get() as *const IntersectionRare).cast()
+        } else {
+            (P::new(UnionRare::default()).get() as *const UnionRare).cast()
+        };
+        self.rare.0.set(p.map_addr(|a| a | kind));
+        // SAFETY: just allocated; `repr(C)` with the shared part first.
+        unsafe { &*p }
+    }
+    pub fn resolved_properties(&self) -> Option<&'static [P<Symbol>]> {
+        self.rare().and_then(|r| r.resolved_properties.get())
+    }
+    pub fn set_resolved_properties(&self, properties: Option<&'static [P<Symbol>]>) {
+        if properties.is_some() || self.rare().is_some() {
+            self.rare_for_write().resolved_properties.set(properties);
+        }
+    }
+    /// Go `t.propertyCacheWithoutObjectFunctionPropertyAugment` when `skip_object_function_property_augment`, else
+    /// `t.propertyCache`.
+    #[inline]
+    pub fn property_cache(&self, skip_object_function_property_augment: bool) -> Option<P<SymbolTable>> {
+        let r = self.rare()?;
+        if skip_object_function_property_augment { r.property_cache_without_function_property_augment.get() } else { r.property_cache.get() }
+    }
+    /// `property_cache`, created empty if it is nil (Go `getSymbolTable(&cache)`).
+    pub fn property_cache_for_write(&self, skip_object_function_property_augment: bool) -> P<SymbolTable> {
+        let r = self.rare_for_write();
+        let cell = if skip_object_function_property_augment { &r.property_cache_without_function_property_augment } else { &r.property_cache };
+        ast::get_symbol_table(cell)
     }
 }
 
@@ -2282,27 +2453,115 @@ impl UnionOrIntersectionType {
 #[derive(Default)]
 pub struct UnionType {
     pub union_or_intersection_type: UnionOrIntersectionType,
-    pub resolved_reduced_type: Cell<Option<P<Type>>>,
-    pub regular_type: Cell<Option<P<Type>>>,
-    pub origin: Cell<Option<P<Type>>>, // Denormalized union, intersection, or index type in which union originates
-    pub key_property_name: StrCell, // Property with unique unit type that exists in every object/intersection in union type
-    pub constituent_map: GoMap<P<Type>, P<Type>>, // Constituents keyed by unit type discriminants
 }
 embeds!(UnionType, union_or_intersection_type, UnionOrIntersectionType);
 
-const _: () = assert!(std::mem::size_of::<UnionType>() == 88);
+const _: () = assert!(std::mem::size_of::<UnionType>() == 24);
+
+impl UnionType {
+    #[inline]
+    fn union_rare(&self) -> Option<&'static UnionRare> {
+        debug_assert!(!self.union_or_intersection_type.is_intersection_data());
+        // SAFETY: a union's tail is a `UnionRare` (`rare_for_write` with the kind bit clear).
+        self.union_or_intersection_type.rare().map(|r| unsafe { &*(r as *const UnionOrIntersectionRare).cast::<UnionRare>() })
+    }
+    fn union_rare_for_write(&self) -> &'static UnionRare {
+        let r = self.union_or_intersection_type.rare_for_write();
+        // SAFETY: as in `union_rare`.
+        unsafe { &*(r as *const UnionOrIntersectionRare).cast::<UnionRare>() }
+    }
+    #[inline]
+    pub fn resolved_reduced_type(&self) -> Option<P<Type>> {
+        self.union_rare().and_then(|r| r.resolved_reduced_type.get())
+    }
+    pub fn set_resolved_reduced_type(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.union_rare().is_some() {
+            self.union_rare_for_write().resolved_reduced_type.set(t);
+        }
+    }
+    #[inline]
+    pub fn regular_type(&self) -> Option<P<Type>> {
+        self.union_rare().and_then(|r| r.regular_type.get())
+    }
+    pub fn set_regular_type(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.union_rare().is_some() {
+            self.union_rare_for_write().regular_type.set(t);
+        }
+    }
+    #[inline]
+    pub fn origin(&self) -> Option<P<Type>> {
+        self.union_rare().and_then(|r| r.origin.get())
+    }
+    pub fn set_origin(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.union_rare().is_some() {
+            self.union_rare_for_write().origin.set(t);
+        }
+    }
+    pub fn key_property_name(&self) -> &'static str {
+        self.union_rare().map_or("", |r| r.key_property_name.get())
+    }
+    pub fn set_key_property_name(&self, name: &'static str) {
+        if !name.is_empty() || self.union_rare().is_some() {
+            self.union_rare_for_write().key_property_name.set(name);
+        }
+    }
+    /// Go `t.constituentMap` for reading (nil while there is no tail).
+    pub fn constituent_map(&self) -> Option<&'static GoMap<P<Type>, P<Type>>> {
+        self.union_rare().map(|r| &r.constituent_map)
+    }
+    /// Go `t.constituentMap` for writing.
+    pub fn constituent_map_for_write(&self) -> &'static GoMap<P<Type>, P<Type>> {
+        &self.union_rare_for_write().constituent_map
+    }
+}
 
 // IntersectionType
 
-#[derive(Default)]
 pub struct IntersectionType {
     pub union_or_intersection_type: UnionOrIntersectionType,
-    pub resolved_apparent_type: Cell<Option<P<Type>>>,
-    pub unique_literal_filled_instantiation: Cell<Option<P<Type>>>, // Instantiation with type parameters mapped to never type
 }
 embeds!(IntersectionType, union_or_intersection_type, UnionOrIntersectionType);
 
-const _: () = assert!(std::mem::size_of::<IntersectionType>() == 64);
+const _: () = assert!(std::mem::size_of::<IntersectionType>() == 24);
+
+impl Default for IntersectionType {
+    fn default() -> Self {
+        let d = UnionOrIntersectionType::default();
+        d.rare.0.set(std::ptr::null::<UnionOrIntersectionRare>().map_addr(|_| RARE_INTERSECTION));
+        IntersectionType { union_or_intersection_type: d }
+    }
+}
+
+impl IntersectionType {
+    #[inline]
+    fn intersection_rare(&self) -> Option<&'static IntersectionRare> {
+        debug_assert!(self.union_or_intersection_type.is_intersection_data());
+        // SAFETY: an intersection's tail is an `IntersectionRare` (`rare_for_write` with the kind bit set).
+        self.union_or_intersection_type.rare().map(|r| unsafe { &*(r as *const UnionOrIntersectionRare).cast::<IntersectionRare>() })
+    }
+    fn intersection_rare_for_write(&self) -> &'static IntersectionRare {
+        let r = self.union_or_intersection_type.rare_for_write();
+        // SAFETY: as in `intersection_rare`.
+        unsafe { &*(r as *const UnionOrIntersectionRare).cast::<IntersectionRare>() }
+    }
+    #[inline]
+    pub fn resolved_apparent_type(&self) -> Option<P<Type>> {
+        self.intersection_rare().and_then(|r| r.resolved_apparent_type.get())
+    }
+    pub fn set_resolved_apparent_type(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.intersection_rare().is_some() {
+            self.intersection_rare_for_write().resolved_apparent_type.set(t);
+        }
+    }
+    pub fn unique_literal_filled_instantiation(&self) -> Option<P<Type>> {
+        self.intersection_rare().and_then(|r| r.unique_literal_filled_instantiation.get())
+    }
+    pub fn set_unique_literal_filled_instantiation(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.intersection_rare().is_some() {
+            self.intersection_rare_for_write().unique_literal_filled_instantiation.set(t);
+        }
+    }
+}
 
 // TypeParameter
 
@@ -2491,24 +2750,59 @@ pub struct Signature {
     pub min_argument_count: Cell<i32>,
     pub resolved_min_argument_count: Cell<i32>,
     pub declaration: Cell<Option<P<Node>>>,
-    pub type_parameters: SliceCell<P<Type>>, // SliceCells pack with the four 4-byte fields above
-    pub parameters: SliceCell<P<Symbol>>,
+    pub type_parameters: ThinSliceCell<P<Type>>, // one word each (`tsrs_core::ThinSlice`)
+    pub parameters: ThinSliceCell<P<Symbol>>,
     pub resolved_return_type: Cell<Option<P<Type>>>,
-    pub resolved_type_predicate: Cell<Option<P<TypePredicate>>>,
     pub target: Cell<Option<P<Signature>>>,
     pub mapper: MapperCell,
-    // `thisParameter`, `isolatedSignatureType` and `composite` (few signatures have any) live in a tail allocated on
-    // the first non-nil write; `this_parameter()` / `set_this_parameter()` & co. read nil when it is absent.
-    rare: Cell<Option<P<SignatureRare>>>,
+    // `thisParameter`, `isolatedSignatureType`, `composite` and a resolved type predicate other than the checker's
+    // `noTypePredicate` (few signatures have any) live in a tail allocated on the first non-nil write;
+    // `this_parameter()` / `set_this_parameter()` & co. read nil when it is absent. `resolvedTypePredicate ==
+    // c.noTypePredicate` (every resolved signature without a predicate) is bit 0 of the same word.
+    rare: SignatureRareWord,
 }
 
-const _: () = assert!(std::mem::size_of::<Signature>() == 88);
+const _: () = assert!(std::mem::size_of::<Signature>() == 72);
 
 #[derive(Default)]
 struct SignatureRare {
     this_parameter: Cell<Option<P<Symbol>>>,
     isolated_signature_type: Cell<Option<P<Type>>>,
     composite: Cell<Option<P<CompositeSignature>>>,
+    resolved_type_predicate: Cell<Option<P<TypePredicate>>>, // never the checker's `noTypePredicate` (that is the bit)
+}
+
+/// `Signature`'s tail pointer (8-aligned, null when absent) with the "no type predicate" bit in bit 0.
+struct SignatureRareWord(Cell<*const SignatureRare>);
+
+const SIGNATURE_NO_TYPE_PREDICATE: usize = 1;
+
+impl Default for SignatureRareWord {
+    fn default() -> Self {
+        SignatureRareWord(Cell::new(std::ptr::null()))
+    }
+}
+
+impl SignatureRareWord {
+    #[inline]
+    fn tail(&self) -> Option<P<SignatureRare>> {
+        let p = self.0.get().map_addr(|a| a & !SIGNATURE_NO_TYPE_PREDICATE);
+        // SAFETY: a non-null address is a `P<SignatureRare>` stored by `set_tail`.
+        (!p.is_null()).then(|| P::from_static(unsafe { &*p }))
+    }
+    #[inline]
+    fn no_type_predicate(&self) -> bool {
+        self.0.get().addr() & SIGNATURE_NO_TYPE_PREDICATE != 0
+    }
+    #[inline]
+    fn set_tail(&self, tail: P<SignatureRare>) {
+        let bit = self.0.get().addr() & SIGNATURE_NO_TYPE_PREDICATE;
+        self.0.set((tail.get() as *const SignatureRare).map_addr(|a| a | bit));
+    }
+    #[inline]
+    fn set_no_type_predicate(&self, on: bool) {
+        self.0.set(self.0.get().map_addr(|a| if on { a | SIGNATURE_NO_TYPE_PREDICATE } else { a & !SIGNATURE_NO_TYPE_PREDICATE }));
+    }
 }
 
 impl Signature {
@@ -2528,36 +2822,53 @@ impl Signature {
         self.target.get()
     }
     fn rare_for_write(&self) -> P<SignatureRare> {
-        match self.rare.get() {
+        match self.rare.tail() {
             Some(rare) => rare,
             None => {
                 let rare = P::new(SignatureRare::default());
-                self.rare.set(Some(rare));
+                self.rare.set_tail(rare);
                 rare
             }
         }
     }
+    /// Go `sig.resolvedTypePredicate`; `no_type_predicate` is the checker's `noTypePredicate`.
+    #[inline]
+    pub fn resolved_type_predicate(&self, no_type_predicate: P<TypePredicate>) -> Option<P<TypePredicate>> {
+        if self.rare.no_type_predicate() {
+            return Some(no_type_predicate);
+        }
+        self.rare.tail().and_then(|r| r.resolved_type_predicate.get())
+    }
+    /// Go `sig.resolvedTypePredicate = predicate`; `no_type_predicate` is the checker's `noTypePredicate`.
+    pub fn set_resolved_type_predicate(&self, predicate: Option<P<TypePredicate>>, no_type_predicate: P<TypePredicate>) {
+        let none = predicate == Some(no_type_predicate);
+        self.rare.set_no_type_predicate(none);
+        let stored = if none { None } else { predicate };
+        if stored.is_some() || self.rare.tail().is_some() {
+            self.rare_for_write().resolved_type_predicate.set(stored);
+        }
+    }
     pub fn this_parameter(&self) -> Option<P<Symbol>> {
-        self.rare.get().and_then(|r| r.this_parameter.get())
+        self.rare.tail().and_then(|r| r.this_parameter.get())
     }
     pub fn set_this_parameter(&self, this_parameter: Option<P<Symbol>>) {
-        if this_parameter.is_some() || self.rare.get().is_some() {
+        if this_parameter.is_some() || self.rare.tail().is_some() {
             self.rare_for_write().this_parameter.set(this_parameter);
         }
     }
     pub fn isolated_signature_type(&self) -> Option<P<Type>> {
-        self.rare.get().and_then(|r| r.isolated_signature_type.get())
+        self.rare.tail().and_then(|r| r.isolated_signature_type.get())
     }
     pub fn set_isolated_signature_type(&self, t: Option<P<Type>>) {
-        if t.is_some() || self.rare.get().is_some() {
+        if t.is_some() || self.rare.tail().is_some() {
             self.rare_for_write().isolated_signature_type.set(t);
         }
     }
     pub fn composite(&self) -> Option<P<CompositeSignature>> {
-        self.rare.get().and_then(|r| r.composite.get())
+        self.rare.tail().and_then(|r| r.composite.get())
     }
     pub fn set_composite(&self, composite: Option<P<CompositeSignature>>) {
-        if composite.is_some() || self.rare.get().is_some() {
+        if composite.is_some() || self.rare.tail().is_some() {
             self.rare_for_write().composite.set(composite);
         }
     }

@@ -747,7 +747,7 @@ pub fn get_next_jsdoc_comment_location(node: P<Node>) -> Option<P<Node>> {
             | Kind::VariableStatement
             | Kind::ExpressionStatement => return Some(parent),
             Kind::VariableDeclarationList => {
-                if parent.as_variable_declaration_list().declarations.nodes[0] == node {
+                if parent.as_variable_declaration_list().declarations.nodes()[0] == node {
                     return Some(parent);
                 }
             }
@@ -879,7 +879,7 @@ pub fn is_potentially_executable_node(node: P<Node>) -> bool {
             if get_combined_node_flags(declaration_list).intersects(NodeFlags::BlockScoped) {
                 return true;
             }
-            let declarations = declaration_list.as_variable_declaration_list().declarations.nodes;
+            let declarations = declaration_list.as_variable_declaration_list().declarations.nodes();
             return declarations.iter().any(|d| d.initializer().is_some());
         }
         return true;
@@ -962,7 +962,7 @@ pub fn class_element_or_class_element_parameter_is_decorated(use_legacy_decorato
         return true;
     }
     if let Some(parameters) = parameters {
-        for &parameter in parameters.nodes {
+        for &parameter in parameters.nodes() {
             if is_this_parameter(parameter) {
                 continue;
             }
@@ -1074,7 +1074,7 @@ pub fn get_rest_parameter_element_type(node: impl Into<Option<P<Node>>>) -> Opti
     }
     if node.kind() == Kind::TypeReference {
         if let Some(type_arguments) = node.as_type_reference_node().type_arguments() {
-            return type_arguments.nodes.first().copied();
+            return type_arguments.nodes().first().copied();
         }
     }
     None
@@ -1285,10 +1285,10 @@ pub fn is_jsdoc_single_comment_node_list(node_list: Option<P<NodeList>>) -> bool
     let Some(node_list) = node_list else {
         return false;
     };
-    if node_list.nodes.is_empty() {
+    if node_list.nodes().is_empty() {
         return false;
     }
-    let Some(parent) = node_list.nodes[0].parent() else {
+    let Some(parent) = node_list.nodes()[0].parent() else {
         return false;
     };
     is_jsdoc_single_comment_node(parent) && Some(node_list) == parent.comment_list()
@@ -1302,12 +1302,12 @@ pub fn is_jsdoc_single_comment_node_comment(node: Option<P<Node>>) -> bool {
     let Some(parent) = node.parent() else {
         return false;
     };
-    is_jsdoc_single_comment_node(parent) && node == parent.comment_list().unwrap().nodes[0]
+    is_jsdoc_single_comment_node(parent) && node == parent.comment_list().unwrap().nodes()[0]
 }
 
 // utilities.go:3165
 pub fn is_jsdoc_single_comment_node(node: P<Node>) -> bool {
-    has_comment(node.kind()) && node.comment_list().is_some_and(|l| l.nodes.len() == 1)
+    has_comment(node.kind()) && node.comment_list().is_some_and(|l| l.nodes().len() == 1)
 }
 
 // utilities.go:3806

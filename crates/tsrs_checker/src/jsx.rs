@@ -267,7 +267,7 @@ impl Checker {
             }
             _ => return None,
         };
-        let real_children = ast::get_semantic_jsx_children(node.children().nodes);
+        let real_children = ast::get_semantic_jsx_children(node.children().nodes());
         let child_index = real_children.iter().position(|&c| c == child).map_or(-1, |i| i as i32);
         let child_field_type = self.get_type_of_property_of_contextual_type(attributes_type, &jsx_children_property_name)?;
         if real_children.len() == 1 {
@@ -321,7 +321,7 @@ impl Checker {
                 let element = node.parent().unwrap().parent().unwrap();
                 if s.name() == jsx_children_property_name
                     && ast::is_jsx_element(element)
-                    && !ast::get_semantic_jsx_children(element.children().nodes).is_empty()
+                    && !ast::get_semantic_jsx_children(element.children().nodes()).is_empty()
                 {
                     break 'keep false;
                 }
@@ -369,7 +369,7 @@ impl Checker {
             }
             let children_name_type = self.get_string_literal_type(&children_prop_name);
             let children_target_type = self.get_indexed_access_type(target, children_name_type);
-            let valid_children = ast::get_semantic_jsx_children(containing_element.children().nodes);
+            let valid_children = ast::get_semantic_jsx_children(containing_element.children().nodes());
             if valid_children.is_empty() {
                 return reported_error;
             }
@@ -459,7 +459,7 @@ impl Checker {
     // Go returns a lazy iter.Seq; the port returns the equivalent pull function (`None` = exhausted) so that
     // element creation interleaves with the consumer's work exactly as in Go.
     pub(crate) fn generate_jsx_children(&mut self, node: P<Node>, get_invalid_text_diagnostic: InvalidTextDiagnosticFn) -> impl FnMut(&mut Checker) -> Option<JsxElaborationElement> + 'static {
-        let children = node.children().nodes;
+        let children = node.children().nodes();
         let mut i = 0usize;
         let mut member_offset = 0usize;
         move |c: &mut Checker| {
@@ -880,11 +880,11 @@ impl Checker {
             if ast::is_jsx_element(parent) {
                 // We have to check that openingElement of the parent is the one we are visiting as this may not be true for selfClosingElement
                 if parent.as_jsx_element().opening_element == opening_like_element {
-                    children = parent.children().nodes;
+                    children = parent.children().nodes();
                 }
             } else if ast::is_jsx_fragment(parent) {
                 if parent.as_jsx_fragment().opening_fragment == opening_like_element {
-                    children = parent.children().nodes;
+                    children = parent.children().nodes();
                 }
             }
             !ast::get_semantic_jsx_children(children).is_empty()
@@ -957,7 +957,7 @@ impl Checker {
     // jsx.go:877
     pub(crate) fn check_jsx_children(&mut self, node: P<Node>, check_mode: CheckMode) -> Vec<P<Type>> {
         let mut child_types: Vec<P<Type>> = Vec::new();
-        for &child in node.children().nodes {
+        for &child in node.children().nodes() {
             // In React, JSX text that contains only whitespaces will be ignored so we don't want to type-check that
             // because then type of children property will have constituent of string type.
             if ast::is_jsx_text(child) {

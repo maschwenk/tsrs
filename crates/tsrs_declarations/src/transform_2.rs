@@ -526,7 +526,7 @@ impl DeclarationTransformer {
             // 3. Some things are exported, some are not, and there's no marker - add an empty marker
             if !ast::is_global_scope_augmentation(input) && !self.result_has_scope_marker.get() && !has_scope_marker(Some(late_statements)) {
                 if self.needs_scope_fix_marker.get() {
-                    let mut nodes = late_statements.nodes.to_vec();
+                    let mut nodes = late_statements.nodes().to_vec();
                     nodes.push(create_empty_exports(f.as_node_factory()));
                     late_statements = f.new_node_list(nodes);
                 } else {
@@ -605,13 +605,13 @@ impl DeclarationTransformer {
         // Prevents other classes with the same public members from being used in place of the current class
         let members = class_node.class_like_data().unwrap().members();
         let mut private_identifier = None;
-        if members.nodes.iter().any(|member| member.name().is_some_and(ast::is_private_identifier)) {
+        if members.nodes().iter().any(|member| member.name().is_some_and(ast::is_private_identifier)) {
             private_identifier = Some(f.new_property_declaration(None, f.new_private_identifier("#private"), None, None, None));
         }
 
         let late_indexes = self.resolver.create_late_bound_index_signatures(self.emit_context(), class_node, self.enclosing_declaration.get(), declarationEmitNodeBuilderFlags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
 
-        let mut member_nodes = Vec::with_capacity(members.nodes.len());
+        let mut member_nodes = Vec::with_capacity(members.nodes().len());
         if let Some(private_identifier) = private_identifier {
             member_nodes.push(private_identifier);
         }
@@ -619,8 +619,8 @@ impl DeclarationTransformer {
         member_nodes.extend(parameter_properties);
         member_nodes.extend_from_slice(extra_members);
         let visit_result = self.visitor().visit_nodes(Some(members));
-        if let Some(visit_result) = visit_result.filter(|r| !r.nodes.is_empty()) {
-            member_nodes.extend_from_slice(visit_result.nodes);
+        if let Some(visit_result) = visit_result.filter(|r| !r.nodes().is_empty()) {
+            member_nodes.extend_from_slice(visit_result.nodes());
         }
         f.new_node_list(member_nodes)
     }
@@ -686,8 +686,8 @@ impl DeclarationTransformer {
                     );
                     let retained_heritage_clauses = self.visitor().visit_nodes(decl.heritage_clauses()); // should just be `implements`
                     let mut heritage_list = vec![new_heritage_clause];
-                    if let Some(retained_heritage_clauses) = retained_heritage_clauses.filter(|r| !r.nodes.is_empty()) {
-                        heritage_list.extend_from_slice(retained_heritage_clauses.nodes);
+                    if let Some(retained_heritage_clauses) = retained_heritage_clauses.filter(|r| !r.nodes().is_empty()) {
+                        heritage_list.extend_from_slice(retained_heritage_clauses.nodes());
                     }
                     let heritage_clauses = f.new_node_list(heritage_list);
 
@@ -733,7 +733,7 @@ impl DeclarationTransformer {
                 // but what we transform to won't - so we either need to match the base type (for example, if it's a getter/setter) or emit nothing
                 // See `checkKindsOfPropertyMemberOverrides` in the checker for what we're trying to satisfy here
                 let heritage_clauses = this_target.class_like_data().unwrap().heritage_clauses();
-                if heritage_clauses.is_some_and(|h| !h.nodes.is_empty()) && !is_class_extending_null(Some(this_target)) {
+                if heritage_clauses.is_some_and(|h| !h.nodes().is_empty()) && !is_class_extending_null(Some(this_target)) {
                     // there is a base type any assignments might be "from"
                     self.resolver.lock(|c| self.tracker.report_inference_fallback(c, this_target)); // Add an isolated declarations error on this class - we can't know how to transform this prop into an assignment without referring to type information
                     if self.resolver.is_this_property_assignment_declaration_redundant(Some(node)) {
@@ -779,10 +779,10 @@ pub(crate) fn is_class_extending_null(node: Option<P<Node>>) -> bool {
         return false;
     };
     let types = extends_clause.as_heritage_clause().types();
-    if types.nodes.len() != 1 {
+    if types.nodes().len() != 1 {
         return false;
     }
-    let expr = types.nodes[0].as_expression_with_type_arguments().expression;
+    let expr = types.nodes()[0].as_expression_with_type_arguments().expression;
     expr.kind() == Kind::NullKeyword
 }
 
@@ -794,7 +794,7 @@ impl DeclarationTransformer {
         let members = class_node.class_like_data().unwrap().members();
         let mut seen = Set::new();
         // Pre-populate seen with existing direct member nodes to avoid duplicates
-        for &member in members.nodes {
+        for &member in members.nodes() {
             if member.name().is_some() {
                 let is_static = ast::is_static(member);
                 seen.add(get_this_property_assignment_key(member.name(), member, is_static));
@@ -803,7 +803,7 @@ impl DeclarationTransformer {
         *self.seen_properties.borrow_mut() = seen;
         *self.this_property_assignments_collected.borrow_mut() = Vec::new();
 
-        for &n in members.nodes {
+        for &n in members.nodes() {
             self.this_property_visitor().visit_each_child(Some(n));
         }
         // Go: the result is read before the deferred `seenProperties.Clear()` and `thisPropertyAssignmentsCollected = nil`.
@@ -815,7 +815,7 @@ impl DeclarationTransformer {
     // transform.go:2201
     pub(crate) fn walk_binding_pattern(&self, pattern: P<Node>, param: P<Node>) -> Vec<P<Node>> {
         let mut elems = Vec::new();
-        for &elem in pattern.as_binding_pattern().elements.nodes {
+        for &elem in pattern.as_binding_pattern().elements.nodes() {
             if ast::is_omitted_expression(elem) {
                 continue;
             }
@@ -839,7 +839,7 @@ impl DeclarationTransformer {
         let f = self.factory();
         let declaration_list = input.as_variable_statement().declaration_list;
         let mut visible = false;
-        for &decl in declaration_list.as_variable_declaration_list().declarations.nodes {
+        for &decl in declaration_list.as_variable_declaration_list().declarations.nodes() {
             visible = get_binding_name_visible(self.resolver, decl);
             if visible {
                 break;
@@ -849,7 +849,7 @@ impl DeclarationTransformer {
             return None;
         }
 
-        let mut input_nodes: Vec<P<Node>> = declaration_list.as_variable_declaration_list().declarations.nodes.to_vec();
+        let mut input_nodes: Vec<P<Node>> = declaration_list.as_variable_declaration_list().declarations.nodes().to_vec();
         let mut extra_imports: &'static [P<Node>] = &[];
         if self.state.current_source_file.get().unwrap().common_js_module_indicator().is_some() {
             let mut normal_declarations = Vec::new();
@@ -900,7 +900,7 @@ impl DeclarationTransformer {
         let decl = input.as_enum_declaration();
         let modifiers = self.ensure_modifiers(input);
         let mut members = Vec::new();
-        for &m in decl.members.nodes {
+        for &m in decl.members.nodes() {
             if self.should_strip_internal(Some(m)) {
                 continue;
             }

@@ -682,7 +682,7 @@ impl Parser {
             Kind::JsxOpeningElement => {
                 let mut children = self.parse_jsx_children(opening);
                 let closing_element: P<Node>;
-                let last_child = children.nodes.last().copied();
+                let last_child = children.nodes().last().copied();
                 if let Some(last_child) = last_child.filter(|last_child| {
                     last_child.kind() == Kind::JsxElement
                         && !ast::tag_names_are_equivalent(last_child.as_jsx_element().opening_element.tag_name(), last_child.as_jsx_element().closing_element.tag_name())
@@ -701,11 +701,11 @@ impl Parser {
                     let new_last = self.finish_node_with_end(element, last_child_data.opening_element.pos(), end);
                     // force reset parent pointers from discarded parse result
                     last_child_data.opening_element.set_parent(Some(new_last));
-                    for c in last_child_data.children.nodes {
+                    for c in last_child_data.children.nodes() {
                         c.set_parent(Some(new_last));
                     }
                     new_closing_element.set_parent(Some(new_last));
-                    let mut nodes = children.nodes[0..children.nodes.len() - 1].to_vec();
+                    let mut nodes = children.nodes()[0..children.nodes().len() - 1].to_vec();
                     nodes.push(new_last);
                     children = self.new_node_list(TextRange::new(children.pos(), new_last.end()), &nodes);
                     closing_element = last_child_data.closing_element;
@@ -1748,7 +1748,7 @@ impl Parser {
             expression.set_parent(Some(result));
         }
         if let Some(type_arguments) = type_arguments {
-            for a in type_arguments.nodes {
+            for a in type_arguments.nodes() {
                 a.set_parent(Some(result));
             }
         }
@@ -2714,7 +2714,7 @@ impl Parser {
             | Kind::PropertyDeclaration => {
                 if !matches!(node.kind(), Kind::VariableStatement | Kind::PropertyDeclaration) {
                     if let Some(list) = node.type_parameter_list() {
-                        if list.nodes.iter().any(|n| !n.flags().intersects(NodeFlags::Reparsed)) {
+                        if list.nodes().iter().any(|n| !n.flags().intersects(NodeFlags::Reparsed)) {
                             self.js_error_at_range(list.loc.get(), &diagnostics::Type_parameter_declarations_can_only_be_used_in_TypeScript_files, &[]);
                         }
                     }
@@ -2734,7 +2734,7 @@ impl Parser {
             }
             Kind::CallExpression | Kind::NewExpression | Kind::ExpressionWithTypeArguments | Kind::JsxSelfClosingElement | Kind::JsxOpeningElement | Kind::TaggedTemplateExpression => {
                 if let Some(list) = node.type_argument_list() {
-                    if list.nodes.iter().any(|n| !n.flags().intersects(NodeFlags::Reparsed)) {
+                    if list.nodes().iter().any(|n| !n.flags().intersects(NodeFlags::Reparsed)) {
                         self.js_error_at_range(list.loc.get(), &diagnostics::Type_arguments_can_only_be_used_in_TypeScript_files, &[]);
                     }
                 }

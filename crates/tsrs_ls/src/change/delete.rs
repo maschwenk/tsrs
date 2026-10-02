@@ -32,7 +32,7 @@ pub(crate) fn delete_declaration(t: &mut Tracker, deleted_nodes_in_lists: &mut O
         Kind::ImportDeclaration | Kind::ImportEqualsDeclaration => {
             let imports = source_file.imports();
             let is_first_import = !imports.is_empty() && Some(node) == imports[0].parent()
-                || Some(node) == source_file.statements.nodes.iter().copied().find(|&s| ast::is_any_import_syntax(s));
+                || Some(node) == source_file.statements.nodes().iter().copied().find(|&s| ast::is_any_import_syntax(s));
             // For first import, leave header comment in place, otherwise only delete JSDoc comments
             let mut leading_trivia = LeadingTriviaOption::StartLine;
             if is_first_import {
@@ -45,7 +45,7 @@ pub(crate) fn delete_declaration(t: &mut Tracker, deleted_nodes_in_lists: &mut O
 
         Kind::BindingElement => {
             let pattern = node.parent().unwrap();
-            let elements = pattern.as_binding_pattern().elements.nodes;
+            let elements = pattern.as_binding_pattern().elements.nodes();
             let preserve_comma = pattern.kind() == Kind::ArrayBindingPattern && node != elements[elements.len() - 1];
             if preserve_comma {
                 delete_node(t, source_file, node, LeadingTriviaOption::IncludeAll, TrailingTriviaOption::Exclude);
@@ -60,7 +60,7 @@ pub(crate) fn delete_declaration(t: &mut Tracker, deleted_nodes_in_lists: &mut O
 
         Kind::ImportSpecifier => {
             let named_imports = node.parent().unwrap();
-            if named_imports.as_named_imports().elements.nodes.len() == 1 {
+            if named_imports.as_named_imports().elements.nodes().len() == 1 {
                 delete_import_binding(t, source_file, named_imports);
             } else {
                 delete_node_in_list(t, deleted_nodes_in_lists, source_file, node);
@@ -163,7 +163,7 @@ fn delete_variable_declaration(t: &mut Tracker, deleted_nodes_in_lists: &mut Ord
         return;
     }
 
-    if parent.as_variable_declaration_list().declarations.nodes.len() != 1 {
+    if parent.as_variable_declaration_list().declarations.nodes().len() != 1 {
         delete_node_in_list(t, deleted_nodes_in_lists, source_file, node);
         return;
     }
@@ -203,11 +203,11 @@ fn delete_node_in_list(t: &mut Tracker, deleted_nodes_in_lists: &mut OrderedMap<
     let containing_list = format::get_containing_list(node, source_file);
     assert!(containing_list.is_some(), "containingList should not be nil");
     let containing_list = containing_list.unwrap();
-    let index = containing_list.nodes.iter().position(|&n| n == node);
+    let index = containing_list.nodes().iter().position(|&n| n == node);
     assert!(index.is_some(), "node should be in containing list");
     let index = index.unwrap();
 
-    if containing_list.nodes.len() == 1 {
+    if containing_list.nodes().len() == 1 {
         delete_node(t, source_file, node, LeadingTriviaOption::IncludeAll, TrailingTriviaOption::Include);
         return;
     }
@@ -218,11 +218,11 @@ fn delete_node_in_list(t: &mut Tracker, deleted_nodes_in_lists: &mut OrderedMap<
     deleted_nodes_in_lists.insert(node, true);
 
     let start_pos = t.start_position_to_delete_node_in_list(source_file, node);
-    let end_pos = if index == containing_list.nodes.len() - 1 {
+    let end_pos = if index == containing_list.nodes().len() - 1 {
         t.get_adjusted_end_position(source_file, node, TrailingTriviaOption::None)
     } else {
-        let prev_node = if index > 0 { Some(containing_list.nodes[index - 1]) } else { None };
-        t.end_position_to_delete_node_in_list(source_file, node, prev_node, containing_list.nodes[index + 1])
+        let prev_node = if index > 0 { Some(containing_list.nodes()[index - 1]) } else { None };
+        t.end_position_to_delete_node_in_list(source_file, node, prev_node, containing_list.nodes()[index + 1])
     };
 
     t.replace_text_range_with_text(source_file, TextRange::new(start_pos, end_pos), "");

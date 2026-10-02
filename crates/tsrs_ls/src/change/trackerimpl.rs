@@ -436,7 +436,7 @@ impl Tracker {
     // trackerimpl.go:475
     pub(crate) fn get_insertion_position_at_source_file_top(&self, source_file: P<SourceFile>) -> i32 {
         let mut last_prologue: Option<P<Node>> = None;
-        for &node in source_file.statements.nodes {
+        for &node in source_file.statements.nodes() {
             if ast::is_prologue_directive(node) {
                 last_prologue = Some(node);
             } else {
@@ -480,7 +480,7 @@ impl Tracker {
         let mut pinned_or_triple_slash = false;
         let mut first_node_line = -1;
 
-        let len_statements = source_file.statements.nodes.len();
+        let len_statements = source_file.statements.nodes().len();
         let line_map = source_file.ecma_line_map();
         for r in &ranges {
             if r.kind == Kind::MultiLineCommentTrivia {
@@ -514,7 +514,7 @@ impl Tracker {
                 if first_node_line == -1 {
                     first_node_line = scanner::compute_line_of_position(
                         line_map,
-                        astnav::get_start_of_node(source_file.statements.nodes[0], source_file, false),
+                        astnav::get_start_of_node(source_file.statements.nodes()[0], source_file, false),
                     );
                 }
                 let comment_end_line = scanner::compute_line_of_position(line_map, r.end());

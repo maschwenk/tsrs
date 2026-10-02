@@ -298,9 +298,9 @@ impl DeclarationTransformer {
             result.push(cjs_export_assignment);
         }
         result.extend_from_slice(&self.cjs_export_members.borrow());
-        result.extend_from_slice(combined_statements.nodes);
+        result.extend_from_slice(combined_statements.nodes());
         let statement_nodes = flatten_syntax_lists(&result);
-        if statement_nodes.len() != combined_statements.nodes.len() {
+        if statement_nodes.len() != combined_statements.nodes().len() {
             combined_statements = self.factory().new_node_list(statement_nodes);
         }
         combined_statements
@@ -331,7 +331,7 @@ impl DeclarationTransformer {
             }
             if !self.result_has_external_module_indicator.get() || (self.needs_scope_fix_marker.get() && !self.result_has_scope_marker.get()) {
                 let marker = create_empty_exports(self.factory().as_node_factory());
-                let mut new_list = combined_statements.nodes.to_vec();
+                let mut new_list = combined_statements.nodes().to_vec();
                 new_list.push(marker);
                 let with_marker = self.factory().new_node_list(new_list);
                 with_marker.loc.set(combined_statements.loc.get());
@@ -396,8 +396,8 @@ impl DeclarationTransformer {
 
         // And lastly, we need to get the final form of all those indetermine import declarations from before and add them to the output list
         // (and remove them from the set to examine for outter declarations)
-        let mut results: Vec<P<Node>> = Vec::with_capacity(statements.nodes.len());
-        for &statement in statements.nodes {
+        let mut results: Vec<P<Node>> = Vec::with_capacity(statements.nodes().len());
+        for &statement in statements.nodes() {
             if !ast::is_late_visibility_painted_statement(statement) {
                 results.push(statement);
                 continue;
@@ -580,7 +580,7 @@ impl DeclarationTransformer {
         }
 
         if ast::is_heritage_clause(input) {
-            let types = input.as_heritage_clause().types().nodes;
+            let types = input.as_heritage_clause().types().nodes();
             if types.is_empty() || (types.len() == 1 && ast::node_is_missing(types[0])) {
                 return None;
             }
@@ -696,7 +696,7 @@ impl DeclarationTransformer {
         let heritage_clause = clause.as_heritage_clause();
         let types = heritage_clause.types();
         let retained_clauses: Vec<P<Node>> = types
-            .nodes
+            .nodes()
             .iter()
             .copied()
             .filter(|&t| {
@@ -709,7 +709,7 @@ impl DeclarationTransformer {
         if retained_clauses.is_empty() {
             return None; // elide empty clause
         }
-        if retained_clauses.len() == types.nodes.len() {
+        if retained_clauses.len() == types.nodes().len() {
             return self.visitor().visit_each_child(Some(clause));
         }
         Some(self.factory().update_heritage_clause(clause, heritage_clause.token, self.visitor().visit_nodes(Some(self.factory().new_node_list(retained_clauses))).unwrap()))
@@ -819,7 +819,7 @@ impl DeclarationTransformer {
 
 // transform.go:859
 pub(crate) fn has_any_binding_initializers(binding_pattern: P<Node>) -> bool {
-    for &elem in binding_pattern.as_binding_pattern().elements.nodes {
+    for &elem in binding_pattern.as_binding_pattern().elements.nodes() {
         if !ast::is_binding_element(elem) {
             continue;
         }
@@ -852,7 +852,7 @@ impl DeclarationTransformer {
 
             // `const {x, y: z} = require("something")` -> `import {x, y as z} from "something"`
             let mut import_specifiers: Vec<P<Node>> = Vec::new();
-            for &elem in name.as_binding_pattern().elements.nodes {
+            for &elem in name.as_binding_pattern().elements.nodes() {
                 if !ast::is_identifier(elem.name().unwrap()) {
                     continue; // nested destructuring, bail
                 }
@@ -870,7 +870,7 @@ impl DeclarationTransformer {
     // transform.go:907
     pub(crate) fn recreate_binding_pattern(&self, input: P<Node>) -> Option<P<Node>> {
         let mut results: Vec<P<Node>> = Vec::new();
-        for &elem in input.as_binding_pattern().elements.nodes {
+        for &elem in input.as_binding_pattern().elements.nodes() {
             let Some(result) = self.recreate_binding_element(elem) else {
                 continue;
             };

@@ -113,13 +113,7 @@ fn bind_source_file_worker(file: P<SourceFile>) {
 }
 
 fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32) -> P<FlowNode> {
-    P::new_recycled(FlowNode {
-        flags: OwnedCell::new(flags),
-        node: OwnedCell::new(node),
-        antecedent: OwnedCell::new(antecedent),
-        antecedents: OwnedCell::new(None),
-        text_index,
-    })
+    P::new_recycled(FlowNode::new(flags, node, antecedent, text_index))
 }
 
 impl Binder {
@@ -642,7 +636,7 @@ impl Binder {
         let label = label.unwrap();
         // If antecedent isn't already on the Antecedents list, add it to the end of the list
         let mut last: Option<P<FlowList>> = None;
-        let mut list = label.antecedents.get();
+        let mut list = label.antecedents();
         while let Some(l) = list {
             if l.flow == antecedent {
                 return;
@@ -652,14 +646,14 @@ impl Binder {
         }
         let new_list = self.new_flow_list(antecedent, None);
         match last {
-            None => label.antecedents.set(Some(new_list)),
+            None => label.set_antecedents(Some(new_list)),
             Some(last) => last.next.set(Some(new_list)),
         }
         set_flow_node_referenced(antecedent);
     }
 
     pub(crate) fn finish_flow_label(&mut self, label: P<FlowNode>) -> P<FlowNode> {
-        let Some(antecedents) = label.antecedents.get() else {
+        let Some(antecedents) = label.antecedents() else {
             return self.unreachable_flow;
         };
         if antecedents.next.get().is_none() {
@@ -697,7 +691,7 @@ impl Binder {
         {
             return;
         }
-        let mut list = label.antecedents.get();
+        let mut list = label.antecedents();
         while let Some(l) = list {
             list = l.next.get();
             // SAFETY: a label's antecedent list cells are referenced only by the label (combineFlowLists copies
@@ -1986,7 +1980,7 @@ impl Binder {
 
     pub(crate) fn bind_node_list(&mut self, node_list: Option<P<NodeList>>) {
         if let Some(node_list) = node_list {
-            self.bind_each(node_list.nodes);
+            self.bind_each(node_list.nodes());
         }
     }
 
@@ -1997,12 +1991,12 @@ impl Binder {
     }
 
     pub(crate) fn bind_each_statement_functions_first(&mut self, statements: P<NodeList>) {
-        for &node in statements.nodes {
+        for &node in statements.nodes() {
             if node.kind() == Kind::FunctionDeclaration {
                 self.bind(node);
             }
         }
-        for &node in statements.nodes {
+        for &node in statements.nodes() {
             if node.kind() != Kind::FunctionDeclaration {
                 self.bind(node);
             }
@@ -2319,9 +2313,9 @@ impl Binder {
             // set of antecedents for the pre-finally label. As control flow analysis passes by a ReduceLabel
             // node, the pre-finally label is temporarily switched to the reduced antecedent set.
             let finally_label = self.create_branch_label();
-            let rest = self.combine_flow_lists(exception_label.antecedents.get(), return_label.antecedents.get());
-            let combined = self.combine_flow_lists(normal_exit_label.antecedents.get(), rest);
-            finally_label.antecedents.set(combined);
+            let rest = self.combine_flow_lists(exception_label.antecedents(), return_label.antecedents());
+            let combined = self.combine_flow_lists(normal_exit_label.antecedents(), rest);
+            finally_label.set_antecedents(combined);
             self.current_flow = Some(finally_label);
             self.bind(stmt.finally_block());
             if self.current_flow().flags.get().intersects(FlowFlags::Unreachable) {
@@ -2330,21 +2324,21 @@ impl Binder {
             } else {
                 // If we have an IIFE return target and return statements in the try or catch blocks, add a control
                 // flow that goes back through the finally block and back through only the return statements.
-                if self.current_return_target.is_some() && return_label.antecedents.get().is_some() {
-                    let reduce = self.create_reduce_label(finally_label, return_label.antecedents.get(), self.current_flow());
+                if self.current_return_target.is_some() && return_label.antecedents().is_some() {
+                    let reduce = self.create_reduce_label(finally_label, return_label.antecedents(), self.current_flow());
                     self.add_antecedent(self.current_return_target, reduce);
                 }
                 // If we have an outer exception target (i.e. a containing try-finally or try-catch-finally), add a
                 // control flow that goes back through the finally block and back through each possible exception source.
-                if self.current_exception_target.is_some() && exception_label.antecedents.get().is_some() {
-                    let reduce = self.create_reduce_label(finally_label, exception_label.antecedents.get(), self.current_flow());
+                if self.current_exception_target.is_some() && exception_label.antecedents().is_some() {
+                    let reduce = self.create_reduce_label(finally_label, exception_label.antecedents(), self.current_flow());
                     self.add_antecedent(self.current_exception_target, reduce);
                 }
                 // If the end of the finally block is reachable, but the end of the try and catch blocks are not,
                 // convert the current flow to unreachable. For example, 'try { return 1; } finally { ... }' should
                 // result in an unreachable current control flow.
-                if normal_exit_label.antecedents.get().is_some() {
-                    self.current_flow = Some(self.create_reduce_label(finally_label, normal_exit_label.antecedents.get(), self.current_flow()));
+                if normal_exit_label.antecedents().is_some() {
+                    self.current_flow = Some(self.create_reduce_label(finally_label, normal_exit_label.antecedents(), self.current_flow()));
                 } else {
                     self.current_flow = Some(self.unreachable_flow);
                 }
@@ -2364,7 +2358,7 @@ impl Binder {
         self.pre_switch_case_flow = self.current_flow;
         self.bind(stmt.case_block());
         self.add_antecedent(Some(post_switch_label), self.current_flow());
-        let has_default = stmt.case_block().as_case_block().clauses().nodes.iter().any(|c| c.kind() == Kind::DefaultClause);
+        let has_default = stmt.case_block().as_case_block().clauses().nodes().iter().any(|c| c.kind() == Kind::DefaultClause);
         if !has_default {
             let clause = self.create_flow_switch_clause(self.pre_switch_case_flow.unwrap(), node, 0, 0);
             self.add_antecedent(Some(post_switch_label), clause);
@@ -2376,7 +2370,7 @@ impl Binder {
 
     pub(crate) fn bind_case_block(&mut self, node: P<Node>) {
         let switch_statement = node.parent().unwrap();
-        let clauses = node.as_case_block().clauses().nodes;
+        let clauses = node.as_case_block().clauses().nodes();
         let is_narrowing_switch =
             switch_statement.expression().unwrap().kind() == Kind::TrueKeyword || is_narrowing_expression(switch_statement.expression().unwrap());
         let mut fallthrough_flow: P<FlowNode> = self.unreachable_flow;
@@ -2416,7 +2410,7 @@ impl Binder {
             self.bind(expression);
             self.current_flow = save_current_flow;
         }
-        self.bind_each(clause.statements().nodes);
+        self.bind_each(clause.statements().nodes());
     }
 
     pub(crate) fn bind_expression_statement(&mut self, node: P<Node>) {
@@ -2721,7 +2715,7 @@ impl Binder {
             let expr = ast::skip_parentheses(call.expression());
             if expr.kind() == Kind::FunctionExpression || expr.kind() == Kind::ArrowFunction {
                 self.bind_node_list(call.type_arguments());
-                self.bind_each(call.arguments().nodes);
+                self.bind_each(call.arguments().nodes());
                 self.bind(call.expression());
             } else {
                 self.bind_each_child(node);
@@ -2981,7 +2975,7 @@ pub(crate) fn is_narrowable_reference(node: P<Node>) -> bool {
 
 pub(crate) fn has_narrowable_argument(expr: P<Node>) -> bool {
     let call = expr.as_call_expression();
-    for &argument in call.arguments().nodes {
+    for &argument in call.arguments().nodes() {
         if contains_narrowable_reference(argument) {
             return true;
         }

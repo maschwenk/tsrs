@@ -888,7 +888,7 @@ impl Printer {
 
 impl Printer {
     pub(crate) fn is_empty_block(&self, block: P<Node>, statements: P<NodeList>) -> bool {
-        statements.nodes.is_empty() && (self.current_source_file().is_none() || range_end_is_on_same_line_as_range_start(block.loc(), block.loc(), self.current_source_file().unwrap()))
+        statements.nodes().is_empty() && (self.current_source_file().is_none() || range_end_is_on_same_line_as_range_start(block.loc(), block.loc(), self.current_source_file().unwrap()))
     }
 
     pub(crate) fn emit_block(&mut self, node: P<Node>) {
@@ -1966,12 +1966,12 @@ impl Printer {
 impl Printer {
     pub(crate) fn emit_case_or_default_clause_statements(&mut self, node: P<Node>, colon_pos: i32) {
         let statements = node.as_case_or_default_clause().statements();
-        let emit_as_single_statement = statements.nodes.len() == 1
+        let emit_as_single_statement = statements.nodes().len() == 1
             // treat synthesized nodes as located on the same line for emit purposes
             && (self.current_source_file().is_none()
                 || node_is_synthesized(node)
-                || node_is_synthesized(statements.nodes[0])
-                || range_start_positions_are_on_same_line(node.loc(), statements.nodes[0].loc(), self.current_source_file().unwrap()));
+                || node_is_synthesized(statements.nodes()[0])
+                || range_start_positions_are_on_same_line(node.loc(), statements.nodes()[0].loc(), self.current_source_file().unwrap()));
 
         let mut format = ListFormat::CaseOrDefaultClauseStatements;
         if emit_as_single_statement {
@@ -2148,7 +2148,7 @@ impl Printer {
     }
 
     pub(crate) fn emit_prologue_directives(&mut self, statements: P<NodeList>) -> usize {
-        for (i, statement) in statements.nodes.iter().enumerate() {
+        for (i, statement) in statements.nodes().iter().enumerate() {
             if is_prologue_directive(*statement) {
                 self.write_line();
                 self.emit_statement(*statement);
@@ -2156,7 +2156,7 @@ impl Printer {
                 return i;
             }
         }
-        statements.nodes.len()
+        statements.nodes().len()
     }
 
     pub(crate) fn emit_helpers(&mut self, node: P<Node>) -> bool {

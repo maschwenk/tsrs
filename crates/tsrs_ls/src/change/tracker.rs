@@ -465,14 +465,14 @@ impl Tracker {
             let Some(list) = format::get_containing_list(node, source_file) else {
                 continue;
             };
-            if node != list.nodes[list.nodes.len() - 1] {
+            if node != list.nodes()[list.nodes().len() - 1] {
                 continue;
             }
 
             let mut last_non_deleted_index: i32 = -1;
-            let mut i = list.nodes.len() as i32 - 2;
+            let mut i = list.nodes().len() as i32 - 2;
             while i >= 0 {
-                if !deleted_nodes_in_lists.get(&list.nodes[i as usize]).copied().unwrap_or(false) {
+                if !deleted_nodes_in_lists.get(&list.nodes()[i as usize]).copied().unwrap_or(false) {
                     last_non_deleted_index = i;
                     break;
                 }
@@ -480,8 +480,8 @@ impl Tracker {
             }
 
             if last_non_deleted_index != -1 {
-                let start = list.nodes[last_non_deleted_index as usize].end();
-                let end = self.start_position_to_delete_node_in_list(source_file, list.nodes[last_non_deleted_index as usize + 1]);
+                let start = list.nodes()[last_non_deleted_index as usize].end();
+                let end = self.start_position_to_delete_node_in_list(source_file, list.nodes()[last_non_deleted_index as usize + 1]);
                 self.replace_text_range_with_text(source_file, TextRange::new(start, end), "");
             }
         }
@@ -513,11 +513,11 @@ impl Tracker {
             // Debug.fail("node is not a list element")
             return;
         };
-        let Some(index) = containing_list.nodes.iter().position(|&n| n == after) else {
+        let Some(index) = containing_list.nodes().iter().position(|&n| n == after) else {
             return;
         };
         let end = after.end();
-        if index != containing_list.nodes.len() - 1 {
+        if index != containing_list.nodes().len() - 1 {
             // any element except the last one
             // use next sibling as an anchor
             let next_token = astnav::get_token_at_position(source_file, after.end());
@@ -538,7 +538,7 @@ impl Tracker {
                 //   insertedtext<separator>#
                 // ###b,
                 //   c,
-                let next_node = containing_list.nodes[index + 1];
+                let next_node = containing_list.nodes()[index + 1];
                 let start_pos = scanner::skip_trivia_ex(
                     source_file.text(),
                     next_node.pos(),
@@ -565,13 +565,13 @@ impl Tracker {
         // i.e. var x = 1 // this is x
         //     | new element will be inserted at this position
         let mut separator = Kind::CommaToken; // SyntaxKind.CommaToken | SyntaxKind.SemicolonToken
-        if containing_list.nodes.len() != 1 {
+        if containing_list.nodes().len() != 1 {
             // otherwise, if list has more than one element, pick separator from the list
             let token_before_insert_position = astnav::find_preceding_token(source_file, after.pos());
             separator = if is_separator(after, token_before_insert_position) { token_before_insert_position.unwrap().kind() } else { Kind::CommaToken };
             // determine if list is multiline by checking lines of after element and element that precedes it.
             let after_minus_one_start_line_position = format::get_line_start_position_for_position(
-                astnav::get_start_of_node(containing_list.nodes[index - 1], source_file, false),
+                astnav::get_start_of_node(containing_list.nodes()[index - 1], source_file, false),
                 source_file,
             );
             multiline_list = after_minus_one_start_line_position != after_start_line_position;
@@ -625,7 +625,7 @@ impl Tracker {
     // tracker.go:522
     // InsertImportSpecifierAtIndex inserts a new import specifier at the specified index in a NamedImports list
     pub fn insert_import_specifier_at_index(&mut self, source_file: P<SourceFile>, new_specifier: P<Node>, named_imports: P<Node>, index: usize) {
-        let elements = named_imports.as_named_imports().elements.nodes;
+        let elements = named_imports.as_named_imports().elements.nodes();
 
         let mut prev_specifier: Option<P<Node>> = None;
         if index > 0 && index - 1 < elements.len() {
@@ -727,7 +727,7 @@ impl Tracker {
             tab_size = 4;
         }
 
-        for &member in members.nodes {
+        for &member in members.nodes() {
             if printer::range_start_positions_are_on_same_line(last.loc(), member.loc(), source_file) {
                 return -1;
             }
@@ -828,7 +828,7 @@ impl Tracker {
         let is_object_literal = ast::is_object_literal_expression(node);
         let is_json = ast::is_json_source_file(source_file);
 
-        let has_members = members.is_some_and(|m| !m.nodes.is_empty());
+        let has_members = members.is_some_and(|m| !m.nodes().is_empty());
 
         let insert_trailing_comma = is_object_literal && (has_members || !is_json);
         let insert_leading_comma = is_object_literal && is_json && !has_members && has_previous_insertion;
@@ -861,7 +861,7 @@ impl Tracker {
             };
 
             let members = get_members_or_properties(node);
-            let is_empty = members.is_none_or(|m| m.nodes.is_empty());
+            let is_empty = members.is_none_or(|m| m.nodes().is_empty());
             let is_single_line = positions_are_on_same_line(open_brace.end(), close_brace.end(), source_file);
 
             if is_empty && is_single_line && open_brace.end() != close_brace.end() - 1 {
