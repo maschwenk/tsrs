@@ -97,7 +97,9 @@ whole. The CLI never creates one and allocates exactly as before.
 | a parsed file version (text, AST, symbols, flow nodes, and its lazily filled data) | until neither the parse cache nor a live program refers to it | **file region**: the parse cache's parse function runs parse + bind in a fresh region; the cache entry owns it until its final `Deref`, and so does every program owner whose program contains the file |
 | types, signatures, links, transient symbols, synthetic nodes of a program's checkers | until the program's pool is unreachable | **checker region** per pooled checker: the holder's allocation target while it is created and while it is held; freed with the pool when the program is freed (a disposed checker is parked until then, see below) |
 | `Program` (file lists, maps, resolution data; cloned per edit by `ReuseProgram`) | GC | **program owner** (`tsrs_project` memregions.rs), held by every `Project` value that refers to the program; what `CreateProgram` allocates is in the version's region, the full build's region is shared by its clones (they share its processed-file data); dropping the owner frees the checkers, the `Program` (`tsrs_compiler::free_program`) and the regions |
-| auto-import registry data | GC | thread arena (never freed); files the registry acquires stay parsed for the session (see notes) |
+| auto-import registry update scratch (module and alias resolvers, extraction checkers, resolution caches) | GC | **scratch region** per `Registry::clone_registry`, freed before it returns; files the update acquired are released at the end of the snapshot clone as in Go (and freed when nothing else holds them) |
+| auto-import registry versions (buckets, indexes, entrypoints: heap; directories' package.json entries: arena) | GC | heap values by Rust ownership; the package.json entries an update reads for `directories` go to a **package.json region** of that update, held by every registry version whose directories still refer into it (`Registry::regions`) |
+| package.json cache entries of a program's resolution data (copied to its clones) | GC | the original cache's region when added while that region is the allocation target (the full build); otherwise the thread arena (`arena::enter_table_owner`) |
 | request-scoped results (lsproto values, strings) | GC | ordinary Rust ownership |
 
 Mechanism (`tsrs_core::arena`): `Region::enter` makes a region the thread's allocation target until the returned
@@ -107,7 +109,10 @@ debug builds assert it). It keeps a drop list of the values allocated in it whos
 runs those drops, so heap memory owned by links and tables goes too. Lazily filled data of a shared object is routed
 to the object's own region (`arena::enter_owner(addr)`: `SourceFile`'s JSDoc cache, line and position maps, name
 table, identifier set, token cache, declaration map; the program's symlink cache goes to the full build's region);
-process-wide statics allocate in the thread arena (`arena::enter_thread_arena`). Regions bump upwards and their
+process-wide statics allocate in the thread arena (`arena::enter_thread_arena`). Entries of a table that later
+versions copy and any thread may fill (the resolution data's package.json cache) use `arena::enter_table_owner`:
+the current target if the table lives in it, else the thread arena, without waiting for a region another thread has
+entered (parse workers fill the cache while the building thread holds the full build's region). Regions bump upwards and their
 chunks are carved from per-thread slabs, and a file region is trimmed after binding: tens of thousands of file
 regions would otherwise each cost a partly used page.
 
@@ -122,7 +127,12 @@ Two corrections to the original plan:
   checkers are parked with their regions until the pool is freed; holding a checker keeps the program owner alive.
 
 The census build is the gate (notes/mem-recycle.md; at server exit with `TSRS_CENSUS=1`, roots = server, session,
-snapshot): a freed region is recorded as would-free and kept, and nothing reachable may point into it.
+snapshot): a freed region is recorded as would-free and kept, and nothing reachable may point into it. Kept `None`
+options carry uninitialized payload bytes; long-lived ones (process-wide completion caches, registry buckets and
+entrypoints) are zeroed in census builds (`tsrs_core::census_scrub_none`).
+
+Measured (notes/lsp-mem.md, notes/lsp-memfix.md; 200 edits, release build): RSS is flat under edits with and without
+completion requests on xstate and on the private monorepo (registry updates included).
 
 ## Gates
 
@@ -278,7 +288,7 @@ before and after; lazy-off `.types` / `.symbols` 12,779 / 12,779).
 ## Known gaps
 
 - Content mappers, `api`, ATA, telemetry, pprof requests: not ported (see above).
-- Memory: everything allocated by programs and checkers is leaked until phase 4 (see the memory plan).
+- Memory: see the memory plan (regions; phase 4).
 - Cancellation: ported (robust wave): the checker polls the request context at Go's points; canceled checkers are disposed.
 - `tsrs_ls::autoimport` (ported, actions wave): the registry builds buckets sequentially where Go fans out to
   goroutines (discovery, extraction, bucket building; same results, the extraction checker pool holds one checker).
@@ -286,7 +296,9 @@ before and after; lazy-off `.types` / `.symbols` 12,779 / 12,779).
   a request, its `autoimport.View` and the import adder built on the view; the view keeps the checker's address
   (`View::checker`, one `unsafe` with a SAFETY comment), because callers keep using the checker while the view is
   alive. The registry's clone host is only valid during `Registry::clone_registry`; the module resolvers, alias
-  resolvers and checkers built from it are leaked, like other per-program data until phase 4.
+  resolvers and checkers built from it live in the update's scratch region, freed before it returns. The
+  extraction checker's `compareSymbols` is not a total order (files outside the alias resolver's root files map to
+  index 0, as in Go), so `sort_symbols` uses Go's pdqsort port there (`checker::Program::source_files_complete`).
 - Builtin watcher backends: `fanotify_linux.go` (Linux uses inotify, Go's own fallback without fanotify) and
   `windows.go` are not ported. The server only uses the builtin watcher with a fast-recursive backend, so this
   changes nothing on Linux (watching disabled without client support, as in Go).
