@@ -1802,7 +1802,8 @@ pub struct ConstrainedType {
 // structured types are never resolved (on the private monorepo 4.9M of 7.6M: type references answered by lazy member tables,
 // unions and intersections whose members nobody asks for), and those now carry one pointer instead of 48 bytes.
 // Reads of an absent record return the zero values (nil members, empty slices, count 0), exactly like reading the
-// unset fields; once allocated, every getter returns exactly what was last set.
+// unset fields; once allocated, every getter returns exactly what was last set (except that an empty index info
+// list reads as `&[]` until a non-empty one is set, see `CountOrIndexInfos`).
 #[derive(Default)]
 pub struct StructuredType {
     resolved: Cell<Option<P<StructuredMembers>>>,
@@ -1815,12 +1816,63 @@ struct StructuredMembers {
     // `ThinSliceCell`s are one word each (`tsrs_core::ThinSlice`).
     properties: ThinSliceCell<P<Symbol>>,
     signatures: ThinSliceCell<P<Signature>>, // Signatures (call + construct)
-    call_signature_count: Cell<i32>,     // Count of call signatures
-    index_infos: ThinSliceCell<P<IndexInfo>>,
+    // Count of call signatures, and index infos (2% of the resolved types on the private monorepo have any).
+    count_or_index_infos: CountOrIndexInfos,
 }
 
 const _: () = assert!(std::mem::size_of::<StructuredType>() == 8);
-const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 40);
+const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 32);
+
+/// Go's `CallSignatureCount` and `IndexInfos` in one word: `count << 1 | 1` while no non-empty index info list was
+/// set (the list reads empty, `&[]`), else a pointer to an `IndexInfosTail` holding both.
+struct CountOrIndexInfos(Cell<*const IndexInfosTail>);
+
+struct IndexInfosTail {
+    index_infos: ThinSliceCell<P<IndexInfo>>,
+    call_signature_count: Cell<i32>,
+}
+
+impl Default for CountOrIndexInfos {
+    fn default() -> Self {
+        CountOrIndexInfos(Cell::new(std::ptr::without_provenance(1)))
+    }
+}
+
+impl CountOrIndexInfos {
+    #[inline]
+    fn tail(&self) -> Option<&'static IndexInfosTail> {
+        let p = self.0.get();
+        // SAFETY: an even word is the tail allocated by `set_index_infos` (never freed).
+        (p.addr() & 1 == 0).then(|| unsafe { &*p })
+    }
+    #[inline]
+    fn call_signature_count(&self) -> i32 {
+        match self.tail() {
+            Some(t) => t.call_signature_count.get(),
+            None => (self.0.get().addr() >> 1) as u32 as i32,
+        }
+    }
+    #[inline]
+    fn set_call_signature_count(&self, count: i32) {
+        match self.tail() {
+            Some(t) => t.call_signature_count.set(count),
+            None => self.0.set(std::ptr::without_provenance(((count as u32 as usize) << 1) | 1)),
+        }
+    }
+    #[inline]
+    fn index_infos(&self) -> &'static [P<IndexInfo>] {
+        self.tail().map_or(&[], |t| t.index_infos.get())
+    }
+    fn set_index_infos(&self, index_infos: &'static [P<IndexInfo>]) {
+        if let Some(t) = self.tail() {
+            t.index_infos.set(index_infos);
+        } else if !index_infos.is_empty() {
+            let count = self.call_signature_count();
+            let t = P::new(IndexInfosTail { index_infos: ThinSliceCell::new(index_infos), call_signature_count: Cell::new(count) });
+            self.0.set(t.get());
+        }
+    }
+}
 
 impl StructuredType {
     #[inline]
@@ -1862,19 +1914,19 @@ impl StructuredType {
     }
     #[inline]
     pub fn call_signature_count(&self) -> i32 {
-        self.resolved.get().map_or(0, |r| r.call_signature_count.get())
+        self.resolved.get().map_or(0, |r| r.count_or_index_infos.call_signature_count())
     }
     #[inline]
     pub fn set_call_signature_count(&self, count: i32) {
-        self.resolved_for_write().call_signature_count.set(count);
+        self.resolved_for_write().count_or_index_infos.set_call_signature_count(count);
     }
     #[inline]
     pub fn index_infos(&self) -> &'static [P<IndexInfo>] {
-        self.resolved.get().map_or(&[], |r| r.index_infos.get())
+        self.resolved.get().map_or(&[], |r| r.count_or_index_infos.index_infos())
     }
     #[inline]
     pub fn set_index_infos(&self, index_infos: &'static [P<IndexInfo>]) {
-        self.resolved_for_write().index_infos.set(index_infos);
+        self.resolved_for_write().count_or_index_infos.set_index_infos(index_infos);
     }
     pub fn call_signatures(&self) -> &'static [P<Signature>] {
         &self.signatures()[..self.call_signature_count() as usize]
