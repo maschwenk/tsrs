@@ -346,10 +346,9 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let host = opts.host.clone();
     let mut p = Program {
         opts: opts.program_config(),
-        compare_paths_options: ComparePathsOptions {
-            use_case_sensitive_file_names: host.fs().use_case_sensitive_file_names(),
-            current_directory: host.get_current_directory().to_string(),
-        },
+        // Go's NewProgram never sets `comparePathsOptions`: it is the zero value (no current directory,
+        // case-insensitive), which e.g. makes IsGlobalTypingsFile false when no typings location is set.
+        compare_paths_options: ComparePathsOptions::default(),
         resolution_host: crate::projectreferencefilemapper::resolution_host_for(host.clone()),
         host,
         resolution_data,

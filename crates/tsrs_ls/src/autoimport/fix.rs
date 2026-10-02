@@ -371,7 +371,7 @@ fn get_type_keyword_of_type_only_import(import_clause: P<Node>, source_file: P<S
 // fix.go:338
 fn add_element_to_binding_pattern(ct: &mut change::Tracker, file: P<SourceFile>, binding_pattern: P<Node>, name: &str, property_name: &str) {
     let property = if property_name.is_empty() { None } else { Some(ct.node_factory.new_identifier(alloc_str(property_name))) };
-    let element = ct.node_factory.new_binding_element(None, Some(ct.node_factory.new_identifier(alloc_str(name))), property, None);
+    let element = ct.node_factory.new_binding_element(None, None, Some(ct.node_factory.new_identifier(alloc_str(name))), property);
     let elements = binding_pattern.as_binding_pattern().elements;
     if !elements.nodes.is_empty() {
         ct.insert_node_in_list_after(file, elements.nodes[elements.nodes.len() - 1], element, Some(elements));
