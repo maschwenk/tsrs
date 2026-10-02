@@ -558,6 +558,26 @@ impl checkerPool {
     }
 
     #[cfg(test)]
+    pub(crate) fn checker_ptr(&self, index: usize) -> Option<*const Checker> {
+        self.mu.lock().unwrap().checkers[index].as_ref().map(|c| &**c as *const Checker)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn persistent_ptr(&self) -> Option<*const Checker> {
+        self.mu.lock().unwrap().persistent_checker.as_ref().map(|c| &**c as *const Checker)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn opts(&self) -> CheckerPoolOptions {
+        self.opts
+    }
+
+    #[cfg(test)]
+    pub(crate) fn query_sem_used(&self) -> usize {
+        *self.query_sem.used.lock().unwrap()
+    }
+
+    #[cfg(test)]
     pub(crate) fn test_state<R>(&self, f: impl FnOnce(&checkerPoolTestView) -> R) -> R {
         let st = self.mu.lock().unwrap();
         let view = checkerPoolTestView {
