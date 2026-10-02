@@ -311,6 +311,132 @@ impl fmt::Debug for PackedStr {
     }
 }
 
+/// A `&'static [T]` in one word: the data pointer in the low 48 bits and the length in the high 16 (like
+/// `PackedStr`). A slice of 2^16 elements or more (or one whose address does not fit in 48 bits) is kept as a
+/// pointer to an arena copy of the `&'static [T]` reference itself, tagged with bit 0 (`T` is at least 2-aligned, so
+/// a data pointer never has it), so `get` returns exactly the slice that was packed (same pointer and length) in
+/// either form. The word is never zero (a slice's data pointer, even an empty one's, is non-null), so
+/// `Option<ThinSlice<T>>` is one word too.
+pub struct ThinSlice<T: 'static>(std::ptr::NonNull<()>, std::marker::PhantomData<&'static [T]>);
+
+const THIN_LEN_SHIFT: u32 = 48;
+const THIN_ADDR_MASK: usize = (1 << THIN_LEN_SHIFT) - 1;
+const THIN_LONG_TAG: usize = 1;
+
+impl<T> Clone for ThinSlice<T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for ThinSlice<T> {}
+
+impl<T> ThinSlice<T> {
+    const ALIGNED: () = assert!(std::mem::align_of::<T>() >= 2, "ThinSlice needs bit 0 of the data pointer");
+
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn new(s: &'static [T]) -> Self {
+        let () = Self::ALIGNED;
+        let p = std::ptr::NonNull::from(s).cast::<()>();
+        if (p.addr().get() >> THIN_LEN_SHIFT) | (s.len() >> (usize::BITS - THIN_LEN_SHIFT)) == 0 {
+            return ThinSlice(p.map_addr(|a| a | (s.len() << THIN_LEN_SHIFT)), std::marker::PhantomData);
+        }
+        Self::new_long(s)
+    }
+
+    #[cold]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    fn new_long(s: &'static [T]) -> Self {
+        let r = P::new(s);
+        let p = std::ptr::NonNull::from(r.get()).cast::<()>();
+        assert!(p.addr().get() >> THIN_LEN_SHIFT == 0, "arena address above 2^48");
+        ThinSlice(p.map_addr(|a| a | THIN_LONG_TAG), std::marker::PhantomData)
+    }
+
+    #[inline]
+    pub fn get(self) -> &'static [T] {
+        let w = self.0.addr().get();
+        if w & THIN_LONG_TAG != 0 {
+            return self.get_long();
+        }
+        let p = self.0.as_ptr().map_addr(|a| a & THIN_ADDR_MASK);
+        // SAFETY: built by `new` from a `&'static [T]` of this length.
+        unsafe { std::slice::from_raw_parts(p as *const T, w >> THIN_LEN_SHIFT) }
+    }
+
+    #[cold]
+    fn get_long(self) -> &'static [T] {
+        // SAFETY: built by `new_long`: a tagged pointer to the `&'static [T]` itself.
+        unsafe { *(self.0.as_ptr().map_addr(|a| a & !THIN_LONG_TAG) as *const &'static [T]) }
+    }
+}
+
+// Same contract as `P`.
+unsafe impl<T> Send for ThinSlice<T> {}
+unsafe impl<T> Sync for ThinSlice<T> {}
+
+impl<T: fmt::Debug> fmt::Debug for ThinSlice<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.get().fmt(f)
+    }
+}
+
+/// A `Cell<&'static [T]>` in one word (a `ThinSlice`). `get` returns exactly the slice last `set` (same pointer and
+/// length).
+pub struct ThinSliceCell<T: 'static>(std::cell::Cell<ThinSlice<T>>);
+
+impl<T> ThinSliceCell<T> {
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn new(s: &'static [T]) -> Self {
+        ThinSliceCell(std::cell::Cell::new(ThinSlice::new(s)))
+    }
+    #[inline]
+    pub fn get(&self) -> &'static [T] {
+        self.0.get().get()
+    }
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn set(&self, s: &'static [T]) {
+        self.0.set(ThinSlice::new(s))
+    }
+}
+
+impl<T> Default for ThinSliceCell<T> {
+    fn default() -> Self {
+        ThinSliceCell::new(&[])
+    }
+}
+
+/// A `Cell<Option<&'static [T]>>` in one word, like `ThinSliceCell` (for Go slices whose nil differs from empty).
+pub struct OptionThinSliceCell<T: 'static>(std::cell::Cell<Option<ThinSlice<T>>>);
+
+impl<T> OptionThinSliceCell<T> {
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn new(s: Option<&'static [T]>) -> Self {
+        OptionThinSliceCell(std::cell::Cell::new(s.map(ThinSlice::new)))
+    }
+    #[inline]
+    pub fn get(&self) -> Option<&'static [T]> {
+        self.0.get().map(ThinSlice::get)
+    }
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn set(&self, s: Option<&'static [T]>) {
+        self.0.set(s.map(ThinSlice::new))
+    }
+}
+
+impl<T> Default for OptionThinSliceCell<T> {
+    fn default() -> Self {
+        OptionThinSliceCell::new(None)
+    }
+}
+
+const _: () = assert!(std::mem::size_of::<ThinSliceCell<u16>>() == 8 && std::mem::size_of::<OptionThinSliceCell<u16>>() == 8);
+
 #[repr(C, packed(4))]
 struct PackedSlice<T: 'static> {
     ptr: std::ptr::NonNull<T>,
@@ -404,6 +530,7 @@ impl<T> Default for OptionSliceCell<T> {
         OptionSliceCell::new(None)
     }
 }
+
 
 /// A `Cell<&'static str>` in 8 bytes (a `PackedStr`).
 pub struct StrCell(std::cell::Cell<PackedStr>);
@@ -731,6 +858,22 @@ mod tests {
         assert_eq!(c.get(), Some(&[][..]));
         c.set(Some(alloc_slice(&[1, 2])));
         assert_eq!(c.get(), Some(&[1, 2][..]));
+    }
+
+    #[test]
+    fn thin_slices_keep_identity() {
+        for len in [0usize, 1, 3, u16::MAX as usize - 1, u16::MAX as usize, u16::MAX as usize + 1, 200_000] {
+            let s: &'static [u32] = Box::leak((0..len as u32).collect::<Vec<_>>().into_boxed_slice());
+            let c = SliceCell::new(s);
+            assert!(std::ptr::eq(c.get(), s), "len {len}");
+            let o: OptionSliceCell<u32> = OptionSliceCell::default();
+            o.set(Some(s));
+            assert!(std::ptr::eq(o.get().unwrap(), s), "len {len}");
+            o.set(None);
+            assert_eq!(o.get(), None);
+        }
+        let empty: &'static [u64] = &[];
+        assert!(std::ptr::eq(SliceCell::new(empty).get(), empty));
     }
 
     #[test]

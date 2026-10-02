@@ -1986,7 +1986,7 @@ impl Binder {
 
     pub(crate) fn bind_node_list(&mut self, node_list: Option<P<NodeList>>) {
         if let Some(node_list) = node_list {
-            self.bind_each(node_list.nodes);
+            self.bind_each(node_list.nodes());
         }
     }
 
@@ -1997,12 +1997,12 @@ impl Binder {
     }
 
     pub(crate) fn bind_each_statement_functions_first(&mut self, statements: P<NodeList>) {
-        for &node in statements.nodes {
+        for &node in statements.nodes() {
             if node.kind() == Kind::FunctionDeclaration {
                 self.bind(node);
             }
         }
-        for &node in statements.nodes {
+        for &node in statements.nodes() {
             if node.kind() != Kind::FunctionDeclaration {
                 self.bind(node);
             }
@@ -2364,7 +2364,7 @@ impl Binder {
         self.pre_switch_case_flow = self.current_flow;
         self.bind(stmt.case_block());
         self.add_antecedent(Some(post_switch_label), self.current_flow());
-        let has_default = stmt.case_block().as_case_block().clauses().nodes.iter().any(|c| c.kind() == Kind::DefaultClause);
+        let has_default = stmt.case_block().as_case_block().clauses().nodes().iter().any(|c| c.kind() == Kind::DefaultClause);
         if !has_default {
             let clause = self.create_flow_switch_clause(self.pre_switch_case_flow.unwrap(), node, 0, 0);
             self.add_antecedent(Some(post_switch_label), clause);
@@ -2376,7 +2376,7 @@ impl Binder {
 
     pub(crate) fn bind_case_block(&mut self, node: P<Node>) {
         let switch_statement = node.parent().unwrap();
-        let clauses = node.as_case_block().clauses().nodes;
+        let clauses = node.as_case_block().clauses().nodes();
         let is_narrowing_switch =
             switch_statement.expression().unwrap().kind() == Kind::TrueKeyword || is_narrowing_expression(switch_statement.expression().unwrap());
         let mut fallthrough_flow: P<FlowNode> = self.unreachable_flow;
@@ -2416,7 +2416,7 @@ impl Binder {
             self.bind(expression);
             self.current_flow = save_current_flow;
         }
-        self.bind_each(clause.statements().nodes);
+        self.bind_each(clause.statements().nodes());
     }
 
     pub(crate) fn bind_expression_statement(&mut self, node: P<Node>) {
@@ -2721,7 +2721,7 @@ impl Binder {
             let expr = ast::skip_parentheses(call.expression());
             if expr.kind() == Kind::FunctionExpression || expr.kind() == Kind::ArrowFunction {
                 self.bind_node_list(call.type_arguments());
-                self.bind_each(call.arguments().nodes);
+                self.bind_each(call.arguments().nodes());
                 self.bind(call.expression());
             } else {
                 self.bind_each_child(node);
@@ -2981,7 +2981,7 @@ pub(crate) fn is_narrowable_reference(node: P<Node>) -> bool {
 
 pub(crate) fn has_narrowable_argument(expr: P<Node>) -> bool {
     let call = expr.as_call_expression();
-    for &argument in call.arguments().nodes {
+    for &argument in call.arguments().nodes() {
         if contains_narrowable_reference(argument) {
             return true;
         }

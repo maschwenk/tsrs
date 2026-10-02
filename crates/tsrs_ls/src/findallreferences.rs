@@ -347,7 +347,7 @@ pub(crate) fn get_context_node(node: Option<P<Node>>) -> Option<P<Node>> {
     match node.kind() {
         Kind::VariableDeclaration => {
             let parent = node.parent().unwrap();
-            if !ast::is_variable_declaration_list(parent) || parent.as_variable_declaration_list().declarations.nodes.len() != 1 {
+            if !ast::is_variable_declaration_list(parent) || parent.as_variable_declaration_list().declarations.nodes().len() != 1 {
                 Some(node)
             } else if ast::is_variable_statement(parent.parent().unwrap()) {
                 parent.parent()
@@ -2053,7 +2053,7 @@ impl LanguageService {
                         let range_node = match range_node {
                             Some(n) => n,
                             None => {
-                                if let Some(&first) = referencing_file.statements.nodes.first() {
+                                if let Some(&first) = referencing_file.statements.nodes().first() {
                                     first
                                 } else {
                                     referencing_file.as_node()

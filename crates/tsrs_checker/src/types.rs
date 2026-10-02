@@ -2,7 +2,7 @@ use std::fmt;
 use std::hash::Hash;
 
 use bitflags::bitflags;
-use tsrs_core::{OptionSliceCell, SliceCell, StrCell};
+use tsrs_core::{OptionThinSliceCell, StrCell, ThinSliceCell};
 
 use crate::*;
 
@@ -982,7 +982,7 @@ bitflags! {
 #[derive(Default)]
 pub struct TypeAlias {
     pub symbol: Cell<Option<P<Symbol>>>,
-    pub type_arguments: Cell<&'static [P<Type>]>,
+    pub type_arguments: ThinSliceCell<P<Type>>,
 }
 
 impl TypeAlias {
@@ -1046,7 +1046,7 @@ impl<'a> AliasArg<'a> {
             AliasArg::None => None,
             AliasArg::Some(a) => Some(a),
             AliasArg::Pending(p) => Some(p.alias.get().unwrap_or_else(|| {
-                let a = P::new(TypeAlias { symbol: Cell::new(p.symbol), type_arguments: Cell::new(alloc_slice(&p.type_arguments)) });
+                let a = P::new(TypeAlias { symbol: Cell::new(p.symbol), type_arguments: ThinSliceCell::new(alloc_slice(&p.type_arguments)) });
                 p.alias.set(Some(a));
                 a
             })),
@@ -1812,14 +1812,15 @@ pub struct StructuredType {
 #[derive(Default)]
 struct StructuredMembers {
     members: Cell<Option<P<SymbolTable>>>,
-    // `SliceCell`s (12 bytes, 4-aligned) pack with `call_signature_count`.
-    properties: SliceCell<P<Symbol>>,
-    signatures: SliceCell<P<Signature>>, // Signatures (call + construct)
+    // `ThinSliceCell`s are one word each (`tsrs_core::ThinSlice`).
+    properties: ThinSliceCell<P<Symbol>>,
+    signatures: ThinSliceCell<P<Signature>>, // Signatures (call + construct)
     call_signature_count: Cell<i32>,     // Count of call signatures
-    index_infos: SliceCell<P<IndexInfo>>,
+    index_infos: ThinSliceCell<P<IndexInfo>>,
 }
 
 const _: () = assert!(std::mem::size_of::<StructuredType>() == 8);
+const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 40);
 
 impl StructuredType {
     #[inline]
@@ -1934,7 +1935,7 @@ embeds!(ObjectType, structured_type, StructuredType);
 pub struct TypeReference {
     pub object_type: ObjectType,
     pub node: Cell<Option<P<Node>>>, // TypeReferenceNode | ArrayTypeNode | TupleTypeNode when deferred, else nil
-    pub resolved_type_arguments: Cell<Option<&'static [P<Type>]>>, // nil = not computed (Go tests against nil)
+    pub resolved_type_arguments: OptionThinSliceCell<P<Type>>, // nil = not computed (Go tests against nil)
 }
 embeds!(TypeReference, object_type, ObjectType);
 
@@ -2167,9 +2168,9 @@ embeds!(EvolvingArrayType, object_type, ObjectType);
 #[derive(Default)]
 pub struct UnionOrIntersectionType {
     pub structured_type: StructuredType,
-    // Packed slice cells (12 bytes each), as in `StructuredType`.
-    pub types: SliceCell<P<Type>>,
-    pub resolved_properties: OptionSliceCell<P<Symbol>>, // nil = not computed (Go tests against nil)
+    // One-word slice cells, as in `StructuredMembers`.
+    pub types: ThinSliceCell<P<Type>>,
+    pub resolved_properties: OptionThinSliceCell<P<Symbol>>, // nil = not computed (Go tests against nil)
     pub property_cache: Cell<Option<P<SymbolTable>>>,
     pub property_cache_without_function_property_augment: Cell<Option<P<SymbolTable>>>,
 }
@@ -2194,7 +2195,7 @@ pub struct UnionType {
 }
 embeds!(UnionType, union_or_intersection_type, UnionOrIntersectionType);
 
-const _: () = assert!(std::mem::size_of::<UnionType>() == 88);
+const _: () = assert!(std::mem::size_of::<UnionType>() == 80);
 
 // IntersectionType
 
@@ -2206,7 +2207,7 @@ pub struct IntersectionType {
 }
 embeds!(IntersectionType, union_or_intersection_type, UnionOrIntersectionType);
 
-const _: () = assert!(std::mem::size_of::<IntersectionType>() == 64);
+const _: () = assert!(std::mem::size_of::<IntersectionType>() == 56);
 
 // TypeParameter
 
@@ -2395,8 +2396,8 @@ pub struct Signature {
     pub min_argument_count: Cell<i32>,
     pub resolved_min_argument_count: Cell<i32>,
     pub declaration: Cell<Option<P<Node>>>,
-    pub type_parameters: SliceCell<P<Type>>, // SliceCells pack with the four 4-byte fields above
-    pub parameters: SliceCell<P<Symbol>>,
+    pub type_parameters: ThinSliceCell<P<Type>>, // one word each (`tsrs_core::ThinSlice`)
+    pub parameters: ThinSliceCell<P<Symbol>>,
     pub resolved_return_type: Cell<Option<P<Type>>>,
     pub resolved_type_predicate: Cell<Option<P<TypePredicate>>>,
     pub target: Cell<Option<P<Signature>>>,
@@ -2406,7 +2407,7 @@ pub struct Signature {
     rare: Cell<Option<P<SignatureRare>>>,
 }
 
-const _: () = assert!(std::mem::size_of::<Signature>() == 88);
+const _: () = assert!(std::mem::size_of::<Signature>() == 80);
 
 #[derive(Default)]
 struct SignatureRare {

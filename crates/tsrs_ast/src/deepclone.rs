@@ -30,7 +30,7 @@ fn get_deep_clone_visitor(f: NodeFactory, synthetic_location: bool) -> NodeVisit
         if synthetic_location {
             new_list.loc.set(new_text_range(-1, -1));
             if nodes.has_trailing_comma() {
-                new_list.nodes[new_list.nodes.len() - 1].set_loc(new_text_range(-2, -2));
+                new_list.nodes()[new_list.nodes().len() - 1].set_loc(new_text_range(-2, -2));
             }
         }
         Some(new_list)

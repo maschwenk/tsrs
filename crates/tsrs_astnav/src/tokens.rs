@@ -167,11 +167,11 @@ pub(crate) fn get_token_at_position_worker(
             let Some(list) = node_list else {
                 return node_list;
             };
-            if list.nodes.is_empty() {
+            if list.nodes().is_empty() {
                 return node_list;
             }
             if st.node_after_left.get().is_none() {
-                for &node in list.nodes {
+                for &node in list.nodes() {
                     if !node.flags().intersects(NodeFlags::Reparsed) {
                         st.node_after_left.set(Some(node));
                         break;
@@ -182,7 +182,7 @@ pub(crate) fn get_token_at_position_worker(
                 if list.end() == position && include_preceding_token_at_end_position.is_some() {
                     st.left.set(list.end());
                     st.node_after_left.set(None);
-                    for &v in list.nodes.iter().rev() {
+                    for &v in list.nodes().iter().rev() {
                         if !v.flags().intersects(NodeFlags::Reparsed) {
                             st.prev_subtree.set(Some(v));
                             break;
@@ -192,7 +192,7 @@ pub(crate) fn get_token_at_position_worker(
                     st.left.set(list.end());
                     st.node_after_left.set(None);
                 } else if list.pos() <= position {
-                    let all_nodes: &'static [P<Node>] = list.nodes;
+                    let all_nodes: &'static [P<Node>] = list.nodes();
                     let (mut index, mut match_) = binary_search_unique_func(all_nodes, |middle, node| {
                         if node.flags().intersects(NodeFlags::Reparsed) {
                             return 0;
@@ -341,7 +341,7 @@ pub fn find_rightmost_node(node: P<Node>) -> P<Node> {
         let next = next.clone();
         Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| {
             if let Some(list) = node_list {
-                if let Some(rightmost) = ast::find_last_visible_node(list.nodes) {
+                if let Some(rightmost) = ast::find_last_visible_node(list.nodes()) {
                     next.set(Some(rightmost));
                 }
             }
@@ -439,8 +439,8 @@ pub fn find_preceding_token_ex(
                     return node_list;
                 }
                 if let Some(list) = node_list {
-                    if !list.nodes.is_empty() {
-                        let nodes = list.nodes;
+                    if !list.nodes().is_empty() {
+                        let nodes = list.nodes();
                         let (index, match_) = binary_search_unique_func(nodes, |middle, _| {
                             // synthetic jsdoc nodes should have jsdocNode.End() <= n.Pos()
                             if nodes[middle].flags().intersects(NodeFlags::Reparsed) {
@@ -617,9 +617,9 @@ fn find_rightmost_valid_token(
             let has_children = has_children.clone();
             Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| {
                 if let Some(list) = node_list {
-                    if !list.nodes.is_empty() {
+                    if !list.nodes().is_empty() {
                         has_children.set(true);
-                        let nodes = list.nodes;
+                        let nodes = list.nodes();
                         let (index, _) = binary_search_unique_func(nodes, |_, node| {
                             if node.end() > end_pos {
                                 return COMPARISON_GREATER_THAN;
@@ -754,8 +754,8 @@ pub fn find_next_token(previous_token: P<Node>, parent: P<Node>, file: P<SourceF
             let found_node = found_node.clone();
             Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| {
                 if let Some(list) = node_list {
-                    if !list.nodes.is_empty() && found_node.get().is_none() {
-                        let nodes = list.nodes;
+                    if !list.nodes().is_empty() && found_node.get().is_none() {
+                        let nodes = list.nodes();
                         let (index, match_) = binary_search_unique_func(nodes, |_, node| {
                             if node.flags().intersects(NodeFlags::Reparsed) {
                                 return COMPARISON_LESS_THAN;

@@ -797,7 +797,7 @@ fn test_synthetic_comments_with_source_file() {
         let members = f.new_node_list(vec![member]);
         f.new_type_literal_node(members)
     };
-    let member = literal.as_type_literal_node().members.nodes[0];
+    let member = literal.as_type_literal_node().members.nodes()[0];
     ec.add_synthetic_trailing_comment(member, Kind::MultiLineCommentTrivia, "elided", false /*hasTrailingNewLine*/);
     ec.set_emit_flags(literal, EmitFlags::SingleLine);
     p.write(literal, Some(file), &mut writer, None);

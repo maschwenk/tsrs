@@ -217,7 +217,7 @@ fn get_class(source_file: P<SourceFile>, span: TextRange) -> Option<P<Node>> {
 // codeactions_fixclassincorrectlyimplementsinterface.go:173
 fn get_constructor(class_declaration: Option<P<Node>>) -> Option<P<Node>> {
     let member_list = class_declaration?.member_list()?;
-    member_list.nodes.iter().copied().find(|&member| ast::is_constructor_declaration(member))
+    member_list.nodes().iter().copied().find(|&member| ast::is_constructor_declaration(member))
 }
 
 // codeactions_fixclassincorrectlyimplementsinterface.go:185

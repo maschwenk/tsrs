@@ -81,7 +81,7 @@ fn declaration_jsdoc_tags(node: P<Node>) -> &'static [P<Node>] {
             if !jsdocs.is_empty() {
                 let last_jsdoc = jsdocs[jsdocs.len() - 1].as_jsdoc();
                 if let Some(tags) = last_jsdoc.tags {
-                    return tags.nodes;
+                    return tags.nodes();
                 }
             }
             current = ast::get_next_jsdoc_comment_location(cur);
@@ -116,7 +116,7 @@ fn get_jsdoc_tag_text(tag: P<Node>) -> String {
             if let Some(constraint) = template_tag.constraint {
                 b.push_str(&scanner::get_text_of_node(constraint));
             }
-            for (i, &tp) in template_tag.type_parameters.nodes.iter().enumerate() {
+            for (i, &tp) in template_tag.type_parameters.nodes().iter().enumerate() {
                 if i == 0 && !b.is_empty() {
                     b.push(' ');
                 }
@@ -173,7 +173,7 @@ pub(crate) fn get_jsdoc_or_tag(c: &mut Checker, node: Option<P<Node>>, seen_symb
         return get_matching_jsdoc_tag(c, node.parent().unwrap(), node.name().unwrap().text(), is_matching_template_tag, seen_symbols);
     } else if ast::is_variable_declaration(node)
         && ast::is_variable_declaration_list(node.parent().unwrap())
-        && node.parent().unwrap().as_variable_declaration_list().declarations.nodes.first() == Some(&node)
+        && node.parent().unwrap().as_variable_declaration_list().declarations.nodes().first() == Some(&node)
     {
         return get_jsdoc_or_tag(c, node.parent().unwrap().parent(), seen_symbols);
     } else if (ast::is_function_expression_or_arrow_function(node) || ast::is_class_expression(node))
@@ -259,7 +259,7 @@ fn get_matching_jsdoc_tag(
     if let Some(jsdoc) = get_jsdoc_or_tag(c, Some(node), seen_symbols) {
         if jsdoc.kind() == Kind::JSDoc {
             if let Some(tags) = jsdoc.as_jsdoc().tags {
-                for &tag in tags.nodes {
+                for &tag in tags.nodes() {
                     if match_(tag, name) {
                         return Some(tag);
                     }
@@ -290,7 +290,7 @@ fn get_jsdoc_parameter_tag_by_position(c: &mut Checker, param: P<Node>) -> Optio
     let tags = jsdoc.as_jsdoc().tags?;
 
     let mut param_tag_index = 0;
-    for &tag in tags.nodes {
+    for &tag in tags.nodes() {
         if tag.kind() == Kind::JSDocParameterTag {
             if param_tag_index == param_index {
                 return Some(tag);

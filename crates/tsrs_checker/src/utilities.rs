@@ -181,7 +181,7 @@ pub fn get_single_variable_of_variable_statement(node: P<Node>) -> Option<P<Node
     if !ast::is_variable_statement(node) {
         return None;
     }
-    node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes.first().copied()
+    node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes().first().copied()
 }
 
 // utilities.go:161

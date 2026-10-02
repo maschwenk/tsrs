@@ -129,13 +129,13 @@ impl exportExtractor<'_> {
         }
         if !file.ambient_module_names().is_empty() {
             let mut export_count = 0;
-            for &statement in file.statements.nodes {
+            for &statement in file.statements.nodes() {
                 if ast::is_module_with_string_literal_name(statement) && is_non_pattern_ambient_module_declaration(file, statement) {
                     export_count += statement.symbol().unwrap().exports().map_or(0, |e| e.len());
                 }
             }
             let mut exports = Vec::with_capacity(export_count);
-            for &statement in file.statements.nodes {
+            for &statement in file.statements.nodes() {
                 if ast::is_module_with_string_literal_name(statement) && is_non_pattern_ambient_module_declaration(file, statement) {
                     self.extract_from_module_declaration(statement, file, &ModuleID(statement.name().unwrap().text().to_string()), "", &mut exports);
                 }
@@ -298,7 +298,7 @@ impl symbolExtractor<'_> {
                 // what is actually desirable here? I think it would be reasonable to only treat these as exports
                 // if *every* property is a shorthand property or identifier: identifier
                 // At least, it would be sketchy if there were any methods, computed properties...
-                let properties = expression.as_object_literal_expression().properties.nodes;
+                let properties = expression.as_object_literal_expression().properties.nodes();
                 exports.reserve(properties.len());
                 for &prop in properties {
                     if ast::is_shorthand_property_assignment(prop) || ast::is_property_assignment(prop) && prop.name().unwrap().kind() == Kind::Identifier {

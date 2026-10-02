@@ -1754,7 +1754,7 @@ impl Checker {
     pub(crate) fn instantiate_type_alias(&mut self, alias: Option<P<TypeAlias>>, m: Option<P<TypeMapper>>) -> Option<P<TypeAlias>> {
         let alias = alias?;
         let type_arguments = self.instantiate_types(alias.type_arguments(), m);
-        Some(P::new(TypeAlias { symbol: Cell::new(alias.symbol()), type_arguments: Cell::new(alloc_vec(type_arguments)) }))
+        Some(P::new(TypeAlias { symbol: Cell::new(alias.symbol()), type_arguments: ThinSliceCell::new(alloc_vec(type_arguments)) }))
     }
 
     /// `instantiate_type_alias` for the alias argument of a cached type constructor (`AliasArg::Pending`): the type
@@ -2379,8 +2379,8 @@ impl Checker {
                 let type_node = node.type_node().unwrap();
                 type_node.kind() != Kind::ArrayType || self.may_resolve_type_alias(type_node.as_array_type_node().element_type)
             }
-            Kind::UnionType => node.as_union_type_node().types().nodes.iter().any(|&t| self.may_resolve_type_alias(t)),
-            Kind::IntersectionType => node.as_intersection_type_node().types().nodes.iter().any(|&t| self.may_resolve_type_alias(t)),
+            Kind::UnionType => node.as_union_type_node().types().nodes().iter().any(|&t| self.may_resolve_type_alias(t)),
+            Kind::IntersectionType => node.as_intersection_type_node().types().nodes().iter().any(|&t| self.may_resolve_type_alias(t)),
             Kind::IndexedAccessType => self.may_resolve_type_alias(node.as_indexed_access_type_node().object_type) || self.may_resolve_type_alias(node.as_indexed_access_type_node().index_type),
             Kind::ConditionalType => {
                 let n = node.as_conditional_type_node();

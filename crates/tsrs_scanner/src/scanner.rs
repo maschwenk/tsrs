@@ -2980,7 +2980,7 @@ fn find_originating_jsdoc_satisfies_tag(source_file: P<SourceFile>, node: P<Node
         let mut first_satisfies_tag: Option<P<Node>> = None;
         for &js_doc in cur.eager_jsdoc(Some(source_file.get())) {
             if let Some(tags) = js_doc.as_jsdoc().tags {
-                for &tag in tags.nodes {
+                for &tag in tags.nodes() {
                     if !ast::is_jsdoc_satisfies_tag(tag) {
                         continue;
                     }

@@ -299,14 +299,14 @@ fn get_module_specifier_expression(declaration: P<Node>) -> Option<P<Node>> {
         }
         Kind::ImportDeclaration => declaration.module_specifier(),
         Kind::VariableStatement => {
-            let declarations = declaration.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes;
+            let declarations = declaration.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes();
             if !declarations.is_empty() {
                 let initializer = declarations[0].initializer();
                 if let Some(initializer) = initializer {
                     if initializer.kind() == Kind::CallExpression {
                         let call_expr = initializer.as_call_expression();
-                        if !call_expr.arguments.nodes.is_empty() {
-                            return Some(call_expr.arguments.nodes[0]);
+                        if !call_expr.arguments.nodes().is_empty() {
+                            return Some(call_expr.arguments.nodes()[0]);
                         }
                     }
                 }
@@ -525,14 +525,14 @@ fn detect_named_import_organization_by_sort_worker(
             continue;
         };
         let named_imports = named_bindings.as_named_imports();
-        if named_imports.elements.nodes.is_empty() {
+        if named_imports.elements.nodes().is_empty() {
             continue;
         }
 
         if !both_named_imports {
             let mut has_type_only = false;
             let mut has_regular = false;
-            for &elem in named_imports.elements.nodes {
+            for &elem in named_imports.elements.nodes() {
                 if elem.is_type_only() {
                     has_type_only = true;
                 } else {
@@ -555,7 +555,7 @@ fn detect_named_import_organization_by_sort_worker(
     for &imp in &import_decls_with_named {
         let clause = imp.as_import_declaration().import_clause.unwrap().as_import_clause();
         let named_imports = clause.named_bindings.unwrap().as_named_imports();
-        named_imports_by_decl.push(named_imports.elements.nodes);
+        named_imports_by_decl.push(named_imports.elements.nodes());
     }
 
     if !both_named_imports || types_to_test.is_empty() {
@@ -727,7 +727,7 @@ pub fn get_named_import_specifier_comparer_with_detection(
                     detect_from_decl.named_import_comparer,
                 );
             } else if let Some(source_file) = source_file {
-                let all_imports = filter_import_declarations(source_file.statements.nodes);
+                let all_imports = filter_import_declarations(source_file.statements.nodes());
                 let detect_from_file = detect_named_import_organization_by_sort_worker(&all_imports, &comparers_to_test, &type_orders_to_test);
                 if let Some(detect_from_file) = detect_from_file {
                     is_sorted = bool_to_tristate(detect_from_file.is_sorted);

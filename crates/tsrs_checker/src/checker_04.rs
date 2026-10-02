@@ -1056,7 +1056,7 @@ impl Checker {
 
     // checker.go:7358
     pub(crate) fn report_unused_variables(&mut self, node: P<Node>) {
-        let declarations = node.as_variable_declaration_list().declarations.nodes;
+        let declarations = node.as_variable_declaration_list().declarations.nodes();
         if declarations.len() > 1 && declarations.iter().all(|&d| self.is_unreferenced_variable_declaration(d)) {
             self.report_unused_variable(node, new_diagnostic_for_node(Some(node), Some(&diagnostics::All_variables_are_unused), &[]));
         } else {
@@ -1190,12 +1190,12 @@ impl Checker {
         let Some(type_parameter_list) = node.type_parameter_list() else {
             return;
         };
-        if type_parameter_list.nodes.len() > 1 && type_parameter_list.nodes.iter().all(|&tp| self.is_unreferenced_type_parameter(tp)) {
+        if type_parameter_list.nodes().len() > 1 && type_parameter_list.nodes().iter().all(|&tp| self.is_unreferenced_type_parameter(tp)) {
             let file = get_source_file_of_node(node).unwrap();
             let loc = range_of_type_parameters(file, type_parameter_list);
             self.report_unused(node, UnusedKind::Parameter, new_diagnostic(Some(file), loc, &diagnostics::All_type_parameters_are_unused, &[]));
         } else {
-            for &type_parameter in type_parameter_list.nodes {
+            for &type_parameter in type_parameter_list.nodes() {
                 if self.is_unreferenced_type_parameter(type_parameter) {
                     let name = type_parameter.name().unwrap();
                     self.report_unused(
@@ -1960,7 +1960,7 @@ impl Checker {
     // checker.go:8148
     pub(crate) fn check_template_expression(&mut self, node: P<Node>) -> P<Type> {
         let expr = node.as_template_expression();
-        let spans = expr.template_spans.nodes;
+        let spans = expr.template_spans.nodes();
         let length = spans.len();
         let mut texts: Vec<&str> = vec![""; length + 1];
         let mut types: Vec<P<Type>> = Vec::with_capacity(length);
@@ -2244,7 +2244,7 @@ impl Checker {
     pub(crate) fn get_for_in_variable_symbol(&mut self, node: P<Node>) -> Option<P<Symbol>> {
         let initializer = node.initializer().unwrap();
         if is_variable_declaration_list(initializer) {
-            let declarations = initializer.as_variable_declaration_list().declarations.nodes;
+            let declarations = initializer.as_variable_declaration_list().declarations.nodes();
             if !declarations.is_empty() {
                 let variable = declarations[0];
                 if !is_binding_pattern(variable.name().unwrap()) {
@@ -2354,7 +2354,7 @@ impl Checker {
                 self.check_type_assignable_to(options_type, target, Some(args[1]), None);
             }
             if is_object_literal_expression(args[1]) {
-                for &prop in args[1].as_object_literal_expression().properties.nodes {
+                for &prop in args[1].as_object_literal_expression().properties.nodes() {
                     if is_property_assignment(prop) && is_identifier(prop.name().unwrap()) && prop.name().unwrap().text() == "assert" {
                         self.error(prop.name(), &diagnostics::Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert, &[]);
                         break;

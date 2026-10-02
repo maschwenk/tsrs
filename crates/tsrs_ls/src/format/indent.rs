@@ -213,7 +213,7 @@ fn get_actual_indentation_for_list_item_before_comma(comma_token: P<Node>, sourc
     let Some(containing_list) = get_containing_list(comma_token, source_file) else {
         return -1;
     };
-    let comma_index = tsrs_core::find_index(containing_list.nodes, |&n| n == comma_token);
+    let comma_index = tsrs_core::find_index(containing_list.nodes(), |&n| n == comma_token);
     if comma_index > 0 {
         return derive_actual_indentation_from_list(containing_list, (comma_index - 1) as usize, source_file, options);
     }
@@ -345,7 +345,7 @@ fn get_indentation_for_node_worker(
             let mut first_list_child: Option<P<Node>> = None;
             let container_list = get_containing_list(current, source_file);
             if let Some(container_list) = container_list {
-                first_list_child = tsrs_core::first_or_nil(container_list.nodes);
+                first_list_child = tsrs_core::first_or_nil(container_list.nodes());
             }
             // A list indents its children if the children begin on a later line than the list itself:
             //
@@ -470,7 +470,7 @@ fn get_actual_indentation_for_list_item(node: P<Node>, source_file: P<SourceFile
     }
     let containing_list = get_containing_list(node, source_file);
     if let Some(containing_list) = containing_list {
-        let index = tsrs_core::find_index(containing_list.nodes, |&e| e == node);
+        let index = tsrs_core::find_index(containing_list.nodes(), |&e| e == node);
         if index != -1 {
             let result = derive_actual_indentation_from_list(containing_list, index as usize, source_file, options);
             if result != -1 {
@@ -501,9 +501,9 @@ fn get_actual_indentation_for_list_start_line(list: Option<P<NodeList>>, source_
 
 // indent.go:435
 fn derive_actual_indentation_from_list(list: P<NodeList>, index: usize, source_file: P<SourceFile>, options: &FormatCodeSettings) -> i32 {
-    assert!(index < list.nodes.len());
+    assert!(index < list.nodes().len());
 
-    let node = list.nodes[index];
+    let node = list.nodes()[index];
 
     // walk toward the start of the list starting from current node and check if the line is the same for all items.
     // if end line for item [i - 1] differs from the start line for item [i] - find column of the first non-whitespace character on the line of item [i]
@@ -511,16 +511,16 @@ fn derive_actual_indentation_from_list(list: P<NodeList>, index: usize, source_f
     let (mut line, mut char) = get_start_line_and_character_for_node(node, source_file);
 
     for i in (0..=index).rev() {
-        if list.nodes[i].kind() == Kind::CommaToken {
+        if list.nodes()[i].kind() == Kind::CommaToken {
             continue;
         }
         // skip list items that ends on the same line with the current list element
-        let prev_end_line = scanner::get_ecma_line_of_position(source_file.get(), list.nodes[i].end());
+        let prev_end_line = scanner::get_ecma_line_of_position(source_file.get(), list.nodes()[i].end());
         if prev_end_line != line {
             return find_column_for_first_non_whitespace_character_in_line(line, char, source_file, options);
         }
 
-        (line, char) = get_start_line_and_character_for_node(list.nodes[i], source_file);
+        (line, char) = get_start_line_and_character_for_node(list.nodes()[i], source_file);
     }
     -1
 }

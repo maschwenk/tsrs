@@ -21,7 +21,7 @@ fn test_get_containing_list_named_imports() {
     for specifier in import_specifiers {
         let list = get_containing_list(specifier, source_file);
         assert!(list.is_some(), "GetContainingList should return non-nil for import specifier");
-        assert!(list.unwrap().nodes.len() == 2, "Expected list with 2 elements, got {}", list.unwrap().nodes.len());
+        assert!(list.unwrap().nodes().len() == 2, "Expected list with 2 elements, got {}", list.unwrap().nodes().len());
     }
 }
 

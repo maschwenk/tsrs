@@ -99,7 +99,7 @@ pub(crate) fn get_all_jsdoc_tags(node: P<Node>) -> Vec<P<Node>> {
             if !jsdocs.is_empty() {
                 let last_jsdoc = jsdocs[jsdocs.len() - 1].as_jsdoc();
                 if let Some(tags) = last_jsdoc.tags {
-                    return tags.nodes.to_vec();
+                    return tags.nodes().to_vec();
                 }
             }
             current = ast::get_next_jsdoc_comment_location(cur);

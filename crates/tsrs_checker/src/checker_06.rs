@@ -91,7 +91,7 @@ impl Checker {
         if let Some(&cached) = self.instantiation_expression_types.get(&key) {
             return cached;
         }
-        let mut st = InstantiationExpressionState { node, type_arguments: type_arguments.nodes, has_some_applicable_signature: false, non_applicable_type: None };
+        let mut st = InstantiationExpressionState { node, type_arguments: type_arguments.nodes(), has_some_applicable_signature: false, non_applicable_type: None };
         let result = get_instantiated_type(self, &mut st, expr_type);
         self.instantiation_expression_types.insert(key, result);
         let error_type = if st.has_some_applicable_signature { st.non_applicable_type } else { Some(expr_type) };
@@ -2349,10 +2349,10 @@ impl Checker {
     // checker.go:12788
     pub(crate) fn check_object_literal_assignment(&mut self, node: P<Node>, source_type: P<Type>, right_is_this: bool) -> P<Type> {
         let properties = node.property_list();
-        if self.strict_null_checks && properties.nodes.is_empty() {
+        if self.strict_null_checks && properties.nodes().is_empty() {
             return self.check_non_null_type(source_type, node);
         }
-        for i in 0..properties.nodes.len() {
+        for i in 0..properties.nodes().len() {
             self.check_object_literal_destructuring_property_assignment(node, source_type, i as i32, Some(properties), right_is_this);
         }
         source_type
@@ -2400,7 +2400,7 @@ impl Checker {
             }
             let mut non_rest_names: Vec<P<Node>> = Vec::new();
             if let Some(all_properties) = all_properties {
-                for &other_property in all_properties.nodes {
+                for &other_property in all_properties.nodes() {
                     if !ast::is_spread_assignment(other_property) {
                         non_rest_names.push(other_property.name().unwrap());
                     }
@@ -2439,7 +2439,7 @@ impl Checker {
     // checker.go:12871
     pub(crate) fn check_array_literal_destructuring_element_assignment(&mut self, node: P<Node>, source_type: P<Type>, element_index: i32, element_type: P<Type>, check_mode: CheckMode) -> Option<P<Type>> {
         let elements = node.element_list();
-        let element = elements.nodes[element_index as usize];
+        let element = elements.nodes()[element_index as usize];
         if !ast::is_omitted_expression(element) {
             if !ast::is_spread_element(element) {
                 let index_type = self.get_number_literal_type(Number(element_index as f64));
@@ -2458,7 +2458,7 @@ impl Checker {
                 }
                 return Some(self.check_destructuring_assignment(element, element_type, check_mode, false));
             }
-            if (element_index as usize) < elements.nodes.len() - 1 {
+            if (element_index as usize) < elements.nodes().len() - 1 {
                 self.error(Some(element), &diagnostics::A_rest_element_must_be_last_in_a_destructuring_pattern, &[]);
             } else {
                 let rest_expression = element.expression().unwrap();

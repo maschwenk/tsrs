@@ -500,7 +500,7 @@ impl Checker {
                         let data = for_node.as_for_in_or_of_statement();
                         let initializer = data.initializer;
                         if is_variable_declaration_list(initializer)
-                            && initializer.as_variable_declaration_list().declarations.nodes.is_empty()
+                            && initializer.as_variable_declaration_list().declarations.nodes().is_empty()
                             && (location == data.expression || ast::is_node_descendant_of(location, data.expression))
                         {
                             return;
@@ -1037,8 +1037,8 @@ impl Checker {
     pub(crate) fn get_entity_name_for_decorator_metadata(&mut self, node: Option<P<Node>>) -> Option<P<Node>> {
         let node = node?;
         match node.kind() {
-            Kind::IntersectionType => self.get_entity_name_for_decorator_metadata_from_type_list(node.as_intersection_type_node().types().nodes),
-            Kind::UnionType => self.get_entity_name_for_decorator_metadata_from_type_list(node.as_union_type_node().types().nodes),
+            Kind::IntersectionType => self.get_entity_name_for_decorator_metadata_from_type_list(node.as_intersection_type_node().types().nodes()),
+            Kind::UnionType => self.get_entity_name_for_decorator_metadata_from_type_list(node.as_union_type_node().types().nodes()),
             Kind::ConditionalType => {
                 let n = node.as_conditional_type_node();
                 self.get_entity_name_for_decorator_metadata_from_type_list(&[n.true_type, n.false_type])

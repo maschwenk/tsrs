@@ -957,7 +957,7 @@ fn convert_object_literal_expression_to_json(
 ) -> (CompilerOptionsValue, Vec<P<Diagnostic>>) {
     let mut result: Option<OrderedMap<String, CompilerOptionsValue>> = if return_value { Some(OrderedMap::default()) } else { None };
     let mut errors: Vec<P<Diagnostic>> = Vec::new();
-    for element in node.as_object_literal_expression().properties.nodes.iter().copied() {
+    for element in node.as_object_literal_expression().properties.nodes().iter().copied() {
         if element.kind() != Kind::PropertyAssignment {
             errors.push(new_diagnostic(Some(source_file), element.loc(), &diagnostics::Property_assignment_expected, &[]));
             continue;
@@ -2166,7 +2166,7 @@ pub fn for_each_property_assignment<T>(
     key2: Option<&str>,
 ) -> Option<T> {
     if let Some(object_literal) = object_literal {
-        for property in object_literal.as_object_literal_expression().properties.nodes.iter().copied() {
+        for property in object_literal.as_object_literal_expression().properties.nodes().iter().copied() {
             if !tsrs_ast::is_property_assignment(property) {
                 continue;
             }

@@ -1229,7 +1229,7 @@ pub fn get_combined_node_flags(node: P<Node>) -> NodeFlags {
 pub fn get_jsdoc_deprecated_tag(node: P<Node>) -> Option<P<Node>> {
     for &jsdoc in node.jsdoc(None) {
         if let Some(tags) = jsdoc.as_jsdoc().tags {
-            for &tag in tags.nodes {
+            for &tag in tags.nodes() {
                 if is_jsdoc_deprecated_tag(tag) {
                     return Some(tag);
                 }

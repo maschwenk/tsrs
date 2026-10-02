@@ -115,7 +115,7 @@ pub fn get_text_of_jsdoc_comment(comment: Option<P<NodeList>>) -> String {
         return String::new();
     };
     let mut b = String::new();
-    for &n in comment.nodes {
+    for &n in comment.nodes() {
         match n.kind() {
             Kind::JSDocText => b.push_str(n.text()),
             Kind::JSDocLink | Kind::JSDocLinkCode | Kind::JSDocLinkPlain => b.push_str(&get_text_of_node(n)),

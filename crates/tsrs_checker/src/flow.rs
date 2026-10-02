@@ -1271,7 +1271,7 @@ impl Checker {
             Some(witnesses) => witnesses,
             None => return t,
         };
-        let clauses = data.switch_statement.as_switch_statement().case_block.as_case_block().clauses.nodes;
+        let clauses = data.switch_statement.as_switch_statement().case_block.as_case_block().clauses.nodes();
         // Equal start and end denotes implicit fallthrough; undefined marks explicit default clause.
         let default_index = clauses.iter().position(|clause| clause.kind() == Kind::DefaultClause).map_or(-1, |i| i as i32);
         let clause_start = data.clause_start;
@@ -1299,7 +1299,7 @@ impl Checker {
     pub(crate) fn narrow_type_by_switch_on_true(&mut self, f: P<FlowState>, t: P<Type>, data: P<Node>) -> P<Type> {
         let mut t = t;
         let data = data.as_flow_switch_clause_data();
-        let clauses = data.switch_statement.as_switch_statement().case_block.as_case_block().clauses.nodes;
+        let clauses = data.switch_statement.as_switch_statement().case_block.as_case_block().clauses.nodes();
         let default_index = clauses.iter().position(|clause| clause.kind() == Kind::DefaultClause).map_or(-1, |i| i as i32);
         let clause_start = data.clause_start;
         let clause_end = data.clause_end;
@@ -2268,7 +2268,7 @@ impl Checker {
     pub(crate) fn get_switch_clause_type_of_witnesses(&mut self, node: P<Node>) -> Option<&'static [&'static str]> {
         let links = self.switch_statement_links.get(node);
         if !links.witnesses_computed.get() {
-            let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes;
+            let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes();
             let mut witnesses: Option<Vec<&'static str>> = Some(vec![""; clauses.len()]);
             for (i, &clause) in clauses.iter().enumerate() {
                 if clause.kind() == Kind::CaseClause {
@@ -2311,7 +2311,7 @@ impl Checker {
     pub(crate) fn get_switch_clause_types(&mut self, node: P<Node>) -> Vec<P<Type>> {
         let links = self.switch_statement_links.get(node);
         if !links.switch_types_computed.get() {
-            let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes;
+            let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes();
             let mut types = Vec::with_capacity(clauses.len());
             for &clause in clauses {
                 types.push(self.get_type_of_switch_clause(clause));

@@ -83,7 +83,7 @@ fn get_external_module_indicator(file: &SourceFile, opts: ExternalModuleIndicato
 }
 
 fn is_file_probably_external_module(source_file: &SourceFile) -> Option<P<Node>> {
-    for &statement in source_file.statements.nodes {
+    for &statement in source_file.statements.nodes() {
         if is_an_external_module_indicator_node(statement) {
             return Some(statement);
         }

@@ -150,7 +150,7 @@ impl EmitContext {
     // Invokes c.EndVariableEnvironment() and merges the results into `statements`
     pub fn end_and_merge_variable_environment_list(&self, statements: Option<P<NodeList>>) -> Option<P<NodeList>> {
         let nodes: &[P<Node>] = match statements {
-            Some(statements) => statements.nodes,
+            Some(statements) => statements.nodes(),
             None => &[],
         };
 
@@ -230,7 +230,7 @@ impl EmitContext {
     // Invokes c.EndLexicalEnvironment() and merges the results into `statements`
     pub fn end_and_merge_lexical_environment_list(&self, statements: Option<P<NodeList>>) -> Option<P<NodeList>> {
         let nodes: &[P<Node>] = match statements {
-            Some(statements) => statements.nodes,
+            Some(statements) => statements.nodes(),
             None => &[],
         };
 
@@ -269,7 +269,7 @@ impl EmitContext {
 
     // Merges declarations produced by c.EndVariableEnvironment() or c.EndLexicalEnvironment() into a statement list
     pub fn merge_environment_list(&self, statements: P<NodeList>, declarations: &[P<Node>]) -> P<NodeList> {
-        let (result, changed) = self.merge_environment_worker(statements.nodes, declarations);
+        let (result, changed) = self.merge_environment_worker(statements.nodes(), declarations);
         if changed {
             let list = self.factory.new_node_list(result);
             list.loc.set(statements.loc.get());
@@ -389,7 +389,7 @@ impl EmitContext {
     pub(crate) fn is_hoisted_variable_statement(&self, node: P<Node>) -> bool {
         self.is_custom_prologue(node)
             && is_variable_statement(node)
-            && every(node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes, |&n| is_hoisted_variable(n))
+            && every(node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes(), |&n| is_hoisted_variable(n))
     }
 
     pub(crate) fn on_create(&self, node: P<Node>) {
@@ -782,7 +782,7 @@ impl EmitContext {
             return node_list;
         };
         let mut result: Option<Vec<P<Node>>> = None;
-        let nodes = node_list.nodes;
+        let nodes = node_list.nodes();
         for (i, &parameter) in nodes.iter().enumerate() {
             let updated = self.add_default_value_assignment_if_needed(parameter);
             if updated != parameter {

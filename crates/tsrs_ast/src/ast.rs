@@ -8,7 +8,7 @@ use tsrs_core::collections::Set;
 use tsrs_core::tspath::Path;
 use tsrs_core::{
     alloc_slice, alloc_str, alloc_vec, compute_ecma_line_starts, undefined_text_range, LanguageVariant, ResolutionMode,
-    FrozenCell, OwnedCell, ScriptKind, TextPos, TextRange, Tristate, P,
+    FrozenCell, OwnedCell, ScriptKind, TextPos, TextRange, ThinSlice, Tristate, P,
 };
 use tsrs_diagnostics as diagnostics;
 
@@ -50,7 +50,7 @@ pub(crate) fn visit_nodes<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, nodes: 
 #[inline]
 pub(crate) fn visit_node_list<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, node_list: Option<P<NodeList>>) -> bool {
     match node_list {
-        Some(list) => visit_nodes(v, list.nodes),
+        Some(list) => visit_nodes(v, list.nodes()),
         None => false,
     }
 }
@@ -58,7 +58,7 @@ pub(crate) fn visit_node_list<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, nod
 #[inline]
 pub(crate) fn visit_modifiers<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, modifiers: Option<P<ModifierList>>) -> bool {
     match modifiers {
-        Some(list) => visit_nodes(v, list.list.nodes),
+        Some(list) => visit_nodes(v, list.list.nodes()),
         None => false,
     }
 }
@@ -178,10 +178,13 @@ pub(crate) fn clone_node(updated: P<Node>, original: P<Node>, hooks: &NodeFactor
 
 // NodeList
 
+/// `nodes` is a `ThinSlice` (pointer and length in one word): 16 bytes, 4.2M lists on the private monorepo.
 pub struct NodeList {
     pub loc: OwnedCell<TextRange>,
-    pub nodes: &'static [P<Node>],
+    nodes: ThinSlice<P<Node>>,
 }
+
+const _: () = assert!(std::mem::size_of::<NodeList>() == 16);
 
 impl NodeFactory {
     pub fn new_node_list(&self, nodes: Vec<P<Node>>) -> P<NodeList> {
@@ -194,14 +197,19 @@ impl NodeFactory {
 
     /// Stores `nodes` without copying (keeps slice identity, e.g. for sentinel slices).
     pub fn new_node_list_from_static(&self, nodes: &'static [P<Node>]) -> P<NodeList> {
-        P::new(NodeList { loc: OwnedCell::new(undefined_text_range()), nodes })
+        P::new(NodeList::new(undefined_text_range(), nodes))
     }
 }
 
 impl NodeList {
+    /// A list value (callers allocate it with `P::new`); `nodes()` returns `nodes` (same slice).
+    #[inline]
+    pub fn new(loc: TextRange, nodes: &'static [P<Node>]) -> NodeList {
+        NodeList { loc: OwnedCell::new(loc), nodes: ThinSlice::new(nodes) }
+    }
     #[inline]
     pub fn nodes(&self) -> &'static [P<Node>] {
-        self.nodes
+        self.nodes.get()
     }
     #[inline]
     pub fn loc(&self) -> TextRange {
@@ -217,14 +225,14 @@ impl NodeList {
     }
 
     pub fn has_trailing_comma(&self) -> bool {
-        let Some(last) = self.nodes.last() else {
+        let Some(last) = self.nodes().last() else {
             return false;
         };
         last.end() < self.end()
     }
 
     pub fn clone_list(&self, f: &NodeFactory) -> P<NodeList> {
-        let result = f.new_node_list_from_static(self.nodes);
+        let result = f.new_node_list_from_static(self.nodes());
         result.loc.set(self.loc.get());
         result
     }
@@ -248,7 +256,7 @@ impl NodeFactory {
 
     fn new_modifier_list_from_static(&self, nodes: &'static [P<Node>]) -> P<ModifierList> {
         P::new(ModifierList {
-            list: NodeList { loc: OwnedCell::new(undefined_text_range()), nodes },
+            list: NodeList::new(undefined_text_range(), nodes),
             modifier_flags: modifiers_to_flags(nodes),
         })
     }
@@ -257,7 +265,7 @@ impl NodeFactory {
 impl ModifierList {
     #[inline]
     pub fn nodes(&self) -> &'static [P<Node>] {
-        self.list.nodes
+        self.list.nodes()
     }
     #[inline]
     pub fn loc(&self) -> TextRange {
@@ -278,7 +286,7 @@ impl ModifierList {
 
     pub fn clone_list(&self, f: &NodeFactory) -> P<ModifierList> {
         P::new(ModifierList {
-            list: NodeList { loc: OwnedCell::new(self.list.loc.get()), nodes: self.list.nodes },
+            list: NodeList::new(self.list.loc.get(), self.list.nodes()),
             modifier_flags: self.modifier_flags,
         })
     }
@@ -456,7 +464,7 @@ impl Node {
 
     pub fn parameters(&self) -> &'static [P<Node>] {
         match self.parameter_list() {
-            Some(list) => list.nodes,
+            Some(list) => list.nodes(),
             None => &[],
         }
     }
@@ -638,7 +646,7 @@ impl Node {
 
     pub fn arguments(&self) -> &'static [P<Node>] {
         match self.argument_list() {
-            Some(list) => list.nodes,
+            Some(list) => list.nodes(),
             None => &[],
         }
     }
@@ -660,7 +668,7 @@ impl Node {
 
     pub fn type_arguments(&self) -> &'static [P<Node>] {
         match self.type_argument_list() {
-            Some(list) => list.nodes,
+            Some(list) => list.nodes(),
             None => &[],
         }
     }
@@ -683,7 +691,7 @@ impl Node {
 
     pub fn type_parameters(&self) -> &'static [P<Node>] {
         match self.type_parameter_list() {
-            Some(list) => list.nodes,
+            Some(list) => list.nodes(),
             None => &[],
         }
     }
@@ -702,7 +710,7 @@ impl Node {
 
     pub fn members(&self) -> &'static [P<Node>] {
         match self.member_list() {
-            Some(list) => list.nodes,
+            Some(list) => list.nodes(),
             None => &[],
         }
     }
@@ -719,7 +727,7 @@ impl Node {
 
     pub fn statements(&self) -> &'static [P<Node>] {
         match self.statement_list() {
-            Some(list) => list.nodes,
+            Some(list) => list.nodes(),
             None => &[],
         }
     }
@@ -946,7 +954,7 @@ impl Node {
 
     pub fn comments(&self) -> &'static [P<Node>] {
         match self.comment_list() {
-            Some(list) => list.nodes,
+            Some(list) => list.nodes(),
             None => &[],
         }
     }
@@ -1015,7 +1023,7 @@ impl Node {
     }
 
     pub fn properties(&self) -> &'static [P<Node>] {
-        self.property_list().nodes
+        self.property_list().nodes()
     }
 
     pub fn element_list(&self) -> P<NodeList> {
@@ -1030,7 +1038,7 @@ impl Node {
     }
 
     pub fn elements(&self) -> &'static [P<Node>] {
-        self.element_list().nodes
+        self.element_list().nodes()
     }
 
     pub fn postfix_token(&self) -> Option<P<Node>> {
@@ -1435,7 +1443,7 @@ impl ImportAttributes {
     ) -> Option<ResolutionMode> {
         let node = node?;
         let attributes = node.as_import_attributes().attributes;
-        let attribute = attributes.nodes.iter().copied().find(|attribute| attribute.name().unwrap().text() == "resolution-mode")?;
+        let attribute = attributes.nodes().iter().copied().find(|attribute| attribute.name().unwrap().text() == "resolution-mode")?;
         let elem = attribute.as_import_attribute();
         if !is_string_literal_like(elem.value) {
             return None;

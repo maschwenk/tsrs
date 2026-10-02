@@ -71,7 +71,7 @@ impl DeclarationTransformer {
                     declarationEmitInternalNodeBuilderFlags,
                     self.tracker.get(),
                 ) {
-                    type_parameters = Some(P::new(NodeList { loc: tsrs_core::OwnedCell::new(node.loc()), nodes: alloc_vec(nodes) }));
+                    type_parameters = Some(P::new(NodeList::new(node.loc(), alloc_vec(nodes))));
                 }
             }
         }

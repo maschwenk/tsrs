@@ -25,7 +25,7 @@ impl Printer {
 
         let mut length = 0;
         if let Some(children) = children {
-            length = children.nodes.len() as i32;
+            length = children.nodes().len() as i32;
         }
 
         let mut start = start;
@@ -78,7 +78,7 @@ impl Printer {
             let end = std::cmp::min(start + count, length);
 
             let has_trailing_comma = self.has_trailing_comma(parent_node.unwrap(), children);
-            self.emit_list_items(emit, parent_node, &children.nodes[start as usize..end as usize], format, has_trailing_comma, children.loc());
+            self.emit_list_items(emit, parent_node, &children.nodes()[start as usize..end as usize], format, has_trailing_comma, children.loc());
         }
 
         if let Some(on_after_emit_node_list) = &mut self.print_handlers.on_after_emit_node_list {
@@ -1274,7 +1274,7 @@ impl Printer {
         let Some(nodes) = nodes else {
             return;
         };
-        for node in nodes.nodes {
+        for node in nodes.nodes() {
             self.generate_names(Some(*node));
         }
     }
@@ -1340,7 +1340,7 @@ impl Printer {
         let Some(nodes) = nodes else {
             return;
         };
-        for node in nodes.nodes {
+        for node in nodes.nodes() {
             self.generate_member_names(Some(*node));
         }
     }

@@ -422,9 +422,9 @@ pub(crate) fn sibling_node_positions_are_comparable(emit_context: P<EmitContext>
 
     let parent_node_array = get_containing_node_array(previous_node);
     if let Some(parent_node_array) = parent_node_array {
-        let prev_node_index = parent_node_array.nodes.iter().position(|n| *n == previous_node);
+        let prev_node_index = parent_node_array.nodes().iter().position(|n| *n == previous_node);
         return match prev_node_index {
-            Some(prev_node_index) => parent_node_array.nodes.iter().position(|n| *n == next_node) == Some(prev_node_index + 1),
+            Some(prev_node_index) => parent_node_array.nodes().iter().position(|n| *n == next_node) == Some(prev_node_index + 1),
             None => false,
         };
     }

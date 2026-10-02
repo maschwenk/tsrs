@@ -527,7 +527,7 @@ impl FormatSpanWorker {
 
         // node range is outside the target range - do not dive inside
         if !self.original_range.overlaps(nodes.loc.get()) {
-            if nodes.end() < self.original_range.pos() && (nodes.nodes.is_empty() || !nodes.nodes[0].flags().intersects(NodeFlags::Reparsed)) {
+            if nodes.end() < self.original_range.pos() && (nodes.nodes().is_empty() || !nodes.nodes()[0].flags().intersects(NodeFlags::Reparsed)) {
                 self.fs().skip_to_end_of(&nodes.loc.get());
             }
             return;
@@ -567,8 +567,8 @@ impl FormatSpanWorker {
         }
 
         let mut inherited_indentation = -1;
-        for i in 0..nodes.nodes.len() {
-            let child = nodes.nodes[i];
+        for i in 0..nodes.nodes().len() {
+            let child = nodes.nodes()[i];
             inherited_indentation = self.process_child_node(
                 node,
                 indenter.clone(),
