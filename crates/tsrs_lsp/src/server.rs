@@ -661,7 +661,7 @@ impl Server {
                 lsproto::RegisterOptions {
                     text_document_semantic_tokens: Some(lsproto::SemanticTokensRegistrationOptions {
                         document_selector: selector.clone(),
-                        legend: lsconsts::semantic_tokens_legend(&self.client_capabilities().text_document.semantic_tokens),
+                        legend: tsrs_ls::semantic_tokens_legend(&self.client_capabilities().text_document.semantic_tokens),
                         full: Some(lsproto::BooleanOrSemanticTokensFullDelta { boolean: Some(true), ..Default::default() }),
                         range: Some(lsproto::BooleanOrEmptyObject { boolean: Some(true), ..Default::default() }),
                         ..Default::default()
@@ -1497,7 +1497,7 @@ impl Server {
                 }),
                 semantic_tokens_provider: Some(lsproto::SemanticTokensOptionsOrRegistrationOptions {
                     options: Some(lsproto::SemanticTokensOptions {
-                        legend: lsconsts::semantic_tokens_legend(&self.client_capabilities().text_document.semantic_tokens),
+                        legend: tsrs_ls::semantic_tokens_legend(&self.client_capabilities().text_document.semantic_tokens),
                         full: Some(lsproto::BooleanOrSemanticTokensFullDelta { boolean: Some(true), ..Default::default() }),
                         range: Some(lsproto::BooleanOrEmptyObject { boolean: Some(true), ..Default::default() }),
                         ..Default::default()
@@ -1853,7 +1853,7 @@ impl Server {
 
     // server.go:2079
     fn handle_folding_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::FoldingRangeParams) -> Result<lsproto::FoldingRangeResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentFoldingRange))
+        ls.provide_folding_range(ctx, &params.text_document.uri)
     }
 
     // server.go:2083
@@ -1941,12 +1941,39 @@ impl Server {
 
     // server.go:2156
     fn handle_workspace_symbol(self: &Arc<Self>, ctx: &Context, params: lsproto::WorkspaceSymbolParams, req_msg: &RequestMessage) -> Result<lsproto::WorkspaceSymbolResponse, Error> {
-        Err(not_yet_ported(Method::WorkspaceSymbol))
+        let mut resp = lsproto::WorkspaceSymbolResponse::default();
+        let mut ls_err: Option<Error> = None;
+        let mut provide_symbols = |snapshot: &Arc<project::Snapshot>, programs: Vec<&'static tsrs_compiler::Program>| {
+            let _ = self.with_recover(req_msg, || {
+                match tsrs_ls::provide_workspace_symbols(ctx, &programs, &snapshot.converters(), snapshot.user_preferences(), &params.query) {
+                    Ok(r) => resp = r,
+                    Err(e) => ls_err = Some(e),
+                }
+                Ok(())
+            });
+        };
+        if params.text_document.is_some() && self.session().config().workspace_symbols_scope == lsutil::WorkspaceSymbolsScope::CurrentProject {
+            let uri = params.text_document.as_ref().unwrap().uri.clone();
+            self.session().with_snapshot_for_document(ctx, &uri, |snapshot| {
+                // Go maps `ls.Project.GetProgram` (a nil program is dereferenced by ProvideWorkspaceSymbols).
+                let programs = snapshot.get_language_service_projects_containing_file(&uri).iter().map(|p| p.get_program().unwrap()).collect();
+                provide_symbols(snapshot, programs);
+            });
+        } else {
+            self.session().with_snapshot_loading_project_tree(ctx, None, |snapshot| {
+                let programs = snapshot.project_collection.language_service_projects().iter().map(|p| p.get_program().unwrap()).collect();
+                provide_symbols(snapshot, programs);
+            });
+        }
+        match ls_err {
+            Some(e) => Err(e),
+            None => Ok(resp),
+        }
     }
 
     // server.go:2184
     fn handle_document_symbol(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::DocumentSymbolParams) -> Result<lsproto::DocumentSymbolResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentDocumentSymbol))
+        ls.provide_document_symbols(ctx, &params.text_document.uri)
     }
 
     // server.go:2188
@@ -1971,7 +1998,7 @@ impl Server {
 
     // server.go:2196
     fn handle_selection_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::SelectionRangeParams) -> Result<lsproto::SelectionRangeResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentSelectionRange))
+        ls.provide_selection_ranges(ctx, &params)
     }
 
     // server.go:2200
@@ -1981,17 +2008,44 @@ impl Server {
 
     // server.go:2204
     fn handle_inlay_hint(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: lsproto::InlayHintParams) -> Result<lsproto::InlayHintResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentInlayHint))
+        language_service.provide_inlay_hint(ctx, &params)
     }
 
     // server.go:2212
     fn handle_code_lens(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::CodeLensParams) -> Result<lsproto::CodeLensResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentCodeLens))
+        ls.provide_code_lenses(ctx, &params.text_document.uri)
     }
 
     // server.go:2216
     fn handle_code_lens_resolve(self: &Arc<Self>, ctx: &Context, code_lens: lsproto::CodeLens, req_msg: &RequestMessage) -> Result<lsproto::CodeLensResolveResponse, Error> {
-        Err(not_yet_ported(Method::CodeLensResolve))
+        let uri = code_lens.data.as_ref().unwrap().uri.clone();
+        let result = self.get_language_service_and_cross_project_orchestrator(ctx, &uri, req_msg);
+        if let Some(err) = ctx.err() {
+            return Err(err.into());
+        }
+        let Ok((default_ls, orchestrator)) = result else {
+            // This can happen if a codeLens/resolve request comes in after a program change.
+            // While it's true that handlers should latch onto a specific snapshot
+            // while processing requests, we just set `Data.Uri` based on
+            // some older snapshot's contents. The content could have been modified,
+            // or the file itself could have been removed from the session entirely.
+            // Note this won't bail out on every change, but will prevent crashing
+            // based on non-existent files and line maps from shortened files.
+            return Err(ErrorCode::ContentModified.into());
+        };
+        // Go: `defer s.recover(reqMsg)`. After a recovered panic Go returns a nil *CodeLens; the Rust response type
+        // is not nullable, so the (already answered) request gets an empty code lens.
+        let mut resolved: Result<lsproto::CodeLens, Error> = Ok(lsproto::CodeLens::default());
+        let _ = self.with_recover(req_msg, || {
+            resolved = default_ls.resolve_code_lens(
+                ctx,
+                code_lens,
+                self.initialization_options().code_lens_show_locations_command_name.as_ref(),
+                Some(&*orchestrator),
+            );
+            Ok(())
+        });
+        resolved
     }
 
     // server.go:2240
@@ -2028,7 +2082,7 @@ impl Server {
 
     // server.go:2272
     fn handle_semantic_tokens_full(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::SemanticTokensParams) -> Result<lsproto::SemanticTokensResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentSemanticTokensFull))
+        ls.provide_semantic_tokens(ctx, &params.text_document.uri)
     }
 
     // server.go:2276
@@ -2038,7 +2092,7 @@ impl Server {
         ls: &Arc<LanguageService>,
         params: lsproto::SemanticTokensRangeParams,
     ) -> Result<lsproto::SemanticTokensRangeResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentSemanticTokensRange))
+        ls.provide_semantic_tokens_range(ctx, &params.text_document.uri, params.range)
     }
 
     // server.go:2280 (the `api` package is out of scope)

@@ -75,7 +75,7 @@ pub fn get_line_start_position_for_position(position: i32, source_file: P<Source
 }
 
 // util.go:86
-/**
+/*
  * Validating `expectedTokenKind` ensures the token was typed in the context we expect (eg: not a comment).
  * @param expectedTokenKind The kind of the last token constituting the desired parent node.
  */
@@ -88,7 +88,7 @@ pub(crate) fn find_immediately_preceding_token_of_kind(end: i32, expected_token_
 }
 
 // util.go:107
-/**
+/*
  * Finds the highest node enclosing `node` at the same list level as `node`
  * and whose end does not exceed `node.end`.
  *

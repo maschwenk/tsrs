@@ -2052,7 +2052,69 @@ impl FourslashTest {
 
     // fourslash.go:2631
     pub fn verify_baseline_code_lens(&mut self, t: &T, preferences: Option<lsutil::UserPreferences>) {
-        Self::server_unavailable(t, "feature not ported: code lens (VerifyBaselineCodeLens)")
+        let reset = preferences.map(|preferences| self.configure_with_reset(t, preferences));
+
+        let mut found_at_least_one_code_lens = false;
+        let mut open_files: Vec<String> = self.open_files.keys().cloned().collect();
+        open_files.sort();
+        for open_file in &open_files {
+            let params = lsproto::CodeLensParams {
+                text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(open_file) },
+                ..Default::default()
+            };
+
+            let unresolved_code_lens_list = self.send_request(t, lsproto::TEXT_DOCUMENT_CODE_LENS_INFO, params);
+            let Some(code_lenses) = unresolved_code_lens_list.code_lenses.filter(|c| !c.is_empty()) else {
+                continue;
+            };
+            found_at_least_one_code_lens = true;
+
+            for unresolved_code_lens in code_lenses {
+                let resolved_code_lens = self.send_request(t, lsproto::CODE_LENS_RESOLVE_INFO, unresolved_code_lens);
+                let Some(command) = &resolved_code_lens.command else {
+                    t.fatal("Expected resolved code lens to have a command.");
+                };
+                if !command.command.is_empty() {
+                    assert_deep_equal(t, &command.command.as_str(), &SHOW_CODE_LENS_LOCATIONS_COMMAND_NAME, "");
+                }
+
+                let mut locations: Vec<lsproto::Location> = Vec::new();
+                // commandArgs: (DocumentUri, Position, Location[])
+                if let Some(command_args) = &command.arguments {
+                    match <Vec<lsproto::Location> as Json>::from_json(&command_args[2]) {
+                        Ok(locs) => locations = locs,
+                        Err(err) => t.fatal(&format!("failed to re-encode code lens locations: {err}")),
+                    }
+                }
+
+                let ranges = self.converters.converters.from_lsp_range(self.get_script_info(open_file), resolved_code_lens.range, Feature::All);
+                if ranges.len() != 1 {
+                    continue;
+                }
+                let code_lens_range = ranges[0].span;
+                let baseline = self.get_baseline_for_locations_with_file_contents(
+                    &locations,
+                    BaselineFourslashLocationsOptions {
+                        marker: Some(MarkerOrRange::RangeMarker(Arc::new(RangeMarker {
+                            file_name: open_file.clone(),
+                            ls_range: resolved_code_lens.range,
+                            range: code_lens_range,
+                            marker: None,
+                        }))),
+                        marker_name: format!("/*CODELENS: {}*/", command.title),
+                        ..Default::default()
+                    },
+                );
+                self.add_result_to_baseline(t, CODE_LENSES_CMD, &baseline);
+            }
+        }
+
+        if !found_at_least_one_code_lens {
+            t.fatal("Expected at least one code lens in any open file, but got none.");
+        }
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
     }
 
     // fourslash.go:2691
@@ -2122,17 +2184,104 @@ impl FourslashTest {
 
     // fourslash.go:2825
     pub fn verify_baseline_workspace_symbol(&mut self, t: &T, query: &str) {
-        Self::server_unavailable(t, "feature not ported: workspace symbols (VerifyBaselineWorkspaceSymbol)")
+        let result = self.send_request(t, lsproto::WORKSPACE_SYMBOL_INFO, lsproto::WorkspaceSymbolParams { query: query.to_string(), ..Default::default() });
+
+        let mut location_to_text: FxHashMap<DocumentSpan, lsproto::SymbolInformation> = FxHashMap::default();
+        let mut grouped_ranges: MultiMap<lsproto::DocumentUri, DocumentSpan> = MultiMap::default();
+        let symbol_informations = result.symbol_informations.unwrap_or_default();
+        for symbol in symbol_informations {
+            let uri = symbol.location.uri.clone();
+            let span = location_to_span(&symbol.location);
+            grouped_ranges.add(uri, span.clone());
+            location_to_text.insert(span, symbol);
+        }
+
+        let baseline = self.get_baseline_for_grouped_spans_with_file_contents(
+            &grouped_ranges,
+            &BaselineFourslashLocationsOptions {
+                get_location_data: Some(Box::new(move |span: &DocumentSpan| symbol_information_to_data(&location_to_text[span]))),
+                ..Default::default()
+            },
+        );
+        self.add_result_to_baseline(t, BaselineCommand("workspaceSymbol"), &baseline);
     }
 
     // fourslash.go:2850
     pub fn verify_outlining_spans(&mut self, t: &T, folding_range_kind: &[lsproto::FoldingRangeKind]) {
-        Self::server_unavailable(t, "feature not ported: folding ranges (VerifyOutliningSpans)")
+        let params = lsproto::FoldingRangeParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_FOLDING_RANGE_INFO, params);
+        let Some(folding_ranges) = result.folding_ranges else {
+            t.fatal("Nil response received for folding range request");
+        };
+
+        // Extract actual folding ranges from the result and filter by kind if specified
+        let mut actual_ranges = folding_ranges;
+        if let Some(&target_kind) = folding_range_kind.first() {
+            actual_ranges.retain(|r| r.kind == Some(target_kind));
+        }
+
+        if actual_ranges.len() != self.test_data.ranges.len() {
+            t.fatal(&format!(
+                "verifyOutliningSpans failed - expected total spans to be {}, but was {}",
+                self.test_data.ranges.len(),
+                actual_ranges.len()
+            ));
+        }
+
+        // Go sorts the test data's range slice in place (f.Ranges() returns it).
+        tsrs_core::goslices::sort_func(&mut self.test_data.ranges, |a, b| lsproto::compare_positions(a.ls_pos(), b.ls_pos()));
+
+        for (i, expected_range) in self.test_data.ranges.iter().enumerate() {
+            let actual_range = &actual_ranges[i];
+            let start_pos = lsproto::Position { line: actual_range.start_line, character: actual_range.start_character.unwrap() };
+            let end_pos = lsproto::Position { line: actual_range.end_line, character: actual_range.end_character.unwrap() };
+
+            if lsproto::compare_positions(start_pos, expected_range.ls_range.start) != 0 || lsproto::compare_positions(end_pos, expected_range.ls_range.end) != 0 {
+                t.fatal(&format!(
+                    "verifyOutliningSpans failed - span {} has invalid positions:\n  actual: start ({},{}), end ({},{})\n  expected: start ({},{}), end ({},{})",
+                    i + 1,
+                    actual_range.start_line,
+                    actual_range.start_character.unwrap(),
+                    actual_range.end_line,
+                    actual_range.end_character.unwrap(),
+                    expected_range.ls_range.start.line,
+                    expected_range.ls_range.start.character,
+                    expected_range.ls_range.end.line,
+                    expected_range.ls_range.end.character
+                ));
+            }
+        }
     }
 
+    // VerifyFoldingRangeLines verifies folding ranges by comparing only start and end lines.
+    // This is useful for testing with lineFoldingOnly where character positions are ignored.
     // fourslash.go:2907
     pub fn verify_folding_range_lines(&mut self, t: &T, expected: &[FoldingRangeLineExpected]) {
-        Self::server_unavailable(t, "feature not ported: folding ranges (VerifyFoldingRangeLines)")
+        let params = lsproto::FoldingRangeParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_FOLDING_RANGE_INFO, params);
+        let Some(actual_ranges) = result.folding_ranges else {
+            t.fatal("Nil response received for folding range request");
+        };
+
+        if actual_ranges.len() != expected.len() {
+            t.fatal(&format!("verifyFoldingRangeLines failed - expected {} ranges, got {}", expected.len(), actual_ranges.len()));
+        }
+
+        for (i, exp) in expected.iter().enumerate() {
+            let got = &actual_ranges[i];
+            if got.start_line != exp.start_line || got.end_line != exp.end_line {
+                t.error(&format!(
+                    "verifyFoldingRangeLines failed - range {}: expected (startLine={}, endLine={}), got (startLine={}, endLine={})",
+                    i, exp.start_line, exp.end_line, got.start_line, got.end_line
+                ));
+            }
+        }
     }
 
     // fourslash.go:2932
@@ -2408,7 +2557,124 @@ impl FourslashTest {
 
     // fourslash.go:3283
     pub fn verify_baseline_selection_ranges(&mut self, t: &T) {
-        Self::server_unavailable(t, "feature not ported: selection ranges (VerifyBaselineSelectionRanges)")
+        let markers = self.markers();
+        let mut result = String::new();
+        let new_line = "\n";
+
+        for (i, marker) in markers.iter().enumerate() {
+            if i > 0 {
+                result.push_str(new_line);
+                result.push_str(&"=".repeat(80));
+                result.push_str(new_line);
+                result.push_str(new_line);
+            }
+
+            let script = self.get_script_info(&marker.file_name());
+            let file_content = script.content.clone();
+
+            // Add the marker position indicator
+            let marker_pos = marker.position as usize;
+            let baseline_content = format!("{}/**/{}{}", &file_content[..marker_pos], &file_content[marker_pos..], new_line);
+            result.push_str(&baseline_content);
+
+            // Get selection ranges at this marker
+            let params = lsproto::SelectionRangeParams {
+                text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&marker.file_name()) },
+                positions: vec![marker.ls_position],
+                ..Default::default()
+            };
+
+            let selection_range_result = self.send_request(t, lsproto::TEXT_DOCUMENT_SELECTION_RANGE_INFO, params);
+
+            let selection_ranges = selection_range_result.selection_ranges.unwrap_or_default();
+            if selection_ranges.is_empty() {
+                result.push_str("No selection ranges available\n");
+                continue;
+            }
+
+            let mut selection_range = Some(&selection_ranges[0]);
+
+            // Add blank line after source code section
+            result.push_str(new_line);
+
+            // Walk through the selection range chain
+            while let Some(sr) = selection_range {
+                let start = self.converters.line_and_character_to_position(script.clone(), sr.range.start) as usize;
+                let end = self.converters.line_and_character_to_position(script.clone(), sr.range.end) as usize;
+
+                // Create a masked version of the file showing only this range
+                // (Go compares rune indices with the byte offsets above.)
+                let masked: String = file_content
+                    .chars()
+                    .enumerate()
+                    .map(|(i, ch)| {
+                        if i >= start && i < end {
+                            // Keep characters in the selection range
+                            if ch == ' ' {
+                                '•'
+                            } else {
+                                ch
+                            }
+                        } else if ch == '\n' || ch == '\r' {
+                            // Replace characters outside the range
+                            ch
+                        } else {
+                            ' '
+                        }
+                    })
+                    .collect();
+
+                let mut masked_str = masked;
+
+                // Add line break arrows
+                masked_str = masked_str.replace('\n', "↲\n");
+                masked_str = masked_str.replace('\r', "↲\r");
+
+                // Remove blank lines
+                let mut non_blank_lines: Vec<&str> = Vec::new();
+                for line in masked_str.split('\n') {
+                    let trimmed = line.trim_matches(go_is_space);
+                    if !trimmed.is_empty() && trimmed != "↲" {
+                        non_blank_lines.push(line);
+                    }
+                }
+                masked_str = non_blank_lines.join("\n");
+
+                // Find leading and trailing width of non-whitespace characters
+                let masked_runes: Vec<char> = masked_str.chars().collect();
+                let is_real_character = |ch: char| ch != '•' && ch != '↲' && !stringutil::is_white_space_like(ch);
+
+                let leading_width = masked_runes.iter().position(|&ch| is_real_character(ch));
+                let trailing_width = masked_runes.iter().rposition(|&ch| is_real_character(ch));
+
+                if let (Some(leading_width), Some(trailing_width)) = (leading_width, trailing_width) {
+                    if leading_width <= trailing_width {
+                        // Clean up middle section
+                        let prefix: String = masked_runes[..leading_width].iter().collect();
+                        let middle: String = masked_runes[leading_width..trailing_width + 1].iter().collect();
+                        let suffix: String = masked_runes[trailing_width + 1..].iter().collect();
+
+                        let middle = middle.replace('•', " ").replace('↲', "");
+
+                        masked_str = prefix + &middle + &suffix;
+                    }
+                }
+
+                // Add blank line before multi-line ranges
+                if masked_str.contains('\n') {
+                    result.push_str(new_line);
+                }
+
+                result.push_str(&masked_str);
+                if !masked_str.ends_with('\n') {
+                    result.push_str(new_line);
+                }
+
+                selection_range = sr.parent.as_deref();
+            }
+        }
+        let result = result.strip_suffix('\n').unwrap_or(&result).to_string();
+        self.add_result_to_baseline(t, SMART_SELECTION_CMD, &result);
     }
 
     // fourslash.go:3421
@@ -3431,7 +3697,61 @@ impl FourslashTest {
 
     // fourslash.go:5267
     pub fn verify_baseline_inlay_hints(&mut self, t: &T, span: Option<lsproto::Range>, test_preferences: Option<lsutil::UserPreferences>) {
-        Self::server_unavailable(t, "feature not ported: inlay hints (VerifyBaselineInlayHints)")
+        let file_name = self.active_filename.clone();
+        let lsp_range = match span {
+            None => {
+                let script = self.get_script_info(&file_name);
+                let (r, _) = self.converters.converters.to_lsp_range(&script, TextRange::new(0, script.content.len() as i32));
+                r
+            }
+            Some(span) => span,
+        };
+
+        let params = lsproto::InlayHintParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&file_name) },
+            range: lsp_range,
+            ..Default::default()
+        };
+
+        let preferences = test_preferences.unwrap_or_else(lsutil::new_default_user_preferences);
+        let reset = self.configure_with_reset(t, preferences);
+
+        let prefix = format!("At position (Ln {}, Col {}): ", lsp_range.start.line, lsp_range.start.character);
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_INLAY_HINT_INFO, params);
+        let content = self.get_script_info(&file_name).content;
+        let file_lines: Vec<&str> = content.split('\n').collect();
+        let mut annotations: Vec<String> = Vec::new();
+        if let Some(mut inlay_hints) = result.inlay_hints {
+            tsrs_core::goslices::sort_func(&mut inlay_hints, |a, b| lsproto::compare_positions(a.position, b.position));
+            for mut hint in inlay_hints {
+                if let Some(parts) = &mut hint.label.inlay_hint_label_parts {
+                    for part in parts {
+                        // Avoid diffs caused by lib file updates.
+                        if let Some(location) = &mut part.location {
+                            if is_lib_file(&location.uri.file_name()) {
+                                location.range.start = lsproto::Position { line: 0, character: 0 };
+                                location.range.end = lsproto::Position { line: 0, character: 0 };
+                            }
+                        }
+                    }
+                }
+                let underline = format!("{}^", " ".repeat(hint.position.character as usize));
+                let hint_json = match tsrs_core::json::marshal_indent(&hint.to_json(), "", "  ") {
+                    Ok(j) => j,
+                    Err(err) => t.fatal(&format!("{prefix}Failed to stringify inlay hint for baseline: {err}")),
+                };
+                let mut annotation = file_lines[hint.position.line as usize].to_string();
+                annotation += &format!("\n{underline}\n{hint_json}");
+                annotations.push(annotation);
+            }
+        }
+
+        if annotations.is_empty() {
+            annotations.push("=== No inlay hints ===".to_string());
+        }
+
+        self.add_result_to_baseline(t, INLAY_HINTS_CMD, &annotations.join("\n\n"));
+        reset(self, t);
     }
 
     // fourslash.go:5328
@@ -3600,12 +3920,73 @@ impl FourslashTest {
 
     // fourslash.go:5726
     pub fn verify_workspace_symbol(&mut self, t: &T, cases: &[VerifyWorkspaceSymbolCase]) {
-        Self::server_unavailable(t, "feature not ported: workspace symbols (VerifyWorkspaceSymbol)")
+        let original_preferences = self.user_preferences.clone();
+        for test_case in cases {
+            let preferences = test_case.preferences.clone().unwrap_or_else(lsutil::new_default_user_preferences);
+            self.configure(t, preferences);
+            let result = self.send_request(
+                t,
+                lsproto::WORKSPACE_SYMBOL_INFO,
+                lsproto::WorkspaceSymbolParams {
+                    query: test_case.pattern.clone(),
+                    text_document: Some(lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) }),
+                    ..Default::default()
+                },
+            );
+            let Some(symbol_informations) = result.symbol_informations else {
+                t.fatal("Expected non-nil symbol information array from workspace symbol request");
+            };
+            if let Some(includes) = &test_case.includes {
+                if test_case.exact.is_some() {
+                    t.fatal("Test case cannot have both 'Includes' and 'Exact' fields set");
+                }
+                verify_includes_symbols(t, &symbol_informations, includes, &format!("Workspace symbols mismatch with pattern '{}'", test_case.pattern));
+            } else {
+                let Some(exact) = &test_case.exact else {
+                    t.fatal("Test case must have either 'Includes' or 'Exact' field set");
+                };
+                verify_exact_symbols(t, &symbol_informations, exact, &format!("Workspace symbols mismatch with pattern '{}'", test_case.pattern));
+            }
+        }
+        self.configure(t, original_preferences);
     }
 
     // fourslash.go:5796
     pub fn verify_baseline_document_symbol(&mut self, t: &T) {
-        Self::server_unavailable(t, "feature not ported: document symbols (VerifyBaselineDocumentSymbol)")
+        let params = lsproto::DocumentSymbolParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_DOCUMENT_SYMBOL_INFO, params);
+        let uri = lsconv::file_name_to_document_uri(&self.active_filename);
+        // Go collects into a map (random iteration order); the baseline orders spans by position.
+        let mut symbol_by_span: OrderedMap<DocumentSpanKey, lsproto::DocumentSymbol> = OrderedMap::default();
+        if let Some(document_symbols) = &result.document_symbols {
+            for symbol in document_symbols {
+                collect_document_symbol_spans(&uri, symbol, &mut symbol_by_span);
+            }
+        }
+        let mut spans = Vec::with_capacity(symbol_by_span.len());
+        for (key, symbol) in symbol_by_span.iter() {
+            spans.push(DocumentSpan { uri: key.uri.clone(), text_span: key.text_span, context_span: Some(symbol.range) });
+        }
+        let baseline = self.get_baseline_for_spans_with_file_contents(
+            &spans,
+            BaselineFourslashLocationsOptions {
+                get_location_data: Some(Box::new(move |span: &DocumentSpan| {
+                    let symbol = &symbol_by_span[&DocumentSpanKey { uri: span.uri.clone(), text_span: span.text_span, context_span: span.context_span.unwrap() }];
+                    format!("{{| name: {}, kind: {} |}}", symbol.name, symbol.kind.string())
+                })),
+                ..Default::default()
+            },
+        );
+        self.add_result_to_baseline(t, DOCUMENT_SYMBOLS_CMD, &baseline);
+
+        let mut details_builder = String::new();
+        if let Some(document_symbols) = &result.document_symbols {
+            write_document_symbol_details(document_symbols, 0, &mut details_builder);
+        }
+        self.write_to_baseline(DOCUMENT_SYMBOLS_CMD, &format!("\n\n// === Details ===\n{details_builder}"));
     }
 
     // fourslash.go:5871
@@ -4586,6 +4967,74 @@ fn compare_related_diagnostics(d1: &[FourslashDiagnostic], d2: &[FourslashDiagno
         }
     }
     0
+}
+
+// fourslash.go:5757
+fn verify_exact_symbols(t: &T, actual: &[lsproto::SymbolInformation], expected: &[lsproto::SymbolInformation], prefix: &str) {
+    if actual.len() != expected.len() {
+        t.fatal(&format!("{}: Expected {} symbols, but got {}:\n{:?}\n{:?}", prefix, expected.len(), actual.len(), actual, expected));
+    }
+    for i in 0..actual.len() {
+        assert_deep_equal(t, &actual[i], &expected[i], prefix);
+    }
+}
+
+// fourslash.go:5771
+fn verify_includes_symbols(t: &T, actual: &[lsproto::SymbolInformation], includes: &[lsproto::SymbolInformation], prefix: &str) {
+    let mut name_and_loc_to_actual_symbol: FxHashMap<(String, lsproto::Location), &lsproto::SymbolInformation> = FxHashMap::default();
+    for sym in actual {
+        name_and_loc_to_actual_symbol.insert((sym.name.clone(), sym.location.clone()), sym);
+    }
+
+    for sym in includes {
+        let Some(actual_sym) = name_and_loc_to_actual_symbol.get(&(sym.name.clone(), sym.location.clone())) else {
+            t.fatal(&format!("{}: Expected symbol '{}' at location '{:?}' not found", prefix, sym.name, sym.location));
+        };
+        assert_deep_equal(t, *actual_sym, sym, &format!("{}: Symbol '{}' at location '{:?}' mismatch", prefix, sym.name, sym.location));
+    }
+}
+
+// fourslash.go:5830
+fn write_document_symbol_details(symbols: &[lsproto::DocumentSymbol], indent: usize, builder: &mut String) {
+    for symbol in symbols {
+        builder.push_str(&format!("{}({}) {}\n", "  ".repeat(indent), symbol.kind.string(), symbol.name));
+        if let Some(children) = &symbol.children {
+            write_document_symbol_details(children, indent + 1, builder);
+        }
+    }
+}
+
+// fourslash.go:5839
+fn collect_document_symbol_spans(uri: &lsproto::DocumentUri, symbol: &lsproto::DocumentSymbol, symbol_by_span: &mut OrderedMap<DocumentSpanKey, lsproto::DocumentSymbol>) {
+    // Deduplicate by value rather than by the documentSpan key, which holds a pointer to
+    // the symbol's Range. The same logical symbol can be reached more than once
+    // (e.g. a merged declaration), and depending on transport those occurrences may
+    // be the same object (shared *Range) or independent copies (distinct *Range
+    // after a JSON round-trip). A value-based key collapses them consistently.
+    let key = DocumentSpanKey { uri: uri.clone(), text_span: symbol.selection_range, context_span: symbol.range };
+    if !symbol_by_span.contains_key(&key) {
+        symbol_by_span.insert(key, symbol.clone());
+    }
+    if let Some(children) = &symbol.children {
+        for child in children {
+            collect_document_symbol_spans(uri, child, symbol_by_span);
+        }
+    }
+}
+
+// documentSpanKey is a value-comparable variant of documentSpan used to deduplicate
+// document symbols regardless of pointer identity.
+// fourslash.go:5863
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct DocumentSpanKey {
+    uri: lsproto::DocumentUri,
+    text_span: lsproto::Range,
+    context_span: lsproto::Range,
+}
+
+// Go unicode.IsSpace (strings.TrimSpace).
+fn go_is_space(r: char) -> bool {
+    matches!(r, '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{85}' | '\u{A0}') || (!r.is_ascii() && r.is_whitespace())
 }
 
 // fourslash.go:3450

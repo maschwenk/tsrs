@@ -149,7 +149,7 @@ test's `// @option` lines via `harnessutil.SetOptionsFromTestConfig`). Methods f
 not ported yet fail with `feature not ported: <feature> (<Method>)`. The test-data parser is a full port (checked
 against Go's `ParseTestData`, `tools/oracle/fourslash-parser`). Run with
 `tsrs-fourslash run [--filter <regex>] [--include-skipped] [-j N] [-v]` (results in
-`target/fourslash-results/{pass,fail,skip}.txt`, baseline actuals in `target/fourslash-results/local/`). Tests run
+`target/fourslash-results/{pass,fail,skip}.txt`, full failure messages in `failures/<name>.txt`, baseline actuals in `target/fourslash-results/local/`). Tests run
 in worker processes (`tsrs-fourslash worker`, replaced after a crash, a 120 s timeout or 200 tests): the server ends
 the process on an unrecovered panic in one of its threads, like a Go program, and programs are never freed. Mapping
 rules and deviations: notes/lsp-fsgen.md, notes/lsp-fswire.md.
@@ -159,6 +159,9 @@ rules and deviations: notes/lsp-fsgen.md, notes/lsp-fswire.md.
 | 2026-10-01 (no server yet) | 4,559 | 0 | 4,173 | 386 |
 | 2026-10-02 (in-process server; hover, definition, diagnostics, formatting, edits) | 4,546 | 1,172 | 2,957 | 417 |
 | 2026-10-02 (+ refs wave; completions, signature help, linked editing, closing tags; notes/lsp-compl.md) | 4,546 | 3,037 | 1,092 | 417 |
+| 2026-10-02 (+ fix1: compiler project references; notes/lsp-fix1.md) | 4,546 | 3,040 | 1,089 | 417 |
+| 2026-10-02 (+ document/workspace symbols, semantic tokens, folding, selection ranges, inlay hints, code lens; notes/lsp-misc.md) | 4,546 | 3,321 | 808 | 417 |
+| 2026-10-02 (merged: refs + compl + misc + fix1) | 4,546 | 3,325 | 804 | 417 |
 
 Skips: 386 known failing in Go (registry) + 31 `SkipUnsupportedCompilerOptions` (module UMD/System, moduleResolution
 node10/classic, `esModuleInterop`/`allowSyntheticDefaultImports` false, `baseUrl`, ES5 target, `alwaysStrict` false).
@@ -195,11 +198,26 @@ Passing tests per verify family (tests that call the method and pass / tests tha
 | VerifyNotQuickInfoExists | 6 / 9 |
 | VerifyBaselineVSHover | 5 / 5 |
 | Backspace / Paste / ReplaceLine | 4 / 18, 4 / 4, 2 / 11 |
+| VerifyBaselineDocumentSymbol | 83 / 85 |
+| VerifyBaselineInlayHints | 64 / 65 |
+| VerifySemanticTokens | 46 / 46 |
+| VerifyBaselineSelectionRanges | 36 / 37 |
+| VerifyOutliningSpans / VerifyFoldingRangeLines | 32 / 33, 2 / 6 |
+| VerifyWorkspaceSymbol / VerifyBaselineWorkspaceSymbol | 14 / 15, 0 / 1 |
+| VerifyBaselineCodeLens | 7 / 13 |
 
 (The "calling tests" that fail stop at a later unported feature, except the 3 divergences.) Divergences in ported
-features: `TestRewriteRelativeImportExtensionsProjectReferences{1,2,3}` (diagnostic baselines): tsrs_compiler does not
-redirect imports of a referenced project's sources to the project reference (TS6059 / TS6307 instead of Go's TS2878 /
-no error).
+features: `TestRewriteRelativeImportExtensionsProjectReferences{1,2,3}` (diagnostic baselines) were tsrs_compiler not
+resolving project references; fixed by porting them (fix1).
+
+After the completions wave (fix1, 2026-10-02): of the 1,089 failures, 153 do not stop at an unported feature, and
+none of them is a divergence in ported code: 152 expect auto-import data that the placeholder registry cannot
+produce (auto-import completion items, `AdditionalTextEdits` from the import adder in class member / override /
+exhaustive case snippets, `VerifyApplyCodeActionFromCompletion` import fixes, `BaselineAutoImportsCompletions`; in
+JS files a missing auto-import entry also lets the name-table entry of the same name through), and 1 reaches
+`workspace/willRenameFiles` from rename (`TestGetEditsForFileRename_cssImport4`). `TestCodeLensOnFunctionAcrossProjects1` (code lens, misc wave) had the same root cause and passes after the merge.
+Full failure messages: `target/fourslash-results/failures/<test>.txt`. The symbol / folding / selection / inlay hint /
+code lens failures not counted as passing are content-mapper, state-baseline or Go-skipped tests.
 
 ## Known gaps
 

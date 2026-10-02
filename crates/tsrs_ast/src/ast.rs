@@ -1569,6 +1569,9 @@ pub struct SourceFile {
 
     // Language service token cache (Go `tokenCacheMu`, `tokenCache`), see get_or_create_token
     token_cache: std::sync::Mutex<FxHashMap<TokenCacheKey, P<Node>>>,
+
+    // Go `declarationMapMu`, `declarationMap` (workspace symbols), see get_declaration_map
+    declaration_map: OnceLock<FxHashMap<String, Vec<P<Node>>>>,
 }
 
 impl NodeFactory {
@@ -1630,6 +1633,7 @@ impl NodeFactory {
             ecma_line_map: OnceLock::new(),
             position_map: OnceLock::new(),
             token_cache: std::sync::Mutex::new(FxHashMap::default()),
+            declaration_map: OnceLock::new(),
         });
         node.as_source_file().node.set(Some(node));
         node
@@ -2016,6 +2020,136 @@ impl SourceFile {
         token.set_parent(Some(parent));
         token_cache.insert(key, token);
         token
+    }
+}
+
+impl SourceFile {
+    // ast.go:2973
+    pub fn get_declaration_map(&self) -> &FxHashMap<String, Vec<P<Node>>> {
+        self.declaration_map.get_or_init(|| self.compute_declaration_map())
+    }
+
+    // ast.go:2982
+    fn compute_declaration_map(&self) -> FxHashMap<String, Vec<P<Node>>> {
+        let mut result: FxHashMap<String, Vec<P<Node>>> = FxHashMap::default();
+
+        fn add_declaration(result: &mut FxHashMap<String, Vec<P<Node>>>, declaration: P<Node>) {
+            let name = get_declaration_name(declaration);
+            if !name.is_empty() {
+                result.entry(name).or_default().push(declaration);
+            }
+        }
+
+        fn visit(result: &mut FxHashMap<String, Vec<P<Node>>>, node: P<Node>) -> bool {
+            match node.kind() {
+                Kind::FunctionDeclaration | Kind::FunctionExpression | Kind::MethodDeclaration | Kind::MethodSignature => {
+                    let declaration_name = get_declaration_name(node);
+                    if !declaration_name.is_empty() {
+                        let declarations = result.entry(declaration_name).or_default();
+                        let last_declaration = declarations.last().copied();
+                        // Check whether this declaration belongs to an "overload group".
+                        if let Some(last_declaration) = last_declaration.filter(|l| node.parent() == l.parent() && node.symbol() == l.symbol()) {
+                            // Overwrite the last declaration if it was an overload and this one is an implementation.
+                            if node.body().is_some() && last_declaration.body().is_none() {
+                                *declarations.last_mut().unwrap() = node;
+                            }
+                        } else {
+                            declarations.push(node);
+                        }
+                    }
+                    node.for_each_child(&mut |c| visit(result, c));
+                }
+                Kind::ClassDeclaration
+                | Kind::ClassExpression
+                | Kind::InterfaceDeclaration
+                | Kind::TypeAliasDeclaration
+                | Kind::EnumDeclaration
+                | Kind::ModuleDeclaration
+                | Kind::ImportEqualsDeclaration
+                | Kind::ImportClause
+                | Kind::NamespaceImport
+                | Kind::GetAccessor
+                | Kind::SetAccessor
+                | Kind::TypeLiteral => {
+                    add_declaration(result, node);
+                    node.for_each_child(&mut |c| visit(result, c));
+                }
+                Kind::ImportSpecifier | Kind::ExportSpecifier => {
+                    if node.property_name().is_some() {
+                        add_declaration(result, node);
+                    }
+                }
+                Kind::Parameter | Kind::VariableDeclaration | Kind::BindingElement => {
+                    // Only consider parameter properties
+                    if node.kind() == Kind::Parameter && !has_syntactic_modifier(node, ModifierFlags::ParameterPropertyModifier) {
+                        return false;
+                    }
+                    if let Some(name) = node.name() {
+                        if is_binding_pattern(name) {
+                            name.for_each_child(&mut |c| visit(result, c));
+                        } else {
+                            if let Some(initializer) = node.initializer() {
+                                visit(result, initializer);
+                            }
+                            add_declaration(result, node);
+                        }
+                    }
+                }
+                Kind::EnumMember | Kind::PropertyDeclaration | Kind::PropertySignature => {
+                    add_declaration(result, node);
+                }
+                Kind::ExportDeclaration => {
+                    // Handle named exports case e.g.:
+                    //    export {a, b as B} from "mod";
+                    if let Some(export_clause) = node.as_export_declaration().export_clause {
+                        if is_named_exports(export_clause) {
+                            for &element in export_clause.elements() {
+                                visit(result, element);
+                            }
+                        } else {
+                            visit(result, export_clause.name().unwrap());
+                        }
+                    }
+                }
+                Kind::ImportDeclaration => {
+                    if let Some(import_clause) = node.as_import_declaration().import_clause {
+                        // Handle default import case e.g.:
+                        //    import d from "mod";
+                        if let Some(name) = import_clause.name() {
+                            add_declaration(result, name);
+                        }
+                        // Handle named bindings in imports e.g.:
+                        //    import * as NS from "mod";
+                        //    import {a, b as B} from "mod";
+                        if let Some(named_bindings) = import_clause.as_import_clause().named_bindings {
+                            if named_bindings.kind() == Kind::NamespaceImport {
+                                add_declaration(result, named_bindings);
+                            } else {
+                                for &element in named_bindings.elements() {
+                                    visit(result, element);
+                                }
+                            }
+                        }
+                    }
+                }
+                Kind::BinaryExpression => {
+                    if matches!(
+                        get_assignment_declaration_kind(node),
+                        JSDeclarationKind::ExportsProperty | JSDeclarationKind::ThisProperty | JSDeclarationKind::Property
+                    ) {
+                        add_declaration(result, node);
+                    }
+                    node.for_each_child(&mut |c| visit(result, c));
+                }
+                _ => {
+                    node.for_each_child(&mut |c| visit(result, c));
+                }
+            }
+            false
+        }
+
+        self.as_node().for_each_child(&mut |c| visit(&mut result, c));
+        result
     }
 }
 

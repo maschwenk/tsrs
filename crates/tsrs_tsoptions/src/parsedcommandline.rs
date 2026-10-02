@@ -518,6 +518,17 @@ pub(crate) struct SourceAndOutputMaps {
     output_dts_to_project_reference: FxHashMap<Path, P<SourceOutputAndProjectReference>>,
 }
 
+// Go passes `*ParsedCommandLine` where module resolution takes a `module.ResolvedProjectReference`.
+impl tsrs_module::ResolvedProjectReference for ParsedCommandLine {
+    fn config_name(&self) -> &str {
+        ParsedCommandLine::config_name(self)
+    }
+
+    fn compiler_options(&self) -> Option<P<CompilerOptions>> {
+        ParsedCommandLine::compiler_options(self)
+    }
+}
+
 impl OutputPathsHost for ParsedCommandLine {
     fn common_source_directory(&self) -> String {
         ParsedCommandLine::common_source_directory(self)

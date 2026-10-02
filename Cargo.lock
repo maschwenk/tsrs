@@ -320,6 +320,7 @@ dependencies = [
  "tsrs_printer",
  "tsrs_pseudochecker",
  "tsrs_scanner",
+ "tsrs_tsoptions",
  "xxhash-rust",
 ]
 

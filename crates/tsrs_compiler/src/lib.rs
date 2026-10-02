@@ -15,7 +15,9 @@ mod includeprocessor;
 mod outputpaths;
 mod processing_diagnostic;
 mod program;
+mod projectreferencedtsfakinghost;
 mod projectreferencefilemapper;
+mod projectreferenceparser;
 #[cfg(all(test, feature = "checker"))]
 mod program_test;
 #[cfg(all(test, feature = "checker"))]

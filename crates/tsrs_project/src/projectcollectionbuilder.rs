@@ -819,7 +819,7 @@ impl ProjectCollectionBuilder {
                 }
                 Some(projectTreeWork::Child(program, child_config)) => {
                     if !project_tree_request.is_all_projects()
-                        && program.range_resolved_project_reference_in_child_config(child_config, |reference_path, _config, _, _| {
+                        && program.range_resolved_project_reference_in_child_config(Some(child_config), |reference_path, _config, _, _| {
                             !project_tree_request.is_project_referenced(reference_path)
                         })
                     {
@@ -871,6 +871,9 @@ impl ProjectCollectionBuilder {
 
         let children = program.get_resolved_project_references();
         for child_config in children {
+            let Some(child_config) = child_config else {
+                continue;
+            };
             wg.borrow_mut().push(projectTreeWork::Child(program, child_config));
         }
     }

@@ -11,7 +11,7 @@ use crate::astnav;
 use crate::lsutil::FormatCodeSettings;
 
 // span.go:20
-/** find node that fully contains given text range */
+/* find node that fully contains given text range */
 pub(crate) fn find_enclosing_node(r: TextRange, source_file: P<SourceFile>) -> P<Node> {
     fn find(n: P<Node>, r: TextRange, source_file: P<SourceFile>) -> P<Node> {
         let mut candidate: Option<P<Node>> = None;
@@ -35,7 +35,7 @@ pub(crate) fn find_enclosing_node(r: TextRange, source_file: P<SourceFile>) -> P
 }
 
 // span.go:51
-/**
+/*
  * Start of the original range might fall inside the comment - scanner will not yield appropriate results
  * This function will look for token that is located before the start of target range
  * and return its end as start position for the scanner.
@@ -713,7 +713,7 @@ impl FormatSpanWorker {
     }
 
     // span.go:593
-    /** Tries to compute the indentation for a list element.
+    /* Tries to compute the indentation for a list element.
     * If list element is not in range then
     * function will pick its actual indentation
     * so it can be pushed downstream as inherited indentation.
@@ -997,7 +997,7 @@ impl FormatSpanWorker {
     }
 
     // span.go:796
-    /**
+    /*
     * Trimming will be done for lines after the previous range.
     * Exclude comments as they had been previously processed.
      */
@@ -1058,7 +1058,7 @@ impl FormatSpanWorker {
     }
 
     // span.go:850
-    /**
+    /*
     * @param start The position of the first character in range
     * @param end The position of the last character in range
      */

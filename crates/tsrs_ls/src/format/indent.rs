@@ -538,7 +538,7 @@ pub fn find_first_non_whitespace_column(start_pos: i32, end_pos: i32, source_fil
 }
 
 // indent.go:477
-/**
+/*
 * Character is the actual index of the character since the beginning of the line.
 * Column - position of the character after expanding tabs to spaces.
 * "0\t2$"
@@ -699,7 +699,7 @@ fn is_control_flow_ending_statement(kind: Kind, parent_kind: Kind) -> bool {
 }
 
 // indent.go:637
-/**
+/*
 * True when the parent node should indent the given child by an explicit rule.
 * @param isNextChild If true, we are judging indent of a hypothetical child *after* this one, not the current child.
  */

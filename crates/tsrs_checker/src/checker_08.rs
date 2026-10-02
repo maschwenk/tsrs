@@ -319,7 +319,7 @@ impl Checker {
                             if own_out_dir.is_empty() {
                                 own_out_dir = own_root_dir.clone();
                             }
-                            let mut other_out_dir = redirect.compiler_options().out_dir.clone();
+                            let mut other_out_dir = redirect.compiler_options().unwrap().out_dir.clone();
                             if other_out_dir.is_empty() {
                                 other_out_dir = other_root_dir.clone();
                             }
