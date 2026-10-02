@@ -10,6 +10,7 @@ mod definition;
 mod diagnostics;
 mod displaypartswriter;
 mod findallreferences;
+mod folding;
 pub mod format;
 mod host;
 mod hover;

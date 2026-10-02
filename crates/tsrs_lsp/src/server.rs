@@ -1819,7 +1819,7 @@ impl Server {
 
     // server.go:2079
     fn handle_folding_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::FoldingRangeParams) -> Result<lsproto::FoldingRangeResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentFoldingRange))
+        ls.provide_folding_range(ctx, &params.text_document.uri)
     }
 
     // server.go:2083

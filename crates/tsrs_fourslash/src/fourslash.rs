@@ -1483,12 +1483,80 @@ impl FourslashTest {
 
     // fourslash.go:2850
     pub fn verify_outlining_spans(&mut self, t: &T, folding_range_kind: &[lsproto::FoldingRangeKind]) {
-        Self::server_unavailable(t, "feature not ported: folding ranges (VerifyOutliningSpans)")
+        let params = lsproto::FoldingRangeParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_FOLDING_RANGE_INFO, params);
+        let Some(folding_ranges) = result.folding_ranges else {
+            t.fatal("Nil response received for folding range request");
+        };
+
+        // Extract actual folding ranges from the result and filter by kind if specified
+        let mut actual_ranges = folding_ranges;
+        if let Some(&target_kind) = folding_range_kind.first() {
+            actual_ranges.retain(|r| r.kind == Some(target_kind));
+        }
+
+        if actual_ranges.len() != self.test_data.ranges.len() {
+            t.fatal(&format!(
+                "verifyOutliningSpans failed - expected total spans to be {}, but was {}",
+                self.test_data.ranges.len(),
+                actual_ranges.len()
+            ));
+        }
+
+        // Go sorts the test data's range slice in place (f.Ranges() returns it).
+        tsrs_core::goslices::sort_func(&mut self.test_data.ranges, |a, b| lsproto::compare_positions(a.ls_pos(), b.ls_pos()));
+
+        for (i, expected_range) in self.test_data.ranges.iter().enumerate() {
+            let actual_range = &actual_ranges[i];
+            let start_pos = lsproto::Position { line: actual_range.start_line, character: actual_range.start_character.unwrap() };
+            let end_pos = lsproto::Position { line: actual_range.end_line, character: actual_range.end_character.unwrap() };
+
+            if lsproto::compare_positions(start_pos, expected_range.ls_range.start) != 0 || lsproto::compare_positions(end_pos, expected_range.ls_range.end) != 0 {
+                t.fatal(&format!(
+                    "verifyOutliningSpans failed - span {} has invalid positions:\n  actual: start ({},{}), end ({},{})\n  expected: start ({},{}), end ({},{})",
+                    i + 1,
+                    actual_range.start_line,
+                    actual_range.start_character.unwrap(),
+                    actual_range.end_line,
+                    actual_range.end_character.unwrap(),
+                    expected_range.ls_range.start.line,
+                    expected_range.ls_range.start.character,
+                    expected_range.ls_range.end.line,
+                    expected_range.ls_range.end.character
+                ));
+            }
+        }
     }
 
+    // VerifyFoldingRangeLines verifies folding ranges by comparing only start and end lines.
+    // This is useful for testing with lineFoldingOnly where character positions are ignored.
     // fourslash.go:2907
     pub fn verify_folding_range_lines(&mut self, t: &T, expected: &[FoldingRangeLineExpected]) {
-        Self::server_unavailable(t, "feature not ported: folding ranges (VerifyFoldingRangeLines)")
+        let params = lsproto::FoldingRangeParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_FOLDING_RANGE_INFO, params);
+        let Some(actual_ranges) = result.folding_ranges else {
+            t.fatal("Nil response received for folding range request");
+        };
+
+        if actual_ranges.len() != expected.len() {
+            t.fatal(&format!("verifyFoldingRangeLines failed - expected {} ranges, got {}", expected.len(), actual_ranges.len()));
+        }
+
+        for (i, exp) in expected.iter().enumerate() {
+            let got = &actual_ranges[i];
+            if got.start_line != exp.start_line || got.end_line != exp.end_line {
+                t.error(&format!(
+                    "verifyFoldingRangeLines failed - range {}: expected (startLine={}, endLine={}), got (startLine={}, endLine={})",
+                    i, exp.start_line, exp.end_line, got.start_line, got.end_line
+                ));
+            }
+        }
     }
 
     // fourslash.go:2932
