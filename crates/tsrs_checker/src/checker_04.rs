@@ -1812,7 +1812,7 @@ impl Checker {
     // checker.go:8026
     pub(crate) fn check_super_expression(&mut self, node: P<Node>) -> P<Type> {
         let is_call_expression = is_call_expression(node.parent().unwrap()) && node.parent().unwrap().expression() == Some(node);
-        let immediate_container = get_super_container(node, true /*stopOnFunctions*/);
+        let immediate_container = crate::utilities::get_super_container(node, true /*stopOnFunctions*/);
         let mut container = immediate_container;
 
         // adjust the container reference in case if super is used inside arrow functions with arbitrarily deep nesting
@@ -1821,7 +1821,7 @@ impl Checker {
                 if !is_arrow_function(c) {
                     break;
                 }
-                container = get_super_container(c, true /*stopOnFunctions*/);
+                container = crate::utilities::get_super_container(c, true /*stopOnFunctions*/);
             }
         }
 
