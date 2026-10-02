@@ -405,6 +405,7 @@ dependencies = [
  "indexmap",
  "rustc-hash",
  "tsrs_ast",
+ "tsrs_astnav",
  "tsrs_binder",
  "tsrs_checker",
  "tsrs_compiler",

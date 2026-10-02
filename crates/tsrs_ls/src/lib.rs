@@ -5,3 +5,4 @@ pub mod format;
 pub mod lsconv;
 pub mod lsutil;
 pub mod sourcemap;
+pub mod spanmap;
