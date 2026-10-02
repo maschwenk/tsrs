@@ -479,7 +479,7 @@ impl Snapshot {
                     details += &format!(" Projects: {:?}", change.resource_request.projects.iter().map(|p| p.0.as_str()).collect::<Vec<_>>());
                 }
                 if let Some(project_tree) = &change.resource_request.project_tree {
-                    details += &format!(" ProjectTree: {:?}", project_tree.projects().iter().map(|p| p.0.as_str()).collect::<Vec<_>>());
+                    details += &format!(" ProjectTree: {:?}", project_tree.projects().iter().map(|p| p.as_str()).collect::<Vec<_>>());
                 }
                 details
             };

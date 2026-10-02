@@ -730,7 +730,7 @@ impl LanguageService {
         for &parameter in type_parameters_nodes {
             parameters.push(factory.new_parameter_declaration(
                 None, /*modifiers*/
-                parameter.as_parameter_declaration().dot_dot_dot_token,
+                parameter.as_parameter_declaration().dot_dot_dot_token(),
                 parameter.name().unwrap().clone_node(factory),
                 None, /*questionToken*/
                 None, /*typeNode*/

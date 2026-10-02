@@ -492,7 +492,7 @@ pub(crate) fn get_containing_node_array(node: P<Node>) -> Option<P<NodeList>> {
         Kind::CallExpression => {
             let p = parent.as_call_expression();
             if is_type_node(node) {
-                return p.type_arguments;
+                return p.type_arguments();
             } else if node != p.expression {
                 return Some(p.arguments);
             }
@@ -500,7 +500,7 @@ pub(crate) fn get_containing_node_array(node: P<Node>) -> Option<P<NodeList>> {
         Kind::NewExpression => {
             let p = parent.as_new_expression();
             if is_type_node(node) {
-                return p.type_arguments;
+                return p.type_arguments();
             } else if node != p.expression {
                 return p.arguments;
             }

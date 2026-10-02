@@ -312,8 +312,7 @@ struct SymbolMap {
 const _: () = assert!(std::mem::size_of::<SymbolMap>() == 24);
 
 /// `Vec<SymbolMapEntry>` with a `u32` length and capacity (16 bytes instead of 24; 3.5M symbol tables on the private monorepo).
-/// `push` doubles from 1 (`Vec` starts at 4: on the private monorepo 1.36M of 3.65M tables hold one entry and 0.93M
-/// two, so a 4-entry first block left 45 MB unused); `reserve_exact` adds exactly.
+/// Grows like `Vec` (`push` doubles from 4; `reserve_exact` adds exactly).
 struct EntryVec {
     ptr: std::ptr::NonNull<SymbolMapEntry>,
     len: u32,
@@ -366,7 +365,7 @@ impl EntryVec {
     #[inline]
     fn push(&mut self, e: SymbolMapEntry) {
         if self.len == self.cap {
-            self.set_capacity((self.cap as usize * 2).max(1));
+            self.set_capacity((self.cap as usize * 2).max(4));
         }
         // SAFETY: `len` < `cap`.
         unsafe { self.ptr.as_ptr().add(self.len as usize).write(e) };
@@ -600,6 +599,10 @@ impl SymbolMap {
             // Grow by half instead of doubling: most large tables stop growing soon after (member tables,
             // property caches), and the slack of a doubled Vec is the larger part of their memory.
             self.entries.reserve_exact(i / 2);
+        } else if i == self.entries.capacity() && i < 2 {
+            // Capacity 1, then 2, then doubling from 4 (`push`): over half of the binder's tables hold one or two
+            // symbols (locals of small functions, members of small object literals).
+            self.entries.reserve_exact(1);
         }
         self.entries.push(SymbolMapEntry::new(symbol, KeyPrint::of(name, hash_name(name))));
         if symbol.name() != name {

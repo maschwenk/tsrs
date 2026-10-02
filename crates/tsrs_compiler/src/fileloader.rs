@@ -282,9 +282,9 @@ impl fileLoader {
         root_task.lib_file = lib_file;
         root_task.include_reason = Some(include_reason);
         if let Some(diagnostic) = diagnostic {
-            root_task.normalized_file_path = abs_path;
+            root_task.normalized_file_path = abs_path.into();
             root_task.failed_lookup = true;
-            root_task.processing_diagnostics = vec![processingDiagnostic::explaining(includeExplainingDiagnostic {
+            root_task.data().processing_diagnostics = vec![processingDiagnostic::explaining(includeExplainingDiagnostic {
                 file: None,
                 diagnostic_reason: Some(include_reason),
                 message: diagnostic.message,
@@ -329,7 +329,7 @@ impl fileLoader {
             if resolved.is_resolved() {
                 let mut reason = FileIncludeReason::new(fileIncludeKind::AutomaticTypeDirectiveFile);
                 reason.automatic_type_directive =
-                    Some(Box::new(automaticTypeDirectiveFileData { type_reference: name.clone(), package_id: resolved.package_id }));
+                    Some(P::new(automaticTypeDirectiveFileData { type_reference: name.clone(), package_id: resolved.package_id }));
                 to_parse.push(resolvedRef {
                     file_name: resolved.resolved_file_name.to_string(),
                     increase_depth: resolved.is_external_library_import,
@@ -340,7 +340,7 @@ impl fileLoader {
             } else {
                 let mut reason = FileIncludeReason::new(fileIncludeKind::AutomaticTypeDirectiveFile);
                 reason.automatic_type_directive =
-                    Some(Box::new(automaticTypeDirectiveFileData { type_reference: name.clone(), package_id: Default::default() }));
+                    Some(P::new(automaticTypeDirectiveFileData { type_reference: name.clone(), package_id: Default::default() }));
                 p_diagnostics.push(processingDiagnostic::explaining(includeExplainingDiagnostic {
                     file: None,
                     diagnostic_reason: Some(P::new(reason)),
@@ -385,7 +385,7 @@ impl fileLoader {
 
     pub(crate) fn parse_options_for_task(&self, t: TaskId) -> SourceFileParseOptions {
         let task = &self.tasks[t];
-        parse_options_for(&*self.host, &self.project_references, &task.normalized_file_path, &task.metadata)
+        parse_options_for(&*self.host, &self.project_references, &task.normalized_file_path, &task.path, &task.metadata())
     }
 
     pub(crate) fn parse_source_file(&self, t: TaskId) -> Option<P<SourceFile>> {
@@ -438,9 +438,16 @@ pub(crate) fn parse_options_for(
     host: &dyn CompilerHost,
     project_references: &projectReferenceFileMapperBuilder,
     normalized_file_path: &str,
+    // The task's path when it is already known (`to_path(normalized_file_path)`, filesParser::start): sharing it
+    // keeps one copy of the string per file.
+    path: &Path,
     metadata: &SourceFileMetaData,
 ) -> SourceFileParseOptions {
-    let path = tspath::to_path(normalized_file_path, host.get_current_directory(), host.fs().use_case_sensitive_file_names());
+    let path = if path.is_empty() {
+        tspath::to_path(normalized_file_path, host.get_current_directory(), host.fs().use_case_sensitive_file_names())
+    } else {
+        path.clone()
+    };
     let options = project_references.get_compiler_options_for_file(normalized_file_path, &path);
     SourceFileParseOptions {
         file_name: normalized_file_path.to_string(),
@@ -593,7 +600,12 @@ impl fileLoader {
         prefetched: Option<(String, Option<sourceFileFromReferenceDiagnostic>)>,
     ) -> Result<resolvedRef, processingDiagnostic> {
         let include_reason =
-            FileIncludeReason::new_referenced(fileIncludeKind::ReferenceFile, self.to_path(containing_file), index as i32, None);
+            FileIncludeReason::new_referenced(
+            fileIncludeKind::ReferenceFile,
+            tsrs_core::alloc_str(self.to_path(containing_file).as_str()),
+            index as i32,
+            None,
+        );
 
         let (resolved_file_name, diagnostic) = match prefetched {
             Some(looked_up) => looked_up,
@@ -623,10 +635,10 @@ impl fileLoader {
         if type_reference_directives.is_empty() {
             return;
         }
-        let meta = self.tasks[t].metadata.clone();
-        let task_path = self.tasks[t].path.clone();
+        let meta = self.tasks[t].metadata();
+        let task_path = self.tasks[t].reason_path();
         let mut prefetched =
-            self.tasks[t].prefetched_resolutions.as_mut().map(|p| std::mem::take(&mut p.type_references).into_iter());
+            self.tasks[t].data().prefetched_resolutions.as_mut().map(|p| std::mem::take(&mut p.type_references).into_iter());
 
         let mut type_resolutions_in_file = ModeAwareCache::default();
         let mut type_resolutions_trace = Vec::new();
@@ -645,7 +657,7 @@ impl fileLoader {
             };
             type_resolutions_in_file.insert(ModeAwareCacheKey { name: alloc_str(&ref_.file_name), mode: resolution_mode }, resolved);
             let include_reason =
-                FileIncludeReason::new_referenced(fileIncludeKind::TypeReferenceDirective, task_path.clone(), index as i32, None);
+                FileIncludeReason::new_referenced(fileIncludeKind::TypeReferenceDirective, task_path, index as i32, None);
             type_resolutions_trace.extend(trace);
 
             if resolved.is_resolved() {
@@ -661,18 +673,18 @@ impl fileLoader {
                     None,
                 );
             } else {
-                self.tasks[t].processing_diagnostics.push(processingDiagnostic::unknown_reference(include_reason));
+                self.tasks[t].data().processing_diagnostics.push(processingDiagnostic::unknown_reference(include_reason));
             }
         }
 
-        self.tasks[t].type_resolutions_in_file = type_resolutions_in_file;
-        self.tasks[t].type_resolutions_trace = type_resolutions_trace;
+        let data = self.tasks[t].data();
+        data.type_resolutions_in_file = type_resolutions_in_file;
+        data.type_resolutions_trace = type_resolutions_trace;
     }
 
     pub(crate) fn resolve_imports_and_module_augmentations(&mut self, t: TaskId) {
         let file = self.tasks[t].file.unwrap();
-        let meta = self.tasks[t].metadata.clone();
-        let task_path = self.tasks[t].path.clone();
+        let meta = self.tasks[t].metadata();
 
         let imports = file.imports();
         let mut module_names: Vec<P<Node>> = Vec::with_capacity(imports.len() + file.module_augmentations.get().len() + 2);
@@ -687,7 +699,7 @@ impl fileLoader {
             if options_for_file.import_helpers.is_true() {
                 let specifier = self.create_synthetic_import(EXTERNAL_HELPERS_MODULE_NAME_TEXT, file);
                 module_names.push(specifier);
-                self.tasks[t].import_helpers_import_specifier = Some(specifier);
+                self.tasks[t].data().import_helpers_import_specifier = Some(specifier);
             }
         }
 
@@ -696,7 +708,7 @@ impl fileLoader {
             if !jsx_import.is_empty() {
                 let specifier = self.create_synthetic_import(&jsx_import, file);
                 module_names.push(specifier);
-                self.tasks[t].jsx_runtime_import_specifier =
+                self.tasks[t].data().jsx_runtime_import_specifier =
                     Some(P::new(jsxRuntimeImportSpecifier { module_reference: jsx_import.to_string(), specifier }));
             }
         }
@@ -718,7 +730,7 @@ impl fileLoader {
         if !module_names.is_empty() {
             let mut resolutions_in_file: ModeAwareCache<P<ResolvedModule>> = ModeAwareCache::default();
             let mut resolutions_trace = Vec::new();
-            let mut prefetched = self.tasks[t].prefetched_resolutions.take().map(|p| p.imports);
+            let mut prefetched = self.tasks[t].data().prefetched_resolutions.take().map(|p| p.imports);
 
             for (index, &entry) in module_names.iter().enumerate() {
                 let prefetched_resolution = match prefetched.as_mut() {
@@ -782,7 +794,7 @@ impl fileLoader {
                 if should_add_file {
                     let include_reason = FileIncludeReason::new_referenced(
                         fileIncludeKind::Import,
-                        task_path.clone(),
+                        self.tasks[t].reason_path(),
                         import_index,
                         if import_index < 0 { Some(entry) } else { None },
                     );
@@ -801,8 +813,9 @@ impl fileLoader {
                 }
             }
 
-            self.tasks[t].resolutions_in_file = resolutions_in_file;
-            self.tasks[t].resolutions_trace = resolutions_trace;
+            let data = self.tasks[t].data();
+            data.resolutions_in_file = resolutions_in_file;
+            data.resolutions_trace = resolutions_trace;
         }
     }
 
@@ -862,11 +875,21 @@ impl fileLoader {
         lib_file: Option<P<LibFile>>,
         normalized: Option<(String, Path)>,
     ) {
-        let (normalized_file_path, path) = match normalized {
+        let (normalized_file_path, mut path) = match normalized {
             Some((normalized_file_path, path)) => (normalized_file_path, path),
             None => (tspath::normalize_path(&ref_.file_name), Path::default()),
         };
-        let mut sub_task = parseTask::new(normalized_file_path);
+        // A reference to a file that already has a task shares that task's strings (one copy per file name, as Go's
+        // strings are shared); the values are equal either way.
+        let mut shared_name: Option<std::sync::Arc<str>> = None;
+        if let Some((known_path, &data)) = self.files_parser.task_data_by_path.get_key_value(&path) {
+            path = known_path.clone();
+            shared_name = self.files_parser.datas[data].tasks.get_key_value(&normalized_file_path).map(|(name, _)| name.clone());
+        }
+        let mut sub_task = match shared_name {
+            Some(name) => parseTask::new(name),
+            None => parseTask::new(normalized_file_path),
+        };
         sub_task.path = path;
         sub_task.lib_file = lib_file;
         sub_task.increase_depth = ref_.increase_depth;
@@ -1035,7 +1058,7 @@ pub(crate) fn get_mode_for_usage_location(
         let is_type_only = ast::is_exclusively_type_only_import_or_export(parent);
         if is_type_only {
             let attributes = match parent.kind() {
-                Kind::ImportDeclaration | Kind::JSImportDeclaration => parent.as_import_declaration().attributes,
+                Kind::ImportDeclaration | Kind::JSImportDeclaration => parent.as_import_declaration().attributes(),
                 Kind::ExportDeclaration => parent.as_export_declaration().attributes,
                 Kind::JSDocImportTag => parent.as_jsdoc_import_tag().attributes,
                 _ => None,

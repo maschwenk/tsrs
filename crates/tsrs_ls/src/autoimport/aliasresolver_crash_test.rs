@@ -58,14 +58,14 @@ fn test_alias_resolver_get_diagnostics_does_not_panic() {
     let host: &'static fakeCloneHost = Box::leak(Box::new(fakeCloneHost { fs: Box::new(fs) }));
 
     let source_file = tsrs_parser::parse_source_file(
-        SourceFileParseOptions { file_name: file_name.to_string(), path: Path(file_name.to_string()), ..Default::default() },
+        SourceFileParseOptions { file_name: file_name.to_string(), path: Path::new(file_name.to_string()), ..Default::default() },
         text,
         ScriptKind::TS,
     );
     tsrs_binder::bind_source_file(source_file);
 
     let resolver = Box::leak(Box::new(tsrs_module::new_resolver(ResolverOptions::new(host, P::from_static(&*EMPTY_COMPILER_OPTIONS)))));
-    let r = new_alias_resolver(vec![source_file], Default::default(), host, resolver, Arc::new(|f: &str| Path(f.to_string())), Box::new(|_, _| {}));
+    let r = new_alias_resolver(vec![source_file], Default::default(), host, resolver, Arc::new(|f: &str| Path::from(f)), Box::new(|_, _| {}));
     let r = Box::leak(Box::new(r));
 
     let mut ch = tsrs_checker::new_checker(r);

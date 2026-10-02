@@ -7,12 +7,12 @@ use std::fmt;
 use std::ops::Deref;
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-pub struct Path(pub String);
+pub struct Path(pub std::sync::Arc<str>);
 
 impl Path {
     #[inline]
     pub fn new(s: impl Into<String>) -> Path {
-        Path(s.into())
+        Path(std::sync::Arc::from(s.into()))
     }
 
     #[inline]
@@ -37,13 +37,13 @@ impl Borrow<str> for Path {
 
 impl From<String> for Path {
     fn from(s: String) -> Path {
-        Path(s)
+        Path(std::sync::Arc::from(s))
     }
 }
 
 impl From<&str> for Path {
     fn from(s: &str) -> Path {
-        Path(s.to_string())
+        Path(std::sync::Arc::from(s))
     }
 }
 
@@ -276,7 +276,7 @@ pub fn get_directory_path(path: &str) -> String {
 
 impl Path {
     pub fn get_directory_path(&self) -> Path {
-        Path(get_directory_path(&self.0))
+        Path::new(get_directory_path(&self.0))
     }
 }
 
@@ -732,13 +732,13 @@ pub fn to_path(file_name: &str, base_path: &str, use_case_sensitive_file_names: 
         if is_rooted_disk_path(file_name) { normalize_path(file_name) } else { get_normalized_absolute_path(file_name, base_path) };
     // get_canonical_file_name, reusing the owned string
     if use_case_sensitive_file_names {
-        return Path(non_canonicalized_path);
+        return Path::new(non_canonicalized_path);
     }
     if non_canonicalized_path.is_ascii() {
         non_canonicalized_path.make_ascii_lowercase();
-        return Path(non_canonicalized_path);
+        return Path::new(non_canonicalized_path);
     }
-    Path(to_file_name_lower_case(&non_canonicalized_path))
+    Path::new(to_file_name_lower_case(&non_canonicalized_path))
 }
 
 pub fn remove_trailing_directory_separator(path: &str) -> &str {
@@ -750,7 +750,7 @@ pub fn remove_trailing_directory_separator(path: &str) -> &str {
 
 impl Path {
     pub fn remove_trailing_directory_separator(&self) -> Path {
-        Path(remove_trailing_directory_separator(&self.0).to_string())
+        Path::from(remove_trailing_directory_separator(&self.0))
     }
 }
 
@@ -775,7 +775,7 @@ pub fn ensure_trailing_directory_separator(path: &str) -> String {
 
 impl Path {
     pub fn ensure_trailing_directory_separator(&self) -> Path {
-        Path(ensure_trailing_directory_separator(&self.0))
+        Path::new(ensure_trailing_directory_separator(&self.0))
     }
 }
 
@@ -1150,7 +1150,7 @@ pub fn for_each_ancestor_directory<T>(directory: &str, mut callback: impl FnMut(
 
 impl Path {
     pub fn for_each_ancestor_directory<T>(&self, mut callback: impl FnMut(&Path) -> Option<T>) -> Option<T> {
-        for_each_ancestor_directory(&self.0, |directory| callback(&Path(directory.to_string())))
+        for_each_ancestor_directory(&self.0, |directory| callback(&Path::from(directory)))
     }
 }
 

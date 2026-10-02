@@ -24,7 +24,7 @@ pub(crate) fn try_get_module_id_and_file_name_of_module_symbol(symbol: P<Symbol>
     let decl = ast::get_non_augmentation_declaration(symbol)?;
     if decl.kind() == Kind::SourceFile {
         let file = decl.as_source_file();
-        return Some((ModuleID(file.path().0.clone()), file.file_name().to_string()));
+        return Some((ModuleID(file.path().to_string()), file.file_name().to_string()));
     }
     if ast::is_module_with_string_literal_name(decl) {
         return Some((ModuleID(decl.name().unwrap().text().to_string()), String::new()));
@@ -42,7 +42,7 @@ pub(crate) fn get_module_id_and_file_name_of_module_symbol(symbol: P<Symbol>) ->
     };
     if decl.kind() == Kind::SourceFile {
         let file = decl.as_source_file();
-        return (ModuleID(file.path().0.clone()), file.file_name().to_string());
+        return (ModuleID(file.path().to_string()), file.file_name().to_string());
     }
     if ast::is_module_with_string_literal_name(decl) {
         return (ModuleID(decl.name().unwrap().text().to_string()), String::new());

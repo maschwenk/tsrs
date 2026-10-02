@@ -27,18 +27,15 @@ pub struct FileIncludeReason {
     pub(crate) index: usize,
     pub(crate) is_default_lib: bool,
     pub(crate) referenced_file: Option<referencedFileData>,
-    // Boxed: set on few reasons, and 88 bytes inline (203K reasons on the private monorepo, 144 -> 64 bytes each).
-    pub(crate) automatic_type_directive: Option<Box<automaticTypeDirectiveFileData>>,
+    pub(crate) automatic_type_directive: Option<P<automaticTypeDirectiveFileData>>,
 }
-
-const _: () = assert!(std::mem::size_of::<FileIncludeReason>() == 64);
 
 impl FileIncludeReason {
     pub(crate) fn new(kind: fileIncludeKind) -> FileIncludeReason {
         FileIncludeReason { kind, index: 0, is_default_lib: false, referenced_file: None, automatic_type_directive: None }
     }
 
-    pub(crate) fn new_referenced(kind: fileIncludeKind, file: Path, index: i32, synthetic: Option<P<Node>>) -> P<FileIncludeReason> {
+    pub(crate) fn new_referenced(kind: fileIncludeKind, file: &'static str, index: i32, synthetic: Option<P<Node>>) -> P<FileIncludeReason> {
         let mut r = FileIncludeReason::new(kind);
         r.referenced_file = Some(referencedFileData { file, index, synthetic });
         P::new(r)
@@ -46,7 +43,8 @@ impl FileIncludeReason {
 }
 
 pub(crate) struct referencedFileData {
-    pub(crate) file: Path,
+    // Go `tspath.Path`; shared by every reference from the same file (fileLoader `reason_path`).
+    pub(crate) file: &'static str,
     pub(crate) index: i32,
     pub(crate) synthetic: Option<P<Node>>,
 }
@@ -111,7 +109,7 @@ impl FileIncludeReason {
     }
 
     pub(crate) fn as_automatic_type_directive_file_data(&self) -> &automaticTypeDirectiveFileData {
-        self.automatic_type_directive.as_ref().unwrap()
+        self.automatic_type_directive.as_deref().unwrap()
     }
 }
 
@@ -121,7 +119,7 @@ pub(crate) fn is_referenced_file(r: Option<P<FileIncludeReason>>) -> bool {
 
 pub(crate) fn get_referenced_location(r: P<FileIncludeReason>, program: &Program) -> referenceFileLocation {
     let ref_ = r.as_referenced_file_data();
-    let file = program.get_source_file_by_path(&ref_.file).unwrap();
+    let file = program.get_source_file_by_path_str(ref_.file).unwrap();
     match r.kind {
         fileIncludeKind::Import => {
             let mut specifier: Option<P<Node>> = None;

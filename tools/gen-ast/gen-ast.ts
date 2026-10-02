@@ -87,8 +87,29 @@ interface Field {
     rust: string; // Rust field name
     ty: string; // Rust value type (without Cell)
     cell: boolean;
+    rare: boolean; // stored in the struct's rare tail (RARE_FIELDS)
     member: MemberInfo;
 }
+
+// Own fields that are almost never set, stored in a tail allocated after the data struct only when one of them is set
+// at construction (`NodeAllocRare` in ast.rs; the getter reads None otherwise). Only nil-able fields that nothing
+// writes after construction (not Cells, not Go-only bookkeeping). Occupancy on the private monorepo (notes/mem-frontend.md):
+// CallExpression ?. 0.1% and type arguments 0.5% of 1.24M, PropertyAccessExpression ?. 2.7% of 1.27M, Parameter
+// `...` 1.8% and initializer 1.4% of 374K, PropertySignature initializer 0% of 401K, VariableDeclaration `!` 0.02%
+// of 344K, ImportSpecifier property name 3.2% of 184K, BindingElement `...` / property name / initializer
+// 1.3 / 5.9 / 2.2% of 76K, ImportDeclaration attributes 0.02% of 148K, NewExpression type arguments 5.3% of 60K.
+const RARE_FIELDS = new Map<string, string[]>([
+    ["CallExpression", ["QuestionDotToken", "TypeArguments"]],
+    ["PropertyAccessExpression", ["QuestionDotToken"]],
+    ["ElementAccessExpression", ["QuestionDotToken"]],
+    ["ParameterDeclaration", ["DotDotDotToken", "Initializer"]],
+    ["PropertySignatureDeclaration", ["Initializer"]],
+    ["VariableDeclaration", ["ExclamationToken"]],
+    ["ImportSpecifier", ["PropertyName"]],
+    ["BindingElement", ["DotDotDotToken", "PropertyName", "Initializer"]],
+    ["ImportDeclaration", ["Attributes"]],
+    ["NewExpression", ["TypeArguments"]],
+]);
 
 interface Layout {
     name: string;
@@ -166,7 +187,10 @@ function makeField(owner: string, m: MemberInfo): Field {
         ty = `Option<${ty}>`;
         widenedToOption.push(`${owner}.${m.name}`);
     }
-    return { owner, name: m.name, rust: ident(m.name), ty, cell: isCell(owner, m), member: m };
+    const rare = RARE_FIELDS.get(owner)?.includes(m.name) ?? false;
+    const cell = isCell(owner, m);
+    if (rare && (cell || !ty.startsWith("Option<"))) throw new Error(`rare field ${owner}.${m.name} must be a nil-able non-Cell field`);
+    return { owner, name: m.name, rust: ident(m.name), ty, cell, rare, member: m };
 }
 
 function baseOwnFields(key: string): Field[] {
@@ -371,7 +395,8 @@ function genGetters(l: Layout) {
         const fnName = f.rust;
         w(`    #[inline]`);
         w(`    pub fn ${fnName}(&self) -> ${f.ty} {`);
-        w(`        self.${f.path}${f.cell ? ".get()" : isPackedStr(f) ? ".as_str()" : ""}`);
+        if (f.rare) w(`        rare_tail(self).and_then(|r| r.${f.rust})`);
+        else w(`        self.${f.path}${f.cell ? ".get()" : isPackedStr(f) ? ".as_str()" : ""}`);
         w(`    }`);
         if (f.cell) {
             w(`    #[inline]`);
@@ -394,9 +419,21 @@ function genStruct(node: NodeType) {
     }
     w(`pub struct ${node.name} {`);
     for (const e of l.embeds) w(`    pub ${snake(e)}: ${e},`);
-    for (const f of l.fields) w(`    pub ${f.rust}: ${fieldDecl(f)},`);
+    for (const f of l.fields) if (!f.rare) w(`    pub ${f.rust}: ${fieldDecl(f)},`);
     w("}");
     w();
+    const rare = l.fields.filter(f => f.rare);
+    if (rare.length > 0) {
+        w(`/// The rare tail of \`${node.name}\` (\`NodeAllocRare\`): allocated only when one of these is set.`);
+        w(`pub struct ${node.name}Rare {`);
+        for (const f of rare) w(`    pub ${f.rust}: ${fieldDecl(f)},`);
+        w("}");
+        w();
+        w(`impl NodeRareTail for ${node.name} {`);
+        w(`    type Rare = ${node.name}Rare;`);
+        w("}");
+        w();
+    }
     genGetters(l);
 }
 
@@ -408,11 +445,21 @@ function structLiteral(l: Layout, values: Map<string, string>, indent: string): 
         lines.push(`${indent}    ${snake(e)}: ${structLiteral(baseLayout(e), values, indent + "    ")},`);
     }
     for (const f of l.fields) {
+        if (f.rare) continue;
         const v = values.get(f.name) ?? defaultValue(f.ty);
         lines.push(`${indent}    ${f.rust}: ${f.cell ? `OwnedCell::new(${v})` : isPackedStr(f) ? `PackedStr::new(${v})` : v},`);
     }
     lines.push(`${indent}}`);
     return lines.join("\n");
+}
+
+// The rare tail literal of a node layout and the condition under which it is allocated.
+function rareLiteral(l: Layout, values: Map<string, string>, indent: string): { cond: string; lit: string; } | undefined {
+    const rare = l.fields.filter(f => f.rare);
+    if (rare.length === 0) return undefined;
+    const value = (f: Field) => values.get(f.name) ?? defaultValue(f.ty);
+    const lines = [`${l.name}Rare {`, ...rare.map(f => `${indent}    ${f.rust}: ${value(f)},`), `${indent}}`];
+    return { cond: rare.map(f => `${value(f)}.is_some()`).join(" || "), lit: lines.join("\n") };
 }
 
 // Factory parameter types are the storage field types (an inherited member may narrow the Go type, but
@@ -445,8 +492,11 @@ function genNewFactory(node: NodeType) {
         }
         if (hasTextContent(node)) w(`        self.text_count.set(self.text_count.get() + 1);`);
         const kindArg = kindMember ? "kind" : `Kind::${kindName}`;
+        const rare = rareLiteral(l, values, "            ");
         const newNode = isEmptyLayout(l)
             ? `self.new_empty_node(${kindArg}, NodeDataTag::${node.name})`
+            : rare
+            ? `if ${rare.cond} {\n            self.new_node_with_rare(${kindArg}, ${structLiteral(l, values, "            ")}, ${rare.lit})\n        } else {\n            self.new_node(${kindArg}, ${structLiteral(l, values, "            ")})\n        }`
             : `self.new_node(${kindArg}, ${structLiteral(l, values, "        ")})`;
         if (flagsMembers.length > 0) {
             w(`        let node = ${newNode};`);

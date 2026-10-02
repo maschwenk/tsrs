@@ -666,7 +666,7 @@ impl isolatedDeclarationsFixer<'_> {
 
                 // Build property access expression
                 let access_expr: P<Node>;
-                if let Some(property_name) = be.property_name.filter(|p| ast::is_computed_property_name(*p)) {
+                if let Some(property_name) = be.property_name().filter(|p| ast::is_computed_property_name(*p)) {
                     // Handle computed property names: create a temp variable for the computed expression
                     let computed_expression = property_name.as_computed_property_name().expression;
                     let identifier_for_computed_property = self.change_tracker.emit_context.factory.new_generated_name_for_node(computed_expression);
@@ -675,7 +675,7 @@ impl isolatedDeclarationsFixer<'_> {
                     let comp_var_stmt = factory.new_variable_statement(None, comp_var_decl_list);
                     new_nodes.push(comp_var_stmt);
                     access_expr = factory.new_element_access_expression(base_expr, None, identifier_for_computed_property, NodeFlags::None);
-                } else if let Some(property_name) = be.property_name {
+                } else if let Some(property_name) = be.property_name() {
                     // Use property name text (handles identifiers, string literals, numeric literals)
                     let prop_text = property_name.text();
                     access_expr = factory.new_property_access_expression(base_expr, None, factory.new_identifier(prop_text), NodeFlags::None);
@@ -731,7 +731,7 @@ impl isolatedDeclarationsFixer<'_> {
         if let Some(be_initializer) = be.initializer() {
             // Create a temp variable to hold the accessed value, then use a conditional expression
             // to apply the default: temp === undefined ? defaultValue : temp
-            let prop_name = be.property_name;
+            let prop_name = be.property_name();
             let mut temp_base_name = "temp".to_string();
             if let Some(prop_name) = prop_name.filter(|p| ast::is_identifier(*p)) {
                 temp_base_name = prop_name.text().to_string();
@@ -1174,7 +1174,7 @@ impl isolatedDeclarationsFixer<'_> {
                 let new_named_imports = factory.new_named_imports(factory.new_node_list(new_elements));
                 let new_import_clause = factory.update_import_clause(import_clause_node, import_clause.phase_modifier(), import_clause.name(), Some(new_named_imports));
                 let new_import_decl =
-                    factory.update_import_declaration(stmt, stmt.modifiers(), Some(new_import_clause), import_decl.module_specifier, import_decl.attributes);
+                    factory.update_import_declaration(stmt, stmt.modifiers(), Some(new_import_clause), import_decl.module_specifier, import_decl.attributes());
                 self.change_tracker.replace_node(self.source_file, stmt, new_import_decl, None);
             }
             return;

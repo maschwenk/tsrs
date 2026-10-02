@@ -306,7 +306,7 @@ fn remove_unused_imports(
                 import_decl.modifiers(),
                 Some(new_clause),
                 import_decl_node.module_specifier,
-                import_decl_node.attributes,
+                import_decl_node.attributes(),
             );
             used_imports.push(new_import_decl);
         } else {
@@ -319,7 +319,7 @@ fn remove_unused_imports(
                         import_decl.modifiers(),
                         None, // no import clause
                         import_decl_node.module_specifier,
-                        import_decl_node.attributes,
+                        import_decl_node.attributes(),
                     );
                     used_imports.push(new_import_decl);
                 } else {
@@ -480,7 +480,7 @@ fn coalesce_imports_worker(
     let mut attribute_keys: Vec<String> = Vec::new();
 
     for &import_decl in import_decls {
-        let key = get_import_attributes_key(import_decl.as_import_declaration().attributes);
+        let key = get_import_attributes_key(import_decl.as_import_declaration().attributes());
         if !import_groups_by_attributes.contains_key(&key) {
             attribute_keys.push(key.clone());
         }
@@ -522,7 +522,7 @@ fn coalesce_imports_worker(
                     default_import.modifiers(),
                     Some(new_clause),
                     default_decl_node.module_specifier,
-                    default_decl_node.attributes,
+                    default_decl_node.attributes(),
                 );
                 coalesced_imports.push(new_import_decl);
                 continue;
@@ -544,7 +544,7 @@ fn coalesce_imports_worker(
                     ns_import.modifiers(),
                     Some(new_clause),
                     ns_import_decl.module_specifier,
-                    ns_import_decl.attributes,
+                    ns_import_decl.attributes(),
                 );
                 coalesced_imports.push(new_import_decl);
             }
@@ -611,7 +611,7 @@ fn coalesce_imports_worker(
                     import_decl.modifiers(),
                     Some(default_clause),
                     import_decl_node.module_specifier,
-                    import_decl_node.attributes,
+                    import_decl_node.attributes(),
                 );
                 coalesced_imports.push(default_import_decl);
 
@@ -624,7 +624,7 @@ fn coalesce_imports_worker(
                     named_decl_node.modifiers(),
                     Some(named_clause),
                     named_import_decl_node.module_specifier,
-                    named_import_decl_node.attributes,
+                    named_import_decl_node.attributes(),
                 );
                 coalesced_imports.push(named_import_decl);
             } else {
@@ -636,7 +636,7 @@ fn coalesce_imports_worker(
                     import_decl.modifiers(),
                     Some(new_clause),
                     import_decl_node.module_specifier,
-                    import_decl_node.attributes,
+                    import_decl_node.attributes(),
                 );
                 coalesced_imports.push(new_import_decl);
             }
@@ -715,7 +715,7 @@ fn get_new_import_specifiers(named_imports: &[P<Node>], factory: &NodeFactory) -
         for &elem in elements {
             let spec = elem.as_import_specifier();
 
-            if let Some(property_name) = spec.property_name {
+            if let Some(property_name) = spec.property_name() {
                 let property_text = property_name.text();
                 let name_text = spec.name().text();
 

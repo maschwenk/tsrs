@@ -150,7 +150,7 @@ pub fn has_resolution_mode_override(node: impl Into<Option<P<Node>>>) -> bool {
     };
     let attributes = match node.kind() {
         Kind::ImportType => node.as_import_type_node().attributes,
-        Kind::ImportDeclaration | Kind::JSImportDeclaration => node.as_import_declaration().attributes,
+        Kind::ImportDeclaration | Kind::JSImportDeclaration => node.as_import_declaration().attributes(),
         Kind::ExportDeclaration => node.as_export_declaration().attributes,
         _ => None,
     };
@@ -241,7 +241,7 @@ pub fn replace_modifiers(factory: &NodeFactory, node: P<Node>, modifier_array: O
             return factory.update_parameter_declaration(
                 node,
                 modifier_array,
-                node.as_parameter_declaration().dot_dot_dot_token,
+                node.as_parameter_declaration().dot_dot_dot_token(),
                 node.name().unwrap(),
                 node.question_token(),
                 node.type_node(),
@@ -426,7 +426,7 @@ pub fn replace_modifiers(factory: &NodeFactory, node: P<Node>, modifier_array: O
                 modifier_array,
                 node.import_clause(),
                 node.module_specifier().unwrap(),
-                node.as_import_declaration().attributes,
+                node.as_import_declaration().attributes(),
             );
         }
         Kind::ExportAssignment => {
@@ -1180,10 +1180,10 @@ pub fn is_named_evaluation_source(node: P<Node>) -> bool {
         Kind::ShorthandPropertyAssignment => node.as_shorthand_property_assignment().object_assignment_initializer().is_some(),
         Kind::VariableDeclaration => is_identifier(node.name().unwrap()) && node.initializer().is_some(),
         Kind::Parameter => {
-            is_identifier(node.name().unwrap()) && node.initializer().is_some() && node.as_parameter_declaration().dot_dot_dot_token.is_none()
+            is_identifier(node.name().unwrap()) && node.initializer().is_some() && node.as_parameter_declaration().dot_dot_dot_token().is_none()
         }
         Kind::BindingElement => {
-            is_identifier(node.name().unwrap()) && node.initializer().is_some() && node.as_binding_element().dot_dot_dot_token.is_none()
+            is_identifier(node.name().unwrap()) && node.initializer().is_some() && node.as_binding_element().dot_dot_dot_token().is_none()
         }
         Kind::PropertyDeclaration => node.initializer().is_some(),
         Kind::BinaryExpression => match node.as_binary_expression().operator_token.kind() {

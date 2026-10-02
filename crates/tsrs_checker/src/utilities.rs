@@ -347,8 +347,8 @@ pub(crate) fn has_only_expression_initializer(node: P<Node>) -> bool {
 // utilities.go:272
 pub(crate) fn has_dot_dot_dot_token(node: P<Node>) -> bool {
     match node.kind() {
-        Kind::Parameter => node.as_parameter_declaration().dot_dot_dot_token.is_some(),
-        Kind::BindingElement => node.as_binding_element().dot_dot_dot_token.is_some(),
+        Kind::Parameter => node.as_parameter_declaration().dot_dot_dot_token().is_some(),
+        Kind::BindingElement => node.as_binding_element().dot_dot_dot_token().is_some(),
         Kind::NamedTupleMember => node.as_named_tuple_member().dot_dot_dot_token.is_some(),
         Kind::JsxExpression => node.as_jsx_expression().dot_dot_dot_token.is_some(),
         _ => false,
@@ -401,7 +401,7 @@ impl Checker {
         if let Some(iife) = iife {
             let parameter_index = parent.parameters().iter().position(|&p| p == node).map_or(-1, |i| i as i32);
             return node.type_node().is_none()
-                && node.as_parameter_declaration().dot_dot_dot_token.is_none()
+                && node.as_parameter_declaration().dot_dot_dot_token().is_none()
                 && parameter_index >= self.get_effective_call_arguments(iife).len() as i32;
         }
         false

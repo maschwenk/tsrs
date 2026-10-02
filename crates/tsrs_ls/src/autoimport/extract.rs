@@ -99,9 +99,9 @@ impl symbolExtractor<'_> {
     fn get_module_id(&self, file: P<SourceFile>) -> ModuleID {
         if let (Some(realpath), Some(to_path)) = (&self.realpath, &self.to_path) {
             let realpath = realpath(file.file_name());
-            return ModuleID(to_path(&realpath).0);
+            return ModuleID(to_path(&realpath).to_string());
         }
-        ModuleID(file.path().0.clone())
+        ModuleID(file.path().to_string())
     }
 
     // extract.go:89
@@ -178,11 +178,11 @@ impl exportExtractor<'_> {
                 let resolved = self.module_resolver.resolve_module_name(name, file.file_name(), ModuleKind::CommonJS, None).unwrap().0;
                 if resolved.is_resolved() {
                     module_file_name = resolved.resolved_file_name.to_string();
-                    module_id = ModuleID((self.symbol_extractor.to_path.as_ref().unwrap())(&module_file_name).0);
+                    module_id = ModuleID((self.symbol_extractor.to_path.as_ref().unwrap())(&module_file_name).to_string());
                 } else {
                     // :shrug:
                     module_file_name = tspath::resolve_path(&tspath::get_directory_path(file.file_name()), &[name]);
-                    module_id = ModuleID((self.symbol_extractor.to_path.as_ref().unwrap())(&module_file_name).0);
+                    module_id = ModuleID((self.symbol_extractor.to_path.as_ref().unwrap())(&module_file_name).to_string());
                 }
             }
             self.extract_from_module_declaration(decl, file, &module_id, &module_file_name, &mut exports);
@@ -379,7 +379,7 @@ impl symbolExtractor<'_> {
                 }
                 export.script_element_kind = lsutil::get_symbol_kind(self.try_checker(checker_lease), ts, decl);
                 export.script_element_kind_modifiers = lsutil::get_symbol_modifiers(self.try_checker(checker_lease), Some(ts));
-                let mut target_module_id = ModuleID(ast::get_source_file_of_node(decl).unwrap().path().0.clone());
+                let mut target_module_id = ModuleID(ast::get_source_file_of_node(decl).unwrap().path().to_string());
                 if let Some(parent) = parent {
                     if parent.is_external_module() {
                         if let Some(id) = self.get_module_id_for_symbol(parent) {

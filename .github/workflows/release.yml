@@ -50,7 +50,7 @@ jobs:
           echo "ts_commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
 
   # Release binaries are PGO builds with the `dist` profile (fat LTO, one codegen unit; Cargo.toml): an instrumented
-  # build of tsrs + tsrs-test, the training workload (.github/scripts/pgo-train.sh: the conformance suite and two
+  # build of tsrs + tsrs-test + tsrs-fourslash, the training workload (.github/scripts/pgo-train.sh: the conformance suite and two
   # open-source bench projects), then the final build with the merged profile. Numbers: notes/perf-pgo.md.
   build:
     name: build ${{ matrix.target }}
@@ -63,12 +63,7 @@ jobs:
       matrix:
         include:
           - { target: aarch64-apple-darwin, os: macos-14, experimental: false, run: true }
-          # Cross-compiled on the arm64 runner (Apple's toolchain targets both architectures). Its profile comes
-          # from its own x86_64 instrumented build, trained under Rosetta 2 on that runner: the arm64 profile does
-          # not fit, because profile entries are keyed by symbol names whose hashes depend on the target triple
-          # (with the arm64 profile 9.3k functions had no data instead of 1.8k, and the gain under Rosetta was 4%
-          # instructions instead of 16%; notes/perf-pgo.md). The smoke test below stays off (`run: false`) as before.
-          - { target: x86_64-apple-darwin, os: macos-14, experimental: false, run: false }
+          # No Intel macOS build: nobody asked for it, and its PGO step had to train under Rosetta 2.
           # Built on 22.04 so the binary needs at most glibc 2.35.
           - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, experimental: false, run: true }
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, experimental: false, run: true }
@@ -99,9 +94,6 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ${{ matrix.target }}-pgo
-      - name: Rosetta 2 (x86_64 training run on the arm64 runner)
-        if: matrix.target == 'x86_64-apple-darwin'
-        run: arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
       # Everything of the PGO steps but the final build lives outside target/, which rust-cache saves.
       # CFLAGS: cc passes -Cprofile-generate/-use on to clang (macOS) but not to gcc (Linux). Apple clang's profile
       # format does not match rustc's LLVM (the instrumented mimalloc crashed in __llvm_profile_instrument_target
@@ -112,7 +104,7 @@ jobs:
           RUSTFLAGS: -Cprofile-generate=${{ runner.temp }}/pgo/raw
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-generate' || '' }}
           CARGO_TARGET_DIR: ${{ runner.temp }}/pgo/target
-        run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner --target ${{ matrix.target }}
+        run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target ${{ matrix.target }}
       - name: Training run
         shell: bash
         run: .github/scripts/pgo-train.sh "$RUNNER_TEMP/pgo/target/${{ matrix.target }}/dist" "$RUNNER_TEMP/pgo/raw" "$RUNNER_TEMP/pgo/bench"
@@ -186,7 +178,7 @@ jobs:
           merge-multiple: true
       - name: Require the release platforms
         run: |
-          for t in aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu; do
+          for t in aarch64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu; do
             test -f "artifacts/$t/tsrs" || { echo "::error::missing binary for $t"; exit 1; }
           done
           ls -lR artifacts

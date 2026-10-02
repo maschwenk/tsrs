@@ -353,7 +353,7 @@ impl<'a> missingMemberFixer<'a> {
                 nodes.push(self.factory().update_parameter_declaration(
                     p,
                     p.modifiers(),
-                    parameter.dot_dot_dot_token,
+                    parameter.dot_dot_dot_token(),
                     p.name().unwrap(),
                     if is_js { None } else { parameter.question_token() },
                     parameter_type_node,

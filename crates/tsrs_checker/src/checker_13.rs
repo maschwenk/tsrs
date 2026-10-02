@@ -2451,7 +2451,7 @@ pub(crate) fn has_rest_parameter(signature: P<Node>) -> bool {
 
 // checker.go:28262
 pub(crate) fn is_rest_parameter(param: P<Node>) -> bool {
-    param.as_parameter_declaration().dot_dot_dot_token.is_some()
+    param.as_parameter_declaration().dot_dot_dot_token().is_some()
 }
 
 // checker.go:28266

@@ -982,7 +982,7 @@ impl Checker {
     pub(crate) fn get_parameter_type_of_full_signature(&mut self, node: P<Node>, parameter: P<Node>) -> Option<P<Type>> {
         if let Some(signature) = self.get_signature_of_full_signature_type(node) {
             let pos = node.parameters().iter().position(|p| *p == parameter).map_or(-1, |i| i as i32);
-            if parameter.as_parameter_declaration().dot_dot_dot_token.is_some() {
+            if parameter.as_parameter_declaration().dot_dot_dot_token().is_some() {
                 return Some(self.get_rest_type_at_position(signature, pos, false /*readonly*/));
             } else {
                 return Some(self.get_type_at_position(signature, pos));

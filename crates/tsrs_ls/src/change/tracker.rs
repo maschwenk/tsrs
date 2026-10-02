@@ -353,7 +353,7 @@ impl Tracker {
             end_node = e;
         } else {
             let mut e = match node.kind() {
-                Kind::VariableDeclaration => node.as_variable_declaration().exclamation_token,
+                Kind::VariableDeclaration => node.as_variable_declaration().exclamation_token(),
                 Kind::PropertySignature => node.as_property_signature_declaration().postfix_token(),
                 Kind::PropertyDeclaration => node.as_property_declaration().postfix_token(),
                 Kind::Parameter => node.as_parameter_declaration().question_token(),

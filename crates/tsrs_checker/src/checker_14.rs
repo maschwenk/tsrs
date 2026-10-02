@@ -1015,7 +1015,7 @@ impl Checker {
     // checker.go:29204
     pub(crate) fn get_parameter_type_node_for_decorator_check(&mut self, node: P<Node>) -> Option<P<Node>> {
         let type_node = node.type_node();
-        if node.as_parameter_declaration().dot_dot_dot_token.is_some() {
+        if node.as_parameter_declaration().dot_dot_dot_token().is_some() {
             return get_rest_parameter_element_type(type_node);
         }
         type_node

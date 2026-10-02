@@ -65,7 +65,7 @@ fn did_open_file_create_configured_project() {
     let snapshot = session.snapshot();
     assert_eq!(snapshot.project_collection.projects().len(), 1);
 
-    let configured_project = snapshot.project_collection.configured_project(&Path("/home/projects/ts/p1/tsconfig.json".to_string()));
+    let configured_project = snapshot.project_collection.configured_project(&Path::from("/home/projects/ts/p1/tsconfig.json"));
     assert!(configured_project.is_some());
 
     // Get language service to access the program
@@ -87,7 +87,7 @@ fn did_open_file_create_inferred_project() {
     assert_eq!(snapshot.project_collection.projects().len(), 2);
 
     // Should have both configured project (for tsconfig.json) and inferred project
-    let configured_project = snapshot.project_collection.configured_project(&Path("/home/projects/ts/p1/tsconfig.json".to_string()));
+    let configured_project = snapshot.project_collection.configured_project(&Path::from("/home/projects/ts/p1/tsconfig.json"));
     let inferred_project = snapshot.project_collection.inferred_project();
     assert!(configured_project.is_some());
     assert!(inferred_project.is_some());
@@ -1195,7 +1195,7 @@ fn sets_locale_when_configured() {
 fn locale_change_invalidates_programs() {
     let files: &[(&str, &str)] = &[("/src/tsconfig.json", "{}"), ("/src/index.ts", "export const x = 1;")];
     let (session, _) = setup(files);
-    let config_path = Path("/src/tsconfig.json".to_string());
+    let config_path = Path::from("/src/tsconfig.json");
     open(&session, files, "/src/index.ts");
     let _ = ls_program(&session, "/src/index.ts");
     let program_of = || session.snapshot().project_collection.configured_project(&config_path).unwrap().program.unwrap();
