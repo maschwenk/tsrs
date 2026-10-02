@@ -686,9 +686,6 @@ impl Snapshot {
             None => autoimport::new_registry(store.to_path.clone(), self.user_preferences.clone()),
         };
         let mut auto_imports_watch = None;
-        // Memory regions (memregions.rs): the registry keeps what its update allocates in the arena for as long as
-        // any registry version shares it, so it is never in a freeable region (see autoimport.rs `pin_registry_file`).
-        let auto_imports_scope = tsrs_core::arena::enter_thread_arena();
         let auto_imports = old_auto_imports.clone_registry(
             ctx,
             autoimport::RegistryChange {
@@ -703,7 +700,6 @@ impl Snapshot {
             &auto_import_host,
             logger.fork("UpdateAutoImports"),
         );
-        drop(auto_imports_scope);
         if let Ok(auto_imports) = &auto_imports {
             auto_imports_watch = self.auto_imports_watch.as_ref().map(|w| w.clone_with(auto_imports.node_modules_directories()));
         }

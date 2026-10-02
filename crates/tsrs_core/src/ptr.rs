@@ -540,6 +540,25 @@ pub fn census_scrub_slack<T>(v: &mut Vec<T>) {
     let _ = v;
 }
 
+/// Census builds (`TSRS_CENSUS=1`): a `None` option keeps uninitialized payload bytes (copied from the stack slot or
+/// heap block the value was built in), which the conservative census reads as references. Zeroes them, for options
+/// kept for the rest of a session (process-wide caches, long-lived tables). Compiled to nothing otherwise.
+#[inline(always)]
+pub fn census_scrub_none<T>(opt: &mut Option<T>) {
+    #[cfg(feature = "alloc-profile")]
+    if crate::alloc_profile::census::recording() && opt.is_none() {
+        let p: *mut Option<T> = opt;
+        // SAFETY: `*p` is `None` and owns nothing; it is overwritten with zeros and then with `None` again before
+        // anything reads it, so it holds a valid `None` afterwards whatever the type's niche encoding is.
+        unsafe {
+            std::ptr::write_bytes(p.cast::<u8>(), 0, std::mem::size_of::<Option<T>>());
+            p.write(None);
+        }
+    }
+    #[cfg(not(feature = "alloc-profile"))]
+    let _ = opt;
+}
+
 /// Census builds (`TSRS_CENSUS=1`): clears the stack area the caller's next callees will use, so values built there
 /// (a struct with an unset `OnceLock`, padding) do not carry stale words that look like references. Compiled to
 /// nothing otherwise.

@@ -345,13 +345,13 @@ impl ResolutionHost for resolutionHost {
 }
 
 // util.go:333
-// The resolver keeps its host for its whole life (module.ResolverOptions.Host is 'static); the host is leaked,
-// like the resolution data the resolver builds (docs/LSP.md memory plan).
+// The resolver keeps its host for its whole life (module.ResolverOptions.Host is 'static); the host lives in the
+// current arena, which is the registry update's scratch region (registry.go `Clone`), like the resolver.
 pub(crate) fn get_module_resolver(host: &'static dyn RegistryCloneHost, realpath: PathFunc) -> DefaultResolver {
-    let rh: &'static resolutionHost = Box::leak(Box::new(resolutionHost {
+    let rh: &'static resolutionHost = tsrs_core::alloc(resolutionHost {
         fs: wrapvfs::wrap(host.fs(), wrapvfs::Replacements { realpath: Some(Box::new(move |s: &str| realpath(s))), ..Default::default() }),
         current_directory: host.get_current_directory().to_string(),
-    }));
+    });
     let opts = ResolverOptions::new(rh, P::from_static(&EMPTY_COMPILER_OPTIONS));
     module::new_resolver(opts)
 }

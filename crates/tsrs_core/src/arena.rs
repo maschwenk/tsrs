@@ -832,6 +832,23 @@ pub fn enter_owner(addr: usize) -> Option<RegionScope> {
     })
 }
 
+/// Routes allocations for a value stored in a shared table that may outlive the current allocation target (a cache
+/// that later program versions copy, filled by whichever thread happens to look something up): they stay in the
+/// current target only if the table at `addr` lives in it, and go to the thread's own (never freed) arena otherwise.
+/// Unlike `enter_owner`, never waits for a region another thread has entered. No scope (and no cost beyond one load)
+/// while no region exists, as in the CLI.
+#[inline]
+pub fn enter_table_owner(addr: usize) -> Option<RegionScope> {
+    if !ANY_REGION.load(Ordering::Relaxed) {
+        return None;
+    }
+    let current = CURRENT.with(|c| c.get());
+    match Region::containing(addr) {
+        Some(region) if std::ptr::eq(&*region.0.arena, current) => None,
+        _ => Some(enter_thread_arena()),
+    }
+}
+
 impl Drop for RegionInner {
     fn drop(&mut self) {
         for f in self.on_free.get_mut().unwrap().drain(..) {

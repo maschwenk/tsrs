@@ -886,9 +886,15 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             }
         }
         if heap {
-            let c = (w & MASK45) << 3;
-            if let Some(i) = table.lookup(c) {
-                if table.blocks[i].start == c && class_is(table.blocks[i].class, "Symbol") {
+            // Symbol table entries (`SymbolMapEntry`: address >> 3 in the low 45 bits) live in a `Vec` buffer whose
+            // first word is an entry too. Other heap blocks hold no entries; a random 64-bit word there (a hash in a
+            // cache keyed by hashes) decodes to a symbol's address once in ~10^7 words, so it is not an edge.
+            let is_symbol_entry = |w: u64| {
+                let c = (w & MASK45) << 3;
+                table.lookup(c).filter(|&i| table.blocks[i].start == c && class_is(table.blocks[i].class, "Symbol"))
+            };
+            if let Some(i) = is_symbol_entry(w) {
+                if is_symbol_entry(read(table.blocks[from.unwrap()].start as usize)).is_some() {
                     return Some(i);
                 }
             }
