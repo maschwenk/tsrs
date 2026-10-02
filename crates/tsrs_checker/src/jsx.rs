@@ -810,10 +810,10 @@ impl Checker {
                     let expr_type = self.check_jsx_attribute(attribute_decl, check_mode);
                     object_flags |= expr_type.object_flags() & ObjectFlags::PropagatingFlags;
                     let attribute_symbol = self.new_symbol(SymbolFlags::Property | member.flags(), member.name());
-                    attribute_symbol.declarations.set(member.declarations());
+                    attribute_symbol.set_declarations_static(member.declarations());
                     attribute_symbol.set_parent(member.parent());
                     if member.value_declaration().is_some() {
-                        attribute_symbol.value_declaration.set(member.value_declaration());
+                        attribute_symbol.set_value_declaration(member.value_declaration());
                     }
                     let links = self.value_symbol_links.get(attribute_symbol);
                     links.resolved_type.set(Some(expr_type));
@@ -920,7 +920,7 @@ impl Checker {
                 // Fake up a property declaration for the children
                 let name = self.factory.new_identifier(alloc_str(&jsx_children_property_name));
                 let value_declaration = self.factory.new_property_signature_declaration(None, name, None /*postfixToken*/, None /*type*/, None /*initializer*/);
-                children_prop_symbol.value_declaration.set(Some(value_declaration));
+                children_prop_symbol.set_value_declaration(Some(value_declaration));
                 value_declaration.set_parent(Some(attribute_parent));
                 value_declaration.as_property_signature_declaration().declaration_base.set_symbol(Some(children_prop_symbol));
                 let child_prop_map = SymbolTable::new();

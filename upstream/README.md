@@ -12,13 +12,70 @@ upstream; the PR texts are drafts for Max.
 | 4 | `patches/0004-Don-t-copy-union-and-intersection-...patch` | L6 | union/intersection property caches: no eager copy, allocate on store | nothing (also in `patches/standalone-main/`) |
 | 5 | `patches/0005-Instantiate-conditional-types-...patch` | L5 | conditional instantiation without the throwaway composite mapper | nothing (also in `patches/standalone-main/`) |
 
-- `pr-01-...md` .. `pr-05-...md`: ready-to-paste title and description per commit.
+- `pr-01-...md` .. `pr-05-...md`: title and description per commit. `pr-04` and `pr-05` are final (line 1 = title,
+  line 3 on = body, ready for `gh pr create`); `pr-01`..`pr-03` are still drafts with a `**Title:**`/`**Base:**` header.
 - `review-notes.md`: likely pushback and the answers we have.
 - `results/`: raw per-run measurements (JSON lines from `tools/measure.py`) and `results/testfiles.md`. `equiv*` are
   the Go-vs-Rust counter runs (b85298b6 base), `main*` the per-commit runs on main, `variance*` repeated 4-checker
   runs. Files without a suffix used the first L10 translation for L10/L6/L5, `-v2` an intermediate one, `-v4` the
   final code (counters are identical across the three; allocations differ, see below).
-- `tools/`: the measurement scripts used below.
+- `tools/`: the measurement scripts used below, and `variance-debug.patch` (throwaway instrumentation for the
+  6-symbol variation, review-notes.md).
+
+## To open (L6 and L5, against main)
+
+Current base: main **82f0546163** (2026-10-01). Both are one commit each, independent of each other and of
+#64475/#64526. From `$TSRS_WORK/TypeScript-upstream` (`$TSRS` = this repo); `fork` is
+https://github.com/maschwenk/TypeScript (exists; neither branch name is taken there):
+
+```sh
+cd $TSRS_WORK/TypeScript-upstream
+git remote add fork https://github.com/maschwenk/TypeScript.git    # once; the checkout only has origin
+git fetch origin main && git log --oneline -1 origin/main          # if main moved: git rebase origin/main <branch>, re-run the gates
+
+git push fork perf/union-property-cache
+tail -n +3 $TSRS/upstream/pr-04-union-property-cache.md | gh pr create -R microsoft/TypeScript --draft --base main \
+  --head maschwenk:perf/union-property-cache \
+  --title "don't copy union and intersection properties into the augmented property cache" --body-file -
+
+git push fork perf/conditional-instantiation-mapper
+tail -n +3 $TSRS/upstream/pr-05-conditional-instantiation-mapper.md | gh pr create -R microsoft/TypeScript --draft --base main \
+  --head maschwenk:perf/conditional-instantiation-mapper \
+  --title "instantiate conditional types without a combined mapper for the cache lookup" --body-file -
+```
+
+Add the `#64475`/`#64526` cross-links by hand if wanted; the texts reference them by number. L1, L11, L10 stay local
+until #64475 lands (they need its lazy tables); see "Local branches".
+
+## Local branches (in `$TSRS_WORK/TypeScript-upstream`, none pushed)
+
+On main 82f0546163, rebased 2026-10-01 from edf7da4e93. The 8 upstream commits in between touch `checker.go` only in
+`checkInterfaceDeclaration` / `checkEnumDeclaration` / `checkExportsOnMergedDeclarations` (#64566), away from all seven
+changes; every cherry-pick applied cleanly and `git range-diff` shows `=` for every commit. One of them (#64093) adds a
+lib file, so the private monorepo now has 37,943 files and the 4-checker file assignment shifted (4-checker absolute
+numbers below differ from the edf7da4e93 ones for that reason).
+
+| branch | head | what |
+| --- | --- | --- |
+| `perf/union-property-cache` | 2a3563f0b7 | L6 on main (to open, pr-04) |
+| `perf/conditional-instantiation-mapper` | 8dc563d641 | L5 on main (to open, pr-05) |
+| `perf/lazy-base` | 15e6d92251 | main + #64475 + #64526, squashed (= `patches/base/`) |
+| `perf/lazy-tuple-members` | cc5011c63f | + L1 (on `perf/lazy-base`) |
+| `perf/lazy-empty-object-checks` | ae4d097199 | + L11 (on `perf/lazy-tuple-members`) |
+| `perf/lazy-unmatched-properties` | 7d1605f445 | + L10 (on `perf/lazy-empty-object-checks`) |
+| `lazy-stack-main` | 602f265a99 | + L6 + L5 on top, for measuring the stack (= `patches/`) |
+
+The edf7da4e93-based branches (`lazy-base`, `lazy-stack`, `lazy-stack-ref`, `standalone-L6-L5`) are kept unchanged.
+`patches/` was regenerated from the new branches (`git am --keep-cr` on 82f0546163 reproduces the branch trees
+exactly); the L6/L5 commit messages on the two `perf/` branches carry the re-measured numbers, the copies in
+`lazy-stack-main` still have the edf7da4e93 ones.
+
+Gates on 82f0546163 (README "Tests"), at every commit of all seven branches: `go vet` clean, go1.27 `gofmt -l` empty,
+`go test ./internal/checker/... ./internal/testrunner/...` ok (also with `TS_TEST_PROGRAM_SINGLE_THREADED=false`), 0
+files in `testdata/baselines/local`, `npx hereby lint` 0 issues, `npx hereby check:format` clean. On both `perf/` L6/L5
+branches and `lazy-stack-main`: `go test ./...` ok except `internal/fswatch` (macOS fsevents subtests time out under
+machine load, on branches that don't touch it; `go test ./internal/fswatch/...` passes on a rerun at lower load, and
+on main). `-race` with concurrent test programs on `lazy-stack-main`: ok (380 s).
 
 ## How the stack was built
 
@@ -39,11 +96,11 @@ upstream; the PR texts are drafts for Max.
   comparison; the patches are identical (`git range-diff` shows `=` for all seven commits).
 - L6 and L5 also apply to plain main unchanged (`patches/standalone-main/`, same messages), tested and measured there.
 
-Branches in `$TSRS_WORK/TypeScript-upstream` (local only): `lazy-base` (main + PRs),
-`lazy-stack` (the five commits, = `patches/`), `lazy-stack-ref` (same on b85298b6), `standalone-L6-L5`, and the
-PR worktrees `../TypeScript-pr-64475`, `../TypeScript-pr-64526`.
+Branches from that first build in `$TSRS_WORK/TypeScript-upstream` (local only, on edf7da4e93): `lazy-base` (main +
+PRs), `lazy-stack` (the five commits), `lazy-stack-ref` (same on b85298b6), `standalone-L6-L5`, and the PR worktrees
+`../TypeScript-pr-64475`, `../TypeScript-pr-64526`. The current branches are in "Local branches" above.
 
-Apply: `git am --keep-cr patches/base/*.patch patches/*.patch` on main edf7da4e93 (`--keep-cr`: the baselines are
+Apply: `git am --keep-cr patches/base/*.patch patches/*.patch` on main 82f0546163 (`--keep-cr`: the baselines are
 CRLF and the repo has `* -text`; without it `git am` strips the CRs and the baseline tests fail).
 
 ## Tests (upstream CI's commands)
@@ -86,10 +143,11 @@ order; `TSRS_LAZY_HAS_PROP=0` throughout). 4 checkers: Go's default assignment, 
 | + L5 conditional mapper | 12,811,032 / same / same | 18,693,678 |
 
 Every single-threaded number is identical between Go and Rust in every run, and the reference and PR rows equal the
-numbers in notes/lazy-members.md / notes/mem-lazy.md. With 4 checkers, Go builds from L11 on sometimes come out 6
-symbols higher: 9 of 52 such runs across all files in `results/`, against 0 of 33 runs of the main (9 runs), PRs, L1
-and main+L6/L5 builds, 0 with 1 checker, and the Rust port constant (review-notes.md). The most frequent Go value
-equals Rust.
+numbers in notes/lazy-members.md / notes/mem-lazy.md. With 4 checkers, Go builds sometimes come out 6 symbols
+higher: 9 of 52 runs from L11 on across all files in `results/`, 0 of 33 runs of main, PRs, L1 and main+L6/L5, 0 with
+1 checker, the Rust port constant. The most frequent Go value equals Rust. Since then traced (review-notes.md, "The
+6-symbol variation"): one `Partial<X>` resolved in full or not, depending on a per-process type creation order inside
+a checker that unmodified main also has; reproduced on L1 and with the checkers run one after another.
 
 Also equal on the PRs' tests and the new tests (`results/testfiles.md`, symbols/types/instantiations, single file
 with `--strict --target esnext`):
@@ -142,6 +200,31 @@ Whole stack vs the PRs: symbols -16.4% / -18.1%, heap -0.76 GB (-6.9%) / -1.33 G
 L6 and L5 on plain main (`standalone-L6-L5`): L6 heap 14.04 -> 13.85 GB (-1.4%) single, 21.54 -> 21.26 GB (-1.3%)
 4 checkers, allocs -1.0M / -1.4M; L5 allocs 147.91M -> 143.56M (-4.35M) / 247.32M -> 238.50M (-8.8M), heap same.
 
+### Re-measured on main 82f0546163 (the numbers in pr-04 / pr-05)
+
+`results/main-82f0546163.jsonl`, same method (medians of 3, interleaved, one process at a time, load 24-48 this
+time), on the same pristine private-monorepo checkout as before (37,943 files with the new lib file, 0
+errors). L5 is now measured against main itself (its own branch), not main + L6. Stack = `perf/lazy-unmatched-properties`
+(main + PRs + L1 + L11 + L10), then L6, then L5 (`lazy-stack-main~1`, `lazy-stack-main`).
+
+| build | symbols, single / 4 ch | heap GB, single / 4 ch | allocs, single / 4 ch |
+| --- | --- | --- | --- |
+| main | 25,972,751 / 39,067,109 | 14.03 / 21.25 | 148.86M / 246.89M |
+| main + L6 | same | 13.84 (-1.4%) / 20.96 (-1.4%) | 147.86M (-1.0M) / 245.02M (-1.9M) |
+| main + L5 | same | 14.03 / 21.24 | 144.51M (-4.35M) / 238.12M (-8.8M) |
+| stack to L10 | 12,810,429 / 18,479,183 | 10.36 / 15.07 | 149.24M / 248.70M |
+| + L6 | same | 10.23 (-1.3%) / 14.84 (-1.5%) | 148.42M (-0.82M) / 247.09M (-1.6M) |
+| + L5 | same | 10.23 / 14.84 | 144.08M (-4.34M) / 238.41M (-8.7M) |
+
+Types / instantiations: main 9,639,290 / 44,879,960 single, 15,968,284 / 88,419,340 with 4 checkers; stack
+9,629,448 / 44,816,393 and 15,954,673 / 88,320,433. Single-threaded symbols are +11 vs edf7da4e93 everywhere (the new
+lib file); types and instantiations single-threaded are unchanged. Heap spread between runs: < 0.002 GB single, up to
+0.15 GB with 4 checkers (more than before; still below the L6 deltas). 4-checker allocs of L10 spread 248.4-251.5M.
+L5's malloc delta on the stack is now 4,340,793 (prototype: 4,340,555 composites). Changes vs the old pr-04/pr-05
+texts: file count 37,942 -> 37,943, every absolute number above, L6 4-checker allocs -1.4M -> -1.9M on main and
+-1.35M -> -1.6M on the stack, L6 single heap on the stack -1.2% -> -1.3%, L5 base changed to plain main, and the test
+line (fswatch note). The relative effects are otherwise the same.
+
 ### Go vs Rust, effect per commit
 
 | commit | Go symbols, single / 4 ch | Rust symbols (notes/mem-lazy.md) | Go memory | Rust memory |
@@ -176,15 +259,19 @@ assignment.)
   Go's malloc delta (4,340,242) matches the prototype's count of avoided composites (4,340,555) within 313.
 - **No per-path counters in Go**: Max's PRs have none, so the Go patches have none; the per-path numbers in the PR
   texts come from tsrs, and say so.
-- **4-checker run-to-run variation** of 6 symbols in Go builds from L11 on (above, and review-notes.md). Not
-  explained yet; single-threaded and 1-checker runs are constant and equal Rust.
+- **4-checker run-to-run variation** of 6 symbols (above). Traced on 2026-10-01 (review-notes.md, "The 6-symbol
+  variation"): not global symbol ids, not concurrency, not introduced by L11. Unmodified main already creates types in
+  a run-dependent order inside a checker (type ids at a fixed site shift between runs even with the checkers run one
+  after another); with the lazy tables that order decides whether one lib `Partial<X>` gets resolved in full by
+  `isWeakType` under `typeRelatedToSomeType`, its 6 optional members. The order-dependent loop on main is not located.
+  Single-threaded runs are constant and equal Rust.
 
 ## Reproduction
 
 ```sh
 # Clone and base
 git clone https://github.com/microsoft/TypeScript.git TypeScript-upstream && cd TypeScript-upstream
-git checkout -b lazy-stack edf7da4e93
+git checkout -b lazy-stack-main 82f0546163     # edf7da4e93 for the first build's numbers
 git am --keep-cr <tsrs>/upstream/patches/base/*.patch <tsrs>/upstream/patches/*.patch
 git fetch origin pull/64475/head:pr-64475 pull/64526/head:pr-64526     # references only
 

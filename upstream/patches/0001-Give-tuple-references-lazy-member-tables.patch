@@ -1,4 +1,4 @@
-From b10fddae61b3fe8bf1b67c83ac00fd149f2f6ed6 Mon Sep 17 00:00:00 2001
+From cc5011c63f22b83043fa986181e4e86c4dd7459f Mon Sep 17 00:00:00 2001
 From: Max schwenk <maschwenk@gmail.com>
 Date: Thu, 1 Oct 2026 03:09:32 -0400
 Subject: [PATCH 1/5] Give tuple references lazy member tables
@@ -46,10 +46,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 tsc/testdata/tests/cases/compiler/tupleLazyMembers.ts
 
 diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
-index 89f4ed6546..3ac45da33c 100644
+index 1e7ae23532..321fd7ad3b 100644
 --- a/tsc/internal/checker/checker.go
 +++ b/tsc/internal/checker/checker.go
-@@ -19528,7 +19528,7 @@ func (c *Checker) appendInheritedSignaturesAndIndexInfos(callSignatures []*Signa
+@@ -19531,7 +19531,7 @@ func (c *Checker) appendInheritedSignaturesAndIndexInfos(callSignatures []*Signa
  	return callSignatures, constructSignatures, indexInfos
  }
  
@@ -58,7 +58,7 @@ index 89f4ed6546..3ac45da33c 100644
  // resolved members. It has the signatures and index infos, but only instantiates the
  // members that are looked up, and reuses them if the members are later resolved in full.
  
-@@ -19567,8 +19567,8 @@ func (c *Checker) getReadyLazyMemberTable(t *Type) *lazyMemberTable {
+@@ -19570,8 +19570,8 @@ func (c *Checker) getReadyLazyMemberTable(t *Type) *lazyMemberTable {
  
  func (c *Checker) getReadyLazyMemberTableWorker(t *Type) *lazyMemberTable {
  	source := t.Target()

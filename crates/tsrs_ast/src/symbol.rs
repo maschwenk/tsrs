@@ -19,17 +19,20 @@ use crate::*;
 // they live in a tail allocated on the first write of a non-nil value (`members()` / `set_members()` & co.).
 // Reads of an absent tail return nil, like the unset Go field. The tail pointer shares a word with `parent`
 // (`SymbolParentWord`): the word holds the parent until a tail exists, then the tail (which holds the parent).
-// `name` is a `PackedStr` (pointer and length in one word), `declarations` a 4-byte-aligned (pointer, `u32`
-// length) pair packed with the two flag words and the `u32` id: 48 bytes.
+// `ValueDeclaration` is the first declaration in 82% of the symbols and nil in 17.5% (on the private monorepo:
+// 10.88M / 2.31M of 13.2M; another node in 23K), so a bit of that word says "the first declaration" and only
+// another node is kept in the tail (`value_declaration()` / `set_value_declaration()`; a declarations write that
+// replaces the first declaration moves it to the tail first). `name` is a `PackedStr` (pointer and length in one
+// word), `declarations` a 4-byte-aligned (pointer, `u32` length) pair packed with the two flag words and the `u32`
+// id: 40 bytes.
 
 #[derive(Default)]
 pub struct Symbol {
     pub flags: OwnedCell<SymbolFlags>,
     pub check_flags: OwnedCell<CheckFlags>, // Non-zero only in transient symbols created by Checker
     pub name: OwnedStrCell,
-    pub declarations: OwnedSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
-    pub value_declaration: OwnedCell<Option<P<Node>>>,
-    pub(crate) id: AtomicU32, // Go uint64; ids above u32::MAX panic in get_symbol_id
+    declarations: OwnedSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
+    pub(crate) id: AtomicU32,              // Go uint64; ids above u32::MAX panic in get_symbol_id
     parent_or_tables: OwnedCell<SymbolParentWord>,
 }
 
@@ -39,18 +42,22 @@ struct SymbolTables {
     members: OwnedCell<Option<P<SymbolTable>>>,
     exports: OwnedCell<Option<P<SymbolTable>>>,
     export_symbol: OwnedCell<Option<P<Symbol>>>,
+    value_declaration: OwnedCell<Option<P<Node>>>, // when it is not the first declaration
 }
 
-const _: () = assert!(std::mem::size_of::<Symbol>() == 48);
+const _: () = assert!(std::mem::size_of::<Symbol>() == 40);
 
 /// `Symbol.parent` or, once the symbol has a `SymbolTables` tail, the tail: an address (provenance exposed when
-/// stored, recovered with `with_exposed_provenance`), with bit 63 set for the tail (user-space addresses are below
-/// 2^48). 0 = no parent and no tail. The address part stays a plain pointer to the start of its block.
+/// stored, recovered with `with_exposed_provenance`) in the low 48 bits (user-space addresses are below 2^48), with
+/// bit 63 set for the tail. Bit 62: the value declaration is the first declaration. 0 = no parent, no tail, no value
+/// declaration. The address part stays a plain pointer to the start of its block.
 #[derive(Clone, Copy, Default)]
 struct SymbolParentWord(u64);
 
 impl SymbolParentWord {
     const TABLES: u64 = 1 << 63;
+    const VALUE_FIRST: u64 = 1 << 62;
+    const ADDR: u64 = (1 << 48) - 1;
 
     #[inline]
     fn parent(p: Option<P<Symbol>>) -> SymbolParentWord {
@@ -74,7 +81,7 @@ impl SymbolParentWord {
         // SAFETY: a tagged word was stored from a live `P<SymbolTables>` (arena objects are never freed or moved),
         // whose provenance `addr` exposed.
         (self.0 & Self::TABLES != 0).then(|| {
-            P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<SymbolTables>((self.0 & !Self::TABLES) as usize) })
+            P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<SymbolTables>((self.0 & Self::ADDR) as usize) })
         })
     }
 
@@ -83,7 +90,10 @@ impl SymbolParentWord {
         match self.get_tables() {
             Some(t) => t.parent.get(),
             // SAFETY: a nonzero untagged word was stored from a live `P<Symbol>`, whose provenance `addr` exposed.
-            None => (self.0 != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(self.0 as usize) })),
+            None => {
+                let addr = self.0 & Self::ADDR;
+                (addr != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(addr as usize) }))
+            }
         }
     }
 }
@@ -114,9 +124,22 @@ impl Symbol {
     pub fn declarations(&self) -> &'static [P<Node>] {
         self.declarations.get()
     }
+    /// Go `symbol.Declarations = slices.Clone(declarations)`-like: stores a copy.
     #[inline]
     pub fn set_declarations(&self, declarations: &[P<Node>]) {
-        self.declarations.set(tsrs_core::alloc_slice(declarations))
+        self.set_declarations_static(tsrs_core::alloc_slice(declarations))
+    }
+    /// Go `symbol.Declarations = declarations` (shares the slice).
+    pub fn set_declarations_static(&self, declarations: &'static [P<Node>]) {
+        let word = self.parent_or_tables.get();
+        if word.0 & SymbolParentWord::VALUE_FIRST != 0 {
+            let value_declaration = self.declarations.get()[0];
+            if declarations.first() != Some(&value_declaration) {
+                self.parent_or_tables.set(SymbolParentWord(word.0 & !SymbolParentWord::VALUE_FIRST));
+                self.tables_for_write().value_declaration.set(Some(value_declaration));
+            }
+        }
+        self.declarations.set(declarations)
     }
     /// Go `append(symbol.Declarations, declarations...)`.
     pub fn append_declarations(&self, declarations: &[P<Node>]) {
@@ -126,11 +149,33 @@ impl Symbol {
         let mut result = Vec::with_capacity(self.declarations.get().len() + declarations.len());
         result.extend_from_slice(self.declarations.get());
         result.extend_from_slice(declarations);
-        self.declarations.set(tsrs_core::alloc_vec(result))
+        self.set_declarations_static(tsrs_core::alloc_vec(result))
     }
     #[inline]
     pub fn value_declaration(&self) -> Option<P<Node>> {
-        self.value_declaration.get()
+        let word = self.parent_or_tables.get();
+        if word.0 & SymbolParentWord::VALUE_FIRST != 0 {
+            let declarations = self.declarations.get();
+            debug_assert!(!declarations.is_empty());
+            // SAFETY: the bit is set only while the declarations are non-empty (`set_value_declaration`,
+            // `set_declarations_static`).
+            return Some(unsafe { *declarations.get_unchecked(0) });
+        }
+        word.get_tables().and_then(|t| t.value_declaration.get())
+    }
+    pub fn set_value_declaration(&self, value_declaration: Option<P<Node>>) {
+        let word = self.parent_or_tables.get();
+        if value_declaration.is_some() && self.declarations.get().first().copied() == value_declaration {
+            self.parent_or_tables.set(SymbolParentWord(word.0 | SymbolParentWord::VALUE_FIRST));
+            if let Some(tables) = word.get_tables() {
+                tables.value_declaration.set(None);
+            }
+            return;
+        }
+        self.parent_or_tables.set(SymbolParentWord(word.0 & !SymbolParentWord::VALUE_FIRST));
+        if value_declaration.is_some() || word.get_tables().is_some() {
+            self.tables_for_write().value_declaration.set(value_declaration);
+        }
     }
     #[inline]
     fn tables(&self) -> Option<P<SymbolTables>> {
@@ -143,7 +188,7 @@ impl Symbol {
             Some(tables) => tables,
             None => {
                 let tables = P::new(SymbolTables { parent: OwnedCell::new(word.get_parent()), ..Default::default() });
-                self.parent_or_tables.set(SymbolParentWord::tables(tables));
+                self.parent_or_tables.set(SymbolParentWord(SymbolParentWord::tables(tables).0 | word.0 & SymbolParentWord::VALUE_FIRST));
                 tables
             }
         }
@@ -174,9 +219,10 @@ impl Symbol {
     }
     #[inline]
     pub fn set_parent(&self, parent: Option<P<Symbol>>) {
-        match self.tables() {
+        let word = self.parent_or_tables.get();
+        match word.get_tables() {
             Some(tables) => tables.parent.set(parent),
-            None => self.parent_or_tables.set(SymbolParentWord::parent(parent)),
+            None => self.parent_or_tables.set(SymbolParentWord(SymbolParentWord::parent(parent).0 | word.0 & SymbolParentWord::VALUE_FIRST)),
         }
     }
     #[inline]
@@ -195,7 +241,7 @@ impl Symbol {
     }
 
     pub fn is_static(&self) -> bool {
-        let Some(value_declaration) = self.value_declaration.get() else {
+        let Some(value_declaration) = self.value_declaration() else {
             return false;
         };
         let modifier_flags = value_declaration.modifier_flags();
@@ -219,16 +265,16 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
     if symbol.flags.get().intersects(SymbolFlags::Transient) {
         return None;
     }
-    if symbol.declarations.get().is_empty() {
+    if symbol.declarations().is_empty() {
         // A class's implicit prototype has no declaration of its own.
         assert!(symbol.flags.get().intersects(SymbolFlags::Prototype), "File-bound symbol has no declarations");
         let parent = symbol.parent();
         assert!(parent.is_some_and(|p| p.flags.get().intersects(SymbolFlags::Class)), "Prototype has no declaring class");
         symbol = parent.unwrap();
         assert!(!symbol.flags.get().intersects(SymbolFlags::Transient), "Prototype parent is not file-bound");
-        assert!(!symbol.declarations.get().is_empty(), "Prototype parent has no declarations");
+        assert!(!symbol.declarations().is_empty(), "Prototype parent has no declarations");
     }
-    let first = symbol.declarations.get()[0];
+    let first = symbol.declarations()[0];
     let file = get_source_file_of_node(first);
     assert!(file.is_some(), "File-bound declaration has no source file");
     file
@@ -711,7 +757,7 @@ pub const InternalSymbolNameThis: &str = "this";
 pub const InternalSymbolNameModuleExports: &str = "module.exports";
 
 pub fn symbol_name(symbol: P<Symbol>) -> &'static str {
-    if let Some(value_declaration) = symbol.value_declaration.get() {
+    if let Some(value_declaration) = symbol.value_declaration() {
         if is_private_identifier_class_element_declaration(value_declaration) {
             return value_declaration.name().unwrap().text();
         }

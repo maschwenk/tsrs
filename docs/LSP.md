@@ -129,3 +129,9 @@ measured on the private monorepo in phase 4 (open a file, edit 200 times, RSS vs
 - Content mappers, `api`, ATA, telemetry, pprof requests: not ported (see above).
 - Memory: everything allocated by programs and checkers is leaked until phase 4 (see the memory plan).
 - Cancellation: only before a request starts (phase 4).
+- `tsrs_ls::autoimport` is a PLACEHOLDER until phase 3: only the types/functions `project` and the phase-1 `ls` files
+  call, behaving like an empty registry that is never prepared for any file (`Clone` builds nothing,
+  `IsPreparedForImportingFile` is false, no node_modules directories). `autoimport.ProjectID` (a Go `fmt.Stringer`
+  interface) is a string newtype.
+- `tsrs_ls::spanmap` is a PLACEHOLDER for Go `internal/spanmap`: value types only; `SpanMap` is uninhabited (no
+  content mapper ever builds one), so content-mapped branches are kept but statically unreachable.

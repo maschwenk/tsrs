@@ -1,4 +1,4 @@
-From 454faf31533e656d11f8dda9c43f03b8ea41fd5a Mon Sep 17 00:00:00 2001
+From 3d6a4da43fd2af127bccec582df02edccf6430d2 Mon Sep 17 00:00:00 2001
 From: Max schwenk <maschwenk@gmail.com>
 Date: Thu, 1 Oct 2026 03:05:04 -0400
 Subject: [PATCH 1/2] Resolve members of instantiated class and interface
@@ -18,10 +18,10 @@ Subject: [PATCH 1/2] Resolve members of instantiated class and interface
  create mode 100644 tsc/testdata/tests/cases/compiler/instantiatedReferenceLazyMembers.ts
 
 diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
-index 415c8ecdf7..f04c079aa9 100644
+index 6b1d3e44c0..571ec32fc6 100644
 --- a/tsc/internal/checker/checker.go
 +++ b/tsc/internal/checker/checker.go
-@@ -700,6 +700,7 @@ type Checker struct {
+@@ -701,6 +701,7 @@ type Checker struct {
  	sourceFileLinks                             core.LinkStore[*ast.SourceFile, SourceFileLinks]
  	regExpScanner                               *scanner.Scanner
  	patternForType                              map[*Type]*ast.Node
@@ -29,7 +29,7 @@ index 415c8ecdf7..f04c079aa9 100644
  	contextFreeTypes                            map[*ast.Node]*Type
  	anyType                                     *Type
  	autoType                                    *Type
-@@ -980,6 +981,7 @@ func NewChecker(program Program, tracer *Tracer) (*Checker, *sync.Mutex) {
+@@ -981,6 +982,7 @@ func NewChecker(program Program, tracer *Tracer) (*Checker, *sync.Mutex) {
  	c.propertiesTypes = make(map[PropertiesTypesKey]*Type)
  	c.mergedSymbols = make(map[*ast.Symbol]*ast.Symbol)
  	c.patternForType = make(map[*Type]*ast.Node)
@@ -37,7 +37,7 @@ index 415c8ecdf7..f04c079aa9 100644
  	c.contextFreeTypes = make(map[*ast.Node]*Type)
  	c.anyType = c.newIntrinsicType(TypeFlagsAny, "any")
  	c.autoType = c.newIntrinsicTypeEx(TypeFlagsAny, "any", ObjectFlagsNonInferrableType)
-@@ -19244,8 +19246,7 @@ func (c *Checker) getPropertyOfTypeEx(t *Type, name string, skipObjectFunctionPr
+@@ -19247,8 +19249,7 @@ func (c *Checker) getPropertyOfTypeEx(t *Type, name string, skipObjectFunctionPr
  	t = c.getReducedApparentType(t)
  	switch {
  	case t.flags&TypeFlagsObject != 0:
@@ -47,7 +47,7 @@ index 415c8ecdf7..f04c079aa9 100644
  		if symbol != nil {
  			if !includeTypeOnlyMembers && t.symbol != nil && t.symbol.Flags&ast.SymbolFlagsValueModule != 0 && c.moduleSymbolLinks.Get(t.symbol).typeOnlyExportStarMap[name] != nil {
  				// If this is the type of a module, `resolved.members.get(name)` might have effectively skipped over
-@@ -19264,9 +19265,9 @@ func (c *Checker) getPropertyOfTypeEx(t *Type, name string, skipObjectFunctionPr
+@@ -19267,9 +19268,9 @@ func (c *Checker) getPropertyOfTypeEx(t *Type, name string, skipObjectFunctionPr
  		switch {
  		case t == c.anyFunctionType:
  			functionType = c.globalFunctionType
@@ -59,7 +59,7 @@ index 415c8ecdf7..f04c079aa9 100644
  			functionType = c.globalNewableFunctionType
  		}
  		if functionType != nil {
-@@ -19308,6 +19309,12 @@ func (c *Checker) getSignaturesOfStructuredType(t *Type, kind SignatureKind) []*
+@@ -19311,6 +19312,12 @@ func (c *Checker) getSignaturesOfStructuredType(t *Type, kind SignatureKind) []*
  	if t.flags&TypeFlagsStructuredType == 0 {
  		return nil
  	}
@@ -72,7 +72,7 @@ index 415c8ecdf7..f04c079aa9 100644
  	resolved := c.resolveStructuredTypeMembers(t)
  	if kind == SignatureKindCall {
  		return resolved.signatures[:resolved.callSignatureCount]
-@@ -19321,6 +19328,9 @@ func (c *Checker) getIndexInfosOfType(t *Type) []*IndexInfo {
+@@ -19324,6 +19331,9 @@ func (c *Checker) getIndexInfosOfType(t *Type) []*IndexInfo {
  
  func (c *Checker) getIndexInfosOfStructuredType(t *Type) []*IndexInfo {
  	if t.flags&TypeFlagsStructuredType != 0 {
@@ -82,7 +82,7 @@ index 415c8ecdf7..f04c079aa9 100644
  		return c.resolveStructuredTypeMembers(t).indexInfos
  	}
  	return nil
-@@ -19437,13 +19447,12 @@ func (c *Checker) resolveClassOrInterfaceMembers(t *Type) {
+@@ -19440,13 +19450,12 @@ func (c *Checker) resolveClassOrInterfaceMembers(t *Type) {
  }
  
  func (c *Checker) resolveTypeReferenceMembers(t *Type) {
@@ -101,7 +101,7 @@ index 415c8ecdf7..f04c079aa9 100644
  	c.resolveObjectTypeMembers(t, source, typeParameters, paddedTypeArguments)
  }
  
-@@ -19480,17 +19489,7 @@ func (c *Checker) resolveObjectTypeMembers(t *Type, source *Type, typeParameters
+@@ -19483,17 +19492,7 @@ func (c *Checker) resolveObjectTypeMembers(t *Type, source *Type, typeParameters
  				instantiatedBaseType = c.getTypeWithThisArgument(c.instantiateType(baseType, mapper), thisArgument, false /*needsApparentType*/)
  			}
  			members = c.addInheritedMembers(members, c.getPropertiesOfType(instantiatedBaseType))
@@ -120,7 +120,7 @@ index 415c8ecdf7..f04c079aa9 100644
  		}
  	}
  	c.setStructuredTypeMembers(t, members, callSignatures, constructSignatures, indexInfos)
-@@ -19505,6 +19504,213 @@ func findIndexInfo(indexInfos []*IndexInfo, keyType *Type) *IndexInfo {
+@@ -19508,6 +19507,213 @@ func findIndexInfo(indexInfos []*IndexInfo, keyType *Type) *IndexInfo {
  	return nil
  }
  
@@ -334,7 +334,7 @@ index 415c8ecdf7..f04c079aa9 100644
  func (c *Checker) getBaseTypes(t *Type) []*Type {
  	if t.objectFlags&(ObjectFlagsClassOrInterface|ObjectFlagsTuple) == 0 {
  		return nil
-@@ -19693,13 +19899,14 @@ func (c *Checker) getSingleCallOrConstructSignature(t *Type) *Signature {
+@@ -19696,13 +19902,14 @@ func (c *Checker) getSingleCallOrConstructSignature(t *Type) *Signature {
  
  func (c *Checker) getSingleSignature(t *Type, kind SignatureKind, allowMembers bool) *Signature {
  	if t.flags&TypeFlagsObject != 0 {
@@ -355,7 +355,7 @@ index 415c8ecdf7..f04c079aa9 100644
  			}
  		}
  	}
-@@ -21092,24 +21299,34 @@ func (c *Checker) instantiateSymbolTable(symbols ast.SymbolTable, m *TypeMapper)
+@@ -21095,24 +21302,34 @@ func (c *Checker) instantiateSymbolTable(symbols ast.SymbolTable, m *TypeMapper)
  }
  
  func (c *Checker) instantiateSymbol(symbol *ast.Symbol, m *TypeMapper) *ast.Symbol {
@@ -395,7 +395,7 @@ index 415c8ecdf7..f04c079aa9 100644
  	if symbol.CheckFlags&ast.CheckFlagsInstantiated != 0 {
  		// If symbol being instantiated is itself a instantiation, fetch the original target and combine the
  		// type mappers. This ensures that original type identities are properly preserved and that aliases
-@@ -27833,7 +28050,7 @@ func (c *Checker) getPropertyNameFromIndex(indexType *Type, accessNode *ast.Node
+@@ -27836,7 +28053,7 @@ func (c *Checker) getPropertyNameFromIndex(indexType *Type, accessNode *ast.Node
  }
  
  func (c *Checker) isStringIndexSignatureOnlyTypeWorker(t *Type) bool {
@@ -404,7 +404,7 @@ index 415c8ecdf7..f04c079aa9 100644
  		t.flags&TypeFlagsUnionOrIntersection != 0 && core.Every(t.Types(), c.isStringIndexSignatureOnlyType)
  }
  
-@@ -31633,8 +31850,8 @@ func (c *Checker) isFunctionObjectType(t *Type) bool {
+@@ -31636,8 +31853,8 @@ func (c *Checker) isFunctionObjectType(t *Type) bool {
  	}
  	// We do a quick check for a "bind" property before performing the more expensive subtype
  	// check. This gives us a quicker out in the common case where an object type is not a function.

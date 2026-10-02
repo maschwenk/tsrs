@@ -273,6 +273,10 @@ function w(s = "") {
     out.push(s);
 }
 
+// Node data structs written by hand although ast.json generates them (struct, getters, factory, clone): `Identifier`
+// packs its flow node and its text into one word (crates/tsrs_ast/src/identifier.rs).
+const HAND_WRITTEN_DATA = new Set(["Identifier"]);
+
 // Identifier and literal text is stored as a `PackedStr` (8 bytes: pointer and length in one word, tsrs_core::ptr); the getter
 // and the factory parameter stay `&'static str`.
 const PACKED_STR_FIELDS = new Set(["Identifier.Text", "PrivateIdentifier.Text", "LiteralLikeNodeBase.Text"]);
@@ -335,6 +339,7 @@ function header() {
     w();
     w("use crate::ast::*;");
     w("use crate::flow::*;");
+    w("use crate::identifier::Identifier;");
     w("use crate::kind::Kind;");
     w("use crate::nodeflags::NodeFlags;");
     w("use crate::symbol::{Symbol, SymbolTable};");
@@ -380,6 +385,7 @@ function genGetters(l: Layout) {
 }
 
 function genStruct(node: NodeType) {
+    if (HAND_WRITTEN_DATA.has(node.name)) return;
     const l = layouts.get(node.name)!;
     if (isEmptyLayout(l)) {
         w(`pub struct ${node.name};`);
@@ -425,6 +431,7 @@ function hasTextContent(node: NodeType): boolean {
 }
 
 function genNewFactory(node: NodeType) {
+    if (HAND_WRITTEN_DATA.has(node.name)) return;
     const l = layouts.get(node.name)!;
     const params = factoryParams(node);
     const kindMember = params.find(p => p.m.isKindParam());
@@ -582,6 +589,7 @@ function genVisitEachChild(node: NodeType) {
 }
 
 function genClone(node: NodeType) {
+    if (HAND_WRITTEN_DATA.has(node.name)) return;
     const l = layouts.get(node.name)!;
     const params = factoryParams(node);
     const args = params.map(p => memberValue(l, p.m, "self", "node")).join(", ");
@@ -787,8 +795,10 @@ function genNodeImpl() {
     w(`    }`);
     w();
 
+    // The flow node of every kind is read and written through `Node::flow_node()` / `set_flow_node()`
+    // (identifiers keep theirs packed, without a `FlowNodeBase`), so this one is crate-private.
     const baseAccessors: [string, string][] = [
-        ["flow_node_data", "FlowNodeBase"],
+        ["flow_node_base", "FlowNodeBase"],
         ["declaration_data", "DeclarationBase"],
         ["exportable_data", "ExportableBase"],
         ["locals_container_data", "LocalsContainerBase"],
@@ -799,9 +809,10 @@ function genNodeImpl() {
         ["template_literal_like_data", "TemplateLiteralLikeNodeBase"],
     ];
     for (const [fn, base] of baseAccessors) {
-        w(`    pub fn ${fn}(&self) -> Option<&'static ${base}> {`);
+        w(`    ${fn === "flow_node_base" ? "pub(crate)" : "pub"} fn ${fn}(&self) -> Option<&'static ${base}> {`);
         w(`        match self.data_tag() {`);
         for (const n of nodes) {
+            if (HAND_WRITTEN_DATA.has(n.name)) continue;
             const p = basePath(layouts.get(n.name)!, base);
             if (p) w(arm(n.name, `Some(&d.${p})`));
         }
