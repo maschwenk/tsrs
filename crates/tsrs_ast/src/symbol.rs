@@ -99,6 +99,11 @@ impl SymbolParentWord {
 }
 
 impl Symbol {
+    /// The id if one was assigned (0 otherwise), without assigning one (census instrumentation).
+    pub fn peek_id(&self) -> u32 {
+        self.id.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).
     pub fn new(flags: SymbolFlags, name: &'static str) -> P<Symbol> {
         P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedStrCell::new(name), ..Default::default() })

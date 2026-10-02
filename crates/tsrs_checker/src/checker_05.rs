@@ -515,6 +515,7 @@ impl Checker {
 
     // checker.go:9213
     pub(crate) fn choose_overload(&mut self, s: &mut CallState, relation: P<Relation>) -> Option<P<Signature>> {
+        let _region = CensusRegion::enter(2);
         s.candidates_for_argument_error = Vec::new();
         s.candidate_for_argument_arity_error = None;
         s.candidate_for_type_argument_error = None;
@@ -525,7 +526,7 @@ impl Checker {
             if !s.type_arguments.is_empty() || !self.has_correct_arity(node, &args, candidate, s.signature_help_trailing_comma) {
                 return None;
             }
-            if !self.is_signature_applicable(node, &args, candidate, relation, CheckMode::Normal, false /*reportErrors*/, None /*diagnosticOutput*/) {
+            if !self.is_signature_applicable_speculative(node, &args, candidate, relation, CheckMode::Normal) {
                 s.candidates_for_argument_error = vec![candidate];
                 return None;
             }
@@ -599,7 +600,7 @@ impl Checker {
             } else {
                 check_candidate = candidate;
             }
-            if !self.is_signature_applicable(node, args, check_candidate, relation, s.arg_check_mode, false /*reportErrors*/, None /*diagnosticOutput*/) {
+            if !self.is_signature_applicable_speculative(node, args, check_candidate, relation, s.arg_check_mode) {
                 // Give preference to error candidates that have no rest parameters (as they are more specific)
                 s.candidates_for_argument_error.push(check_candidate);
                 return None;
@@ -619,7 +620,7 @@ impl Checker {
                         return None;
                     }
                 }
-                if !self.is_signature_applicable(node, args, check_candidate, relation, s.arg_check_mode, false /*reportErrors*/, None /*diagnosticOutput*/) {
+                if !self.is_signature_applicable_speculative(node, args, check_candidate, relation, s.arg_check_mode) {
                     // Give preference to error candidates that have no rest parameters (as they are more specific)
                     s.candidates_for_argument_error.push(check_candidate);
                     return None;
@@ -791,6 +792,12 @@ impl Checker {
             }
         }
         type_argument_types
+    }
+
+    /// `isSignatureApplicable` from `chooseOverload` (no error reporting), a speculative region for the census.
+    fn is_signature_applicable_speculative(&mut self, node: P<Node>, args: &[P<Node>], signature: P<Signature>, relation: P<Relation>, check_mode: CheckMode) -> bool {
+        let _region = CensusRegion::enter(1);
+        self.is_signature_applicable(node, args, signature, relation, check_mode, false /*reportErrors*/, None /*diagnosticOutput*/)
     }
 
     // checker.go:9448
@@ -2444,5 +2451,29 @@ impl Checker {
             }
         };
         self.get_instantiation_expression_type(expr_type, node)
+    }
+}
+
+/// Census only (notes/mem-overload-rollback.md): tags the allocations made while alive as a speculative region of
+/// `kind` (`TSRS_CENSUS_REGION`). Compiled to nothing without the alloc-profile build.
+struct CensusRegion(bool);
+
+impl CensusRegion {
+    #[inline(always)]
+    fn enter(kind: u8) -> CensusRegion {
+        let on = tsrs_core::census_hooks::region_kind() == kind;
+        if on {
+            tsrs_core::census_hooks::region_enter();
+        }
+        CensusRegion(on)
+    }
+}
+
+impl Drop for CensusRegion {
+    #[inline(always)]
+    fn drop(&mut self) {
+        if self.0 {
+            tsrs_core::census_hooks::region_exit();
+        }
     }
 }

@@ -2,6 +2,7 @@ pub mod arena;
 pub mod ptr;
 #[cfg(feature = "alloc-profile")]
 pub mod alloc_profile;
+pub mod census_hooks;
 pub use ptr::{alloc, alloc_slice, alloc_slice_recycled, alloc_str, alloc_vec, alloc_profile_dump, arena_checkpoint, arena_pin, census_scrub_none, census_scrub_slack, census_scrub_stack, arena_rewind, free_raw, OptionSliceCell, PackedStr, SliceCell, StrCell, SlicePair, StaticSlicePtr, P};
 
 mod frozen;

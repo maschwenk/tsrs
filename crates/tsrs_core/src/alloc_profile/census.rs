@@ -128,6 +128,94 @@ fn shard(a: usize) -> usize {
     ((a >> 4) ^ (a >> 13)) % SHARDS
 }
 
+// ---- speculative regions and weak tables (crate::census_hooks) ----
+
+/// Bit 31 of an arena block's site index / a heap block's stack id: allocated inside a region.
+pub(super) const REGION_BIT: u32 = 1 << 31;
+
+thread_local! {
+    static REGION_DEPTH: Cell<u32> = const { Cell::new(0) };
+}
+
+#[inline]
+pub(super) fn region_tag() -> u32 {
+    if REGION_DEPTH.try_with(|d| d.get()).unwrap_or(0) > 0 {
+        REGION_BIT
+    } else {
+        0
+    }
+}
+
+pub fn region_enter() {
+    if recording() {
+        let _ = REGION_DEPTH.try_with(|d| d.set(d.get() + 1));
+    }
+}
+
+pub fn region_exit() {
+    if recording() {
+        let _ = REGION_DEPTH.try_with(|d| d.set(d.get().saturating_sub(1)));
+    }
+}
+
+static REGION_KIND: AtomicU8 = AtomicU8::new(u8::MAX);
+
+/// `TSRS_CENSUS_REGION`: 1 `applicable` (default: `isSignatureApplicable` from `chooseOverload`), 2 `overload`
+/// (the whole `chooseOverload`), 0 `none` or census off.
+pub fn region_kind() -> u8 {
+    let k = REGION_KIND.load(Ordering::Relaxed);
+    if k != u8::MAX {
+        return k;
+    }
+    let k = with_guard(|| {
+        if !recording() {
+            return 0;
+        }
+        match std::env::var("TSRS_CENSUS_REGION").as_deref() {
+            Ok("overload") => 2,
+            Ok("none") => 0,
+            _ => 1,
+        }
+    });
+    REGION_KIND.store(k, Ordering::Relaxed);
+    k
+}
+
+static WEAK: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+/// Flat list of entries: key count, start, len, keys...
+static EPHEMERONS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+static NOTED: Mutex<Vec<(u8, usize)>> = Mutex::new(Vec::new());
+
+pub fn weak(addr: usize) {
+    if recording() {
+        with_guard(|| WEAK.lock().unwrap().push(addr));
+    }
+}
+
+pub fn ephemeron(keys: &[usize], start: usize, len: usize) {
+    if recording() {
+        with_guard(|| {
+            let mut e = EPHEMERONS.lock().unwrap();
+            e.push(keys.len());
+            e.push(start);
+            e.push(len);
+            e.extend_from_slice(keys);
+        });
+    }
+}
+
+pub fn note(kind: u8, addr: usize) {
+    if recording() {
+        with_guard(|| NOTED.lock().unwrap().push((kind, addr)));
+    }
+}
+
+/// Made with tracking suspended, so the list is not a block that keeps the noted objects reachable. Call before
+/// `run` (the caller must not keep the vector across it either: it is an untracked allocation).
+pub fn noted(kind: u8) -> Vec<usize> {
+    with_guard(|| NOTED.lock().unwrap().iter().filter(|n| n.0 == kind).map(|n| n.1).collect())
+}
+
 /// While recording, freed heap memory is cleared before it goes back to the allocator. Otherwise its stale contents
 /// (pointers of dead objects, and the census's own address tables) would sit in the unused capacity of the blocks
 /// that reuse the memory (`Vec` slack, empty hash table buckets) and keep arbitrary blocks "reachable".
@@ -148,7 +236,7 @@ pub(super) fn on_alloc(p: *mut u8, size: usize) {
         if !enabled() {
             return;
         }
-        let id = intern(&capture());
+        let id = intern(&capture()) | region_tag();
         let a = p as usize;
         LIVE[shard(a)].lock().unwrap().get_or_insert_with(FxHashMap::default).insert(a, (size, id, next_seq()));
     });
@@ -174,6 +262,8 @@ struct Block {
     class: u32,
     /// Allocation order (`next_seq`).
     seq: u32,
+    /// Allocated inside a speculative region (`census_hooks::region_enter`).
+    region: bool,
 }
 
 static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -509,7 +599,13 @@ fn run_frozen(roots: &[usize]) {
             .collect();
         let own = std::mem::take(&mut data.blocks);
         blocks.reserve(own.len());
-        blocks.extend(own.iter().map(|&(start, size, site, seq)| Block { start, size, class: remap[site as usize], seq }));
+        blocks.extend(own.iter().map(|&(start, size, site, seq)| Block {
+            start,
+            size,
+            class: remap[(site & !REGION_BIT) as usize],
+            seq,
+            region: site & REGION_BIT != 0,
+        }));
         drop(own);
         samples.extend(std::mem::take(&mut data.samples));
         would_free.extend(std::mem::take(&mut data.would_free));
@@ -541,7 +637,7 @@ fn run_frozen(roots: &[usize]) {
                     oversized += 1;
                     u32::MAX
                 });
-                blocks.push(Block { start: a as u64, size, class: arena_classes + stack, seq });
+                blocks.push(Block { start: a as u64, size, class: arena_classes + (stack & !REGION_BIT), seq, region: stack & REGION_BIT != 0 });
             }
         }
     }
@@ -630,6 +726,10 @@ fn run_frozen(roots: &[usize]) {
             a.count - a.rcount,
             a.ubytes() as f64 * 100.0 / a.bytes.max(1) as f64
         );
+    }
+
+    if table.blocks.iter().any(|b| b.region) {
+        region_report(&mut table, &classes, &stacks, &scan, roots, top);
     }
 
     let mut by_type: FxHashMap<String, Agg> = FxHashMap::default();
@@ -729,6 +829,250 @@ fn run_frozen(roots: &[usize]) {
         let _ = out.flush();
     }
     *RESULT.lock().unwrap() = Some(table);
+}
+
+/// Speculative regions (`census_hooks::region_enter`): of the blocks allocated inside a region and not already freed
+/// by a recycling site, how many are unreachable at exit (1) with the ordinary conservative mark, and (2) with the
+/// identity-keyed caches registered by `census_hooks::weak` treated as weak tables whose entries
+/// (`census_hooks::ephemeron`) keep their values only while every key and the table itself are reachable. (1) bounds
+/// what a rollback that keeps every cache entry could free at region end; (2) what one that also drops the entries
+/// keyed by dead objects could free. Both are upper bounds for the region end: a block unreachable then stays
+/// unreachable, but a block reachable at region end can die later.
+fn region_report(table: &mut Table, classes: &[Class], stacks: &[Stack], scan: &[bool], roots: &[usize], top: usize) {
+    let t0 = Instant::now();
+    let n = table.blocks.len();
+    let bit = |m: &[u64], i: usize| m[i / 64] & (1 << (i % 64)) != 0;
+    let mut freed = vec![0u64; n / 64 + 1];
+    for &(a, _) in WOULD_FREE.lock().unwrap().iter() {
+        if let Some(i) = table.lookup(a) {
+            if table.blocks[i].start == a {
+                freed[i / 64] |= 1 << (i % 64);
+            }
+        }
+    }
+    let mark1 = std::mem::replace(&mut table.marks, vec![0u64; n / 64 + 1]);
+    let mut weak = vec![0u64; n / 64 + 1];
+    let (mut weak_count, mut weak_bytes) = (0u64, 0u64);
+    for a in std::mem::take(&mut *WEAK.lock().unwrap()) {
+        if let Some(i) = table.lookup(a as u64) {
+            if !bit(&weak, i) {
+                weak[i / 64] |= 1 << (i % 64);
+                weak_count += 1;
+                weak_bytes += table.blocks[i].size as u64;
+            }
+        }
+    }
+    let mut work: Vec<u32> = Vec::new();
+    for &r in roots {
+        if let Some(i) = table.lookup(r as u64) {
+            table.mark(i, &mut work);
+        }
+    }
+    scan_stack(table, &mut work);
+    for (start, len, _) in data_segments() {
+        table.scan(start, len, &mut work);
+    }
+    let drain = |table: &mut Table, work: &mut Vec<u32>| {
+        while let Some(i) = work.pop() {
+            let b = table.blocks[i as usize];
+            if scan[b.class as usize] && !bit(&weak, i as usize) {
+                table.scan(b.start as usize, b.size as usize, work);
+            }
+        }
+    };
+    drain(table, &mut work);
+    let eph = std::mem::take(&mut *EPHEMERONS.lock().unwrap());
+    let mut entries: Vec<usize> = Vec::new();
+    let mut at = 0;
+    while at < eph.len() {
+        entries.push(at);
+        at += 3 + eph[at];
+    }
+    let mut fired = vec![false; entries.len()];
+    let (mut passes, mut fired_count) = (0u32, 0u64);
+    loop {
+        let mut changed = false;
+        for (k, &off) in entries.iter().enumerate() {
+            if fired[k] {
+                continue;
+            }
+            let (nk, start, len) = (eph[off], eph[off + 1], eph[off + 2]);
+            let live = |a: usize| table.lookup(a as u64).is_none_or(|i| table.marked(i));
+            if live(start) && eph[off + 3..off + 3 + nk].iter().all(|&key| live(key)) {
+                fired[k] = true;
+                fired_count += 1;
+                changed = true;
+                table.scan(start, len, &mut work);
+                drain(table, &mut work);
+            }
+        }
+        passes += 1;
+        if !changed {
+            break;
+        }
+    }
+    let mark2 = std::mem::replace(&mut table.marks, mark1);
+    // Which weak tables refer directly to the region blocks only they keep (first hop only).
+    let mut kept_by: FxHashMap<u32, u64> = FxHashMap::default();
+    let mut attributed = vec![0u64; n / 64 + 1];
+    for w in 0..n {
+        if !bit(&weak, w) || !bit(&table.marks, w) {
+            continue;
+        }
+        let wb = table.blocks[w];
+        let mut p = wb.start as usize;
+        while p + 8 <= (wb.start + wb.size as u64) as usize {
+            // SAFETY: inside a recorded live block.
+            let word = u64::from_ne_bytes(unsafe { std::ptr::read_volatile(p as *const [u8; 8]) }) & MASK48;
+            if let Some(i) = table.lookup(word) {
+                let b = table.blocks[i];
+                if b.region && !bit(&freed, i) && bit(&table.marks, i) && !bit(&mark2, i) && !bit(&attributed, i) {
+                    attributed[i / 64] |= 1 << (i % 64);
+                    *kept_by.entry(wb.class).or_default() += b.size as u64;
+                }
+            }
+            p += 4;
+        }
+    }
+
+    #[derive(Default, Clone, Copy)]
+    struct R {
+        count: u64,
+        bytes: u64,
+        r1: u64,
+        r2: u64,
+        freed: u64,
+    }
+    let mut by_class: FxHashMap<u32, R> = FxHashMap::default();
+    let (mut arena, mut heap) = (R::default(), R::default());
+    let (mut other_lost, mut other_lost_bytes) = (0u64, 0u64);
+    for (i, b) in table.blocks.iter().enumerate() {
+        if !b.region {
+            if bit(&table.marks, i) && !bit(&mark2, i) {
+                other_lost += 1;
+                other_lost_bytes += b.size as u64;
+            }
+            continue;
+        }
+        let is_heap = matches!(classes[b.class as usize], Class::Heap { .. });
+        let key = b.class;
+        let size = b.size as u64;
+        for r in [by_class.entry(key).or_default(), if is_heap { &mut heap } else { &mut arena }] {
+            if bit(&freed, i) {
+                r.freed += size;
+                continue;
+            }
+            r.count += 1;
+            r.bytes += size;
+            if bit(&table.marks, i) {
+                r.r1 += size;
+            }
+            if bit(&mark2, i) {
+                r.r2 += size;
+            }
+        }
+    }
+    eprintln!(
+        "\n== census: speculative regions (TSRS_CENSUS_REGION kind {}) ==\nweak tables: {weak_count} blocks ({} MB); ephemerons {} entries, {fired_count} fired in {passes} passes; mark took {:.1} s",
+        region_kind(),
+        mb(weak_bytes),
+        entries.len(),
+        t0.elapsed().as_secs_f64()
+    );
+    for (name, r) in [("arena", arena), ("heap", heap)] {
+        eprintln!(
+            "region {name:<5}: freed by recycling {:>8} MB | kept {:>8} MB {:>10} blocks | unreachable at exit: conservative {:>8} MB, with weak caches {:>8} MB",
+            mb(r.freed),
+            mb(r.bytes),
+            r.count,
+            mb(r.bytes - r.r1),
+            mb(r.bytes - r.r2)
+        );
+    }
+    eprintln!("non-region blocks reachable only through weak tables: {other_lost} blocks, {} MB", mb(other_lost_bytes));
+    let mut rows: Vec<(u32, R)> = by_class.into_iter().collect();
+    let mut by_type: FxHashMap<String, R> = FxHashMap::default();
+    for (c, r) in &rows {
+        let name = match &classes[*c as usize] {
+            Class::Arena { ty, .. } => short_type(ty),
+            Class::Heap { .. } => "(heap blocks)".into(),
+        };
+        let e = by_type.entry(name).or_default();
+        e.count += r.count;
+        e.bytes += r.bytes;
+        e.r1 += r.r1;
+        e.r2 += r.r2;
+        e.freed += r.freed;
+    }
+    let mut types: Vec<(String, R)> = by_type.into_iter().collect();
+    types.sort_by(|a, b| (b.1.bytes - b.1.r2).cmp(&(a.1.bytes - a.1.r2)));
+    eprintln!("{:>10} {:>10} {:>12} {:>12} {:>12}  region blocks by type", "freed MB", "kept MB", "unreach1 MB", "unreach2 MB", "reach2 MB");
+    for (name, r) in types.iter().take(top) {
+        eprintln!("{:>10} {:>10} {:>12} {:>12} {:>12}  {name}", mb(r.freed), mb(r.bytes), mb(r.bytes - r.r1), mb(r.bytes - r.r2), mb(r.r2));
+    }
+    let mut kept: Vec<(u32, u64)> = kept_by.into_iter().collect();
+    kept.sort_by(|a, b| b.1.cmp(&a.1));
+    let mut ips: Vec<usize> = Vec::new();
+    for (c, _) in kept.iter().take(top) {
+        if let Class::Heap { stack } = classes[*c as usize] {
+            ips.extend(stacks[stack as usize].iter().copied());
+        }
+    }
+    let mut names: FxHashMap<usize, String> = FxHashMap::default();
+    atos(&ips, &mut names);
+    let mut kept_named: FxHashMap<String, u64> = FxHashMap::default();
+    for (c, b) in &kept {
+        let name = match classes[*c as usize] {
+            Class::Heap { stack } => stacks[stack as usize].iter().take_while(|&&ip| ip != 0).filter_map(|ip| names.get(ip)).filter(|n| !boring(n)).take(2).cloned().collect::<Vec<_>>().join(" <- "),
+            ref a => class_name(a),
+        };
+        *kept_named.entry(name).or_default() += b;
+    }
+    let mut kept_named: Vec<(String, u64)> = kept_named.into_iter().collect();
+    kept_named.sort_by(|a, b| b.1.cmp(&a.1));
+    eprintln!("weak tables that directly refer to region blocks kept only by weak tables (first hop, MB):");
+    for (name, b) in kept_named.iter().take(top) {
+        eprintln!("{:>10}  {name}", mb(*b));
+    }
+    // Heap blocks by allocating function.
+    let mut heap_rows: Vec<(u32, R)> = rows.iter().filter(|(c, _)| matches!(classes[*c as usize], Class::Heap { .. })).copied().collect();
+    heap_rows.sort_by(|a, b| (b.1.bytes - b.1.r2).cmp(&(a.1.bytes - a.1.r2)));
+    let mut ips: Vec<usize> = Vec::new();
+    for (c, _) in &heap_rows {
+        if let Class::Heap { stack } = classes[*c as usize] {
+            ips.extend(stacks[stack as usize].iter().copied());
+        }
+    }
+    let mut names: FxHashMap<usize, String> = FxHashMap::default();
+    atos(&ips, &mut names);
+    let mut by_fn: FxHashMap<String, R> = FxHashMap::default();
+    for (c, r) in &heap_rows {
+        let Class::Heap { stack } = classes[*c as usize] else { continue };
+        let f: Vec<String> = stacks[stack as usize].iter().take_while(|&&ip| ip != 0).filter_map(|ip| names.get(ip)).filter(|n| !boring(n)).take(3).cloned().collect();
+        let e = by_fn.entry(f.join("  <-  ")).or_default();
+        e.bytes += r.bytes;
+        e.r1 += r.r1;
+        e.r2 += r.r2;
+    }
+    let mut fns: Vec<(String, R)> = by_fn.into_iter().collect();
+    fns.sort_by(|a, b| (b.1.bytes - b.1.r2).cmp(&(a.1.bytes - a.1.r2)));
+    eprintln!("region heap blocks by allocating function (kept MB, unreach1 MB, unreach2 MB):");
+    for (f, r) in fns.iter().take(top) {
+        eprintln!("{:>10} {:>10} {:>10}  {f}", mb(r.bytes), mb(r.bytes - r.r1), mb(r.bytes - r.r2));
+    }
+    rows.sort_by(|a, b| b.1.r2.cmp(&a.1.r2));
+    eprintln!("region blocks still reachable with weak caches, by site:");
+    for (c, r) in rows.iter().filter(|(c, _)| matches!(classes[*c as usize], Class::Arena { .. })).take(top) {
+        let name = class_name(&classes[*c as usize]);
+        eprintln!("{:>10} MB reach2 of {:>10} MB  {name}", mb(r.r2), mb(r.bytes));
+    }
+    if let Some(out) = TSV.lock().unwrap().as_mut() {
+        use std::io::Write;
+        for (c, r) in &rows {
+            let name = class_name(&classes[*c as usize]);
+            let _ = writeln!(out, "region\t{}\t{}\t{}\t{}\t{}\t{name}", r.freed, r.bytes, r.r1, r.r2, r.count);
+        }
+    }
 }
 
 /// Offsets (in 4-byte scan steps) of words that overlap struct padding in arena types whose padding showed up as

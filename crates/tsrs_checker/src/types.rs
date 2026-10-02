@@ -1966,7 +1966,15 @@ impl ReferenceInstantiations {
 
     /// Go `m = make(map[CacheHashKey]*Type)`.
     pub fn make(&self) {
-        self.0.set(Some(P::new(RefCell::new(hashbrown::HashTable::new()))));
+        let table = P::new(RefCell::new(hashbrown::HashTable::new()));
+        tsrs_core::census_hooks::note(tsrs_core::census_hooks::NOTE_REFERENCE_INSTANTIATIONS, table.addr());
+        self.0.set(Some(table));
+    }
+
+    /// Census only (notes/mem-overload-rollback.md): the table behind a noted address.
+    pub fn census_table(addr: usize) -> P<RefCell<hashbrown::HashTable<P<Type>>>> {
+        // SAFETY: `addr` was noted by `make` for exactly this type; arena objects are never moved or dropped.
+        P::from_static(unsafe { &*(addr as *const RefCell<hashbrown::HashTable<P<Type>>>) })
     }
 
     /// Go `m[getTypeListKey(typeArguments)]`.

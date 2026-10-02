@@ -473,6 +473,7 @@ impl Checker {
                     let type_parameters = alloc_vec(type_parameters);
                     links.type_parameters.set(type_parameters);
                     links.instantiations.make();
+                    tsrs_core::census_hooks::note(tsrs_core::census_hooks::NOTE_ALIAS_INSTANTIATIONS, links.instantiations.get_ref().unwrap().addr());
                     links.instantiations.set(get_type_list_key(type_parameters), t);
                 }
                 if t == self.intrinsic_marker_type && symbol.name() == "BuiltinIteratorReturn" {
@@ -988,6 +989,7 @@ impl Checker {
             links.resolved_type.set(Some(self.get_conditional_type(root, None /*mapper*/, false /*forConstraint*/, None)));
             if !outer_type_parameters.is_empty() {
                 root.instantiations.make();
+                tsrs_core::census_hooks::note(tsrs_core::census_hooks::NOTE_CONDITIONAL_INSTANTIATIONS, root.instantiations.get_ref().unwrap().addr());
                 root.instantiations.set(get_conditional_type_key(outer_type_parameters, None /*alias*/, false /*forConstraint*/), links.resolved_type.get().unwrap());
             }
         }
@@ -1876,6 +1878,7 @@ impl Checker {
             TypeId(self.type_count),
             data,
         );
+        tsrs_core::census_hooks::note(tsrs_core::census_hooks::NOTE_TYPE, t.addr());
         #[cfg(feature = "assignment-stats")]
         self.stats_created.0.push(t);
         t

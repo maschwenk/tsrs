@@ -422,7 +422,7 @@ pub(crate) fn record(site: &'static Location<'static>, ty: &'static str, bytes: 
             let sample = data.countdown == 0;
             data.countdown = if sample { census::arena_sample_rate() - 1 } else { data.countdown - 1 };
             census::with_guard(|| {
-                data.blocks.push((addr as u64, size, idx, census::next_seq()));
+                data.blocks.push((addr as u64, size, idx | census::region_tag(), census::next_seq()));
                 if sample {
                     data.samples.push((addr as u64, census::stack_id()));
                 }

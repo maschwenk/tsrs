@@ -66,6 +66,19 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
     pub fn has(&self, key: P<K>) -> bool {
         self.index(key).is_some()
     }
+
+    /// Census only (notes/mem-overload-rollback.md): the slot table and chunk blocks, and every link as (key address,
+    /// link address).
+    pub fn census_entries(&self, mut block: impl FnMut(usize), mut entry: impl FnMut(usize, usize)) {
+        for c in &self.chunks {
+            block(c.as_ptr() as usize);
+        }
+        for slot in self.slots.iter() {
+            block(slot as *const LinkSlot as usize);
+            let key = slot.key;
+            entry(key, self.at(slot.index).addr());
+        }
+    }
 }
 
 impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
@@ -138,6 +151,24 @@ impl<V: 'static> IdLinkStore<V> {
     #[inline]
     pub fn has(&self, id: u64) -> bool {
         self.slot(id).is_some()
+    }
+
+    /// Census only (notes/mem-overload-rollback.md): the chunk blocks, and every link as (id, its address).
+    pub fn census_slots(&self, mut chunk: impl FnMut(usize), mut slot: impl FnMut(u64, usize)) {
+        for c in &self.chunks {
+            chunk(c.as_ptr() as usize);
+        }
+        for (page_index, page) in self.pages.iter().enumerate() {
+            let Some(page) = page else { continue };
+            for (i, &s) in page.iter().enumerate() {
+                if s != 0 {
+                    slot(((page_index << ID_PAGE_SHIFT) + i) as u64, self.at(s - 1).addr());
+                }
+            }
+        }
+        for (&id, &s) in &self.wide_slots {
+            slot(id, self.at(s).addr());
+        }
     }
 }
 
@@ -237,5 +268,9 @@ impl<V: 'static> SymbolArenaLinkStore<V> {
     #[inline]
     pub fn has(&self, symbol: P<Symbol>) -> bool {
         self.store.has(ast::get_symbol_id(symbol).0)
+    }
+
+    pub fn census_slots(&self, chunk: impl FnMut(usize), slot: impl FnMut(u64, usize)) {
+        self.store.census_slots(chunk, slot)
     }
 }

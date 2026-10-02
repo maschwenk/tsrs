@@ -17,6 +17,9 @@ pub(crate) fn run(program: &'static Program, roots: &[usize]) {
     }
     let mut all = vec![program as *const Program as usize];
     all.extend_from_slice(roots);
+    if tsrs_core::census_hooks::region_kind() != 0 {
+        program.for_each_checker_parallel(|_, c| c.census_register_weak_tables());
+    }
     census::run(&all);
     if std::env::var_os("TSRS_CENSUS_VERIFY").is_some_and(|v| v == "1") {
         verify(program);

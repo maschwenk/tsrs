@@ -1590,6 +1590,7 @@ impl Checker {
         self.symbol_count += 1;
         tsrs_core::sitecount::hit("symbol", "");
         let s = Symbol::new(flags | SymbolFlags::Transient, name);
+        tsrs_core::census_hooks::note(tsrs_core::census_hooks::NOTE_TRANSIENT_SYMBOL, s.addr());
         #[cfg(feature = "assignment-stats")]
         self.stats_created.1.push(s);
         s
