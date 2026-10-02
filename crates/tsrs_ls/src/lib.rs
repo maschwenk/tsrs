@@ -24,6 +24,7 @@ mod definition;
 mod diagnostics;
 mod displaypartswriter;
 mod documenthighlights;
+mod file_rename;
 mod findallreferences;
 mod folding;
 #[cfg(test)]

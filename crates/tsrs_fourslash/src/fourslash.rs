@@ -4103,14 +4103,67 @@ impl FourslashTest {
         result
     }
 
-    // fourslash.go:4992 (needs workspace/willRenameFiles, i.e. ls/file_rename.go, which is not ported)
-    fn will_rename_files_worker(&mut self, t: &T, _files: &[lsproto::FileRename]) {
-        Self::server_unavailable(t, "feature not ported: willRenameFiles (willRenameFilesWorker)")
+    // fourslash.go:4992
+    // Emulates a file rename by sending a workspace/willRenameFiles request and applying the resulting edits and file renames.
+    fn will_rename_files_worker(&mut self, t: &T, files: &[lsproto::FileRename]) {
+        t.helper();
+        let result = self.will_rename_files(t, files);
+
+        let Some(workspace_edit) = result.workspace_edit else {
+            for file in files {
+                let old_path = file.old_uri.file_name();
+                let new_path = file.new_uri.file_name();
+                self.rename_file_or_directory(t, &old_path, &new_path);
+            }
+            return;
+        };
+
+        if let Some(changes) = workspace_edit.changes {
+            for (uri, edits) in changes {
+                let file_name = uri.file_name();
+                let script = self.get_or_load_script_info(&file_name).unwrap();
+                let changes: Vec<TextChange> =
+                    edits.iter().map(|edit| TextChange { text_range: self.from_lsp_range(&script, edit.range), new_text: edit.new_text.clone() }).collect();
+                self.edit_script_and_update_markers_worker(t, &file_name, &changes);
+            }
+        }
+
+        let mut rename_files: Vec<lsproto::RenameFile> = Vec::new();
+        if let Some(document_changes) = workspace_edit.document_changes {
+            for doc_change in document_changes {
+                if let Some(text_document_edit) = doc_change.text_document_edit {
+                    let file_name = text_document_edit.text_document.uri.file_name();
+                    let script = self.get_or_load_script_info(&file_name).unwrap();
+                    let changes: Vec<TextChange> = text_document_edit
+                        .edits
+                        .iter()
+                        .map(|edit| {
+                            let text_edit = edit.text_edit.as_ref().unwrap();
+                            TextChange { text_range: self.from_lsp_range(&script, text_edit.range), new_text: text_edit.new_text.clone() }
+                        })
+                        .collect();
+                    self.edit_script_and_update_markers_worker(t, &file_name, &changes);
+                } else if let Some(rename_file) = doc_change.rename_file {
+                    rename_files.push(rename_file);
+                }
+            }
+        }
+
+        let file_renames: Vec<lsproto::FileRename> =
+            rename_files.into_iter().map(|rename_file| lsproto::FileRename { old_uri: rename_file.old_uri, new_uri: rename_file.new_uri }).collect();
+        self.will_rename_files_worker(t, &file_renames);
+
+        for file in files {
+            let old_path = file.old_uri.file_name();
+            let new_path = file.new_uri.file_name();
+            self.rename_file_or_directory(t, &old_path, &new_path);
+        }
     }
 
     // fourslash.go:4984
     pub fn will_rename_files(&mut self, t: &T, files: &[lsproto::FileRename]) -> lsproto::WillRenameFilesResponse {
-        Self::server_unavailable(t, "feature not ported: willRenameFiles (WillRenameFiles)")
+        t.helper();
+        self.send_request(t, lsproto::WORKSPACE_WILL_RENAME_FILES_INFO, lsproto::RenameFilesParams { files: files.to_vec() })
     }
 
     // fourslash.go:5055
@@ -4140,7 +4193,28 @@ impl FourslashTest {
         expected_file_contents: OrderedMap<String, String>,
         preferences: Option<lsutil::UserPreferences>,
     ) {
-        Self::server_unavailable(t, "feature not ported: willRenameFiles (VerifyWillRenameFilesEdits)")
+        t.helper();
+        let reset = preferences.map(|preferences| self.configure_with_reset(t, preferences));
+
+        self.will_rename_files_worker(
+            t,
+            &[lsproto::FileRename { old_uri: lsconv::file_name_to_document_uri(old_path), new_uri: lsconv::file_name_to_document_uri(new_path) }],
+        );
+
+        for (file_name, expected_content) in &expected_file_contents {
+            let Some(script) = self.get_or_load_script_info(file_name) else {
+                t.fatal(&format!("Expected script info for {}, but got nil", file_name));
+            };
+            crate::go::assert::equal(
+                t,
+                script.content.as_str(),
+                expected_content.as_str(),
+                &format!("File content after workspace/willRenameFiles edits did not match expected content for {}.", file_name),
+            );
+        }
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
     }
 
     // fourslash.go:5186

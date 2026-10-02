@@ -19,7 +19,7 @@ use crate::sourcemap::{self, DocumentPositionMapper, ECMALineInfo};
 // languageservice.go:16
 pub struct LanguageService {
     pub(crate) project_id: ProjectID,
-    host: Arc<dyn Host>,
+    pub(crate) host: Arc<dyn Host>,
     active_config: UserPreferences,
     program: &'static Program,
     pub(crate) converters: Arc<Converters>,

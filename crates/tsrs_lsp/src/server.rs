@@ -1842,8 +1842,88 @@ impl Server {
             return Ok(lsproto::WillRenameFilesResponse::default());
         }
 
-        // The rest of the worker collects `LanguageService.GetEditsForFileRename` results (phase 3).
-        Err(not_yet_ported(Method::WorkspaceWillRenameFiles))
+        let services = self.session().get_language_services_for_documents_loading_project_tree(ctx, &uris);
+
+        // Go maps (random iteration order).
+        let mut seen_edits: rustc_hash::FxHashMap<(lsproto::DocumentUri, lsproto::Range), String> = rustc_hash::FxHashMap::default();
+        let mut seen_renames: rustc_hash::FxHashMap<lsproto::DocumentUri, bool> = rustc_hash::FxHashMap::default();
+        let mut document_changes: Vec<lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile> = Vec::new();
+
+        for language_service in &services {
+            for file in &params.files {
+                let changes = language_service.get_edits_for_file_rename(ctx, &file.old_uri, &file.new_uri);
+                for change in changes {
+                    if let Some(rename_file) = &change.rename_file {
+                        if !seen_renames.get(&rename_file.old_uri).copied().unwrap_or(false) {
+                            seen_renames.insert(rename_file.old_uri.clone(), true);
+                            document_changes.push(change);
+                        }
+                    } else if let Some(text_document_edit) = &change.text_document_edit {
+                        let uri = text_document_edit.text_document.uri.clone();
+                        let mut deduped: Vec<lsproto::TextEditOrAnnotatedTextEditOrSnippetTextEdit> = Vec::new();
+                        for edit in &text_document_edit.edits {
+                            if let Some(text_edit) = &edit.text_edit {
+                                let key = (uri.clone(), text_edit.range);
+                                if seen_edits.get(&key).is_some_and(|prev| *prev == text_edit.new_text) {
+                                    continue;
+                                }
+                                seen_edits.insert(key, text_edit.new_text.clone());
+                            }
+                            deduped.push(edit.clone());
+                        }
+                        if !deduped.is_empty() {
+                            document_changes.push(lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
+                                text_document_edit: Some(lsproto::TextDocumentEdit { text_document: text_document_edit.text_document.clone(), edits: deduped }),
+                                ..Default::default()
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        if send_rename_file {
+            for file in &params.files {
+                document_changes.push(lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
+                    rename_file: Some(lsproto::RenameFile {
+                        kind: lsproto::StringLiteralRename::default(),
+                        old_uri: file.old_uri.clone(),
+                        new_uri: file.new_uri.clone(),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                });
+            }
+        }
+
+        if document_changes.is_empty() {
+            return Ok(lsproto::WillRenameFilesResponse::default());
+        }
+
+        if tsrs_ls::client_supports_document_changes(ctx) {
+            return Ok(lsproto::WillRenameFilesResponse {
+                workspace_edit: Some(lsproto::WorkspaceEdit { document_changes: Some(document_changes), ..Default::default() }),
+                ..Default::default()
+            });
+        }
+
+        // Go map (random iteration order).
+        let mut changes: tsrs_core::collections::OrderedMap<lsproto::DocumentUri, Vec<lsproto::TextEdit>> = Default::default();
+        for change in &document_changes {
+            if let Some(text_document_edit) = &change.text_document_edit {
+                let uri = text_document_edit.text_document.uri.clone();
+                for edit in &text_document_edit.edits {
+                    if let Some(text_edit) = &edit.text_edit {
+                        changes.entry(uri.clone()).or_default().push(text_edit.clone());
+                    }
+                }
+            }
+        }
+
+        Ok(lsproto::WillRenameFilesResponse {
+            workspace_edit: Some(lsproto::WorkspaceEdit { changes: Some(changes), ..Default::default() }),
+            ..Default::default()
+        })
     }
 
     // server.go:2070
