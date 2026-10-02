@@ -63,10 +63,10 @@ suite, errors, types and symbols):
 * [give tuple references lazy member tables](upstream/pr-01-tuple-lazy-tables.md)
 * [answer empty-object checks from lazy member tables](upstream/pr-02-empty-object-lazy-tables.md)
 * [find unmatched properties without instantiating a lazy target's members](upstream/pr-03-unmatched-properties-lazy-target.md)
-* [don't copy union/intersection properties into the augmented property cache](upstream/pr-04-union-property-cache.md)
-* [instantiate conditional types without a combined mapper for the cache lookup](upstream/pr-05-conditional-instantiation-mapper.md)
+* [don't copy union and intersection properties into the augmented property cache (microsoft/TypeScript#64600)](https://github.com/microsoft/TypeScript/pull/64600)
+* [instantiate conditional types without a combined mapper for the cache lookup (microsoft/TypeScript#64601)](https://github.com/microsoft/TypeScript/pull/64601)
 
-The last five are Go patches prepared from this port, not yet opened upstream (`upstream/`).
+The three without a PR number are Go patches prepared from this port, not yet opened upstream (`upstream/`).
 
 ## Language server
 
