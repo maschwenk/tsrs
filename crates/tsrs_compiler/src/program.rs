@@ -2594,6 +2594,8 @@ pub fn get_diagnostics_of_any_program(
             }
         }
     }
+    #[cfg(feature = "checker")]
+    crate::checkerpool::write_cost_cache(program);
     all_diagnostics
 }
 

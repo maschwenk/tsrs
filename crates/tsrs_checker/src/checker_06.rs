@@ -55,7 +55,7 @@ fn get_instantiated_type_part(c: &mut Checker, st: &mut InstantiationExpressionS
         if !tsrs_core::same(&call_signatures, resolved.call_signatures()) || !tsrs_core::same(&construct_signatures, resolved.construct_signatures()) {
             let symbol = c.new_symbol(SymbolFlags::None, InternalSymbolNameInstantiationExpression);
             assert!(t.symbol().is_some(), "Instantiation expression source type must have a symbol");
-            symbol.declarations.set(t.symbol().unwrap().declarations());
+            symbol.set_declarations_static(t.symbol().unwrap().declarations());
             let result = c.new_object_type(ObjectFlags::Anonymous | ObjectFlags::InstantiationExpressionType, Some(symbol));
             c.set_structured_type_members(result, resolved.members(), &call_signatures, &construct_signatures, resolved.index_infos());
             result.as_instantiation_expression_type().node.set(Some(st.node));
@@ -486,7 +486,7 @@ impl Checker {
             let declarations = target_symbol.declarations();
             self.add_deprecated_suggestion(node, &declarations, node.text());
         }
-        let mut declaration = local_or_export_symbol.value_declaration.get();
+        let mut declaration = local_or_export_symbol.value_declaration();
         let immediate_declaration = declaration;
         // If the identifier is declared in a binding pattern for which we're currently computing the implied type and the
         // reference occurs with the same binding pattern, return the non-inferrable any type. This for example occurs in
@@ -749,7 +749,7 @@ impl Checker {
             }
             let lexically_scoped_symbol = self.lookup_symbol_for_private_identifier_declaration(right.text(), right);
             if assignment_kind != AssignmentKind::None
-                && lexically_scoped_symbol.is_some_and(|s| s.value_declaration.get().is_some_and(ast::is_method_declaration))
+                && lexically_scoped_symbol.is_some_and(|s| s.value_declaration().is_some_and(ast::is_method_declaration))
             {
                 self.grammar_error_on_node(right, &diagnostics::Cannot_assign_to_private_method_0_Private_methods_are_not_writable, &[&right.text()]);
             }
@@ -905,7 +905,7 @@ impl Checker {
         let mut assume_uninitialized = false;
         if self.strict_null_checks {
             if let Some(p) = prop {
-                if let Some(declaration) = p.value_declaration.get() {
+                if let Some(declaration) = p.value_declaration() {
                     if self.strict_property_initialization && ast::is_access_expression(node) && node.expression().unwrap().kind() == Kind::ThisKeyword {
                         if self.is_property_without_initializer(declaration) && !ast::is_static(declaration) {
                             let flow_container = self.get_control_flow_container(node);
@@ -953,7 +953,7 @@ impl Checker {
     pub(crate) fn get_flow_type_of_property(&mut self, reference: P<Node>, prop: Option<P<Symbol>>) -> P<Type> {
         let mut initial_type = self.undefined_type;
         if let Some(p) = prop {
-            if let Some(value_declaration) = p.value_declaration.get() {
+            if let Some(value_declaration) = p.value_declaration() {
                 if !self.is_auto_typed_property(p) || value_declaration.modifier_flags().intersects(ModifierFlags::Ambient) {
                     if let Some(base_type) = self.get_type_of_property_in_base_class(p) {
                         initial_type = base_type;
@@ -1019,7 +1019,7 @@ impl Checker {
         let properties = self.get_properties_of_type(left_type);
         let mut property_on_type: Option<P<Symbol>> = None;
         for &symbol in properties {
-            let decl = symbol.value_declaration.get();
+            let decl = symbol.value_declaration();
             if let Some(decl) = decl {
                 if decl.name().is_some_and(|n| ast::is_private_identifier(n) && n.text() == right.text()) {
                     property_on_type = Some(symbol);
@@ -1029,14 +1029,14 @@ impl Checker {
         }
         let diag_name = tsrs_scanner::declaration_name_to_string(Some(right));
         if let Some(property_on_type) = property_on_type {
-            let type_value_decl = property_on_type.value_declaration.get().unwrap();
+            let type_value_decl = property_on_type.value_declaration().unwrap();
             let type_class = ast::get_containing_class(type_value_decl);
             // We found a private identifier property with the same description.
             // Either:
             // - There is a lexically scoped private identifier AND it shadows the one we found on the type.
             // - It is an attempt to access the private identifier outside of the class.
             if let Some(lexically_scoped_identifier) = lexically_scoped_identifier {
-                if let Some(lexical_value_decl) = lexically_scoped_identifier.value_declaration.get() {
+                if let Some(lexical_value_decl) = lexically_scoped_identifier.value_declaration() {
                     let lexical_class = ast::get_containing_class(lexical_value_decl);
                     if ast::find_ancestor(lexical_class, |n| type_class == Some(n)).is_some() {
                         let type_string = self.type_to_string_exported(left_type);
@@ -1123,7 +1123,7 @@ impl Checker {
                             &diagnostics::Property_0_does_not_exist_on_type_1_Did_you_mean_2
                         };
                         let d = new_diagnostic_chain_for_node(diagnostic, prop_node, Some(message), &[&missing_property, &container, &suggested_name]);
-                        if let Some(value_declaration) = suggestion.value_declaration.get() {
+                        if let Some(value_declaration) = suggestion.value_declaration() {
                             d.add_related_info(new_diagnostic_for_node(Some(value_declaration), Some(&diagnostics::X_0_is_declared_here), &[&suggested_name]));
                         }
                         diagnostic = Some(d);
@@ -1199,7 +1199,7 @@ impl Checker {
         }
         // A #private property access in an optional chain is an error dealt with by the parser.
         // The checker does not check for it, so we need to do our own check here.
-        if let Some(value_declaration) = property.value_declaration.get() {
+        if let Some(value_declaration) = property.value_declaration() {
             if ast::is_private_identifier_class_element_declaration(value_declaration) {
                 let decl_class = ast::get_containing_class(value_declaration);
                 return !ast::is_optional_chain(node) && crate::is_node_descendant_of(Some(node), decl_class.unwrap());
@@ -1281,7 +1281,7 @@ impl Checker {
 
     // checker.go:11911
     pub(crate) fn check_property_not_used_before_declaration(&mut self, prop: P<Symbol>, node: P<Node>, right: P<Node>) {
-        let value_declaration = prop.value_declaration.get();
+        let value_declaration = prop.value_declaration();
         let Some(value_declaration) = value_declaration else {
             return;
         };
@@ -1323,7 +1323,7 @@ impl Checker {
             let base_types = self.get_base_types(declared_type);
             if !base_types.is_empty() {
                 let super_property = self.get_property_of_type(base_types[0], prop.name());
-                return super_property.is_some_and(|s| s.value_declaration.get().is_some());
+                return super_property.is_some_and(|s| s.value_declaration().is_some());
             }
         }
         false
@@ -1948,8 +1948,8 @@ impl Checker {
         // If a containing class does not have extends clause or the class extends null
         // skip checking whether super statement is called before "this" accessing.
         if base_type_node.is_some() && !self.class_declaration_extends_null(containing_class_decl) {
-            if let Some(flow_node_data) = node.flow_node_data() {
-                if !self.is_post_super_flow_node(flow_node_data.flow_node.get().unwrap(), false /*noCacheCheck*/) {
+            if node.has_flow_node_data() {
+                if !self.is_post_super_flow_node(node.flow_node().unwrap(), false /*noCacheCheck*/) {
                     self.error(Some(node), diagnostic_message, &[]);
                 }
             }

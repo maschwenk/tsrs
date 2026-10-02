@@ -1853,8 +1853,9 @@ impl Parser {
         if is_identifier {
             let pos = if self.scanner.has_preceding_jsdoc_leading_asterisks() { self.scanner.token_start() } else { self.node_pos() };
             let text = self.scanner.token_value();
+            let end = self.scanner.token_end();
             self.next_token_without_check();
-            let id = self.new_identifier(text);
+            let id = self.new_source_identifier(text, TextRange::new(pos, end));
             return self.finish_node(id, pos);
         }
         self.create_missing_identifier_with_diagnostic(diagnostic_message, private_identifier_diagnostic_message)

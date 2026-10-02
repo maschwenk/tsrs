@@ -269,7 +269,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_ast"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "hashbrown",
@@ -281,7 +281,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_astnav"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "tsrs_ast",
  "tsrs_core",
@@ -290,7 +290,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_binder"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "rustc-hash",
@@ -303,7 +303,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_checker"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "hashbrown",
@@ -325,7 +325,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_cli"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "mimalloc",
  "rustc-hash",
@@ -343,7 +343,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_compiler"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "indexmap",
@@ -365,7 +365,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_core"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "indexmap",
@@ -376,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_declarations"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "rustc-hash",
  "tsrs_ast",
@@ -391,7 +391,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_diagnostics"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "rustc-hash",
  "tsrs_core",
@@ -399,7 +399,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_ls"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "indexmap",
@@ -423,7 +423,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_lsp"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "indexmap",
  "rustc-hash",
@@ -440,7 +440,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_lsproto"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "indexmap",
  "rustc-hash",
@@ -450,7 +450,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_module"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "indexmap",
@@ -463,7 +463,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_modulespecifiers"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "regex",
  "rustc-hash",
@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_parser"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "mimalloc",
@@ -489,7 +489,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_printer"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "indexmap",
@@ -503,7 +503,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_project"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "indexmap",
@@ -524,7 +524,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_pseudochecker"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "tsrs_ast",
  "tsrs_core",
@@ -532,7 +532,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_scanner"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "memchr",
@@ -545,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_testrunner"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "mimalloc",
  "regex",
@@ -565,7 +565,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_tsoptions"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "indexmap",
@@ -581,7 +581,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_vfs"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bitflags",
  "rayon",

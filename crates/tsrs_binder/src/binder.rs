@@ -112,12 +112,13 @@ fn bind_source_file_worker(file: P<SourceFile>) {
     });
 }
 
-fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>) -> P<FlowNode> {
+fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32) -> P<FlowNode> {
     P::new_recycled(FlowNode {
         flags: OwnedCell::new(flags),
         node: OwnedCell::new(node),
         antecedent: OwnedCell::new(antecedent),
         antecedents: OwnedCell::new(None),
+        text_index,
     })
 }
 
@@ -125,7 +126,7 @@ impl Binder {
     fn new(file: P<SourceFile>) -> Binder {
         Binder {
             file,
-            unreachable_flow: new_flow_node_value(FlowFlags::Unreachable, None, None),
+            unreachable_flow: new_flow_node_value(FlowFlags::Unreachable, None, None, file.text_index.get()),
             container: None,
             this_container: None,
             block_scope_container: None,
@@ -537,11 +538,11 @@ impl Binder {
     }
 
     pub(crate) fn new_flow_node(&mut self, flags: FlowFlags) -> P<FlowNode> {
-        new_flow_node_value(flags, None, None)
+        new_flow_node_value(flags, None, None, self.file.text_index.get())
     }
 
     pub(crate) fn new_flow_node_ex(&mut self, flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>) -> P<FlowNode> {
-        new_flow_node_value(flags, node, antecedent)
+        new_flow_node_value(flags, node, antecedent, self.file.text_index.get())
     }
 
     pub(crate) fn create_loop_label(&mut self) -> P<FlowNode> {
@@ -733,22 +734,22 @@ impl Binder {
         // (like TypeLiterals for example) will not be put in any table.
         match node.kind() {
             Kind::Identifier => {
-                node.flow_node_data().unwrap().flow_node.set(self.current_flow);
+                node.set_flow_node(self.current_flow);
                 self.check_contextual_identifier(node);
             }
             Kind::ThisKeyword | Kind::SuperKeyword => {
                 if node.kind() == Kind::ThisKeyword {
                     self.seen_this_keyword = true;
                 }
-                node.flow_node_data().unwrap().flow_node.set(self.current_flow);
+                node.set_flow_node(self.current_flow);
             }
             Kind::QualifiedName => {
                 if self.current_flow.is_some() && ast::is_part_of_type_query(node) {
-                    node.flow_node_data().unwrap().flow_node.set(self.current_flow);
+                    node.set_flow_node(self.current_flow);
                 }
             }
             Kind::MetaProperty => {
-                node.flow_node_data().unwrap().flow_node.set(self.current_flow);
+                node.set_flow_node(self.current_flow);
             }
             Kind::PrivateIdentifier => {
                 self.check_private_identifier(node);
@@ -781,7 +782,7 @@ impl Binder {
             Kind::Parameter => self.bind_parameter(node),
             Kind::VariableDeclaration => self.bind_variable_declaration_or_binding_element(node),
             Kind::BindingElement => {
-                node.flow_node_data().unwrap().flow_node.set(self.current_flow);
+                node.set_flow_node(self.current_flow);
                 self.bind_variable_declaration_or_binding_element(node);
             }
             Kind::PropertyDeclaration | Kind::PropertySignature => self.bind_property_worker(node),
@@ -1284,7 +1285,7 @@ impl Binder {
 
 pub(crate) fn get_initializer_symbol(symbol: Option<P<Symbol>>) -> Option<P<Symbol>> {
     let symbol = symbol?;
-    let declaration = symbol.value_declaration.get()?;
+    let declaration = symbol.value_declaration()?;
     // For an assignment 'fn.xxx = ...', where 'fn' is a previously declared function or a previously
     // declared const variable initialized with a function expression or arrow function, we add expando
     // property declarations to the function's symbol. This also applies to class expressions in JS files,
@@ -1882,11 +1883,11 @@ impl Binder {
         if (*locals).get(name).is_none() {
             let symbol = self.new_symbol(SymbolFlags::FunctionScopedVariable | SymbolFlags::ModuleExports, name);
             symbol.set_declarations(&vec![self.file.as_node()]);
-            symbol.value_declaration.set(Some(self.file.as_node()));
+            symbol.set_value_declaration(Some(self.file.as_node()));
             if name == "module" {
                 let exports_property = self.new_symbol(SymbolFlags::ModuleExports | SymbolFlags::Property, "exports");
-                exports_property.declarations.set(symbol.declarations());
-                exports_property.value_declaration.set(symbol.value_declaration.get());
+                exports_property.set_declarations_static(symbol.declarations());
+                exports_property.set_value_declaration(symbol.value_declaration());
                 exports_property.set_parent(Some(symbol));
                 let members = SymbolTable::new();
                 members.set("exports", exports_property);
@@ -1903,8 +1904,8 @@ impl Binder {
         self.in_assignment_pattern = false;
 
         if self.current_flow == Some(self.unreachable_flow) {
-            if let Some(flow_node_data) = node.flow_node_data() {
-                flow_node_data.flow_node.set(None);
+            if node.has_flow_node_data() {
+                node.set_flow_node(None);
             }
             if ast::is_potentially_executable_node(node) {
                 node.set_flags(node.flags() | NodeFlags::Unreachable);
@@ -1915,8 +1916,8 @@ impl Binder {
         }
 
         if Kind::FirstStatement <= node.kind() && node.kind() <= Kind::LastStatement {
-            if let Some(flow_node_data) = node.flow_node_data() {
-                flow_node_data.flow_node.set(self.current_flow);
+            if node.has_flow_node_data() {
+                node.set_flow_node(self.current_flow);
             }
         }
 
@@ -2787,8 +2788,8 @@ impl Binder {
 }
 
 pub(crate) fn set_flow_node(node: P<Node>, flow_node: Option<P<FlowNode>>) {
-    if let Some(data) = node.flow_node_data() {
-        data.set_flow_node(flow_node);
+    if node.has_flow_node_data() {
+        node.set_flow_node(flow_node);
     }
 }
 
@@ -2834,7 +2835,7 @@ impl Binder {
 }
 
 pub fn set_value_declaration(symbol: P<Symbol>, node: P<Node>) {
-    let value_declaration = symbol.value_declaration.get();
+    let value_declaration = symbol.value_declaration();
     let replace = match value_declaration {
         None => true,
         Some(value_declaration) => {
@@ -2845,7 +2846,7 @@ pub fn set_value_declaration(symbol: P<Symbol>, node: P<Node>) {
     if replace {
         // Non-assignment declarations take precedence over assignment declarations and
         // non-namespace declarations take precedence over namespace declarations.
-        symbol.value_declaration.set(Some(node));
+        symbol.set_value_declaration(Some(node));
     }
 }
 
@@ -3074,7 +3075,7 @@ pub(crate) fn get_optional_symbol_flag_for_node(node: P<Node>) -> SymbolFlags {
 }
 
 pub(crate) fn is_function_symbol(symbol: P<Symbol>) -> bool {
-    if let Some(d) = symbol.value_declaration.get() {
+    if let Some(d) = symbol.value_declaration() {
         if ast::is_function_declaration(d) {
             return true;
         }

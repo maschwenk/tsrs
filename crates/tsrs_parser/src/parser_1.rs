@@ -116,6 +116,8 @@ pub struct Parser {
     pub(crate) has_parse_error: bool,
 
     pub(crate) identifier_count: usize,
+    // `register_source_text` index of `source_text` (`NO_SOURCE_TEXT`: identifiers store their text)
+    pub(crate) source_text_index: u32,
     pub(crate) not_parenthesized_arrow: FxHashSet<i32>,
     pub(crate) jsdoc_infos: Vec<JSDocInfo>,
     pub(crate) possible_await_spans: Vec<usize>,
@@ -154,6 +156,7 @@ pub(crate) fn new_parser() -> Parser {
         has_deprecated_tag: false,
         has_parse_error: false,
         identifier_count: 0,
+        source_text_index: ast::NO_SOURCE_TEXT,
         not_parenthesized_arrow: FxHashSet::default(),
         jsdoc_infos: Vec::new(),
         possible_await_spans: Vec::new(),
@@ -202,6 +205,7 @@ fn parse_source_file_static(opts: SourceFileParseOptions, source_text: &'static 
     crate::jsdoc::init();
     let mut p = new_parser();
     p.initialize_state_static(opts, source_text, script_kind);
+    p.source_text_index = ast::register_source_text(source_text);
     p.next_token();
     if p.script_kind == ScriptKind::JSON {
         return p.parse_json_text();
@@ -274,6 +278,7 @@ impl Parser {
             eof = self.parse_expected_token(Kind::EndOfFile);
         }
         let node = self.factory.new_source_file(self.opts.clone(), self.source_text, statements, eof);
+        node.as_source_file().text_index.set(self.source_text_index);
         let node = self.finish_node(node, pos);
         let result = P::from_static(node.as_source_file());
         if !result.statements.nodes.is_empty() {
@@ -405,6 +410,7 @@ impl Parser {
         self.scanner.reset();
         self.opts = opts;
         self.source_text = source_text;
+        self.source_text_index = ast::NO_SOURCE_TEXT;
         self.script_kind = script_kind;
         self.language_variant = get_language_variant(self.script_kind);
         self.context_flags = match self.script_kind {
@@ -593,6 +599,7 @@ impl Parser {
         }
         let statement_list = self.new_node_list(new_text_range(pos, end), &statements);
         let node = self.factory.new_source_file(self.opts.clone(), self.source_text, statement_list, eof);
+        node.as_source_file().text_index.set(self.source_text_index);
         let node = self.finish_node(node, pos);
         let mut result = P::from_static(node.as_source_file());
         self.finish_source_file(result, is_declaration_file);
@@ -749,6 +756,7 @@ impl Parser {
         let loc = source_file.statements.loc.get();
         let list = self.new_node_list(loc, &statements);
         let result = self.factory.new_source_file(source_file.parse_options().clone(), self.source_text, list, source_file.end_of_file_token);
+        result.as_source_file().text_index.set(self.source_text_index);
         for s in &statements {
             s.set_parent(Some(result)); // force (re)set parent to reparsed source file
         }

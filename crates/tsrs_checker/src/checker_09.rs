@@ -972,7 +972,7 @@ impl Checker {
                     if lhs_expr != parent_access {
                         lhs_expr.set_parent(Some(result));
                     }
-                    result.flow_node_data().unwrap().flow_node.set(get_flow_node_of_node(parent_access));
+                    result.set_flow_node(get_flow_node_of_node(parent_access));
                     return Some(result);
                 }
             }

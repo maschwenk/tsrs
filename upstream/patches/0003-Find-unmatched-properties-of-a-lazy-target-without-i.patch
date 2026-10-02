@@ -1,4 +1,4 @@
-From 7762e7c44c596b737a0579fb02152c9bfa278f38 Mon Sep 17 00:00:00 2001
+From 7d1605f4458892a6746a356011e9d71d1a5d90b8 Mon Sep 17 00:00:00 2001
 From: Max schwenk <maschwenk@gmail.com>
 Date: Thu, 1 Oct 2026 03:11:57 -0400
 Subject: [PATCH 3/5] Find unmatched properties of a lazy target without
@@ -56,10 +56,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 tsc/testdata/tests/cases/compiler/lazyMembersUnmatchedProperties.ts
 
 diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
-index 72101e21ae..8500429f7e 100644
+index f73e4c8c96..a8ffffaef0 100644
 --- a/tsc/internal/checker/checker.go
 +++ b/tsc/internal/checker/checker.go
-@@ -19245,10 +19245,19 @@ func (c *Checker) getPropertyOfType(t *Type, name string) *ast.Symbol {
+@@ -19248,10 +19248,19 @@ func (c *Checker) getPropertyOfType(t *Type, name string) *ast.Symbol {
   * @param name a name of property to look up in a given type
   */
  func (c *Checker) getPropertyOfTypeEx(t *Type, name string, skipObjectFunctionPropertyAugment bool, includeTypeOnlyMembers bool) *ast.Symbol {
@@ -80,7 +80,7 @@ index 72101e21ae..8500429f7e 100644
  		if symbol != nil {
  			if !includeTypeOnlyMembers && t.symbol != nil && t.symbol.Flags&ast.SymbolFlagsValueModule != 0 && c.moduleSymbolLinks.Get(t.symbol).typeOnlyExportStarMap[name] != nil {
  				// If this is the type of a module, `resolved.members.get(name)` might have effectively skipped over
-@@ -19542,6 +19551,7 @@ type lazyMemberTable struct {
+@@ -19545,6 +19554,7 @@ type lazyMemberTable struct {
  	indexInfos          []*IndexInfo
  	baseTypes           []*Type
  	declared            map[string]*ast.Symbol
@@ -88,7 +88,7 @@ index 72101e21ae..8500429f7e 100644
  }
  
  func mayHaveLazyMembers(t *Type) bool {
-@@ -19655,14 +19665,16 @@ func (c *Checker) getLazyDeclaredMember(lm *lazyMemberTable, symbol *ast.Symbol,
+@@ -19658,14 +19668,16 @@ func (c *Checker) getLazyDeclaredMember(lm *lazyMemberTable, symbol *ast.Symbol,
  	return result
  }
  
@@ -108,7 +108,7 @@ index 72101e21ae..8500429f7e 100644
  	if t.objectFlags&ObjectFlagsMapped != 0 && !isReservedMemberName(name) {
  		if lazy := c.getLazyMappedTable(t); lazy != nil {
  			if member, ok := c.getLazyMappedTypeMember(t, lazy, name); ok {
-@@ -19677,13 +19689,17 @@ func (c *Checker) getMemberOfUnresolvedStructuredType(t *Type, name string) *ast
+@@ -19680,13 +19692,17 @@ func (c *Checker) getMemberOfUnresolvedStructuredType(t *Type, name string) *ast
  	// The declared member, else the first base type's property (see addInheritedMembers).
  	var result *ast.Symbol
  	if decl := c.resolveDeclaredMembers(t.Target()).declaredMembers[name]; decl != nil && c.isNamedMember(decl, name) {
@@ -128,7 +128,7 @@ index 72101e21ae..8500429f7e 100644
  			result = prop
  		}
  	}
-@@ -19727,6 +19743,38 @@ func (c *Checker) everyLazyProperty(t *Type, lm *lazyMemberTable, seen *collecti
+@@ -19730,6 +19746,38 @@ func (c *Checker) everyLazyProperty(t *Type, lm *lazyMemberTable, seen *collecti
  	return true
  }
  
@@ -167,7 +167,7 @@ index 72101e21ae..8500429f7e 100644
  func (c *Checker) getBaseTypes(t *Type) []*Type {
  	if t.objectFlags&(ObjectFlagsClassOrInterface|ObjectFlagsTuple) == 0 {
  		return nil
-@@ -21628,7 +21676,7 @@ func (c *Checker) getLazyMappedTypeMember(t *Type, lazy *lazyMappedTable, name s
+@@ -21631,7 +21679,7 @@ func (c *Checker) getLazyMappedTypeMember(t *Type, lazy *lazyMappedTable, name s
  	}
  	// Recursive lookups see no member, as they would while resolveMappedTypeMembers runs.
  	lazy.members[name] = nil
@@ -176,7 +176,7 @@ index 72101e21ae..8500429f7e 100644
  	if t.objectFlags&ObjectFlagsMembersResolved != 0 {
  		return t.AsStructuredType().members[name], true
  	}
-@@ -31999,7 +32047,7 @@ func (c *Checker) isFunctionObjectType(t *Type) bool {
+@@ -32002,7 +32050,7 @@ func (c *Checker) isFunctionObjectType(t *Type) bool {
  	// We do a quick check for a "bind" property before performing the more expensive subtype
  	// check. This gives us a quicker out in the common case where an object type is not a function.
  	return len(c.getSignaturesOfStructuredType(t, SignatureKindCall)) != 0 || len(c.getSignaturesOfStructuredType(t, SignatureKindConstruct)) != 0 ||

@@ -142,7 +142,7 @@ impl<H: 'static> NameResolver<H> {
                                 use_result = last.kind() == Kind::Parameter
                                     || last.flags().intersects(NodeFlags::Synthesized)
                                     || last_location == loc.type_node()
-                                        && ast::find_ancestor(res.value_declaration.get(), ast::is_parameter_declaration).is_some();
+                                        && ast::find_ancestor(res.value_declaration(), ast::is_parameter_declaration).is_some();
                             }
                         }
                     } else if loc.kind() == Kind::ConditionalType {
@@ -229,7 +229,7 @@ impl<H: 'static> NameResolver<H> {
                             if name_not_found_message.is_some()
                                 && self.compiler_options.get_isolated_modules()
                                 && !loc.flags().intersects(NodeFlags::Ambient)
-                                && ast::get_source_file_of_node(Some(loc)) != ast::get_source_file_of_node(res.value_declaration.get())
+                                && ast::get_source_file_of_node(Some(loc)) != ast::get_source_file_of_node(res.value_declaration())
                             {
                                 let isolated_modules_like_flag_name = if self.compiler_options.verbatim_module_syntax == Tristate::True {
                                     "verbatimModuleSyntax"
@@ -503,7 +503,7 @@ impl<H: 'static> NameResolver<H> {
 
     pub(crate) fn use_outer_variable_scope_in_parameter(&self, host: &mut H, result: P<Symbol>, location: P<Node>, last_location: P<Node>) -> bool {
         if ast::is_parameter_declaration(last_location) {
-            if let (Some(body), Some(value_declaration)) = (location.body(), result.value_declaration.get()) {
+            if let (Some(body), Some(value_declaration)) = (location.body(), result.value_declaration()) {
                 if value_declaration.pos() >= body.pos() && value_declaration.end() <= body.end() {
                     // check for several cases where we introduce temporaries that require moving the name/initializer of the parameter to the body
                     // - static field in a class expression

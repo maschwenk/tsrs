@@ -1,4 +1,4 @@
-From 6b03235762be32000a1abe67cbf0c6fb3076b712 Mon Sep 17 00:00:00 2001
+From f8c0a12750c89acec8413c79b018b16c24ab2035 Mon Sep 17 00:00:00 2001
 From: Max schwenk <maschwenk@gmail.com>
 Date: Thu, 1 Oct 2026 03:12:17 -0400
 Subject: [PATCH 4/5] Don't copy union and intersection properties into the
@@ -30,10 +30,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 11 insertions(+), 13 deletions(-)
 
 diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
-index 8500429f7e..46afea3dd4 100644
+index a8ffffaef0..c7be77d50c 100644
 --- a/tsc/internal/checker/checker.go
 +++ b/tsc/internal/checker/checker.go
-@@ -22157,25 +22157,23 @@ func (c *Checker) getPropertyOfUnionOrIntersectionType(t *Type, name string, ski
+@@ -22160,25 +22160,23 @@ func (c *Checker) getPropertyOfUnionOrIntersectionType(t *Type, name string, ski
  // these partial properties when identifying discriminant properties, but otherwise they are filtered out
  // and do not appear to be present in the union type.
  func (c *Checker) getUnionOrIntersectionProperty(t *Type, name string, skipObjectFunctionPropertyAugment bool) *ast.Symbol {
