@@ -4,6 +4,7 @@ pub mod astnav;
 pub mod autoimport;
 mod completions;
 mod crossproject;
+mod displaypartswriter;
 mod findallreferences;
 pub mod format;
 mod host;
