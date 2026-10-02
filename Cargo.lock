@@ -398,6 +398,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_fourslash"
+version = "0.1.6"
+dependencies = [
+ "regex",
+ "rustc-hash",
+ "tsrs_core",
+ "tsrs_ls",
+ "tsrs_lsproto",
+ "tsrs_modulespecifiers",
+ "tsrs_scanner",
+]
+
+[[package]]
 name = "tsrs_ls"
 version = "0.1.6"
 dependencies = [
