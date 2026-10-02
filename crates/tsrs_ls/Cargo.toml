@@ -21,6 +21,7 @@ tsrs_checker.workspace = true
 tsrs_astnav.workspace = true
 tsrs_modulespecifiers.workspace = true
 tsrs_printer.workspace = true
+tsrs_projectutil.workspace = true
 tsrs_compiler.workspace = true
 tsrs_lsproto.workspace = true
 rustc-hash.workspace = true

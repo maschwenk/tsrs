@@ -435,6 +435,7 @@ dependencies = [
  "tsrs_modulespecifiers",
  "tsrs_parser",
  "tsrs_printer",
+ "tsrs_projectutil",
  "tsrs_scanner",
  "tsrs_tsoptions",
  "tsrs_vfs",
@@ -537,9 +538,19 @@ dependencies = [
  "tsrs_lsproto",
  "tsrs_module",
  "tsrs_parser",
+ "tsrs_projectutil",
  "tsrs_tsoptions",
  "tsrs_vfs",
  "xxhash-rust",
+]
+
+[[package]]
+name = "tsrs_projectutil"
+version = "0.1.6"
+dependencies = [
+ "indexmap",
+ "rustc-hash",
+ "tsrs_core",
 ]
 
 [[package]]
