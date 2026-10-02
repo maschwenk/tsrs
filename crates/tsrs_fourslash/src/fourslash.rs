@@ -1466,7 +1466,69 @@ impl FourslashTest {
 
     // fourslash.go:2631
     pub fn verify_baseline_code_lens(&mut self, t: &T, preferences: Option<lsutil::UserPreferences>) {
-        Self::server_unavailable(t, "feature not ported: code lens (VerifyBaselineCodeLens)")
+        let reset = preferences.map(|preferences| self.configure_with_reset(t, preferences));
+
+        let mut found_at_least_one_code_lens = false;
+        let mut open_files: Vec<String> = self.open_files.keys().cloned().collect();
+        open_files.sort();
+        for open_file in &open_files {
+            let params = lsproto::CodeLensParams {
+                text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(open_file) },
+                ..Default::default()
+            };
+
+            let unresolved_code_lens_list = self.send_request(t, lsproto::TEXT_DOCUMENT_CODE_LENS_INFO, params);
+            let Some(code_lenses) = unresolved_code_lens_list.code_lenses.filter(|c| !c.is_empty()) else {
+                continue;
+            };
+            found_at_least_one_code_lens = true;
+
+            for unresolved_code_lens in code_lenses {
+                let resolved_code_lens = self.send_request(t, lsproto::CODE_LENS_RESOLVE_INFO, unresolved_code_lens);
+                let Some(command) = &resolved_code_lens.command else {
+                    t.fatal("Expected resolved code lens to have a command.");
+                };
+                if !command.command.is_empty() {
+                    assert_deep_equal(t, &command.command.as_str(), &SHOW_CODE_LENS_LOCATIONS_COMMAND_NAME, "");
+                }
+
+                let mut locations: Vec<lsproto::Location> = Vec::new();
+                // commandArgs: (DocumentUri, Position, Location[])
+                if let Some(command_args) = &command.arguments {
+                    match <Vec<lsproto::Location> as Json>::from_json(&command_args[2]) {
+                        Ok(locs) => locations = locs,
+                        Err(err) => t.fatal(&format!("failed to re-encode code lens locations: {err}")),
+                    }
+                }
+
+                let ranges = self.converters.converters.from_lsp_range(self.get_script_info(open_file), resolved_code_lens.range, Feature::All);
+                if ranges.len() != 1 {
+                    continue;
+                }
+                let code_lens_range = ranges[0].span;
+                let baseline = self.get_baseline_for_locations_with_file_contents(
+                    &locations,
+                    BaselineFourslashLocationsOptions {
+                        marker: Some(MarkerOrRange::RangeMarker(Arc::new(RangeMarker {
+                            file_name: open_file.clone(),
+                            ls_range: resolved_code_lens.range,
+                            range: code_lens_range,
+                            marker: None,
+                        }))),
+                        marker_name: format!("/*CODELENS: {}*/", command.title),
+                        ..Default::default()
+                    },
+                );
+                self.add_result_to_baseline(t, CODE_LENSES_CMD, &baseline);
+            }
+        }
+
+        if !found_at_least_one_code_lens {
+            t.fatal("Expected at least one code lens in any open file, but got none.");
+        }
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
     }
 
     // fourslash.go:2691

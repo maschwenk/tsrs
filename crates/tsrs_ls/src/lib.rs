@@ -4,6 +4,7 @@ mod api;
 pub mod astnav;
 pub mod autoimport;
 mod callhierarchy;
+mod codelens;
 mod completions;
 mod constants;
 mod crossproject;

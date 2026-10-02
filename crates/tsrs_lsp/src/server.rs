@@ -2001,12 +2001,39 @@ impl Server {
 
     // server.go:2212
     fn handle_code_lens(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::CodeLensParams) -> Result<lsproto::CodeLensResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentCodeLens))
+        ls.provide_code_lenses(ctx, &params.text_document.uri)
     }
 
     // server.go:2216
     fn handle_code_lens_resolve(self: &Arc<Self>, ctx: &Context, code_lens: lsproto::CodeLens, req_msg: &RequestMessage) -> Result<lsproto::CodeLensResolveResponse, Error> {
-        Err(not_yet_ported(Method::CodeLensResolve))
+        let uri = code_lens.data.as_ref().unwrap().uri.clone();
+        let result = self.get_language_service_and_cross_project_orchestrator(ctx, &uri, req_msg);
+        if let Some(err) = ctx.err() {
+            return Err(err.into());
+        }
+        let Ok((default_ls, orchestrator)) = result else {
+            // This can happen if a codeLens/resolve request comes in after a program change.
+            // While it's true that handlers should latch onto a specific snapshot
+            // while processing requests, we just set `Data.Uri` based on
+            // some older snapshot's contents. The content could have been modified,
+            // or the file itself could have been removed from the session entirely.
+            // Note this won't bail out on every change, but will prevent crashing
+            // based on non-existent files and line maps from shortened files.
+            return Err(ErrorCode::ContentModified.into());
+        };
+        // Go: `defer s.recover(reqMsg)`. After a recovered panic Go returns a nil *CodeLens; the Rust response type
+        // is not nullable, so the (already answered) request gets an empty code lens.
+        let mut resolved: Result<lsproto::CodeLens, Error> = Ok(lsproto::CodeLens::default());
+        let _ = self.with_recover(req_msg, || {
+            resolved = default_ls.resolve_code_lens(
+                ctx,
+                code_lens,
+                self.initialization_options().code_lens_show_locations_command_name.as_ref(),
+                Some(&*orchestrator),
+            );
+            Ok(())
+        });
+        resolved
     }
 
     // server.go:2240
