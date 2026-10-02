@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::SourceFile;
 use tsrs_compiler::Program;
 use tsrs_core::collections::Set;
@@ -35,15 +35,17 @@ impl std::fmt::Display for ProjectID {
 
 pub type ToPath = Arc<dyn Fn(&str) -> Path + Send + Sync>;
 
-// registry.go:328 (placeholder: no buckets, directories or caches)
+// registry.go:328 (placeholder: no directories or caches; a project bucket is the set of projects whose (empty)
+// bucket has been built)
 pub struct Registry {
     to_path: ToPath,
     user_preferences: UserPreferences,
+    projects: FxHashSet<ProjectID>,
 }
 
 // registry.go:346
 pub fn new_registry(to_path: ToPath, preferences: UserPreferences) -> Arc<Registry> {
-    Arc::new(Registry { to_path, user_preferences: preferences })
+    Arc::new(Registry { to_path, user_preferences: preferences, projects: FxHashSet::default() })
 }
 
 // Go's nil-receiver `(*Registry).IsPreparedForImportingFile` (registry.go:354): a nil registry is never prepared.
@@ -61,10 +63,10 @@ impl RegistryExt for Option<Arc<Registry>> {
 }
 
 impl Registry {
-    // registry.go:354 (placeholder: the registry has no project buckets, so Go's `r.projects[projectID]` lookup
-    // always misses)
-    pub fn is_prepared_for_importing_file(&self, _file_name: &str, _project_id: &ProjectID, _preferences: &UserPreferences) -> bool {
-        false
+    // registry.go:354 (placeholder: an empty bucket never needs a rebuild and there are no node_modules buckets, so
+    // the file is prepared once its project's bucket exists)
+    pub fn is_prepared_for_importing_file(&self, _file_name: &str, project_id: &ProjectID, _preferences: &UserPreferences) -> bool {
+        self.projects.contains(project_id)
     }
 
     // registry.go:383 (placeholder: no directories)
@@ -72,15 +74,26 @@ impl Registry {
         FxHashMap::default()
     }
 
-    // registry.go:393 (placeholder: builds nothing; keeps Go's user-preference update)
+    // registry.go:393 (placeholder: keeps Go's user-preference update; drops the buckets of projects whose program
+    // structure changed and builds an empty bucket for the requested file's default project, as Go's builder does
+    // for a requested file, without extracting any exports)
     // Go's logger is `*project/logging.LogTree`; that package lives below `project` in Go but the Rust port of it is
     // in `tsrs_project`, which depends on this crate, so the placeholder takes any logger value.
-    pub fn clone_registry<L>(&self, _ctx: &Context, change: RegistryChange, _host: &dyn RegistryCloneHost, _logger: L) -> Result<Arc<Registry>, String> {
+    pub fn clone_registry<L>(&self, _ctx: &Context, change: RegistryChange, host: &dyn RegistryCloneHost, _logger: L) -> Result<Arc<Registry>, String> {
         let mut user_preferences = self.user_preferences.clone();
         if let Some(prefs) = change.user_preferences {
             user_preferences = prefs;
         }
-        Ok(Arc::new(Registry { to_path: self.to_path.clone(), user_preferences }))
+        let mut projects = self.projects.clone();
+        for project_id in change.rebuilt_programs.keys() {
+            projects.remove(project_id);
+        }
+        if !change.requested_file.is_empty() {
+            if let (Some(project_id), _) = host.get_default_project(&change.requested_file) {
+                projects.insert(project_id);
+            }
+        }
+        Ok(Arc::new(Registry { to_path: self.to_path.clone(), user_preferences, projects }))
     }
 
     pub fn to_path(&self, file_name: &str) -> Path {

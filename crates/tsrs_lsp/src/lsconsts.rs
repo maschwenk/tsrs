@@ -1,16 +1,11 @@
 // The `ls` package values the server's capabilities need (ls/completions.go, ls/signaturehelp.go,
-// ls/semantictokens.go). Those Go files are ported in phase 3 (completions, signature help, semantic tokens);
-// until then the values live here. Move them to tsrs_ls when the files are ported.
+// ls/semantictokens.go). Completions and signature help are ported (re-exported from tsrs_ls); semantic tokens
+// are phase 3, so their values live here until semantictokens.go is ported.
 
 use tsrs_lsproto as lsproto;
 use tsrs_lsproto::{SemanticTokenModifier, SemanticTokenType};
 
-// completions.go:259
-pub(crate) const COMPLETION_TRIGGER_CHARACTERS: [&str; 10] = [".", "\"", "'", "`", "/", "@", "<", "#", " ", "*"];
-
-// signaturehelp.go:25
-pub(crate) const SIGNATURE_HELP_TRIGGER_CHARACTERS: [&str; 3] = ["(", ",", "<"];
-pub(crate) const SIGNATURE_HELP_RETRIGGER_CHARACTERS: [&str; 1] = [")"];
+pub(crate) use tsrs_ls::{COMPLETION_TRIGGER_CHARACTERS, SIGNATURE_HELP_RETRIGGER_CHARACTERS, SIGNATURE_HELP_TRIGGER_CHARACTERS};
 
 // semantictokens.go:21
 // tokenTypes defines the order of token types for encoding

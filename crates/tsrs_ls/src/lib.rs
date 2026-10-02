@@ -51,6 +51,7 @@ pub use completions_3::{
     SOURCE_THIS_PROPERTY, SOURCE_TYPE_ONLY_ALIAS,
 };
 pub use crossproject::*;
+pub use signaturehelp::{SIGNATURE_HELP_RETRIGGER_CHARACTERS, SIGNATURE_HELP_TRIGGER_CHARACTERS};
 pub use host::*;
 pub use jsdoc::{get_symbol_documentation_comment, get_symbol_jsdoc_tags, JSDocTagInfo};
 pub use languageservice::*;

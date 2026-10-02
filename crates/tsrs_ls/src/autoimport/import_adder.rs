@@ -1,6 +1,5 @@
 // PLACEHOLDER (see mod.rs): import_adder.go, reduced to what completions and the missing-member fixer call. The
-// type-node conversion functions are ported in full; the adder itself is not (a View, which `NewImportAdder`
-// needs, is never handed out while the registry is never prepared).
+// type-node conversion functions are ported in full; the adder itself is inert (the registry finds no exports).
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -30,7 +29,7 @@ pub trait ImportAdder {
 // import_adder.go:53 (placeholder: no state)
 struct importAdder;
 
-// import_adder.go:70 (placeholder: unreachable until the registry is ported, since no prepared View exists)
+// import_adder.go:70 (placeholder: an adder without state)
 pub fn new_import_adder(
     _ctx: &Context,
     _program: &'static Program,
@@ -48,12 +47,10 @@ impl ImportAdder for importAdder {
     fn has_fixes(&self) -> bool {
         false
     }
-    fn add_import_from_exported_symbol(&mut self, _symbol: P<Symbol>, _is_valid_type_only_use_site: bool) {
-        unreachable!("autoimport placeholder: no import adder exists while the registry is never prepared")
-    }
-    fn add_import_fix(&mut self, _fix: &Fix) {
-        unreachable!("autoimport placeholder: no import adder exists while the registry is never prepared")
-    }
+    // placeholder: the registry holds no exports, so no fix is ever found for a symbol
+    fn add_import_from_exported_symbol(&mut self, _symbol: P<Symbol>, _is_valid_type_only_use_site: bool) {}
+    // placeholder: fixes come from the registry, which produces none
+    fn add_import_fix(&mut self, _fix: &Fix) {}
     fn edits(&mut self) -> Vec<lsproto::TextEdit> {
         Vec::new()
     }
