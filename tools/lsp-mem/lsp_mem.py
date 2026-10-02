@@ -57,6 +57,7 @@ def main():
     ap.add_argument("--log", default=os.path.join(REPO, "target", "scratch", "mem", "lsp-mem"))
     ap.add_argument("--json")
     ap.add_argument("--env", action="append", default=[], help="KEY=VALUE for the server environment")
+    ap.add_argument("--exit-timeout", type=float, default=10, help="seconds to wait for the server to exit (census runs at exit)")
     args = ap.parse_args()
 
     cmd = args.cmd or {
@@ -135,7 +136,14 @@ def main():
     if args.settle:
         server.drain(args.settle)
         sample(args.edits, "settled ")
-    server.close()
+    server.request("shutdown", None, 60)
+    server.notify("exit", None)
+    # (`exit` alone does not end tsrs's server at the moment; end of input does.)
+    server.proc.stdin.close()
+    try:
+        server.proc.wait(timeout=args.exit_timeout)
+    except subprocess.TimeoutExpired:
+        server.proc.kill()
     first_rss, last_rss = samples[0]["rss_kib"], samples[-1]["rss_kib"]
     peak = max(s["rss_kib"] for s in samples)
     print(f"summary {args.server}: start {first_rss / 1024:.1f} MiB, end {last_rss / 1024:.1f} MiB, peak {peak / 1024:.1f} MiB, "
