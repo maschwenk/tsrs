@@ -1830,9 +1830,9 @@ impl Checker {
             CheckFlags::Instantiated
                 | symbol.check_flags() & (CheckFlags::Readonly | CheckFlags::Late | CheckFlags::OptionalParameter | CheckFlags::RestParameter),
         );
-        result.declarations.set(symbol.declarations());
+        result.set_declarations_static(symbol.declarations());
         result.set_parent(symbol.parent());
-        result.value_declaration.set(symbol.value_declaration());
+        result.set_value_declaration(symbol.value_declaration());
         #[cfg(feature = "site-counts")]
         {
             self.inst_symbol_sites.insert(result, std::panic::Location::caller());
@@ -2083,7 +2083,7 @@ impl Checker {
         if let Some(modifiers_prop) = modifiers_prop {
             mapped_links.synthetic_origin.set(Some(modifiers_prop));
             if should_link_prop_declarations {
-                prop.declarations.set(modifiers_prop.declarations());
+                prop.set_declarations_static(modifiers_prop.declarations());
             }
         }
         prop

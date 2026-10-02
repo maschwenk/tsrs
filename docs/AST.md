@@ -257,20 +257,22 @@ discarded (the declaration transformer's side-effect visitors).
 ## Symbols
 
 ```rust
-pub struct Symbol {                                  // 48 bytes
+pub struct Symbol {                                  // 40 bytes
     pub flags: OwnedCell<SymbolFlags>,
     pub check_flags: OwnedCell<CheckFlags>,
     pub name: OwnedStrCell,                          // PackedStr: pointer + length in one word
-    pub declarations: OwnedSliceCell<P<Node>>,       // 4-aligned (pointer, u32 length)
-    pub value_declaration: OwnedCell<Option<P<Node>>>,
+    declarations: OwnedSliceCell<P<Node>>,           // 4-aligned (pointer, u32 length)
     pub(crate) id: AtomicU32,
-    parent_or_tables: OwnedCell<SymbolParentWord>,   // parent, or a tail {parent, members, exports, export_symbol}
+    parent_or_tables: OwnedCell<SymbolParentWord>,   // parent, or a tail {parent, members, exports, export_symbol,
+                                                     // value_declaration}; a bit: value declaration = declarations[0]
 }
 ```
 
 `Symbol: Default`; `Symbol::new(flags, name) -> P<Symbol>`; getters `flags()`, `name()`,
 `declarations()`, `value_declaration()`, `members()`, `exports()`, `parent()`,
-`export_symbol()` and setters `set_parent()`, `set_members()`, `set_exports()`, `set_export_symbol()`; `is_external_module()`, `is_static()`, `combined_local_and_export_symbol_flags()`.
+`export_symbol()` and setters `set_parent()`, `set_members()`, `set_exports()`, `set_export_symbol()`,
+`set_value_declaration()`, `set_declarations(&[_])` (copies), `set_declarations_static(&'static [_])` (shares, Go
+`s.Declarations = other.Declarations`), `append_declarations()`; `is_external_module()`, `is_static()`, `combined_local_and_export_symbol_flags()`.
 Free: `get_source_file_of_symbol`, `symbol_name`, `escape_symbol_name`, … `get_symbol_id` is in utilities.
 
 `pub struct SymbolTable(RefCell<IndexMap<&'static str, P<Symbol>>>)`, handled as `P<SymbolTable>`

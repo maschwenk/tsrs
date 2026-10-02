@@ -1285,7 +1285,7 @@ impl Binder {
 
 pub(crate) fn get_initializer_symbol(symbol: Option<P<Symbol>>) -> Option<P<Symbol>> {
     let symbol = symbol?;
-    let declaration = symbol.value_declaration.get()?;
+    let declaration = symbol.value_declaration()?;
     // For an assignment 'fn.xxx = ...', where 'fn' is a previously declared function or a previously
     // declared const variable initialized with a function expression or arrow function, we add expando
     // property declarations to the function's symbol. This also applies to class expressions in JS files,
@@ -1883,11 +1883,11 @@ impl Binder {
         if (*locals).get(name).is_none() {
             let symbol = self.new_symbol(SymbolFlags::FunctionScopedVariable | SymbolFlags::ModuleExports, name);
             symbol.set_declarations(&vec![self.file.as_node()]);
-            symbol.value_declaration.set(Some(self.file.as_node()));
+            symbol.set_value_declaration(Some(self.file.as_node()));
             if name == "module" {
                 let exports_property = self.new_symbol(SymbolFlags::ModuleExports | SymbolFlags::Property, "exports");
-                exports_property.declarations.set(symbol.declarations());
-                exports_property.value_declaration.set(symbol.value_declaration.get());
+                exports_property.set_declarations_static(symbol.declarations());
+                exports_property.set_value_declaration(symbol.value_declaration());
                 exports_property.set_parent(Some(symbol));
                 let members = SymbolTable::new();
                 members.set("exports", exports_property);
@@ -2835,7 +2835,7 @@ impl Binder {
 }
 
 pub fn set_value_declaration(symbol: P<Symbol>, node: P<Node>) {
-    let value_declaration = symbol.value_declaration.get();
+    let value_declaration = symbol.value_declaration();
     let replace = match value_declaration {
         None => true,
         Some(value_declaration) => {
@@ -2846,7 +2846,7 @@ pub fn set_value_declaration(symbol: P<Symbol>, node: P<Node>) {
     if replace {
         // Non-assignment declarations take precedence over assignment declarations and
         // non-namespace declarations take precedence over namespace declarations.
-        symbol.value_declaration.set(Some(node));
+        symbol.set_value_declaration(Some(node));
     }
 }
 
@@ -3075,7 +3075,7 @@ pub(crate) fn get_optional_symbol_flag_for_node(node: P<Node>) -> SymbolFlags {
 }
 
 pub(crate) fn is_function_symbol(symbol: P<Symbol>) -> bool {
-    if let Some(d) = symbol.value_declaration.get() {
+    if let Some(d) = symbol.value_declaration() {
         if ast::is_function_declaration(d) {
             return true;
         }

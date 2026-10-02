@@ -281,7 +281,7 @@ impl Checker {
         result.set_declarations(&declarations);
         if !has_non_uniform_value_declaration {
             if let Some(first_value_declaration) = first_value_declaration {
-                result.value_declaration.set(Some(first_value_declaration));
+                result.set_value_declaration(Some(first_value_declaration));
                 // Inherit information about parent type.
                 result.set_parent(first_value_declaration.symbol().unwrap().parent());
             }
@@ -359,9 +359,9 @@ impl Checker {
     // checker.go:22065
     pub(crate) fn create_symbol_with_type(&mut self, source: P<Symbol>, t: Option<P<Type>>) -> P<Symbol> {
         let symbol = self.new_symbol_ex(source.flags(), source.name(), source.check_flags.get() & CheckFlags::Readonly);
-        symbol.declarations.set(source.declarations());
+        symbol.set_declarations_static(source.declarations());
         symbol.set_parent(source.parent());
-        symbol.value_declaration.set(source.value_declaration());
+        symbol.set_value_declaration(source.value_declaration());
         let links = self.value_symbol_links.get(symbol);
         links.resolved_type.set(t);
         links.set_target(Some(source));

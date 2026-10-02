@@ -102,3 +102,42 @@ blocks; the strong mark reported one "violation" in each mode, a heap word of `n
 0x7d40_0000_0000 (local patch, not landed) the same binary reports 0 violations, and step 1 reports 0 at the usual
 base. (The census strong mark decodes x8-encoded words only in heap blocks, so it does not follow identifiers' flow
 nodes; the precise walk does, through `flow_node()`.)
+
+## 3. Next arena rows: `Symbol` 48 -> 40 bytes (value declaration as a bit)
+
+Profile after step 2 (alloc-profile, single): Symbol 605 MB (13.2M x 48), TypeMapper 255, NodeAlloc<Identifier> 240,
+[ValueSymbolLinks] 238, [P<Type>] 217, ObjectType / TypeReference 167 / 165, Signature 136, StructuredMembers 125.
+`Symbol` is still the largest row, so it went first.
+
+Counted once (every symbol registered at creation, inspected at exit; the private monorepo single):
+
+| symbols | value declaration nil | = first declaration | another node |
+| --- | --- | --- | --- |
+| binder (3.92M) | 689,627 | 3,228,501 | 2,672 |
+| transient, default mode (9.29M) | 1,621,384 | 7,650,022 | 20,367 |
+| transient, opt-out (22.98M) | 3,454,097 | 19,505,610 | 20,360 |
+
+So the value declaration is either nil or `declarations[0]` for 99.8% of the symbols. A bit of the parent/tail word
+(bit 62 of `SymbolParentWord`) now says "the value declaration is the first declaration"; another node is kept in the
+symbol's tail (`SymbolTables.value_declaration`, the tail grows 32 -> 40 bytes). `set_value_declaration` picks the
+form, `value_declaration()` reads `declarations[0]` when the bit is set, and every write of the declarations
+(`set_declarations`, the new `set_declarations_static` for Go's slice sharing, `append_declarations`) moves the value
+declaration into the tail first when the new slice's first element differs. The bit is only set while the
+declarations are non-empty. `declarations` is private now, `value_declaration` an accessor pair (37 + 23 sites,
+mechanical). Same owner-only write contract as the other `Symbol` words.
+
+| run (3 interleaved rounds) | peak GiB | instructions |
+| --- | --- | --- |
+| single, step 2 | 5.764-5.781 (5.773) | 305.5-306.0 G |
+| single, after | 5.668-5.684 (5.681, -0.092) | 306.2 G (+0.2%) |
+| 4 checkers, step 2 | 7.726-7.742 (7.736) | 416.1-417.1 G |
+| 4 checkers, after | 7.613-7.631 (7.628, -0.108) | 416.9-417.6 G (+0.2%) |
+| opt-out single (3 runs) | 7.691-7.698 -> 7.498-7.500 (-0.19) | 329.0-331.9 -> 331.0-333.7 G (noise: +-1.5%) |
+| opt-out 4 checkers, go assignment (1 run) | 11.828 -> 11.541 (-0.29) | 496.3 -> 495.6 G |
+
+(A first version indexed `declarations[0]` with a bounds check: single +0.7% instructions in two of three pairs;
+`get_unchecked` under the non-empty invariant, which a `debug_assert` checks, is the landed one.)
+
+Gates: suite trees identical to step 2 in all three modes, also with a dev build (debug assertions) and
+`TSRS_CHECK_SHARED=1`; private-monorepo output and counters identical in all four runs (and the dev build, 4
+checkers, without panics).
