@@ -293,3 +293,7 @@ identical. Details: `notes/mem-small.md`.
 ## 2026-10-01: checker balance (opt-in cost cache)
 
 `--checkerCostCache <file>` balances the 4 checkers on per-file CPU times from the previous run (default unchanged; ordering and static cost models gave nothing): wall -3.7% on the private monorepo (slowest checker 10.4% -> 2.1% above the mean), -12.5% vscode, -15% mui-docs; output identical. Details: `notes/perf-balance.md`.
+
+## 2026-10-01: first Linux profile (x86_64 cloud VM)
+
+The private monorepo on an 18-vCPU x86_64 sandbox VM (kernel 7.2, THP `madvise`): release 0.1.5 takes 37-48 s with one checker and 16-20 s with four (TS 7.1 nightly `tsc`: 127 s / 75 s), sys 3.5-7.7 s, ~25 K page faults, because mimalloc already puts ~97% of memory on transparent huge pages (THP off: +11-12% wall); explicit `MADV_HUGEPAGE` on arena chunks changes no wall time (-2% RSS) and pre-faulting adds 16-36% RSS for nothing, so nothing landed. Details: `notes/linux-perf.md`.
