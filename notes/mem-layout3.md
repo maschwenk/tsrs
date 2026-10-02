@@ -143,11 +143,9 @@ Final head, the private monorepo, `TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1`, default 
 checkers: precise walk 50,362,689 references, 0 to freed or rewound blocks; strong mark **0 violations** in all four
 runs (27 registered layouts, 208 arena classes covered). Positive control: with the escape barrier removed from
 `MapperCell::set`, single checker reports 835,737 violations (freed mappers held by `ConditionalType.mapper` /
-`combinedMapper`), so the registrations do not hide real pointer fields. Conformance corpus (12,758 files, before the
-merge with main's census, i.e. with this branch's earlier census edits): precise walk 0 in every file. (The old strong mark
-flagged 11 files, all through the relater's maybe-key buffers whose `RelationKey::Pair` entries leave a word
-uninitialized, also on the base binary; main's census now resets those buffers. The corpus was not rerun after the
-merge.)
+`combinedMapper`), so the registrations do not hide real pointer fields. Conformance corpus (12,758 files through `tsrs --strict --target esnext`, final census binary, 10 in parallel):
+precise walk 0 and strong mark 0 in every file. 9 files did not report 0 on the first run under the parallel load
+(a missing or non-zero line) and reported 0 on the retry and on three more single runs each.
 
 ## Result
 
