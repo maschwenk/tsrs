@@ -26,13 +26,14 @@ implementations / call hierarchy use them (phase 3); hover, definition, diagnost
 
 ### Tests
 
-- `cargo test -p tsrs_ls --lib`: 86 pass. New: `lsconv/converters_test.rs` (Go tests: URI <-> file name both ways,
+- `cargo test -p tsrs_ls --lib`: 87 pass. New: `lsconv/converters_test.rs` (Go tests: URI <-> file name both ways,
   `TestConvertersAgainstJSReference` via node), `ls_smoke_test.rs` (not a Go test): builds an in-memory program with
   the bundled libs and compares the JSON of `provide_hover` / `provide_definition` / `provide_type_definition` /
   `provide_diagnostics` byte for byte with responses recorded from `tsgo-ref --lsp -stdio` (markdown hover with
   JSDoc `@param`/`@returns`/`@example`/`@see`/`@deprecated`/`{@link}`, constructors, methods, enum members,
   namespaces, overloads, type aliases, type parameters, import aliases, `this`, definition links, pull
-  diagnostics incl. suggestion/deprecated). 21 responses, all identical. The recorder is
+  diagnostics incl. suggestion/deprecated; a Visual Studio client's `_vs_rawContent` classified runs). 23 responses,
+  all identical. The recorder is
   `target/scratch/lscore/drive.py` (scratch).
 
 ### API notes for callers
@@ -123,5 +124,3 @@ implementations / call hierarchy use them (phase 3); hover, definition, diagnost
 - `impl Script for P<SourceFile>`: with `lsconv::Script` in scope, `file.text()` on a `P<SourceFile>` resolves to the
   trait method (borrow-tied `&str`) before deref to `SourceFile::text` (`&'static str`). Files that only need the
   trait as a type name it by path (`&dyn crate::lsconv::Script`).
-- The VS-capability hover path (`_vs_rawContent`, classified runs through the printer) compiles but is not covered by
-  the smoke test (the oracle's client does not announce VS extensions).

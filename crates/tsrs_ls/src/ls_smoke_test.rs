@@ -69,6 +69,10 @@ impl ParseConfigHost for parseConfigHost {
 }
 
 fn setup(files: &[(&str, &str)]) -> (LanguageService, Context) {
+    setup_with(files, false)
+}
+
+fn setup_with(files: &[(&str, &str)], vs: bool) -> (LanguageService, Context) {
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files.iter().map(|&(k, v)| (k, v)), true)));
     let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: fs.clone() }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, config_host, None);
@@ -85,6 +89,7 @@ fn setup(files: &[(&str, &str)]) -> (LanguageService, Context) {
     caps.text_document.hover.content_format = vec![lsproto::MarkupKind::Markdown];
     caps.text_document.definition.link_support = true;
     caps.text_document.type_definition.link_support = true;
+    caps.vs_supports_visual_studio_extensions = vs;
     let ctx = lsproto::with_client_capabilities(&Context::background(), Arc::new(caps));
     (ls, ctx)
 }
@@ -192,4 +197,14 @@ fn hover_jsdoc_aliases_overloads() {
     assert_eq!(json(&ls.provide_definition(&ctx, &uri, position_of(INDEX2, "Gadget}")).unwrap()), r#"[{"originSelectionRange":{"start":{"line":0,"character":25},"end":{"line":0,"character":31}},"targetUri":"file:///index.ts","targetRange":{"start":{"line":7,"character":0},"end":{"line":7,"character":15}},"targetSelectionRange":{"start":{"line":7,"character":6},"end":{"line":7,"character":12}}}]"#, "{}", "Gadget}");
     assert_eq!(json(&ls.provide_definition(&ctx, &uri, position_of(INDEX2, "G =")).unwrap()), r#"[{"originSelectionRange":{"start":{"line":19,"character":7},"end":{"line":19,"character":8}},"targetUri":"file:///index.ts","targetRange":{"start":{"line":9,"character":15},"end":{"line":9,"character":38}},"targetSelectionRange":{"start":{"line":9,"character":28},"end":{"line":9,"character":33}}}]"#, "{}", "G =");
     assert_eq!(json(&ls.provide_diagnostics(&ctx, &uri).unwrap()), r#"{"kind":"full","items":[{"range":{"start":{"line":6,"character":74},"end":{"line":6,"character":75}},"severity":4,"code":6133,"source":"ts","message":"'n' is declared but its value is never read."},{"range":{"start":{"line":14,"character":14},"end":{"line":14,"character":20}},"severity":4,"code":6385,"source":"ts","message":"'Widget' is deprecated."}]}"#, "{}", "");
+}
+
+// Visual Studio client: classified runs and `_vs_rawContent`, recorded from tsgo-ref (drive_vs.py).
+#[test]
+fn hover_visual_studio_raw_content() {
+    let files = [("/tsconfig.json", r#"{"compilerOptions":{"strict":true},"files":["index.ts"]}"#), ("/index.ts", INDEX)];
+    let (ls, ctx) = setup_with(&files, true);
+    let uri = lsconv::file_name_to_document_uri("/index.ts");
+    assert_eq!(json(&ls.provide_hover(&ctx, &lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri: uri.clone() }, position: position_of(INDEX, "add(p.x"), ..Default::default() }).unwrap()), r#"{"contents":{"kind":"markdown","value":"```typescript\nfunction add(a: number, b: number): number;\n```\nAdds two numbers.\n\n*@param* `a` — the first\n\n*@returns* — the sum"},"range":{"start":{"line":8,"character":14},"end":{"line":8,"character":17}},"_vs_rawContent":{"Style":1,"Elements":[{"Style":0,"Elements":[{"ImageId":{"Guid":"ae27a6b0-e345-4288-96df-5eaf394ee369","Id":1880,"_vs_type":"ImageId"},"_vs_type":"ImageElement"},{"Runs":[{"ClassificationTypeName":"keyword","Text":"function ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"method name","Text":"add","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":"(","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"parameter name","Text":"a","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":":","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"whitespace","Text":" ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"keyword","Text":"number","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":",","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"whitespace","Text":" ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"parameter name","Text":"b","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":":","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"whitespace","Text":" ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"keyword","Text":"number","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":")","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":":","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"whitespace","Text":" ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"keyword","Text":"number","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":";","_vs_type":"ClassifiedTextRun"}],"_vs_type":"ClassifiedTextElement"}],"_vs_type":"ContainerElement"},{"Runs":[{"ClassificationTypeName":"text","Text":"Adds two numbers.","_vs_type":"ClassifiedTextRun"}],"_vs_type":"ClassifiedTextElement"}],"_vs_type":"ContainerElement"}}"#, "{}", "add(p.x");
+    assert_eq!(json(&ls.provide_hover(&ctx, &lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri: uri.clone() }, position: position_of(INDEX, "x: 1"), ..Default::default() }).unwrap()), r#"{"contents":{"kind":"markdown","value":"```typescript\n(property) Point.x: number\n```\n"},"range":{"start":{"line":7,"character":19},"end":{"line":7,"character":20}},"_vs_rawContent":{"Style":0,"Elements":[{"ImageId":{"Guid":"ae27a6b0-e345-4288-96df-5eaf394ee369","Id":2436,"_vs_type":"ImageId"},"_vs_type":"ImageElement"},{"Runs":[{"ClassificationTypeName":"punctuation","Text":"(","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"text","Text":"property","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":") ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"property name","Text":"Point.x","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":": ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"keyword","Text":"number","_vs_type":"ClassifiedTextRun"}],"_vs_type":"ClassifiedTextElement"}],"_vs_type":"ContainerElement"}}"#, "{}", "x: 1");
 }
