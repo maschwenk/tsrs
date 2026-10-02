@@ -80,3 +80,12 @@ census ran.) So the count rose with layout changes and stack-content changes, no
   walk checks them.
 - Heap blocks have no types, so their uninitialized bytes can only be scrubbed at the source (as for the relater keys
   and mem-recycle's pooled vectors). A new pooled table of enum keys may need the same.
+
+## Known flakiness under parallel load (2026-10-02, after the layout3 merge)
+
+Running the corpus free-gate with several census processes in parallel can report a non-zero line for a file that
+reports 0 when run alone. Seen on main b0602ae with 6 processes: 2 of 5,296 files
+(`arrowFunctionMissingCurlyWithSemicolon.ts`, `conditionalExpressionNewLine7.ts`), each 0 in six single runs
+afterwards; the layout3 branch saw 9 of 12,758 the same way. It predates that branch. Cause not established (the
+conservative mark's roots include stack contents, which depend on scheduling). Until the roots are made
+deterministic: rerun any non-zero file alone before treating it as a violation.
