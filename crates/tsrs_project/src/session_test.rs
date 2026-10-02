@@ -326,3 +326,480 @@ fn snapshot_refs_release_parse_cache() {
     let _ = Arc::strong_count(&session);
     let _ = projecttestutil::TestTypingsLocation;
 }
+
+fn open(session: &crate::session::Session, files: &[(&str, &str)], name: &str) {
+    session.did_open_file(&ctx(), uri(&format!("file://{name}")), 1, file(files, name), lsproto::LanguageKind::TypeScript);
+}
+
+fn ls_program(session: &crate::session::Session, name: &str) -> &'static tsrs_compiler::Program {
+    session.get_language_service(&ctx(), &uri(&format!("file://{name}"))).unwrap().get_program()
+}
+
+fn watch_changed(session: &crate::session::Session, name: &str, type_: lsproto::FileChangeType) {
+    session.did_change_watched_files(&ctx(), &[lsproto::FileEvent { type_, uri: uri(&format!("file://{name}")) }]);
+}
+
+fn delete_close_recreate(files: &[(&str, &str)]) {
+    let (session, utils) = setup(files);
+
+    open(&session, files, "/home/projects/TS/p1/src/x.ts");
+    open(&session, files, "/home/projects/TS/p1/src/index.ts");
+
+    utils.fs().remove("/home/projects/TS/p1/src/x.ts").unwrap();
+
+    session.did_close_file(&ctx(), uri("file:///home/projects/TS/p1/src/x.ts"));
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert!(program.get_source_file("/home/projects/TS/p1/src/x.ts").is_none());
+
+    utils.fs().write_file("/home/projects/TS/p1/src/x.ts", "").unwrap();
+
+    session.did_open_file(&ctx(), uri("file:///home/projects/TS/p1/src/x.ts"), 1, String::new(), lsproto::LanguageKind::TypeScript);
+
+    let program = ls_program(&session, "/home/projects/TS/p1/src/x.ts");
+    assert_eq!(program.get_source_file("/home/projects/TS/p1/src/x.ts").unwrap().text(), "");
+}
+
+// session_test.go:402 TestSession/DidCloseFile/Configured projects/delete a file, close it, recreate it
+#[test]
+fn did_close_file_configured_delete_close_recreate() {
+    delete_close_recreate(default_files);
+}
+
+// session_test.go:433 TestSession/DidCloseFile/Inferred projects/delete a file, close it, recreate it
+#[test]
+fn did_close_file_inferred_delete_close_recreate() {
+    let files: Vec<(&str, &str)> = default_files.iter().copied().filter(|(k, _)| *k != "/home/projects/TS/p1/tsconfig.json").collect();
+    delete_close_recreate(&files);
+}
+
+// session_test.go:464 TestSession/DidCloseFile/Inferred projects/close untitled file
+#[test]
+fn did_close_file_close_untitled_file() {
+    let (session, _) = setup(default_files);
+
+    session.did_open_file(&ctx(), uri("untitled:Untitled-1"), 1, "let x = 1;".to_string(), lsproto::LanguageKind::TypeScript);
+    session.did_close_file(&ctx(), uri("untitled:Untitled-1"));
+    session.did_open_file(&ctx(), uri("untitled:Untitled-2"), 1, String::new(), lsproto::LanguageKind::TypeScript);
+}
+
+fn did_save_file(save_first: bool) {
+    let (session, _) = setup(default_files);
+    open(&session, default_files, "/home/projects/TS/p1/src/index.ts");
+
+    assert_eq!(session.snapshot().id(), 1);
+
+    if save_first {
+        session.did_save_file(&ctx(), uri("file:///home/projects/TS/p1/src/index.ts"));
+        watch_changed(&session, "/home/projects/TS/p1/src/index.ts", lsproto::FileChangeType::Changed);
+    } else {
+        watch_changed(&session, "/home/projects/TS/p1/src/index.ts", lsproto::FileChangeType::Changed);
+        session.did_save_file(&ctx(), uri("file:///home/projects/TS/p1/src/index.ts"));
+    }
+
+    session.wait_for_background_tasks();
+    // We didn't need a snapshot change, but the session overlays should be updated.
+    assert_eq!(session.snapshot().id(), 1);
+
+    // Open another file to force a snapshot update so we can see the changes.
+    open(&session, default_files, "/home/projects/TS/p1/src/x.ts");
+    assert!(session.snapshot().get_file("/home/projects/TS/p1/src/index.ts").unwrap().matches_disk_text());
+}
+
+// session_test.go:477 TestSession/DidSaveFile/save event first
+#[test]
+fn did_save_file_save_event_first() {
+    did_save_file(true);
+}
+
+// session_test.go:504 TestSession/DidSaveFile/watch event first
+#[test]
+fn did_save_file_watch_event_first() {
+    did_save_file(false);
+}
+
+// session_test.go:534 TestSession/Source file sharing/projects with similar options share source files
+#[test]
+fn source_file_sharing_similar_options() {
+    let mut files: Vec<(&str, &str)> = default_files.to_vec();
+    files.push((
+        "/home/projects/TS/p2/tsconfig.json",
+        r#"{
+				"compilerOptions": {
+					"noLib": true,
+					"module": "nodenext",
+					"strict": true,
+					"noCheck": true
+				}
+			}"#,
+    ));
+    files.push(("/home/projects/TS/p2/src/index.ts", r#"import { x } from "../../p1/src/x";"#));
+    let (session, _) = setup(&files);
+
+    open(&session, &files, "/home/projects/TS/p1/src/index.ts");
+    open(&session, &files, "/home/projects/TS/p2/src/index.ts");
+
+    assert_eq!(session.snapshot().project_collection.projects().len(), 2);
+
+    let program1 = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    let program2 = ls_program(&session, "/home/projects/TS/p2/src/index.ts");
+
+    assert_eq!(program1.get_source_file("/home/projects/TS/p1/src/x.ts"), program2.get_source_file("/home/projects/TS/p1/src/x.ts"));
+}
+
+// session_test.go:569 TestSession/Source file sharing/projects with different options do not share source files
+#[test]
+fn source_file_sharing_different_options() {
+    let mut files: Vec<(&str, &str)> = default_files.to_vec();
+    files.push((
+        "/home/projects/TS/p2/tsconfig.json",
+        r#"{
+				"compilerOptions": {
+					"noLib": true,
+					"module": "nodenext",
+					"strict": true,
+					"moduleDetection": "auto"
+				},
+				"include": ["src"]
+			}"#,
+    ));
+    files.push(("/home/projects/TS/p2/src/index.ts", r#"import { x } from "../../p1/src/x";"#));
+    let (session, _) = setup(&files);
+
+    open(&session, &files, "/home/projects/TS/p1/src/index.ts");
+    open(&session, &files, "/home/projects/TS/p2/src/index.ts");
+
+    assert_eq!(session.snapshot().project_collection.projects().len(), 2);
+
+    let x1 = ls_program(&session, "/home/projects/TS/p1/src/index.ts").get_source_file("/home/projects/TS/p1/src/x.ts").unwrap();
+    let x2 = ls_program(&session, "/home/projects/TS/p2/src/index.ts").get_source_file("/home/projects/TS/p1/src/x.ts").unwrap();
+    assert_ne!(x1, x2);
+}
+
+// session_test.go:608 TestSession/DidChangeWatchedFiles/change open file
+#[test]
+fn did_change_watched_files_change_open_file() {
+    let (session, utils) = setup(default_files);
+
+    open(&session, default_files, "/home/projects/TS/p1/src/x.ts");
+    open(&session, default_files, "/home/projects/TS/p1/src/index.ts");
+
+    let program_before = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+
+    utils.fs().write_file("/home/projects/TS/p1/src/x.ts", "export const x = 2;").unwrap();
+
+    watch_changed(&session, "/home/projects/TS/p1/src/x.ts", lsproto::FileChangeType::Changed);
+
+    // Program should remain the same since the file is open and changes are handled through DidChangeTextDocument
+    assert!(std::ptr::eq(program_before, ls_program(&session, "/home/projects/TS/p1/src/index.ts")));
+}
+
+// session_test.go:636 TestSession/DidChangeWatchedFiles/change closed program file
+#[test]
+fn did_change_watched_files_change_closed_program_file() {
+    let (session, utils) = setup(default_files);
+
+    open(&session, default_files, "/home/projects/TS/p1/src/index.ts");
+
+    let program_before = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+
+    utils.fs().write_file("/home/projects/TS/p1/src/x.ts", "export const x = 2;").unwrap();
+
+    watch_changed(&session, "/home/projects/TS/p1/src/x.ts", lsproto::FileChangeType::Changed);
+
+    assert!(!std::ptr::eq(program_before, ls_program(&session, "/home/projects/TS/p1/src/index.ts")));
+}
+
+// projecttestutil.go:281 WithRequestID(t.Context())
+fn request_ctx() -> Context {
+    let (ctx, cancel) = Context::background().with_cancel();
+    std::mem::forget(cancel);
+    tsrs_core::context::with_request_id(&ctx, "0")
+}
+
+fn semantic_diagnostics_count(program: &'static tsrs_compiler::Program, file_name: &str) -> usize {
+    program.get_semantic_diagnostics(&request_ctx(), program.get_source_file(file_name)).len()
+}
+
+fn root_file_names(program: &'static tsrs_compiler::Program) -> Vec<String> {
+    program.command_line().parsed_config.file_names.clone()
+}
+
+// session_test.go:713 TestSession/DidChangeWatchedFiles/change config file
+#[test]
+fn did_change_watched_files_change_config_file() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+					"compilerOptions": {
+						"noLib": true,
+						"strict": false
+					}
+				}"#,
+        ),
+        ("/home/projects/TS/p1/src/x.ts", "export declare const x: number | undefined;"),
+        (
+            "/home/projects/TS/p1/src/index.ts",
+            r#"
+					import { x } from "./x";
+					let y: number = x;"#,
+        ),
+    ];
+
+    let (session, utils) = setup(files);
+    open(&session, files, "/home/projects/TS/p1/src/index.ts");
+
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+
+    utils
+        .fs()
+        .write_file(
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+				"compilerOptions": {
+					"noLib": false,
+					"strict": true
+				}
+			}"#,
+        )
+        .unwrap();
+
+    watch_changed(&session, "/home/projects/TS/p1/tsconfig.json", lsproto::FileChangeType::Changed);
+
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+}
+
+// session_test.go:757 TestSession/DidChangeWatchedFiles/delete explicitly included file
+#[test]
+fn did_change_watched_files_delete_explicitly_included_file() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"files": ["src/index.ts", "src/x.ts"]
+				}"#,
+        ),
+        ("/home/projects/TS/p1/src/x.ts", "export declare const x: number | undefined;"),
+        ("/home/projects/TS/p1/src/index.ts", r#"import { x } from "./x";"#),
+    ];
+    let (session, utils) = setup(files);
+    open(&session, files, "/home/projects/TS/p1/src/index.ts");
+
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert!(root_file_names(program).contains(&"/home/projects/TS/p1/src/x.ts".to_string()));
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+
+    utils.fs().remove("/home/projects/TS/p1/src/x.ts").unwrap();
+
+    watch_changed(&session, "/home/projects/TS/p1/src/x.ts", lsproto::FileChangeType::Deleted);
+
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    // File name is still in the command line, was explicitly included
+    assert!(root_file_names(program).contains(&"/home/projects/TS/p1/src/x.ts".to_string()));
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+    assert!(program.get_source_file("/home/projects/TS/p1/src/x.ts").is_none());
+
+    // Open file to trigger cleanup
+    session.did_open_file(&ctx(), uri("untitled:Untitled-1"), 1, String::new(), lsproto::LanguageKind::TypeScript);
+    assert!(session.snapshot().get_file("/home/projects/TS/p1/src/x.ts").is_none());
+}
+
+// session_test.go:802 TestSession/DidChangeWatchedFiles/delete wildcard included file
+#[test]
+fn did_change_watched_files_delete_wildcard_included_file() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"include": ["src"]
+				}"#,
+        ),
+        ("/home/projects/TS/p1/src/index.ts", "let x = 2;"),
+        ("/home/projects/TS/p1/src/x.ts", "let y = x;"),
+    ];
+    let (session, utils) = setup(files);
+    open(&session, files, "/home/projects/TS/p1/src/x.ts");
+
+    let program = ls_program(&session, "/home/projects/TS/p1/src/x.ts");
+    assert!(root_file_names(program).contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/x.ts"), 0);
+
+    utils.fs().remove("/home/projects/TS/p1/src/index.ts").unwrap();
+
+    watch_changed(&session, "/home/projects/TS/p1/src/index.ts", lsproto::FileChangeType::Deleted);
+
+    let program = ls_program(&session, "/home/projects/TS/p1/src/x.ts");
+    // File name is gone from the command line, was originally included via wildcard
+    assert!(!root_file_names(program).contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/x.ts"), 1);
+
+    // Open file to trigger cleanup
+    session.did_open_file(&ctx(), uri("untitled:Untitled-1"), 1, String::new(), lsproto::LanguageKind::TypeScript);
+    assert!(session.snapshot().get_file("/home/projects/TS/p1/src/index.ts").is_none());
+}
+
+fn delete_directory(files_spec: &str, check_root_names: bool) {
+    let files: &[(&str, &str)] = &[
+        ("/home/projects/TS/p1/tsconfig.json", files_spec),
+        ("/home/projects/TS/p1/src/index.ts", r#"import { x } from "./sub/x";"#),
+        ("/home/projects/TS/p1/src/sub/x.ts", "export const x = 1;"),
+    ];
+    let (session, utils) = setup(files);
+    open(&session, files, "/home/projects/TS/p1/src/index.ts");
+
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    if check_root_names {
+        assert!(root_file_names(program).contains(&"/home/projects/TS/p1/src/sub/x.ts".to_string()));
+    } else {
+        assert!(root_file_names(program).contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
+        // x.ts is not in "files" but is pulled in via the import.
+        assert!(program.get_source_file("/home/projects/TS/p1/src/sub/x.ts").is_some());
+    }
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+
+    // Delete the entire subdirectory from the file system.
+    utils.fs().remove("/home/projects/TS/p1/src/sub").unwrap();
+
+    // Send a delete event for the directory URI.
+    watch_changed(&session, "/home/projects/TS/p1/src/sub", lsproto::FileChangeType::Deleted);
+
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    if check_root_names {
+        // The directory was deleted, so the file should no longer be in the program.
+        assert!(!root_file_names(program).contains(&"/home/projects/TS/p1/src/sub/x.ts".to_string()));
+    } else {
+        // The directory was deleted, so the file should no longer be resolvable.
+        assert!(program.get_source_file("/home/projects/TS/p1/src/sub/x.ts").is_none());
+    }
+    // The import should now be an error since the module is missing.
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+}
+
+// session_test.go:846 TestSession/DidChangeWatchedFiles/delete directory with wildcard included files
+#[test]
+fn did_change_watched_files_delete_directory_with_wildcard_included_files() {
+    delete_directory(
+        r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"include": ["src"]
+				}"#,
+        true,
+    );
+}
+
+// session_test.go:892 TestSession/DidChangeWatchedFiles/delete directory with program-only files
+#[test]
+fn did_change_watched_files_delete_directory_with_program_only_files() {
+    delete_directory(
+        r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"files": ["src/index.ts"]
+				}"#,
+        false,
+    );
+}
+
+fn delete_sibling_folder(open_third: bool) {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            if open_third {
+                r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"files": ["index.ts", "third.ts"]
+				}"#
+            } else {
+                r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"files": ["index.ts"]
+				}"#
+            },
+        ),
+        ("/home/projects/TS/p1/index.ts", "import { content } from \"./f/content\";\n\nexport const value = content;"),
+        ("/home/projects/TS/p1/f/content.ts", "export const content = 1;"),
+        ("/home/projects/TS/p1/third.ts", "export const third = 3;"),
+    ];
+    let (session, utils) = setup(files);
+    let content_uri = uri("file:///home/projects/TS/p1/f/content.ts");
+    open(&session, files, "/home/projects/TS/p1/index.ts");
+    open(&session, files, "/home/projects/TS/p1/f/content.ts");
+
+    let _ = ls_program(&session, "/home/projects/TS/p1/index.ts");
+    session.wait_for_background_tasks();
+
+    let baseline_refresh_count = utils.client().refresh_diagnostics_calls();
+
+    utils.fs().remove("/home/projects/TS/p1/f").unwrap();
+
+    watch_changed(&session, "/home/projects/TS/p1/f", lsproto::FileChangeType::Deleted);
+    if open_third {
+        open(&session, files, "/home/projects/TS/p1/third.ts");
+    } else {
+        session.did_close_file(&ctx(), content_uri);
+    }
+    // The debounced refresh runs after the session's (zero) debounce delay.
+    session.wait_for_background_tasks();
+
+    let refresh_count = utils.client().refresh_diagnostics_calls();
+    assert!(refresh_count > baseline_refresh_count, "expected RefreshDiagnostics to be called, got {refresh_count} calls (baseline {baseline_refresh_count})");
+}
+
+// session_test.go:936 TestSession/DidChangeWatchedFiles/delete sibling folder schedules diagnostics refresh
+#[test]
+fn did_change_watched_files_delete_sibling_folder_schedules_diagnostics_refresh() {
+    delete_sibling_folder(false);
+}
+
+// session_test.go:979 TestSession/DidChangeWatchedFiles/delete sibling folder schedules diagnostics refresh after opening third file
+#[test]
+fn did_change_watched_files_delete_sibling_folder_after_opening_third_file() {
+    delete_sibling_folder(true);
+}
+
+// session_test.go:1024 TestSession/DidChangeWatchedFiles/create explicitly included file
+#[test]
+fn did_change_watched_files_create_explicitly_included_file() {
+    let files: &[(&str, &str)] = &[
+        (
+            "/home/projects/TS/p1/tsconfig.json",
+            r#"{
+					"compilerOptions": {
+						"noLib": true
+					},
+					"files": ["src/index.ts", "src/y.ts"]
+				}"#,
+        ),
+        ("/home/projects/TS/p1/src/index.ts", r#"import { y } from "./y";"#),
+    ];
+    let (session, utils) = setup(files);
+    open(&session, files, "/home/projects/TS/p1/src/index.ts");
+
+    // Initially should have an error because y.ts is missing
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+
+    // Add the missing file
+    utils.fs().write_file("/home/projects/TS/p1/src/y.ts", "export const y = 1;").unwrap();
+
+    watch_changed(&session, "/home/projects/TS/p1/src/y.ts", lsproto::FileChangeType::Created);
+
+    // Error should be resolved
+    let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
+    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+}
