@@ -105,3 +105,15 @@ mappers; `parseContentMapperContributions` not ported).
 - `tsrs_ls`: move `lsconsts.rs` contents into `completions.rs` / `signaturehelp.rs` / `semantictokens.rs` when ported.
 
 ## Doubts
+
+## Gates
+
+- `cargo check --workspace`: 0 errors, 0 warnings. `cargo test -p tsrs_lsp`: 26 passed.
+- `python3 tools/oracle/lsp/lsp_oracle.py --conformance genericRestParameters1 asyncAwait_es6 --edits`: initialize 2/2,
+  diagnostic 6/6, hover 240/240, definition 240/240, publishDiagnostics 2/2 equal.
+- Same with `--requests diagnostic,hover,definition,typeDefinition` on moduleResolutionWithExtensions,
+  importsImplicitlyReadonly, declarationEmitPromise, exportAssignmentMembersVisibleInAugmentation,
+  typeGuardsInClassMethods (`--positions 20 --edits`): all 1204 requests equal; also on assignmentCompatability10,
+  classAbstractInstantiations1 (diagnostics with errors).
+- Shutdown/exit: like tsgo-ref, `exit` ends the process with status 1 and "context canceled" on stderr (Go's `Run`
+  returns the canceled group error).
