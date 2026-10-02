@@ -1957,11 +1957,12 @@ impl Program {
     }
 
     pub fn line_count(&self) -> usize {
-        // Most line maps are first computed here (--diagnostics / --extendedDiagnostics); they are independent.
+        // Go builds (and keeps) every file's line map here; counting the line starts gives the same number without
+        // keeping 4 bytes per line of the program at the end of the run.
         if self.single_threaded() {
-            return self.files.iter().map(|f| f.ecma_line_map().len()).sum();
+            return self.files.iter().map(|f| f.ecma_line_count()).sum();
         }
-        worker_pool().install(|| self.files.par_iter().map(|f| f.ecma_line_map().len()).sum())
+        worker_pool().install(|| self.files.par_iter().map(|f| f.ecma_line_count()).sum())
     }
 
     pub fn identifier_count(&self) -> usize {

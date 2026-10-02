@@ -1931,6 +1931,20 @@ impl SourceFile {
         clone_node(updated, node, &f.hooks)
     }
 
+    /// `ecma_line_map().len()` without computing and keeping the map when it does not exist yet (the
+    /// `--extendedDiagnostics` line count would otherwise build every file's map at the end of the run).
+    pub fn ecma_line_count(&self) -> usize {
+        if let Some(m) = self.ecma_line_map.get() {
+            return m.len();
+        }
+        let mut n = 0;
+        tsrs_core::compute_ecma_line_starts_seq(self.text, |_| {
+            n += 1;
+            true
+        });
+        n
+    }
+
     pub fn ecma_line_map(&self) -> &'static [TextPos] {
         if let Some(&m) = self.ecma_line_map.get() {
             return m;
