@@ -275,6 +275,50 @@ Go's zero value (tsrs_compiler set a current directory, which made `IsGlobalTypi
 typings location is configured and hid them from auto-imports); the conformance suite is unchanged (13,458 pass both
 before and after; lazy-off `.types` / `.symbols` 12,779 / 12,779).
 
+## Editor setup
+
+`tsrs --lsp -stdio` speaks the same protocol as `tsgo --lsp -stdio` (Go's flag parsing: `-stdio` and `--stdio` both
+work; only stdio is supported, like Go). Build it with `cargo build --release -p tsrs_cli` (binary
+`target/release/tsrs`) or install the npm package (`@maschwenk/tsrs`, binary `tsrs`). Nothing below has been installed
+on the development machine; the configurations follow the editors' documented mechanisms.
+
+**VS Code** — the TypeScript 7 extension (`TypeScriptTeam.native-preview`, source in
+`ts-ref/packages/vscode-typescript`) starts `<tsdk>/tsgo --lsp --stdio` when `js/ts.tsdk.path` points at a directory
+that contains an executable named `tsgo` or `tsc` (`src/util.ts`: `tsdkConfigSources`, `packagedExeBaseNames`). So:
+
+```sh
+mkdir -p ~/.tsrs-tsdk && ln -sf "$PWD/target/release/tsrs" ~/.tsrs-tsdk/tsgo
+```
+
+```jsonc
+// settings.json (user settings; a workspace-level tsdk asks for workspace trust and consent)
+{
+  "js/ts.tsdk.path": "/Users/<you>/.tsrs-tsdk",
+  "js/ts.trace.server": "verbose"   // optional: protocol log in the "TypeScript 7" output channel
+}
+```
+
+Run "TypeScript 7: Restart Server" (or reload the window); the output channel names the executable it started.
+Content mappers (`js/ts.contentMappers.enabled`) are not ported; turn them off if a workspace contributes any.
+
+**Neovim** (0.11+, built-in client):
+
+```lua
+vim.lsp.config('tsrs', {
+  cmd = { 'tsrs', '--lsp', '-stdio' },          -- or the absolute path to target/release/tsrs
+  filetypes = { 'typescript', 'typescriptreact', 'javascript', 'javascriptreact' },
+  root_markers = { 'tsconfig.json', 'jsconfig.json', 'package.json', '.git' },
+})
+vim.lsp.enable('tsrs')
+```
+
+Disable other TypeScript servers for the same buffers (e.g. `ts_ls`, `vtsls`) to avoid duplicate results.
+`:checkhealth vim.lsp` shows the attached client; `vim.lsp.set_log_level('debug')` logs the protocol.
+
+What to expect: diagnostics are pull-based (`textDocument/diagnostic`; both clients support it) and tsconfig errors
+are pushed; everything in the Progress table works; see Known gaps. Memory: see the memory plan (program versions,
+checkers and old file versions are freed).
+
 ## Known gaps
 
 - Content mappers, `api`, ATA, telemetry, pprof requests: not ported (see above).
