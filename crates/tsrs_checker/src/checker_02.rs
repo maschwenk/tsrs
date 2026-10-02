@@ -951,7 +951,7 @@ impl Checker {
             if let (Some(getter), Some(setter)) = (getter, setter) {
                 if !self.node_links.get(getter).flags.get().intersects(NodeCheckFlags::TypeChecked) {
                     let getter_links = self.node_links.get(getter);
-                    getter_links.flags.set(getter_links.flags.get() | NodeCheckFlags::TypeChecked);
+                    getter_links.flags.set(getter_links.flags.peek() | NodeCheckFlags::TypeChecked);
                     let getter_flags = getter.modifier_flags();
                     let setter_flags = setter.modifier_flags();
                     if (getter_flags & ModifierFlags::Abstract) != (setter_flags & ModifierFlags::Abstract) {

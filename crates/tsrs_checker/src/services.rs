@@ -318,7 +318,7 @@ impl Checker {
         if let Some(function_type) = function_type {
             for &p in self.get_properties_of_type(function_type) {
                 if !props_by_name.has(p.name()) {
-                    props_by_name.set(p.name(), p);
+                    props_by_name.set(p.name.peek(), p);
                 }
             }
         }

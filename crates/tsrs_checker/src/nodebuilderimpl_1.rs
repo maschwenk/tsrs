@@ -391,7 +391,7 @@ impl NodeBuilderImpl {
             // `UseFullyQualifiedType` flag enabled.
             let mut restore_flags = self.save_restore_flags(c);
             let ctx = self.ctx();
-            ctx.flags.set(ctx.flags.get() | Flags::UseFullyQualifiedType);
+            ctx.flags.set(ctx.flags.peek() | Flags::UseFullyQualifiedType);
             for types in seen_names.values() {
                 if !array_is_homogeneous(types, |a: seenName, b: seenName| types_are_same_reference(a.t, b.t)) {
                     for seen in types {
@@ -760,10 +760,10 @@ impl NodeBuilderImpl {
         let mut symbol_name = String::new();
         if index == 0 {
             let ctx = self.ctx();
-            ctx.flags.set(ctx.flags.get() | Flags::InInitialEntityName);
+            ctx.flags.set(ctx.flags.peek() | Flags::InInitialEntityName);
             symbol_name = self.get_name_of_symbol_as_written(c, symbol);
             ctx.approximate_length.set(ctx.approximate_length.get() + symbol_name.len() as i32 + 1);
-            ctx.flags.set(ctx.flags.get() ^ Flags::InInitialEntityName);
+            ctx.flags.set(ctx.flags.peek() ^ Flags::InInitialEntityName);
         } else {
             // lookup a ref to symbol within parent to handle export aliases
             if let Some(parent) = parent {
@@ -1440,7 +1440,7 @@ impl NodeBuilderImpl {
     pub(crate) fn type_parameter_to_declaration_with_constraint(&self, c: &mut Checker, type_parameter: P<Type>, constraint_node: Option<P<Node>>) -> P<Node> {
         let mut restore_flags = self.save_restore_flags(c);
         let ctx = self.ctx();
-        ctx.flags.set(ctx.flags.get() & !Flags::WriteTypeParametersInQualifiedName); // Avoids potential infinite loop when building for a claimspace with a generic
+        ctx.flags.set(ctx.flags.peek() & !Flags::WriteTypeParametersInQualifiedName); // Avoids potential infinite loop when building for a claimspace with a generic
         let modifier_flags = c.get_type_parameter_modifiers(type_parameter);
         let modifiers = create_modifiers_from_modifier_flags(modifier_flags, |k| self.f.new_modifier(k));
         let mut modifiers_list: Option<P<ModifierList>> = None;

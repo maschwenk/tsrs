@@ -2021,6 +2021,7 @@ impl SourceFile {
 
     pub fn ecma_line_map(&self) -> &'static [TextPos] {
         if let Some(&m) = self.ecma_line_map.get() {
+            tsrs_core::usebits::mark_slice(m);
             return m;
         }
         let _region = self.owner_region();

@@ -121,9 +121,25 @@ impl TypeMapper {
         P::new_recycled(TypeMapper { first: tagged(P::new(rare), TAG_RARE), second: std::cell::Cell::new(0) })
     }
 
-    /// The mapper's kind and payload.
+    /// The mapper's kind and payload. A use of the mapper and of its lists for the use census (`tsrs_core::usebits`).
     #[inline]
     pub fn data(&self) -> TypeMapperData {
+        let d = self.data_peek();
+        tsrs_core::usebits::mark_ptr(self);
+        match d {
+            TypeMapperData::Array { sources, targets } => {
+                tsrs_core::usebits::mark_slice(sources);
+                tsrs_core::usebits::mark_slice(targets);
+            }
+            TypeMapperData::ArrayToSingle { sources, .. } => tsrs_core::usebits::mark_slice(sources),
+            _ => {}
+        }
+        d
+    }
+
+    /// `data` without recording a use (the escape barrier and recycling only follow the structure).
+    #[inline]
+    pub fn data_peek(&self) -> TypeMapperData {
         let second = self.second.get();
         // SAFETY: the words were encoded for this tag by the constructors below.
         unsafe {
@@ -245,7 +261,7 @@ pub(crate) fn escape_mapper(m: P<TypeMapper>) {
         return;
     }
     m.set_escaped();
-    match m.data() {
+    match m.data_peek() {
         TypeMapperData::Merged { m1, m2 } | TypeMapperData::Composite { m1, m2 } => {
             escape_mapper(m1);
             escape_mapper(m2);
@@ -275,7 +291,7 @@ pub(crate) unsafe fn recycle_mapping(m: P<TypeMapper>, appended: bool) {
     if m.escaped() {
         return; // its children are escaped too
     }
-    if let TypeMapperData::Merged { m1, m2 } = m.data() {
+    if let TypeMapperData::Merged { m1, m2 } = m.data_peek() {
         let simple = if appended { m2 } else { m1 };
         tsrs_core::free!(m);
         // SAFETY: the caller made the simple mapper too (this function's contract), and the merged mapper that held
@@ -322,6 +338,11 @@ impl MapperCell {
     #[inline]
     pub fn get(&self) -> Option<P<TypeMapper>> {
         self.0.get()
+    }
+    /// `get` without recording a use (`tsrs_core::usebits`).
+    #[inline]
+    pub fn peek(&self) -> Option<P<TypeMapper>> {
+        self.0.peek()
     }
     #[inline]
     pub fn set(&self, m: Option<P<TypeMapper>>) {

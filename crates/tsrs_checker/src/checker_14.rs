@@ -313,7 +313,7 @@ impl Checker {
         if t.object_flags().intersects(ObjectFlags::IdenticalBaseTypeCalculated) {
             return self.cached_types.get(&key).copied();
         }
-        t.object_flags.set(t.object_flags() | ObjectFlags::IdenticalBaseTypeCalculated);
+        t.object_flags.set(t.object_flags.peek() | ObjectFlags::IdenticalBaseTypeCalculated);
         let target = t.target().unwrap();
         if target.object_flags().intersects(ObjectFlags::Class) {
             let base_type_node = get_base_type_node_of_class(target);
@@ -401,7 +401,7 @@ impl Checker {
         let regular = self.new_anonymous_type(t.symbol(), Some(members), resolved.call_signatures(), resolved.construct_signatures(), resolved.index_infos());
         // resolved is t's own structured data, so resolved.flags/objectFlags are t's header flags
         regular.flags.set(t.flags());
-        regular.object_flags.set(regular.object_flags() | (t.object_flags() & !ObjectFlags::FreshLiteral));
+        regular.object_flags.set(regular.object_flags.peek() | (t.object_flags() & !ObjectFlags::FreshLiteral));
         self.cached_types.insert(key, regular);
         regular
     }
@@ -416,7 +416,7 @@ impl Checker {
             if updated != original {
                 property = self.create_symbol_with_type(property, Some(updated));
             }
-            members.set(property.name(), property);
+            members.set(property.name.peek(), property);
         }
         members
     }

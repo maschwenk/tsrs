@@ -1171,7 +1171,7 @@ impl Checker {
                     Some(s) => s,
                     None => {
                         let s = self.new_symbol_ex(SymbolFlags::None, alloc_str(&member_name), CheckFlags::Late);
-                        late_symbols.set(s.name(), s);
+                        late_symbols.set(s.name.peek(), s);
                         s
                     }
                 };
@@ -1196,7 +1196,7 @@ impl Checker {
                     }
                     self.error(Some(decl_name), &diagnostics::Duplicate_identifier_0, &[&name]);
                     if late_symbol.flags().intersects(SymbolFlags::Accessor) && late_symbol.flags() & SymbolFlags::Accessor != symbol_flags & SymbolFlags::Accessor {
-                        late_symbol.flags.set(late_symbol.flags() | SymbolFlags::Accessor);
+                        late_symbol.flags.set(late_symbol.flags.peek() | SymbolFlags::Accessor);
                     }
                     late_symbol = self.new_symbol_ex(SymbolFlags::None, alloc_str(&member_name), CheckFlags::Late);
                 }
@@ -1223,7 +1223,7 @@ impl Checker {
                     None => self.new_symbol_ex(SymbolFlags::None, InternalSymbolNameIndex, CheckFlags::Late),
                     Some(early) => {
                         let s = self.clone_symbol(early);
-                        s.check_flags.set(s.check_flags.get() | CheckFlags::Late);
+                        s.check_flags.set(s.check_flags.peek() | CheckFlags::Late);
                         s
                     }
                 };
@@ -1255,7 +1255,7 @@ impl Checker {
         let member_symbol = member.symbol().unwrap();
         self.late_bound_links.get(member_symbol).late_symbol.set(Some(symbol));
         if symbol.declarations().is_empty() || !member_symbol.flags().intersects(SymbolFlags::ReplaceableByMethod) {
-            symbol.flags.set(symbol.flags() | symbol_flags);
+            symbol.flags.set(symbol.flags.peek() | symbol_flags);
             symbol.append_declarations(&[member]);
         } else if symbol.flags().intersects(SymbolFlags::ReplaceableByMethod) && member_symbol.flags().intersects(SymbolFlags::Method) {
             // Remove all replacable-by-method members, along with their flags.
@@ -1266,10 +1266,10 @@ impl Checker {
             symbol.flags.set(SymbolFlags::Transient);
             let declarations = symbol.declarations();
             for d in declarations {
-                symbol.flags.set(symbol.flags() | d.symbol().unwrap().flags());
+                symbol.flags.set(symbol.flags.peek() | d.symbol().unwrap().flags());
             }
             if old_flags.intersects(SymbolFlags::Accessor) {
-                symbol.flags.set(symbol.flags() | SymbolFlags::Accessor);
+                symbol.flags.set(symbol.flags.peek() | SymbolFlags::Accessor);
             }
         }
         if symbol_flags.intersects(SymbolFlags::Value) {
@@ -1396,7 +1396,7 @@ impl Checker {
                     }
                     let flags = self.get_symbol_flags(symbol);
                     if flags.intersects(SymbolFlags::Type | SymbolFlags::Namespace) && !flags.intersects(SymbolFlags::Value) && exports.lookup(symbol.name()).is_none() {
-                        exports.set(symbol.name(), symbol);
+                        exports.set(symbol.name.peek(), symbol);
                     }
                 }
             }
@@ -2120,14 +2120,14 @@ impl Checker {
         }
         let members = SymbolTable::new();
         for prop in self.get_properties_of_object_type(t).iter().copied() {
-            members.set(prop.name(), prop);
+            members.set(prop.name.peek(), prop);
         }
         for e in missing_elements {
             let name = self.get_property_name_from_binding_element(e);
             let symbol = self.new_symbol(SymbolFlags::Property | SymbolFlags::Optional, alloc_str(&name));
             let resolved_type = self.get_type_from_binding_element(e, false /*includePatternInType*/, true /*reportErrors*/);
             self.value_symbol_links.get(symbol).resolved_type.set(Some(resolved_type));
-            members.set(symbol.name(), symbol);
+            members.set(symbol.name.peek(), symbol);
         }
         let index_infos = self.get_index_infos_of_type(t);
         let result = self.new_anonymous_type(t.symbol(), Some(members), &[], &[], &index_infos);

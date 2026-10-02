@@ -141,7 +141,7 @@ impl Checker {
         t.as_union_type().set_origin(origin);
         t.set_alias(alias.alias());
         if types.len() == 2 && types[0].flags().intersects(TypeFlags::BooleanLiteral) && types[1].flags().intersects(TypeFlags::BooleanLiteral) {
-            t.flags.set(t.flags() | TypeFlags::Boolean);
+            t.flags.set(t.flags.peek() | TypeFlags::Boolean);
         }
         self.union_types.insert(key, t);
         t
@@ -359,6 +359,7 @@ impl Checker {
         }
         let key = get_type_list_key(types);
         if let Some(cached) = self.subtype_reduction_cache.get(&key).copied() {
+            tsrs_core::usebits::mark_slice(cached);
             return Some(cached.to_vec());
         }
         let mut types = types.to_vec();
@@ -2460,14 +2461,14 @@ impl Checker {
     pub(crate) fn is_unknown_like_union_type(&mut self, t: P<Type>) -> bool {
         if self.strict_null_checks && t.flags().intersects(TypeFlags::Union) {
             if !t.object_flags().intersects(ObjectFlags::IsUnknownLikeUnionComputed) {
-                t.object_flags.set(t.object_flags() | ObjectFlags::IsUnknownLikeUnionComputed);
+                t.object_flags.set(t.object_flags.peek() | ObjectFlags::IsUnknownLikeUnionComputed);
                 let types = t.types();
                 if types.len() >= 3
                     && types[0].flags().intersects(TypeFlags::Undefined)
                     && types[1].flags().intersects(TypeFlags::Null)
                     && types.iter().any(|&t| self.is_empty_anonymous_object_type(t))
                 {
-                    t.object_flags.set(t.object_flags() | ObjectFlags::IsUnknownLikeUnion);
+                    t.object_flags.set(t.object_flags.peek() | ObjectFlags::IsUnknownLikeUnion);
                 }
             }
             return t.object_flags().intersects(ObjectFlags::IsUnknownLikeUnion);
@@ -2483,7 +2484,7 @@ impl Checker {
         if t.object_flags().intersects(ObjectFlags::PrimitiveUnion) {
             if !t.object_flags().intersects(ObjectFlags::IsUniformEnumComputed) {
                 let uniform = self.compute_is_uniform_union_type(t.types());
-                t.object_flags.set(t.object_flags() | ObjectFlags::IsUniformEnumComputed | if_else(uniform, ObjectFlags::IsUniformEnum, ObjectFlags::None));
+                t.object_flags.set(t.object_flags.peek() | ObjectFlags::IsUniformEnumComputed | if_else(uniform, ObjectFlags::IsUniformEnum, ObjectFlags::None));
             }
             return t.object_flags().intersects(ObjectFlags::IsUniformEnum);
         }

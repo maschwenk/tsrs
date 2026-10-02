@@ -285,7 +285,7 @@ impl Checker {
         links.set_name_type(name_type);
         if prop_types.len() > 2 {
             // When `propTypes` has the potential to explode in size when normalized, defer normalization until absolutely needed
-            result.check_flags.set(result.check_flags.get() | CheckFlags::DeferredType);
+            result.check_flags.set(result.check_flags.peek() | CheckFlags::DeferredType);
             let deferred = self.deferred_symbol_links.get(result);
             deferred.parent.set(Some(containing_type));
             deferred.constituents.set(alloc_vec(prop_types));
@@ -505,9 +505,9 @@ impl Checker {
             }
         } else if t.flags().intersects(TypeFlags::Intersection) {
             if !t.object_flags().intersects(ObjectFlags::IsNeverIntersectionComputed) {
-                t.object_flags.set(t.object_flags() | ObjectFlags::IsNeverIntersectionComputed);
+                t.object_flags.set(t.object_flags.peek() | ObjectFlags::IsNeverIntersectionComputed);
                 if !self.is_mapping_of_same_object_type(t.types()) && self.some_property_reduces_to_never(t) {
-                    t.object_flags.set(t.object_flags() | ObjectFlags::IsNeverIntersection);
+                    t.object_flags.set(t.object_flags.peek() | ObjectFlags::IsNeverIntersection);
                 }
             }
             if t.object_flags().intersects(ObjectFlags::IsNeverIntersection) {
@@ -846,6 +846,7 @@ impl Checker {
 
     // checker.go:22445
     pub(crate) fn get_named_members(&mut self, members: Option<P<SymbolTable>>, container: Option<P<Symbol>>) -> Vec<P<Symbol>> {
+        let _builder = tsrs_core::usebits::builder(); // use census: assembling, not a use
         let Some(members) = members.filter(|m| !m.is_empty()) else {
             return Vec::new();
         };
@@ -1110,7 +1111,7 @@ impl Checker {
                 && !t.flags().intersects(TypeFlags::EnumLiteral)
                 && !self.is_non_generic_top_level_type(t)
                 && t.types().iter().any(|&u| self.could_contain_type_variables(u));
-        t.object_flags.set(t.object_flags() | ObjectFlags::CouldContainTypeVariablesComputed | tsrs_core::if_else(result, ObjectFlags::CouldContainTypeVariables, ObjectFlags::None));
+        t.object_flags.set(t.object_flags.peek() | ObjectFlags::CouldContainTypeVariablesComputed | tsrs_core::if_else(result, ObjectFlags::CouldContainTypeVariables, ObjectFlags::None));
         result
     }
 
@@ -1345,7 +1346,7 @@ impl Checker {
                         // If none of the type arguments for the outer type parameters contain type variables, it follows
                         // that the instantiated type doesn't reference type variables.
                         // Intrinsics have `CouldContainTypeVariablesComputed` pre-set, so this should only cover unions and intersections resulting from `instantiateMappedType`
-                        r.object_flags.set(r.object_flags() | tsrs_core::if_else(!result_could_contain_object_flags, ObjectFlags::CouldContainTypeVariablesComputed, ObjectFlags::None));
+                        r.object_flags.set(r.object_flags.peek() | tsrs_core::if_else(!result_could_contain_object_flags, ObjectFlags::CouldContainTypeVariablesComputed, ObjectFlags::None));
                     }
                 }
             }
@@ -1446,7 +1447,7 @@ impl Checker {
         if let Some(alias) = alias {
             if !alias.type_arguments().is_empty() {
                 let propagating = self.get_propagating_flags_of_types(result.alias().unwrap().type_arguments(), TypeFlags::None);
-                result.object_flags.set(result.object_flags() | propagating);
+                result.object_flags.set(result.object_flags.peek() | propagating);
             }
         }
         let d = result.as_object_type();

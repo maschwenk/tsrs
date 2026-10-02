@@ -91,6 +91,7 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, key: P<K>) -> P<V> {
+        let owner = key;
         let key = Self::address(key);
         let index = match self.slots.entry(Self::hash(key), |slot| ({ slot.key }) == key, |slot| Self::hash(slot.key)) {
             hashbrown::hash_table::Entry::Occupied(slot) => slot.get().index,
@@ -102,6 +103,7 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
                     self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
                 }
                 self.len += 1;
+                tsrs_core::usebits::note_slot(self.at(index).addr(), std::mem::size_of::<V>(), std::any::type_name::<V>(), owner.addr());
                 index
             }
         };
@@ -200,6 +202,7 @@ impl<K: 'static, V: KeyedLinks + Default + 'static> KeyedLinkStore<K, V> {
                 let value = keyed_at(&self.chunks, index);
                 value.link_key().set(key);
                 slot.insert(index);
+                tsrs_core::usebits::note_slot(value.addr(), std::mem::size_of::<V>(), std::any::type_name::<V>(), 0);
                 value
             }
         }
@@ -404,12 +407,22 @@ impl<V: Default + 'static> IdLinkStore<V> {
         if let Some(slot) = self.slot(id) {
             return self.at(slot);
         }
-        self.create(id)
+        self.create(id, 0)
+    }
+
+    /// `get` for a store keyed by an object's id; `key` is the object's address (for the use census).
+    #[inline]
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    fn get_keyed(&mut self, id: u64, key: usize) -> P<V> {
+        if let Some(slot) = self.slot(id) {
+            return self.at(slot);
+        }
+        self.create(id, key)
     }
 
     #[inline(never)]
     #[cfg_attr(feature = "site-counts", track_caller)]
-    fn create(&mut self, id: u64) -> P<V> {
+    fn create(&mut self, id: u64, key: usize) -> P<V> {
         tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
         let slot = self.len;
         if slot as usize % ID_LINK_CHUNK == 0 {
@@ -451,6 +464,7 @@ impl<V: Default + 'static> IdLinkStore<V> {
         } else {
             self.wide_slots.insert(id, slot);
         }
+        tsrs_core::usebits::note_slot(self.at(slot).addr(), std::mem::size_of::<V>(), std::any::type_name::<V>(), key);
         self.at(slot)
     }
 }
@@ -644,7 +658,7 @@ impl<V: Default + 'static> SymbolArenaLinkStore<V> {
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, symbol: P<Symbol>) -> P<V> {
-        self.store.get(ast::get_symbol_id(symbol).0)
+        self.store.get_keyed(ast::get_symbol_id(symbol).0, symbol.addr())
     }
 }
 
