@@ -1,7 +1,7 @@
-From 7db472fee9675a21d6a7c7759a2cd1a48b9568b4 Mon Sep 17 00:00:00 2001
+From 2a3563f0b765a8faa166a4bfa33e141ef15eef3a Mon Sep 17 00:00:00 2001
 From: Max schwenk <maschwenk@gmail.com>
 Date: Thu, 1 Oct 2026 03:12:17 -0400
-Subject: [PATCH 1/2] Don't copy union and intersection properties into the
+Subject: [PATCH] Don't copy union and intersection properties into the
  augmented property cache
 
 A non-partial property created by a lookup without the function property
@@ -12,12 +12,12 @@ still consulted first, and partial properties are still recreated. Cache
 maps are allocated on their first store instead of on the first lookup.
 Nothing else reads the caches.
 
-38k-file program (37,942 files), median of 3, single threaded / 4
-checkers, symbols/types/instantiations unchanged. On top of the lazy
-member PRs and the previous commits: heap after check 10.37 -> 10.25 GB
-(-1.2%) / 15.22 -> 15.00 GB (-1.5%), allocations 149.29M -> 148.47M /
-250.83M -> 249.48M. On main alone: heap 14.04 -> 13.85 GB (-1.4%) /
-21.54 -> 21.26 GB (-1.3%).
+38k-file program (37,943 files), median of 3, single threaded / 4
+checkers, symbols/types/instantiations unchanged. On main: heap after
+check 14.03 -> 13.84 GB (-1.4%) / 21.25 -> 20.96 GB (-1.4%), allocations
+148.86M -> 147.86M / 246.89M -> 245.02M. On top of the lazy member PRs
+and their follow-ups: heap 10.36 -> 10.23 GB (-1.3%) / 15.07 -> 14.84 GB
+(-1.5%), allocations 149.24M -> 148.42M / 248.70M -> 247.09M.
 
 Prototype in a Rust port of the checker (4 checkers there assign files
 by directory locality): 2,369,096 / 3,391,408 cache entries avoided,
@@ -30,10 +30,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 11 insertions(+), 13 deletions(-)
 
 diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
-index 415c8ecdf7..a84805f5d4 100644
+index 6b1d3e44c0..37d8f2b3dd 100644
 --- a/tsc/internal/checker/checker.go
 +++ b/tsc/internal/checker/checker.go
-@@ -21767,25 +21767,23 @@ func (c *Checker) getPropertyOfUnionOrIntersectionType(t *Type, name string, ski
+@@ -21770,25 +21770,23 @@ func (c *Checker) getPropertyOfUnionOrIntersectionType(t *Type, name string, ski
  // these partial properties when identifying discriminant properties, but otherwise they are filtered out
  // and do not appear to be present in the union type.
  func (c *Checker) getUnionOrIntersectionProperty(t *Type, name string, skipObjectFunctionPropertyAugment bool) *ast.Symbol {

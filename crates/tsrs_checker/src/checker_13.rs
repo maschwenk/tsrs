@@ -123,7 +123,7 @@ impl Checker {
         let flags = precomputed_object_flags | self.get_propagating_flags_of_types(types, TypeFlags::Nullable);
         let t = self.new_union_type(flags, types);
         t.as_union_type().origin.set(origin);
-        t.alias.set(alias.alias());
+        t.set_alias(alias.alias());
         if types.len() == 2 && types[0].flags().intersects(TypeFlags::BooleanLiteral) && types[1].flags().intersects(TypeFlags::BooleanLiteral) {
             t.flags.set(t.flags() | TypeFlags::Boolean);
         }
@@ -609,7 +609,7 @@ impl Checker {
             } else {
                 let propagated = self.get_propagating_flags_of_types(types, TypeFlags::Nullable /*excludeKinds*/);
                 r = self.new_intersection_type(object_flags | propagated, &type_set);
-                r.alias.set(alias.alias());
+                r.set_alias(alias.alias());
             }
             self.intersection_types.insert(key, r);
             result = Some(r);
@@ -1490,7 +1490,7 @@ impl Checker {
                 return Some(t);
             }
             let t = self.new_indexed_access_type(object_type, index_type, persistent_access_flags);
-            t.alias.set(alias.alias());
+            t.set_alias(alias.alias());
             self.indexed_access_types.insert(key, t);
             return Some(t);
         }

@@ -772,7 +772,7 @@ impl Checker {
             let synthetic_type;
             if has_synthetic_default {
                 let anonymous_symbol = self.new_symbol(SymbolFlags::TypeLiteral, InternalSymbolNameType);
-                anonymous_symbol.declarations.set(original_symbol.declarations());
+                anonymous_symbol.set_declarations_static(original_symbol.declarations());
                 let default_containing_object = self.create_default_property_wrapper_for_module(symbol, Some(original_symbol), Some(anonymous_symbol));
                 self.value_symbol_links.get(anonymous_symbol).resolved_type.set(Some(default_containing_object));
                 if self.is_valid_spread_type(t) {
@@ -838,7 +838,7 @@ impl Checker {
         if anonymous_symbol.is_none() {
             if let Some(original_symbol) = original_symbol {
                 let s = self.new_symbol(SymbolFlags::ObjectLiteral, InternalSymbolNameObject);
-                s.declarations.set(original_symbol.declarations());
+                s.set_declarations_static(original_symbol.declarations());
                 anonymous_symbol = Some(s);
             }
         }
@@ -848,8 +848,8 @@ impl Checker {
     // checker.go:16044
     pub(crate) fn clone_type_as_module_type(&mut self, symbol: P<Symbol>, module_type: P<Type>, reference_parent: P<Node>) -> P<Symbol> {
         let result = self.new_symbol(symbol.flags(), symbol.name());
-        result.declarations.set(symbol.declarations());
-        result.value_declaration.set(symbol.value_declaration());
+        result.set_declarations_static(symbol.declarations());
+        result.set_value_declaration(symbol.value_declaration());
         result.set_members(symbol.members().map(|m| m.clone_table()));
         result.set_exports(symbol.exports().map(|e| e.clone_table()));
         result.set_parent(symbol.parent());

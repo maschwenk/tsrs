@@ -63,6 +63,16 @@ pub fn command_line(sys: &'static dyn System, command_line_args: Vec<String>) ->
         }
         args.drain(pos..(pos + 2).min(args.len()));
     }
+    // tsrs-only, opt-in: `--checkerCostCache <file>` balances the checkers on per-file check times measured by
+    // the previous run that used the same file, and writes this run's times to it (checkerpool.rs).
+    if let Some(pos) = args.iter().position(|a| a.eq_ignore_ascii_case("--checkerCostCache")) {
+        let Some(path) = args.get(pos + 1).cloned().filter(|p| !p.starts_with('-')) else {
+            sys.write("error: --checkerCostCache expects a file path.\n");
+            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+        };
+        tsrs_compiler::set_checker_cost_cache_from_cli(&path);
+        args.drain(pos..pos + 2);
+    }
     if !args.iter().any(|a| a.eq_ignore_ascii_case("--noEmit") || a.eq_ignore_ascii_case("-noEmit")) {
         args.push("--noEmit".to_string());
     }

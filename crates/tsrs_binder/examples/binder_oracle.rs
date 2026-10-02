@@ -88,7 +88,7 @@ impl Dumper {
     fn symbol(&mut self, tag: &str, s: P<Symbol>) {
         let _ = write!(self.sb, " {}(", tag);
         escape(&mut self.sb, s.name.get());
-        let _ = write!(self.sb, " {:x} {} {}", s.flags.get().bits(), s.declarations().len(), node_ref(s.value_declaration.get()));
+        let _ = write!(self.sb, " {:x} {} {}", s.flags.get().bits(), s.declarations().len(), node_ref(s.value_declaration()));
         if let Some(parent) = s.parent() {
             self.sb.push_str(" p=");
             escape(&mut self.sb, parent.name.get());
@@ -119,7 +119,7 @@ impl Dumper {
                 let _ = write!(self.sb, " next={}", node_ref(Some(next)));
             }
         }
-        if let Some(flow) = n.flow_node_data().and_then(|d| d.flow_node.get()) {
+        if let Some(flow) = n.flow_node() {
             let r = self.flow_ref(Some(flow));
             let _ = write!(self.sb, " f={}", r);
         }

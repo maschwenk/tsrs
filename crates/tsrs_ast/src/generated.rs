@@ -6,6 +6,7 @@ use tsrs_core::{OwnedCell, PackedStr, P};
 
 use crate::ast::*;
 use crate::flow::*;
+use crate::identifier::Identifier;
 use crate::kind::Kind;
 use crate::nodeflags::NodeFlags;
 use crate::symbol::{Symbol, SymbolTable};
@@ -397,26 +398,6 @@ impl JSDocCommentBase {
 // ── Node data structs ─────────────────────────────────────────────────────
 
 pub struct Token;
-
-pub struct Identifier {
-    pub flow_node_base: FlowNodeBase,
-    pub text: PackedStr,
-}
-
-impl Identifier {
-    #[inline]
-    pub fn text(&self) -> &'static str {
-        self.text.as_str()
-    }
-    #[inline]
-    pub fn flow_node(&self) -> Option<P<FlowNode>> {
-        self.flow_node_base.flow_node.get()
-    }
-    #[inline]
-    pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
-    }
-}
 
 pub struct PrivateIdentifier {
     pub text: PackedStr,
@@ -9110,9 +9091,8 @@ impl Node {
         }
     }
 
-    pub fn flow_node_data(&self) -> Option<&'static FlowNodeBase> {
+    pub(crate) fn flow_node_base(&self) -> Option<&'static FlowNodeBase> {
         match self.data_tag() {
-            NodeDataTag::Identifier => Some(&self.payload::<Identifier>().flow_node_base),
             NodeDataTag::QualifiedName => Some(&self.payload::<QualifiedName>().flow_node_base),
             NodeDataTag::EmptyStatement => Some(&self.payload::<EmptyStatement>().flow_node_base),
             NodeDataTag::IfStatement => Some(&self.payload::<IfStatement>().flow_node_base),
@@ -9349,16 +9329,6 @@ impl Node {
 impl NodeFactory {
     pub fn new_token(&self, kind: Kind) -> P<Node> {
         self.new_empty_node(kind, NodeDataTag::Token)
-    }
-
-    pub fn new_identifier(&self, text: &'static str) -> P<Node> {
-        self.text_count.set(self.text_count.get() + 1);
-        self.new_node(Kind::Identifier, Identifier {
-            flow_node_base: FlowNodeBase {
-                flow_node: OwnedCell::new(None),
-            },
-            text: PackedStr::new(text),
-        })
     }
 
     pub fn new_private_identifier(&self, text: &'static str) -> P<Node> {
@@ -12879,12 +12849,6 @@ impl NodeFactory {
 impl Token {
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_token(node.kind()), node, &f.hooks)
-    }
-}
-
-impl Identifier {
-    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        clone_node(f.new_identifier(self.text()), node, &f.hooks)
     }
 }
 

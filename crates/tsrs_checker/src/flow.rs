@@ -69,11 +69,7 @@ impl Checker {
 
 // flow.go:69
 pub(crate) fn get_flow_node_of_node(node: P<Node>) -> Option<P<FlowNode>> {
-    let flow_node_data = node.flow_node_data();
-    if let Some(flow_node_data) = flow_node_data {
-        return flow_node_data.flow_node.get();
-    }
-    None
+    node.flow_node()
 }
 
 impl Checker {
@@ -201,7 +197,8 @@ impl Checker {
                         && !ast::is_element_access_expression(reference)
                         && !(reference.kind() == Kind::ThisKeyword && !ast::is_arrow_function(container))
                     {
-                        flow = container.flow_node_data().unwrap().flow_node.get().unwrap();
+                        assert!(container.has_flow_node_data());
+                        flow = container.flow_node().unwrap();
                         continue;
                     }
                 }
@@ -2816,7 +2813,7 @@ impl Checker {
         let reference = self.factory.new_property_access_expression(this_keyword, None, access_name, NodeFlags::None);
         reference.expression().unwrap().set_parent(Some(reference));
         reference.set_parent(Some(constructor));
-        reference.flow_node_data().unwrap().flow_node.set(constructor.as_constructor_declaration().return_flow_node.get());
+        reference.set_flow_node(constructor.as_constructor_declaration().return_flow_node.get());
         let flow_type = self.get_flow_type_of_property(reference, Some(symbol));
         if self.no_implicit_any && (flow_type == self.auto_type || flow_type == self.auto_array_type) {
             let symbol_string = self.symbol_to_string(symbol);
@@ -2844,7 +2841,7 @@ impl Checker {
             let reference = self.factory.new_property_access_expression(this_keyword, None, access_name, NodeFlags::None);
             reference.expression().unwrap().set_parent(Some(reference));
             reference.set_parent(Some(static_block));
-            reference.flow_node_data().unwrap().flow_node.set(static_block.as_class_static_block_declaration().return_flow_node.get());
+            reference.set_flow_node(static_block.as_class_static_block_declaration().return_flow_node.get());
             let flow_type = self.get_flow_type_of_property(reference, Some(symbol));
             if self.no_implicit_any && (flow_type == self.auto_type || flow_type == self.auto_array_type) {
                 let symbol_string = self.symbol_to_string(symbol);

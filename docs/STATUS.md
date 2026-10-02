@@ -284,4 +284,16 @@ on the monorepo and the corpus). Details: `notes/mem-recycle.md`.
 ## 2026-10-01: small representation items (Symbol, Identifier)
 
 `Symbol` 56 -> 48 bytes (the member/export tail shares a word with `parent`): private monorepo peak -0.08 GiB single,
--0.14 GiB on 4 checkers, output and counters identical. Details: `notes/mem-small.md`.
+-0.14 GiB on 4 checkers. Parser identifiers 40 -> 32 bytes (text derived from the source text and the node's end, flow
+node and text in one word): -0.07 / -0.05 GiB, instructions +0.3%. `Symbol` 48 -> 40 bytes (a bit for "the value
+declaration is the first declaration", 82% of symbols): -0.09 / -0.11 GiB, instructions +0.2%. Type header 32 ->
+24 bytes (the rare alias shares a word with the symbol): -0.07 / -0.10 GiB. Output, counters and AST oracle
+identical. Details: `notes/mem-small.md`.
+
+## 2026-10-01: checker balance (opt-in cost cache)
+
+`--checkerCostCache <file>` balances the 4 checkers on per-file CPU times from the previous run (default unchanged; ordering and static cost models gave nothing): wall -3.7% on the private monorepo (slowest checker 10.4% -> 2.1% above the mean), -12.5% vscode, -15% mui-docs; output identical. Details: `notes/perf-balance.md`.
+
+## 2026-10-01: first Linux profile (x86_64 cloud VM)
+
+The private monorepo on an 18-vCPU x86_64 sandbox VM (kernel 7.2, THP `madvise`): release 0.1.5 takes 37-48 s with one checker and 16-20 s with four (TS 7.1 nightly `tsc`: 127 s / 75 s), sys 3.5-7.7 s, ~25 K page faults, because mimalloc already puts ~97% of memory on transparent huge pages (THP off: +11-12% wall); explicit `MADV_HUGEPAGE` on arena chunks changes no wall time (-2% RSS) and pre-faulting adds 16-36% RSS for nothing, so nothing landed. Details: `notes/linux-perf.md`.

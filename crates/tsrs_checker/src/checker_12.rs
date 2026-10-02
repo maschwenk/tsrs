@@ -127,7 +127,7 @@ impl Checker {
             let mut error_type = self.error_types.get(&key).copied();
             if error_type.is_none() {
                 let t = self.new_intrinsic_type(TypeFlags::Any, "error");
-                t.alias.set(Some(alias));
+                t.set_alias(Some(alias));
                 self.error_types.insert(key, t);
                 error_type = Some(t);
             }
@@ -523,7 +523,7 @@ impl Checker {
             };
             if enum_type.flags().intersects(TypeFlags::Union) {
                 enum_type.flags.set(enum_type.flags() | TypeFlags::EnumLiteral);
-                enum_type.symbol.set(Some(symbol));
+                enum_type.set_symbol(Some(symbol));
             }
             links.declared_type.set(Some(enum_type));
         }
@@ -539,9 +539,9 @@ impl Checker {
     // checker.go:24387
     pub(crate) fn create_computed_enum_type(&mut self, symbol: P<Symbol>) -> P<Type> {
         let regular_type = self.new_literal_type(TypeFlags::Enum, None, None);
-        regular_type.symbol.set(Some(symbol));
+        regular_type.set_symbol(Some(symbol));
         let fresh_type = self.new_literal_type(TypeFlags::Enum, None, Some(regular_type));
-        fresh_type.symbol.set(Some(symbol));
+        fresh_type.set_symbol(Some(symbol));
         regular_type.as_literal_type().fresh_type.set(Some(fresh_type));
         fresh_type.as_literal_type().fresh_type.set(Some(fresh_type));
         regular_type
@@ -951,7 +951,7 @@ impl Checker {
         if links.resolved_type.get().is_none() {
             let t = self.new_object_type(ObjectFlags::Mapped, node.symbol());
             t.as_mapped_type().declaration.set(Some(node));
-            t.alias.set(self.get_alias_for_type_node(node));
+            t.set_alias(self.get_alias_for_type_node(node));
             links.resolved_type.set(Some(t));
             // Eagerly resolve the constraint type which forces an error if the constraint type circularly
             // references itself through one or more type aliases.
@@ -1180,10 +1180,10 @@ impl Checker {
             // Return a deferred type for a check that is neither definitely true nor definitely false
             result = self.new_conditional_type(root, mapper, combined_mapper);
             if alias.is_some() {
-                result.alias.set(alias);
+                result.set_alias(alias);
             } else {
                 let instantiated_alias = self.instantiate_type_alias(root.alias.get(), mapper);
-                result.alias.set(instantiated_alias);
+                result.set_alias(instantiated_alias);
             }
             break;
         }
@@ -1930,7 +1930,7 @@ impl Checker {
         let data = UniqueESSymbolType::default();
         data.name.set(alloc_str(name));
         let t = self.new_type(TypeFlags::UniqueESSymbol, ObjectFlags::None, data);
-        t.symbol.set(Some(symbol));
+        t.set_symbol(Some(symbol));
         t
     }
 
@@ -1956,7 +1956,7 @@ impl Checker {
         } else {
             panic!("Unhandled case in newObjectType")
         };
-        t.symbol.set(symbol);
+        t.set_symbol(symbol);
         t
     }
 
@@ -2018,7 +2018,7 @@ impl Checker {
             }
         }
         let t = self.new_object_type(ObjectFlags::Reference, target.symbol());
-        t.alias.set(alias);
+        t.set_alias(alias);
         let d = t.as_type_reference();
         d.target.set(Some(target));
         d.mapper.set(mapper);
@@ -2070,7 +2070,7 @@ impl Checker {
     // checker.go:25638
     pub(crate) fn new_type_parameter(&mut self, symbol: Option<P<Symbol>>) -> P<Type> {
         let t = self.new_type(TypeFlags::TypeParameter, ObjectFlags::None, TypeParameter::default());
-        t.symbol.set(symbol);
+        t.set_symbol(symbol);
         t
     }
 
@@ -2135,7 +2135,7 @@ impl Checker {
         let data = StringMappingType::default();
         data.target.set(Some(target));
         let t = self.new_type(TypeFlags::StringMapping, ObjectFlags::None, data);
-        t.symbol.set(Some(symbol));
+        t.set_symbol(Some(symbol));
         t
     }
 
@@ -2219,7 +2219,7 @@ impl Checker {
             let d = t.as_literal_type();
             if d.fresh_type.get().is_none() {
                 let f = self.new_literal_type(t.flags(), d.value.get(), Some(t));
-                f.symbol.set(t.symbol());
+                f.set_symbol(t.symbol());
                 f.as_literal_type().fresh_type.set(Some(f));
                 d.fresh_type.set(Some(f));
             }
@@ -2329,7 +2329,7 @@ impl Checker {
                     let mut t = self.enum_nan_literal_types.get(&enum_symbol).copied();
                     if t.is_none() {
                         let literal = self.new_literal_type(flags, Some(value), None);
-                        literal.symbol.set(Some(symbol));
+                        literal.set_symbol(Some(symbol));
                         self.enum_nan_literal_types.insert(enum_symbol, literal);
                         t = Some(literal);
                     }
@@ -2343,7 +2343,7 @@ impl Checker {
         let mut t = self.enum_literal_types.get(&key).copied();
         if t.is_none() {
             let literal = self.new_literal_type(flags, Some(value), None);
-            literal.symbol.set(Some(symbol));
+            literal.set_symbol(Some(symbol));
             self.enum_literal_types.insert(key, literal);
             t = Some(literal);
         }

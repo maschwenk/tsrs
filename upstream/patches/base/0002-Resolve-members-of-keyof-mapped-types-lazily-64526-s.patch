@@ -1,4 +1,4 @@
-From 980e2adf9b83e1371a01293138941dd3911a7a3f Mon Sep 17 00:00:00 2001
+From 15e6d922515a99996cf6c98ea063bac4f7b0d600 Mon Sep 17 00:00:00 2001
 From: Max schwenk <maschwenk@gmail.com>
 Date: Thu, 1 Oct 2026 03:06:17 -0400
 Subject: [PATCH 2/2] Resolve members of keyof mapped types lazily (#64526,
@@ -20,10 +20,10 @@ counts.Entries() in discovery order.
  create mode 100644 tsc/testdata/tests/cases/compiler/mappedTypeLazyMembers.ts
 
 diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
-index f04c079aa9..89f4ed6546 100644
+index 571ec32fc6..1e7ae23532 100644
 --- a/tsc/internal/checker/checker.go
 +++ b/tsc/internal/checker/checker.go
-@@ -701,6 +701,7 @@ type Checker struct {
+@@ -702,6 +702,7 @@ type Checker struct {
  	regExpScanner                               *scanner.Scanner
  	patternForType                              map[*Type]*ast.Node
  	lazyMemberTables                            map[*Type]*lazyMemberTable
@@ -31,7 +31,7 @@ index f04c079aa9..89f4ed6546 100644
  	contextFreeTypes                            map[*ast.Node]*Type
  	anyType                                     *Type
  	autoType                                    *Type
-@@ -982,6 +983,7 @@ func NewChecker(program Program, tracer *Tracer) (*Checker, *sync.Mutex) {
+@@ -983,6 +984,7 @@ func NewChecker(program Program, tracer *Tracer) (*Checker, *sync.Mutex) {
  	c.mergedSymbols = make(map[*ast.Symbol]*ast.Symbol)
  	c.patternForType = make(map[*Type]*ast.Node)
  	c.lazyMemberTables = make(map[*Type]*lazyMemberTable)
@@ -39,7 +39,7 @@ index f04c079aa9..89f4ed6546 100644
  	c.contextFreeTypes = make(map[*ast.Node]*Type)
  	c.anyType = c.newIntrinsicType(TypeFlagsAny, "any")
  	c.autoType = c.newIntrinsicTypeEx(TypeFlagsAny, "any", ObjectFlagsNonInferrableType)
-@@ -19315,6 +19317,10 @@ func (c *Checker) getSignaturesOfStructuredType(t *Type, kind SignatureKind) []*
+@@ -19318,6 +19320,10 @@ func (c *Checker) getSignaturesOfStructuredType(t *Type, kind SignatureKind) []*
  		}
  		return lm.constructSignatures
  	}
@@ -50,7 +50,7 @@ index f04c079aa9..89f4ed6546 100644
  	resolved := c.resolveStructuredTypeMembers(t)
  	if kind == SignatureKindCall {
  		return resolved.signatures[:resolved.callSignatureCount]
-@@ -19331,6 +19337,9 @@ func (c *Checker) getIndexInfosOfStructuredType(t *Type) []*IndexInfo {
+@@ -19334,6 +19340,9 @@ func (c *Checker) getIndexInfosOfStructuredType(t *Type) []*IndexInfo {
  		if lm := c.getReadyLazyMemberTable(t); lm != nil {
  			return lm.indexInfos
  		}
@@ -60,7 +60,7 @@ index f04c079aa9..89f4ed6546 100644
  		return c.resolveStructuredTypeMembers(t).indexInfos
  	}
  	return nil
-@@ -19603,7 +19612,7 @@ func (c *Checker) prepareLazyMembers(t *Type, lm *lazyMemberTable) {
+@@ -19606,7 +19615,7 @@ func (c *Checker) prepareLazyMembers(t *Type, lm *lazyMemberTable) {
  			instantiatedBaseType = c.getTypeWithThisArgument(c.instantiateType(baseType, lm.mapper), thisArgument, false /*needsApparentType*/)
  		}
  		lm.baseTypes = append(lm.baseTypes, instantiatedBaseType)
@@ -69,7 +69,7 @@ index f04c079aa9..89f4ed6546 100644
  			c.getPropertiesOfType(instantiatedBaseType)
  		}
  		callSignatures, constructSignatures, indexInfos = c.appendInheritedSignaturesAndIndexInfos(callSignatures, constructSignatures, indexInfos, instantiatedBaseType)
-@@ -19654,6 +19663,13 @@ func (c *Checker) getMemberOfStructuredType(t *Type, name string) *ast.Symbol {
+@@ -19657,6 +19666,13 @@ func (c *Checker) getMemberOfStructuredType(t *Type, name string) *ast.Symbol {
  }
  
  func (c *Checker) getMemberOfUnresolvedStructuredType(t *Type, name string) *ast.Symbol {
@@ -83,7 +83,7 @@ index f04c079aa9..89f4ed6546 100644
  	lm := c.getReadyLazyMemberTable(t)
  	if lm == nil || isReservedMemberName(name) {
  		return c.resolveStructuredTypeMembers(t).members[name]
-@@ -21466,6 +21482,8 @@ func (c *Checker) resolveMappedTypeMembers(t *Type) {
+@@ -21469,6 +21485,8 @@ func (c *Checker) resolveMappedTypeMembers(t *Type) {
  	// The 'T' in 'keyof T'
  	templateModifiers := getMappedTypeModifiers(t)
  	include := TypeFlagsStringOrNumberLiteralOrUnique
@@ -92,7 +92,7 @@ index f04c079aa9..89f4ed6546 100644
  	addMemberForKeyTypeWorker := func(keyType *Type, propNameType *Type) {
  		// If the current iteration type constituent is a string literal type, create a property.
  		// Otherwise, for type string create a string index signature.
-@@ -21479,46 +21497,13 @@ func (c *Checker) resolveMappedTypeMembers(t *Type) {
+@@ -21482,46 +21500,13 @@ func (c *Checker) resolveMappedTypeMembers(t *Type) {
  				valueLinks.nameType = c.getUnionType([]*Type{valueLinks.nameType, propNameType})
  				mappedLinks := c.mappedSymbolLinks.Get(existingProp)
  				mappedLinks.keyType = c.getUnionType([]*Type{mappedLinks.keyType, keyType})
@@ -144,7 +144,7 @@ index f04c079aa9..89f4ed6546 100644
  		}
  	}
  	addMemberForKeyType := func(keyType *Type) {
-@@ -21536,9 +21521,149 @@ func (c *Checker) resolveMappedTypeMembers(t *Type) {
+@@ -21539,9 +21524,149 @@ func (c *Checker) resolveMappedTypeMembers(t *Type) {
  	} else {
  		forEachType(c.getLowerBoundOfKeyType(constraintType), addMemberForKeyType)
  	}
@@ -294,7 +294,7 @@ index f04c079aa9..89f4ed6546 100644
  func (c *Checker) getTypeOfMappedSymbol(symbol *ast.Symbol) *Type {
  	links := c.valueSymbolLinks.Get(symbol)
  	if links.resolvedType == nil {
-@@ -22436,10 +22561,25 @@ func (c *Checker) isMappingOfSameObjectType(types []*Type) bool {
+@@ -22439,10 +22564,25 @@ func (c *Checker) isMappingOfSameObjectType(types []*Type) bool {
  
  func (c *Checker) somePropertyReducesToNever(t *Type) bool {
  	// Collect declaration counts for each property across all constituent types of the intersection.
