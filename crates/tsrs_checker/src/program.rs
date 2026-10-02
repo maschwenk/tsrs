@@ -42,4 +42,11 @@ pub trait Program: Send + Sync {
     /// Go's implicit conversion of the program to the checker's `Host` (= `modulespecifiers.ModuleSpecifierGenerationHost`),
     /// done by `NewNodeBuilderEx` (`host: ch.program`). The program type implements that trait separately.
     fn as_module_specifier_generation_host(&self) -> &dyn ModuleSpecifierGenerationHost;
+
+    /// Not in Go: whether every source file the checker can reach is in `source_files` (true for a program). When it
+    /// is not (the auto-import alias resolver loads files on demand), `compareNodes` maps the missing files to index
+    /// 0 like Go's map lookup, so `compareSymbols` is not a total order (`sort_symbols`).
+    fn source_files_complete(&self) -> bool {
+        true
+    }
 }

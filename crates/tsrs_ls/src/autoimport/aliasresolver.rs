@@ -90,6 +90,11 @@ impl checker::Program for aliasResolver {
         self.root_files_static
     }
 
+    // Not in Go (see `checker::Program::source_files_complete`): files are loaded on demand.
+    fn source_files_complete(&self) -> bool {
+        false
+    }
+
     // aliasresolver.go:51
     fn bind_source_files(&self) {
         // We will bind as we parse

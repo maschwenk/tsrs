@@ -449,9 +449,13 @@ pub(crate) fn create_symbol_table(symbols: &[P<Symbol>]) -> Option<P<SymbolTable
 impl Checker {
     // utilities.go:361
     pub(crate) fn sort_symbols(&mut self, symbols: &mut [P<Symbol>]) {
-        // Go's pdqsort: the auto-import extraction checker has no file index map, so declarations in different files
-        // compare equal and the order is not total (Rust's `sort_by` panics then; Go sorts anyway).
-        tsrs_core::goslices::sort_func(symbols, |&a, &b| self.compare_symbols(Some(a), Some(b)));
+        if self.program.source_files_complete() {
+            symbols.sort_by(|&a, &b| self.compare_symbols(Some(a), Some(b)).cmp(&0));
+        } else {
+            // Not a total order (see `Program::source_files_complete`): Rust's sort would panic, Go's pdqsort sorts
+            // anyway; its port gives Go's order.
+            tsrs_core::goslices::sort_func(symbols, |&a, &b| self.compare_symbols(Some(a), Some(b)));
+        }
     }
 
     // utilities.go:365
