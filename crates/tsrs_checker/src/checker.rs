@@ -1233,6 +1233,7 @@ pub struct Checker {
     pub emit_resolver: Option<P<EmitResolver>>, // Go `emitResolver` + `emitResolverOnce`: None until `get_emit_resolver`
 }
 
+// checker.go:911
 /// Go `NewChecker(program, tracer)`. The tracer and the returned mutex are not ported.
 pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     program.bind_source_files();

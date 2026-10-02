@@ -70,6 +70,11 @@ pub(crate) fn to_node_builder_flags(flags: TypeFormatFlags) -> Flags {
 }
 
 impl Checker {
+    // printer.go:55
+    pub fn type_to_string_ex_exported(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
+        self.type_to_string_ex(t, enclosing_declaration, flags, vc)
+    }
+
     // printer.go:59
     pub fn type_to_string_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
         // Serialization of types can lead to (lazy) resolution of members, which can cause diagnostics that again require
@@ -818,6 +823,11 @@ impl Checker {
             use_only_external_aliasing,
             visited_symbol_tables_map: Default::default(),
         })
+    }
+
+    // symbolaccessibility.go:382
+    pub fn get_accessible_symbol_chain_exported(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, use_only_external_aliasing: bool) -> Vec<P<Symbol>> {
+        self.get_accessible_symbol_chain(symbol, enclosing_declaration, meaning, use_only_external_aliasing)
     }
 }
 
