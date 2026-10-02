@@ -115,27 +115,90 @@ measured on the private monorepo in phase 4 (open a file, edit 200 times, RSS vs
 
 | phase | content | state |
 | --- | --- | --- |
-| 1 | transport, protocol types, session skeleton, document sync, project discovery, program update, push + pull diagnostics, hover, definition; LSP oracle | in progress |
-| 2 | fourslash harness + generated tests | generator, harness (server-independent parts), parser, runner done; needs the in-process server |
+| 1 | transport, protocol types, session skeleton, document sync, project discovery, program update, push + pull diagnostics, hover, definition; LSP oracle | done (2026-10-02, below) |
+| 2 | fourslash harness + generated tests | harness drives the in-process server; hover, definitions, diagnostics, formatting (ls/format.go ported), document sync / edits done; completions, references in progress (below) |
 | 3 | references, rename, completions, signature help, symbols, semantic tokens, folding, selection ranges, inlay hints, code actions, formatting | — |
 | 4 | watchers, multi-project, program reuse, cancellation, memory regions, editor setup | — |
 
+### Phase 1 gates (2026-10-02, `lsp` 3c95d59+)
+
+`tools/oracle/lsp/lsp_oracle.py`, `tsgo-ref --lsp -stdio` vs `tsrs --lsp -stdio`, sequential sessions with an edit round
+(insert a character in an identifier, re-request, revert, re-request):
+
+| session | files | diagnostic | hover | definition | typeDefinition | publishDiagnostics | initialize |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 20 conformance cases (generics, async, abstract classes, enums, mapped/conditional/template literal types, JSX, control flow, decorators, module resolution, overloads) | 20 | 87/87 | 2334/2334 | 2334/2334 | 2334/2334 | 20/20 | 20/20 |
+| xstate (bench), 30 files of `packages/core` + `xstate-react` | 30 | 120/120 | 3308/3308 | 3308/3308 | 3308/3308 | 1/1 | 1/1 |
+
+16,875 responses, all JSON-identical (1,440 + 2,308 non-null hovers; 67 + 12 diagnostic reports with items). Conformance
+suite unchanged in both lazy modes (13,458 pass / 2 codes / 2 fail; `.types` / `.symbols` 12,779 / 12,779, pass lists
+identical). Unit tests: `tsrs_lsproto` 33 (+ 6,869-case Go codec oracle), `tsrs_ls` 87, `tsrs_project` 105, `tsrs_lsp`
+(see notes/lsp-server.md).
+
 ### Fourslash
 
-`tools/gen-fourslash` (Go, `go/types`) converts every Go fourslash test (`internal/fourslash/tests/*_test.go`,
-4,559 `Test*` functions in 4,364 files) into a Rust function in `crates/tsrs_fourslash/src/tests/gen/` plus a
-registry (name, file, fn, skip reason for the 386 `t.Skip("Known failing…")` tests). Regenerate with
-`cd tools/gen-fourslash && GOTOOLCHAIN=auto go run .`; nothing is left untranslated. The harness
-(`tsrs_fourslash::fourslash`) mirrors Go's `FourslashTest` method for method; the test-data parser is a full port
-(checked against Go's `ParseTestData` for all 4,484 constant contents, `tools/oracle/fourslash-parser`), and every
-method that needs the in-process server calls `FourslashTest::server_unavailable` until `tsrs_lsp` can be driven
-in-process. Run with `tsrs-fourslash run [--filter <regex>] [--include-skipped]` (results in
-`target/fourslash-results/{pass,fail,skip}.txt`, baseline actuals in `target/fourslash-results/local/`). Mapping
-rules and deviations: notes/lsp-fsgen.md.
+`tools/gen-fourslash` (Go, `go/types`) converts every Go fourslash test that `go test` builds
+(`internal/fourslash/tests/*_test.go`, 4,546 `Test*` functions; files excluded by Go build constraints, such as the 13
+tests in `*_js_test.go` files that only build for GOOS=js, are skipped like `go test` skips them) into a Rust
+function in `crates/tsrs_fourslash/src/tests/gen/` plus a registry (name, file, fn, skip reason for the 386
+`t.Skip("Known failing…")` tests). Regenerate with `cd tools/gen-fourslash && GOTOOLCHAIN=auto go run .`; nothing
+is left untranslated. The harness (`tsrs_fourslash::fourslash`) mirrors Go's `FourslashTest` method for method and
+drives the real server in-process (`tsrs_lsp::lsptestutil`, Go's `testutil/lsptestutil`: framed JSON over byte
+pipes, in-memory `vfstest` file system wrapped with the bundled libs, shared parse cache, compiler options from the
+test's `// @option` lines via `harnessutil.SetOptionsFromTestConfig`). Methods for language-service features that are
+not ported yet fail with `feature not ported: <feature> (<Method>)`. The test-data parser is a full port (checked
+against Go's `ParseTestData`, `tools/oracle/fourslash-parser`). Run with
+`tsrs-fourslash run [--filter <regex>] [--include-skipped] [-j N] [-v]` (results in
+`target/fourslash-results/{pass,fail,skip}.txt`, baseline actuals in `target/fourslash-results/local/`). Tests run
+in worker processes (`tsrs-fourslash worker`, replaced after a crash, a 120 s timeout or 200 tests): the server ends
+the process on an unrecovered panic in one of its threads, like a Go program, and programs are never freed. Mapping
+rules and deviations: notes/lsp-fsgen.md, notes/lsp-fswire.md.
 
-| date | pass | fail | skip |
-| --- | --- | --- | --- |
-| 2026-10-01 (no server yet) | 0 | 4,173 | 386 |
+| date | total | pass | fail | skip |
+| --- | --- | --- | --- | --- |
+| 2026-10-01 (no server yet) | 4,559 | 0 | 4,173 | 386 |
+| 2026-10-02 (in-process server; hover, definition, diagnostics, formatting, edits) | 4,546 | 1,172 | 2,957 | 417 |
+
+Skips: 386 known failing in Go (registry) + 31 `SkipUnsupportedCompilerOptions` (module UMD/System, moduleResolution
+node10/classic, `esModuleInterop`/`allowSyntheticDefaultImports` false, `baseUrl`, ES5 target, `alwaysStrict` false).
+Failures: 2,940 stop at a feature that is not ported (completions 988+, references 356, code actions ~450, document
+highlights 144, rename ~150, signature help ~150, document symbols 83, implementation 67, inlay hints 64, …;
+content mappers 55, out of scope); 3 are divergences in ported features (see below). Of the 1,313 tests whose calls
+are all ported, 1,170 pass, 118 are skipped, 14 are content-mapper tests and 3 fail.
+
+Passing tests per verify family (tests that call the method and pass / tests that call it):
+
+| method | pass / calling tests |
+| --- | --- |
+| VerifyBaselineGoToDefinition | 226 / 249 |
+| VerifyQuickInfoAt | 190 / 325 |
+| FormatDocument | 157 / 177 |
+| VerifyBaselineHover | 142 / 148 |
+| VerifyCurrentLineContent | 133 / 136 |
+| Insert (typing + on-type formatting) | 112 / 226 |
+| VerifyCurrentFileContent | 94 / 112 |
+| VerifyBaselineGoToSourceDefinition | 89 / 89 |
+| VerifyBaselineHoverWithVerbosity | 56 / 56 |
+| VerifyNoErrors | 48 / 109 |
+| VerifyNumberOfErrorsInCurrentFile | 41 / 49 |
+| VerifySuggestionDiagnostics | 39 / 42 |
+| DeleteAtCaret | 25 / 26 |
+| VerifyBaselineNonSuggestionDiagnostics | 24 / 30 |
+| FormatSelection | 21 / 36 |
+| VerifyBaselineGoToTypeDefinition | 20 / 24 |
+| VerifyQuickInfoExists | 19 / 22 |
+| InsertLine | 18 / 25 |
+| VerifyQuickInfoIs | 15 / 41 |
+| VerifyErrorExistsBetweenMarkers | 11 / 15 |
+| VerifyNonSuggestionDiagnostics | 9 / 16 |
+| VerifyNotQuickInfoExists | 6 / 9 |
+| VerifyBaselineVSHover | 5 / 5 |
+| Backspace / Paste / ReplaceLine | 4 / 18, 4 / 4, 2 / 11 |
+
+(The "calling tests" that fail stop at a later unported feature, except the 3 divergences.) Divergences in ported
+features: `TestRewriteRelativeImportExtensionsProjectReferences{1,2,3}` (diagnostic baselines): tsrs_compiler does not
+redirect imports of a referenced project's sources to the project reference (TS6059 / TS6307 instead of Go's TS2878 /
+no error).
 
 ## Known gaps
 

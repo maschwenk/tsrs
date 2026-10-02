@@ -2,6 +2,7 @@
 
 mod dynamic_queue;
 mod logger;
+pub mod lsptestutil;
 mod lsconsts;
 mod progress;
 mod server;
@@ -18,8 +19,6 @@ mod progress_test;
 mod server_test;
 #[cfg(test)]
 mod stack_sanitizer_test;
-#[cfg(test)]
-mod lsptestutil;
 #[cfg(test)]
 mod server_flakydiagnostics_test;
 #[cfg(test)]

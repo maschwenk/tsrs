@@ -3,282 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod find_all_refs_module_augmentation {
-use crate::tests::prelude::*;
-
-// findAllRefsModuleAugmentation_test.go:10
-pub fn test_find_all_refs_module_augmentation(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /node_modules/foo/index.d.ts
-/*1*/export type /*2*/T = number;
-// @Filename: /a.ts
-import * as foo from "foo";
-declare module "foo" {
-    export const x: /*3*/T;
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-            f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod find_all_refs_module_dot_exports {
-use crate::tests::prelude::*;
-
-// findAllRefsModuleDotExports_test.go:10
-pub fn test_find_all_refs_module_dot_exports(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
-// @Filename: /a.js
-/*1*/const b = require("/*2*/./b");
-// @Filename: /b.js
-/*3*/module.exports = 0;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod find_all_refs_no_import_clause {
-use crate::tests::prelude::*;
-
-// findAllRefsNoImportClause_test.go:10
-pub fn test_find_all_refs_no_import_clause(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.ts
-/*1*/export const /*2*/x = 0;
-// @Filename: /b.ts
-import "./a";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &["1", "2"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod find_all_refs_no_substitution_template_literal_no_crash1 {
-use crate::tests::prelude::*;
-
-// findAllRefsNoSubstitutionTemplateLiteralNoCrash1_test.go:10
-pub fn test_find_all_refs_no_substitution_template_literal_no_crash1(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "type Test = `T/*1*/`;";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &["1"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod find_all_refs_non_module {
-use crate::tests::prelude::*;
-
-// findAllRefsNonModule_test.go:10
-pub fn test_find_all_refs_non_module(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @checkJs: true
-// @Filename: /script.ts
-console.log("I'm a script!");
-// @Filename: /import.ts
-import "./script/*1*/";
-// @Filename: /require.js
-require("./script/*2*/");
-console.log("./script/*3*/");
-// @Filename: /tripleSlash.ts
-/// <reference path="script.ts" />
-// @Filename: /stringLiteral.ts
-console.log("./script");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod find_all_refs_nonexistent_property_no_crash1 {
-use crate::tests::prelude::*;
-
-// findAllRefsNonexistentPropertyNoCrash1_test.go:10
-pub fn test_find_all_refs_nonexistent_property_no_crash1(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: true
-// @allowJs: true
-// @checkJs: true
-// @filename: ./src/parser-input.js
-export default () => {
-  let input;
-
-  const parserInput = {};
-
-  parserInput.currentChar = () => input.charAt(parserInput.i);
-
-  parserInput.end = () => {
-    const isFinished = parserInput.i >= input.length;
-
-    return {
-      isFinished,
-      furthest: parserInput.i,
-    };
-  };
-
-  return parserInput;
-};
-// @filename: ./src/parser.js
-import getParserInput from "./parser-input";
-
-const Parser = function Parser(context, imports, fileInfo, currentIndex) {
-  currentIndex = currentIndex || 0;
-  let parsers;
-  const parserInput = getParserInput();
-
-  return {
-    parserInput,
-    parsers: (parsers = {
-      variable: function () {
-        let name;
-
-        if (parserInput.currentChar() === "/*1*/@") {
-          return name[1];
-        }
-      },
-    }),
-  };
-};
-
-export default Parser;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &["1"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod find_all_refs_object_binding_element_property_name01 {
-use crate::tests::prelude::*;
-
-// findAllRefsObjectBindingElementPropertyName01_test.go:10
-pub fn test_find_all_refs_object_binding_element_property_name01(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface I {
-    /*1*/property1: number;
-    property2: string;
-}
-
-var foo: I;
-/*2*/var { /*3*/property1: prop1 } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod find_all_refs_object_binding_element_property_name02 {
-use crate::tests::prelude::*;
-
-// findAllRefsObjectBindingElementPropertyName02_test.go:10
-pub fn test_find_all_refs_object_binding_element_property_name02(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface I {
-    /*1*/property1: number;
-    property2: string;
-}
-
-var foo: I;
-/*2*/var { /*3*/property1: {} } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod find_all_refs_object_binding_element_property_name03 {
-use crate::tests::prelude::*;
-
-// findAllRefsObjectBindingElementPropertyName03_test.go:10
-pub fn test_find_all_refs_object_binding_element_property_name03(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface I {
-    /*1*/property1: number;
-    property2: string;
-}
-
-var foo: I;
-var [ { property1: prop1 }, { /*2*/property1, property2 } ] = [foo, foo];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &["1", "2"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod find_all_refs_object_binding_element_property_name04 {
 use crate::tests::prelude::*;
 
@@ -4688,6 +4412,272 @@ pub fn test_format_on_enter_function_declaration(t: &T) {
             f.insert_line(t, "");
             f.go_to_marker(t, "0");
             f.verify_current_line_content(t, "function listAPIFiles(path: string): string[] {");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod format_on_enter_in_comment {
+use crate::tests::prelude::*;
+
+// formatOnEnterInComment_test.go:10
+pub fn test_format_on_enter_in_comment(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"   /**
+    * /*1*/
+    */"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "1");
+            f.insert_line(t, "");
+            f.verify_current_file_content(t, r#"  /**
+   * 
+
+   */"#);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod format_on_enter_open_brace_add_new_line {
+use crate::tests::prelude::*;
+
+// formatOnEnterOpenBraceAddNewLine_test.go:11
+pub fn test_format_on_enter_open_brace_add_new_line(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"if(true) {/*0*/}
+if(false)/*1*/{
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            let mut opts148 = f.get_options();
+            opts148.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
+            f.configure(t, opts148.clone());
+            f.go_to_marker(t, "0");
+            f.insert_line(t, "");
+            f.verify_current_file_content(t, r#"if (true)
+{
+}
+if(false){
+}"#);
+            f.go_to_marker(t, "1");
+            f.insert_line(t, "");
+            f.verify_current_file_content(t, r#"if (true)
+{
+}
+if (false)
+{
+}"#);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod format_on_open_curly_brace_remove_new_line {
+use crate::tests::prelude::*;
+
+// formatOnOpenCurlyBraceRemoveNewLine_test.go:11
+pub fn test_format_on_open_curly_brace_remove_new_line(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"if(true)
+/**/ }"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            let mut opts124 = f.get_options();
+            opts124.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::False;
+            f.configure(t, opts124.clone());
+            f.go_to_marker(t, "");
+            f.insert(t, "{");
+            f.verify_current_file_content(t, "if (true) { }");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod format_on_semi_colon_after_break {
+use crate::tests::prelude::*;
+
+// formatOnSemiColonAfterBreak_test.go:10
+pub fn test_format_on_semi_colon_after_break(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"for (var a in b) {
+break/**/
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "");
+            f.insert(t, ";");
+            f.verify_current_line_content(t, "    break;");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod format_parameter {
+use crate::tests::prelude::*;
+
+// formatParameter_test.go:10
+pub fn test_format_parameter(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"function foo(
+    first:
+    number,/*first*/
+    second: (
+    string/*second*/
+    ),
+    third:
+    (
+    boolean/*third*/
+    )
+) {
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.format_document(t, "");
+            f.go_to_marker(t, "first");
+            f.verify_current_line_content(t, "        number,");
+            f.go_to_marker(t, "second");
+            f.verify_current_line_content(t, "        string");
+            f.go_to_marker(t, "third");
+            f.verify_current_line_content(t, "            boolean");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod format_range_ending_after_comma_of_call {
+use crate::tests::prelude::*;
+
+// formatRangeEndingAfterCommaOfCall_test.go:10
+pub fn test_format_range_ending_after_comma_of_call(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"someCall(
+    /*start*/"firstParameter",/*end*/
+    "something else"
+);"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.format_selection(t, "start", "end");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod format_remove_new_line_after_open_brace {
+use crate::tests::prelude::*;
+
+// formatRemoveNewLineAfterOpenBrace_test.go:10
+pub fn test_format_remove_new_line_after_open_brace(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"function foo()
+{
+}
+if (true)
+{
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.format_document(t, "");
+            f.verify_current_file_content(t, r#"function foo() {
+}
+if (true) {
+}"#);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod format_remove_space_between_dot_dot_dot_and_type_name {
+use crate::tests::prelude::*;
+
+// formatRemoveSpaceBetweenDotDotDotAndTypeName_test.go:10
+pub fn test_format_remove_space_between_dot_dot_dot_and_type_name(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"let a: [... any[]];
+let b: [...   number[]];
+let c: [...     string[]];"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.format_document(t, "");
+            f.verify_current_file_content(t, r#"let a: [...any[]];
+let b: [...number[]];
+let c: [...string[]];"#);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod format_satisfies_expression {
+use crate::tests::prelude::*;
+
+// formatSatisfiesExpression_test.go:10
+pub fn test_format_satisfies_expression(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"type Foo = "a" | "b" | "c";
+const foo1 = ["a"] satisfies Foo[];
+const foo2 = ["a"]satisfies Foo[];
+const foo3 = ["a"]  satisfies Foo[];"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.format_document(t, "");
+            f.verify_current_file_content(t, r#"type Foo = "a" | "b" | "c";
+const foo1 = ["a"] satisfies Foo[];
+const foo2 = ["a"] satisfies Foo[];
+const foo3 = ["a"] satisfies Foo[];"#);
         });
         done(&mut *f, t);
         go::resume(__defer2);

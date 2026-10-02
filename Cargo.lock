@@ -405,10 +405,15 @@ dependencies = [
  "regex",
  "rustc-hash",
  "tsrs_core",
+ "tsrs_diagnostics",
  "tsrs_ls",
+ "tsrs_lsp",
  "tsrs_lsproto",
  "tsrs_modulespecifiers",
+ "tsrs_project",
  "tsrs_scanner",
+ "tsrs_tsoptions",
+ "tsrs_vfs",
 ]
 
 [[package]]

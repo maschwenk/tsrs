@@ -1,4 +1,5 @@
-// Port of testutil/lsptestutil/lspclient.go (the in-process LSP test client), as a test module of this crate.
+// Port of testutil/lsptestutil/lspclient.go (the in-process LSP test client). Public: the fourslash harness
+// (tsrs_fourslash) drives the server through it, like Go's package lsptestutil.
 
 use std::collections::VecDeque;
 use std::io::{Read, Write};
@@ -91,15 +92,15 @@ fn new_client_transport() -> clientTransport {
 
 // lspclient.go:53
 // ServerRequestHandler handles server-initiated requests and returns the response to send back.
-pub(crate) type ServerRequestHandler = Box<dyn Fn(&RequestMessage) -> Option<ResponseMessage> + Send + Sync>;
+pub type ServerRequestHandler = Box<dyn Fn(&RequestMessage) -> Option<ResponseMessage> + Send + Sync>;
 
 // lspclient.go:56
 // ServerNotificationHandler handles server-initiated notifications (e.g., $/progress).
-pub(crate) type ServerNotificationHandler = Box<dyn Fn(&RequestMessage) + Send + Sync>;
+pub type ServerNotificationHandler = Box<dyn Fn(&RequestMessage) + Send + Sync>;
 
 // lspclient.go:59
-pub(crate) struct LSPClient {
-    pub(crate) server: Arc<Server>,
+pub struct LSPClient {
+    pub server: Arc<Server>,
     input_writer: Mutex<Box<dyn Writer>>,
     id: AtomicI32,
     ctx: Context,
@@ -108,7 +109,7 @@ pub(crate) struct LSPClient {
     pending_requests: Mutex<FxHashMap<ID, std::sync::mpsc::SyncSender<ResponseMessage>>>,
 }
 
-pub(crate) struct closeClient {
+pub struct closeClient {
     cancel: CancelFunc,
     client_to_server: pipe,
     threads: Vec<JoinHandle<Result<(), Error>>>,
@@ -116,7 +117,7 @@ pub(crate) struct closeClient {
 
 impl closeClient {
     // lspclient.go:117
-    pub(crate) fn close(self) -> Result<(), Error> {
+    pub fn close(self) -> Result<(), Error> {
         self.cancel.call();
         self.client_to_server.close();
         let mut first = None;
@@ -134,7 +135,7 @@ impl closeClient {
 
 // lspclient.go:93
 // NewLSPClient creates an LSPClient wrapping the given server and pipes.
-pub(crate) fn new_lsp_client(mut server_opts: ServerOptions, on_server_request: Option<ServerRequestHandler>) -> (Arc<LSPClient>, closeClient) {
+pub fn new_lsp_client(mut server_opts: ServerOptions, on_server_request: Option<ServerRequestHandler>) -> (Arc<LSPClient>, closeClient) {
     let transport = new_client_transport();
     server_opts.in_ = transport.server_in;
     server_opts.out = transport.server_out;
@@ -254,13 +255,13 @@ impl LSPClient {
     }
 
     // lspclient.go:245
-    pub(crate) fn write_msg(&self, msg: &Message) {
+    pub fn write_msg(&self, msg: &Message) {
         self.write_to_server(msg).unwrap_or_else(|err| panic!("failed to write message: {}", err));
     }
 
     // lspclient.go:253
     // SendRequest sends a typed request and waits for the response.
-    pub(crate) fn send_request<Params: Json, Resp: Json>(&self, info: lsproto::RequestInfo<Params, Resp>, params: Params) -> (ResponseMessage, Option<Resp>) {
+    pub fn send_request<Params: Json, Resp: Json>(&self, info: lsproto::RequestInfo<Params, Resp>, params: Params) -> (ResponseMessage, Option<Resp>) {
         let id = self.next_id();
         let req_id = lsproto::new_id(&lsproto::IntegerOrString { integer: Some(id), ..Default::default() });
         let req = info.new_request_message(Some(req_id.clone()), params);
@@ -277,11 +278,17 @@ impl LSPClient {
 
     // lspclient.go:316
     // SendNotification sends a typed notification.
-    pub(crate) fn send_notification<Params: Json>(&self, info: lsproto::NotificationInfo<Params>, params: Params) {
+    pub fn send_notification<Params: Json>(&self, info: lsproto::NotificationInfo<Params>, params: Params) {
         self.write_msg(&info.new_notification_message(params).message());
+    }
+
+    // lspclient.go:327
+    pub fn set_compiler_options_for_inferred_projects(&self, options: Option<tsrs_core::P<tsrs_core::CompilerOptions>>) {
+        self.server.set_compiler_options_for_inferred_projects(&self.ctx, options);
     }
 }
 
+#[cfg(test)]
 // The `onServerRequest` handler of the lsp tests: acknowledge registrations and progress tokens.
 pub(crate) fn acknowledge_registrations() -> ServerRequestHandler {
     Box::new(|req: &RequestMessage| {
@@ -295,6 +302,7 @@ pub(crate) fn acknowledge_registrations() -> ServerRequestHandler {
     })
 }
 
+#[cfg(test)]
 pub(crate) fn test_server_options(cwd: &str, files: &[(&str, &str)]) -> ServerOptions {
     let fs: Arc<dyn tsrs_vfs::FS> = Arc::new(tsrs_vfs::bundled::wrap_fs(tsrs_vfs::vfstest::from_map(files.iter().copied(), false)));
     ServerOptions {
@@ -312,16 +320,20 @@ pub(crate) fn test_server_options(cwd: &str, files: &[(&str, &str)]) -> ServerOp
     }
 }
 
+#[cfg(test)]
 struct nullReader;
 
+#[cfg(test)]
 impl Reader for nullReader {
     fn read(&mut self) -> (Option<Message>, Option<Error>) {
         (None, Some(Error::tagged(ErrorTag::EOF, "EOF")))
     }
 }
 
+#[cfg(test)]
 struct nullWriter;
 
+#[cfg(test)]
 impl Writer for nullWriter {
     fn write(&mut self, _msg: &Message) -> Result<(), Error> {
         Ok(())

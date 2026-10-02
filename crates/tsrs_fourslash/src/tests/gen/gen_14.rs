@@ -3,548 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod get_occurrences_declare2 {
-use crate::tests::prelude::*;
-
-// getOccurrencesDeclare2_test.go:11
-pub fn test_get_occurrences_declare2(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"namespace m {
-    export class C1 {
-        public pub1;
-        public pub2;
-        private priv1;
-        private priv2;
-        protected prot1;
-        protected prot2;
-
-        public public;
-        private private;
-        protected protected;
-
-        public constructor(public a, private b, protected c, public d, private e, protected f) {
-            this.public = 10;
-            this.private = 10;
-            this.protected = 10;
-        }
-
-        public get x() { return 10; }
-        public set x(value) { }
-
-        public static statPub;
-        private static statPriv;
-        protected static statProt;
-    }
-
-    export interface I1 {
-    }
-
-    export declare namespace ma.m1.m2.m3 {
-        interface I2 {
-        }
-    }
-
-    export namespace mb.m1.m2.m3 {
-        [|declare|] var foo;
-
-        export class C2 {
-            public pub1;
-            private priv1;
-            protected prot1;
-
-            protected constructor(public public, protected protected, private private) {
-                public = private = protected;
-            }
-        }
-    }
-
-    declare var ambientThing: number;
-    export var exportedThing = 10;
-    declare function foo(): string;
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod get_occurrences_declare3 {
-use crate::tests::prelude::*;
-
-// getOccurrencesDeclare3_test.go:11
-pub fn test_get_occurrences_declare3(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
-[|declare|] var x;
-export [|declare|] var y, z;
-
-namespace m {
-    export class C1 {
-        public pub1;
-        public pub2;
-        private priv1;
-        private priv2;
-        protected prot1;
-        protected prot2;
-
-        public public;
-        private private;
-        protected protected;
-
-        public constructor(public a, private b, protected c, public d, private e, protected f) {
-            this.public = 10;
-            this.private = 10;
-            this.protected = 10;
-        }
-
-        public get x() { return 10; }
-        public set x(value) { }
-
-        public static statPub;
-        private static statPriv;
-        protected static statProt;
-    }
-
-    export interface I1 {
-    }
-
-    export declare namespace ma.m1.m2.m3 {
-        interface I2 {
-        }
-    }
-
-    export namespace mb.m1.m2.m3 {
-        declare var foo;
-
-        export class C2 {
-            public pub1;
-            private priv1;
-            protected prot1;
-
-            protected constructor(public public, protected protected, private private) {
-            }
-        }
-    }
-
-    declare var ambientThing: number;
-    export var exportedThing = 10;
-    declare function foo(): string;
-}
-
-[|declare|] export var v1, v2;
-[|declare|] namespace dm { }
-export class EC { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod get_occurrences_export1 {
-use crate::tests::prelude::*;
-
-// getOccurrencesExport1_test.go:11
-pub fn test_get_occurrences_export1(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"namespace m {
-    [|export|] class C1 {
-        public pub1;
-        public pub2;
-        private priv1;
-        private priv2;
-        protected prot1;
-        protected prot2;
-
-        public public;
-        private private;
-        protected protected;
-
-        public constructor(public a, private b, protected c, public d, private e, protected f) {
-            this.public = 10;
-            this.private = 10;
-            this.protected = 10;
-        }
-
-        public get x() { return 10; }
-        public set x(value) { }
-
-        public static statPub;
-        private static statPriv;
-        protected static statProt;
-    }
-
-    [|export|] interface I1 {
-    }
-
-    [|export|] declare namespace ma.m1.m2.m3 {
-        interface I2 {
-        }
-    }
-
-    [|export|] namespace mb.m1.m2.m3 {
-        declare var foo;
-
-        export class C2 {
-            public pub1;
-            private priv1;
-            protected prot1;
-
-            protected constructor(public public, protected protected, private private) {
-            }
-        }
-    }
-
-    declare var ambientThing: number;
-    [|export|] var exportedThing = 10;
-    declare function foo(): string;
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod get_occurrences_export2 {
-use crate::tests::prelude::*;
-
-// getOccurrencesExport2_test.go:11
-pub fn test_get_occurrences_export2(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"namespace m {
-    export class C1 {
-        public pub1;
-        public pub2;
-        private priv1;
-        private priv2;
-        protected prot1;
-        protected prot2;
-
-        public public;
-        private private;
-        protected protected;
-
-        public constructor(public a, private b, protected c, public d, private e, protected f) {
-            this.public = 10;
-            this.private = 10;
-            this.protected = 10;
-        }
-
-        public get x() { return 10; }
-        public set x(value) { }
-
-        public static statPub;
-        private static statPriv;
-        protected static statProt;
-    }
-
-    export interface I1 {
-    }
-
-    export declare namespace ma.m1.m2.m3 {
-        interface I2 {
-        }
-    }
-
-    export namespace mb.m1.m2.m3 {
-        declare var foo;
-
-        [|export|] class C2 {
-            public pub1;
-            private priv1;
-            protected prot1;
-
-            protected constructor(public public, protected protected, private private) {
-                public = private = protected;
-            }
-        }
-    }
-
-    declare var ambientThing: number;
-    export var exportedThing = 10;
-    declare function foo(): string;
-}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod get_occurrences_export3 {
-use crate::tests::prelude::*;
-
-// getOccurrencesExport3_test.go:11
-pub fn test_get_occurrences_export3(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
-declare var x;
-[|export|] declare var y, z;
-
-namespace m {
-    export class C1 {
-        public pub1;
-        public pub2;
-        private priv1;
-        private priv2;
-        protected prot1;
-        protected prot2;
-
-        public public;
-        private private;
-        protected protected;
-
-        public constructor(public a, private b, protected c, public d, private e, protected f) {
-            this.public = 10;
-            this.private = 10;
-            this.protected = 10;
-        }
-
-        public get x() { return 10; }
-        public set x(value) { }
-
-        public static statPub;
-        private static statPriv;
-        protected static statProt;
-    }
-
-    export interface I1 {
-    }
-
-    export declare namespace ma.m1.m2.m3 {
-        interface I2 {
-        }
-    }
-
-    export namespace mb.m1.m2.m3 {
-        declare var foo;
-
-        export class C2 {
-            public pub1;
-            private priv1;
-            protected prot1;
-
-            protected constructor(public public, protected protected, private private) {
-            }
-        }
-    }
-
-    declare var ambientThing: number;
-    export var exportedThing = 10;
-    declare function foo(): string;
-}
-
-declare [|export|] var v1, v2;
-declare namespace dm { }
-[|export|] class EC { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod get_occurrences_if_else {
-use crate::tests::prelude::*;
-
-// getOccurrencesIfElse_test.go:11
-pub fn test_get_occurrences_if_else(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"[|if|] (true) {
-    if (false) {
-    }
-    else {
-    }
-    if (true) {
-    }
-    else {
-        if (false)
-            if (true)
-                var x = undefined;
-    }
-}
-[|else            i/**/f|] (null) {
-}
-[|else|] /* whar garbl */ [|if|] (undefined) {
-}
-[|else|]
-[|if|] (false) {
-}
-[|else|] { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod get_occurrences_if_else2 {
-use crate::tests::prelude::*;
-
-// getOccurrencesIfElse2_test.go:11
-pub fn test_get_occurrences_if_else2(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"if (true) {
-    [|if|] (false) {
-    }
-    [|else|]{
-    }
-    if (true) {
-    }
-    else {
-        if (false)
-            if (true)
-                var x = undefined;
-    }
-}
-else            if (null) {
-}
-else /* whar garbl */ if (undefined) {
-}
-else
-if (false) {
-}
-else { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod get_occurrences_if_else3 {
-use crate::tests::prelude::*;
-
-// getOccurrencesIfElse3_test.go:11
-pub fn test_get_occurrences_if_else3(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"if (true) {
-    if (false) {
-    }
-    else {
-    }
-    [|if|] (true) {
-    }
-    [|else|] {
-        if (false)
-            if (true)
-                var x = undefined;
-    }
-}
-else            if (null) {
-}
-else /* whar garbl */ if (undefined) {
-}
-else
-if (false) {
-}
-else { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod get_occurrences_if_else4 {
-use crate::tests::prelude::*;
-
-// getOccurrencesIfElse4_test.go:11
-pub fn test_get_occurrences_if_else4(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"if (true) {
-    if (false) {
-    }
-    else {
-    }
-    if (true) {
-    }
-    else {
-        /*1*/if (false)
-            /*2*/i/*3*/f (true)
-                var x = undefined;
-    }
-}
-else            if (null) {
-}
-else /* whar garbl */ if (undefined) {
-}
-else
-if (false) {
-}
-else { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.markers()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod get_occurrences_if_else5 {
 use crate::tests::prelude::*;
 
@@ -7534,6 +6992,247 @@ export var x = 0;"#;
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_definition_external_module_name3 {
+use crate::tests::prelude::*;
+
+// goToDefinitionExternalModuleName3_test.go:10
+pub fn test_go_to_definition_external_module_name3(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: b.ts
+import n = require([|'e/*1*/'|]);
+var x = new n.Foo();
+// @Filename: a.ts
+declare module /*2*/"e" {
+    class Foo { }
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_definition(t, true, &["1"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_definition_external_module_name4 {
+use crate::tests::prelude::*;
+
+// goToDefinitionExternalModuleName4_test.go:10
+pub fn test_go_to_definition_external_module_name4(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: b.ts
+import n = require('unknown/*1*/');"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_definition(t, true, &["1"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_definition_external_module_name5 {
+use crate::tests::prelude::*;
+
+// goToDefinitionExternalModuleName5_test.go:10
+pub fn test_go_to_definition_external_module_name5(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: a.ts
+declare module /*2*/[|"external/*1*/"|] {
+    class Foo { }
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_definition(t, true, &["1"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_definition_external_module_name6 {
+use crate::tests::prelude::*;
+
+// goToDefinitionExternalModuleName6_test.go:10
+pub fn test_go_to_definition_external_module_name6(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: b.ts
+import * from [|'e/*1*/'|];
+// @Filename: a.ts
+declare module /*2*/"e" {
+    class Foo { }
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_definition(t, true, &["1"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_definition_external_module_name7 {
+use crate::tests::prelude::*;
+
+// goToDefinitionExternalModuleName7_test.go:10
+pub fn test_go_to_definition_external_module_name7(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: b.ts
+import {Foo, Bar} from [|'e/*1*/'|];
+// @Filename: a.ts
+declare module /*2*/"e" {
+    class Foo { }
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_definition(t, true, &["1"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_definition_external_module_name8 {
+use crate::tests::prelude::*;
+
+// goToDefinitionExternalModuleName8_test.go:10
+pub fn test_go_to_definition_external_module_name8(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: b.ts
+export {Foo, Bar} from [|'e/*1*/'|];
+// @Filename: a.ts
+declare module /*2*/"e" {
+    class Foo { }
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_definition(t, true, &["1"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_definition_external_module_name9 {
+use crate::tests::prelude::*;
+
+// goToDefinitionExternalModuleName9_test.go:10
+pub fn test_go_to_definition_external_module_name9(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @Filename: b.ts
+export * from [|'e/*1*/'|];
+// @Filename: a.ts
+declare module /*2*/"e" {
+    class Foo { }
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_definition(t, true, &["1"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_definition_filtering_generic_mapped_type {
+use crate::tests::prelude::*;
+
+// goToDefinition_filteringGenericMappedType_test.go:10
+pub fn test_go_to_definition_filtering_generic_mapped_type(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"const obj = {
+  get /*def*/id() {
+    return 1;
+  },
+  name: "test",
+};
+
+type Omit2<T, DroppedKeys extends PropertyKey> = {
+  [K in keyof T as Exclude<K, DroppedKeys>]: T[K];
+};
+
+declare function omit2<O, Mask extends { [K in keyof O]?: true }>(
+  obj: O,
+  mask: Mask
+): Omit2<O, keyof Mask>;
+
+const obj2 = omit2(obj, {
+  name: true,
+});
+
+obj2.[|/*ref*/id|];"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_definition(t, true, &["ref"]);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod go_to_definition_filtering_mapped_type {
+use crate::tests::prelude::*;
+
+// goToDefinition_filteringMappedType_test.go:10
+pub fn test_go_to_definition_filtering_mapped_type(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"const obj = { /*def*/a: 1, b: 2 };
+const filtered: { [P in keyof typeof obj as P extends 'b' ? never : P]: 0; } = { a: 0 };
+filtered.[|/*ref*/a|];"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_go_to_definition(t, true, &["ref"]);
         });
         done(&mut *f, t);
         go::resume(__defer2);

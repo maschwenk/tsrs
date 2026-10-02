@@ -3,199 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod auto_import_provider_export_map4 {
-use crate::tests::prelude::*;
-
-// autoImportProvider_exportMap4_test.go:13
-pub fn test_auto_import_provider_export_map4(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
-{
-  "compilerOptions": {
-    "module": "nodenext",
-    "lib": ["es5"]
-  }
-}
-// @Filename: /home/src/workspaces/project/package.json
-{
-  "type": "module",
-  "dependencies": {
-    "dependency": "^1.0.0"
-  }
-}
-// @Filename: /home/src/workspaces/project/node_modules/dependency/package.json
-{
-  "type": "module",
-  "name": "dependency",
-  "version": "1.0.0",
-  "exports": {
-    "types": "./lib/index.d.ts",
-    "require": "./lib/lol.js"
-  }
-}
-// @Filename: /home/src/workspaces/project/node_modules/dependency/lib/index.d.ts
-export function fooFromIndex(): void;
-// @Filename: /home/src/workspaces/project/node_modules/dependency/lib/lol.d.ts
-export function fooFromLol(): void;
-// @Filename: /home/src/workspaces/project/src/foo.ts
-fooFrom/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.go_to_marker(t, "");
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "fooFromIndex".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "dependency".to_string(), ..Default::default() }), ..Default::default() }), sort_text: Some("16".to_string()), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), ..Default::default() })], excludes: vec!["fooFromLol".to_string()], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod auto_import_provider_export_map5 {
-use crate::tests::prelude::*;
-
-// autoImportProvider_exportMap5_test.go:13
-pub fn test_auto_import_provider_export_map5(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @types package lookup
-// @Filename: /home/src/workspaces/project/tsconfig.json
-{
-  "compilerOptions": {
-    "module": "nodenext",
-    "lib": ["es5"]
-  }
-}
-// @Filename: /home/src/workspaces/project/package.json
-{
-  "type": "module",
-  "dependencies": {
-    "dependency": "^1.0.0"
-  }
-}
-// @Filename: /home/src/workspaces/project/node_modules/dependency/package.json
-{
-  "type": "module",
-  "name": "dependency",
-  "version": "1.0.0",
-  "exports": {
-    ".": "./lib/index.js",
-    "./lol": "./lib/lol.js"
-  }
-}
-// @Filename: /home/src/workspaces/project/node_modules/dependency/lib/index.js
-export function fooFromIndex() {}
-// @Filename: /home/src/workspaces/project/node_modules/dependency/lib/lol.js
-export function fooFromLol() {}
-// @Filename: /home/src/workspaces/project/node_modules/@types/dependency/package.json
-{
-  "type": "module",
-  "name": "@types/dependency",
-  "version": "1.0.0",
-  "exports": {
-    ".": "./lib/index.d.ts",
-    "./lol": "./lib/lol.d.ts"
-  }
-}
-// @Filename: /home/src/workspaces/project/node_modules/@types/dependency/lib/index.d.ts
-export declare function fooFromIndex(): void;
-// @Filename: /home/src/workspaces/project/node_modules/@types/dependency/lib/lol.d.ts
-export declare function fooFromLol(): void;
-// @Filename: /home/src/workspaces/project/src/foo.ts
-fooFrom/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.go_to_marker(t, "");
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "fooFromIndex".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "dependency".to_string(), ..Default::default() }), ..Default::default() }), sort_text: Some("16".to_string()), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooFromLol".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "dependency/lol".to_string(), ..Default::default() }), ..Default::default() }), sort_text: Some("16".to_string()), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod auto_import_provider_export_map6 {
-use crate::tests::prelude::*;
-
-// autoImportProvider_exportMap6_test.go:13
-pub fn test_auto_import_provider_export_map6(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @types package should be ignored because implementation package has types
-// @Filename: /home/src/workspaces/project/tsconfig.json
-{
-  "compilerOptions": {
-    "module": "nodenext",
-    "lib": ["es5"]
-  }
-}
-// @Filename: /home/src/workspaces/project/package.json
-{
-  "type": "module",
-  "dependencies": {
-    "dependency": "^1.0.0"
-  },
-  "devDependencies": {
-    "@types/dependency": "^1.0.0"
-  }
-}
-// @Filename: /home/src/workspaces/project/node_modules/dependency/package.json
-{
-  "type": "module",
-  "name": "dependency",
-  "version": "1.0.0",
-  "exports": {
-    ".": "./lib/index.js",
-    "./lol": "./lib/lol.js"
-  }
-}
-// @Filename: /home/src/workspaces/project/node_modules/dependency/lib/index.js
-export function fooFromIndex() {}
-// @Filename: /home/src/workspaces/project/node_modules/dependency/lib/index.d.ts
-export declare function fooFromIndex(): void
-// @Filename: /home/src/workspaces/project/node_modules/dependency/lib/lol.js
-export function fooFromLol() {}
-// @Filename: /home/src/workspaces/project/node_modules/dependency/lib/lol.d.ts
-export declare function fooFromLol(): void
-// @Filename: /home/src/workspaces/project/node_modules/@types/dependency/package.json
-{
-  "type": "module",
-  "name": "@types/dependency",
-  "version": "1.0.0",
-  "exports": {
-    ".": "./lib/index.d.ts",
-    "./lol": "./lib/lol.d.ts"
-  }
-}
-// @Filename: /home/src/workspaces/project/node_modules/@types/dependency/lib/index.d.ts
-export declare function fooFromAtTypesIndex(): void;
-// @Filename: /home/src/workspaces/project/node_modules/@types/dependency/lib/lol.d.ts
-export declare function fooFromAtTypesLol(): void;
-// @Filename: /home/src/workspaces/project/src/foo.ts
-fooFrom/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.go_to_marker(t, "");
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "fooFromIndex".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "dependency".to_string(), ..Default::default() }), ..Default::default() }), sort_text: Some("16".to_string()), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooFromLol".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "dependency/lol".to_string(), ..Default::default() }), ..Default::default() }), sort_text: Some("16".to_string()), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod auto_import_provider_export_map7 {
 use crate::tests::prelude::*;
 
@@ -5618,6 +5425,126 @@ class C extends A {[|
             f.verify_range_after_code_fix(t, r#"
 override z: number;
 "#, false, 0, 0);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod code_fix_class_implement_class_abstract_getters_and_setters {
+use crate::tests::prelude::*;
+
+// codeFixClassImplementClassAbstractGettersAndSetters_test.go:10
+pub fn test_code_fix_class_implement_class_abstract_getters_and_setters(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"abstract class A {
+    abstract get a(): string;
+    abstract set a(newName: string);
+
+    abstract get b(): number;
+
+    abstract set c(arg: number | string);
+
+    abstract accessor d: string;
+}
+
+class C implements A {}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"abstract class A {
+    abstract get a(): string;
+    abstract set a(newName: string);
+
+    abstract get b(): number;
+
+    abstract set c(arg: number | string);
+
+    abstract accessor d: string;
+}
+
+class C implements A {
+    get a(): string {
+        throw new Error("Method not implemented.");
+    }
+    set a(newName: string) {
+        throw new Error("Method not implemented.");
+    }
+    get b(): number {
+        throw new Error("Method not implemented.");
+    }
+    set c(arg: string | number) {
+        throw new Error("Method not implemented.");
+    }
+    accessor d: string;
+}"#.to_string(), index: 0, ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod code_fix_class_implement_class_function_void_inferred {
+use crate::tests::prelude::*;
+
+// codeFixClassImplementClassFunctionVoidInferred_test.go:10
+pub fn test_code_fix_class_implement_class_function_void_inferred(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"class A {
+    f() {}
+}
+
+class B implements A {[| |]}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"class A {
+    f() {}
+}
+
+class B implements A {
+    f(): void {
+        throw new Error("Method not implemented.");
+    }
+}"#.to_string(), index: 0, ..Default::default() });
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod code_fix_class_implement_class_member_anonymous_class {
+use crate::tests::prelude::*;
+
+// codeFixClassImplementClassMemberAnonymousClass_test.go:10
+pub fn test_code_fix_class_implement_class_member_anonymous_class(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @strict: false
+class A {
+    foo() {
+        return class { x: number; }
+    }
+    bar() {
+        return new class { x: number; }
+    }
+}
+class C implements A {[| |]}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_code_fix_not_available(t, &[]);
         });
         done(&mut *f, t);
         go::resume(__defer2);

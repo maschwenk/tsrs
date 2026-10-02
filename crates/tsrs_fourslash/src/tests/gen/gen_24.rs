@@ -3,542 +3,6 @@
 // `var x T` is zero-initialized as in Go, even where every branch assigns it before use.
 #![allow(unused_assignments)]
 
-pub mod quick_info_from_contextual_type {
-use crate::tests::prelude::*;
-
-// quickInfoFromContextualType_test.go:10
-pub fn test_quick_info_from_contextual_type(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: quickInfoExportAssignmentOfGenericInterface_0.ts
-interface I {
-    /** Documentation */
-    x: number;
-}
-const i: I = { /**/x: 0 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "(property) I.x: number", "Documentation");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_from_contextual_union_type1 {
-use crate::tests::prelude::*;
-
-// quickInfoFromContextualUnionType1_test.go:10
-pub fn test_quick_info_from_contextual_union_type1(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: true
-// based on https://github.com/microsoft/TypeScript/issues/55495
-type X =
-  | {
-      name: string;
-      [key: string]: any;
-    }
-  | {
-      name: "john";
-      someProp: boolean;
-    };
-
-const obj = { name: "john", /*1*/someProp: "foo" } satisfies X;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "(property) someProp: string", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_from_contextual_union_type2 {
-use crate::tests::prelude::*;
-
-// quickInfoFromContextualUnionType2_test.go:10
-pub fn test_quick_info_from_contextual_union_type2(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: true
-function test1(arg: { prop: "foo" }) {}
-test1({ /*1*/prop: "bar" });
-
-function test2(arg: { prop: "foo" } | undefined) {}
-test2({ /*2*/prop: "bar" });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", r#"(property) prop: "foo""#, "");
-            f.verify_quick_info_at(t, "2", r#"(property) prop: "foo""#, "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_from_contextual_union_type3 {
-use crate::tests::prelude::*;
-
-// quickInfoFromContextualUnionType3_test.go:10
-pub fn test_quick_info_from_contextual_union_type3(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: true
-declare const foo1: <D extends Foo1<D>>(definition: D) => D;
-
-type Foo1<D, Bar = Prop<D, "bar">> = {
-  bar: {
-    [K in keyof Bar]: Bar[K] extends boolean
-      ? Bar[K]
-      : "Error: bar should be boolean";
-  };
-};
-
-declare const foo2: <D extends Foo2<D>>(definition: D) => D;
-
-type Foo2<D, Bar = Prop<D, "bar">> = {
-  bar?: {
-    [K in keyof Bar]: Bar[K] extends boolean
-      ? Bar[K]
-      : "Error: bar should be boolean";
-  };
-};
-
-type Prop<T, K> = K extends keyof T ? T[K] : never;
-
-foo1({ bar: { /*1*/X: "test" } });
-
-foo2({ bar: { /*2*/X: "test" } });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", r#"(property) X: "Error: bar should be boolean""#, "");
-            f.verify_quick_info_at(t, "2", r#"(property) X: "Error: bar should be boolean""#, "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_from_empty_block_comment {
-use crate::tests::prelude::*;
-
-// quickInfoFromEmptyBlockComment_test.go:10
-pub fn test_quick_info_from_empty_block_comment(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/**/
-class Foo {
-}
-var f/*A*/ff = new Foo();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "A", "var fff: Foo", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_function {
-use crate::tests::prelude::*;
-
-// quickInfoFunction_test.go:10
-pub fn test_quick_info_function(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/**/function foo() { return "hi"; }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "function foo(): string", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_function_check_type {
-use crate::tests::prelude::*;
-
-// quickInfoFunctionCheckType_test.go:10
-pub fn test_quick_info_function_check_type(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "export type /**/Tail<T extends any[]> = ((...t: T) => void) extends (h: any, ...rest: infer R) => void ? R : never;";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "type Tail<T extends any[]> = ((...t: T) => void) extends (h: any, ...rest: infer R) => void ? R : never", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_function_keyword {
-use crate::tests::prelude::*;
-
-// quickInfoFunctionKeyword_test.go:10
-pub fn test_quick_info_function_keyword(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"[1].forEach(fu/*1*/nction() {});
-[1].map(x =/*2*/> x + 1);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "(local function)(): void", "");
-            f.verify_quick_info_at(t, "2", "function(x: number): number", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_generic_combinators2 {
-use crate::tests::prelude::*;
-
-// quickInfoGenericCombinators2_test.go:10
-pub fn test_quick_info_generic_combinators2(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface Collection<T, U> {
-   length: number;
-   add(x: T, y: U): void ;
-   remove(x: T, y: U): boolean;
-}
-
-interface Combinators {
-   map<T, U, V>(c: Collection<T, U>, f: (x: T, y: U) => V): Collection<T, V>;
-   map<T, U>(c: Collection<T, U>, f: (x: T, y: U) => any): Collection<any, any>;
-}
-
-class A {
-   foo<T>(): T { return null; }
-}
-
-class B<T> {
-   foo(x: T): T { return null; }
-}
-
-var c1: Collection<any, any>;
-var c2: Collection<number, string>;
-var c3: Collection<Collection<number, number>, string>;
-var c4: Collection<number, A>;
-var c5: Collection<number, B<any>>;
-
-var _: Combinators;
-// param help on open paren for arg 2 should show 'number' not T or 'any'
-// x should be contextually typed to number
-var rf1 = (x: number, y: string) => { return x.toFixed() };
-var rf2 = (x: Collection<number, number>, y: string) => { return x.length };
-var rf3 = (x: number, y: A) => { return y.foo() };
-
-var /*9*/r1a  = _.map/*1c*/(c2, (/*1a*/x, /*1b*/y) => { return x.toFixed() });
-var /*10*/r1b = _.map(c2, rf1);
-
-var /*11*/r2a = _.map(c3, (/*2a*/x, /*2b*/y) => { return x.length });
-var /*12*/r2b = _.map(c3, rf2);
-
-var /*13*/r3a = _.map(c4, (/*3a*/x, /*3b*/y) => { return y.foo() });
-var /*14*/r3b = _.map(c4, rf3);
-
-var /*15*/r4a = _.map(c5, (/*4a*/x, /*4b*/y) => { return y.foo() });
-
-var /*17*/r5a = _.map<number, string, Date>(c2, /*17error1*/(/*5a*/x, /*5b*/y) => { return x.toFixed() }/*17error2*/); 
-var rf1b = (x: number, y: string) => { return new Date() };
-var /*18*/r5b = _.map<number, string, Date>(c2, rf1b);
-
-var /*19*/r6a = _.map<Collection<number, number>, string, Date>(c3, (/*6a*/x,/*6b*/y) => { return new Date(); });
-var rf2b = (x: Collection<number, number>, y: string) => { return new Date(); };
-var /*20*/r6b = _.map<Collection<number, number>, string, Date>(c3, rf2b);
-
-var /*21*/r7a = _.map<number, A, string>(c4, (/*7a*/x,/*7b*/y) => { return y.foo() });
-var /*22*/r7b = _.map<number, A, string>(c4, /*22error1*/rf3/*22error2*/);
-
-var /*23*/r8a = _.map<number, /*error1*/B/*error2*/, string>(c5, (/*8a*/x,/*8b*/y) => { return y.foo() }); "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "2a", "(parameter) x: Collection<number, number>", "");
-            f.verify_quick_info_at(t, "2b", "(parameter) y: string", "");
-            f.verify_quick_info_at(t, "3a", "(parameter) x: number", "");
-            f.verify_quick_info_at(t, "3b", "(parameter) y: A", "");
-            f.verify_quick_info_at(t, "4a", "(parameter) x: number", "");
-            f.verify_quick_info_at(t, "4b", "(parameter) y: B<any>", "");
-            f.verify_quick_info_at(t, "5a", "(parameter) x: number", "");
-            f.verify_quick_info_at(t, "5b", "(parameter) y: string", "");
-            f.verify_quick_info_at(t, "6a", "(parameter) x: Collection<number, number>", "");
-            f.verify_quick_info_at(t, "6b", "(parameter) y: string", "");
-            f.verify_quick_info_at(t, "7a", "(parameter) x: number", "");
-            f.verify_quick_info_at(t, "7b", "(parameter) y: A", "");
-            f.verify_quick_info_at(t, "8a", "(parameter) x: number", "");
-            f.verify_quick_info_at(t, "8b", "(parameter) y: any", "");
-            f.verify_quick_info_at(t, "9", "var r1a: Collection<number, string>", "");
-            f.verify_quick_info_at(t, "10", "var r1b: Collection<number, string>", "");
-            f.verify_quick_info_at(t, "11", "var r2a: Collection<Collection<number, number>, number>", "");
-            f.verify_quick_info_at(t, "12", "var r2b: Collection<Collection<number, number>, number>", "");
-            f.verify_quick_info_at(t, "13", "var r3a: Collection<number, unknown>", "");
-            f.verify_quick_info_at(t, "14", "var r3b: Collection<number, unknown>", "");
-            f.verify_quick_info_at(t, "15", "var r4a: Collection<number, any>", "");
-            f.verify_quick_info_at(t, "17", "var r5a: Collection<number, Date>", "");
-            f.verify_quick_info_at(t, "18", "var r5b: Collection<number, Date>", "");
-            f.verify_quick_info_at(t, "19", "var r6a: Collection<Collection<number, number>, Date>", "");
-            f.verify_quick_info_at(t, "20", "var r6b: Collection<Collection<number, number>, Date>", "");
-            f.verify_quick_info_at(t, "21", "var r7a: Collection<number, string>", "");
-            f.verify_quick_info_at(t, "22", "var r7b: Collection<number, string>", "");
-            f.verify_quick_info_at(t, "23", "var r8a: Collection<number, string>", "");
-            f.verify_error_exists_between_markers(t, "error1", "error2");
-            f.verify_error_exists_between_markers(t, "17error1", "17error2");
-            f.verify_error_exists_between_markers(t, "22error1", "22error2");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_generic_property_accessor {
-use crate::tests::prelude::*;
-
-// quickInfoGenericPropertyAccessor_test.go:10
-pub fn test_quick_info_generic_property_accessor(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
-declare const o: {
-    f: <T>(x: T) => T
-    get g(): <T>(x: T) => T
-}
-
-declare const x: number
-
-o.f/*1*/(x)
-o.g/*2*/(x)
-"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "(property) f: <number>(x: number) => number", "");
-            f.verify_quick_info_at(t, "2", "(accessor) g: <number>(x: number) => number", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_generic_type_argument_inference1 {
-use crate::tests::prelude::*;
-
-// quickInfoGenericTypeArgumentInference1_test.go:10
-pub fn test_quick_info_generic_type_argument_inference1(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: false
-namespace Underscore {
-    export interface Iterator<T, U> {
-        (value: T, index: any, list: any): U;
-    }
-
-    export interface Static {
-        all<T>(list: T[], iterator?: Iterator<T, boolean>, context?: any): T;
-        identity<T>(value: T): T;
-    }
-}
-
-declare var _: Underscore.Static;
-var /*1*/r = _./*11*/all([true, 1, null, 'yes'], x => !x);
-var /*2*/r2 = _./*21*/all([true], _.identity);
-var /*3*/r3 = _./*31*/all([], _.identity);
-var /*4*/r4 = _./*41*/all([<any>true], _.identity);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "var r: string | number | boolean", "");
-            f.verify_quick_info_at(t, "11", "(method) Underscore.Static.all<string | number | boolean>(list: (string | number | boolean)[], iterator?: Underscore.Iterator<string | number | boolean, boolean>, context?: any): string | number | boolean", "");
-            f.verify_quick_info_at(t, "2", "var r2: boolean", "");
-            f.verify_quick_info_at(t, "21", "(method) Underscore.Static.all<boolean>(list: boolean[], iterator?: Underscore.Iterator<boolean, boolean>, context?: any): boolean", "");
-            f.verify_quick_info_at(t, "3", "var r3: any", "");
-            f.verify_quick_info_at(t, "31", "(method) Underscore.Static.all<any>(list: any[], iterator?: Underscore.Iterator<any, boolean>, context?: any): any", "");
-            f.verify_quick_info_at(t, "4", "var r4: any", "");
-            f.verify_quick_info_at(t, "41", "(method) Underscore.Static.all<any>(list: any[], iterator?: Underscore.Iterator<any, boolean>, context?: any): any", "");
-            f.verify_no_errors(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_generic_type_path {
-use crate::tests::prelude::*;
-
-// quickInfoGenericTypePath_test.go:10
-pub fn test_quick_info_generic_type_path(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
-function f<T>(x: T) {
-  class C {
-    value = x
-  }
-  return new C()
-}
-
-class Box<T> {
-  public value: T;
-  constructor(value: T) {
-    this.value = value;
-  }
-}
-
-const instance = f/*callF*/("hello");
-const b1/*b1*/ = new Box/*newBox*/(instance);
-declare const b2/*b2*/: Box<typeof instance>;
-"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_generics {
-use crate::tests::prelude::*;
-
-// quickInfoGenerics_test.go:10
-pub fn test_quick_info_generics(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class Con/*1*/tainer<T> {
-    x: T;
-}
-interface IList</*2*/T> {
-    getItem(i: number): /*3*/T;
-}
-class List2</*4*/T extends IList<number>> implements IList<T> {
-    private __it/*6*/em: /*5*/T[];
-    public get/*7*/Item(i: number) {
-        return this.__item[i];
-    }
-    public /*8*/method</*9*/S extends IList<T>>(s: S, p: /*10*/T[]) {
-        return s;
-    }
-}
-function foo4</*11*/T extends Date>(test: T): T;
-function foo4</*12*/S extends string>(test: S): S;
-function foo4(test: any): any;
-function foo4</*13*/T extends Date>(test: any): any { return null; }
-var x: List2<IList<number>>;
-var y = x./*14*/getItem(10);
-var x2: IList<IList<number>>;
-var x3: IList<number>;
-var y2 = x./*15*/method(x2, [x3, x3]);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "class Container<T>", "");
-            f.verify_quick_info_at(t, "2", "(type parameter) T in IList<T>", "");
-            f.verify_quick_info_at(t, "3", "(type parameter) T in IList<T>", "");
-            f.verify_quick_info_at(t, "4", "(type parameter) T in List2<T extends IList<number>>", "");
-            f.verify_quick_info_at(t, "5", "(type parameter) T in List2<T extends IList<number>>", "");
-            f.verify_quick_info_at(t, "6", "(property) List2<T extends IList<number>>.__item: T[]", "");
-            f.verify_quick_info_at(t, "7", "(method) List2<T extends IList<number>>.getItem(i: number): T", "");
-            f.verify_quick_info_at(t, "8", "(method) List2<T extends IList<number>>.method<S extends IList<T>>(s: S, p: T[]): S", "");
-            f.verify_quick_info_at(t, "9", "(type parameter) S in List2<T extends IList<number>>.method<S extends IList<T>>(s: S, p: T[]): S", "");
-            f.verify_quick_info_at(t, "10", "(type parameter) T in List2<T extends IList<number>>", "");
-            f.verify_quick_info_at(t, "11", "(type parameter) T in foo4<T extends Date>(test: T): T", "");
-            f.verify_quick_info_at(t, "12", "(type parameter) S in foo4<S extends string>(test: S): S", "");
-            f.verify_quick_info_at(t, "13", "(type parameter) T in foo4<T extends Date>(test: any): any", "");
-            f.verify_quick_info_at(t, "14", "(method) List2<IList<number>>.getItem(i: number): IList<number>", "");
-            f.verify_quick_info_at(t, "15", "(method) List2<IList<number>>.method<IList<IList<number>>>(s: IList<IList<number>>, p: IList<number>[]): IList<IList<number>>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod quick_info_getter_setter {
-use crate::tests::prelude::*;
-
-// quickInfoGetterSetter_test.go:10
-pub fn test_quick_info_getter_setter(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @target: es2015
-class C {
-    #x = Promise.resolve("")
-    set /*setterDef*/myValue(x: Promise<string> | string) {
-        this.#x = Promise.resolve(x);
-    }
-    get /*getterDef*/myValue(): Promise<string> {
-        return this.#x;
-    }
-}
-let instance = new C();
-instance./*setterUse*/myValue = instance./*getterUse*/myValue;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "getterUse", "(property) C.myValue: Promise<string>", "");
-            f.verify_quick_info_at(t, "getterDef", "(getter) C.myValue: Promise<string>", "");
-            f.verify_quick_info_at(t, "setterUse", "(property) C.myValue: string | Promise<string>", "");
-            f.verify_quick_info_at(t, "setterDef", "(setter) C.myValue: string | Promise<string>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
 pub mod quick_info_import_meta {
 use crate::tests::prelude::*;
 
@@ -5445,6 +4909,473 @@ function explicitLiteral(th/*6*/is: { n: number }): void {
             f.verify_quick_info_at(t, "7", r#"this: {
     n: number;
 }"#, "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_on_this4 {
+use crate::tests::prelude::*;
+
+// quickInfoOnThis4_test.go:10
+pub fn test_quick_info_on_this4(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface ContextualInterface {
+    m: number;
+    method(this: this, n: number);
+}
+let o: ContextualInterface = {
+    m: 12,
+    method(n) {
+        let x = this/*1*/.m;
+    }
+}
+interface ContextualInterface2 {
+    (this: void, n: number): void;
+}
+let contextualInterface2: ContextualInterface2 = function (th/*2*/is, n) { }"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "this: ContextualInterface", "");
+            f.verify_quick_info_at(t, "2", "(parameter) this: void", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_on_this5 {
+use crate::tests::prelude::*;
+
+// quickInfoOnThis5_test.go:10
+pub fn test_quick_info_on_this5(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @noImplicitThis: true
+const foo = {
+    num: 0,
+    f() {
+        type Y = typeof th/*1*/is;
+        type Z = typeof th/*2*/is.num;
+    },
+    g(this: number) {
+        type X = typeof th/*3*/is;
+    }
+}
+class Foo {
+    num = 0;
+    f() {
+        type Y = typeof th/*4*/is;
+        type Z = typeof th/*5*/is.num;
+    }
+    g(this: number) {
+        type X = typeof th/*6*/is;
+    }
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_hover(t);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_on_un_resolved_base_constructor_signature {
+use crate::tests::prelude::*;
+
+// quickInfoOnUnResolvedBaseConstructorSignature_test.go:10
+pub fn test_quick_info_on_un_resolved_base_constructor_signature(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"class baseClassWithConstructorParameterSpecifyingType {
+    constructor(loading?: boolean) {
+    }
+}
+class genericBaseClassInheritingConstructorFromBase<TValue> extends baseClassWithConstructorParameterSpecifyingType {
+}
+class classInheritingSpecializedClass extends genericBaseClassInheritingConstructorFromBase<string> {
+}
+new class/*1*/InheritingSpecializedClass();"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "1");
+            f.verify_quick_info_exists(t);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_on_undefined {
+use crate::tests::prelude::*;
+
+// quickInfoOnUndefined_test.go:10
+pub fn test_quick_info_on_undefined(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"function foo(a: string) {
+}
+foo(/*1*/undefined);
+var x = {
+    undefined: 10
+};
+x./*2*/undefined = 30;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "var undefined", "");
+            f.verify_quick_info_at(t, "2", "(property) undefined: number", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_on_union_properties_with_identical_jsdoc_comments01 {
+use crate::tests::prelude::*;
+
+// quickInfoOnUnionPropertiesWithIdenticalJSDocComments01_test.go:10
+pub fn test_quick_info_on_union_properties_with_identical_jsdoc_comments01(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"export type DocumentFilter = {
+    /** A language id, like `typescript`. */
+    language: string;
+    /** A Uri [scheme](#Uri.scheme), like `file` or `untitled`. */
+    scheme?: string;
+    /** A glob pattern, like `*.{ts,js}`. */
+    pattern?: string;
+} | {
+    /** A language id, like `typescript`. */
+    language?: string;
+    /** A Uri [scheme](#Uri.scheme), like `file` or `untitled`. */
+    scheme: string;
+    /** A glob pattern, like `*.{ts,js}`. */
+    pattern?: string;
+} | {
+    /** A language id, like `typescript`. */
+    language?: string;
+    /** A Uri [scheme](#Uri.scheme), like `file` or `untitled`. */
+    scheme?: string;
+    /** A glob pattern, like `*.{ts,js}`. */
+    pattern: string;
+};
+
+declare let x: DocumentFilter;
+x./**/language"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_hover(t);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_on_value_symbol_without_export_with_same_name_export_symbol {
+use crate::tests::prelude::*;
+
+// quickInfoOnValueSymbolWithoutExportWithSameNameExportSymbol_test.go:10
+pub fn test_quick_info_on_value_symbol_without_export_with_same_name_export_symbol(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @strict: true
+
+declare function num(): number
+const /*1*/Unit = num()
+export type Unit = number
+const value = /*2*/Unit
+
+function Fn() {}
+export type Fn = () => void
+/*3*/Fn()
+
+// repro from #41897
+const /*4*/X = 1;
+export interface X {}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "const Unit: number", "");
+            f.verify_quick_info_at(t, "2", "const Unit: number", "");
+            f.verify_quick_info_at(t, "3", "function Fn(): void", "");
+            f.verify_quick_info_at(t, "4", "const X: 1", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_on_var_in_arrow_expression {
+use crate::tests::prelude::*;
+
+// quickInfoOnVarInArrowExpression_test.go:10
+pub fn test_quick_info_on_var_in_arrow_expression(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"interface IMap<T> {
+    [key: string]: T;
+}
+var map: IMap<string[]>;
+var categories: string[];
+each(categories, category => {
+    var /*1*/changes = map[category];
+    return each(changes, change => {
+    });
+});
+function each<T>(items: T[], handler: (item: T) => void) { }"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "(local var) changes: string[]", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_parameter_skip_this_parameter {
+use crate::tests::prelude::*;
+
+// quickInfoParameter_skipThisParameter_test.go:10
+pub fn test_quick_info_parameter_skip_this_parameter(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"function f(cb: (x: number) => void) {}
+f(function(this: any, /**/x) {});"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "", "(parameter) x: number", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_private_identifier_in_type_reference_no_crash1 {
+use crate::tests::prelude::*;
+
+// quickInfoPrivateIdentifierInTypeReferenceNoCrash1_test.go:10
+pub fn test_quick_info_private_identifier_in_type_reference_no_crash1(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @target: esnext
+class Foo {
+  #prop: string = "";
+
+  method() {
+    const test: Foo.#prop/*1*/ = "";
+  }
+}"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "1", "", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_property_tag {
+use crate::tests::prelude::*;
+
+// quickInfoPropertyTag_test.go:10
+pub fn test_quick_info_property_tag(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @allowJs: true
+// @Filename: /a.js
+/**
+ * @typedef I
+ * @property {number} x Doc
+ *                      More doc
+ */
+
+/** @type {I} */
+const obj = { /**/x: 10 };"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "", "(property) x: number", r#"Doc
+More doc"#);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_recursive_object_literal {
+use crate::tests::prelude::*;
+
+// quickInfoRecursiveObjectLiteral_test.go:10
+pub fn test_quick_info_recursive_object_literal(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = "var a = { f: /**/a";
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "", "var a: any", "");
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_root_symbol_jsdoc_aggregation {
+use crate::tests::prelude::*;
+
+// quickInfoRootSymbolJSDocAggregation_test.go:10
+pub fn test_quick_info_root_symbol_jsdoc_aggregation(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"
+declare const distinct: {
+    /** first */
+    a: number;
+} & {
+    /** second */
+    a: number;
+};
+
+declare const duplicate: {
+    /** same */
+    a: number;
+} & {
+    /** same */
+    a: number;
+} & {
+    /** third */
+    a: number;
+};
+
+declare const mixed: {
+    /** first */
+    a: number;
+} & {
+    /** second */
+    a: number;
+} & {
+    /** first */
+    a: number;
+};
+
+distinct./*distinct*/a
+duplicate./*duplicate*/a
+mixed./*mixed*/a
+"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_quick_info_at(t, "distinct", "(property) a: number", r#"first
+second"#);
+            f.verify_quick_info_at(t, "duplicate", "(property) a: number", r#"same
+third"#);
+            f.verify_quick_info_at(t, "mixed", "(property) a: number", r#"first
+second"#);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_salsa_methods_on_assigned_function_expressions {
+use crate::tests::prelude::*;
+
+// quickInfoSalsaMethodsOnAssignedFunctionExpressions_test.go:10
+pub fn test_quick_info_salsa_methods_on_assigned_function_expressions(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @allowJs: true
+// @Filename: something.js
+var C = function () { }
+/**
+ * The prototype method.
+ * @param {string} a Parameter definition.
+ */
+function f(a) {}
+C.prototype.m = f;
+
+var x = new C();
+x/*1*/.m();"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_hover(t);
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod quick_info_satisfies_tag {
+use crate::tests::prelude::*;
+
+// quickInfoSatisfiesTag_test.go:10
+pub fn test_quick_info_satisfies_tag(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let content: &str = r#"// @noEmit: true
+// @allowJS: true
+// @checkJs: true
+// @filename: /a.js
+/** @satisfies {number} comment */
+const /*1*/a = 1;"#;
+        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.verify_baseline_hover(t);
         });
         done(&mut *f, t);
         go::resume(__defer2);
