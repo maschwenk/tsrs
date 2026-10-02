@@ -334,6 +334,7 @@ dependencies = [
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
+ "tsrs_lsp",
  "tsrs_module",
  "tsrs_parser",
  "tsrs_scanner",
@@ -395,6 +396,19 @@ version = "0.1.6"
 dependencies = [
  "rustc-hash",
  "tsrs_core",
+]
+
+[[package]]
+name = "tsrs_fourslash"
+version = "0.1.6"
+dependencies = [
+ "regex",
+ "rustc-hash",
+ "tsrs_core",
+ "tsrs_ls",
+ "tsrs_lsproto",
+ "tsrs_modulespecifiers",
+ "tsrs_scanner",
 ]
 
 [[package]]
@@ -520,6 +534,7 @@ dependencies = [
  "tsrs_parser",
  "tsrs_tsoptions",
  "tsrs_vfs",
+ "xxhash-rust",
 ]
 
 [[package]]

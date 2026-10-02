@@ -116,13 +116,26 @@ measured on the private monorepo in phase 4 (open a file, edit 200 times, RSS vs
 | phase | content | state |
 | --- | --- | --- |
 | 1 | transport, protocol types, session skeleton, document sync, project discovery, program update, push + pull diagnostics, hover, definition; LSP oracle | in progress |
-| 2 | fourslash harness + generated tests | — |
+| 2 | fourslash harness + generated tests | generator, harness (server-independent parts), parser, runner done; needs the in-process server |
 | 3 | references, rename, completions, signature help, symbols, semantic tokens, folding, selection ranges, inlay hints, code actions, formatting | — |
 | 4 | watchers, multi-project, program reuse, cancellation, memory regions, editor setup | — |
 
 ### Fourslash
 
-(filled in from phase 2)
+`tools/gen-fourslash` (Go, `go/types`) converts every Go fourslash test (`internal/fourslash/tests/*_test.go`,
+4,559 `Test*` functions in 4,364 files) into a Rust function in `crates/tsrs_fourslash/src/tests/gen/` plus a
+registry (name, file, fn, skip reason for the 386 `t.Skip("Known failing…")` tests). Regenerate with
+`cd tools/gen-fourslash && GOTOOLCHAIN=auto go run .`; nothing is left untranslated. The harness
+(`tsrs_fourslash::fourslash`) mirrors Go's `FourslashTest` method for method; the test-data parser is a full port
+(checked against Go's `ParseTestData` for all 4,484 constant contents, `tools/oracle/fourslash-parser`), and every
+method that needs the in-process server calls `FourslashTest::server_unavailable` until `tsrs_lsp` can be driven
+in-process. Run with `tsrs-fourslash run [--filter <regex>] [--include-skipped]` (results in
+`target/fourslash-results/{pass,fail,skip}.txt`, baseline actuals in `target/fourslash-results/local/`). Mapping
+rules and deviations: notes/lsp-fsgen.md.
+
+| date | pass | fail | skip |
+| --- | --- | --- | --- |
+| 2026-10-01 (no server yet) | 0 | 4,173 | 386 |
 
 ## Known gaps
 
