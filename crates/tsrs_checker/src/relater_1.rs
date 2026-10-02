@@ -1318,8 +1318,10 @@ impl Checker {
                 || !target_prop.flags().intersects(SymbolFlags::Optional)
                     && !target_prop.check_flags.get().intersects(CheckFlags::Partial)
             {
-                let source_prop = if (lazy || self.lazy_has_prop) && !match_discriminant_properties {
-                    // notes/mem-lazy.md L9/L10: only whether the source has the property matters below.
+                let source_prop = if (lazy || self.lazy_has_prop) && !match_discriminant_properties || match_discriminant_properties && self.lazy_discriminants {
+                    // notes/mem-lazy.md L9/L10: only whether the source has the property matters below. With
+                    // discriminants (notes/mem-use-census.md U1) the source property is looked up below if its type
+                    // is needed.
                     if self.has_property_of_type(source, target_prop.name()) { Some(target_prop) } else { None }
                 } else {
                     self.get_property_of_type(source, target_prop.name())
@@ -1344,6 +1346,7 @@ impl Checker {
                             }
                             let target_type = self.get_type_of_symbol(target_prop);
                             if target_type.flags().intersects(TypeFlags::Unit) {
+                                let source_prop = if self.lazy_discriminants { self.get_property_of_type(source, target_prop.name()).unwrap() } else { source_prop };
                                 let source_type = self.get_type_of_symbol(source_prop);
                                 if !(source_type.flags().intersects(TypeFlags::Any) || {
                                     let a = self.get_regular_type_of_literal_type(source_type);
@@ -1355,6 +1358,8 @@ impl Checker {
                                         Some(out) => out.push(target_prop),
                                     }
                                 }
+                            } else if self.lazy_discriminants {
+                                self.lazy_member_stats.discriminant_source_lookups_avoided += 1;
                             }
                         }
                     }

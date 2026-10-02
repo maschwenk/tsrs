@@ -67,6 +67,14 @@ pub fn lazy_unmatched() -> bool {
     env_flag(&F, "TSRS_LAZY_UNMATCHED", true)
 }
 
+/// Candidate U1 (notes/mem-use-census.md): `getUnmatchedProperties` with discriminant matching asks the source
+/// only whether it has each property, and looks the source property up (instantiating a lazy member) only when the
+/// target property's type is a unit type, the one case that reads it. `TSRS_LAZY_DISCRIMINANTS=0|1`.
+pub fn lazy_discriminants() -> bool {
+    static F: OnceLock<bool> = OnceLock::new();
+    env_flag(&F, "TSRS_LAZY_DISCRIMINANTS", true)
+}
+
 /// Candidate L11 (notes/mem-lazy.md): "is this an empty object type" (`isEmptyObjectType`, the empty-object test in
 /// `removeSubtypes`) answers from a lazy member table instead of resolving it. `TSRS_LAZY_EMPTY=0|1`.
 pub fn lazy_empty() -> bool {
@@ -126,4 +134,5 @@ lazy_member_stats! {
     has_prop_uninstantiated: "Existence answers from an uninstantiated member",
     unmatched_lazy_walks: "Lazy property-order lists requested",
     empty_lazy_queries: "Empty-object queries answered by lazy tables",
+    discriminant_source_lookups_avoided: "Discriminant source lookups avoided",
 }
