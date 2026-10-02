@@ -234,9 +234,20 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
         is_strada_server: false,
     };
     // client, closeClient := lsptestutil.NewLSPClient(t, serverOpts, f.handleServerRequest)
-    // client.SetCompilerOptionsForInferredProjects(compilerOptions); f.initialize(t, options); open the files.
+    // client.SetCompilerOptionsForInferredProjects(compilerOptions); f.initialize(t, options); state baseline or
+    // open the files; then `return (f, new_done_fn(test_path))`.
     let _ = f;
     FourslashTest::server_unavailable(t, "NewFourslash")
+}
+
+// fourslash.go:280: the `done` closure NewFourslash returns.
+fn new_done_fn(test_path: &str) -> DoneFn {
+    let test_path = test_path.to_string();
+    Box::new(move |f: &mut FourslashTest, t: &T| {
+        t.helper();
+        // !!! err := closeClient(); if err != nil { t.Errorf("goroutine error: %v", err) }
+        f.verify_baselines(t, &test_path);
+    })
 }
 
 // fourslash.go:346
@@ -884,6 +895,28 @@ impl FourslashTest {
     pub fn go_to_range_start(&mut self, t: &T, range_marker: Arc<RangeMarker>) {
         self.open_file(t, &range_marker.file_name());
         self.go_to_position_impl(t, range_marker.ls_range.start);
+    }
+
+    // fourslash.go:900
+    pub fn go_to_select(&mut self, t: &T, start_marker_name: &str, end_marker_name: &str) {
+        let Some(start_marker) = self.test_data.marker_positions.get(start_marker_name).cloned() else {
+            t.fatal(&format!("Start marker '{start_marker_name}' not found"));
+        };
+        let Some(end_marker) = self.test_data.marker_positions.get(end_marker_name).cloned() else {
+            t.fatal(&format!("End marker '{end_marker_name}' not found"));
+        };
+        if start_marker.file_name() != end_marker.file_name() {
+            t.fatal(&format!("Markers '{start_marker_name}' and '{end_marker_name}' are in different files"));
+        }
+        self.ensure_active_file(t, &start_marker.file_name());
+        self.go_to_position_impl(t, start_marker.ls_position);
+        self.selection_end = Some(end_marker.ls_position);
+    }
+
+    // fourslash.go:917
+    pub fn go_to_select_range(&mut self, t: &T, range_marker: Arc<RangeMarker>) {
+        self.go_to_range_start(t, range_marker.clone());
+        self.selection_end = Some(range_marker.ls_range.end);
     }
 
     // fourslash.go:922
