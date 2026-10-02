@@ -120,7 +120,7 @@ impl Json for Message {
         if raw.id.is_some() && raw.method.0.is_empty() {
             return Ok(Message {
                 kind: MessageKind::Response,
-                msg: MessageMsg::Response(ResponseMessage { id: raw.id, result: raw.result, error: raw.error }),
+                msg: MessageMsg::Response(ResponseMessage { id: raw.id, result: raw.result, error: raw.error, raw_result: true }),
             });
         }
 
@@ -171,6 +171,9 @@ pub struct ResponseMessage {
     pub id: Option<ID>,
     pub result: Option<Value>,
     pub error: Option<ResponseError>,
+    // Set on responses read by Message's decoding, whose Go Result is always a (possibly empty) raw
+    // json.Value: it marshals as null when the response had no result.
+    pub(crate) raw_result: bool,
 }
 
 impl ResponseMessage {
@@ -187,6 +190,9 @@ impl Json for ResponseMessage {
         let mut w = ObjectWriter::new(4);
         w.field("jsonrpc", &JSONRPCVersion);
         w.field("id", &self.id);
+        if self.result.is_none() && self.raw_result {
+            w.raw("result", Value::Null);
+        }
         w.opt("result", &self.result);
         w.opt("error", &self.error);
         w.finish()

@@ -68,9 +68,14 @@ pub fn check_required(seen: u64, required_names: &[&str], go_type: &str) -> Resu
     Ok(())
 }
 
-// A union arm decoded with its own codec (Go `o.X = new(T); json.Unmarshal(data, o.X)`).
+// A union arm decoded with the union's decoder (Go `o.X = new(T); json.UnmarshalDecode(dec, o.X)`).
 pub fn arm<T: Json>(v: &Value) -> Result<Option<T>, JsonError> {
     T::from_json(v).map(Some)
+}
+
+// A union arm decoded from the buffered value (Go `o.X = new(T); json.Unmarshal(data, o.X)`).
+pub fn arm_buffered<T: Json>(v: &Value) -> Result<Option<T>, JsonError> {
+    T::from_json(v).map(Some).map_err(JsonError::seal)
 }
 
 pub fn value_str(v: &Value) -> Option<&str> {
@@ -127,19 +132,53 @@ impl DiscriminatedStructDecoder<'_> {
                 tsrs_core::json::marshal(value).unwrap_or_default()
             ),
         )
-        .within(self.discriminator)
     }
 }
 
-// structcodec.go:235: the arm is decoded with its struct spec, and errors of that decoding are reported
-// against the union's type.
-pub fn unmarshal_discriminated_arm<T: Json>(v: &Value, union_go_type: &str) -> Result<T, JsonError> {
-    T::from_json(v).map_err(|mut e| {
-        if e.go_type == T::GO_TYPE {
-            e.go_type = union_go_type.to_string();
+// structcodec.go:235: the arm is decoded with its struct spec. Go decodes the discriminator first, then
+// replays the fields that preceded it (each with a fresh json.Unmarshal), then decodes the remaining fields
+// from the stream; the arm's own errors are reported against the union's type.
+pub fn unmarshal_discriminated_arm<T: Json>(v: &Value, union_go_type: &str, discriminator: &str) -> Result<T, JsonError> {
+    let err = match T::from_json(v) {
+        Ok(arm) => return Ok(arm),
+        Err(err) => err,
+    };
+    let Value::Object(members) = v else {
+        return Err(err);
+    };
+    let discriminator_index = members.get_index_of(discriminator);
+    // Go's field order decides which error is reported first.
+    let mut err = match discriminator_index {
+        Some(d) if d > 0 => {
+            let mut reordered = OrderedMap::default();
+            reordered.reserve(members.len());
+            for (k, item) in members.iter().skip(d).take(1).chain(members.iter().take(d)).chain(members.iter().skip(d + 1)) {
+                reordered.insert(k.clone(), item.clone());
+            }
+            match T::from_json(&Value::Object(reordered)) {
+                Ok(arm) => return Ok(arm),
+                Err(err) => err,
+            }
         }
-        e
-    })
+        _ => err,
+    };
+    if err.go_type == T::GO_TYPE {
+        err.go_type = union_go_type.to_string();
+    }
+    if !err.sealed {
+        if let Some(field) = err.pointer.last() {
+            let replayed = match (members.get_index_of(field.as_str()), discriminator_index) {
+                (Some(f), Some(d)) => f <= d,
+                (Some(_), None) => true,
+                _ => false,
+            };
+            if replayed {
+                err.pointer.pop();
+                err = err.seal();
+            }
+        }
+    }
+    Err(err)
 }
 
 // Go `cmp.Compare`.

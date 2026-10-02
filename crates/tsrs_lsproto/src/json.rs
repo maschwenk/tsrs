@@ -25,6 +25,9 @@ pub struct JsonError {
     // ErrorCodes wrapped (Go `%w`) by the underlying error, outermost first.
     pub codes: Vec<ErrorCode>,
     pub plain: bool,
+    // The pointer is relative to a value Go decoded with a fresh `json.Unmarshal` (a buffered union arm,
+    // a replayed field); json/v2 keeps such a pointer as is instead of prefixing the outer position.
+    pub sealed: bool,
 }
 
 impl JsonError {
@@ -59,8 +62,17 @@ impl JsonError {
     }
 
     pub fn within(mut self, token: &str) -> JsonError {
-        if !self.plain {
+        if !self.plain && !self.sealed {
             self.pointer.push(token.to_string());
+        }
+        self
+    }
+
+    // The error of a fresh `json.Unmarshal` returned from an unmarshal method: json/v2 fills in the
+    // current position only if the error has none.
+    pub fn seal(mut self) -> JsonError {
+        if !self.pointer.is_empty() {
+            self.sealed = true;
         }
         self
     }
@@ -104,7 +116,18 @@ impl fmt::Display for JsonError {
         }
         if !self.go_type.is_empty() {
             s.push_str(" into Go ");
-            s.push_str(&self.go_type);
+            if self.go_type.len() > 100 {
+                // json/v2 prints only the kind of an excessively long type.
+                s.push_str(if self.go_type.starts_with("[]") {
+                    "slice"
+                } else if self.go_type.starts_with("map[") {
+                    "map"
+                } else {
+                    "struct"
+                });
+            } else {
+                s.push_str(&self.go_type);
+            }
         }
         if !self.pointer.is_empty() {
             s.push_str(" within ");
@@ -158,6 +181,13 @@ pub trait Json: Sized {
     const GO_TYPE: &'static str;
     // Go `any(params).(NoParams)` in `UnmarshalParams`.
     const IS_NO_PARAMS: bool = false;
+    // Go holds the type behind a pointer in slices and maps (`[]*T`); only used in error texts.
+    const GO_POINTER: bool = false;
+
+    // The Go type name of a composite type ("[]*lsproto.TextEdit"); only used in error texts.
+    fn go_type_name() -> String {
+        Self::GO_TYPE.to_string()
+    }
 
     fn to_json(&self) -> Value;
     fn from_json(v: &Value) -> Result<Self, JsonError>;
@@ -358,6 +388,10 @@ impl IsZero for f64 {
 impl<T: Json> Json for Option<T> {
     const GO_TYPE: &'static str = T::GO_TYPE;
 
+    fn go_type_name() -> String {
+        T::go_type_name()
+    }
+
     fn to_json(&self) -> Value {
         match self {
             Some(v) => v.to_json(),
@@ -375,6 +409,11 @@ impl<T: Json> Json for Option<T> {
 
 impl<T: Json> Json for Box<T> {
     const GO_TYPE: &'static str = T::GO_TYPE;
+    const GO_POINTER: bool = T::GO_POINTER;
+
+    fn go_type_name() -> String {
+        T::go_type_name()
+    }
 
     fn to_json(&self) -> Value {
         (**self).to_json()
@@ -388,6 +427,10 @@ impl<T: Json> Json for Box<T> {
 // Go slice: json/v2 marshals a nil slice as `[]`; null decodes as an empty (nil) slice.
 impl<T: Json> Json for Vec<T> {
     const GO_TYPE: &'static str = "slice";
+
+    fn go_type_name() -> String {
+        format!("[]{}{}", if T::GO_POINTER { "*" } else { "" }, T::go_type_name())
+    }
 
     fn to_json(&self) -> Value {
         Value::Array(self.iter().map(T::to_json).collect())
@@ -403,7 +446,7 @@ impl<T: Json> Json for Vec<T> {
                 Ok(out)
             }
             Value::Null => Ok(Vec::new()),
-            _ => Err(JsonError::mismatch(v, &format!("[]{}", T::GO_TYPE))),
+            _ => Err(JsonError::mismatch(v, &Self::go_type_name())),
         }
     }
 }
@@ -439,11 +482,14 @@ impl Json for [u32; 2] {
 
 // Map keys: Go string kinds.
 pub trait JsonKey: Sized + Hash + Eq {
+    const GO_KEY_TYPE: &'static str;
     fn key_string(&self) -> &str;
     fn from_key(s: &str) -> Self;
 }
 
 impl JsonKey for String {
+    const GO_KEY_TYPE: &'static str = "string";
+
     fn key_string(&self) -> &str {
         self
     }
@@ -457,6 +503,10 @@ impl JsonKey for String {
 // entries; an OrderedMap keeps insertion order (and decodes in document order).
 impl<K: JsonKey, V: Json> Json for OrderedMap<K, V> {
     const GO_TYPE: &'static str = "map";
+
+    fn go_type_name() -> String {
+        format!("map[{}]{}{}", K::GO_KEY_TYPE, if V::GO_POINTER { "*" } else { "" }, V::go_type_name())
+    }
 
     fn to_json(&self) -> Value {
         let mut m = OrderedMap::default();
@@ -478,7 +528,7 @@ impl<K: JsonKey, V: Json> Json for OrderedMap<K, V> {
                 Ok(out)
             }
             Value::Null => Ok(OrderedMap::default()),
-            _ => Err(JsonError::mismatch(v, &format!("map[string]{}", V::GO_TYPE))),
+            _ => Err(JsonError::mismatch(v, &Self::go_type_name())),
         }
     }
 }

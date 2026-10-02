@@ -42,6 +42,7 @@ impl HasTextDocumentPosition for ImplementationParams {
 
 impl Json for ImplementationParams {
     const GO_TYPE: &'static str = "lsproto.ImplementationParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -142,6 +143,7 @@ pub struct ImplementationRegistrationOptions {
 
 impl Json for ImplementationRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.ImplementationRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -203,6 +205,7 @@ impl HasTextDocumentPosition for TypeDefinitionParams {
 
 impl Json for TypeDefinitionParams {
     const GO_TYPE: &'static str = "lsproto.TypeDefinitionParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -254,6 +257,7 @@ pub struct TypeDefinitionRegistrationOptions {
 
 impl Json for TypeDefinitionRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.TypeDefinitionRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -298,6 +302,7 @@ pub struct WorkspaceFolder {
 
 impl Json for WorkspaceFolder {
     const GO_TYPE: &'static str = "lsproto.WorkspaceFolder";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -339,6 +344,7 @@ pub struct DidChangeWorkspaceFoldersParams {
 
 impl Json for DidChangeWorkspaceFoldersParams {
     const GO_TYPE: &'static str = "lsproto.DidChangeWorkspaceFoldersParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -374,6 +380,7 @@ pub struct ConfigurationParams {
 
 impl Json for ConfigurationParams {
     const GO_TYPE: &'static str = "lsproto.ConfigurationParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -423,6 +430,7 @@ impl HasTextDocumentURI for DocumentColorParams {
 
 impl Json for DocumentColorParams {
     const GO_TYPE: &'static str = "lsproto.DocumentColorParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -466,6 +474,7 @@ pub struct ColorInformation {
 
 impl Json for ColorInformation {
     const GO_TYPE: &'static str = "lsproto.ColorInformation";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -513,6 +522,7 @@ pub struct DocumentColorRegistrationOptions {
 
 impl Json for DocumentColorRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentColorRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -572,6 +582,7 @@ impl HasTextDocumentURI for ColorPresentationParams {
 
 impl Json for ColorPresentationParams {
     const GO_TYPE: &'static str = "lsproto.ColorPresentationParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -632,6 +643,7 @@ pub struct ColorPresentation {
 
 impl Json for ColorPresentation {
     const GO_TYPE: &'static str = "lsproto.ColorPresentation";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -685,6 +697,7 @@ impl HasTextDocumentURI for FoldingRangeParams {
 
 impl Json for FoldingRangeParams {
     const GO_TYPE: &'static str = "lsproto.FoldingRangeParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -749,6 +762,7 @@ pub struct FoldingRange {
 
 impl Json for FoldingRange {
     const GO_TYPE: &'static str = "lsproto.FoldingRange";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
@@ -804,6 +818,7 @@ pub struct FoldingRangeRegistrationOptions {
 
 impl Json for FoldingRangeRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.FoldingRangeRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -865,6 +880,7 @@ impl HasTextDocumentPosition for DeclarationParams {
 
 impl Json for DeclarationParams {
     const GO_TYPE: &'static str = "lsproto.DeclarationParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -916,6 +932,7 @@ pub struct DeclarationRegistrationOptions {
 
 impl Json for DeclarationRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DeclarationRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -972,6 +989,7 @@ impl HasTextDocumentURI for SelectionRangeParams {
 
 impl Json for SelectionRangeParams {
     const GO_TYPE: &'static str = "lsproto.SelectionRangeParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -1021,6 +1039,7 @@ pub struct SelectionRange {
 
 impl Json for SelectionRange {
     const GO_TYPE: &'static str = "lsproto.SelectionRange";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -1065,6 +1084,7 @@ pub struct SelectionRangeRegistrationOptions {
 
 impl Json for SelectionRangeRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.SelectionRangeRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -1104,6 +1124,7 @@ pub struct WorkDoneProgressCreateParams {
 
 impl Json for WorkDoneProgressCreateParams {
     const GO_TYPE: &'static str = "lsproto.WorkDoneProgressCreateParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -1139,6 +1160,7 @@ pub struct WorkDoneProgressCancelParams {
 
 impl Json for WorkDoneProgressCancelParams {
     const GO_TYPE: &'static str = "lsproto.WorkDoneProgressCancelParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -1195,6 +1217,7 @@ impl HasTextDocumentPosition for CallHierarchyPrepareParams {
 
 impl Json for CallHierarchyPrepareParams {
     const GO_TYPE: &'static str = "lsproto.CallHierarchyPrepareParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -1273,6 +1296,7 @@ impl HasLocation for CallHierarchyItem {
 
 impl Json for CallHierarchyItem {
     const GO_TYPE: &'static str = "lsproto.CallHierarchyItem";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(8);
@@ -1344,6 +1368,7 @@ pub struct CallHierarchyRegistrationOptions {
 
 impl Json for CallHierarchyRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.CallHierarchyRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -1392,6 +1417,7 @@ pub struct CallHierarchyIncomingCallsParams {
 
 impl Json for CallHierarchyIncomingCallsParams {
     const GO_TYPE: &'static str = "lsproto.CallHierarchyIncomingCallsParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -1438,6 +1464,7 @@ pub struct CallHierarchyIncomingCall {
 
 impl Json for CallHierarchyIncomingCall {
     const GO_TYPE: &'static str = "lsproto.CallHierarchyIncomingCall";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -1487,6 +1514,7 @@ pub struct CallHierarchyOutgoingCallsParams {
 
 impl Json for CallHierarchyOutgoingCallsParams {
     const GO_TYPE: &'static str = "lsproto.CallHierarchyOutgoingCallsParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -1534,6 +1562,7 @@ pub struct CallHierarchyOutgoingCall {
 
 impl Json for CallHierarchyOutgoingCall {
     const GO_TYPE: &'static str = "lsproto.CallHierarchyOutgoingCall";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -1588,6 +1617,7 @@ impl HasTextDocumentURI for SemanticTokensParams {
 
 impl Json for SemanticTokensParams {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -1634,6 +1664,7 @@ pub struct SemanticTokens {
 
 impl Json for SemanticTokens {
     const GO_TYPE: &'static str = "lsproto.SemanticTokens";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -1671,6 +1702,7 @@ pub struct SemanticTokensPartialResult {
 
 impl Json for SemanticTokensPartialResult {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensPartialResult";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -1724,6 +1756,7 @@ pub struct SemanticTokensRegistrationOptions {
 
 impl Json for SemanticTokensRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
@@ -1790,6 +1823,7 @@ impl HasTextDocumentURI for SemanticTokensDeltaParams {
 
 impl Json for SemanticTokensDeltaParams {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensDeltaParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -1837,6 +1871,7 @@ pub struct SemanticTokensDelta {
 
 impl Json for SemanticTokensDelta {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensDelta";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -1874,6 +1909,7 @@ pub struct SemanticTokensDeltaPartialResult {
 
 impl Json for SemanticTokensDeltaPartialResult {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensDeltaPartialResult";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -1926,6 +1962,7 @@ impl HasTextDocumentURI for SemanticTokensRangeParams {
 
 impl Json for SemanticTokensRangeParams {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensRangeParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -1990,6 +2027,7 @@ pub struct ShowDocumentParams {
 
 impl Json for ShowDocumentParams {
     const GO_TYPE: &'static str = "lsproto.ShowDocumentParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -2034,6 +2072,7 @@ pub struct ShowDocumentResult {
 
 impl Json for ShowDocumentResult {
     const GO_TYPE: &'static str = "lsproto.ShowDocumentResult";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -2087,6 +2126,7 @@ impl HasTextDocumentPosition for LinkedEditingRangeParams {
 
 impl Json for LinkedEditingRangeParams {
     const GO_TYPE: &'static str = "lsproto.LinkedEditingRangeParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -2138,6 +2178,7 @@ pub struct LinkedEditingRanges {
 
 impl Json for LinkedEditingRanges {
     const GO_TYPE: &'static str = "lsproto.LinkedEditingRanges";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -2182,6 +2223,7 @@ pub struct LinkedEditingRangeRegistrationOptions {
 
 impl Json for LinkedEditingRangeRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.LinkedEditingRangeRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -2225,6 +2267,7 @@ pub struct CreateFilesParams {
 
 impl Json for CreateFilesParams {
     const GO_TYPE: &'static str = "lsproto.CreateFilesParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -2292,6 +2335,7 @@ pub struct WorkspaceEdit {
 
 impl Json for WorkspaceEdit {
     const GO_TYPE: &'static str = "lsproto.WorkspaceEdit";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -2329,6 +2373,7 @@ pub struct FileOperationRegistrationOptions {
 
 impl Json for FileOperationRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.FileOperationRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -2369,6 +2414,7 @@ pub struct RenameFilesParams {
 
 impl Json for RenameFilesParams {
     const GO_TYPE: &'static str = "lsproto.RenameFilesParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -2408,6 +2454,7 @@ pub struct DeleteFilesParams {
 
 impl Json for DeleteFilesParams {
     const GO_TYPE: &'static str = "lsproto.DeleteFilesParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -2465,6 +2512,7 @@ impl HasTextDocumentPosition for MonikerParams {
 
 impl Json for MonikerParams {
     const GO_TYPE: &'static str = "lsproto.MonikerParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -2522,6 +2570,7 @@ pub struct Moniker {
 
 impl Json for Moniker {
     const GO_TYPE: &'static str = "lsproto.Moniker";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -2572,6 +2621,7 @@ pub struct MonikerRegistrationOptions {
 
 impl Json for MonikerRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.MonikerRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -2630,6 +2680,7 @@ impl HasTextDocumentPosition for TypeHierarchyPrepareParams {
 
 impl Json for TypeHierarchyPrepareParams {
     const GO_TYPE: &'static str = "lsproto.TypeHierarchyPrepareParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -2709,6 +2760,7 @@ impl HasLocation for TypeHierarchyItem {
 
 impl Json for TypeHierarchyItem {
     const GO_TYPE: &'static str = "lsproto.TypeHierarchyItem";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(8);
@@ -2780,6 +2832,7 @@ pub struct TypeHierarchyRegistrationOptions {
 
 impl Json for TypeHierarchyRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.TypeHierarchyRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -2828,6 +2881,7 @@ pub struct TypeHierarchySupertypesParams {
 
 impl Json for TypeHierarchySupertypesParams {
     const GO_TYPE: &'static str = "lsproto.TypeHierarchySupertypesParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -2876,6 +2930,7 @@ pub struct TypeHierarchySubtypesParams {
 
 impl Json for TypeHierarchySubtypesParams {
     const GO_TYPE: &'static str = "lsproto.TypeHierarchySubtypesParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -2934,6 +2989,7 @@ impl HasTextDocumentURI for InlineValueParams {
 
 impl Json for InlineValueParams {
     const GO_TYPE: &'static str = "lsproto.InlineValueParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -2991,6 +3047,7 @@ pub struct InlineValueRegistrationOptions {
 
 impl Json for InlineValueRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.InlineValueRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -3045,6 +3102,7 @@ impl HasTextDocumentURI for InlayHintParams {
 
 impl Json for InlayHintParams {
     const GO_TYPE: &'static str = "lsproto.InlayHintParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -3131,6 +3189,7 @@ pub struct InlayHint {
 
 impl Json for InlayHint {
     const GO_TYPE: &'static str = "lsproto.InlayHint";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(8);
@@ -3197,6 +3256,7 @@ pub struct InlayHintRegistrationOptions {
 
 impl Json for InlayHintRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.InlayHintRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -3260,6 +3320,7 @@ impl HasTextDocumentURI for DocumentDiagnosticParams {
 
 impl Json for DocumentDiagnosticParams {
     const GO_TYPE: &'static str = "lsproto.DocumentDiagnosticParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -3305,6 +3366,7 @@ pub struct DiagnosticServerCancellationData {
 
 impl Json for DiagnosticServerCancellationData {
     const GO_TYPE: &'static str = "lsproto.DiagnosticServerCancellationData";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -3363,6 +3425,7 @@ pub struct DiagnosticRegistrationOptions {
 
 impl Json for DiagnosticRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DiagnosticRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
@@ -3428,6 +3491,7 @@ pub struct WorkspaceDiagnosticParams {
 
 impl Json for WorkspaceDiagnosticParams {
     const GO_TYPE: &'static str = "lsproto.WorkspaceDiagnosticParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -3471,6 +3535,7 @@ pub struct WorkspaceDiagnosticReport {
 
 impl Json for WorkspaceDiagnosticReport {
     const GO_TYPE: &'static str = "lsproto.WorkspaceDiagnosticReport";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -3508,6 +3573,7 @@ pub struct WorkspaceDiagnosticReportPartialResult {
 
 impl Json for WorkspaceDiagnosticReportPartialResult {
     const GO_TYPE: &'static str = "lsproto.WorkspaceDiagnosticReportPartialResult";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -3568,6 +3634,7 @@ impl HasTextDocumentPosition for InlineCompletionParams {
 
 impl Json for InlineCompletionParams {
     const GO_TYPE: &'static str = "lsproto.InlineCompletionParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -3618,6 +3685,7 @@ pub struct InlineCompletionList {
 
 impl Json for InlineCompletionList {
     const GO_TYPE: &'static str = "lsproto.InlineCompletionList";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -3665,6 +3733,7 @@ pub struct InlineCompletionItem {
 
 impl Json for InlineCompletionItem {
     const GO_TYPE: &'static str = "lsproto.InlineCompletionItem";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -3716,6 +3785,7 @@ pub struct InlineCompletionRegistrationOptions {
 
 impl Json for InlineCompletionRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.InlineCompletionRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -3758,6 +3828,7 @@ pub struct TextDocumentContentParams {
 
 impl Json for TextDocumentContentParams {
     const GO_TYPE: &'static str = "lsproto.TextDocumentContentParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -3799,6 +3870,7 @@ pub struct TextDocumentContentResult {
 
 impl Json for TextDocumentContentResult {
     const GO_TYPE: &'static str = "lsproto.TextDocumentContentResult";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -3841,6 +3913,7 @@ pub struct TextDocumentContentRegistrationOptions {
 
 impl Json for TextDocumentContentRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.TextDocumentContentRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -3881,6 +3954,7 @@ pub struct TextDocumentContentRefreshParams {
 
 impl Json for TextDocumentContentRefreshParams {
     const GO_TYPE: &'static str = "lsproto.TextDocumentContentRefreshParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -3915,6 +3989,7 @@ pub struct RegistrationParams {
 
 impl Json for RegistrationParams {
     const GO_TYPE: &'static str = "lsproto.RegistrationParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -3949,6 +4024,7 @@ pub struct UnregistrationParams {
 
 impl Json for UnregistrationParams {
     const GO_TYPE: &'static str = "lsproto.UnregistrationParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -4037,6 +4113,7 @@ pub struct InitializeParams {
 
 impl Json for InitializeParams {
     const GO_TYPE: &'static str = "lsproto.InitializeParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(10);
@@ -4102,6 +4179,7 @@ pub struct InitializeResult {
 
 impl Json for InitializeResult {
     const GO_TYPE: &'static str = "lsproto.InitializeResult";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -4144,6 +4222,7 @@ pub struct InitializeError {
 
 impl Json for InitializeError {
     const GO_TYPE: &'static str = "lsproto.InitializeError";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -4177,6 +4256,7 @@ pub struct InitializedParams {
 
 impl Json for InitializedParams {
     const GO_TYPE: &'static str = "lsproto.InitializedParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(0);
@@ -4198,6 +4278,7 @@ pub struct DidChangeConfigurationParams {
 
 impl Json for DidChangeConfigurationParams {
     const GO_TYPE: &'static str = "lsproto.DidChangeConfigurationParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -4232,6 +4313,7 @@ pub struct DidChangeConfigurationRegistrationOptions {
 
 impl Json for DidChangeConfigurationRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DidChangeConfigurationRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -4266,6 +4348,7 @@ pub struct ShowMessageParams {
 
 impl Json for ShowMessageParams {
     const GO_TYPE: &'static str = "lsproto.ShowMessageParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -4312,6 +4395,7 @@ pub struct ShowMessageRequestParams {
 
 impl Json for ShowMessageRequestParams {
     const GO_TYPE: &'static str = "lsproto.ShowMessageRequestParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -4354,6 +4438,7 @@ pub struct MessageActionItem {
 
 impl Json for MessageActionItem {
     const GO_TYPE: &'static str = "lsproto.MessageActionItem";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -4393,6 +4478,7 @@ pub struct LogMessageParams {
 
 impl Json for LogMessageParams {
     const GO_TYPE: &'static str = "lsproto.LogMessageParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -4434,6 +4520,7 @@ pub struct DidOpenTextDocumentParams {
 
 impl Json for DidOpenTextDocumentParams {
     const GO_TYPE: &'static str = "lsproto.DidOpenTextDocumentParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -4471,6 +4558,7 @@ pub struct TextDocumentRegistrationOptions {
 
 impl Json for TextDocumentRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.TextDocumentRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -4522,6 +4610,7 @@ pub struct DidChangeTextDocumentParams {
 
 impl Json for DidChangeTextDocumentParams {
     const GO_TYPE: &'static str = "lsproto.DidChangeTextDocumentParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -4567,6 +4656,7 @@ pub struct TextDocumentChangeRegistrationOptions {
 
 impl Json for TextDocumentChangeRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.TextDocumentChangeRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -4614,6 +4704,7 @@ impl HasTextDocumentURI for DidCloseTextDocumentParams {
 
 impl Json for DidCloseTextDocumentParams {
     const GO_TYPE: &'static str = "lsproto.DidCloseTextDocumentParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -4660,6 +4751,7 @@ impl HasTextDocumentURI for DidSaveTextDocumentParams {
 
 impl Json for DidSaveTextDocumentParams {
     const GO_TYPE: &'static str = "lsproto.DidSaveTextDocumentParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -4702,6 +4794,7 @@ pub struct TextDocumentSaveRegistrationOptions {
 
 impl Json for TextDocumentSaveRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.TextDocumentSaveRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -4749,6 +4842,7 @@ impl HasTextDocumentURI for WillSaveTextDocumentParams {
 
 impl Json for WillSaveTextDocumentParams {
     const GO_TYPE: &'static str = "lsproto.WillSaveTextDocumentParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -4795,6 +4889,7 @@ pub struct TextEdit {
 
 impl Json for TextEdit {
     const GO_TYPE: &'static str = "lsproto.TextEdit";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -4846,6 +4941,7 @@ pub struct DidChangeWatchedFilesParams {
 
 impl Json for DidChangeWatchedFilesParams {
     const GO_TYPE: &'static str = "lsproto.DidChangeWatchedFilesParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -4882,6 +4978,7 @@ pub struct DidChangeWatchedFilesRegistrationOptions {
 
 impl Json for DidChangeWatchedFilesRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DidChangeWatchedFilesRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -4926,6 +5023,7 @@ pub struct PublishDiagnosticsParams {
 
 impl Json for PublishDiagnosticsParams {
     const GO_TYPE: &'static str = "lsproto.PublishDiagnosticsParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -4995,6 +5093,7 @@ impl HasTextDocumentPosition for CompletionParams {
 
 impl Json for CompletionParams {
     const GO_TYPE: &'static str = "lsproto.CompletionParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -5177,6 +5276,7 @@ pub struct CompletionItem {
 
 impl Json for CompletionItem {
     const GO_TYPE: &'static str = "lsproto.CompletionItem";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(19);
@@ -5292,6 +5392,7 @@ pub struct CompletionList {
 
 impl Json for CompletionList {
     const GO_TYPE: &'static str = "lsproto.CompletionList";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -5370,6 +5471,7 @@ pub struct CompletionRegistrationOptions {
 
 impl Json for CompletionRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.CompletionRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
@@ -5437,6 +5539,7 @@ impl HasTextDocumentPosition for HoverParams {
 
 impl Json for HoverParams {
     const GO_TYPE: &'static str = "lsproto.HoverParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -5492,6 +5595,7 @@ pub struct Hover {
 
 impl Json for Hover {
     const GO_TYPE: &'static str = "lsproto.Hover";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -5537,6 +5641,7 @@ pub struct HoverRegistrationOptions {
 
 impl Json for HoverRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.HoverRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -5599,6 +5704,7 @@ impl HasTextDocumentPosition for SignatureHelpParams {
 
 impl Json for SignatureHelpParams {
     const GO_TYPE: &'static str = "lsproto.SignatureHelpParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -5678,6 +5784,7 @@ pub struct SignatureHelp {
 
 impl Json for SignatureHelp {
     const GO_TYPE: &'static str = "lsproto.SignatureHelp";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -5732,6 +5839,7 @@ pub struct SignatureHelpRegistrationOptions {
 
 impl Json for SignatureHelpRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.SignatureHelpRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -5796,6 +5904,7 @@ impl HasTextDocumentPosition for DefinitionParams {
 
 impl Json for DefinitionParams {
     const GO_TYPE: &'static str = "lsproto.DefinitionParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -5844,6 +5953,7 @@ pub struct DefinitionRegistrationOptions {
 
 impl Json for DefinitionRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DefinitionRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -5906,6 +6016,7 @@ impl HasTextDocumentPosition for ReferenceParams {
 
 impl Json for ReferenceParams {
     const GO_TYPE: &'static str = "lsproto.ReferenceParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -5959,6 +6070,7 @@ pub struct ReferenceRegistrationOptions {
 
 impl Json for ReferenceRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.ReferenceRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -6019,6 +6131,7 @@ impl HasTextDocumentPosition for DocumentHighlightParams {
 
 impl Json for DocumentHighlightParams {
     const GO_TYPE: &'static str = "lsproto.DocumentHighlightParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -6069,6 +6182,7 @@ pub struct DocumentHighlight {
 
 impl Json for DocumentHighlight {
     const GO_TYPE: &'static str = "lsproto.DocumentHighlight";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -6110,6 +6224,7 @@ pub struct DocumentHighlightRegistrationOptions {
 
 impl Json for DocumentHighlightRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentHighlightRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -6161,6 +6276,7 @@ impl HasTextDocumentURI for DocumentSymbolParams {
 
 impl Json for DocumentSymbolParams {
     const GO_TYPE: &'static str = "lsproto.DocumentSymbolParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -6232,6 +6348,7 @@ pub struct SymbolInformation {
 
 impl Json for SymbolInformation {
     const GO_TYPE: &'static str = "lsproto.SymbolInformation";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
@@ -6316,6 +6433,7 @@ pub struct DocumentSymbol {
 
 impl Json for DocumentSymbol {
     const GO_TYPE: &'static str = "lsproto.DocumentSymbol";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(8);
@@ -6384,6 +6502,7 @@ pub struct DocumentSymbolRegistrationOptions {
 
 impl Json for DocumentSymbolRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentSymbolRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -6443,6 +6562,7 @@ impl HasTextDocumentURI for CodeActionParams {
 
 impl Json for CodeActionParams {
     const GO_TYPE: &'static str = "lsproto.CodeActionParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -6508,6 +6628,7 @@ pub struct Command {
 
 impl Json for Command {
     const GO_TYPE: &'static str = "lsproto.Command";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -6609,6 +6730,7 @@ pub struct CodeAction {
 
 impl Json for CodeAction {
     const GO_TYPE: &'static str = "lsproto.CodeAction";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(9);
@@ -6692,6 +6814,7 @@ pub struct CodeActionRegistrationOptions {
 
 impl Json for CodeActionRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.CodeActionRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -6753,6 +6876,7 @@ pub struct WorkspaceSymbolParams {
 
 impl Json for WorkspaceSymbolParams {
     const GO_TYPE: &'static str = "lsproto.WorkspaceSymbolParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -6824,6 +6948,7 @@ pub struct WorkspaceSymbol {
 
 impl Json for WorkspaceSymbol {
     const GO_TYPE: &'static str = "lsproto.WorkspaceSymbol";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
@@ -6881,6 +7006,7 @@ pub struct WorkspaceSymbolRegistrationOptions {
 
 impl Json for WorkspaceSymbolRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.WorkspaceSymbolRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -6927,6 +7053,7 @@ impl HasTextDocumentURI for CodeLensParams {
 
 impl Json for CodeLensParams {
     const GO_TYPE: &'static str = "lsproto.CodeLensParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -6978,6 +7105,7 @@ pub struct CodeLens {
 
 impl Json for CodeLens {
     const GO_TYPE: &'static str = "lsproto.CodeLens";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -7024,6 +7152,7 @@ pub struct CodeLensRegistrationOptions {
 
 impl Json for CodeLensRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.CodeLensRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -7077,6 +7206,7 @@ impl HasTextDocumentURI for DocumentLinkParams {
 
 impl Json for DocumentLinkParams {
     const GO_TYPE: &'static str = "lsproto.DocumentLinkParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -7134,6 +7264,7 @@ pub struct DocumentLink {
 
 impl Json for DocumentLink {
     const GO_TYPE: &'static str = "lsproto.DocumentLink";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -7182,6 +7313,7 @@ pub struct DocumentLinkRegistrationOptions {
 
 impl Json for DocumentLinkRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentLinkRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -7234,6 +7366,7 @@ impl HasTextDocumentURI for DocumentFormattingParams {
 
 impl Json for DocumentFormattingParams {
     const GO_TYPE: &'static str = "lsproto.DocumentFormattingParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -7280,6 +7413,7 @@ pub struct DocumentFormattingRegistrationOptions {
 
 impl Json for DocumentFormattingRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentFormattingRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -7333,6 +7467,7 @@ impl HasTextDocumentURI for DocumentRangeFormattingParams {
 
 impl Json for DocumentRangeFormattingParams {
     const GO_TYPE: &'static str = "lsproto.DocumentRangeFormattingParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -7389,6 +7524,7 @@ pub struct DocumentRangeFormattingRegistrationOptions {
 
 impl Json for DocumentRangeFormattingRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentRangeFormattingRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -7446,6 +7582,7 @@ impl HasTextDocumentURI for DocumentRangesFormattingParams {
 
 impl Json for DocumentRangesFormattingParams {
     const GO_TYPE: &'static str = "lsproto.DocumentRangesFormattingParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -7520,6 +7657,7 @@ impl HasTextDocumentPosition for DocumentOnTypeFormattingParams {
 
 impl Json for DocumentOnTypeFormattingParams {
     const GO_TYPE: &'static str = "lsproto.DocumentOnTypeFormattingParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -7578,6 +7716,7 @@ pub struct DocumentOnTypeFormattingRegistrationOptions {
 
 impl Json for DocumentOnTypeFormattingRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentOnTypeFormattingRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -7644,6 +7783,7 @@ impl HasTextDocumentPosition for RenameParams {
 
 impl Json for RenameParams {
     const GO_TYPE: &'static str = "lsproto.RenameParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -7700,6 +7840,7 @@ pub struct RenameRegistrationOptions {
 
 impl Json for RenameRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.RenameRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -7757,6 +7898,7 @@ impl HasTextDocumentPosition for PrepareRenameParams {
 
 impl Json for PrepareRenameParams {
     const GO_TYPE: &'static str = "lsproto.PrepareRenameParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -7806,6 +7948,7 @@ pub struct ExecuteCommandParams {
 
 impl Json for ExecuteCommandParams {
     const GO_TYPE: &'static str = "lsproto.ExecuteCommandParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -7848,6 +7991,7 @@ pub struct ExecuteCommandRegistrationOptions {
 
 impl Json for ExecuteCommandRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.ExecuteCommandRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -7896,6 +8040,7 @@ pub struct ApplyWorkspaceEditParams {
 
 impl Json for ApplyWorkspaceEditParams {
     const GO_TYPE: &'static str = "lsproto.ApplyWorkspaceEditParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -7948,6 +8093,7 @@ pub struct ApplyWorkspaceEditResult {
 
 impl Json for ApplyWorkspaceEditResult {
     const GO_TYPE: &'static str = "lsproto.ApplyWorkspaceEditResult";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -8012,6 +8158,7 @@ pub struct WorkDoneProgressBegin {
 
 impl Json for WorkDoneProgressBegin {
     const GO_TYPE: &'static str = "lsproto.WorkDoneProgressBegin";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -8078,6 +8225,7 @@ pub struct WorkDoneProgressReport {
 
 impl Json for WorkDoneProgressReport {
     const GO_TYPE: &'static str = "lsproto.WorkDoneProgressReport";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -8122,6 +8270,7 @@ pub struct WorkDoneProgressEnd {
 
 impl Json for WorkDoneProgressEnd {
     const GO_TYPE: &'static str = "lsproto.WorkDoneProgressEnd";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -8158,6 +8307,7 @@ pub struct SetTraceParams {
 
 impl Json for SetTraceParams {
     const GO_TYPE: &'static str = "lsproto.SetTraceParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -8194,6 +8344,7 @@ pub struct LogTraceParams {
 
 impl Json for LogTraceParams {
     const GO_TYPE: &'static str = "lsproto.LogTraceParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -8231,6 +8382,7 @@ pub struct CancelParams {
 
 impl Json for CancelParams {
     const GO_TYPE: &'static str = "lsproto.CancelParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -8269,6 +8421,7 @@ pub struct ProgressParams {
 
 impl Json for ProgressParams {
     const GO_TYPE: &'static str = "lsproto.ProgressParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -8326,6 +8479,7 @@ impl HasTextDocumentPosition for TextDocumentPositionParams {
 
 impl Json for TextDocumentPositionParams {
     const GO_TYPE: &'static str = "lsproto.TextDocumentPositionParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -8366,6 +8520,7 @@ pub struct WorkDoneProgressParams {
 
 impl Json for WorkDoneProgressParams {
     const GO_TYPE: &'static str = "lsproto.WorkDoneProgressParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -8397,6 +8552,7 @@ pub struct PartialResultParams {
 
 impl Json for PartialResultParams {
     const GO_TYPE: &'static str = "lsproto.PartialResultParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -8453,6 +8609,7 @@ impl HasLocation for LocationLink {
 
 impl Json for LocationLink {
     const GO_TYPE: &'static str = "lsproto.LocationLink";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -8563,6 +8720,7 @@ pub struct ImplementationOptions {
 
 impl Json for ImplementationOptions {
     const GO_TYPE: &'static str = "lsproto.ImplementationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -8596,6 +8754,7 @@ pub struct StaticRegistrationOptions {
 
 impl Json for StaticRegistrationOptions {
     const GO_TYPE: &'static str = "lsproto.StaticRegistrationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -8625,6 +8784,7 @@ pub struct TypeDefinitionOptions {
 
 impl Json for TypeDefinitionOptions {
     const GO_TYPE: &'static str = "lsproto.TypeDefinitionOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -8659,6 +8819,7 @@ pub struct WorkspaceFoldersChangeEvent {
 
 impl Json for WorkspaceFoldersChangeEvent {
     const GO_TYPE: &'static str = "lsproto.WorkspaceFoldersChangeEvent";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -8702,6 +8863,7 @@ pub struct ConfigurationItem {
 
 impl Json for ConfigurationItem {
     const GO_TYPE: &'static str = "lsproto.ConfigurationItem";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -8829,6 +8991,7 @@ pub struct DocumentColorOptions {
 
 impl Json for DocumentColorOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentColorOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -8858,6 +9021,7 @@ pub struct FoldingRangeOptions {
 
 impl Json for FoldingRangeOptions {
     const GO_TYPE: &'static str = "lsproto.FoldingRangeOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -8887,6 +9051,7 @@ pub struct DeclarationOptions {
 
 impl Json for DeclarationOptions {
     const GO_TYPE: &'static str = "lsproto.DeclarationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -8999,6 +9164,7 @@ pub struct SelectionRangeOptions {
 
 impl Json for SelectionRangeOptions {
     const GO_TYPE: &'static str = "lsproto.SelectionRangeOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -9031,6 +9197,7 @@ pub struct CallHierarchyOptions {
 
 impl Json for CallHierarchyOptions {
     const GO_TYPE: &'static str = "lsproto.CallHierarchyOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -9071,6 +9238,7 @@ pub struct SemanticTokensOptions {
 
 impl Json for SemanticTokensOptions {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -9119,6 +9287,7 @@ pub struct SemanticTokensEdit {
 
 impl Json for SemanticTokensEdit {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensEdit";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -9160,6 +9329,7 @@ pub struct LinkedEditingRangeOptions {
 
 impl Json for LinkedEditingRangeOptions {
     const GO_TYPE: &'static str = "lsproto.LinkedEditingRangeOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -9193,6 +9363,7 @@ pub struct FileCreate {
 
 impl Json for FileCreate {
     const GO_TYPE: &'static str = "lsproto.FileCreate";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -9241,6 +9412,7 @@ pub struct TextDocumentEdit {
 
 impl Json for TextDocumentEdit {
     const GO_TYPE: &'static str = "lsproto.TextDocumentEdit";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -9293,6 +9465,7 @@ pub struct CreateFile {
 
 impl Json for CreateFile {
     const GO_TYPE: &'static str = "lsproto.CreateFile";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -9352,6 +9525,7 @@ pub struct RenameFile {
 
 impl Json for RenameFile {
     const GO_TYPE: &'static str = "lsproto.RenameFile";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -9413,6 +9587,7 @@ pub struct DeleteFile {
 
 impl Json for DeleteFile {
     const GO_TYPE: &'static str = "lsproto.DeleteFile";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -9469,6 +9644,7 @@ pub struct ChangeAnnotation {
 
 impl Json for ChangeAnnotation {
     const GO_TYPE: &'static str = "lsproto.ChangeAnnotation";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -9515,6 +9691,7 @@ pub struct FileOperationFilter {
 
 impl Json for FileOperationFilter {
     const GO_TYPE: &'static str = "lsproto.FileOperationFilter";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -9558,6 +9735,7 @@ pub struct FileRename {
 
 impl Json for FileRename {
     const GO_TYPE: &'static str = "lsproto.FileRename";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -9601,6 +9779,7 @@ pub struct FileDelete {
 
 impl Json for FileDelete {
     const GO_TYPE: &'static str = "lsproto.FileDelete";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -9635,6 +9814,7 @@ pub struct MonikerOptions {
 
 impl Json for MonikerOptions {
     const GO_TYPE: &'static str = "lsproto.MonikerOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -9667,6 +9847,7 @@ pub struct TypeHierarchyOptions {
 
 impl Json for TypeHierarchyOptions {
     const GO_TYPE: &'static str = "lsproto.TypeHierarchyOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -9702,6 +9883,7 @@ pub struct InlineValueContext {
 
 impl Json for InlineValueContext {
     const GO_TYPE: &'static str = "lsproto.InlineValueContext";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -9748,6 +9930,7 @@ pub struct InlineValueText {
 
 impl Json for InlineValueText {
     const GO_TYPE: &'static str = "lsproto.InlineValueText";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -9806,6 +9989,7 @@ pub struct InlineValueVariableLookup {
 
 impl Json for InlineValueVariableLookup {
     const GO_TYPE: &'static str = "lsproto.InlineValueVariableLookup";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -9863,6 +10047,7 @@ pub struct InlineValueEvaluatableExpression {
 
 impl Json for InlineValueEvaluatableExpression {
     const GO_TYPE: &'static str = "lsproto.InlineValueEvaluatableExpression";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -9902,6 +10087,7 @@ pub struct InlineValueOptions {
 
 impl Json for InlineValueOptions {
     const GO_TYPE: &'static str = "lsproto.InlineValueOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -9960,6 +10146,7 @@ pub struct InlayHintLabelPart {
 
 impl Json for InlayHintLabelPart {
     const GO_TYPE: &'static str = "lsproto.InlayHintLabelPart";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -10026,6 +10213,7 @@ pub struct MarkupContent {
 
 impl Json for MarkupContent {
     const GO_TYPE: &'static str = "lsproto.MarkupContent";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -10072,6 +10260,7 @@ pub struct InlayHintOptions {
 
 impl Json for InlayHintOptions {
     const GO_TYPE: &'static str = "lsproto.InlayHintOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -10124,6 +10313,7 @@ pub struct RelatedFullDocumentDiagnosticReport {
 
 impl Json for RelatedFullDocumentDiagnosticReport {
     const GO_TYPE: &'static str = "lsproto.RelatedFullDocumentDiagnosticReport";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -10187,6 +10377,7 @@ pub struct RelatedUnchangedDocumentDiagnosticReport {
 
 impl Json for RelatedUnchangedDocumentDiagnosticReport {
     const GO_TYPE: &'static str = "lsproto.RelatedUnchangedDocumentDiagnosticReport";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -10231,6 +10422,7 @@ pub struct DocumentDiagnosticReportPartialResult {
 
 impl Json for DocumentDiagnosticReportPartialResult {
     const GO_TYPE: &'static str = "lsproto.DocumentDiagnosticReportPartialResult";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -10281,6 +10473,7 @@ pub struct DiagnosticOptions {
 
 impl Json for DiagnosticOptions {
     const GO_TYPE: &'static str = "lsproto.DiagnosticOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -10384,6 +10577,7 @@ pub struct TextDocumentItem {
 
 impl Json for TextDocumentItem {
     const GO_TYPE: &'static str = "lsproto.TextDocumentItem";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -10440,6 +10634,7 @@ pub struct InlineCompletionContext {
 
 impl Json for InlineCompletionContext {
     const GO_TYPE: &'static str = "lsproto.InlineCompletionContext";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -10489,6 +10684,7 @@ pub struct StringValue {
 
 impl Json for StringValue {
     const GO_TYPE: &'static str = "lsproto.StringValue";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -10531,6 +10727,7 @@ pub struct InlineCompletionOptions {
 
 impl Json for InlineCompletionOptions {
     const GO_TYPE: &'static str = "lsproto.InlineCompletionOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -10564,6 +10761,7 @@ pub struct TextDocumentContentOptions {
 
 impl Json for TextDocumentContentOptions {
     const GO_TYPE: &'static str = "lsproto.TextDocumentContentOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -10713,6 +10911,7 @@ impl RegisterOptions {
 
 impl Json for Registration {
     const GO_TYPE: &'static str = "lsproto.Registration";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let Some(register_options) = &self.register_options else {
@@ -10871,148 +11070,148 @@ impl Json for Registration {
             let mut register_options = RegisterOptions::default();
             match Method::from_str(&method) {
                 Method::TextDocumentImplementation => {
-                    register_options.text_document_implementation = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_implementation = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentTypeDefinition => {
-                    register_options.text_document_type_definition = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_type_definition = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentDocumentColor => {
-                    register_options.text_document_document_color = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_document_color = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentColorPresentation => {
-                    register_options.text_document_color_presentation = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_color_presentation = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentFoldingRange => {
-                    register_options.text_document_folding_range = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_folding_range = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentDeclaration => {
-                    register_options.text_document_declaration = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_declaration = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentSelectionRange => {
-                    register_options.text_document_selection_range = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_selection_range = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentPrepareCallHierarchy => {
-                    register_options.text_document_prepare_call_hierarchy = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_prepare_call_hierarchy = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentSemanticTokens => {
-                    register_options.text_document_semantic_tokens = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_semantic_tokens = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentLinkedEditingRange => {
-                    register_options.text_document_linked_editing_range = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_linked_editing_range = arm_buffered(raw_register_options)?;
                 }
                 Method::WorkspaceWillCreateFiles => {
-                    register_options.workspace_will_create_files = Some(Json::from_json(raw_register_options)?);
+                    register_options.workspace_will_create_files = arm_buffered(raw_register_options)?;
                 }
                 Method::WorkspaceWillRenameFiles => {
-                    register_options.workspace_will_rename_files = Some(Json::from_json(raw_register_options)?);
+                    register_options.workspace_will_rename_files = arm_buffered(raw_register_options)?;
                 }
                 Method::WorkspaceWillDeleteFiles => {
-                    register_options.workspace_will_delete_files = Some(Json::from_json(raw_register_options)?);
+                    register_options.workspace_will_delete_files = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentMoniker => {
-                    register_options.text_document_moniker = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_moniker = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentPrepareTypeHierarchy => {
-                    register_options.text_document_prepare_type_hierarchy = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_prepare_type_hierarchy = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentInlineValue => {
-                    register_options.text_document_inline_value = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_inline_value = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentInlayHint => {
-                    register_options.text_document_inlay_hint = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_inlay_hint = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentDiagnostic => {
-                    register_options.text_document_diagnostic = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_diagnostic = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentInlineCompletion => {
-                    register_options.text_document_inline_completion = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_inline_completion = arm_buffered(raw_register_options)?;
                 }
                 Method::WorkspaceTextDocumentContent => {
-                    register_options.workspace_text_document_content = Some(Json::from_json(raw_register_options)?);
+                    register_options.workspace_text_document_content = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentWillSaveWaitUntil => {
-                    register_options.text_document_will_save_wait_until = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_will_save_wait_until = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentCompletion => {
-                    register_options.text_document_completion = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_completion = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentHover => {
-                    register_options.text_document_hover = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_hover = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentSignatureHelp => {
-                    register_options.text_document_signature_help = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_signature_help = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentDefinition => {
-                    register_options.text_document_definition = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_definition = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentReferences => {
-                    register_options.text_document_references = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_references = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentDocumentHighlight => {
-                    register_options.text_document_document_highlight = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_document_highlight = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentDocumentSymbol => {
-                    register_options.text_document_document_symbol = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_document_symbol = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentCodeAction => {
-                    register_options.text_document_code_action = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_code_action = arm_buffered(raw_register_options)?;
                 }
                 Method::WorkspaceSymbol => {
-                    register_options.workspace_symbol = Some(Json::from_json(raw_register_options)?);
+                    register_options.workspace_symbol = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentCodeLens => {
-                    register_options.text_document_code_lens = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_code_lens = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentDocumentLink => {
-                    register_options.text_document_document_link = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_document_link = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentFormatting => {
-                    register_options.text_document_formatting = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_formatting = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentRangeFormatting => {
-                    register_options.text_document_range_formatting = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_range_formatting = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentRangesFormatting => {
-                    register_options.text_document_ranges_formatting = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_ranges_formatting = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentOnTypeFormatting => {
-                    register_options.text_document_on_type_formatting = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_on_type_formatting = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentRename => {
-                    register_options.text_document_rename = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_rename = arm_buffered(raw_register_options)?;
                 }
                 Method::WorkspaceExecuteCommand => {
-                    register_options.workspace_execute_command = Some(Json::from_json(raw_register_options)?);
+                    register_options.workspace_execute_command = arm_buffered(raw_register_options)?;
                 }
                 Method::WorkspaceDidCreateFiles => {
-                    register_options.workspace_did_create_files = Some(Json::from_json(raw_register_options)?);
+                    register_options.workspace_did_create_files = arm_buffered(raw_register_options)?;
                 }
                 Method::WorkspaceDidRenameFiles => {
-                    register_options.workspace_did_rename_files = Some(Json::from_json(raw_register_options)?);
+                    register_options.workspace_did_rename_files = arm_buffered(raw_register_options)?;
                 }
                 Method::WorkspaceDidDeleteFiles => {
-                    register_options.workspace_did_delete_files = Some(Json::from_json(raw_register_options)?);
+                    register_options.workspace_did_delete_files = arm_buffered(raw_register_options)?;
                 }
                 Method::WorkspaceDidChangeConfiguration => {
-                    register_options.workspace_did_change_configuration = Some(Json::from_json(raw_register_options)?);
+                    register_options.workspace_did_change_configuration = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentDidOpen => {
-                    register_options.text_document_did_open = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_did_open = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentDidChange => {
-                    register_options.text_document_did_change = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_did_change = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentDidClose => {
-                    register_options.text_document_did_close = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_did_close = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentDidSave => {
-                    register_options.text_document_did_save = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_did_save = arm_buffered(raw_register_options)?;
                 }
                 Method::TextDocumentWillSave => {
-                    register_options.text_document_will_save = Some(Json::from_json(raw_register_options)?);
+                    register_options.text_document_will_save = arm_buffered(raw_register_options)?;
                 }
                 Method::WorkspaceDidChangeWatchedFiles => {
-                    register_options.workspace_did_change_watched_files = Some(Json::from_json(raw_register_options)?);
+                    register_options.workspace_did_change_watched_files = arm_buffered(raw_register_options)?;
                 }
                 _ => {
                     return Err(JsonError::method(Self::GO_TYPE, format!("unknown registration method: {method}")));
@@ -11040,6 +11239,7 @@ pub struct Unregistration {
 
 impl Json for Unregistration {
     const GO_TYPE: &'static str = "lsproto.Unregistration";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -11086,6 +11286,7 @@ pub struct WorkspaceFoldersInitializeParams {
 
 impl Json for WorkspaceFoldersInitializeParams {
     const GO_TYPE: &'static str = "lsproto.WorkspaceFoldersInitializeParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -11258,6 +11459,7 @@ pub struct ServerCapabilities {
 
 impl Json for ServerCapabilities {
     const GO_TYPE: &'static str = "lsproto.ServerCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(37);
@@ -11368,6 +11570,7 @@ pub struct ServerInfo {
 
 impl Json for ServerInfo {
     const GO_TYPE: &'static str = "lsproto.ServerInfo";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -11450,6 +11653,7 @@ pub struct SaveOptions {
 
 impl Json for SaveOptions {
     const GO_TYPE: &'static str = "lsproto.SaveOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -11484,6 +11688,7 @@ pub struct FileEvent {
 
 impl Json for FileEvent {
     const GO_TYPE: &'static str = "lsproto.FileEvent";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -11531,6 +11736,7 @@ pub struct FileSystemWatcher {
 
 impl Json for FileSystemWatcher {
     const GO_TYPE: &'static str = "lsproto.FileSystemWatcher";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -11610,6 +11816,7 @@ pub struct Diagnostic {
 
 impl Json for Diagnostic {
     const GO_TYPE: &'static str = "lsproto.Diagnostic";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(9);
@@ -11669,6 +11876,7 @@ pub struct CompletionContext {
 
 impl Json for CompletionContext {
     const GO_TYPE: &'static str = "lsproto.CompletionContext";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -11714,6 +11922,7 @@ pub struct CompletionItemLabelDetails {
 
 impl Json for CompletionItemLabelDetails {
     const GO_TYPE: &'static str = "lsproto.CompletionItemLabelDetails";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -11755,6 +11964,7 @@ pub struct InsertReplaceEdit {
 
 impl Json for InsertReplaceEdit {
     const GO_TYPE: &'static str = "lsproto.InsertReplaceEdit";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -11837,6 +12047,7 @@ pub struct CompletionItemDefaults {
 
 impl Json for CompletionItemDefaults {
     const GO_TYPE: &'static str = "lsproto.CompletionItemDefaults";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -11930,6 +12141,7 @@ pub struct CompletionItemApplyKinds {
 
 impl Json for CompletionItemApplyKinds {
     const GO_TYPE: &'static str = "lsproto.CompletionItemApplyKinds";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -11992,6 +12204,7 @@ pub struct CompletionOptions {
 
 impl Json for CompletionOptions {
     const GO_TYPE: &'static str = "lsproto.CompletionOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -12030,6 +12243,7 @@ pub struct HoverOptions {
 
 impl Json for HoverOptions {
     const GO_TYPE: &'static str = "lsproto.HoverOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -12080,6 +12294,7 @@ pub struct SignatureHelpContext {
 
 impl Json for SignatureHelpContext {
     const GO_TYPE: &'static str = "lsproto.SignatureHelpContext";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -12151,6 +12366,7 @@ pub struct SignatureInformation {
 
 impl Json for SignatureInformation {
     const GO_TYPE: &'static str = "lsproto.SignatureInformation";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -12205,6 +12421,7 @@ pub struct SignatureHelpOptions {
 
 impl Json for SignatureHelpOptions {
     const GO_TYPE: &'static str = "lsproto.SignatureHelpOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -12239,6 +12456,7 @@ pub struct DefinitionOptions {
 
 impl Json for DefinitionOptions {
     const GO_TYPE: &'static str = "lsproto.DefinitionOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -12271,6 +12489,7 @@ pub struct ReferenceContext {
 
 impl Json for ReferenceContext {
     const GO_TYPE: &'static str = "lsproto.ReferenceContext";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -12306,6 +12525,7 @@ pub struct ReferenceOptions {
 
 impl Json for ReferenceOptions {
     const GO_TYPE: &'static str = "lsproto.ReferenceOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -12336,6 +12556,7 @@ pub struct DocumentHighlightOptions {
 
 impl Json for DocumentHighlightOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentHighlightOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -12381,6 +12602,7 @@ pub struct BaseSymbolInformation {
 
 impl Json for BaseSymbolInformation {
     const GO_TYPE: &'static str = "lsproto.BaseSymbolInformation";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -12431,6 +12653,7 @@ pub struct DocumentSymbolOptions {
 
 impl Json for DocumentSymbolOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentSymbolOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -12480,6 +12703,7 @@ pub struct CodeActionContext {
 
 impl Json for CodeActionContext {
     const GO_TYPE: &'static str = "lsproto.CodeActionContext";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -12524,6 +12748,7 @@ pub struct CodeActionDisabled {
 
 impl Json for CodeActionDisabled {
     const GO_TYPE: &'static str = "lsproto.CodeActionDisabled";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -12587,6 +12812,7 @@ pub struct CodeActionOptions {
 
 impl Json for CodeActionOptions {
     const GO_TYPE: &'static str = "lsproto.CodeActionOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -12625,6 +12851,7 @@ pub struct LocationUriOnly {
 
 impl Json for LocationUriOnly {
     const GO_TYPE: &'static str = "lsproto.LocationUriOnly";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -12666,6 +12893,7 @@ pub struct WorkspaceSymbolOptions {
 
 impl Json for WorkspaceSymbolOptions {
     const GO_TYPE: &'static str = "lsproto.WorkspaceSymbolOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -12701,6 +12929,7 @@ pub struct CodeLensOptions {
 
 impl Json for CodeLensOptions {
     const GO_TYPE: &'static str = "lsproto.CodeLensOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -12736,6 +12965,7 @@ pub struct DocumentLinkOptions {
 
 impl Json for DocumentLinkOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentLinkOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -12787,6 +13017,7 @@ pub struct FormattingOptions {
 
 impl Json for FormattingOptions {
     const GO_TYPE: &'static str = "lsproto.FormattingOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -12833,6 +13064,7 @@ pub struct DocumentFormattingOptions {
 
 impl Json for DocumentFormattingOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentFormattingOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -12868,6 +13100,7 @@ pub struct DocumentRangeFormattingOptions {
 
 impl Json for DocumentRangeFormattingOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentRangeFormattingOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -12904,6 +13137,7 @@ pub struct DocumentOnTypeFormattingOptions {
 
 impl Json for DocumentOnTypeFormattingOptions {
     const GO_TYPE: &'static str = "lsproto.DocumentOnTypeFormattingOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -12946,6 +13180,7 @@ pub struct RenameOptions {
 
 impl Json for RenameOptions {
     const GO_TYPE: &'static str = "lsproto.RenameOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -12980,6 +13215,7 @@ pub struct PrepareRenamePlaceholder {
 
 impl Json for PrepareRenamePlaceholder {
     const GO_TYPE: &'static str = "lsproto.PrepareRenamePlaceholder";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -13020,6 +13256,7 @@ pub struct PrepareRenameDefaultBehavior {
 
 impl Json for PrepareRenameDefaultBehavior {
     const GO_TYPE: &'static str = "lsproto.PrepareRenameDefaultBehavior";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -13058,6 +13295,7 @@ pub struct ExecuteCommandOptions {
 
 impl Json for ExecuteCommandOptions {
     const GO_TYPE: &'static str = "lsproto.ExecuteCommandOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -13098,6 +13336,7 @@ pub struct WorkspaceEditMetadata {
 
 impl Json for WorkspaceEditMetadata {
     const GO_TYPE: &'static str = "lsproto.WorkspaceEditMetadata";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -13127,6 +13366,7 @@ pub struct WorkDoneProgressOptions {
 
 impl Json for WorkDoneProgressOptions {
     const GO_TYPE: &'static str = "lsproto.WorkDoneProgressOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -13161,6 +13401,7 @@ pub struct SemanticTokensLegend {
 
 impl Json for SemanticTokensLegend {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensLegend";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -13204,6 +13445,7 @@ pub struct SemanticTokensFullDelta {
 
 impl Json for SemanticTokensFullDelta {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensFullDelta";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -13293,6 +13535,7 @@ pub struct AnnotatedTextEdit {
 
 impl Json for AnnotatedTextEdit {
     const GO_TYPE: &'static str = "lsproto.AnnotatedTextEdit";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -13347,6 +13590,7 @@ pub struct SnippetTextEdit {
 
 impl Json for SnippetTextEdit {
     const GO_TYPE: &'static str = "lsproto.SnippetTextEdit";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -13395,6 +13639,7 @@ pub struct ResourceOperation {
 
 impl Json for ResourceOperation {
     const GO_TYPE: &'static str = "lsproto.ResourceOperation";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -13436,6 +13681,7 @@ pub struct CreateFileOptions {
 
 impl Json for CreateFileOptions {
     const GO_TYPE: &'static str = "lsproto.CreateFileOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -13472,6 +13718,7 @@ pub struct RenameFileOptions {
 
 impl Json for RenameFileOptions {
     const GO_TYPE: &'static str = "lsproto.RenameFileOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -13508,6 +13755,7 @@ pub struct DeleteFileOptions {
 
 impl Json for DeleteFileOptions {
     const GO_TYPE: &'static str = "lsproto.DeleteFileOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -13558,6 +13806,7 @@ pub struct FileOperationPattern {
 
 impl Json for FileOperationPattern {
     const GO_TYPE: &'static str = "lsproto.FileOperationPattern";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -13608,6 +13857,7 @@ pub struct FullDocumentDiagnosticReport {
 
 impl Json for FullDocumentDiagnosticReport {
     const GO_TYPE: &'static str = "lsproto.FullDocumentDiagnosticReport";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -13661,6 +13911,7 @@ pub struct UnchangedDocumentDiagnosticReport {
 
 impl Json for UnchangedDocumentDiagnosticReport {
     const GO_TYPE: &'static str = "lsproto.UnchangedDocumentDiagnosticReport";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -13719,6 +13970,7 @@ pub struct WorkspaceFullDocumentDiagnosticReport {
 
 impl Json for WorkspaceFullDocumentDiagnosticReport {
     const GO_TYPE: &'static str = "lsproto.WorkspaceFullDocumentDiagnosticReport";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -13788,6 +14040,7 @@ pub struct WorkspaceUnchangedDocumentDiagnosticReport {
 
 impl Json for WorkspaceUnchangedDocumentDiagnosticReport {
     const GO_TYPE: &'static str = "lsproto.WorkspaceUnchangedDocumentDiagnosticReport";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -13844,6 +14097,7 @@ pub struct SelectedCompletionInfo {
 
 impl Json for SelectedCompletionInfo {
     const GO_TYPE: &'static str = "lsproto.SelectedCompletionInfo";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -13892,6 +14146,7 @@ pub struct ClientInfo {
 
 impl Json for ClientInfo {
     const GO_TYPE: &'static str = "lsproto.ClientInfo";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -13959,6 +14214,7 @@ pub struct ClientCapabilities {
 
 impl Json for ClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.ClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(10);
@@ -14024,6 +14280,7 @@ pub struct TextDocumentSyncOptions {
 
 impl Json for TextDocumentSyncOptions {
     const GO_TYPE: &'static str = "lsproto.TextDocumentSyncOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -14077,6 +14334,7 @@ pub struct WorkspaceOptions {
 
 impl Json for WorkspaceOptions {
     const GO_TYPE: &'static str = "lsproto.WorkspaceOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -14120,6 +14378,7 @@ pub struct TextDocumentContentChangePartial {
 
 impl Json for TextDocumentContentChangePartial {
     const GO_TYPE: &'static str = "lsproto.TextDocumentContentChangePartial";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -14163,6 +14422,7 @@ pub struct TextDocumentContentChangeWholeDocument {
 
 impl Json for TextDocumentContentChangeWholeDocument {
     const GO_TYPE: &'static str = "lsproto.TextDocumentContentChangeWholeDocument";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -14201,6 +14461,7 @@ pub struct CodeDescription {
 
 impl Json for CodeDescription {
     const GO_TYPE: &'static str = "lsproto.CodeDescription";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -14242,6 +14503,7 @@ pub struct DiagnosticRelatedInformation {
 
 impl Json for DiagnosticRelatedInformation {
     const GO_TYPE: &'static str = "lsproto.DiagnosticRelatedInformation";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -14286,6 +14548,7 @@ pub struct EditRangeWithInsertReplace {
 
 impl Json for EditRangeWithInsertReplace {
     const GO_TYPE: &'static str = "lsproto.EditRangeWithInsertReplace";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -14331,6 +14594,7 @@ pub struct ServerCompletionItemOptions {
 
 impl Json for ServerCompletionItemOptions {
     const GO_TYPE: &'static str = "lsproto.ServerCompletionItemOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -14365,6 +14629,7 @@ pub struct MarkedStringWithLanguage {
 
 impl Json for MarkedStringWithLanguage {
     const GO_TYPE: &'static str = "lsproto.MarkedStringWithLanguage";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -14422,6 +14687,7 @@ pub struct ParameterInformation {
 
 impl Json for ParameterInformation {
     const GO_TYPE: &'static str = "lsproto.ParameterInformation";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -14471,6 +14737,7 @@ pub struct CodeActionKindDocumentation {
 
 impl Json for CodeActionKindDocumentation {
     const GO_TYPE: &'static str = "lsproto.CodeActionKindDocumentation";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -14514,6 +14781,7 @@ pub struct FileOperationPatternOptions {
 
 impl Json for FileOperationPatternOptions {
     const GO_TYPE: &'static str = "lsproto.FileOperationPatternOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -14617,6 +14885,7 @@ pub struct WorkspaceClientCapabilities {
 
 impl Json for WorkspaceClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.WorkspaceClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(16);
@@ -14804,6 +15073,7 @@ pub struct TextDocumentClientCapabilities {
 
 impl Json for TextDocumentClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.TextDocumentClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(32);
@@ -14914,6 +15184,7 @@ pub struct WindowClientCapabilities {
 
 impl Json for WindowClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.WindowClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -14986,6 +15257,7 @@ pub struct GeneralClientCapabilities {
 
 impl Json for GeneralClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.GeneralClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -15031,6 +15303,7 @@ pub struct WorkspaceFoldersServerCapabilities {
 
 impl Json for WorkspaceFoldersServerCapabilities {
     const GO_TYPE: &'static str = "lsproto.WorkspaceFoldersServerCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -15081,6 +15354,7 @@ pub struct FileOperationOptions {
 
 impl Json for FileOperationOptions {
     const GO_TYPE: &'static str = "lsproto.FileOperationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
@@ -15130,6 +15404,7 @@ pub struct RelativePattern {
 
 impl Json for RelativePattern {
     const GO_TYPE: &'static str = "lsproto.RelativePattern";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -15207,6 +15482,7 @@ pub struct WorkspaceEditClientCapabilities {
 
 impl Json for WorkspaceEditClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.WorkspaceEditClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(7);
@@ -15249,6 +15525,7 @@ pub struct DidChangeConfigurationClientCapabilities {
 
 impl Json for DidChangeConfigurationClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DidChangeConfigurationClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -15287,6 +15564,7 @@ pub struct DidChangeWatchedFilesClientCapabilities {
 
 impl Json for DidChangeWatchedFilesClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DidChangeWatchedFilesClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -15336,6 +15614,7 @@ pub struct WorkspaceSymbolClientCapabilities {
 
 impl Json for WorkspaceSymbolClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.WorkspaceSymbolClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -15373,6 +15652,7 @@ pub struct ExecuteCommandClientCapabilities {
 
 impl Json for ExecuteCommandClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.ExecuteCommandClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -15410,6 +15690,7 @@ pub struct SemanticTokensWorkspaceClientCapabilities {
 
 impl Json for SemanticTokensWorkspaceClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensWorkspaceClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -15447,6 +15728,7 @@ pub struct CodeLensWorkspaceClientCapabilities {
 
 impl Json for CodeLensWorkspaceClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.CodeLensWorkspaceClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -15501,6 +15783,7 @@ pub struct FileOperationClientCapabilities {
 
 impl Json for FileOperationClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.FileOperationClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(7);
@@ -15552,6 +15835,7 @@ pub struct InlineValueWorkspaceClientCapabilities {
 
 impl Json for InlineValueWorkspaceClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.InlineValueWorkspaceClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -15591,6 +15875,7 @@ pub struct InlayHintWorkspaceClientCapabilities {
 
 impl Json for InlayHintWorkspaceClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.InlayHintWorkspaceClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -15630,6 +15915,7 @@ pub struct DiagnosticWorkspaceClientCapabilities {
 
 impl Json for DiagnosticWorkspaceClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DiagnosticWorkspaceClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -15671,6 +15957,7 @@ pub struct FoldingRangeWorkspaceClientCapabilities {
 
 impl Json for FoldingRangeWorkspaceClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.FoldingRangeWorkspaceClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -15704,6 +15991,7 @@ pub struct TextDocumentContentClientCapabilities {
 
 impl Json for TextDocumentContentClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.TextDocumentContentClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -15745,6 +16033,7 @@ pub struct TextDocumentSyncClientCapabilities {
 
 impl Json for TextDocumentSyncClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.TextDocumentSyncClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -15783,6 +16072,7 @@ pub struct TextDocumentFilterClientCapabilities {
 
 impl Json for TextDocumentFilterClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.TextDocumentFilterClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -15838,6 +16128,7 @@ pub struct CompletionClientCapabilities {
 
 impl Json for CompletionClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.CompletionClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
@@ -15882,6 +16173,7 @@ pub struct HoverClientCapabilities {
 
 impl Json for HoverClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.HoverClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -15927,6 +16219,7 @@ pub struct SignatureHelpClientCapabilities {
 
 impl Json for SignatureHelpClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.SignatureHelpClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -15967,6 +16260,7 @@ pub struct DeclarationClientCapabilities {
 
 impl Json for DeclarationClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DeclarationClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -16005,6 +16299,7 @@ pub struct DefinitionClientCapabilities {
 
 impl Json for DefinitionClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DefinitionClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -16045,6 +16340,7 @@ pub struct TypeDefinitionClientCapabilities {
 
 impl Json for TypeDefinitionClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.TypeDefinitionClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -16085,6 +16381,7 @@ pub struct ImplementationClientCapabilities {
 
 impl Json for ImplementationClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.ImplementationClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -16118,6 +16415,7 @@ pub struct ReferenceClientCapabilities {
 
 impl Json for ReferenceClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.ReferenceClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -16149,6 +16447,7 @@ pub struct DocumentHighlightClientCapabilities {
 
 impl Json for DocumentHighlightClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DocumentHighlightClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -16200,6 +16499,7 @@ pub struct DocumentSymbolClientCapabilities {
 
 impl Json for DocumentSymbolClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DocumentSymbolClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -16290,6 +16590,7 @@ pub struct CodeActionClientCapabilities {
 
 impl Json for CodeActionClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.CodeActionClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(9);
@@ -16343,6 +16644,7 @@ pub struct CodeLensClientCapabilities {
 
 impl Json for CodeLensClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.CodeLensClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -16381,6 +16683,7 @@ pub struct DocumentLinkClientCapabilities {
 
 impl Json for DocumentLinkClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DocumentLinkClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -16415,6 +16718,7 @@ pub struct DocumentColorClientCapabilities {
 
 impl Json for DocumentColorClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DocumentColorClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -16446,6 +16750,7 @@ pub struct DocumentFormattingClientCapabilities {
 
 impl Json for DocumentFormattingClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DocumentFormattingClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -16482,6 +16787,7 @@ pub struct DocumentRangeFormattingClientCapabilities {
 
 impl Json for DocumentRangeFormattingClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DocumentRangeFormattingClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -16515,6 +16821,7 @@ pub struct DocumentOnTypeFormattingClientCapabilities {
 
 impl Json for DocumentOnTypeFormattingClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DocumentOnTypeFormattingClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -16568,6 +16875,7 @@ pub struct RenameClientCapabilities {
 
 impl Json for RenameClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.RenameClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -16627,6 +16935,7 @@ pub struct FoldingRangeClientCapabilities {
 
 impl Json for FoldingRangeClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.FoldingRangeClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -16667,6 +16976,7 @@ pub struct SelectionRangeClientCapabilities {
 
 impl Json for SelectionRangeClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.SelectionRangeClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -16722,6 +17032,7 @@ pub struct PublishDiagnosticsClientCapabilities {
 
 impl Json for PublishDiagnosticsClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.PublishDiagnosticsClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -16763,6 +17074,7 @@ pub struct CallHierarchyClientCapabilities {
 
 impl Json for CallHierarchyClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.CallHierarchyClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -16841,6 +17153,7 @@ pub struct SemanticTokensClientCapabilities {
 
 impl Json for SemanticTokensClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.SemanticTokensClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(9);
@@ -16906,6 +17219,7 @@ pub struct LinkedEditingRangeClientCapabilities {
 
 impl Json for LinkedEditingRangeClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.LinkedEditingRangeClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -16941,6 +17255,7 @@ pub struct MonikerClientCapabilities {
 
 impl Json for MonikerClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.MonikerClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -16974,6 +17289,7 @@ pub struct TypeHierarchyClientCapabilities {
 
 impl Json for TypeHierarchyClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.TypeHierarchyClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -17007,6 +17323,7 @@ pub struct InlineValueClientCapabilities {
 
 impl Json for InlineValueClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.InlineValueClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -17044,6 +17361,7 @@ pub struct InlayHintClientCapabilities {
 
 impl Json for InlayHintClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.InlayHintClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -17110,6 +17428,7 @@ pub struct DiagnosticClientCapabilities {
 
 impl Json for DiagnosticClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.DiagnosticClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(7);
@@ -17155,6 +17474,7 @@ pub struct InlineCompletionClientCapabilities {
 
 impl Json for InlineCompletionClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.InlineCompletionClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -17186,6 +17506,7 @@ pub struct ShowMessageRequestClientCapabilities {
 
 impl Json for ShowMessageRequestClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.ShowMessageRequestClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -17220,6 +17541,7 @@ pub struct ShowDocumentClientCapabilities {
 
 impl Json for ShowDocumentClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.ShowDocumentClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -17261,6 +17583,7 @@ pub struct StaleRequestSupportOptions {
 
 impl Json for StaleRequestSupportOptions {
     const GO_TYPE: &'static str = "lsproto.StaleRequestSupportOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -17307,6 +17630,7 @@ pub struct RegularExpressionsClientCapabilities {
 
 impl Json for RegularExpressionsClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.RegularExpressionsClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -17356,6 +17680,7 @@ pub struct MarkdownClientCapabilities {
 
 impl Json for MarkdownClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.MarkdownClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -17408,6 +17733,7 @@ pub struct TextDocumentFilterLanguage {
 
 impl Json for TextDocumentFilterLanguage {
     const GO_TYPE: &'static str = "lsproto.TextDocumentFilterLanguage";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -17460,6 +17786,7 @@ pub struct TextDocumentFilterScheme {
 
 impl Json for TextDocumentFilterScheme {
     const GO_TYPE: &'static str = "lsproto.TextDocumentFilterScheme";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -17512,6 +17839,7 @@ pub struct TextDocumentFilterPattern {
 
 impl Json for TextDocumentFilterPattern {
     const GO_TYPE: &'static str = "lsproto.TextDocumentFilterPattern";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -17554,6 +17882,7 @@ pub struct ChangeAnnotationsSupportOptions {
 
 impl Json for ChangeAnnotationsSupportOptions {
     const GO_TYPE: &'static str = "lsproto.ChangeAnnotationsSupportOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -17592,6 +17921,7 @@ pub struct ClientSymbolKindOptions {
 
 impl Json for ClientSymbolKindOptions {
     const GO_TYPE: &'static str = "lsproto.ClientSymbolKindOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -17623,6 +17953,7 @@ pub struct ClientSymbolTagOptions {
 
 impl Json for ClientSymbolTagOptions {
     const GO_TYPE: &'static str = "lsproto.ClientSymbolTagOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -17660,6 +17991,7 @@ pub struct ClientSymbolResolveOptions {
 
 impl Json for ClientSymbolResolveOptions {
     const GO_TYPE: &'static str = "lsproto.ClientSymbolResolveOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -17748,6 +18080,7 @@ pub struct ClientCompletionItemOptions {
 
 impl Json for ClientCompletionItemOptions {
     const GO_TYPE: &'static str = "lsproto.ClientCompletionItemOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(10);
@@ -17804,6 +18137,7 @@ pub struct ClientCompletionItemOptionsKind {
 
 impl Json for ClientCompletionItemOptionsKind {
     const GO_TYPE: &'static str = "lsproto.ClientCompletionItemOptionsKind";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -17858,6 +18192,7 @@ pub struct CompletionListCapabilities {
 
 impl Json for CompletionListCapabilities {
     const GO_TYPE: &'static str = "lsproto.CompletionListCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -17908,6 +18243,7 @@ pub struct ClientSignatureInformationOptions {
 
 impl Json for ClientSignatureInformationOptions {
     const GO_TYPE: &'static str = "lsproto.ClientSignatureInformationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -17946,6 +18282,7 @@ pub struct ClientCodeActionLiteralOptions {
 
 impl Json for ClientCodeActionLiteralOptions {
     const GO_TYPE: &'static str = "lsproto.ClientCodeActionLiteralOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -17982,6 +18319,7 @@ pub struct ClientCodeActionResolveOptions {
 
 impl Json for ClientCodeActionResolveOptions {
     const GO_TYPE: &'static str = "lsproto.ClientCodeActionResolveOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18018,6 +18356,7 @@ pub struct CodeActionTagOptions {
 
 impl Json for CodeActionTagOptions {
     const GO_TYPE: &'static str = "lsproto.CodeActionTagOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18054,6 +18393,7 @@ pub struct ClientCodeLensResolveOptions {
 
 impl Json for ClientCodeLensResolveOptions {
     const GO_TYPE: &'static str = "lsproto.ClientCodeLensResolveOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18093,6 +18433,7 @@ pub struct ClientFoldingRangeKindOptions {
 
 impl Json for ClientFoldingRangeKindOptions {
     const GO_TYPE: &'static str = "lsproto.ClientFoldingRangeKindOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18127,6 +18468,7 @@ pub struct ClientFoldingRangeOptions {
 
 impl Json for ClientFoldingRangeOptions {
     const GO_TYPE: &'static str = "lsproto.ClientFoldingRangeOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18176,6 +18518,7 @@ pub struct DiagnosticsCapabilities {
 
 impl Json for DiagnosticsCapabilities {
     const GO_TYPE: &'static str = "lsproto.DiagnosticsCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -18218,6 +18561,7 @@ pub struct ClientSemanticTokensRequestOptions {
 
 impl Json for ClientSemanticTokensRequestOptions {
     const GO_TYPE: &'static str = "lsproto.ClientSemanticTokensRequestOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -18251,6 +18595,7 @@ pub struct ClientInlayHintResolveOptions {
 
 impl Json for ClientInlayHintResolveOptions {
     const GO_TYPE: &'static str = "lsproto.ClientInlayHintResolveOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18289,6 +18634,7 @@ pub struct ClientShowMessageActionItemOptions {
 
 impl Json for ClientShowMessageActionItemOptions {
     const GO_TYPE: &'static str = "lsproto.ClientShowMessageActionItemOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18320,6 +18666,7 @@ pub struct CompletionItemTagOptions {
 
 impl Json for CompletionItemTagOptions {
     const GO_TYPE: &'static str = "lsproto.CompletionItemTagOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18356,6 +18703,7 @@ pub struct ClientCompletionItemResolveOptions {
 
 impl Json for ClientCompletionItemResolveOptions {
     const GO_TYPE: &'static str = "lsproto.ClientCompletionItemResolveOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18391,6 +18739,7 @@ pub struct ClientCompletionItemInsertTextModeOptions {
 
 impl Json for ClientCompletionItemInsertTextModeOptions {
     const GO_TYPE: &'static str = "lsproto.ClientCompletionItemInsertTextModeOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18430,6 +18779,7 @@ pub struct ClientSignatureParameterInformationOptions {
 
 impl Json for ClientSignatureParameterInformationOptions {
     const GO_TYPE: &'static str = "lsproto.ClientSignatureParameterInformationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18464,6 +18814,7 @@ pub struct ClientCodeActionKindOptions {
 
 impl Json for ClientCodeActionKindOptions {
     const GO_TYPE: &'static str = "lsproto.ClientCodeActionKindOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18500,6 +18851,7 @@ pub struct ClientDiagnosticsTagOptions {
 
 impl Json for ClientDiagnosticsTagOptions {
     const GO_TYPE: &'static str = "lsproto.ClientDiagnosticsTagOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18537,6 +18889,7 @@ pub struct ClientSemanticTokensRequestFullDelta {
 
 impl Json for ClientSemanticTokensRequestFullDelta {
     const GO_TYPE: &'static str = "lsproto.ClientSemanticTokensRequestFullDelta";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18586,6 +18939,7 @@ pub struct InitializationOptions {
 
 impl Json for InitializationOptions {
     const GO_TYPE: &'static str = "lsproto.InitializationOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(7);
@@ -18646,6 +19000,7 @@ pub struct AutoImportFix {
 
 impl Json for AutoImportFix {
     const GO_TYPE: &'static str = "lsproto.AutoImportFix";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(9);
@@ -18721,6 +19076,7 @@ pub struct CompletionItemData {
 
 impl Json for CompletionItemData {
     const GO_TYPE: &'static str = "lsproto.CompletionItemData";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(7);
@@ -18772,6 +19128,7 @@ pub struct CodeLensData {
 
 impl Json for CodeLensData {
     const GO_TYPE: &'static str = "lsproto.CodeLensData";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -18823,6 +19180,7 @@ pub struct ExperimentalServerCapabilities {
 
 impl Json for ExperimentalServerCapabilities {
     const GO_TYPE: &'static str = "lsproto.ExperimentalServerCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -18856,6 +19214,7 @@ pub struct ExperimentalClientCapabilities {
 
 impl Json for ExperimentalClientCapabilities {
     const GO_TYPE: &'static str = "lsproto.ExperimentalClientCapabilities";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18887,6 +19246,7 @@ pub struct VSOnAutoInsertOptions {
 
 impl Json for VSOnAutoInsertOptions {
     const GO_TYPE: &'static str = "lsproto.VSOnAutoInsertOptions";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -18941,6 +19301,7 @@ pub struct VSReferenceItem {
 
 impl Json for VSReferenceItem {
     const GO_TYPE: &'static str = "lsproto.VSReferenceItem";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(7);
@@ -19010,6 +19371,7 @@ impl HasTextDocumentPosition for VSOnAutoInsertParams {
 
 impl Json for VSOnAutoInsertParams {
     const GO_TYPE: &'static str = "lsproto.VSOnAutoInsertParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -19059,6 +19421,7 @@ pub struct VSOnAutoInsertResponseItem {
 
 impl Json for VSOnAutoInsertResponseItem {
     const GO_TYPE: &'static str = "lsproto.VSOnAutoInsertResponseItem";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -19106,6 +19469,7 @@ pub struct RequestFailureTelemetryEvent {
 
 impl Json for RequestFailureTelemetryEvent {
     const GO_TYPE: &'static str = "lsproto.RequestFailureTelemetryEvent";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -19158,6 +19522,7 @@ pub struct RequestFailureTelemetryProperties {
 
 impl Json for RequestFailureTelemetryProperties {
     const GO_TYPE: &'static str = "lsproto.RequestFailureTelemetryProperties";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -19204,6 +19569,7 @@ pub struct ProfileParams {
 
 impl Json for ProfileParams {
     const GO_TYPE: &'static str = "lsproto.ProfileParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -19240,6 +19606,7 @@ pub struct ProfileResult {
 
 impl Json for ProfileResult {
     const GO_TYPE: &'static str = "lsproto.ProfileResult";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -19276,6 +19643,7 @@ pub struct InitializeAPISessionParams {
 
 impl Json for InitializeAPISessionParams {
     const GO_TYPE: &'static str = "lsproto.InitializeAPISessionParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -19310,6 +19678,7 @@ pub struct InitializeAPISessionResult {
 
 impl Json for InitializeAPISessionResult {
     const GO_TYPE: &'static str = "lsproto.InitializeAPISessionResult";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -19357,6 +19726,7 @@ impl HasTextDocumentURI for ProjectInfoParams {
 
 impl Json for ProjectInfoParams {
     const GO_TYPE: &'static str = "lsproto.ProjectInfoParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -19393,6 +19763,7 @@ pub struct ProjectInfoResult {
 
 impl Json for ProjectInfoResult {
     const GO_TYPE: &'static str = "lsproto.ProjectInfoResult";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -19444,6 +19815,7 @@ pub struct ContentMapperManifest {
 
 impl Json for ContentMapperManifest {
     const GO_TYPE: &'static str = "lsproto.ContentMapperManifest";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
@@ -19496,6 +19868,7 @@ pub struct InferredProjectContentMapperContribution {
 
 impl Json for InferredProjectContentMapperContribution {
     const GO_TYPE: &'static str = "lsproto.InferredProjectContentMapperContribution";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -19540,6 +19913,7 @@ pub struct ContentMapperContribution {
 
 impl Json for ContentMapperContribution {
     const GO_TYPE: &'static str = "lsproto.ContentMapperContribution";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -19586,6 +19960,7 @@ pub struct SetContentMapperContributionsParams {
 
 impl Json for SetContentMapperContributionsParams {
     const GO_TYPE: &'static str = "lsproto.SetContentMapperContributionsParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -19627,6 +20002,7 @@ pub struct SetLogVerbosityParams {
 
 impl Json for SetLogVerbosityParams {
     const GO_TYPE: &'static str = "lsproto.SetLogVerbosityParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
@@ -19669,6 +20045,7 @@ pub struct PerformanceStatsTelemetryEvent {
 
 impl Json for PerformanceStatsTelemetryEvent {
     const GO_TYPE: &'static str = "lsproto.PerformanceStatsTelemetryEvent";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -19802,6 +20179,7 @@ pub struct PerformanceStatsTelemetryMeasurements {
 
 impl Json for PerformanceStatsTelemetryMeasurements {
     const GO_TYPE: &'static str = "lsproto.PerformanceStatsTelemetryMeasurements";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(30);
@@ -19900,6 +20278,7 @@ pub struct ProjectInfoTelemetryEvent {
 
 impl Json for ProjectInfoTelemetryEvent {
     const GO_TYPE: &'static str = "lsproto.ProjectInfoTelemetryEvent";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
@@ -19968,6 +20347,7 @@ pub struct ProjectInfoTelemetryMeasurements {
 
 impl Json for ProjectInfoTelemetryMeasurements {
     const GO_TYPE: &'static str = "lsproto.ProjectInfoTelemetryMeasurements";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(10);
@@ -20020,6 +20400,7 @@ pub struct MultiDocumentHighlight {
 
 impl Json for MultiDocumentHighlight {
     const GO_TYPE: &'static str = "lsproto.MultiDocumentHighlight";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -20079,6 +20460,7 @@ impl HasTextDocumentPosition for MultiDocumentHighlightParams {
 
 impl Json for MultiDocumentHighlightParams {
     const GO_TYPE: &'static str = "lsproto.MultiDocumentHighlightParams";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -20137,6 +20519,7 @@ pub struct VSClassifiedTextRun {
 
 impl Json for VSClassifiedTextRun {
     const GO_TYPE: &'static str = "lsproto.VSClassifiedTextRun";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
@@ -20190,6 +20573,7 @@ pub struct VSClassifiedTextElement {
 
 impl Json for VSClassifiedTextElement {
     const GO_TYPE: &'static str = "lsproto.VSClassifiedTextElement";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -20237,6 +20621,7 @@ pub struct VSImageId {
 
 impl Json for VSImageId {
     const GO_TYPE: &'static str = "lsproto.VSImageId";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -20286,6 +20671,7 @@ pub struct VSImageElement {
 
 impl Json for VSImageElement {
     const GO_TYPE: &'static str = "lsproto.VSImageElement";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
@@ -20333,6 +20719,7 @@ pub struct VSContainerElement {
 
 impl Json for VSContainerElement {
     const GO_TYPE: &'static str = "lsproto.VSContainerElement";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
@@ -20377,6 +20764,7 @@ pub struct CallHierarchyItemData {
 
 impl Json for CallHierarchyItemData {
     const GO_TYPE: &'static str = "lsproto.CallHierarchyItemData";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(0);
@@ -20396,6 +20784,7 @@ pub struct TypeHierarchyItemData {
 
 impl Json for TypeHierarchyItemData {
     const GO_TYPE: &'static str = "lsproto.TypeHierarchyItemData";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(0);
@@ -20415,6 +20804,7 @@ pub struct InlayHintData {
 
 impl Json for InlayHintData {
     const GO_TYPE: &'static str = "lsproto.InlayHintData";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(0);
@@ -20434,6 +20824,7 @@ pub struct CodeActionData {
 
 impl Json for CodeActionData {
     const GO_TYPE: &'static str = "lsproto.CodeActionData";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(0);
@@ -20453,6 +20844,7 @@ pub struct WorkspaceSymbolData {
 
 impl Json for WorkspaceSymbolData {
     const GO_TYPE: &'static str = "lsproto.WorkspaceSymbolData";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(0);
@@ -20472,6 +20864,7 @@ pub struct DocumentLinkData {
 
 impl Json for DocumentLinkData {
     const GO_TYPE: &'static str = "lsproto.DocumentLinkData";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(0);
@@ -20491,6 +20884,7 @@ pub struct DiagnosticData {
 
 impl Json for DiagnosticData {
     const GO_TYPE: &'static str = "lsproto.DiagnosticData";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(0);
@@ -20510,6 +20904,7 @@ pub struct CompletionItemDefaultsData {
 
 impl Json for CompletionItemDefaultsData {
     const GO_TYPE: &'static str = "lsproto.CompletionItemDefaultsData";
+    const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(0);
@@ -24137,19 +24532,19 @@ impl Json for TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
         let state = scan_discriminated_struct(v, Self::GO_TYPE, "TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile", "kind")?;
         match state.discriminator_str() {
             Some("rename") => {
-                o.rename_file = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.rename_file = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             Some("create") => {
-                o.create_file = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.create_file = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             Some("delete") => {
-                o.delete_file = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.delete_file = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             _ => {
-                o.text_document_edit = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.text_document_edit = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
         }
@@ -24258,11 +24653,11 @@ impl Json for WorkspaceFullDocumentDiagnosticReportOrUnchangedDocumentDiagnostic
         let state = scan_discriminated_struct(v, Self::GO_TYPE, "WorkspaceFullDocumentDiagnosticReportOrUnchangedDocumentDiagnosticReport", "kind")?;
         match state.discriminator_str() {
             Some("full") => {
-                o.full_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.full_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             Some("unchanged") => {
-                o.unchanged_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.unchanged_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
@@ -24527,11 +24922,11 @@ impl Json for TextDocumentContentChangePartialOrWholeDocument {
         match json_object_has_key(v, &["range"]) {
             // range
             0 => {
-                o.partial = arm(v)?;
+                o.partial = arm_buffered(v)?;
                 return Ok(o);
             }
             _ => {
-                o.whole_document = arm(v)?;
+                o.whole_document = arm_buffered(v)?;
                 return Ok(o);
             }
         }
@@ -24564,12 +24959,12 @@ impl Json for TextEditOrInsertReplaceEdit {
         match json_object_has_key(v, &["insert", "range"]) {
             // insert
             0 => {
-                o.insert_replace_edit = arm(v)?;
+                o.insert_replace_edit = arm_buffered(v)?;
                 return Ok(o);
             }
             // range
             1 => {
-                o.text_edit = arm(v)?;
+                o.text_edit = arm_buffered(v)?;
                 return Ok(o);
             }
             _ => {}
@@ -24615,12 +25010,12 @@ impl Json for MarkupContentOrStringOrMarkedStringWithLanguageOrMarkedStrings {
                 match json_object_has_key(v, &["kind", "language"]) {
                     // kind
                     0 => {
-                        o.markup_content = arm(v)?;
+                        o.markup_content = arm_buffered(v)?;
                         return Ok(o);
                     }
                     // language
                     1 => {
-                        o.marked_string_with_language = arm(v)?;
+                        o.marked_string_with_language = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {}
@@ -24697,11 +25092,11 @@ impl Json for LocationOrLocationUriOnly {
         match json_object_has_key(v, &["range"]) {
             // range
             0 => {
-                o.location = arm(v)?;
+                o.location = arm_buffered(v)?;
                 return Ok(o);
             }
             _ => {
-                o.location_uri_only = arm(v)?;
+                o.location_uri_only = arm_buffered(v)?;
                 return Ok(o);
             }
         }
@@ -24738,15 +25133,15 @@ impl Json for WorkDoneProgressBeginOrReportOrEnd {
         let state = scan_discriminated_struct(v, Self::GO_TYPE, "WorkDoneProgressBeginOrReportOrEnd", "kind")?;
         match state.discriminator_str() {
             Some("begin") => {
-                o.begin = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.begin = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             Some("report") => {
-                o.report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             Some("end") => {
-                o.end = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.end = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
@@ -24784,16 +25179,16 @@ impl Json for TextEditOrAnnotatedTextEditOrSnippetTextEdit {
         match json_object_has_key(v, &["snippet", "annotationId"]) {
             // snippet
             0 => {
-                o.snippet_text_edit = arm(v)?;
+                o.snippet_text_edit = arm_buffered(v)?;
                 return Ok(o);
             }
             // annotationId
             1 => {
-                o.annotated_text_edit = arm(v)?;
+                o.annotated_text_edit = arm_buffered(v)?;
                 return Ok(o);
             }
             _ => {
-                o.text_edit = arm(v)?;
+                o.text_edit = arm_buffered(v)?;
                 return Ok(o);
             }
         }
@@ -24826,11 +25221,11 @@ impl Json for FullDocumentDiagnosticReportOrUnchangedDocumentDiagnosticReport {
         let state = scan_discriminated_struct(v, Self::GO_TYPE, "FullDocumentDiagnosticReportOrUnchangedDocumentDiagnosticReport", "kind")?;
         match state.discriminator_str() {
             Some("full") => {
-                o.full_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.full_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             Some("unchanged") => {
-                o.unchanged_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.unchanged_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
@@ -24951,11 +25346,11 @@ impl Json for BooleanOrDeclarationOptionsOrDeclarationRegistrationOptions {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.declaration_registration_options = arm(v)?;
+                        o.declaration_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.declaration_options = arm(v)?;
+                        o.declaration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25040,11 +25435,11 @@ impl Json for BooleanOrTypeDefinitionOptionsOrTypeDefinitionRegistrationOptions 
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.type_definition_registration_options = arm(v)?;
+                        o.type_definition_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.type_definition_options = arm(v)?;
+                        o.type_definition_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25091,11 +25486,11 @@ impl Json for BooleanOrImplementationOptionsOrImplementationRegistrationOptions 
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.implementation_registration_options = arm(v)?;
+                        o.implementation_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.implementation_options = arm(v)?;
+                        o.implementation_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25294,11 +25689,11 @@ impl Json for BooleanOrDocumentColorOptionsOrDocumentColorRegistrationOptions {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.document_color_registration_options = arm(v)?;
+                        o.document_color_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.document_color_options = arm(v)?;
+                        o.document_color_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25497,11 +25892,11 @@ impl Json for BooleanOrFoldingRangeOptionsOrFoldingRangeRegistrationOptions {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.folding_range_registration_options = arm(v)?;
+                        o.folding_range_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.folding_range_options = arm(v)?;
+                        o.folding_range_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25548,11 +25943,11 @@ impl Json for BooleanOrSelectionRangeOptionsOrSelectionRangeRegistrationOptions 
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.selection_range_registration_options = arm(v)?;
+                        o.selection_range_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.selection_range_options = arm(v)?;
+                        o.selection_range_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25599,11 +25994,11 @@ impl Json for BooleanOrCallHierarchyOptionsOrCallHierarchyRegistrationOptions {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.call_hierarchy_registration_options = arm(v)?;
+                        o.call_hierarchy_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.call_hierarchy_options = arm(v)?;
+                        o.call_hierarchy_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25650,11 +26045,11 @@ impl Json for BooleanOrLinkedEditingRangeOptionsOrLinkedEditingRangeRegistration
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.linked_editing_range_registration_options = arm(v)?;
+                        o.linked_editing_range_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.linked_editing_range_options = arm(v)?;
+                        o.linked_editing_range_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25690,11 +26085,11 @@ impl Json for SemanticTokensOptionsOrRegistrationOptions {
         match json_object_has_key(v, &["documentSelector"]) {
             // documentSelector
             0 => {
-                o.registration_options = arm(v)?;
+                o.registration_options = arm_buffered(v)?;
                 return Ok(o);
             }
             _ => {
-                o.options = arm(v)?;
+                o.options = arm_buffered(v)?;
                 return Ok(o);
             }
         }
@@ -25738,11 +26133,11 @@ impl Json for BooleanOrMonikerOptionsOrMonikerRegistrationOptions {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.moniker_registration_options = arm(v)?;
+                        o.moniker_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.moniker_options = arm(v)?;
+                        o.moniker_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25789,11 +26184,11 @@ impl Json for BooleanOrTypeHierarchyOptionsOrTypeHierarchyRegistrationOptions {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.type_hierarchy_registration_options = arm(v)?;
+                        o.type_hierarchy_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.type_hierarchy_options = arm(v)?;
+                        o.type_hierarchy_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25840,11 +26235,11 @@ impl Json for BooleanOrInlineValueOptionsOrInlineValueRegistrationOptions {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.inline_value_registration_options = arm(v)?;
+                        o.inline_value_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.inline_value_options = arm(v)?;
+                        o.inline_value_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25891,11 +26286,11 @@ impl Json for BooleanOrInlayHintOptionsOrInlayHintRegistrationOptions {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
                     0 => {
-                        o.inlay_hint_registration_options = arm(v)?;
+                        o.inlay_hint_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {
-                        o.inlay_hint_options = arm(v)?;
+                        o.inlay_hint_options = arm_buffered(v)?;
                         return Ok(o);
                     }
                 }
@@ -25931,11 +26326,11 @@ impl Json for DiagnosticOptionsOrRegistrationOptions {
         match json_object_has_key(v, &["documentSelector"]) {
             // documentSelector
             0 => {
-                o.registration_options = arm(v)?;
+                o.registration_options = arm_buffered(v)?;
                 return Ok(o);
             }
             _ => {
-                o.options = arm(v)?;
+                o.options = arm_buffered(v)?;
                 return Ok(o);
             }
         }
@@ -26044,12 +26439,12 @@ impl Json for RangeOrEditRangeWithInsertReplace {
         match json_object_has_key(v, &["start", "insert"]) {
             // start
             0 => {
-                o.range = arm(v)?;
+                o.range = arm_buffered(v)?;
                 return Ok(o);
             }
             // insert
             1 => {
-                o.edit_range_with_insert_replace = arm(v)?;
+                o.edit_range_with_insert_replace = arm_buffered(v)?;
                 return Ok(o);
             }
             _ => {}
@@ -26313,15 +26708,15 @@ impl Json for VSImageElementOrClassifiedTextElementOrContainerElement {
         let state = scan_discriminated_struct(v, Self::GO_TYPE, "VSImageElementOrClassifiedTextElementOrContainerElement", "_vs_type")?;
         match state.discriminator_str() {
             Some("ContainerElement") => {
-                o.container_element = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.container_element = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "_vs_type")?);
                 return Ok(o);
             }
             Some("ImageElement") => {
-                o.image_element = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.image_element = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "_vs_type")?);
                 return Ok(o);
             }
             Some("ClassifiedTextElement") => {
-                o.classified_text_element = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.classified_text_element = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "_vs_type")?);
                 return Ok(o);
             }
             _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
@@ -26657,12 +27052,12 @@ impl Json for SemanticTokensOrSemanticTokensDeltaOrNull {
                 match json_object_has_key(v, &["data", "edits"]) {
                     // data
                     0 => {
-                        o.semantic_tokens = arm(v)?;
+                        o.semantic_tokens = arm_buffered(v)?;
                         return Ok(o);
                     }
                     // edits
                     1 => {
-                        o.semantic_tokens_delta = arm(v)?;
+                        o.semantic_tokens_delta = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {}
@@ -26886,11 +27281,11 @@ impl Json for RelatedFullDocumentDiagnosticReportOrUnchangedDocumentDiagnosticRe
         let state = scan_discriminated_struct(v, Self::GO_TYPE, "RelatedFullDocumentDiagnosticReportOrUnchangedDocumentDiagnosticReport", "kind")?;
         match state.discriminator_str() {
             Some("full") => {
-                o.full_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.full_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             Some("unchanged") => {
-                o.unchanged_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                o.unchanged_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
                 return Ok(o);
             }
             _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
@@ -27414,17 +27809,17 @@ impl Json for RangeOrPrepareRenamePlaceholderOrPrepareRenameDefaultBehaviorOrNul
                 match json_object_has_key(v, &["start", "range", "defaultBehavior"]) {
                     // start
                     0 => {
-                        o.range = arm(v)?;
+                        o.range = arm_buffered(v)?;
                         return Ok(o);
                     }
                     // range
                     1 => {
-                        o.prepare_rename_placeholder = arm(v)?;
+                        o.prepare_rename_placeholder = arm_buffered(v)?;
                         return Ok(o);
                     }
                     // defaultBehavior
                     2 => {
-                        o.prepare_rename_default_behavior = arm(v)?;
+                        o.prepare_rename_default_behavior = arm_buffered(v)?;
                         return Ok(o);
                     }
                     _ => {}
@@ -27593,15 +27988,15 @@ impl Json for RequestFailureTelemetryEventOrPerformanceStatsTelemetryEventOrProj
                 let state = scan_discriminated_struct(v, Self::GO_TYPE, "RequestFailureTelemetryEventOrPerformanceStatsTelemetryEventOrProjectInfoTelemetryEventOrNull", "eventName")?;
                 match state.discriminator_str() {
                     Some("languageServer.projectInfo") => {
-                        o.project_info_telemetry_event = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                        o.project_info_telemetry_event = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "eventName")?);
                         return Ok(o);
                     }
                     Some("languageServer.errorResponse") => {
-                        o.request_failure_telemetry_event = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                        o.request_failure_telemetry_event = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "eventName")?);
                         return Ok(o);
                     }
                     Some("languageServer.performanceStats") => {
-                        o.performance_stats_telemetry_event = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?);
+                        o.performance_stats_telemetry_event = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "eventName")?);
                         return Ok(o);
                     }
                     _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
@@ -27723,16 +28118,16 @@ impl Json for InlineValueTextOrVariableLookupOrEvaluatableExpression {
         match json_object_has_key(v, &["text", "caseSensitiveLookup"]) {
             // text
             0 => {
-                o.text = arm(v)?;
+                o.text = arm_buffered(v)?;
                 return Ok(o);
             }
             // caseSensitiveLookup
             1 => {
-                o.variable_lookup = arm(v)?;
+                o.variable_lookup = arm_buffered(v)?;
                 return Ok(o);
             }
             _ => {
-                o.evaluatable_expression = arm(v)?;
+                o.evaluatable_expression = arm_buffered(v)?;
                 return Ok(o);
             }
         }

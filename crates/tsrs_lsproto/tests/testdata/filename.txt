@@ -1,0 +1,28 @@
+file:///home/user/a.ts	/home/user/a.ts
+file:///c%3A/Users/a/b.ts	c:/Users/a/b.ts
+file:///C:/Users/a/b.ts	C:/Users/a/b.ts
+file:///c:/x	c:/x
+file:///d%3A	d:
+file:///	/
+file://server/share/a.ts	//server/share/a.ts
+file://server:8080/share/a.ts	//server:8080/share/a.ts
+file://user@server/share/a.ts	//server/share/a.ts
+file://[::1]/a.ts	//[::1]/a.ts
+file:///a%20b/c%2Bd+e.ts	/a b/c+d+e.ts
+file:///a/b.ts?query#frag	/a/b.ts
+file:///a/b.ts#fr%zz	PANIC invalid file URI: file:///a/b.ts#fr%zz
+file:///a/%zz.ts	PANIC invalid file URI: file:///a/%zz.ts
+file:///a/%2.ts	PANIC invalid file URI: file:///a/%2.ts
+file://ser%41ver/a.ts	PANIC invalid file URI: file://ser%41ver/a.ts
+file://ser ver/a.ts	PANIC invalid file URI: file://ser ver/a.ts
+file:///é/😀.ts	/é/😀.ts
+file:///a%E2%82%AC.ts	/a€.ts
+untitled:Untitled-1	^/untitled/ts-nul-authority/Untitled-1
+untitled:/Untitled-1	^/untitled/ts-nul-authority//Untitled-1
+vscode-notebook-cell://authority/path/to/file.ts#cell	^/vscode-notebook-cell/authority/path/to/file.ts#cell
+vscode-vfs://github/microsoft/typescript/src/a.ts	^/vscode-vfs/github/microsoft/typescript/src/a.ts
+http://example.com/a.ts	^/http/example.com/a.ts
+bundled:///libs/lib.d.ts	bundled:///libs/lib.d.ts
+noscheme	PANIC invalid URI: noscheme
+zip://	PANIC invalid URI: zip://
+^/scheme/authority/path	PANIC invalid URI: ^/scheme/authority/path

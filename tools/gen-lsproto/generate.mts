@@ -2519,6 +2519,9 @@ function generateCode() {
         const strict = isStrictStructure(structure);
         writeLine(`impl Json for ${structure.name} {`);
         writeLine(`    const GO_TYPE: &'static str = "lsproto.${structure.name}";`);
+        if (typeInfo.types.get(structure.name)!.needsPointer) {
+            writeLine(`    const GO_POINTER: bool = true;`);
+        }
         writeLine("");
         writeLine("    fn to_json(&self) -> Value {");
         writeLine(`        let mut w = ObjectWriter::new(${fields.length});`);
@@ -2624,6 +2627,7 @@ function generateCode() {
         const idField = fields.find(f => f.prop!.name === "id")!;
         writeLine(`impl Json for Registration {`);
         writeLine(`    const GO_TYPE: &'static str = "lsproto.Registration";`);
+        writeLine(`    const GO_POINTER: bool = true;`);
         writeLine("");
         writeLine(`    fn to_json(&self) -> Value {`);
         writeLine(`        let Some(register_options) = &self.register_options else {`);
@@ -2691,7 +2695,7 @@ function generateCode() {
         writeLine(`            match Method::from_str(&method) {`);
         for (const reg of registrationMethods) {
             writeLine(`                Method::${reg.fieldName} => {`);
-            writeLine(`                    register_options.${rustIdent(reg.fieldName)} = Some(Json::from_json(raw_register_options)?);`);
+            writeLine(`                    register_options.${rustIdent(reg.fieldName)} = arm_buffered(raw_register_options)?;`);
             writeLine(`                }`);
         }
         writeLine(`                _ => {`);
@@ -3149,7 +3153,7 @@ function generateCode() {
             writeLine(`${indent}match json_object_raw_field(v, ${rustStr(disc.fieldName)}).and_then(value_str) {`);
             for (const [value, entry] of disc.mapping) {
                 writeLine(`${indent}    Some(${rustStr(value)}) => {`);
-                armAssign(entry, indent + "        ", "arm(v)?");
+                armAssign(entry, indent + "        ", "arm_buffered(v)?");
                 writeLine(`${indent}    }`);
             }
             let exhaustive = false;
@@ -3173,12 +3177,12 @@ function generateCode() {
             writeLine(`${indent}match state.discriminator_str() {`);
             for (const [value, entry] of disc.mapping) {
                 writeLine(`${indent}    Some(${rustStr(value)}) => {`);
-                armAssign(entry, indent + "        ", "Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?)");
+                armAssign(entry, indent + "        ", `Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, ${rustStr(disc.fieldName)})?)`);
                 writeLine(`${indent}    }`);
             }
             if (disc.unmapped.length === 1) {
                 writeLine(`${indent}    _ => {`);
-                armAssign(disc.unmapped[0], indent + "        ", "Some(unmarshal_discriminated_arm(v, Self::GO_TYPE)?)");
+                armAssign(disc.unmapped[0], indent + "        ", `Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, ${rustStr(disc.fieldName)})?)`);
                 writeLine(`${indent}    }`);
             }
             else {
@@ -3208,7 +3212,7 @@ function generateCode() {
                 // Exactly 1 entry: it's the only remaining variant after dispatch,
                 // so use a hard error return instead of speculative decoding.
                 for (const entry of unmapped) {
-                    armAssign(entry, indent, "arm(v)?");
+                    armAssign(entry, indent, "arm_buffered(v)?");
                 }
                 return unmapped.length === 1;
             }
@@ -3247,14 +3251,14 @@ function generateCode() {
             for (let i = 0; i < allChecks.length; i++) {
                 writeLine(`${indent}    // ${allChecks[i].jsonFieldName}`);
                 writeLine(`${indent}    ${i} => {`);
-                armAssign(allChecks[i].entry, indent + "        ", "arm(v)?");
+                armAssign(allChecks[i].entry, indent + "        ", "arm_buffered(v)?");
                 writeLine(`${indent}    }`);
             }
             if (finalUnmapped.length > 0) {
                 writeLine(`${indent}    _ => {`);
                 if (finalUnmapped.length === 1) {
                     // Only one variant left after dispatch — use hard error return.
-                    armAssign(finalUnmapped[0], indent + "        ", "arm(v)?");
+                    armAssign(finalUnmapped[0], indent + "        ", "arm_buffered(v)?");
                 }
                 else {
                     tryEach(finalUnmapped, indent + "        ");

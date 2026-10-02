@@ -101,6 +101,8 @@ impl Json for DocumentUri {
 }
 
 impl JsonKey for DocumentUri {
+    const GO_KEY_TYPE: &'static str = "lsproto.DocumentUri";
+
     fn key_string(&self) -> &str {
         &self.0
     }

@@ -17,3 +17,10 @@ pub use lsp::*;
 pub use lsp_generated::*;
 pub use lsproto_jsonrpc::*;
 pub use util::*;
+
+#[cfg(test)]
+mod baseproto_test;
+#[cfg(test)]
+mod lsp_json_test;
+#[cfg(test)]
+mod lsp_test;
