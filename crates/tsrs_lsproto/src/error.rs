@@ -18,6 +18,12 @@ pub enum ErrorTag {
     InvalidContentLength,
     NoContentLength,
     InvalidJSONRPCVersion,
+    // context.Canceled / context.DeadlineExceeded (Go returns `ctx.Err()` as an error).
+    ContextCanceled,
+    ContextDeadlineExceeded,
+    // A package-level sentinel error value or error type (`errors.Is(err, pkg.ErrFoo)`,
+    // `errors.AsType[pkg.fooError](err)`), named by its Go identifier.
+    Sentinel(&'static str),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -86,6 +92,16 @@ impl std::error::Error for Error {}
 impl From<ErrorCode> for Error {
     fn from(code: ErrorCode) -> Error {
         Error { message: code.string(), tags: vec![ErrorTag::Code(code)] }
+    }
+}
+
+impl From<tsrs_core::context::ContextError> for Error {
+    fn from(err: tsrs_core::context::ContextError) -> Error {
+        let tag = match err {
+            tsrs_core::context::ContextError::Canceled => ErrorTag::ContextCanceled,
+            tsrs_core::context::ContextError::DeadlineExceeded => ErrorTag::ContextDeadlineExceeded,
+        };
+        Error { message: err.to_string(), tags: vec![tag] }
     }
 }
 
