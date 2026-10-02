@@ -1379,12 +1379,89 @@ impl FourslashTest {
 
     // fourslash.go:2523
     pub fn verify_baseline_find_all_references(&mut self, t: &T, markers: &[&str]) {
-        Self::server_unavailable(t, "feature not ported: references (VerifyBaselineFindAllReferences)")
+        let reference_locations = self.lookup_markers_or_get_ranges(t, markers);
+
+        for marker_or_range in reference_locations {
+            // worker in `baselineEachMarkerOrRange`
+            self.go_to_marker_or_range(t, marker_or_range.clone());
+
+            let params = lsproto::ReferenceParams {
+                text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+                position: self.current_caret_position,
+                context: lsproto::ReferenceContext { include_declaration: true },
+                ..Default::default()
+            };
+            let result = self.send_request(t, lsproto::TEXT_DOCUMENT_REFERENCES_INFO, params);
+            let Some(locations) = result.locations else {
+                t.fatal("nil pointer dereference: result.Locations");
+            };
+            let baseline = self.get_baseline_for_locations_with_file_contents(
+                &locations,
+                BaselineFourslashLocationsOptions { marker: Some(marker_or_range), marker_name: "/*FIND ALL REFS*/".to_string(), ..Default::default() },
+            );
+            self.add_result_to_baseline(t, FIND_ALL_REFERENCES_CMD, &baseline);
+        }
     }
 
     // fourslash.go:2551
     pub fn verify_baseline_vs_find_all_references(&mut self, t: &T, markers: &[&str]) {
-        Self::server_unavailable(t, "feature not ported: references (VerifyBaselineVSFindAllReferences)")
+        let reference_locations = self.lookup_markers_or_get_ranges(t, markers);
+
+        for marker_or_range in reference_locations {
+            self.go_to_marker_or_range(t, marker_or_range.clone());
+
+            let params = lsproto::ReferenceParams {
+                text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+                position: self.current_caret_position,
+                context: lsproto::ReferenceContext { include_declaration: true },
+                ..Default::default()
+            };
+            let mut result = self.send_request(t, lsproto::TEXT_DOCUMENT_VS_REFERENCES_INFO, params);
+            // Sort cross-project results for deterministic baselines
+            if let Some(items) = result.vs_reference_items.as_mut().filter(|items| !items.is_empty()) {
+                items.sort_by(|a, b| {
+                    let ap = a.vs_project_name.clone().unwrap_or_default();
+                    let bp = b.vs_project_name.clone().unwrap_or_default();
+                    if ap != bp {
+                        return ap.cmp(&bp);
+                    }
+                    if a.vs_location.uri != b.vs_location.uri {
+                        return a.vs_location.uri.0.cmp(&b.vs_location.uri.0);
+                    }
+                    if a.vs_location.range.start.line != b.vs_location.range.start.line {
+                        return a.vs_location.range.start.line.cmp(&b.vs_location.range.start.line);
+                    }
+                    a.vs_location.range.start.character.cmp(&b.vs_location.range.start.character)
+                });
+                // Re-number IDs sequentially after sort
+                let mut id_remap: FxHashMap<i32, i32> = FxHashMap::default();
+                for (i, item) in items.iter_mut().enumerate() {
+                    id_remap.insert(item.vs_id, i as i32);
+                    item.vs_id = i as i32;
+                }
+                for item in items.iter_mut() {
+                    if let Some(definition_id) = item.vs_definition_id {
+                        item.vs_definition_id = Some(id_remap.get(&definition_id).copied().unwrap_or(0));
+                    }
+                }
+            }
+            // Include file contents with markers
+            let mut locations: Vec<lsproto::Location> = Vec::new();
+            if let Some(items) = &result.vs_reference_items {
+                for item in items {
+                    locations.push(item.vs_location.clone());
+                }
+            }
+            let file_contents = self.get_baseline_for_locations_with_file_contents(
+                &locations,
+                BaselineFourslashLocationsOptions { marker: Some(marker_or_range), marker_name: "/*FIND ALL REFS*/".to_string(), ..Default::default() },
+            );
+
+            match tsrs_core::json::marshal_indent(&result.to_json(), "", "  ") {
+                Ok(json_str) => self.add_result_to_baseline(t, VS_FIND_ALL_REFERENCES_CMD, &(file_contents + "\n\n" + &json_str)),
+                Err(err) => t.fatal(&format!("Failed to stringify VS references result for baseline: {err}")),
+            }
+        }
     }
 
     // fourslash.go:2631
@@ -1854,7 +1931,34 @@ impl FourslashTest {
 
     // fourslash.go:3421
     pub fn verify_baseline_call_hierarchy(&mut self, t: &T) {
-        Self::server_unavailable(t, "feature not ported: call hierarchy (VerifyBaselineCallHierarchy)")
+        let file_name = self.active_filename.clone();
+        let position = self.current_caret_position;
+
+        let params = lsproto::CallHierarchyPrepareParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&file_name) },
+            position,
+            ..Default::default()
+        };
+
+        let prepare_result = self.send_request(t, lsproto::TEXT_DOCUMENT_PREPARE_CALL_HIERARCHY_INFO, params);
+        let items = match prepare_result.call_hierarchy_items {
+            Some(items) if !items.is_empty() => items,
+            _ => {
+                self.add_result_to_baseline(t, CALL_HIERARCHY_CMD, "No call hierarchy items available");
+                return;
+            }
+        };
+
+        let mut result = String::new();
+
+        for call_hierarchy_item in items {
+            let mut seen: rustc_hash::FxHashSet<callHierarchyItemKey> = rustc_hash::FxHashSet::default();
+            let item_file_name = call_hierarchy_item.uri.file_name();
+            let script = self.get_or_load_script_info(&item_file_name);
+            format_call_hierarchy_item(t, self, script.as_ref(), &mut result, &call_hierarchy_item, callHierarchyItemDirection::Root, &mut seen, "");
+        }
+
+        self.add_result_to_baseline(t, CALL_HIERARCHY_CMD, result.strip_suffix('\n').unwrap_or(&result));
     }
 
     // fourslash.go:3740
@@ -1870,7 +1974,81 @@ impl FourslashTest {
         files_to_search: &[&str],
         marker_or_range_or_names: &[Any],
     ) {
-        Self::server_unavailable(t, "feature not ported: document highlights (VerifyBaselineDocumentHighlightsWithOptions)")
+        let mut marker_or_ranges: Vec<MarkerOrRange> = Vec::new();
+        for marker_or_range_or_name in marker_or_range_or_names {
+            match marker_or_range_or_name {
+                Any::String(name) => match self.test_data.marker_positions.get(name.as_str()) {
+                    Some(marker) => marker_or_ranges.push(MarkerOrRange::Marker(marker.clone())),
+                    None => t.fatal(&format!("Marker '{name}' not found")),
+                },
+                Any::Marker(marker) => marker_or_ranges.push(MarkerOrRange::Marker(marker.clone())),
+                Any::RangeMarker(range) => marker_or_ranges.push(MarkerOrRange::RangeMarker(range.clone())),
+                other => t.fatal(&format!("Invalid marker or range type: {}. Expected string, *Marker, or *RangeMarker.", other.type_name())),
+            }
+        }
+
+        self.verify_baseline_document_highlights_impl(t, preferences, files_to_search, marker_or_ranges);
+    }
+
+    // fourslash.go:3775
+    fn verify_baseline_document_highlights_impl(
+        &mut self,
+        t: &T,
+        _preferences: Option<lsutil::UserPreferences>,
+        files_to_search: &[&str],
+        marker_or_ranges: Vec<MarkerOrRange>,
+    ) {
+        for marker_or_range in marker_or_ranges {
+            self.go_to_marker_impl(t, &marker_or_range);
+
+            let mut spans: Vec<lsproto::Location> = Vec::new();
+            let mut header = String::new();
+
+            if !files_to_search.is_empty() {
+                // Multi-file: use the custom method.
+                let search_uris: Vec<lsproto::DocumentUri> = files_to_search.iter().map(|file| lsconv::file_name_to_document_uri(file)).collect();
+
+                let params = lsproto::MultiDocumentHighlightParams {
+                    text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+                    position: self.current_caret_position,
+                    files_to_search: search_uris,
+                };
+                let result = self.send_request(t, lsproto::CUSTOM_TEXT_DOCUMENT_MULTI_DOCUMENT_HIGHLIGHT_INFO, params);
+                let multi_highlights = result.multi_document_highlights.unwrap_or_default();
+
+                for mh in &multi_highlights {
+                    for h in &mh.highlights {
+                        spans.push(lsproto::Location { uri: mh.uri.clone(), range: h.range });
+                    }
+                }
+
+                header.push_str("// filesToSearch:\n");
+                for file in files_to_search {
+                    header.push_str(&format!("//   {}\n", file));
+                }
+                header.push('\n');
+            } else {
+                // Single-file: use the standard LSP method.
+                let params = lsproto::DocumentHighlightParams {
+                    text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+                    position: self.current_caret_position,
+                    ..Default::default()
+                };
+                let result = self.send_request(t, lsproto::TEXT_DOCUMENT_DOCUMENT_HIGHLIGHT_INFO, params);
+                let highlights = result.document_highlights.unwrap_or_default();
+
+                for h in &highlights {
+                    spans.push(lsproto::Location { uri: lsconv::file_name_to_document_uri(&self.active_filename), range: h.range });
+                }
+            }
+
+            // Add result to baseline
+            let baseline = self.get_baseline_for_locations_with_file_contents(
+                &spans,
+                BaselineFourslashLocationsOptions { marker: Some(marker_or_range), marker_name: "/*HIGHLIGHTS*/".to_string(), ..Default::default() },
+            );
+            self.add_result_to_baseline(t, DOCUMENT_HIGHLIGHTS_CMD, &(header + &baseline));
+        }
     }
 
     // fourslash.go:3890
@@ -2069,22 +2247,223 @@ impl FourslashTest {
 
     // fourslash.go:4754
     pub fn verify_baseline_rename(&mut self, t: &T, preferences: Option<lsutil::UserPreferences>, marker_or_name_or_ranges: &[Any]) {
-        Self::server_unavailable(t, "feature not ported: rename (VerifyBaselineRename)")
+        let mut marker_or_ranges: Vec<MarkerOrRange> = Vec::new();
+        for marker_or_name_or_range in marker_or_name_or_ranges {
+            match marker_or_name_or_range {
+                Any::String(name) => match self.test_data.marker_positions.get(name.as_str()) {
+                    Some(marker) => marker_or_ranges.push(MarkerOrRange::Marker(marker.clone())),
+                    None => t.fatal(&format!("Marker '{name}' not found")),
+                },
+                Any::Marker(marker) => marker_or_ranges.push(MarkerOrRange::Marker(marker.clone())),
+                Any::RangeMarker(range) => marker_or_ranges.push(MarkerOrRange::RangeMarker(range.clone())),
+                other => t.fatal(&format!("Invalid marker or range type: {}. Expected string, *Marker, or *RangeMarker.", other.type_name())),
+            }
+        }
+
+        self.verify_baseline_rename_impl(t, preferences, marker_or_ranges);
+    }
+
+    // fourslash.go:4780
+    fn verify_baseline_rename_impl(&mut self, t: &T, preferences: Option<lsutil::UserPreferences>, marker_or_ranges: Vec<MarkerOrRange>) {
+        let reset = preferences.clone().map(|preferences| self.configure_with_reset(t, preferences));
+
+        for marker_or_range in marker_or_ranges {
+            self.go_to_marker_or_range(t, marker_or_range.clone());
+
+            let params = lsproto::RenameParams {
+                text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+                position: self.current_caret_position,
+                new_name: "?".to_string(),
+                ..Default::default()
+            };
+
+            let result = self.send_request(t, lsproto::TEXT_DOCUMENT_RENAME_INFO, params);
+
+            let changes = result.workspace_edit.and_then(|edit| edit.changes).unwrap_or_default();
+            let mut span_to_text: FxHashMap<DocumentSpan, String> = FxHashMap::default();
+            let mut file_to_span: MultiMap<lsproto::DocumentUri, DocumentSpan> = MultiMap::default();
+            for (uri, edits) in &changes {
+                for edit in edits {
+                    let span = DocumentSpan { uri: uri.clone(), text_span: edit.range, context_span: None };
+                    file_to_span.add(uri.clone(), span.clone());
+                    span_to_text.insert(span, edit.new_text.clone());
+                }
+            }
+
+            let mut rename_options = String::new();
+            if let Some(preferences) = &preferences {
+                if preferences.use_aliases_for_rename != Tristate::Unknown {
+                    rename_options.push_str(&format!("// @useAliasesForRename: {}\n", preferences.use_aliases_for_rename.is_true()));
+                }
+                if preferences.quote_preference != lsutil::QuotePreference::Unknown {
+                    rename_options.push_str(&format!("// @quotePreference: {}\n", preferences.quote_preference.as_str()));
+                }
+            }
+
+            let span_to_text = Arc::new(span_to_text);
+            let prefix_texts = span_to_text.clone();
+            let suffix_texts = span_to_text.clone();
+            let baseline_file_content = self.get_baseline_for_grouped_spans_with_file_contents(
+                &file_to_span,
+                &BaselineFourslashLocationsOptions {
+                    marker: Some(marker_or_range),
+                    marker_name: "/*RENAME*/".to_string(),
+                    end_marker: "RENAME|]".to_string(),
+                    start_marker_prefix: Some(Box::new(move |span: &DocumentSpan| {
+                        let text = prefix_texts.get(span).cloned().unwrap_or_default();
+                        let prefix_and_suffix: Vec<&str> = text.split('?').collect();
+                        if !prefix_and_suffix[0].is_empty() {
+                            return Some(format!("/*START PREFIX*/{}", prefix_and_suffix[0]));
+                        }
+                        None
+                    })),
+                    end_marker_suffix: Some(Box::new(move |span: &DocumentSpan| {
+                        let text = suffix_texts.get(span).cloned().unwrap_or_default();
+                        let prefix_and_suffix: Vec<&str> = text.split('?').collect();
+                        // (Go indexes [1] and panics when the text has no "?".)
+                        if !prefix_and_suffix[1].is_empty() {
+                            return Some(format!("{}/*END SUFFIX*/", prefix_and_suffix[1]));
+                        }
+                        None
+                    })),
+                    ..Default::default()
+                },
+            );
+
+            let baseline_result = if !rename_options.is_empty() { rename_options + "\n" + &baseline_file_content } else { baseline_file_content };
+
+            self.add_result_to_baseline(t, RENAME_CMD, &baseline_result);
+        }
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
     }
 
     // fourslash.go:4862
     pub fn verify_rename_succeeded(&mut self, t: &T, preferences: Option<lsutil::UserPreferences>) {
-        Self::server_unavailable(t, "feature not ported: rename (VerifyRenameSucceeded)")
+        let reset = preferences.map(|preferences| self.configure_with_reset(t, preferences));
+        let params = lsproto::PrepareRenameParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            ..Default::default()
+        };
+
+        let prefix = self.get_current_position_prefix();
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_PREPARE_RENAME_INFO, params);
+        if result.range.is_none() && result.prepare_rename_placeholder.is_none() && result.prepare_rename_default_behavior.is_none() {
+            t.fatal(&(prefix + "Expected rename to succeed, but prepareRename returned null"));
+        }
+
+        // Also verify that textDocument/rename produces edits, since prepareRename is optional.
+        let rename_params = lsproto::RenameParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            new_name: "RENAME_SUCCEEDED_TEST".to_string(),
+            ..Default::default()
+        };
+        let rename_result = self.send_request(t, lsproto::TEXT_DOCUMENT_RENAME_INFO, rename_params);
+        if rename_result.workspace_edit.and_then(|edit| edit.changes).is_none_or(|changes| changes.is_empty()) {
+            t.fatal(&(prefix + "prepareRename succeeded but textDocument/rename returned no changes"));
+        }
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
     }
 
     // fourslash.go:4892
     pub fn verify_rename_range(&mut self, t: &T, expected_range: lsproto::Range, expected_placeholder: &str, preferences: Option<lsutil::UserPreferences>) {
-        Self::server_unavailable(t, "feature not ported: rename (VerifyRenameRange)")
+        t.helper();
+        let reset = preferences.map(|preferences| self.configure_with_reset(t, preferences));
+        let params = lsproto::PrepareRenameParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            ..Default::default()
+        };
+
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_PREPARE_RENAME_INFO, params);
+        let Some(placeholder) = result.prepare_rename_placeholder else {
+            t.fatal(&(self.get_current_position_prefix() + "Expected prepareRename to return a range and placeholder"));
+        };
+        assert_deep_equal(t, &placeholder.range, &expected_range, "");
+        if placeholder.placeholder != expected_placeholder {
+            t.fatal(&format!("assertion failed: {:?} (result.PrepareRenamePlaceholder.Placeholder) != {:?} (expectedPlaceholder)", placeholder.placeholder, expected_placeholder));
+        }
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
     }
 
     // fourslash.go:4912
     pub fn rename_at_caret(&mut self, t: &T, new_name: &str) -> lsproto::RenameResponse {
-        Self::server_unavailable(t, "feature not ported: rename (RenameAtCaret)")
+        t.helper();
+        let params = lsproto::RenameParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            new_name: new_name.to_string(),
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_RENAME_INFO, params);
+
+        let Some(workspace_edit) = &result.workspace_edit else {
+            return result;
+        };
+
+        if let Some(changes) = &workspace_edit.changes {
+            for (uri, edits) in changes {
+                let file_name = uri.file_name();
+                let script = self.get_or_load_script_info(&file_name).expect("nil pointer dereference: scriptInfo");
+                let changes: Vec<TextChange> =
+                    edits.iter().map(|edit| TextChange { text_range: self.from_lsp_range(&script, edit.range), new_text: edit.new_text.clone() }).collect();
+                self.edit_script_and_update_markers_worker(t, &file_name, &changes);
+            }
+        }
+
+        let mut rename_files: Vec<lsproto::RenameFile> = Vec::new();
+        if let Some(document_changes) = &workspace_edit.document_changes {
+            for doc_change in document_changes {
+                if let Some(text_document_edit) = &doc_change.text_document_edit {
+                    let file_name = text_document_edit.text_document.uri.file_name();
+                    let script = self.get_or_load_script_info(&file_name).expect("nil pointer dereference: scriptInfo");
+                    let changes: Vec<TextChange> = text_document_edit
+                        .edits
+                        .iter()
+                        .map(|edit| {
+                            let text_edit = edit.text_edit.as_ref().expect("nil pointer dereference: TextEdit");
+                            TextChange { text_range: self.from_lsp_range(&script, text_edit.range), new_text: text_edit.new_text.clone() }
+                        })
+                        .collect();
+                    self.edit_script_and_update_markers_worker(t, &file_name, &changes);
+                } else if let Some(rename_file) = &doc_change.rename_file {
+                    rename_files.push(rename_file.clone());
+                }
+            }
+        }
+
+        if !rename_files.is_empty() {
+            let file_renames: Vec<lsproto::FileRename> =
+                rename_files.iter().map(|rename_file| lsproto::FileRename { old_uri: rename_file.old_uri.clone(), new_uri: rename_file.new_uri.clone() }).collect();
+            let will_rename = self
+                .capabilities
+                .as_ref()
+                .and_then(|c| c.workspace.as_ref())
+                .and_then(|w| w.file_operations.as_ref())
+                .and_then(|o| o.will_rename)
+                .unwrap_or(false);
+            if will_rename {
+                self.will_rename_files_worker(t, &file_renames);
+            } else {
+                for rename_file in &rename_files {
+                    self.rename_file_or_directory(t, &rename_file.old_uri.file_name(), &rename_file.new_uri.file_name());
+                }
+            }
+        }
+
+        result
+    }
+
+    // fourslash.go:4992 (needs workspace/willRenameFiles, i.e. ls/file_rename.go, which is not ported)
+    fn will_rename_files_worker(&mut self, t: &T, _files: &[lsproto::FileRename]) {
+        Self::server_unavailable(t, "feature not ported: willRenameFiles (willRenameFilesWorker)")
     }
 
     // fourslash.go:4984
@@ -2094,7 +2473,20 @@ impl FourslashTest {
 
     // fourslash.go:5055
     pub fn verify_rename(&mut self, t: &T, marker_name: &str, new_name: &str, expected_file_contents: OrderedMap<String, String>) {
-        Self::server_unavailable(t, "feature not ported: rename (VerifyRename)")
+        t.helper();
+        self.go_to_marker(t, marker_name);
+        self.rename_at_caret(t, new_name);
+        for (file_name, expected_content) in &expected_file_contents {
+            let Some(script) = self.try_get_script_info(file_name) else {
+                t.fatal(&format!("Expected script info for {file_name}, but got nil"));
+            };
+            if script.content != *expected_content {
+                t.fatal(&format!(
+                    "assertion failed: {:?} (script.content) != {:?} (expectedContent): File content after rename did not match expected content for {}.",
+                    script.content, expected_content, file_name
+                ));
+            }
+        }
     }
 
     // fourslash.go:5068
@@ -2111,12 +2503,54 @@ impl FourslashTest {
 
     // fourslash.go:5186
     pub fn verify_rename_failed(&mut self, t: &T, preferences: Option<lsutil::UserPreferences>) {
-        Self::server_unavailable(t, "feature not ported: rename (VerifyRenameFailed)")
+        let reset = preferences.map(|preferences| self.configure_with_reset(t, preferences));
+        let params = lsproto::PrepareRenameParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            ..Default::default()
+        };
+
+        let prefix = self.get_current_position_prefix();
+        self.baseline_state(t);
+        self.baseline_request_or_notification(t, lsproto::TEXT_DOCUMENT_PREPARE_RENAME_INFO.method, || params.to_json());
+        let (res_msg, result) = self.client().send_request(lsproto::TEXT_DOCUMENT_PREPARE_RENAME_INFO, params);
+        self.baseline_state(t);
+
+        // prepareRename can reject via an error response (with a localized message) or a null result.
+        if res_msg.error.is_some() {
+            // Error response — rename was rejected with a message. This is expected.
+        } else if let Some(result) = &result {
+            if result.range.is_some() || result.prepare_rename_placeholder.is_some() || result.prepare_rename_default_behavior.is_some() {
+                t.fatal(&format!("{prefix}Expected rename to fail, but prepareRename returned a result"));
+            }
+        }
+
+        // Also verify that textDocument/rename does not produce usable edits, since prepareRename is optional.
+        let rename_params = lsproto::RenameParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            new_name: "RENAME_FAILED_TEST".to_string(),
+            ..Default::default()
+        };
+        let (rename_msg, rename_result) = self.client().send_request(lsproto::TEXT_DOCUMENT_RENAME_INFO, rename_params);
+        if rename_msg.error.is_none() {
+            if rename_result.and_then(|r| r.workspace_edit).and_then(|edit| edit.changes).is_some_and(|changes| !changes.is_empty()) {
+                t.fatal(&format!("{prefix}prepareRename returned null but textDocument/rename returned changes"));
+            }
+        }
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
     }
 
     // fourslash.go:5226
     pub fn verify_baseline_rename_at_ranges_with_text(&mut self, t: &T, preferences: Option<lsutil::UserPreferences>, texts: &[&str]) {
-        Self::server_unavailable(t, "feature not ported: rename (VerifyBaselineRenameAtRangesWithText)")
+        let mut marker_or_ranges: Vec<MarkerOrRange> = Vec::new();
+        for text in texts {
+            let ranges_by_text = self.get_ranges_by_text();
+            marker_or_ranges.extend(ranges_by_text.get(&text.to_string()).iter().map(|r| MarkerOrRange::RangeMarker(r.clone())));
+        }
+        self.verify_baseline_rename_impl(t, preferences, marker_or_ranges);
     }
 
     // fourslash.go:5239
@@ -2214,7 +2648,22 @@ impl FourslashTest {
 
     // fourslash.go:5698
     pub fn verify_baseline_go_to_implementation(&mut self, t: &T, marker_names: &[&str]) {
-        Self::server_unavailable(t, "feature not ported: implementation (VerifyBaselineGoToImplementation)")
+        self.verify_baseline_definitions(
+            t,
+            GO_TO_IMPLEMENTATION_CMD,
+            "/*GOTO IMPL*/", /*definitionMarker*/
+            |t: &T, f: &mut FourslashTest, _file_name: &str, _position: lsproto::Position| {
+                let params = lsproto::ImplementationParams {
+                    text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&f.active_filename) },
+                    position: f.current_caret_position,
+                    ..Default::default()
+                };
+
+                f.send_request(t, lsproto::TEXT_DOCUMENT_IMPLEMENTATION_INFO, params)
+            },
+            false, /*includeOriginalSelectionRange*/
+            marker_names,
+        );
     }
 
     // fourslash.go:5726
@@ -3232,4 +3681,384 @@ struct DocumentSpanKey {
 // Go unicode.IsSpace (strings.TrimSpace).
 fn go_is_space(r: char) -> bool {
     matches!(r, '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{85}' | '\u{A0}') || (!r.is_ascii() && r.is_whitespace())
+}
+
+// fourslash.go:3450
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum callHierarchyItemDirection {
+    Root,
+    Incoming,
+    Outgoing,
+}
+
+// fourslash.go:3458
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct callHierarchyItemKey {
+    uri: lsproto::DocumentUri,
+    range_: lsproto::Range,
+    direction: callHierarchyItemDirection,
+}
+
+// fourslash.go:3464
+fn symbol_kind_to_lowercase(kind: lsproto::SymbolKind) -> String {
+    kind.string().to_lowercase()
+}
+
+// Go passes a possibly nil `*scriptInfo` and dereferences it when formatting a span.
+// fourslash.go:3468
+#[allow(clippy::too_many_arguments)]
+fn format_call_hierarchy_item(
+    t: &T,
+    f: &mut FourslashTest,
+    file: Option<&ScriptInfo>,
+    result: &mut String,
+    call_hierarchy_item: &lsproto::CallHierarchyItem,
+    direction: callHierarchyItemDirection,
+    seen: &mut rustc_hash::FxHashSet<callHierarchyItemKey>,
+    prefix: &str,
+) {
+    let key = callHierarchyItemKey { uri: call_hierarchy_item.uri.clone(), range_: call_hierarchy_item.range, direction };
+    let already_seen = !seen.insert(key);
+
+    struct callResult<V> {
+        skip: bool,
+        seen: bool,
+        values: Vec<V>,
+    }
+
+    let mut incoming_calls: callResult<lsproto::CallHierarchyIncomingCall> = callResult { skip: false, seen: false, values: Vec::new() };
+    let mut outgoing_calls: callResult<lsproto::CallHierarchyOutgoingCall> = callResult { skip: false, seen: false, values: Vec::new() };
+
+    if direction == callHierarchyItemDirection::Outgoing {
+        incoming_calls.skip = true;
+    } else if already_seen {
+        incoming_calls.seen = true;
+    } else {
+        let incoming_params = lsproto::CallHierarchyIncomingCallsParams { item: call_hierarchy_item.clone(), ..Default::default() };
+        let incoming_result = f.send_request(t, lsproto::CALL_HIERARCHY_INCOMING_CALLS_INFO, incoming_params);
+        if let Some(values) = incoming_result.call_hierarchy_incoming_calls {
+            incoming_calls.values = values;
+        }
+    }
+
+    if direction == callHierarchyItemDirection::Incoming {
+        outgoing_calls.skip = true;
+    } else if already_seen {
+        outgoing_calls.seen = true;
+    } else {
+        let outgoing_params = lsproto::CallHierarchyOutgoingCallsParams { item: call_hierarchy_item.clone(), ..Default::default() };
+        let outgoing_result = f.send_request(t, lsproto::CALL_HIERARCHY_OUTGOING_CALLS_INFO, outgoing_params);
+        if let Some(values) = outgoing_result.call_hierarchy_outgoing_calls {
+            outgoing_calls.values = values;
+        }
+    }
+
+    let trailing_prefix = prefix;
+    result.push_str(&format!("{}╭ name: {}\n", prefix, call_hierarchy_item.name));
+    result.push_str(&format!("{}├ kind: {}\n", prefix, symbol_kind_to_lowercase(call_hierarchy_item.kind)));
+    if let Some(detail) = call_hierarchy_item.detail.as_ref().filter(|d| !d.is_empty()) {
+        result.push_str(&format!("{}├ containerName: {}\n", prefix, detail));
+    }
+    result.push_str(&format!("{}├ file: {}\n", prefix, call_hierarchy_item.uri.file_name()));
+    result.push_str(prefix);
+    result.push_str("├ span:\n");
+    format_call_hierarchy_item_span(f, file, result, call_hierarchy_item.range, &format!("{prefix}│ "), &format!("{prefix}│ "));
+    result.push_str(prefix);
+    result.push_str("├ selectionSpan:\n");
+    format_call_hierarchy_item_span(f, file, result, call_hierarchy_item.selection_range, &format!("{prefix}│ "), &format!("{prefix}│ "));
+
+    // Handle incoming calls
+    if incoming_calls.seen {
+        if outgoing_calls.skip {
+            result.push_str(trailing_prefix);
+            result.push_str("╰ incoming: ...\n");
+        } else {
+            result.push_str(prefix);
+            result.push_str("├ incoming: ...\n");
+        }
+    } else if !incoming_calls.skip {
+        if incoming_calls.values.is_empty() {
+            if outgoing_calls.skip {
+                result.push_str(trailing_prefix);
+                result.push_str("╰ incoming: none\n");
+            } else {
+                result.push_str(prefix);
+                result.push_str("├ incoming: none\n");
+            }
+        } else {
+            result.push_str(prefix);
+            result.push_str("├ incoming:\n");
+            let count = incoming_calls.values.len();
+            for (i, incoming_call) in incoming_calls.values.iter().enumerate() {
+                let from_file_name = incoming_call.from.uri.file_name();
+                let from_file = f.get_or_load_script_info(&from_file_name);
+                result.push_str(prefix);
+                result.push_str("│ ╭ from:\n");
+                format_call_hierarchy_item(t, f, from_file.as_ref(), result, &incoming_call.from, callHierarchyItemDirection::Incoming, seen, &format!("{prefix}│ │ "));
+                result.push_str(prefix);
+                result.push_str("│ ├ fromSpans:\n");
+
+                let mut from_spans_trailing_prefix = format!("{trailing_prefix}╰ ╰ ");
+                if i < count - 1 {
+                    from_spans_trailing_prefix = format!("{prefix}│ ╰ ");
+                } else if !outgoing_calls.skip && (!outgoing_calls.seen || !outgoing_calls.values.is_empty()) {
+                    from_spans_trailing_prefix = format!("{prefix}│ ╰ ");
+                }
+                format_call_hierarchy_item_spans(f, from_file.as_ref(), result, &incoming_call.from_ranges, &format!("{prefix}│ │ "), &from_spans_trailing_prefix);
+            }
+        }
+    }
+
+    // Handle outgoing calls
+    if outgoing_calls.seen {
+        result.push_str(trailing_prefix);
+        result.push_str("╰ outgoing: ...\n");
+    } else if !outgoing_calls.skip {
+        if outgoing_calls.values.is_empty() {
+            result.push_str(trailing_prefix);
+            result.push_str("╰ outgoing: none\n");
+        } else {
+            result.push_str(prefix);
+            result.push_str("├ outgoing:\n");
+            let count = outgoing_calls.values.len();
+            for (i, outgoing_call) in outgoing_calls.values.iter().enumerate() {
+                let to_file_name = outgoing_call.to.uri.file_name();
+                let to_file = f.get_or_load_script_info(&to_file_name);
+                result.push_str(prefix);
+                result.push_str("│ ╭ to:\n");
+                format_call_hierarchy_item(t, f, to_file.as_ref(), result, &outgoing_call.to, callHierarchyItemDirection::Outgoing, seen, &format!("{prefix}│ │ "));
+                result.push_str(prefix);
+                result.push_str("│ ├ fromSpans:\n");
+
+                let mut from_spans_trailing_prefix = format!("{trailing_prefix}╰ ╰ ");
+                if i < count - 1 {
+                    from_spans_trailing_prefix = format!("{prefix}│ ╰ ");
+                }
+                format_call_hierarchy_item_spans(f, file, result, &outgoing_call.from_ranges, &format!("{prefix}│ │ "), &from_spans_trailing_prefix);
+            }
+        }
+    }
+}
+
+// fourslash.go:3613
+fn format_call_hierarchy_item_span(f: &FourslashTest, file: Option<&ScriptInfo>, result: &mut String, span: lsproto::Range, prefix: &str, closing_prefix: &str) {
+    let file = file.expect("nil pointer dereference: scriptInfo");
+    let start_lc = span.start;
+    let end_lc = span.end;
+    let start_pos = f.converters.line_and_character_to_position(file.clone(), span.start);
+    let end_pos = f.converters.line_and_character_to_position(file.clone(), span.end);
+
+    // Compute line starts for the file
+    let line_starts = compute_line_starts(&file.content);
+    let content = file.content.as_bytes();
+
+    // Find the line boundaries - expand to full lines
+    let mut context_start = start_pos as usize;
+    let mut context_end = end_pos as usize;
+
+    // Expand to start of first line
+    while context_start > 0 && content[context_start - 1] != b'\n' && content[context_start - 1] != b'\r' {
+        context_start -= 1;
+    }
+
+    // Expand to end of last line
+    while context_end < content.len() && content[context_end] != b'\n' && content[context_end] != b'\r' {
+        context_end += 1;
+    }
+
+    // Get actual line and character positions for the context
+    let context_start_line = start_lc.line as usize;
+    let context_end_line = end_lc.line as usize;
+
+    // Calculate line number padding
+    let line_num_width = (context_end_line + 1).to_string().len() + 2;
+
+    result.push_str(&format!("{}╭ {}:{}:{}-{}:{}\n", prefix, file.file_name, start_lc.line + 1, start_lc.character + 1, end_lc.line + 1, end_lc.character + 1));
+
+    for line_num in context_start_line..=context_end_line {
+        let line_start = line_starts[line_num];
+        let mut line_end = file.content.len();
+        if line_num + 1 < line_starts.len() {
+            line_end = line_starts[line_num + 1];
+        }
+
+        // Get the line content, trimming trailing newlines
+        let line_content = file.content[line_start..line_end].trim_end_matches(['\r', '\n']);
+
+        // Format with line number
+        let line_num_str = format!("{}:", line_num + 1);
+        let padded_line_num = " ".repeat(line_num_width - line_num_str.len() - 1) + &line_num_str;
+        if line_content.is_empty() {
+            result.push_str(&format!("{}│ {}\n", prefix, padded_line_num));
+        } else {
+            result.push_str(&format!("{}│ {} {}\n", prefix, padded_line_num, line_content));
+        }
+
+        // Add selection carets if this line contains part of the span
+        if line_num >= start_lc.line as usize && line_num <= end_lc.line as usize {
+            let mut sel_start: usize = 0;
+            let mut sel_end: usize = line_content.len();
+
+            if line_num == start_lc.line as usize {
+                sel_start = start_lc.character as usize;
+            }
+            if line_num == end_lc.line as usize {
+                sel_end = end_lc.character as usize;
+            }
+
+            // Don't show carets for empty selections
+            let is_empty = start_lc.line == end_lc.line && start_lc.character == end_lc.character;
+            if is_empty {
+                // For empty selections, show a single "<" character
+                let padding = " ".repeat(line_num_width + sel_start);
+                result.push_str(&format!("{}│ {}<\n", prefix, padding));
+            } else {
+                // Calculate selection length (at least 1)
+                let mut sel_length = sel_end as isize - sel_start as isize;
+                sel_length = sel_length.max(1); // Trim to actual content on the line
+                if line_num < end_lc.line as usize {
+                    // For lines before the last, trim to line content length
+                    if sel_end > line_content.len() {
+                        sel_end = line_content.len();
+                        sel_length = sel_end as isize - sel_start as isize;
+                    }
+                }
+
+                let padding = " ".repeat(line_num_width + sel_start);
+                let carets = "^".repeat(sel_length.max(0) as usize);
+                result.push_str(&format!("{}│ {}{}\n", prefix, padding, carets));
+            }
+        }
+    }
+
+    result.push_str(closing_prefix);
+    result.push_str("╰\n");
+}
+
+// fourslash.go:3712
+fn compute_line_starts(content: &str) -> Vec<usize> {
+    let mut line_starts = vec![0];
+    for (i, ch) in content.char_indices() {
+        if ch == '\n' {
+            line_starts.push(i + 1);
+        }
+    }
+    line_starts
+}
+
+// fourslash.go:3723
+fn format_call_hierarchy_item_spans(f: &FourslashTest, file: Option<&ScriptInfo>, result: &mut String, spans: &[lsproto::Range], prefix: &str, trailing_prefix: &str) {
+    for (i, span) in spans.iter().enumerate() {
+        let mut closing_prefix = prefix;
+        if i == spans.len() - 1 {
+            closing_prefix = trailing_prefix;
+        }
+        format_call_hierarchy_item_span(f, file, result, *span, prefix, closing_prefix);
+    }
+}
+
+impl FourslashTest {
+    // fourslash.go:5086
+    fn get_path_updater(&self, old_path: &str, new_path: &str) -> impl Fn(&str) -> Option<String> {
+        let use_case_sensitive_file_names = self.vfs.use_case_sensitive_file_names();
+        let (old_path, new_path) = (old_path.to_string(), new_path.to_string());
+        move |path: &str| {
+            let compare_options = tspath::ComparePathsOptions { use_case_sensitive_file_names, ..Default::default() };
+            if tspath::compare_paths(path, &old_path, &compare_options) == 0 {
+                return Some(new_path.clone());
+            }
+            if tspath::starts_with_directory(path, &old_path, use_case_sensitive_file_names) {
+                return Some(format!("{}{}", new_path, &path[old_path.len()..]));
+            }
+            None
+        }
+    }
+
+    // fourslash.go:5101
+    fn rename_file_or_directory(&mut self, t: &T, old_path: &str, new_path: &str) {
+        t.helper();
+
+        let path_updater = self.get_path_updater(old_path, new_path);
+
+        // Collect all file paths that need to be renamed. (Go: a map, iterated in random order.)
+        let mut old_file_names: OrderedMap<String, ()> = OrderedMap::default();
+        if self.vfs.read_file(old_path).is_some() {
+            old_file_names.insert(old_path.to_string(), ());
+        } else {
+            for path in get_accessible_file_paths(&*self.vfs, old_path) {
+                old_file_names.insert(path, ());
+            }
+        }
+        if old_file_names.is_empty() {
+            t.fatal(&format!("rename source {old_path} did not exist in test environment"));
+        }
+
+        // !!! TODO: handle overwrites if we need to.
+        // For each file: close if open, update script infos, write to VFS at new path, and collect file-watch events.
+        let mut file_events: Vec<lsproto::FileEvent> = Vec::with_capacity(old_file_names.len() * 2);
+        let mut reopen_at_new_path: OrderedMap<String, String> = OrderedMap::default(); // newFileName -> content, for files that were open
+        for old_file_name in old_file_names.keys() {
+            let Some(new_file_name) = path_updater(old_file_name) else {
+                t.fatal(&format!("failed to compute renamed path for {old_file_name}"));
+            };
+
+            // Send didClose for open files; get content from the old script info.
+            if self.open_files.contains_key(old_file_name) {
+                let script = self.get_script_info(old_file_name);
+                reopen_at_new_path.insert(new_file_name.clone(), script.content.clone());
+                self.send_notification(
+                    t,
+                    lsproto::TEXT_DOCUMENT_DID_CLOSE_INFO,
+                    lsproto::DidCloseTextDocumentParams { text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(old_file_name) } },
+                );
+                self.open_files.shift_remove(old_file_name);
+            }
+
+            {
+                let mut script_infos = self.script_infos.write().unwrap();
+                let old_content = script_infos.get(old_file_name).expect("nil pointer dereference: scriptInfo").content.clone();
+                script_infos.insert(new_file_name.clone(), new_script_info(&new_file_name, &old_content));
+                script_infos.remove(old_file_name);
+            }
+
+            // Write renamed file to VFS.
+            let Some(content) = self.vfs.read_file(old_file_name) else {
+                t.fatal(&format!("failed to read content for {old_file_name} during rename to {new_file_name}"));
+            };
+            if let Err(err) = self.vfs.write_file(&new_file_name, &content) {
+                t.fatal(&format!("failed to write renamed file {new_file_name}: {err}"));
+            }
+
+            file_events.push(lsproto::FileEvent { uri: lsconv::file_name_to_document_uri(old_file_name), type_: lsproto::FileChangeType::Deleted });
+            file_events.push(lsproto::FileEvent { uri: lsconv::file_name_to_document_uri(&new_file_name), type_: lsproto::FileChangeType::Created });
+        }
+
+        // Remove the old path from VFS and notify the server of all file-system changes.
+        if let Err(err) = self.vfs.remove(old_path) {
+            t.fatal(&format!("failed to remove old path {old_path}: {err}"));
+        }
+        self.send_notification(t, lsproto::WORKSPACE_DID_CHANGE_WATCHED_FILES_INFO, lsproto::DidChangeWatchedFilesParams { changes: file_events });
+
+        // Reopen files that were previously open at their new paths.
+        for (new_file_name, content) in &reopen_at_new_path {
+            self.send_notification(
+                t,
+                lsproto::TEXT_DOCUMENT_DID_OPEN_INFO,
+                lsproto::DidOpenTextDocumentParams {
+                    text_document: lsproto::TextDocumentItem {
+                        uri: lsconv::file_name_to_document_uri(new_file_name),
+                        language_id: get_language_kind(new_file_name),
+                        text: content.clone(),
+                        ..Default::default()
+                    },
+                },
+            );
+            self.open_files.insert(new_file_name.clone(), ());
+        }
+
+        // Update active filename if it was under the renamed path.
+        if let Some(updated_active) = path_updater(&self.active_filename) {
+            self.active_filename = updated_active;
+        }
+    }
 }

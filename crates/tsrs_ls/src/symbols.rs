@@ -704,7 +704,7 @@ fn should_exclude_file(file: P<SourceFile>, program: &Program, exclude_library_s
 }
 
 // symbols.go:619
-fn is_inside_node_modules(file_name: &str) -> bool {
+pub(crate) fn is_inside_node_modules(file_name: &str) -> bool {
     file_name.contains("/node_modules/")
 }
 

@@ -310,7 +310,7 @@ impl LanguageService {
 }
 
 // definition.go:281
-fn lsp_range_contains(outer: lsproto::Range, inner: lsproto::Range) -> bool {
+pub(crate) fn lsp_range_contains(outer: lsproto::Range, inner: lsproto::Range) -> bool {
     lsproto::compare_positions(outer.start, inner.start) <= 0 && lsproto::compare_positions(inner.end, outer.end) <= 0
 }
 

@@ -1570,6 +1570,8 @@ pub struct SourceFile {
 
     // Go `declarationMapMu`, `declarationMap` (workspace symbols), see get_declaration_map
     declaration_map: OnceLock<FxHashMap<&'static str, Vec<P<Node>>>>,
+    // Language service name table (Go `nameTableOnce`, `nameTable`), see get_name_table
+    name_table: OnceLock<FxHashMap<&'static str, i32>>,
 }
 
 impl NodeFactory {
@@ -1631,6 +1633,7 @@ impl NodeFactory {
             position_map: OnceLock::new(),
             token_cache: std::sync::Mutex::new(FxHashMap::default()),
             declaration_map: OnceLock::new(),
+            name_table: OnceLock::new(),
         });
         node.as_source_file().node.set(Some(node));
         node
@@ -1818,6 +1821,40 @@ impl SourceFile {
     }
 
     // GetPositionMap returns the PositionMap for this source file, computing it lazily.
+    // GetNameTable returns a map of all names in the file to their positions.
+    // If the name appears more than once, the value is -1.
+    // ast.go:2857
+    pub fn get_name_table(&self) -> &FxHashMap<&'static str, i32> {
+        self.name_table.get_or_init(|| {
+            let file: &'static SourceFile = self.as_node().as_source_file();
+            let mut name_table: FxHashMap<&'static str, i32> = FxHashMap::with_capacity_and_hasher(self.identifier_count.get(), Default::default());
+
+            fn walk(node: P<Node>, file: &'static SourceFile, name_table: &mut FxHashMap<&'static str, i32>) -> bool {
+                if is_identifier(node) && !is_tag_name(node) && !node.text().is_empty()
+                    || is_string_or_numeric_literal_like(node) && literal_is_name(node)
+                    || is_private_identifier(node)
+                {
+                    let text = node.text();
+                    if name_table.contains_key(text) {
+                        name_table.insert(text, -1);
+                    } else {
+                        name_table.insert(text, node.pos());
+                    }
+                }
+
+                node.for_each_child(&mut |child| walk(child, file, name_table));
+                let jsdoc_nodes = node.jsdoc(Some(file));
+                for &jsdoc in jsdoc_nodes {
+                    jsdoc.for_each_child(&mut |child| walk(child, file, name_table));
+                }
+                false
+            }
+            file.as_node().for_each_child(&mut |child| walk(child, file, &mut name_table));
+
+            name_table
+        })
+    }
+
     pub fn get_position_map(&self) -> P<PositionMap> {
         *self.position_map.get_or_init(|| P::new(compute_position_map(self.text)))
     }
