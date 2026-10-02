@@ -19,9 +19,9 @@ Wave agent `misc` (phase 3), branch `lsp-misc`.
 Not ported: `ls/organizeimports.go` (scope change: the `actions` wave owns `ls/change`, organize imports, code
 actions and auto-imports; nothing was started here).
 
-## Gates (2026-10-02, after merging `lsp` with the refs wave)
+## Gates (2026-10-02, after merging `lsp` with the refs and compl waves)
 
-- `tsrs-fourslash run`: 4,546 tests, 2,238 pass (lsp: 1,954), 1,891 fail, 417 skip; no test of the `lsp` pass list
+- `tsrs-fourslash run`: 4,546 tests, 3,321 pass (lsp: 3,037), 808 fail, 417 skip; no test of the `lsp` pass list
   fails.
 - Per family (pass / calling tests; every other failure is a content-mapper, state-baseline or Go-skipped test,
   except the one divergence below): VerifyBaselineDocumentSymbol 83 / 85, VerifySemanticTokens 46 / 46,
@@ -33,12 +33,14 @@ actions and auto-imports; nothing was started here).
   ("Cannot find module '../../a/dist/foo.js'" in b), so b's reference is never found. Same compiler gap as the
   `TestRewriteRelativeImportExtensionsProjectReferences{1,2,3}` divergences (project-reference output -> source
   redirects); not in this wave's files.
-- `cargo check --workspace --tests`: 0 errors, 0 warnings.
+- `cargo check --workspace --tests`: 0 errors, 0 warnings. `cargo test -p tsrs_ls -p tsrs_lsp` (lib): 91 + 26 pass
+  (before the compl merge). The `tsrs_ls` doctest `format::util::find_outermost_node_within_list_level` (an indented
+  block in a `///` comment of format/util.rs, not this wave's file) is compiled as Rust and loops forever.
 
 ## Shared-file edits
 
 - `crates/tsrs_ast/src/ast.rs`: `SourceFile.declaration_map` (`OnceLock`, Go `declarationMapMu` + `declarationMap`),
-  `get_declaration_map`, `compute_declaration_map`, `get_declaration_name` (ast.go:2973/2982/3092).
+  `get_declaration_map`, `compute_declaration_map` (ast.go:2973/2982; uses the compl wave's `get_declaration_name`).
 - `crates/tsrs_lsp/src/lsconsts.rs`: semantic tokens legend removed (now `tsrs_ls::semantic_tokens_legend`);
   `server.rs` calls the `tsrs_ls` one.
 - `crates/tsrs_fourslash/src/runner.rs`: the full message of each failure is written to
@@ -55,10 +57,6 @@ actions and auto-imports; nothing was started here).
   position), so the response is the same.
 - `getMatchScore`: Go `unicode.IsUpper` is approximated by `char::is_uppercase` outside ASCII (Rust's Uppercase
   property also includes `Other_Uppercase`, e.g. circled letters); `unicode.ToLower` is `stringutil::unicode_to_lower`.
-- `getLineEndOfPosition` (folding), `supplementalFileIndex` / `sourceFileForSupplementalFileIndex` (code lens) and
-  `strPtrTo` (workspace symbols) live in `completions.go`; this wave keeps private copies (`folding.rs`,
-  `codelens.rs`, inline in `symbols.rs`) so it does not touch `completions.rs`. Fold them into `completions.rs` when
-  merging.
 - Selection ranges: Go walks `current.VisitEachChild(tempVisitor)` with closures over the builder state; the Rust
   visitor's callbacks are `'static`, so the children are collected in VisitEachChild order (nodes through `Visit`,
   lists through the `VisitNodes` hook) and processed afterwards (same pattern as `format/span.rs`).
@@ -75,8 +73,6 @@ actions and auto-imports; nothing was started here).
 
 - compiler: project-reference output -> source redirects (`TestCodeLensOnFunctionAcrossProjects1`, and the 3
   RewriteRelativeImportExtensions divergences).
-- completions wave: `getLineEndOfPosition`, `supplementalFileIndex`, `sourceFileForSupplementalFileIndex`,
-  `strPtrTo` from completions.rs can replace the private copies listed above.
 
 ## Doubts
 
