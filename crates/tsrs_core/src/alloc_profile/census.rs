@@ -734,26 +734,29 @@ fn run_frozen(roots: &[usize]) {
 /// Offsets (in 4-byte scan steps) of words that overlap struct padding in arena types whose padding showed up as
 /// would-free references: `P::new` copies the value with its padding, so stale stack words land there.
 /// Also the non-pointer header words of types and nodes (ids and text positions that can look like arena
-/// addresses). `TypeAlloc<TypeParameter>`: two bools then 6 padding bytes at +80; `TypeAlloc<LiteralType>`: the 24-byte value
-/// enum, whose number / boolean variants leave bytes after the value uninitialized (+36..+56); `TypeAlloc<MappedType>` and
-/// `Diagnostic`: a trailing bool (+112, +144).
+/// addresses). Type offsets are after the 24-byte type header. `TypeAlloc<TypeParameter>`: two bools then 6 padding
+/// bytes at +72; `TypeAlloc<LiteralType>`: the 24-byte value enum, whose number / boolean variants leave bytes after
+/// the value uninitialized (+28..+48); `TypeAlloc<MappedType>` and `Diagnostic`: a trailing bool (+104, +144).
 fn padding_words(c: &Class) -> &'static [usize] {
     match c {
-        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::TypeParameter>") => &[76, 80, 84],
-        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::LiteralType>") => &[36, 40, 44, 48, 52],
-        // (104: a 4-byte field followed by the padding at 108.)
-        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::MappedType>") => &[104, 108, 112],
+        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::TypeParameter>") => &[68, 72],
+        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::LiteralType>") => &[28, 32, 36, 40, 44],
+        // (96: a 4-byte field followed by the padding at 100.)
+        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::MappedType>") => &[96, 100, 104],
         Class::Arena { ty, .. } if ty.ends_with("tsrs_ast::diagnostic::Diagnostic") => &[140, 144],
         Class::Arena { ty, .. } if ty.ends_with("tsrs_checker::types::ConditionalRoot") => &[68, 72],
+        // Two bools then 6 padding bytes at +40.
+        Class::Arena { ty, .. } if ty.ends_with("tsrs_checker::checker::InferenceInfo") => &[36, 40, 44],
         _ => &[],
     }
 }
 
-/// Header words that never hold pointers: in types the id, the data tag and 3 padding bytes at +24 (and the
-/// words straddling them); in nodes flags, range and id at +8..+24 (word 0 holds the parent, x8-encoded).
+/// Header words that never hold pointers: in types (24-byte header) flags and object flags at +8, the id at +16, the
+/// data tag and 3 padding bytes at +20 (and the words straddling them); in nodes flags, range and id at +8..+24
+/// (word 0 holds the parent, x8-encoded).
 fn header_words(c: &Class) -> &'static [usize] {
     match c {
-        Class::Arena { ty, .. } if ty.starts_with("tsrs_checker::types::TypeAlloc<") => &[20, 24, 28],
+        Class::Arena { ty, .. } if ty.starts_with("tsrs_checker::types::TypeAlloc<") => &[8, 12, 16, 20],
         Class::Arena { ty, .. } if ty.starts_with("tsrs_ast::ast::NodeAlloc<") || *ty == "tsrs_ast::ast::Node" => &[4, 8, 12, 16, 20],
         _ => &[],
     }
@@ -885,8 +888,13 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
                 || bit0
                 || is_heap(b.class)
                 || (slice && off_t % 8 == 0);
-            // A `ThinSlice` keeps the length of the list it points to in the top 16 bits.
-            if aimed && (w >> 48 == 0 || packed || (slice && off_t == 0)) {
+            // A `ThinSlice` keeps the length of the list it points to in the top 16 bits: accept those bits only when
+            // they are that list's element count (4- to 16-byte elements), not stray bytes over a pointer.
+            let thin = slice && off_t == 0 && {
+                let len = w >> 48;
+                len != 0 && b.size as u64 % len == 0 && matches!(b.size as u64 / len, 4 | 8 | 12 | 16)
+            };
+            if aimed && (w >> 48 == 0 || packed || thin) {
                 match wf_seq.get(&i) {
                     None => return Some(i),
                     Some(&freed) if c & 0xffff != 0 && born.is_none_or(|b| b <= freed) => return Some(i),
