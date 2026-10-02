@@ -1748,37 +1748,414 @@ impl FourslashTest {
 
     // fourslash.go:1691
     pub fn verify_code_fix(&mut self, t: &T, options: VerifyCodeFixOptions) {
-        Self::server_unavailable(t, "feature not ported: code actions (VerifyCodeFix)")
+        t.helper();
+
+        let reset = options.user_preferences.clone().map(|preferences| self.configure_with_reset(t, preferences));
+
+        let actions = self.get_code_fix_actions(t, None);
+
+        if actions.is_empty() {
+            t.fatal("No code fixes returned.");
+        }
+        if options.index as usize >= actions.len() {
+            t.fatal(&format!("Code fix index {} out of range (got {} fixes)", options.index, actions.len()));
+        }
+
+        let mut matching_action = actions[options.index as usize].clone();
+        if matching_action.title != options.description {
+            let mut found = false;
+            for action in &actions {
+                if action.title == options.description {
+                    matching_action = action.clone();
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
+                t.fatal(&format!("No code fix with description {:?} at index {} found. Available fixes: {:?}", options.description, options.index, titles));
+            }
+        }
+
+        let active = self.active_filename.clone();
+        let original_content = self.get_script_info(&active).content;
+        let mut expected_content = options.new_file_content.clone();
+        if !options.new_range_content.is_empty() {
+            let mut selection = self.get_selection();
+            if selection.pos() == selection.end() {
+                let ranges = self.get_ranges_in_file(&active);
+                if ranges.is_empty() {
+                    t.fatal("Expected a selected range or fourslash range for NewRangeContent verification.");
+                }
+                selection = ranges[0].range;
+            }
+            expected_content = format!(
+                "{}{}{}",
+                &original_content[..selection.pos() as usize],
+                options.new_range_content,
+                &original_content[selection.end() as usize..]
+            );
+        }
+
+        if options.apply_changes {
+            if let Some(changes) = matching_action.edit.as_ref().and_then(|e| e.changes.clone()) {
+                let expected_uri = lsconv::file_name_to_document_uri(&active);
+                for (uri, edits) in changes {
+                    if uri != expected_uri {
+                        t.fatal(&format!("Code fix returned edits for unexpected URI {:?} (expected {:?})", uri.0, expected_uri.0));
+                    }
+                    self.apply_text_edits(t, edits);
+                }
+            }
+            let actual = self.get_script_info(&active).content;
+            crate::go::assert::equal(t, expected_content.as_str(), actual.as_str(), "File content after applying code fix did not match expected content.");
+        } else {
+            let mut actual = self.get_script_info(&active).content;
+            if let Some(changes) = matching_action.edit.as_ref().and_then(|e| e.changes.clone()) {
+                let expected_uri = lsconv::file_name_to_document_uri(&active);
+                for (uri, edits) in changes {
+                    if uri != expected_uri {
+                        t.fatal(&format!("Code fix returned edits for unexpected URI {:?} (expected {:?})", uri.0, expected_uri.0));
+                    }
+                    actual = self.apply_edits_to_content(&actual, edits);
+                }
+            }
+            crate::go::assert::equal(t, expected_content.as_str(), actual.as_str(), "File content after applying code fix did not match expected content.");
+        }
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
     }
 
     // fourslash.go:1768
     pub fn verify_range_after_code_fix(&mut self, t: &T, expected_text: &str, include_whitespace: bool, error_code: i32, index: i32) {
-        Self::server_unavailable(t, "feature not ported: code actions (VerifyRangeAfterCodeFix)")
+        t.helper();
+
+        let actions = self.get_code_fix_actions(t, Some(error_code));
+        if actions.is_empty() {
+            t.fatal("No code fixes returned.");
+        }
+
+        if index as usize >= actions.len() {
+            t.fatal(&format!("Code fix index {} out of range (got {} fixes)", index, actions.len()));
+        }
+
+        let action = actions[index as usize].clone();
+        let active = self.active_filename.clone();
+        let ranges = self.get_ranges_in_file(&active);
+        if ranges.len() != 1 {
+            t.fatal(&format!("Expected exactly one range in {:?}, got {}.", active, ranges.len()));
+        }
+
+        let edits = self.get_code_action_edits_for_active_file(t, &action);
+        let updated_range = self.update_text_range_for_text_edits(ranges[0].range, &edits);
+        assert_valid_text_range(
+            t,
+            updated_range,
+            &format!("Code fix {:?} replaced part of the expected range; unable to compute rangeAfterCodeFix result.", action.title),
+        );
+
+        self.apply_text_edits(t, edits);
+        let actual_content = self.get_script_info(&active).content;
+        let actual_text = &actual_content[updated_range.pos() as usize..updated_range.end() as usize];
+
+        if include_whitespace {
+            crate::go::assert::equal(t, expected_text, actual_text, "Range content after applying code fix did not match expected content.");
+            return;
+        }
+
+        let actual_text = remove_whitespace(actual_text);
+        let expected_text = remove_whitespace(expected_text);
+        crate::go::assert::equal(t, expected_text.as_str(), actual_text.as_str(), "Range content after applying code fix did not match expected content.");
+    }
+
+    // fourslash.go:1806
+    fn get_code_action_edits_for_active_file(&self, t: &T, action: &lsproto::CodeAction) -> Vec<lsproto::TextEdit> {
+        t.helper();
+        let Some(changes) = action.edit.as_ref().and_then(|e| e.changes.as_ref()) else {
+            t.fatal(&format!("Code fix {:?} did not return text edits.", action.title));
+        };
+        if changes.len() != 1 {
+            t.fatal(&format!("Code fix {:?} returned edits for multiple files; rangeAfterCodeFix expects only the active file.", action.title));
+        }
+
+        if let Some(edits) = changes.get(&lsconv::file_name_to_document_uri(&self.active_filename)) {
+            return edits.clone();
+        }
+        t.fatal(&format!("Code fix {:?} did not return edits for active file {:?}.", action.title, self.active_filename));
     }
 
     // fourslash.go:1822
+    // The generator emits Go's `nil` as `&[]`; no Go test passes a non-nil empty slice (which would take the
+    // `VerifyCodeFixNotAvailable` branch), so an empty slice is Go's nil here.
     pub fn verify_code_fix_available(&mut self, t: &T, expected_descriptions: &[&str]) {
-        Self::server_unavailable(t, "feature not ported: code actions (VerifyCodeFixAvailable)")
+        t.helper();
+
+        let actions = self.get_code_fix_actions(t, None);
+
+        if expected_descriptions.is_empty() {
+            if actions.is_empty() {
+                t.fatal("Expected code fixes to be available, but got none.");
+            }
+            return;
+        }
+
+        for expected in expected_descriptions {
+            let found = actions.iter().any(|action| action.title == *expected);
+            if !found {
+                let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
+                t.fatal(&format!("Expected code fix with description {:?} not found. Available fixes: {:?}", expected, titles));
+            }
+        }
     }
 
     // fourslash.go:1857
     pub fn verify_code_fix_not_available(&mut self, t: &T, expected: &[&str]) {
-        Self::server_unavailable(t, "feature not ported: code actions (VerifyCodeFixNotAvailable)")
+        t.helper();
+
+        let actions = self.get_code_fix_actions(t, None);
+        if expected.is_empty() {
+            if actions.is_empty() {
+                return;
+            }
+
+            let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
+            t.fatal(&format!("Expected no code fixes, but got: {:?}", titles));
+        }
+        for title in expected {
+            for action in &actions {
+                if action.title == *title {
+                    t.fatal(&format!("Expected code fix with description {:?} not to be available.", title));
+                }
+            }
+        }
     }
 
     // fourslash.go:1884
     pub fn verify_code_fix_available_exact(&mut self, t: &T, expected_descriptions: &[&str]) {
-        Self::server_unavailable(t, "feature not ported: code actions (VerifyCodeFixAvailableExact)")
+        t.helper();
+
+        let actions = self.get_code_fix_actions(t, None);
+
+        if actions.len() != expected_descriptions.len() {
+            let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
+            t.fatal(&format!(
+                "Expected exactly {} code fixes, but got {}. Available fixes: {:?}",
+                expected_descriptions.len(),
+                actions.len(),
+                titles
+            ));
+        }
+
+        for expected in expected_descriptions {
+            let found = actions.iter().any(|action| action.title == *expected);
+            if !found {
+                let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
+                t.fatal(&format!("Expected code fix with description {:?} not found. Available fixes: {:?}", expected, titles));
+            }
+        }
     }
 
     // fourslash.go:1918
     pub fn verify_code_fix_all(&mut self, t: &T, options: VerifyCodeFixAllOptions) {
-        Self::server_unavailable(t, "feature not ported: code actions (VerifyCodeFixAll)")
+        t.helper();
+
+        let actions = self.get_all_quick_fix_actions(t, None);
+        if actions.is_empty() {
+            t.fatal(&format!("No code fixes available for fixId {:?}", options.fix_id));
+        }
+
+        // Find fix-all actions. The server returns these as quickfix entries with titles like
+        // "Add all missing imports" when multiple diagnostics match the same provider.
+        // We look for actions that are NOT single-diagnostic fixes (i.e., have no Diagnostics attached).
+        let fix_all_candidates: Vec<&lsproto::CodeAction> =
+            actions.iter().filter(|action| action.diagnostics.as_ref().is_none_or(|d| d.is_empty())).collect();
+
+        let mut fix_all_action: Option<&lsproto::CodeAction> = None;
+        if fix_all_candidates.len() == 1 {
+            fix_all_action = Some(fix_all_candidates[0]);
+        } else {
+            // If there are multiple fix-all candidates, match by FixID in the title.
+            for action in &fix_all_candidates {
+                if action.title.to_lowercase().contains(&options.fix_id.to_lowercase()) {
+                    fix_all_action = Some(action);
+                    break;
+                }
+            }
+        }
+
+        let Some(fix_all_action) = fix_all_action.cloned() else {
+            let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
+            t.fatal(&format!("No fix-all code action found for fixId {:?}. Available fixes: {:?}", options.fix_id, titles));
+        };
+
+        let active = self.active_filename.clone();
+        if let Some(changes) = fix_all_action.edit.and_then(|e| e.changes) {
+            let expected_uri = lsconv::file_name_to_document_uri(&active);
+            for (uri, edits) in changes {
+                if uri != expected_uri {
+                    t.fatal(&format!("Fix-all code action returned edits for unexpected URI {:?} (expected {:?})", uri.0, expected_uri.0));
+                }
+                self.apply_text_edits(t, edits);
+            }
+        }
+
+        let actual = self.get_script_info(&active).content;
+        crate::go::assert::equal(t, options.new_file_content.as_str(), actual.as_str(), "File content after applying all code fixes did not match expected content.");
     }
 
     // fourslash.go:1973
     pub fn verify_source_fix_all(&mut self, t: &T, expected_content: &str) {
-        Self::server_unavailable(t, "feature not ported: code actions (VerifySourceFixAll)")
+        t.helper();
+
+        let active = self.active_filename.clone();
+        let only = vec![lsproto::CodeActionKind::SourceFixAll];
+        let params = lsproto::CodeActionParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&active) },
+            range: lsproto::Range { start: self.current_caret_position, end: self.current_caret_position },
+            context: lsproto::CodeActionContext { diagnostics: Vec::new(), only: Some(only), ..Default::default() },
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_CODE_ACTION_INFO, params);
+
+        let Some(items) = result.command_or_code_action_array else {
+            t.fatal("No source.fixAll code actions returned");
+        };
+
+        let mut selected: Option<lsproto::CodeAction> = None;
+        for item in items {
+            let Some(code_action) = item.code_action else {
+                continue;
+            };
+            if code_action.kind != Some(lsproto::CodeActionKind::SourceFixAllTs) {
+                continue;
+            }
+            selected = Some(code_action);
+            break;
+        }
+
+        let Some(selected) = selected else {
+            t.fatal("No source.fixAll code action found");
+        };
+        if let Some(changes) = selected.edit.and_then(|e| e.changes) {
+            let expected_uri = lsconv::file_name_to_document_uri(&active);
+            for (uri, edits) in changes {
+                if uri != expected_uri {
+                    t.fatal(&format!("source.fixAll returned edits for unexpected URI {:?} (expected {:?})", uri.0, expected_uri.0));
+                }
+                self.apply_text_edits(t, edits);
+            }
+        }
+
+        let actual = self.get_script_info(&active).content;
+        crate::go::assert::equal(t, expected_content, actual.as_str(), "File content after source.fixAll did not match expected content.");
+    }
+
+    // fourslash.go:2023
+    // getCodeFixActions gets per-diagnostic quick fix code actions, excluding fix-all entries.
+    fn get_code_fix_actions(&mut self, t: &T, error_code: Option<i32>) -> Vec<lsproto::CodeAction> {
+        t.helper();
+        let all = self.get_all_quick_fix_actions(t, error_code);
+        // Filter to only per-diagnostic fixes (those with diagnostics attached)
+        all.into_iter().filter(|action| action.diagnostics.as_ref().is_some_and(|d| !d.is_empty())).collect()
+    }
+
+    // fourslash.go:2037
+    // getAllQuickFixActions gets all quick fix code actions including fix-all entries.
+    fn get_all_quick_fix_actions(&mut self, t: &T, error_code: Option<i32>) -> Vec<lsproto::CodeAction> {
+        t.helper();
+
+        let diagnostics = self.get_document_diagnostics_for_code_actions(t);
+
+        if diagnostics.is_empty() {
+            return Vec::new();
+        }
+
+        let Some(diagnostic) = select_code_fix_diagnostic(&diagnostics, error_code.unwrap_or(0)) else {
+            return Vec::new();
+        };
+
+        let params = lsproto::CodeActionParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            range: lsproto::Range { start: diagnostic.range.start, end: diagnostic.range.end },
+            context: lsproto::CodeActionContext { diagnostics: diagnostics.clone(), ..Default::default() },
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_CODE_ACTION_INFO, params);
+
+        let mut actions = Vec::new();
+        if let Some(items) = result.command_or_code_action_array {
+            for item in items {
+                if let Some(code_action) = item.code_action {
+                    if code_action.kind == Some(lsproto::CodeActionKind::QuickFix) {
+                        actions.push(code_action);
+                    }
+                }
+            }
+        }
+
+        actions
+    }
+
+    // The diagnostics request shared by Go's getAllQuickFixActions, VerifyImportFixAtPosition and
+    // VerifyImportFixModuleSpecifiers.
+    fn get_document_diagnostics_for_code_actions(&mut self, t: &T) -> Vec<lsproto::Diagnostic> {
+        let diag_params = lsproto::DocumentDiagnosticParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            ..Default::default()
+        };
+        let diag_result = self.send_request(t, lsproto::TEXT_DOCUMENT_DIAGNOSTIC_INFO, diag_params);
+
+        diag_result.full_document_diagnostic_report.map(|r| r.items).unwrap_or_default()
+    }
+
+    // fourslash.go:2087
+    fn update_text_range_for_text_edits(&self, text_range: TextRange, edits: &[lsproto::TextEdit]) -> TextRange {
+        let script = self.get_script_info(&self.active_filename);
+        let mut spans: Vec<textEditSpan> = Vec::with_capacity(edits.len());
+        for edit in edits {
+            spans.push(textEditSpan {
+                start: self.converters.line_and_character_to_position(script.clone(), edit.range.start) as i32,
+                end: self.converters.line_and_character_to_position(script.clone(), edit.range.end) as i32,
+                length: edit.new_text.len() as i32,
+            });
+        }
+        tsrs_core::goslices::sort_func(&mut spans, |a, b| a.start - b.start);
+
+        let mut pos = text_range.pos();
+        let mut end = text_range.end();
+        for i in 0..spans.len() {
+            let edit = spans[i];
+            pos = update_position_for_text_edit(pos, edit.start, edit.end, edit.length);
+            end = update_position_for_text_edit(end, edit.start, edit.end, edit.length);
+
+            let delta = edit.length - (edit.end - edit.start);
+            for span in spans.iter_mut().skip(i + 1) {
+                if span.start >= edit.start {
+                    span.start += delta;
+                    span.end += delta;
+                }
+            }
+        }
+        TextRange::new(pos, end)
+    }
+
+    // fourslash.go:2119
+    // applyEditsToContent applies text edits to a content string without mutating the file.
+    fn apply_edits_to_content(&self, content: &str, mut edits: Vec<lsproto::TextEdit>) -> String {
+        let script = self.get_script_info(&self.active_filename);
+        tsrs_core::goslices::sort_func(&mut edits, |a, b| {
+            let a_start = self.converters.line_and_character_to_position(script.clone(), a.range.start);
+            let b_start = self.converters.line_and_character_to_position(script.clone(), b.range.start);
+            a_start as i32 - b_start as i32
+        });
+        let mut content = content.to_string();
+        for edit in edits.iter().rev() {
+            let start = self.converters.line_and_character_to_position(script.clone(), edit.range.start) as usize;
+            let end = self.converters.line_and_character_to_position(script.clone(), edit.range.end) as usize;
+            content = format!("{}{}{}", &content[..start], edit.new_text, &content[end..]);
+        }
+        content
     }
 
     // fourslash.go:2135
@@ -1949,7 +2326,110 @@ impl FourslashTest {
 
     // fourslash.go:2291
     pub fn verify_import_fix_at_position(&mut self, t: &T, expected_texts: &[&str], preferences: Option<lsutil::UserPreferences>) {
-        Self::server_unavailable(t, "feature not ported: code actions (VerifyImportFixAtPosition)")
+        t.helper();
+        let file_name = self.active_filename.clone();
+        let ranges = self.ranges();
+        let filtered_ranges: Vec<Arc<RangeMarker>> = ranges.into_iter().filter(|r| r.file_name() == file_name).collect();
+        if filtered_ranges.len() > 1 {
+            t.fatal("Exactly one range should be specified in the testfile.");
+        }
+        let range_marker = filtered_ranges.first().cloned();
+
+        let reset = preferences.map(|preferences| self.configure_with_reset(t, preferences));
+
+        // Get diagnostics at the current position to find errors that need import fixes
+        let diagnostics = self.get_document_diagnostics_for_code_actions(t);
+
+        let current_caret_position = self.current_caret_position;
+        let params = lsproto::CodeActionParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            range: lsproto::Range { end: current_caret_position, start: current_caret_position },
+            context: lsproto::CodeActionContext { diagnostics, ..Default::default() },
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_CODE_ACTION_INFO, params);
+
+        // Find all auto-import code actions (fixes with fixId/fixName related to imports)
+        // Skip fix-all entries (those without diagnostics attached)
+        let mut import_actions: Vec<lsproto::CodeAction> = Vec::new();
+        if let Some(items) = result.command_or_code_action_array {
+            for item in items {
+                if let Some(code_action) = item.code_action {
+                    if code_action.kind == Some(lsproto::CodeActionKind::QuickFix) && code_action.diagnostics.as_ref().is_some_and(|d| !d.is_empty()) {
+                        import_actions.push(code_action);
+                    }
+                }
+            }
+        }
+
+        if import_actions.is_empty() {
+            if !expected_texts.is_empty() {
+                t.fatal("No codefixes returned.");
+            }
+            if let Some(reset) = reset {
+                reset(self, t);
+            }
+            return;
+        }
+
+        // Save the original content before any edits
+        let active = self.active_filename.clone();
+        let script = self.get_script_info(&active);
+        let original_content = script.content.clone();
+        // For each import action, apply it and check the result
+        let mut actual_text_array: Vec<String> = Vec::with_capacity(import_actions.len());
+        for action in import_actions {
+            // Apply the code action
+            if let Some(changes) = action.edit.and_then(|e| e.changes) {
+                if changes.len() != 1 {
+                    t.fatal(&format!("Expected exactly 1 change, got {}", changes.len()));
+                }
+                for (uri, change_edits) in changes {
+                    if uri != lsconv::file_name_to_document_uri(&active) {
+                        t.fatal(&format!("Expected change to file {}, got {}", active, uri.0));
+                    }
+                    self.apply_text_edits(t, change_edits);
+                }
+            }
+
+            // Get the result text
+            // Go's range marker is updated in place by the edit; the Rust markers are replaced by updated copies,
+            // so the range is looked up again.
+            let text = match &range_marker {
+                Some(_) => {
+                    let current = self.get_ranges_in_file(&active).first().cloned().unwrap();
+                    self.get_range_text(&current)
+                }
+                None => self.get_script_info(&active).content,
+            };
+            actual_text_array.push(text);
+
+            // Restore original content for next fix
+            // (Go passes len(script.content), the length when the script info was read before the edits.)
+            self.edit_script_and_update_markers(t, &active, 0, script.content.len() as i32, &original_content);
+            self.current_caret_position = current_caret_position;
+        }
+
+        // Compare results
+        if expected_texts.len() != actual_text_array.len() {
+            let mut actual_joined = String::new();
+            for (i, actual) in actual_text_array.iter().enumerate() {
+                if i > 0 {
+                    actual_joined.push_str("\n\n");
+                    actual_joined.push_str(&"-".repeat(20));
+                    actual_joined.push_str("\n\n");
+                }
+                actual_joined.push_str(actual);
+            }
+            t.fatal(&format!("Expected {} import fixes, got {}:\n\n{}", expected_texts.len(), actual_text_array.len(), actual_joined));
+        }
+        for (i, expected) in expected_texts.iter().enumerate() {
+            let actual = &actual_text_array[i];
+            crate::go::assert::equal(t, *expected, actual.as_str(), &format!("Import fix at index {} doesn't match.\n", i));
+        }
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
     }
 
     // fourslash.go:2414
@@ -1960,7 +2440,65 @@ impl FourslashTest {
         expected_module_specifiers: &[&str],
         preferences: Option<lsutil::UserPreferences>,
     ) {
-        Self::server_unavailable(t, "feature not ported: code actions (VerifyImportFixModuleSpecifiers)")
+        t.helper();
+        self.go_to_marker(t, marker_name);
+
+        let reset = preferences.map(|preferences| self.configure_with_reset(t, preferences));
+
+        // Get diagnostics at the current position to find errors that need import fixes
+        let diagnostics = self.get_document_diagnostics_for_code_actions(t);
+
+        let params = lsproto::CodeActionParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            range: lsproto::Range { start: self.current_caret_position, end: self.current_caret_position },
+            context: lsproto::CodeActionContext { diagnostics, ..Default::default() },
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_CODE_ACTION_INFO, params);
+
+        // Extract module specifiers from import fix code actions
+        let mut actual_module_specifiers: Vec<String> = Vec::new();
+        if let Some(items) = result.command_or_code_action_array {
+            for item in items {
+                if let Some(code_action) = item.code_action {
+                    if code_action.kind == Some(lsproto::CodeActionKind::QuickFix) {
+                        if let Some(changes) = code_action.edit.and_then(|e| e.changes) {
+                            for change_edits in changes.values() {
+                                for edit in change_edits {
+                                    let module_spec = extract_module_specifier(&edit.new_text);
+                                    if !module_spec.is_empty() && !actual_module_specifiers.contains(&module_spec) {
+                                        actual_module_specifiers.push(module_spec);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Compare results
+        if actual_module_specifiers.len() != expected_module_specifiers.len() {
+            t.fatal(&format!(
+                "Expected {} module specifiers, got {}.\nExpected: {:?}\nActual: {:?}",
+                expected_module_specifiers.len(),
+                actual_module_specifiers.len(),
+                expected_module_specifiers,
+                actual_module_specifiers
+            ));
+        }
+
+        for (i, expected) in expected_module_specifiers.iter().enumerate() {
+            if i >= actual_module_specifiers.len() || actual_module_specifiers[i] != *expected {
+                t.fatal(&format!(
+                    "Module specifier mismatch at index {}.\nExpected: {:?}\nActual: {:?}",
+                    i, expected_module_specifiers, actual_module_specifiers
+                ));
+            }
+        }
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
     }
 
     // fourslash.go:2523
@@ -5415,4 +5953,85 @@ impl FourslashTest {
             self.active_filename = updated_active;
         }
     }
+}
+
+// fourslash.go:101
+#[derive(Clone, Copy)]
+struct textEditSpan {
+    start: i32,
+    end: i32,
+    length: i32,
+}
+
+// fourslash.go:2490
+fn extract_module_specifier(text: &str) -> String {
+    // Try to match: from "..." or from '...'
+    if let Some(idx) = text.find("from \"") {
+        let start = idx + 6; // len("from \"")
+        if let Some(end) = text[start..].find('"') {
+            return text[start..start + end].to_string();
+        }
+    }
+    if let Some(idx) = text.find("from '") {
+        let start = idx + 6; // len("from '")
+        if let Some(end) = text[start..].find('\'') {
+            return text[start..start + end].to_string();
+        }
+    }
+
+    // Try to match: require("...") or require('...')
+    if let Some(idx) = text.find("require(\"") {
+        let start = idx + 9; // len("require(\"")
+        if let Some(end) = text[start..].find('"') {
+            return text[start..start + end].to_string();
+        }
+    }
+    if let Some(idx) = text.find("require('") {
+        let start = idx + 9; // len("require('")
+        if let Some(end) = text[start..].find('\'') {
+            return text[start..start + end].to_string();
+        }
+    }
+
+    String::new()
+}
+
+// fourslash.go:6013
+fn update_position_for_text_edit(position: i32, edit_start: i32, edit_end: i32, new_text_length: i32) -> i32 {
+    if position <= edit_start {
+        return position;
+    }
+    if position < edit_end {
+        return -1;
+    }
+    position + new_text_length - (edit_end - edit_start)
+}
+
+// fourslash.go:6023
+fn remove_whitespace(text: &str) -> String {
+    let mut builder = String::new();
+    for ch in text.chars() {
+        if tsrs_core::stringutil::is_white_space_like(ch as i32) {
+            continue;
+        }
+        builder.push(ch);
+    }
+    builder
+}
+
+// fourslash.go:6034
+fn assert_valid_text_range(t: &T, text_range: TextRange, message: &str) {
+    t.helper();
+    if text_range.pos() >= 0 && text_range.end() >= 0 {
+        return;
+    }
+    t.fatal(message);
+}
+
+// fourslash.go:6042
+fn select_code_fix_diagnostic(diagnostics: &[lsproto::Diagnostic], error_code: i32) -> Option<&lsproto::Diagnostic> {
+    if error_code == 0 {
+        return Some(&diagnostics[0]);
+    }
+    diagnostics.iter().find(|diagnostic| diagnostic.code.as_ref().and_then(|c| c.integer) == Some(error_code))
 }

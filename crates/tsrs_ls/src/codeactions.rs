@@ -84,10 +84,13 @@ pub struct CombinedCodeActions {
 // codeactions.go:72
 // codeFixProviders is the list of all registered code fix providers
 fn code_fix_providers() -> &'static [&'static CodeFixProvider] {
-    static PROVIDERS: &[&CodeFixProvider] = &[
-        // Add more code fix providers here as they are implemented
-    ];
-    PROVIDERS
+    static PROVIDERS: std::sync::LazyLock<Vec<&'static CodeFixProvider>> = std::sync::LazyLock::new(|| {
+        vec![
+            &*crate::codeactions_importfixes::IMPORT_FIX_PROVIDER,
+            // Add more code fix providers here as they are implemented
+        ]
+    });
+    &PROVIDERS
 }
 
 impl LanguageService {
@@ -331,7 +334,7 @@ fn code_fix_provider_matches_lsp_diagnostic(provider: &CodeFixProvider, diagnost
 }
 
 // codeactions.go:220
-fn is_fixable_diagnostic(diagnostic: P<Diagnostic>, error_codes: &[i32]) -> bool {
+pub(crate) fn is_fixable_diagnostic(diagnostic: P<Diagnostic>, error_codes: &[i32]) -> bool {
     diagnostic.source().is_empty() && contains_error_code(error_codes, diagnostic.code())
 }
 
