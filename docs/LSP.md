@@ -313,6 +313,8 @@ vim.lsp.enable('tsrs')
 ```
 
 Disable other TypeScript servers for the same buffers (e.g. `ts_ls`, `vtsls`) to avoid duplicate results.
+Verified headless (Neovim 0.11.6, `nvim --headless --clean -u init.lua`, scratch HOME, no plugins): the client
+attaches, the type error of the opened file arrives as a diagnostic, and hover returns the quick info.
 `:checkhealth vim.lsp` shows the attached client; `vim.lsp.set_log_level('debug')` logs the protocol.
 
 What to expect: diagnostics are pull-based (`textDocument/diagnostic`; both clients support it) and tsconfig errors
