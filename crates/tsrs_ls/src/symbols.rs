@@ -17,6 +17,7 @@ use tsrs_printer as printer;
 use tsrs_scanner as scanner;
 
 use crate::astnav;
+use crate::completions_2::str_ptr_to;
 use crate::languageservice::LanguageService;
 use crate::lsconv::Converters;
 use crate::lsutil::UserPreferences;
@@ -183,7 +184,7 @@ impl DocumentSymbolsVisitor<'_> {
         match node.kind() {
             Kind::ClassDeclaration | Kind::ClassExpression | Kind::InterfaceDeclaration | Kind::EnumDeclaration => {
                 if ast::is_class_like(node) && !ast::get_declaration_name(node).is_empty() {
-                    self.expando_targets.insert(ast::get_declaration_name(node).to_string());
+                    self.expando_targets.insert(ast::get_declaration_name(node));
                 }
                 let children = self.get_symbols_for_children(Some(node));
                 self.add_symbol_for_node(node, None /*name*/, children);
@@ -204,7 +205,7 @@ impl DocumentSymbolsVisitor<'_> {
             Kind::FunctionDeclaration | Kind::FunctionExpression | Kind::ArrowFunction | Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => {
                 let decl_name = ast::get_declaration_name(node);
                 if !decl_name.is_empty() {
-                    self.expando_targets.insert(decl_name.to_string());
+                    self.expando_targets.insert(decl_name);
                 }
                 let children = self.get_symbols_for_children(node.body());
                 self.add_symbol_for_node(node, None /*name*/, children);
@@ -623,7 +624,7 @@ fn get_module_name(node: P<Node>) -> String {
 
 // symbols.go:540
 struct DeclarationInfo {
-    name: &'static str,
+    name: String,
     declaration: P<Node>,
     match_score: i32,
 }
@@ -654,11 +655,11 @@ pub fn provide_workspace_symbols(
             return Ok(lsproto::SymbolInformationsOrWorkspaceSymbolsOrNull::default());
         }
         let declaration_map = source_file.get_declaration_map();
-        for (&name, declarations) in declaration_map {
+        for (name, declarations) in declaration_map {
             let score = get_match_score(name, query);
             if score >= 0 {
                 for &declaration in declarations {
-                    infos.push(DeclarationInfo { name, declaration, match_score: score });
+                    infos.push(DeclarationInfo { name: name.clone(), declaration, match_score: score });
                 }
             }
         }
@@ -671,8 +672,10 @@ pub fn provide_workspace_symbols(
         let node = info.declaration;
         let source_file = ast::get_source_file_of_node(node).unwrap();
         let container = get_container_node(info.declaration);
-        // strPtrTo (completions.go): nil for an empty name.
-        let container_name = container.map(|c| ast::get_declaration_name(c)).filter(|n| !n.is_empty()).map(str::to_string);
+        let mut container_name: Option<String> = None;
+        if let Some(container) = container {
+            container_name = str_ptr_to(&ast::get_declaration_name(container));
+        }
         // Use the name node's span so that VS selects just the symbol name (matching
         // the TS5 navto behaviour). GetNameOfDeclaration is always non-nil here because
         // computeDeclarationMap only adds declarations whose GetDeclarationName (string
@@ -686,7 +689,7 @@ pub fn provide_workspace_symbols(
             continue;
         }
         let symbol = lsproto::SymbolInformation {
-            name: info.name.to_string(),
+            name: info.name.clone(),
             kind: get_symbol_kind_from_node(info.declaration),
             location,
             container_name,
@@ -751,11 +754,11 @@ fn compare_declaration_infos(d1: &DeclarationInfo, d2: &DeclarationInfo) -> i32 
     if d1.match_score != d2.match_score {
         return d1.match_score - d2.match_score;
     }
-    let c = stringutil::compare_strings_case_insensitive(d1.name, d2.name);
+    let c = stringutil::compare_strings_case_insensitive(&d1.name, &d2.name);
     if c != 0 {
         return c;
     }
-    let c = go_strings_compare(d1.name, d2.name);
+    let c = go_strings_compare(&d1.name, &d2.name);
     if c != 0 {
         return c;
     }

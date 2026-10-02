@@ -8,7 +8,9 @@ use tsrs_compiler::Program;
 use tsrs_core::tspath::Path;
 use tsrs_core::P;
 
-use super::{ProjectID, Registry};
+use tsrs_lsproto as lsproto;
+
+use super::{Export, Fix, ProjectID, Registry};
 
 // view.go:21 (placeholder: the checker and the import caches are not kept; nothing reads them yet)
 pub struct View {
@@ -34,4 +36,17 @@ pub fn new_view(
         importing_file_path = canonical.path().clone();
     }
     View { registry, importing_file, importing_file_path, program, preferences, project_id }
+}
+
+// view.go:175
+pub struct FixAndExport {
+    pub fix: Fix,
+    pub export: Export,
+}
+
+impl View {
+    // view.go:180 (placeholder: the registry holds no exports, so there is nothing to search)
+    pub fn get_completions(&self, _prefix: &str, _position: lsproto::Position, _for_jsx: bool, _is_type_only_location: bool) -> Vec<FixAndExport> {
+        Vec::new()
+    }
 }

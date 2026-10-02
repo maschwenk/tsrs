@@ -1,0 +1,88 @@
+{
+ "capabilities": {
+  "textDocument": {
+   "completion": {}
+  }
+ },
+ "preferences": {
+  "unstable": {
+   "includeCompletionsForModuleExports": false
+  }
+ },
+ "files": [
+  "index.ts",
+  "other.ts",
+  "app.tsx",
+  "plain.js",
+  "docsnip.ts",
+  "jsx2.tsx"
+ ],
+ "cases": [
+  {
+   "id": "min-member",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "p.|x;",
+   "context": {
+    "triggerKind": 2,
+    "triggerCharacter": "."
+   }
+  },
+  {
+   "id": "min-optional-chain",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "maybe.|y;"
+  },
+  {
+   "id": "min-object-literal",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "{ x: 1, |};"
+  },
+  {
+   "id": "min-string-literal",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "kind = \"|large\";"
+  },
+  {
+   "id": "min-type-position",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "let typed: Poi|;"
+  },
+  {
+   "id": "min-class-body",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "radius = 1;\n    |\n}"
+  },
+  {
+   "id": "min-import-path",
+   "file": "index.ts",
+   "method": "textDocument/completion",
+   "caret": "from \"./|other\";\ninterface",
+   "context": {
+    "triggerKind": 2,
+    "triggerCharacter": "/"
+   }
+  },
+  {
+   "id": "min-jsx-attr",
+   "file": "app.tsx",
+   "method": "textDocument/completion",
+   "caret": "className=\"x\" |>"
+  },
+  {
+   "id": "min-jsdoc-snippet",
+   "file": "docsnip.ts",
+   "method": "textDocument/completion",
+   "caret": "/**|\nfunction",
+   "context": {
+    "triggerKind": 2,
+    "triggerCharacter": "*"
+   }
+  }
+ ]
+}

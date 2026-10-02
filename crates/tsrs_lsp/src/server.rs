@@ -1848,7 +1848,7 @@ impl Server {
 
     // server.go:2070
     fn handle_signature_help(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::SignatureHelpParams) -> Result<lsproto::SignatureHelpResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentSignatureHelp))
+        ls.provide_signature_help(ctx, &params.text_document.uri, params.position, params.context.as_ref())
     }
 
     // server.go:2079
@@ -1858,7 +1858,7 @@ impl Server {
 
     // server.go:2083
     fn handle_vs_on_auto_insert(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::VSOnAutoInsertParams) -> Result<lsproto::VSOnAutoInsertResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentVSOnAutoInsert))
+        ls.provide_on_auto_insert(ctx, &params)
     }
 
     // server.go:2087
@@ -1868,7 +1868,7 @@ impl Server {
         ls: &Arc<LanguageService>,
         params: lsproto::LinkedEditingRangeParams,
     ) -> Result<lsproto::LinkedEditingRangeResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentLinkedEditingRange))
+        ls.provide_linked_editing_range(ctx, &params)
     }
 
     // server.go:2091
@@ -1894,12 +1894,24 @@ impl Server {
 
     // server.go:2107
     fn handle_completion(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: lsproto::CompletionParams) -> Result<lsproto::CompletionResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentCompletion))
+        language_service.provide_completion(ctx, &params.text_document.uri, params.position, params.context.as_ref())
     }
 
     // server.go:2116
     fn handle_completion_item_resolve(self: &Arc<Self>, ctx: &Context, params: lsproto::CompletionItem, req_msg: &RequestMessage) -> Result<lsproto::CompletionResolveResponse, Error> {
-        Err(not_yet_ported(Method::CompletionItemResolve))
+        let Some(data) = params.data.clone() else {
+            return Err(Error::new("completion item data is nil"));
+        };
+        let language_service = self.session().get_language_service(ctx, &tsrs_ls::lsconv::file_name_to_document_uri(&data.file_name))?;
+        // `defer s.recover(reqMsg)`: Go answers the recovered panic with an internal error and then sends the nil
+        // result; here the handler returns an error instead of a second (null) result.
+        match recover_scope(|| language_service.resolve_completion_item(ctx, params, Some(&data))) {
+            Ok(result) => result,
+            Err((payload, stack)) => {
+                self.recover(req_msg, payload, &stack);
+                Err(Error::new(format!("panic handling request {}", req_msg.method)))
+            }
+        }
     }
 
     // server.go:2129

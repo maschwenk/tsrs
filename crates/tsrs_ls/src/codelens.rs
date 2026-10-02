@@ -9,6 +9,7 @@ use tsrs_lsproto as lsproto;
 use tsrs_lsproto::Json as _;
 use tsrs_scanner as scanner;
 
+use crate::completions::{source_file_for_supplemental_file_index, supplemental_file_index};
 use crate::crossproject::CrossProjectOrchestrator;
 use crate::findallreferences::SymbolEntryTransformOptions;
 use crate::languageservice::LanguageService;
@@ -203,30 +204,6 @@ impl LanguageService {
             ..Default::default()
         })
     }
-}
-
-// completions.go:139 (supplementalFileIndex, sourceFileForSupplementalFileIndex; completions.go is ported by another
-// wave, so this file keeps private copies)
-fn supplemental_file_index(file: P<SourceFile>) -> Option<i32> {
-    let canonical = file.canonical_source_file()?;
-    for (i, &supplemental) in canonical.supplemental_source_files().iter().enumerate() {
-        if supplemental == file {
-            return Some(i as i32);
-        }
-    }
-    panic!("supplemental source file is not linked from its canonical source file");
-}
-
-// completions.go:152
-fn source_file_for_supplemental_file_index(file: P<SourceFile>, index: Option<i32>) -> Option<P<SourceFile>> {
-    let Some(index) = index else {
-        return Some(file);
-    };
-    let supplemental = file.supplemental_source_files();
-    if index >= 0 && (index as usize) < supplemental.len() {
-        return Some(supplemental[index as usize]);
-    }
-    None
 }
 
 // codelens.go:197

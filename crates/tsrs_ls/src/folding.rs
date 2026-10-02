@@ -10,6 +10,7 @@ use tsrs_printer as printer;
 use tsrs_scanner as scanner;
 
 use crate::astnav;
+use crate::completions_2::get_line_end_of_position;
 use crate::languageservice::LanguageService;
 use crate::spanmap::{Feature, Fidelity};
 use crate::utilities::is_in_comment;
@@ -224,19 +225,6 @@ impl LanguageService {
 
 fn go_strings_index(s: &str, substr: &str) -> i32 {
     s.find(substr).map_or(-1, |i| i as i32)
-}
-
-// completions.go:3027 (getLineOfPosition, getLineEndOfPosition; completions.go is ported by another wave, so this
-// file keeps a private copy)
-fn get_line_end_of_position(file: P<SourceFile>, pos: i32) -> i32 {
-    let line = scanner::get_ecma_line_of_position(&*file, pos) as usize;
-    let line_starts = scanner::get_ecma_line_starts(&*file);
-    let last_char_pos: i32 = if line + 1 >= line_starts.len() { file.as_node().end() } else { line_starts[line + 1] as i32 - 1 };
-    let full_text = file.text().as_bytes();
-    if last_char_pos > 0 && (last_char_pos as usize) < full_text.len() && full_text[last_char_pos as usize] == b'\n' && full_text[last_char_pos as usize - 1] == b'\r' {
-        return last_char_pos - 1;
-    }
-    last_char_pos
 }
 
 // folding.go:203

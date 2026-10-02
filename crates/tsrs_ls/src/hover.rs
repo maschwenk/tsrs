@@ -184,7 +184,7 @@ impl LanguageService {
     }
 
     // hover.go:174
-    fn get_quick_info_and_documentation_for_symbol(
+    pub(crate) fn get_quick_info_and_documentation_for_symbol(
         &self,
         c: &mut Checker,
         symbol: Option<P<Symbol>>,
@@ -221,7 +221,7 @@ impl LanguageService {
     }
 
     // hover.go:206
-    fn documentation_location_mapper(&self, feature: Feature) -> impl Fn(P<SourceFile>, TextRange) -> (lsproto::Location, Fidelity) + '_ {
+    pub(crate) fn documentation_location_mapper(&self, feature: Feature) -> impl Fn(P<SourceFile>, TextRange) -> (lsproto::Location, Fidelity) + '_ {
         move |file, file_range| self.source_file_range_to_lsp_location_for_feature(file, file_range, feature)
     }
 }
