@@ -151,6 +151,7 @@ impl RegistryCloneHost for autoImportRegistryCloneHost {
         let opts = SourceFileParseOptions { file_name: file_name.to_string(), path: path.clone(), ..Default::default() };
         let key = new_parse_cache_key(opts, fh.hash(), fh.kind());
         let result = self.parse_cache.acquire(key.clone(), fh);
+        pin_registry_file(&self.parse_cache, &key);
 
         self.files.lock().unwrap().push(key);
 
@@ -163,5 +164,17 @@ impl RegistryCloneHost for autoImportRegistryCloneHost {
         for key in files.iter() {
             self.parse_cache.deref(key);
         }
+    }
+}
+
+// Memory regions (memregions.rs), not in Go: the auto-import registry keeps arena data made while extracting exports
+// (its checkers' symbols, alias resolver caches) that refer to the files it acquired, after it releases them. Go's
+// GC keeps those files alive; here a file version the registry acquired keeps one extra parse-cache reference for
+// the rest of the session, so its region is never freed (and it is not parsed again for every registry update).
+fn pin_registry_file(cache: &Arc<ParseCache>, key: &ParseCacheKey) {
+    static PINNED: std::sync::LazyLock<Mutex<rustc_hash::FxHashSet<(usize, ParseCacheKey)>>> = std::sync::LazyLock::new(Default::default);
+    let id = (Arc::as_ptr(cache) as usize, key.clone());
+    if PINNED.lock().unwrap().insert(id) {
+        cache.ref_(key.clone());
     }
 }

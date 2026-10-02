@@ -57,6 +57,7 @@ def main():
     ap.add_argument("--log", default=os.path.join(REPO, "target", "scratch", "mem", "lsp-mem"))
     ap.add_argument("--json")
     ap.add_argument("--env", action="append", default=[], help="KEY=VALUE for the server environment")
+    ap.add_argument("--completion", action="store_true", help="also request completions at the edit point after each edit")
     ap.add_argument("--exit-timeout", type=float, default=10, help="seconds to wait for the server to exit (census runs at exit)")
     args = ap.parse_args()
 
@@ -91,7 +92,8 @@ def main():
         "workspaceFolders": [{"uri": file_uri(root), "name": os.path.basename(root)}],
         "capabilities": {
             "textDocument": {"diagnostic": {"dynamicRegistration": False},
-                             "hover": {"contentFormat": ["markdown", "plaintext"]}},
+                             "hover": {"contentFormat": ["markdown", "plaintext"]},
+                             "completion": {"completionItem": {"snippetSupport": True, "resolveSupport": {"properties": ["documentation", "detail", "additionalTextEdits"]}}}},
             "workspace": {"configuration": True, "workspaceFolders": True},
             "general": {"positionEncodings": ["utf-16"]},
         },
@@ -131,6 +133,9 @@ def main():
         d = server.request("textDocument/diagnostic", {"textDocument": {"uri": uri}}, args.timeout)
         h = server.request("textDocument/hover", {"textDocument": {"uri": uri}, "position": offset_to_position(cur, hov)}, args.timeout)
         errors += ("error" in d) + ("error" in h)
+        if args.completion:
+            c = server.request("textDocument/completion", {"textDocument": {"uri": uri}, "position": offset_to_position(cur, at + typed)}, args.timeout)
+            errors += "error" in c
         if i % args.every == 0:
             sample(i)
     if args.settle:

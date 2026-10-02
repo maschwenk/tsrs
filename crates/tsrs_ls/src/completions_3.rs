@@ -432,6 +432,8 @@ pub(crate) fn clone_items(items: &[lsproto::CompletionItem]) -> Vec<CompletionIt
 
 // completions.go:3873
 pub(crate) fn get_keyword_completions(keyword_filter: KeywordCompletionFilters, filter_out_ts_only_keywords: bool) -> Vec<CompletionItem> {
+    // Census builds: the items are cached process-wide; clear the stack their unset fields are copied from.
+    tsrs_core::census_scrub_stack();
     if !filter_out_ts_only_keywords {
         return clone_items(&get_typescript_keyword_completions(keyword_filter));
     }

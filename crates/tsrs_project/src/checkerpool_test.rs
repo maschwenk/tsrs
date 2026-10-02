@@ -55,6 +55,9 @@ fn setup_checker_pool_session(opts: CheckerPoolOptions) -> (Arc<Session>, Arc<ch
     let snapshot = session.snapshot();
     let project = snapshot.project_collection.configured_project(&Path("/src/tsconfig.json".to_string())).expect("expected configured project");
     let pool = project.checker_pool.clone().expect("expected checker pool");
+    // Go's GC keeps the program alive through the pool's program pointer for as long as the test uses the pool; here
+    // the project values own it (memregions.rs), and the session may replace this project's snapshot meanwhile.
+    std::mem::forget(project.clone());
     (session, pool)
 }
 

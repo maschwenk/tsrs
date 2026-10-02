@@ -333,7 +333,8 @@ static THREADS: Mutex<Vec<Shared>> = Mutex::new(Vec::new());
 static ARENAS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 
 thread_local! {
-    static LOCAL: Shared = {
+    // Census bookkeeping: made with tracking suspended, like the rest of it.
+    static LOCAL: Shared = census::with_guard(|| {
         let data = Arc::new(Mutex::new(ThreadData {
             index: FxHashMap::default(),
             sites: Vec::new(),
@@ -344,7 +345,7 @@ thread_local! {
         }));
         THREADS.lock().unwrap().push(data.clone());
         data
-    };
+    });
 }
 
 /// Marks heap allocations made while the arena grows (chunk allocations) so the heap sampler can tell them apart.

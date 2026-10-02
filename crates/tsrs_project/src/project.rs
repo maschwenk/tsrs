@@ -645,6 +645,9 @@ impl Project {
             _ => region.clone(),
         };
         let owner = Arc::new(programOwner::new(new_program_result, checker_pool.clone(), region, base, !program_cloned));
+        if let Some(pool) = &checker_pool {
+            pool.set_owner(Arc::downgrade(&owner));
+        }
         CreateProgramResult { program: new_program_result, update_kind, checker_pool, owner }
     }
 

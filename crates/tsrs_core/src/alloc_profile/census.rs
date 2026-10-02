@@ -741,7 +741,8 @@ fn padding_words(c: &Class) -> &'static [usize] {
     match c {
         Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::TypeParameter>") => &[76, 80, 84],
         Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::LiteralType>") => &[36, 40, 44, 48, 52],
-        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::MappedType>") => &[108, 112],
+        // (104: a 4-byte field followed by the padding at 108.)
+        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::MappedType>") => &[104, 108, 112],
         Class::Arena { ty, .. } if ty.ends_with("tsrs_ast::diagnostic::Diagnostic") => &[140, 144],
         Class::Arena { ty, .. } if ty.ends_with("tsrs_checker::types::ConditionalRoot") => &[68, 72],
         _ => &[],
@@ -854,6 +855,16 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         };
         if padding {
             return None;
+        }
+        // An `Option<Vec<_>>` / `Option<String>` that is `None` keeps the capacity niche (2^63, or 2^63 + k for
+        // nested options) in its first word, and its pointer and length words are uninitialized bytes (copied from
+        // the stack): not references.
+        if let Some(j) = from {
+            let rb = table.blocks[j];
+            let niche = |o: usize| o >= 8 && o <= rb.size as usize && (read(rb.start as usize + o - 8) >> 8) == 0x0080_0000_0000_0000;
+            if off % 8 == 0 && (niche(off) || (off >= 8 && niche(off - 8))) {
+                return None;
+            }
         }
         let c = w & MASK48;
         if let Some(i) = table.lookup(c) {
@@ -1037,11 +1048,32 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         if let Some(f) = heap_frames(&r) {
             r = format!("{r} {{{}}}", f.join(" <- "));
         }
+        if std::env::var_os("TSRS_CENSUS_RAW_FRAMES").is_some() {
+            if let Some(k) = heap_stack(&r) {
+                let raw: Vec<String> = stacks[k].iter().take_while(|&&ip| ip != 0).take(12).map(|ip| names.get(ip).cloned().unwrap_or_else(|| format!("{ip:#x}"))).collect();
+                eprintln!("    raw frames: {}", raw.join(" <- "));
+            }
+        }
         eprintln!("  STRONG {:#x} ({} bytes, {}) <- {r}", b.start, b.size, class_name(&classes[b.class as usize]));
         let mut chain: Vec<String> = Vec::new();
         let mut k = via[i];
+        let mut child = i;
         while k != u32::MAX && chain.len() < 12 {
             let kb = table.blocks[k as usize];
+            // The offset in the referrer of the first word that points into the block below it on the chain.
+            let cb = table.blocks[child];
+            let mut at = None;
+            let mut p = kb.start as usize;
+            while p + 8 <= (kb.start + kb.size as u64) as usize {
+                let w = read(p) & MASK48;
+                if w >= cb.start && w < cb.start + cb.size as u64 {
+                    at = Some(p - kb.start as usize);
+                    break;
+                }
+                p += 4;
+            }
+            child = k as usize;
+            chain.push(format!("+{}", at.map_or("?".into(), |o| o.to_string())));
             let frames = heap_class_stack(kb.class)
                 .map(|st| stacks[st].iter().take_while(|&&ip| ip != 0).filter_map(|ip| names.get(ip)).filter(|n| !boring(n)).take(3).cloned().collect::<Vec<_>>().join(" < "))
                 .map_or(String::new(), |f| format!(" {{{f}}}"));

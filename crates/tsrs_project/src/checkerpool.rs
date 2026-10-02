@@ -6,6 +6,8 @@ use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_compiler::{sort_and_deduplicate_diagnostics, Checker, CheckerHandle, CheckerPool, PooledChecker, Program};
 use tsrs_core::context::{get_checker_lifetime, get_request_id, CheckerLifetime, Context};
 use tsrs_core::arena::{Region, RegionScope};
+
+use crate::memregions::programOwner;
 use tsrs_core::P;
 
 use crate::background::{after_func, Timer};
@@ -82,6 +84,10 @@ pub struct checkerPool {
     // program is freed). Declared last: dropped after the checkers in `mu`.
     parked: Mutex<Vec<PooledChecker>>,
     regions: Mutex<FxHashMap<usize, Region>>,
+    // The program's owner (memregions.rs), once the project system created it. A held checker keeps it alive, and
+    // a pool whose program was freed refuses to hand out checkers (Go's GC would keep the program alive through the
+    // pool's program pointer; here the project values own it).
+    owner: Mutex<Option<Weak<programOwner>>>,
 }
 
 struct checkerPoolState {
@@ -151,6 +157,7 @@ pub(crate) fn new_checker_pool(mut opts: CheckerPoolOptions, program: &'static P
         self_ref: self_ref.clone(),
         parked: Mutex::new(Vec::new()),
         regions: Mutex::new(FxHashMap::default()),
+        owner: Mutex::new(None),
     })
 }
 
@@ -188,10 +195,22 @@ impl checkerPool {
         checker
     }
 
-    // Region hook: while a checker is held, its region is the holder's allocation target.
-    fn enter_checker_region(&self, c: std::ptr::NonNull<Checker>) -> Option<RegionScope> {
+    // Region hook: while a checker is held, its region is the holder's allocation target and the program's owner
+    // is kept alive.
+    fn enter_checker_region(&self, c: std::ptr::NonNull<Checker>) -> (Option<RegionScope>, Option<Arc<programOwner>>) {
         let region = self.regions.lock().unwrap().get(&(c.as_ptr() as usize)).cloned();
-        region.map(|r| r.enter())
+        (region.map(|r| r.enter()), self.live_owner())
+    }
+
+    pub(crate) fn set_owner(&self, owner: Weak<programOwner>) {
+        *self.owner.lock().unwrap() = Some(owner);
+    }
+
+    fn live_owner(&self) -> Option<Arc<programOwner>> {
+        match &*self.owner.lock().unwrap() {
+            None => None,
+            Some(w) => Some(w.upgrade().expect("checker pool used after its program was freed")),
+        }
     }
 
     // Region hook: frees every checker of the pool and their regions. Called when the program is freed (nothing
@@ -215,6 +234,7 @@ impl checkerPool {
 
     // checkerpool.go:123
     pub fn get_checker(&self, ctx: &Context, file: Option<P<SourceFile>>) -> CheckerHandle {
+        drop(self.live_owner());
         let lifetime = get_checker_lifetime(ctx);
         let mut request_id = get_request_id(ctx).to_string();
 
@@ -379,10 +399,11 @@ impl checkerPool {
         st.persistent_held = true;
         drop(st);
 
-        let region_scope = self.enter_checker_region(c);
+        let (region_scope, owner) = self.enter_checker_region(c);
         let p = self.arc();
         let release = move || {
             drop(region_scope);
+            let _owner = owner;
             let mut st = p.mu.lock().unwrap();
             st.persistent_held = false;
             let canceled = st.persistent_checker.as_mut().is_some_and(|pc| pc.as_non_null() == c && pc.was_canceled());
@@ -405,11 +426,12 @@ impl checkerPool {
     // checkerpool.go:319
     fn create_release(&self, st: &mut checkerPoolState, request_id: &str, index: usize) -> CheckerHandle {
         let c = st.checkers[index].as_mut().unwrap().as_non_null();
-        let region_scope = self.enter_checker_region(c);
+        let (region_scope, owner) = self.enter_checker_region(c);
         let p = self.arc();
         let request_id = request_id.to_string();
         let release = move || {
             drop(region_scope);
+            let _owner = owner;
             let mut st = p.mu.lock().unwrap();
 
             let was_canceled = st.checkers[index].as_mut().unwrap().was_canceled();
