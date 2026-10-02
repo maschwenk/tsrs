@@ -110,6 +110,9 @@ mod heap_sample {
         pub(super) live: FxHashMap<usize, (u32, usize)>,
         pub(super) stacks: Vec<(Stack, i64, u64)>, // stack, live bytes, total sampled bytes
         pub(super) index: FxHashMap<Stack, u32>,
+        // Live bytes per stack when the heap last grew past `peak_heap` + 8 MB: "live at the heap peak".
+        pub(super) peak: Vec<i64>,
+        pub(super) peak_heap: usize,
     }
     pub(super) static STATE: Mutex<Option<State>> = Mutex::new(None);
     static ENABLED: AtomicU8 = AtomicU8::new(0); // 0 unknown, 1 off, 2 on (bytes), 3 on (counts)
@@ -183,6 +186,8 @@ mod heap_sample {
                 live: FxHashMap::default(),
                 stacks: Vec::new(),
                 index: FxHashMap::default(),
+                peak: Vec::new(),
+                peak_heap: 0,
             });
             let next = state.stacks.len() as u32;
             let id = *state.index.entry(stack).or_insert(next);
@@ -193,6 +198,11 @@ mod heap_sample {
             state.stacks[id as usize].2 += weight as u64;
             if mode == 2 {
                 state.live.insert(p as usize, (id, weight));
+                let now = super::HEAP_CURRENT.load(Ordering::Relaxed);
+                if now > state.peak_heap + (8 << 20) {
+                    state.peak_heap = now;
+                    state.peak = state.stacks.iter().map(|s| s.1).collect();
+                }
             }
         });
     }
@@ -277,6 +287,15 @@ mod heap_sample {
         );
         order.sort_by_key(|&i| -state.stacks[i].1);
         print("live", &order, &|i| state.stacks[i].1);
+        let at_peak = |i: usize| state.peak.get(i).copied().unwrap_or(0);
+        let peak_live: i64 = (0..state.stacks.len()).filter(|&i| state.stacks[i].0[0] != 1).map(at_peak).sum();
+        eprintln!(
+            "\nheap at its peak (snapshot at {:.1} MB counted): sampled live outside arena chunks {:.1} MB",
+            state.peak_heap as f64 / 1048576.0,
+            peak_live as f64 / 1048576.0
+        );
+        order.sort_by_key(|&i| -at_peak(i));
+        print("live at the heap peak", &order, &at_peak);
         order.sort_by_key(|&i| -(state.stacks[i].2 as i64));
         print("allocated (cumulative)", &order, &|i| state.stacks[i].2 as i64);
     }
