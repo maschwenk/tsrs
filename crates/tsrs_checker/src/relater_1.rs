@@ -1392,7 +1392,7 @@ impl Checker {
                 }
             }
         }
-        for &base_type in lm.ready.get().unwrap().base_types {
+        for &base_type in tsrs_core::usebits::used(lm.ready.get().unwrap().base_types) {
             let base_properties: std::borrow::Cow<'static, [P<Symbol>]> = match self.get_lazy_properties_in_order(base_type) {
                 Some(properties) => properties.into(),
                 None => self.get_properties_of_type(base_type).into(),
@@ -1509,12 +1509,12 @@ impl Checker {
             let prop = self.get_union_or_intersection_property(t, name, false /*skipObjectFunctionPropertyAugment*/);
             if let Some(prop) = prop.filter(|p| p.check_flags.get().intersects(CheckFlags::SyntheticProperty)) {
                 if !prop.check_flags.get().intersects(CheckFlags::IsDiscriminantComputed) {
-                    prop.check_flags.set(prop.check_flags.get() | CheckFlags::IsDiscriminantComputed);
+                    prop.check_flags.set(prop.check_flags.peek() | CheckFlags::IsDiscriminantComputed);
                     if prop.check_flags.get().contains(CheckFlags::NonUniformAndLiteral) && {
                         let prop_type = self.get_type_of_symbol(prop);
                         !self.is_generic_type(prop_type)
                     } {
-                        prop.check_flags.set(prop.check_flags.get() | CheckFlags::IsDiscriminant);
+                        prop.check_flags.set(prop.check_flags.peek() | CheckFlags::IsDiscriminant);
                     }
                 }
                 return prop.check_flags.get().intersects(CheckFlags::IsDiscriminant);

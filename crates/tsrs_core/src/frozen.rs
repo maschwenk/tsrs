@@ -45,6 +45,7 @@ impl<T> FrozenCell<T> {
 
     #[inline]
     pub fn borrow(&self) -> FrozenRef<'_, T> {
+        crate::usebits::mark_ptr(self);
         #[cfg(any(debug_assertions, feature = "checked-cells"))]
         {
             let prev = self.state.fetch_add(1, Ordering::Acquire);
@@ -207,6 +208,14 @@ impl<T> OwnedCell<T> {
 impl<T: Copy> OwnedCell<T> {
     #[inline]
     pub fn get(&self) -> T {
+        crate::usebits::mark_ptr(self);
+        let v = self.0.get();
+        crate::usebits::mark_value(&v);
+        v
+    }
+    /// `get` without recording a use (`usebits`).
+    #[inline]
+    pub fn peek(&self) -> T {
         self.0.get()
     }
 }
@@ -247,6 +256,12 @@ impl<T> OwnedSliceCell<T> {
         self.0.get()
     }
 
+    /// `get` without recording a use (`usebits`).
+    #[inline]
+    pub fn peek(&self) -> &'static [T] {
+        self.0.peek()
+    }
+
     #[inline]
     pub fn set(&self, value: &'static [T]) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedSliceCell");
@@ -265,6 +280,15 @@ impl OwnedStrCell {
 
     #[inline]
     pub fn get(&self) -> &'static str {
+        crate::usebits::mark_ptr(self);
+        let s = self.0.get().as_str();
+        crate::usebits::mark(s.as_ptr() as usize);
+        s
+    }
+
+    /// `get` without recording a use (`usebits`).
+    #[inline]
+    pub fn peek(&self) -> &'static str {
         self.0.get().as_str()
     }
 

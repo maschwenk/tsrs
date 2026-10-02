@@ -3,7 +3,7 @@
 //! Every module does `use crate::*;`, which brings the data model and the common imports below into scope.
 
 // Common imports for all checker modules.
-pub(crate) use std::cell::{Cell, RefCell};
+pub(crate) use tsrs_core::ucell::{Cell, Peek, RefCell};
 
 pub(crate) use rustc_hash::{FxHashMap, FxHashSet};
 pub(crate) use tsrs_ast as ast;

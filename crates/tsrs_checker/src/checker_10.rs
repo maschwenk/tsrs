@@ -412,6 +412,7 @@ impl Checker {
 
     // checker.go:19939
     pub(crate) fn add_inherited_members(&mut self, symbols: Option<P<SymbolTable>>, base_symbols: &[P<Symbol>]) -> Option<P<SymbolTable>> {
+        let _builder = tsrs_core::usebits::builder(); // use census: assembling, not a use
         let mut symbols = symbols;
         for &base in base_symbols {
             if !is_static_private_identifier_property(base) {
@@ -420,7 +421,7 @@ impl Checker {
                     if symbols.is_none() {
                         symbols = Some(SymbolTable::new());
                     }
-                    symbols.unwrap().set(base.name(), base);
+                    symbols.unwrap().set(base.name.peek(), base);
                 }
             }
         }
@@ -1691,7 +1692,7 @@ impl Checker {
                             && !p.declarations().is_empty()
                             && p.declarations().iter().all(|d| ast::is_ambient_module(*d)))
                     {
-                        vars_only.set(p.name(), p);
+                        vars_only.set(p.name.peek(), p);
                     }
                 }
             }
@@ -1765,6 +1766,7 @@ impl Checker {
 
     // checker.go:21081
     pub(crate) fn instantiate_symbol_table(&mut self, symbols: Option<P<SymbolTable>>, m: P<TypeMapper>) -> Option<P<SymbolTable>> {
+        let _builder = tsrs_core::usebits::builder(); // use census: assembling, not a use
         let Some(symbols) = symbols.filter(|s| !s.is_empty()) else {
             return None;
         };
@@ -1781,6 +1783,7 @@ impl Checker {
     // checker.go:21094
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn instantiate_symbol(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> P<Symbol> {
+        let _builder = tsrs_core::usebits::builder(); // use census: assembling, not a use
         if self.is_symbol_unaffected_by_instantiation(symbol, m) {
             return symbol;
         }
@@ -1952,9 +1955,9 @@ impl Checker {
                 sig.type_parameters.set(class_type.as_interface_type().local_type_parameters());
                 sig.resolved_return_type.set(Some(class_type));
                 if is_abstract {
-                    sig.flags.set(sig.flags.get() | SignatureFlags::Abstract);
+                    sig.flags.set(sig.flags.peek() | SignatureFlags::Abstract);
                 } else {
-                    sig.flags.set(sig.flags.get() & !SignatureFlags::Abstract);
+                    sig.flags.set(sig.flags.peek() & !SignatureFlags::Abstract);
                 }
                 result.push(sig);
             }
@@ -2252,10 +2255,10 @@ fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTy
             let key_type_union = c.get_union_type(&[mapped_links.key_type.get().unwrap(), key_type]);
             mapped_links.key_type.set(Some(key_type_union));
         } else if let Some(member) = st.lazy.as_ref().and_then(|lazy| lazy.members.borrow().get(&*prop_name).copied().flatten()) {
-            st.members.set(member.name(), member);
+            st.members.set(member.name.peek(), member);
         } else {
             let prop = c.new_mapped_type_member(t, st.modifiers_type, st.template_modifiers, st.should_link_prop_declarations, key_type, prop_name_type, &prop_name);
-            st.members.set(prop.name(), prop);
+            st.members.set(prop.name.peek(), prop);
         }
     } else if st.lazy.as_ref().is_none_or(|lazy| !lazy.index_infos_ready.get()) {
         let index_infos = std::mem::take(&mut st.index_infos);

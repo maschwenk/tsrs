@@ -522,7 +522,7 @@ impl Checker {
                 self.create_computed_enum_type(symbol)
             };
             if enum_type.flags().intersects(TypeFlags::Union) {
-                enum_type.flags.set(enum_type.flags() | TypeFlags::EnumLiteral);
+                enum_type.flags.set(enum_type.flags.peek() | TypeFlags::EnumLiteral);
                 enum_type.set_symbol(Some(symbol));
             }
             links.declared_type.set(Some(enum_type));
@@ -564,7 +564,7 @@ impl Checker {
     pub(crate) fn compute_enum_member_values(&mut self, node: P<Node>) {
         let node_links = self.node_links.get(node);
         if !node_links.flags.get().intersects(NodeCheckFlags::EnumValuesComputed) {
-            node_links.flags.set(node_links.flags.get() | NodeCheckFlags::EnumValuesComputed);
+            node_links.flags.set(node_links.flags.peek() | NodeCheckFlags::EnumValuesComputed);
             let mut auto_value: Option<Number> = Some(Number(0.0));
             let mut previous: Option<P<Node>> = None;
             for &member in node.members() {
@@ -1611,7 +1611,7 @@ impl Checker {
                     );
                     self.value_symbol_links.get(property).resolved_type.set(Some(type_parameter));
                     // c.valueSymbolLinks.get(property).tupleLabelDeclaration = elementInfos[i].labeledDeclaration
-                    members.set(property.name(), property);
+                    members.set(property.name.peek(), property);
                 }
             }
         }
@@ -1627,7 +1627,7 @@ impl Checker {
             let length_type = self.get_union_type(&literal_types);
             self.value_symbol_links.get(length_symbol).resolved_type.set(Some(length_type));
         }
-        members.set(length_symbol.name(), length_symbol);
+        members.set(length_symbol.name.peek(), length_symbol);
         let t = self.new_object_type(ObjectFlags::Tuple | ObjectFlags::Reference, None);
         let d = t.as_tuple_type();
         let this_type = self.new_type_parameter(None);
@@ -1722,7 +1722,7 @@ impl Checker {
                     let d = t.as_substitution_type();
                     combined_flags = self.get_generic_object_flags(d.base_type.get().unwrap()) | self.get_generic_object_flags(d.constraint.get().unwrap());
                 }
-                t.object_flags.set(t.object_flags() | ObjectFlags::IsGenericTypeComputed | combined_flags);
+                t.object_flags.set(t.object_flags.peek() | ObjectFlags::IsGenericTypeComputed | combined_flags);
             }
             return t.object_flags() & ObjectFlags::IsGenericType;
         }
@@ -1899,7 +1899,7 @@ impl Checker {
             return non_widening_type;
         }
         let t = self.new_intrinsic_type(non_widening_type.flags(), non_widening_type.as_intrinsic_type().intrinsic_name());
-        t.object_flags.set(t.object_flags() | ObjectFlags::ContainsWideningType);
+        t.object_flags.set(t.object_flags.peek() | ObjectFlags::ContainsWideningType);
         t
     }
 
@@ -2044,7 +2044,7 @@ impl Checker {
         construct_signatures: &[P<Signature>],
         index_infos: &[P<IndexInfo>],
     ) {
-        t.object_flags.set(t.object_flags() | ObjectFlags::MembersResolved);
+        t.object_flags.set(t.object_flags.peek() | ObjectFlags::MembersResolved);
         let data = t.as_structured_type();
         data.set_members(members);
         let properties = self.get_named_members(members, t.symbol());

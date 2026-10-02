@@ -441,7 +441,7 @@ pub(crate) fn create_symbol_table(symbols: &[P<Symbol>]) -> Option<P<SymbolTable
     }
     let result = SymbolTable::new();
     for &symbol in symbols {
-        result.set(symbol.name(), symbol);
+        result.set(symbol.name.peek(), symbol);
     }
     Some(result)
 }

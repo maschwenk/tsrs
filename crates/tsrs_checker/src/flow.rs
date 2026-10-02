@@ -3047,7 +3047,7 @@ impl Checker {
         };
         let links = self.node_links.get(parent);
         if !links.flags.get().intersects(NodeCheckFlags::AssignmentsMarked) {
-            links.flags.set(links.flags.get() | NodeCheckFlags::AssignmentsMarked);
+            links.flags.set(links.flags.peek() | NodeCheckFlags::AssignmentsMarked);
             if !self.has_parent_with_assignments_marked(parent) {
                 self.mark_node_assignments(parent);
             }

@@ -161,7 +161,9 @@ impl Identifier {
     pub fn text(&self) -> &'static str {
         let word = self.word.get();
         if Self::mode(word) == MODE_TEXT {
-            return self.stored_text();
+            let s = self.stored_text();
+            tsrs_core::usebits::mark(s.as_ptr() as usize);
+            return s;
         }
         let len = ((word >> LEN_SHIFT) & LEN_MAX) as usize;
         let end = self.node().end() as usize;

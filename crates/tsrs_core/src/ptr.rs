@@ -341,12 +341,21 @@ impl<T> SliceCell<T> {
     }
     #[inline]
     pub fn get(&self) -> &'static [T] {
+        crate::usebits::mark_ptr(self);
+        let s = self.peek();
+        crate::usebits::mark_slice(s);
+        s
+    }
+    /// `get` without recording a use (`usebits`).
+    #[inline]
+    pub fn peek(&self) -> &'static [T] {
         let p = self.0.get();
         // SAFETY: built from a `&'static [T]` of this length.
         unsafe { std::slice::from_raw_parts(p.ptr.as_ptr(), p.len as usize) }
     }
     #[inline]
     pub fn set(&self, s: &'static [T]) {
+        crate::usebits::mark_write(self as *const Self as usize);
         self.0.set(Self::pack(s))
     }
 }
@@ -389,12 +398,23 @@ impl<T> OptionSliceCell<T> {
     }
     #[inline]
     pub fn get(&self) -> Option<&'static [T]> {
+        crate::usebits::mark_ptr(self);
+        let s = self.peek();
+        if let Some(s) = s {
+            crate::usebits::mark_slice(s);
+        }
+        s
+    }
+    /// `get` without recording a use (`usebits`).
+    #[inline]
+    pub fn peek(&self) -> Option<&'static [T]> {
         let p = self.0.get();
         // SAFETY: a non-null pointer was built from a `&'static [T]` of this length.
         (!p.ptr.is_null()).then(|| unsafe { std::slice::from_raw_parts(p.ptr, p.len as usize) })
     }
     #[inline]
     pub fn set(&self, s: Option<&'static [T]>) {
+        crate::usebits::mark_write(self as *const Self as usize);
         self.0.set(Self::pack(s))
     }
 }
@@ -415,7 +435,10 @@ impl StrCell {
     }
     #[inline]
     pub fn get(&self) -> &'static str {
-        self.0.get().as_str()
+        crate::usebits::mark_ptr(self);
+        let s = self.0.get().as_str();
+        crate::usebits::mark(s.as_ptr() as usize);
+        s
     }
     #[inline]
     pub fn set(&self, s: &'static str) {

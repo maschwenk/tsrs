@@ -45,12 +45,12 @@ fn create_object_literal_type(c: &mut Checker, node: P<Node>, st: &ObjectLiteral
         index_infos.push(c.get_object_literal_index_info(is_readonly, &st.properties_array[st.offset..], es_symbol_type));
     }
     let result = c.new_anonymous_type(node.symbol(), Some(st.properties_table), &[], &[], &index_infos);
-    result.object_flags.set(result.object_flags() | st.object_flags | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
+    result.object_flags.set(result.object_flags.peek() | st.object_flags | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
     if st.contextual_type.is_none() && ast::is_in_js_file(node) && !ast::is_in_json_file(node) {
-        result.object_flags.set(result.object_flags() | ObjectFlags::JSLiteral);
+        result.object_flags.set(result.object_flags.peek() | ObjectFlags::JSLiteral);
     }
     if st.pattern_with_computed_properties {
-        result.object_flags.set(result.object_flags() | ObjectFlags::ObjectLiteralPatternWithComputedProperties);
+        result.object_flags.set(result.object_flags.peek() | ObjectFlags::ObjectLiteralPatternWithComputedProperties);
     }
     if st.in_destructuring_pattern {
         c.pattern_for_type.insert(result, node);
@@ -450,7 +450,7 @@ impl Checker {
             let symbol = node.symbol().unwrap();
             let result = self.new_anonymous_type(Some(symbol), symbol.exports(), &[], &[], &[]);
             if ast::is_in_js_file(node) && !ast::is_in_json_file(node) {
-                result.object_flags.set(result.object_flags() | ObjectFlags::JSLiteral);
+                result.object_flags.set(result.object_flags.peek() | ObjectFlags::JSLiteral);
             }
             // An expando object literal has no property children (len == 0), so there
             // is nothing to check here.
@@ -536,14 +536,14 @@ impl Checker {
                 if in_destructuring_pattern && self.has_default_value(member_decl) {
                     // If object literal is an assignment pattern and if the assignment pattern specifies a default value
                     // for the property, make the property optional.
-                    prop.flags.set(prop.flags() | SymbolFlags::Optional);
+                    prop.flags.set(prop.flags.peek() | SymbolFlags::Optional);
                 } else if contextual_type_has_pattern && !contextual_type.unwrap().object_flags().intersects(ObjectFlags::ObjectLiteralPatternWithComputedProperties) {
                     // If object literal is contextually typed by the implied type of a binding pattern, and if the
                     // binding pattern specifies a default value for the property, make the property optional.
                     let contextual_type = contextual_type.unwrap();
                     let implied_prop = self.get_property_of_type(contextual_type, member_symbol.name());
                     if let Some(implied_prop) = implied_prop {
-                        prop.flags.set(prop.flags() | (implied_prop.flags() & SymbolFlags::Optional));
+                        prop.flags.set(prop.flags.peek() | (implied_prop.flags() & SymbolFlags::Optional));
                     } else {
                         let string_type = self.string_type;
                         if self.get_index_info_of_type(contextual_type, string_type).is_none() {
@@ -560,7 +560,7 @@ impl Checker {
                 links.set_target(Some(member_symbol));
                 member = Some(prop);
                 if let Some(all_properties_table) = all_properties_table {
-                    all_properties_table.set(prop.name(), prop);
+                    all_properties_table.set(prop.name.peek(), prop);
                 }
                 if contextual_type.is_some()
                     && check_mode.intersects(CheckMode::Inferential)
@@ -631,7 +631,7 @@ impl Checker {
                     }
                 }
             } else {
-                st.properties_table.set(member.name(), member);
+                st.properties_table.set(member.name.peek(), member);
             }
             st.properties_array.push(member);
         }
@@ -909,7 +909,7 @@ impl Checker {
         }
         let index_infos = self.get_index_infos_of_type(first_type);
         let spread = self.new_anonymous_type(first_type.symbol(), Some(members), &[], &[], &index_infos);
-        spread.object_flags.set(spread.object_flags() | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
+        spread.object_flags.set(spread.object_flags.peek() | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
         spread
     }
 
@@ -1181,14 +1181,14 @@ impl Checker {
                     {
                         let links = self.node_links.get(parent);
                         if !links.flags.get().intersects(NodeCheckFlags::InCheckIdentifier) {
-                            links.flags.set(links.flags.get() | NodeCheckFlags::InCheckIdentifier);
+                            links.flags.set(links.flags.peek() | NodeCheckFlags::InCheckIdentifier);
                             let parent_type = self.get_type_for_binding_element_parent(parent, CheckMode::Normal);
                             let mut parent_type_constraint: Option<P<Type>> = None;
                             if let Some(parent_type) = parent_type {
                                 parent_type_constraint = self.map_type(parent_type, |c, t| Some(c.get_base_constraint_or_type(t)));
                             }
                             // Guard parent-type resolution only; flow analysis should allow re-entrant narrowing
-                            links.flags.set(links.flags.get() & !NodeCheckFlags::InCheckIdentifier);
+                            links.flags.set(links.flags.peek() & !NodeCheckFlags::InCheckIdentifier);
                             if let Some(parent_type_constraint) = parent_type_constraint {
                                 if parent_type_constraint.flags().intersects(TypeFlags::Union)
                                     && !(ast::is_parameter_declaration(root_declaration) && self.is_some_symbol_assigned(root_declaration))
@@ -1703,13 +1703,13 @@ impl Checker {
                 && !source.flags().intersects(SymbolFlags::ConstEnumOnlyModule)
             {
                 // reset flag when merging instantiated module into value module that has only const enums
-                target.flags.set(target.flags() & !SymbolFlags::ConstEnumOnlyModule);
+                target.flags.set(target.flags.peek() & !SymbolFlags::ConstEnumOnlyModule);
             }
             let mut source_flags = source.flags();
             if !target.flags().intersects(SymbolFlags::ConstEnumOnlyModule) {
                 source_flags &= !SymbolFlags::ConstEnumOnlyModule;
             }
-            target.flags.set(target.flags() | source_flags);
+            target.flags.set(target.flags.peek() | source_flags);
             if let Some(value_declaration) = source.value_declaration() {
                 tsrs_binder::set_value_declaration(target, value_declaration);
             }

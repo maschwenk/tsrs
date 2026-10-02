@@ -68,6 +68,10 @@ fn enabled() -> bool {
     match MODE.load(Ordering::Relaxed) {
         0 => {
             let on = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1");
+            if on && std::env::var_os("TSRS_USE_CENSUS").is_some_and(|v| v == "1") {
+                crate::usebits::init();
+                crate::usebits::set_first_reads(std::env::var_os("TSRS_USE_CENSUS_FIRST_READS").is_some_and(|v| v == "1"));
+            }
             MODE.store(if on { 2 } else { 1 }, Ordering::Relaxed);
             on
         }
@@ -177,6 +181,61 @@ struct Block {
 }
 
 static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Link records handed out (`usebits::note_slot`): address, size, value type, owner address.
+static SLOTS: Mutex<Vec<(u64, u32, &'static str, u64)>> = Mutex::new(Vec::new());
+/// Every `arena_sample_rate()`-th link record with the stack that asked for it: (address, stack id).
+static SLOT_SAMPLES: Mutex<Vec<(u64, u32)>> = Mutex::new(Vec::new());
+
+pub fn note_slot(addr: usize, size: usize, ty: &'static str, key: usize) {
+    if !crate::usebits::recording() {
+        return;
+    }
+    unless_guarded(|| {
+        let mut slots = SLOTS.lock().unwrap();
+        if slots.len() % arena_sample_rate() as usize == 0 {
+            let id = stack_id();
+            SLOT_SAMPLES.lock().unwrap().push((addr as u64, id));
+        }
+        slots.push((addr as u64, size as u32, ty, key as u64));
+    });
+}
+
+/// `next_seq()` when the first checker was created (`usebits::note_check_start`); `u32::MAX` before.
+static CHECK_START: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(u32::MAX);
+
+pub fn note_check_start() {
+    if CHECK_START.load(Ordering::Relaxed) == u32::MAX && recording() {
+        CHECK_START.fetch_min(next_seq(), Ordering::Relaxed);
+    }
+}
+
+/// First reads (`TSRS_USE_CENSUS_FIRST_READS=1`): every `FIRST_READ_SAMPLE`-th granule read for the first time, with
+/// the reader's stack: which code is the first to read the objects of each type (validating what counts as a use).
+static FIRST_READ_SAMPLES: Mutex<Vec<(u64, u32)>> = Mutex::new(Vec::new());
+const FIRST_READ_SAMPLE: u32 = 16;
+
+thread_local! {
+    static FIRST_READ_COUNTDOWN: Cell<u32> = const { Cell::new(0) };
+}
+
+#[inline(never)]
+pub(crate) fn sample_first_read(addr: usize) {
+    let take = FIRST_READ_COUNTDOWN
+        .try_with(|c| {
+            let n = c.get();
+            c.set(if n == 0 { FIRST_READ_SAMPLE - 1 } else { n - 1 });
+            n == 0
+        })
+        .unwrap_or(false);
+    if !take {
+        return;
+    }
+    unless_guarded(|| {
+        let id = stack_id();
+        FIRST_READ_SAMPLES.lock().unwrap().push((addr as u64, id));
+    });
+}
 
 /// A global event counter (/4, to fit `u32`): orders allocations and frees across threads for the would-free check.
 pub(super) fn next_seq() -> u32 {
@@ -357,6 +416,7 @@ pub fn run(roots: &[usize]) {
     if !recording() {
         return;
     }
+    crate::usebits::freeze();
     MODE.store(3, Ordering::SeqCst);
     with_guard(|| run_frozen(roots));
 }
@@ -584,6 +644,7 @@ fn run_frozen(roots: &[usize]) {
     }
     let t_mark = t0.elapsed();
     check_would_free(&table, &classes, &stacks, &scan, roots, would_free);
+    let use_census = UseCensus::compute(&table, &classes);
 
     let mut per_class = vec![Agg::default(); classes.len()];
     for (i, b) in table.blocks.iter().enumerate() {
@@ -653,9 +714,31 @@ fn run_frozen(roots: &[usize]) {
     // Arena samples: (type, stack) -> scaled aggregate.
     let rate = arena_sample_rate() as u64;
     let mut sampled: FxHashMap<(u32, u32), Agg> = FxHashMap::default();
+    let mut sampled_use: FxHashMap<(u32, u32), UseAgg> = FxHashMap::default();
+    // Symbols (checker phase) by stack: [created, value links used, symbol used but its value links not, builder-only, never].
+    let linked = use_census.as_ref().map(|u| u.symbols_with_used_value_links()).unwrap_or_default();
+    let mut sampled_sym: FxHashMap<u32, [u64; 5]> = FxHashMap::default();
     for &(addr, stack) in &samples {
         let Some(i) = table.lookup(addr) else { continue };
         let b = table.blocks[i];
+        if let Some(u) = &use_census {
+            u.add_block(sampled_use.entry((b.class, stack)).or_default(), &table, i, rate);
+            if let Class::Arena { ty, .. } = classes[b.class as usize] {
+                if ty == "tsrs_ast::symbol::Symbol" && !u.is_front(i) && !u.is_freed(i) {
+                    let e = sampled_sym.entry(stack).or_default();
+                    e[0] += rate;
+                    if linked.contains(&b.start) {
+                        e[1] += rate;
+                    } else if u.is_read(i) {
+                        e[2] += rate;
+                    } else if u.is_builder_read(i) {
+                        e[3] += rate;
+                    } else {
+                        e[4] += rate;
+                    }
+                }
+            }
+        }
         let a = sampled.entry((b.class, stack)).or_default();
         a.count += rate;
         a.bytes += b.size as u64 * rate;
@@ -717,6 +800,131 @@ fn run_frozen(roots: &[usize]) {
     print_table(&title, &mut arena_fn.into_iter().collect(), top);
     let title = format!("arena by type and allocating function <- callers (sampled 1/{rate}, scaled)");
     print_table(&title, &mut arena_fn_caller.into_iter().collect(), top);
+    if let Some(u) = &use_census {
+        u.report(&table, &classes, top);
+        let deep_frames: usize = std::env::var("TSRS_USE_CENSUS_FRAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(6);
+        let mut use_fn: FxHashMap<String, UseAgg> = FxHashMap::default();
+        let mut use_fn_caller: FxHashMap<String, UseAgg> = FxHashMap::default();
+        let mut use_fn_deep: FxHashMap<String, UseAgg> = FxHashMap::default();
+        for (&(class, stack), a) in &sampled_use {
+            let Class::Arena { ty, .. } = classes[class as usize] else { continue };
+            let ty = short_type(ty);
+            let f = frames(stack, &arena_wrapper, deep_frames);
+            let site = f.first().cloned().unwrap_or_else(|| "?".into());
+            use_fn.entry(format!("{ty}  {site}")).or_default().add(a);
+            use_fn_caller.entry(format!("{ty}  {}", f.iter().take(3).cloned().collect::<Vec<_>>().join("  <-  "))).or_default().add(a);
+            use_fn_deep.entry(format!("{ty}  {}", f.join("  <-  "))).or_default().add(a);
+        }
+        print_use_table(&format!("arena by type and allocating function (sampled 1/{rate}, scaled)"), &mut use_fn.into_iter().collect(), top);
+        print_use_table(&format!("arena by type and allocating function <- callers (sampled 1/{rate}, scaled)"), &mut use_fn_caller.into_iter().collect(), top);
+        print_use_table(&format!("arena by type and {deep_frames} frames (sampled 1/{rate}, scaled)"), &mut use_fn_deep.into_iter().collect(), top);
+        let mut sym_rows: FxHashMap<String, [u64; 5]> = FxHashMap::default();
+        let mut sym_total = [0u64; 5];
+        for (&stack, e) in &sampled_sym {
+            let f = frames(stack, &arena_wrapper, deep_frames);
+            let row = sym_rows.entry(f.join("  <-  ")).or_default();
+            for k in 0..5 {
+                row[k] += e[k];
+                sym_total[k] += e[k];
+            }
+        }
+        let mut sym_rows: Vec<(String, [u64; 5])> = sym_rows.into_iter().collect();
+        sym_rows.sort_by(|a, b| (b.1[0] - b.1[1]).cmp(&(a.1[0] - a.1[1])));
+        eprintln!(
+            "\n-- use census: checker-phase symbols by depth of use (sampled 1/{rate}, scaled): created {}, value links used {}, symbol used without its value links {}, only builders {}, never {} --",
+            sym_total[0], sym_total[1], sym_total[2], sym_total[3], sym_total[4]
+        );
+        eprintln!("{:>10} {:>10} {:>10} {:>10} {:>10}  created by", "created", "linked", "shallow", "builder", "never");
+        for (name, e) in sym_rows.iter().take(top) {
+            eprintln!("{:>10} {:>10} {:>10} {:>10} {:>10}  {name}", e[0], e[1], e[2], e[3], e[4]);
+        }
+        let slot_samples = std::mem::take(&mut *SLOT_SAMPLES.lock().unwrap());
+        if !slot_samples.is_empty() {
+            let mut slot_ips: Vec<usize> = Vec::new();
+            for &(_, stack) in &slot_samples {
+                slot_ips.extend(stacks[stack as usize].iter().copied());
+            }
+            let mut slot_names: FxHashMap<usize, String> = FxHashMap::default();
+            atos(&slot_ips, &mut slot_names);
+            let by_addr: FxHashMap<u64, (u32, &'static str)> = u.slots.iter().map(|s| (s.0, (s.1, s.2))).collect();
+            let mut rows: FxHashMap<String, UseAgg> = FxHashMap::default();
+            let mut unw: FxHashMap<String, (u64, u64, u64)> = FxHashMap::default();
+            for &(addr, stack) in &slot_samples {
+                let Some(&(size, ty)) = by_addr.get(&addr) else { continue };
+                let f: Vec<String> = stacks[stack as usize]
+                    .iter()
+                    .take_while(|&&ip| ip != 0)
+                    .filter_map(|ip| slot_names.get(ip))
+                    .filter(|n| !arena_wrapper(n) && !n.contains("LinkStore") && !n.contains("note_slot") && !n.contains("usebits"))
+                    .take(deep_frames)
+                    .cloned()
+                    .collect();
+                let key = format!("{}  {}", short_type(ty), f.join("  <-  "));
+                let e = unw.entry(key.clone()).or_default();
+                e.0 += rate;
+                if !crate::usebits::is_written(addr as usize, size as usize) {
+                    e.1 += rate;
+                    e.2 += size as u64 * rate;
+                }
+                let a = rows.entry(key).or_default();
+                let (w, sz) = (rate, size as u64);
+                a.count += w;
+                a.bytes += sz * w;
+                if crate::usebits::is_read(addr as usize, size as usize) {
+                    a.read_count += w;
+                    a.read_bytes += sz * w;
+                } else {
+                    if crate::usebits::is_builder_read(addr as usize, size as usize) {
+                        a.bonly_count += w;
+                        a.bonly_bytes += sz * w;
+                    }
+                    a.nr_reach_count += w;
+                    a.nr_reach_bytes += sz * w;
+                }
+            }
+            print_use_table(&format!("link records by type and the code that asked for them (sampled 1/{rate}, scaled)"), &mut rows.into_iter().collect(), top);
+            let mut unw: Vec<(String, (u64, u64, u64))> = unw.into_iter().collect();
+            unw.sort_by(|a, b| b.1 .2.cmp(&a.1 .2));
+            eprintln!("\n-- use census: link records never written, by the code that asked for them (sampled 1/{rate}, scaled) --");
+            eprintln!("{:>11} {:>11} {:>8}  what", "records", "unwritten", "MB");
+            for (name, (n, k, b)) in unw.iter().take(top) {
+                eprintln!("{n:>11} {k:>11} {:>8}  {name}", mb(*b));
+            }
+        }
+        let first = std::mem::take(&mut *FIRST_READ_SAMPLES.lock().unwrap());
+        if !first.is_empty() {
+            let mut fr_ips: Vec<usize> = Vec::new();
+            for &(_, stack) in &first {
+                fr_ips.extend(stacks[stack as usize].iter().copied());
+            }
+            let mut fr_names: FxHashMap<usize, String> = FxHashMap::default();
+            atos(&fr_ips, &mut fr_names);
+            let mut by: FxHashMap<String, u64> = FxHashMap::default();
+            for &(addr, stack) in &first {
+                let Some(i) = table.lookup(addr) else { continue };
+                let b = table.blocks[i];
+                if u.is_front(i) {
+                    continue;
+                }
+                let Class::Arena { ty, .. } = classes[b.class as usize] else { continue };
+                let f: Vec<String> = stacks[stack as usize]
+                    .iter()
+                    .take_while(|&&ip| ip != 0)
+                    .filter_map(|ip| fr_names.get(ip))
+                    .filter(|n| !first_read_wrapper(n))
+                    .take(5)
+                    .cloned()
+                    .collect();
+                *by.entry(format!("{}  +{}  {}", short_type(ty), addr - b.start, f.join("  <-  "))).or_default() += FIRST_READ_SAMPLE as u64;
+            }
+            let mut rows: Vec<(String, u64)> = by.into_iter().collect();
+            rows.sort_by(|a, b| b.1.cmp(&a.1));
+            eprintln!("\n-- use census: first reads of checker-phase blocks by type, offset and reader (sampled 1/{FIRST_READ_SAMPLE}, scaled; top {top}) --");
+            for (name, n) in rows.iter().take(top) {
+                eprintln!("{n:>11}  {name}");
+            }
+        }
+    }
     eprintln!(
         "\ncensus time: collect {:.1} s, sort+index {:.1} s, mark {:.1} s, resolve {:.1} s",
         t_collect.as_secs_f64(),
@@ -1226,5 +1434,395 @@ fn atos(ips: &[usize], names: &mut FxHashMap<usize, String>) {
         for ip in chunk {
             names.insert(*ip, lines.next().map(function_name).unwrap_or_else(|| format!("{ip:#x}")));
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Use census (`TSRS_USE_CENSUS=1` with `TSRS_CENSUS=1`; `crate::usebits`)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Created / read bytes and counts. `read*`: read by a use; `bonly*`: read only inside builder scopes
+/// (`usebits::builder`); `nr_reach*`: not read by any use and still reachable at exit (the ranking key).
+#[derive(Default, Clone, Copy)]
+struct UseAgg {
+    count: u64,
+    bytes: u64,
+    read_count: u64,
+    read_bytes: u64,
+    bonly_count: u64,
+    bonly_bytes: u64,
+    nr_reach_count: u64,
+    nr_reach_bytes: u64,
+}
+
+impl UseAgg {
+    fn add(&mut self, o: &UseAgg) {
+        self.count += o.count;
+        self.bytes += o.bytes;
+        self.read_count += o.read_count;
+        self.read_bytes += o.read_bytes;
+        self.bonly_count += o.bonly_count;
+        self.bonly_bytes += o.bonly_bytes;
+        self.nr_reach_count += o.nr_reach_count;
+        self.nr_reach_bytes += o.nr_reach_bytes;
+    }
+}
+
+struct UseCensus {
+    /// Per block of `Table::blocks`: read at least once (arena blocks only).
+    read: Vec<u64>,
+    /// Per block: read inside a builder scope.
+    bread: Vec<u64>,
+    /// Per block: freed or rewound by the arena (garbage reclaimed in normal builds): left out of the use census.
+    freed: Vec<u64>,
+    /// Per block: allocated before the first checker was created (parse, bind): reported separately.
+    front: Vec<u64>,
+    /// Per class: a chunk of link records (reported per record from `SLOTS` instead).
+    chunk_class: Vec<bool>,
+    /// Link records: address, size, value type, owner address.
+    slots: Vec<(u64, u32, &'static str, u64)>,
+}
+
+impl UseCensus {
+    fn compute(table: &Table, classes: &[Class]) -> Option<UseCensus> {
+        if !crate::usebits::is_active() {
+            return None;
+        }
+        let slots = std::mem::take(&mut *SLOTS.lock().unwrap());
+        let slot_types: FxHashSet<String> = slots.iter().map(|s| format!("[{}]", s.2)).collect();
+        let chunk_class: Vec<bool> = classes
+            .iter()
+            .map(|c| matches!(c, Class::Arena { ty, .. } if slot_types.contains(*ty)))
+            .collect();
+        let n = table.blocks.len();
+        let mut read = vec![0u64; n / 64 + 1];
+        let mut bread = vec![0u64; n / 64 + 1];
+        let mut freed = vec![0u64; n / 64 + 1];
+        let mut front = vec![0u64; n / 64 + 1];
+        let check_start = CHECK_START.load(Ordering::Relaxed);
+        let wf = WOULD_FREE.lock().unwrap();
+        let mut k = 0usize;
+        for (i, b) in table.blocks.iter().enumerate() {
+            if !matches!(classes[b.class as usize], Class::Arena { .. }) {
+                continue;
+            }
+            while k < wf.len() && wf[k].0 < b.start {
+                k += 1;
+            }
+            if k < wf.len() && wf[k].0 == b.start {
+                freed[i / 64] |= 1 << (i % 64);
+                continue;
+            }
+            if crate::usebits::is_read(b.start as usize, b.size as usize) {
+                read[i / 64] |= 1 << (i % 64);
+            }
+            if crate::usebits::is_builder_read(b.start as usize, b.size as usize) {
+                bread[i / 64] |= 1 << (i % 64);
+            }
+            if b.seq < check_start {
+                front[i / 64] |= 1 << (i % 64);
+            }
+        }
+        Some(UseCensus { read, bread, freed, front, chunk_class, slots })
+    }
+
+    #[inline]
+    fn is_read(&self, i: usize) -> bool {
+        self.read[i / 64] & (1 << (i % 64)) != 0
+    }
+
+    #[inline]
+    fn is_builder_read(&self, i: usize) -> bool {
+        self.bread[i / 64] & (1 << (i % 64)) != 0
+    }
+
+    #[inline]
+    fn is_freed(&self, i: usize) -> bool {
+        self.freed[i / 64] & (1 << (i % 64)) != 0
+    }
+
+    #[inline]
+    fn is_front(&self, i: usize) -> bool {
+        self.front[i / 64] & (1 << (i % 64)) != 0
+    }
+
+    /// Adds block `i` unless it was freed, belongs to the front end or is a chunk of link records.
+    fn add_block(&self, a: &mut UseAgg, table: &Table, i: usize, weight: u64) {
+        if self.is_freed(i) || self.is_front(i) || self.chunk_class[table.blocks[i].class as usize] {
+            return;
+        }
+        let size = table.blocks[i].size as u64;
+        a.count += weight;
+        a.bytes += size * weight;
+        if self.is_read(i) {
+            a.read_count += weight;
+            a.read_bytes += size * weight;
+            return;
+        }
+        if self.is_builder_read(i) {
+            a.bonly_count += weight;
+            a.bonly_bytes += size * weight;
+        }
+        if table.marked(i) {
+            a.nr_reach_count += weight;
+            a.nr_reach_bytes += size * weight;
+        }
+    }
+
+    fn report(&self, table: &Table, classes: &[Class], top: usize) {
+        let mut per_class = vec![UseAgg::default(); classes.len()];
+        let mut total = UseAgg::default();
+        let mut front = UseAgg::default();
+        let mut freed = (0u64, 0u64);
+        for (i, b) in table.blocks.iter().enumerate() {
+            if !matches!(classes[b.class as usize], Class::Arena { .. }) {
+                continue;
+            }
+            if self.is_freed(i) {
+                freed.0 += 1;
+                freed.1 += b.size as u64;
+                continue;
+            }
+            if self.is_front(i) {
+                let size = b.size as u64;
+                front.count += 1;
+                front.bytes += size;
+                if self.is_read(i) {
+                    front.read_count += 1;
+                    front.read_bytes += size;
+                } else if table.marked(i) {
+                    front.nr_reach_count += 1;
+                    front.nr_reach_bytes += size;
+                }
+                continue;
+            }
+            self.add_block(&mut per_class[b.class as usize], table, i, 1);
+            self.add_block(&mut total, table, i, 1);
+        }
+        let slot_total = self.slot_report(table, classes, top);
+        total.add(&slot_total);
+        eprintln!("\n== use census (TSRS_USE_CENSUS=1): arena blocks never read after creation (notes/mem-use-census.md) ==");
+        eprintln!(
+            "front end (allocated before the first checker; not in the tables below): {} MB {} blocks, never read {} MB, of which reachable {} MB",
+            mb(front.bytes),
+            front.count,
+            mb(front.bytes - front.read_bytes),
+            mb(front.nr_reach_bytes)
+        );
+        eprintln!(
+            "checker phase (without {} freed / rewound blocks, {} MB): created {} MB {} blocks | used {} MB {} | not used {} MB {} ({:.1}%: read only by builders {} MB {}, never read {} MB), of which reachable at exit {} MB {}",
+            freed.0,
+            mb(freed.1),
+            mb(total.bytes),
+            total.count,
+            mb(total.read_bytes),
+            total.read_count,
+            mb(total.bytes - total.read_bytes),
+            total.count - total.read_count,
+            (total.bytes - total.read_bytes) as f64 * 100.0 / total.bytes.max(1) as f64,
+            mb(total.bonly_bytes),
+            total.bonly_count,
+            mb(total.bytes - total.read_bytes - total.bonly_bytes),
+            mb(total.nr_reach_bytes),
+            total.nr_reach_count
+        );
+        let mut by_type: FxHashMap<String, UseAgg> = FxHashMap::default();
+        let mut by_site: Vec<(String, UseAgg)> = Vec::new();
+        for (c, a) in classes.iter().zip(&per_class) {
+            if let Class::Arena { loc, ty } = c {
+                if a.count == 0 {
+                    continue;
+                }
+                let ty = short_type(ty);
+                by_type.entry(ty.clone()).or_default().add(a);
+                let file = loc.file();
+                let file = file.find("crates/").map(|i| &file[i + 7..]).unwrap_or(file);
+                by_site.push((format!("{}:{}  {}", file, loc.line(), ty), *a));
+            }
+        }
+        for (ty, a) in self.slot_rows() {
+            by_type.insert(ty, a);
+        }
+        print_use_table("arena by type (link records per record)", &mut by_type.clone().into_iter().collect(), top);
+        print_use_table("arena by call site (one level, #[track_caller])", &mut by_site, top);
+        if let Some(n) = std::env::var("TSRS_USE_CENSUS_FIELDS").ok().and_then(|v| v.parse::<usize>().ok()) {
+            self.field_profile(table, classes, &by_type, n);
+        }
+    }
+
+    /// For the `n` types with the most never-read reachable bytes whose blocks all have one size: per 4-byte offset,
+    /// the share of (checker-phase, non-freed) blocks in which it was read.
+    fn field_profile(&self, table: &Table, classes: &[Class], by_type: &FxHashMap<String, UseAgg>, n: usize) {
+        let mut types: Vec<(&String, &UseAgg)> = by_type.iter().collect();
+        types.sort_by(|a, b| b.1.nr_reach_bytes.cmp(&a.1.nr_reach_bytes));
+        let chosen: FxHashMap<&str, usize> = types.iter().take(n).enumerate().map(|(k, (t, _))| (t.as_str(), k)).collect();
+        let class_type: Vec<Option<usize>> = classes
+            .iter()
+            .map(|c| match c {
+                Class::Arena { ty, .. } => chosen.get(short_type(ty).as_str()).copied(),
+                Class::Heap { .. } => None,
+            })
+            .collect();
+        // Per chosen type: block size (0 = mixed), block count, read count per granule.
+        let mut prof: Vec<(u32, u64, Vec<u64>)> = vec![(u32::MAX, 0, Vec::new()); chosen.len()];
+        for (i, b) in table.blocks.iter().enumerate() {
+            let Some(k) = class_type[b.class as usize] else { continue };
+            if self.is_freed(i) || self.is_front(i) {
+                continue;
+            }
+            let p = &mut prof[k];
+            if p.0 == u32::MAX {
+                p.0 = b.size;
+                p.2 = vec![0; (b.size as usize).div_ceil(4)];
+            } else if p.0 != b.size {
+                p.0 = 0;
+            }
+            if p.0 == 0 {
+                continue;
+            }
+            p.1 += 1;
+            for (g, c) in p.2.iter_mut().enumerate() {
+                if crate::usebits::is_read(b.start as usize + 4 * g, 4) {
+                    *c += 1;
+                }
+            }
+        }
+        eprintln!("\n-- use census: read share per 4-byte offset (TSRS_USE_CENSUS_FIELDS={n}) --");
+        let mut order: Vec<(&str, usize)> = chosen.iter().map(|(t, k)| (*t, *k)).collect();
+        order.sort_by_key(|x| x.1);
+        for (t, k) in order {
+            let (size, count, g) = &prof[k];
+            if *size == 0 || *size == u32::MAX || *count == 0 {
+                eprintln!("{t}: blocks of different sizes");
+                continue;
+            }
+            if *size > 256 {
+                eprintln!("{t}: {size}-byte blocks (not shown)");
+                continue;
+            }
+            let cells: Vec<String> = g.iter().enumerate().map(|(o, c)| format!("+{}:{:.0}%", 4 * o, *c as f64 * 100.0 / *count as f64)).collect();
+            eprintln!("{t} ({size} B, {count} blocks): {}", cells.join(" "));
+        }
+    }
+}
+
+fn print_use_table(title: &str, rows: &mut Vec<(String, UseAgg)>, top: usize) {
+    rows.sort_by(|a, b| b.1.nr_reach_bytes.cmp(&a.1.nr_reach_bytes).then(b.1.bytes.cmp(&a.1.bytes)));
+    if let Some(out) = TSV.lock().unwrap().as_mut() {
+        use std::io::Write;
+        for (name, a) in rows.iter() {
+            let _ = writeln!(
+                out,
+                "use: {title}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{name}",
+                a.bytes, a.count, a.read_bytes, a.read_count, a.bonly_bytes, a.bonly_count, a.nr_reach_bytes, a.nr_reach_count
+            );
+        }
+    }
+    eprintln!("\n-- use census: {title} (top {top} by unused reachable bytes; {} rows) --", rows.len());
+    eprintln!(
+        "{:>9} {:>10} {:>9} {:>9} {:>9} {:>9} {:>10} {:>6}  what",
+        "alloc MB", "count", "used MB", "bonly MB", "never MB", "nu+r MB", "count", "nu%"
+    );
+    for (name, a) in rows.iter().take(top) {
+        eprintln!(
+            "{:>9} {:>10} {:>9} {:>9} {:>9} {:>9} {:>10} {:>6.1}  {}",
+            mb(a.bytes),
+            a.count,
+            mb(a.read_bytes),
+            mb(a.bonly_bytes),
+            mb(a.bytes - a.read_bytes - a.bonly_bytes),
+            mb(a.nr_reach_bytes),
+            a.nr_reach_count,
+            (a.bytes - a.read_bytes) as f64 * 100.0 / a.bytes.max(1) as f64,
+            name
+        );
+    }
+}
+
+/// Frames of the read accessors themselves (cells, getters), skipped in the first-read table.
+fn first_read_wrapper(name: &str) -> bool {
+    boring(name)
+        || name.contains("usebits::")
+        || name.contains("census::")
+        || name.contains("ucell::")
+        || name.contains("Cell<")
+        || name.contains("SliceCell")
+        || name.contains("StrCell")
+}
+
+impl UseCensus {
+    /// Per link record (checker phase): created / used / builder-only / never, all reachable (their stores live in
+    /// the checker). Returns the total.
+    fn slot_rows(&self) -> Vec<(String, UseAgg)> {
+        let check_start_slots = &self.slots;
+        let mut by: FxHashMap<&'static str, UseAgg> = FxHashMap::default();
+        for &(addr, size, ty, _) in check_start_slots {
+            let a = by.entry(ty).or_default();
+            let size = size as u64;
+            a.count += 1;
+            a.bytes += size;
+            if crate::usebits::is_read(addr as usize, size as usize) {
+                a.read_count += 1;
+                a.read_bytes += size;
+                continue;
+            }
+            if crate::usebits::is_builder_read(addr as usize, size as usize) {
+                a.bonly_count += 1;
+                a.bonly_bytes += size;
+            }
+            a.nr_reach_count += 1;
+            a.nr_reach_bytes += size;
+        }
+        by.into_iter().map(|(ty, a)| (format!("{} (link record)", short_type(ty)), a)).collect()
+    }
+
+    fn slot_report(&self, table: &Table, classes: &[Class], _top: usize) -> UseAgg {
+        let mut total = UseAgg::default();
+        for (_, a) in self.slot_rows() {
+            total.add(&a);
+        }
+        let (mut chunk_bytes, mut chunks) = (0u64, 0u64);
+        for (i, b) in table.blocks.iter().enumerate() {
+            if self.chunk_class[b.class as usize] && !self.is_front(i) {
+                chunk_bytes += b.size as u64;
+                chunks += 1;
+            }
+        }
+        let _ = classes;
+        // Records never written: every access read the zero value, so a lookup that does not allocate would do.
+        let mut unwritten: FxHashMap<&'static str, (u64, u64, u64)> = FxHashMap::default();
+        for &(addr, size, ty, _) in &self.slots {
+            let e = unwritten.entry(ty).or_default();
+            e.0 += 1;
+            if !crate::usebits::is_written(addr as usize, size as usize) {
+                e.1 += 1;
+                e.2 += size as u64;
+            }
+        }
+        let mut rows: Vec<_> = unwritten.into_iter().collect();
+        rows.sort_by(|a, b| b.1 .2.cmp(&a.1 .2));
+        eprintln!("\n-- use census: link records never written (all zero; a non-allocating lookup would answer the same) --");
+        for (ty, (n, k, b)) in rows.iter().take(12) {
+            eprintln!("{:>11} of {:>11} records, {:>7} MB  {}", k, n, mb(*b), short_type(ty));
+        }
+        eprintln!(
+            "link records (checker phase): {} records {} MB in {} chunks of {} MB (the rest of the chunks is never handed out); used {} MB, not used {} MB",
+            total.count,
+            mb(total.bytes),
+            chunks,
+            mb(chunk_bytes),
+            mb(total.read_bytes),
+            mb(total.bytes - total.read_bytes)
+        );
+        total
+    }
+
+    /// Owners (addresses) whose value-symbol links record was used: for the symbol depth table.
+    fn symbols_with_used_value_links(&self) -> FxHashSet<u64> {
+        self.slots
+            .iter()
+            .filter(|s| s.2.ends_with("::ValueSymbolLinks") && s.3 != 0 && crate::usebits::is_read(s.0 as usize, s.1 as usize))
+            .map(|s| s.3)
+            .collect()
     }
 }

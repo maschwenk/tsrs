@@ -27,7 +27,7 @@ impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
         self.0.set(Some(P::new(RefCell::new(FxHashMap::default()))));
     }
     pub fn is_nil(&self) -> bool {
-        self.0.get().is_none()
+        self.0.peek().is_none()
     }
     /// Go `v, ok := m[k]` (reading a nil map is allowed).
     pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V>
@@ -41,17 +41,17 @@ impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
     }
     /// Go `m[k] = v`. Creates the map if it is nil (Go would panic; faithful code always `make`s first).
     pub fn set(&self, key: K, value: V) {
-        let m = match self.0.get() {
+        let m = match self.0.peek() {
             Some(m) => m,
             None => {
                 self.make();
-                self.0.get().unwrap()
+                self.0.peek().unwrap()
             }
         };
         m.borrow_mut().insert(key, value);
     }
     pub fn delete(&self, key: &K) {
-        if let Some(m) = self.0.get() {
+        if let Some(m) = self.0.peek() {
             m.borrow_mut().remove(key);
         }
     }
@@ -59,7 +59,7 @@ impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
         self.0.get().map_or(0, |m| m.borrow().len())
     }
     pub fn clear(&self) {
-        if let Some(m) = self.0.get() {
+        if let Some(m) = self.0.peek() {
             m.borrow_mut().clear();
         }
     }
@@ -67,7 +67,7 @@ impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
     /// bucket, so a table that one large use grew would make every later small use pay for its capacity; such
     /// a table is reallocated at the size of its last use instead. Unobservable: the map is empty either way.
     pub fn clear_scratch(&self) {
-        if let Some(m) = self.0.get() {
+        if let Some(m) = self.0.peek() {
             let mut m = m.borrow_mut();
             let len = m.len();
             if m.capacity() > 64 && m.capacity() > 4 * len {
@@ -325,9 +325,11 @@ fn word_bits(w: Option<P<()>>) -> usize {
 }
 
 impl ValueSymbolLinks {
+    // Getters record a use of the word they answer from (`tsrs_core::usebits`); the mode checks and the `*_peek`
+    // forms used by setters do not.
     #[inline]
     fn mode(&self) -> LinksMode {
-        match word_bits(self.second.get()) & MODE_MASK {
+        match word_bits(self.second.peek()) & MODE_MASK {
             0 => LinksMode::Plain,
             SYNTHETIC => LinksMode::Synthetic,
             _ => LinksMode::Tail,
@@ -338,7 +340,7 @@ impl ValueSymbolLinks {
     fn tail(&self) -> P<ValueSymbolLinksTail> {
         debug_assert!(self.mode() == LinksMode::Tail);
         // SAFETY: in tail mode `first` is an erased `P<ValueSymbolLinksTail>`.
-        unsafe { restore(self.first.get()) }.unwrap()
+        unsafe { restore(self.first.peek()) }.unwrap()
     }
 
     /// The tail, moving the record to tail mode first if needed.
@@ -347,10 +349,10 @@ impl ValueSymbolLinks {
             return self.tail();
         }
         let tail = P::new(ValueSymbolLinksTail::default());
-        tail.target.set(self.target());
-        tail.mapper.set(self.mapper());
-        tail.containing_type.set(self.containing_type());
-        tail.name_type.set(self.name_type());
+        tail.target.set(self.target_peek());
+        tail.mapper.set(self.mapper_peek());
+        tail.containing_type.set(self.containing_type_peek());
+        tail.name_type.set(self.name_type_peek());
         self.first.set(erase(Some(tail)));
         self.second.set(map_word(None, |_| TAIL));
         tail
@@ -358,7 +360,7 @@ impl ValueSymbolLinks {
 
     /// Moves a plain record without target and mapper to synthetic mode, if it is one.
     fn enter_synthetic_mode(&self) -> bool {
-        if self.mode() == LinksMode::Plain && self.first.get().is_none() && self.second.get().is_none() {
+        if self.mode() == LinksMode::Plain && self.first.peek().is_none() && self.second.peek().is_none() {
             self.second.set(map_word(None, |_| SYNTHETIC));
             return true;
         }
@@ -366,13 +368,30 @@ impl ValueSymbolLinks {
     }
 
     #[inline]
-    pub fn target(&self) -> Option<P<Symbol>> {
+    fn mark_first(&self) {
+        tsrs_core::usebits::mark_ptr(&self.first);
+    }
+    #[inline]
+    fn mark_second(&self) {
+        tsrs_core::usebits::mark_ptr(&self.second);
+    }
+
+    #[inline]
+    fn target_peek(&self) -> Option<P<Symbol>> {
         match self.mode() {
             // SAFETY: in plain mode `first` is an erased `P<Symbol>` or nil.
-            LinksMode::Plain => unsafe { restore(self.first.get()) },
+            LinksMode::Plain => unsafe { restore(self.first.peek()) },
             LinksMode::Synthetic => None,
-            LinksMode::Tail => self.tail().target.get(),
+            LinksMode::Tail => self.tail().target.peek(),
         }
+    }
+    #[inline]
+    pub fn target(&self) -> Option<P<Symbol>> {
+        self.mark_first();
+        if self.mode() == LinksMode::Tail {
+            return self.tail().target.get();
+        }
+        self.target_peek()
     }
     #[inline]
     pub fn set_target(&self, target: Option<P<Symbol>>) {
@@ -383,13 +402,21 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub fn mapper(&self) -> Option<P<TypeMapper>> {
+    fn mapper_peek(&self) -> Option<P<TypeMapper>> {
         match self.mode() {
             // SAFETY: in plain mode `second` is an erased `P<TypeMapper>` or nil (no mode bits).
-            LinksMode::Plain => unsafe { restore(self.second.get()) },
+            LinksMode::Plain => unsafe { restore(self.second.peek()) },
             LinksMode::Synthetic => None,
-            LinksMode::Tail => self.tail().mapper.get(),
+            LinksMode::Tail => self.tail().mapper.peek(),
         }
+    }
+    #[inline]
+    pub fn mapper(&self) -> Option<P<TypeMapper>> {
+        self.mark_second();
+        if self.mode() == LinksMode::Tail {
+            return self.tail().mapper.get();
+        }
+        self.mapper_peek()
     }
     #[inline]
     pub fn set_mapper(&self, mapper: Option<P<TypeMapper>>) {
@@ -403,13 +430,21 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub fn containing_type(&self) -> Option<P<Type>> {
+    fn containing_type_peek(&self) -> Option<P<Type>> {
         match self.mode() {
             LinksMode::Plain => None,
             // SAFETY: in synthetic mode `first` is an erased `P<Type>` or nil.
-            LinksMode::Synthetic => unsafe { restore(self.first.get()) },
-            LinksMode::Tail => self.tail().containing_type.get(),
+            LinksMode::Synthetic => unsafe { restore(self.first.peek()) },
+            LinksMode::Tail => self.tail().containing_type.peek(),
         }
+    }
+    #[inline]
+    pub fn containing_type(&self) -> Option<P<Type>> {
+        self.mark_first();
+        if self.mode() == LinksMode::Tail {
+            return self.tail().containing_type.get();
+        }
+        self.containing_type_peek()
     }
     #[inline]
     pub fn set_containing_type(&self, t: Option<P<Type>>) {
@@ -423,13 +458,21 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub fn name_type(&self) -> Option<P<Type>> {
+    fn name_type_peek(&self) -> Option<P<Type>> {
         match self.mode() {
             LinksMode::Plain => None,
             // SAFETY: in synthetic mode `second` is an erased `P<Type>` or nil plus the mode bits.
-            LinksMode::Synthetic => unsafe { restore(map_word(self.second.get(), |a| a & !MODE_MASK)) },
-            LinksMode::Tail => self.tail().name_type.get(),
+            LinksMode::Synthetic => unsafe { restore(map_word(self.second.peek(), |a| a & !MODE_MASK)) },
+            LinksMode::Tail => self.tail().name_type.peek(),
         }
+    }
+    #[inline]
+    pub fn name_type(&self) -> Option<P<Type>> {
+        self.mark_second();
+        if self.mode() == LinksMode::Tail {
+            return self.tail().name_type.get();
+        }
+        self.name_type_peek()
     }
     #[inline]
     pub fn set_name_type(&self, t: Option<P<Type>>) {
@@ -444,6 +487,7 @@ impl ValueSymbolLinks {
     }
     #[inline]
     pub fn write_type(&self) -> Option<P<Type>> {
+        self.mark_first();
         match self.mode() {
             LinksMode::Tail => self.tail().write_type.get(),
             _ => None,
@@ -457,6 +501,7 @@ impl ValueSymbolLinks {
     }
     #[inline]
     pub fn function_or_constructor_checked(&self) -> bool {
+        self.mark_first();
         self.mode() == LinksMode::Tail && self.tail().function_or_constructor_checked.get()
     }
     #[inline]
@@ -1516,7 +1561,7 @@ impl Type {
 
     #[inline]
     pub fn set_symbol(&self, symbol: Option<P<Symbol>>) {
-        let word = self.symbol_or_alias.get();
+        let word = self.symbol_or_alias.peek();
         match word.record() {
             Some(r) => r.symbol.set(symbol),
             None => self.symbol_or_alias.set(TypeSymbolWord::symbol_word(symbol)),
@@ -1529,7 +1574,7 @@ impl Type {
     }
 
     pub fn set_alias(&self, alias: Option<P<TypeAlias>>) {
-        let word = self.symbol_or_alias.get();
+        let word = self.symbol_or_alias.peek();
         match word.record() {
             Some(r) => r.alias.set(alias),
             None if alias.is_some() => {
@@ -1768,6 +1813,9 @@ pub struct LiteralType {
 
 impl LiteralType {
     pub fn value(&self) -> Option<LiteralValue> {
+        if let Some(LiteralValue::String(s)) = self.value.get() {
+            tsrs_core::usebits::mark_ptr(s);
+        }
         self.value.get()
     }
     pub fn fresh_type(&self) -> Option<P<Type>> {
@@ -1824,7 +1872,7 @@ const _: () = assert!(std::mem::size_of::<StructuredType>() == 8);
 impl StructuredType {
     #[inline]
     fn resolved_for_write(&self) -> P<StructuredMembers> {
-        match self.resolved.get() {
+        match self.resolved.peek() {
             Some(resolved) => resolved,
             None => {
                 let resolved = P::new(StructuredMembers::default());
@@ -2432,7 +2480,7 @@ impl Signature {
         self.target.get()
     }
     fn rare_for_write(&self) -> P<SignatureRare> {
-        match self.rare.get() {
+        match self.rare.peek() {
             Some(rare) => rare,
             None => {
                 let rare = P::new(SignatureRare::default());
@@ -2445,7 +2493,7 @@ impl Signature {
         self.rare.get().and_then(|r| r.this_parameter.get())
     }
     pub fn set_this_parameter(&self, this_parameter: Option<P<Symbol>>) {
-        if this_parameter.is_some() || self.rare.get().is_some() {
+        if this_parameter.is_some() || self.rare.peek().is_some() {
             self.rare_for_write().this_parameter.set(this_parameter);
         }
     }
@@ -2453,7 +2501,7 @@ impl Signature {
         self.rare.get().and_then(|r| r.isolated_signature_type.get())
     }
     pub fn set_isolated_signature_type(&self, t: Option<P<Type>>) {
-        if t.is_some() || self.rare.get().is_some() {
+        if t.is_some() || self.rare.peek().is_some() {
             self.rare_for_write().isolated_signature_type.set(t);
         }
     }
@@ -2461,7 +2509,7 @@ impl Signature {
         self.rare.get().and_then(|r| r.composite.get())
     }
     pub fn set_composite(&self, composite: Option<P<CompositeSignature>>) {
-        if composite.is_some() || self.rare.get().is_some() {
+        if composite.is_some() || self.rare.peek().is_some() {
             self.rare_for_write().composite.set(composite);
         }
     }

@@ -789,7 +789,7 @@ impl Checker {
         fn create_jsx_attributes_type(c: &mut Checker, object_flags: &mut ObjectFlags, attributes_symbol: Option<P<Symbol>>, attributes_table: P<SymbolTable>) -> P<Type> {
             *object_flags |= ObjectFlags::FreshLiteral;
             let result = c.new_anonymous_type(attributes_symbol, Some(attributes_table), &[], &[], &[]);
-            result.object_flags.set(result.object_flags.get() | *object_flags | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
+            result.object_flags.set(result.object_flags.peek() | *object_flags | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
             result
         }
         let jsx_namespace = self.get_jsx_namespace_at(Some(opening_like_element));
@@ -818,9 +818,9 @@ impl Checker {
                     let links = self.value_symbol_links.get(attribute_symbol);
                     links.resolved_type.set(Some(expr_type));
                     links.set_target(Some(member));
-                    attributes_table.set(attribute_symbol.name(), attribute_symbol);
+                    attributes_table.set(attribute_symbol.name.peek(), attribute_symbol);
                     if let Some(all_attributes_table) = all_attributes_table {
-                        all_attributes_table.set(attribute_symbol.name(), attribute_symbol);
+                        all_attributes_table.set(attribute_symbol.name.peek(), attribute_symbol);
                     }
                     if attribute_decl.name().unwrap().text() == jsx_children_property_name {
                         explicitly_specify_children_attribute = true;
@@ -924,7 +924,7 @@ impl Checker {
                 value_declaration.set_parent(Some(attribute_parent));
                 value_declaration.as_property_signature_declaration().declaration_base.set_symbol(Some(children_prop_symbol));
                 let child_prop_map = SymbolTable::new();
-                child_prop_map.set(children_prop_symbol.name(), children_prop_symbol);
+                child_prop_map.set(children_prop_symbol.name.peek(), children_prop_symbol);
                 let children_type = self.new_anonymous_type(attributes_symbol, Some(child_prop_map), &[], &[], &[]);
                 let propagating_flags = self.get_propagating_flags_of_types(&child_types, TypeFlags::None);
                 spread = self.get_spread_type(spread, children_type, attributes_symbol, object_flags | propagating_flags, false /*readonly*/);

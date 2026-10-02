@@ -131,9 +131,9 @@ impl Symbol {
     }
     /// Go `symbol.Declarations = declarations` (shares the slice).
     pub fn set_declarations_static(&self, declarations: &'static [P<Node>]) {
-        let word = self.parent_or_tables.get();
+        let word = self.parent_or_tables.peek();
         if word.0 & SymbolParentWord::VALUE_FIRST != 0 {
-            let value_declaration = self.declarations.get()[0];
+            let value_declaration = self.declarations.peek()[0];
             if declarations.first() != Some(&value_declaration) {
                 self.parent_or_tables.set(SymbolParentWord(word.0 & !SymbolParentWord::VALUE_FIRST));
                 self.tables_for_write().value_declaration.set(Some(value_declaration));
@@ -146,8 +146,8 @@ impl Symbol {
         if declarations.is_empty() {
             return;
         }
-        let mut result = Vec::with_capacity(self.declarations.get().len() + declarations.len());
-        result.extend_from_slice(self.declarations.get());
+        let mut result = Vec::with_capacity(self.declarations.peek().len() + declarations.len());
+        result.extend_from_slice(self.declarations.peek());
         result.extend_from_slice(declarations);
         self.set_declarations_static(tsrs_core::alloc_vec(result))
     }
@@ -164,8 +164,8 @@ impl Symbol {
         word.get_tables().and_then(|t| t.value_declaration.get())
     }
     pub fn set_value_declaration(&self, value_declaration: Option<P<Node>>) {
-        let word = self.parent_or_tables.get();
-        if value_declaration.is_some() && self.declarations.get().first().copied() == value_declaration {
+        let word = self.parent_or_tables.peek();
+        if value_declaration.is_some() && self.declarations.peek().first().copied() == value_declaration {
             self.parent_or_tables.set(SymbolParentWord(word.0 | SymbolParentWord::VALUE_FIRST));
             if let Some(tables) = word.get_tables() {
                 tables.value_declaration.set(None);
@@ -181,9 +181,14 @@ impl Symbol {
     fn tables(&self) -> Option<P<SymbolTables>> {
         self.parent_or_tables.get().get_tables()
     }
+    /// `tables` without recording a use (`tsrs_core::usebits`), for setters.
+    #[inline]
+    fn tables_peek(&self) -> Option<P<SymbolTables>> {
+        self.parent_or_tables.peek().get_tables()
+    }
     #[inline]
     fn tables_for_write(&self) -> P<SymbolTables> {
-        let word = self.parent_or_tables.get();
+        let word = self.parent_or_tables.peek();
         match word.get_tables() {
             Some(tables) => tables,
             None => {
@@ -199,7 +204,7 @@ impl Symbol {
     }
     #[inline]
     pub fn set_members(&self, members: Option<P<SymbolTable>>) {
-        if members.is_some() || self.tables().is_some() {
+        if members.is_some() || self.tables_peek().is_some() {
             self.tables_for_write().members.set(members);
         }
     }
@@ -209,7 +214,7 @@ impl Symbol {
     }
     #[inline]
     pub fn set_exports(&self, exports: Option<P<SymbolTable>>) {
-        if exports.is_some() || self.tables().is_some() {
+        if exports.is_some() || self.tables_peek().is_some() {
             self.tables_for_write().exports.set(exports);
         }
     }
@@ -219,7 +224,7 @@ impl Symbol {
     }
     #[inline]
     pub fn set_parent(&self, parent: Option<P<Symbol>>) {
-        let word = self.parent_or_tables.get();
+        let word = self.parent_or_tables.peek();
         match word.get_tables() {
             Some(tables) => tables.parent.set(parent),
             None => self.parent_or_tables.set(SymbolParentWord(SymbolParentWord::parent(parent).0 | word.0 & SymbolParentWord::VALUE_FIRST)),
@@ -231,7 +236,7 @@ impl Symbol {
     }
     #[inline]
     pub fn set_export_symbol(&self, export_symbol: Option<P<Symbol>>) {
-        if export_symbol.is_some() || self.tables().is_some() {
+        if export_symbol.is_some() || self.tables_peek().is_some() {
             self.tables_for_write().export_symbol.set(export_symbol);
         }
     }
@@ -542,7 +547,7 @@ impl SymbolMap {
     fn key(&self, i: usize) -> &'static str {
         let e = self.entries[i];
         if !e.is_odd() {
-            return e.symbol().name();
+            return e.symbol().name.peek();
         }
         let odd_keys = &self.extra.as_ref().unwrap().odd_keys;
         odd_keys.iter().find(|&&(j, _)| j as usize == i).unwrap().1
@@ -589,7 +594,7 @@ impl SymbolMap {
         if let Some(i) = self.position(name) {
             // Go keeps the stored key; it is no longer the new symbol's name when that differs.
             self.entries[i].set_symbol(symbol);
-            if !self.entries[i].is_odd() && symbol.name() != name {
+            if !self.entries[i].is_odd() && symbol.name.peek() != name {
                 self.add_odd_key(i, name);
             }
             return;
@@ -601,7 +606,7 @@ impl SymbolMap {
             self.entries.reserve_exact(i / 2);
         }
         self.entries.push(SymbolMapEntry::new(symbol, KeyPrint::of(name, hash_name(name))));
-        if symbol.name() != name {
+        if symbol.name.peek() != name {
             self.add_odd_key(i, name);
         }
         let len = self.entries.len();

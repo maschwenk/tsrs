@@ -454,7 +454,7 @@ impl NodeBuilderImpl {
 
         // Use the same name as symbol display.
         let old_flags = ctx.flags.get();
-        ctx.flags.set(ctx.flags.get() | Flags::WriteTypeParametersInQualifiedName | Flags::from_bits_retain(SymbolFormatFlags::UseOnlyExternalAliasing.bits()));
+        ctx.flags.set(ctx.flags.peek() | Flags::WriteTypeParametersInQualifiedName | Flags::from_bits_retain(SymbolFormatFlags::UseOnlyExternalAliasing.bits()));
         let local_name = self.symbol_to_node(c, symbol, SymbolFlags::All);
         self.ctx().flags.set(old_flags);
 
