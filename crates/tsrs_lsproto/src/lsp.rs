@@ -631,6 +631,21 @@ impl Json for NoParams {
     }
 }
 
+struct clientCapabilitiesKey(std::sync::Arc<crate::ResolvedClientCapabilities>);
+
+// lsp.go:289
+pub fn with_client_capabilities(ctx: &tsrs_core::context::Context, caps: std::sync::Arc<crate::ResolvedClientCapabilities>) -> tsrs_core::context::Context {
+    ctx.with_value(clientCapabilitiesKey(caps))
+}
+
+// lsp.go:293
+pub fn get_client_capabilities(ctx: &tsrs_core::context::Context) -> std::sync::Arc<crate::ResolvedClientCapabilities> {
+    if let Some(caps) = ctx.value::<clientCapabilitiesKey>() {
+        return caps.0.clone();
+    }
+    std::sync::Arc::new(crate::ResolvedClientCapabilities::default())
+}
+
 // lsp.go:285
 impl IsZero for NoParams {
     fn is_zero(&self) -> bool {

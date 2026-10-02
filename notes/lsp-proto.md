@@ -63,7 +63,7 @@ text (except json/v2's "after offset N"). Three extra seeds × 4 samples (40494 
   `UnmarshalParams` error "unexpected params type %T" (params that are not a raw json.Value) cannot occur.
   `ResponseMessage.raw_result` reproduces Go writing `"result":null` when re-marshaling a decoded response that had
   no result.
-- `WithClientCapabilities` / `GetClientCapabilities` (lsp.go:289/293) are not ported: `tsrs_core::context::Context`
+- (ported by the lead after Context landed, `Arc<ResolvedClientCapabilities>` for Go's pointer) `WithClientCapabilities` / `GetClientCapabilities` (lsp.go:289/293) were not ported: `tsrs_core::context::Context`
   is not on this branch yet (it is on `lsp-api`). With it they are:
   `ctx.with_value(clientCapabilitiesKey(Arc<ResolvedClientCapabilities>))` and
   `ctx.value::<clientCapabilitiesKey>().map(|k| k.0.clone()).unwrap_or_default()`.
