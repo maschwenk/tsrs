@@ -232,7 +232,7 @@ impl LanguageService {
                 let mut requested_project_trees: Set<Path> = Set::new();
                 for (key, response) in results.iter() {
                     if response.complete {
-                        requested_project_trees.add(Path(key.clone()));
+                        requested_project_trees.add(Path::new(key.clone()));
                     }
                 }
 

@@ -385,7 +385,7 @@ pub(crate) fn create_resolution_lookup_glob_mapper(
                 } else if lib_directory_path.contains_path(path) {
                     include_lib = true;
                 } else if let Some(idx) = path.find("/node_modules/") {
-                    node_modules_directories.add(Path(path[..idx + "/node_modules".len()].to_string()));
+                    node_modules_directories.add(Path::from(&path[..idx + "/node_modules".len()]));
                 } else {
                     external_directories.add(path.get_directory_path());
                 }
@@ -410,7 +410,7 @@ pub(crate) fn create_resolution_lookup_glob_mapper(
         }
         let mut outside_dirs = Vec::new();
         if external_directories.len() > 0 {
-            let external_dir_strings: Vec<String> = external_directories.keys().iter().map(|dir| dir.0.clone()).collect();
+            let external_dir_strings: Vec<String> = external_directories.keys().iter().map(|dir| dir.to_string()).collect();
             let (mut external_directory_parents, ignored_external_dirs) = tspath::get_common_parents(
                 &external_dir_strings,
                 minWatchLocationDepth,

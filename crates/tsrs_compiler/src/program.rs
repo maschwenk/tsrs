@@ -1678,7 +1678,7 @@ impl Program {
                 let emit_file_key = if !self.host().fs().use_case_sensitive_file_names() {
                     tspath::to_file_name_lower_case(&emit_file_path)
                 } else {
-                    emit_file_path.0.clone()
+                    emit_file_path.as_str().to_string()
                 };
 
                 // Report error if multiple files write into same file
@@ -2149,6 +2149,10 @@ impl Program {
     }
 
     pub fn get_source_file_by_path(&self, path: &Path) -> Option<P<SourceFile>> {
+        self.files_by_path.get(path).copied()
+    }
+
+    pub(crate) fn get_source_file_by_path_str(&self, path: &str) -> Option<P<SourceFile>> {
         self.files_by_path.get(path).copied()
     }
 

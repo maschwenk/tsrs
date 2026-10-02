@@ -128,7 +128,7 @@ impl View {
             let exports = search_fn(bucket);
             results.reserve(exports.len());
             for e in exports {
-                if e.module_id.0 == self.importing_file.path().0 {
+                if e.module_id.0 == self.importing_file.path().as_str() {
                     // Don't auto-import from the importing file itself
                     continue;
                 }
@@ -223,7 +223,7 @@ impl View {
                 name,
                 ambient_module_or_package_name: if !ambient.is_empty() { ambient.to_string() } else { e.package_name.clone() },
             };
-            if e.package_name == "@types/node" || e.path.0.contains("/node_modules/@types/node/") {
+            if e.package_name == "@types/node" || e.path.contains("/node_modules/@types/node/") {
                 if tsrs_core::is_unprefixed_node_core_module(&key.ambient_module_or_package_name) {
                     // Group URI-style and non-URI style node core modules together so the ranking logic
                     // is allowed to drop one if an explicit preference is detected.

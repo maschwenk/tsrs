@@ -18,7 +18,7 @@ fn ctx() -> Context {
 }
 
 fn p(s: &str) -> Path {
-    Path(s.to_string())
+    Path::from(s)
 }
 
 type Files = Vec<(String, String)>;

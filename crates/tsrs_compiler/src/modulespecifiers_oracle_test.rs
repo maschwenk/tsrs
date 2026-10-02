@@ -86,7 +86,7 @@ fn run(s: &Value) -> Value {
     let mut symlinks = Vec::new();
     program.get_symlink_cache().directories_by_realpath().range(|realpath, set| {
         for k in set.to_slice() {
-            symlinks.push(format!("{} <- {}", realpath.0, k));
+            symlinks.push(format!("{} <- {}", realpath.as_str(), k));
         }
         true
     });

@@ -420,9 +420,9 @@ fn test_to_file_name_lower_case() {
 
 #[test]
 fn test_to_path() {
-    assert_eq!(to_path("file.ext", "path/to", false).0, "path/to/file.ext");
-    assert_eq!(to_path("file.ext", "/path/to", true).0, "/path/to/file.ext");
-    assert_eq!(to_path("/path/to/../file.ext", "path/to", true).0, "/path/file.ext");
+    assert_eq!(to_path("file.ext", "path/to", false).as_str(), "path/to/file.ext");
+    assert_eq!(to_path("file.ext", "/path/to", true).as_str(), "/path/to/file.ext");
+    assert_eq!(to_path("/path/to/../file.ext", "path/to", true).as_str(), "/path/file.ext");
 }
 
 #[test]
@@ -547,7 +547,7 @@ fn test_untitled_path_handling() {
     assert_eq!(get_encoded_root_length(untitled_path), 2);
     assert!(is_rooted_disk_path(untitled_path));
     let current_dir = "/home/user/project";
-    assert_eq!(to_path(untitled_path, current_dir, true).0, "^/untitled/ts-nul-authority/Untitled-2");
+    assert_eq!(to_path(untitled_path, current_dir, true).as_str(), "^/untitled/ts-nul-authority/Untitled-2");
     assert_eq!(get_normalized_absolute_path(untitled_path, current_dir), "^/untitled/ts-nul-authority/Untitled-2");
 }
 

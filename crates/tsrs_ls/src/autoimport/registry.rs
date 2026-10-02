@@ -473,7 +473,7 @@ impl Registry {
         let mut dirs = FxHashMap::default();
         for (dir_path, dir) in self.directories.iter() {
             if dir.has_node_modules {
-                dirs.insert(Path(tspath::combine_paths(&dir_path.0, &["node_modules"])), tspath::combine_paths(&dir.name, &["node_modules"]));
+                dirs.insert(Path::new(tspath::combine_paths(dir_path.as_str(), &["node_modules"])), tspath::combine_paths(&dir.name, &["node_modules"]));
             }
         }
         dirs
@@ -553,7 +553,7 @@ impl Registry {
                 package_names = Some(names);
             }
             stats.node_modules_buckets.push(BucketStats {
-                name: path.0.clone(),
+                name: path.to_string(),
                 export_count,
                 file_count,
                 state: bucket.state.clone(),
@@ -835,7 +835,7 @@ impl registryBuilder<'_> {
                     let had_node_modules = self.base.node_modules.contains_key(dir_path);
                     update_directory(self, dir_path, dir_name, false);
                     if !logger.is_nil() {
-                        logger.logf(format_args!("Added directory: {}", dir_path.0));
+                        logger.logf(format_args!("Added directory: {}", dir_path.as_str()));
                     }
                     if self.node_modules.get(dir_path).is_some() && !had_node_modules {
                         added_node_modules_dirs.push(dir_path.clone());
@@ -847,7 +847,7 @@ impl registryBuilder<'_> {
                     if !equal {
                         update_directory(self, dir_path, dir_name, package_json_changed(dir_name));
                         if !logger.is_nil() {
-                            logger.logf(format_args!("Changed directory: {}", dir_path.0));
+                            logger.logf(format_args!("Changed directory: {}", dir_path.as_str()));
                         }
                     }
                 }
@@ -860,7 +860,7 @@ impl registryBuilder<'_> {
                 self.directories.delete(dir_path);
                 self.node_modules.try_delete(dir_path);
                 if !logger.is_nil() {
-                    logger.logf(format_args!("Removed directory: {}", dir_path.0));
+                    logger.logf(format_args!("Removed directory: {}", dir_path.as_str()));
                 }
                 if had_node_modules {
                     removed_node_modules_dirs.push(dir_path.clone());
@@ -870,10 +870,10 @@ impl registryBuilder<'_> {
 
         if !logger.is_nil() {
             for dir_path in &added_node_modules_dirs {
-                logger.logf(format_args!("Added node_modules bucket: {}", dir_path.0));
+                logger.logf(format_args!("Added node_modules bucket: {}", dir_path.as_str()));
             }
             for dir_path in &removed_node_modules_dirs {
-                logger.logf(format_args!("Removed node_modules bucket: {}", dir_path.0));
+                logger.logf(format_args!("Removed node_modules bucket: {}", dir_path.as_str()));
             }
             logger.logf(format_args!("Updated buckets and directories in {:?}", start.elapsed()));
         }
@@ -917,8 +917,8 @@ impl registryBuilder<'_> {
                     // For node_modules, mark the bucket dirty if anything changes in the directory.
                     // The path could be either a symlink path (containing /node_modules/) or a realpath
                     // (for symlinked project references). Both are recorded in Paths for granular updates.
-                    if let Some(node_modules_index) = path.0.find("/node_modules/") {
-                        let dir_path = Path(path.0[..node_modules_index].to_string());
+                    if let Some(node_modules_index) = path.find("/node_modules/") {
+                        let dir_path = Path::from(&path[..node_modules_index]);
                         if clean_node_modules_buckets.contains_key(&dir_path) {
                             let entry = b.node_modules.get(&dir_path).unwrap();
                             // Look up the package name for granular updates
