@@ -1,8 +1,10 @@
 // Go internal/ls (+ lsconv, lsutil, change), astnav, format, sourcemap (docs/LSP.md).
 
+mod api;
 pub mod astnav;
 pub mod autoimport;
 mod completions;
+mod constants;
 mod crossproject;
 mod definition;
 mod diagnostics;
@@ -14,6 +16,8 @@ mod hover;
 mod hovericon;
 mod jsdoc;
 mod languageservice;
+#[cfg(test)]
+mod ls_smoke_test;
 mod lsformat;
 pub mod lsconv;
 pub mod lsutil;
@@ -23,6 +27,7 @@ mod sourcedefinition;
 pub mod spanmap;
 mod utilities;
 
+pub use api::{ERR_NO_SOURCE_FILE, ERR_NO_TOKEN_AT_POSITION};
 pub use completions::{err_needs_auto_imports, is_err_needs_auto_imports, ERR_NEEDS_AUTO_IMPORTS};
 pub use crossproject::*;
 pub use host::*;
