@@ -17,5 +17,6 @@ tsrs_compiler.workspace = true
 tsrs_lsproto.workspace = true
 tsrs_ls.workspace = true
 tsrs_project.workspace = true
+tsrs_fswatch = { path = "../tsrs_fswatch" }
 rustc-hash.workspace = true
 indexmap.workspace = true

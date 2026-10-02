@@ -464,6 +464,7 @@ dependencies = [
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
+ "tsrs_fswatch",
  "tsrs_ls",
  "tsrs_lsproto",
  "tsrs_project",

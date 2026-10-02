@@ -3,6 +3,7 @@
 mod dynamic_queue;
 mod logger;
 pub mod lsptestutil;
+pub mod lspwatcher;
 mod lsconsts;
 mod progress;
 mod server;
@@ -13,6 +14,8 @@ pub use server::{new_server, to_reader, to_writer, npmInstallFunc, Reader, Serve
 
 #[cfg(test)]
 mod dynamic_queue_test;
+#[cfg(test)]
+mod lspwatcher_test;
 #[cfg(test)]
 mod progress_test;
 #[cfg(test)]

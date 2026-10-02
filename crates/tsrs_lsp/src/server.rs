@@ -24,6 +24,7 @@ use tsrs_vfs::FS;
 use crate::dynamic_queue::{dynamicQueue, new_dynamic_queue, wait_until};
 use crate::logger::{is_valid_log_verbosity, logger, new_logger};
 use crate::lsconsts;
+use crate::lspwatcher;
 use crate::progress::{new_project_loading_progress, projectLoadingProgress};
 use crate::stack_sanitizer::sanitize_stack_trace;
 use crate::workerpool;
@@ -80,7 +81,7 @@ pub fn new_server(opts: ServerOptions) -> Arc<Server> {
         watcher_id: AtomicU32::new(0),
         watchers: Mutex::new(FxHashSet::default()),
         content_mapper_registration_mu: Mutex::new(false),
-        builtin_watcher: None,
+        builtin_watcher: OnceLock::new(),
         last_request_time_ms: AtomicI64::new(0),
         init_complete: Context::background().with_cancel(),
         session: OnceLock::new(),
@@ -203,10 +204,6 @@ pub fn to_writer(w: impl Write + Send + 'static) -> Box<dyn Writer> {
     Box::new(lspWriter { w: lsproto::new_base_writer(w) })
 }
 
-// lspwatcher (the builtin in-process file watcher) is ported in phase 4. Until then no value of this type
-// exists: `builtin_watcher` is always None and every "builtin watcher" branch keeps Go's structure.
-pub(crate) enum builtinWatcher {}
-
 // server.go:171
 pub struct Server {
     r: Mutex<Option<Box<dyn Reader>>>,
@@ -253,7 +250,8 @@ pub struct Server {
     // is enabled when the client lacks DynamicRegistration for
     // workspace/didChangeWatchedFiles and the builtin watcher backend
     // supports efficient recursive watching (Windows or FSEvents).
-    builtin_watcher: Option<builtinWatcher>,
+    // (Set once, in handleInitialized.)
+    builtin_watcher: OnceLock<Arc<lspwatcher::Watcher>>,
 
     last_request_time_ms: AtomicI64,
 
@@ -381,8 +379,12 @@ impl Server {
     // server.go:263
     // WatchFiles implements project.Client.
     pub fn watch_files(&self, ctx: &Context, id: &str, watchers: Vec<lsproto::FileSystemWatcher>) -> Result<(), Error> {
-        if let Some(builtin_watcher) = &self.builtin_watcher {
-            match *builtin_watcher {}
+        if let Some(builtin_watcher) = self.builtin_watcher.get() {
+            if let Err(err) = builtin_watcher.watch_files(id, &watchers) {
+                return Err(Error::new(format!("failed to register file watcher: {}", err)));
+            }
+            self.watchers.lock().unwrap().insert(id.to_string());
+            return Ok(());
         }
         let result = self.send_client_request(
             ctx,
@@ -409,8 +411,15 @@ impl Server {
     // server.go:292
     // UnwatchFiles implements project.Client.
     pub fn unwatch_files(&self, ctx: &Context, id: &str) -> Result<(), Error> {
-        if let Some(builtin_watcher) = &self.builtin_watcher {
-            match *builtin_watcher {}
+        if let Some(builtin_watcher) = self.builtin_watcher.get() {
+            if !self.watchers.lock().unwrap().contains(id) {
+                return Err(Error::new(format!("no file watcher exists with ID {}", id)));
+            }
+            if let Err(err) = builtin_watcher.unwatch_files(id) {
+                return Err(Error::new(format!("failed to unregister file watcher: {}", err)));
+            }
+            self.watchers.lock().unwrap().remove(id);
+            return Ok(());
         }
         let has = self.watchers.lock().unwrap().contains(id);
         if has {
@@ -1530,21 +1539,27 @@ impl Server {
         if has_dynamic_watch_registration {
             self.logger.logf(format_args!("file watching: using LSP client-side watching (client supports dynamic registration)"));
             self.watch_enabled.store(true, Ordering::SeqCst);
-        } else if builtin_watcher_has_fast_recursive_backend() {
+        } else if tsrs_fswatch::default().has_fast_recursive_backend() {
             // The client cannot watch files itself, but the builtin watcher has a
             // backend with efficient recursive watching (Windows or FSEvents), so
             // fall back to watching files in-process.
-            // (Phase 4: lspwatcher is not ported, so this branch is never taken; Go logs
-            // "file watching: using builtin in-process watcher (client lacks dynamic watch registration)", enables
-            // watching and creates the watcher here.)
+            self.logger.logf(format_args!("file watching: using builtin in-process watcher (client lacks dynamic watch registration)"));
+            self.watch_enabled.store(true, Ordering::SeqCst);
+            let s = Arc::downgrade(self);
+            let background_ctx = self.background_ctx();
+            let on_changes: lspwatcher::OnChanges = Arc::new(move |changes: Vec<lsproto::FileEvent>| {
+                if let Some(s) = s.upgrade() {
+                    if let Some(session) = s.session.get() {
+                        session.did_change_watched_files(&background_ctx, &changes);
+                    }
+                }
+            });
+            let logger: Arc<dyn logging::Logger> = self.logger_arc();
+            let _ = self.builtin_watcher.set(lspwatcher::new(self.fs.clone().expect("FS is required"), on_changes, logger));
         } else {
             // The client cannot watch files and the builtin watcher backend lacks
             // efficient recursive watching, so file watching is disabled.
-            // (tsrs: the builtin watcher (lspwatcher) is not ported yet, phase 4, so this branch is also taken where
-            // Go would watch in-process.)
-            self.logger.logf(format_args!(
-                "file watching: disabled (client lacks dynamic watch registration and builtin watcher backend is not fast-recursive; the builtin watcher is not ported)"
-            ));
+            self.logger.logf(format_args!("file watching: disabled (client lacks dynamic watch registration and builtin watcher backend is not fast-recursive)"));
         }
 
         let initialize_params = self.initialize_params.get().unwrap().clone();
@@ -1634,8 +1649,8 @@ impl Server {
 
     // server.go:1788
     fn handle_shutdown(self: &Arc<Self>, ctx: &Context, _params: lsproto::NoParams, _req: &RequestMessage) -> Result<lsproto::ShutdownResponse, Error> {
-        if let Some(builtin_watcher) = &self.builtin_watcher {
-            match *builtin_watcher {}
+        if let Some(builtin_watcher) = self.builtin_watcher.get() {
+            builtin_watcher.close();
         }
         self.session().close();
         Ok(lsproto::Null)
@@ -2540,12 +2555,6 @@ fn generate_diagnostic_diff_string(missing_from_pre: &[&lsproto::Diagnostic], mi
         b.push_str(&format!("Diagnostic {} was present before emit but not after emit\n", stringifier(elem)));
     }
     b
-}
-
-// fswatch.Default().HasFastRecursiveBackend(): the builtin watcher (lspwatcher, fswatch) is phase 4, so no
-// backend is available yet.
-fn builtin_watcher_has_fast_recursive_backend() -> bool {
-    false
 }
 
 // server.go:99: `_ project.Client = (*Server)(nil)`.

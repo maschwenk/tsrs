@@ -31,6 +31,13 @@ pub struct Event {
     pub(crate) included_watch_root: bool,
 }
 
+impl Event {
+    // Go `fswatch.Event{Kind: k, Path: p}` (the unexported field stays zero).
+    pub fn new(kind: EventKind, path: impl Into<String>) -> Event {
+        Event { kind, path: path.into(), included_watch_root: false }
+    }
+}
+
 // eventEntry tracks coalescing state during a debounce batch.
 #[derive(Clone, Copy, Default)]
 struct eventEntry {
