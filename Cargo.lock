@@ -334,6 +334,7 @@ dependencies = [
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
+ "tsrs_lsp",
  "tsrs_module",
  "tsrs_parser",
  "tsrs_scanner",
