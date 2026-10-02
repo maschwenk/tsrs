@@ -16,6 +16,8 @@ use crate::checkerpool::{checkerPool, checkerPoolHandle, new_checker_pool};
 use crate::compilerhost::{compilerHost, new_compiler_host};
 use crate::dirty::Cloneable;
 use crate::logging::LogTree;
+use crate::memregions::programOwner;
+use tsrs_core::arena::Region;
 use crate::parsecache::{parse_cache_key_for_duplicate, parse_cache_key_for_file};
 use crate::projectcollectionbuilder::ProjectCollectionBuilder;
 use crate::snapshot::{ModuleResolverFactory, ProjectTreeRequest};
@@ -209,6 +211,8 @@ pub struct Project {
     pub(crate) content_mapper_watched_files: Option<Arc<Set<Path>>>,
 
     pub(crate) checker_pool: Option<Arc<checkerPool>>,
+    // Memory regions (not in Go): owns the program and what is freed with it (memregions.rs).
+    pub(crate) program_owner: Option<Arc<programOwner>>,
 
     pub(crate) module_resolver_factory: Option<Arc<dyn ModuleResolverFactory>>,
     pub(crate) module_resolver_id: u64,
@@ -367,6 +371,7 @@ pub fn new_project(id: ID, kind: Kind, current_directory: &str, builder: &Projec
         content_mapper_watch: Some(content_mapper_watch),
         content_mapper_watched_files: None,
         checker_pool: None,
+        program_owner: None,
         module_resolver_factory: None,
         module_resolver_id: 0,
         installed_typings_info: None,
@@ -381,6 +386,7 @@ pub struct CreateProgramResult {
     // Go reads the pool back with `program.GetCheckerPool().(*checkerPool)`; the program keeps the pool behind
     // `dyn CheckerPool`, so the factory hands the concrete pool out here.
     pub(crate) checker_pool: Option<Arc<checkerPool>>,
+    pub(crate) owner: Arc<programOwner>,
 }
 
 impl Project {
@@ -577,6 +583,10 @@ impl Project {
 
         // Create the command line, potentially augmented with typing files
         let command_line = self.get_command_line_with_typings_files();
+        // Memory regions: what the new program version allocates lives in its own region (memregions.rs). The
+        // command line above is memoized in the project and outlives the program, so it is made before.
+        let region = Region::new(1 << 20);
+        let region_scope = region.enter();
         let reuse = !self.dirty_file_path.0.is_empty() && self.program.is_some_and(|program| Some(program.command_line()) == command_line);
         if reuse {
             let old_program = self.program.unwrap();
@@ -626,9 +636,15 @@ impl Project {
         }
 
         new_program_result.bind_source_files();
+        drop(region_scope);
 
         let checker_pool = pool_slot.lock().unwrap().take();
-        CreateProgramResult { program: new_program_result, update_kind, checker_pool }
+        let base = match (&self.program_owner, program_cloned) {
+            (Some(old), true) => old.base.clone(),
+            _ => region.clone(),
+        };
+        let owner = Arc::new(programOwner::new(new_program_result, checker_pool.clone(), region, base, !program_cloned));
+        CreateProgramResult { program: new_program_result, update_kind, checker_pool, owner }
     }
 
     // project.go:589
@@ -758,6 +774,7 @@ impl Cloneable for Project {
             content_mapper_watched_files: self.content_mapper_watched_files.clone(),
 
             checker_pool: self.checker_pool.clone(),
+            program_owner: self.program_owner.clone(),
 
             module_resolver_factory: self.module_resolver_factory.clone(),
             module_resolver_id: self.module_resolver_id,

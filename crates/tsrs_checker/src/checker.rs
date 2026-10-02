@@ -2246,6 +2246,8 @@ impl Checker {
 pub fn primitive_type_alias_suggestions() -> &'static FxHashMap<&'static str, P<Symbol>> {
     static MAP: OnceLock<FxHashMap<&'static str, P<Symbol>>> = OnceLock::new();
     MAP.get_or_init(|| {
+        // Process-wide: never in a freeable region (language server).
+        let _arena = tsrs_core::arena::enter_thread_arena();
         let mut result = FxHashMap::default();
         for (primitive, builtin) in [
             ("string", "String"),

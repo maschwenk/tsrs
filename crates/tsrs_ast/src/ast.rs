@@ -1697,6 +1697,10 @@ impl SourceFile {
     // If the name appears more than once, the value is -1.
     // ast.go:2857
     pub fn get_name_table(&self) -> &tsrs_core::collections::OrderedMap<&'static str, i32> {
+        if let Some(t) = self.name_table.get() {
+            return t;
+        }
+        let _region = self.owner_region();
         self.name_table.get_or_init(|| {
             let mut name_table: tsrs_core::collections::OrderedMap<&'static str, i32> = Default::default();
             let file: &'static SourceFile = self.as_node().as_source_file();
@@ -1726,7 +1730,19 @@ impl SourceFile {
     }
 
     pub fn has_identifier(&self, name: &str) -> bool {
+        if let Some(ids) = self.identifiers.get() {
+            return ids.keys().contains(name);
+        }
+        let _region = self.owner_region();
         self.identifiers.get_or_init(|| collect_identifiers_for_source_file(self)).keys().contains(name)
+    }
+
+    // Lazily filled shared data of the file lives in the file's own region in the language server (docs/LSP.md
+    // "Memory plan for a long-lived server"), not in the region of whichever checker fills it. Take the scope before
+    // any lock of the cache it fills (lock order: region, then cache). No-op without regions (CLI).
+    #[inline]
+    fn owner_region(&self) -> Option<tsrs_core::arena::RegionScope> {
+        tsrs_core::arena::enter_owner(self as *const SourceFile as usize)
     }
 
     pub fn file_name(&self) -> &str {
@@ -1785,6 +1801,7 @@ impl SourceFile {
             }
         }
         // Slow path: parse and cache under write lock
+        let _region = self.owner_region();
         let _guard = self.jsdoc_mu.write().unwrap();
         // Double-check after acquiring write lock
         if let Some(&jsdocs) = self.jsdoc_cache.borrow().get(&n) {
@@ -1845,6 +1862,10 @@ impl SourceFile {
     }
 
     pub fn ecma_line_map(&self) -> &'static [TextPos] {
+        if let Some(&m) = self.ecma_line_map.get() {
+            return m;
+        }
+        let _region = self.owner_region();
         self.ecma_line_map.get_or_init(|| alloc_vec(compute_ecma_line_starts(self.text)))
     }
 
@@ -1854,6 +1875,10 @@ impl SourceFile {
 
     // GetPositionMap returns the PositionMap for this source file, computing it lazily.
     pub fn get_position_map(&self) -> P<PositionMap> {
+        if let Some(&m) = self.position_map.get() {
+            return m;
+        }
+        let _region = self.owner_region();
         *self.position_map.get_or_init(|| P::new(compute_position_map(self.text)))
     }
 
@@ -2003,6 +2028,7 @@ pub struct TokenCacheKey {
 impl SourceFile {
     // ast.go:2909
     pub fn get_or_create_token(&self, kind: Kind, pos: i32, end: i32, parent: P<Node>, flags: TokenFlags) -> P<Node> {
+        let _region = self.owner_region();
         let mut token_cache = self.token_cache.lock().unwrap();
         let loc = TextRange::new(pos, end);
         let key = TokenCacheKey { parent, loc };
@@ -2026,6 +2052,10 @@ impl SourceFile {
 impl SourceFile {
     // ast.go:2973
     pub fn get_declaration_map(&self) -> &FxHashMap<String, Vec<P<Node>>> {
+        if let Some(m) = self.declaration_map.get() {
+            return m;
+        }
+        let _region = self.owner_region();
         self.declaration_map.get_or_init(|| self.compute_declaration_map())
     }
 

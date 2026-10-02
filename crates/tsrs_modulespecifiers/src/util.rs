@@ -108,7 +108,11 @@ pub(crate) fn string_to_regex(pattern: &str) -> Option<P<regex::Regex>> {
             None
         }
         Ok(compiled) => {
-            let compiled = P::new(compiled);
+            // The cache is process-wide: never in a freeable region (language server).
+            let compiled = {
+                let _arena = tsrs_core::arena::enter_thread_arena();
+                P::new(compiled)
+            };
             cache.insert(key, Some(compiled));
             Some(compiled)
         }

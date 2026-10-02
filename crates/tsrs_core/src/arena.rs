@@ -138,7 +138,10 @@ impl Arena {
     fn alloc_layout_slow(&self, layout: Layout) -> NonNull<u8> {
         let prev = self.end.get().addr() - self.start.get().addr();
         let need = layout.size().checked_add(layout.align()).expect("arena allocation size overflow");
-        self.new_chunk((prev * 2).max(need));
+        // A region grows by a quarter of what it has (at least 4 KiB): many regions are small (one per parsed file),
+        // and the unused tail of a doubled chunk would dominate their footprint.
+        let next = if self.is_region() { (self.capacity.get() / 4).max(PAGE) } else { prev * 2 };
+        self.new_chunk(next.max(need));
         let ptr = self.ptr.get();
         let new = (ptr.addr() - layout.size()) & !(layout.align() - 1);
         debug_assert!(new >= self.start.get().addr());
@@ -498,6 +501,8 @@ pub(crate) struct RegionInner {
     arena: Box<Arena>,
     /// Held by the thread that has the region entered: a region's arena is used by one thread at a time.
     lock: OwnerLock,
+    /// Addresses of objects outside the region registered as owned by it (`adopt_owner`).
+    owners: Mutex<Vec<usize>>,
 }
 
 // SAFETY: the arena's cells are only touched by the thread holding `lock` (or, before the region is shared, by its
@@ -516,6 +521,7 @@ impl Region {
         Region(Arc::new_cyclic(|weak| RegionInner {
             arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(weak.clone()))),
             lock: OwnerLock { state: Mutex::new((None, 0)), released: Condvar::new() },
+            owners: Mutex::new(Vec::new()),
         }))
     }
 
@@ -539,9 +545,43 @@ impl Region {
         region.upgrade().map(Region)
     }
 
+    /// `containing` for many addresses under one registry lock.
+    pub fn containing_all(addrs: impl Iterator<Item = usize>) -> Vec<Option<Region>> {
+        if !ANY_REGION.load(Ordering::Relaxed) {
+            return addrs.map(|_| None).collect();
+        }
+        let reg = REGISTRY.read().unwrap();
+        addrs
+            .map(|addr| {
+                let (_, (end, region)) = reg.range(..=addr).next_back()?;
+                if addr >= *end {
+                    return None;
+                }
+                region.upgrade().map(Region)
+            })
+            .collect()
+    }
+
+    /// Registers the object at `addr` (not in any region, e.g. a heap object shared by several region owners) as owned
+    /// by this region, so `enter_owner(addr)` routes to it while the region lives.
+    pub fn adopt_owner(&self, addr: usize) {
+        self.0.owners.lock().unwrap().push(addr);
+        REGISTRY.write().unwrap().insert(addr, (addr + 1, Arc::downgrade(&self.0)));
+    }
+
     /// Total size of the region's chunks.
     pub fn allocated_bytes(&self) -> usize {
         self.0.arena.capacity()
+    }
+
+    /// Bytes in use in the region's chunks (call while no other thread has the region entered).
+    pub fn used_bytes(&self) -> usize {
+        self.0.arena.used_ranges().iter().map(|&(_, len)| len).sum()
+    }
+
+    /// Number of values waiting to be dropped when the region is freed (diagnostics).
+    pub fn drop_entries(&self) -> usize {
+        self.0.arena.drops.borrow().len()
     }
 
     pub fn ptr_eq(&self, other: &Region) -> bool {
@@ -619,6 +659,9 @@ impl Drop for RegionInner {
             let mut reg = REGISTRY.write().unwrap();
             for &(start, _) in &chunks {
                 reg.remove(&start);
+            }
+            for addr in self.owners.get_mut().unwrap().drain(..) {
+                reg.remove(&addr);
             }
         }
         if census_mode() {

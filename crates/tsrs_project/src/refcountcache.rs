@@ -24,6 +24,11 @@ pub struct RefCountCache<K: Hash + Eq, V, AcquireArgs> {
     entries: SyncMap<K, Arc<refCountCacheEntry<V>>>,
 
     parse: Box<dyn Fn(&K, AcquireArgs) -> V + Send + Sync>,
+
+    // Not in Go (memory regions, docs/LSP.md): told when an entry's value leaves the cache (final Deref) and when a
+    // deleted entry's value is stored again (`Ref` racing a final Deref).
+    pub(crate) on_evict: Option<Box<dyn Fn(&V) + Send + Sync>>,
+    pub(crate) on_revive: Option<Box<dyn Fn(&V) + Send + Sync>>,
 }
 
 // refcountcache.go:28
@@ -31,7 +36,7 @@ pub fn new_ref_count_cache<K: Hash + Eq, V, AcquireArgs>(
     options: RefCountCacheOptions,
     parse: impl Fn(&K, AcquireArgs) -> V + Send + Sync + 'static,
 ) -> RefCountCache<K, V, AcquireArgs> {
-    RefCountCache { options, entries: SyncMap::default(), parse: Box::new(parse) }
+    RefCountCache { options, entries: SyncMap::default(), parse: Box::new(parse), on_evict: None, on_revive: None }
 }
 
 impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArgs> {
@@ -46,8 +51,6 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
         self.load_or_store_new_locked_entry(&identity, |entry, loaded| {
             if !loaded {
                 // New entry - parse the value
-                // phase 4 (docs/LSP.md memory plan): the parse function allocates the file's AST and binder data
-                // in a region owned by this cache entry; the entry's final Deref frees it.
                 let value = (self.parse)(&identity, acquire_args);
                 entry.value = Some(value.clone());
                 return value;
@@ -114,6 +117,9 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
         if st.ref_count <= 0 && !self.options.disable_deletion {
             // Entry was deleted while we were acquiring the lock
             let value = st.value.clone();
+            if let (Some(on_revive), Some(value)) = (&self.on_revive, &value) {
+                on_revive(value);
+            }
             self.load_or_store_new_locked_entry(&identity, |new_entry, _| {
                 new_entry.value = value;
             });
@@ -133,8 +139,10 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
         let mut st = entry.mu.lock().unwrap();
         st.ref_count -= 1;
         if st.ref_count <= 0 && !self.options.disable_deletion {
-            // phase 4 (docs/LSP.md memory plan): the entry's file region is freed here.
             self.entries.delete(identity);
+            if let (Some(on_evict), Some(value)) = (&self.on_evict, &st.value) {
+                on_evict(value);
+            }
         }
     }
 

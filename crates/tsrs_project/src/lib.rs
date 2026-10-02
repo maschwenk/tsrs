@@ -31,6 +31,7 @@ mod checkerpool;
 mod compilerhost;
 mod configfileregistry;
 mod configfileregistrybuilder;
+mod memregions;
 mod project;
 mod projectcollection;
 mod projectcollectionbuilder;

@@ -381,6 +381,19 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     p
 }
 
+// Frees a program made by `new_program` or `update_program` (language server; Go's GC). The caller guarantees that
+// nothing uses it any more: no checker of its pool is held, and no snapshot or language service refers to it. What
+// it shares with other versions (`processed`, the project reference file mapper) stays.
+//
+// # Safety
+// `program` came from `new_program` / `update_program` and is not used afterwards.
+pub unsafe fn free_program(program: &'static Program) {
+    let resolution_host: *const dyn ResolutionHost = program.resolution_host;
+    drop(Box::from_raw(program as *const Program as *mut Program));
+    // Per program (`resolution_host_for`); it keeps the compiler host alive.
+    drop(Box::from_raw(resolution_host as *mut dyn ResolutionHost));
+}
+
 impl Program {
     // program.go:323
     // Return an updated program for which it is known that only the file with the given path has changed.
@@ -2348,6 +2361,12 @@ impl Program {
     }
 
     pub fn get_symlink_cache(&self) -> P<KnownSymlinks> {
+        if let Some(&k) = self.known_symlinks.get() {
+            return k;
+        }
+        // `UpdateProgram` hands the cache to the next program version, which shares `processed`: in the language
+        // server it lives in the region that owns `processed` (the full build's), not in this version's.
+        let _region = tsrs_core::arena::enter_owner(self.processed as *const processedFiles as usize);
         *self.known_symlinks.get_or_init(|| {
             let resolver = self.new_resolver();
             let known_symlinks = symlinks::new_known_symlink(self.get_current_directory(), self.use_case_sensitive_file_names());

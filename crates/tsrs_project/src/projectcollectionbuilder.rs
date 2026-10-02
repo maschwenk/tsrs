@@ -1601,6 +1601,7 @@ impl ProjectCollectionBuilder {
                     project.content_mapper_watched_files = Some(Arc::new(content_mapper_watched_files));
                     project.program = Some(result.program);
                     project.checker_pool = result.checker_pool.clone();
+                    project.program_owner = Some(result.owner.clone());
                     project.program_update_kind = result.update_kind;
                     project.program_last_update = self.new_snapshot_id;
                     if result.update_kind == ProgramUpdateKind::Cloned {

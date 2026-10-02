@@ -112,6 +112,9 @@ impl CompilerHost for compilerHost {
 
     // compilerhost.go:91
     fn get_resolved_project_reference(&self, file_name: &str, path: Path) -> Option<P<ParsedCommandLine>> {
+        // Config files outlive the program that asks for them (the registry keeps them): never in the program's
+        // memory region.
+        let _arena = tsrs_core::arena::enter_thread_arena();
         let builder = self.builder.read().unwrap();
         match builder.as_ref() {
             None => self.config_file_registry.read().unwrap().as_ref().unwrap().get_config(&path),

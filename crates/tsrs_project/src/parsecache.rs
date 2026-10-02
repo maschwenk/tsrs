@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+use rustc_hash::FxHashMap;
+use tsrs_core::arena::Region;
 
 use tsrs_ast::{SourceFile, SourceFileParseOptions};
 use tsrs_compiler::DuplicateSourceFile;
@@ -47,13 +50,48 @@ pub(crate) fn parse_cache_key_for_duplicate(file: &DuplicateSourceFile) -> Parse
 pub type ParseCache = RefCountCache<ParseCacheKey, P<SourceFile>, Arc<dyn FileHandle>>;
 
 // parsecache.go:74
+//
+// Memory (docs/LSP.md "Memory plan for a long-lived server"): each parsed file version gets its own region; parse
+// and bind (and later, through `arena::enter_owner`, the file's lazily filled data) allocate there. The cache entry
+// owns the region until its final Deref, and every program that contains the file owns it too (`programOwner`), so
+// it is freed once neither the cache nor any live program refers to the file, as Go's GC would.
 pub fn new_parse_cache(options: RefCountCacheOptions) -> ParseCache {
-    new_ref_count_cache(options, |key: &ParseCacheKey, fh: Arc<dyn FileHandle>| {
-        let file = tsrs_parser::parse_source_file(key.source_file_parse_options.clone(), fh.content(), key.script_kind);
-        file.hash.set(fh.hash());
-        tsrs_binder::bind_source_file(file);
+    let regions: Arc<Mutex<FxHashMap<usize, Region>>> = Arc::default();
+    let parse_regions = regions.clone();
+    let mut cache = new_ref_count_cache(options, move |key: &ParseCacheKey, fh: Arc<dyn FileHandle>| {
+        let text = fh.content();
+        let region = Region::new(file_region_first_chunk(text.len()));
+        let file = {
+            let _scope = if std::env::var_os("TSRS_NOFR").is_some() { None } else { Some(region.enter()) };
+            let file = tsrs_parser::parse_source_file(key.source_file_parse_options.clone(), text, key.script_kind);
+            file.hash.set(fh.hash());
+            tsrs_binder::bind_source_file(file);
+            file
+        };
+        if std::env::var_os("TSRS_REGION_SIZES").is_some() {
+            eprintln!("filesize {} {} {} {}", text.len(), region.used_bytes(), region.allocated_bytes(), region.drop_entries());
+        }
+        parse_regions.lock().unwrap().insert(file.addr(), region);
         file
-    })
+    });
+    let evict_regions = regions.clone();
+    cache.on_evict = Some(Box::new(move |file: &P<SourceFile>| {
+        let region = evict_regions.lock().unwrap().remove(&file.addr());
+        drop(region);
+    }));
+    cache.on_revive = Some(Box::new(move |file: &P<SourceFile>| {
+        // A live program still holds the region (it is the one re-referencing the file).
+        if let Some(region) = Region::containing(file.addr()) {
+            regions.lock().unwrap().insert(file.addr(), region);
+        }
+    }));
+    cache
+}
+
+// The text is copied into the region; text, AST and binder data take about 4-8 times the text (measured on the
+// private monorepo: 7.8x on average). Regions grow by a quarter when this is exceeded.
+fn file_region_first_chunk(text_len: usize) -> usize {
+    text_len.saturating_mul(4).saturating_add(4 << 10).min(64 << 20)
 }
 
 // Content mappers are not ported (docs/LSP.md): the canonical/supplemental bundle type is reduced to the
