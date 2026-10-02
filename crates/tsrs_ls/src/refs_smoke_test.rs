@@ -27,6 +27,8 @@ struct dataset {
     tsconfig: &'static str,
     reqs: &'static str,
     expected: &'static str,
+    // Client capabilities: Visual Studio extensions and implementation links (recorded with CAPS set).
+    vs: bool,
 }
 
 macro_rules! dataset {
@@ -37,6 +39,7 @@ macro_rules! dataset {
             tsconfig: include_str!(concat!("../testdata/", $dir, "/tsconfig.json")),
             reqs: include_str!(concat!("../testdata/", $dir, "/reqs.json")),
             expected: include_str!(concat!("../testdata/", $dir, "/expected.txt")),
+            vs: false,
         }
     };
 }
@@ -153,7 +156,10 @@ fn setup(d: &dataset) -> (LanguageService, Context) {
     });
     let host = Arc::new(testHost { fs, converters });
     let ls = new_language_service(ProjectID("/tsconfig.json".to_string()), program, host, "/b.ts");
-    let ctx = lsproto::with_client_capabilities(&Context::background(), Arc::new(lsproto::ResolvedClientCapabilities::default()));
+    let mut caps = lsproto::ResolvedClientCapabilities::default();
+    caps.vs_supports_visual_studio_extensions = d.vs;
+    caps.text_document.implementation.link_support = d.vs;
+    let ctx = lsproto::with_client_capabilities(&Context::background(), Arc::new(caps));
     (ls, ctx)
 }
 
@@ -206,6 +212,13 @@ fn references_rename_classes_exports_destructuring() {
     run(&dataset!("refs_smoke2"));
 }
 
+// Visual Studio client (`_vs_references` with classified definition text) and implementation location links;
+// recorded with CAPS='{"_vs_supportsVisualStudioExtensions":true,"textDocument":{"implementation":{"linkSupport":true}}}'.
+#[test]
+fn vs_references_and_implementation_links() {
+    run(&dataset { vs: true, ..dataset!("refs_smoke_vs") });
+}
+
 fn run(d: &dataset) {
     let (ls, ctx) = setup(d);
     let reqs = json::unmarshal(d.reqs).unwrap();
@@ -233,6 +246,7 @@ fn run(d: &dataset) {
         let started = std::time::Instant::now();
         let got = match method {
             "textDocument/references" => to_line(&ls.provide_references(&ctx, &decode(&params), None).unwrap()),
+            "textDocument/_vs_references" => to_line(&ls.provide_vs_references(&ctx, &decode(&params), None).unwrap()),
             "textDocument/rename" => to_line(&ls.provide_rename(&ctx, &decode(&params), None).unwrap()),
             "textDocument/prepareRename" => {
                 let p: lsproto::PrepareRenameParams = decode(&params);

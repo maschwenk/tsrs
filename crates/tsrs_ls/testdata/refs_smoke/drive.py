@@ -20,7 +20,7 @@ def req(m,params):
             send({'jsonrpc':'2.0','id':r['id'],'result':None}); continue
         if r.get('id')==i: return r
 base='file://'+proj+'/'
-req('initialize',{'processId':None,'rootUri':'file://'+proj,'capabilities':{}})
+req('initialize',{'processId':None,'rootUri':'file://'+proj,'capabilities':json.loads(os.environ.get('CAPS','{}'))})
 send({'jsonrpc':'2.0','method':'initialized','params':{}})
 texts={}
 for f in ['a.ts','b.ts']:
@@ -29,7 +29,7 @@ for f in ['a.ts','b.ts']:
 def pos(f,marker,off=0):
     t=texts[f]; o=t.find(marker)+off; line=t.count('\n',0,o); ch=o-(t.rfind('\n',0,o)+1)
     return {'line':line,'character':ch}
-def fix(o): return json.loads(json.dumps(o).replace(base,'file:///').replace(proj+'/','/'))
+def fix(o): return json.loads(json.dumps(o).replace(base,'file:///').replace(proj+'/','/').replace(proj.lower()+'/','/'))
 for r in reqs:
     m=r['m']; f=r['f']
     params={'textDocument':{'uri':base+f},'position':pos(f,r['at'],r.get('off',0))}
