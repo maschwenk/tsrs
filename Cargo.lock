@@ -411,6 +411,7 @@ version = "0.1.6"
 dependencies = [
  "regex",
  "rustc-hash",
+ "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
  "tsrs_ls",

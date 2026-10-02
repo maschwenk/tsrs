@@ -249,8 +249,8 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
             (path.clone(), file)
         })
         .collect();
-    let fs_from_map = tsrs_vfs::vfstest::from_map(entries, harness_options.use_case_sensitive_file_names);
-    let fs: Arc<dyn FS> = Arc::new(tsrs_vfs::bundled::wrap_fs(fs_from_map));
+    let fs_from_map = Arc::new(tsrs_vfs::vfstest::from_map(entries, harness_options.use_case_sensitive_file_names));
+    let fs: Arc<dyn FS> = Arc::new(tsrs_vfs::bundled::wrap_fs(fs_from_map.clone()));
 
     if options.content_mapper_spawner.is_some() {
         // serverOpts.Spawn = options.ContentMapperSpawner.Spawn: content mappers are out of scope (docs/LSP.md).
@@ -316,8 +316,7 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
 
     if f.test_data.is_state_baselining_enabled() {
         // Single baseline, so initialize project state baseline too
-        // (newStateBaseline needs fsbaselineutil.FSDiffer and the project-state printers of statebaseline.go.)
-        t.fatal("feature not ported: state baselines (statebaseline.go, fsbaselineutil)");
+        f.state_baseline = Some(crate::statebaseline::new_state_baseline(fs_from_map));
     } else {
         let files: Vec<Arc<TestFileInfo>> = f.test_data.files.clone();
         for file in &files {
