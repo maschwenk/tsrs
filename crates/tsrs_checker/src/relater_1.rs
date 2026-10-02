@@ -1539,20 +1539,22 @@ impl Checker {
     // an empty string if no such discriminant property exists.
     pub(crate) fn get_key_property_name(&mut self, t: P<Type>) -> String {
         let u = t.as_union_type();
-        if u.key_property_name.get().is_empty() {
+        if u.key_property_name().is_empty() {
             let (key_property_name, constituent_map) = self.compute_key_property_name_and_map(t);
-            u.key_property_name.set(alloc_str(&key_property_name));
+            u.set_key_property_name(alloc_str(&key_property_name));
             // An empty map stands for Go's nil map (mapTypesByKeyProperty never returns an empty non-nil map).
             if constituent_map.is_empty() {
-                u.constituent_map.set_ref(None);
+                if let Some(m) = u.constituent_map() {
+                    m.set_ref(None);
+                }
             } else {
-                u.constituent_map.assign(constituent_map);
+                u.constituent_map_for_write().assign(constituent_map);
             }
         }
-        if u.key_property_name.get() == InternalSymbolNameMissing {
+        if u.key_property_name() == InternalSymbolNameMissing {
             return String::new();
         }
-        u.key_property_name.get().to_string()
+        u.key_property_name().to_string()
     }
 
     // relater.go:1124
@@ -1560,7 +1562,7 @@ impl Checker {
     // that corresponds to the given key type for that property name.
     pub(crate) fn get_constituent_type_for_key_type(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<Type>> {
         let key = self.get_regular_type_of_literal_type(key_type);
-        let result = t.as_union_type().constituent_map.get(&key);
+        let result = t.as_union_type().constituent_map().and_then(|m| m.get(&key));
         if result != Some(self.unknown_type) {
             return result;
         }

@@ -1780,10 +1780,10 @@ impl Checker {
     // checker.go:25407
     pub(crate) fn is_reducible_intersection(&mut self, t: P<Type>) -> bool {
         let d = t.as_intersection_type();
-        if d.unique_literal_filled_instantiation.get().is_none() {
-            d.unique_literal_filled_instantiation.set(Some(self.instantiate_type(t, Some(self.unique_literal_mapper))));
+        if d.unique_literal_filled_instantiation().is_none() {
+            d.set_unique_literal_filled_instantiation(Some(self.instantiate_type(t, Some(self.unique_literal_mapper))));
         }
-        let instantiation = d.unique_literal_filled_instantiation.get().unwrap();
+        let instantiation = d.unique_literal_filled_instantiation().unwrap();
         self.get_reduced_type(instantiation) != instantiation
     }
 
@@ -2205,10 +2205,10 @@ impl Checker {
         }
         if t.flags().intersects(TypeFlags::Union) {
             let u = t.as_union_type();
-            if u.regular_type.get().is_none() {
-                u.regular_type.set(self.map_type(t, |c, t| Some(c.get_regular_type_of_literal_type(t))));
+            if u.regular_type().is_none() {
+                u.set_regular_type(self.map_type(t, |c, t| Some(c.get_regular_type_of_literal_type(t))));
             }
-            return u.regular_type.get().unwrap();
+            return u.regular_type().unwrap();
         }
         t
     }
@@ -2556,7 +2556,7 @@ impl Checker {
         }
         let u = t.as_union_type();
         let mut types = u.types.get();
-        if let Some(origin) = u.origin.get() {
+        if let Some(origin) = u.origin() {
             if origin.flags().intersects(TypeFlags::Union) {
                 types = origin.types();
             }

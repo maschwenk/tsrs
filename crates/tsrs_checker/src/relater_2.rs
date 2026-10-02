@@ -386,7 +386,7 @@ impl Relater {
                 // unions can get very large and expensive to relate. The following fast path checks if the source union
                 // originated in an intersection. If so, and if that intersection contains the target type, then we know
                 // the result to be true (for any two types A and B, A & B is related to both A and B).
-                let source_origin = source.as_union_type().origin.get();
+                let source_origin = source.as_union_type().origin();
                 if let Some(source_origin) = source_origin {
                     if source_origin.flags().intersects(TypeFlags::Intersection) && target.alias().is_some() && source_origin.types().contains(&target) {
                         return Ternary::True;
@@ -394,7 +394,7 @@ impl Relater {
                 }
                 // Similarly, in unions of unions the we preserve the original list of unions. This original list is often
                 // much shorter than the normalized result, so we scan it in the following fast path.
-                let target_origin = target.as_union_type().origin.get();
+                let target_origin = target.as_union_type().origin();
                 if let Some(target_origin) = target_origin {
                     if target_origin.flags().intersects(TypeFlags::Union) && source.alias().is_some() && target_origin.types().contains(&source) {
                         return Ternary::True;

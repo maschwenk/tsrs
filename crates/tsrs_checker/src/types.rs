@@ -2165,20 +2165,106 @@ embeds!(EvolvingArrayType, object_type, ObjectType);
 
 // UnionOrIntersectionTypeData
 
+/// Go's `UnionOrIntersectionType` / `UnionType` / `IntersectionType` fields other than `types` are set on few types
+/// (on the private monorepo single: of 1.07M unions 12% get an origin, 9.5% a key property name, ~6% each a
+/// property cache, resolved properties, a reduced or a regular type; of 1.17M intersections 21% a non-augmented
+/// property cache, 14% an apparent type, 4.4% resolved properties), so they live in a tail allocated on the first
+/// non-nil write: a `UnionRare` or an `IntersectionRare`, both starting with the shared `UnionOrIntersectionRare`.
+/// Reads of an absent tail return the zero value, like the unset Go field. The tail word keeps the kind in bit 0
+/// (set at construction) so the shared accessors allocate the right tail.
 #[derive(Default)]
 pub struct UnionOrIntersectionType {
     pub structured_type: StructuredType,
-    // One-word slice cells, as in `StructuredMembers`.
     pub types: ThinSliceCell<P<Type>>,
-    pub resolved_properties: OptionThinSliceCell<P<Symbol>>, // nil = not computed (Go tests against nil)
-    pub property_cache: Cell<Option<P<SymbolTable>>>,
-    pub property_cache_without_function_property_augment: Cell<Option<P<SymbolTable>>>,
+    rare: UnionOrIntersectionRareWord,
 }
 embeds!(UnionOrIntersectionType, structured_type, StructuredType);
+
+#[derive(Default)]
+#[repr(C)]
+struct UnionOrIntersectionRare {
+    resolved_properties: OptionThinSliceCell<P<Symbol>>, // nil = not computed (Go tests against nil)
+    property_cache: Cell<Option<P<SymbolTable>>>,
+    property_cache_without_function_property_augment: Cell<Option<P<SymbolTable>>>,
+}
+
+#[derive(Default)]
+#[repr(C)]
+struct UnionRare {
+    shared: UnionOrIntersectionRare,
+    resolved_reduced_type: Cell<Option<P<Type>>>,
+    regular_type: Cell<Option<P<Type>>>,
+    origin: Cell<Option<P<Type>>>, // Denormalized union, intersection, or index type in which union originates
+    key_property_name: StrCell,    // Property with unique unit type that exists in every object/intersection in union type
+    constituent_map: GoMap<P<Type>, P<Type>>, // Constituents keyed by unit type discriminants
+}
+
+#[derive(Default)]
+#[repr(C)]
+struct IntersectionRare {
+    shared: UnionOrIntersectionRare,
+    resolved_apparent_type: Cell<Option<P<Type>>>,
+    unique_literal_filled_instantiation: Cell<Option<P<Type>>>, // Instantiation with type parameters mapped to never type
+}
+
+/// The tail pointer (8-aligned, null while absent) with bit 0 set for an intersection.
+struct UnionOrIntersectionRareWord(Cell<*const UnionOrIntersectionRare>);
+
+const RARE_INTERSECTION: usize = 1;
+
+impl Default for UnionOrIntersectionRareWord {
+    fn default() -> Self {
+        UnionOrIntersectionRareWord(Cell::new(std::ptr::null()))
+    }
+}
 
 impl UnionOrIntersectionType {
     pub fn types(&self) -> &'static [P<Type>] {
         self.types.get()
+    }
+    #[inline]
+    fn rare(&self) -> Option<&'static UnionOrIntersectionRare> {
+        let p = self.rare.0.get().map_addr(|a| a & !RARE_INTERSECTION);
+        // SAFETY: a non-null address is the tail allocated by `rare_for_write` (never freed).
+        (!p.is_null()).then(|| unsafe { &*p })
+    }
+    fn is_intersection_data(&self) -> bool {
+        self.rare.0.get().addr() & RARE_INTERSECTION != 0
+    }
+    fn rare_for_write(&self) -> &'static UnionOrIntersectionRare {
+        if let Some(r) = self.rare() {
+            return r;
+        }
+        let kind = self.rare.0.get().addr() & RARE_INTERSECTION;
+        let p: *const UnionOrIntersectionRare = if kind != 0 {
+            (P::new(IntersectionRare::default()).get() as *const IntersectionRare).cast()
+        } else {
+            (P::new(UnionRare::default()).get() as *const UnionRare).cast()
+        };
+        self.rare.0.set(p.map_addr(|a| a | kind));
+        // SAFETY: just allocated; `repr(C)` with the shared part first.
+        unsafe { &*p }
+    }
+    pub fn resolved_properties(&self) -> Option<&'static [P<Symbol>]> {
+        self.rare().and_then(|r| r.resolved_properties.get())
+    }
+    pub fn set_resolved_properties(&self, properties: Option<&'static [P<Symbol>]>) {
+        if properties.is_some() || self.rare().is_some() {
+            self.rare_for_write().resolved_properties.set(properties);
+        }
+    }
+    /// Go `t.propertyCacheWithoutObjectFunctionPropertyAugment` when `skip_object_function_property_augment`, else
+    /// `t.propertyCache`.
+    #[inline]
+    pub fn property_cache(&self, skip_object_function_property_augment: bool) -> Option<P<SymbolTable>> {
+        let r = self.rare()?;
+        if skip_object_function_property_augment { r.property_cache_without_function_property_augment.get() } else { r.property_cache.get() }
+    }
+    /// `property_cache`, created empty if it is nil (Go `getSymbolTable(&cache)`).
+    pub fn property_cache_for_write(&self, skip_object_function_property_augment: bool) -> P<SymbolTable> {
+        let r = self.rare_for_write();
+        let cell = if skip_object_function_property_augment { &r.property_cache_without_function_property_augment } else { &r.property_cache };
+        ast::get_symbol_table(cell)
     }
 }
 
@@ -2187,27 +2273,115 @@ impl UnionOrIntersectionType {
 #[derive(Default)]
 pub struct UnionType {
     pub union_or_intersection_type: UnionOrIntersectionType,
-    pub resolved_reduced_type: Cell<Option<P<Type>>>,
-    pub regular_type: Cell<Option<P<Type>>>,
-    pub origin: Cell<Option<P<Type>>>, // Denormalized union, intersection, or index type in which union originates
-    pub key_property_name: StrCell, // Property with unique unit type that exists in every object/intersection in union type
-    pub constituent_map: GoMap<P<Type>, P<Type>>, // Constituents keyed by unit type discriminants
 }
 embeds!(UnionType, union_or_intersection_type, UnionOrIntersectionType);
 
-const _: () = assert!(std::mem::size_of::<UnionType>() == 80);
+const _: () = assert!(std::mem::size_of::<UnionType>() == 24);
+
+impl UnionType {
+    #[inline]
+    fn union_rare(&self) -> Option<&'static UnionRare> {
+        debug_assert!(!self.union_or_intersection_type.is_intersection_data());
+        // SAFETY: a union's tail is a `UnionRare` (`rare_for_write` with the kind bit clear).
+        self.union_or_intersection_type.rare().map(|r| unsafe { &*(r as *const UnionOrIntersectionRare).cast::<UnionRare>() })
+    }
+    fn union_rare_for_write(&self) -> &'static UnionRare {
+        let r = self.union_or_intersection_type.rare_for_write();
+        // SAFETY: as in `union_rare`.
+        unsafe { &*(r as *const UnionOrIntersectionRare).cast::<UnionRare>() }
+    }
+    #[inline]
+    pub fn resolved_reduced_type(&self) -> Option<P<Type>> {
+        self.union_rare().and_then(|r| r.resolved_reduced_type.get())
+    }
+    pub fn set_resolved_reduced_type(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.union_rare().is_some() {
+            self.union_rare_for_write().resolved_reduced_type.set(t);
+        }
+    }
+    #[inline]
+    pub fn regular_type(&self) -> Option<P<Type>> {
+        self.union_rare().and_then(|r| r.regular_type.get())
+    }
+    pub fn set_regular_type(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.union_rare().is_some() {
+            self.union_rare_for_write().regular_type.set(t);
+        }
+    }
+    #[inline]
+    pub fn origin(&self) -> Option<P<Type>> {
+        self.union_rare().and_then(|r| r.origin.get())
+    }
+    pub fn set_origin(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.union_rare().is_some() {
+            self.union_rare_for_write().origin.set(t);
+        }
+    }
+    pub fn key_property_name(&self) -> &'static str {
+        self.union_rare().map_or("", |r| r.key_property_name.get())
+    }
+    pub fn set_key_property_name(&self, name: &'static str) {
+        if !name.is_empty() || self.union_rare().is_some() {
+            self.union_rare_for_write().key_property_name.set(name);
+        }
+    }
+    /// Go `t.constituentMap` for reading (nil while there is no tail).
+    pub fn constituent_map(&self) -> Option<&'static GoMap<P<Type>, P<Type>>> {
+        self.union_rare().map(|r| &r.constituent_map)
+    }
+    /// Go `t.constituentMap` for writing.
+    pub fn constituent_map_for_write(&self) -> &'static GoMap<P<Type>, P<Type>> {
+        &self.union_rare_for_write().constituent_map
+    }
+}
 
 // IntersectionType
 
-#[derive(Default)]
 pub struct IntersectionType {
     pub union_or_intersection_type: UnionOrIntersectionType,
-    pub resolved_apparent_type: Cell<Option<P<Type>>>,
-    pub unique_literal_filled_instantiation: Cell<Option<P<Type>>>, // Instantiation with type parameters mapped to never type
 }
 embeds!(IntersectionType, union_or_intersection_type, UnionOrIntersectionType);
 
-const _: () = assert!(std::mem::size_of::<IntersectionType>() == 56);
+const _: () = assert!(std::mem::size_of::<IntersectionType>() == 24);
+
+impl Default for IntersectionType {
+    fn default() -> Self {
+        let d = UnionOrIntersectionType::default();
+        d.rare.0.set(std::ptr::null::<UnionOrIntersectionRare>().map_addr(|_| RARE_INTERSECTION));
+        IntersectionType { union_or_intersection_type: d }
+    }
+}
+
+impl IntersectionType {
+    #[inline]
+    fn intersection_rare(&self) -> Option<&'static IntersectionRare> {
+        debug_assert!(self.union_or_intersection_type.is_intersection_data());
+        // SAFETY: an intersection's tail is an `IntersectionRare` (`rare_for_write` with the kind bit set).
+        self.union_or_intersection_type.rare().map(|r| unsafe { &*(r as *const UnionOrIntersectionRare).cast::<IntersectionRare>() })
+    }
+    fn intersection_rare_for_write(&self) -> &'static IntersectionRare {
+        let r = self.union_or_intersection_type.rare_for_write();
+        // SAFETY: as in `intersection_rare`.
+        unsafe { &*(r as *const UnionOrIntersectionRare).cast::<IntersectionRare>() }
+    }
+    #[inline]
+    pub fn resolved_apparent_type(&self) -> Option<P<Type>> {
+        self.intersection_rare().and_then(|r| r.resolved_apparent_type.get())
+    }
+    pub fn set_resolved_apparent_type(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.intersection_rare().is_some() {
+            self.intersection_rare_for_write().resolved_apparent_type.set(t);
+        }
+    }
+    pub fn unique_literal_filled_instantiation(&self) -> Option<P<Type>> {
+        self.intersection_rare().and_then(|r| r.unique_literal_filled_instantiation.get())
+    }
+    pub fn set_unique_literal_filled_instantiation(&self, t: Option<P<Type>>) {
+        if t.is_some() || self.intersection_rare().is_some() {
+            self.intersection_rare_for_write().unique_literal_filled_instantiation.set(t);
+        }
+    }
+}
 
 // TypeParameter
 

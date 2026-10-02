@@ -122,7 +122,7 @@ impl Checker {
         }
         let flags = precomputed_object_flags | self.get_propagating_flags_of_types(types, TypeFlags::Nullable);
         let t = self.new_union_type(flags, types);
-        t.as_union_type().origin.set(origin);
+        t.as_union_type().set_origin(origin);
         t.set_alias(alias.alias());
         if types.len() == 2 && types[0].flags().intersects(TypeFlags::BooleanLiteral) && types[1].flags().intersects(TypeFlags::BooleanLiteral) {
             t.flags.set(t.flags() | TypeFlags::Boolean);
@@ -172,7 +172,7 @@ impl Checker {
             if Some(t) != last_type {
                 if t.flags().intersects(TypeFlags::Union) {
                     let u = t.as_union_type();
-                    if t.alias().is_some() || u.origin.get().is_some() {
+                    if t.alias().is_some() || u.origin().is_some() {
                         includes |= TypeFlags::Union;
                     }
                     for &s in u.types() {
@@ -206,7 +206,7 @@ impl Checker {
         for &t in types {
             if t.flags().intersects(TypeFlags::Union) {
                 let u = t.as_union_type();
-                let origin = u.origin.get();
+                let origin = u.origin();
                 if t.alias().is_some() || origin.is_some_and(|o| !o.flags().intersects(TypeFlags::Union)) {
                     append_if_unique(&mut named_unions, t);
                 } else if let Some(origin) = origin.filter(|o| o.flags().intersects(TypeFlags::Union)) {
@@ -876,7 +876,7 @@ pub(crate) fn get_constituent_count(t: P<Type>) -> i32 {
         return 1;
     }
     if t.flags().intersects(TypeFlags::Union) {
-        if let Some(origin) = t.as_union_type().origin.get() {
+        if let Some(origin) = t.as_union_type().origin() {
             return get_constituent_count(origin);
         }
     }
@@ -1032,7 +1032,7 @@ impl Checker {
             if filtered.len() == types.len() {
                 return t;
             }
-            let origin = t.as_union_type().origin.get();
+            let origin = t.as_union_type().origin();
             let mut new_origin: Option<P<Type>> = None;
             if let Some(origin) = origin.filter(|o| o.flags().intersects(TypeFlags::Union)) {
                 // If the origin type is a (denormalized) union type, filter its non-union constituents. If that ends
@@ -1067,7 +1067,7 @@ impl Checker {
             }
             return t;
         }
-        if let Some(origin) = t.as_union_type().origin.get() {
+        if let Some(origin) = t.as_union_type().origin() {
             if origin.flags().intersects(TypeFlags::Union) && contains_type(self, origin.types(), target_type) {
                 return self.filter_type(t, |_, t| t != target_type);
             }

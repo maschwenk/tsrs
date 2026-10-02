@@ -1317,7 +1317,7 @@ impl Checker {
         }
         let mut origin = Some(constraint);
         if constraint.flags().intersects(TypeFlags::Union) {
-            origin = constraint.as_union_type().origin.get();
+            origin = constraint.as_union_type().origin();
         }
         let origin = match origin {
             Some(origin) if origin.flags().intersects(TypeFlags::Intersection) => origin,

@@ -1838,8 +1838,8 @@ impl NodeBuilderImpl {
             };
             return Some(self.f.new_type_reference_node(self.new_identifier(c, &name, None /*symbol*/), None /*typeArguments*/));
         }
-        if t.flags().intersects(TypeFlags::Union) && t.as_union_type().origin.get().is_some() {
-            t = t.as_union_type().origin.get().unwrap();
+        if t.flags().intersects(TypeFlags::Union) && t.as_union_type().origin().is_some() {
+            t = t.as_union_type().origin().unwrap();
         }
         if t.flags().intersects(TypeFlags::Union | TypeFlags::Intersection) {
             let types: Vec<P<Type>> = if t.flags().intersects(TypeFlags::Union) {
