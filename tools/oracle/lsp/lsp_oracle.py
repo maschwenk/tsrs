@@ -374,6 +374,14 @@ def normalize(key, msg):
             res = dict(res)
             res.pop("serverInfo", None)
             msg["result"] = res
+    if key.startswith("completion ") or " completion " in key:
+        # Go builds completion lists by iterating Go maps (symbol tables, ...), so its item order differs from run to
+        # run (tsgo-ref against itself differs); clients sort by sortText. Compare the items as a multiset.
+        res = msg.get("result")
+        if isinstance(res, dict) and isinstance(res.get("items"), list):
+            res = dict(res)
+            res["items"] = sorted(res["items"], key=lambda it: json.dumps(it, sort_keys=True))
+            msg["result"] = res
     if "error" in msg and isinstance(msg["error"], dict):
         # Compare error codes, not Go/Rust error text.
         msg["error"] = {"code": msg["error"].get("code")}
