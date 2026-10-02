@@ -27,8 +27,11 @@ pub struct FileIncludeReason {
     pub(crate) index: usize,
     pub(crate) is_default_lib: bool,
     pub(crate) referenced_file: Option<referencedFileData>,
-    pub(crate) automatic_type_directive: Option<automaticTypeDirectiveFileData>,
+    // Boxed: set on few reasons, and 88 bytes inline (203K reasons on the private monorepo, 144 -> 64 bytes each).
+    pub(crate) automatic_type_directive: Option<Box<automaticTypeDirectiveFileData>>,
 }
+
+const _: () = assert!(std::mem::size_of::<FileIncludeReason>() == 64);
 
 impl FileIncludeReason {
     pub(crate) fn new(kind: fileIncludeKind) -> FileIncludeReason {

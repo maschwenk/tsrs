@@ -329,7 +329,7 @@ impl fileLoader {
             if resolved.is_resolved() {
                 let mut reason = FileIncludeReason::new(fileIncludeKind::AutomaticTypeDirectiveFile);
                 reason.automatic_type_directive =
-                    Some(automaticTypeDirectiveFileData { type_reference: name.clone(), package_id: resolved.package_id });
+                    Some(Box::new(automaticTypeDirectiveFileData { type_reference: name.clone(), package_id: resolved.package_id }));
                 to_parse.push(resolvedRef {
                     file_name: resolved.resolved_file_name.to_string(),
                     increase_depth: resolved.is_external_library_import,
@@ -340,7 +340,7 @@ impl fileLoader {
             } else {
                 let mut reason = FileIncludeReason::new(fileIncludeKind::AutomaticTypeDirectiveFile);
                 reason.automatic_type_directive =
-                    Some(automaticTypeDirectiveFileData { type_reference: name.clone(), package_id: Default::default() });
+                    Some(Box::new(automaticTypeDirectiveFileData { type_reference: name.clone(), package_id: Default::default() }));
                 p_diagnostics.push(processingDiagnostic::explaining(includeExplainingDiagnostic {
                     file: None,
                     diagnostic_reason: Some(P::new(reason)),
