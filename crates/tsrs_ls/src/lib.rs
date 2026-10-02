@@ -4,6 +4,7 @@ mod api;
 pub mod astnav;
 pub mod autoimport;
 mod autoinsert;
+mod callhierarchy;
 pub mod change;
 mod codeactions_missingmemberfixer;
 mod completions;
@@ -17,11 +18,15 @@ mod crossproject;
 mod definition;
 mod diagnostics;
 mod displaypartswriter;
+mod documenthighlights;
 mod findallreferences;
+#[cfg(test)]
+mod findallreferences_test;
 pub mod format;
 mod host;
 mod hover;
 mod hovericon;
+mod import_tracker;
 mod jsdoc;
 mod jsdoc_snippet;
 mod languageservice;
@@ -29,6 +34,9 @@ mod linkedediting;
 #[cfg(test)]
 mod ls_smoke_test;
 mod lsformat;
+#[cfg(test)]
+mod refs_smoke_test;
+mod rename;
 pub mod lsconv;
 pub mod lsutil;
 pub mod sourcemap;
@@ -37,9 +45,12 @@ mod signaturehelp;
 mod sourcedefinition;
 mod string_completions;
 pub mod spanmap;
+mod symbols;
 mod utilities;
 
 pub use api::{ERR_NO_SOURCE_FILE, ERR_NO_TOKEN_AT_POSITION};
+pub use findallreferences::{Definition, DefinitionKind, ReferenceEntry, SignatureUsage, SymbolAndEntries, SymbolAndEntriesData};
+pub use rename::{client_supports_document_changes, client_supports_rename_resource_operations, client_supports_will_rename_files, RenameInfo};
 pub use completions::{
     deprecate_sort_text, err_needs_auto_imports, is_err_needs_auto_imports, object_literal_property_sort_text, sort_below, CompletionItem, CompletionKind, CompletionList,
     KeywordCompletionFilters, SortText, COMPLETION_TRIGGER_CHARACTERS, ERR_NEEDS_AUTO_IMPORTS, SORT_TEXT_AUTO_IMPORT_SUGGESTIONS, SORT_TEXT_CLASS_MEMBER_SNIPPETS,

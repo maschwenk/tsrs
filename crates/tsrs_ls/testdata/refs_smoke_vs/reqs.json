@@ -1,0 +1,7 @@
+[
+ {"m":"textDocument/_vs_references","f":"a.ts","at":"greet(name","params":{"context":{"includeDeclaration":true}}},
+ {"m":"textDocument/_vs_references","f":"b.ts","at":"name = ","params":{"context":{"includeDeclaration":true}}},
+ {"m":"textDocument/_vs_references","f":"b.ts","at":"label;","params":{"context":{"includeDeclaration":true}}},
+ {"m":"textDocument/implementation","f":"a.ts","at":"area(): number"},
+ {"m":"textDocument/implementation","f":"a.ts","at":"Shape {"}
+]

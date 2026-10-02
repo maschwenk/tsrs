@@ -1770,13 +1770,47 @@ impl Server {
         language_service: &Arc<LanguageService>,
         params: lsproto::PrepareRenameParams,
     ) -> Result<lsproto::PrepareRenameResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentPrepareRename))
+        let info = language_service.get_rename_info(ctx, "" /*newName*/, &params.text_document.uri, params.position);
+        if !info.can_rename {
+            return Err(user_facing_request_failed_error(info.localized_error_message));
+        }
+        Ok(lsproto::PrepareRenameResponse {
+            prepare_rename_placeholder: Some(lsproto::PrepareRenamePlaceholder { range: info.trigger_span, placeholder: info.display_name }),
+            ..Default::default()
+        })
     }
 
     // server.go:1924
     fn handle_rename(self: &Arc<Self>, ctx: &Context, params: lsproto::RenameParams, req: &RequestMessage) -> Result<lsproto::RenameResponse, Error> {
         let (default_ls, orchestrator) = self.get_language_service_and_cross_project_orchestrator(ctx, &params.text_document.uri, req)?;
-        Err(not_yet_ported(Method::TextDocumentRename))
+        let info = default_ls.get_rename_info(ctx, &params.new_name, &params.text_document.uri, params.position);
+        if info.can_rename && !info.file_to_rename.is_empty() {
+            // We send a `willRenameFiles` request if the client allows;
+            // otherwise we directly compute the edits for renaming the file.
+            if tsrs_ls::client_supports_will_rename_files(ctx) {
+                let document_changes = vec![lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
+                    rename_file: Some(lsproto::RenameFile {
+                        kind: lsproto::StringLiteralRename::default(),
+                        old_uri: tsrs_ls::lsconv::file_name_to_document_uri(&info.file_to_rename),
+                        new_uri: tsrs_ls::lsconv::file_name_to_document_uri(&info.new_file_name),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }];
+                return Ok(lsproto::WorkspaceEditOrNull {
+                    workspace_edit: Some(lsproto::WorkspaceEdit { document_changes: Some(document_changes), ..Default::default() }),
+                });
+            }
+            let rename_files_params = lsproto::RenameFilesParams {
+                files: vec![lsproto::FileRename {
+                    old_uri: tsrs_ls::lsconv::file_name_to_document_uri(&info.file_to_rename),
+                    new_uri: tsrs_ls::lsconv::file_name_to_document_uri(&info.new_file_name),
+                }],
+            };
+            return self.handle_will_rename_files_worker(ctx, rename_files_params, req, true /*sendRenameFile*/);
+        }
+
+        default_ls.provide_rename(ctx, &params, Some(&*orchestrator))
     }
 
     // server.go:1961
@@ -1922,7 +1956,7 @@ impl Server {
         ls: &Arc<LanguageService>,
         params: lsproto::DocumentHighlightParams,
     ) -> Result<lsproto::DocumentHighlightResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentDocumentHighlight))
+        ls.provide_document_highlights(ctx, &params.text_document.uri, params.position)
     }
 
     // server.go:2192
@@ -1932,7 +1966,7 @@ impl Server {
         ls: &Arc<LanguageService>,
         params: lsproto::MultiDocumentHighlightParams,
     ) -> Result<lsproto::CustomMultiDocumentHighlightResponse, Error> {
-        Err(not_yet_ported(Method::CustomTextDocumentMultiDocumentHighlight))
+        ls.provide_multi_document_highlights(ctx, &params.text_document.uri, params.position, &params.files_to_search)
     }
 
     // server.go:2196
@@ -1967,7 +2001,7 @@ impl Server {
         language_service: &Arc<LanguageService>,
         params: lsproto::CallHierarchyPrepareParams,
     ) -> Result<lsproto::CallHierarchyPrepareResponse, Error> {
-        Err(not_yet_ported(Method::TextDocumentPrepareCallHierarchy))
+        language_service.provide_prepare_call_hierarchy(ctx, &params.text_document.uri, params.position)
     }
 
     // server.go:2248
@@ -1978,7 +2012,7 @@ impl Server {
         req_msg: &RequestMessage,
     ) -> Result<lsproto::CallHierarchyIncomingCallsResponse, Error> {
         let (default_ls, orchestrator) = self.get_language_service_and_cross_project_orchestrator(ctx, &params.item.uri, req_msg)?;
-        Err(not_yet_ported(Method::CallHierarchyIncomingCalls))
+        default_ls.provide_call_hierarchy_incoming_calls(ctx, &params.item, Some(&*orchestrator))
     }
 
     // server.go:2260
@@ -1989,7 +2023,7 @@ impl Server {
         _req: &RequestMessage,
     ) -> Result<lsproto::CallHierarchyOutgoingCallsResponse, Error> {
         let language_service = self.session().get_language_service(ctx, &params.item.uri)?;
-        Err(not_yet_ported(Method::CallHierarchyOutgoingCalls))
+        language_service.provide_call_hierarchy_outgoing_calls(ctx, &params.item)
     }
 
     // server.go:2272
@@ -2204,15 +2238,15 @@ fn handlers() -> &'static handlerMap {
 
         handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_VS_ON_AUTO_INSERT_INFO, Server::handle_vs_on_auto_insert);
 
-        handlers.register_multi_project_reference_request_handler(lsproto::TEXT_DOCUMENT_REFERENCES_INFO, |_ls, _ctx, _params, _orchestrator| {
-            Err(not_yet_ported(Method::TextDocumentReferences))
+        handlers.register_multi_project_reference_request_handler(lsproto::TEXT_DOCUMENT_REFERENCES_INFO, |ls, ctx, params, orchestrator| {
+            ls.provide_references(ctx, &params, Some(&*orchestrator))
         });
-        handlers.register_multi_project_reference_request_handler(lsproto::TEXT_DOCUMENT_VS_REFERENCES_INFO, |_ls, _ctx, _params, _orchestrator| {
-            Err(not_yet_ported(Method::TextDocumentVSReferences))
+        handlers.register_multi_project_reference_request_handler(lsproto::TEXT_DOCUMENT_VS_REFERENCES_INFO, |ls, ctx, params, orchestrator| {
+            ls.provide_vs_references(ctx, &params, Some(&*orchestrator))
         });
         handlers.register_request_handler(lsproto::TEXT_DOCUMENT_RENAME_INFO, Server::handle_rename);
-        handlers.register_multi_project_reference_request_handler(lsproto::TEXT_DOCUMENT_IMPLEMENTATION_INFO, |_ls, _ctx, _params, _orchestrator| {
-            Err(not_yet_ported(Method::TextDocumentImplementation))
+        handlers.register_multi_project_reference_request_handler(lsproto::TEXT_DOCUMENT_IMPLEMENTATION_INFO, |ls, ctx, params, orchestrator| {
+            ls.provide_implementations(ctx, &params, Some(&*orchestrator))
         });
 
         handlers.register_request_handler(lsproto::CALL_HIERARCHY_INCOMING_CALLS_INFO, Server::handle_call_hierarchy_incoming_calls);

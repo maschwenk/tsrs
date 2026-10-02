@@ -552,7 +552,11 @@ pub(crate) fn get_container_node(node: P<Node>) -> Option<P<Node>> {
 pub(crate) fn get_adjusted_location(node: P<Node>, for_rename: bool, mut source_file: Option<P<SourceFile>>) -> P<Node> {
     // todo: check if this function needs to be changed for jsdoc updates
 
-    let parent = node.parent().unwrap();
+    // Go reads `node.Parent` only after checking that `node` is a keyword (keywords always have a parent), so a
+    // parentless node (the SourceFile) falls through to `return node`.
+    let Some(parent) = node.parent() else {
+        return node;
+    };
     // /**/<modifier> [|name|] ...
     // /**/<modifier> <class|interface|type|enum|module|namespace|function|get|set> [|name|] ...
     // /**/<class|interface|type|enum|module|namespace|function|get|set> [|name|] ...

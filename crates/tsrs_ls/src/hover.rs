@@ -484,8 +484,8 @@ fn should_get_type(node: P<Node>) -> bool {
 
 // symbolDisplayInfo holds the result of getSymbolDisplayPartsDocumentationAndSymbolKind.
 // hover.go:420
-struct SymbolDisplayInfo {
-    display_parts: DisplayPartsWriter,
+pub(crate) struct SymbolDisplayInfo {
+    pub(crate) display_parts: DisplayPartsWriter,
     declaration: Option<P<Node>>,
 }
 
@@ -1027,7 +1027,7 @@ impl QuickInfoWriter {
 // getQuickInfoAndDeclarationAtLocation builds classified display parts using displayPartsWriter when vsCapability is true.
 // When vsCapability is false, it still builds the plain text string but skips classification runs.
 // hover.go:426
-fn get_quick_info_and_declaration_at_location(
+pub(crate) fn get_quick_info_and_declaration_at_location(
     c: &mut Checker,
     symbol: Option<P<Symbol>>,
     node: P<Node>,

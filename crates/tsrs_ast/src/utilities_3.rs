@@ -1406,6 +1406,186 @@ pub fn is_right_side_of_property_access(node: P<Node>) -> bool {
     parent.kind() == Kind::PropertyAccessExpression && parent.name() == Some(node)
 }
 
+// utilities.go:1864
+pub fn get_super_container(node: P<Node>, stop_on_functions: bool) -> Option<P<Node>> {
+    let mut node = node;
+    loop {
+        node = node.parent()?;
+        match node.kind() {
+            Kind::ComputedPropertyName => {
+                node = node.parent().unwrap();
+            }
+            Kind::FunctionDeclaration | Kind::FunctionExpression | Kind::ArrowFunction => {
+                if !stop_on_functions {
+                    continue;
+                }
+                return Some(node);
+            }
+            Kind::PropertyDeclaration
+            | Kind::PropertySignature
+            | Kind::MethodDeclaration
+            | Kind::MethodSignature
+            | Kind::Constructor
+            | Kind::GetAccessor
+            | Kind::SetAccessor
+            | Kind::ClassStaticBlockDeclaration => {
+                return Some(node);
+            }
+            Kind::Decorator => {
+                // Decorators are always applied outside of the body of a class or method.
+                let parent = node.parent().unwrap();
+                if parent.kind() == Kind::Parameter && is_class_element(parent.parent().unwrap()) {
+                    // If the decorator's parent is a ParameterDeclaration, we resolve the this container from
+                    // the grandparent class declaration.
+                    node = parent.parent().unwrap();
+                } else if is_class_element(parent) {
+                    // If the decorator's parent is a class element, we resolve the 'this' container
+                    // from the parent class declaration.
+                    node = parent;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+// utilities.go:2592
+pub fn is_default_import(node: P<Node> /*ImportDeclaration | ImportEqualsDeclaration | ExportDeclaration*/) -> bool {
+    match node.kind() {
+        Kind::ImportDeclaration | Kind::JSImportDeclaration => {
+            let import_clause = node.import_clause();
+            import_clause.is_some_and(|import_clause| import_clause.as_import_clause().name.is_some())
+        }
+        _ => false,
+    }
+}
+
+// utilities.go:3650
+pub fn is_argument_expression_of_element_access(node: P<Node>) -> bool {
+    node.parent().is_some_and(|parent| parent.kind() == Kind::ElementAccessExpression && parent.as_element_access_expression().argument_expression == node)
+}
+
+// utilities.go:3654
+pub fn climb_past_property_access(node: P<Node>) -> P<Node> {
+    if is_right_side_of_property_access(node) {
+        return node.parent().unwrap();
+    }
+    node
+}
+
+// utilities.go:3661
+fn climb_past_property_or_element_access(node: P<Node>) -> P<Node> {
+    if is_right_side_of_property_access(node) || is_argument_expression_of_element_access(node) {
+        return node.parent().unwrap();
+    }
+    node
+}
+
+// utilities.go:3668
+fn select_expression_of_call_or_new_expression_or_decorator(node: P<Node>) -> Option<P<Node>> {
+    if is_call_expression(node) || is_new_expression(node) || is_decorator(node) {
+        return node.expression();
+    }
+    None
+}
+
+// utilities.go:3675
+fn select_tag_of_tagged_template_expression(node: P<Node>) -> Option<P<Node>> {
+    if is_tagged_template_expression(node) {
+        return Some(node.as_tagged_template_expression().tag);
+    }
+    None
+}
+
+// utilities.go:3682
+fn select_tag_name_of_jsx_opening_like_element(node: P<Node>) -> Option<P<Node>> {
+    if is_jsx_opening_element(node) || is_jsx_self_closing_element(node) {
+        return Some(node.tag_name());
+    }
+    None
+}
+
+// utilities.go:3689
+pub fn is_call_expression_target(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_call_expression, select_expression_of_call_or_new_expression_or_decorator, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3693
+pub fn is_new_expression_target(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_new_expression, select_expression_of_call_or_new_expression_or_decorator, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3697
+pub fn is_call_or_new_expression_target(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_call_or_new_expression, select_expression_of_call_or_new_expression_or_decorator, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3701
+pub fn is_tagged_template_tag(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_tagged_template_expression, select_tag_of_tagged_template_expression, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3705
+pub fn is_decorator_target(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_decorator, select_expression_of_call_or_new_expression_or_decorator, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3709
+pub fn is_jsx_opening_like_element_tag_name(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_jsx_opening_like_element, select_tag_name_of_jsx_opening_like_element, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3713
+fn is_callee_worker(
+    node: P<Node>,
+    pred: fn(P<Node>) -> bool,
+    callee_selector: fn(P<Node>) -> Option<P<Node>>,
+    include_element_access: bool,
+    skip_past_outer_expressions: bool,
+) -> bool {
+    let mut target = if include_element_access { climb_past_property_or_element_access(node) } else { climb_past_property_access(node) };
+    if skip_past_outer_expressions {
+        // Only skip outer expressions if the target is actually an expression node
+        if is_expression(target) {
+            target = skip_outer_expressions(target, OuterExpressionKinds::All);
+        }
+    }
+    target.parent().is_some_and(|parent| pred(parent) && callee_selector(parent) == Some(target))
+}
+
+// utilities.go:4195
+pub fn import_from_module_specifier(node: P<Node>) -> P<Node> {
+    if let Some(result) = try_get_import_from_module_specifier(node) {
+        return result;
+    }
+    panic!("Unexpected node kind: {:?}", node.parent().unwrap().kind());
+}
+
+// utilities.go:4203
+pub fn try_get_import_from_module_specifier(node: P<Node> /*StringLiteralLike*/) -> Option<P<Node>> {
+    let parent = node.parent().unwrap();
+    match parent.kind() {
+        Kind::ImportDeclaration | Kind::JSImportDeclaration | Kind::ExportDeclaration => Some(parent),
+        Kind::ExternalModuleReference => parent.parent(),
+        Kind::CallExpression => {
+            if is_import_call(parent) || is_require_call(parent, false /*requireStringLiteralLikeArgument*/) {
+                return Some(parent);
+            }
+            None
+        }
+        Kind::LiteralType => {
+            if !is_string_literal(node) {
+                return None;
+            }
+            if is_import_type_node(parent.parent().unwrap()) {
+                return parent.parent();
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 // utilities.go:3021
 pub fn node_has_kind(node: Option<P<Node>>, kind: Kind) -> bool {
     let Some(node) = node else {
@@ -1462,31 +1642,6 @@ pub fn is_class_or_type_element(node: P<Node>) -> bool {
 // utilities.go:3139
 pub fn is_type_keyword_token(node: P<Node>) -> bool {
     node.kind() == Kind::TypeKeyword
-}
-
-// utilities.go:4203
-pub fn try_get_import_from_module_specifier(node: P<Node>) -> Option<P<Node>> {
-    let parent = node.parent().unwrap();
-    match parent.kind() {
-        Kind::ImportDeclaration | Kind::JSImportDeclaration | Kind::ExportDeclaration => Some(parent),
-        Kind::ExternalModuleReference => parent.parent(),
-        Kind::CallExpression => {
-            if is_import_call(parent) || is_require_call(parent, false /*requireStringLiteralLikeArgument*/) {
-                return Some(parent);
-            }
-            None
-        }
-        Kind::LiteralType => {
-            if !is_string_literal(node) {
-                return None;
-            }
-            if is_import_type_node(parent.parent().unwrap()) {
-                return parent.parent();
-            }
-            None
-        }
-        _ => None,
-    }
 }
 
 // utilities.go:3282

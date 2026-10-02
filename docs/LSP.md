@@ -211,3 +211,12 @@ no error).
   interface) is a string newtype.
 - `tsrs_ls::spanmap` is a PLACEHOLDER for Go `internal/spanmap`: value types only; `SpanMap` is uninhabited (no
   content mapper ever builds one), so content-mapped branches are kept but statically unreachable.
+- Nested checker acquisition (decided 2026-10-02): Go's call hierarchy (and a few other ls paths) acquires a second
+  checker while holding one. The project pool (what the server uses) hands out a different query checker, as in Go.
+  The compiler's built-in pool (CLI, compiler-level tests) locks each checker, where Go's non-exclusive getter returns
+  it unlocked and aliases it; a nested acquisition on the same checker would deadlock there. Accepted: no language
+  service path runs on the built-in pool; aliasing a `&mut Checker` is not expressible soundly in Rust.
+- Cross-project orchestration (`handle_cross_project`, references / rename across projects) searches projects
+  sequentially; Go fans out to goroutines. Results are merged in the same order, so responses are identical; only
+  latency differs on multi-project workspaces. Revisit in phase 4 (worker pool).
+- `workspace/willRenameFiles` and module-specifier updates on rename need `ls/file_rename.go` (not ported yet).
