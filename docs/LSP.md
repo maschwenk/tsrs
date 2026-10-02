@@ -115,10 +115,25 @@ measured on the private monorepo in phase 4 (open a file, edit 200 times, RSS vs
 
 | phase | content | state |
 | --- | --- | --- |
-| 1 | transport, protocol types, session skeleton, document sync, project discovery, program update, push + pull diagnostics, hover, definition; LSP oracle | in progress |
+| 1 | transport, protocol types, session skeleton, document sync, project discovery, program update, push + pull diagnostics, hover, definition; LSP oracle | done (2026-10-02, below) |
 | 2 | fourslash harness + generated tests | generator, harness (server-independent parts), parser, runner done; needs the in-process server |
 | 3 | references, rename, completions, signature help, symbols, semantic tokens, folding, selection ranges, inlay hints, code actions, formatting | — |
 | 4 | watchers, multi-project, program reuse, cancellation, memory regions, editor setup | — |
+
+### Phase 1 gates (2026-10-02, `lsp` 3c95d59+)
+
+`tools/oracle/lsp/lsp_oracle.py`, `tsgo-ref --lsp -stdio` vs `tsrs --lsp -stdio`, sequential sessions with an edit round
+(insert a character in an identifier, re-request, revert, re-request):
+
+| session | files | diagnostic | hover | definition | typeDefinition | publishDiagnostics | initialize |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 20 conformance cases (generics, async, abstract classes, enums, mapped/conditional/template literal types, JSX, control flow, decorators, module resolution, overloads) | 20 | 87/87 | 2334/2334 | 2334/2334 | 2334/2334 | 20/20 | 20/20 |
+| xstate (bench), 30 files of `packages/core` + `xstate-react` | 30 | 120/120 | 3308/3308 | 3308/3308 | 3308/3308 | 1/1 | 1/1 |
+
+16,875 responses, all JSON-identical (1,440 + 2,308 non-null hovers; 67 + 12 diagnostic reports with items). Conformance
+suite unchanged in both lazy modes (13,458 pass / 2 codes / 2 fail; `.types` / `.symbols` 12,779 / 12,779, pass lists
+identical). Unit tests: `tsrs_lsproto` 33 (+ 6,869-case Go codec oracle), `tsrs_ls` 87, `tsrs_project` 105, `tsrs_lsp`
+(see notes/lsp-server.md).
 
 ### Fourslash
 
