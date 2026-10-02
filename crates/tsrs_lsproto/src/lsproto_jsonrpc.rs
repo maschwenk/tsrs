@@ -173,7 +173,7 @@ pub struct ResponseMessage {
     pub error: Option<ResponseError>,
     // Set on responses read by Message's decoding, whose Go Result is always a (possibly empty) raw
     // json.Value: it marshals as null when the response had no result.
-    pub(crate) raw_result: bool,
+    pub raw_result: bool,
 }
 
 impl ResponseMessage {

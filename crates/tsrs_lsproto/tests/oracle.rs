@@ -56,3 +56,35 @@ fn oracle_file_name() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+// Outbound messages, against what Go's json.Marshal writes for the same values.
+#[test]
+fn oracle_messages() {
+    use tsrs_lsproto::jsonrpc;
+    use tsrs_lsproto::*;
+
+    let req = RequestInfo::<NoParams, Null>::new(Method("x")).new_request_message(Some(jsonrpc::new_id_int(1)), NoParams);
+    assert_eq!(marshal(&req.message()).unwrap(), r#"{"jsonrpc":"2.0","id":1,"method":"x","params":{}}"#);
+
+    let resp = ResponseMessage { id: Some(jsonrpc::new_id_int(1)), result: Some(Null.to_json()), ..Default::default() };
+    assert_eq!(marshal(&resp).unwrap(), r#"{"jsonrpc":"2.0","id":1,"result":null}"#);
+
+    let resp = ResponseMessage {
+        error: Some(jsonrpc::ResponseError { code: 1, message: "m".to_string(), data: None }),
+        ..Default::default()
+    };
+    assert_eq!(marshal(&resp).unwrap(), r#"{"jsonrpc":"2.0","id":null,"error":{"code":1,"message":"m"}}"#);
+
+    let resp = ResponseMessage { id: Some(jsonrpc::new_id_string("a")), result: Some(HoverOrNull::default().to_json()), ..Default::default() };
+    assert_eq!(marshal(&resp.message()).unwrap(), r#"{"jsonrpc":"2.0","id":"a","result":null}"#);
+
+    let note = TEXT_DOCUMENT_PUBLISH_DIAGNOSTICS_INFO.new_notification_message(PublishDiagnosticsParams {
+        uri: DocumentUri::from("file:///a.ts"),
+        version: Some(3),
+        diagnostics: Vec::new(),
+    });
+    assert_eq!(
+        marshal(&note).unwrap(),
+        r#"{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///a.ts","version":3,"diagnostics":[]}}"#
+    );
+}

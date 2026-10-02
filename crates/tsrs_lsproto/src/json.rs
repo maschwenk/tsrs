@@ -387,6 +387,7 @@ impl IsZero for f64 {
 // Go pointer: null decodes as nil, nil marshals as null.
 impl<T: Json> Json for Option<T> {
     const GO_TYPE: &'static str = T::GO_TYPE;
+    const GO_POINTER: bool = true;
 
     fn go_type_name() -> String {
         T::go_type_name()

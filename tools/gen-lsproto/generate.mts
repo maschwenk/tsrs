@@ -2245,10 +2245,12 @@ function rustOfGo(g: string): RType {
         return { k: "vec", el: rustOfGo(el) };
     }
     if (g.startsWith("map[")) {
+        // A pointer map value can be nil (JSON null): Option.
         const close = g.indexOf("]");
-        let val = g.slice(close + 1);
-        if (val.startsWith("*")) val = val.slice(1);
-        return { k: "map", key: rustOfGo(g.slice(4, close)), val: rustOfGo(val) };
+        const val = g.slice(close + 1);
+        const key = rustOfGo(g.slice(4, close));
+        if (val.startsWith("*")) return { k: "map", key, val: { k: "opt", el: rustOfGo(val.slice(1)) } };
+        return { k: "map", key, val: rustOfGo(val) };
     }
     const prim = PRIMS[g];
     if (prim) return { k: "prim", ...prim };

@@ -444,6 +444,7 @@ dependencies = [
  "indexmap",
  "rustc-hash",
  "tsrs_core",
+ "tsrs_vfs",
 ]
 
 [[package]]
