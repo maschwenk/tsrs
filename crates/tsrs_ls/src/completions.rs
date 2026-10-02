@@ -91,7 +91,7 @@ impl LanguageService {
                 continue;
             };
             let (edits, description, ok) =
-                (autoimport::Fix { auto_import_fix: auto_import }).edits(ctx, file, program.options(), self.format_options(), &self.converters, self.user_preferences());
+                (autoimport::Fix { auto_import_fix: auto_import, ..Default::default() }).edits(ctx, file, program.options(), self.format_options(), &self.converters, self.user_preferences());
             if !ok {
                 continue;
             }

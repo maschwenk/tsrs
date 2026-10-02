@@ -40,6 +40,7 @@ tsrs_astnav = { path = "crates/tsrs_astnav" }
 tsrs_lsproto = { path = "crates/tsrs_lsproto" }
 tsrs_ls = { path = "crates/tsrs_ls" }
 tsrs_project = { path = "crates/tsrs_project" }
+tsrs_projectutil = { path = "crates/tsrs_projectutil" }
 tsrs_lsp = { path = "crates/tsrs_lsp" }
 tsrs_fourslash = { path = "crates/tsrs_fourslash" }
 

@@ -14,6 +14,7 @@ tsrs_lsproto.workspace = true
 tsrs_ls.workspace = true
 tsrs_lsp.workspace = true
 tsrs_project.workspace = true
+tsrs_compiler.workspace = true
 tsrs_tsoptions.workspace = true
 tsrs_vfs.workspace = true
 tsrs_diagnostics.workspace = true

@@ -225,6 +225,60 @@ fn checker_pool_default_idle_timeout() {
     assert_eq!(pool.opts().idle_timeout, secs(30));
 }
 
+// checkerpool_test.go:353
+#[test]
+fn checker_pool_canceled_checker_disposal() {
+    let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
+    let program = program_of(&session);
+    let source_file = program.get_source_file("/src/index.ts").expect("source file");
+    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+
+    // Acquire a query checker and cancel it.
+    let mut c = pool.get_checker(&ctx_with("cancel-test", CheckerLifetime::Temporary), None);
+    let p = ptr(&c);
+
+    let (canceled_ctx, cancel) = Context::background().with_cancel();
+    cancel.call();
+    c.get_diagnostics_exported(&canceled_ctx, source_file);
+    assert!(c.was_canceled());
+
+    // Release should dispose the canceled checker.
+    drop(c);
+
+    // Next request should get a fresh checker.
+    let c2 = pool.get_checker(&ctx_with("after-cancel", CheckerLifetime::Temporary), None);
+    assert_ne!(ptr(&c2), p, "should get a new checker, not the canceled one");
+}
+
+// checkerpool_test.go:389
+#[test]
+fn checker_pool_request_association_cleanup_on_disposal() {
+    let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
+    let program = program_of(&session);
+    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(5) });
+
+    // Create a query checker with a request association.
+    let (req_ctx, req_cancel) = Context::background().with_cancel();
+    let ctx = with_checker_lifetime(&with_request_id(&req_ctx, "assoc-cleanup-req"), CheckerLifetime::Temporary);
+    let mut c = pool.get_checker(&ctx, None);
+
+    // Cancel the checker to trigger disposal on release.
+    let (canceled_ctx, cancel) = Context::background().with_cancel();
+    cancel.call();
+    let source_file = program.get_source_file("/src/index.ts").expect("source file");
+    c.get_diagnostics_exported(&canceled_ctx, source_file);
+    assert!(c.was_canceled());
+
+    drop(c);
+
+    // Request association should be cleared after checker disposal.
+    assert!(
+        !pool.test_state(|st| st.request_associations.contains_key("assoc-cleanup-req")),
+        "request association should be cleared after checker disposal"
+    );
+    req_cancel.call();
+}
+
 // checkerpool_test.go:425
 #[test]
 fn checker_pool_request_association_cleanup_on_context_done() {
@@ -455,6 +509,34 @@ fn checker_pool_discard_idempotent() {
 fn checker_pool_get_global_diagnostics_empty() {
     let (_, pool) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
     assert!(pool.get_global_diagnostics().is_empty());
+}
+
+// checkerpool_test.go:1235
+#[test]
+fn checker_pool_api_checker_disposed_on_cancel() {
+    let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
+    let program = program_of(&session);
+    let source_file = program.get_source_file("/src/index.ts").expect("source file");
+    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+
+    let ctx = with_checker_lifetime(&Context::background(), CheckerLifetime::API);
+    let mut c = pool.get_checker(&ctx, None);
+    let p = ptr(&c);
+
+    // Cancel the API checker.
+    let (canceled_ctx, cancel) = Context::background().with_cancel();
+    cancel.call();
+    c.get_diagnostics_exported(&canceled_ctx, source_file);
+    assert!(c.was_canceled());
+
+    // Releasing a canceled API checker must drop it so it isn't reused.
+    drop(c);
+
+    assert!(!pool.test_state(|st| st.persistent), "canceled API checker should be dropped on release");
+
+    // Next API acquisition gets a fresh, usable checker rather than panicking.
+    let c2 = pool.get_checker(&ctx, None);
+    assert_ne!(ptr(&c2), p, "should get a fresh API checker after cancellation");
 }
 
 // checkerpool_test.go:1272

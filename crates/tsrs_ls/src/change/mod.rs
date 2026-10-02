@@ -1,7 +1,10 @@
-// PARTIAL port of Go `internal/ls/change` (code actions and the change tracker are phase 3): the tracker's
-// construction and the format settings helper, which completions use for class member snippets.
+// Go internal/ls/change.
 
+mod delete;
 mod tracker;
 mod trackerimpl;
+#[cfg(test)]
+mod trackerimpl_test;
+
 pub use tracker::*;
-pub use trackerimpl::*;
+pub use trackerimpl::get_format_code_settings_for_writing;

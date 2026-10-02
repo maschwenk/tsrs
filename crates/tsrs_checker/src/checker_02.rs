@@ -117,6 +117,7 @@ impl Checker {
         if self.is_canceled() {
             self.was_canceled = true;
         }
+        self.ctx = None;
     }
 
     // checker.go:2273

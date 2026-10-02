@@ -70,7 +70,7 @@ impl LanguageService {
             // Auto-imports in content-mapped files are evaluated eagerly so edits outside
             // of verbatim spans can cause the completion item to be filtered out entirely.
             // Only real files take this code path, so the final Edits() is guaranteed ok.
-            let (edits, description, _) = (autoimport::Fix { auto_import_fix: auto_import.clone() }).edits(
+            let (edits, description, _) = (autoimport::Fix { auto_import_fix: auto_import.clone(), ..Default::default() }).edits(
                 ctx,
                 file,
                 program.options(),

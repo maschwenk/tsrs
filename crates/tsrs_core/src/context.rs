@@ -6,6 +6,7 @@
 
 use std::any::{Any, TypeId};
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::time::{Duration, Instant};
 
@@ -47,6 +48,9 @@ type afterFunc = Box<dyn FnOnce() + Send>;
 // its own goroutine).
 struct cancelState {
     deadline: Option<Instant>,
+    // Set (under `inner`) once `inner.err` is set, so that polling a live context (the checker's `isCanceled`
+    // runs once per statement) is one atomic load instead of a lock.
+    canceled: AtomicBool,
     inner: Mutex<cancelInner>,
     done: Condvar,
 }
@@ -66,20 +70,17 @@ fn spawn_after_func(f: afterFunc) {
 
 impl cancelState {
     fn new(deadline: Option<Instant>) -> Arc<cancelState> {
-        Arc::new(cancelState { deadline, inner: Mutex::new(cancelInner::default()), done: Condvar::new() })
+        Arc::new(cancelState { deadline, canceled: AtomicBool::new(false), inner: Mutex::new(cancelInner::default()), done: Condvar::new() })
     }
 
     fn err(&self) -> Option<ContextError> {
-        let err = self.inner.lock().unwrap().err;
-        if err.is_none() {
-            if let Some(deadline) = self.deadline {
-                if Instant::now() >= deadline {
-                    self.cancel(ContextError::DeadlineExceeded, None);
-                    return self.inner.lock().unwrap().err;
-                }
+        if !self.canceled.load(Ordering::Acquire) {
+            match self.deadline {
+                Some(deadline) if Instant::now() >= deadline => self.cancel(ContextError::DeadlineExceeded, None),
+                _ => return None,
             }
         }
-        err
+        self.inner.lock().unwrap().err
     }
 
     fn cancel(&self, err: ContextError, cause: Option<String>) {
@@ -90,6 +91,7 @@ impl cancelState {
             }
             inner.err = Some(err);
             inner.cause = Some(cause.unwrap_or_else(|| err.to_string()));
+            self.canceled.store(true, Ordering::Release);
             (std::mem::take(&mut inner.children), std::mem::take(&mut inner.after))
         };
         self.done.notify_all();

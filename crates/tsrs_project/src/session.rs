@@ -1445,8 +1445,44 @@ impl Session {
             self.logger.logf(format_args!("Parse cache size:           {:6}", parse_cache_size));
             self.logger.logf(format_args!("Program count:              {:6}", self.snapshot_host.program_counter.len()));
             self.logger.logf(format_args!("Extended config cache size: {:6}", extended_config_count));
-            // (The auto-import registry is a placeholder without cache statistics: Go's "Auto Imports" section is
-            // not printed.)
+
+            self.logger.log("Auto Imports:");
+            // Go calls GetCacheStats on the (never nil after an update) registry pointer.
+            let auto_import_stats = snapshot.auto_import_registry().expect("nil auto-import registry").get_cache_stats();
+            self.logger.logf(format_args!("\tUnique packages (by realpath): {}", auto_import_stats.unique_package_count));
+            if !auto_import_stats.project_buckets.is_empty() {
+                self.logger.log("\tProject buckets:");
+                for bucket in &auto_import_stats.project_buckets {
+                    self.logger.logf(format_args!("\t\t{}{}:", bucket.name, if bucket.state.dirty() { " (dirty)" } else { "" }));
+                    self.logger.logf(format_args!("\t\t\tFiles: {}", bucket.file_count));
+                    self.logger.logf(format_args!("\t\t\tExports: {}", bucket.export_count));
+                }
+            }
+            if !auto_import_stats.node_modules_buckets.is_empty() {
+                self.logger.log("\tnode_modules buckets:");
+                for bucket in &auto_import_stats.node_modules_buckets {
+                    self.logger.logf(format_args!("\t\t{}{}:", bucket.name, if bucket.state.dirty() { " (dirty)" } else { "" }));
+                    if let Some(dirty_packages) = bucket.state.dirty_packages() {
+                        for package_name in dirty_packages.keys() {
+                            self.logger.logf(format_args!("\t\t\tNeeds granular update: {}", package_name));
+                        }
+                    }
+                    match &bucket.dependency_names {
+                        Some(dependency_names) => self.logger.logf(format_args!("\t\t\tCollected packages: {}", dependency_names.len())),
+                        None => self.logger.logf(format_args!("\t\t\tCollected packages: all, due to no package.json!")),
+                    }
+                    self.logger.logf(format_args!("\t\t\tTotal packages: {}", bucket.package_names.as_ref().map_or(0, |p| p.len())));
+                    self.logger.logf(format_args!("\t\t\tFiles: {}", bucket.file_count));
+                    self.logger.logf(format_args!("\t\t\tExports: {}", bucket.export_count));
+                    match bucket.state.recursive_search_packages() {
+                        None => self.logger.log("\t\t\tRecursive search: all"),
+                        Some(packages) if packages.len() > 0 => {
+                            self.logger.logf(format_args!("\t\t\tRecursive search: {} packages", packages.len()))
+                        }
+                        Some(_) => self.logger.log("\t\t\tRecursive search: none"),
+                    }
+                }
+            }
         }
     }
 

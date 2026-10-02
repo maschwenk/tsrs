@@ -7,6 +7,10 @@ mod autoinsert;
 mod callhierarchy;
 mod codelens;
 pub mod change;
+mod codeactions;
+mod codeactions_fixclassincorrectlyimplementsinterface;
+mod codeactions_fixmissingtypeannotation;
+mod codeactions_importfixes;
 mod codeactions_missingmemberfixer;
 mod completions;
 mod completions_2;
@@ -20,6 +24,7 @@ mod definition;
 mod diagnostics;
 mod displaypartswriter;
 mod documenthighlights;
+mod file_rename;
 mod findallreferences;
 mod folding;
 #[cfg(test)]
@@ -37,6 +42,7 @@ mod linkedediting;
 #[cfg(test)]
 mod ls_smoke_test;
 mod lsformat;
+mod organizeimports;
 #[cfg(test)]
 mod refs_smoke_test;
 mod rename;
@@ -56,6 +62,7 @@ mod utilities;
 pub use api::{ERR_NO_SOURCE_FILE, ERR_NO_TOKEN_AT_POSITION};
 pub use findallreferences::{Definition, DefinitionKind, ReferenceEntry, SignatureUsage, SymbolAndEntries, SymbolAndEntriesData};
 pub use rename::{client_supports_document_changes, client_supports_rename_resource_operations, client_supports_will_rename_files, RenameInfo};
+pub use codeactions::{CodeAction, CodeFixContext, CodeFixProvider, CombinedCodeActions};
 pub use completions::{
     deprecate_sort_text, err_needs_auto_imports, is_err_needs_auto_imports, object_literal_property_sort_text, sort_below, CompletionItem, CompletionKind, CompletionList,
     KeywordCompletionFilters, SortText, COMPLETION_TRIGGER_CHARACTERS, ERR_NEEDS_AUTO_IMPORTS, SORT_TEXT_AUTO_IMPORT_SUGGESTIONS, SORT_TEXT_CLASS_MEMBER_SNIPPETS,
