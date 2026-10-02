@@ -23,6 +23,41 @@ pub(crate) fn run(program: &'static Program, roots: &[usize]) {
     }
 }
 
+// Language server (`tsrs --lsp`, docs/LSP.md memory regions): at exit, the census marks from the server and its
+// session (and the main thread's stack and the data segments). Freed regions (old file versions, checkers, programs)
+// were recorded as would-free instead of released, so a strong reference into one is a region-lifetime bug. With
+// `TSRS_CENSUS_VERIFY=1`, the programs of the session's current snapshot are also walked precisely.
+pub(crate) fn run_lsp(server: &std::sync::Arc<tsrs_lsp::Server>) {
+    if !census::active() {
+        return;
+    }
+    // The census's own frames take the stack area the server's work used on this thread; their unset slots would
+    // keep its words (pointers into freed regions).
+    tsrs_core::census_scrub_stack();
+    let session = server.session();
+    let snapshot = session.snapshot();
+    let programs: Vec<&'static Program> = snapshot.project_collection.projects().iter().filter_map(|p| p.program).collect();
+    let roots = [std::sync::Arc::as_ptr(server) as usize, std::sync::Arc::as_ptr(session) as usize, std::sync::Arc::as_ptr(&snapshot) as usize];
+    eprintln!("census (lsp): {} programs in the current snapshot", programs.len());
+    census::run(&roots);
+    if std::env::var_os("TSRS_CENSUS_VERIFY").is_some_and(|v| v == "1") {
+        for program in programs {
+            verify(program);
+        }
+    }
+}
+
+// Before the server starts: a process-wide lazily initialized static keeps the uninitialized payload bytes of its
+// `None` fields, copied from the stack it was built on. The server first touches `EMPTY_COMPILER_OPTIONS` while
+// updating the auto-import registry, whose stack then holds pointers into the update's scratch region, freed right
+// after; initialized here, while no region exists, it cannot hold such a word (notes/lsp-memfix.md).
+pub(crate) fn prepare_lsp() {
+    if !census::active() {
+        return;
+    }
+    std::sync::LazyLock::force(&tsrs_core::EMPTY_COMPILER_OPTIONS);
+}
+
 #[derive(Default)]
 struct Tally {
     checked: u64,

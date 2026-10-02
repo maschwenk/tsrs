@@ -2,7 +2,7 @@
 // surface is ported (the JS emit parts of Go's `printer.EmitHost` are not needed to compute diagnostics).
 //
 // Go `newEmitHost` acquires the file's checker from the pool and keeps it locked until `done()`; here the caller
-// holds the checker (`CheckerGuard`/`&mut Checker`) and lends it to `checker_slot` for the duration of the
+// holds the checker (`CheckerHandle`/`&mut Checker`) and lends it to `checker_slot` for the duration of the
 // transform, and the host's `Resolver` borrows it from there (see tsrs_declarations::Resolver).
 
 use tsrs_ast::{FileReference, ModifierFlags, Node, SourceFile};

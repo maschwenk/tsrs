@@ -1,0 +1,22 @@
+[package]
+name = "tsrs_lsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tsrs_core.workspace = true
+tsrs_diagnostics.workspace = true
+tsrs_ast.workspace = true
+tsrs_vfs.workspace = true
+tsrs_tsoptions.workspace = true
+tsrs_compiler.workspace = true
+tsrs_lsproto.workspace = true
+tsrs_ls.workspace = true
+tsrs_project.workspace = true
+tsrs_fswatch = { path = "../tsrs_fswatch" }
+rustc-hash.workspace = true
+indexmap.workspace = true

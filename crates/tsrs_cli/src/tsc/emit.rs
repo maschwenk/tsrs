@@ -49,22 +49,24 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
     let check_time = Cell::new(times.check_time);
     let program = input.program;
 
+    let ctx = tsrs_compiler::Context::default();
     let mut all_diagnostics = get_diagnostics_of_any_program(
+        &ctx,
         program,
         None,
         false,
-        &mut |file| {
+        &mut |ctx, file| {
             // Options diagnostics include global diagnostics (even though we collect them separately),
             // and global diagnostics create checkers, which then bind all of the files. Do this binding
             // early so we can track the time.
             let bind_start = input.sys.now();
-            let diags = program.get_bind_diagnostics(file);
+            let diags = program.get_bind_diagnostics(ctx, file);
             bind_time.set(input.sys.now() - bind_start);
             diags
         },
-        &mut |file| {
+        &mut |ctx, file| {
             let check_start = input.sys.now();
-            let diags = program.get_semantic_diagnostics(file);
+            let diags = program.get_semantic_diagnostics(ctx, file);
             check_time.set(input.sys.now() - check_start);
             diags
         },

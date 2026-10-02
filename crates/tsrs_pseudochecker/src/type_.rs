@@ -67,15 +67,21 @@ fn new_pseudo_type(kind: PseudoTypeKind, data: PseudoTypeData) -> P<PseudoType> 
     P::new(PseudoType { kind, data })
 }
 
-pub static PseudoTypeUndefined: LazyLock<P<PseudoType>> = LazyLock::new(|| new_pseudo_type(PseudoTypeKind::Undefined, PseudoTypeData::Base));
-pub static PseudoTypeNull: LazyLock<P<PseudoType>> = LazyLock::new(|| new_pseudo_type(PseudoTypeKind::Null, PseudoTypeData::Base));
-pub static PseudoTypeAny: LazyLock<P<PseudoType>> = LazyLock::new(|| new_pseudo_type(PseudoTypeKind::Any, PseudoTypeData::Base));
-pub static PseudoTypeString: LazyLock<P<PseudoType>> = LazyLock::new(|| new_pseudo_type(PseudoTypeKind::String, PseudoTypeData::Base));
-pub static PseudoTypeNumber: LazyLock<P<PseudoType>> = LazyLock::new(|| new_pseudo_type(PseudoTypeKind::Number, PseudoTypeData::Base));
-pub static PseudoTypeBigInt: LazyLock<P<PseudoType>> = LazyLock::new(|| new_pseudo_type(PseudoTypeKind::BigInt, PseudoTypeData::Base));
-pub static PseudoTypeBoolean: LazyLock<P<PseudoType>> = LazyLock::new(|| new_pseudo_type(PseudoTypeKind::Boolean, PseudoTypeData::Base));
-pub static PseudoTypeFalse: LazyLock<P<PseudoType>> = LazyLock::new(|| new_pseudo_type(PseudoTypeKind::False, PseudoTypeData::Base));
-pub static PseudoTypeTrue: LazyLock<P<PseudoType>> = LazyLock::new(|| new_pseudo_type(PseudoTypeKind::True, PseudoTypeData::Base));
+// The shared pseudo types below are process-wide: never in a freeable region (language server).
+fn new_static_pseudo_type(kind: PseudoTypeKind) -> P<PseudoType> {
+    let _arena = tsrs_core::arena::enter_thread_arena();
+    new_pseudo_type(kind, PseudoTypeData::Base)
+}
+
+pub static PseudoTypeUndefined: LazyLock<P<PseudoType>> = LazyLock::new(|| new_static_pseudo_type(PseudoTypeKind::Undefined));
+pub static PseudoTypeNull: LazyLock<P<PseudoType>> = LazyLock::new(|| new_static_pseudo_type(PseudoTypeKind::Null));
+pub static PseudoTypeAny: LazyLock<P<PseudoType>> = LazyLock::new(|| new_static_pseudo_type(PseudoTypeKind::Any));
+pub static PseudoTypeString: LazyLock<P<PseudoType>> = LazyLock::new(|| new_static_pseudo_type(PseudoTypeKind::String));
+pub static PseudoTypeNumber: LazyLock<P<PseudoType>> = LazyLock::new(|| new_static_pseudo_type(PseudoTypeKind::Number));
+pub static PseudoTypeBigInt: LazyLock<P<PseudoType>> = LazyLock::new(|| new_static_pseudo_type(PseudoTypeKind::BigInt));
+pub static PseudoTypeBoolean: LazyLock<P<PseudoType>> = LazyLock::new(|| new_static_pseudo_type(PseudoTypeKind::Boolean));
+pub static PseudoTypeFalse: LazyLock<P<PseudoType>> = LazyLock::new(|| new_static_pseudo_type(PseudoTypeKind::False));
+pub static PseudoTypeTrue: LazyLock<P<PseudoType>> = LazyLock::new(|| new_static_pseudo_type(PseudoTypeKind::True));
 
 macro_rules! pseudo_type_cast {
     ($name:ident, $variant:ident, $ty:ty) => {

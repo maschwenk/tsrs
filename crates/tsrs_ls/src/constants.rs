@@ -1,0 +1,3 @@
+// constants.go:4
+pub(crate) const MODULE_SPECIFIER_RESOLUTION_LIMIT: i32 = 100;
+pub(crate) const MODULE_SPECIFIER_RESOLUTION_CACHE_ATTEMPT_LIMIT: i32 = 1000;

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use rustc_hash::FxHashSet;
-use tsrs_compiler::{get_diagnostics_of_any_program, new_cached_fs_compiler_host, new_program, ProgramOptions};
+use tsrs_compiler::{get_diagnostics_of_any_program, new_cached_fs_compiler_host, new_program, Context, ProgramOptions};
 use tsrs_core::{tspath, Tristate, P};
 use tsrs_tsoptions::{self as tsoptions, ParseConfigHost};
 use tsrs_vfs::{bundled, osvfs, FS};
@@ -54,11 +54,12 @@ pub fn run(args: DumpArgs) {
     opts.single_threaded = Tristate::True;
     let program = new_program(opts);
     let diags = get_diagnostics_of_any_program(
+        &Context::default(),
         program,
         None,
         false,
-        &mut |file| program.get_bind_diagnostics(file),
-        &mut |file| program.get_semantic_diagnostics(file),
+        &mut |ctx, file| program.get_bind_diagnostics(ctx, file),
+        &mut |ctx, file| program.get_semantic_diagnostics(ctx, file),
     );
     eprintln!("diagnostics: {}", diags.len());
 
@@ -113,7 +114,7 @@ pub fn run(args: DumpArgs) {
                 eprintln!("{kind}: {}/{}", i + 1, files.len());
             }
         }
-        let c = program.get_type_checker();
+        let c = program.get_type_checker(&Context::default());
         writeln!(mw, "#counts\t{}\t{}\t{}", c.type_count, c.symbol_count, c.total_instantiation_count).unwrap();
         drop(c);
         mw.flush().unwrap();

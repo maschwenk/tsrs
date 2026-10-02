@@ -103,6 +103,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "libc"
+version = "0.2.189"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+
+[[package]]
 name = "libmimalloc-sys"
 version = "0.1.49"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -280,6 +286,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_astnav"
+version = "0.1.6"
+dependencies = [
+ "tsrs_ast",
+ "tsrs_core",
+ "tsrs_scanner",
+]
+
+[[package]]
 name = "tsrs_binder"
 version = "0.1.6"
 dependencies = [
@@ -301,6 +316,7 @@ dependencies = [
  "indexmap",
  "rustc-hash",
  "tsrs_ast",
+ "tsrs_astnav",
  "tsrs_binder",
  "tsrs_core",
  "tsrs_diagnostics",
@@ -310,6 +326,7 @@ dependencies = [
  "tsrs_printer",
  "tsrs_pseudochecker",
  "tsrs_scanner",
+ "tsrs_tsoptions",
  "xxhash-rust",
 ]
 
@@ -324,8 +341,10 @@ dependencies = [
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
+ "tsrs_lsp",
  "tsrs_module",
  "tsrs_parser",
+ "tsrs_project",
  "tsrs_scanner",
  "tsrs_tsoptions",
  "tsrs_vfs",
@@ -388,6 +407,85 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_fourslash"
+version = "0.1.6"
+dependencies = [
+ "regex",
+ "rustc-hash",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_ls",
+ "tsrs_lsp",
+ "tsrs_lsproto",
+ "tsrs_modulespecifiers",
+ "tsrs_project",
+ "tsrs_scanner",
+ "tsrs_tsoptions",
+ "tsrs_vfs",
+]
+
+[[package]]
+name = "tsrs_fswatch"
+version = "0.1.6"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "tsrs_ls"
+version = "0.1.6"
+dependencies = [
+ "bitflags",
+ "indexmap",
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_astnav",
+ "tsrs_binder",
+ "tsrs_checker",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_lsproto",
+ "tsrs_module",
+ "tsrs_modulespecifiers",
+ "tsrs_parser",
+ "tsrs_printer",
+ "tsrs_projectutil",
+ "tsrs_scanner",
+ "tsrs_tsoptions",
+ "tsrs_vfs",
+]
+
+[[package]]
+name = "tsrs_lsp"
+version = "0.1.6"
+dependencies = [
+ "indexmap",
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_fswatch",
+ "tsrs_ls",
+ "tsrs_lsproto",
+ "tsrs_project",
+ "tsrs_tsoptions",
+ "tsrs_vfs",
+]
+
+[[package]]
+name = "tsrs_lsproto"
+version = "0.1.6"
+dependencies = [
+ "indexmap",
+ "rustc-hash",
+ "tsrs_core",
+ "tsrs_vfs",
+]
+
+[[package]]
 name = "tsrs_module"
 version = "0.1.6"
 dependencies = [
@@ -438,6 +536,38 @@ dependencies = [
  "tsrs_parser",
  "tsrs_scanner",
  "tsrs_vfs",
+]
+
+[[package]]
+name = "tsrs_project"
+version = "0.1.6"
+dependencies = [
+ "bitflags",
+ "indexmap",
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_binder",
+ "tsrs_checker",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_ls",
+ "tsrs_lsproto",
+ "tsrs_module",
+ "tsrs_parser",
+ "tsrs_projectutil",
+ "tsrs_tsoptions",
+ "tsrs_vfs",
+ "xxhash-rust",
+]
+
+[[package]]
+name = "tsrs_projectutil"
+version = "0.1.6"
+dependencies = [
+ "indexmap",
+ "rustc-hash",
+ "tsrs_core",
 ]
 
 [[package]]

@@ -8,31 +8,37 @@ use tsrs_ast::{
     self as ast, compare_diagnostics, equal_diagnostics, equal_diagnostics_no_related_info, new_compiler_diagnostic, new_diagnostic,
     CommentDirectiveKind, Diagnostic, DiagnosticExt, FileReference, Kind, Node, SourceFile, SourceFileMetaData,
 };
-use crate::checkerpool::{Checker, Context};
+use crate::checkerpool::{Checker, CheckerHandle, CheckerPool, Context};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{CompilerOptions, JsxEmit, ModuleKind, ModuleResolutionKind, ResolutionMode, ScriptKind, ScriptTarget, Tristate, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_module::{self as module, ModeAwareCache, ModeAwareCacheKey, ResolvedModule, ResolvedTypeReferenceDirective, Resolver, ResolverOptions};
 use tsrs_tsoptions::{self as tsoptions, ParsedCommandLine};
 
-use crate::checkerpool::{checkerPool, CheckerGuard};
+use crate::checkerpool::checkerPool;
 use crate::emitter::source_file_may_be_emitted;
 use crate::file_include::{self, FileIncludeReason};
 use crate::fileloader::{
     self, get_default_resolution_mode_for_file, get_emit_syntax_for_usage_location_worker, get_mode_for_usage_location,
-    jsxRuntimeImportSpecifier, process_all_program_files, processedFiles, LibFile,
+    process_all_program_files, processedFiles, DuplicateSourceFile, LibFile,
 };
+use tsrs_core::collections::Set;
 use crate::host::CompilerHost;
 use crate::includeprocessor::includeProcessor;
 use crate::outputpaths;
 use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic};
-use crate::projectreferencefilemapper::{projectReferenceFileMapper, SourceOutputAndProjectReference};
+use crate::projectreferencefilemapper::projectReferenceFileMapper;
+use tsrs_tsoptions::SourceOutputAndProjectReference;
 use crate::fileloader::str_slice;
 use tsrs_module::symlinks::{self, KnownSymlinks};
 use tsrs_module::{ResolutionHost, ResolvedProjectReference};
 
-pub type CreateModuleResolver = Box<dyn Fn(ResolverOptions) -> Box<dyn Resolver> + Send + Sync>;
+pub type CreateModuleResolver = Arc<dyn Fn(ResolverOptions) -> Box<dyn Resolver> + Send + Sync>;
 
+// Go `ProgramFactories.CreateCheckerPool func(*Program) CheckerPool`.
+pub type CreateCheckerPool = Arc<dyn Fn(&'static Program) -> Box<dyn CheckerPool> + Send + Sync>;
+
+// Go `ProgramOptions` (= ProgramConfig + ProgramHosts + ProgramFactories, flattened; tracing is not ported).
 pub struct ProgramOptions {
     pub config: P<ParsedCommandLine>,
     pub use_source_of_project_reference: bool,
@@ -43,6 +49,7 @@ pub struct ProgramOptions {
     // still collecting import metadata needed for emit.
     pub skip_module_resolution: bool,
     pub host: Arc<dyn CompilerHost>,
+    pub create_checker_pool: Option<CreateCheckerPool>,
     pub create_module_resolver: Option<CreateModuleResolver>,
 }
 
@@ -56,7 +63,28 @@ impl ProgramOptions {
             project_name: String::new(),
             skip_module_resolution: false,
             host,
+            create_checker_pool: None,
             create_module_resolver: None,
+        }
+    }
+
+    // Go `ProgramOptions{ProgramConfig: config, Host: host, CreateCheckerPool: ..., CreateModuleResolver: ...}`.
+    pub fn from_config(
+        config: ProgramConfig,
+        host: Arc<dyn CompilerHost>,
+        create_checker_pool: Option<CreateCheckerPool>,
+        create_module_resolver: Option<CreateModuleResolver>,
+    ) -> ProgramOptions {
+        ProgramOptions {
+            config: config.config,
+            use_source_of_project_reference: config.use_source_of_project_reference,
+            single_threaded: config.single_threaded,
+            typings_location: config.typings_location,
+            project_name: config.project_name,
+            skip_module_resolution: config.skip_module_resolution,
+            host,
+            create_checker_pool,
+            create_module_resolver,
         }
     }
 
@@ -83,42 +111,74 @@ pub struct ProgramConfig {
 }
 
 impl ProgramConfig {
+    // program.go:64
     pub(crate) fn can_use_project_reference_source(&self) -> bool {
         self.use_source_of_project_reference && !self.config.compiler_options().unwrap().disable_source_of_project_reference_redirect.is_true()
     }
+}
+
+// program.go:91
+pub(crate) struct packageNamesInfo {
+    resolved: Set<String>,
+    unresolved: Set<String>,
+    deep_import_packages: Set<String>,
+}
+
+// Go `checkerPool CheckerPool` + `compilerCheckerPool *checkerPool`: the built-in pool is set only when
+// `CreateCheckerPool` was not provided; it enables grouped parallel iteration, non-exclusive access for emit,
+// and direct global diagnostics collection.
+enum programCheckerPool {
+    Compiler(checkerPool),
+    External(Box<dyn CheckerPool>),
 }
 
 pub struct Program {
     pub(crate) opts: ProgramConfig,
     host: Arc<dyn CompilerHost>,
     resolution_host: &'static dyn ResolutionHost,
-    resolution_data: P<module::ResolutionData>,
-    checker_pool: OnceLock<checkerPool>,
+    pub(crate) resolution_data: P<module::ResolutionData>,
+    // Always set once the program is constructed (see `init_checker_pool`).
+    checker_pool: OnceLock<programCheckerPool>,
     pub(crate) include_processor: includeProcessor,
     module_resolution_error: Option<String>,
 
     pub(crate) compare_paths_options: ComparePathsOptions,
 
-    processed: processedFiles,
-    project_reference_file_mapper: projectReferenceFileMapper,
+    // Go's embedded `processedFiles`: `files` and `filesByPath` are per program (ReuseProgram replaces one file);
+    // the rest is shared by the programs ReuseProgram derives from this one, as Go's shallow struct copy shares it.
+    pub(crate) files: &'static [P<SourceFile>],
+    pub(crate) files_by_path: FxHashMap<Path, P<SourceFile>>,
+    processed: &'static processedFiles,
+    project_reference_file_mapper: &'static projectReferenceFileMapper,
     processing_diagnostics: Mutex<Vec<processingDiagnostic>>,
 
     uses_uri_style_node_core_modules: Tristate,
 
     common_source_directory: OnceLock<String>,
 
+    declaration_diagnostic_cache: Mutex<FxHashMap<P<SourceFile>, Vec<P<Diagnostic>>>>,
+
     program_diagnostics: Vec<P<Diagnostic>>,
     has_emit_blocking_diagnostics: FxHashSet<Path>,
 
-    packages_map: OnceLock<FxHashMap<String, bool>>,
+    // Cached unresolved imports for ATA
+    unresolved_imports: OnceLock<Arc<Set<String>>>,
     known_symlinks: OnceLock<P<KnownSymlinks>>,
-    declaration_diagnostic_cache: Mutex<FxHashMap<P<SourceFile>, Vec<P<Diagnostic>>>>,
+
+    // Used by auto-imports
+    package_names: OnceLock<Arc<packageNamesInfo>>,
+
+    // Used by workspace/symbol
+    has_ts_file: OnceLock<bool>,
+
+    // Cached map of package names to whether they bundle types
+    packages_map: OnceLock<FxHashMap<String, bool>>,
 }
 
 impl std::ops::Deref for Program {
     type Target = processedFiles;
     fn deref(&self) -> &processedFiles {
-        &self.processed
+        self.processed
     }
 }
 
@@ -170,28 +230,61 @@ impl Program {
         file_name.to_string()
     }
 
-    pub fn get_project_reference_from_source(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference> {
+    // program.go:209
+    pub fn get_project_reference_from_source(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
         self.project_reference_file_mapper.get_project_reference_from_source(path)
     }
 
+    // program.go:214
     pub fn is_source_from_project_reference(&self, path: &Path) -> bool {
         self.project_reference_file_mapper.is_source_from_project_reference(path)
     }
 
-    pub fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference> {
+    // program.go:218
+    pub fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
         self.project_reference_file_mapper.get_project_reference_from_output_dts(path)
     }
 
-    pub fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<&'static dyn ResolvedProjectReference> {
+    // program.go:222
+    pub fn get_resolved_project_reference_for(&self, path: &Path) -> (Option<P<ParsedCommandLine>>, bool) {
+        self.project_reference_file_mapper.get_resolved_reference_for(path)
+    }
+
+    // program.go:226
+    pub fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<P<ParsedCommandLine>> {
         self.project_reference_file_mapper.get_redirect_for_resolution(file.file_name(), &file.path()).0
     }
 
+    // program.go:231
     pub fn get_parse_file_redirect(&self, file_name: &str) -> String {
         self.project_reference_file_mapper.get_parse_file_redirect(file_name, &self.to_path(file_name))
     }
 
-    pub fn get_resolved_project_references(&self) -> Vec<P<ParsedCommandLine>> {
+    // program.go:235
+    pub fn get_resolved_project_references(&self) -> Vec<Option<P<ParsedCommandLine>>> {
         self.project_reference_file_mapper.get_resolved_project_references()
+    }
+
+    // program.go:239
+    pub fn range_resolved_project_reference(
+        &self,
+        f: impl FnMut(&Path, Option<P<ParsedCommandLine>>, P<ParsedCommandLine>, usize) -> bool,
+    ) -> bool {
+        self.project_reference_file_mapper.range_resolved_project_reference(f)
+    }
+
+    // program.go:243
+    pub fn range_resolved_project_reference_in_child_config(
+        &self,
+        child_config: Option<P<ParsedCommandLine>>,
+        f: impl FnMut(&Path, Option<P<ParsedCommandLine>>, P<ParsedCommandLine>, usize) -> bool,
+    ) -> bool {
+        self.project_reference_file_mapper.range_resolved_project_reference_in_child_config(child_config, f)
+    }
+
+    // program.go:183
+    pub fn package_json_cache_entries(&self, f: impl FnMut(&Path, &P<tsrs_module::packagejson::InfoCacheEntry>) -> bool) {
+        self.resolution_data.package_json_cache_entries(f)
     }
 
     pub fn use_case_sensitive_file_names(&self) -> bool {
@@ -242,51 +335,349 @@ pub(crate) fn worker_pool() -> &'static rayon::ThreadPool {
     POOL.get_or_init(|| rayon::ThreadPoolBuilder::new().stack_size(256 << 20).build().unwrap())
 }
 
+// program.go:305
 pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let single_threaded = opts.single_threaded.default_if_unknown(opts.config.compiler_options().unwrap().single_threaded).is_true();
     let (mut processed, resolution_data, module_resolution_error) = process_all_program_files(&opts, single_threaded);
-    let project_reference_file_mapper = processed.project_reference_file_mapper.take().unwrap();
+    let project_reference_file_mapper: &'static projectReferenceFileMapper = processed.project_reference_file_mapper.take().unwrap();
     let processing_diagnostics = std::mem::take(&mut processed.file_include_data.processing_diagnostics);
+    let files = std::mem::take(&mut processed.files);
+    let files_by_path = std::mem::take(&mut processed.files_by_path);
     let host = opts.host.clone();
     let mut p = Program {
         opts: opts.program_config(),
-        compare_paths_options: ComparePathsOptions {
-            use_case_sensitive_file_names: host.fs().use_case_sensitive_file_names(),
-            current_directory: host.get_current_directory().to_string(),
-        },
+        // Go's NewProgram never sets `comparePathsOptions`: it is the zero value (no current directory,
+        // case-insensitive), which e.g. makes IsGlobalTypingsFile false when no typings location is set.
+        compare_paths_options: ComparePathsOptions::default(),
         resolution_host: crate::projectreferencefilemapper::resolution_host_for(host.clone()),
         host,
         resolution_data,
         checker_pool: OnceLock::new(),
         include_processor: includeProcessor::default(),
         module_resolution_error,
-        processed,
+        files,
+        files_by_path,
+        processed: Box::leak(Box::new(processed)),
         project_reference_file_mapper,
         processing_diagnostics: Mutex::new(processing_diagnostics),
         uses_uri_style_node_core_modules: Tristate::Unknown,
         common_source_directory: OnceLock::new(),
+        declaration_diagnostic_cache: Mutex::new(FxHashMap::default()),
         program_diagnostics: Vec::new(),
         has_emit_blocking_diagnostics: FxHashSet::default(),
-        packages_map: OnceLock::new(),
+        unresolved_imports: OnceLock::new(),
         known_symlinks: OnceLock::new(),
-        declaration_diagnostic_cache: Mutex::new(FxHashMap::default()),
+        package_names: OnceLock::new(),
+        has_ts_file: OnceLock::new(),
+        packages_map: OnceLock::new(),
     };
-    p.init_checker_pool();
+    // Go initializes the checker pool before verifying options; the pool factory takes the program by
+    // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
+    // verification writes (checkers are created lazily).
     tsrs_core::phases::time("Program: verify options", || p.verify_compiler_options());
-    Box::leak(Box::new(p))
+    let p: &'static Program = Box::leak(Box::new(p));
+    // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
+    tsrs_core::census_scrub_stack();
+    p.init_checker_pool(opts.create_checker_pool.as_ref());
+    p
+}
+
+// Frees a program made by `new_program` or `update_program` (language server; Go's GC). The caller guarantees that
+// nothing uses it any more: no checker of its pool is held, and no snapshot or language service refers to it. What
+// it shares with other versions (`processed`, the project reference file mapper) stays.
+//
+// # Safety
+// `program` came from `new_program` / `update_program` and is not used afterwards.
+pub unsafe fn free_program(program: &'static Program) {
+    let resolution_host: *const dyn ResolutionHost = program.resolution_host;
+    drop(Box::from_raw(program as *const Program as *mut Program));
+    // Per program (`resolution_host_for`); it keeps the compiler host alive.
+    drop(Box::from_raw(resolution_host as *mut dyn ResolutionHost));
 }
 
 impl Program {
-    fn init_checker_pool(&mut self) {
+    // program.go:323
+    // Return an updated program for which it is known that only the file with the given path has changed.
+    // In addition to a new program, return a boolean indicating whether the data of the old program was reused.
+    // The returned *ast.SourceFile is the changed file as acquired through newHost; it is nil
+    // only if the host cannot locate the file (e.g. it was deleted). Callers that manage
+    // host-side parse caches must release this exact pointer when the old program could not be
+    // reused, since it was acquired speculatively before that decision was made.
+    pub fn update_program(
+        &'static self,
+        changed_file_path: &Path,
+        new_host: Arc<dyn CompilerHost>,
+        create_checker_pool: Option<CreateCheckerPool>,
+        create_module_resolver: Option<CreateModuleResolver>,
+    ) -> (&'static Program, Option<P<SourceFile>>, bool) {
+        let (result, new_file, reused) = self.reuse_program(changed_file_path, new_host.clone(), create_checker_pool.clone(), create_module_resolver.clone());
+        if reused {
+            (result.unwrap(), new_file, true)
+        } else {
+            (new_program(ProgramOptions::from_config(self.opts.clone(), new_host, create_checker_pool, create_module_resolver)), new_file, false)
+        }
+    }
+
+    // program.go:347
+    // ReuseProgram attempts to produce a new program by replacing only
+    // changedFilePath in place, reusing the rest of p. It returns
+    // (newProgram, newFile, true) on success, or (nil, newFile, false) when the
+    // file cannot be replaced in place. Unlike UpdateProgram, it never constructs a
+    // full fallback program, so callers that build their own fallback (e.g. with a
+    // different host) do not pay for a discarded program build.
+    pub fn reuse_program(
+        &'static self,
+        changed_file_path: &Path,
+        new_host: Arc<dyn CompilerHost>,
+        create_checker_pool: Option<CreateCheckerPool>,
+        _create_module_resolver: Option<CreateModuleResolver>,
+    ) -> (Option<&'static Program>, Option<P<SourceFile>>, bool) {
+        let old_file = self.files_by_path[changed_file_path];
+        // Content mappers are not ported: no file is content-mapped (`oldFile.ContentMapper() == ""`), so the
+        // supplemental file lists are always empty.
+        let old_supplemental_files: &[P<SourceFile>] = &[];
+        let new_supplemental_files: &[P<SourceFile>] = &[];
+        let new_file = new_host.get_source_file(old_file.parse_options().clone());
+
+        // If this file is part of a package redirect group (same package installed in multiple
+        // node_modules locations), we need to rebuild the program because the redirect targets
+        // might need recalculation.
+        let in_redirect_files = self.redirect_files_by_path.contains_key(changed_file_path);
+        let is_redirect_target = self.redirect_targets_map.contains_key(changed_file_path);
+        if in_redirect_files || is_redirect_target {
+            return (None, new_file, false);
+        }
+
+        if self.module_resolution_error.is_some() || !self.can_replace_file_in_program(old_file, new_file) {
+            return (None, new_file, false);
+        }
+        let new_file_some = new_file.unwrap();
+        // Cloning does not recompute synthetic helper or JSX-runtime import bookkeeping. Fall back to a full
+        // build whenever either version requires those imports.
+        if self.import_helpers_import_specifiers.contains_key(old_file.path()) || self.needs_import_helpers_import_specifier(new_file_some) {
+            return (None, new_file, false);
+        }
+        if self.jsx_runtime_import_specifiers.contains_key(old_file.path()) || !self.jsx_runtime_import_specifier(new_file_some).is_empty() {
+            return (None, new_file, false);
+        }
+        if old_supplemental_files.len() != new_supplemental_files.len() {
+            return (None, new_file, false);
+        }
+        for (i, &old_supplemental) in old_supplemental_files.iter().enumerate() {
+            let new_supplemental = new_supplemental_files[i];
+            if old_supplemental.path() != new_supplemental.path() || !self.can_replace_file_in_program(old_supplemental, Some(new_supplemental)) {
+                return (None, new_file, false);
+            }
+            if self.import_helpers_import_specifiers.contains_key(old_supplemental.path()) || self.needs_import_helpers_import_specifier(new_supplemental) {
+                return (None, new_file, false);
+            }
+            if self.jsx_runtime_import_specifiers.contains_key(old_supplemental.path()) || !self.jsx_runtime_import_specifier(new_supplemental).is_empty() {
+                return (None, new_file, false);
+            }
+        }
+        // TODO: reverify compiler options when config has changed?
+        let mut result = Program {
+            opts: self.opts.clone(),
+            resolution_host: crate::projectreferencefilemapper::resolution_host_for(new_host.clone()),
+            host: new_host,
+            resolution_data: self.resolution_data.clone_data(),
+            checker_pool: OnceLock::new(),
+            include_processor: includeProcessor::default(),
+            module_resolution_error: None,
+            compare_paths_options: self.compare_paths_options.clone(),
+            files: self.files,
+            files_by_path: FxHashMap::default(),
+            processed: self.processed,
+            project_reference_file_mapper: self.project_reference_file_mapper,
+            processing_diagnostics: Mutex::new(self.processing_diagnostics().clone()),
+            uses_uri_style_node_core_modules: self.uses_uri_style_node_core_modules,
+            common_source_directory: OnceLock::new(),
+            declaration_diagnostic_cache: Mutex::new(FxHashMap::default()),
+            program_diagnostics: self.program_diagnostics.clone(),
+            has_emit_blocking_diagnostics: self.has_emit_blocking_diagnostics.clone(),
+            unresolved_imports: OnceLock::new(),
+            known_symlinks: OnceLock::new(),
+            package_names: OnceLock::new(),
+            has_ts_file: OnceLock::new(),
+            packages_map: OnceLock::new(),
+        };
+        try_reuse(&result.unresolved_imports, &self.unresolved_imports);
+        try_reuse(&result.known_symlinks, &self.known_symlinks);
+        try_reuse(&result.package_names, &self.package_names);
+        let index = result.files.iter().position(|file| file.path() == new_file_some.path()).unwrap();
+        let mut files = result.files.to_vec();
+        files[index] = new_file_some;
+        result.files_by_path = self.files_by_path.clone();
+        result.files_by_path.insert(new_file_some.path().clone(), new_file_some);
+        for (i, &old_supplemental) in old_supplemental_files.iter().enumerate() {
+            let new_supplemental = new_supplemental_files[i];
+            let supplemental_index = files.iter().position(|&file| file == old_supplemental).unwrap();
+            files[supplemental_index] = new_supplemental;
+            result.files_by_path.insert(new_supplemental.path().clone(), new_supplemental);
+        }
+        result.files = tsrs_core::alloc_vec(files);
+        let result: &'static Program = Box::leak(Box::new(result));
+        tsrs_core::census_scrub_stack();
+        result.init_checker_pool(create_checker_pool.as_ref());
+        (Some(result), new_file, true)
+    }
+
+    // program.go:443
+    fn init_checker_pool(&'static self, create: Option<&CreateCheckerPool>) {
         if !self.finished_processing {
             panic!("Program must finish processing files before initializing checker pool");
         }
-        let pool = checkerPool::new(self);
-        let _ = self.checker_pool.set(pool);
+
+        let pool = match create {
+            Some(create) => programCheckerPool::External(create(self)),
+            None => programCheckerPool::Compiler(checkerPool::new(self)),
+        };
+        if self.checker_pool.set(pool).is_err() {
+            panic!("checker pool initialized twice");
+        }
     }
 
+    // program.go:458
+    // GetCheckerPool returns the checker pool associated with this program.
+    pub fn get_checker_pool(&self) -> &dyn CheckerPool {
+        match self.checker_pool.get().unwrap() {
+            programCheckerPool::Compiler(pool) => pool,
+            programCheckerPool::External(pool) => &**pool,
+        }
+    }
+
+    // Go `p.compilerCheckerPool` (nil when the program was created with `CreateCheckerPool`).
+    pub(crate) fn compiler_checker_pool(&self) -> Option<&checkerPool> {
+        match self.checker_pool.get() {
+            Some(programCheckerPool::Compiler(pool)) => Some(pool),
+            _ => None,
+        }
+    }
+
+    // The built-in pool, for the CLI's statistics; panics on a program with an external pool.
     pub(crate) fn pool(&self) -> &checkerPool {
-        self.checker_pool.get().unwrap()
+        self.compiler_checker_pool().expect("program uses an external checker pool")
+    }
+
+    // program.go:462
+    fn can_replace_file_in_program(&self, file1: P<SourceFile>, file2: Option<P<SourceFile>>) -> bool {
+        let Some(file2) = file2 else {
+            return false;
+        };
+        file1.parse_options() == file2.parse_options()
+            && file1.script_kind.get() == file2.script_kind.get()
+            && ast::is_external_or_common_js_module(file1) == ast::is_external_or_common_js_module(file2)
+            && file1.uses_uri_style_node_core_modules() == file2.uses_uri_style_node_core_modules()
+            && equal_func(file1.imports(), file2.imports(), |n1, n2| {
+                equal_module_specifiers(n1, n2) && self.get_mode_for_usage_location(file1, n1) == self.get_mode_for_usage_location(file2, n2)
+            })
+            && equal_func(file1.module_augmentations(), file2.module_augmentations(), |n1, n2| equal_module_augmentation_names(n1, n2))
+            && file1.ambient_module_names() == file2.ambient_module_names()
+            && equal_func(file1.referenced_files(), file2.referenced_files(), |f1, f2| equal_file_references(f1, f2))
+            && equal_func(file1.type_reference_directives.get(), file2.type_reference_directives.get(), |f1, f2| equal_file_references(f1, f2))
+            && equal_func(file1.lib_reference_directives.get(), file2.lib_reference_directives.get(), |f1, f2| equal_file_references(f1, f2))
+            && equal_check_js_directives(file1.check_js_directive.get(), file2.check_js_directive.get())
+    }
+
+    // program.go:480
+    fn needs_import_helpers_import_specifier(&self, file: P<SourceFile>) -> bool {
+        let (redirect, _) = self.project_reference_file_mapper.get_redirect_for_resolution(file.file_name(), file.path());
+        let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
+        let options_for_file = module::get_compiler_options_with_redirect(self.opts.config.compiler_options().unwrap(), redirect);
+        if !options_for_file.import_helpers.is_true() {
+            return false;
+        }
+        let is_java_script_file = ast::is_source_file_js(file);
+        let is_external_module_file = ast::is_external_module(file);
+        if !is_java_script_file && (file.is_declaration_file.get() || (!options_for_file.get_isolated_modules() && !is_external_module_file)) {
+            return false;
+        }
+        true
+    }
+
+    // program.go:494
+    fn jsx_runtime_import_specifier(&self, file: P<SourceFile>) -> String {
+        if !ast::is_source_file_js(file) && file.script_kind.get() != ScriptKind::TSX {
+            return String::new();
+        }
+        let (redirect, _) = self.project_reference_file_mapper.get_redirect_for_resolution(file.file_name(), file.path());
+        let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
+        let options_for_file = module::get_compiler_options_with_redirect(self.opts.config.compiler_options().unwrap(), redirect);
+        ast::get_jsx_runtime_import(&ast::get_jsx_implicit_import_base(&options_for_file, Some(file)), &options_for_file)
+    }
+
+    // program.go:519
+    pub fn source_files(&self) -> &'static [P<SourceFile>] {
+        self.files
+    }
+
+    // program.go:520
+    pub fn duplicate_source_files(&self) -> &[DuplicateSourceFile] {
+        &self.processed.duplicate_source_files
+    }
+
+    // program.go:521
+    pub fn options(&self) -> P<CompilerOptions> {
+        self.opts.config.compiler_options().unwrap()
+    }
+
+    // program.go:536 (content mappers are not ported)
+    pub fn content_mapper_extensions(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    // program.go:537
+    pub fn command_line(&self) -> P<ParsedCommandLine> {
+        self.opts.config
+    }
+
+    // program.go:538
+    pub fn host(&self) -> &Arc<dyn CompilerHost> {
+        &self.host
+    }
+
+    // program.go:540
+    pub fn get_config_file_parsing_diagnostics(&self) -> Vec<P<Diagnostic>> {
+        self.opts.config.get_config_file_parsing_diagnostics().to_vec()
+    }
+
+    // program.go:546
+    // GetUnresolvedImports returns the unresolved imports for this program.
+    // The result is cached and computed only once.
+    pub fn get_unresolved_imports(&self) -> &Set<String> {
+        self.unresolved_imports.get_or_init(|| Arc::new(self.extract_unresolved_imports()))
+    }
+
+    // program.go:550
+    fn extract_unresolved_imports(&self) -> Set<String> {
+        let mut unresolved_set = Set::default();
+
+        for &source_file in self.files {
+            let unresolved_imports = self.extract_unresolved_imports_from_source_file(source_file);
+            for imp in unresolved_imports {
+                unresolved_set.add(imp);
+            }
+        }
+
+        unresolved_set
+    }
+
+    // program.go:563
+    fn extract_unresolved_imports_from_source_file(&self, file: P<SourceFile>) -> Vec<String> {
+        let mut unresolved_imports = Vec::new();
+
+        if let Some(resolved_modules) = self.resolved_modules.get(file.path()) {
+            for (cache_key, resolution) in resolved_modules {
+                let resolved = resolution.is_resolved();
+                if (!resolved || !tspath::extension_is_one_of(resolution.extension, tspath::SUPPORTED_TS_EXTENSIONS_WITH_JSON_FLAT))
+                    && !tspath::is_external_module_name_relative(cache_key.name)
+                {
+                    unresolved_imports.push(cache_key.name.to_string());
+                }
+            }
+        }
+
+        unresolved_imports
     }
 
     pub fn checker_count(&self) -> usize {
@@ -307,30 +698,12 @@ impl Program {
         self.processing_diagnostics.lock().unwrap().push(d);
     }
 
-    pub fn source_files(&self) -> &[P<SourceFile>] {
-        &self.files
-    }
-
-    pub fn options(&self) -> P<CompilerOptions> {
-        self.opts.config.compiler_options().unwrap()
-    }
-
-    pub fn command_line(&self) -> P<ParsedCommandLine> {
-        self.opts.config
-    }
-
-    pub fn host(&self) -> &Arc<dyn CompilerHost> {
-        &self.host
-    }
-
-    pub fn get_config_file_parsing_diagnostics(&self) -> Vec<P<Diagnostic>> {
-        self.opts.config.get_config_file_parsing_diagnostics().to_vec()
-    }
-
+    // program.go:578
     pub fn single_threaded(&self) -> bool {
         self.opts.single_threaded.default_if_unknown(self.options().single_threaded).is_true()
     }
 
+    // program.go:582
     pub fn bind_source_files(&self) {
         let unbound: Vec<P<SourceFile>> = self.files.iter().copied().filter(|f| !f.is_bound()).collect();
         if self.single_threaded() {
@@ -342,17 +715,42 @@ impl Program {
         }
     }
 
+    // program.go:598
     // Return the type checker associated with the program.
-    pub fn get_type_checker(&'static self) -> CheckerGuard<'static> {
-        self.pool().get_checker(self, None)
+    pub fn get_type_checker(&self, ctx: &Context) -> CheckerHandle {
+        if let Some(pool) = self.compiler_checker_pool() {
+            return pool.get_checker_non_exclusive();
+        }
+        self.get_checker_pool().get_checker(ctx, None)
     }
 
+    // program.go:605
+    pub fn for_each_checker_parallel(&self, cb: impl Fn(usize, &mut Checker) + Sync) {
+        if let Some(pool) = self.compiler_checker_pool() {
+            pool.for_each_checker_parallel(cb);
+        }
+    }
+
+    // program.go:615
     // Return a checker for the given file. We may have multiple checkers in concurrent scenarios and this
     // method returns the checker that was tasked with checking the file. Note that it isn't possible to mix
     // types obtained from different checkers, so only non-type data (such as diagnostics or string
     // representations of types) should be obtained from checkers returned by this method.
-    pub fn get_type_checker_for_file(&'static self, file: P<SourceFile>) -> CheckerGuard<'static> {
-        self.pool().get_checker(self, Some(file))
+    pub fn get_type_checker_for_file(&self, ctx: &Context, file: P<SourceFile>) -> CheckerHandle {
+        if let Some(pool) = self.compiler_checker_pool() {
+            return pool.get_checker_for_file_non_exclusive(file);
+        }
+        self.get_checker_pool().get_checker(ctx, Some(file))
+    }
+
+    // program.go:624
+    // Return a checker for the given file, locked to the current thread to prevent data races from multiple threads
+    // accessing the same checker. The lock will be released when the `done` function is called.
+    pub fn get_type_checker_for_file_exclusive(&self, ctx: &Context, file: P<SourceFile>) -> CheckerHandle {
+        if let Some(pool) = self.compiler_checker_pool() {
+            return pool.get_checker_for_file_exclusive(file);
+        }
+        self.get_checker_pool().get_checker(ctx, Some(file))
     }
 
     pub fn get_resolved_module(&self, file: P<SourceFile>, module_reference: &str, mode: ResolutionMode) -> Option<P<ResolvedModule>> {
@@ -397,71 +795,101 @@ impl Program {
         })
     }
 
+    // program.go:675
     // collectDiagnostics collects diagnostics from a single file or all files.
+    // If sourceFile is non-nil, returns diagnostics for just that file.
+    // If sourceFile is nil, returns diagnostics for all files in the program.
     fn collect_diagnostics(
         &self,
+        ctx: &Context,
         source_file: Option<P<SourceFile>>,
         concurrent: bool,
-        collect: impl Fn(P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
+        collect: impl Fn(&Context, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
     ) -> Vec<P<Diagnostic>> {
         let result = match source_file {
-            Some(file) => collect(file),
+            Some(file) => collect(ctx, file),
             None => {
-                let diagnostics = self.collect_diagnostics_from_files(&self.files, concurrent, &collect);
+                let diagnostics = self.collect_diagnostics_from_files(ctx, self.files, concurrent, &collect);
                 diagnostics.concat()
             }
         };
         filter_and_sort_diagnostics(result)
     }
 
+    // program.go:686
     fn collect_diagnostics_from_files(
         &self,
+        ctx: &Context,
         source_files: &[P<SourceFile>],
         concurrent: bool,
-        collect: &(impl Fn(P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
+        collect: &(impl Fn(&Context, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
     ) -> Vec<Vec<P<Diagnostic>>> {
         if !concurrent || self.single_threaded() {
-            source_files.iter().map(|&f| collect(f)).collect()
+            source_files.iter().map(|&f| collect(ctx, f)).collect()
         } else {
-            source_files.par_iter().map(|&f| collect(f)).collect()
+            source_files.par_iter().map(|&f| collect(ctx, f)).collect()
         }
     }
 
+    // program.go:703
     // collectCheckerDiagnostics collects diagnostics from a single file or all files,
-    // using a callback that receives the checker for each file. Files are grouped by checker and
-    // processed with one task per checker.
+    // using a callback that receives the checker for each file. When the checker pool
+    // supports grouped iteration (compiler pool), files are grouped by checker and
+    // processed in parallel with one task per checker, reducing contention and improving
+    // cache locality. Otherwise, falls back to per-file concurrent collection.
     fn collect_checker_diagnostics(
         &'static self,
+        ctx: &Context,
         source_file: Option<P<SourceFile>>,
-        collect: impl Fn(&mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
+        collect: impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
     ) -> Vec<P<Diagnostic>> {
         if let Some(source_file) = source_file {
             if self.skip_type_checking(source_file, false) {
                 return Vec::new();
             }
-            let mut c = self.get_type_checker_for_file(source_file);
-            let result = collect(&mut c, source_file);
+            let mut c = self.get_type_checker_for_file_exclusive(ctx, source_file);
+            let result = collect(ctx, &mut c, source_file);
             drop(c);
             return filter_and_sort_diagnostics(result);
         }
-        filter_and_sort_diagnostics(self.collect_checker_diagnostics_from_files(&self.files, &collect).concat())
+        filter_and_sort_diagnostics(self.collect_checker_diagnostics_from_files(ctx, self.files, &collect).concat())
     }
 
+    // program.go:728
     // collectCheckerDiagnosticsFromFiles collects checker diagnostics for a list of files.
     fn collect_checker_diagnostics_from_files(
         &'static self,
+        ctx: &Context,
         source_files: &[P<SourceFile>],
-        collect: &(impl Fn(&mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
+        collect: &(impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
     ) -> Vec<Vec<P<Diagnostic>>> {
         let diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = source_files.iter().map(|_| Mutex::new(Vec::new())).collect();
-        self.pool().for_each_checker_group_do(self, source_files, self.single_threaded(), |c, file_index, file| {
-            *diagnostics[file_index].lock().unwrap() = collect(c, file);
-        });
+        if let Some(pool) = self.compiler_checker_pool() {
+            pool.for_each_checker_group_do(source_files, self.single_threaded(), |c, file_index, file| {
+                *diagnostics[file_index].lock().unwrap() = collect(ctx, c, file);
+            });
+        } else {
+            let run = |i: usize, file: P<SourceFile>| {
+                if self.skip_type_checking(file, false) {
+                    return;
+                }
+                let mut c = self.get_checker_pool().get_checker(ctx, Some(file));
+                *diagnostics[i].lock().unwrap() = collect(ctx, &mut c, file);
+                drop(c);
+            };
+            if self.single_threaded() {
+                // Go's single-threaded work group runs queued functions last-queued first.
+                source_files.iter().enumerate().rev().for_each(|(i, &file)| run(i, file));
+            } else {
+                worker_pool().install(|| source_files.par_iter().enumerate().for_each(|(i, &file)| run(i, file)));
+            }
+        }
         diagnostics.into_iter().map(|d| d.into_inner().unwrap()).collect()
     }
 
-    pub fn get_syntactic_diagnostics(&self, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        self.collect_diagnostics(source_file, false /*concurrent*/, |file| {
+    // program.go:751
+    pub fn get_syntactic_diagnostics(&self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        self.collect_diagnostics(ctx, source_file, false /*concurrent*/, |_, file| {
             let mut diags: Vec<P<Diagnostic>> = file.diagnostics().to_vec();
             diags.extend_from_slice(file.js_diagnostics());
             // For JS files that won't be checked by the checker (no checkJs/ts-check), we need
@@ -474,22 +902,44 @@ impl Program {
         })
     }
 
-    pub fn get_bind_diagnostics(&self, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+    // program.go:795
+    pub fn get_bind_diagnostics(&self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         match source_file {
             Some(file) => tsrs_binder::bind_source_file(file),
             None => self.bind_source_files(),
         }
-        self.collect_diagnostics(source_file, false /*concurrent*/, |file| file.bind_diagnostics().to_vec())
+        self.collect_diagnostics(ctx, source_file, false /*concurrent*/, |_, file| file.bind_diagnostics().to_vec())
     }
 
-    pub fn get_semantic_diagnostics(&'static self, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        self.collect_checker_diagnostics(source_file, |c, file| self.get_semantic_diagnostics_with_checker(c, file))
+    // program.go:806
+    pub fn get_semantic_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        self.collect_checker_diagnostics(ctx, source_file, |ctx, c, file| self.get_semantic_diagnostics_with_checker(ctx, c, file))
     }
 
-    pub fn get_suggestion_diagnostics(&'static self, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        self.collect_checker_diagnostics(source_file, |c, file| self.get_suggestion_diagnostics_with_checker(c, file))
+    // program.go:812
+    // GetSemanticDiagnosticsForIncremental includes newly discovered globals in each
+    // file's cached diagnostics and leaves noEmit filtering to the builder.
+    pub fn get_semantic_diagnostics_for_incremental(
+        &'static self,
+        ctx: &Context,
+        source_files: &[P<SourceFile>],
+    ) -> FxHashMap<P<SourceFile>, Vec<P<Diagnostic>>> {
+        let all_diags = self.collect_checker_diagnostics_from_files(ctx, source_files, &|ctx: &Context, c: &mut Checker, file: P<SourceFile>| {
+            self.get_bind_and_check_diagnostics_with_checker(ctx, c, file, true /*includeDeferredGlobals*/)
+        });
+        let mut result = FxHashMap::default();
+        for (i, diags) in all_diags.into_iter().enumerate() {
+            result.insert(source_files[i], filter_and_sort_diagnostics(diags));
+        }
+        result
     }
 
+    // program.go:823
+    pub fn get_suggestion_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        self.collect_checker_diagnostics(ctx, source_file, |ctx, c, file| self.get_suggestion_diagnostics_with_checker(ctx, c, file))
+    }
+
+    // program.go:827
     pub fn get_program_diagnostics(&'static self) -> Vec<P<Diagnostic>> {
         let mut all = self.program_diagnostics.clone();
         all.extend(self.include_processor.get_diagnostics(self).lock().unwrap().get_global_diagnostics());
@@ -1259,31 +1709,88 @@ impl Program {
         self.has_emit_blocking_diagnostics.contains(&self.to_path(emit_file_name))
     }
 
+    // program.go:1402
     fn verify_project_references(&mut self) {
-        // Project references are not ported; with no resolved references this loop never runs.
-        self.project_reference_file_mapper.range_resolved_project_reference(|_, _, _, _| true);
+        let build_info_file_name =
+            if !self.options().suppress_output_path_check.is_true() { self.opts.config.get_build_info_file_name() } else { String::new() };
+        let mut program_diagnostics = Vec::new();
+        let mut emit_blocking = Vec::new();
+        let mut create_diagnostic_for_reference = |config: P<ParsedCommandLine>, index: usize, message: &'static Message, args: &[&dyn Display]| {
+            let diag = tsoptions::create_diagnostic_at_reference_syntax(&config, index, message, args)
+                .unwrap_or_else(|| new_compiler_diagnostic(message, args));
+            program_diagnostics.push(diag);
+        };
+
+        self.project_reference_file_mapper.range_resolved_project_reference(|_path, config, parent, index| {
+            let ref_ = &parent.project_references()[index];
+            // !!! Deprecated in 5.0 and removed since 5.5
+            // verifyRemovedProjectReference(ref, parent, index);
+            let Some(config) = config else {
+                create_diagnostic_for_reference(parent, index, &diagnostics::File_0_not_found, &[&ref_.path]);
+                return true;
+            };
+            let ref_options = config.compiler_options().unwrap();
+            if !ref_options.composite.is_true() || ref_options.no_emit.is_true() {
+                if !parent.file_names().is_empty() {
+                    if !ref_options.composite.is_true() {
+                        create_diagnostic_for_reference(parent, index, &diagnostics::Referenced_project_0_must_have_setting_composite_Colon_true, &[&ref_.path]);
+                    }
+                    if ref_options.no_emit.is_true() {
+                        create_diagnostic_for_reference(parent, index, &diagnostics::Referenced_project_0_may_not_disable_emit, &[&ref_.path]);
+                    }
+                }
+            }
+            if !build_info_file_name.is_empty() && build_info_file_name == config.get_build_info_file_name() {
+                create_diagnostic_for_reference(
+                    parent,
+                    index,
+                    &diagnostics::Cannot_write_file_0_because_it_will_overwrite_tsbuildinfo_file_generated_by_referenced_project_1,
+                    &[&build_info_file_name, &ref_.path],
+                );
+                emit_blocking.push(build_info_file_name.clone());
+            }
+            true
+        });
+        self.program_diagnostics.extend(program_diagnostics);
+        for file_name in emit_blocking {
+            let path = self.to_path(&file_name);
+            self.has_emit_blocking_diagnostics.insert(path);
+        }
     }
 
-    pub fn get_global_diagnostics(&'static self) -> Vec<P<Diagnostic>> {
+    // program.go:1463
+    pub fn get_global_diagnostics(&'static self, _ctx: &Context) -> Vec<P<Diagnostic>> {
         if self.files.is_empty() {
             return Vec::new();
         }
-        self.pool().get_global_diagnostics(self)
+        if let Some(pool) = self.compiler_checker_pool() {
+            return pool.get_global_diagnostics();
+        }
+        // For external pools (project system), global diagnostics are collected
+        // incrementally as checkers are used, not via a bulk query.
+        Vec::new()
     }
 
     // program.go:1475. Go's `collectDiagnostics(ctx, sourceFile, true /*concurrent*/, p.getDeclarationDiagnosticsForFile)`
-    // runs one task per file, each taking the file's checker from the pool; here the files run grouped by checker on
-    // the checker threads (in file order within a checker), like the other checker-backed diagnostics.
+    // runs one task per file, each taking the file's checker from the pool; with the built-in pool the files run
+    // grouped by checker on the checker threads (in file order within a checker), like the other checker-backed
+    // diagnostics. With an external pool each file takes its checker from the pool, as in Go.
     #[cfg(feature = "checker")]
-    pub fn get_declaration_diagnostics(&'static self, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        let result = match source_file {
-            Some(file) => self.get_declaration_diagnostics_for_file(None, file),
-            None => {
+    pub fn get_declaration_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        let result = match (source_file, self.compiler_checker_pool()) {
+            (Some(file), _) => self.get_declaration_diagnostics_for_file(ctx, None, file),
+            (None, Some(pool)) => {
                 let diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = self.files.iter().map(|_| Mutex::new(Vec::new())).collect();
-                self.pool().for_each_checker_group_do(self, self.files, self.single_threaded(), |c, file_index, file| {
-                    *diagnostics[file_index].lock().unwrap() = self.get_declaration_diagnostics_for_file(Some(c), file);
+                pool.for_each_checker_group_do(self.files, self.single_threaded(), |c, file_index, file| {
+                    *diagnostics[file_index].lock().unwrap() = self.get_declaration_diagnostics_for_file(ctx, Some(c), file);
                 });
                 diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect()
+            }
+            (None, None) => {
+                self.collect_diagnostics_from_files(ctx, self.files, true /*concurrent*/, &|ctx: &Context, file: P<SourceFile>| {
+                    self.get_declaration_diagnostics_for_file(ctx, None, file)
+                })
+                .concat()
             }
         };
         filter_and_sort_diagnostics(result)
@@ -1291,14 +1798,14 @@ impl Program {
 
     // Declaration emit needs the checker; without it declaration diagnostics are empty.
     #[cfg(not(feature = "checker"))]
-    pub fn get_declaration_diagnostics(&'static self, _source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+    pub fn get_declaration_diagnostics(&'static self, _ctx: &Context, _source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         Vec::new()
     }
 
     // program.go:1626. `c` is the file's checker when the caller already holds it (Go `newEmitHost` takes it from
     // the pool); with `None` it is taken here.
     #[cfg(feature = "checker")]
-    fn get_declaration_diagnostics_for_file(&'static self, c: Option<&mut Checker>, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    fn get_declaration_diagnostics_for_file(&'static self, ctx: &Context, c: Option<&mut Checker>, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         if source_file.is_declaration_file.get() {
             return Vec::new();
         }
@@ -1311,7 +1818,7 @@ impl Program {
         let c = match c {
             Some(c) => c,
             None => {
-                guard = self.get_type_checker_for_file(source_file);
+                guard = self.get_type_checker_for_file(ctx, source_file);
                 &mut *guard
             }
         };
@@ -1321,9 +1828,10 @@ impl Program {
         self.declaration_diagnostic_cache.lock().unwrap().entry(source_file).or_insert(diagnostics).clone()
     }
 
-    fn get_semantic_diagnostics_with_checker(&'static self, c: &mut Checker, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    // program.go:1488
+    fn get_semantic_diagnostics_with_checker(&'static self, ctx: &Context, c: &mut Checker, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         let mut result = filter_no_emit_semantic_diagnostics(
-            self.get_bind_and_check_diagnostics_with_checker(c, source_file, false /*includeDeferredGlobals*/),
+            self.get_bind_and_check_diagnostics_with_checker(ctx, c, source_file, false /*includeDeferredGlobals*/),
             &self.options(),
         );
         result.extend(self.get_include_processor_diagnostics(source_file));
@@ -1333,8 +1841,10 @@ impl Program {
     // getBindAndCheckDiagnosticsWithChecker gets semantic diagnostics for a single file using a
     // caller-provided checker, including bind diagnostics, checker diagnostics, and handling
     // of @ts-ignore/@ts-expect-error directives.
+    // program.go:1498
     fn get_bind_and_check_diagnostics_with_checker(
         &self,
+        ctx: &Context,
         file_checker: &mut Checker,
         source_file: P<SourceFile>,
         include_deferred_globals: bool,
@@ -1350,9 +1860,12 @@ impl Program {
 
         // Checker creation forces binding, so bind diagnostics will be populated.
         let mut diags: Vec<P<Diagnostic>> = source_file.bind_diagnostics().to_vec();
-        diags.extend(file_checker.get_diagnostics_exported(Context, source_file));
+        diags.extend(file_checker.get_diagnostics_exported(ctx, source_file));
 
         if include_deferred_globals {
+            if file_checker.was_canceled() {
+                return Vec::new();
+            }
             let current_globals = file_checker.get_global_diagnostics();
             if current_globals.len() > previous_globals.len() {
                 for diagnostic in current_globals {
@@ -1389,11 +1902,12 @@ impl Program {
         filtered
     }
 
-    fn get_suggestion_diagnostics_with_checker(&self, file_checker: &mut Checker, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    // program.go:1642
+    fn get_suggestion_diagnostics_with_checker(&self, ctx: &Context, file_checker: &mut Checker, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         if self.skip_type_checking(source_file, false) {
             return Vec::new();
         }
-        file_checker.get_suggestion_diagnostics(Context, source_file)
+        file_checker.get_suggestion_diagnostics(ctx, source_file)
     }
 
     fn get_diagnostics_with_preceding_directives(
@@ -1457,7 +1971,7 @@ impl Program {
     pub fn symbol_count(&'static self) -> usize {
         let count: usize = self.files.iter().map(|f| f.symbol_count.get() as usize).sum();
         let val = std::sync::atomic::AtomicUsize::new(count);
-        self.pool().for_each_checker_parallel(self, |_, c| {
+        self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.symbol_count as usize, std::sync::atomic::Ordering::Relaxed);
         });
         val.into_inner()
@@ -1465,7 +1979,7 @@ impl Program {
 
     pub fn type_count(&'static self) -> usize {
         let val = std::sync::atomic::AtomicUsize::new(0);
-        self.pool().for_each_checker_parallel(self, |_, c| {
+        self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.type_count as usize, std::sync::atomic::Ordering::Relaxed);
         });
         val.into_inner()
@@ -1473,7 +1987,7 @@ impl Program {
 
     pub fn instantiation_count(&'static self) -> usize {
         let val = std::sync::atomic::AtomicUsize::new(0);
-        self.pool().for_each_checker_parallel(self, |_, c| {
+        self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.total_instantiation_count as usize, std::sync::atomic::Ordering::Relaxed);
         });
         val.into_inner()
@@ -1481,10 +1995,15 @@ impl Program {
 
     pub fn lazy_member_stats(&'static self) -> tsrs_core::lazymembers::LazyMemberStats {
         let total = std::sync::Mutex::new(tsrs_core::lazymembers::LazyMemberStats::default());
-        self.pool().for_each_checker_parallel(self, |_, c| {
+        self.for_each_checker_parallel(|_, c| {
             total.lock().unwrap().add(&c.lazy_member_stats);
         });
         total.into_inner().unwrap()
+    }
+
+    // program.go:1743
+    pub fn program(&self) -> &Program {
+        self
     }
 
     pub fn get_source_file_meta_data(&self, path: &Path) -> SourceFileMetaData {
@@ -1633,8 +2152,21 @@ impl Program {
         self.files_by_path.get(path).copied()
     }
 
-    pub fn get_source_files(&self) -> &[P<SourceFile>] {
-        &self.files
+    // program.go:2103
+    pub fn has_same_file_names(&self, other: &Program) -> bool {
+        // checks for casing differences on case-insensitive file systems
+        self.files_by_path.len() == other.files_by_path.len()
+            && self.files_by_path.iter().all(|(path, a)| other.files_by_path.get(path).is_some_and(|b| a.file_name() == b.file_name()))
+            && self.redirect_files_by_path.len() == other.redirect_files_by_path.len()
+            && self
+                .redirect_files_by_path
+                .iter()
+                .all(|(path, a)| other.redirect_files_by_path.get(path).is_some_and(|b| a.file_name == b.file_name))
+    }
+
+    // program.go:2112
+    pub fn get_source_files(&self) -> &'static [P<SourceFile>] {
+        self.files
     }
 
     // Testing only
@@ -1743,15 +2275,100 @@ impl Program {
         source_file_may_be_emitted(source_file, self, force_dts_emit, false)
     }
 
+    // program.go:2222
+    pub fn resolved_package_names(&self) -> &Set<String> {
+        &self.collect_package_names().resolved
+    }
+
+    // program.go:2226
+    pub fn unresolved_package_names(&self) -> &Set<String> {
+        &self.collect_package_names().unresolved
+    }
+
+    // program.go:2230
+    pub fn deep_import_package_names(&self) -> &Set<String> {
+        &self.collect_package_names().deep_import_packages
+    }
+
+    // program.go:2234
+    fn collect_package_names(&self) -> &packageNamesInfo {
+        self.package_names.get_or_init(|| {
+            let resolver = self.new_resolver();
+            let mut package_names = packageNamesInfo { resolved: Set::default(), unresolved: Set::default(), deep_import_packages: Set::default() };
+            for &file in self.files {
+                if self.is_source_file_default_library(file.path()) || self.is_source_file_from_external_library(file) || file.file_name().contains("/node_modules/") {
+                    // Checking for /node_modules/ is a little imprecise, but ATA treats locally installed typings
+                    // as root files, which would not pass IsSourceFileFromExternalLibrary.
+                    continue;
+                }
+                'imports: for &imp in file.imports() {
+                    if tspath::is_external_module_name_relative(imp.text()) {
+                        continue;
+                    }
+                    if self.resolved_modules.contains_key(file.path()) {
+                        let mode = self.get_mode_for_usage_location(file, imp);
+                        if let Some(resolved_module) = self.get_resolved_module(file, imp.text(), mode).filter(|r| r.is_resolved()) {
+                            if !resolved_module.is_external_library_import {
+                                continue 'imports;
+                            }
+                            // Priority order for getting package name:
+                            // 1. PackageId.Name (requires both name and version in package.json)
+                            let mut name = resolved_module.package_id.name.to_string();
+                            if name.is_empty() {
+                                // 2. GetPackageScopeForPath - get name from package.json in the package directory
+                                if let Some(package_scope) = resolver.get_package_scope_for_path(&resolved_module.resolved_file_name) {
+                                    if package_scope.exists() {
+                                        if let Some(scope_name) = package_scope.contents.and_then(|c| c.get().name.get_value()) {
+                                            name = scope_name.to_string();
+                                        }
+                                    }
+                                }
+                            }
+                            if name.is_empty() {
+                                // 3. GetPackageNameFromDirectory - extract from node_modules path
+                                name = tsrs_modulespecifiers::get_package_name_from_directory(&resolved_module.resolved_file_name);
+                            }
+                            // 4. If all fail, don't add empty string
+                            if !name.is_empty() {
+                                package_names.resolved.add(name.clone());
+                                // Detect deep imports: subpath imports in packages without exports.
+                                // These are imports like "lodash/fp" where the package has no exports
+                                // map, so auto-import can only find them via recursive directory search.
+                                let (_, rest) = module::parse_package_name(imp.text());
+                                if !rest.is_empty() {
+                                    if let Some(scope) = resolver.get_package_scope_for_path(&resolved_module.resolved_file_name) {
+                                        if scope.exists() && !scope.contents.is_some_and(|c| c.exports.is_present()) {
+                                            package_names.deep_import_packages.add(module::get_package_name_from_types_package_name(&name));
+                                        }
+                                    }
+                                }
+                            }
+                            continue 'imports;
+                        }
+                    }
+                    package_names.unresolved.add(imp.text().to_string());
+                }
+            }
+            Arc::new(package_names)
+        })
+    }
+
     pub fn is_lib_file(&self, source_file: P<SourceFile>) -> bool {
         self.lib_files.contains_key(source_file.path())
     }
 
+    // program.go:2297
     pub fn has_ts_file(&self) -> bool {
-        self.files.iter().any(|f| tspath::has_implementation_ts_file_extension(f.file_name()))
+        *self.has_ts_file.get_or_init(|| self.files.iter().any(|f| tspath::has_implementation_ts_file_extension(f.file_name())))
     }
 
     pub fn get_symlink_cache(&self) -> P<KnownSymlinks> {
+        if let Some(&k) = self.known_symlinks.get() {
+            return k;
+        }
+        // `UpdateProgram` hands the cache to the next program version, which shares `processed`: in the language
+        // server it lives in the region that owns `processed` (the full build's), not in this version's.
+        let _region = tsrs_core::arena::enter_owner(self.processed as *const processedFiles as usize);
         *self.known_symlinks.get_or_init(|| {
             let resolver = self.new_resolver();
             let known_symlinks = symlinks::new_known_symlink(self.get_current_directory(), self.use_case_sensitive_file_names());
@@ -1849,6 +2466,42 @@ fn for_each_resolution<T>(
                 callback(resolution, key.name, key.mode, file_path);
             }
         }
+    }
+}
+
+// program.go:84 `lazyValue.tryReuse`.
+fn try_reuse<T: Clone>(to: &OnceLock<T>, from: &OnceLock<T>) {
+    if let Some(value) = from.get() {
+        let _ = to.set(value.clone());
+    }
+}
+
+// Go `slices.EqualFunc`.
+fn equal_func<T: Copy>(a: &[T], b: &[T], mut eq: impl FnMut(T, T) -> bool) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(&x, &y)| eq(x, y))
+}
+
+// program.go:503
+fn equal_module_specifiers(n1: P<Node>, n2: P<Node>) -> bool {
+    n1.kind() == n2.kind() && (!ast::is_string_literal(n1) || n1.text() == n2.text())
+}
+
+// program.go:507
+fn equal_module_augmentation_names(n1: P<Node>, n2: P<Node>) -> bool {
+    n1.kind() == n2.kind() && n1.text() == n2.text()
+}
+
+// program.go:511
+fn equal_file_references(f1: P<FileReference>, f2: P<FileReference>) -> bool {
+    f1.file_name == f2.file_name && f1.resolution_mode == f2.resolution_mode && f1.preserve == f2.preserve
+}
+
+// program.go:515
+fn equal_check_js_directives(d1: Option<P<ast::CheckJsDirective>>, d2: Option<P<ast::CheckJsDirective>>) -> bool {
+    match (d1, d2) {
+        (None, None) => true,
+        (Some(d1), Some(d2)) => d1.enabled == d2.enabled,
+        _ => false,
     }
 }
 
@@ -1959,29 +2612,31 @@ fn compact_and_merge_related_infos(diagnostics: Vec<P<Diagnostic>>) -> Vec<P<Dia
 
 // GetDiagnosticsOfAnyProgram collects config, syntactic, program, global and semantic diagnostics
 // in tsc's order, stopping at the first phase that produced diagnostics.
+// program.go:2018
 pub fn get_diagnostics_of_any_program(
+    ctx: &Context,
     program: &'static Program,
     files: Option<&[P<SourceFile>]>,
     skip_no_emit_check_for_dts_diagnostics: bool,
-    get_bind_diagnostics: &mut dyn FnMut(Option<P<SourceFile>>) -> Vec<P<Diagnostic>>,
-    get_semantic_diagnostics: &mut dyn FnMut(Option<P<SourceFile>>) -> Vec<P<Diagnostic>>,
+    get_bind_diagnostics: &mut dyn FnMut(&Context, Option<P<SourceFile>>) -> Vec<P<Diagnostic>>,
+    get_semantic_diagnostics: &mut dyn FnMut(&Context, Option<P<SourceFile>>) -> Vec<P<Diagnostic>>,
 ) -> Vec<P<Diagnostic>> {
     let mut all_diagnostics = program.get_config_file_parsing_diagnostics();
     let config_file_parsing_diagnostics_length = all_diagnostics.len();
 
     let append_diagnostics_for_all_files =
-        |diagnostics: &mut Vec<P<Diagnostic>>, get_diagnostics: &mut dyn FnMut(Option<P<SourceFile>>) -> Vec<P<Diagnostic>>| match files {
-            None => diagnostics.extend(get_diagnostics(None)),
+        |diagnostics: &mut Vec<P<Diagnostic>>, get_diagnostics: &mut dyn FnMut(&Context, Option<P<SourceFile>>) -> Vec<P<Diagnostic>>| match files {
+            None => diagnostics.extend(get_diagnostics(ctx, None)),
             Some(files) => {
                 for &file in files {
-                    diagnostics.extend(get_diagnostics(Some(file)));
+                    diagnostics.extend(get_diagnostics(ctx, Some(file)));
                 }
             }
         };
 
     let mut syntactic_diagnostics = Vec::new();
     let start = std::time::Instant::now();
-    append_diagnostics_for_all_files(&mut syntactic_diagnostics, &mut |f| program.get_syntactic_diagnostics(f));
+    append_diagnostics_for_all_files(&mut syntactic_diagnostics, &mut |ctx, f| program.get_syntactic_diagnostics(ctx, f));
     tsrs_core::phases::record("Diagnostics: syntactic", start.elapsed());
     all_diagnostics.extend(syntactic_diagnostics);
 
@@ -1994,13 +2649,13 @@ pub fn get_diagnostics_of_any_program(
         append_diagnostics_for_all_files(&mut Vec::new(), get_bind_diagnostics);
 
         if program.options().list_files_only.is_false_or_unknown() {
-            all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: global (first)", || program.get_global_diagnostics()));
+            all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: global (first)", || program.get_global_diagnostics(ctx)));
 
             if all_diagnostics.len() == config_file_parsing_diagnostics_length {
                 append_diagnostics_for_all_files(&mut all_diagnostics, get_semantic_diagnostics);
                 // Incremental programs cache checking globals with file diagnostics;
                 // a late sweep would also collect incidental signature-generation globals.
-                all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: global (after)", || program.get_global_diagnostics()));
+                all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: global (after)", || program.get_global_diagnostics(ctx)));
                 #[cfg(feature = "checker")]
                 crate::checkerpool::write_file_times(program);
             }
@@ -2009,7 +2664,7 @@ pub fn get_diagnostics_of_any_program(
                 && program.options().get_emit_declarations()
                 && all_diagnostics.len() == config_file_parsing_diagnostics_length
             {
-                append_diagnostics_for_all_files(&mut all_diagnostics, &mut |f| program.get_declaration_diagnostics(f));
+                append_diagnostics_for_all_files(&mut all_diagnostics, &mut |ctx, f| program.get_declaration_diagnostics(ctx, f));
             }
         }
     }

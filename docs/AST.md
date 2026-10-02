@@ -310,8 +310,11 @@ bitflags/enums per PORTING.md (`XxxFlags::None` is the empty set). `NodeId(pub u
 `SourceFileMetaData` are plain structs as in Go (embedded `core.TextRange` becomes a `text_range` field
 plus `pos()`/`end()`).
 
+Language service token cache: `SourceFile::get_or_create_token(kind, pos, end, parent, flags)` (Go `GetOrCreateToken`,
+keyed by `TokenCacheKey { parent, loc }` under a mutex; each call creates tokens with a fresh default factory).
+
 Not ported (language service / emit / API only): content mappers, `SourceFileDataKey`,
-the token cache (`GetOrCreateToken`), `GetNameTable`, `GetDeclarationMap`, `Hash`.
+`GetNameTable`, `GetDeclarationMap`, `Hash`.
 
 ## Diagnostics
 

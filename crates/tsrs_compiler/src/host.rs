@@ -5,7 +5,7 @@ use tsrs_ast::{SourceFile, SourceFileParseOptions};
 use tsrs_core::tspath::Path;
 use tsrs_core::{ensure_script_kind_from_file_name, P};
 use tsrs_diagnostics::Message;
-use tsrs_tsoptions::{ExtendedConfigCache, ParsedCommandLine};
+use tsrs_tsoptions::{ExtendedConfigCache, ParseConfigHost, ParsedCommandLine};
 use tsrs_vfs::FS;
 
 pub type TraceFn = dyn Fn(&'static Message, &[&dyn Display]) + Send + Sync;
@@ -78,9 +78,35 @@ impl CompilerHost for compilerHost {
         Some(tsrs_parser::parse_source_file_owned(opts, text, script_kind))
     }
 
-    fn get_resolved_project_reference(&self, _file_name: &str, _path: Path) -> Option<P<ParsedCommandLine>> {
-        // Only reached through project references, which are not ported yet.
-        let _ = &self.extended_config_cache;
-        None
+    // host.go:119
+    fn get_resolved_project_reference(&self, file_name: &str, path: Path) -> Option<P<ParsedCommandLine>> {
+        // Go passes the host itself as the `ParseConfigHost`; tsoptions keeps it for the parsed command line's
+        // lifetime, so it gets a leaked handle on the same file system and directory.
+        let sys: &'static dyn ParseConfigHost =
+            Box::leak(Box::new(parseConfigHost { fs: self.fs.clone(), current_directory: self.current_directory.clone() }));
+        let (command_line, _) = tsrs_tsoptions::get_parsed_command_line_of_config_file_path(
+            file_name,
+            path,
+            None,
+            None, /*optionsRaw*/
+            sys,
+            self.extended_config_cache.as_deref().map(|c| c as &dyn ExtendedConfigCache),
+        );
+        command_line.map(P::new)
+    }
+}
+
+struct parseConfigHost {
+    fs: Arc<dyn FS>,
+    current_directory: String,
+}
+
+impl ParseConfigHost for parseConfigHost {
+    fn fs(&self) -> &dyn FS {
+        &*self.fs
+    }
+
+    fn get_current_directory(&self) -> &str {
+        &self.current_directory
     }
 }

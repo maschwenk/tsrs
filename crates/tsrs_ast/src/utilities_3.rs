@@ -1240,3 +1240,429 @@ pub fn is_external_module_indicator(node: P<Node>) -> bool {
     // Exported top-level member indicates moduleness
     is_any_import_or_re_export(node) || is_export_assignment(node) || has_syntactic_modifier(node, ModifierFlags::Export)
 }
+
+// Language-service-only utilities (added for tsrs_ls; the batch port skipped them).
+
+// utilities.go:89
+pub fn find_last_visible_node(nodes: &[P<Node>]) -> Option<P<Node>> {
+    let mut from_end = 1;
+    while from_end <= nodes.len() && nodes[nodes.len() - from_end].flags().intersects(NodeFlags::Reparsed) {
+        from_end += 1;
+    }
+    if from_end <= nodes.len() {
+        return Some(nodes[nodes.len() - from_end]);
+    }
+    None
+}
+
+// utilities.go:687
+pub fn is_statement_but_not_declaration(node: P<Node>) -> bool {
+    is_statement_kind_but_not_declaration_kind(node.kind())
+}
+
+// utilities.go:2201
+pub fn is_non_whitespace_token(node: P<Node>) -> bool {
+    is_token_kind(node.kind()) && !is_whitespace_only_jsx_text(node)
+}
+
+// utilities.go:2205
+pub fn is_whitespace_only_jsx_text(node: P<Node>) -> bool {
+    node.kind() == Kind::JsxText && node.as_jsx_text().contains_only_trivia_white_spaces
+}
+
+// utilities.go:3056
+pub fn for_each_child_and_jsdoc(node: P<Node>, source_file: &'static SourceFile, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    for &jsdoc in node.jsdoc(Some(source_file)) {
+        if v(jsdoc) {
+            return true;
+        }
+    }
+    node.for_each_child(v)
+}
+
+// utilities.go:3144
+pub fn is_jsdoc_single_comment_node_list(node_list: Option<P<NodeList>>) -> bool {
+    let Some(node_list) = node_list else {
+        return false;
+    };
+    if node_list.nodes.is_empty() {
+        return false;
+    }
+    let Some(parent) = node_list.nodes[0].parent() else {
+        return false;
+    };
+    is_jsdoc_single_comment_node(parent) && Some(node_list) == parent.comment_list()
+}
+
+// utilities.go:3156
+pub fn is_jsdoc_single_comment_node_comment(node: Option<P<Node>>) -> bool {
+    let Some(node) = node else {
+        return false;
+    };
+    let Some(parent) = node.parent() else {
+        return false;
+    };
+    is_jsdoc_single_comment_node(parent) && node == parent.comment_list().unwrap().nodes[0]
+}
+
+// utilities.go:3165
+pub fn is_jsdoc_single_comment_node(node: P<Node>) -> bool {
+    has_comment(node.kind()) && node.comment_list().is_some_and(|l| l.nodes.len() == 1)
+}
+
+// utilities.go:3806
+pub fn is_trivia(token: Kind) -> bool {
+    Kind::FirstTriviaToken <= token && token <= Kind::LastTriviaToken
+}
+
+// utilities.go:3848
+fn has_comment(kind: Kind) -> bool {
+    matches!(
+        kind,
+        Kind::JSDoc
+            | Kind::JSDocUnknownTag
+            | Kind::JSDocAugmentsTag
+            | Kind::JSDocImplementsTag
+            | Kind::JSDocDeprecatedTag
+            | Kind::JSDocPublicTag
+            | Kind::JSDocPrivateTag
+            | Kind::JSDocProtectedTag
+            | Kind::JSDocReadonlyTag
+            | Kind::JSDocOverrideTag
+            | Kind::JSDocCallbackTag
+            | Kind::JSDocOverloadTag
+            | Kind::JSDocParameterTag
+            | Kind::JSDocPropertyTag
+            | Kind::JSDocReturnTag
+            | Kind::JSDocThisTag
+            | Kind::JSDocTypeTag
+            | Kind::JSDocTemplateTag
+            | Kind::JSDocTypedefTag
+            | Kind::JSDocSeeTag
+            | Kind::JSDocThrowsTag
+            | Kind::JSDocSatisfiesTag
+            | Kind::JSDocImportTag
+    )
+}
+
+// Used by the checker's language-service API (services.go).
+// utilities.go:3017
+pub fn is_call_like_or_function_like_expression(node: P<Node>) -> bool {
+    is_call_like_expression(node) || is_function_expression_or_arrow_function(node)
+}
+
+// utilities.go:3063
+pub fn has_type_arguments(node: P<Node>) -> bool {
+    matches!(
+        node.kind(),
+        Kind::CallExpression
+            | Kind::NewExpression
+            | Kind::TaggedTemplateExpression
+            | Kind::TypeReference
+            | Kind::ExpressionWithTypeArguments
+            | Kind::ImportType
+            | Kind::TypeQuery
+            | Kind::JsxOpeningElement
+            | Kind::JsxSelfClosingElement
+    )
+}
+
+// Used by tsrs_ls (lscore).
+// utilities.go:1240
+pub fn is_deprecated_declaration(declaration: P<Node>) -> bool {
+    is_deprecated_declaration_with_cached_flags(declaration, get_combined_node_flags(declaration))
+}
+
+// utilities.go:3043
+pub fn is_let(node: P<Node>) -> bool {
+    get_combined_node_flags(node) & NodeFlags::BlockScoped == NodeFlags::Let
+}
+
+// utilities.go:3086
+pub fn has_initializer(node: P<Node>) -> bool {
+    match node.kind() {
+        Kind::VariableDeclaration
+        | Kind::Parameter
+        | Kind::BindingElement
+        | Kind::PropertyDeclaration
+        | Kind::PropertyAssignment
+        | Kind::EnumMember
+        | Kind::ForStatement
+        | Kind::ForInStatement
+        | Kind::ForOfStatement
+        | Kind::JsxAttribute => node.initializer().is_some(),
+        _ => false,
+    }
+}
+
+// utilities.go:3274
+pub fn is_string_text_containing_node(node: P<Node>) -> bool {
+    node.kind() == Kind::StringLiteral || is_template_literal_kind(node.kind())
+}
+
+// utilities.go:3646
+pub fn is_right_side_of_property_access(node: P<Node>) -> bool {
+    let parent = node.parent().unwrap();
+    parent.kind() == Kind::PropertyAccessExpression && parent.name() == Some(node)
+}
+
+// utilities.go:1864
+pub fn get_super_container(node: P<Node>, stop_on_functions: bool) -> Option<P<Node>> {
+    let mut node = node;
+    loop {
+        node = node.parent()?;
+        match node.kind() {
+            Kind::ComputedPropertyName => {
+                node = node.parent().unwrap();
+            }
+            Kind::FunctionDeclaration | Kind::FunctionExpression | Kind::ArrowFunction => {
+                if !stop_on_functions {
+                    continue;
+                }
+                return Some(node);
+            }
+            Kind::PropertyDeclaration
+            | Kind::PropertySignature
+            | Kind::MethodDeclaration
+            | Kind::MethodSignature
+            | Kind::Constructor
+            | Kind::GetAccessor
+            | Kind::SetAccessor
+            | Kind::ClassStaticBlockDeclaration => {
+                return Some(node);
+            }
+            Kind::Decorator => {
+                // Decorators are always applied outside of the body of a class or method.
+                let parent = node.parent().unwrap();
+                if parent.kind() == Kind::Parameter && is_class_element(parent.parent().unwrap()) {
+                    // If the decorator's parent is a ParameterDeclaration, we resolve the this container from
+                    // the grandparent class declaration.
+                    node = parent.parent().unwrap();
+                } else if is_class_element(parent) {
+                    // If the decorator's parent is a class element, we resolve the 'this' container
+                    // from the parent class declaration.
+                    node = parent;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+// utilities.go:2592
+pub fn is_default_import(node: P<Node> /*ImportDeclaration | ImportEqualsDeclaration | ExportDeclaration*/) -> bool {
+    match node.kind() {
+        Kind::ImportDeclaration | Kind::JSImportDeclaration => {
+            let import_clause = node.import_clause();
+            import_clause.is_some_and(|import_clause| import_clause.as_import_clause().name.is_some())
+        }
+        _ => false,
+    }
+}
+
+// utilities.go:3650
+pub fn is_argument_expression_of_element_access(node: P<Node>) -> bool {
+    node.parent().is_some_and(|parent| parent.kind() == Kind::ElementAccessExpression && parent.as_element_access_expression().argument_expression == node)
+}
+
+// utilities.go:3654
+pub fn climb_past_property_access(node: P<Node>) -> P<Node> {
+    if is_right_side_of_property_access(node) {
+        return node.parent().unwrap();
+    }
+    node
+}
+
+// utilities.go:3661
+fn climb_past_property_or_element_access(node: P<Node>) -> P<Node> {
+    if is_right_side_of_property_access(node) || is_argument_expression_of_element_access(node) {
+        return node.parent().unwrap();
+    }
+    node
+}
+
+// utilities.go:3668
+fn select_expression_of_call_or_new_expression_or_decorator(node: P<Node>) -> Option<P<Node>> {
+    if is_call_expression(node) || is_new_expression(node) || is_decorator(node) {
+        return node.expression();
+    }
+    None
+}
+
+// utilities.go:3675
+fn select_tag_of_tagged_template_expression(node: P<Node>) -> Option<P<Node>> {
+    if is_tagged_template_expression(node) {
+        return Some(node.as_tagged_template_expression().tag);
+    }
+    None
+}
+
+// utilities.go:3682
+fn select_tag_name_of_jsx_opening_like_element(node: P<Node>) -> Option<P<Node>> {
+    if is_jsx_opening_element(node) || is_jsx_self_closing_element(node) {
+        return Some(node.tag_name());
+    }
+    None
+}
+
+// utilities.go:3689
+pub fn is_call_expression_target(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_call_expression, select_expression_of_call_or_new_expression_or_decorator, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3693
+pub fn is_new_expression_target(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_new_expression, select_expression_of_call_or_new_expression_or_decorator, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3697
+pub fn is_call_or_new_expression_target(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_call_or_new_expression, select_expression_of_call_or_new_expression_or_decorator, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3701
+pub fn is_tagged_template_tag(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_tagged_template_expression, select_tag_of_tagged_template_expression, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3705
+pub fn is_decorator_target(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_decorator, select_expression_of_call_or_new_expression_or_decorator, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3709
+pub fn is_jsx_opening_like_element_tag_name(node: P<Node>, include_element_access: bool, skip_past_outer_expressions: bool) -> bool {
+    is_callee_worker(node, is_jsx_opening_like_element, select_tag_name_of_jsx_opening_like_element, include_element_access, skip_past_outer_expressions)
+}
+
+// utilities.go:3713
+fn is_callee_worker(
+    node: P<Node>,
+    pred: fn(P<Node>) -> bool,
+    callee_selector: fn(P<Node>) -> Option<P<Node>>,
+    include_element_access: bool,
+    skip_past_outer_expressions: bool,
+) -> bool {
+    let mut target = if include_element_access { climb_past_property_or_element_access(node) } else { climb_past_property_access(node) };
+    if skip_past_outer_expressions {
+        // Only skip outer expressions if the target is actually an expression node
+        if is_expression(target) {
+            target = skip_outer_expressions(target, OuterExpressionKinds::All);
+        }
+    }
+    target.parent().is_some_and(|parent| pred(parent) && callee_selector(parent) == Some(target))
+}
+
+// utilities.go:4195
+pub fn import_from_module_specifier(node: P<Node>) -> P<Node> {
+    if let Some(result) = try_get_import_from_module_specifier(node) {
+        return result;
+    }
+    panic!("Unexpected node kind: {:?}", node.parent().unwrap().kind());
+}
+
+// utilities.go:4203
+pub fn try_get_import_from_module_specifier(node: P<Node> /*StringLiteralLike*/) -> Option<P<Node>> {
+    let parent = node.parent().unwrap();
+    match parent.kind() {
+        Kind::ImportDeclaration | Kind::JSImportDeclaration | Kind::ExportDeclaration => Some(parent),
+        Kind::ExternalModuleReference => parent.parent(),
+        Kind::CallExpression => {
+            if is_import_call(parent) || is_require_call(parent, false /*requireStringLiteralLikeArgument*/) {
+                return Some(parent);
+            }
+            None
+        }
+        Kind::LiteralType => {
+            if !is_string_literal(node) {
+                return None;
+            }
+            if is_import_type_node(parent.parent().unwrap()) {
+                return parent.parent();
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+// utilities.go:3021
+pub fn node_has_kind(node: Option<P<Node>>, kind: Kind) -> bool {
+    let Some(node) = node else {
+        return false;
+    };
+    node.kind() == kind
+}
+
+// utilities.go:3106
+pub fn get_type_annotation_node(node: P<Node>) -> Option<P<Node>> {
+    match node.kind() {
+        Kind::VariableDeclaration
+        | Kind::Parameter
+        | Kind::PropertySignature
+        | Kind::PropertyDeclaration
+        | Kind::TypePredicate
+        | Kind::ParenthesizedType
+        | Kind::TypeOperator
+        | Kind::MappedType
+        | Kind::TypeAssertionExpression
+        | Kind::AsExpression
+        | Kind::SatisfiesExpression
+        | Kind::TypeAliasDeclaration
+        | Kind::JSTypeAliasDeclaration
+        | Kind::NamedTupleMember
+        | Kind::OptionalType
+        | Kind::RestType
+        | Kind::TemplateLiteralTypeSpan
+        | Kind::JSDocTypeExpression
+        | Kind::JSDocPropertyTag
+        | Kind::JSDocNullableType
+        | Kind::JSDocNonNullableType
+        | Kind::JSDocOptionalType => node.type_node(),
+        _ => {
+            let func_like = node.function_like_data();
+            if let Some(func_like) = func_like {
+                return func_like.type_();
+            }
+            None
+        }
+    }
+}
+
+// utilities.go:3123
+pub fn is_object_type_declaration(node: P<Node>) -> bool {
+    is_class_like(node) || is_interface_declaration(node) || is_type_literal_node(node)
+}
+
+// utilities.go:3127
+pub fn is_class_or_type_element(node: P<Node>) -> bool {
+    is_class_element(node) || is_type_element(node)
+}
+
+// utilities.go:3139
+pub fn is_type_keyword_token(node: P<Node>) -> bool {
+    node.kind() == Kind::TypeKeyword
+}
+
+// utilities.go:3282
+pub fn is_template_literal_token(node: P<Node>) -> bool {
+    is_template_literal_kind(node.kind())
+}
+
+// ast.go:3092
+pub fn get_declaration_name(declaration: P<Node>) -> String {
+    let name = get_non_assigned_name_of_declaration(declaration);
+    if let Some(name) = name {
+        if is_computed_property_name(name) {
+            if is_string_or_numeric_literal_like(name.expression().unwrap()) {
+                return name.expression().unwrap().text().to_string();
+            }
+            if is_property_access_expression(name.expression().unwrap()) {
+                return name.expression().unwrap().name().unwrap().text().to_string();
+            }
+        } else if is_property_name(name) {
+            return name.text().to_string();
+        }
+    }
+    String::new()
+}

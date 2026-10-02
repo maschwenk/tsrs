@@ -70,6 +70,11 @@ pub(crate) fn to_node_builder_flags(flags: TypeFormatFlags) -> Flags {
 }
 
 impl Checker {
+    // printer.go:55
+    pub fn type_to_string_ex_exported(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
+        self.type_to_string_ex(t, enclosing_declaration, flags, vc)
+    }
+
     // printer.go:59
     pub fn type_to_string_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
         // Serialization of types can lead to (lazy) resolution of members, which can cause diagnostics that again require
@@ -152,7 +157,7 @@ impl Checker {
     }
 
     // printer.go:132
-    pub(crate) fn symbol_to_string_ex(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, flags: SymbolFormatFlags) -> String {
+    pub fn symbol_to_string_ex(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, flags: SymbolFormatFlags) -> String {
         let (mut writer, put_writer) = get_single_line_string_writer();
 
         let mut node_flags = Flags::IgnoreErrors;
@@ -208,7 +213,7 @@ impl Checker {
     }
 
     // printer.go:187
-    pub(crate) fn signature_to_string_ex(&mut self, signature: P<Signature>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
+    pub fn signature_to_string_ex(&mut self, signature: P<Signature>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
         let is_constructor = signature.flags.get().intersects(SignatureFlags::Construct) && !flags.intersects(TypeFormatFlags::WriteCallStyleSignature);
         let sig_output = if flags.intersects(TypeFormatFlags::WriteArrowStyleSignature) {
             if is_constructor {
@@ -318,7 +323,7 @@ impl Checker {
     }
 
     // printer.go:288
-    pub fn type_to_type_node(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> Option<P<Node>> {
+    pub fn type_to_type_node(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> {
         let node_builder = self.get_node_builder_ex(id_to_symbol);
         node_builder.type_to_type_node(self, t, enclosing_declaration, flags, InternalFlags::None, None)
     }
@@ -384,13 +389,13 @@ impl Checker {
     }
 
     // printer.go:348
-    pub fn type_to_type_node_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> Option<P<Node>> {
+    pub fn type_to_type_node_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> {
         let node_builder = self.get_node_builder_ex(id_to_symbol);
         node_builder.type_to_type_node(self, t, enclosing_declaration, flags, internal_flags, None)
     }
 
     // printer.go:353
-    pub fn type_predicate_to_type_predicate_node(&mut self, t: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> Option<P<Node>> {
+    pub fn type_predicate_to_type_predicate_node(&mut self, t: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> {
         let node_builder = self.get_node_builder_ex(id_to_symbol);
         node_builder.type_predicate_to_type_predicate_node(self, t, enclosing_declaration, flags, InternalFlags::None, None)
     }
@@ -818,6 +823,11 @@ impl Checker {
             use_only_external_aliasing,
             visited_symbol_tables_map: Default::default(),
         })
+    }
+
+    // symbolaccessibility.go:382
+    pub fn get_accessible_symbol_chain_exported(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, use_only_external_aliasing: bool) -> Vec<P<Symbol>> {
+        self.get_accessible_symbol_chain(symbol, enclosing_declaration, meaning, use_only_external_aliasing)
     }
 }
 

@@ -1,3 +1,4 @@
+use std::ptr::NonNull;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use rustc_hash::FxHashMap;
@@ -24,29 +25,145 @@ pub struct Checker {
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
 }
 
-// Go `context.Context` (see tsrs_checker::Context).
 #[cfg(not(feature = "checker"))]
-#[derive(Clone, Copy, Default)]
-pub struct Context;
+pub use tsrs_core::context::Context;
 
 #[cfg(not(feature = "checker"))]
 impl Checker {
-    pub fn get_diagnostics_exported(&mut self, _ctx: Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    pub fn get_diagnostics_exported(&mut self, _ctx: &Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         unimplemented!("tsrs_compiler was built without the `checker` feature")
     }
 
-    pub fn get_suggestion_diagnostics(&mut self, _ctx: Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    pub fn get_suggestion_diagnostics(&mut self, _ctx: &Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         unimplemented!("tsrs_compiler was built without the `checker` feature")
     }
 
     pub fn get_global_diagnostics(&mut self) -> Vec<P<Diagnostic>> {
         unimplemented!("tsrs_compiler was built without the `checker` feature")
     }
+
+    pub fn was_canceled(&mut self) -> bool {
+        false
+    }
 }
 
 #[cfg(not(feature = "checker"))]
 fn new_checker(_program: &'static Program) -> Box<Checker> {
     Box::new(Checker { type_count: 0, symbol_count: 0, total_instantiation_count: 0, lazy_member_stats: Default::default() })
+}
+
+// checkerpool.go:24
+// CheckerPool is implemented by the project system to provide checkers with
+// request-scoped lifetime and reclamation. It returns a checker and a release
+// function that must be called when the caller is done with the checker.
+// The returned checker must not be accessed concurrently; each acquisition is exclusive.
+// Acquisitions are not reentrant, even when they share a request ID. Callers must
+// pass an already acquired checker to nested operations instead of acquiring again.
+// If file is non-nil, the pool may use it as an affinity hint to return the same
+// checker for the same file across calls.
+//
+// Go returns `(*checker.Checker, func())`; the Rust pool returns a `CheckerHandle` that derefs to the checker
+// and runs the release function when dropped (or on `release()`).
+pub trait CheckerPool: Send + Sync {
+    fn get_checker(&self, ctx: &Context, file: Option<P<SourceFile>>) -> CheckerHandle;
+}
+
+// Go's `(*checker.Checker, func())` pair. Dropping the handle is Go's `done()`; like Go's `sync.OnceFunc`
+// releases it runs exactly once.
+pub struct CheckerHandle {
+    kind: checkerHandleKind,
+}
+
+enum checkerHandleKind {
+    // The built-in pool's checkers live behind a mutex per checker (Go `locks[i]`).
+    Locked(MutexGuard<'static, Box<Checker>>),
+    // A checker owned by an external pool, which tracks exclusivity itself (Go project pool's `heldBy`).
+    External { checker: NonNull<Checker>, release: Option<Box<dyn FnOnce()>> },
+}
+
+impl CheckerHandle {
+    fn locked(guard: MutexGuard<'static, Box<Checker>>) -> CheckerHandle {
+        CheckerHandle { kind: checkerHandleKind::Locked(guard) }
+    }
+
+    /// Hands out a checker owned by a pool outside this crate; `release` runs when the handle is dropped.
+    ///
+    /// # Safety
+    /// Until `release` runs, the caller guarantees that `checker` stays alive and that nothing else accesses it
+    /// (the pool has marked it held, Go `heldBy[i] = requestID`).
+    pub unsafe fn from_raw(checker: NonNull<Checker>, release: impl FnOnce() + 'static) -> CheckerHandle {
+        CheckerHandle { kind: checkerHandleKind::External { checker, release: Some(Box::new(release)) } }
+    }
+
+    // Go `done()`.
+    pub fn release(self) {}
+}
+
+impl std::ops::Deref for CheckerHandle {
+    type Target = Checker;
+    fn deref(&self) -> &Checker {
+        match &self.kind {
+            checkerHandleKind::Locked(guard) => guard,
+            // SAFETY: `from_raw`'s contract: the checker is alive and exclusively ours until release.
+            checkerHandleKind::External { checker, .. } => unsafe { checker.as_ref() },
+        }
+    }
+}
+
+impl std::ops::DerefMut for CheckerHandle {
+    fn deref_mut(&mut self) -> &mut Checker {
+        match &mut self.kind {
+            checkerHandleKind::Locked(guard) => guard,
+            // SAFETY: `from_raw`'s contract: the checker is alive and exclusively ours until release.
+            checkerHandleKind::External { checker, .. } => unsafe { checker.as_mut() },
+        }
+    }
+}
+
+impl Drop for CheckerHandle {
+    fn drop(&mut self) {
+        if let checkerHandleKind::External { release, .. } = &mut self.kind {
+            if let Some(release) = release.take() {
+                release();
+            }
+        }
+    }
+}
+
+// A checker owned by a pool outside this crate (Go's project pool keeps `[]*checker.Checker` behind its mutex).
+// `Checker` is not `Send` (it keeps `Rc`s and non-`Send` deferred closures, all reachable only from the checker
+// itself), so a pool that shares checkers between threads stores them in this wrapper and, like the built-in pool,
+// lets only the thread that holds a checker touch it.
+pub struct PooledChecker(Box<Checker>);
+unsafe impl Send for PooledChecker {}
+unsafe impl Sync for PooledChecker {}
+
+impl PooledChecker {
+    pub fn new(checker: Box<Checker>) -> PooledChecker {
+        PooledChecker(checker)
+    }
+
+    // The checker's stable address, for `CheckerHandle::from_raw`.
+    pub fn as_non_null(&mut self) -> NonNull<Checker> {
+        NonNull::from(&mut *self.0)
+    }
+
+    pub fn into_inner(self) -> Box<Checker> {
+        self.0
+    }
+}
+
+impl std::ops::Deref for PooledChecker {
+    type Target = Checker;
+    fn deref(&self) -> &Checker {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for PooledChecker {
+    fn deref_mut(&mut self) -> &mut Checker {
+        &mut self.0
+    }
 }
 
 // Checkers recurse deeply (the single-threaded CLI runs on a 512 MB stack); each checker thread gets the same.
@@ -89,23 +206,9 @@ struct CheckerSlot(Mutex<Box<Checker>>);
 unsafe impl Send for CheckerSlot {}
 unsafe impl Sync for CheckerSlot {}
 
-pub struct CheckerGuard<'a>(MutexGuard<'a, Box<Checker>>);
-
-impl std::ops::Deref for CheckerGuard<'_> {
-    type Target = Checker;
-    fn deref(&self) -> &Checker {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for CheckerGuard<'_> {
-    fn deref_mut(&mut self) -> &mut Checker {
-        &mut self.0
-    }
-}
-
 pub(crate) struct poolState {
-    checkers: Vec<CheckerSlot>,
+    // Leaked like the program that owns the pool, so a handle can hold a checker's lock without borrowing the pool.
+    checkers: &'static [CheckerSlot],
     file_associations: FxHashMap<P<SourceFile>, usize>,
     // Checker index per program file index.
     pub(crate) associations: Vec<usize>,
@@ -129,7 +232,7 @@ pub(crate) fn file_times_path() -> Option<&'static str> {
 
 pub(crate) fn write_file_times(program: &'static Program) {
     use std::fmt::Write;
-    let (Some(path), Some(state)) = (file_times_path(), program.pool().state.get()) else {
+    let (Some(path), Some(state)) = (file_times_path(), program.compiler_checker_pool().and_then(|pool| pool.state.get())) else {
         return;
     };
     fn count_kinds(node: P<tsrs_ast::Node>, counts: &mut [u32]) {
@@ -189,6 +292,7 @@ pub fn assignment_stats_enabled() -> bool {
 }
 
 pub(crate) struct checkerPool {
+    program: &'static Program,
     checker_count: usize,
     single_threaded: bool,
     state: OnceLock<poolState>,
@@ -371,7 +475,8 @@ fn get_checker_association_weights(base_weights: &[i64], import_counts: &[i64]) 
 }
 
 impl checkerPool {
-    pub(crate) fn new(program: &Program) -> checkerPool {
+    // checkerpool.go:305 newCheckerPool / checkerpool.go:309 newCheckerPoolWithTracing (tracing is not ported).
+    pub(crate) fn new(program: &'static Program) -> checkerPool {
         let mut checker_count = 4;
         if program.single_threaded() {
             checker_count = 1;
@@ -381,10 +486,46 @@ impl checkerPool {
 
         checker_count = checker_count.min(program.files.len()).min(256).max(1);
 
-        checkerPool { checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new() }
+        checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new() }
     }
 
-    fn create_checkers(&self, program: &'static Program) -> &poolState {
+    // checkerpool.go:331
+    // GetChecker implements CheckerPool. When file is non-nil, returns the checker
+    // associated with that file; otherwise returns the first checker.
+    pub(crate) fn get_checker_exclusive(&self, file: Option<P<SourceFile>>) -> CheckerHandle {
+        if let Some(file) = file {
+            return self.get_checker_for_file_exclusive(file);
+        }
+        let state = self.create_checkers();
+        CheckerHandle::locked(state.checkers[0].0.lock().unwrap())
+    }
+
+    // checkerpool.go:346
+    // getCheckerForFileNonExclusive returns the checker for the given file without locking.
+    // This is only safe when the caller guarantees no concurrent access to the same checker,
+    // e.g. for read-only operations like obtaining an emit resolver.
+    // Rust hands out `&mut Checker` only under the checker's lock, so this locks like the exclusive variant.
+    pub(crate) fn get_checker_for_file_non_exclusive(&self, file: P<SourceFile>) -> CheckerHandle {
+        self.get_checker_for_file_exclusive(file)
+    }
+
+    // checkerpool.go:351
+    pub(crate) fn get_checker_for_file_exclusive(&self, file: P<SourceFile>) -> CheckerHandle {
+        let state = self.create_checkers();
+        let idx = state.file_associations[&file];
+        CheckerHandle::locked(state.checkers[idx].0.lock().unwrap())
+    }
+
+    // checkerpool.go:362
+    // getCheckerNonExclusive returns the first checker without locking (locks in Rust, see above).
+    pub(crate) fn get_checker_non_exclusive(&self) -> CheckerHandle {
+        let state = self.create_checkers();
+        CheckerHandle::locked(state.checkers[0].0.lock().unwrap())
+    }
+
+    // checkerpool.go:367
+    fn create_checkers(&self) -> &poolState {
+        let program = self.program;
         self.state.get_or_init(|| {
             if tsrs_core::ptr::shared_check::enabled() {
                 // Debug aid: bind up front so every parser/binder allocation is recorded as shared.
@@ -397,7 +538,7 @@ impl checkerPool {
             run_work_group(self.single_threaded, self.checker_count, |i| {
                 *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
             });
-            let checkers: Vec<CheckerSlot> = slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect();
+            let checkers: &'static [CheckerSlot] = Vec::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect());
             tsrs_core::phases::record("Checkers: create", create_start.elapsed());
 
             let files = &program.files;
@@ -418,27 +559,19 @@ impl checkerPool {
         })
     }
 
-    pub(crate) fn state(&self, program: &'static Program) -> &poolState {
-        self.create_checkers(program)
+    pub(crate) fn state(&self) -> &poolState {
+        self.create_checkers()
     }
 
     pub(crate) fn checker_count(&self) -> usize {
         self.checker_count
     }
 
-    // GetChecker: when file is Some, returns the checker associated with that file; otherwise the first checker.
-    pub(crate) fn get_checker(&self, program: &'static Program, file: Option<P<SourceFile>>) -> CheckerGuard<'_> {
-        let state = self.create_checkers(program);
-        let idx = match file {
-            Some(file) => state.file_associations[&file],
-            None => 0,
-        };
-        CheckerGuard(state.checkers[idx].0.lock().unwrap())
-    }
-
-    // Runs `cb` for each checker in the pool, locking each checker while it runs.
-    pub(crate) fn for_each_checker_parallel(&self, program: &'static Program, cb: impl Fn(usize, &mut Checker) + Sync) {
-        let state = self.create_checkers(program);
+    // checkerpool.go:451
+    // Runs `cb` for each checker in the pool concurrently, locking and unlocking checker mutexes as it goes,
+    // making it safe to call `forEachCheckerParallel` from many threads simultaneously.
+    pub(crate) fn for_each_checker_parallel(&self, cb: impl Fn(usize, &mut Checker) + Sync) {
+        let state = self.create_checkers();
         let run = |idx: usize| {
             let mut guard = state.checkers[idx].0.lock().unwrap();
             cb(idx, &mut guard);
@@ -446,28 +579,29 @@ impl checkerPool {
         run_work_group(self.single_threaded, state.checkers.len(), run);
     }
 
-    pub(crate) fn get_global_diagnostics(&self, program: &'static Program) -> Vec<P<Diagnostic>> {
-        let state = self.create_checkers(program);
+    // checkerpool.go:464
+    pub(crate) fn get_global_diagnostics(&self) -> Vec<P<Diagnostic>> {
+        let state = self.create_checkers();
         let global_diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = (0..state.checkers.len()).map(|_| Mutex::new(Vec::new())).collect();
-        self.for_each_checker_parallel(program, |idx, checker| {
+        self.for_each_checker_parallel(|idx, checker| {
             *global_diagnostics[idx].lock().unwrap() = checker.get_global_diagnostics();
         });
         let all: Vec<P<Diagnostic>> = global_diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect();
         sort_and_deduplicate_diagnostics(&all)
     }
 
-    // forEachCheckerGroupDo runs one task per checker. Each task iterates the provided files,
+    // checkerpool.go:476
+    // forEachCheckerGroupDo runs one task per checker in parallel. Each task iterates the provided files,
     // processing only those assigned to its checker. Within each checker's set, files are
     // visited in their original order (load-bearing: another order can change the property order of
     // types printed in messages, notes/perf-balance.md).
     pub(crate) fn for_each_checker_group_do(
         &self,
-        program: &'static Program,
         files: &[P<SourceFile>],
         single_threaded: bool,
         cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync,
     ) {
-        let state = self.create_checkers(program);
+        let state = self.create_checkers();
         let stats = assignment_stats_enabled();
         let times: Vec<Mutex<(f64, usize)>> = if stats { (0..state.checkers.len()).map(|_| Mutex::new((0.0, 0))).collect() } else { Vec::new() };
         let cpu: Vec<Mutex<f64>> = if stats { (0..state.checkers.len()).map(|_| Mutex::new(0.0)).collect() } else { Vec::new() };
@@ -506,6 +640,12 @@ impl checkerPool {
             state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_cpu.lock().unwrap().push(cpu.into_iter().map(|t| t.into_inner().unwrap()).collect());
         }
+    }
+}
+
+impl CheckerPool for checkerPool {
+    fn get_checker(&self, _ctx: &Context, file: Option<P<SourceFile>>) -> CheckerHandle {
+        self.get_checker_exclusive(file)
     }
 }
 

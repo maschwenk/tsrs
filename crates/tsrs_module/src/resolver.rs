@@ -2054,21 +2054,23 @@ impl<'r> ResolutionState<'r> {
             let parsed = packagejson::parse(&contents);
             trace!(self.tracer, diagnostics::Found_package_json_at_0, package_json_path);
             let parseable = parsed.is_ok();
+            let owner = tsrs_core::arena::enter_table_owner(self.resolver.package_json_info_cache.owner_addr());
             let result = P::new(InfoCacheEntry {
                 package_directory: tsrs_core::alloc_str(package_directory),
                 directory_exists: true,
                 contents: Some(P::new(PackageJson::new(parsed.unwrap_or_default(), parseable))),
             });
+            drop(owner);
             let result = self.resolver.package_json_info_cache.set(&package_json_path, result);
             return Some(with_package_directory(result, package_directory));
         } else {
             if directory_exists {
                 trace!(self.tracer, diagnostics::File_0_does_not_exist, package_json_path);
             }
-            self.resolver.package_json_info_cache.set(
-                &package_json_path,
-                P::new(InfoCacheEntry { package_directory: tsrs_core::alloc_str(package_directory), directory_exists, contents: None }),
-            );
+            let owner = tsrs_core::arena::enter_table_owner(self.resolver.package_json_info_cache.owner_addr());
+            let entry = P::new(InfoCacheEntry { package_directory: tsrs_core::alloc_str(package_directory), directory_exists, contents: None });
+            drop(owner);
+            self.resolver.package_json_info_cache.set(&package_json_path, entry);
         }
         None
     }
@@ -2425,4 +2427,286 @@ fn static_extension(extension: &str) -> &'static str {
         }
     }
     alloc_string(extension)
+}
+
+// resolver.go:2126
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum Ending {
+    // EndingFixed indicates that the module specifier cannot be changed without changing its resolution.
+    #[default]
+    Fixed,
+    // EndingExtensionChangeable indicates that the module specifier's extension portion was inferred from a
+    // file on disk, so an interchangeable one could be used instead (e.g. replacing .d.ts with .js).
+    ExtensionChangeable,
+    // EndingChangeable indicates that the module specifier's file name and extension portion were inferred
+    // from a file on disk without being matched as part of an 'exports' pattern, so can be changed according
+    // to the importer's module resolution rules (e.g. an /index.d.ts may be dropped entirely in CommonJS settings).
+    Changeable,
+}
+
+// resolver.go:2139
+#[derive(Clone, Debug, Default)]
+pub struct ResolvedEntrypoint {
+    // OriginalFileName is the symlink path if the entrypoint was discovered at a symlink. Empty otherwise.
+    pub original_file_name: String,
+    // ResolvedFileName is the real path to the entrypoint file.
+    pub resolved_file_name: String,
+    pub module_specifier: String,
+    // Ending indicates whether the file name and extension portion of ModuleSpecifier is fixed or can be changed.
+    pub ending: Ending,
+    // IncludeConditions are the conditions that a resolver must have to reach this entrypoint.
+    pub include_conditions: Option<Set<String>>,
+    // ExcludeConditions are the conditions that a resolver must not have to reach this entrypoint.
+    pub exclude_conditions: Option<Set<String>>,
+}
+
+impl ResolvedEntrypoint {
+    // resolver.go:2154
+    pub fn symlink_or_realpath(&self) -> &str {
+        if !self.original_file_name.is_empty() {
+            return &self.original_file_name;
+        }
+        &self.resolved_file_name
+    }
+}
+
+impl DefaultResolver {
+    // resolver.go:2161
+    pub fn get_entrypoints_from_package_json_info(
+        &self,
+        package_json: P<InfoCacheEntry>,
+        package_name: &str,
+        enable_directory_search: bool,
+    ) -> Option<Vec<ResolvedEntrypoint>> {
+        let extensions = Extensions::TypeScript | Extensions::Declaration;
+        let features = NodeResolutionFeatures::All;
+        let mut state = ResolutionState::bare(self, self.compiler_options);
+        state.extensions = extensions;
+        state.features = features;
+        if package_json.exists() && package_json.contents.unwrap().exports.is_present() {
+            let entrypoints = state.load_entrypoints_from_export_map(package_json, package_name, &package_json.contents.unwrap().exports);
+            return Some(entrypoints);
+        }
+
+        let mut result: Vec<ResolvedEntrypoint> = Vec::new();
+        let main_resolution = state.load_node_module_from_directory_worker(extensions, package_json.package_directory, Some(package_json));
+
+        if main_resolution.is_resolved() {
+            result.push(self.create_resolved_entrypoint_handling_symlink(&main_resolution.as_ref().unwrap().path, package_name, None, None, Ending::Fixed));
+        }
+
+        if enable_directory_search {
+            let other_files = tsrs_vfs::vfsmatch::read_directory(
+                self.host.fs(),
+                self.host.get_current_directory(),
+                package_json.package_directory,
+                &extensions.array(),
+                &["node_modules"],
+                &["**/*"],
+                tsrs_vfs::vfsmatch::UNLIMITED_DEPTH,
+            );
+
+            let compare_paths_options = ComparePathsOptions { use_case_sensitive_file_names: self.host.fs().use_case_sensitive_file_names(), ..Default::default() };
+            for file in &other_files {
+                if main_resolution.is_resolved() && tspath::compare_paths(file, &main_resolution.as_ref().unwrap().path, &compare_paths_options) == 0 {
+                    continue;
+                }
+
+                result.push(self.create_resolved_entrypoint_handling_symlink(
+                    file,
+                    &tspath::resolve_path(package_name, &[&tspath::get_relative_path_from_directory(package_json.package_directory, file, &compare_paths_options)]),
+                    None,
+                    None,
+                    Ending::Changeable,
+                ));
+            }
+        }
+
+        if !result.is_empty() {
+            return Some(result);
+        }
+        None
+    }
+
+    // resolver.go:2220
+    fn create_resolved_entrypoint_handling_symlink(
+        &self,
+        file_name: &str,
+        module_specifier: &str,
+        include_conditions: Option<Set<String>>,
+        exclude_conditions: Option<Set<String>>,
+        ending: Ending,
+    ) -> ResolvedEntrypoint {
+        let mut original_file_name = String::new();
+        let mut resolved_file_name = file_name.to_string();
+        let real_path = self.host.fs().realpath(file_name);
+        if real_path != file_name {
+            original_file_name = file_name.to_string();
+            resolved_file_name = real_path;
+        }
+        ResolvedEntrypoint {
+            original_file_name,
+            resolved_file_name,
+            module_specifier: module_specifier.to_string(),
+            include_conditions,
+            exclude_conditions,
+            ending,
+        }
+    }
+}
+
+impl ResolutionState<'_> {
+    // resolver.go:2237
+    fn load_entrypoints_from_export_map(
+        &mut self,
+        package_json: P<InfoCacheEntry>,
+        package_name: &str,
+        exports: &packagejson::ExportsOrImports,
+    ) -> Vec<ResolvedEntrypoint> {
+        let mut entrypoints: Vec<ResolvedEntrypoint> = Vec::new();
+
+        match exports.type_() {
+            JSONValueType::Array => {
+                for element in exports.as_array() {
+                    self.load_entrypoints_from_target_exports(package_json, package_name, &mut entrypoints, ".", None, None, element);
+                }
+            }
+            JSONValueType::Object => {
+                if exports.is_subpaths() {
+                    for (subpath, export) in exports.as_object() {
+                        self.load_entrypoints_from_target_exports(package_json, package_name, &mut entrypoints, subpath, None, None, export);
+                    }
+                } else {
+                    self.load_entrypoints_from_target_exports(package_json, package_name, &mut entrypoints, ".", None, None, exports);
+                }
+            }
+            _ => self.load_entrypoints_from_target_exports(package_json, package_name, &mut entrypoints, ".", None, None, exports),
+        }
+
+        entrypoints
+    }
+
+    // resolver.go:2245 (Go's recursive closure `loadEntrypointsFromTargetExports`)
+    fn load_entrypoints_from_target_exports(
+        &mut self,
+        package_json: P<InfoCacheEntry>,
+        package_name: &str,
+        entrypoints: &mut Vec<ResolvedEntrypoint>,
+        subpath: &str,
+        include_conditions: Option<Set<String>>,
+        mut exclude_conditions: Option<Set<String>>,
+        exports: &packagejson::ExportsOrImports,
+    ) {
+        if exports.type_() == JSONValueType::String && exports.as_string().starts_with("./") {
+            let exports_str = exports.as_string();
+            if exports_str.contains('*') {
+                if exports_str.find('*') != exports_str.rfind('*') {
+                    return;
+                }
+                let pattern_path = tspath::resolve_path(package_json.package_directory, &[exports_str]);
+                let (leading_slice, trailing_slice) = pattern_path.split_once('*').unwrap_or((&pattern_path, ""));
+                let case_sensitive = self.resolver.host.fs().use_case_sensitive_file_names();
+                let files = tsrs_vfs::vfsmatch::read_directory(
+                    self.resolver.host.fs(),
+                    self.resolver.host.get_current_directory(),
+                    package_json.package_directory,
+                    &self.extensions.array(),
+                    &[] as &[&str],
+                    &[tspath::change_full_extension(&exports_str.replacen('*', "**/*", 1), ".*")],
+                    tsrs_vfs::vfsmatch::UNLIMITED_DEPTH,
+                );
+                for file in &files {
+                    let Some(matched_star) = self.get_matched_star_for_pattern_entrypoint(file, leading_slice, trailing_slice, case_sensitive) else {
+                        continue;
+                    };
+                    let module_specifier = tspath::resolve_path(package_name, &[&subpath.replacen('*', &matched_star, 1)]);
+                    entrypoints.push(self.resolver.create_resolved_entrypoint_handling_symlink(
+                        file,
+                        &module_specifier,
+                        include_conditions.clone(),
+                        exclude_conditions.clone(),
+                        if exports_str.ends_with('*') { Ending::ExtensionChangeable } else { Ending::Fixed },
+                    ));
+                }
+            } else {
+                let parts_after_first = &tspath::get_path_components(exports_str, "")[2..];
+                if parts_after_first.iter().any(|p| p == "..") || parts_after_first.iter().any(|p| p == ".") || parts_after_first.iter().any(|p| p == "node_modules") {
+                    return;
+                }
+                let resolved_target = tspath::resolve_path(package_json.package_directory, &[exports_str]);
+                let result = self.load_file_name_from_package_json_field(self.extensions, &resolved_target, exports_str);
+                if result.is_resolved() {
+                    entrypoints.push(self.resolver.create_resolved_entrypoint_handling_symlink(
+                        &result.unwrap().path,
+                        &tspath::resolve_path(package_name, &[subpath]),
+                        include_conditions.clone(),
+                        exclude_conditions.clone(),
+                        if exports_str.ends_with('*') { Ending::ExtensionChangeable } else { Ending::Fixed },
+                    ));
+                }
+            }
+        } else if exports.type_() == JSONValueType::Array {
+            for element in exports.as_array() {
+                self.load_entrypoints_from_target_exports(
+                    package_json,
+                    package_name,
+                    entrypoints,
+                    subpath,
+                    include_conditions.clone(),
+                    exclude_conditions.clone(),
+                    element,
+                );
+            }
+        } else if exports.type_() == JSONValueType::Object {
+            let mut prev_conditions: Vec<String> = Vec::new();
+            for (condition, export) in exports.as_object() {
+                if exclude_conditions.as_ref().is_some_and(|e| e.has(condition)) {
+                    continue;
+                }
+
+                let condition_always_matches = condition == "default" || condition == "types" || is_applicable_versioned_types_key(condition);
+                let mut new_include_conditions = include_conditions.clone();
+                if !condition_always_matches {
+                    // Go clones the (possibly nil) sets; a nil set clones to nil.
+                    let mut set = new_include_conditions.unwrap_or_default();
+                    set.add(condition.clone());
+                    new_include_conditions = Some(set);
+                    for prev_condition in &prev_conditions {
+                        exclude_conditions.get_or_insert_with(Set::new).add(prev_condition.clone());
+                    }
+                }
+
+                prev_conditions.push(condition.clone());
+                self.load_entrypoints_from_target_exports(
+                    package_json,
+                    package_name,
+                    entrypoints,
+                    subpath,
+                    new_include_conditions,
+                    exclude_conditions.clone(),
+                    export,
+                );
+                if condition_always_matches {
+                    break;
+                }
+            }
+        }
+    }
+
+    // resolver.go:2352
+    fn get_matched_star_for_pattern_entrypoint(&self, file: &str, leading_slice: &str, trailing_slice: &str, case_sensitive: bool) -> Option<String> {
+        if tsrs_core::stringutil::has_prefix_and_suffix_without_overlap(file, leading_slice, trailing_slice, case_sensitive) {
+            return Some(file[leading_slice.len()..file.len() - trailing_slice.len()].to_string());
+        }
+
+        let js_extension = crate::util::try_get_js_extension_for_file(file, &self.compiler_options);
+        if !js_extension.is_empty() {
+            let swapped = tspath::change_full_extension(file, js_extension);
+            if tsrs_core::stringutil::has_prefix_and_suffix_without_overlap(&swapped, leading_slice, trailing_slice, case_sensitive) {
+                return Some(swapped[leading_slice.len()..swapped.len() - trailing_slice.len()].to_string());
+            }
+        }
+
+        None
+    }
 }

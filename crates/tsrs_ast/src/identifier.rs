@@ -62,6 +62,16 @@ pub fn register_source_text(text: &'static str) -> u32 {
     index
 }
 
+// Forgets the text of a file whose memory is about to be freed (language server regions): the table must not keep a
+// pointer into freed memory. The index is not reused.
+pub fn unregister_source_text(index: u32) {
+    if (index as usize) < SOURCE_TEXTS_CAP {
+        let slot = &SOURCE_TEXTS[index as usize];
+        slot.len.store(0, Relaxed);
+        slot.ptr.store(std::ptr::null_mut(), Relaxed);
+    }
+}
+
 #[inline]
 fn source_text_ptr(index: u32) -> *const u8 {
     SOURCE_TEXTS[index as usize].ptr.load(Relaxed)

@@ -736,6 +736,13 @@ impl EmitResolver {
     pub fn is_symbol_accessible(&self, c: &mut Checker, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult {
         c.is_symbol_accessible(symbol, enclosing_declaration, meaning, should_compute_alias_to_mark_visible)
     }
+
+    // emitresolver.go:685
+    pub fn is_symbol_accessible_exported(&self, c: &mut Checker, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult {
+        // TODO: Split into locking and non-locking API methods - only current usage is the symbol tracker, which is non-locking,
+        // as all tracker calls happen within a CreateX call below, which already holds a lock
+        self.is_symbol_accessible(c, symbol, enclosing_declaration, meaning, should_compute_alias_to_mark_visible)
+    }
 }
 
 // emitresolver.go:693

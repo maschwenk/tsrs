@@ -308,6 +308,8 @@ impl Table {
 }
 
 static RESULT: Mutex<Option<Table>> = Mutex::new(None);
+/// Used ranges of freed regions (`census_would_free_range`).
+pub(super) static REGION_FREES: Mutex<Vec<(u64, u64, u32)>> = Mutex::new(Vec::new());
 static WOULD_FREE: Mutex<Vec<(u64, u32)>> = Mutex::new(Vec::new());
 
 /// After `run`: whether `addr` lies in a block the arena freed or rewound (see `check_would_free`).
@@ -513,6 +515,18 @@ fn run_frozen(roots: &[usize]) {
         would_free.extend(std::mem::take(&mut data.would_free));
     }
     let arena_classes = classes.len() as u32;
+    let mut ranges = std::mem::take(&mut *REGION_FREES.lock().unwrap());
+    ranges.sort_unstable();
+    let region_blocks_before = would_free.len();
+    if !ranges.is_empty() {
+        for b in &blocks {
+            let i = ranges.partition_point(|&(s, _, _)| s <= b.start);
+            if i > 0 && b.start < ranges[i - 1].0 + ranges[i - 1].1 {
+                would_free.push((b.start, b.size, ranges[i - 1].2));
+            }
+        }
+    }
+    eprintln!("census: {} freed regions' ranges, {} arena blocks in them", ranges.len(), would_free.len() - region_blocks_before);
     let stacks = STACKS.lock().unwrap().take().map_or_else(Vec::new, |t| t.stacks);
     classes.extend((0..stacks.len() as u32).map(|stack| Class::Heap { stack }));
     let mut oversized = 0u64;
@@ -727,7 +741,8 @@ fn padding_words(c: &Class) -> &'static [usize] {
     match c {
         Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::TypeParameter>") => &[76, 80, 84],
         Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::LiteralType>") => &[36, 40, 44, 48, 52],
-        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::MappedType>") => &[108, 112],
+        // (104: a 4-byte field followed by the padding at 108.)
+        Class::Arena { ty, .. } if ty.ends_with("TypeAlloc<tsrs_checker::types::MappedType>") => &[104, 108, 112],
         Class::Arena { ty, .. } if ty.ends_with("tsrs_ast::diagnostic::Diagnostic") => &[140, 144],
         Class::Arena { ty, .. } if ty.ends_with("tsrs_checker::types::ConditionalRoot") => &[68, 72],
         _ => &[],
@@ -841,6 +856,16 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         if padding {
             return None;
         }
+        // An `Option<Vec<_>>` / `Option<String>` that is `None` keeps the capacity niche (2^63, or 2^63 + k for
+        // nested options) in its first word, and its pointer and length words are uninitialized bytes (copied from
+        // the stack): not references.
+        if let Some(j) = from {
+            let rb = table.blocks[j];
+            let niche = |o: usize| o >= 8 && o <= rb.size as usize && (read(rb.start as usize + o - 8) >> 8) == 0x0080_0000_0000_0000;
+            if off % 8 == 0 && (niche(off) || (off >= 8 && niche(off - 8))) {
+                return None;
+            }
+        }
         let c = w & MASK48;
         if let Some(i) = table.lookup(c) {
             let b = table.blocks[i];
@@ -861,9 +886,15 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             }
         }
         if heap {
-            let c = (w & MASK45) << 3;
-            if let Some(i) = table.lookup(c) {
-                if table.blocks[i].start == c && class_is(table.blocks[i].class, "Symbol") {
+            // Symbol table entries (`SymbolMapEntry`: address >> 3 in the low 45 bits) live in a `Vec` buffer whose
+            // first word is an entry too. Other heap blocks hold no entries; a random 64-bit word there (a hash in a
+            // cache keyed by hashes) decodes to a symbol's address once in ~10^7 words, so it is not an edge.
+            let is_symbol_entry = |w: u64| {
+                let c = (w & MASK45) << 3;
+                table.lookup(c).filter(|&i| table.blocks[i].start == c && class_is(table.blocks[i].class, "Symbol"))
+            };
+            if let Some(i) = is_symbol_entry(w) {
+                if is_symbol_entry(read(table.blocks[from.unwrap()].start as usize)).is_some() {
                     return Some(i);
                 }
             }
@@ -951,6 +982,24 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             ips.extend(stacks[k].iter().copied());
         }
     }
+    // Also name the heap blocks on the referrer chains of the reported violations.
+    let heap_class_stack = |c: u32| -> Option<usize> {
+        match &classes[c as usize] {
+            Class::Heap { stack } => Some(*stack as usize),
+            _ => None,
+        }
+    };
+    for &i in strong.keys().take(20) {
+        let mut k = via[i];
+        let mut n = 0;
+        while k != u32::MAX && n < 12 {
+            if let Some(st) = heap_class_stack(table.blocks[k as usize].class) {
+                ips.extend(stacks[st].iter().copied());
+            }
+            k = via[k as usize];
+            n += 1;
+        }
+    }
     let mut names: FxHashMap<usize, String> = FxHashMap::default();
     atos(&ips, &mut names);
     let heap_frames = |r: &str| -> Option<Vec<String>> {
@@ -985,18 +1034,56 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         mb(cbytes)
     );
     eprintln!("  strongly reachable freed blocks (violations): {}", strong.len());
+    let mut by_referrer: FxHashMap<String, u64> = FxHashMap::default();
+    for r in strong.values() {
+        let class = r.split(" +").next().unwrap_or(r).split(" [").next().unwrap_or(r).to_string();
+        let key = match heap_frames(r) {
+            Some(f) => format!("{} {{{}}}", class, f.join(" <- ")),
+            None => class,
+        };
+        *by_referrer.entry(key).or_default() += 1;
+    }
+    let mut rows: Vec<(String, u64)> = by_referrer.into_iter().collect();
+    rows.sort_by(|a, b| b.1.cmp(&a.1));
+    for (k, n) in rows.iter().take(25) {
+        eprintln!("    violations {n:>8} from {k}");
+    }
     for (&i, r) in strong.iter().take(20) {
         let b = table.blocks[i];
         let mut r = r.clone();
         if let Some(f) = heap_frames(&r) {
             r = format!("{r} {{{}}}", f.join(" <- "));
         }
+        if std::env::var_os("TSRS_CENSUS_RAW_FRAMES").is_some() {
+            if let Some(k) = heap_stack(&r) {
+                let raw: Vec<String> = stacks[k].iter().take_while(|&&ip| ip != 0).take(12).map(|ip| names.get(ip).cloned().unwrap_or_else(|| format!("{ip:#x}"))).collect();
+                eprintln!("    raw frames: {}", raw.join(" <- "));
+            }
+        }
         eprintln!("  STRONG {:#x} ({} bytes, {}) <- {r}", b.start, b.size, class_name(&classes[b.class as usize]));
         let mut chain: Vec<String> = Vec::new();
         let mut k = via[i];
+        let mut child = i;
         while k != u32::MAX && chain.len() < 12 {
             let kb = table.blocks[k as usize];
-            chain.push(format!("{} ({:#x})", class_name(&classes[kb.class as usize]), kb.start));
+            // The offset in the referrer of the first word that points into the block below it on the chain.
+            let cb = table.blocks[child];
+            let mut at = None;
+            let mut p = kb.start as usize;
+            while p + 8 <= (kb.start + kb.size as u64) as usize {
+                let w = read(p) & MASK48;
+                if w >= cb.start && w < cb.start + cb.size as u64 {
+                    at = Some(p - kb.start as usize);
+                    break;
+                }
+                p += 4;
+            }
+            child = k as usize;
+            chain.push(format!("+{}", at.map_or("?".into(), |o| o.to_string())));
+            let frames = heap_class_stack(kb.class)
+                .map(|st| stacks[st].iter().take_while(|&&ip| ip != 0).filter_map(|ip| names.get(ip)).filter(|n| !boring(n)).take(3).cloned().collect::<Vec<_>>().join(" < "))
+                .map_or(String::new(), |f| format!(" {{{f}}}"));
+            chain.push(format!("{}{frames} ({:#x})", class_name(&classes[kb.class as usize]), kb.start));
             k = via[k as usize];
         }
         eprintln!("      reached via: {}", chain.join(" <- "));

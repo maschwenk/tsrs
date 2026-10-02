@@ -1,0 +1,12 @@
+[package]
+name = "tsrs_fswatch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# kqueue / inotify / pipe / pathconf / stat bindings (Go: golang.org/x/sys/unix).
+libc = "0.2"

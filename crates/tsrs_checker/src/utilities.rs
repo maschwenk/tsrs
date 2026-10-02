@@ -449,7 +449,13 @@ pub(crate) fn create_symbol_table(symbols: &[P<Symbol>]) -> Option<P<SymbolTable
 impl Checker {
     // utilities.go:361
     pub(crate) fn sort_symbols(&mut self, symbols: &mut [P<Symbol>]) {
-        symbols.sort_by(|&a, &b| self.compare_symbols(Some(a), Some(b)).cmp(&0));
+        if self.program.source_files_complete() {
+            symbols.sort_by(|&a, &b| self.compare_symbols(Some(a), Some(b)).cmp(&0));
+        } else {
+            // Not a total order (see `Program::source_files_complete`): Rust's sort would panic, Go's pdqsort sorts
+            // anyway; its port gives Go's order.
+            tsrs_core::goslices::sort_func(symbols, |&a, &b| self.compare_symbols(Some(a), Some(b)));
+        }
     }
 
     // utilities.go:365
@@ -1764,8 +1770,7 @@ pub fn is_external_module_symbol(module_symbol: P<Symbol>) -> bool {
 impl Checker {
     // utilities.go:1712
     pub(crate) fn is_canceled(&mut self) -> bool {
-        // Cancellation (c.ctx) is not ported.
-        false
+        self.ctx.as_ref().is_some_and(|ctx| ctx.err().is_some())
     }
 
     // utilities.go:1716

@@ -119,7 +119,19 @@ mod nodebuilder_hover;
 pub(crate) use nodebuilder_hover::*;
 mod services;
 pub(crate) use services::*;
+pub use tsrs_astnav as astnav;
 
-// Exported Go functions the conformance harness's `.types`/`.symbols` baseline writer calls (tsrs_testrunner).
-pub use nodebuilder::new_node_builder;
-pub use utilities::is_type_any;
+// Exported Go package-level functions (the baseline writer, the language service and the project system call them).
+pub use exports::{
+    get_declaration_modifier_flags_from_symbol_exported, get_property_name_from_type_exported, is_distributed_type_parameter, is_tuple_type_exported,
+    is_tuple_type_target, is_type_usable_as_property_name_exported,
+};
+pub use nodebuilder::{new_node_builder, new_node_builder_ex};
+pub use nodebuilderimpl_1::try_get_module_specifier_from_declaration;
+pub use printer::new_symbol_tracker_impl;
+pub use services::get_resolved_signature_for_signature_help;
+pub use utilities::{
+    compare_types, create_mode_mismatch_details, create_module_not_found_chain, get_set_accessor_value_parameter, get_single_variable_of_variable_statement,
+    is_external_module_symbol, is_in_type_query, is_known_symbol, is_private_identifier_symbol, is_type_any, new_diagnostic_chain_for_node, skip_alias,
+    value_to_string,
+};

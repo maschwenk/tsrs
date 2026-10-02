@@ -657,7 +657,7 @@ impl Checker {
                 if let Some(const_enum_declaration) = const_enum_declaration {
                     if const_enum_declaration.flags().intersects(NodeFlags::Ambient) {
                         let redirect = self.program.get_project_reference_from_output_dts(get_source_file_of_node(const_enum_declaration).unwrap().path());
-                        if redirect.is_none() || !redirect.unwrap().resolved.compiler_options().should_preserve_const_enums() {
+                        if redirect.is_none() || !redirect.unwrap().resolved.compiler_options().unwrap().should_preserve_const_enums() {
                             let flag_name = self.get_isolated_modules_like_flag_name();
                             self.error(Some(node), &diagnostics::Cannot_access_ambient_const_enums_when_0_is_enabled, &[&flag_name]);
                         }
@@ -1553,7 +1553,7 @@ impl Checker {
             let redirect = self.program.get_project_reference_from_output_dts(get_source_file_of_node(const_enum_declaration).unwrap().path());
             if const_enum_declaration.flags().intersects(NodeFlags::Ambient)
                 && !is_valid_type_only_alias_use_site(node)
-                && (redirect.is_none() || !redirect.unwrap().resolved.compiler_options().should_preserve_const_enums())
+                && (redirect.is_none() || !redirect.unwrap().resolved.compiler_options().unwrap().should_preserve_const_enums())
             {
                 let flag_name = self.get_isolated_modules_like_flag_name();
                 self.error(Some(node), &diagnostics::Cannot_access_ambient_const_enums_when_0_is_enabled, &[&flag_name]);
@@ -1812,7 +1812,7 @@ impl Checker {
     // checker.go:8026
     pub(crate) fn check_super_expression(&mut self, node: P<Node>) -> P<Type> {
         let is_call_expression = is_call_expression(node.parent().unwrap()) && node.parent().unwrap().expression() == Some(node);
-        let immediate_container = get_super_container(node, true /*stopOnFunctions*/);
+        let immediate_container = crate::utilities::get_super_container(node, true /*stopOnFunctions*/);
         let mut container = immediate_container;
 
         // adjust the container reference in case if super is used inside arrow functions with arbitrarily deep nesting
@@ -1821,7 +1821,7 @@ impl Checker {
                 if !is_arrow_function(c) {
                     break;
                 }
-                container = get_super_container(c, true /*stopOnFunctions*/);
+                container = crate::utilities::get_super_container(c, true /*stopOnFunctions*/);
             }
         }
 

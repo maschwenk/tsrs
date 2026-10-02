@@ -1213,6 +1213,7 @@ pub struct Checker {
     pub _jsx_namespace: String,
     pub _jsx_factory_entity: Option<P<Node>>,
     pub skip_direct_inference_nodes: Set<P<Node>>,
+    pub ctx: Option<Context>, // Go nil until checkSourceFile
     pub packages_map: Option<FxHashMap<String, bool>>, // Go nil map = not computed
     pub active_mappers: Vec<P<TypeMapper>>,
     pub active_type_mappers_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>,
@@ -1233,6 +1234,7 @@ pub struct Checker {
     pub emit_resolver: Option<P<EmitResolver>>, // Go `emitResolver` + `emitResolverOnce`: None until `get_emit_resolver`
 }
 
+// checker.go:911
 /// Go `NewChecker(program, tracer)`. The tracer and the returned mutex are not ported.
 pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     program.bind_source_files();
@@ -1568,6 +1570,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         _jsx_namespace: String::new(),
         _jsx_factory_entity: None,
         skip_direct_inference_nodes: Set::new(),
+        ctx: None,
         packages_map: None,
         active_mappers: Vec::new(),
         active_type_mappers_caches: Vec::new(),
@@ -2243,6 +2246,8 @@ impl Checker {
 pub fn primitive_type_alias_suggestions() -> &'static FxHashMap<&'static str, P<Symbol>> {
     static MAP: OnceLock<FxHashMap<&'static str, P<Symbol>>> = OnceLock::new();
     MAP.get_or_init(|| {
+        // Process-wide: never in a freeable region (language server).
+        let _arena = tsrs_core::arena::enter_thread_arena();
         let mut result = FxHashMap::default();
         for (primitive, builtin) in [
             ("string", "String"),

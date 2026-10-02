@@ -333,7 +333,8 @@ static THREADS: Mutex<Vec<Shared>> = Mutex::new(Vec::new());
 static ARENAS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 
 thread_local! {
-    static LOCAL: Shared = {
+    // Census bookkeeping: made with tracking suspended, like the rest of it.
+    static LOCAL: Shared = census::with_guard(|| {
         let data = Arc::new(Mutex::new(ThreadData {
             index: FxHashMap::default(),
             sites: Vec::new(),
@@ -344,7 +345,7 @@ thread_local! {
         }));
         THREADS.lock().unwrap().push(data.clone());
         data
-    };
+    });
 }
 
 /// Marks heap allocations made while the arena grows (chunk allocations) so the heap sampler can tell them apart.
@@ -381,6 +382,11 @@ pub(crate) fn census_would_free(addr: usize, size: usize) {
         let mut data = local.lock().unwrap();
         census::with_guard(|| data.would_free.push((addr as u64, size as u32, census::next_seq())));
     });
+}
+
+/// Census only: a freed region's used chunk range; every arena block recorded inside it is would-free as of now.
+pub(crate) fn census_would_free_range(start: usize, len: usize) {
+    census::with_guard(|| census::REGION_FREES.lock().unwrap().push((start as u64, len as u64, census::next_seq())));
 }
 
 /// Census only: every block this thread recorded since `census_block_count()` returned `since` would be discarded

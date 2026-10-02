@@ -1536,6 +1536,8 @@ pub struct SourceFile {
     jsdoc_mu: RwLock<()>,
     pub(crate) has_lazy_jsdoc: OwnedCell<bool>,
     identifiers: OnceLock<Set<&'static str>>,
+    // ast.go:2517 nameTableOnce/nameTable (Go map, random order; insertion order here)
+    name_table: OnceLock<tsrs_core::collections::OrderedMap<&'static str, i32>>,
     pub reparsed_clones: OwnedCell<&'static [P<Node>]>,
     pub pragmas: OwnedCell<&'static [Pragma]>,
     pub referenced_files: OwnedCell<&'static [P<FileReference>]>,
@@ -1544,6 +1546,8 @@ pub struct SourceFile {
     pub check_js_directive: OwnedCell<Option<P<CheckJsDirective>>>,
     pub node_count: OwnedCell<usize>,
     pub text_count: OwnedCell<usize>,
+    // Go `Hash xxh3.Uint128`: the content hash the project system's parse cache keys files by (0 = unset).
+    pub hash: OwnedCell<u128>,
     pub common_js_module_indicator: OwnedCell<Option<P<Node>>>,
     // If this is the SourceFile itself, then this module was "forced"
     // to be an external module (previously "true").
@@ -1562,6 +1566,12 @@ pub struct SourceFile {
 
     // Fields for UTF-8 to UTF-16 position mapping
     position_map: OnceLock<P<PositionMap>>,
+
+    // Language service token cache (Go `tokenCacheMu`, `tokenCache`), see get_or_create_token
+    token_cache: std::sync::Mutex<FxHashMap<TokenCacheKey, P<Node>>>,
+
+    // Go `declarationMapMu`, `declarationMap` (workspace symbols), see get_declaration_map
+    declaration_map: OnceLock<FxHashMap<String, Vec<P<Node>>>>,
 }
 
 impl NodeFactory {
@@ -1602,6 +1612,7 @@ impl NodeFactory {
             jsdoc_mu: RwLock::new(()),
             has_lazy_jsdoc: OwnedCell::new(false),
             identifiers: OnceLock::new(),
+            name_table: OnceLock::new(),
             reparsed_clones: OwnedCell::new(&[]),
             pragmas: OwnedCell::new(&[]),
             referenced_files: OwnedCell::new(&[]),
@@ -1610,6 +1621,7 @@ impl NodeFactory {
             check_js_directive: OwnedCell::new(None),
             node_count: OwnedCell::new(0),
             text_count: OwnedCell::new(0),
+            hash: OwnedCell::new(0),
             common_js_module_indicator: OwnedCell::new(None),
             external_module_indicator: OwnedCell::new(None),
             is_bound: AtomicBool::new(false),
@@ -1620,6 +1632,8 @@ impl NodeFactory {
             global_exports: OwnedCell::new(None),
             ecma_line_map: OnceLock::new(),
             position_map: OnceLock::new(),
+            token_cache: std::sync::Mutex::new(FxHashMap::default()),
+            declaration_map: OnceLock::new(),
         });
         node.as_source_file().node.set(Some(node));
         node
@@ -1679,8 +1693,56 @@ impl SourceFile {
         false
     }
 
+    // GetNameTable returns a map of all names in the file to their positions.
+    // If the name appears more than once, the value is -1.
+    // ast.go:2857
+    pub fn get_name_table(&self) -> &tsrs_core::collections::OrderedMap<&'static str, i32> {
+        if let Some(t) = self.name_table.get() {
+            return t;
+        }
+        let _region = self.owner_region();
+        self.name_table.get_or_init(|| {
+            let mut name_table: tsrs_core::collections::OrderedMap<&'static str, i32> = Default::default();
+            let file: &'static SourceFile = self.as_node().as_source_file();
+            fn walk(node: P<Node>, file: &'static SourceFile, name_table: &mut tsrs_core::collections::OrderedMap<&'static str, i32>) -> bool {
+                if is_identifier(node) && !is_tag_name(node) && !node.text().is_empty()
+                    || is_string_or_numeric_literal_like(node) && literal_is_name(node)
+                    || is_private_identifier(node)
+                {
+                    let text = node.text();
+                    if name_table.contains_key(text) {
+                        name_table.insert(text, -1);
+                    } else {
+                        name_table.insert(text, node.pos());
+                    }
+                }
+
+                node.for_each_child(&mut |c| walk(c, file, name_table));
+                let jsdoc_nodes = node.jsdoc(Some(file));
+                for &jsdoc in jsdoc_nodes {
+                    jsdoc.for_each_child(&mut |c| walk(c, file, name_table));
+                }
+                false
+            }
+            self.as_node().for_each_child(&mut |c| walk(c, file, &mut name_table));
+            name_table
+        })
+    }
+
     pub fn has_identifier(&self, name: &str) -> bool {
+        if let Some(ids) = self.identifiers.get() {
+            return ids.keys().contains(name);
+        }
+        let _region = self.owner_region();
         self.identifiers.get_or_init(|| collect_identifiers_for_source_file(self)).keys().contains(name)
+    }
+
+    // Lazily filled shared data of the file lives in the file's own region in the language server (docs/LSP.md
+    // "Memory plan for a long-lived server"), not in the region of whichever checker fills it. Take the scope before
+    // any lock of the cache it fills (lock order: region, then cache). No-op without regions (CLI).
+    #[inline]
+    fn owner_region(&self) -> Option<tsrs_core::arena::RegionScope> {
+        tsrs_core::arena::enter_owner(self as *const SourceFile as usize)
     }
 
     pub fn file_name(&self) -> &str {
@@ -1739,6 +1801,7 @@ impl SourceFile {
             }
         }
         // Slow path: parse and cache under write lock
+        let _region = self.owner_region();
         let _guard = self.jsdoc_mu.write().unwrap();
         // Double-check after acquiring write lock
         if let Some(&jsdocs) = self.jsdoc_cache.borrow().get(&n) {
@@ -1799,6 +1862,10 @@ impl SourceFile {
     }
 
     pub fn ecma_line_map(&self) -> &'static [TextPos] {
+        if let Some(&m) = self.ecma_line_map.get() {
+            return m;
+        }
+        let _region = self.owner_region();
         self.ecma_line_map.get_or_init(|| alloc_vec(compute_ecma_line_starts(self.text)))
     }
 
@@ -1808,6 +1875,10 @@ impl SourceFile {
 
     // GetPositionMap returns the PositionMap for this source file, computing it lazily.
     pub fn get_position_map(&self) -> P<PositionMap> {
+        if let Some(&m) = self.position_map.get() {
+            return m;
+        }
+        let _region = self.owner_region();
         *self.position_map.get_or_init(|| P::new(compute_position_map(self.text)))
     }
 
@@ -1944,6 +2015,194 @@ impl NodeFactory {
             return update_node(updated, node, &self.hooks);
         }
         node
+    }
+}
+
+// ast.go:2441
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct TokenCacheKey {
+    pub parent: P<Node>,
+    pub loc: TextRange,
+}
+
+impl SourceFile {
+    // ast.go:2909
+    pub fn get_or_create_token(&self, kind: Kind, pos: i32, end: i32, parent: P<Node>, flags: TokenFlags) -> P<Node> {
+        let _region = self.owner_region();
+        let mut token_cache = self.token_cache.lock().unwrap();
+        let loc = TextRange::new(pos, end);
+        let key = TokenCacheKey { parent, loc };
+        if let Some(&token) = token_cache.get(&key) {
+            if token.kind() != kind {
+                panic!("Token cache mismatch: {:?} != {:?}", token.kind(), kind);
+            }
+            return token;
+        }
+        if parent.flags().intersects(NodeFlags::Reparsed) {
+            panic!("Cannot create token from reparsed node of kind {:?}", parent.kind());
+        }
+        let token = create_token(kind, self, pos, end, flags);
+        token.set_loc(loc);
+        token.set_parent(Some(parent));
+        token_cache.insert(key, token);
+        token
+    }
+}
+
+impl SourceFile {
+    // ast.go:2973
+    pub fn get_declaration_map(&self) -> &FxHashMap<String, Vec<P<Node>>> {
+        if let Some(m) = self.declaration_map.get() {
+            return m;
+        }
+        let _region = self.owner_region();
+        self.declaration_map.get_or_init(|| self.compute_declaration_map())
+    }
+
+    // ast.go:2982
+    fn compute_declaration_map(&self) -> FxHashMap<String, Vec<P<Node>>> {
+        let mut result: FxHashMap<String, Vec<P<Node>>> = FxHashMap::default();
+
+        fn add_declaration(result: &mut FxHashMap<String, Vec<P<Node>>>, declaration: P<Node>) {
+            let name = get_declaration_name(declaration);
+            if !name.is_empty() {
+                result.entry(name).or_default().push(declaration);
+            }
+        }
+
+        fn visit(result: &mut FxHashMap<String, Vec<P<Node>>>, node: P<Node>) -> bool {
+            match node.kind() {
+                Kind::FunctionDeclaration | Kind::FunctionExpression | Kind::MethodDeclaration | Kind::MethodSignature => {
+                    let declaration_name = get_declaration_name(node);
+                    if !declaration_name.is_empty() {
+                        let declarations = result.entry(declaration_name).or_default();
+                        let last_declaration = declarations.last().copied();
+                        // Check whether this declaration belongs to an "overload group".
+                        if let Some(last_declaration) = last_declaration.filter(|l| node.parent() == l.parent() && node.symbol() == l.symbol()) {
+                            // Overwrite the last declaration if it was an overload and this one is an implementation.
+                            if node.body().is_some() && last_declaration.body().is_none() {
+                                *declarations.last_mut().unwrap() = node;
+                            }
+                        } else {
+                            declarations.push(node);
+                        }
+                    }
+                    node.for_each_child(&mut |c| visit(result, c));
+                }
+                Kind::ClassDeclaration
+                | Kind::ClassExpression
+                | Kind::InterfaceDeclaration
+                | Kind::TypeAliasDeclaration
+                | Kind::EnumDeclaration
+                | Kind::ModuleDeclaration
+                | Kind::ImportEqualsDeclaration
+                | Kind::ImportClause
+                | Kind::NamespaceImport
+                | Kind::GetAccessor
+                | Kind::SetAccessor
+                | Kind::TypeLiteral => {
+                    add_declaration(result, node);
+                    node.for_each_child(&mut |c| visit(result, c));
+                }
+                Kind::ImportSpecifier | Kind::ExportSpecifier => {
+                    if node.property_name().is_some() {
+                        add_declaration(result, node);
+                    }
+                }
+                Kind::Parameter | Kind::VariableDeclaration | Kind::BindingElement => {
+                    // Only consider parameter properties
+                    if node.kind() == Kind::Parameter && !has_syntactic_modifier(node, ModifierFlags::ParameterPropertyModifier) {
+                        return false;
+                    }
+                    if let Some(name) = node.name() {
+                        if is_binding_pattern(name) {
+                            name.for_each_child(&mut |c| visit(result, c));
+                        } else {
+                            if let Some(initializer) = node.initializer() {
+                                visit(result, initializer);
+                            }
+                            add_declaration(result, node);
+                        }
+                    }
+                }
+                Kind::EnumMember | Kind::PropertyDeclaration | Kind::PropertySignature => {
+                    add_declaration(result, node);
+                }
+                Kind::ExportDeclaration => {
+                    // Handle named exports case e.g.:
+                    //    export {a, b as B} from "mod";
+                    if let Some(export_clause) = node.as_export_declaration().export_clause {
+                        if is_named_exports(export_clause) {
+                            for &element in export_clause.elements() {
+                                visit(result, element);
+                            }
+                        } else {
+                            visit(result, export_clause.name().unwrap());
+                        }
+                    }
+                }
+                Kind::ImportDeclaration => {
+                    if let Some(import_clause) = node.as_import_declaration().import_clause {
+                        // Handle default import case e.g.:
+                        //    import d from "mod";
+                        if let Some(name) = import_clause.name() {
+                            add_declaration(result, name);
+                        }
+                        // Handle named bindings in imports e.g.:
+                        //    import * as NS from "mod";
+                        //    import {a, b as B} from "mod";
+                        if let Some(named_bindings) = import_clause.as_import_clause().named_bindings {
+                            if named_bindings.kind() == Kind::NamespaceImport {
+                                add_declaration(result, named_bindings);
+                            } else {
+                                for &element in named_bindings.elements() {
+                                    visit(result, element);
+                                }
+                            }
+                        }
+                    }
+                }
+                Kind::BinaryExpression => {
+                    if matches!(
+                        get_assignment_declaration_kind(node),
+                        JSDeclarationKind::ExportsProperty | JSDeclarationKind::ThisProperty | JSDeclarationKind::Property
+                    ) {
+                        add_declaration(result, node);
+                    }
+                    node.for_each_child(&mut |c| visit(result, c));
+                }
+                _ => {
+                    node.for_each_child(&mut |c| visit(result, c));
+                }
+            }
+            false
+        }
+
+        self.as_node().for_each_child(&mut |c| visit(&mut result, c));
+        result
+    }
+}
+
+// ast.go:2940
+// `kind` should be a token kind.
+// Go keeps one lazily created factory per file (`tokenFactory`); a NodeFactory handle is not `Sync`, and a factory
+// carries no state that tokens observe, so each call uses a fresh default factory.
+fn create_token(kind: Kind, file: &SourceFile, pos: i32, end: i32, flags: TokenFlags) -> P<Node> {
+    let token_factory = NodeFactory::default();
+    let text: &'static str = &file.text[pos as usize..end as usize];
+    match kind {
+        Kind::NumericLiteral => token_factory.new_numeric_literal(text, flags),
+        Kind::BigIntLiteral => token_factory.new_big_int_literal(text, flags),
+        Kind::StringLiteral => token_factory.new_string_literal(text, flags),
+        Kind::JsxText | Kind::JsxTextAllWhiteSpaces => token_factory.new_jsx_text(text, kind == Kind::JsxTextAllWhiteSpaces),
+        Kind::RegularExpressionLiteral => token_factory.new_regular_expression_literal(text, flags),
+        Kind::NoSubstitutionTemplateLiteral => token_factory.new_no_substitution_template_literal(text, flags),
+        Kind::TemplateHead => token_factory.new_template_head(text, "" /*rawText*/, flags),
+        Kind::TemplateMiddle => token_factory.new_template_middle(text, "" /*rawText*/, flags),
+        Kind::TemplateTail => token_factory.new_template_tail(text, "" /*rawText*/, flags),
+        Kind::Identifier => token_factory.new_identifier(text),
+        Kind::PrivateIdentifier => token_factory.new_private_identifier(text),
+        _ => token_factory.new_token(kind), // Punctuation and keywords
     }
 }
 
