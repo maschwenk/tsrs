@@ -94,7 +94,7 @@ t2./**/"#;
         let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: util::completion_function_members_with_prototype_plus(&[Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_with_prototype_plus(&[Any::String("foo".to_string())])), ..Default::default() }), ..Default::default() }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -168,7 +168,7 @@ var /*3*/r2 = t./*4*/foo; // t should have 'foo' in dropdown list and be of type
 import test = require('./exportEqualTypes_file0')"#, "");
             f.verify_quick_info_at(t, "2", "var r1: Date", "");
             f.verify_quick_info_at(t, "3", "var r2: string", "");
-            f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: util::completion_function_members_with_prototype_plus(&[Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_with_prototype_plus(&[Any::String("foo".to_string())])), ..Default::default() }), ..Default::default() }));
             f.verify_no_errors(t);
         });
         done(&mut *f, t);
@@ -391,7 +391,7 @@ var x = express();/*1*/"#;
             f.verify_number_of_errors_in_current_file(t, 0);
             f.go_to_eof(t);
             f.insert(t, "x.");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: vec![Any::String("enable".to_string()), Any::String("post".to_string())], ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("enable".to_string()), Any::String("post".to_string())]), ..Default::default() }), ..Default::default() }));
         });
         done(&mut *f, t);
         go::resume(__defer2);

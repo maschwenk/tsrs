@@ -846,13 +846,14 @@ pub struct CompletionsExpectedItemDefaults {
     pub edit_range: Any, // *EditRange | Ignored
 }
 
-// fourslash.go:1140 (items are *lsproto.CompletionItem | string)
+// fourslash.go:1140 (items are *lsproto.CompletionItem | string). `exact` and `unsorted` are `Option` because a nil
+// and an empty Go slice mean different things there (an empty one requires an empty list).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CompletionsExpectedItems {
     pub includes: Vec<Any>,
     pub excludes: Vec<String>,
-    pub exact: Vec<Any>,
-    pub unsorted: Vec<Any>,
+    pub exact: Option<Vec<Any>>,
+    pub unsorted: Option<Vec<Any>>,
 }
 
 // fourslash.go:1147
@@ -1281,27 +1282,468 @@ impl FourslashTest {
 
     // fourslash.go:1164
     pub fn verify_completions(&mut self, t: &T, marker_input: Any, expected: Option<CompletionsExpectedList>) -> VerifyCompletionsResult {
-        Self::server_unavailable(t, "feature not ported: completions (VerifyCompletions)")
+        t.helper();
+        let mut list: Option<lsproto::CompletionList> = None;
+        match &marker_input {
+            Any::String(marker) => {
+                self.go_to_marker(t, marker);
+                list = self.verify_completions_worker(t, expected.as_ref());
+            }
+            Any::Marker(marker) => {
+                self.go_to_marker_impl(t, &MarkerOrRange::Marker(marker.clone()));
+                list = self.verify_completions_worker(t, expected.as_ref());
+            }
+            Any::StringSlice(markers) => {
+                for marker_name in markers {
+                    self.go_to_marker(t, marker_name);
+                    self.verify_completions_worker(t, expected.as_ref());
+                }
+            }
+            Any::MarkerSlice(markers) => {
+                for marker in markers {
+                    self.go_to_marker_impl(t, &MarkerOrRange::Marker(marker.clone()));
+                    self.verify_completions_worker(t, expected.as_ref());
+                }
+            }
+            Any::Nil => {
+                list = self.verify_completions_worker(t, expected.as_ref());
+            }
+            _ => t.fatal(&format!("Invalid marker input type: {}. Expected string, *Marker, []string, or []*Marker.", marker_input.type_name())),
+        }
+        self.verify_completions_actions(list)
+    }
+
+    // fourslash.go:1191
+    fn verify_completions_actions(&self, list: Option<lsproto::CompletionList>) -> VerifyCompletionsResult {
+        // Go's closures share the list; each Rust closure gets its own copy.
+        let list_for_no_action = list.clone();
+        // (Go dereferences a nil list and a nil expected action, which panics; so do these.)
+        fn find(list: &Option<lsproto::CompletionList>, action: &CompletionsExpectedCodeAction) -> Option<lsproto::CompletionItem> {
+            let list = list.as_ref().expect("runtime error: invalid memory address or nil pointer dereference");
+            list.items
+                .iter()
+                .find(|item| {
+                    if item.label != action.name {
+                        return false;
+                    }
+                    let Some(data) = &item.data else {
+                        return false;
+                    };
+                    let Some(auto_import) = &data.auto_import else {
+                        return false;
+                    };
+                    auto_import.module_specifier == action.source
+                })
+                .cloned()
+        }
+        VerifyCompletionsResult {
+            and_apply_code_action: Box::new(move |f: &mut FourslashTest, t: &T, expected_action: Option<CompletionsExpectedCodeAction>| {
+                let expected_action = expected_action.expect("runtime error: invalid memory address or nil pointer dereference");
+                let Some(item) = find(&list, &expected_action) else {
+                    t.fatal(&format!("Code action '{}' from source '{}' not found in completions.", expected_action.name, expected_action.source));
+                };
+                // Detail and AdditionalTextEdits for auto-import items are populated by
+                // completionItem/resolve, not in the initial completion list.
+                let item = f.resolve_completion_item_impl(t, item);
+                crate::go::assert::check(
+                    t,
+                    item.detail.as_ref().is_some_and(|d| d.contains(&expected_action.description)),
+                    "Completion item detail does not contain expected description.",
+                );
+                let Some(additional_text_edits) = item.additional_text_edits else {
+                    panic!("runtime error: invalid memory address or nil pointer dereference");
+                };
+                f.apply_text_edits(t, additional_text_edits);
+                crate::go::assert::equal(
+                    t,
+                    f.get_script_info(&f.active_filename.clone()).content.as_str(),
+                    expected_action.new_file_content.as_str(),
+                    &format!("File content after applying code action '{}' did not match expected content.", expected_action.name),
+                );
+            }),
+            and_has_no_code_action: Box::new(move |_f: &mut FourslashTest, t: &T, unexpected_action: Option<CompletionsExpectedCodeAction>| {
+                let unexpected_action = unexpected_action.expect("runtime error: invalid memory address or nil pointer dereference");
+                if find(&list_for_no_action, &unexpected_action).is_some() {
+                    t.fatal(&format!("Unexpected code action '{}' from source '{}' found in completions.", unexpected_action.name, unexpected_action.source));
+                }
+            }),
+        }
+    }
+
+    // fourslash.go:1232
+    fn verify_completions_worker(&mut self, t: &T, expected: Option<&CompletionsExpectedList>) -> Option<lsproto::CompletionList> {
+        t.helper();
+        let user_preferences = expected.and_then(|e| e.user_preferences.clone());
+        let prefix = self.get_current_position_prefix();
+        let list = self.get_completions_impl(t, user_preferences);
+        self.verify_completions_result(t, list.as_ref(), expected, &prefix);
+        list
     }
 
     // fourslash.go:1245
     pub fn get_completions(&mut self, t: &T, user_preferences: Option<lsutil::UserPreferences>) -> Option<lsproto::CompletionList> {
-        Self::server_unavailable(t, "feature not ported: completions (GetCompletions)")
+        t.helper();
+        self.get_completions_impl(t, user_preferences)
     }
 
     // fourslash.go:1250
     pub fn verify_jsdoc_completion(&mut self, t: &T, marker_input: Any, expected_offset: i32, expected_text: &str, generate_return_in_doc_template: Option<bool>) {
-        Self::server_unavailable(t, "feature not ported: completions (VerifyJSDocCompletion)")
+        t.helper();
+        self.go_to_marker_input(t, &marker_input);
+
+        let mut user_preferences: Option<lsutil::UserPreferences> = None;
+        if let Some(generate_return_in_doc_template) = generate_return_in_doc_template {
+            let mut prefs = lsutil::new_default_user_preferences();
+            prefs.generate_return_in_doc_template = tsrs_core::bool_to_tristate(generate_return_in_doc_template);
+            user_preferences = Some(prefs);
+        }
+
+        let mut list = self.get_completions_impl(t, user_preferences.clone());
+        let mut item = find_jsdoc_completion_item(list.as_ref());
+        if item.is_none() {
+            let script = self.get_script_info(&self.active_filename.clone());
+            let insert_start = self.converters.line_and_character_to_position(script.clone(), self.current_caret_position);
+            self.insert(t, "/**");
+            list = self.get_completions_impl(t, user_preferences);
+            item = find_jsdoc_completion_item(list.as_ref());
+            let active = self.active_filename.clone();
+            self.edit_script_and_update_markers(t, &active, insert_start, insert_start + 3, "");
+            // (Go converts with the script info captured before the edits.)
+            self.current_caret_position = self.converters.position_to_line_and_character(&script, insert_start);
+        }
+        let Some(list) = list else {
+            t.fatal(&format!("{}Expected JSDoc completion, got nil completion list.", self.get_current_position_prefix()));
+        };
+        let Some(item) = item else {
+            t.fatal(&format!("{}Expected JSDoc completion item, got {:?}.", self.get_current_position_prefix(), list.items));
+        };
+        let Some(insert_replace_edit) = item.text_edit.as_ref().and_then(|e| e.insert_replace_edit.as_ref()) else {
+            t.fatal(&format!("{}Expected JSDoc completion to have insert/replace edit, got {:?}.", self.get_current_position_prefix(), item.text_edit));
+        };
+        crate::go::assert::equal(t, insert_replace_edit.new_text.as_str(), expected_text, &self.get_current_position_prefix());
+        let _ = expected_offset; // The completion path uses snippet placeholders for caret placement.
     }
 
     // fourslash.go:1285
     pub fn verify_no_jsdoc_completion(&mut self, t: &T, marker_input: Any) {
-        Self::server_unavailable(t, "feature not ported: completions (VerifyNoJSDocCompletion)")
+        t.helper();
+        self.go_to_marker_input(t, &marker_input);
+
+        let list = self.get_completions_impl(t, None /*userPreferences*/);
+        if find_jsdoc_completion_item(list.as_ref()).is_some() {
+            t.fatal(&format!("{}Did not expect JSDoc completion item.", self.get_current_position_prefix()));
+        }
+
+        let script = self.get_script_info(&self.active_filename.clone());
+        let insert_start = self.converters.line_and_character_to_position(script.clone(), self.current_caret_position);
+        self.insert(t, "/**");
+        let list = self.get_completions_impl(t, None /*userPreferences*/);
+        let item = find_jsdoc_completion_item(list.as_ref());
+        let active = self.active_filename.clone();
+        self.edit_script_and_update_markers(t, &active, insert_start, insert_start + 3, "");
+        self.current_caret_position = self.converters.position_to_line_and_character(&script, insert_start);
+        if item.is_some() {
+            t.fatal(&format!("{}Did not expect JSDoc completion item.", self.get_current_position_prefix()));
+        }
+    }
+
+    // fourslash.go:1327
+    fn get_completions_impl(&mut self, t: &T, user_preferences: Option<lsutil::UserPreferences>) -> Option<lsproto::CompletionList> {
+        t.helper();
+        let params = lsproto::CompletionParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            context: Some(lsproto::CompletionContext::default()),
+            ..Default::default()
+        };
+        let mut reset: Option<DoneFn> = None;
+        if let Some(user_preferences) = user_preferences {
+            let mut preferences = user_preferences;
+            preferences.format_code_settings = self.user_preferences.format_code_settings.clone();
+            reset = Some(self.configure_with_reset(t, preferences));
+        }
+        let mut result = lsproto::CompletionResponse::default();
+        let r = crate::go::run(|| {
+            result = self.send_request(t, lsproto::TEXT_DOCUMENT_COMPLETION_INFO, params);
+        });
+        if let Some(reset) = reset {
+            reset(self, t);
+        }
+        crate::go::resume(r);
+        // For performance, the server may return unsorted completion lists.
+        // The client is expected to sort them by SortText and then by Label.
+        // We are the client here.
+        if let Some(list) = &mut result.list {
+            list.items.sort_by(|a, b| tsrs_ls::compare_completion_entries(a, b).cmp(&0));
+        }
+        result.list
+    }
+
+    // fourslash.go:1354
+    fn verify_completions_result(&mut self, t: &T, actual: Option<&lsproto::CompletionList>, expected: Option<&CompletionsExpectedList>, prefix: &str) {
+        let Some(actual) = actual else {
+            if !is_empty_expected_list(expected) {
+                t.fatal(&format!("{prefix}Expected completion list but got nil."));
+            }
+            return;
+        };
+        let Some(expected) = expected else {
+            if actual.items.is_empty() {
+                return;
+            }
+            t.fatal(&format!("{prefix}Expected nil completion list but got non-nil: {actual:?}"));
+        };
+        crate::go::assert::equal(t, actual.is_incomplete, expected.is_incomplete, &format!("{prefix}IsIncomplete mismatch"));
+        verify_completions_item_defaults(t, actual.item_defaults.as_ref(), expected.item_defaults.as_ref(), &format!("{prefix}ItemDefaults mismatch: "));
+        // (Go dereferences expected.Items, which panics when it is nil.)
+        let Some(items) = &expected.items else {
+            panic!("runtime error: invalid memory address or nil pointer dereference");
+        };
+        self.verify_completions_items(t, prefix, &actual.items, items);
+    }
+
+    // fourslash.go:1419
+    fn verify_completions_items(&mut self, t: &T, prefix: &str, actual: &[lsproto::CompletionItem], expected: &CompletionsExpectedItems) {
+        if let Some(exact) = &expected.exact {
+            if !expected.includes.is_empty() {
+                t.fatal(&format!("{prefix}Expected exact completion list but also specified 'includes'."));
+            }
+            if !expected.excludes.is_empty() {
+                t.fatal(&format!("{prefix}Expected exact completion list but also specified 'excludes'."));
+            }
+            if expected.unsorted.is_some() {
+                t.fatal(&format!("{prefix}Expected exact completion list but also specified 'unsorted'."));
+            }
+            if actual.len() != exact.len() {
+                t.fatal(&format!("{prefix}Expected {} exact completion items but got {}.", exact.len(), actual.len()));
+            }
+            if !actual.is_empty() {
+                self.verify_completions_are_exactly(t, prefix, actual, exact);
+            }
+            return;
+        }
+        let mut name_to_actual_items: OrderedMap<String, Vec<lsproto::CompletionItem>> = OrderedMap::default();
+        for item in actual {
+            match name_to_actual_items.get_mut(&item.label) {
+                Some(items) => items.push(item.clone()),
+                None => {
+                    name_to_actual_items.insert(item.label.clone(), vec![item.clone()]);
+                }
+            }
+        }
+        if let Some(unsorted) = &expected.unsorted {
+            if !expected.includes.is_empty() {
+                t.fatal(&format!("{prefix}Expected unsorted completion list but also specified 'includes'."));
+            }
+            if !expected.excludes.is_empty() {
+                t.fatal(&format!("{prefix}Expected unsorted completion list but also specified 'excludes'."));
+            }
+            for item in unsorted {
+                match item {
+                    Any::String(item) => {
+                        if name_to_actual_items.get(item).is_none() {
+                            t.fatal(&format!("{prefix}Label '{item}' not found in actual items."));
+                        }
+                        name_to_actual_items.shift_remove(item);
+                    }
+                    Any::CompletionItem(item) => {
+                        let Some(actual_items) = name_to_actual_items.get(&item.label).cloned() else {
+                            t.fatal(&format!("{prefix}Label '{}' not found in actual items.", item.label));
+                        };
+                        let mut mismatch_prefix = if actual_items.len() > 1 {
+                            format!("{prefix}No completion item match for label {} (multiple candidates found): ", item.label)
+                        } else {
+                            format!("{prefix}Includes completion item mismatch for label {}: ", item.label)
+                        };
+                        let item_index = actual_items.iter().position(|actual_item| {
+                            let err = self.verify_completion_item(t, prefix, actual_item, item);
+                            if !err.is_empty() {
+                                mismatch_prefix += &format!("\n    {err}");
+                                return false;
+                            }
+                            true
+                        });
+
+                        // fail test if no match found
+                        let Some(item_index) = item_index else {
+                            t.fatal(&mismatch_prefix);
+                        };
+
+                        if actual_items.len() == 1 {
+                            name_to_actual_items.shift_remove(&item.label);
+                        } else {
+                            let mut rest = actual_items;
+                            rest.remove(item_index);
+                            name_to_actual_items.insert(item.label.clone(), rest);
+                        }
+                    }
+                    _ => t.fatal(&format!("{prefix}Expected completion item to be a string or *lsproto.CompletionItem, got {}", item.type_name())),
+                }
+            }
+            if unsorted.len() != actual.len() {
+                let unmatched: Vec<String> = name_to_actual_items.keys().cloned().collect();
+                t.fatal(&format!("{prefix}Additional completions found but not included in 'unsorted': {}", unmatched.join("\n")));
+            }
+            return;
+        }
+        for item in &expected.includes {
+            match item {
+                Any::String(item) => {
+                    if name_to_actual_items.get(item).is_none() {
+                        t.fatal(&format!("{prefix}Label '{item}' not found in actual items."));
+                    }
+                }
+                Any::CompletionItem(item) => {
+                    let Some(actual_items) = name_to_actual_items.get(&item.label).cloned() else {
+                        t.fatal(&format!("{prefix}Label '{}' not found in actual items.", item.label));
+                    };
+
+                    let mut mismatch_prefix = if actual_items.len() > 1 {
+                        format!("{prefix}No completion item match for label {} (multiple candidates found): ", item.label)
+                    } else {
+                        format!("{prefix}Includes completion item mismatch for label {}: ", item.label)
+                    };
+                    let item_index = actual_items.iter().position(|actual_item| {
+                        let err = self.verify_completion_item(t, prefix, actual_item, item);
+                        if !err.is_empty() {
+                            mismatch_prefix += &format!("\n    {err}");
+                            return false;
+                        }
+                        true
+                    });
+
+                    // fail test if no match found
+                    let Some(item_index) = item_index else {
+                        t.fatal(&mismatch_prefix);
+                    };
+
+                    // delete previous entries since we verify entries in order
+                    if actual_items.len() == 1 || item_index == actual_items.len() - 1 {
+                        name_to_actual_items.shift_remove(&item.label);
+                    } else {
+                        name_to_actual_items.insert(item.label.clone(), actual_items[item_index..].to_vec());
+                    }
+                }
+                _ => t.fatal(&format!("{prefix}Expected completion item to be a string or *lsproto.CompletionItem, got {}", item.type_name())),
+            }
+        }
+        for exclude in &expected.excludes {
+            if name_to_actual_items.get(exclude).is_some() {
+                t.fatal(&format!("{prefix}Label '{exclude}' should not be in actual items but was found."));
+            }
+        }
+    }
+
+    // fourslash.go:1541
+    fn verify_completions_are_exactly(&mut self, t: &T, prefix: &str, actual: &[lsproto::CompletionItem], expected: &[Any]) {
+        let label_mismatch_prefix = format!("{prefix}Label mismatch");
+        for (i, actual_item) in actual.iter().enumerate() {
+            match &expected[i] {
+                Any::String(expected_item) => {
+                    assert_deep_equal(t, &actual_item.label, expected_item, &label_mismatch_prefix);
+                }
+                Any::CompletionItem(expected_item) => {
+                    assert_deep_equal(t, &actual_item.label, &expected_item.label, &label_mismatch_prefix);
+                    let item_prefix = format!("{prefix}Completion item mismatch for label {}", actual_item.label);
+                    let err = self.verify_completion_item(t, &item_prefix, actual_item, expected_item);
+                    if !err.is_empty() {
+                        t.fatal(&format!("{item_prefix}:\n{err}"));
+                    }
+                }
+                other => t.fatal(&format!("Expected completion item to be a string or *lsproto.CompletionItem, got {}", other.type_name())),
+            }
+        }
+    }
+
+    // fourslash.go:1575
+    // Returns an error message if the items do not match. cmp.Diff's report is replaced by both values' Debug forms;
+    // the ignorePaths options clear the ignored fields (at any depth, like cmp's path filter: `.Kind` also matches
+    // MarkupContent.Kind in the documentation) of both sides before comparing.
+    fn verify_completion_item(&mut self, t: &T, prefix: &str, actual: &lsproto::CompletionItem, expected: &lsproto::CompletionItem) -> String {
+        t.helper();
+        let _ = prefix;
+        let actual_auto_import_fix = actual.data.as_ref().and_then(|d| d.auto_import.clone());
+        let expected_auto_import_fix = expected.data.as_ref().and_then(|d| d.auto_import.clone());
+        if actual_auto_import_fix.is_none() != expected_auto_import_fix.is_none() {
+            return "Mismatch in auto-import data presence".to_string();
+        }
+
+        let mut actual = actual.clone();
+        if expected.detail.is_some() || expected.documentation.is_some() || actual_auto_import_fix.is_some() {
+            actual = self.resolve_completion_item_impl(t, actual);
+        }
+
+        if let Some(actual_auto_import_fix) = &actual_auto_import_fix {
+            let err = diff(&auto_import_ignore(&actual), &auto_import_ignore(expected));
+            if !err.is_empty() {
+                return err;
+            }
+            if is_any_text_edits(&expected.additional_text_edits) {
+                if !actual.additional_text_edits.as_ref().is_some_and(|e| !e.is_empty()) {
+                    return "Expected non-nil AdditionalTextEdits for auto-import completion item".to_string();
+                }
+            } else if is_no_text_edits(&expected.additional_text_edits) && actual.additional_text_edits.as_ref().is_some_and(|e| !e.is_empty()) {
+                return "Expected no AdditionalTextEdits for auto-import completion item".to_string();
+            }
+            if expected.label_details.is_some() {
+                let err = diff(&actual.label_details, &expected.label_details);
+                if !err.is_empty() {
+                    return format!("LabelDetailsMismatch:\n{err}");
+                }
+            }
+            if actual_auto_import_fix.module_specifier != expected_auto_import_fix.as_ref().unwrap().module_specifier {
+                return "ModuleSpecifier mismatch".to_string();
+            }
+        } else {
+            let err = diff(&completion_ignore(&actual), &completion_ignore(expected));
+            if !err.is_empty() {
+                return err;
+            }
+            if is_any_text_edits(&expected.additional_text_edits) {
+                if actual.additional_text_edits.as_ref().is_none_or(|e| e.is_empty()) {
+                    return "Expected non-empty AdditionalTextEdits for completion item".to_string();
+                }
+            } else {
+                // NoTextEdits is a pointer to a nil slice in Go.
+                let expected_edits = if is_no_text_edits(&expected.additional_text_edits) { Some(Vec::new()) } else { expected.additional_text_edits.clone() };
+                let err = diff(&actual.additional_text_edits, &expected_edits);
+                if !err.is_empty() {
+                    return format!("AdditionalTextEdits mismatch:\n{err}");
+                }
+            }
+        }
+
+        if expected.filter_text.is_some() {
+            let err = diff(&actual.filter_text, &expected.filter_text);
+            if !err.is_empty() {
+                return format!("FilterText mismatch:\n{err}");
+            }
+        }
+        if expected.kind.is_some() {
+            let err = diff(&actual.kind, &expected.kind);
+            if !err.is_empty() {
+                return format!("Kind mismatch:\n{err}");
+            }
+        }
+        let expected_sort_text = Some(expected.sort_text.clone().unwrap_or_else(|| tsrs_ls::SORT_TEXT_LOCATION_PRIORITY.to_string()));
+        let err = diff(&actual.sort_text, &expected_sort_text);
+        if !err.is_empty() {
+            return format!("SortText mismatch:\n{err}");
+        }
+
+        String::new()
     }
 
     // fourslash.go:1655
     pub fn resolve_completion_item(&mut self, t: &T, item: Option<lsproto::CompletionItem>) -> Option<lsproto::CompletionItem> {
-        Self::server_unavailable(t, "feature not ported: completions (ResolveCompletionItem)")
+        t.helper();
+        let item = item.expect("runtime error: invalid memory address or nil pointer dereference");
+        Some(self.resolve_completion_item_impl(t, item))
+    }
+
+    // fourslash.go:1660
+    fn resolve_completion_item_impl(&mut self, t: &T, item: lsproto::CompletionItem) -> lsproto::CompletionItem {
+        self.send_request(t, lsproto::COMPLETION_ITEM_RESOLVE_INFO, item)
     }
 
     // fourslash.go:1691
@@ -1356,9 +1798,89 @@ impl FourslashTest {
         Self::server_unavailable(t, "feature not ported: code actions (VerifyOrganizeImportsWithRequestKind)")
     }
 
+    // fourslash.go:2222
+    fn find_completion_for_code_action(&mut self, t: &T, items: &[lsproto::CompletionItem], description: &str) -> Option<lsproto::CompletionItem> {
+        t.helper();
+        if let Some(item) = items.iter().find(|item| item.additional_text_edits.as_ref().is_some_and(|e| !e.is_empty())) {
+            return Some(item.clone());
+        }
+        for item in items {
+            let resolved_item = self.resolve_completion_item_impl(t, item.clone());
+            if resolved_item.additional_text_edits.as_ref().is_none_or(|e| e.is_empty()) {
+                continue;
+            }
+            if !description.is_empty() && !resolved_item.detail.as_ref().is_some_and(|d| d.contains(description)) {
+                continue;
+            }
+            return Some(resolved_item);
+        }
+        None
+    }
+
     // fourslash.go:2241
     pub fn verify_apply_code_action_from_completion(&mut self, t: &T, marker_name: Option<String>, options: Option<ApplyCodeActionFromCompletionOptions>) {
-        Self::server_unavailable(t, "feature not ported: completions (VerifyApplyCodeActionFromCompletion)")
+        t.helper();
+        let nil = || -> ! { panic!("runtime error: invalid memory address or nil pointer dereference") };
+        let marker_name = marker_name.unwrap_or_else(|| nil());
+        self.go_to_marker(t, &marker_name);
+        let user_preferences = match options.as_ref().and_then(|o| o.user_preferences.clone()) {
+            Some(user_preferences) => user_preferences,
+            // Default preferences: enables auto-imports
+            None => lsutil::new_default_user_preferences(),
+        };
+
+        let reset = self.configure_with_reset(t, user_preferences);
+        let r = crate::go::run(|| {
+            let completions_list = self.get_completions_impl(t, None /*userPreferences*/); // Already configured, so we do not need to pass it in again
+            let completions_list = completions_list.unwrap_or_else(|| nil());
+            let options = options.as_ref().unwrap_or_else(|| nil());
+            let items: Vec<lsproto::CompletionItem> = completions_list
+                .items
+                .iter()
+                .filter(|item| {
+                    if item.label != options.name {
+                        return false;
+                    }
+                    let Some(data) = &item.data else {
+                        return false;
+                    };
+                    if let Some(auto_import_fix) = &options.auto_import_fix {
+                        let mut module_specifier = auto_import_fix.module_specifier.as_str();
+                        if module_specifier.is_empty() {
+                            module_specifier = &options.source;
+                        }
+                        return data.auto_import.as_ref().is_some_and(|a| a.module_specifier == module_specifier);
+                    }
+                    if data.auto_import.is_none() && !data.source.is_empty() && data.source == options.source {
+                        return true;
+                    }
+                    if data.auto_import.as_ref().is_some_and(|a| a.module_specifier == options.source) {
+                        return true;
+                    }
+                    false
+                })
+                .cloned()
+                .collect();
+
+            let Some(item) = self.find_completion_for_code_action(t, &items, &options.description) else {
+                t.fatal(&format!("Code action '{}' from source '{}' not found.", options.name, options.source));
+            };
+
+            // apply the item to the test files
+            self.apply_text_edits(t, item.additional_text_edits.unwrap_or_else(|| nil()));
+            if let Some(new_file_content) = &options.new_file_content {
+                crate::go::assert::equal(
+                    t,
+                    self.get_script_info(&self.active_filename.clone()).content.as_str(),
+                    new_file_content.as_str(),
+                    "File content after applying code action did not match expected content.",
+                );
+            } else if options.new_range_content.is_some() {
+                t.fatal("!!! TODO");
+            }
+        });
+        reset(self, t);
+        crate::go::resume(r);
     }
 
     // fourslash.go:2291
@@ -1640,7 +2162,107 @@ impl FourslashTest {
 
     // fourslash.go:3173
     pub fn verify_baseline_signature_help(&mut self, t: &T) {
-        Self::server_unavailable(t, "feature not ported: signature help (VerifyBaselineSignatureHelp)")
+        let mut markers_and_items: Vec<MarkerAndItem<Option<lsproto::SignatureHelp>>> = Vec::new();
+        for marker in self.markers() {
+            if marker.name.is_none() {
+                continue;
+            }
+
+            let params = lsproto::SignatureHelpParams {
+                text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&marker.file_name) },
+                position: marker.ls_position,
+                ..Default::default()
+            };
+
+            let result = self.send_request(t, lsproto::TEXT_DOCUMENT_SIGNATURE_HELP_INFO, params);
+            markers_and_items.push(MarkerAndItem { marker, item: result.signature_help });
+        }
+
+        // SignatureHelp doesn't have a range like hover does
+        let get_range = |_item: &Option<lsproto::SignatureHelp>| -> Option<lsproto::Range> { None };
+
+        let get_tooltip_lines = |item: &Option<lsproto::SignatureHelp>, _prev: &Option<lsproto::SignatureHelp>| -> Vec<String> {
+            let Some(item) = item.as_ref().filter(|item| !item.signatures.is_empty()) else {
+                return vec!["No signature help available".to_string()];
+            };
+
+            // Show active signature if specified, otherwise first signature
+            let mut active_signature = 0;
+            if let Some(a) = item.active_signature {
+                if (a as usize) < item.signatures.len() {
+                    active_signature = a as usize;
+                }
+            }
+
+            let sig = &item.signatures[active_signature];
+
+            // Build signature display
+            let mut signature_line = sig.label.clone();
+            let mut active_param_line = String::new();
+
+            // Determine active parameter: per-signature takes precedence over top-level per LSP spec
+            // "If provided (or `null`), this is used in place of `SignatureHelp.activeParameter`."
+            let active_param_ptr = if sig.active_parameter.is_some() { &sig.active_parameter } else { &item.active_parameter };
+
+            // Show active parameter if specified, and the signature text.
+            if let (Some(active_param_index), Some(parameters)) = (active_param_ptr.as_ref().and_then(|p| p.uinteger), &sig.parameters) {
+                let active_param_index = active_param_index as usize;
+                if active_param_index < parameters.len() {
+                    let active_param = &parameters[active_param_index];
+
+                    // Get the parameter label and bold the
+                    // parameter text within the original string.
+                    let active_param_label = if let Some(s) = &active_param.label.string {
+                        s.clone()
+                    } else if let Some(tuple) = &active_param.label.tuple {
+                        signature_line[tuple[0] as usize..tuple[1] as usize].to_string()
+                    } else {
+                        t.fatal("Unsupported param label kind.");
+                    };
+                    signature_line = signature_line.replacen(&active_param_label, &format!("**{active_param_label}**"), 1);
+
+                    if let Some(documentation) = &active_param.documentation {
+                        if let Some(markup_content) = &documentation.markup_content {
+                            active_param_line = markup_content.value.clone();
+                        } else if let Some(s) = &documentation.string {
+                            active_param_line = s.clone();
+                        }
+
+                        active_param_line = format!("- `{active_param_label}`: {active_param_line}");
+                    }
+                }
+            }
+
+            let mut result: Vec<String> = Vec::with_capacity(16);
+            result.push(signature_line);
+            if !active_param_line.is_empty() {
+                result.push(active_param_line);
+            }
+
+            // ORIGINALLY we would "only display signature documentation on the last argument when multiple arguments are marked".
+            // !!!
+            // Note that this is harder than in Strada, because LSP signature help has no concept of
+            // applicable spans.
+            if let Some(documentation) = &sig.documentation {
+                if let Some(markup_content) = &documentation.markup_content {
+                    result.extend(markup_content.value.split('\n').map(str::to_string));
+                } else if let Some(s) = &documentation.string {
+                    result.extend(s.split('\n').map(str::to_string));
+                } else {
+                    t.fatal("Unsupported documentation format.");
+                }
+            }
+
+            result
+        };
+
+        let annotated = self.annotate_content_with_tooltips(t, &markers_and_items, "signaturehelp", get_range, get_tooltip_lines);
+        self.add_result_to_baseline(t, SIGNATURE_HELP_CMD, &annotated);
+        let json = Value::Array(markers_and_items.iter().map(|m| marker_and_item_to_json(m, |h| h.as_ref().map_or(Value::Null, |h| h.to_json()))).collect());
+        match tsrs_core::json::marshal_indent(&json, "", "  ") {
+            Ok(json_str) => self.write_to_baseline(SIGNATURE_HELP_CMD, &json_str),
+            Err(err) => t.fatal(&format!("Failed to stringify markers and items for baseline: {err}")),
+        }
     }
 
     // fourslash.go:3283
@@ -1801,27 +2423,240 @@ impl FourslashTest {
 
     // fourslash.go:4255
     pub fn verify_jsx_closing_tag(&mut self, t: &T, markers_to_new_text: OrderedMap<String, Option<String>>) {
-        Self::server_unavailable(t, "feature not ported: _vs_onAutoInsert (VerifyJsxClosingTag)")
+        for (marker, expected_text) in markers_to_new_text.iter() {
+            self.go_to_marker(t, marker);
+            let params = lsproto::VSOnAutoInsertParams {
+                vs_text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+                vs_position: self.current_caret_position,
+                vs_ch: ">".to_string(),
+                ..Default::default()
+            };
+
+            let request_result = self.send_request(t, lsproto::TEXT_DOCUMENT_VS_ON_AUTO_INSERT_INFO, params);
+
+            let mut actual_text: Option<String> = None;
+            if let Some(item) = &request_result.vs_on_auto_insert_response_item {
+                let mut new_text = item.vs_text_edit.new_text.clone();
+                if item.vs_text_edit_format == lsproto::InsertTextFormat::Snippet {
+                    match new_text.strip_prefix("$0") {
+                        Some(rest) => new_text = rest.to_string(),
+                        None => t.fatal(&format!(
+                            "{}expected JSX closing tag snippet to begin with $0, got {}",
+                            self.get_current_position_prefix(),
+                            crate::go::quote(&item.vs_text_edit.new_text)
+                        )),
+                    }
+                }
+                actual_text = Some(new_text);
+            }
+            assert_deep_equal(t, &actual_text, expected_text, &format!("{}JSX closing tag text mismatch", self.get_current_position_prefix()));
+        }
     }
 
+    // VerifyBaselineClosingTags generates a baseline for JSX closing tag completions at all markers.
     // fourslash.go:4285
     pub fn verify_baseline_closing_tags(&mut self, t: &T) {
-        Self::server_unavailable(t, "feature not ported: _vs_onAutoInsert (VerifyBaselineClosingTags)")
+        t.helper();
+
+        let mut markers_and_items: Vec<MarkerAndItem<Option<lsproto::VSOnAutoInsertResponseItem>>> = Vec::new();
+        for marker in self.markers() {
+            if marker.name.is_none() {
+                continue;
+            }
+
+            let params = lsproto::VSOnAutoInsertParams {
+                vs_text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&marker.file_name) },
+                vs_position: marker.ls_position,
+                vs_ch: ">".to_string(),
+                ..Default::default()
+            };
+
+            let result = self.send_request(t, lsproto::TEXT_DOCUMENT_VS_ON_AUTO_INSERT_INFO, params);
+            markers_and_items.push(MarkerAndItem { marker, item: result.vs_on_auto_insert_response_item });
+        }
+
+        // Returning nil lets annotateContentWithTooltips render the caret marker at
+        // the marker position. The text edit's range is zero-width at the cursor,
+        // which would render as an empty underline.
+        let get_range = |_item: &Option<lsproto::VSOnAutoInsertResponseItem>| -> Option<lsproto::Range> { None };
+
+        let get_tooltip_lines = |item: &Option<lsproto::VSOnAutoInsertResponseItem>, _prev: &Option<lsproto::VSOnAutoInsertResponseItem>| -> Vec<String> {
+            let Some(item) = item else {
+                return vec!["No closing tag".to_string()];
+            };
+            let mut format = "plaintext";
+            if item.vs_text_edit_format == lsproto::InsertTextFormat::Snippet {
+                format = "snippet";
+            }
+            vec![format!("{format}: {}", crate::go::quote(&item.vs_text_edit.new_text))]
+        };
+
+        let result = self.annotate_content_with_tooltips(t, &markers_and_items, "closing tag", get_range, get_tooltip_lines);
+        self.add_result_to_baseline(t, CLOSING_TAG_CMD, &result);
     }
 
+    // VerifySignatureHelp verifies signature help at the current position matches the expected options.
     // fourslash.go:4353
     pub fn verify_signature_help(&mut self, t: &T, expected: VerifySignatureHelpOptions) {
-        Self::server_unavailable(t, "feature not ported: signature help (VerifySignatureHelp)")
+        t.helper();
+        let prefix = self.get_current_position_prefix();
+        let params = lsproto::SignatureHelpParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_SIGNATURE_HELP_INFO, params);
+        let Some(help) = result.signature_help else {
+            t.fatal(&format!("{prefix}Could not get signature help"));
+        };
+
+        // Determine which signature to check
+        let mut selected_index: usize = 0;
+        if expected.override_selected_item_index > 0 {
+            selected_index = expected.override_selected_item_index as usize;
+        } else if let Some(active_signature) = help.active_signature {
+            selected_index = active_signature as usize;
+        }
+
+        if selected_index >= help.signatures.len() {
+            t.fatal(&format!("{prefix}Selected signature index {selected_index} out of range (have {} signatures)", help.signatures.len()));
+        }
+
+        let selected_sig = &help.signatures[selected_index];
+
+        // Verify overloads count
+        if expected.overloads_count > 0 && help.signatures.len() != expected.overloads_count as usize {
+            t.error(&format!("{prefix}Expected {} overloads, got {}", expected.overloads_count, help.signatures.len()));
+        }
+
+        // Verify signature text
+        if !expected.text.is_empty() && selected_sig.label != expected.text {
+            t.error(&format!("{prefix}Expected signature text {}, got {}", crate::go::quote(&expected.text), crate::go::quote(&selected_sig.label)));
+        }
+
+        // Verify doc comment
+        if !expected.doc_comment.is_empty() {
+            let actual_doc = documentation_text(&selected_sig.documentation);
+            if actual_doc != expected.doc_comment {
+                t.error(&format!("{prefix}Expected doc comment {}, got {}", crate::go::quote(&expected.doc_comment), crate::go::quote(&actual_doc)));
+            }
+        }
+
+        // Verify parameter count
+        if expected.parameter_count > 0 {
+            let param_count = selected_sig.parameters.as_ref().map_or(0, Vec::len);
+            if param_count != expected.parameter_count as usize {
+                t.error(&format!("{prefix}Expected {} parameters, got {param_count}", expected.parameter_count));
+            }
+        }
+
+        // Get active parameter
+        let mut active_param_index: usize = 0;
+        if let Some(i) = selected_sig.active_parameter.as_ref().and_then(|p| p.uinteger) {
+            active_param_index = i as usize;
+        } else if let Some(i) = help.active_parameter.as_ref().and_then(|p| p.uinteger) {
+            active_param_index = i as usize;
+        }
+
+        let active_param: Option<&lsproto::ParameterInformation> = selected_sig.parameters.as_ref().and_then(|p| p.get(active_param_index));
+
+        // Verify parameter name
+        if !expected.parameter_name.is_empty() {
+            match active_param {
+                None => t.error(&format!("{prefix}Expected parameter name {}, but no active parameter", crate::go::quote(&expected.parameter_name))),
+                Some(active_param) => {
+                    // Parameter name is extracted from the label
+                    let mut actual_name = String::new();
+                    if let Some(label) = &active_param.label.string {
+                        // Extract name from label like "x: string" -> "x" or "T extends Foo" -> "T" or "...x: any[]" -> "x"
+                        // Strip leading "..." for rest parameters
+                        let label = label.strip_prefix("...").unwrap_or(label);
+                        if let Some((name, _)) = label.split_once(':') {
+                            actual_name = name.trim().to_string();
+                        } else if let Some((name, _)) = label.split_once(" extends ") {
+                            actual_name = name.trim().to_string();
+                        } else {
+                            actual_name = label.to_string();
+                        }
+                    }
+                    if actual_name != expected.parameter_name {
+                        t.error(&format!("{prefix}Expected parameter name {}, got {}", crate::go::quote(&expected.parameter_name), crate::go::quote(&actual_name)));
+                    }
+                }
+            }
+        }
+
+        // Verify parameter span (label)
+        if !expected.parameter_span.is_empty() {
+            match active_param {
+                None => t.error(&format!("{prefix}Expected parameter span {}, but no active parameter", crate::go::quote(&expected.parameter_span))),
+                Some(active_param) => {
+                    let actual_span = active_param.label.string.clone().unwrap_or_default();
+                    if actual_span != expected.parameter_span {
+                        t.error(&format!("{prefix}Expected parameter span {}, got {}", crate::go::quote(&expected.parameter_span), crate::go::quote(&actual_span)));
+                    }
+                }
+            }
+        }
+
+        // Verify parameter doc comment
+        if !expected.parameter_doc_comment.is_empty() {
+            match active_param {
+                None => t.error(&format!("{prefix}Expected parameter doc comment {}, but no active parameter", crate::go::quote(&expected.parameter_doc_comment))),
+                Some(active_param) => {
+                    let actual_doc = documentation_text(&active_param.documentation);
+                    if actual_doc != expected.parameter_doc_comment {
+                        t.error(&format!(
+                            "{prefix}Expected parameter doc comment {}, got {}",
+                            crate::go::quote(&expected.parameter_doc_comment),
+                            crate::go::quote(&actual_doc)
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Verify isVariadic (check if any parameter starts with "...")
+        if expected.is_variadic_set {
+            let actual_is_variadic =
+                selected_sig.parameters.as_ref().is_some_and(|params| params.iter().any(|param| param.label.string.as_ref().is_some_and(|s| s.starts_with("..."))));
+            if actual_is_variadic != expected.is_variadic {
+                t.error(&format!("{prefix}Expected isVariadic={}, got {actual_is_variadic}", expected.is_variadic));
+            }
+        }
     }
 
+    // VerifyNoSignatureHelp verifies that no signature help is available at the current position.
     // fourslash.go:4513
     pub fn verify_no_signature_help(&mut self, t: &T) {
-        Self::server_unavailable(t, "feature not ported: signature help (VerifyNoSignatureHelp)")
+        t.helper();
+        let prefix = self.get_current_position_prefix();
+        let params = lsproto::SignatureHelpParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_SIGNATURE_HELP_INFO, params);
+        if let Some(help) = result.signature_help.as_ref().filter(|h| !h.signatures.is_empty()) {
+            t.error(&format!("{prefix}Expected no signature help, but got {} signatures", help.signatures.len()));
+        }
     }
 
+    // VerifyNoSignatureHelpWithContext verifies that no signature help is available at the current position with a given context.
     // fourslash.go:4529
     pub fn verify_no_signature_help_with_context(&mut self, t: &T, context: Option<lsproto::SignatureHelpContext>) {
-        Self::server_unavailable(t, "feature not ported: signature help (VerifyNoSignatureHelpWithContext)")
+        t.helper();
+        let prefix = self.get_current_position_prefix();
+        let params = lsproto::SignatureHelpParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            context,
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_SIGNATURE_HELP_INFO, params);
+        if let Some(help) = result.signature_help.as_ref().filter(|h| !h.signatures.is_empty()) {
+            t.error(&format!("{prefix}Expected no signature help, but got {} signatures", help.signatures.len()));
+        }
     }
 
     // fourslash.go:4546
@@ -1832,9 +2667,21 @@ impl FourslashTest {
         }
     }
 
+    // VerifySignatureHelpPresent verifies that signature help is available at the current position with a given context.
     // fourslash.go:4555
     pub fn verify_signature_help_present(&mut self, t: &T, context: Option<lsproto::SignatureHelpContext>) {
-        Self::server_unavailable(t, "feature not ported: signature help (VerifySignatureHelpPresent)")
+        t.helper();
+        let prefix = self.get_current_position_prefix();
+        let params = lsproto::SignatureHelpParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            context,
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_SIGNATURE_HELP_INFO, params);
+        if result.signature_help.as_ref().is_none_or(|h| h.signatures.is_empty()) {
+            t.error(&format!("{prefix}Expected signature help to be present, but got none"));
+        }
     }
 
     // fourslash.go:4572
@@ -1853,14 +2700,145 @@ impl FourslashTest {
         }
     }
 
+    // VerifySignatureHelpWithCases verifies signature help using detailed SignatureHelpCase structs.
+    // This is useful for more complex tests that need to verify the full signature help response.
     // fourslash.go:4597
     pub fn verify_signature_help_with_cases(&mut self, t: &T, signature_help_cases: &[SignatureHelpCase]) {
-        Self::server_unavailable(t, "feature not ported: signature help (VerifySignatureHelpWithCases)")
+        for option in signature_help_cases {
+            match &option.marker_input {
+                Any::String(marker) => {
+                    self.go_to_marker(t, marker);
+                    self.verify_signature_help_impl(t, option.context.clone(), option.expected.as_ref());
+                }
+                Any::Marker(marker) => {
+                    self.go_to_marker_impl(t, &MarkerOrRange::Marker(marker.clone()));
+                    self.verify_signature_help_impl(t, option.context.clone(), option.expected.as_ref());
+                }
+                Any::StringSlice(markers) => {
+                    for marker_name in markers {
+                        self.go_to_marker(t, marker_name);
+                        self.verify_signature_help_impl(t, option.context.clone(), option.expected.as_ref());
+                    }
+                }
+                Any::MarkerSlice(markers) => {
+                    for marker in markers {
+                        self.go_to_marker_impl(t, &MarkerOrRange::Marker(marker.clone()));
+                        self.verify_signature_help_impl(t, option.context.clone(), option.expected.as_ref());
+                    }
+                }
+                Any::Nil => self.verify_signature_help_impl(t, option.context.clone(), option.expected.as_ref()),
+                other => t.fatal(&format!("Invalid marker input type: {}. Expected string, *Marker, []string, or []*Marker.", other.type_name())),
+            }
+        }
+    }
+
+    // fourslash.go:4626 (verifySignatureHelp)
+    fn verify_signature_help_impl(&mut self, t: &T, context: Option<lsproto::SignatureHelpContext>, expected: Option<&lsproto::SignatureHelp>) {
+        let prefix = self.get_current_position_prefix();
+        let params = lsproto::SignatureHelpParams {
+            text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+            position: self.current_caret_position,
+            context,
+            ..Default::default()
+        };
+        let result = self.send_request(t, lsproto::TEXT_DOCUMENT_SIGNATURE_HELP_INFO, params);
+        self.verify_signature_help_result(t, result.signature_help.as_ref(), expected, &prefix);
+    }
+
+    // fourslash.go:4642
+    fn verify_signature_help_result(&self, t: &T, actual: Option<&lsproto::SignatureHelp>, expected: Option<&lsproto::SignatureHelp>, prefix: &str) {
+        assert_deep_equal(t, &actual, &expected, &format!("{prefix} SignatureHelp mismatch"));
     }
 
     // fourslash.go:4657
     pub fn baseline_auto_imports_completions(&mut self, t: &T, marker_names: &[&str]) {
-        Self::server_unavailable(t, "feature not ported: completions (BaselineAutoImportsCompletions)")
+        t.helper();
+        let reset = self.configure_with_reset(
+            t,
+            lsutil::UserPreferences {
+                include_completions_for_module_exports: Tristate::True,
+                include_completions_for_import_statements: Tristate::True,
+                import_module_specifier_preference: self.user_preferences.import_module_specifier_preference.clone(),
+                import_module_specifier_ending: self.user_preferences.import_module_specifier_ending.clone(),
+                auto_import_specifier_exclude_regexes: self.user_preferences.auto_import_specifier_exclude_regexes.clone(),
+                auto_import_file_exclude_patterns: self.user_preferences.auto_import_file_exclude_patterns.clone(),
+                prefer_type_only_auto_imports: self.user_preferences.prefer_type_only_auto_imports,
+                auto_import_entrypoint_directory_search: self.user_preferences.auto_import_entrypoint_directory_search,
+                ..Default::default()
+            },
+        );
+        let r = crate::go::run(|| {
+            for &marker_name in marker_names {
+                self.go_to_marker(t, marker_name);
+                let params = lsproto::CompletionParams {
+                    text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+                    position: self.current_caret_position,
+                    context: Some(lsproto::CompletionContext::default()),
+                    ..Default::default()
+                };
+                let result = self.send_request(t, lsproto::TEXT_DOCUMENT_COMPLETION_INFO, params);
+
+                let prefix = format!("At marker '{marker_name}': ");
+
+                self.write_to_baseline(AUTO_IMPORTS_CMD, "// === Auto Imports === \n");
+
+                let active = self.active_filename.clone();
+                let Some(file_content) = self.text_of_file(&active) else {
+                    t.fatal(&format!("{prefix}Failed to read file {active} for auto-import baseline"));
+                };
+
+                let marker = self.test_data.marker_positions[marker_name].clone();
+                let ext = tspath::get_any_extension_from_path(&active, &[], true);
+                let ext = ext.strip_prefix('.').unwrap_or(&ext);
+                let lang = if ext == "mts" || ext == "cts" { "ts" } else { ext };
+                let position = marker.position as usize;
+                self.write_to_baseline(
+                    AUTO_IMPORTS_CMD,
+                    &code_fence(lang, &format!("// @FileName: {active}\n{}/*{marker_name}*/{}", &file_content[..position], &file_content[position..])),
+                );
+
+                let current_file = new_script_info(&active, &file_content);
+                let line_map = current_file.line_map.clone();
+                let converters = new_test_converters(lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(line_map.clone())));
+                let list: Vec<lsproto::CompletionItem> = match result.items.filter(|items| !items.is_empty()) {
+                    Some(items) => items,
+                    None => match result.list.filter(|list| !list.items.is_empty()) {
+                        Some(list) => list.items,
+                        None => {
+                            self.write_to_baseline(AUTO_IMPORTS_CMD, "no autoimport completions found\n\n");
+                            continue;
+                        }
+                    },
+                };
+
+                for item in list {
+                    // (Go dereferences SortText, which panics when it is nil.)
+                    if item.data.is_none() || item.sort_text.as_deref().expect("runtime error: invalid memory address or nil pointer dereference") != tsrs_ls::SORT_TEXT_AUTO_IMPORT_SUGGESTIONS {
+                        continue;
+                    }
+                    let label = item.label.clone();
+                    let detail = item.detail.clone();
+                    let details = self.send_request(t, lsproto::COMPLETION_ITEM_RESOLVE_INFO, item);
+                    let Some(mut all_changes) = details.additional_text_edits.filter(|edits| !edits.is_empty()) else {
+                        // (Go formats the *string detail with %s, which prints the pointer.)
+                        t.fatal(&format!("{prefix}Entry {label} from {detail:?} returned no code changes from completion details request"));
+                    };
+
+                    // !!! calculate the change provided by the completiontext
+                    // sorted from back-of-file-most to front-of-file-most
+                    all_changes.sort_by(|a, b| lsproto::compare_positions(b.range.start, a.range.start).cmp(&0));
+                    let mut new_file_content = file_content.clone();
+                    for change in &all_changes {
+                        let start = converters.line_and_character_to_position(current_file.clone(), change.range.start) as usize;
+                        let end = converters.line_and_character_to_position(current_file.clone(), change.range.end) as usize;
+                        new_file_content = format!("{}{}{}", &new_file_content[..start], change.new_text, &new_file_content[end..]);
+                    }
+                    self.write_to_baseline(AUTO_IMPORTS_CMD, &format!("{}\n\n", code_fence(lang, &new_file_content)));
+                }
+            }
+        });
+        reset(self, t);
+        crate::go::resume(r);
     }
 
     // fourslash.go:4754
@@ -1960,12 +2938,106 @@ impl FourslashTest {
 
     // fourslash.go:5328
     pub fn verify_baseline_linked_editing(&mut self, t: &T) {
-        Self::server_unavailable(t, "feature not ported: linked editing (VerifyBaselineLinkedEditing)")
+        let mut baseline_builder = String::new();
+        let mut offset = 0;
+
+        // write to baseline in order of file appearance in test data
+        for file in self.test_data.files.clone() {
+            baseline_builder.push_str("// === Linked Editing ===\n");
+            baseline_builder.push_str(&format!("=== {} ===\n", file.file_name()));
+            let mut results: Vec<lsproto::LinkedEditingRanges> = Vec::new();
+            let mut found: FxHashMap<lsproto::Range, bool> = FxHashMap::default();
+
+            // request linkedEditing at every position in the file
+            for i in 0..file.content.len() {
+                let script = self.get_script_info(&file.file_name());
+                let params = lsproto::LinkedEditingRangeParams {
+                    text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&file.file_name()) },
+                    position: self.converters.position_to_line_and_character(&script, i as TextPos),
+                    ..Default::default()
+                };
+                let result = self.send_request(t, lsproto::TEXT_DOCUMENT_LINKED_EDITING_RANGE_INFO, params);
+                if let Some(ranges) = result.linked_editing_ranges {
+                    if !ranges.ranges.is_empty() && !found.get(&ranges.ranges[0]).copied().unwrap_or(false) {
+                        found.insert(ranges.ranges[0], true);
+                        results.push(ranges);
+                    }
+                }
+            }
+
+            if results.is_empty() {
+                baseline_builder.push_str(&format!("{}\n\n--No linked edits found--\n\n\n", file.content));
+                continue;
+            }
+
+            // sort entries in each file
+            results.sort_by(|a, b| lsproto::compare_positions(a.ranges[0].start, b.ranges[0].start).cmp(&0));
+            let mut baseline_details: Vec<(lsproto::Position, String)> = Vec::new();
+            let mut found_edit_info_builder = String::new();
+            for edit in &results {
+                baseline_details.push((edit.ranges[0].start, format!("[|/*{offset}*/")));
+                baseline_details.push((edit.ranges[0].end, "|]".to_string()));
+                baseline_details.push((edit.ranges[1].start, format!("[|/*{offset}*/")));
+                baseline_details.push((edit.ranges[1].end, "|]".to_string()));
+
+                let json = tsrs_core::json::marshal_indent(&edit.to_json(), "", "  ").expect("stringify linked editing ranges");
+                found_edit_info_builder.push_str(&format!("\n\n=== {offset} ===\n{json}"));
+                offset += 1;
+            }
+
+            // sort baselineDetails by position
+            baseline_details.sort_by(|a, b| lsproto::compare_positions(a.0, b.0).cmp(&0));
+
+            // write file content with inline annotations for linked edits
+            let mut last_position = 0usize;
+            for (pos, position_marker) in &baseline_details {
+                let current_position = self.converters.line_and_character_to_position(self.get_script_info(&file.file_name()), *pos) as usize;
+                baseline_builder.push_str(&file.content[last_position..current_position]);
+                baseline_builder.push_str(position_marker);
+                last_position = current_position;
+            }
+            baseline_builder.push_str(&file.content[last_position..]);
+            baseline_builder.push_str(&format!("{found_edit_info_builder}\n\n\n"));
+        }
+
+        self.write_to_baseline(LINKED_EDITING_CMD, &baseline_builder);
     }
 
     // fourslash.go:5407
     pub fn verify_linked_editing(&mut self, t: &T, marker_names_to_expected: OrderedMap<String, Vec<lsproto::Range>>) {
-        Self::server_unavailable(t, "feature not ported: linked editing (VerifyLinkedEditing)")
+        for (marker_name, expected_ranges) in marker_names_to_expected.iter() {
+            self.go_to_marker(t, marker_name);
+            let params = lsproto::LinkedEditingRangeParams {
+                text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
+                position: self.current_caret_position,
+                ..Default::default()
+            };
+            let result = self.send_request(t, lsproto::TEXT_DOCUMENT_LINKED_EDITING_RANGE_INFO, params);
+            let actual_ranges = result.linked_editing_ranges;
+            if expected_ranges.is_empty() {
+                if let Some(actual_ranges) = actual_ranges.as_ref().filter(|r| !r.ranges.is_empty()) {
+                    t.fatal(&format!("Expected no linked editing ranges for marker '{marker_name}', but found {actual_ranges:?}"));
+                }
+                continue;
+            } else {
+                let Some(actual_ranges) = actual_ranges.filter(|r| !r.ranges.is_empty()) else {
+                    t.fatal(&format!("Expected linked editing ranges for marker '{marker_name}', but found none"));
+                };
+
+                assert_deep_equal(
+                    t,
+                    &actual_ranges.ranges[0],
+                    &expected_ranges[0],
+                    &format!("Linked editing ranges for opening element do not match expected for marker '{marker_name}'"),
+                );
+                assert_deep_equal(
+                    t,
+                    &actual_ranges.ranges[1],
+                    &expected_ranges[1],
+                    &format!("Linked editing ranges for closing element do not match expected for marker '{marker_name}'"),
+                );
+            }
+        }
     }
 
     // fourslash.go:5434
@@ -2662,6 +3734,108 @@ impl FourslashTest {
         }
         Vec::new()
     }
+}
+
+// fourslash.go:1306
+fn find_jsdoc_completion_item(list: Option<&lsproto::CompletionList>) -> Option<lsproto::CompletionItem> {
+    let list = list?;
+    list.items.iter().find(|item| item.label == "/** */").cloned()
+}
+
+// fourslash.go:1377
+fn is_empty_expected_list(expected: Option<&CompletionsExpectedList>) -> bool {
+    let Some(expected) = expected else {
+        return true;
+    };
+    // (Go dereferences expected.Items, which panics when it is nil.)
+    let Some(items) = &expected.items else {
+        panic!("runtime error: invalid memory address or nil pointer dereference");
+    };
+    items.exact.as_ref().is_none_or(Vec::is_empty) && items.includes.is_empty() && items.excludes.is_empty() && items.unsorted.as_ref().is_none_or(Vec::is_empty)
+}
+
+// fourslash.go:1381
+fn verify_completions_item_defaults(t: &T, actual: Option<&lsproto::CompletionItemDefaults>, expected: Option<&CompletionsExpectedItemDefaults>, prefix: &str) {
+    let Some(actual) = actual else {
+        if expected.is_none() {
+            return;
+        }
+        t.fatal(&format!("{prefix}Expected non-nil completion item defaults but got nil"));
+    };
+    let Some(expected) = expected else {
+        t.fatal(&format!("{prefix}Expected nil completion item defaults but got non-nil: {actual:?}"));
+    };
+    assert_deep_equal(t, &actual.commit_characters, &expected.commit_characters, &format!("{prefix}CommitCharacters mismatch:"));
+    match &expected.edit_range {
+        Any::EditRange(edit_range) => {
+            if actual.edit_range.is_none() {
+                t.fatal(&format!("{prefix}Expected non-nil EditRange but got nil"));
+            }
+            // (Go dereferences the range markers, which panics when one is nil.)
+            let nil = || -> ! { panic!("runtime error: invalid memory address or nil pointer dereference") };
+            let expected_insert = edit_range.insert.as_ref().unwrap_or_else(|| nil()).ls_range;
+            let expected_replace = edit_range.replace.as_ref().unwrap_or_else(|| nil()).ls_range;
+            assert_deep_equal(
+                t,
+                &actual.edit_range,
+                &Some(lsproto::RangeOrEditRangeWithInsertReplace {
+                    edit_range_with_insert_replace: Some(lsproto::EditRangeWithInsertReplace { insert: expected_insert, replace: expected_replace }),
+                    ..Default::default()
+                }),
+                &format!("{prefix}EditRange mismatch:"),
+            );
+        }
+        Any::Nil => {
+            if let Some(edit_range) = &actual.edit_range {
+                t.fatal(&format!("{prefix}Expected nil EditRange but got non-nil: {edit_range:?}"));
+            }
+        }
+        Any::Ignored => {
+            // The edit range is intentionally ignored.
+        }
+        other => t.fatal(&format!("{prefix}Expected EditRange to be *EditRange or Ignored, got {}", other.type_name())),
+    }
+}
+
+// cmp.Diff's report is replaced by both values' Debug forms ("" when equal).
+fn diff<V: PartialEq + std::fmt::Debug>(actual: &V, expected: &V) -> String {
+    if actual == expected {
+        return String::new();
+    }
+    format!("-actual:   {actual:?}\n+expected: {expected:?}")
+}
+
+// The `.Kind` path of ignorePaths also matches the documentation's MarkupContent.Kind.
+fn ignore_markup_kind(item: &mut lsproto::CompletionItem) {
+    if let Some(markup_content) = item.documentation.as_mut().and_then(|d| d.markup_content.as_mut()) {
+        markup_content.kind = lsproto::MarkupKind::PlainText;
+    }
+}
+
+// fourslash.go:1569 (completionIgnoreOpts)
+fn completion_ignore(item: &lsproto::CompletionItem) -> lsproto::CompletionItem {
+    let mut item = lsproto::CompletionItem { kind: None, sort_text: None, filter_text: None, data: None, additional_text_edits: None, ..item.clone() };
+    ignore_markup_kind(&mut item);
+    item
+}
+
+// fourslash.go:1570 (autoImportIgnoreOpts)
+fn auto_import_ignore(item: &lsproto::CompletionItem) -> lsproto::CompletionItem {
+    let mut item =
+        lsproto::CompletionItem { kind: None, sort_text: None, filter_text: None, data: None, label_details: None, detail: None, additional_text_edits: None, ..item.clone() };
+    ignore_markup_kind(&mut item);
+    item
+}
+
+// The text of a signature or parameter documentation (markup value or plain string; "" when absent).
+fn documentation_text(documentation: &Option<lsproto::StringOrMarkupContent>) -> String {
+    let Some(documentation) = documentation else {
+        return String::new();
+    };
+    if let Some(markup_content) = &documentation.markup_content {
+        return markup_content.value.clone();
+    }
+    documentation.string.clone().unwrap_or_default()
 }
 
 // fourslash.go:1665 (cmp.Diff's report is replaced by both values' Debug forms)

@@ -903,14 +903,20 @@ func (g *gen) compositeLit(e *ast.CompositeLit, t types.Type) string {
 
 // Fields of hand-ported structs whose Rust type is Option<Vec<_>> although Go has a plain slice (nil and empty
 // mean different things there).
-var optionSliceFields = map[string]bool{
-	"UserPreferences.AutoImportSpecifierExcludeRegexes": true,
-	"UserPreferences.AutoImportFileExcludePatterns":     true,
+var optionSliceFields = map[string]map[string]bool{
+	lsutilPath: {
+		"UserPreferences.AutoImportSpecifierExcludeRegexes": true,
+		"UserPreferences.AutoImportFileExcludePatterns":     true,
+	},
+	fsPath: {
+		"CompletionsExpectedItems.Exact":    true,
+		"CompletionsExpectedItems.Unsorted": true,
+	},
 }
 
 func isOptionSliceField(structT types.Type, field string) bool {
 	n, ok := types.Unalias(derefType(structT)).(*types.Named)
-	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == lsutilPath && optionSliceFields[n.Obj().Name()+"."+field]
+	return ok && n.Obj().Pkg() != nil && optionSliceFields[n.Obj().Pkg().Path()][n.Obj().Name()+"."+field]
 }
 
 // fieldValue: a struct field value. Harness-object pointer fields are Option<Arc<T>>.
