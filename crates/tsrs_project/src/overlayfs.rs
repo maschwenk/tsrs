@@ -311,7 +311,7 @@ impl FsRef {
     }
 }
 
-pub(crate) struct overlayFS {
+pub struct overlayFS {
     to_path: ToPath,
     host: FsRef,
     position_encoding: lsproto::PositionEncodingKind,

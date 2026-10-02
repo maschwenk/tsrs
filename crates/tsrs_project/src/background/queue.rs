@@ -58,6 +58,13 @@ fn worker_pool() -> &'static workerPool {
     })
 }
 
+// Go `go f()` for work that is not tracked by a Queue (timer callbacks): runs `f` on the shared workers.
+pub fn go(f: impl FnOnce() + Send + 'static) {
+    let pool = worker_pool();
+    pool.tasks.lock().unwrap().push_back(Box::new(f));
+    pool.available.notify_one();
+}
+
 // queue.go:16
 // NewQueue creates a new background queue for managing background tasks execution.
 pub fn new_queue() -> Queue {

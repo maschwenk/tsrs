@@ -945,7 +945,11 @@ pub(crate) fn new_source_fs(tracking: bool, source: Arc<dyn FileSource>, to_path
 }
 
 impl sourceFS {
-    fn source(&self) -> Arc<dyn FileSource> {
+    pub(crate) fn to_path(&self, file_name: &str) -> Path {
+        (self.to_path)(file_name)
+    }
+
+    pub(crate) fn source(&self) -> Arc<dyn FileSource> {
         self.source.read().unwrap().clone()
     }
 
