@@ -309,7 +309,7 @@ impl Table {
 
 static RESULT: Mutex<Option<Table>> = Mutex::new(None);
 /// Used ranges of freed regions (`census_would_free_range`).
-pub(super) static REGION_FREES: Mutex<Vec<(u64, u64)>> = Mutex::new(Vec::new());
+pub(super) static REGION_FREES: Mutex<Vec<(u64, u64, u32)>> = Mutex::new(Vec::new());
 static WOULD_FREE: Mutex<Vec<(u64, u32)>> = Mutex::new(Vec::new());
 
 /// After `run`: whether `addr` lies in a block the arena freed or rewound (see `check_would_free`).
@@ -520,9 +520,9 @@ fn run_frozen(roots: &[usize]) {
     let region_blocks_before = would_free.len();
     if !ranges.is_empty() {
         for b in &blocks {
-            let i = ranges.partition_point(|&(s, _)| s <= b.start);
+            let i = ranges.partition_point(|&(s, _, _)| s <= b.start);
             if i > 0 && b.start < ranges[i - 1].0 + ranges[i - 1].1 {
-                would_free.push((b.start, b.size, u32::MAX));
+                would_free.push((b.start, b.size, ranges[i - 1].2));
             }
         }
     }
@@ -965,6 +965,24 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             ips.extend(stacks[k].iter().copied());
         }
     }
+    // Also name the heap blocks on the referrer chains of the reported violations.
+    let heap_class_stack = |c: u32| -> Option<usize> {
+        match &classes[c as usize] {
+            Class::Heap { stack } => Some(*stack as usize),
+            _ => None,
+        }
+    };
+    for &i in strong.keys().take(20) {
+        let mut k = via[i];
+        let mut n = 0;
+        while k != u32::MAX && n < 12 {
+            if let Some(st) = heap_class_stack(table.blocks[k as usize].class) {
+                ips.extend(stacks[st].iter().copied());
+            }
+            k = via[k as usize];
+            n += 1;
+        }
+    }
     let mut names: FxHashMap<usize, String> = FxHashMap::default();
     atos(&ips, &mut names);
     let heap_frames = |r: &str| -> Option<Vec<String>> {
@@ -999,6 +1017,20 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         mb(cbytes)
     );
     eprintln!("  strongly reachable freed blocks (violations): {}", strong.len());
+    let mut by_referrer: FxHashMap<String, u64> = FxHashMap::default();
+    for r in strong.values() {
+        let class = r.split(" +").next().unwrap_or(r).split(" [").next().unwrap_or(r).to_string();
+        let key = match heap_frames(r) {
+            Some(f) => format!("{} {{{}}}", class, f.join(" <- ")),
+            None => class,
+        };
+        *by_referrer.entry(key).or_default() += 1;
+    }
+    let mut rows: Vec<(String, u64)> = by_referrer.into_iter().collect();
+    rows.sort_by(|a, b| b.1.cmp(&a.1));
+    for (k, n) in rows.iter().take(25) {
+        eprintln!("    violations {n:>8} from {k}");
+    }
     for (&i, r) in strong.iter().take(20) {
         let b = table.blocks[i];
         let mut r = r.clone();
@@ -1010,7 +1042,10 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         let mut k = via[i];
         while k != u32::MAX && chain.len() < 12 {
             let kb = table.blocks[k as usize];
-            chain.push(format!("{} ({:#x})", class_name(&classes[kb.class as usize]), kb.start));
+            let frames = heap_class_stack(kb.class)
+                .map(|st| stacks[st].iter().take_while(|&&ip| ip != 0).filter_map(|ip| names.get(ip)).filter(|n| !boring(n)).take(3).cloned().collect::<Vec<_>>().join(" < "))
+                .map_or(String::new(), |f| format!(" {{{f}}}"));
+            chain.push(format!("{}{frames} ({:#x})", class_name(&classes[kb.class as usize]), kb.start));
             k = via[k as usize];
         }
         eprintln!("      reached via: {}", chain.join(" <- "));

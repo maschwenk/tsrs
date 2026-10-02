@@ -69,9 +69,8 @@ pub fn new_parse_cache(options: RefCountCacheOptions) -> ParseCache {
             file
         };
         region.trim();
-        if std::env::var_os("TSRS_REGION_SIZES").is_some() {
-            eprintln!("filesize {} {} {} {}", text.len(), region.used_bytes(), region.allocated_bytes(), region.drop_entries());
-        }
+        let text_index = file.text_index.get();
+        region.on_free(Box::new(move || tsrs_ast::unregister_source_text(text_index)));
         parse_regions.lock().unwrap().insert(file.addr(), region);
         file
     });

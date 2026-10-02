@@ -540,6 +540,17 @@ pub fn census_scrub_slack<T>(v: &mut Vec<T>) {
     let _ = v;
 }
 
+/// Census builds (`TSRS_CENSUS=1`): clears the stack area the caller's next callees will use, so values built there
+/// (a struct with an unset `OnceLock`, padding) do not carry stale words that look like references. Compiled to
+/// nothing otherwise.
+#[inline(always)]
+pub fn census_scrub_stack() {
+    #[cfg(feature = "alloc-profile")]
+    if crate::alloc_profile::census::recording() {
+        crate::arena::scrub_stack_for_census();
+    }
+}
+
 /// The current thread's arena position, for discarding a speculative parse (`arena_rewind`).
 #[inline]
 pub fn arena_checkpoint() -> Checkpoint {

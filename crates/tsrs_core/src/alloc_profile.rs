@@ -383,11 +383,9 @@ pub(crate) fn census_would_free(addr: usize, size: usize) {
     });
 }
 
-/// Census only: a freed region's used chunk range; every arena block recorded inside it is would-free (checked
-/// without the "referrer born before the free" filter: a region's memory is never reused, so any later block that
-/// points into it is a real reference).
+/// Census only: a freed region's used chunk range; every arena block recorded inside it is would-free as of now.
 pub(crate) fn census_would_free_range(start: usize, len: usize) {
-    census::with_guard(|| census::REGION_FREES.lock().unwrap().push((start as u64, len as u64)));
+    census::with_guard(|| census::REGION_FREES.lock().unwrap().push((start as u64, len as u64, census::next_seq())));
 }
 
 /// Census only: every block this thread recorded since `census_block_count()` returned `since` would be discarded

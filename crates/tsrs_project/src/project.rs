@@ -587,6 +587,7 @@ impl Project {
         // command line above is memoized in the project and outlives the program, so it is made before.
         let region = Region::new(1 << 20);
         let region_scope = region.enter();
+        tsrs_core::census_scrub_stack();
         let reuse = !self.dirty_file_path.0.is_empty() && self.program.is_some_and(|program| Some(program.command_line()) == command_line);
         if reuse {
             let old_program = self.program.unwrap();

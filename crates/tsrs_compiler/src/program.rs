@@ -377,6 +377,8 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     // verification writes (checkers are created lazily).
     tsrs_core::phases::time("Program: verify options", || p.verify_compiler_options());
     let p: &'static Program = Box::leak(Box::new(p));
+    // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
+    tsrs_core::census_scrub_stack();
     p.init_checker_pool(opts.create_checker_pool.as_ref());
     p
 }
@@ -516,6 +518,7 @@ impl Program {
         }
         result.files = tsrs_core::alloc_vec(files);
         let result: &'static Program = Box::leak(Box::new(result));
+        tsrs_core::census_scrub_stack();
         result.init_checker_pool(create_checker_pool.as_ref());
         (Some(result), new_file, true)
     }

@@ -179,18 +179,16 @@ impl Arena {
     }
 
     fn new_chunk(&self, size: usize) {
-        let base = if self.up {
-            let size = size.next_multiple_of(CHUNK_ALIGN);
+        if self.up {
+            let size = (size + CENSUS_GAP).next_multiple_of(CHUNK_ALIGN);
             let (base, slab) = slab_carve(size);
             self.slabs.borrow_mut().push(slab);
             self.new_chunk_at(base, size);
-            return;
         } else {
             let size = size.div_ceil(PAGE) * PAGE;
             let layout = Layout::from_size_align(size, CHUNK_ALIGN).expect("arena chunk layout");
-            (os_chunk(layout), size)
-        };
-        self.new_chunk_at(base.0, base.1);
+            self.new_chunk_at(os_chunk(layout), size);
+        }
     }
 
     fn new_chunk_at(&self, base: *mut u8, size: usize) {
@@ -202,10 +200,11 @@ impl Arena {
         self.start.set(base);
         // SAFETY: one past the end of the allocation.
         self.end.set(unsafe { base.add(size) });
-        self.ptr.set(if self.up { base } else { self.end.get() });
+        // (Profile builds: a region's first block does not start at the chunk start, which its arena keeps.)
+        self.ptr.set(if self.up { base.wrapping_add(CENSUS_GAP) } else { self.end.get() });
         self.capacity.set(self.capacity.get() + size);
         if let Some(region) = &self.region {
-            REGISTRY.write().unwrap().insert(base.addr(), (base.addr() + size, region.clone()));
+            REGISTRY.write().unwrap().insert(reg_key(base.addr()), (reg_key(base.addr() + size), region.clone()));
         }
     }
 
@@ -223,7 +222,7 @@ impl Arena {
         self.end.set(end.with_addr(new_end));
         self.capacity.set(self.capacity.get() - (end.addr() - new_end));
         if let Some(region) = &self.region {
-            REGISTRY.write().unwrap().insert(start.addr(), (new_end, region.clone()));
+            REGISTRY.write().unwrap().insert(reg_key(start.addr()), (reg_key(new_end), region.clone()));
         }
     }
 
@@ -410,6 +409,11 @@ struct Slab {
 
 const SLAB_SIZE: usize = 1 << 20;
 
+/// Profile builds leave a gap after each carved chunk: a chunk's one-past-the-end pointer (in its arena and in the
+/// region registry) would otherwise be the address of the next region's first block, which the census would count
+/// as a reference to it.
+const CENSUS_GAP: usize = if cfg!(feature = "alloc-profile") { CHUNK_ALIGN } else { 0 };
+
 thread_local! {
     /// The thread's current slab and its bump position (upwards).
     static SLAB: Cell<(*const Slab, usize)> = const { Cell::new((std::ptr::null(), 0)) };
@@ -429,7 +433,7 @@ fn slab_carve(size: usize) -> (*mut u8, *const Slab) {
     }
     let (mut cur, mut bump) = SLAB.with(|s| s.get());
     // SAFETY: the current slab is kept alive by the thread's reference.
-    if cur.is_null() || bump + size > unsafe { (*cur).base.addr() + (*cur).size } {
+    if cur.is_null() || bump + size + CENSUS_GAP > unsafe { (*cur).base.addr() + (*cur).size } {
         if !cur.is_null() {
             slab_release(cur);
         }
@@ -440,7 +444,7 @@ fn slab_carve(size: usize) -> (*mut u8, *const Slab) {
     // SAFETY: as above.
     let slab = unsafe { &*cur };
     slab.live.fetch_add(1, Ordering::Relaxed);
-    SLAB.with(|s| s.set((cur, bump + size)));
+    SLAB.with(|s| s.set((cur, bump + size + CENSUS_GAP)));
     (slab.base.with_addr(bump), cur)
 }
 
@@ -448,8 +452,8 @@ fn slab_carve(size: usize) -> (*mut u8, *const Slab) {
 fn slab_trim(slab: *const Slab, end: usize, new_end: usize) -> bool {
     SLAB.with(|s| {
         let (cur, bump) = s.get();
-        if cur == slab && bump == end {
-            s.set((cur, new_end));
+        if cur == slab && bump == end + CENSUS_GAP {
+            s.set((cur, new_end + CENSUS_GAP));
             true
         } else {
             false
@@ -481,6 +485,11 @@ fn slab_release(slab: *const Slab) {
 fn scrub_stack<const N: usize>() {
     let mut buf = [0u8; N];
     std::hint::black_box(&mut buf);
+}
+
+#[cfg(feature = "alloc-profile")]
+pub(crate) fn scrub_stack_for_census() {
+    scrub_stack::<{ 256 << 10 }>();
 }
 
 /// 0 unknown, 1 normal, 2 poison (`TSRS_ARENA_POISON=1`): freed and rewound memory is filled and never reused.
@@ -597,7 +606,14 @@ pub(crate) fn rewind(arena: &Arena, cp: Checkpoint) {
 // Regions and the allocation target
 // ---------------------------------------------------------------------------------------------------------------
 
-/// Chunk start -> (chunk end, region), for `Region::containing`.
+/// Registry keys and ends are addresses + 1 (order is kept): the map's vacated slots keep old values, which must not
+/// look like references to blocks in the census build.
+#[inline]
+fn reg_key(addr: usize) -> usize {
+    addr + 1
+}
+
+/// Chunk start -> (chunk end, region), for `Region::containing` (both as `reg_key`).
 static REGISTRY: RwLock<BTreeMap<usize, (usize, Weak<RegionInner>)>> = RwLock::new(BTreeMap::new());
 /// Set once the first region exists; until then (the CLI) owner lookups return immediately.
 static ANY_REGION: AtomicBool = AtomicBool::new(false);
@@ -652,6 +668,8 @@ pub(crate) struct RegionInner {
     lock: OwnerLock,
     /// Addresses of objects outside the region registered as owned by it (`adopt_owner`).
     owners: Mutex<Vec<usize>>,
+    /// Run when the region is freed, before anything else (`on_free`).
+    on_free: Mutex<Vec<Box<dyn FnOnce() + Send>>>,
 }
 
 // SAFETY: the arena's cells are only touched by the thread holding `lock` (or, before the region is shared, by its
@@ -671,6 +689,7 @@ impl Region {
             arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(weak.clone()))),
             lock: OwnerLock { state: Mutex::new((None, 0)), released: Condvar::new() },
             owners: Mutex::new(Vec::new()),
+            on_free: Mutex::new(Vec::new()),
         }))
     }
 
@@ -687,8 +706,8 @@ impl Region {
             return None;
         }
         let reg = REGISTRY.read().unwrap();
-        let (_, (end, region)) = reg.range(..=addr).next_back()?;
-        if addr >= *end {
+        let (_, (end, region)) = reg.range(..=reg_key(addr)).next_back()?;
+        if reg_key(addr) >= *end {
             return None;
         }
         region.upgrade().map(Region)
@@ -702,8 +721,8 @@ impl Region {
         let reg = REGISTRY.read().unwrap();
         addrs
             .map(|addr| {
-                let (_, (end, region)) = reg.range(..=addr).next_back()?;
-                if addr >= *end {
+                let (_, (end, region)) = reg.range(..=reg_key(addr)).next_back()?;
+                if reg_key(addr) >= *end {
                     return None;
                 }
                 region.upgrade().map(Region)
@@ -711,11 +730,17 @@ impl Region {
             .collect()
     }
 
+    /// Runs `f` when the region is freed (also in the census and poison modes, which keep the memory): for tables
+    /// outside the region that must forget pointers into it.
+    pub fn on_free(&self, f: Box<dyn FnOnce() + Send>) {
+        self.0.on_free.lock().unwrap().push(f);
+    }
+
     /// Registers the object at `addr` (not in any region, e.g. a heap object shared by several region owners) as owned
     /// by this region, so `enter_owner(addr)` routes to it while the region lives.
     pub fn adopt_owner(&self, addr: usize) {
         self.0.owners.lock().unwrap().push(addr);
-        REGISTRY.write().unwrap().insert(addr, (addr + 1, Arc::downgrade(&self.0)));
+        REGISTRY.write().unwrap().insert(reg_key(addr), (reg_key(addr + 1), Arc::downgrade(&self.0)));
     }
 
     /// Total size of the region's chunks.
@@ -809,31 +834,34 @@ pub fn enter_owner(addr: usize) -> Option<RegionScope> {
 
 impl Drop for RegionInner {
     fn drop(&mut self) {
+        for f in self.on_free.get_mut().unwrap().drain(..) {
+            f();
+        }
         let arena = &*self.arena;
         let chunks = arena.chunks();
         {
             let mut reg = REGISTRY.write().unwrap();
             for &(start, _) in &chunks {
-                reg.remove(&start);
+                reg.remove(&reg_key(start));
             }
             for addr in self.owners.get_mut().unwrap().drain(..) {
-                reg.remove(&addr);
+                reg.remove(&reg_key(addr));
             }
-        }
-        if census_mode() {
-            // Recorded as would-free and kept (never released, never dropped): the census checks at exit that
-            // nothing reachable points into it.
-            #[cfg(feature = "alloc-profile")]
-            for (start, len) in arena.used_ranges() {
-                crate::alloc_profile::census_would_free_range(start, len);
-            }
-            return;
         }
         let drops = std::mem::take(&mut *arena.drops.borrow_mut());
         for d in drops {
             // SAFETY: `len` values of the entry's type were allocated at `ptr` in this region and never dropped (a
             // freed block of a type that needs drop is not reused, a rewound one has no entry).
             unsafe { (d.drop)(d.ptr, d.len) };
+        }
+        if census_mode() {
+            // The heap memory the values owned is released (above), the region's own memory is recorded as
+            // would-free and kept, never reused: the census checks at exit that nothing reachable points into it.
+            #[cfg(feature = "alloc-profile")]
+            for (start, len) in arena.used_ranges() {
+                crate::alloc_profile::census_would_free_range(start, len);
+            }
+            return;
         }
         if poison_mode() {
             // Kept mapped and filled, so any later use through a stale pointer crashes.
