@@ -4,12 +4,14 @@
 # raw profiles (*.profraw) in <raw-dir>. Exit codes of the runs are ignored (the suite has known failures and the
 # bench projects have type errors); the script fails only if a run crashes or writes no profile.
 #
-#   pgo-train.sh <dir with instrumented tsrs + tsrs-test> <raw-dir> <bench work dir>
+#   pgo-train.sh <dir with instrumented tsrs + tsrs-test + tsrs-fourslash> <raw-dir> <bench work dir>
 #
 # Workload: the conformance suite (in-process in tsrs-test, which links the same crate builds as tsrs, so its
-# profile counts apply to the checker code in tsrs) plus the tsrs binary itself on two open-source projects from
-# bench/projects.json (xstate-main, webpack; default mode, 4 checkers). Needs ts-ref/tsc/testdata and network for
-# the bench projects' clone + install (bench/run.py --setup-only). Never train on private code.
+# profile counts apply to the checker code in tsrs), the fourslash suite (in-process language server in
+# tsrs-fourslash's worker processes, for the language-service and project-system code behind `tsrs --lsp`), plus
+# the tsrs binary itself on two open-source projects from bench/projects.json (xstate-main, webpack; default mode,
+# 4 checkers). Needs ts-ref/tsc/testdata and network for the bench projects' clone + install
+# (bench/run.py --setup-only). Never train on private code.
 set -euo pipefail
 
 bin=$(cd "$1" && pwd)
@@ -27,6 +29,11 @@ LLVM_PROFILE_FILE="$raw/suite-%m.profraw" TSRS_TEST_RESULTS="$work/test-results"
   "$bin/tsrs-test" run --suite all --timeout 120 && status=0 || status=$?
 check_exit "$status" "tsrs-test run --suite all"
 
+# Workers exit normally at the end of their batch, so each writes its counts; %m merges them per binary.
+LLVM_PROFILE_FILE="$raw/fourslash-%m.profraw" TSRS_FOURSLASH_RESULTS="$work/fourslash-results" \
+  "$bin/tsrs-fourslash" run > /dev/null && status=0 || status=$?
+check_exit "$status" "tsrs-fourslash run"
+
 for p in xstate-main webpack; do
   (cd "$work/solutions/$p" && LLVM_PROFILE_FILE="$raw/$p-%p.profraw" \
     "$bin/tsrs" -p . --noEmit --incremental false --pretty false > /dev/null) && status=0 || status=$?
@@ -34,6 +41,6 @@ for p in xstate-main webpack; do
 done
 
 ls -l "$raw"
-for f in suite xstate-main webpack; do
+for f in suite fourslash xstate-main webpack; do
   compgen -G "$raw/$f-*.profraw" > /dev/null || { echo "::error::no profile from $f"; exit 1; }
 done
