@@ -5,6 +5,7 @@ pub mod baselineutil;
 pub mod contentmapper;
 pub mod contentmappertest;
 pub mod fourslash;
+pub mod fsbaselineutil;
 pub mod go;
 pub mod harnessutil;
 pub mod runner;
