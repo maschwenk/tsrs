@@ -388,6 +388,55 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_ls"
+version = "0.1.5"
+dependencies = [
+ "bitflags",
+ "indexmap",
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_binder",
+ "tsrs_checker",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_lsproto",
+ "tsrs_module",
+ "tsrs_modulespecifiers",
+ "tsrs_parser",
+ "tsrs_printer",
+ "tsrs_scanner",
+ "tsrs_tsoptions",
+ "tsrs_vfs",
+]
+
+[[package]]
+name = "tsrs_lsp"
+version = "0.1.5"
+dependencies = [
+ "indexmap",
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_ls",
+ "tsrs_lsproto",
+ "tsrs_project",
+ "tsrs_tsoptions",
+ "tsrs_vfs",
+]
+
+[[package]]
+name = "tsrs_lsproto"
+version = "0.1.5"
+dependencies = [
+ "indexmap",
+ "rustc-hash",
+ "tsrs_core",
+]
+
+[[package]]
 name = "tsrs_module"
 version = "0.1.5"
 dependencies = [
@@ -437,6 +486,27 @@ dependencies = [
  "tsrs_core",
  "tsrs_parser",
  "tsrs_scanner",
+ "tsrs_vfs",
+]
+
+[[package]]
+name = "tsrs_project"
+version = "0.1.5"
+dependencies = [
+ "bitflags",
+ "indexmap",
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_binder",
+ "tsrs_checker",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_ls",
+ "tsrs_lsproto",
+ "tsrs_module",
+ "tsrs_parser",
+ "tsrs_tsoptions",
  "tsrs_vfs",
 ]
 
