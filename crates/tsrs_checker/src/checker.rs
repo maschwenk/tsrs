@@ -1213,6 +1213,7 @@ pub struct Checker {
     pub _jsx_namespace: String,
     pub _jsx_factory_entity: Option<P<Node>>,
     pub skip_direct_inference_nodes: Set<P<Node>>,
+    pub ctx: Option<Context>, // Go nil until checkSourceFile
     pub packages_map: Option<FxHashMap<String, bool>>, // Go nil map = not computed
     pub active_mappers: Vec<P<TypeMapper>>,
     pub active_type_mappers_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>,
@@ -1569,6 +1570,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         _jsx_namespace: String::new(),
         _jsx_factory_entity: None,
         skip_direct_inference_nodes: Set::new(),
+        ctx: None,
         packages_map: None,
         active_mappers: Vec::new(),
         active_type_mappers_caches: Vec::new(),

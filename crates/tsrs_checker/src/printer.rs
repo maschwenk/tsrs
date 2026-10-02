@@ -323,7 +323,7 @@ impl Checker {
     }
 
     // printer.go:288
-    pub fn type_to_type_node(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> Option<P<Node>> {
+    pub fn type_to_type_node(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> {
         let node_builder = self.get_node_builder_ex(id_to_symbol);
         node_builder.type_to_type_node(self, t, enclosing_declaration, flags, InternalFlags::None, None)
     }
@@ -389,13 +389,13 @@ impl Checker {
     }
 
     // printer.go:348
-    pub fn type_to_type_node_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> Option<P<Node>> {
+    pub fn type_to_type_node_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> {
         let node_builder = self.get_node_builder_ex(id_to_symbol);
         node_builder.type_to_type_node(self, t, enclosing_declaration, flags, internal_flags, None)
     }
 
     // printer.go:353
-    pub fn type_predicate_to_type_predicate_node(&mut self, t: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> Option<P<Node>> {
+    pub fn type_predicate_to_type_predicate_node(&mut self, t: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> {
         let node_builder = self.get_node_builder_ex(id_to_symbol);
         node_builder.type_predicate_to_type_predicate_node(self, t, enclosing_declaration, flags, InternalFlags::None, None)
     }

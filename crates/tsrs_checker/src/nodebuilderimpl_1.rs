@@ -24,11 +24,11 @@ use std::rc::Rc;
 //   type sortedSymbolNamePair (nodebuilderimpl.go:1081)
 
 // nodebuilderimpl.go:125
-pub(crate) fn new_node_builder_impl(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> P<NodeBuilderImpl> {
-    // Go shares the caller's map (language service inlay hints read it back); the checker never passes one.
+pub(crate) fn new_node_builder_impl(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> P<NodeBuilderImpl> {
+    // The map is shared with the caller (Go map semantics): language service code reads it back.
     let id_to_symbol = match id_to_symbol {
-        Some(id_to_symbol) => id_to_symbol.clone(),
-        None => FxHashMap::default(),
+        Some(id_to_symbol) => id_to_symbol,
+        None => P::new(RefCell::new(FxHashMap::default())),
     };
     let b = P::new(NodeBuilderImpl {
         f: e.factory.as_node_factory().clone(),
@@ -38,7 +38,7 @@ pub(crate) fn new_node_builder_impl(ch: &mut Checker, e: P<EmitContext>, id_to_s
         symbol_links: Default::default(),
         ctx: Cell::new(None),
         clone_binding_name_visitor: std::cell::OnceCell::new(),
-        id_to_symbol: RefCell::new(id_to_symbol),
+        id_to_symbol,
         checker_slot: P::new(CheckerSlot::default()),
         this: std::cell::OnceCell::new(),
     });

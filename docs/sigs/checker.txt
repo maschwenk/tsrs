@@ -494,9 +494,9 @@ compare_numbers | fn compare_numbers(a: jsnum::Number, b: jsnum::Number) -> i32 
 compare_properties | pub(crate) fn compare_properties(&mut self, source_prop: P<Symbol>, target_prop: P<Symbol>, compare_types: impl FnMut(&mut Checker, P<Type>, P<Type>) -> Ternary) -> Ternary | checker.go:28142 | Checker
 compare_signatures_identical | pub(crate) fn compare_signatures_identical(&mut self, source: P<Signature>, target: P<Signature>, partial_match: bool, ignore_this_types: bool, ignore_return_types: bool, compare_types: impl FnMut(&mut Checker, P<Type>, P<Type>) -> Ternary) -> Ternary | relater.go:2200 | Checker
 compare_signatures_related | pub(crate) fn compare_signatures_related(&mut self, source: P<Signature>, target: P<Signature>, check_mode: SignatureCheckMode, report_errors: bool, error_reporter: Option<ErrorReporter<'_>>, compare_types: TypeComparer, report_unreliable_markers: Option<P<TypeMapper>>) -> Ternary | relater.go:1491 | Checker
-compare_symbol_chains | pub(crate) fn compare_symbol_chains(&mut self, a: &[P<Symbol>], b: &[P<Symbol>]) -> i32 | rust:checker.rs:1720 | Checker
+compare_symbol_chains | pub(crate) fn compare_symbol_chains(&mut self, a: &[P<Symbol>], b: &[P<Symbol>]) -> i32 | rust:checker.rs:1722 | Checker
 compare_symbol_chains_worker | pub(crate) fn compare_symbol_chains_worker(&mut self, a: &[P<Symbol>], b: &[P<Symbol>]) -> i32 | symbolaccessibility.go:595 | Checker
-compare_symbols | pub(crate) fn compare_symbols(&mut self, s1: Option<P<Symbol>>, s2: Option<P<Symbol>>) -> i32 | rust:checker.rs:1716 | Checker
+compare_symbols | pub(crate) fn compare_symbols(&mut self, s1: Option<P<Symbol>>, s2: Option<P<Symbol>>) -> i32 | rust:checker.rs:1718 | Checker
 compare_symbols_exported | pub fn compare_symbols_exported(&mut self, s1: Option<P<Symbol>>, s2: Option<P<Symbol>>) -> i32 | exports.go:394 | Checker
 compare_symbols_worker | pub(crate) fn compare_symbols_worker(&mut self, s1: Option<P<Symbol>>, s2: Option<P<Symbol>>) -> i32 | utilities.go:365 | Checker
 compare_tuple_types | pub(crate) fn compare_tuple_types(t1: &'static TupleType, t2: &'static TupleType) -> i32 | utilities.go:668 | -
@@ -509,8 +509,8 @@ compare_type_predicate_related_to | pub(crate) fn compare_type_predicate_related
 compare_type_predicates_identical | pub(crate) fn compare_type_predicates_identical(&mut self, source: Option<P<TypePredicate>>, target: Option<P<TypePredicate>>, compare_types: impl FnMut(&mut Checker, P<Type>, P<Type>) -> Ternary) -> Ternary | relater.go:2303 | Checker
 compare_types | pub fn compare_types(c: &mut Checker, t1: Option<P<Type>>, t2: Option<P<Type>>) -> i32 | utilities.go:414 | -
 compare_types_and_depth | pub(crate) fn compare_types_and_depth(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 | inference.go:410 | -
-compare_types_assignable | pub(crate) fn compare_types_assignable(&mut self, source: P<Type>, target: P<Type>, report_errors: bool) -> Ternary | rust:checker.rs:1775 | Checker
-compare_types_assignable_comparer | pub(crate) fn compare_types_assignable_comparer(&self) -> TypeComparer | rust:checker.rs:1780 | Checker
+compare_types_assignable | pub(crate) fn compare_types_assignable(&mut self, source: P<Type>, target: P<Type>, report_errors: bool) -> Ternary | rust:checker.rs:1777 | Checker
+compare_types_assignable_comparer | pub(crate) fn compare_types_assignable_comparer(&self) -> TypeComparer | rust:checker.rs:1782 | Checker
 compare_types_assignable_simple | pub(crate) fn compare_types_assignable_simple(&mut self, source: P<Type>, target: P<Type>) -> Ternary | relater.go:128 | Checker
 compare_types_assignable_worker | pub(crate) fn compare_types_assignable_worker(&mut self, source: P<Type>, target: P<Type>, report_errors: bool) -> Ternary | relater.go:135 | Checker
 compare_types_equal | pub(crate) fn compare_types_equal(s: P<Type>, t: P<Type>) -> Ternary | checker.go:28169 | -
@@ -536,7 +536,7 @@ contains | pub fn contains(&self, item: &T) -> bool | rust:checker.rs:524 | Lazy
 contains | pub(crate) fn contains(&self, value: T) -> bool | utilities.go:884 | orderedSet
 contains_arguments_reference | pub(crate) fn contains_arguments_reference(&mut self, node: P<Node>) -> bool | checker.go:32615 | Checker
 contains_matching_reference | pub(crate) fn contains_matching_reference(&mut self, source: P<Node>, target: P<Node>) -> bool | flow.go:1841 | Checker
-contains_missing_type | pub(crate) fn contains_missing_type(&mut self, t: P<Type>) -> bool | rust:checker.rs:1759 | Checker
+contains_missing_type | pub(crate) fn contains_missing_type(&mut self, t: P<Type>) -> bool | rust:checker.rs:1761 | Checker
 contains_non_missing_undefined_type | pub(crate) fn contains_non_missing_undefined_type(c: &mut Checker, t: P<Type>) -> bool | utilities.go:1647 | -
 contains_same_named_this_property | pub(crate) fn contains_same_named_this_property(&mut self, this_property: P<Node>, expression: P<Node>) -> bool | checker.go:18496 | Checker
 contains_type | pub(crate) fn contains_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> bool | checker.go:27086 | -
@@ -544,7 +544,7 @@ contains_undefined_type | pub(crate) fn contains_undefined_type(&mut self, t: P<
 contextually_check_function_expression_or_object_literal_method | pub(crate) fn contextually_check_function_expression_or_object_literal_method(&mut self, node: P<Node>, check_mode: CheckMode) | checker.go:10347 | Checker
 convert_auto_to_any | pub(crate) fn convert_auto_to_any(&mut self, t: P<Type>) -> P<Type> | checker.go:31705 | Checker
 could_access_optional_property | pub(crate) fn could_access_optional_property(&mut self, object_type: P<Type>, index_type: P<Type>) -> bool | checker.go:29796 | Checker
-could_contain_type_variables | pub(crate) fn could_contain_type_variables(&mut self, t: P<Type>) -> bool | rust:checker.rs:1763 | Checker
+could_contain_type_variables | pub(crate) fn could_contain_type_variables(&mut self, t: P<Type>) -> bool | rust:checker.rs:1765 | Checker
 could_contain_type_variables_worker | pub(crate) fn could_contain_type_variables_worker(&mut self, t: P<Type>) -> bool | checker.go:22609 | Checker
 count_global_symbols | pub(crate) fn count_global_symbols(files: &[P<SourceFile>]) -> i32 | checker.go:1136 | -
 count_types | pub(crate) fn count_types(t: P<Type>) -> i32 | checker.go:27098 | -
@@ -684,7 +684,7 @@ escape_mapper | pub(crate) fn escape_mapper(m: P<TypeMapper>) | rust:mapper.rs:2
 escaped | pub(crate) fn escaped(&self) -> bool | rust:checker.rs:362 | InferenceContext
 escaped | pub fn escaped(&self) -> bool | rust:mapper.rs:146 | TypeMapper
 evaluate | pub fn evaluate<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expressions_to_skip: ast::OuterExpressionKinds, expr: P<Node>, location: P<Node>) -> Result | rust:evaluator.rs:22 | -
-evaluate | pub(crate) fn evaluate(&mut self, expr: P<Node>, location: P<Node>) -> evaluator::Result | rust:checker.rs:1751 | Checker
+evaluate | pub(crate) fn evaluate(&mut self, expr: P<Node>, location: P<Node>) -> evaluator::Result | rust:checker.rs:1753 | Checker
 evaluate_entity | pub(crate) fn evaluate_entity(&mut self, expr: P<Node>, location: Option<P<Node>>) -> evaluator::Result | checker.go:24494 | Checker
 evaluate_enum_member | pub(crate) fn evaluate_enum_member(&mut self, expr: P<Node>, symbol: P<Symbol>, location: P<Node>) -> evaluator::Result | checker.go:24547 | Checker
 evaluate_template_expression | fn evaluate_template_expression<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expressions_to_skip: ast::OuterExpressionKinds, expr: P<Node>, location: P<Node>) -> Result | rust:evaluator.rs:125 | -
@@ -764,7 +764,7 @@ for_each_yield_expression | pub(crate) fn for_each_yield_expression(body: P<Node
 format_type_flags | pub fn format_type_flags(flags: TypeFlags) -> Vec<&'static str> | rust:types.rs:870 | -
 format_union_types | pub(crate) fn format_union_types(&mut self, types: &[P<Type>], expanding_enum: bool) -> Vec<P<Type>> | printer.go:253 | Checker
 fresh_type | pub fn fresh_type(&self) -> Option<P<Type>> | rust:types.rs:1703 | LiteralType
-from_u128 | pub const fn from_u128(v: u128) -> CacheHashKey | rust:checker.rs:2325 | CacheHashKey
+from_u128 | pub const fn from_u128(v: u128) -> CacheHashKey | rust:checker.rs:2327 | CacheHashKey
 from_vec | pub fn from_vec(items: Vec<T>) -> Self | rust:checker.rs:518 | LazyVec
 function_has_implicit_return | pub(crate) fn function_has_implicit_return(&mut self, fn_: P<Node>) -> bool | checker.go:20648 | Checker
 function_or_constructor_checked | pub fn function_or_constructor_checked(&self) -> bool | rust:types.rs:459 | ValueSymbolLinks
@@ -1087,77 +1087,77 @@ get_fresh_type_of_literal_type | pub(crate) fn get_fresh_type_of_literal_type(&m
 get_fully_qualified_name | pub(crate) fn get_fully_qualified_name(&mut self, symbol: P<Symbol>, containing_location: Option<P<Node>>) -> String | checker.go:16236 | Checker
 get_fully_qualified_name_exported | pub fn get_fully_qualified_name_exported(&mut self, symbol: P<Symbol>) -> String | exports.go:318 | Checker
 get_generic_object_flags | pub(crate) fn get_generic_object_flags(&mut self, t: P<Type>) -> ObjectFlags | checker.go:25350 | Checker
-get_global_async_disposable_type | pub(crate) fn get_global_async_disposable_type(&mut self) -> P<Type> | rust:checker.rs:1864 | Checker
-get_global_async_generator_type | pub(crate) fn get_global_async_generator_type(&mut self) -> P<Type> | rust:checker.rs:2134 | Checker
-get_global_async_iterable_iterator_type | pub(crate) fn get_global_async_iterable_iterator_type(&mut self) -> P<Type> | rust:checker.rs:2107 | Checker
-get_global_async_iterable_iterator_type_checked | pub(crate) fn get_global_async_iterable_iterator_type_checked(&mut self) -> P<Type> | rust:checker.rs:2116 | Checker
-get_global_async_iterable_type | pub(crate) fn get_global_async_iterable_type(&mut self) -> P<Type> | rust:checker.rs:2089 | Checker
-get_global_async_iterable_type_checked | pub(crate) fn get_global_async_iterable_type_checked(&mut self) -> P<Type> | rust:checker.rs:2098 | Checker
-get_global_async_iterator_object_type | pub(crate) fn get_global_async_iterator_object_type(&mut self) -> P<Type> | rust:checker.rs:2125 | Checker
-get_global_async_iterator_type | pub(crate) fn get_global_async_iterator_type(&mut self) -> P<Type> | rust:checker.rs:2080 | Checker
-get_global_awaited_symbol | pub(crate) fn get_global_awaited_symbol(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1873 | Checker
-get_global_awaited_symbol_or_nil | pub(crate) fn get_global_awaited_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1882 | Checker
-get_global_big_int_type | pub(crate) fn get_global_big_int_type(&mut self) -> P<Type> | rust:checker.rs:1801 | Checker
+get_global_async_disposable_type | pub(crate) fn get_global_async_disposable_type(&mut self) -> P<Type> | rust:checker.rs:1866 | Checker
+get_global_async_generator_type | pub(crate) fn get_global_async_generator_type(&mut self) -> P<Type> | rust:checker.rs:2136 | Checker
+get_global_async_iterable_iterator_type | pub(crate) fn get_global_async_iterable_iterator_type(&mut self) -> P<Type> | rust:checker.rs:2109 | Checker
+get_global_async_iterable_iterator_type_checked | pub(crate) fn get_global_async_iterable_iterator_type_checked(&mut self) -> P<Type> | rust:checker.rs:2118 | Checker
+get_global_async_iterable_type | pub(crate) fn get_global_async_iterable_type(&mut self) -> P<Type> | rust:checker.rs:2091 | Checker
+get_global_async_iterable_type_checked | pub(crate) fn get_global_async_iterable_type_checked(&mut self) -> P<Type> | rust:checker.rs:2100 | Checker
+get_global_async_iterator_object_type | pub(crate) fn get_global_async_iterator_object_type(&mut self) -> P<Type> | rust:checker.rs:2127 | Checker
+get_global_async_iterator_type | pub(crate) fn get_global_async_iterator_type(&mut self) -> P<Type> | rust:checker.rs:2082 | Checker
+get_global_awaited_symbol | pub(crate) fn get_global_awaited_symbol(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1875 | Checker
+get_global_awaited_symbol_or_nil | pub(crate) fn get_global_awaited_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1884 | Checker
+get_global_big_int_type | pub(crate) fn get_global_big_int_type(&mut self) -> P<Type> | rust:checker.rs:1803 | Checker
 get_global_builtin_iterator_types | pub fn get_global_builtin_iterator_types(&self, c: &mut Checker) -> &'static [P<Type>] | rust:checker.rs:832 | IterationTypesResolver
-get_global_class_accessor_decorator_context_type | pub(crate) fn get_global_class_accessor_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2206 | Checker
-get_global_class_accessor_decorator_result_type | pub(crate) fn get_global_class_accessor_decorator_result_type(&mut self) -> P<Type> | rust:checker.rs:2224 | Checker
-get_global_class_accessor_decorator_target_type | pub(crate) fn get_global_class_accessor_decorator_target_type(&mut self) -> P<Type> | rust:checker.rs:2215 | Checker
-get_global_class_decorator_context_type | pub(crate) fn get_global_class_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2170 | Checker
-get_global_class_field_decorator_context_type | pub(crate) fn get_global_class_field_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2233 | Checker
-get_global_class_getter_decorator_context_type | pub(crate) fn get_global_class_getter_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2188 | Checker
-get_global_class_method_decorator_context_type | pub(crate) fn get_global_class_method_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2179 | Checker
-get_global_class_setter_decorator_context_type | pub(crate) fn get_global_class_setter_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2197 | Checker
+get_global_class_accessor_decorator_context_type | pub(crate) fn get_global_class_accessor_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2208 | Checker
+get_global_class_accessor_decorator_result_type | pub(crate) fn get_global_class_accessor_decorator_result_type(&mut self) -> P<Type> | rust:checker.rs:2226 | Checker
+get_global_class_accessor_decorator_target_type | pub(crate) fn get_global_class_accessor_decorator_target_type(&mut self) -> P<Type> | rust:checker.rs:2217 | Checker
+get_global_class_decorator_context_type | pub(crate) fn get_global_class_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2172 | Checker
+get_global_class_field_decorator_context_type | pub(crate) fn get_global_class_field_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2235 | Checker
+get_global_class_getter_decorator_context_type | pub(crate) fn get_global_class_getter_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2190 | Checker
+get_global_class_method_decorator_context_type | pub(crate) fn get_global_class_method_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2181 | Checker
+get_global_class_setter_decorator_context_type | pub(crate) fn get_global_class_setter_decorator_context_type(&mut self) -> P<Type> | rust:checker.rs:2199 | Checker
 get_global_diagnostics | pub fn get_global_diagnostics(&mut self) -> Vec<P<Diagnostic>> | checker.go:14204 | Checker
-get_global_disposable_type | pub(crate) fn get_global_disposable_type(&mut self) -> P<Type> | rust:checker.rs:1855 | Checker
-get_global_es_symbol_constructor_symbol_or_nil | pub(crate) fn get_global_es_symbol_constructor_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1918 | Checker
-get_global_es_symbol_constructor_type_symbol_or_nil | pub(crate) fn get_global_es_symbol_constructor_type_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1927 | Checker
-get_global_es_symbol_type | pub(crate) fn get_global_es_symbol_type(&mut self) -> P<Type> | rust:checker.rs:1792 | Checker
-get_global_extract_symbol | pub(crate) fn get_global_extract_symbol(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1846 | Checker
-get_global_generator_type | pub(crate) fn get_global_generator_type(&mut self) -> P<Type> | rust:checker.rs:2071 | Checker
+get_global_disposable_type | pub(crate) fn get_global_disposable_type(&mut self) -> P<Type> | rust:checker.rs:1857 | Checker
+get_global_es_symbol_constructor_symbol_or_nil | pub(crate) fn get_global_es_symbol_constructor_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1920 | Checker
+get_global_es_symbol_constructor_type_symbol_or_nil | pub(crate) fn get_global_es_symbol_constructor_type_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1929 | Checker
+get_global_es_symbol_type | pub(crate) fn get_global_es_symbol_type(&mut self) -> P<Type> | rust:checker.rs:1794 | Checker
+get_global_extract_symbol | pub(crate) fn get_global_extract_symbol(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1848 | Checker
+get_global_generator_type | pub(crate) fn get_global_generator_type(&mut self) -> P<Type> | rust:checker.rs:2073 | Checker
 get_global_generator_type | pub fn get_global_generator_type(&self, c: &mut Checker) -> P<Type> | rust:checker.rs:829 | IterationTypesResolver
-get_global_import_attributes_type | pub(crate) fn get_global_import_attributes_type(&mut self) -> P<Type> | rust:checker.rs:1819 | Checker
-get_global_import_attributes_type_checked | pub(crate) fn get_global_import_attributes_type_checked(&mut self) -> P<Type> | rust:checker.rs:1828 | Checker
-get_global_import_call_options_type | pub(crate) fn get_global_import_call_options_type(&mut self) -> P<Type> | rust:checker.rs:1936 | Checker
-get_global_import_call_options_type_checked | pub(crate) fn get_global_import_call_options_type_checked(&mut self) -> P<Type> | rust:checker.rs:1945 | Checker
+get_global_import_attributes_type | pub(crate) fn get_global_import_attributes_type(&mut self) -> P<Type> | rust:checker.rs:1821 | Checker
+get_global_import_attributes_type_checked | pub(crate) fn get_global_import_attributes_type_checked(&mut self) -> P<Type> | rust:checker.rs:1830 | Checker
+get_global_import_call_options_type | pub(crate) fn get_global_import_call_options_type(&mut self) -> P<Type> | rust:checker.rs:1938 | Checker
+get_global_import_call_options_type_checked | pub(crate) fn get_global_import_call_options_type_checked(&mut self) -> P<Type> | rust:checker.rs:1947 | Checker
 get_global_import_meta_expression_type | pub(crate) fn get_global_import_meta_expression_type(&mut self) -> P<Type> | checker.go:25152 | Checker
-get_global_import_meta_type | pub(crate) fn get_global_import_meta_type(&mut self) -> P<Type> | rust:checker.rs:1810 | Checker
-get_global_iterable_iterator_type | pub(crate) fn get_global_iterable_iterator_type(&mut self) -> P<Type> | rust:checker.rs:2044 | Checker
+get_global_import_meta_type | pub(crate) fn get_global_import_meta_type(&mut self) -> P<Type> | rust:checker.rs:1812 | Checker
+get_global_iterable_iterator_type | pub(crate) fn get_global_iterable_iterator_type(&mut self) -> P<Type> | rust:checker.rs:2046 | Checker
 get_global_iterable_iterator_type | pub fn get_global_iterable_iterator_type(&self, c: &mut Checker) -> P<Type> | rust:checker.rs:820 | IterationTypesResolver
-get_global_iterable_iterator_type_checked | pub(crate) fn get_global_iterable_iterator_type_checked(&mut self) -> P<Type> | rust:checker.rs:2053 | Checker
+get_global_iterable_iterator_type_checked | pub(crate) fn get_global_iterable_iterator_type_checked(&mut self) -> P<Type> | rust:checker.rs:2055 | Checker
 get_global_iterable_iterator_type_checked | pub fn get_global_iterable_iterator_type_checked(&self, c: &mut Checker) -> P<Type> | rust:checker.rs:823 | IterationTypesResolver
-get_global_iterable_type | pub(crate) fn get_global_iterable_type(&mut self) -> P<Type> | rust:checker.rs:2026 | Checker
+get_global_iterable_type | pub(crate) fn get_global_iterable_type(&mut self) -> P<Type> | rust:checker.rs:2028 | Checker
 get_global_iterable_type | pub fn get_global_iterable_type(&self, c: &mut Checker) -> P<Type> | rust:checker.rs:814 | IterationTypesResolver
-get_global_iterable_type_checked | pub(crate) fn get_global_iterable_type_checked(&mut self) -> P<Type> | rust:checker.rs:2035 | Checker
+get_global_iterable_type_checked | pub(crate) fn get_global_iterable_type_checked(&mut self) -> P<Type> | rust:checker.rs:2037 | Checker
 get_global_iterable_type_checked | pub fn get_global_iterable_type_checked(&self, c: &mut Checker) -> P<Type> | rust:checker.rs:817 | IterationTypesResolver
-get_global_iterator_object_type | pub(crate) fn get_global_iterator_object_type(&mut self) -> P<Type> | rust:checker.rs:2062 | Checker
+get_global_iterator_object_type | pub(crate) fn get_global_iterator_object_type(&mut self) -> P<Type> | rust:checker.rs:2064 | Checker
 get_global_iterator_object_type | pub fn get_global_iterator_object_type(&self, c: &mut Checker) -> P<Type> | rust:checker.rs:826 | IterationTypesResolver
-get_global_iterator_return_result_type | pub(crate) fn get_global_iterator_return_result_type(&mut self) -> P<Type> | rust:checker.rs:2152 | Checker
-get_global_iterator_type | pub(crate) fn get_global_iterator_type(&mut self) -> P<Type> | rust:checker.rs:2017 | Checker
+get_global_iterator_return_result_type | pub(crate) fn get_global_iterator_return_result_type(&mut self) -> P<Type> | rust:checker.rs:2154 | Checker
+get_global_iterator_type | pub(crate) fn get_global_iterator_type(&mut self) -> P<Type> | rust:checker.rs:2019 | Checker
 get_global_iterator_type | pub fn get_global_iterator_type(&self, c: &mut Checker) -> P<Type> | rust:checker.rs:811 | IterationTypesResolver
-get_global_iterator_yield_result_type | pub(crate) fn get_global_iterator_yield_result_type(&mut self) -> P<Type> | rust:checker.rs:2143 | Checker
-get_global_nan_symbol_or_nil | pub(crate) fn get_global_nan_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1891 | Checker
-get_global_no_infer_symbol_or_nil | pub(crate) fn get_global_no_infer_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:2008 | Checker
-get_global_non_nullable_type_alias_or_nil | pub(crate) fn get_global_non_nullable_type_alias_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1837 | Checker
+get_global_iterator_yield_result_type | pub(crate) fn get_global_iterator_yield_result_type(&mut self) -> P<Type> | rust:checker.rs:2145 | Checker
+get_global_nan_symbol_or_nil | pub(crate) fn get_global_nan_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1893 | Checker
+get_global_no_infer_symbol_or_nil | pub(crate) fn get_global_no_infer_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:2010 | Checker
+get_global_non_nullable_type_alias_or_nil | pub(crate) fn get_global_non_nullable_type_alias_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1839 | Checker
 get_global_non_nullable_type_instantiation | pub(crate) fn get_global_non_nullable_type_instantiation(&mut self, t: P<Type>) -> P<Type> | checker.go:31697 | Checker
-get_global_omit_symbol | pub(crate) fn get_global_omit_symbol(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1999 | Checker
-get_global_promise_constructor_symbol | pub(crate) fn get_global_promise_constructor_symbol(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1981 | Checker
-get_global_promise_constructor_symbol_or_nil | pub(crate) fn get_global_promise_constructor_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1990 | Checker
-get_global_promise_like_type | pub(crate) fn get_global_promise_like_type(&mut self) -> P<Type> | rust:checker.rs:1972 | Checker
-get_global_promise_type | pub(crate) fn get_global_promise_type(&mut self) -> P<Type> | rust:checker.rs:1954 | Checker
-get_global_promise_type_checked | pub(crate) fn get_global_promise_type_checked(&mut self) -> P<Type> | rust:checker.rs:1963 | Checker
-get_global_record_symbol | pub(crate) fn get_global_record_symbol(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1900 | Checker
+get_global_omit_symbol | pub(crate) fn get_global_omit_symbol(&mut self) -> Option<P<Symbol>> | rust:checker.rs:2001 | Checker
+get_global_promise_constructor_symbol | pub(crate) fn get_global_promise_constructor_symbol(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1983 | Checker
+get_global_promise_constructor_symbol_or_nil | pub(crate) fn get_global_promise_constructor_symbol_or_nil(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1992 | Checker
+get_global_promise_like_type | pub(crate) fn get_global_promise_like_type(&mut self) -> P<Type> | rust:checker.rs:1974 | Checker
+get_global_promise_type | pub(crate) fn get_global_promise_type(&mut self) -> P<Type> | rust:checker.rs:1956 | Checker
+get_global_promise_type_checked | pub(crate) fn get_global_promise_type_checked(&mut self) -> P<Type> | rust:checker.rs:1965 | Checker
+get_global_record_symbol | pub(crate) fn get_global_record_symbol(&mut self) -> Option<P<Symbol>> | rust:checker.rs:1902 | Checker
 get_global_strict_function_type | pub(crate) fn get_global_strict_function_type(&mut self, name: &str) -> P<Type> | checker.go:25145 | Checker
 get_global_symbol | pub(crate) fn get_global_symbol(&mut self, name: &str, meaning: SymbolFlags, diagnostic: Option<&'static Message>) -> Option<P<Symbol>> | checker.go:1251 | Checker
 get_global_symbol_exported | pub fn get_global_symbol_exported(&mut self, name: &str, meaning: SymbolFlags, diagnostic: Option<&'static Message>) -> Option<P<Symbol>> | exports.go:99 | Checker
-get_global_template_strings_array_type | pub(crate) fn get_global_template_strings_array_type(&mut self) -> P<Type> | rust:checker.rs:1909 | Checker
+get_global_template_strings_array_type | pub(crate) fn get_global_template_strings_array_type(&mut self) -> P<Type> | rust:checker.rs:1911 | Checker
 get_global_type | pub(crate) fn get_global_type(&mut self, name: &str, arity: i32, report_errors: bool) -> P<Type> | checker.go:1220 | Checker
 get_global_type_alias_resolver | pub(crate) fn get_global_type_alias_resolver(&mut self, name: &str, arity: i32, report_errors: bool) -> Box<dyn FnMut(&mut Checker) -> Option<P<Symbol>>> | checker.go:1168 | Checker
 get_global_type_alias_symbol | pub(crate) fn get_global_type_alias_symbol(&mut self, name: &str, arity: i32, report_errors: bool) -> Option<P<Symbol>> | checker.go:1195 | Checker
 get_global_type_declaration | pub(crate) fn get_global_type_declaration(symbol: P<Symbol>) -> Option<P<Node>> | checker.go:1241 | -
 get_global_type_resolver | pub(crate) fn get_global_type_resolver(&mut self, name: &str, arity: i32, report_errors: bool) -> Box<dyn FnMut(&mut Checker) -> P<Type>> | checker.go:1161 | Checker
 get_global_type_symbol_resolver | pub(crate) fn get_global_type_symbol_resolver(&mut self, name: &str, report_errors: bool) -> Box<dyn FnMut(&mut Checker) -> Option<P<Symbol>>> | checker.go:1181 | Checker
-get_global_typed_property_descriptor_type | pub(crate) fn get_global_typed_property_descriptor_type(&mut self) -> P<Type> | rust:checker.rs:2161 | Checker
-get_global_types | pub(crate) fn get_global_types(&mut self, names: &[&str], arity: i32, report_errors: bool) -> &'static [P<Type>] | rust:checker.rs:1785 | Checker
+get_global_typed_property_descriptor_type | pub(crate) fn get_global_typed_property_descriptor_type(&mut self) -> P<Type> | rust:checker.rs:2163 | Checker
+get_global_types | pub(crate) fn get_global_types(&mut self, names: &[&str], arity: i32, report_errors: bool) -> &'static [P<Type>] | rust:checker.rs:1787 | Checker
 get_global_types_resolver | pub(crate) fn get_global_types_resolver(&mut self, names: &[&str], arity: i32, report_errors: bool) -> Box<dyn FnMut(&mut Checker) -> Vec<P<Type>>> | checker.go:1187 | Checker
 get_global_value_symbol_resolver | pub(crate) fn get_global_value_symbol_resolver(&mut self, name: &str, report_errors: bool) -> Box<dyn FnMut(&mut Checker) -> Option<P<Symbol>>> | checker.go:1175 | Checker
 get_helper_names | pub(crate) fn get_helper_names(&mut self, helper: ExternalEmitHelpers) -> Vec<String> | checker.go:29093 | Checker
@@ -1331,7 +1331,7 @@ get_never_type | pub fn get_never_type(&mut self) -> P<Type> | exports.go:40 | C
 get_next_base_constraint | pub(crate) fn get_next_base_constraint(&mut self, t: Option<P<Type>>, stack: &[RecursionId]) -> Option<P<Type>> | checker.go:28063 | Checker
 get_no_infer_type | pub(crate) fn get_no_infer_type(&mut self, t: P<Type>) -> P<Type> | checker.go:27864 | Checker
 get_node_builder | pub(crate) fn get_node_builder(&mut self) -> (P<NodeBuilder>, Box<dyn FnMut(&mut Checker)>) | nodebuilder.go:288 | Checker
-get_node_builder_ex | pub(crate) fn get_node_builder_ex(&mut self, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> P<NodeBuilder> | nodebuilder.go:299 | Checker
+get_node_builder_ex | pub(crate) fn get_node_builder_ex(&mut self, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> P<NodeBuilder> | nodebuilder.go:299 | Checker
 get_node_list_key | pub(crate) fn get_node_list_key(nodes: &[P<Node>]) -> CacheHashKey | checker.go:17971 | -
 get_node_visitor | fn get_node_visitor(visit_node: Option<VisitNodeFn>, visit_nodes: Option<VisitNodesFn>) -> NodeVisitor | tokens.go:690 | -
 get_non_array_rest_type | pub(crate) fn get_non_array_rest_type(&mut self, signature: P<Signature>) -> Option<P<Type>> | relater.go:1891 | Checker
@@ -1868,8 +1868,8 @@ has_visible_declarations | pub(crate) fn has_visible_declarations(&self, c: &mut
 hash | fn hash(key: usize) -> u64 | rust:links.rs:36 | LinkStore
 hash | fn hash(type_arguments: &[P<Type>]) -> u64 | rust:types.rs:1883 | ReferenceInstantiations
 hash | pub(crate) fn hash(&self) -> CacheHashKey | checker.go:17713 | keyBuilder
-hash_128 | pub fn hash_128(b: &[u8]) -> CacheHashKey | rust:checker.rs:2329 | CacheHashKey
-hash_string_128 | pub const fn hash_string_128(s: &str) -> CacheHashKey | rust:checker.rs:2333 | CacheHashKey
+hash_128 | pub fn hash_128(b: &[u8]) -> CacheHashKey | rust:checker.rs:2331 | CacheHashKey
+hash_string_128 | pub const fn hash_string_128(s: &str) -> CacheHashKey | rust:checker.rs:2335 | CacheHashKey
 hover_heritage_clauses | pub(crate) fn hover_heritage_clauses(&self, _c: &mut Checker, declarations: &[P<Node>]) -> Vec<P<Node>> | nodebuilder_hover.go:275 | NodeBuilderImpl
 id | pub fn id(&self) -> SignatureId | rust:types.rs:2349 | Signature
 id | pub fn id(&self) -> TypeId | rust:types.rs:1240 | Type
@@ -2227,7 +2227,7 @@ is_possibly_discriminant_value | pub(crate) fn is_possibly_discriminant_value(&m
 is_post_super_flow_node | pub(crate) fn is_post_super_flow_node(&mut self, flow: P<FlowNode>, no_cache_check: bool) -> bool | flow.go:2604 | Checker
 is_post_super_flow_node_worker | pub(crate) fn is_post_super_flow_node_worker(&mut self, f: P<FlowState>, flow: P<FlowNode>, no_cache_check: bool) -> bool | flow.go:2611 | Checker
 is_potentially_uncalled_decorator | pub(crate) fn is_potentially_uncalled_decorator(&mut self, decorator: P<Node>, signatures: &[P<Signature>]) -> bool | checker.go:8963 | Checker
-is_primitive_or_object_or_empty_type | pub(crate) fn is_primitive_or_object_or_empty_type(&mut self, t: P<Type>) -> bool | rust:checker.rs:1755 | Checker
+is_primitive_or_object_or_empty_type | pub(crate) fn is_primitive_or_object_or_empty_type(&mut self, t: P<Type>) -> bool | rust:checker.rs:1757 | Checker
 is_primitive_type_name | pub(crate) fn is_primitive_type_name(s: &str) -> bool | checker.go:1678 | -
 is_primitive_union | pub(crate) fn is_primitive_union(t: P<Type>) -> bool | checker.go:26707 | -
 is_private_identifier_symbol | pub fn is_private_identifier_symbol(symbol: Option<P<Symbol>>) -> bool | utilities.go:1022 | -
@@ -2301,7 +2301,7 @@ is_spread_into_call_or_new | pub(crate) fn is_spread_into_call_or_new(node: P<No
 is_spreadable_property | pub(crate) fn is_spreadable_property(&mut self, prop: P<Symbol>) -> bool | checker.go:13798 | Checker
 is_static_private_identifier_property | pub(crate) fn is_static_private_identifier_property(s: P<Symbol>) -> bool | utilities.go:71 | -
 is_string | pub fn is_string(&self) -> bool | rust:types.rs:1477 | Type
-is_string_index_signature_only_type | pub(crate) fn is_string_index_signature_only_type(&mut self, t: P<Type>) -> bool | rust:checker.rs:1767 | Checker
+is_string_index_signature_only_type | pub(crate) fn is_string_index_signature_only_type(&mut self, t: P<Type>) -> bool | rust:checker.rs:1769 | Checker
 is_string_index_signature_only_type_worker | pub(crate) fn is_string_index_signature_only_type_worker(&mut self, t: P<Type>) -> bool | checker.go:27835 | Checker
 is_string_like | pub fn is_string_like(&self) -> bool | rust:types.rs:1505 | Type
 is_string_literal | pub fn is_string_literal(&self) -> bool | rust:types.rs:1485 | Type
@@ -2493,7 +2493,7 @@ mark_linked_aliases | pub(crate) fn mark_linked_aliases(&self, c: &mut Checker, 
 mark_linked_references | pub(crate) fn mark_linked_references(&mut self, location: P<Node>, hint: ReferenceHint, prop_symbol: Option<P<Symbol>>, parent_type: Option<P<Type>>) | checker.go:28659 | Checker
 mark_linked_references_recursively | pub fn mark_linked_references_recursively(&self, c: &mut Checker, file: Option<P<SourceFile>>) | emitresolver.go:808 | EmitResolver
 mark_linked_references_recursively_visit | fn mark_linked_references_recursively_visit(c: &mut Checker, n: P<Node>) -> bool | rust:emitresolver.rs:891 | -
-mark_node_assignments | pub(crate) fn mark_node_assignments(&mut self, node: P<Node>) -> bool | rust:checker.rs:1771 | Checker
+mark_node_assignments | pub(crate) fn mark_node_assignments(&mut self, node: P<Node>) -> bool | rust:checker.rs:1773 | Checker
 mark_node_assignments_worker | pub(crate) fn mark_node_assignments_worker(&mut self, node: P<Node>) -> bool | flow.go:2700 | Checker
 mark_property_alias_referenced | pub(crate) fn mark_property_alias_referenced(&mut self, location: P<Node>, prop_symbol: Option<P<Symbol>>, parent_type: Option<P<Type>>) | checker.go:28877 | Checker
 mark_property_as_referenced | pub(crate) fn mark_property_as_referenced(&mut self, prop: P<Symbol>, node_for_check_write_only: Option<P<Node>>, is_self_type_access: bool) | checker.go:28176 | Checker
@@ -2602,8 +2602,8 @@ new_literal_type | pub(crate) fn new_literal_type(&mut self, flags: TypeFlags, v
 new_mapped_type_member | pub(crate) fn new_mapped_type_member(&mut self, t: P<Type>, modifiers_type: P<Type>, template_modifiers: MappedTypeModifiers, should_link_prop_declarations: bool, key_type: P<Type>, prop_name_type: P<Type>, prop_name: &str) -> P<Symbol> | rust:checker_10.rs:2045 | Checker
 new_merged_type_mapper | pub(crate) fn new_merged_type_mapper(m1: P<TypeMapper>, m2: P<TypeMapper>) -> P<TypeMapper> | rust:mapper.rs:422 | -
 new_node_builder | pub fn new_node_builder(ch: &mut Checker, e: P<EmitContext>) -> P<NodeBuilder> | nodebuilder.go:279 | -
-new_node_builder_ex | pub fn new_node_builder_ex(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> P<NodeBuilder> | nodebuilder.go:283 | -
-new_node_builder_impl | pub(crate) fn new_node_builder_impl(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> P<NodeBuilderImpl> | nodebuilderimpl.go:125 | -
+new_node_builder_ex | pub fn new_node_builder_ex(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> P<NodeBuilder> | nodebuilder.go:283 | -
+new_node_builder_impl | pub(crate) fn new_node_builder_impl(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> P<NodeBuilderImpl> | nodebuilderimpl.go:125 | -
 new_object_type | pub(crate) fn new_object_type(&mut self, object_flags: ObjectFlags, symbol: Option<P<Symbol>>) -> P<Type> | checker.go:25533 | Checker
 new_parameter | pub(crate) fn new_parameter(&mut self, name: &'static str, t: P<Type>) -> P<Symbol> | checker.go:14319 | Checker
 new_property | pub(crate) fn new_property(&mut self, name: &'static str, t: P<Type>) -> P<Symbol> | checker.go:14325 | Checker
@@ -2669,7 +2669,7 @@ pragma_factory_argument | fn pragma_factory_argument(pragma: &'static Pragma) ->
 precalculate_declaration_emit_visibility | pub fn precalculate_declaration_emit_visibility(&self, c: &mut Checker, file: P<SourceFile>) | emitresolver.go:236 | EmitResolver
 prepare_lazy_members | pub(crate) fn prepare_lazy_members(&mut self, t: P<Type>, lm: &std::rc::Rc<LazyMemberTable>) | rust:checker_09.rs:2687 | Checker
 prepend_type_mapping | pub(crate) fn prepend_type_mapping(source: P<Type>, target: P<Type>, mapper: Option<P<TypeMapper>>) -> P<TypeMapper> | rust:mapper.rs:370 | -
-primitive_type_alias_suggestions | pub fn primitive_type_alias_suggestions() -> &'static FxHashMap<&'static str, P<Symbol>> | rust:checker.rs:2244 | -
+primitive_type_alias_suggestions | pub fn primitive_type_alias_suggestions() -> &'static FxHashMap<&'static str, P<Symbol>> | rust:checker.rs:2246 | -
 produce_deferred_diagnostics | pub(crate) fn produce_deferred_diagnostics(&mut self) | checker.go:14214 | Checker
 propagate_optional_type_marker | pub(crate) fn propagate_optional_type_marker(&mut self, t: P<Type>, node: P<Node>, was_optional: bool) -> P<Type> | checker.go:29552 | Checker
 propagate_verbosity_out | pub(crate) fn propagate_verbosity_out(&self) | nodebuilder.go:62 | NodeBuilder
@@ -2828,9 +2828,9 @@ resolve_jsdoc_member_name | pub(crate) fn resolve_jsdoc_member_name(&mut self, n
 resolve_jsx_opening_like_element | pub(crate) fn resolve_jsx_opening_like_element(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> | jsx.go:545 | Checker
 resolve_lazy_members | pub(crate) fn resolve_lazy_members(&mut self, t: P<Type>, lm: &std::rc::Rc<LazyMemberTable>) | rust:checker_09.rs:2734 | Checker
 resolve_mapped_type_members | pub(crate) fn resolve_mapped_type_members(&mut self, t: P<Type>) | checker.go:21235 | Checker
-resolve_name | pub(crate) fn resolve_name(&mut self, location: Option<P<Node>>, name: &str, meaning: SymbolFlags, name_not_found_message: Option<&'static Message>, is_use: bool, exclude_globals: bool) -> Option<P<Symbol>> | rust:checker.rs:1724 | Checker
+resolve_name | pub(crate) fn resolve_name(&mut self, location: Option<P<Node>>, name: &str, meaning: SymbolFlags, name_not_found_message: Option<&'static Message>, is_use: bool, exclude_globals: bool) -> Option<P<Symbol>> | rust:checker.rs:1726 | Checker
 resolve_name_exported | pub fn resolve_name_exported(&mut self, name: &str, location: P<Node>, meaning: SymbolFlags, exclude_globals: bool) -> Option<P<Symbol>> | exports.go:296 | Checker
-resolve_name_for_symbol_suggestion | pub(crate) fn resolve_name_for_symbol_suggestion(&mut self, location: Option<P<Node>>, name: &str, meaning: SymbolFlags, name_not_found_message: Option<&'static Message>, is_use: bool, exclude_globals: bool) -> Option<P<Symbol>> | rust:checker.rs:1737 | Checker
+resolve_name_for_symbol_suggestion | pub(crate) fn resolve_name_for_symbol_suggestion(&mut self, location: Option<P<Node>>, name: &str, meaning: SymbolFlags, name_not_found_message: Option<&'static Message>, is_use: bool, exclude_globals: bool) -> Option<P<Symbol>> | rust:checker.rs:1739 | Checker
 resolve_new_expression | pub(crate) fn resolve_new_expression(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> | checker.go:8749 | Checker
 resolve_object_type_members | pub(crate) fn resolve_object_type_members(&mut self, t: P<Type>, source: P<Type>, type_parameters: &[P<Type>], type_arguments: &[P<Type>]) | checker.go:19450 | Checker
 resolve_qualified_name | pub(crate) fn resolve_qualified_name(&mut self, name: P<Node>, left: P<Node>, right: P<Node>, meaning: SymbolFlags, ignore_errors: bool, location: Option<P<Node>>) -> Option<P<Symbol>> | checker.go:16151 | Checker
@@ -3096,7 +3096,7 @@ type_predicate_kinds_match | pub(crate) fn type_predicate_kinds_match(&mut self,
 type_predicate_to_string | pub(crate) fn type_predicate_to_string(&mut self, type_predicate: P<TypePredicate>) -> String | printer.go:229 | Checker
 type_predicate_to_string_ex | pub(crate) fn type_predicate_to_string_ex(&mut self, type_predicate: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags) -> String | printer.go:233 | Checker
 type_predicate_to_string_exported | pub fn type_predicate_to_string_exported(&mut self, t: P<TypePredicate>) -> String | exports.go:251 | Checker
-type_predicate_to_type_predicate_node | pub fn type_predicate_to_type_predicate_node(&mut self, t: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> Option<P<Node>> | printer.go:353 | Checker
+type_predicate_to_type_predicate_node | pub fn type_predicate_to_type_predicate_node(&mut self, t: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> | printer.go:353 | Checker
 type_predicate_to_type_predicate_node | pub fn type_predicate_to_type_predicate_node(&self, c: &mut Checker, predicate: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:261 | NodeBuilder
 type_predicate_to_type_predicate_node | pub(crate) fn type_predicate_to_type_predicate_node(&self, c: &mut Checker, predicate: P<TypePredicate>) -> P<Node> | nodebuilderimpl.go:1646 | NodeBuilderImpl
 type_predicate_to_type_predicate_node_helper | pub(crate) fn type_predicate_to_type_predicate_node_helper(&self, c: &mut Checker, type_predicate: P<TypePredicate>) -> P<Node> | nodebuilderimpl.go:1837 | NodeBuilderImpl
@@ -3110,10 +3110,10 @@ type_to_string | pub(crate) fn type_to_string(&mut self, t: P<Type>, enclosing_d
 type_to_string_ex | pub fn type_to_string_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String | printer.go:59 | Checker
 type_to_string_ex_exported | pub fn type_to_string_ex_exported(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String | printer.go:55 | Checker
 type_to_string_exported | pub fn type_to_string_exported(&mut self, t: P<Type>) -> String | printer.go:43 | Checker
-type_to_type_node | pub fn type_to_type_node(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> Option<P<Node>> | printer.go:288 | Checker
+type_to_type_node | pub fn type_to_type_node(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> | printer.go:288 | Checker
 type_to_type_node | pub fn type_to_type_node(&self, c: &mut Checker, typ: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:267 | NodeBuilder
 type_to_type_node | pub(crate) fn type_to_type_node(&self, c: &mut Checker, t: Option<P<Type>>) -> Option<P<Node>> | nodebuilderimpl.go:3303 | NodeBuilderImpl
-type_to_type_node_ex | pub fn type_to_type_node_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, id_to_symbol: Option<&FxHashMap<P<Node>, P<Symbol>>>) -> Option<P<Node>> | printer.go:348 | Checker
+type_to_type_node_ex | pub fn type_to_type_node_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> | printer.go:348 | Checker
 type_to_type_node_helper_with_possible_reusable_type_node | pub(crate) fn type_to_type_node_helper_with_possible_reusable_type_node(&self, c: &mut Checker, t: Option<P<Type>>, type_node: Option<P<Node>>) -> Option<P<Node>> | nodebuilderimpl.go:1669 | NodeBuilderImpl
 type_to_type_node_or_circularity_elision | pub(crate) fn type_to_type_node_or_circularity_elision(&self, c: &mut Checker, t: P<Type>) -> Option<P<Node>> | nodebuilderimpl.go:2995 | NodeBuilderImpl
 types | pub fn types(&self) -> &'static [P<Type>] | rust:types.rs:2222 | TemplateLiteralType

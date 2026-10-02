@@ -1764,8 +1764,7 @@ pub fn is_external_module_symbol(module_symbol: P<Symbol>) -> bool {
 impl Checker {
     // utilities.go:1712
     pub(crate) fn is_canceled(&mut self) -> bool {
-        // Cancellation (c.ctx) is not ported.
-        false
+        self.ctx.as_ref().is_some_and(|ctx| ctx.err().is_some())
     }
 
     // utilities.go:1716
