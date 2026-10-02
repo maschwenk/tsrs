@@ -199,7 +199,7 @@ pub(crate) enum builtinWatcher {}
 pub struct Server {
     r: Mutex<Option<Box<dyn Reader>>>,
     w: Mutex<Box<dyn Writer>>,
-    background_ctx: OnceLock<Context>,
+    pub(crate) background_ctx: OnceLock<Context>,
 
     stderr: Mutex<Box<dyn Write + Send>>,
 
@@ -624,7 +624,7 @@ impl Server {
     }
 
     // server.go:1029
-    fn write_loop(&self, ctx: &Context) -> Result<(), Error> {
+    pub(crate) fn write_loop(&self, ctx: &Context) -> Result<(), Error> {
         loop {
             let msg = self.outgoing_queue.get(ctx)?;
             let result = self.w.lock().unwrap().write(&msg);
