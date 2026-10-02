@@ -39,7 +39,7 @@ const MASK: i32 = 0b11111; // MaskBitSize bits
 const MAP_ROW_LENGTH: usize = Kind::LastToken as usize + 1;
 
 // rulesmap.go:49
-/**
+/*
  * For a given rule action, gets a mask of other rule actions that
  * cannot be applied at the same position.
  */

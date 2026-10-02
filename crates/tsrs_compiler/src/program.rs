@@ -27,7 +27,8 @@ use crate::host::CompilerHost;
 use crate::includeprocessor::includeProcessor;
 use crate::outputpaths;
 use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic};
-use crate::projectreferencefilemapper::{projectReferenceFileMapper, SourceOutputAndProjectReference};
+use crate::projectreferencefilemapper::projectReferenceFileMapper;
+use tsrs_tsoptions::SourceOutputAndProjectReference;
 use crate::fileloader::str_slice;
 use tsrs_module::symlinks::{self, KnownSymlinks};
 use tsrs_module::{ResolutionHost, ResolvedProjectReference};
@@ -229,27 +230,38 @@ impl Program {
         file_name.to_string()
     }
 
-    pub fn get_project_reference_from_source(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference> {
+    // program.go:209
+    pub fn get_project_reference_from_source(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
         self.project_reference_file_mapper.get_project_reference_from_source(path)
     }
 
+    // program.go:214
     pub fn is_source_from_project_reference(&self, path: &Path) -> bool {
         self.project_reference_file_mapper.is_source_from_project_reference(path)
     }
 
-    pub fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<&'static SourceOutputAndProjectReference> {
+    // program.go:218
+    pub fn get_project_reference_from_output_dts(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
         self.project_reference_file_mapper.get_project_reference_from_output_dts(path)
     }
 
-    pub fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<&'static dyn ResolvedProjectReference> {
+    // program.go:222
+    pub fn get_resolved_project_reference_for(&self, path: &Path) -> (Option<P<ParsedCommandLine>>, bool) {
+        self.project_reference_file_mapper.get_resolved_reference_for(path)
+    }
+
+    // program.go:226
+    pub fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<P<ParsedCommandLine>> {
         self.project_reference_file_mapper.get_redirect_for_resolution(file.file_name(), &file.path()).0
     }
 
+    // program.go:231
     pub fn get_parse_file_redirect(&self, file_name: &str) -> String {
         self.project_reference_file_mapper.get_parse_file_redirect(file_name, &self.to_path(file_name))
     }
 
-    pub fn get_resolved_project_references(&self) -> Vec<P<ParsedCommandLine>> {
+    // program.go:235
+    pub fn get_resolved_project_references(&self) -> Vec<Option<P<ParsedCommandLine>>> {
         self.project_reference_file_mapper.get_resolved_project_references()
     }
 
@@ -261,18 +273,13 @@ impl Program {
         self.project_reference_file_mapper.range_resolved_project_reference(f)
     }
 
-    // program.go:243 (project references are not ported: there is never a resolved reference to visit)
+    // program.go:243
     pub fn range_resolved_project_reference_in_child_config(
         &self,
-        _child_config: P<ParsedCommandLine>,
-        _f: impl FnMut(&Path, Option<P<ParsedCommandLine>>, P<ParsedCommandLine>, usize) -> bool,
+        child_config: Option<P<ParsedCommandLine>>,
+        f: impl FnMut(&Path, Option<P<ParsedCommandLine>>, P<ParsedCommandLine>, usize) -> bool,
     ) -> bool {
-        false
-    }
-
-    // program.go:222 (project references are not ported)
-    pub fn get_resolved_project_reference_for(&self, _path: &Path) -> Option<P<ParsedCommandLine>> {
-        None
+        self.project_reference_file_mapper.range_resolved_project_reference_in_child_config(child_config, f)
     }
 
     // program.go:183
@@ -332,7 +339,7 @@ pub(crate) fn worker_pool() -> &'static rayon::ThreadPool {
 pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let single_threaded = opts.single_threaded.default_if_unknown(opts.config.compiler_options().unwrap().single_threaded).is_true();
     let (mut processed, resolution_data, module_resolution_error) = process_all_program_files(&opts, single_threaded);
-    let project_reference_file_mapper: &'static projectReferenceFileMapper = Box::leak(Box::new(processed.project_reference_file_mapper.take().unwrap()));
+    let project_reference_file_mapper: &'static projectReferenceFileMapper = processed.project_reference_file_mapper.take().unwrap();
     let processing_diagnostics = std::mem::take(&mut processed.file_include_data.processing_diagnostics);
     let files = std::mem::take(&mut processed.files);
     let files_by_path = std::mem::take(&mut processed.files_by_path);
@@ -560,6 +567,7 @@ impl Program {
     // program.go:480
     fn needs_import_helpers_import_specifier(&self, file: P<SourceFile>) -> bool {
         let (redirect, _) = self.project_reference_file_mapper.get_redirect_for_resolution(file.file_name(), file.path());
+        let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
         let options_for_file = module::get_compiler_options_with_redirect(self.opts.config.compiler_options().unwrap(), redirect);
         if !options_for_file.import_helpers.is_true() {
             return false;
@@ -578,6 +586,7 @@ impl Program {
             return String::new();
         }
         let (redirect, _) = self.project_reference_file_mapper.get_redirect_for_resolution(file.file_name(), file.path());
+        let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
         let options_for_file = module::get_compiler_options_with_redirect(self.opts.config.compiler_options().unwrap(), redirect);
         ast::get_jsx_runtime_import(&ast::get_jsx_implicit_import_base(&options_for_file, Some(file)), &options_for_file)
     }
@@ -1685,9 +1694,53 @@ impl Program {
         self.has_emit_blocking_diagnostics.contains(&self.to_path(emit_file_name))
     }
 
+    // program.go:1402
     fn verify_project_references(&mut self) {
-        // Project references are not ported; with no resolved references this loop never runs.
-        self.project_reference_file_mapper.range_resolved_project_reference(|_, _, _, _| true);
+        let build_info_file_name =
+            if !self.options().suppress_output_path_check.is_true() { self.opts.config.get_build_info_file_name() } else { String::new() };
+        let mut program_diagnostics = Vec::new();
+        let mut emit_blocking = Vec::new();
+        let mut create_diagnostic_for_reference = |config: P<ParsedCommandLine>, index: usize, message: &'static Message, args: &[&dyn Display]| {
+            let diag = tsoptions::create_diagnostic_at_reference_syntax(&config, index, message, args)
+                .unwrap_or_else(|| new_compiler_diagnostic(message, args));
+            program_diagnostics.push(diag);
+        };
+
+        self.project_reference_file_mapper.range_resolved_project_reference(|_path, config, parent, index| {
+            let ref_ = &parent.project_references()[index];
+            // !!! Deprecated in 5.0 and removed since 5.5
+            // verifyRemovedProjectReference(ref, parent, index);
+            let Some(config) = config else {
+                create_diagnostic_for_reference(parent, index, &diagnostics::File_0_not_found, &[&ref_.path]);
+                return true;
+            };
+            let ref_options = config.compiler_options().unwrap();
+            if !ref_options.composite.is_true() || ref_options.no_emit.is_true() {
+                if !parent.file_names().is_empty() {
+                    if !ref_options.composite.is_true() {
+                        create_diagnostic_for_reference(parent, index, &diagnostics::Referenced_project_0_must_have_setting_composite_Colon_true, &[&ref_.path]);
+                    }
+                    if ref_options.no_emit.is_true() {
+                        create_diagnostic_for_reference(parent, index, &diagnostics::Referenced_project_0_may_not_disable_emit, &[&ref_.path]);
+                    }
+                }
+            }
+            if !build_info_file_name.is_empty() && build_info_file_name == config.get_build_info_file_name() {
+                create_diagnostic_for_reference(
+                    parent,
+                    index,
+                    &diagnostics::Cannot_write_file_0_because_it_will_overwrite_tsbuildinfo_file_generated_by_referenced_project_1,
+                    &[&build_info_file_name, &ref_.path],
+                );
+                emit_blocking.push(build_info_file_name.clone());
+            }
+            true
+        });
+        self.program_diagnostics.extend(program_diagnostics);
+        for file_name in emit_blocking {
+            let path = self.to_path(&file_name);
+            self.has_emit_blocking_diagnostics.insert(path);
+        }
     }
 
     // program.go:1463
