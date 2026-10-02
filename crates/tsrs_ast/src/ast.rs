@@ -1540,6 +1540,9 @@ pub struct SourceFile {
 
     // Fields for UTF-8 to UTF-16 position mapping
     position_map: OnceLock<P<PositionMap>>,
+
+    // Language service token cache (Go `tokenCacheMu`, `tokenCache`), see get_or_create_token
+    token_cache: std::sync::Mutex<FxHashMap<TokenCacheKey, P<Node>>>,
 }
 
 impl NodeFactory {
@@ -1598,6 +1601,7 @@ impl NodeFactory {
             global_exports: OwnedCell::new(None),
             ecma_line_map: OnceLock::new(),
             position_map: OnceLock::new(),
+            token_cache: std::sync::Mutex::new(FxHashMap::default()),
         });
         node.as_source_file().node.set(Some(node));
         node
@@ -1922,6 +1926,59 @@ impl NodeFactory {
             return update_node(updated, node, &self.hooks);
         }
         node
+    }
+}
+
+// ast.go:2441
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct TokenCacheKey {
+    pub parent: P<Node>,
+    pub loc: TextRange,
+}
+
+impl SourceFile {
+    // ast.go:2909
+    pub fn get_or_create_token(&self, kind: Kind, pos: i32, end: i32, parent: P<Node>, flags: TokenFlags) -> P<Node> {
+        let mut token_cache = self.token_cache.lock().unwrap();
+        let loc = TextRange::new(pos, end);
+        let key = TokenCacheKey { parent, loc };
+        if let Some(&token) = token_cache.get(&key) {
+            if token.kind() != kind {
+                panic!("Token cache mismatch: {:?} != {:?}", token.kind(), kind);
+            }
+            return token;
+        }
+        if parent.flags().intersects(NodeFlags::Reparsed) {
+            panic!("Cannot create token from reparsed node of kind {:?}", parent.kind());
+        }
+        let token = create_token(kind, self, pos, end, flags);
+        token.set_loc(loc);
+        token.set_parent(Some(parent));
+        token_cache.insert(key, token);
+        token
+    }
+}
+
+// ast.go:2940
+// `kind` should be a token kind.
+// Go keeps one lazily created factory per file (`tokenFactory`); a NodeFactory handle is not `Sync`, and a factory
+// carries no state that tokens observe, so each call uses a fresh default factory.
+fn create_token(kind: Kind, file: &SourceFile, pos: i32, end: i32, flags: TokenFlags) -> P<Node> {
+    let token_factory = NodeFactory::default();
+    let text: &'static str = &file.text[pos as usize..end as usize];
+    match kind {
+        Kind::NumericLiteral => token_factory.new_numeric_literal(text, flags),
+        Kind::BigIntLiteral => token_factory.new_big_int_literal(text, flags),
+        Kind::StringLiteral => token_factory.new_string_literal(text, flags),
+        Kind::JsxText | Kind::JsxTextAllWhiteSpaces => token_factory.new_jsx_text(text, kind == Kind::JsxTextAllWhiteSpaces),
+        Kind::RegularExpressionLiteral => token_factory.new_regular_expression_literal(text, flags),
+        Kind::NoSubstitutionTemplateLiteral => token_factory.new_no_substitution_template_literal(text, flags),
+        Kind::TemplateHead => token_factory.new_template_head(text, "" /*rawText*/, flags),
+        Kind::TemplateMiddle => token_factory.new_template_middle(text, "" /*rawText*/, flags),
+        Kind::TemplateTail => token_factory.new_template_tail(text, "" /*rawText*/, flags),
+        Kind::Identifier => token_factory.new_identifier(text),
+        Kind::PrivateIdentifier => token_factory.new_private_identifier(text),
+        _ => token_factory.new_token(kind), // Punctuation and keywords
     }
 }
 

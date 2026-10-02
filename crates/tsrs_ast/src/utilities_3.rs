@@ -1240,3 +1240,107 @@ pub fn is_external_module_indicator(node: P<Node>) -> bool {
     // Exported top-level member indicates moduleness
     is_any_import_or_re_export(node) || is_export_assignment(node) || has_syntactic_modifier(node, ModifierFlags::Export)
 }
+
+// Language-service-only utilities (added for tsrs_ls; the batch port skipped them).
+
+// utilities.go:89
+pub fn find_last_visible_node(nodes: &[P<Node>]) -> Option<P<Node>> {
+    let mut from_end = 1;
+    while from_end <= nodes.len() && nodes[nodes.len() - from_end].flags().intersects(NodeFlags::Reparsed) {
+        from_end += 1;
+    }
+    if from_end <= nodes.len() {
+        return Some(nodes[nodes.len() - from_end]);
+    }
+    None
+}
+
+// utilities.go:687
+pub fn is_statement_but_not_declaration(node: P<Node>) -> bool {
+    is_statement_kind_but_not_declaration_kind(node.kind())
+}
+
+// utilities.go:2201
+pub fn is_non_whitespace_token(node: P<Node>) -> bool {
+    is_token_kind(node.kind()) && !is_whitespace_only_jsx_text(node)
+}
+
+// utilities.go:2205
+pub fn is_whitespace_only_jsx_text(node: P<Node>) -> bool {
+    node.kind() == Kind::JsxText && node.as_jsx_text().contains_only_trivia_white_spaces
+}
+
+// utilities.go:3056
+pub fn for_each_child_and_jsdoc(node: P<Node>, source_file: &'static SourceFile, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
+    for &jsdoc in node.jsdoc(Some(source_file)) {
+        if v(jsdoc) {
+            return true;
+        }
+    }
+    node.for_each_child(v)
+}
+
+// utilities.go:3144
+pub fn is_jsdoc_single_comment_node_list(node_list: Option<P<NodeList>>) -> bool {
+    let Some(node_list) = node_list else {
+        return false;
+    };
+    if node_list.nodes.is_empty() {
+        return false;
+    }
+    let Some(parent) = node_list.nodes[0].parent() else {
+        return false;
+    };
+    is_jsdoc_single_comment_node(parent) && Some(node_list) == parent.comment_list()
+}
+
+// utilities.go:3156
+pub fn is_jsdoc_single_comment_node_comment(node: Option<P<Node>>) -> bool {
+    let Some(node) = node else {
+        return false;
+    };
+    let Some(parent) = node.parent() else {
+        return false;
+    };
+    is_jsdoc_single_comment_node(parent) && node == parent.comment_list().unwrap().nodes[0]
+}
+
+// utilities.go:3165
+pub fn is_jsdoc_single_comment_node(node: P<Node>) -> bool {
+    has_comment(node.kind()) && node.comment_list().is_some_and(|l| l.nodes.len() == 1)
+}
+
+// utilities.go:3806
+pub fn is_trivia(token: Kind) -> bool {
+    Kind::FirstTriviaToken <= token && token <= Kind::LastTriviaToken
+}
+
+// utilities.go:3848
+fn has_comment(kind: Kind) -> bool {
+    matches!(
+        kind,
+        Kind::JSDoc
+            | Kind::JSDocUnknownTag
+            | Kind::JSDocAugmentsTag
+            | Kind::JSDocImplementsTag
+            | Kind::JSDocDeprecatedTag
+            | Kind::JSDocPublicTag
+            | Kind::JSDocPrivateTag
+            | Kind::JSDocProtectedTag
+            | Kind::JSDocReadonlyTag
+            | Kind::JSDocOverrideTag
+            | Kind::JSDocCallbackTag
+            | Kind::JSDocOverloadTag
+            | Kind::JSDocParameterTag
+            | Kind::JSDocPropertyTag
+            | Kind::JSDocReturnTag
+            | Kind::JSDocThisTag
+            | Kind::JSDocTypeTag
+            | Kind::JSDocTemplateTag
+            | Kind::JSDocTypedefTag
+            | Kind::JSDocSeeTag
+            | Kind::JSDocThrowsTag
+            | Kind::JSDocSatisfiesTag
+            | Kind::JSDocImportTag
+    )
+}
