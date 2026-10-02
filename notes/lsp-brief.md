@@ -18,6 +18,7 @@ if you call into the checker.
   Your crates must compile with 0 errors and 0 warnings (workspace lints already silence the noisy kinds).
 - Commit early and often inside your worktree (`git add -A . && git commit -m "<crate>: <what>"`). Do not push,
   merge or rebase onto anything; the lead lands your branch onto `lsp`.
+- Do not spawn sub-agents (the lead keeps the number of concurrent agents bounded); do the work yourself.
 - Scratch files: `target/scratch/<wave>/` (git-ignored), never in the source tree.
 
 ## How to port
