@@ -30,7 +30,8 @@ pub(crate) fn is_single_element_generic_tuple_type(t: P<Type>) -> bool {
 
 impl Checker {
     // checker.go:23966
-    pub(crate) fn is_array_or_tuple_type(&mut self, t: P<Type>) -> bool {
+    // Public for lint rules (tsgolint's shim exposes Checker_isArrayOrTupleType).
+    pub fn is_array_or_tuple_type(&mut self, t: P<Type>) -> bool {
         self.is_array_type(t) || is_tuple_type(t)
     }
 

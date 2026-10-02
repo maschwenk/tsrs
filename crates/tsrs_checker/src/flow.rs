@@ -1959,7 +1959,8 @@ impl Checker {
     }
 
     // flow.go:1727
-    pub(crate) fn get_accessed_property_name(&mut self, access: P<Node>) -> (String, bool) {
+    // Public for lint rules (tsgolint's shim exposes Checker_getAccessedPropertyName).
+    pub fn get_accessed_property_name(&mut self, access: P<Node>) -> (String, bool) {
         if ast::is_property_access_expression(access) {
             return (access.name().unwrap().text().to_string(), true);
         }
