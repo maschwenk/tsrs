@@ -1073,18 +1073,65 @@ impl TypeAliasOptExt for Option<P<TypeAlias>> {
 //
 // Go's `Type` points to its type-specific data (`data TypeData`, an interface). Here the data struct is allocated
 // together with the header, right after it (`TypeAlloc`), and `data_tag` says which struct it is: one allocation
-// per type and a 32-byte header. `t.data()` returns the `TypeData` view; the `as_*` casts read the data in place.
+// per type and a 24-byte header. `t.data()` returns the `TypeData` view; the `as_*` casts read the data in place.
+// Go's `alias` is set on few types (on the private monorepo 0.6M of 9.9M), so it shares a word with `symbol`
+// (`TypeSymbolWord`): the word holds the symbol until an alias is set, then a `TypeSymbolAlias` record holding both.
 
 pub struct Type {
     pub flags: Cell<TypeFlags>,
     pub object_flags: Cell<ObjectFlags>,
     pub id: TypeId,
     data_tag: TypeDataTag,
-    pub symbol: Cell<Option<P<Symbol>>>,
-    pub alias: Cell<Option<P<TypeAlias>>>,
+    symbol_or_alias: Cell<TypeSymbolWord>,
 }
 
-const _: () = assert!(std::mem::size_of::<Type>() == 32);
+const _: () = assert!(std::mem::size_of::<Type>() == 24);
+
+#[derive(Default)]
+struct TypeSymbolAlias {
+    symbol: Cell<Option<P<Symbol>>>,
+    alias: Cell<Option<P<TypeAlias>>>,
+}
+
+/// `Type.symbol`, or a `TypeSymbolAlias` record once the type has an alias: an address in the low 48 bits
+/// (provenance exposed when stored, recovered with `with_exposed_provenance`; user-space addresses are below 2^48),
+/// bit 63 set for the record. 0 = no symbol, no alias. The address stays a plain pointer to the start of its block.
+#[derive(Clone, Copy, Default)]
+struct TypeSymbolWord(u64);
+
+impl TypeSymbolWord {
+    const RECORD: u64 = 1 << 63;
+
+    #[inline]
+    fn addr(p: *const u8) -> u64 {
+        let addr = p.expose_provenance() as u64;
+        assert!(addr >> 48 == 0, "address {addr:#x} above 2^48");
+        addr
+    }
+
+    #[inline]
+    fn symbol_word(symbol: Option<P<Symbol>>) -> TypeSymbolWord {
+        TypeSymbolWord(symbol.map_or(0, |s| Self::addr(s.get() as *const Symbol as *const u8)))
+    }
+
+    #[inline]
+    fn record(self) -> Option<P<TypeSymbolAlias>> {
+        // SAFETY: a tagged word was stored from a live `P<TypeSymbolAlias>` (arena objects are never moved or
+        // freed), whose provenance `addr` exposed.
+        (self.0 & Self::RECORD != 0).then(|| {
+            P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<TypeSymbolAlias>((self.0 & !Self::RECORD) as usize) })
+        })
+    }
+
+    #[inline]
+    fn symbol(self) -> Option<P<Symbol>> {
+        match self.record() {
+            Some(r) => r.symbol.get(),
+            // SAFETY: a nonzero untagged word was stored from a live `P<Symbol>`, whose provenance `addr` exposed.
+            None => (self.0 != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(self.0 as usize) })),
+        }
+    }
+}
 
 /// One arena allocation per type: the header, then the data struct (`repr(C)`: header at offset 0).
 #[repr(C)]
@@ -1188,7 +1235,7 @@ impl TypePayload for ConditionalType {
 impl Type {
     /// Allocates a type whose data struct is `data` (only `Checker::new_type` and the checker's placeholder type).
     pub(crate) fn alloc<T: TypePayload>(flags: TypeFlags, object_flags: ObjectFlags, id: TypeId, data: T) -> P<Type> {
-        let header = Type { flags: Cell::new(flags), object_flags: Cell::new(object_flags), id, data_tag: T::TAG, symbol: Cell::new(None), alias: Cell::new(None) };
+        let header = Type { flags: Cell::new(flags), object_flags: Cell::new(object_flags), id, data_tag: T::TAG, symbol_or_alias: Cell::new(TypeSymbolWord(0)) };
         let a: &'static TypeAlloc<T> = P::new(TypeAlloc { header, data }).get();
         // SAFETY: `TypeAlloc` is `repr(C)` with the header first; arena values are never moved or freed.
         P::from_static(unsafe { &*(a as *const TypeAlloc<T>).cast::<Type>() })
@@ -1462,12 +1509,35 @@ impl Type {
         self.as_type_reference().target.get().unwrap().as_tuple_type()
     }
 
+    #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
-        self.symbol.get()
+        self.symbol_or_alias.get().symbol()
     }
 
+    #[inline]
+    pub fn set_symbol(&self, symbol: Option<P<Symbol>>) {
+        let word = self.symbol_or_alias.get();
+        match word.record() {
+            Some(r) => r.symbol.set(symbol),
+            None => self.symbol_or_alias.set(TypeSymbolWord::symbol_word(symbol)),
+        }
+    }
+
+    #[inline]
     pub fn alias(&self) -> Option<P<TypeAlias>> {
-        self.alias.get()
+        self.symbol_or_alias.get().record().and_then(|r| r.alias.get())
+    }
+
+    pub fn set_alias(&self, alias: Option<P<TypeAlias>>) {
+        let word = self.symbol_or_alias.get();
+        match word.record() {
+            Some(r) => r.alias.set(alias),
+            None if alias.is_some() => {
+                let r = P::new(TypeSymbolAlias { symbol: Cell::new(word.symbol()), alias: Cell::new(alias) });
+                self.symbol_or_alias.set(TypeSymbolWord(TypeSymbolWord::addr(r.get() as *const TypeSymbolAlias as *const u8) | TypeSymbolWord::RECORD));
+            }
+            None => {}
+        }
     }
 
     pub fn is_union(&self) -> bool {

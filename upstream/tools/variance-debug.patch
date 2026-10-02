@@ -1,0 +1,127 @@
+diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
+index 72101e21ae..6dc31ddbaa 100644
+--- a/tsc/internal/checker/checker.go
++++ b/tsc/internal/checker/checker.go
+@@ -21558,6 +21558,9 @@ func (c *Checker) newMappedTypeMember(t *Type, modifiersType *Type, templateModi
+ 		lateFlag = modifiersProp.CheckFlags & ast.CheckFlagsLate
+ 	}
+ 	prop := c.newSymbol(ast.SymbolFlagsProperty|core.IfElse(isOptional, ast.SymbolFlagsOptional, 0), propName)
++	if symDumpDir != "" {
++		c.recordMappedMember(t, propName)
++	}
+ 	prop.CheckFlags = lateFlag | ast.CheckFlagsMapped | core.IfElse(isReadonly, ast.CheckFlagsReadonly, 0) | core.IfElse(stripOptional, ast.CheckFlagsStripOptional, 0)
+ 	valueLinks := c.valueSymbolLinks.Get(prop)
+ 	valueLinks.containingType = t
+diff --git a/tsc/internal/checker/zz_symdump.go b/tsc/internal/checker/zz_symdump.go
+new file mode 100644
+index 0000000000..499bddce48
+--- /dev/null
++++ b/tsc/internal/checker/zz_symdump.go
+@@ -0,0 +1,70 @@
++package checker
++
++import (
++	"fmt"
++	"os"
++	"runtime"
++	"sort"
++	"strings"
++	"sync"
++
++	"github.com/microsoft/TypeScript/tsc/internal/ast"
++)
++
++var symDumpDir = os.Getenv("TSGO_SYMDUMP")
++
++var sixNames = map[string]bool{"id": true, "name": true, "scope": true, "service": true, "type": true, "version": true}
++
++var stackHists sync.Map // *Checker -> map[string]int
++
++func (c *Checker) recordMappedMember(t *Type, name string) {
++	if !sixNames[name] {
++		return
++	}
++	v, _ := stackHists.LoadOrStore(c, map[string]int{})
++	m := v.(map[string]int)
++	pcs := make([]uintptr, 48)
++	n := runtime.Callers(3, pcs)
++	frames := runtime.CallersFrames(pcs[:n])
++	var b strings.Builder
++	d := t.AsMappedType().declaration
++	alias := ""
++	if t.alias != nil {
++		alias = t.alias.symbol.Name
++	}
++	mod := ""
++	if mt := t.AsMappedType().modifiersType; mt != nil && mt.symbol != nil {
++		mod = mt.symbol.Name
++	}
++	fmt.Fprintf(&b, "%s\tmapped id=%d alias=%s mod=%s decl=%s:%d", name, t.id, alias, mod, ast.GetSourceFileOfNode(d.AsNode()).FileName(), d.Pos())
++	for {
++		f, more := frames.Next()
++		fn := f.Function[strings.LastIndexByte(f.Function, '.')+1:]
++		fmt.Fprintf(&b, " <- %s:%d", fn, f.Line)
++		if !more {
++			break
++		}
++	}
++	m[b.String()]++
++}
++
++func (c *Checker) DumpSymbols(idx int) {
++	if symDumpDir == "" {
++		return
++	}
++	v, ok := stackHists.Load(c)
++	if !ok {
++		return
++	}
++	m := v.(map[string]int)
++	keys := make([]string, 0, len(m))
++	for k := range m {
++		keys = append(keys, k)
++	}
++	sort.Strings(keys)
++	var b strings.Builder
++	for _, k := range keys {
++		fmt.Fprintf(&b, "%d\t%s\n", m[k], k)
++	}
++	os.WriteFile(fmt.Sprintf("%s/checker-%d.txt", symDumpDir, idx), []byte(b.String()), 0o644)
++}
+diff --git a/tsc/internal/compiler/checkerpool.go b/tsc/internal/compiler/checkerpool.go
+index 01db5aa063..91f67b3ddd 100644
+--- a/tsc/internal/compiler/checkerpool.go
++++ b/tsc/internal/compiler/checkerpool.go
+@@ -1,6 +1,7 @@
+ package compiler
+ 
+ import (
++	"os"
+ 	"context"
+ 	"math"
+ 	"slices"
+@@ -314,6 +315,9 @@ func newCheckerPoolWithTracing(program *Program, tr *tracing.Tracing) *checkerPo
+ 		checkerCount = *c
+ 	}
+ 
++	if os.Getenv("TSGO_SEQ4") != "" {
++		checkerCount = 4
++	}
+ 	checkerCount = max(min(checkerCount, len(program.files), 256), 1)
+ 
+ 	pool := &checkerPool{
+diff --git a/tsc/internal/compiler/program.go b/tsc/internal/compiler/program.go
+index c0fb38b3bf..468307873b 100644
+--- a/tsc/internal/compiler/program.go
++++ b/tsc/internal/compiler/program.go
+@@ -1718,8 +1718,9 @@ func (p *Program) SymbolCount() int {
+ 	}
+ 	var val atomic.Uint32
+ 	val.Store(uint32(count))
+-	p.ForEachCheckerParallel(func(_ int, c *checker.Checker) {
++	p.ForEachCheckerParallel(func(i int, c *checker.Checker) {
+ 		val.Add(c.SymbolCount)
++		c.DumpSymbols(i)
+ 	})
+ 	return int(val.Load())
+ }

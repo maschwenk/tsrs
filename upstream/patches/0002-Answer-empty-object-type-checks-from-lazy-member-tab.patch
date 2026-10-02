@@ -1,4 +1,4 @@
-From 25f9f21ef840f9d4286f4ac6c75759a9d02bb82f Mon Sep 17 00:00:00 2001
+From ae4d0971990cd4e2f7871fe42f24101afdeb15f7 Mon Sep 17 00:00:00 2001
 From: Max schwenk <maschwenk@gmail.com>
 Date: Thu, 1 Oct 2026 03:10:11 -0400
 Subject: [PATCH 2/5] Answer empty object type checks from lazy member tables
@@ -40,10 +40,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 tsc/testdata/tests/cases/compiler/lazyMembersEmptyObjectType.ts
 
 diff --git a/tsc/internal/checker/checker.go b/tsc/internal/checker/checker.go
-index 3ac45da33c..72101e21ae 100644
+index 321fd7ad3b..f73e4c8c96 100644
 --- a/tsc/internal/checker/checker.go
 +++ b/tsc/internal/checker/checker.go
-@@ -26771,7 +26771,7 @@ func (c *Checker) removeSubtypes(types []*Type, hasObjectTypes bool) []*Type {
+@@ -26774,7 +26774,7 @@ func (c *Checker) removeSubtypes(types []*Type, hasObjectTypes bool) []*Type {
  	// are no any and unknown types in the array. Thus, the only possible supertypes for primitive types are empty
  	// object types, and if none of those are present we can exclude primitive types from the subtype check.
  	hasEmptyObject := hasObjectTypes && core.Some(types, func(t *Type) bool {
@@ -52,7 +52,7 @@ index 3ac45da33c..72101e21ae 100644
  	})
  	length := len(types)
  	i := length
-@@ -27309,10 +27309,18 @@ func (c *Checker) isEmptyResolvedType(t *StructuredType) bool {
+@@ -27312,10 +27312,18 @@ func (c *Checker) isEmptyResolvedType(t *StructuredType) bool {
  	return t.AsType() != c.anyFunctionType && len(t.properties) == 0 && len(t.signatures) == 0 && len(t.indexInfos) == 0
  }
  

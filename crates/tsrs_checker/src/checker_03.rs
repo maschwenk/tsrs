@@ -894,7 +894,7 @@ impl Checker {
                 let reference = self.factory.new_property_access_expression(this_keyword, None, prop_name, NodeFlags::None);
                 reference.expression().unwrap().set_parent(Some(reference));
                 reference.set_parent(Some(static_block));
-                reference.flow_node_data().unwrap().flow_node.set(static_block.as_class_static_block_declaration().return_flow_node());
+                reference.set_flow_node(static_block.as_class_static_block_declaration().return_flow_node());
                 let optional_type = self.get_optional_type(prop_type, false);
                 let flow_type = self.get_flow_type_of_reference_ex(reference, prop_type, optional_type, None, None);
                 if !self.contains_undefined_type(flow_type) {
@@ -916,7 +916,7 @@ impl Checker {
         };
         reference.expression().unwrap().set_parent(Some(reference));
         reference.set_parent(Some(constructor));
-        reference.flow_node_data().unwrap().flow_node.set(constructor.as_constructor_declaration().return_flow_node());
+        reference.set_flow_node(constructor.as_constructor_declaration().return_flow_node());
         let optional_type = self.get_optional_type(prop_type, false);
         let flow_type = self.get_flow_type_of_reference_ex(reference, prop_type, optional_type, None, None);
         !self.contains_undefined_type(flow_type)

@@ -471,7 +471,7 @@ pub fn is_external_module_augmentation(node: P<Node>) -> bool {
 }
 
 pub fn get_source_file_of_module(module: P<Symbol>) -> Option<P<SourceFile>> {
-    let declaration = module.value_declaration.get().or_else(|| get_non_augmentation_declaration(module));
+    let declaration = module.value_declaration().or_else(|| get_non_augmentation_declaration(module));
     get_source_file_of_node(declaration)
 }
 

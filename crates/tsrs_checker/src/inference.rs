@@ -78,7 +78,7 @@ impl Checker {
                     let alias_symbol = source_alias.symbol().unwrap();
                     let params = self.type_alias_links.get(alias_symbol).type_parameters.get();
                     let min_params = self.get_min_type_argument_count(params);
-                    let node_is_in_js_file = ast::is_in_js_file(alias_symbol.value_declaration.get());
+                    let node_is_in_js_file = ast::is_in_js_file(alias_symbol.value_declaration());
                     let source_types = self.fill_missing_type_arguments(source_alias.type_arguments(), params, min_params, node_is_in_js_file);
                     let target_types = self.fill_missing_type_arguments(target_alias.type_arguments(), params, min_params, node_is_in_js_file);
                     let variances = self.get_alias_variances(alias_symbol);
@@ -1266,7 +1266,7 @@ impl Checker {
             }
             let check_flags = CheckFlags::ReverseMapped | if readonly_mask && self.is_readonly_symbol(prop) { CheckFlags::Readonly } else { CheckFlags::None };
             let inferred_prop = self.new_symbol_ex(SymbolFlags::Property | (prop.flags.get() & optional_mask), prop.name.get(), check_flags);
-            inferred_prop.declarations.set(prop.declarations());
+            inferred_prop.set_declarations_static(prop.declarations());
             let name_type = self.value_symbol_links.get(prop).name_type();
             self.value_symbol_links.get(inferred_prop).set_name_type(name_type);
             let links = self.reverse_mapped_symbol_links.get(inferred_prop);
@@ -1406,8 +1406,8 @@ impl Checker {
             let literal_prop = self.new_symbol(SymbolFlags::Property, alloc_str(&name));
             self.value_symbol_links.get(literal_prop).resolved_type.set(Some(self.any_type));
             if let Some(symbol) = t.symbol() {
-                literal_prop.declarations.set(symbol.declarations());
-                literal_prop.value_declaration.set(symbol.value_declaration.get());
+                literal_prop.set_declarations_static(symbol.declarations());
+                literal_prop.set_value_declaration(symbol.value_declaration());
             }
             members.set(literal_prop.name.get(), literal_prop);
         }

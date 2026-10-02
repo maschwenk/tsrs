@@ -9,7 +9,8 @@ Evidence that applies to every commit (README.md has the commands):
 - **Same work as the prototype, in two implementations.** Built on the tsrs reference commit (b85298b6), each Go
   commit's symbol/type/instantiation counters on the 38k-file program equal the Rust port's with the matching
   `TSRS_LAZY_*` switches on, single-threaded in every run, and with 4 checkers in most runs (some 4-checker Go runs
-  from L11 on are 6 symbols higher, see below); also on the two tests from #64475/#64526 and the three new tests.
+  are 6 symbols higher, an ordering difference that main already has, see below); also on the two tests from
+  #64475/#64526 and the three new tests.
 - **The new tests pin output from before any of this.** Their baselines were generated on unmodified main (no
   #64475/#64526 either).
 
@@ -27,16 +28,54 @@ Evidence that applies to every commit (README.md has the commands):
   same build with 4 checkers (GC timing). Heap after check (`Memory used`) spreads by < 0.02 GB and goes down at
   every commit except L5 (which only removes garbage).
 - **"Are the counts deterministic?"** Single-threaded: yes, every run of every build gave the same symbols, types and
-  instantiations (and mallocs within a few hundred); 1-checker runs gave constant symbols too. With 4 checkers, Go
-  builds from L11 on came out 6 symbols higher in 9 of 52 runs (19,241,827 vs 19,241,821, 18,691,695 vs 18,691,689,
-  ...); builds before L11 (main, PRs, L1, and main + L6/L5) gave constant counts in all 33 runs (main alone: 9), and
-  the Rust port with 4 checkers is constant and equals the usual Go value. Types and instantiations never varied.
-  Cause not established. A hypothesis (not verified): symbol ids are global across checkers (`ast.GetSymbolId`), and
-  unique-symbol property names embed them (`__@name@<id>`), so with several checkers the name order of some synthetic
-  members can change between runs; a path that visits properties in name order and stops early (as
-  `somePropertyReducesToNever` does) would then create a few more or fewer combined properties. Worth understanding
-  before opening L11. The suite also passes with `-race` and concurrent test programs on the top commit (no race
+  instantiations (and mallocs within a few hundred); 1-checker runs gave constant symbols too. With 4 checkers, some
+  runs come out exactly 6 symbols higher (19,241,827 vs 19,241,821 on L11, 18,691,695 vs 18,691,689 on L10..L5, and
+  now also 19,553,619 vs 19,553,613 on L1). Types and instantiations never vary. It is not caused by L11, not by the
+  checkers running concurrently, and not by global symbol ids; it is an existing run-to-run ordering difference inside
+  a checker, which main also has, and which the lazy tables let reach the symbol count. Details in "The 6-symbol
+  variation" below. The suite also passes with `-race` and concurrent test programs on the top commit (no race
   reports).
+
+### The 6-symbol variation (investigated 2026-10-01, main 82f0546163 and the old base edf7da4e93)
+
+The old hypothesis (global symbol ids -> `__@name@<id>` property names -> property order -> early-exit paths) is
+refuted. Measured with throwaway instrumentation on the private monorepo, 4 checkers. `tools/variance-debug.patch`
+(applies to the edf7da4e93-based L1/L11 commits; `TSGO_SYMDUMP=<dir>` with `--extendedDiagnostics` writes per-checker
+stack histograms for those six member names, `TSGO_SEQ4=1` plus `--singleThreaded` runs 4 checkers one after
+another) is the last of three variants; the first two (a full `newSymbol` histogram and the `compareSymbolsWorker`
+counters) were the same idea at other sites:
+
+- **Which symbols.** A per-checker histogram of every `newSymbol` (name, flags, check flags; names that embed ids,
+  `__@x@<id>` and private `\xfe#<id>@#x`, normalized) differs between a normal and a +6 run of L11 in exactly 6
+  entries, all in checker 3: the optional properties `id`, `name`, `scope`, `service`, `type`, `version` of one
+  lib.es5 `Partial<X>`. A stack capture at `newMappedTypeMember` shows they come from one full resolution of that
+  mapped type: `resolveMappedTypeMembers` <- `everyPropertyOfStructuredType` <- `hasPropertiesOfStructuredType` <-
+  `isWeakType` <- `isRelatedToEx` <- `typeRelatedToSomeType` (union target) <- type-argument relation of a signature,
+  during overload resolution (`chooseOverload` / `isSignatureApplicable`). In normal runs that `Partial<X>` is never
+  resolved in full.
+- **Not the symbol ids.** Counting the comparisons in `compareSymbolsWorker` (which `sortSymbols` and `CompareTypes`
+  use) that are decided by the `@<id>` suffix of a unique-symbol name or by the final symbol-id fallback: zero, on both
+  bases. No sort in the checker depends on a global id in these runs.
+- **Not concurrency.** With 4 checkers forced under `--singleThreaded` (same file assignment, parse, bind and the
+  four checkers run one after another, so ids are handed out in a fixed order) the +6 still shows up: L11 1 of 15
+  runs, L1 1 of 3 runs (the same `Partial<X>`, same stack). Parallel 4-checker L11 on the old base: 4 of 53 runs.
+- **Present on main.** In those sequential runs the type ids at a fixed creation site (members of type-fest's
+  `Simplify` mapped type, via `getUnmatchedPropertiesWorker` in `propertiesRelatedTo`) differ between runs by 51 ids
+  in checkers 0, 1 and 3, on unmodified main edf7da4e93 too (5 of 5 run pairs differ), while main's counts stay
+  constant (6 of 6). So something inside a checker creates types in a per-process order (with goroutines and global ids
+  ruled out, presumably a Go map iteration; not located). On main every order does the same total work. With the lazy
+  tables, whether this one `Partial<X>` gets resolved in full depends on that order. A plausible link, not verified:
+  `CompareTypes` orders some union constituents by type id as its last resort, and `typeRelatedToSomeType` stops at
+  the first related constituent, so a different id order relates (and `isWeakType`-checks) a different constituent
+  first.
+- **Why it looked like "from L11 on".** Before L11, `isEmptyObjectType` / `removeSubtypes` resolved such types in every
+  order anyway; L11 answers those from the lazy tables, so more types stay unresolved and the order matters more
+  often. L1 shows it too, only less often (0 of 33 parallel runs before; 1 of 3 sequential runs now). On current main
+  (37,943 files, one more lib file, so a different file assignment) 27 4-checker runs of L11..L5 gave constant counts.
+- **Implications.** Diagnostics are the same in every run; the difference is which members of one mapped type get
+  created. It is not something L11 introduces, so it doesn't block L11, but a reviewer may see different counts
+  between runs with #64475 itself. Making it go away means finding the order-dependent loop on main (a follow-up, not
+  part of these PRs).
 
 ## L1 (tuple lazy tables)
 

@@ -553,9 +553,9 @@ impl Checker {
                         }
                     }
                 }
-                prop.declarations.set(member_symbol.declarations());
+                prop.set_declarations_static(member_symbol.declarations());
                 prop.set_parent(member_symbol.parent());
-                prop.value_declaration.set(member_symbol.value_declaration());
+                prop.set_value_declaration(member_symbol.value_declaration());
                 links.resolved_type.set(Some(t));
                 links.set_target(Some(member_symbol));
                 member = Some(prop);
@@ -901,7 +901,7 @@ impl Checker {
                     let prop_type = self.get_type_of_symbol(prop);
                     links.resolved_type.set(Some(self.add_optionality_ex(prop_type, true /*isProperty*/, true /*isOptional*/)));
                 }
-                result.declarations.set(prop.declarations());
+                result.set_declarations_static(prop.declarations());
                 links.set_name_type(self.value_symbol_links.get(prop).name_type());
                 self.mapped_symbol_links.get(result).synthetic_origin.set(Some(prop));
                 members.set(prop.name(), result);
@@ -940,7 +940,7 @@ impl Checker {
         } else {
             links.resolved_type.set(Some(self.get_type_of_symbol(prop)));
         }
-        result.declarations.set(prop.declarations());
+        result.set_declarations_static(prop.declarations());
         links.set_name_type(self.value_symbol_links.get(prop).name_type());
         self.mapped_symbol_links.get(result).synthetic_origin.set(Some(prop));
         result
@@ -1898,9 +1898,9 @@ impl Checker {
     pub(crate) fn clone_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol> {
         let result = self.new_symbol(symbol.flags(), symbol.name());
         // Force reallocation if anything is ever appended to declarations
-        result.declarations.set(symbol.declarations());
+        result.set_declarations_static(symbol.declarations());
         result.set_parent(symbol.parent());
-        result.value_declaration.set(symbol.value_declaration());
+        result.set_value_declaration(symbol.value_declaration());
         result.set_members(symbol.members().map(|m| m.clone_table()));
         result.set_exports(symbol.exports().map(|e| e.clone_table()));
         self.record_merged_symbol(result, symbol);
@@ -2434,7 +2434,7 @@ impl Checker {
         if result.parent().is_none() {
             result.set_parent(type_symbol.parent());
         }
-        result.value_declaration.set(value_symbol.value_declaration());
+        result.set_value_declaration(value_symbol.value_declaration());
         result.set_members(type_symbol.members().map(|m| m.clone_table()));
         result.set_exports(value_symbol.exports().map(|e| e.clone_table()));
         result

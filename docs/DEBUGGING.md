@@ -62,7 +62,9 @@ With more than one checker, tsrs assigns files to checkers by directory locality
 (`--checkerAssignment locality`, notes/mem-assignment.md); Go uses FENNEL over single files. Per-file diagnostics
 do not depend on it, but multi-checker symbol/type/instantiation counters and peak memory do: compare them
 against `tsgo-ref` with `--checkerAssignment go` (or `TSRS_CHECKER_ASSIGNMENT=go`). Single-threaded runs are
-unaffected.
+unaffected. `--checkerCostCache <file>` (opt-in, locality only) balances the checkers on the previous run's
+per-file CPU times (notes/perf-balance.md); `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
+Inside a checker, files must stay in program order: reordering them can change printed types in messages.
 
 ## `.types` / `.symbols` equivalence on the private monorepo against the cached reference
 
