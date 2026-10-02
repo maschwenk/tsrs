@@ -18,3 +18,11 @@ mod progress_test;
 mod server_test;
 #[cfg(test)]
 mod stack_sanitizer_test;
+#[cfg(test)]
+mod lsptestutil;
+#[cfg(test)]
+mod server_flakydiagnostics_test;
+#[cfg(test)]
+mod server_progress_test;
+#[cfg(test)]
+mod server_projectinfo_test;

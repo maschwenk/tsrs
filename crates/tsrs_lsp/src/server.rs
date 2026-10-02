@@ -361,6 +361,11 @@ impl Server {
         self.session.get().expect("the session is created by the initialized notification")
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_session_for_test(&self, session: Arc<project::Session>) {
+        let _ = self.session.set(session);
+    }
+
     pub(crate) fn logger_arc(&self) -> Arc<logger> {
         self.logger.clone()
     }

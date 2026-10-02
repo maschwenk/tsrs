@@ -150,3 +150,85 @@ fn write_loop_recovers_from_unserializable_response() {
     assert!(saw_error, "did not receive an error response for the unserializable request");
     assert!(saw_good, "did not receive the subsequent well-formed response (write loop likely died)");
 }
+
+// server_test.go:41
+// TestServerShutdownNoDeadlock verifies that operations after shutdown
+// don't block.
+#[test]
+fn test_server_shutdown_no_deadlock() {
+    if !tsrs_vfs::bundled::EMBEDDED {
+        eprintln!("bundled files are not embedded");
+        return;
+    }
+    // Programs are built on this thread (parse + bind): use a large stack like the server threads.
+    std::thread::Builder::new().stack_size(256 << 20).spawn(server_shutdown_no_deadlock).unwrap().join().unwrap();
+}
+
+fn server_shutdown_no_deadlock() {
+    use tsrs_project as project;
+
+    let fs: Arc<dyn tsrs_vfs::FS> = Arc::new(tsrs_vfs::bundled::wrap_fs(tsrs_vfs::vfstest::from_map(
+        [("/test/tsconfig.json", "{}"), ("/test/index.ts", "const x = 1;")],
+        false,
+    )));
+
+    let mut opts = options(Box::new(shutdownTestWriter));
+    opts.fs = Some(fs.clone());
+    opts.default_library_path = tsrs_vfs::bundled::lib_path();
+    let server = new_server(opts);
+
+    let (ctx, cancel) = Context::background().with_cancel();
+    let _ = server.background_ctx.set(ctx.clone());
+
+    // Start write loop to drain queue
+    let s = server.clone();
+    let write_ctx = ctx.clone();
+    let write_loop_done = std::thread::spawn(move || {
+        let _ = s.write_loop(&write_ctx);
+    });
+
+    // Create session with the server's lifecycle context
+    server.init_started.store(true, std::sync::atomic::Ordering::SeqCst);
+    let logger: Arc<dyn project::logging::Logger> = server.logger_arc();
+    let session = project::new_session(project::SessionInit {
+        background_ctx: ctx.clone(),
+        options: Arc::new(project::SessionOptions {
+            current_directory: "/test".to_string(),
+            default_library_path: tsrs_vfs::bundled::lib_path(),
+            position_encoding: lsproto::PositionEncodingKind::UTF8,
+            watch_enabled: false,
+            logging_enabled: true,
+            ..Default::default()
+        }),
+        fs,
+        client: None,
+        logger: Some(logger),
+        npm_executor: None,
+        parse_cache: None,
+        content_mapped_parse_cache: None,
+    });
+    server.set_session_for_test(session.clone());
+
+    // Open a file to establish a project
+    session.did_open_file(&ctx, "file:///test/index.ts".into(), 1, "const x = 1;".to_string(), lsproto::LanguageKind::TypeScript);
+    session.wait_for_background_tasks();
+
+    // Shutdown (cancel context and wait for write loop to exit)
+    cancel.call();
+    write_loop_done.join().unwrap();
+
+    // Trigger operations that would log (these should not block)
+    session.did_change_file(
+        &ctx,
+        "file:///test/index.ts".into(),
+        2,
+        vec![lsproto::TextDocumentContentChangePartialOrWholeDocument {
+            whole_document: Some(lsproto::TextDocumentContentChangeWholeDocument { text: "const x = 2;".to_string() }),
+            ..Default::default()
+        }],
+    );
+    let _ = session.get_language_service(&ctx, &"file:///test/index.ts".into());
+    session.wait_for_background_tasks();
+
+    session.close();
+}
