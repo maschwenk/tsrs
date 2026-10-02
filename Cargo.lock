@@ -280,6 +280,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_astnav"
+version = "0.1.5"
+dependencies = [
+ "tsrs_ast",
+ "tsrs_core",
+ "tsrs_scanner",
+]
+
+[[package]]
 name = "tsrs_binder"
 version = "0.1.5"
 dependencies = [
@@ -301,6 +310,7 @@ dependencies = [
  "indexmap",
  "rustc-hash",
  "tsrs_ast",
+ "tsrs_astnav",
  "tsrs_binder",
  "tsrs_core",
  "tsrs_diagnostics",

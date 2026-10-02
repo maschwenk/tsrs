@@ -1,6 +1,3 @@
-// Go internal/astnav/tokens.go. Go's checker imports astnav (services.go: getPossibleSymbolReferenceNodes), so a copy
-// has to live below tsrs_checker; this is a verbatim copy of tsrs_ls::astnav::tokens (branch lsp-lsfound, d0f3d71).
-// Keep one of the two (notes/lsp-api-checker.md, Doubts).
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 

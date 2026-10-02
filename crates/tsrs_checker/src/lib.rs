@@ -119,7 +119,7 @@ mod nodebuilder_hover;
 pub(crate) use nodebuilder_hover::*;
 mod services;
 pub(crate) use services::*;
-pub mod astnav;
+pub use tsrs_astnav as astnav;
 
 // Exported Go package-level functions (the baseline writer, the language service and the project system call them).
 pub use exports::{
