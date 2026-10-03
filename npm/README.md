@@ -17,6 +17,10 @@ the launcher derives that name from its own `package.json` at runtime.
 
 `bin/tsrs` -> `lib/tsrs.js` -> `lib/getExePath.js`:
 
+(`bin/tsrs` is a CommonJS stub, via `bin/package.json`, that imports the ESM launcher: Node 16 cannot run an
+extensionless ES module in a `"type": "module"` package. `npm/sdk/smoke-consumer.mjs --node <path>` checks the
+launcher and the JS API on each given Node; 16.20.0, 18, 20, 22 and 24 pass.)
+
 1. `TSRS_BINARY` set: run that file (for local builds: `TSRS_BINARY=$PWD/target/release/tsrs pnpm exec tsrs ...`).
 2. Otherwise resolve `<name>-<process.platform>-<process.arch>/package.json` from the launcher's own location (with
    pnpm that is the sibling link in `node_modules/.pnpm/<main>/node_modules/`), and run `tsrs`/`tsrs.exe` next to it.

@@ -3,13 +3,16 @@
 // and exercises the published package: the CLI, the root version export, a nodenext typecheck of the unstable/*
 // declarations (with the packaged binary), and real sync + async compiles through the JS API.
 //
-//   node npm/sdk/smoke-consumer.mjs [--dist npm/dist] [--keep]
+//   node npm/sdk/smoke-consumer.mjs [--dist npm/dist] [--node <node binary>]... [--keep]
+//
+// --node (repeatable) runs the consumer under each given Node binary instead of the current one, e.g. to check the
+// package's `engines` minimum.
 //
 // Nothing is fetched from the registry: the main package has no runtime dependencies and its platform package is
 // installed from the same dist directory. The binary inside the platform package is whatever --binary packed (the
 // tsrs build, or a pinned tsgo while the Rust `--api` server is under construction).
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,6 +23,8 @@ const args = process.argv.slice(2);
 const distArg = args.indexOf("--dist");
 const dist = path.resolve(distArg >= 0 ? args[distArg + 1] : path.join(here, "..", "dist"));
 const keep = args.includes("--keep");
+const nodes = args.flatMap((a, i) => a === "--node" ? [path.resolve(args[i + 1])] : []);
+if (nodes.length === 0) nodes.push(process.execPath);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(dist, "packages.json"), "utf8"));
 const tarballs = manifest.packages.map(p => p.tarball);
@@ -55,9 +60,17 @@ try {
     console.log("typecheck ok: unstable/* declarations from a nodenext consumer");
 
     fs.copyFileSync(path.join(here, "smoke", "consumer.mjs"), path.join(dir, "consumer.mjs"));
-    const out = run(process.execPath, ["consumer.mjs", path.join(dir, "project")]);
-    process.stdout.write(out);
-    if (!out.includes("smoke ok")) throw new Error("consumer did not report success");
+    for (const node of nodes) {
+        const version = run(node, ["--version"]).trim();
+        // The CLI launcher under this Node: --version, and a type error must exit 2 (the binary's own code).
+        run(node, [path.join(dir, "node_modules/@maschwenk/tsrs/bin/tsrs"), "--version"]);
+        fs.writeFileSync(path.join(dir, "bad.ts"), 'const x: number = "no";\n');
+        const bad = spawnSync(node, [path.join(dir, "node_modules/@maschwenk/tsrs/bin/tsrs"), "--noEmit", "--ignoreConfig", "bad.ts"], { cwd: dir, encoding: "utf8" });
+        if (bad.status !== 2 || !bad.stdout.includes("TS2322")) throw new Error(`launcher under node ${version}: expected exit 2 with TS2322, got ${bad.status}\n${bad.stdout}${bad.stderr}`);
+        const out = run(node, ["consumer.mjs", path.join(dir, "project")]);
+        process.stdout.write(`[node ${version}] ${out}`);
+        if (!out.includes("smoke ok")) throw new Error(`consumer under node ${version} did not report success`);
+    }
 }
 finally {
     if (keep) console.log(`kept ${dir}`);

@@ -47,6 +47,8 @@ api.close();
 These entry points are unstable upstream and here. The API is served by the `tsrs` binary (`tsrs --api`), whose
 coverage of the protocol is still incomplete; `npm/sdk/METHODS.md` in the repository tracks it per method.
 TypeScript consumers need `esnext.disposable` (or a newer lib) for the declarations' `Symbol.dispose` members.
+The JS API runs on the package's minimum Node (16.20; checked on 16.20, 18, 20, 22 and 24). Where Node has no
+`Symbol.dispose` (before 18.18/20.4), call `close()` / `dispose()` instead of `using`.
 
 Licensed under Apache-2.0. tsrs is a derivative work of TypeScript (Copyright (c) Microsoft Corporation); the
 bundled `lib.*.d.ts` files and the structure of the code come from that project. See `LICENSE` and `NOTICE.txt`.

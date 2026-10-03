@@ -2,12 +2,14 @@
     "name": "@maschwenk/tsrs",
     "version": "0.0.0-set-by-npm-build",
     "license": "Apache-2.0",
-    "description": "A Rust port of the TypeScript 7 type checker: `tsc --noEmit`, faster, with the TypeScript 7 unstable JS API",
+    "description": "A Rust port of the TypeScript 7 compiler (tsc) and language server, with TypeScript 7's unstable JS API",
     "keywords": [
         "TypeScript",
         "typecheck",
         "tsc",
-        "rust"
+        "rust",
+        "compiler",
+        "api"
     ],
     "repository": {
         "type": "git",
