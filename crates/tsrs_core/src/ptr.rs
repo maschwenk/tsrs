@@ -102,7 +102,7 @@ impl<T> P<T> {
 
 impl<T: ?Sized> P<T> {
     #[inline]
-    pub fn from_static(r: &'static T) -> P<T> {
+    pub const fn from_static(r: &'static T) -> P<T> {
         P(r)
     }
 

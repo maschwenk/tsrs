@@ -1,5 +1,4 @@
-// Only the EmitHelper data type and its ordering are ported: helper definitions and the transforms that request
-// them are emit-only. The printer still sorts and writes whatever helpers an EmitContext carries.
+// helpers.go: the EmitHelper data type and its ordering; the helper definitions are in helpers_defs.rs.
 
 pub struct Priority {
     pub value: i32,

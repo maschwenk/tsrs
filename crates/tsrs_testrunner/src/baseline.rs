@@ -154,3 +154,10 @@ mod tests {
         assert_eq!(classify(None, act), Class::Fail);
     }
 }
+
+// baseline.go:31 (DiffText). Go uses a patience diff with 3 lines of context; `similar`'s patience algorithm and
+// unified format stand in for it (only the `!!!! File ... differs ... in noCheck emit` sections use this).
+pub fn diff_text(old_name: &str, new_name: &str, expected: &str, actual: &str) -> String {
+    let diff = similar::TextDiff::configure().algorithm(similar::Algorithm::Patience).diff_lines(expected, actual);
+    diff.unified_diff().context_radius(3).header(old_name, new_name).to_string()
+}

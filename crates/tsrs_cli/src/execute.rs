@@ -31,6 +31,13 @@ impl ParseConfigHost for sysParseConfigHost {
     }
 }
 
+/// docs/EMIT.md section 6: emit runs only when the environment variable `TSRS_EMIT` is exactly `1`. Without it tsrs
+/// keeps behaving like `tsc --noEmit` and never writes a file. Read once; the library crates never read it.
+pub(crate) fn emit_enabled() -> bool {
+    static EMIT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *EMIT.get_or_init(|| std::env::var("TSRS_EMIT").as_deref() == Ok("1"))
+}
+
 fn not_supported(sys: &dyn System, what: &str) -> CommandLineResult {
     sys.write(&format!("error: {} is not supported by tsrs (type checking only).\n", what));
     CommandLineResult { status: ExitStatus::NotImplemented }
@@ -44,7 +51,6 @@ pub fn command_line(sys: &'static dyn System, command_line_args: Vec<String>) ->
         }
     }
 
-    // tsrs always behaves like `tsc --noEmit`.
     let mut args = command_line_args;
     // tsrs-only: `--noLazyMembers` turns off the port of the lazy member resolution PRs (tsrs_core::lazymembers).
     for (flag, on) in [("--lazyMembers", true), ("--noLazyMembers", false)] {
@@ -73,7 +79,9 @@ pub fn command_line(sys: &'static dyn System, command_line_args: Vec<String>) ->
         tsrs_compiler::set_checker_cost_cache_from_cli(&path);
         args.drain(pos..pos + 2);
     }
-    if !args.iter().any(|a| a.eq_ignore_ascii_case("--noEmit") || a.eq_ignore_ascii_case("-noEmit")) {
+    // Without TSRS_EMIT=1 tsrs always behaves like `tsc --noEmit`; with it, the project's own noEmit /
+    // emitDeclarationOnly / noEmitOnError decide, as in tsc.
+    if !emit_enabled() && !args.iter().any(|a| a.eq_ignore_ascii_case("--noEmit") || a.eq_ignore_ascii_case("-noEmit")) {
         args.push("--noEmit".to_string());
     }
 

@@ -1666,3 +1666,46 @@ pub fn get_declaration_name(declaration: P<Node>) -> String {
     }
     String::new()
 }
+
+// utilities.go:3961 (added for emit)
+pub fn try_get_property_name_of_binding_or_assignment_element(binding_element: P<Node>) -> Option<P<Node>> {
+    match binding_element.kind() {
+        Kind::BindingElement => {
+            // `a` in `let { a: b } = ...`
+            // `[a]` in `let { [a]: b } = ...`
+            // `"a"` in `let { "a": b } = ...`
+            // `1` in `let { 1: b } = ...`
+            if let Some(property_name) = binding_element.property_name() {
+                if is_computed_property_name(property_name) && is_string_or_numeric_literal_like(property_name.expression().unwrap()) {
+                    return property_name.expression();
+                }
+                return Some(property_name);
+            }
+        }
+        Kind::PropertyAssignment => {
+            // `a` in `({ a: b } = ...)`
+            // `[a]` in `({ [a]: b } = ...)`
+            // `"a"` in `({ "a": b } = ...)`
+            // `1` in `({ 1: b } = ...)`
+            if let Some(property_name) = binding_element.name() {
+                if is_computed_property_name(property_name) && is_string_or_numeric_literal_like(property_name.expression().unwrap()) {
+                    return property_name.expression();
+                }
+                return Some(property_name);
+            }
+        }
+        Kind::SpreadAssignment => {
+            // `a` in `({ ...a } = ...)`
+            return binding_element.name();
+        }
+        _ => {}
+    }
+
+    let target = get_target_of_binding_or_assignment_element(binding_element);
+    if let Some(target) = target {
+        if is_property_name(target) {
+            return Some(target);
+        }
+    }
+    None
+}

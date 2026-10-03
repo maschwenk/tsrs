@@ -52,18 +52,22 @@
 //!   `range_start_positions_are_on_same_line`, `positions_are_on_same_line`, `get_lines_between_positions`,
 //!   `is_recognized_triple_slash_comment`, `is_pinned_comment`, `format_generated_name`, `NameGenerator`.
 //!
-//! Not ported: source map emit (guards kept, generator paths unreachable), the transform helpers of `factory.go`
-//! other than the four listed above, the helper definitions of
-//! `helpers.go` (only `EmitHelper` and its ordering), `emithost.go`,
-//! `emitresolver.go`, JSDoc emit (`emitJSDocNode` panics like Go).
+//! - Emit (docs/EMIT.md): factory_2.rs holds the rest of `factory.go` (transform helpers, `New*Helper` constructors,
+//!   declaration names); helpers_defs.rs the helper definitions of `helpers.go` (statics, `P::from_static`);
+//!   Go `printer.EmitHost` is `tsrs_transformers::EmitHost` (its `GetEmitResolver` returns the `Resolver` that lives there).
+//!
+//! Not ported: source map emit (guards kept, generator paths unreachable), `emitresolver.go` (the Rust form is
+//! `tsrs_transformers::Resolver`), JSDoc emit (`emitJSDocNode` panics like Go).
 
 mod changetrackerwriter;
 mod emitcontext;
 mod emitflags;
 mod emittextwriter;
 mod factory;
+mod factory_2;
 mod generatedidentifierflags;
 mod helpers;
+mod helpers_defs;
 mod namegenerator;
 mod printer_1;
 mod printer_2;
@@ -79,8 +83,10 @@ pub use emitcontext::*;
 pub use emitflags::*;
 pub use emittextwriter::*;
 pub use factory::*;
+pub use factory_2::*;
 pub use generatedidentifierflags::*;
 pub use helpers::*;
+pub use helpers_defs::*;
 pub use namegenerator::*;
 pub use printer_1::*;
 pub use printer_2::*;
