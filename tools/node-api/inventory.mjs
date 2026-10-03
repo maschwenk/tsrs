@@ -75,7 +75,8 @@ function loadRun(label) {
     let processes = 0;
     let unparseable = 0;
     const traceDir = path.join(dir, "trace");
-    for (const f of fs.existsSync(traceDir) ? fs.readdirSync(traceDir) : []) {
+    // Only per-process frame traces; *.capture.jsonl payload captures (run-upstream --capture) are not traces.
+    for (const f of fs.existsSync(traceDir) ? fs.readdirSync(traceDir).filter(f => !f.endsWith(".capture.jsonl")) : []) {
         let test;
         for (const line of fs.readFileSync(path.join(traceDir, f), "utf8").split("\n")) {
             if (!line) continue;
