@@ -53,6 +53,9 @@ export class Client {
     private connected = false;
     private closed = false;
     private connecting: Promise<void> | undefined;
+    // tsrs patch (npm/sdk/patches/async-client-connection-loss.patch): set once the server process or connection
+    // goes away without close(); every pending and later request rejects with it instead of never settling.
+    private failure: Error | undefined;
     private timing: TimingCollector | undefined;
     private batchedRequests: { method: APIRequest["method"]; params: APIRequest["params"]; resolve: (value: unknown) => void; reject: (reason?: any) => void; }[] = [];
     private nextBatch: NodeJS.Immediate | "manual" | undefined;
@@ -112,6 +115,10 @@ export class Client {
             const writer = new StreamMessageWriter(this.process.stdin!);
             this.connection = createMessageConnection(reader, writer);
             this.registerFSCallbacks(this.connection, options.fs, fsConfiguration);
+            const child = this.process;
+            writer.onError(([error]) => this.fail(`writing to the server failed: ${error.message}`));
+            child.once("exit", (code, signal) => this.fail(signal ? `server process exited with signal ${signal}` : `server process exited with code ${code}`));
+            this.connection.onClose(() => this.fail(child.signalCode ? `server process exited with signal ${child.signalCode}` : child.exitCode !== null ? `server process exited with code ${child.exitCode}` : "server closed the connection"));
             this.connection.listen();
         });
     }
@@ -124,6 +131,7 @@ export class Client {
                 const reader = new SocketMessageReader(this.socket!);
                 const writer = new SocketMessageWriter(this.socket!);
                 this.connection = createMessageConnection(reader, writer);
+                this.connection.onClose(() => this.fail("server closed the connection"));
                 this.connection.listen();
                 this.connected = true;
                 resolve();
@@ -252,8 +260,22 @@ export class Client {
             }
         }
         catch (error) {
-            for (const { reject } of requests) reject(error);
+            const reason = this.failure ?? error;
+            for (const { reject } of requests) reject(reason);
         }
+    }
+
+    /**
+     * tsrs patch: the server went away while the client was open. Reject queued requests now and dispose the
+     * connection, which rejects in-flight ones (mapped to the same error in doBatch); apiRequest rejects new ones.
+     */
+    private fail(detail: string): void {
+        if (this.closed || this.failure) return;
+        this.failure = new Error(`API server connection lost: ${detail}`);
+        const queued = this.batchedRequests;
+        this.batchedRequests = [];
+        for (const { reject } of queued) reject(this.failure);
+        this.connection?.dispose();
     }
 
     private scheduleImmediateBatch(): void {
@@ -280,6 +302,7 @@ export class Client {
 
     async apiRequest<K extends APIRequest["method"]>(method: K, params: APIMethodInfo[K]["params"]): Promise<APIMethodInfo[K]["result"]> {
         if (this.closed) throw new Error("Client is closed");
+        if (this.failure) throw this.failure;
         if (!this.connected) {
             await this.connect();
         }

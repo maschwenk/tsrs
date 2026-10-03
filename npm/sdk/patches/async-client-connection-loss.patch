@@ -1,0 +1,79 @@
+tsrs patch to microsoft/TypeScript@b85298b6a81f packages/typescript/src/api/async/client.ts
+(applied by npm/sdk/sync-upstream.mjs; the pinned original is recorded in npm/tsrs/UPSTREAM.json "patchedFiles").
+
+Upstream, if the API server process dies or closes the connection while the async client is open, vscode-jsonrpc
+marks the connection closed but never settles pending responses, so in-flight and queued requests hang forever
+(with both tsgo and tsrs as the server). With this patch the client records the loss once (child "exit",
+connection close or a failed write, whichever comes first; never after close()), rejects queued requests, disposes the connection so
+in-flight requests reject, and rejects every later request, all with one Error whose message starts with
+"API server connection lost: " (the stable part) followed by a best-effort detail: the exit code/signal,
+"server closed the connection" or "writing to the server failed: ...", whichever was observed first.
+close() behaves as upstream.
+The sync client is unchanged: its next call already throws at once, with the raw pipe error (EBADF/EPIPE)
+or "Unexpected EOF while reading from child process (...)".
+
+--- a/src/api/async/client.ts
++++ b/src/api/async/client.ts
+@@ -53,6 +53,9 @@
+     private connected = false;
+     private closed = false;
+     private connecting: Promise<void> | undefined;
++    // tsrs patch (npm/sdk/patches/async-client-connection-loss.patch): set once the server process or connection
++    // goes away without close(); every pending and later request rejects with it instead of never settling.
++    private failure: Error | undefined;
+     private timing: TimingCollector | undefined;
+     private batchedRequests: { method: APIRequest["method"]; params: APIRequest["params"]; resolve: (value: unknown) => void; reject: (reason?: any) => void; }[] = [];
+     private nextBatch: NodeJS.Immediate | "manual" | undefined;
+@@ -112,6 +115,10 @@
+             const writer = new StreamMessageWriter(this.process.stdin!);
+             this.connection = createMessageConnection(reader, writer);
+             this.registerFSCallbacks(this.connection, options.fs, fsConfiguration);
++            const child = this.process;
++            writer.onError(([error]) => this.fail(`writing to the server failed: ${error.message}`));
++            child.once("exit", (code, signal) => this.fail(signal ? `server process exited with signal ${signal}` : `server process exited with code ${code}`));
++            this.connection.onClose(() => this.fail(child.signalCode ? `server process exited with signal ${child.signalCode}` : child.exitCode !== null ? `server process exited with code ${child.exitCode}` : "server closed the connection"));
+             this.connection.listen();
+         });
+     }
+@@ -124,6 +131,7 @@
+                 const reader = new SocketMessageReader(this.socket!);
+                 const writer = new SocketMessageWriter(this.socket!);
+                 this.connection = createMessageConnection(reader, writer);
++                this.connection.onClose(() => this.fail("server closed the connection"));
+                 this.connection.listen();
+                 this.connected = true;
+                 resolve();
+@@ -252,10 +260,24 @@
+             }
+         }
+         catch (error) {
+-            for (const { reject } of requests) reject(error);
++            const reason = this.failure ?? error;
++            for (const { reject } of requests) reject(reason);
+         }
+     }
+ 
++    /**
++     * tsrs patch: the server went away while the client was open. Reject queued requests now and dispose the
++     * connection, which rejects in-flight ones (mapped to the same error in doBatch); apiRequest rejects new ones.
++     */
++    private fail(detail: string): void {
++        if (this.closed || this.failure) return;
++        this.failure = new Error(`API server connection lost: ${detail}`);
++        const queued = this.batchedRequests;
++        this.batchedRequests = [];
++        for (const { reject } of queued) reject(this.failure);
++        this.connection?.dispose();
++    }
++
+     private scheduleImmediateBatch(): void {
+         if (this.nextBatch) return;
+         this.nextBatch = setImmediate(this.doBatch.bind(this));
+@@ -280,6 +302,7 @@
+ 
+     async apiRequest<K extends APIRequest["method"]>(method: K, params: APIMethodInfo[K]["params"]): Promise<APIMethodInfo[K]["result"]> {
+         if (this.closed) throw new Error("Client is closed");
++        if (this.failure) throw this.failure;
+         if (!this.connected) {
+             await this.connect();
+         }

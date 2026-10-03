@@ -6,7 +6,8 @@
 //   node npm/sdk/sync-upstream.mjs [--ts-ref <dir>]   # copy (default checkout: ./ts-ref)
 //   node npm/sdk/sync-upstream.mjs --check            # verify the committed copy matches the checkout
 //
-// Source files are copied byte for byte. Test files get the small, listed edits in editTest (package name, the
+// Source files are copied byte for byte, except files listed in PATCHES, which get a deliberate tsrs patch from
+// npm/sdk/patches applied (strictly: every hunk must match the pinned original exactly). Test files get the small, listed edits in editTest (package name, the
 // places upstream hard-codes its repo build of the server, and the compiler fixture root). npm/tsrs/UPSTREAM.json records the commit and a
 // sha256 of every copied file.
 
@@ -26,6 +27,12 @@ const UPSTREAM_NAME = "@typescript/typescript";
 const VERBATIM_DIRS = ["src", "vendor"];
 // Single files copied verbatim. lib/getExePath.d.ts types tsrs's own lib/getExePath.js, which has the same signature.
 const VERBATIM_FILES = ["tsconfig.base.json", "tsconfig.json", "tsconfig.dev.json", "lib/getExePath.d.ts"];
+// Deliberate tsrs changes to upstream sources, documented in each patch header and in npm/README.md.
+const PATCHES = {
+    "src/api/async/client.ts": "async-client-connection-loss.patch",
+    "vendor/vscode-jsonrpc/lib/common/connection.js": "vscode-jsonrpc-send-request-write-error.patch",
+};
+
 // Test files copied with the editTest edits applied. Benchmarks are left out (they need tinybench and TypeScript 5),
 // except ast.bench.ts, which ast.test.ts imports.
 const TEST_FILES = [
@@ -87,6 +94,50 @@ function editTest(rel, text, packageName) {
     return text;
 }
 
+// Applies a unified diff to `text`. Every hunk's context and removed lines must match exactly at the stated
+// line, so an upstream change under a patch fails loudly instead of being merged silently. Lines keep their
+// original endings (the patch files are byte-exact against the pinned sources, CRLF included).
+function applyPatch(rel, text, patchText) {
+    const lines = text.split("\n");
+    const patchLines = patchText.split("\n");
+    let i = patchLines.findIndex(l => l.startsWith("--- "));
+    if (i < 0 || !patchLines[i + 1]?.startsWith("+++ ")) throw new Error(`${rel}: patch has no ---/+++ header`);
+    i += 2;
+    let offset = 0;
+    let hunks = 0;
+    while (i < patchLines.length) {
+        const header = patchLines[i].match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+        if (!header) {
+            if (patchLines[i] === "") {
+                i++;
+                continue;
+            }
+            throw new Error(`${rel}: unexpected patch line ${i + 1}: ${JSON.stringify(patchLines[i])}`);
+        }
+        i++;
+        const oldLines = [], newLines = [];
+        while (i < patchLines.length && !patchLines[i].startsWith("@@")) {
+            const line = patchLines[i++];
+            if (line.startsWith(" ")) oldLines.push(line.slice(1)), newLines.push(line.slice(1));
+            else if (line.startsWith("-")) oldLines.push(line.slice(1));
+            else if (line.startsWith("+")) newLines.push(line.slice(1));
+            else if (line.startsWith("\\")) continue;
+            else if (line === "" && i === patchLines.length) break;
+            else throw new Error(`${rel}: malformed hunk line ${i}: ${JSON.stringify(line)}`);
+        }
+        const start = Number(header[1]) - 1 + offset;
+        const actual = lines.slice(start, start + oldLines.length);
+        if (actual.length !== oldLines.length || actual.some((l, k) => l !== oldLines[k])) {
+            throw new Error(`${rel}: hunk ${hunks + 1} (@@ -${header[1]}) does not match the pinned source`);
+        }
+        lines.splice(start, oldLines.length, ...newLines);
+        offset += newLines.length - oldLines.length;
+        hunks++;
+    }
+    if (hunks === 0) throw new Error(`${rel}: patch has no hunks`);
+    return lines.join("\n");
+}
+
 function listFiles(dir, base = dir) {
     const out = [];
     for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : 1)) {
@@ -114,11 +165,22 @@ function main() {
 
     /** @type {Map<string, Buffer>} relative output path -> contents */
     const outputs = new Map();
+    const patched = {};
     for (const dir of VERBATIM_DIRS) {
         for (const rel of listFiles(path.join(upstreamDir, dir))) {
-            outputs.set(`${dir}/${rel}`, fs.readFileSync(path.join(upstreamDir, dir, rel)));
+            const file = `${dir}/${rel}`;
+            let data = fs.readFileSync(path.join(upstreamDir, dir, rel));
+            if (PATCHES[file]) {
+                const patchFile = path.join(npmDir, "sdk", "patches", PATCHES[file]);
+                const patchText = fs.readFileSync(patchFile, "utf8");
+                const original = data;
+                data = Buffer.from(applyPatch(file, original.toString("utf8"), patchText));
+                patched[file] = { upstreamSha256: sha256(original), patch: `npm/sdk/patches/${PATCHES[file]}`, patchSha256: sha256(patchText) };
+            }
+            outputs.set(file, data);
         }
     }
+    for (const file of Object.keys(PATCHES)) if (!patched[file]) throw new Error(`patched file ${file} is not in the pinned sources`);
     for (const rel of VERBATIM_FILES) outputs.set(rel, fs.readFileSync(path.join(upstreamDir, rel)));
     for (const rel of TEST_FILES) {
         const text = fs.readFileSync(path.join(upstreamDir, rel), "utf8");
@@ -131,6 +193,7 @@ function main() {
         commit,
         path: UPSTREAM_PKG,
         editedFiles: TEST_FILES,
+        patchedFiles: patched,
         files: Object.fromEntries([...outputs].sort(([a], [b]) => a < b ? -1 : 1).map(([rel, data]) => [rel, sha256(data)])),
     };
     const manifestText = JSON.stringify(manifest, undefined, 4) + "\n";
