@@ -1,0 +1,252 @@
+// Port of tsc/internal/api/session.go (Session, snapshotData, HandleRequest dispatch).
+//
+// Ownership/lifetime model (docs/NODE_API.md, "lifetimes"):
+// - Every client-visible snapshot handle maps to an `Arc<SnapshotData>`. The registry entry holds one
+//   reference; every in-flight request that resolves the handle holds another. The underlying
+//   `tsrs_project::Snapshot` reference is dropped (`Snapshot::deref`) only when the last `Arc` goes
+//   away, so a `release` racing with a query never frees regions the query is still reading.
+// - Programs, source files, symbols and types are region-owned (`P<T>` / `&'static`): they may only be
+//   reached through a live `SnapshotData` and are never exposed as addresses. Wire handles are the
+//   pinned Go IDs (snapshot ids, project ids, symbol/type/signature ids, node handles).
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+
+use tsrs_compiler::{CheckerHandle, Program};
+use tsrs_core::context::{with_checker_lifetime, CheckerLifetime, Context};
+use tsrs_core::json::{self, Value};
+use tsrs_project::{Snapshot, SnapshotHost, ID as ProjectID};
+use tsrs_vfs::FS;
+
+use crate::checker::{self, CheckerSnapshotState};
+use crate::handler::{ApiError, ApiResult, ClientConn, Handler, Response};
+use crate::methods::{method_info, Owner};
+
+pub type SnapshotID = u64;
+
+static SESSION_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Go `StdioServerOptions` / `SessionOptions` subset that affects session behavior.
+pub struct SessionOptions {
+    pub cwd: String,
+    pub default_library_path: String,
+    /// Base filesystem (normally `bundled::wrap_fs(osvfs::fs())`, optionally wrapped by the callback FS).
+    pub fs: Arc<dyn FS>,
+    /// Go `UseBinaryResponses`: true for the sync MessagePack protocol, false for JSON-RPC.
+    pub binary_responses: bool,
+    /// Go `RunExternalCode`. Content mappers are not ported; this stays false by default.
+    pub run_external_code: bool,
+}
+
+/// Go `snapshotData`: one registered snapshot plus its per-snapshot registries.
+pub struct SnapshotData {
+    pub handle: SnapshotID,
+    pub snapshot: Arc<Snapshot>,
+    pub(crate) file_system: Arc<dyn FS>,
+    /// Registries owned by the checker lane (symbols, types, signatures).
+    pub checker_state: CheckerSnapshotState,
+}
+
+impl Drop for SnapshotData {
+    fn drop(&mut self) {
+        // Last reference (registry + in-flight requests) is gone: release the project snapshot.
+        self.snapshot.deref();
+    }
+}
+
+impl SnapshotData {
+    /// Go `snapshotData.getProject` / `getProgram`.
+    pub fn get_program(&self, project: &ProjectID) -> ApiResult<&'static Program> {
+        let proj = self
+            .snapshot
+            .project_collection
+            .get_project(project)
+            .ok_or_else(|| ApiError::client(format!("project {} not found", project.0)))?;
+        proj.get_program().ok_or_else(|| ApiError::client("project has no program"))
+    }
+}
+
+/// Go `checkerSetup`. Holds the snapshot alive and the checker exclusively until dropped. Checker
+/// handles are not reentrant: never call `Session::setup_checker` again while one is held on the
+/// same program.
+pub struct CheckerSetup {
+    pub sd: Arc<SnapshotData>,
+    pub snapshot: SnapshotID,
+    pub project: ProjectID,
+    pub program: &'static Program,
+    pub checker: CheckerHandle,
+}
+
+pub struct Session {
+    id: String,
+    pub(crate) snapshot_host: Arc<SnapshotHost>,
+    binary_responses: bool,
+    snapshots: RwLock<HashMap<SnapshotID, Arc<SnapshotData>>>,
+    conn: Mutex<Option<Arc<dyn ClientConn>>>,
+    closed: Mutex<bool>,
+}
+
+impl Session {
+    /// Go `NewStandaloneSession`.
+    pub fn new(options: SessionOptions) -> Arc<Session> {
+        let init = tsrs_project::SessionInit {
+            background_ctx: Context::background(),
+            options: Arc::new(tsrs_project::SessionOptions {
+                current_directory: options.cwd,
+                default_library_path: options.default_library_path,
+                typings_location: String::new(),
+                position_encoding: tsrs_lsproto::PositionEncodingKind::UTF8,
+                watch_enabled: false,
+                logging_enabled: false,
+                telemetry_enabled: false,
+                push_diagnostics_enabled: false,
+                run_external_code: options.run_external_code,
+                debounce_delay: std::time::Duration::ZERO,
+                checker_pool_options: Default::default(),
+            }),
+            fs: options.fs,
+            client: None,
+            logger: None,
+            npm_executor: None,
+            parse_cache: None,
+            content_mapped_parse_cache: None,
+        };
+        let id = SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
+        Arc::new(Session {
+            id: format!("api-session-{id}"),
+            snapshot_host: tsrs_project::new_snapshot_host(&init),
+            binary_responses: options.binary_responses,
+            snapshots: RwLock::new(HashMap::new()),
+            conn: Mutex::new(None),
+            closed: Mutex::new(false),
+        })
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn set_connection(&self, conn: Arc<dyn ClientConn>) {
+        *self.conn.lock().unwrap() = Some(conn);
+    }
+
+    pub(crate) fn connection(&self) -> Option<Arc<dyn ClientConn>> {
+        self.conn.lock().unwrap().clone()
+    }
+
+    pub fn binary_responses(&self) -> bool {
+        self.binary_responses
+    }
+
+    pub fn current_directory(&self) -> &str {
+        self.snapshot_host.get_current_directory()
+    }
+
+    pub fn use_case_sensitive_file_names(&self) -> bool {
+        self.snapshot_host.fs().use_case_sensitive_file_names()
+    }
+
+    /// Releases every registered snapshot (Go `Session.Close`). Idempotent; requests after close fail.
+    pub fn close(&self) {
+        let mut closed = self.closed.lock().unwrap();
+        if *closed {
+            return;
+        }
+        *closed = true;
+        self.snapshots.write().unwrap().clear();
+    }
+
+    /// Go `getSnapshotData`: resolves a client snapshot handle, pinning it for the caller.
+    pub fn snapshot_data(&self, handle: SnapshotID) -> ApiResult<Arc<SnapshotData>> {
+        self.snapshots.read().unwrap().get(&handle).cloned().ok_or_else(|| ApiError::client(format!("snapshot {handle} not found")))
+    }
+
+    /// Go `setupChecker`: resolves snapshot -> project -> program and acquires the API-lifetime checker.
+    pub fn setup_checker(&self, snapshot: SnapshotID, project: &ProjectID) -> ApiResult<CheckerSetup> {
+        let sd = self.snapshot_data(snapshot)?;
+        let program = sd.get_program(project)?;
+        let ctx = with_checker_lifetime(&Context::background(), CheckerLifetime::API);
+        let checker = program.get_type_checker(&ctx);
+        Ok(CheckerSetup { sd, snapshot, project: project.clone(), program, checker })
+    }
+
+    pub(crate) fn register_snapshot(&self, snapshot: Arc<Snapshot>, file_system: Arc<dyn FS>) -> SnapshotID {
+        let handle = snapshot.id();
+        let sd = Arc::new(SnapshotData { handle, snapshot, file_system, checker_state: CheckerSnapshotState::default() });
+        self.snapshots.write().unwrap().insert(handle, sd);
+        handle
+    }
+
+    pub(crate) fn release_snapshot(&self, handle: SnapshotID) -> ApiResult<()> {
+        match self.snapshots.write().unwrap().remove(&handle) {
+            Some(_) => Ok(()),
+            None => Err(ApiError::client(format!("snapshot {handle} not found"))),
+        }
+    }
+
+    fn dispatch(&self, method: &str, params: &[u8]) -> ApiResult<Response> {
+        match method {
+            "echo" => {
+                return Ok(if self.binary_responses {
+                    Response::Binary(params.to_vec())
+                } else {
+                    Response::Json(String::from_utf8_lossy(params).into_owned())
+                })
+            }
+            "ping" => return Ok(Response::Json("\"pong\"".to_string())),
+            _ => {}
+        }
+        let info = method_info(method).ok_or_else(|| ApiError::invalid_request(format!("unknown API method {method:?}")))?;
+        let params = parse_params(params)?;
+        if *self.closed.lock().unwrap() {
+            return Err(ApiError::client("session is closed"));
+        }
+        if info.owner == Owner::Checker {
+            return checker::handle(self, method, &params).unwrap_or_else(|| Err(ApiError::unsupported(method)));
+        }
+        match method {
+            "initialize" => {
+                let mut obj = tsrs_core::collections::OrderedMap::default();
+                obj.insert("useCaseSensitiveFileNames".to_string(), Value::Bool(self.use_case_sensitive_file_names()));
+                obj.insert("currentDirectory".to_string(), Value::String(self.current_directory().to_string()));
+                json_response(&Value::Object(obj))
+            }
+            _ => Err(ApiError::unsupported(method)),
+        }
+    }
+}
+
+impl Handler for Session {
+    fn handle_request(&self, method: &str, params: &[u8]) -> ApiResult<Response> {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.dispatch(method, params))) {
+            Ok(result) => result,
+            Err(panic) => {
+                let message = panic
+                    .downcast_ref::<String>()
+                    .map(String::as_str)
+                    .or_else(|| panic.downcast_ref::<&str>().copied())
+                    .unwrap_or("unknown panic");
+                Err(ApiError::internal(format!("panic: {message}")))
+            }
+        }
+    }
+
+    fn handle_notification(&self, _method: &str, _params: &[u8]) -> ApiResult<()> {
+        // Go `Session.HandleNotification` ignores all notifications.
+        Ok(())
+    }
+}
+
+/// Parses request params (raw JSON bytes; empty means absent, Go `UnmarshalParams` returns nil).
+pub fn parse_params(params: &[u8]) -> ApiResult<Value> {
+    if params.is_empty() {
+        return Ok(Value::Null);
+    }
+    let text = std::str::from_utf8(params).map_err(|e| ApiError::invalid_request(format!("params are not UTF-8: {e}")))?;
+    json::unmarshal(text).map_err(ApiError::invalid_request)
+}
+
+pub fn json_response(value: &Value) -> ApiResult<Response> {
+    json::marshal(value).map(Response::Json).map_err(ApiError::internal)
+}

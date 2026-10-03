@@ -46,6 +46,7 @@ tsrs_projectutil = { path = "crates/tsrs_projectutil" }
 tsrs_lsp = { path = "crates/tsrs_lsp" }
 tsrs_fourslash = { path = "crates/tsrs_fourslash" }
 tsrs_incremental = { path = "crates/tsrs_incremental" }
+tsrs_api = { path = "crates/tsrs_api" }
 
 [profile.dev]
 opt-level = 1
