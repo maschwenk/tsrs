@@ -22,6 +22,7 @@ use tsrs_vfs::FS;
 use crate::checker::{self, CheckerSnapshotState};
 use crate::handler::{ApiError, ApiResult, ClientConn, Handler, Response};
 use crate::methods::{method_info, Owner};
+use crate::program::DiagnosticKind;
 use crate::wire::{Obj, Params};
 
 pub type SnapshotID = u64;
@@ -40,11 +41,20 @@ pub struct SessionOptions {
     pub run_external_code: bool,
 }
 
+/// Go `snapshotOpenState`: projects/files this client opened in a snapshot lineage.
+#[derive(Clone, Default)]
+pub(crate) struct OpenState {
+    pub open_projects: tsrs_core::collections::Set<tsrs_core::tspath::Path>,
+    pub open_files: tsrs_core::collections::Set<tsrs_core::tspath::Path>,
+}
+
 /// Go `snapshotData`: one registered snapshot plus its per-snapshot registries.
 pub struct SnapshotData {
     pub handle: SnapshotID,
     pub snapshot: Arc<Snapshot>,
-    pub(crate) file_system: Arc<dyn FS>,
+    /// Request filesystem the snapshot was created with (inherited by updates), if any.
+    pub(crate) file_system: Option<Arc<dyn FS>>,
+    pub(crate) open_state: OpenState,
     /// Registries owned by the checker lane (symbols, types, signatures).
     pub checker_state: CheckerSnapshotState,
 }
@@ -85,7 +95,8 @@ pub struct Session {
     /// Leaked once per session: tsoptions requires a `&'static dyn ParseConfigHost`.
     pub(crate) parse_config_host: &'static crate::config::ApiParseConfigHost,
     binary_responses: bool,
-    snapshots: RwLock<HashMap<SnapshotID, Arc<SnapshotData>>>,
+    /// Registered snapshots with their API reference count (Go `snapshotData.refCount`).
+    snapshots: RwLock<HashMap<SnapshotID, (Arc<SnapshotData>, usize)>>,
     conn: Mutex<Option<Arc<dyn ClientConn>>>,
     closed: Mutex<bool>,
 }
@@ -169,12 +180,13 @@ impl Session {
             return;
         }
         *closed = true;
-        self.snapshots.write().unwrap().clear();
+        let all: Vec<_> = self.snapshots.write().unwrap().drain().collect();
+        drop(all);
     }
 
     /// Go `getSnapshotData`: resolves a client snapshot handle, pinning it for the caller.
     pub fn snapshot_data(&self, handle: SnapshotID) -> ApiResult<Arc<SnapshotData>> {
-        self.snapshots.read().unwrap().get(&handle).cloned().ok_or_else(|| ApiError::client(format!("snapshot {handle} not found")))
+        self.snapshots.read().unwrap().get(&handle).map(|(sd, _)| sd.clone()).ok_or_else(|| ApiError::client(format!("snapshot {handle} not found")))
     }
 
     /// Go `setupChecker`: resolves snapshot -> project -> program and acquires the API-lifetime checker.
@@ -186,18 +198,43 @@ impl Session {
         Ok(CheckerSetup { sd, snapshot, project: project.clone(), program, checker })
     }
 
-    pub(crate) fn register_snapshot(&self, snapshot: Arc<Snapshot>, file_system: Arc<dyn FS>) -> SnapshotID {
+    /// Go `registerSnapshot`: the same snapshot id returned twice (no changes) bumps the API ref count so
+    /// each client-side snapshot can be disposed independently.
+    pub(crate) fn register_snapshot(&self, snapshot: Arc<Snapshot>, open_state: OpenState, file_system: Option<Arc<dyn FS>>) -> SnapshotID {
         let handle = snapshot.id();
-        let sd = Arc::new(SnapshotData { handle, snapshot, file_system, checker_state: CheckerSnapshotState::default() });
-        self.snapshots.write().unwrap().insert(handle, sd);
+        let mut snapshots = self.snapshots.write().unwrap();
+        if let Some(entry) = snapshots.get_mut(&handle) {
+            // The stored data already holds a project reference; drop the caller's.
+            snapshot.deref();
+            entry.1 += 1;
+        } else {
+            let sd = Arc::new(SnapshotData { handle, snapshot, file_system, open_state, checker_state: CheckerSnapshotState::default() });
+            snapshots.insert(handle, (sd, 1));
+        }
         handle
     }
 
+    /// Go `releaseSnapshot`. The project snapshot is dereferenced when the last in-flight user drops its `Arc`.
     pub(crate) fn release_snapshot(&self, handle: SnapshotID) -> ApiResult<()> {
-        match self.snapshots.write().unwrap().remove(&handle) {
-            Some(_) => Ok(()),
-            None => Err(ApiError::client(format!("snapshot {handle} not found"))),
-        }
+        let removed = {
+            let mut snapshots = self.snapshots.write().unwrap();
+            let Some(entry) = snapshots.get_mut(&handle) else {
+                return Err(ApiError::client(format!("snapshot {handle} not found")));
+            };
+            entry.1 -= 1;
+            if entry.1 == 0 {
+                snapshots.remove(&handle)
+            } else {
+                None
+            }
+        };
+        drop(removed);
+        Ok(())
+    }
+
+    /// Module resolvers (Go `moduleResolverFactory`) are not ported yet.
+    pub(crate) fn module_resolver_factory(&self, id: u64) -> ApiResult<(Arc<dyn tsrs_project::ModuleResolverFactory>, u64)> {
+        Err(ApiError::unsupported(&format!("createProgram options.moduleResolver ({id})")))
     }
 
     fn dispatch(&self, method: &str, params: &[u8]) -> ApiResult<Response> {
@@ -230,6 +267,23 @@ impl Session {
             "readConfigFile" => self.handle_read_config_file(p)?,
             "parseJsonConfigFileContent" => self.handle_parse_json_config_file_content(p)?,
             "parseConfigFile" => self.handle_parse_config_file(p)?,
+            "createSnapshot" => self.handle_create_snapshot(p)?,
+            "updateSnapshot" => self.handle_update_snapshot(p)?,
+            "release" => self.handle_release(p)?,
+            "getDefaultProjectForFile" => self.handle_get_default_project_for_file(p)?,
+            "getSourceFileNames" => self.handle_get_source_file_names(p)?,
+            "getSyntacticDiagnostics" => self.handle_get_diagnostics(p, DiagnosticKind::Syntactic)?,
+            "getBindDiagnostics" => self.handle_get_diagnostics(p, DiagnosticKind::Bind)?,
+            "getSemanticDiagnostics" => self.handle_get_diagnostics(p, DiagnosticKind::Semantic)?,
+            "getSuggestionDiagnostics" => self.handle_get_diagnostics(p, DiagnosticKind::Suggestion)?,
+            "getDeclarationDiagnostics" => self.handle_get_diagnostics(p, DiagnosticKind::Declaration)?,
+            "getProgramDiagnostics" => self.handle_get_program_diagnostics(p)?,
+            "getGlobalDiagnostics" => self.handle_get_global_diagnostics(p)?,
+            "getConfigFileParsingDiagnostics" => self.handle_get_config_file_parsing_diagnostics(p)?,
+            "emit" => self.handle_emit(p)?,
+            "emitToString" => self.handle_emit_to_string(p)?,
+            "getJavaScriptEmit" => self.handle_selected_files_emit(p, tsrs_compiler::EmitOnly::EmitOnlyJs)?,
+            "getDeclarationEmit" => self.handle_selected_files_emit(p, tsrs_compiler::EmitOnly::EmitOnlyDts)?,
             _ => return Err(ApiError::unsupported(method)),
         };
         json_response(&result)

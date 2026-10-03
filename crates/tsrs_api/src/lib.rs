@@ -13,7 +13,9 @@ pub mod config;
 pub mod diagnostics;
 pub mod handler;
 pub mod methods;
+pub mod program;
 pub mod session;
+pub mod snapshots;
 pub mod wire;
 
 pub(crate) mod checker;

@@ -20,4 +20,5 @@ tsrs_checker.workspace = true
 tsrs_lsproto.workspace = true
 tsrs_project.workspace = true
 rustc-hash.workspace = true
+tsrs_ls.workspace = true
 tsrs_scanner.workspace = true
