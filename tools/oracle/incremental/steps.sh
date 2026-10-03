@@ -9,14 +9,16 @@ TSGO=${TSGO:-/root/bin/tsgo}
 TSRS=${TSRS:-/root/tsrs/target/release/tsrs}
 W=$(mktemp -d /tmp/incr-oracle.XXXX)
 cp -r "$src" "$W/go"; cp -r "$src" "$W/rs"
+# `-b ...` runs build mode (no -p); otherwise `-p .` is prepended.
+if [ "${1:-}" = "-b" ]; then PRE=(); else PRE=(-p .); fi
 n=0; fail=0
 while IFS= read -r step; do
   n=$((n+1))
   (cd "$W/go" && eval "$step"); (cd "$W/rs" && eval "$step")
-  (cd "$W/go" && "$TSGO" -p . "$@" > "$W/go.out$n" 2>&1; echo "exit $?" >> "$W/go.out$n")
-  (cd "$W/rs" && TSRS_EMIT=1 "$TSRS" -p . "$@" > "$W/rs.out$n" 2>&1; echo "exit $?" >> "$W/rs.out$n")
+  (cd "$W/go" && "$TSGO" "${PRE[@]}" "$@" > "$W/go.out$n" 2>&1; echo "exit $?" >> "$W/go.out$n")
+  (cd "$W/rs" && TSRS_EMIT=1 "$TSRS" "${PRE[@]}" "$@" > "$W/rs.out$n" 2>&1; echo "exit $?" >> "$W/rs.out$n")
+  sed -i -E 's/[0-9]{2}:[0-9]{2}:[0-9]{2} [AP]M/HH:MM:SS AM/g' "$W/go.out$n" "$W/rs.out$n"
   if ! cmp -s "$W/go.out$n" "$W/rs.out$n"; then echo "step $n ($step): output differs"; diff "$W/go.out$n" "$W/rs.out$n" | head -10; fail=1; fi
-  for f in $(cd "$W/go" && find . -type f -newer "$W/go.out$n" -o -type f -name '*.tsbuildinfo' | sort -u); do :; done
   d=$(diff -r -q -x node_modules "$W/go" "$W/rs" 2>&1 | grep -v tsbuildinfo)
   if [ -n "$d" ]; then echo "step $n ($step): trees differ"; echo "$d" | head; fail=1; fi
   for b in $(cd "$W/go" && find . -name '*.tsbuildinfo'); do

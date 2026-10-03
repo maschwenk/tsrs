@@ -334,6 +334,7 @@ dependencies = [
 name = "tsrs_cli"
 version = "0.2.3"
 dependencies = [
+ "libc",
  "mimalloc",
  "rustc-hash",
  "tsrs_ast",

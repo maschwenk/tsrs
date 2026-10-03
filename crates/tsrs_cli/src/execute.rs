@@ -46,7 +46,14 @@ fn not_supported(sys: &dyn System, what: &str) -> CommandLineResult {
 pub fn command_line(sys: &'static dyn System, command_line_args: Vec<String>) -> CommandLineResult {
     if let Some(first) = command_line_args.first() {
         match first.to_lowercase().as_str() {
-            "-b" | "--b" | "-build" | "--build" => return not_supported(sys, "build mode (--build)"),
+            "-b" | "--b" | "-build" | "--build" => {
+                // Without TSRS_EMIT=1 build mode stays unsupported (docs/EMIT.md section 6).
+                if !emit_enabled() {
+                    return not_supported(sys, "build mode (--build)");
+                }
+                let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
+                return tsc_build_compilation(sys, P::new(tsoptions::parse_build_command_line(&command_line_args, host)));
+            }
             _ => {}
         }
     }
@@ -275,6 +282,9 @@ fn perform_compilation(
         report_error_summary,
         compile_times,
         incremental: None,
+        writer: None,
+        write_file: None,
+        testing: None,
     });
     #[cfg(feature = "alloc-profile")]
     crate::census::run(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
@@ -319,7 +329,34 @@ fn perform_incremental_compilation(
         report_error_summary,
         compile_times,
         incremental: Some(incremental_program),
+        writer: None,
+        write_file: None,
+        testing: None,
     });
 
     CommandLineResult { status: result.status }
+}
+
+// tsc.go:93
+fn tsc_build_compilation(sys: &'static dyn System, build_command: P<tsoptions::ParsedBuildCommandLine>) -> CommandLineResult {
+    let report_diagnostic = create_diagnostic_reporter(sys, Some(&build_command.compiler_options));
+
+    if !build_command.errors.is_empty() {
+        for &err in &build_command.errors {
+            report_diagnostic(err);
+        }
+        return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+    }
+
+    if build_command.compiler_options.help.is_true() {
+        print_version(sys);
+        sys.write("Usage: tsrs -b [projects...] [options]\n  See `tsc -b --help` for options.\n");
+        return CommandLineResult { status: ExitStatus::Success };
+    }
+    if build_command.compiler_options.watch.is_true() {
+        return not_supported(sys, "watch mode (--watch)");
+    }
+
+    let orchestrator = crate::build::new_orchestrator(crate::build::Options { sys, command: build_command, testing: None });
+    orchestrator.start()
 }

@@ -5,6 +5,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[cfg(feature = "alloc-profile")]
 mod census;
+mod build;
 mod execute;
 mod lsp;
 mod sys;

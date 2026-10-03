@@ -1,0 +1,391 @@
+// Port of execute/build/orchestrator.go (the non-watch parts; watch mode is out of scope).
+//
+// Go runs the build tasks on `--builders` goroutines (default 4) that block on their upstream tasks' channels while a
+// reporter goroutine prints the task outputs in build order. tsrs runs the tasks one at a time in build order (Go's
+// `numRoutines == 1` path): a task's upstream tasks are always done before it starts, and each task's buffered output
+// is reported right after it, which is the order Go prints in.
+
+use std::cell::{Cell, RefCell};
+use std::sync::{Arc, Mutex, OnceLock};
+
+use rustc_hash::FxHashMap;
+use tsrs_ast::{new_compiler_diagnostic, Diagnostic};
+use tsrs_compiler::{new_cached_fs_compiler_host, CompilerHost};
+use tsrs_core::collections::Set;
+use tsrs_core::tspath::{self, ComparePathsOptions, Path};
+use tsrs_core::P;
+use tsrs_diagnostics as diagnostics;
+use tsrs_tsoptions::ParsedBuildCommandLine;
+
+use super::buildtask::{taskResult, BuildTask};
+use super::host::host;
+use super::parsecache::parseCache;
+use crate::tsc::{
+    self, create_builder_status_reporter, create_diagnostic_reporter_with_writer, create_report_error_summary, CommandLineResult, CommandLineTesting,
+    DiagnosticReporter, DiagnosticsReporter, ExitStatus, Statistics, System, Writer,
+};
+
+pub struct Options {
+    pub sys: &'static dyn System,
+    pub command: P<ParsedBuildCommandLine>,
+    pub testing: Option<&'static dyn CommandLineTesting>,
+}
+
+#[derive(Default)]
+pub struct OrchestratorResult {
+    pub result: Option<CommandLineResult>,
+    pub status: Option<ExitStatus>,
+    pub errors: Option<Vec<P<Diagnostic>>>,
+    pub statistics: Statistics,
+    pub files_to_delete: Option<Vec<String>>,
+}
+
+impl OrchestratorResult {
+    pub(crate) fn status(&self) -> ExitStatus {
+        self.status.unwrap_or(ExitStatus::Success)
+    }
+
+    // orchestrator.go:39
+    fn report(&mut self, o: &Orchestrator) {
+        self.report_with_files_to_delete(o, true);
+    }
+
+    // orchestrator.go:43
+    fn report_with_files_to_delete(&mut self, o: &Orchestrator, report_files_to_delete: bool) {
+        (o.error_summary_reporter)(self.errors.as_deref().unwrap_or_default());
+        if report_files_to_delete {
+            if let Some(files_to_delete) = &self.files_to_delete {
+                o.create_builder_status_reporter(None)(new_compiler_diagnostic(
+                    &diagnostics::A_non_dry_build_would_delete_the_following_files_Colon_0,
+                    &[&files_to_delete.iter().map(|f| format!("\r\n * {f}")).collect::<String>()],
+                ));
+            }
+        }
+        let options = &o.opts.command.compiler_options;
+        if !options.diagnostics.is_true() && !options.extended_diagnostics.is_true() {
+            return;
+        }
+        self.statistics.set_total_time(o.opts.sys.since_start());
+        let sys = o.opts.sys;
+        self.statistics.report(&|t: &str| sys.write(t), o.opts.testing);
+    }
+}
+
+pub struct Orchestrator {
+    pub(crate) opts: Options,
+    pub(crate) compare_paths_options: ComparePathsOptions,
+    host: OnceLock<&'static host>,
+
+    // order generation result
+    tasks: RefCell<FxHashMap<Path, P<BuildTask>>>,
+    order: RefCell<Vec<String>>,
+    errors: RefCell<Vec<P<Diagnostic>>>,
+    graph_generated: Cell<bool>,
+
+    error_summary_reporter: DiagnosticsReporter<'static>,
+
+    // order sorted by dependency depth, to reduce how often builders block on upstream projects
+    schedule_order: RefCell<Vec<String>>,
+}
+
+impl Orchestrator {
+    pub(crate) fn host(&self) -> &'static host {
+        self.host.get().unwrap()
+    }
+
+    // orchestrator.go:94
+    pub(crate) fn relative_file_name(&self, file_name: &str) -> String {
+        tspath::convert_to_relative_path(file_name, &self.compare_paths_options)
+    }
+
+    // orchestrator.go:98
+    pub(crate) fn to_path(&self, file_name: &str) -> Path {
+        tspath::to_path(file_name, &self.compare_paths_options.current_directory, self.compare_paths_options.use_case_sensitive_file_names)
+    }
+
+    pub fn order(&self) -> Vec<String> {
+        self.order.borrow().clone()
+    }
+
+    // ScheduleOrder is the order in which builders pick up projects: Order() stably sorted by dependency depth.
+    pub fn schedule_order(&self) -> Vec<String> {
+        self.schedule_order.borrow().clone()
+    }
+
+    // orchestrator.go:131
+    fn compute_schedule_order(&self) -> Vec<String> {
+        let order = self.order.borrow().clone();
+        let mut entries: Vec<(String, usize)> = Vec::with_capacity(order.len());
+        let mut depths: FxHashMap<P<BuildTask>, usize> = FxHashMap::default();
+        for config in &order {
+            let task = self.get_task(&self.to_path(config));
+            let mut depth = 0;
+            for upstream in task.up_stream.borrow().iter() {
+                depth = depth.max(depths.get(&upstream.task).copied().unwrap_or(0) + 1);
+            }
+            depths.insert(task, depth);
+            entries.push((config.clone(), depth));
+        }
+        entries.sort_by_key(|e| e.1);
+        entries.into_iter().map(|e| e.0).collect()
+    }
+
+    // orchestrator.go:155
+    pub fn upstream(&self, config_name: &str) -> Vec<String> {
+        let task = self.get_task(&self.to_path(config_name));
+        let upstream = task.up_stream.borrow();
+        upstream.iter().map(|t| t.task.config.clone()).collect()
+    }
+
+    // orchestrator.go:171
+    pub(crate) fn get_task(&self, path: &Path) -> P<BuildTask> {
+        match self.tasks.borrow().get(path) {
+            Some(task) => *task,
+            None => panic!("No build task found for {}", path.as_str()),
+        }
+    }
+
+    // orchestrator.go:179
+    fn create_build_tasks(&self, configs: &[String]) {
+        for config in configs {
+            let path = self.to_path(config);
+            let task = P::new(BuildTask::new(config.clone(), true));
+            task.pending.set(true);
+            if self.tasks.borrow().contains_key(&path) {
+                continue;
+            }
+            self.tasks.borrow_mut().insert(path.clone(), task);
+            task.resolved.set(self.host().get_resolved_project_reference(config, path));
+            task.up_stream.borrow_mut().clear();
+            if let Some(resolved) = task.resolved.get() {
+                self.create_build_tasks(resolved.resolved_project_reference_paths());
+            }
+        }
+    }
+
+    // orchestrator.go:213
+    fn setup_build_task(
+        &self,
+        config_name: &str,
+        _down_stream: Option<P<BuildTask>>,
+        in_circular_context: bool,
+        completed: &mut Set<Path>,
+        analyzing: &mut Set<Path>,
+        circularity_stack: &mut Vec<String>,
+    ) -> Option<P<BuildTask>> {
+        let path = self.to_path(config_name);
+        let task = self.get_task(&path);
+        if !completed.has(&path) {
+            if analyzing.has(&path) {
+                if !in_circular_context {
+                    self.errors.borrow_mut().push(new_compiler_diagnostic(
+                        &diagnostics::Project_references_may_not_form_a_circular_graph_Cycle_detected_Colon_0,
+                        &[&circularity_stack.join("\n")],
+                    ));
+                }
+                return None;
+            }
+            analyzing.add(path.clone());
+            circularity_stack.push(config_name.to_string());
+            if let Some(resolved) = task.resolved.get() {
+                for (index, sub_reference) in resolved.resolved_project_reference_paths().iter().enumerate() {
+                    let upstream = self.setup_build_task(
+                        sub_reference,
+                        Some(task),
+                        in_circular_context || resolved.project_references()[index].circular,
+                        completed,
+                        analyzing,
+                        circularity_stack,
+                    );
+                    if let Some(upstream) = upstream {
+                        task.up_stream.borrow_mut().push(super::buildtask::upstreamTask { task: upstream, ref_index: index });
+                    }
+                }
+            }
+            circularity_stack.pop();
+            completed.add(path);
+            self.order.borrow_mut().push(config_name.to_string());
+        }
+        // Watch mode only: downStream links.
+        Some(task)
+    }
+
+    // orchestrator.go:265
+    pub fn generate_graph(&self) {
+        let projects = self.opts.command.resolved_project_paths().to_vec();
+        // Parse all config files (Go: in parallel)
+        self.create_build_tasks(&projects);
+
+        // Generate the graph
+        let mut completed = Set::default();
+        let mut analyzing = Set::default();
+        let mut circularity_stack = Vec::new();
+        for project in &projects {
+            self.setup_build_task(project, None, false, &mut completed, &mut analyzing, &mut circularity_stack);
+        }
+        *self.schedule_order.borrow_mut() = self.compute_schedule_order();
+        self.graph_generated.set(true);
+    }
+
+    // tsc -b entrypoint
+    // orchestrator.go:295
+    pub fn start(&'static self) -> CommandLineResult {
+        CommandLineResult { status: self.start_worker("", false /*onlyReferences*/).status() }
+    }
+
+    // orchestrator.go:311
+    fn start_worker(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
+        // Content mappers are not supported by tsrs. Watch mode is not ported.
+        self.generate_graph();
+        let Some(mut order) = self.get_build_order_for(project) else {
+            return OrchestratorResult { status: Some(ExitStatus::InvalidProject_OutputsSkipped), ..Default::default() };
+        };
+        if only_references && self.errors.borrow().is_empty() {
+            if project.is_empty() {
+                return OrchestratorResult { status: Some(ExitStatus::InvalidProject_OutputsSkipped), ..Default::default() };
+            }
+            order.pop();
+        }
+        self.build_or_clean_order(&order)
+    }
+
+    // orchestrator.go:426
+    fn get_build_order_for(&self, project: &str) -> Option<Vec<String>> {
+        if project.is_empty() {
+            return Some(self.order.borrow().clone());
+        }
+
+        let config = tsrs_core::resolve_config_file_name_of_project_reference(&tspath::resolve_path(self.opts.sys.get_current_directory(), &[project]));
+        let target = *self.tasks.borrow().get(&self.to_path(&config))?;
+
+        let mut projects: Set<Path> = Set::default();
+        fn add_project_and_references(o: &Orchestrator, projects: &mut Set<Path>, task: P<BuildTask>) {
+            let path = o.to_path(&task.config);
+            if projects.has(&path) {
+                return;
+            }
+            projects.add(path);
+            for upstream in task.up_stream.borrow().iter() {
+                add_project_and_references(o, projects, upstream.task);
+            }
+        }
+        add_project_and_references(self, &mut projects, target);
+
+        let order: Vec<String> = self.order.borrow().iter().filter(|config| projects.has(&self.to_path(config))).cloned().collect();
+        Some(order)
+    }
+
+    // orchestrator.go:798
+    fn build_or_clean_order(&'static self, order: &[String]) -> OrchestratorResult {
+        let build_options = &self.opts.command.build_options;
+        if !build_options.clean.is_true() && build_options.verbose.is_true() {
+            self.create_builder_status_reporter(None)(new_compiler_diagnostic(
+                &diagnostics::Projects_in_this_build_Colon_0,
+                &[&order.iter().map(|p| format!("\r\n    * {}", self.relative_file_name(p))).collect::<String>()],
+            ));
+        }
+        let mut build_result = OrchestratorResult::default();
+        if self.errors.borrow().is_empty() {
+            build_result.statistics.projects = order.len();
+            // Builders pick up projects in scheduleOrder; results are reported in Order(). Run sequentially in
+            // Order() (see the file comment), reporting each project once it is built.
+            for config in order {
+                let path = self.to_path(config);
+                let task = self.get_task(&path);
+                self.build_or_clean_project(task, &path);
+                task.report(self, &path, &mut build_result);
+            }
+        } else {
+            // Circularity errors prevent any project from being built
+            build_result.status = Some(ExitStatus::ProjectReferenceCycle_OutputsSkipped);
+            let report_diagnostic = self.create_diagnostic_reporter(None);
+            for &err in self.errors.borrow().iter() {
+                report_diagnostic(err);
+            }
+            build_result.errors = Some(self.errors.borrow().clone());
+        }
+        build_result.report(self);
+        build_result
+    }
+
+    // orchestrator.go:888
+    fn build_or_clean_project(&'static self, task: P<BuildTask>, path: &Path) {
+        let builder: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+        *task.result.borrow_mut() = Some(taskResult::new(builder));
+        let report_status = self.create_builder_status_reporter(Some(task));
+        let diagnostic_reporter = self.create_diagnostic_reporter(Some(task));
+        {
+            let mut result = task.result.borrow_mut();
+            let result = result.as_mut().unwrap();
+            result.report_status = Some(report_status);
+            result.diagnostic_reporter = Some(diagnostic_reporter);
+        }
+        if !self.opts.command.build_options.clean.is_true() {
+            task.get().build_project(self, path);
+        } else {
+            task.clean_project(self, path);
+        }
+        if self.opts.testing.is_none() {
+            // The program is only needed by Testing.OnProgram at report time; drop it now so a task
+            // that has finished but is not yet reported does not keep its program alive.
+            task.result.borrow_mut().as_mut().unwrap().program = None;
+        }
+    }
+
+    // orchestrator.go:906
+    pub(crate) fn get_writer(&self, task: Option<P<BuildTask>>) -> Writer<'static> {
+        let sys = self.opts.sys;
+        match task {
+            None => std::rc::Rc::new(move |t: &str| sys.write(t)),
+            Some(task) => {
+                let builder = {
+                    let result = task.result.borrow();
+                    result.as_ref().unwrap().builder.clone()
+                };
+                std::rc::Rc::new(move |t: &str| builder.lock().unwrap().push_str(t))
+            }
+        }
+    }
+
+    // orchestrator.go:913
+    pub(crate) fn create_builder_status_reporter(&self, task: Option<P<BuildTask>>) -> DiagnosticReporter<'static> {
+        create_builder_status_reporter(self.opts.sys, self.get_writer(task), &self.opts.command.compiler_options, self.opts.testing)
+    }
+
+    // orchestrator.go:917
+    pub(crate) fn create_diagnostic_reporter(&self, task: Option<P<BuildTask>>) -> DiagnosticReporter<'static> {
+        create_diagnostic_reporter_with_writer(self.opts.sys, self.get_writer(task), Some(&self.opts.command.compiler_options))
+    }
+}
+
+// orchestrator.go:921
+pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
+    let sys = opts.sys;
+    let compare_paths_options =
+        ComparePathsOptions { current_directory: sys.get_current_directory().to_string(), use_case_sensitive_file_names: sys.fs().use_case_sensitive_file_names() };
+    let error_summary_reporter = create_report_error_summary(sys, &opts.command.compiler_options);
+    let orchestrator: &'static Orchestrator = Box::leak(Box::new(Orchestrator {
+        opts,
+        compare_paths_options,
+        host: OnceLock::new(),
+        tasks: RefCell::new(FxHashMap::default()),
+        order: RefCell::new(Vec::new()),
+        errors: RefCell::new(Vec::new()),
+        graph_generated: Cell::new(false),
+        error_summary_reporter,
+        schedule_order: RefCell::new(Vec::new()),
+    }));
+    let compiler_host: Arc<dyn CompilerHost> = new_cached_fs_compiler_host(sys.get_current_directory(), sys.fs(), sys.default_library_path(), None, None);
+    let h: &'static host = Box::leak(Box::new(host {
+        orchestrator: OnceLock::new(),
+        host: compiler_host,
+        extended_config_cache: Mutex::new(Arc::new(tsc::ExtendedConfigCache::default())),
+        source_files: parseCache::default(),
+        config_times: Mutex::new(FxHashMap::default()),
+        resolved_references: parseCache::default(),
+        m_times: Mutex::new(Arc::new(Mutex::new(FxHashMap::default()))),
+    }));
+    let _ = h.orchestrator.set(P::from_static(orchestrator));
+    let _ = orchestrator.host.set(h);
+    orchestrator
+}

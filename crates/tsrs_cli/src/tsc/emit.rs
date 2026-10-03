@@ -16,6 +16,19 @@ pub struct EmitInput<'a> {
     pub compile_times: CompileTimes,
     // Go `EmitInput.ProgramLike` when it is an `*incremental.Program` (only under TSRS_EMIT=1).
     pub incremental: Option<P<tsrs_incremental::Program>>,
+    // Go `EmitInput.Writer` (nil here means `sys.Writer()`), `EmitInput.WriteFile` and `EmitInput.Testing`.
+    pub writer: Option<&'a (dyn Fn(&str) + 'a)>,
+    pub write_file: Option<tsrs_compiler::WriteFile<'a>>,
+    pub testing: Option<&'a dyn super::CommandLineTesting>,
+}
+
+impl EmitInput<'_> {
+    pub fn write(&self, text: &str) {
+        match self.writer {
+            Some(w) => w(text),
+            None => self.sys.write(text),
+        }
+    }
 }
 
 pub fn emit_and_report_statistics(input: EmitInput) -> (CompileAndEmitResult, Option<Statistics>) {
@@ -30,9 +43,9 @@ pub fn emit_and_report_statistics(input: EmitInput) -> (CompileAndEmitResult, Op
     let options = input.config.compiler_options().unwrap();
     if options.diagnostics.is_true() || options.extended_diagnostics.is_true() {
         let stats = tsrs_core::phases::time("Statistics", || statistics_from_program(&input, &result.times));
-        stats.report(input.sys);
+        stats.report(&|t: &str| input.write(t), input.testing);
         if tsrs_compiler::assignment_stats_enabled() {
-            input.sys.write(&input.program.checker_assignment_report());
+            input.write(&input.program.checker_assignment_report());
         }
         statistics = Some(stats);
     }
@@ -106,11 +119,22 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
     tsrs_core::phases::time("List files", || list_files(input, &emit_result));
 
     tsrs_core::phases::time("Error summary", || (input.report_error_summary)(&all_diagnostics));
-    CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, status: ExitStatus::Success, times }
+    let emitted_files = emit_result.emitted_files.clone();
+    CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, emitted_files, status: ExitStatus::Success, times }
 }
 
 // emit.go:142
 fn list_files(input: &EmitInput, emit_result: &tsrs_compiler::EmitResult) {
+    if let Some(testing) = input.testing {
+        testing.on_list_files_start(&|t: &str| input.write(t));
+    }
+    list_files_worker(input, emit_result);
+    if let Some(testing) = input.testing {
+        testing.on_list_files_end(&|t: &str| input.write(t));
+    }
+}
+
+fn list_files_worker(input: &EmitInput, emit_result: &tsrs_compiler::EmitResult) {
     let options = input.program.options();
     if options.list_emitted_files.is_true() {
         let mut out = String::new();
@@ -119,19 +143,19 @@ fn list_files(input: &EmitInput, emit_result: &tsrs_compiler::EmitResult) {
             out.push_str(&tsrs_core::tspath::get_normalized_absolute_path(file, input.program.get_current_directory()));
             out.push('\n');
         }
-        input.sys.write(&out);
+        input.write(&out);
     }
     if options.explain_files.is_true() {
         let mut out = Vec::new();
         input.program.explain_files(&mut out);
-        input.sys.write(&String::from_utf8_lossy(&out));
+        input.write(&String::from_utf8_lossy(&out));
     } else if options.list_files.is_true() || options.list_files_only.is_true() {
         let mut out = String::new();
         for file in input.program.get_source_files() {
             out.push_str(file.file_name());
             out.push('\n');
         }
-        input.sys.write(&out);
+        input.write(&out);
     }
 }
 
@@ -179,11 +203,14 @@ fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<t
     let mut emit_result = Some(EmitResult { emit_skipped: true, ..Default::default() });
     if !program_like.options().list_files_only.is_true() {
         let emit_start = input.sys.now();
-        emit_result = program_like.emit(&ctx, EmitOptions::default());
+        emit_result = program_like.emit(&ctx, EmitOptions { write_file: input.write_file, ..Default::default() });
         times.emit_time += input.sys.now() - emit_start;
     }
     if let Some(emit_result) = &emit_result {
         all_diagnostics.extend(emit_result.diagnostics.iter().copied());
+    }
+    if let Some(testing) = input.testing {
+        testing.on_emitted_files(emit_result.as_ref());
     }
 
     let all_diagnostics = sort_and_deduplicate_diagnostics(&all_diagnostics);
@@ -195,6 +222,7 @@ fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<t
 
     (input.report_error_summary)(&all_diagnostics);
     // Go reads EmitResult.EmitSkipped through a nil result here only when the incremental program was cancelled.
+    let emitted_files = emit_result.as_ref().map(|r| r.emitted_files.clone()).unwrap_or_default();
     let emit_skipped = emit_result.map(|r| r.emit_skipped).unwrap_or(false);
-    CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, status: ExitStatus::Success, times }
+    CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, emitted_files, status: ExitStatus::Success, times }
 }
