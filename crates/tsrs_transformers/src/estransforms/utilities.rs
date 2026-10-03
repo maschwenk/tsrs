@@ -1,7 +1,8 @@
 // Port of estransforms/utilities.go.
 
 use crate::*;
-use tsrs_core::collections::OrderedSet;
+use tsrs_core::collections::{OrderedSet, OrderedSetExt};
+use super::async_::{assignment_target_contains_super_property, is_update_expression};
 
 // utilities.go:10
 pub(crate) fn convert_class_declaration_to_class_expression(emit_context: P<EmitContext>, node: P<Node>) -> P<Node> {
@@ -37,13 +38,13 @@ pub(crate) fn create_not_null_condition(emit_context: P<EmitContext>, left: P<No
     )
 }
 
-// utilities.go:55
 // superAccessState tracks super property/element accesses and super property assignments
 // within async function or async generator bodies. It is embedded by both asyncTransformer
 // and forawaitTransformer to share the tracking logic.
+// utilities.go:55
 #[derive(Default)]
 pub struct superAccessState {
-    pub factory: Cell<Option<&'static printer::NodeFactory>>,
+    pub factory: OnceCell<&'static printer::NodeFactory>,
 
     // Keeps track of property names accessed on super (`super.x`) within async functions.
     pub captured_super_properties: RefCell<Option<OrderedSet<String>>>,
@@ -67,18 +68,19 @@ impl superAccessState {
 
     // utilities.go:69
     pub fn init_super_access_visitor(&'static self, emit_context: P<EmitContext>, factory: &'static printer::NodeFactory) {
-        self.factory.set(Some(factory));
-        let _ = self.super_access_visitor.set(emit_context.new_node_visitor(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| Some(self.visit_super_access_node(n)))));
+        let _ = self.factory.set(factory);
+        let s = P::from_static(self);
+        let _ = self.super_access_visitor.set(emit_context.new_node_visitor(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| Some(s.visit_super_access_node(n)))));
     }
 
-    // utilities.go:77
     // visitSuperAccessNode walks the async/generator body and replaces super property/element
     // accesses with _super/_superIndex references. This is necessary because the async body
     // ends up inside a generator function where `super` is not valid.
-    fn visit_super_access_node(&self, node: P<Node>) -> P<Node> {
+    // utilities.go:77
+    pub fn visit_super_access_node(&self, node: P<Node>) -> P<Node> {
         match node.kind() {
             Kind::CallExpression => {
-                if ast::is_super_property(node.as_call_expression().expression) {
+                if ast::is_super_property(node.expression().unwrap()) {
                     return self.substitute_call_expression_with_super_access(node, &mut self.super_access_visitor());
                 }
                 self.super_access_visitor().visit_each_child(Some(node)).unwrap()
@@ -115,47 +117,48 @@ impl superAccessState {
         self.super_access_visitor().visit_node(Some(body)).unwrap()
     }
 
-    // utilities.go:116
     // substituteCallExpressionWithSuperAccess handles super.x(args) and super[x](args).
+    // utilities.go:116
     pub fn substitute_call_expression_with_super_access(&self, call: P<Node>, visitor: &mut NodeVisitor) -> P<Node> {
+        let f = self.factory();
         let expression = call.as_call_expression().expression;
+        let target;
 
-        let target = if ast::is_property_access_expression(expression) {
+        if ast::is_property_access_expression(expression) {
             // super.x(args) → _super.x.call(this, args)
-            self.factory().new_property_access_expression(self.super_binding.get().unwrap(), None, expression.as_property_access_expression().name(), NodeFlags::None)
+            target = f.new_property_access_expression(self.super_binding.get().unwrap(), None, expression.as_property_access_expression().name, NodeFlags::None);
         } else if ast::is_element_access_expression(expression) {
             // super[x](args) → _superIndex(x).call(this, args) or _superIndex(x).value.call(this, args)
-            self.create_super_element_access_in_async_method(expression.as_element_access_expression().argument_expression)
+            target = self.create_super_element_access_in_async_method(expression.as_element_access_expression().argument_expression);
         } else {
             return visitor.visit_each_child(Some(call)).unwrap();
-        };
+        }
 
-        let call_target = self.factory().new_property_access_expression(target, None, self.factory().new_identifier("call"), NodeFlags::None);
+        let call_target = f.new_property_access_expression(target, None, f.new_identifier("call"), NodeFlags::None);
 
         let mut all_args: Vec<P<Node>> = Vec::new();
-        all_args.push(self.factory().new_this_expression());
-        let arguments = call.as_call_expression().arguments;
-        if let Some(visited_args) = visitor.visit_nodes(Some(arguments)) {
+        all_args.push(f.new_this_expression());
+        let visited_args = visitor.visit_nodes(Some(call.as_call_expression().arguments));
+        if let Some(visited_args) = visited_args {
             all_args.extend_from_slice(visited_args.nodes());
         }
 
-        let result = self.factory().new_call_expression(call_target, None, None, self.factory().new_node_list(all_args), NodeFlags::None);
+        let result = f.new_call_expression(call_target, None, None, f.new_node_list(all_args), NodeFlags::None);
         result.set_loc(call.loc());
         result
     }
 
-    // utilities.go:158
     // createSuperElementAccessInAsyncMethod creates _superIndex(x) or _superIndex(x).value.
+    // utilities.go:158
     pub fn create_super_element_access_in_async_method(&self, argument_expression: P<Node>) -> P<Node> {
-        let super_index_call =
-            self.factory().new_call_expression(self.super_index_binding.get().unwrap(), None, None, self.factory().new_node_list(vec![argument_expression]), NodeFlags::None);
+        let f = self.factory();
+        let super_index_call = f.new_call_expression(self.super_index_binding.get().unwrap(), None, None, f.new_node_list(vec![argument_expression]), NodeFlags::None);
         if self.has_super_property_assignment.get() {
-            return self.factory().new_property_access_expression(super_index_call, None, self.factory().new_identifier("value"), NodeFlags::None);
+            return f.new_property_access_expression(super_index_call, None, f.new_identifier("value"), NodeFlags::None);
         }
         super_index_call
     }
 
-    // utilities.go:182
     // createSuperAccessVariableStatement creates a variable named `_super` with accessor
     // properties for the given property names.
     //
@@ -165,19 +168,19 @@ impl superAccessState {
     //	    x: { get: () => super.x },                           // read-only
     //	    x: { get: () => super.x, set: (v) => super.x = v }, // read-write
     //	});
+    // utilities.go:182
     pub fn create_super_access_variable_statement(&self) -> P<Node> {
         let f = self.factory();
         let mut accessors: Vec<P<Node>> = Vec::new();
 
         let names: Vec<String> = self.captured_super_properties.borrow().as_ref().map(|s| s.iter().cloned().collect()).unwrap_or_default();
         for name in names {
-            let name: &'static str = alloc_str(&name);
+            let name = alloc_str(&name);
             let mut descriptor_properties: Vec<P<Node>> = Vec::new();
 
             // getter: get: () => super.name
             let getter_body = f.new_property_access_expression(f.new_keyword_expression(Kind::SuperKeyword), None, f.new_identifier(name), NodeFlags::None);
-            let getter_arrow =
-                f.new_arrow_function(None, None, Some(f.new_node_list(vec![])), None, None, Some(f.new_token(Kind::EqualsGreaterThanToken)), Some(getter_body));
+            let getter_arrow = f.new_arrow_function(None, None, Some(f.new_node_list(vec![])), None, None, Some(f.new_token(Kind::EqualsGreaterThanToken)), Some(getter_body));
             let getter = f.new_property_assignment(None, f.new_identifier("get"), None, None, getter_arrow);
             descriptor_properties.push(getter);
 
@@ -186,8 +189,7 @@ impl superAccessState {
                 let v_param = f.new_parameter_declaration(None, None, f.new_identifier("v"), None, None, None);
                 let super_prop = f.new_property_access_expression(f.new_keyword_expression(Kind::SuperKeyword), None, f.new_identifier(name), NodeFlags::None);
                 let assign_expr = f.new_assignment_expression(super_prop, f.new_identifier("v"));
-                let setter_arrow =
-                    f.new_arrow_function(None, None, Some(f.new_node_list(vec![v_param])), None, None, Some(f.new_token(Kind::EqualsGreaterThanToken)), Some(assign_expr));
+                let setter_arrow = f.new_arrow_function(None, None, Some(f.new_node_list(vec![v_param])), None, None, Some(f.new_token(Kind::EqualsGreaterThanToken)), Some(assign_expr));
                 let setter = f.new_property_assignment(None, f.new_identifier("set"), None, None, setter_arrow);
                 descriptor_properties.push(setter);
             }
@@ -212,11 +214,11 @@ impl superAccessState {
         f.new_variable_statement(None, decl_list)
     }
 
-    // utilities.go:251
     // trackSuperAccess records super property/element accesses and super property assignments
     // for the enclosing async method body. Called from both the main visitor and auxiliary
     // visitors to ensure super accesses are tracked regardless of whether the node has
     // transform flags.
+    // utilities.go:251
     pub fn track_super_access(&self, node: P<Node>) {
         if self.captured_super_properties.borrow().is_none() {
             return;
@@ -224,8 +226,7 @@ impl superAccessState {
         match node.kind() {
             Kind::PropertyAccessExpression => {
                 if node.expression().unwrap().kind() == Kind::SuperKeyword {
-                    let text = node.name().unwrap().text().to_string();
-                    self.captured_super_properties.borrow_mut().as_mut().unwrap().insert(text);
+                    self.captured_super_properties.borrow_mut().as_mut().unwrap().add(node.name().unwrap().text().to_string());
                 }
             }
             Kind::ElementAccessExpression => {
@@ -265,56 +266,4 @@ pub(crate) fn create_accessor_property_backing_field(f: &printer::NodeFactory, n
         None, /*typeNode*/
         initializer,
     )
-}
-
-// async.go:899 (used by superAccessState.trackSuperAccess; private here so that the async.go port can define its own)
-// assignmentTargetContainsSuperProperty checks top-down whether an assignment target
-// expression contains a super property or element access (super.x or super[x]).
-// This avoids relying on parent pointers (IsAssignmentTarget) which may not be set
-// on synthesized AST nodes from prior transforms.
-fn assignment_target_contains_super_property(node: P<Node>) -> bool {
-    match node.kind() {
-        Kind::PropertyAccessExpression | Kind::ElementAccessExpression => node.expression().unwrap().kind() == Kind::SuperKeyword,
-        Kind::ParenthesizedExpression => assignment_target_contains_super_property(node.as_parenthesized_expression().expression()),
-        Kind::ArrayLiteralExpression => node.as_array_literal_expression().elements.nodes().iter().any(|&e| assignment_target_contains_super_property(e)),
-        Kind::ObjectLiteralExpression => {
-            for &prop in node.as_object_literal_expression().properties.nodes() {
-                match prop.kind() {
-                    Kind::PropertyAssignment => {
-                        if assignment_target_contains_super_property(prop.as_property_assignment().initializer()) {
-                            return true;
-                        }
-                    }
-                    Kind::ShorthandPropertyAssignment => {
-                        if assignment_target_contains_super_property(prop.name().unwrap()) {
-                            return true;
-                        }
-                    }
-                    Kind::SpreadAssignment => {
-                        if assignment_target_contains_super_property(prop.as_spread_assignment().expression) {
-                            return true;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            false
-        }
-        Kind::SpreadElement => assignment_target_contains_super_property(node.as_spread_element().expression),
-        _ => false,
-    }
-}
-
-// async.go:931 (see above)
-// isUpdateExpression checks if a prefix/postfix unary expression is ++ or --.
-fn is_update_expression(node: P<Node>) -> bool {
-    if ast::is_prefix_unary_expression(node) {
-        let op = node.as_prefix_unary_expression().operator;
-        return op == Kind::PlusPlusToken || op == Kind::MinusMinusToken;
-    }
-    if ast::is_postfix_unary_expression(node) {
-        let op = node.as_postfix_unary_expression().operator;
-        return op == Kind::PlusPlusToken || op == Kind::MinusMinusToken;
-    }
-    false
 }
