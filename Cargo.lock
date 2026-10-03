@@ -337,6 +337,7 @@ dependencies = [
  "libc",
  "mimalloc",
  "rustc-hash",
+ "similar",
  "tsrs_ast",
  "tsrs_binder",
  "tsrs_compiler",
