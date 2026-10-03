@@ -1,0 +1,4 @@
+true
+sed -i "s/\"outDir\": \"dist\"/\"outDir\": \"dist\", \"declarationMap\": true/" tsconfig.json
+true
+sed -i "s/, \"declarationMap\": true//" tsconfig.json

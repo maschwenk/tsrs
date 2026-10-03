@@ -308,6 +308,10 @@ impl BuildTask {
         let writer = move |t: &str| writer_builder.lock().unwrap().push_str(t);
         // Called from the checker threads: BuildTask and Orchestrator are Sync (Mutex/atomic state).
         let write_file = move |file_name: &str, text: &str, data: &mut WriteFileData| this.write_file(orchestrator, file_name, text, data);
+        // Go passes `orchestrator.host.mTimes` (the map pointer). Take the Arc here: a guard created inside the call's
+        // argument list would live until the call returns, and `host.get_m_time` (WriteFile of a `.d.ts` that differs
+        // only in its map, emitfileshandler.go:240) locks the same mutex during emit, which deadlocked.
+        let testing_m_times_cache = host.m_times.lock().unwrap().clone();
         let (result, statistics) = emit_and_report_statistics(EmitInput {
             sys,
             program,
@@ -319,7 +323,7 @@ impl BuildTask {
             writer: Some(&writer),
             write_file: Some(&write_file),
             testing: orchestrator.opts.testing,
-            testing_m_times_cache: Some(host.m_times.lock().unwrap().clone()),
+            testing_m_times_cache: Some(testing_m_times_cache),
         });
         {
             let mut r = self.result.lock().unwrap();

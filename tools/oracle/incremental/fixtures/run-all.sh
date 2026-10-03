@@ -9,4 +9,5 @@ run inc1 inc1.steps
 run inc2 inc2.steps
 run b1 b1.steps -b app --verbose
 run b1 b1-outputs.steps -b app --verbose
+run dmap dmap.steps -b . --verbose --builders 4
 exit $fail
