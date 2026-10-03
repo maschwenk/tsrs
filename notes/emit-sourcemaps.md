@@ -60,6 +60,16 @@ Branch `emit/sourcemaps`. Plan: docs/EMIT.md section 7 (E7).
 - Reference binary: the npm nightly 7.1.0-dev.20260929.1 predates the pinned commit and lacks #64460 (declaration
   maps of `export default <identifier>`); with it 187 `.d.ts.map` differ. Use a tsgo built from ts-ref.
 
+## Local integration (unpushed `int-local` = this branch + origin/emit/transforms 3dde949), 2026-10-03
+
+- `--baselines js`: 7322 pass, 1 fail, 6071 crash (other waves' stubs).
+- `.js.map`: 86 pass, **0 fail**, 63 crash; `.sourcemap.txt`: 93 pass, **0 fail**, 63 crash. Of the 151 / 158 reference
+  baselines, every non-passing one crashes in another wave's stub (forawait 36, classfields 15, commonjsmodule 6,
+  jsx 3, esdecorator 2, legacydecorators 1) or is a content-mapper test (2, unsupported).
+- Monorepo oracle, full mode (configs' own sourceMap/declarationMap): 83/103 packages fully identical, 8996 files
+  identical, **0 different**, 1252 not emitted (the 20 other packages panic in metadata 8, classfields 4,
+  legacydecorators 3, commonjsmodule 3, jsx 2). Every emitted map is identical: 2317 `.js.map`, 2166 `.d.ts.map`.
+
 ## Left
 
 - `.js.map` / `.sourcemap.txt` baseline counts and the full monorepo oracle with maps, once the E3/E4 transformers
