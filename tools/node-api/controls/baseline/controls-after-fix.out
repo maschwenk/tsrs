@@ -30,4 +30,16 @@ ok   budget: large wrong reorder: getSymbolsInScope inconclusive (want inconclus
 ok   budget: small correct reorder: getSymbolsInScope equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":1,"oracleUnstable":0,"unverified":0}
 ok   budget: small wrong reorder: getSymbolsInScope differs (want differs) {"okEqual":0,"strictEqual":0,"differ":1,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
 ok   N4 async-only binary method from the schema: getSourceFile equal (want equal) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
-all 32 controls hold
+ok   R1 n1b: run 2 unaligned, then run-2 value for run 1's request: getTypeOfSymbol inconclusive (want differs|inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":1}
+ok   R1 n1b: exchange accepted on run 1: getSymbolAtPosition equal (want equal) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   R1 n1b control: getTypeOfSymbol equal (want equal) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   R1 mirror n1c: run 1 errored, then run-1 value on run 2's history: getTypeOfSymbol inconclusive (want differs|inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":1}
+ok   R1 mirror n1c: exchange accepted on run 2: getSymbolAtPosition equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   R1 mirror n1c control: getTypeOfSymbol equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   R2 same-key elements in a third order (identity from history): getSymbolsInScope equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":1,"oracleUnstable":0,"unverified":0}
+ok   R2 wrong: two elements claim one parent: getSymbolsInScope differs (want differs) {"okEqual":0,"strictEqual":0,"differ":1,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   chain-use after backtracking: getTypeOfSymbol equal (want equal) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   chain-use-swap (abandoned branch handle): getTypeOfSymbol inconclusive (want differs|inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":1}
+ok   N4 async-only binary, same AST: getSourceFile equal (want equal) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   N4 async-only binary, one AST byte different: getSourceFile differs (want differs) {"okEqual":0,"strictEqual":0,"differ":1,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+all 44 controls hold

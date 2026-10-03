@@ -1,0 +1,12 @@
+n1b                    getSymbolAtPosition equal null
+n1b                    getTypeOfSymbol equal null
+n1b-ctl                getSymbolAtPosition equal null
+n1b-ctl                getTypeOfSymbol equal null
+same-key-order         getSymbolsInScope differs {"path":"$[0].parent.id","a":1000,"b":5001,"bijection":"sym"}
+same-key-order-wrong   getSymbolsInScope differs {"path":"$[0].parent.id","a":1000,"b":5001,"bijection":"sym"}
+chain-use              getSymbolsInScope equal null
+chain-use              getTypeOfSymbol equal null
+chain-use-swap         getSymbolsInScope equal null
+chain-use-swap         getTypeOfSymbol inconclusive {"path":"$branch","a":"history locked to oracle run 1","b":"matches only the other oracle run","inconclusive":true}
+n4-ok                  getSourceFile equal null
+n4-wrong               getSourceFile differs {"path":"$.data","a":"QVNUOiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL3NyYy9hLnRzOkVORA==","b":"QVNUOiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL3NyYy9hLnRzOkVuRA=="}

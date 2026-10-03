@@ -55,6 +55,19 @@ const cases = [
     ["budget: small correct reorder", "scen2.mjs", "bucket-small", ["--a2", "syn-a2"], "getSymbolsInScope", VERIFIED],
     ["budget: small wrong reorder", "scen2.mjs", "bucket-small-wrong", ["--a2", "syn-a2"], "getSymbolsInScope", ["differs"]],
     ["N4 async-only binary method from the schema", "scen2.mjs", "async-binary-only", [], "getSourceFile", VERIFIED],
+    // Codec re-audit of 0333222 (scen3.mjs, verbatim except the mk.mjs import and its work-tree constant).
+    ["R1 n1b: run 2 unaligned, then run-2 value for run 1's request", "scen3.mjs", "n1b", ["--a2", "syn-a2"], "getTypeOfSymbol", NOT_VERIFIED],
+    ["R1 n1b: exchange accepted on run 1", "scen3.mjs", "n1b", ["--a2", "syn-a2"], "getSymbolAtPosition", VERIFIED],
+    ["R1 n1b control", "scen3.mjs", "n1b-ctl", ["--a2", "syn-a2"], "getTypeOfSymbol", VERIFIED],
+    ["R1 mirror n1c: run 1 errored, then run-1 value on run 2's history", "scen-extra.mjs", "n1c", ["--a2", "syn-a2"], "getTypeOfSymbol", NOT_VERIFIED],
+    ["R1 mirror n1c: exchange accepted on run 2", "scen-extra.mjs", "n1c", ["--a2", "syn-a2"], "getSymbolAtPosition", VERIFIED],
+    ["R1 mirror n1c control", "scen-extra.mjs", "n1c-ctl", ["--a2", "syn-a2"], "getTypeOfSymbol", VERIFIED],
+    ["R2 same-key elements in a third order (identity from history)", "scen3.mjs", "same-key-order", ["--a2", "syn-a2"], "getSymbolsInScope", VERIFIED],
+    ["R2 wrong: two elements claim one parent", "scen3.mjs", "same-key-order-wrong", ["--a2", "syn-a2"], "getSymbolsInScope", ["differs"]],
+    ["chain-use after backtracking", "scen3.mjs", "chain-use", ["--a2", "syn-a2"], "getTypeOfSymbol", VERIFIED],
+    ["chain-use-swap (abandoned branch handle)", "scen3.mjs", "chain-use-swap", ["--a2", "syn-a2"], "getTypeOfSymbol", NOT_VERIFIED],
+    ["N4 async-only binary, same AST", "scen3.mjs", "n4-ok", [], "getSourceFile", VERIFIED],
+    ["N4 async-only binary, one AST byte different", "scen3.mjs", "n4-wrong", [], "getSourceFile", ["differs"]],
 ];
 
 let failed = 0;

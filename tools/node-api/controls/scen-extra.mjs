@@ -72,3 +72,13 @@ if (scen === "ce10-ctl") {
     run("syn-a2", [{ mode: "sync", test: "t", ex: [[...q1, sym(1, "x")], [...q2, [sym(3, "z"), sym(1, "x"), sym(2, "y")]]] }]);
     run("syn-b", [{ mode: "sync", test: "t", ex: [[...q1, sym(5, "x")], [...q2, [sym(6, "y"), sym(7, "z"), sym(5, "x")]]] }]);
 }
+if (scen === "n1c" || scen === "n1c-ctl") {
+    // Mirror of the codec's n1b: oracle run 1 errored in exchange 1 (run 2 answered), the candidate matches run 2
+    // and must be locked to it; in exchange 2 the candidate answers with run 1's value ("tx", correct per run 2: "ty").
+    const q1 = ["getSymbolAtPosition", { ...P, file: "/f.ts", position: 4 }];
+    const tos = id => ["getTypeOfSymbol", { ...P, symbol: { kind: 1, id } }];
+    const T = (id, v) => ({ id, flags: 128, value: v });
+    run("syn-a", [{ mode: "sync", test: "t", ex: [[...q1, "boom", "error"], [...tos(1), T(7, "tx")]] }]);
+    run("syn-a2", [{ mode: "sync", test: "t", ex: [[...q1, sym(2, "x")], [...tos(2), T(8, "ty")]] }]);
+    run("syn-b", [{ mode: "sync", test: "t", ex: [[...q1, sym(5, "x")], [...tos(5), T(9, scen === "n1c" ? "tx" : "ty")]] }]);
+}

@@ -16,3 +16,7 @@ Synthetic captures in the proxy.mjs format that pin down compare-responses.mjs b
 - `scen2.mjs` comes from the codec lane's re-audit of `c3f1717` (N1–N4), sha256 `d0c3b6e2…c471de`. Only the
   `mk.mjs` import and the work-tree constant of the async-only-binary scenario are adapted to this checkout.
   `baseline/codec-run2-at-c3f1717.out` is that audit reproduced unchanged here.
+- `scen3.mjs` comes from the codec lane's re-audit of `0333222` (R1, R2), sha256 `79804ba1…27f5fd`, adapted the same
+  way. `baseline/codec-run3-at-0333222.out` is that audit reproduced here; all statuses are identical, and only the
+  base64 placeholder length differs because the checkout path differs. `scen-extra.mjs` `n1c` is the mirror of
+  R1, where run 1 errored and run 2 answered.
