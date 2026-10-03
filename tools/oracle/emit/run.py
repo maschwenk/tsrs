@@ -5,8 +5,9 @@ every emitted file byte for byte.
     tools/oracle/emit/run.py <tsconfig|dir> [--name N] [--go-out DIR] [--rs-out DIR] [--json] [-- extra tsc flags]
 
 Both compilers run with the same flags; every output path is redirected (`--outDir`, `--declarationDir`,
-`--tsBuildInfoFile`), so nothing is ever written into the project. `--incremental false` is not passed: the
-reference writes its build info to the redirected path, which lies outside the compared output tree.
+`--tsBuildInfoFile`; by default <W>/ref/out and <W>/rs/out), so nothing is ever written into the project.
+`--incremental false` is not passed: the reference writes its build info to the redirected path, which lies outside
+the compared output tree.
 
 Reference binary: $TSGO, else $TSRS_WORK/bin/tsgo-ref. tsrs binary: $TSRS (default target/release/tsrs), run with
 TSRS_EMIT=1.
@@ -97,8 +98,26 @@ def main():
     project = os.path.abspath(args.project)
     name = args.name or os.path.basename(project.rstrip("/"))
     work = os.path.join(REPO, "target", "scratch", "emit-oracle", name)
-    go_out = os.path.abspath(args.go_out or os.path.join(work, "ref"))
-    rs_out = os.path.abspath(args.rs_out or os.path.join(work, "rs"))
+    # Same basename and depth on both sides: tsbuildinfo stores outDir/declarationDir/tsBuildInfoFile and source
+    # paths relative to its own directory, so the two layouts must serialize identically (`--buildinfo`).
+    go_out = os.path.abspath(args.go_out or os.path.join(work, "ref", "out"))
+    rs_out = os.path.abspath(args.rs_out or os.path.join(work, "rs", "out"))
+    # The two sides must write disjoint trees: with equal or nested dirs one compiler overwrites (or deletes) the
+    # other's output and the comparison can pass falsely. Checked before anything is deleted or run.
+    def overlaps(a, b):
+        a, b = os.path.realpath(a), os.path.realpath(b)
+        return a == b or a.startswith(b + os.sep) or b.startswith(a + os.sep)
+
+    if any(overlaps(a, b) for a in (go_out, go_out + ".tsbuildinfo") for b in (rs_out, rs_out + ".tsbuildinfo")):
+        print(f"--go-out {go_out} and --rs-out {rs_out} overlap; the reference and tsrs outputs must be disjoint",
+              file=sys.stderr)
+        sys.exit(2)
+    if args.buildinfo:
+        layout = lambda out: (os.path.basename(out), os.path.relpath(project, os.path.dirname(out)))
+        if layout(go_out) != layout(rs_out):
+            print(f"--buildinfo needs --go-out and --rs-out with the same basename and the same path to the project "
+                  f"(got {layout(go_out)} and {layout(rs_out)}): tsbuildinfo serializes these paths", file=sys.stderr)
+            sys.exit(2)
     for d in (go_out, rs_out):
         shutil.rmtree(d, ignore_errors=True)
         if os.path.exists(d + ".tsbuildinfo"):
