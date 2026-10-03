@@ -44,6 +44,23 @@ func (p *probe) call(method string, params map[string]any) (result any, errText 
 	return v, ""
 }
 
+// callRaw sends a raw JSON params payload (e.g. with explicit nulls) through HandleRequest.
+func (p *probe) callRaw(method string, raw string) (result any, errText string) {
+	defer func() {
+		if r := recover(); r != nil {
+			result, errText = nil, fmt.Sprintf("panic: %v\n<stack>", r)
+		}
+	}()
+	res, err := p.s.HandleRequest(context.Background(), method, json.Value(raw))
+	if err != nil {
+		return nil, err.Error()
+	}
+	out, _ := json.Marshal(res)
+	var v any
+	_ = json.Unmarshal(out, &v)
+	return v, ""
+}
+
 func (p *probe) sp(kv ...any) map[string]any {
 	m := map[string]any{"snapshot": p.snap, "project": p.proj}
 	for i := 0; i < len(kv); i += 2 {
@@ -359,4 +376,36 @@ func TestTsrsCheckerShapes(t *testing.T) {
 	wrong("getIndexInfoOfType(kind 7)", "getIndexInfoOfType", p.sp("type", objID, "kind", 7))
 	wrong("signatureToSignatureDeclaration(kind 100000)", "signatureToSignatureDeclaration", p.sp("signature", get(sig0, "id"), "kind", 100000))
 	wrong("getParameterType(index -1)", "getParameterType", p.sp("signature", get(sig0, "id"), "index", -1))
+
+	// Missing / null / empty parameter values: Go decodes into zero values (DocumentIdentifier has a
+	// custom decoder; *DocumentIdentifier and slices take null as nil).
+	sp := fmt.Sprintf(`"snapshot":%v,"project":%q`, p.snap, p.proj)
+	for _, c := range [][2]string{
+		{"getSymbolAtPosition", `{` + sp + `,"position":0}`},
+		{"getSymbolAtPosition", `{` + sp + `,"file":null,"position":0}`},
+		{"getSymbolAtPosition", `{` + sp + `,"file":{},"position":0}`},
+		{"getSymbolAtPosition", `{` + sp + `,"file":{"uri":null},"position":0}`},
+		{"getSymbolAtPosition", `{` + sp + `,"file":5,"position":0}`},
+		{"getSymbolAtPosition", `null`},
+		{"getSymbolsOfSourceFiles", `{` + sp + `,"files":[null]}`},
+		{"getSymbolsOfSourceFiles", `{` + sp + `,"files":[{}]}`},
+		{"getSymbolsOfSourceFiles", `{` + sp + `,"files":null}`},
+		{"resolveName", `{` + sp + `,"name":"Array","meaning":788968,"file":null,"position":0}`},
+		{"resolveName", `{` + sp + `,"name":"box","meaning":111551,"file":"/p/main.ts","position":null}`},
+		{"getSymbolsInScope", `{` + sp + `,"file":null,"position":0,"meaning":1}`},
+		{"getSymbolsAtPositions", `{` + sp + `,"file":"/p/main.ts","positions":null}`},
+		{"getTypesOfSymbols", `{` + sp + `,"symbols":[null]}`},
+		{"getTypeOfSymbol", `{` + sp + `,"symbol":null}`},
+		{"getSymbolAtLocation", `{` + sp + `,"location":null}`},
+		{"getSymbolAtPosition", `{` + sp + `,"file":true,"position":0}`},
+		{"getSymbolAtPosition", `{` + sp + `,"file":[],"position":0}`},
+	} {
+		r, e := p.callRaw(c[0], c[1])
+		label := "params:" + c[0] + " " + strings.ReplaceAll(c[1], sp, "<sp>")
+		if e != "" {
+			p.emit(label, map[string]any{"error": firstLine(e)})
+		} else {
+			p.emit(label, map[string]any{"result": r})
+		}
+	}
 }

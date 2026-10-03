@@ -11,9 +11,13 @@ use super::host::{CheckerError, CheckerResult};
 
 const MAX_SAFE_INTEGER: f64 = 9007199254740991.0;
 
+static EMPTY_OBJECT: std::sync::LazyLock<tsrs_core::collections::OrderedMap<String, Value>> = std::sync::LazyLock::new(Default::default);
+
 pub(crate) fn object<'a>(params: &'a Value, method: &str) -> CheckerResult<&'a tsrs_core::collections::OrderedMap<String, Value>> {
     match params {
         Value::Object(map) => Ok(map),
+        // encoding/json v2 decodes `null` into a struct as its zero value.
+        Value::Null => Ok(&EMPTY_OBJECT),
         _ => Err(CheckerError::invalid(format!("{method}: params must be an object"))),
     }
 }
@@ -119,19 +123,24 @@ impl<'a> Params<'a> {
         self.string("project")
     }
 
+    /// Go `DocumentIdentifier` field: a missing field is the zero value (empty file name), but an
+    /// explicit `null` reaches the custom decoder and is an invalid request, like any non-string,
+    /// non-object value.
     pub(crate) fn document(&self, name: &str) -> CheckerResult<DocumentIdentifier> {
-        match self.raw(name) {
+        match self.obj.get(name) {
             None => Ok(DocumentIdentifier::default()),
-            Some(v) => DocumentIdentifier::decode(v, name),
+            Some(v) => DocumentIdentifier::decode(v, &format!("/{name}")),
         }
     }
 
+    /// Go `*DocumentIdentifier`: missing and `null` are both nil.
     pub(crate) fn opt_document(&self, name: &str) -> CheckerResult<Option<DocumentIdentifier>> {
-        self.raw(name).map(|v| DocumentIdentifier::decode(v, name)).transpose()
+        self.raw(name).map(|v| DocumentIdentifier::decode(v, &format!("/{name}"))).transpose()
     }
 
+    /// Go `[]DocumentIdentifier`: `null` is a nil slice; a `null` element is an invalid request.
     pub(crate) fn documents(&self, name: &str) -> CheckerResult<Vec<DocumentIdentifier>> {
-        self.array(name)?.iter().map(|v| DocumentIdentifier::decode(v, name)).collect()
+        self.array(name)?.iter().enumerate().map(|(i, v)| DocumentIdentifier::decode(v, &format!("/{name}/{i}"))).collect()
     }
 
     pub(crate) fn symbol_ref(&self, name: &str) -> CheckerResult<SymbolReference> {
@@ -141,8 +150,12 @@ impl<'a> Params<'a> {
         }
     }
 
+    /// Go `[]SymbolReference`: a `null` element is the zero reference (Go structs decode `null` as zero).
     pub(crate) fn symbol_refs(&self, name: &str) -> CheckerResult<Vec<SymbolReference>> {
-        self.array(name)?.iter().map(|v| SymbolReference::decode(v, name)).collect()
+        self.array(name)?
+            .iter()
+            .map(|v| if matches!(v, Value::Null) { Ok(SymbolReference::default()) } else { SymbolReference::decode(v, name) })
+            .collect()
     }
 }
 
@@ -154,16 +167,30 @@ pub(crate) struct DocumentIdentifier {
 }
 
 impl DocumentIdentifier {
-    fn decode(v: &Value, name: &str) -> CheckerResult<DocumentIdentifier> {
-        match v {
-            Value::String(s) => Ok(DocumentIdentifier { file_name: s.clone(), uri: String::new() }),
-            Value::Object(map) => match map.get("uri") {
-                None | Some(Value::Null) => Ok(DocumentIdentifier::default()),
-                Some(Value::String(uri)) => Ok(DocumentIdentifier { file_name: String::new(), uri: uri.clone() }),
-                Some(_) => Err(wrong_type(name, "a document identifier ({ uri: string })")),
-            },
-            _ => Err(CheckerError::invalid(format!("DocumentIdentifier: expected string or object for field {name:?}"))),
-        }
+    /// Go `DocumentIdentifier.UnmarshalJSONFrom`. `pointer` is the JSON pointer of the value; the error
+    /// text after core's `failed to unmarshal *api.<T>: json: ` prefix is Go's.
+    fn decode(v: &Value, pointer: &str) -> CheckerResult<DocumentIdentifier> {
+        let got = match v {
+            Value::String(s) => return Ok(DocumentIdentifier { file_name: s.clone(), uri: String::new() }),
+            Value::Object(map) => {
+                // Go reads `uri` with `ReadToken().String()`: a scalar is taken as its literal text
+                // (`null` becomes the URI "null", which later fails as an invalid URI, as in Go).
+                return match map.get("uri") {
+                    None => Ok(DocumentIdentifier::default()),
+                    Some(Value::String(uri)) => Ok(DocumentIdentifier { file_name: String::new(), uri: uri.clone() }),
+                    Some(Value::Null) => Ok(DocumentIdentifier { file_name: String::new(), uri: "null".to_string() }),
+                    Some(Value::Bool(b)) => Ok(DocumentIdentifier { file_name: String::new(), uri: b.to_string() }),
+                    Some(n @ Value::Number(_)) => Ok(DocumentIdentifier { file_name: String::new(), uri: tsrs_core::json::marshal(n).unwrap_or_default() }),
+                    Some(_) => Err(CheckerError::invalid(format!("cannot unmarshal into Go api.DocumentIdentifier within \"{pointer}\": DocumentIdentifier: unsupported uri value"))),
+                };
+            }
+            Value::Null => "null",
+            Value::Number(_) => "number",
+            Value::Bool(true) => "true",
+            Value::Bool(false) => "false",
+            Value::Array(_) => "[",
+        };
+        Err(CheckerError::invalid(format!("cannot unmarshal into Go api.DocumentIdentifier within \"{pointer}\": DocumentIdentifier: expected string or object, got {got}")))
     }
 
     /// Go `DocumentIdentifier.ToFileName`.
