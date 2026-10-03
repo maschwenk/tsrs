@@ -16,8 +16,7 @@ pub fn new_import_elision_transformer(opt: &TransformOptions) -> Option<P<Transf
         panic!("ImportElisionTransformer should not be used with VerbatimModuleSyntax");
     }
     let tx = P::new(ImportElisionTransformer { base: Transformer::default(), compiler_options, current_source_file: Cell::new(None), emit_resolver: opt.emit_resolver });
-    tx.base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(emit_context));
-    Some(P::from_static(&tx.get().base))
+    Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(emit_context)))
 }
 
 impl ImportElisionTransformer {

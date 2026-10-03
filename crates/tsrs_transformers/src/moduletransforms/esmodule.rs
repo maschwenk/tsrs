@@ -29,8 +29,7 @@ pub fn new_es_module_transformer(opts: &TransformOptions) -> Option<P<Transforme
         import_require_statements: RefCell::new(None),
         helper_name_substitutions: RefCell::new(FxHashMap::default()),
     });
-    tx.base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(opts.context));
-    Some(P::from_static(&tx.get().base))
+    Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(opts.context)))
 }
 
 impl ESModuleTransformer {

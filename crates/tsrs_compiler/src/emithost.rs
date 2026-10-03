@@ -1,5 +1,5 @@
-// Port of compiler/emitHost.go: the host the declaration transformer runs against. Only the declaration-emit
-// surface is ported (the JS emit parts of Go's `printer.EmitHost` are not needed to compute diagnostics).
+// Port of compiler/emitHost.go: the host the declaration transformer and the emitter run against (Go's
+// `compiler.EmitHost` = `printer.EmitHost` (here `tsrs_transformers::EmitHost`) + `declarations.DeclarationEmitHost`).
 //
 // Go `newEmitHost` acquires the file's checker from the pool and keeps it locked until `done()`; here the caller
 // holds the checker (`CheckerHandle`/`&mut Checker`) and lends it to `checker_slot` for the duration of the
@@ -116,5 +116,69 @@ impl DeclarationEmitHost for EmitHost {
     // emitHost.go:120 (GetEmitResolver)
     fn get_emit_resolver(&self) -> Resolver {
         self.emit_resolver
+    }
+}
+
+impl tsrs_transformers::EmitHost for EmitHost {
+    // emitHost.go:113
+    fn options(&self) -> P<tsrs_core::CompilerOptions> {
+        self.program.options()
+    }
+
+    // emitHost.go:114
+    fn source_files(&self) -> &'static [P<SourceFile>] {
+        self.program.source_files()
+    }
+
+    // emitHost.go:122
+    fn use_case_sensitive_file_names(&self) -> bool {
+        self.program.use_case_sensitive_file_names()
+    }
+
+    // emitHost.go:115
+    fn get_current_directory(&self) -> &str {
+        self.program.get_current_directory()
+    }
+
+    // emitHost.go:116
+    fn common_source_directory(&self) -> String {
+        self.program.common_source_directory().to_string()
+    }
+
+    // emitHost.go:126
+    fn is_emit_blocked(&self, file: &str) -> bool {
+        self.program.is_emit_blocked(file)
+    }
+
+    // emitHost.go:130. The program host's file system (the CLI: the cached FS over the OS FS, which creates missing
+    // directories). Only reached through `Program::emit`, which the CLI calls only under TSRS_EMIT=1.
+    fn write_file(&self, file_name: &str, text: &str) -> Result<(), String> {
+        self.program.host().fs().write_file(file_name, text)
+    }
+
+    // emitHost.go:59
+    fn get_emit_module_format_of_file(&self, file: P<SourceFile>) -> tsrs_core::ModuleKind {
+        self.program.get_emit_module_format_of_file(file)
+    }
+
+    // emitHost.go:134
+    fn get_emit_resolver(&self) -> Resolver {
+        self.emit_resolver
+    }
+
+    // emitHost.go:83
+    fn get_project_reference_from_source(&self, path: &Path) -> Option<P<tsrs_tsoptions::SourceOutputAndProjectReference>> {
+        self.program.get_project_reference_from_source(path)
+    }
+
+    // emitHost.go:138
+    fn is_source_file_from_external_library(&self, file: P<SourceFile>) -> bool {
+        self.program.is_source_file_from_external_library(file)
+    }
+}
+
+impl EmitHost {
+    pub(crate) fn program(&self) -> &'static Program {
+        self.program
     }
 }

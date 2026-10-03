@@ -411,7 +411,7 @@ impl<'a> flattener<'a> {
                     let pattern_node = (self.create_object_binding_or_assignment_pattern)(self, std::mem::take(&mut binding_elements));
                     (self.emit_binding_or_assignment)(self, pattern_node, value, location, Some(pattern));
                 }
-                let rhs_value = self.factory().new_rest_helper(value, elements, &computed_temp_variables, pattern.loc());
+                let rhs_value = self.factory().new_rest_helper(value, elements, if computed_temp_variables.is_empty() { None } else { Some(&computed_temp_variables) }, pattern.loc());
                 self.flatten_binding_or_assignment_element(element, Some(rhs_value), element.loc(), false);
             }
         }
@@ -453,7 +453,7 @@ impl<'a> flattener<'a> {
                 let rhs_value = f.new_element_access_expression(value, None, f.new_numeric_literal(alloc_str(&i.to_string()), TokenFlags::None), NodeFlags::None);
                 self.flatten_binding_or_assignment_element(element, Some(rhs_value), element.loc(), false);
             } else if i == num_elements - 1 {
-                let rhs_value = self.factory().new_array_slice_call(value, i);
+                let rhs_value = self.factory().new_array_slice_call(value, i as i32);
                 self.flatten_binding_or_assignment_element(element, Some(rhs_value), element.loc(), false);
             }
         }

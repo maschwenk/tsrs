@@ -1,13 +1,15 @@
-use super::*;
 use crate::*;
 
+use super::*;
+
+// impliedmodule.go:10
 pub struct ImpliedModuleTransformer {
     pub base: Transformer,
-    opts: TransformOptions,
-    resolver: ReferenceResolverRef,
-    get_emit_module_format_of_file: Rc<dyn Fn(P<SourceFile>) -> ModuleKind>,
-    cjs_transformer: Cell<Option<P<Transformer>>>,
-    esm_transformer: Cell<Option<P<Transformer>>>,
+    pub opts: TransformOptions,
+    pub resolver: ReferenceResolverRef,
+    pub get_emit_module_format_of_file: Rc<dyn Fn(P<SourceFile>) -> ModuleKind>,
+    pub cjs_transformer: Cell<Option<P<Transformer>>>,
+    pub esm_transformer: Cell<Option<P<Transformer>>>,
 }
 
 // impliedmodule.go:19
@@ -20,17 +22,16 @@ pub fn new_implied_module_transformer(opts: &TransformOptions) -> Option<P<Trans
         cjs_transformer: Cell::new(None),
         esm_transformer: Cell::new(None),
     });
-    tx.base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| Some(tx.visit(n))), Some(opts.context));
-    Some(P::from_static(&tx.get().base))
+    Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| Some(tx.visit(n))), Some(opts.context)))
 }
 
 impl ImpliedModuleTransformer {
     // impliedmodule.go:24
-    fn visit(&self, node: P<Node>) -> P<Node> {
-        match node.kind() {
-            Kind::SourceFile => self.visit_source_file(node.as_source_file_p()),
-            _ => node,
+    fn visit(&self, mut node: P<Node>) -> P<Node> {
+        if node.kind() == Kind::SourceFile {
+            node = self.visit_source_file(node.as_source_file_p());
         }
+        node
     }
 
     // impliedmodule.go:32

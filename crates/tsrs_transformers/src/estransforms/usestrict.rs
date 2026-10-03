@@ -2,15 +2,19 @@ use crate::*;
 
 // usestrict.go:9
 pub fn new_use_strict_transformer(opts: &TransformOptions) -> Option<P<Transformer>> {
-    let tx = P::new(useStrictTransformer { base: Transformer::default(), compiler_options: opts.compiler_options, get_emit_module_format_of_file: opts.get_emit_module_format_of_file.clone() });
-    tx.base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| Some(tx.visit(n))), Some(opts.context));
-    Some(P::from_static(&tx.get().base))
+    let tx = P::new(useStrictTransformer {
+        base: Transformer::default(),
+        compiler_options: opts.compiler_options,
+        get_emit_module_format_of_file: opts.get_emit_module_format_of_file.clone(),
+    });
+    Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| Some(tx.visit(n))), Some(opts.context)))
 }
 
+// usestrict.go:17
 pub struct useStrictTransformer {
     pub base: Transformer,
-    compiler_options: P<CompilerOptions>,
-    get_emit_module_format_of_file: Rc<dyn Fn(P<SourceFile>) -> ModuleKind>,
+    pub compiler_options: P<CompilerOptions>,
+    pub get_emit_module_format_of_file: Rc<dyn Fn(P<SourceFile>) -> ModuleKind>,
 }
 
 impl useStrictTransformer {
@@ -24,7 +28,7 @@ impl useStrictTransformer {
 
     // usestrict.go:30
     fn visit_source_file(&self, node: P<SourceFile>) -> P<Node> {
-        if node.script_kind.get() == ScriptKind::JSON {
+        if node.script_kind.get() == tsrs_core::ScriptKind::JSON {
             return node.as_node();
         }
 

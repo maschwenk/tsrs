@@ -93,7 +93,7 @@ pub fn new_declaration_transformer(host: &'static dyn DeclarationEmitHost, conte
         }
     });
     let _ = tx.state.report_expando_function_errors.set(report_expando_function_errors);
-    tx.base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), context);
+    tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), context);
     let _ = tx.binding_name_visitor.set(tx.emit_context().new_node_visitor(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| Some(tx.visit_binding_name(n)))));
     let _ = tx.expression_visitor.set(tx.emit_context().new_node_visitor(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit_nested_expression(Some(n)))));
     let _ = tx.export_stripping_visitor.set(tx.emit_context().new_node_visitor(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| Some(tx.strip_export_modifiers(n)))));

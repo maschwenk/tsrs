@@ -1,3 +1,5 @@
+//! Go package `transformers/moduletransforms`.
+
 use crate::*;
 
 mod commonjsmodule;
@@ -8,6 +10,6 @@ mod utilities;
 
 pub use commonjsmodule::*;
 pub use esmodule::*;
-pub(crate) use externalmoduleinfo::*;
 pub use impliedmodule::*;
+pub(crate) use externalmoduleinfo::*;
 pub(crate) use utilities::*;

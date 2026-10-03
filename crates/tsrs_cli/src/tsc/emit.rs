@@ -74,11 +74,22 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
     times.bind_time = bind_time.get();
     times.check_time = check_time.get();
 
-    // Emit is not supported. Under --listFilesOnly Go skips emit (EmitSkipped); otherwise the
-    // program always has noEmit set, and HandleNoEmitOptions returns an empty, non-skipped result.
-    let emit_skipped = program.options().list_files_only.is_true() || !program.options().no_emit.is_true();
-    let emit_diagnostics: Vec<P<Diagnostic>> = Vec::new();
-    all_diagnostics.extend(emit_diagnostics);
+    // Without TSRS_EMIT=1 (docs/EMIT.md section 6) emit is never called: under --listFilesOnly Go skips emit
+    // (EmitSkipped); otherwise the program always has noEmit set, and HandleNoEmitOptions returns an empty,
+    // non-skipped result.
+    let mut emit_result = tsrs_compiler::EmitResult { emit_skipped: true, ..Default::default() };
+    if crate::execute::emit_enabled() {
+        // emit.go:115
+        if !program.options().list_files_only.is_true() {
+            let emit_start = input.sys.now();
+            emit_result = tsrs_core::phases::time("Emit", || program.emit(&ctx, tsrs_compiler::EmitOptions::default()));
+            times.emit_time += input.sys.now() - emit_start;
+        }
+    } else {
+        emit_result.emit_skipped = program.options().list_files_only.is_true() || !program.options().no_emit.is_true();
+    }
+    let emit_skipped = emit_result.emit_skipped;
+    all_diagnostics.extend(emit_result.diagnostics.iter().copied());
 
     let all_diagnostics = tsrs_core::phases::time("Diagnostics: sort", || sort_and_deduplicate_diagnostics(&all_diagnostics));
     tsrs_core::phases::time("Diagnostics: report", || {
@@ -87,14 +98,24 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
         }
     });
 
-    tsrs_core::phases::time("List files", || list_files(input));
+    tsrs_core::phases::time("List files", || list_files(input, &emit_result));
 
     tsrs_core::phases::time("Error summary", || (input.report_error_summary)(&all_diagnostics));
     CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, status: ExitStatus::Success, times }
 }
 
-fn list_files(input: &EmitInput) {
+// emit.go:142
+fn list_files(input: &EmitInput, emit_result: &tsrs_compiler::EmitResult) {
     let options = input.program.options();
+    if options.list_emitted_files.is_true() {
+        let mut out = String::new();
+        for file in &emit_result.emitted_files {
+            out.push_str("TSFILE: ");
+            out.push_str(&tsrs_core::tspath::get_normalized_absolute_path(file, input.program.get_current_directory()));
+            out.push('\n');
+        }
+        input.sys.write(&out);
+    }
     if options.explain_files.is_true() {
         let mut out = Vec::new();
         input.program.explain_files(&mut out);

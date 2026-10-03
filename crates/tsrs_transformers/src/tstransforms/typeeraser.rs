@@ -13,8 +13,7 @@ pub fn new_type_eraser_transformer(opt: &TransformOptions) -> Option<P<Transform
     let compiler_options = opt.compiler_options;
     let emit_context = opt.context;
     let tx = P::new(TypeEraserTransformer { base: Transformer::default(), compiler_options, parent_node: Cell::new(None), current_node: Cell::new(None) });
-    tx.base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(emit_context));
-    Some(P::from_static(&tx.get().base))
+    Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(emit_context)))
 }
 
 impl TypeEraserTransformer {

@@ -1,40 +1,58 @@
-//! Port of `internal/transformers` (TypeScript 7): the script transformers that turn a TypeScript source file into
-//! JavaScript before printing.
+//! Port of `internal/transformers` (TypeScript 7): the transformer base (transformer.go, chain.go, utilities.go,
+//! modifiervisitor.go), the script transformers that `compiler.getScriptTransformers` chains together
+//! (`tstransforms`, `estransforms`, `moduletransforms`, `jsxtransforms`, `inliners`, one module per Go package and
+//! one file per Go file), and `Resolver`, the Rust form of Go's `printer.EmitResolver` interface value.
+//! The declaration transformer (`transformers/declarations`) lives in `tsrs_declarations`, which depends on this
+//! crate and re-exports its base types.
 //!
-//! Layout (one Rust file per Go file, one module per Go package):
-//! - crate root: package `transformers` (destructuring.rs; transformer.go, chain.go, utilities.go and
-//!   modifiervisitor.go are wave E1's, see todo_core.rs).
-//! - `tstransforms`: typeeraser, importelision, runtimesyntax, utilities.
-//! - `moduletransforms`: commonjsmodule, esmodule, externalmoduleinfo, impliedmodule, utilities.
-//! - `estransforms`: usestrict.
-//! - `inliners`: constenum.
+//! Handles (docs/EMIT.md section 10): a Go `*transformers.Transformer` is a `P<Transformer>` that points at the
+//! `base` field of an arena-allocated concrete transformer (`P<XTransformer>`); the visit closure captures the
+//! `P<XTransformer>`. Factories (`TransformerFactory`) are plain `fn(&TransformOptions) -> Option<P<Transformer>>`.
 //!
-//! Transformers are arena objects (`P<XTransformer>`, `&self` methods, `Cell`/`RefCell` fields). Their visitor
-//! closures capture the handle, exactly like `tsrs_declarations::DeclarationTransformer`. A factory returns the
-//! embedded `Transformer` base as `P<Transformer>` (Go `*transformers.Transformer`).
+//! Transformers that are not ported yet are gate stubs: their constructor and the `SubtreeFacts` early return of
+//! `visit` are ported, the rest of `visit` is `unimplemented!("emit: <file>.go not ported")`.
 
 pub(crate) use std::cell::{Cell, OnceCell, RefCell};
 pub(crate) use std::rc::Rc;
 
 pub(crate) use rustc_hash::{FxHashMap, FxHashSet};
 pub(crate) use tsrs_ast::{self as ast, *};
+pub(crate) use tsrs_checker::{self as checker, Checker, CheckerSlot, EmitResolver, SymbolAccessibilityResult, SymbolTracker};
+pub(crate) use tsrs_core::{alloc_slice, alloc_str, alloc_vec, CompilerOptions, ModuleKind, ScriptTarget, Tristate, P};
+pub(crate) use tsrs_printer::{self as printer, EmitContext, EmitFlags};
+pub(crate) use tsrs_scanner as scanner;
 pub(crate) use tsrs_core::collections::{MultiMap, OrderedSet, OrderedSetExt, Set};
 pub(crate) use tsrs_core::jsnum::{self, Number};
-pub(crate) use tsrs_core::tspath;
-pub(crate) use tsrs_core::{alloc_slice, alloc_str, alloc_vec, CompilerOptions, ModuleKind, ScriptKind, ScriptTarget, TextRange, Tristate, P};
-pub(crate) use tsrs_printer::{self as printer, AutoGenerateOptions, EmitContext, EmitFlags, EmitHelper, GeneratedIdentifierFlags};
-pub(crate) use tsrs_scanner as scanner;
+pub(crate) use tsrs_core::{tspath, ScriptKind, TextRange};
+pub(crate) use tsrs_printer::{AssignedNameOptions, AutoGenerateOptions, EmitHelper, GeneratedIdentifierFlags, NameOptions};
 
-mod todo_core;
-pub use todo_core::*;
+/// Go package `nodebuilder` (flags only).
+pub mod nodebuilder {
+    pub use tsrs_checker::{Flags, InternalFlags};
+}
 
+mod chain;
+mod emithost;
+mod modifiervisitor;
+mod resolver;
+mod transformer;
+mod utilities;
+
+pub use chain::*;
+pub use emithost::*;
+pub use modifiervisitor::*;
+pub use resolver::*;
+pub use transformer::*;
+pub use utilities::*;
+
+mod ast_ext;
 mod destructuring;
+
+pub(crate) use ast_ext::*;
 pub use destructuring::*;
 
 pub mod estransforms;
 pub mod inliners;
+pub mod jsxtransforms;
 pub mod moduletransforms;
 pub mod tstransforms;
-
-#[cfg(test)]
-mod tests;

@@ -40,8 +40,7 @@ pub fn new_runtime_syntax_transformer(opt: &TransformOptions) -> Option<P<Transf
         resolver: opt.resolver,
         emit_resolver: opt.emit_resolver,
     });
-    tx.base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(emit_context));
-    Some(P::from_static(&tx.get().base))
+    Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(emit_context)))
 }
 
 impl RuntimeSyntaxTransformer {
