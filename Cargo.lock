@@ -274,6 +274,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_api_codec"
+version = "0.2.3"
+dependencies = [
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_binder",
+ "tsrs_core",
+ "tsrs_parser",
+ "tsrs_printer",
+ "xxhash-rust",
+]
+
+[[package]]
 name = "tsrs_ast"
 version = "0.2.3"
 dependencies = [
