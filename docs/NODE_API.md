@@ -284,7 +284,8 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 - Request filesystems are ported (`crates/tsrs_api/src/requestfs.rs`) but enter the project snapshot as a
   plain host filesystem: LSP overlay rebasing and alias expansion of client `fileNotifications` through
   request symlinks (Go `ExpandFileChanges`) are not applied. Callback filesystems (`--callbacks`, Go
-  `callbackfs.go`) are not ported yet.
+  `callbackfs.go`) are ported in `crates/tsrs_api/src/callbackfs.rs`; like Go, invalid callback responses
+  panic and become request errors (a panic on a worker thread can poison shared caches; not yet hardened).
 - Build orchestration (`createBuildOrchestrator`, `build*`, `clean*`): the reusable boundary out of the
   CLI build modules is not extracted yet.
 - Source files / AST (`getSourceFile`, `createSourceFile*`, leases, `printNode`, ...) wait on the codec
