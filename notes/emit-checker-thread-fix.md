@@ -72,5 +72,21 @@ TSRS_EMIT=1 MIMALLOC_SHOW_STATS=1 <tsrs> -b . --builders 4 2>&1 | grep -E '^ *th
 ```
 `-b` needs a binary that has it (this hunk applied to the incremental/build branch).
 
-## Gates of this head
-(see the commit message / section below once run)
+## Gates of the code at 4121002 (vs main fb867b1, both built from these heads)
+- conformance errors + `--baselines types,symbols --timeout 60`: result trees identical, default and
+  `TSRS_LAZY_MEMBERS=0` (13458 pass each). (`compiler/intersectionConstructorReductionCrash` needs ~20 s on this box
+  for both binaries; at the default 20 s timeout it is load-sensitive, hence `--timeout 60`.)
+- `--baselines js --timeout 60`: same pass list (8680); fourslash 4066/63, same pass list;
+  `RUSTFLAGS="-D warnings" cargo check --workspace --locked --all-targets` clean; `tests/emit_gate.rs` 3/3.
+
+## Output checks against tsgo built from ts-ref b85298b6
+- This head's CLI (`TSRS_EMIT=1`, non-incremental): a 150-file fixture project (`-p . --incremental false --composite
+  false --declaration`, 150 `.d.ts`) and a CommonJS JS+`.d.ts` project with a cross-file const enum (8 files,
+  `--listEmittedFiles`): stdout, exit code and every file identical.
+- Same hunk applied unchanged to 535adce (-b, emitDeclarationOnly projects): diamond + independent chain, 8 edit steps,
+  `-b . --verbose --listEmittedFiles` at builders 1/4/8; the n8 fixture cold + no-op at builders 1/4/8; the branch's
+  committed fixtures (inc1, inc2, b1, b1-outputs): identical, including tsbuildinfo.
+- Same hunk on 7eb3e04 + emit/transforms f708ab1 (incremental JS emit): 17-step CJS edit sequence, diagnostics replay,
+  13-step two-project `-b` sequence: identical; an 18-step allowJs sequence identical except step 9 (`lib` change),
+  where tsgo itself is nondeterministic (programtosnapshot.go:162-179 stops at the first removed file in sync.Map order;
+  tsgo emits 11 or 1 files across runs, tsrs 1).
