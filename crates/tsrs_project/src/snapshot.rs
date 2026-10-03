@@ -172,6 +172,9 @@ pub struct APISnapshotRequest {
     pub ensure_all_programs: bool,
     pub ensure_files: FxHashMap<Path, String>,
     pub file_system: Option<Arc<dyn FS>>,
+    // A request file system that is a layered (rebasable) file system; takes precedence over `file_system`
+    // (Go passes the request file system as a `vfs.FS` and type-asserts it).
+    pub layered_file_system: Option<Arc<dyn crate::LayeredFileSystem>>,
     // ReplaceFileSystem indicates a total filesystem replacement. Layers use
     // per-path file changes instead of invalidating all inherited state.
     pub replace_file_system: bool,

@@ -138,3 +138,33 @@ fn request_file_system_errors_are_client_errors() {
     let e = call_err(&s, "createSnapshot", r#"{"fileSystem":{"kind":"full","files":{"/a.ts":"x","/A.ts/../a.ts":"y"}}}"#);
     assert!(e.contains("duplicate request filesystem file path"), "{e}");
 }
+
+/// Go `ExpandFileChanges`: a host change notified for `real/a.ts` also invalidates its request-symlink alias
+/// `lnk/a.ts`, which is what the program contains.
+#[test]
+fn file_notifications_expand_to_request_symlink_aliases() {
+    let dir = TempDir::new("rfs-alias");
+    let real = dir.write("real/a.ts", "export const a: number = 1;\n");
+    let cfg = dir.write("tsconfig.json", r#"{ "compilerOptions": { "strict": true, "noEmit": true }, "files": ["lnk/a.ts"] }"#);
+    let s = session(&dir.dir(), false);
+    let r = call(&s, "createSnapshot", &format!(
+        "{{\"openProjects\":[{}],\"fileSystem\":{{\"kind\":\"layer\",\"files\":{{}},\"symlinks\":{{{}:{{\"target\":\"real\"}}}}}}}}",
+        quote(&cfg),
+        quote(&dir.path("lnk"))
+    ));
+    let snap = num(get(&r, "snapshot"));
+    let project = str_of(get(&r, "projects.0.id")).to_string();
+    let sp = |snap: u64| format!("\"snapshot\":{snap},\"project\":{}", quote(&project));
+    let names = json::marshal(&call(&s, "getSourceFileNames", &format!("{{{}}}", sp(snap)))).unwrap();
+    assert!(names.contains("lnk/a.ts"), "{names}");
+    assert_eq!(call(&s, "getSemanticDiagnostics", &format!("{{{}}}", sp(snap))), Value::Array(vec![]));
+
+    std::fs::write(&real, "export const a: number = 'changed';\n").unwrap();
+    let r2 = call(&s, "updateSnapshot", &format!(
+        "{{\"snapshot\":{snap},\"changes\":{{\"ensurePrograms\":true,\"fileNotifications\":{{\"changed\":[{}]}}}}}}",
+        quote(&real)
+    ));
+    let snap2 = num(get(&r2, "snapshot"));
+    let d = call(&s, "getSemanticDiagnostics", &format!("{{{}}}", sp(snap2)));
+    assert_eq!(get(&d, "0.code"), &Value::Number(2322.0), "alias not invalidated: {}", json::marshal(&d).unwrap());
+}

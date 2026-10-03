@@ -2,9 +2,9 @@
 // `fileSystem` of createSnapshot / updateSnapshot. A `full` filesystem is canonical and total; a `layer` is
 // checked before the session host filesystem. Layers over request filesystems are compacted eagerly.
 //
-// Differences from Go (documented in docs/NODE_API.md): the request filesystem enters the project snapshot as
-// a plain host filesystem, so LSP-overlay rebasing (`WithBaseFileSystem` / `Overlays`) and alias expansion of
-// client `fileNotifications` (`ExpandFileChanges`) are not applied; standalone API sessions have no overlays.
+// Like Go, the request filesystem enters the project snapshot as a layered, rebasable file system
+// (`LayeredFileSystem` + `RebasableFileSystem` + `FileChangeExpander`): the snapshot's overlay file system is
+// rebased *under* it, and client `fileNotifications` are expanded to request-symlink aliases.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use std::time::SystemTime;
 use rustc_hash::FxHashSet;
 use tsrs_core::json::Value;
 use tsrs_core::tspath::{self, Path};
-use tsrs_project::FileChangeSummary;
+use tsrs_project::{FileChangeExpander, FileChangeSummary, FileHandle, FileHandleSource, FsRef, LayeredFileSystem, OverlayMap, RebasableFileSystem};
 use tsrs_vfs::{Entries, FileInfo, FileMode, FS};
 
 use crate::wire::Params;
@@ -356,6 +356,8 @@ impl RequestParams {
 pub struct RequestFileSystem {
     pub kind: Kind,
     base: Arc<dyn FS>,
+    /// `base` as the snapshot sees it: the host file system, or (after rebasing) the snapshot overlay layer.
+    base_ref: FsRef,
     current_directory: String,
     cs: bool,
     paths: Arc<Node>,
@@ -397,6 +399,7 @@ pub fn new_for_update(
         fs.paths = compose(Some(&b.paths), Some(&fs.paths), Fallback::Allowed, fs.cs).unwrap_or_default();
         fs.kind = b.kind;
         fs.base = b.base.clone();
+        fs.base_ref = b.base_ref.clone();
     }
     if params.kind == Kind::Layer {
         add_file_changes(file_changes, params, layered_base, &fs, current_directory);
@@ -407,7 +410,14 @@ pub fn new_for_update(
 impl RequestFileSystem {
     fn new_worker(params: &RequestParams, base: Arc<dyn FS>, current_directory: &str) -> Result<RequestFileSystem, String> {
         let cs = base.use_case_sensitive_file_names();
-        let mut r = RequestFileSystem { kind: params.kind, base, current_directory: current_directory.to_string(), cs, paths: Arc::new(Node::default()) };
+        let mut r = RequestFileSystem {
+            kind: params.kind,
+            base_ref: FsRef::Host(base.clone()),
+            base,
+            current_directory: current_directory.to_string(),
+            cs,
+            paths: Arc::new(Node::default()),
+        };
         let mut root = Node::default();
         r.register_directory(&mut root, current_directory);
         let mut files: Vec<&(String, String)> = params.files.iter().collect();
@@ -838,5 +848,90 @@ fn add_file_changes(summary: &mut FileChangeSummary, request: &RequestParams, ba
     }
     if summary.changed.len() + summary.created.len() + summary.deleted.len() > 0 {
         summary.includes_watch_change_outside_node_modules = true;
+    }
+}
+
+// requestfilesystem.go GetFile / GetFileByPath.
+impl FileHandleSource for RequestFileSystem {
+    fn get_file(&self, file_name: &str) -> Option<Arc<dyn FileHandle>> {
+        self.get_file_by_path(file_name, &self.to_path(file_name))
+    }
+
+    fn get_file_by_path(&self, file_name: &str, _path: &Path) -> Option<Arc<dyn FileHandle>> {
+        let l = self.lookup_path(file_name)?;
+        if l.info.as_ref().is_some_and(|i| i.mode.is_dir()) {
+            return None;
+        }
+        if l.use_base {
+            if let FsRef::Layered(layered) = &self.base_ref {
+                return layered.get_file(&l.path);
+            }
+            return self.base.read_file(&l.path).map(|c| tsrs_project::new_cached_file_handle(file_name, &c));
+        }
+        match l.entry.as_deref() {
+            Some(Entry::File { content, .. }) => Some(tsrs_project::new_cached_file_handle(file_name, content)),
+            _ => None,
+        }
+    }
+}
+
+impl LayeredFileSystem for RequestFileSystem {
+    // requestfilesystem.go Overlays: the base layer's overlays this request file system does not mask.
+    fn overlays(&self) -> OverlayMap {
+        let FsRef::Layered(base) = &self.base_ref else { return OverlayMap::default() };
+        let mut result = rustc_hash::FxHashMap::default();
+        for (path, overlay) in base.overlays().iter() {
+            let Some(l) = self.lookup_path(overlay.file_name()) else { continue };
+            if !l.use_base || self.to_path(&l.path) != *path {
+                continue;
+            }
+            result.insert(path.clone(), overlay.clone());
+        }
+        Arc::new(result)
+    }
+
+    fn as_file_change_expander(&self) -> Option<&dyn FileChangeExpander> {
+        Some(self)
+    }
+
+    fn as_rebasable(&self) -> Option<&dyn RebasableFileSystem> {
+        Some(self)
+    }
+}
+
+impl RebasableFileSystem for RequestFileSystem {
+    fn base_file_system(&self) -> FsRef {
+        self.base_ref.clone()
+    }
+
+    fn with_base_file_system(&self, base: FsRef) -> Arc<dyn LayeredFileSystem> {
+        let mut clone = self.clone();
+        clone.base = match &base {
+            FsRef::Host(fs) => fs.clone(),
+            FsRef::Layered(layered) => layered.clone() as Arc<dyn FS>,
+        };
+        clone.base_ref = base;
+        Arc::new(clone)
+    }
+}
+
+// filechanges.go ExpandFileChanges: client notifications also invalidate every request-symlink alias.
+impl FileChangeExpander for RequestFileSystem {
+    fn expand_file_changes(&self, mut summary: FileChangeSummary) -> FileChangeSummary {
+        let expand = |uris: &mut tsrs_core::collections::Set<tsrs_lsproto::DocumentUri>| {
+            let mut additional = Vec::new();
+            for uri in uris.keys().iter() {
+                for alias in self.aliases_for_path(&uri.file_name()) {
+                    additional.push(tsrs_ls::lsconv::file_name_to_document_uri(&alias));
+                }
+            }
+            for uri in additional {
+                uris.add(uri);
+            }
+        };
+        expand(&mut summary.changed);
+        expand(&mut summary.created);
+        expand(&mut summary.deleted);
+        summary
     }
 }

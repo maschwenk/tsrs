@@ -386,7 +386,7 @@ impl Session {
         let mut file_changes = self.to_file_change_summary(p.get("fileNotifications"))?;
         let snapshot_fs = match self.request_file_system(&p, None, &mut file_changes)? {
             Some((fs, replace)) => {
-                req.file_system = Some(fs.clone() as Arc<dyn tsrs_vfs::FS>);
+                req.layered_file_system = Some(fs.clone() as Arc<dyn tsrs_project::LayeredFileSystem>);
                 req.replace_file_system = replace;
                 Some(fs)
             }
@@ -434,7 +434,7 @@ impl Session {
         let replaced = new_fs.as_ref().is_some_and(|(_, replace)| *replace);
         let snapshot_fs = new_fs.map(|(fs, _)| fs).or_else(|| base.file_system.clone());
         if let Some(fs) = &snapshot_fs {
-            req.file_system = Some(fs.clone() as Arc<dyn tsrs_vfs::FS>);
+            req.layered_file_system = Some(fs.clone() as Arc<dyn tsrs_project::LayeredFileSystem>);
             req.replace_file_system = replaced;
         }
         let ctx = tsrs_core::context::Context::background();
