@@ -151,3 +151,42 @@ fn repeated_config_parsing_reclaims_memory() {
     eprintln!("parseConfigFile+readConfigFile x{n}: rss grew {grown} KiB");
     assert!(grown < (n as u64) * 8, "rss grew {grown} KiB over {n} iterations");
 }
+
+/// A createSnapshot whose program build unwinds (moduleResolution with no named kind reaches the module resolver's
+/// `Unexpected moduleResolution` panic, answered as a client error) must release what the aborted clone took: the
+/// parse-cache references of its files (codec d9be067 review: ~7.9 MiB retained per failure with changing content)
+/// and the file loader's project reference mapper and hosts. A retained snapshot sharing a file stays intact.
+#[test]
+fn failed_program_builds_release_their_files() {
+    let _g = MEMORY.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = TempDir::new("failedbuilds");
+    let a = dir.write("a.ts", "export const a = 1;\n");
+    let s = session(&dir.dir(), false);
+    let (keep, keep_project) = create_program(&s, &[a.clone()], "{\"noLib\":true}");
+    let root = format!("{}/root.ts", dir.dir());
+    let body = |i: usize| {
+        format!("import {{ a }} from './a';\nexport const v{i} = a;\n")
+            + &(0..1500).map(|k| format!("export declare function f{i}_{k}(x: {{ p{k}: string; q: number[] }}): Promise<Map<string, number>>;\n")).collect::<String>()
+    };
+    let fail = |i: usize| {
+        std::fs::write(&root, body(i)).unwrap();
+        let e = call_err(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"moduleResolution":-1,"noLib":true}}}}]}}"#, quote(&root)));
+        assert_eq!(e, "api: client error: unsupported moduleResolution value -1 (not a ModuleResolutionKind)");
+    };
+    for i in 0..5 {
+        fail(i);
+    }
+    let before = rss_kib();
+    let n = 40;
+    for i in 5..5 + n {
+        fail(i);
+    }
+    let grown = rss_kib().saturating_sub(before);
+    eprintln!("failed createSnapshot x{n} (changing ~150 KB root): rss grew {grown} KiB");
+    assert!(grown < (n as u64) * 64, "rss grew {grown} KiB over {n} failed builds");
+    // The retained snapshot's copy of a.ts (also acquired and rolled back by every failed build) is still alive.
+    let sf = call(&s, "getSourceFile", &format!(r#"{{"snapshot":{keep},"project":{},"file":{}}}"#, quote(&keep_project), quote(&a)));
+    assert!(!matches!(sf, Value::Null));
+    let (next, _) = create_program(&s, &[a.clone()], "{\"noLib\":true}");
+    call(&s, "release", &format!("{{\"snapshot\":{next}}}"));
+}

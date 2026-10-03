@@ -637,7 +637,8 @@ impl Orchestrator {
 /// `o` came from `new_orchestrator`, `enable_api_regions` was called before its first build, no build or clean
 /// is running, and nothing obtained from it (results, programs, diagnostics) is used afterwards.
 pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
-    let regions = std::mem::take(&mut *o.regions.lock().unwrap());
+    // The lock may be poisoned if the build unwound (`CliOrchestrator::build`); the list itself is intact.
+    let regions = std::mem::take(&mut *o.regions.lock().unwrap_or_else(|e| e.into_inner()));
     if std::env::var_os("TSRS_REGION_LOG").is_some() {
         eprintln!("regions: api orchestrator freed ({} regions, {} KiB)", regions.len(), regions.iter().map(|r| r.allocated_bytes()).sum::<usize>() >> 10);
     }

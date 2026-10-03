@@ -428,17 +428,24 @@ impl SharedProgramData {
     /// # Safety
     /// Every program that shares this data has been freed, and nothing else refers to it.
     pub unsafe fn free(self) {
-        let mapper = self.mapper as *mut projectReferenceFileMapper;
-        let dts_faking_host = (*mapper).dts_faking_host.get().copied();
-        let loader_host = (*mapper).loader_host;
-        drop(Box::from_raw(mapper));
-        if let Some(h) = dts_faking_host {
-            drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
-        }
-        if let Some(h) = loader_host {
-            drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
-        }
+        free_project_reference_file_mapper(self.mapper as *mut projectReferenceFileMapper);
         drop(Box::from_raw(self.processed as *mut processedFiles));
+    }
+}
+
+/// Frees a leaked project reference file mapper with its loader and dts-faking resolution hosts.
+///
+/// # Safety
+/// `mapper` came from `Box::leak` in the file loader, and nothing refers to it or its hosts any more.
+pub(crate) unsafe fn free_project_reference_file_mapper(mapper: *mut projectReferenceFileMapper) {
+    let dts_faking_host = (*mapper).dts_faking_host.get().copied();
+    let loader_host = (*mapper).loader_host;
+    drop(Box::from_raw(mapper));
+    if let Some(h) = dts_faking_host {
+        drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
+    }
+    if let Some(h) = loader_host {
+        drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
     }
 }
 

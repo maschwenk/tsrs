@@ -581,57 +581,70 @@ impl Snapshot {
             client,
         );
 
-        if !change.ata_changes.is_empty() {
-            project_collection_builder.did_update_ata_state(&change.ata_changes, &logger.fork("DidUpdateATAState"));
-        }
-
-        project_collection_builder.did_change_custom_config_file_name(&logger.fork("DidChangeCustomConfigFileName"));
-        if let Some(options) = change.compiler_options_for_inferred_projects {
-            if let Some(inferred) = project_collection_builder.inferred_project_value() {
-                let command_line = inferred.command_line.unwrap();
-                project_collection_builder.update_inferred_project(
-                    command_line.file_names().to_vec(),
-                    Some(options),
-                    command_line.project_references().to_vec(),
-                    command_line.errors.clone(),
-                    command_line.content_mappers().to_vec(),
-                    &logger.fork("DidChangeCompilerOptionsForInferredProjects"),
-                );
+        // Building programs can unwind (a panic while building, e.g. the module resolver's `Unexpected
+        // moduleResolution`, which the API turns into an error). The parse-cache references the clone's programs took
+        // would then never reach a snapshot to release them: roll them back before unwinding further. The clone's
+        // projects (and their program owners) are dropped with the builder as the unwind continues.
+        let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if !change.ata_changes.is_empty() {
+                project_collection_builder.did_update_ata_state(&change.ata_changes, &logger.fork("DidUpdateATAState"));
             }
-        }
-        if change.content_mapper_contributions.is_some() {
-            project_collection_builder.did_change_content_mapper_contributions(&logger.fork("DidChangeContentMapperContributions"));
-        }
-        if let Some(new_config) = &change.new_config {
-            project_collection_builder.did_change_user_preferences(&self.user_preferences, new_config, &logger.fork("DidChangeUserPreferences"));
-        }
 
-        if !change.file_changes.is_empty() {
-            project_collection_builder.did_change_files(&change.file_changes, &logger.fork("DidChangeFiles"));
-        }
+            project_collection_builder.did_change_custom_config_file_name(&logger.fork("DidChangeCustomConfigFileName"));
+            if let Some(options) = change.compiler_options_for_inferred_projects {
+                if let Some(inferred) = project_collection_builder.inferred_project_value() {
+                    let command_line = inferred.command_line.unwrap();
+                    project_collection_builder.update_inferred_project(
+                        command_line.file_names().to_vec(),
+                        Some(options),
+                        command_line.project_references().to_vec(),
+                        command_line.errors.clone(),
+                        command_line.content_mappers().to_vec(),
+                        &logger.fork("DidChangeCompilerOptionsForInferredProjects"),
+                    );
+                }
+            }
+            if change.content_mapper_contributions.is_some() {
+                project_collection_builder.did_change_content_mapper_contributions(&logger.fork("DidChangeContentMapperContributions"));
+            }
+            if let Some(new_config) = &change.new_config {
+                project_collection_builder.did_change_user_preferences(&self.user_preferences, new_config, &logger.fork("DidChangeUserPreferences"));
+            }
 
-        let mut api_error = None;
-        if let Some(api_request) = &change.api_request {
-            api_error = project_collection_builder.handle_api_request(api_request, &logger.fork("HandleAPIRequest")).err();
-        }
+            if !change.file_changes.is_empty() {
+                project_collection_builder.did_change_files(&change.file_changes, &logger.fork("DidChangeFiles"));
+            }
 
-        for uri in &change.resource_request.documents {
-            project_collection_builder.did_request_file(uri, false /*configuredProjectsOnly*/, &logger.fork("DidRequestFile"));
-        }
+            let mut api_error = None;
+            if let Some(api_request) = &change.api_request {
+                api_error = project_collection_builder.handle_api_request(api_request, &logger.fork("HandleAPIRequest")).err();
+            }
 
-        for uri in &change.resource_request.configured_project_documents {
-            project_collection_builder.did_request_file(uri, true /*configuredProjectsOnly*/, &logger.fork("DidRequestFile (optional)"));
-        }
+            for uri in &change.resource_request.documents {
+                project_collection_builder.did_request_file(uri, false /*configuredProjectsOnly*/, &logger.fork("DidRequestFile"));
+            }
 
-        for project_id in &change.resource_request.projects {
-            project_collection_builder.did_request_project(project_id, &logger.fork("DidRequestProject"));
-        }
+            for uri in &change.resource_request.configured_project_documents {
+                project_collection_builder.did_request_file(uri, true /*configuredProjectsOnly*/, &logger.fork("DidRequestFile (optional)"));
+            }
 
-        if let Some(project_tree) = &change.resource_request.project_tree {
-            project_collection_builder.did_request_project_trees(project_tree, &logger.fork("DidRequestProjectTrees"));
-        }
+            for project_id in &change.resource_request.projects {
+                project_collection_builder.did_request_project(project_id, &logger.fork("DidRequestProject"));
+            }
 
-        let (project_collection, config_file_registry) = project_collection_builder.finalize(&logger);
+            if let Some(project_tree) = &change.resource_request.project_tree {
+                project_collection_builder.did_request_project_trees(project_tree, &logger.fork("DidRequestProjectTrees"));
+            }
+            let (project_collection, config_file_registry) = project_collection_builder.finalize(&logger);
+            (api_error, project_collection, config_file_registry)
+        }));
+        let (api_error, project_collection, config_file_registry) = match built {
+            Ok(built) => built,
+            Err(panic) => {
+                project_collection_builder.parse_cache_journal.roll_back(&store.parse_cache);
+                std::panic::resume_unwind(panic);
+            }
+        };
 
         let mut projects_with_new_program_structure: FxHashMap<ProjectID, bool> = FxHashMap::default();
         for project in project_collection.projects() {

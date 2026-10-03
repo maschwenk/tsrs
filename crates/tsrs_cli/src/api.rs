@@ -251,7 +251,18 @@ fn outcome(result: crate::build::OrchestratorResult) -> BuildOutcome {
 impl BuildOrchestrator for CliOrchestrator {
     fn build(&mut self, project: &str, only_references: bool) -> BuildOutcome {
         let o = self.fresh();
-        let result = outcome(o.build_for_api(project, only_references));
+        // A build can unwind (a panic while building a program, e.g. the module resolver's `Unexpected
+        // moduleResolution`, which the API turns into an error). The fresh orchestrator is then freed here instead
+        // of being leaked; the retained one (for later cleans) is untouched.
+        let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| o.build_for_api(project, only_references))) {
+            Ok(result) => outcome(result),
+            Err(panic) => {
+                // SAFETY: the build ran inline on this thread and has unwound (its scoped workers were joined), so
+                // nothing uses `o`; it was never stored, and nothing returned from it outlives this call.
+                unsafe { crate::build::free_api_orchestrator(o) };
+                std::panic::resume_unwind(panic);
+            }
+        };
         self.replace(o);
         result
     }
@@ -516,6 +527,49 @@ mod memory_tests {
         // Before per-build regions each rebuild retained ~19 MiB (lib files reparsed into never-freed arenas and
         // leaked texts); now one build's worth stays (kept for cleans) and older builds are freed.
         assert!(grown < (n as u64) * 512, "rss grew {grown} KiB over {n} builds");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A build that unwinds (moduleResolution with no named kind: the module resolver's `Unexpected
+    /// moduleResolution` panic, answered as a client error) must free its fresh orchestrator (codec d9be067 review:
+    /// ~9 MiB leaked per failed build), and the retained orchestrator keeps working.
+    #[test]
+    fn failed_builds_free_their_orchestrator() {
+        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("tsrs-api-failedbuild-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("tsconfig.json"), r#"{ "compilerOptions": { "outDir": "out" } }"#).unwrap();
+        std::fs::write(dir.join("w.ts"), "export const w = 1;\n").unwrap();
+        let cwd = dir.canonicalize().unwrap().to_string_lossy().into_owned();
+        let flags = ApiFlags { cwd, pipe_path: String::new(), callbacks: Vec::new(), case_sensitive: true, is_async: true, timing: false, run_external_code: false };
+        let (s, _) = new_api_session(&flags).unwrap();
+        let create = || match s.handle_request("createBuildOrchestrator", br#"{"rootNames":["."],"compilerOptions":{"moduleResolution":-1}}"#).unwrap() {
+            Response::Json(t) => match json::unmarshal(&t).unwrap() {
+                Value::Object(o) => json::marshal(o.get("buildOrchestratorID").unwrap()).unwrap(),
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        };
+        let id = create();
+        let fail = |i: usize| {
+            std::fs::write(dir.join("a.ts"), format!("import {{ w }} from './w';\nexport const v{i} = w;\n").repeat(200)).unwrap();
+            let e = s.handle_request("build", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).unwrap_err();
+            assert_eq!(e.to_string(), "api: client error: unsupported moduleResolution value -1 (not a ModuleResolutionKind)");
+        };
+        for i in 0..5 {
+            fail(i);
+        }
+        let n = 30;
+        let before = rss_kib();
+        for i in 5..5 + n {
+            fail(i);
+        }
+        let grown = rss_kib().saturating_sub(before);
+        eprintln!("failed build x{n}: rss grew {grown} KiB");
+        assert!(grown < (n as u64) * 256, "rss grew {grown} KiB over {n} failed builds");
+        assert!(s.handle_request("cleanBuild", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_ok());
+        assert!(s.handle_request("disposeBuildOrchestrator", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
