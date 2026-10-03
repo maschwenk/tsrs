@@ -103,13 +103,10 @@ pub fn config_file_response(parsed: &ParsedCommandLine) -> Value {
     Obj::new()
         .set("fileNames", strings(parsed.file_names().iter().cloned()))
         .set("options", options)
-        .set_opt(
-            "projectReferences",
-            (!refs.is_empty()).then(|| Value::Array(refs.iter().map(gojson::project_reference_to_go_json).collect())),
-        )
-        .set_opt("typeAcquisition", parsed.type_acquisition().map(gojson::type_acquisition_to_go_json))
-        .set_opt("compileOnSave", compile_on_save.map(Value::Bool))
-        .set_opt("raw", (!matches!(raw, Value::Null)).then_some(raw))
+        .set_omitempty("projectReferences", Value::Array(refs.iter().map(gojson::project_reference_to_go_json).collect()))
+        .set_omitempty("typeAcquisition", parsed.type_acquisition().map(gojson::type_acquisition_to_go_json).unwrap_or(Value::Null))
+        .set_omitempty("compileOnSave", compile_on_save.map(Value::Bool).unwrap_or(Value::Null))
+        .set_omitempty("raw", raw)
         .set("errors", diagnostic_responses(&parsed.errors))
         .build()
 }

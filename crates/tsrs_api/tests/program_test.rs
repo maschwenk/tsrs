@@ -34,7 +34,7 @@ fn create_program_diagnostics_emit_release() {
     assert!(arr(&names).iter().any(|n| str_of(n).ends_with("lib.es2022.d.ts")));
 
     let syn = call(&s, "getSyntacticDiagnostics", &format!("{{{sp},\"files\":[{}]}}", quote(&a)));
-    assert_eq!(syn, Value::Null);
+    assert_eq!(syn, Value::Array(vec![]));
     let sem = call(&s, "getSemanticDiagnostics", &format!("{{{sp},\"files\":[{}]}}", quote(&a)));
     let d = &arr(&sem)[0];
     assert_eq!(get(d, "code"), &Value::Number(2322.0));
@@ -43,8 +43,8 @@ fn create_program_diagnostics_emit_release() {
     assert_eq!(get(d, "pos"), &Value::Number(13.0));
     let all = call(&s, "getSemanticDiagnostics", &format!("{{{sp}}}"));
     assert_eq!(arr(&all).len(), 1);
-    assert_eq!(call(&s, "getProgramDiagnostics", &format!("{{{sp}}}")), Value::Null);
-    assert_eq!(call(&s, "getGlobalDiagnostics", &format!("{{{sp}}}")), Value::Null);
+    assert_eq!(call(&s, "getProgramDiagnostics", &format!("{{{sp}}}")), Value::Array(vec![]));
+    assert_eq!(call(&s, "getGlobalDiagnostics", &format!("{{{sp}}}")), Value::Array(vec![]));
 
     let out = call(&s, "emitToString", &format!("{{{sp}}}"));
     assert_eq!(get(&out, "emitSkipped"), &Value::Bool(false));
@@ -107,7 +107,7 @@ fn configured_project_update_and_retained_old_snapshot() {
     let dp = call(&s, "getDefaultProjectForFile", &format!("{{\"snapshot\":{snap1},\"file\":{}}}", quote(&a)));
     assert_eq!(str_of(get(&dp, "id")), project);
     let sp1 = format!("\"snapshot\":{snap1},\"project\":{}", quote(&project));
-    assert_eq!(call(&s, "getSemanticDiagnostics", &format!("{{{sp1}}}")), Value::Null);
+    assert_eq!(call(&s, "getSemanticDiagnostics", &format!("{{{sp1}}}")), Value::Array(vec![]));
 
     // Change the file on disk and notify; the old snapshot stays valid and unchanged.
     std::fs::write(&a, "export const a: number = 'no';\n").unwrap();
@@ -121,11 +121,11 @@ fn configured_project_update_and_retained_old_snapshot() {
     assert_eq!(arr(changed).len(), 1);
     let sp2 = format!("\"snapshot\":{snap2},\"project\":{}", quote(&project));
     assert_eq!(arr(&call(&s, "getSemanticDiagnostics", &format!("{{{sp2}}}"))).len(), 1);
-    assert_eq!(call(&s, "getSemanticDiagnostics", &format!("{{{sp1}}}")), Value::Null);
+    assert_eq!(call(&s, "getSemanticDiagnostics", &format!("{{{sp1}}}")), Value::Array(vec![]));
 
     // Releasing the newer snapshot leaves the old one usable; a second session cannot use these handles.
     call(&s, "release", &format!("{{\"snapshot\":{snap2}}}"));
-    assert_eq!(call(&s, "getSemanticDiagnostics", &format!("{{{sp1}}}")), Value::Null);
+    assert_eq!(call(&s, "getSemanticDiagnostics", &format!("{{{sp1}}}")), Value::Array(vec![]));
     let other = session(&dir.dir(), true);
     let e = call_err(&other, "getSemanticDiagnostics", &format!("{{{sp1}}}"));
     assert!(e.contains("not found"), "{e}");
@@ -165,7 +165,7 @@ fn remaining_diagnostic_kinds_and_declaration_emit() {
     assert!(!arr(&decl).is_empty(), "expected declaration diagnostics");
     let sugg = call(&s, "getSuggestionDiagnostics", &format!("{{{sp},\"files\":[{}]}}", quote(&a)));
     assert!(matches!(sugg, Value::Null | Value::Array(_)));
-    assert_eq!(call(&s, "getConfigFileParsingDiagnostics", &format!("{{{sp}}}")), Value::Null);
+    assert_eq!(call(&s, "getConfigFileParsingDiagnostics", &format!("{{{sp}}}")), Value::Array(vec![]));
     let dts = call(&s, "getDeclarationEmit", &format!("{{{sp},\"files\":[{}]}}", quote(&a)));
     let files = arr(get(&dts, "outputFiles"));
     assert_eq!(files.len(), 1);
@@ -214,7 +214,7 @@ fn config_file_names_and_source_file_metadata() {
 
     // Synthetic programs have no config file.
     let (snap2, p2) = create_program(&s, &[a], "{}");
-    assert_eq!(call(&s, "getConfigFileNames", &format!("{{\"snapshot\":{snap2},\"project\":{}}}", quote(&p2))), Value::Null);
+    assert_eq!(call(&s, "getConfigFileNames", &format!("{{\"snapshot\":{snap2},\"project\":{}}}", quote(&p2))), Value::Array(vec![]));
 }
 
 #[test]

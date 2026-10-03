@@ -293,10 +293,11 @@ pub fn resolved_module_response(r: &ResolvedModule) -> Value {
         .set("resolvedFileName", s(r.resolved_file_name))
         .set_opt("originalPath", (!r.original_path.is_empty()).then(|| s(r.original_path)))
         .set("extension", s(r.extension))
-        .set_opt("resolvedUsingTsExtension", r.resolved_using_ts_extension.then(|| b(true)))
-        .set_opt("resolvedUsingExtraExtensions", r.resolved_using_extra_extensions.then(|| b(true)))
+        // encoding/json/v2 `omitempty` keeps `false`.
+        .set("resolvedUsingTsExtension", b(r.resolved_using_ts_extension))
+        .set("resolvedUsingExtraExtensions", b(r.resolved_using_extra_extensions))
         .set_opt("packageId", pkg)
-        .set_opt("isExternalLibraryImport", r.is_external_library_import.then(|| b(true)))
+        .set("isExternalLibraryImport", b(r.is_external_library_import))
         .set_opt("alternateResult", (!r.alternate_result.is_empty()).then(|| s(r.alternate_result)))
         .build()
 }

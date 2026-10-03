@@ -76,7 +76,7 @@ fn full_file_system_is_total_and_layer_retains_base() {
     let names2 = json::marshal(&call(&s, "getSourceFileNames", &format!("{{{sp2}}}"))).unwrap();
     assert_eq!(names, names2);
     // Old snapshot still sees the original content.
-    assert_eq!(call(&s, "getSemanticDiagnostics", &format!("{{\"snapshot\":{snap},\"project\":{}}}", quote(&project))), Value::Null);
+    assert_eq!(call(&s, "getSemanticDiagnostics", &format!("{{\"snapshot\":{snap},\"project\":{}}}", quote(&project))), Value::Array(vec![]));
 }
 
 #[test]

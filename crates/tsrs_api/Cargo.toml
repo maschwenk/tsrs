@@ -25,6 +25,5 @@ tsrs_project.workspace = true
 rustc-hash.workspace = true
 tsrs_scanner.workspace = true
 tsrs_api_codec.workspace = true
-
-[dev-dependencies]
+# Re-entrancy helpers only (thread-local request context set by the connection); no protocol code.
 tsrs_api_transport.workspace = true

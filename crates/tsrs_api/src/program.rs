@@ -18,13 +18,10 @@ use crate::handler::{ApiError, ApiResult};
 use crate::session::Session;
 use crate::wire::{b, s, strings, DocumentIdentifier, Obj, Params};
 
-/// Go `NewDiagnosticResponses` under `@gen-proto-nullable`: empty is `null`.
+/// Go `NewDiagnosticResponses`: a nil slice, which encoding/json/v2 writes as `[]` (the TS type is
+/// nullable, but the pinned server never sends `null` here).
 fn nullable_diagnostics(diags: &[P<Diagnostic>]) -> Value {
-    if diags.is_empty() {
-        Value::Null
-    } else {
-        diagnostic_responses(diags)
-    }
+    diagnostic_responses(diags)
 }
 
 /// Go `resolveOptionalSourceFile` for a present identifier.
@@ -187,7 +184,8 @@ impl Session {
     pub(crate) fn handle_get_config_file_names(&self, p: Params) -> ApiResult<Value> {
         let (_sd, program) = self.program_of(&p)?;
         let command_line = program.command_line();
-        let Some(config) = command_line.config_file else { return Ok(Value::Null) };
+        // Go returns a nil []string, written as `[]` by encoding/json/v2.
+        let Some(config) = command_line.config_file else { return Ok(Value::Array(Vec::new())) };
         let mut names = vec![config.source_file.file_name().to_string()];
         names.extend(command_line.extended_source_files());
         Ok(strings(names))

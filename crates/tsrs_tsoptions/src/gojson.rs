@@ -290,9 +290,8 @@ pub fn project_reference_to_go_json(r: &ProjectReference) -> Value {
     if !r.original_path.is_empty() {
         o.insert("originalPath".to_string(), Value::String(r.original_path.clone()));
     }
-    if r.circular {
-        o.insert("circular".to_string(), Value::Bool(true));
-    }
+    // encoding/json/v2 `omitempty` never omits booleans.
+    o.insert("circular".to_string(), Value::Bool(r.circular));
     Value::Object(o)
 }
 

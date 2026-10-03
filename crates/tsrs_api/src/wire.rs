@@ -23,6 +23,23 @@ impl Obj {
             None => self,
         }
     }
+    /// Go encoding/json/v2 `omitempty`: omitted when the encoded value is `null`, `""`, `[]` or `{}`
+    /// (unlike v1, `false` and `0` are NOT omitted).
+    pub fn set_omitempty(self, key: &str, value: Value) -> Obj {
+        let empty = match &value {
+            Value::Null => true,
+            Value::String(s) => s.is_empty(),
+            Value::Array(a) => a.is_empty(),
+            Value::Object(o) => o.is_empty(),
+            _ => false,
+        };
+        if empty {
+            self
+        } else {
+            self.set(key, value)
+        }
+    }
+
     pub fn build(self) -> Value {
         Value::Object(self.0)
     }

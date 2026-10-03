@@ -78,8 +78,9 @@ pub trait Handler: Send + Sync {
     fn handle_request(&self, method: &str, params: &[u8]) -> ApiResult<Response>;
     /// A request that arrives while the server is blocked in a server->client call on the same connection
     /// (sync MessagePack mode: the client re-enters the API from a filesystem / resolver callback).
-    /// `depth >= 1`. The default treats it like a top-level request; `Session` rejects methods that could
-    /// block on resources held by the outer request (see `Session::nested_request_allowed`).
+    /// `depth >= 1`. Nested requests are served like top-level ones (Go does the same); resources that are
+    /// not reentrant are acquired with the transport's `lock_for_request`, which fails boundedly instead of
+    /// deadlocking when the holder is waiting on the client (crates/tsrs_api_transport/src/reentrancy.rs).
     fn handle_nested_request(&self, method: &str, params: &[u8], depth: u32) -> ApiResult<Response> {
         let _ = depth;
         self.handle_request(method, params)

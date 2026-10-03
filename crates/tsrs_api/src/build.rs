@@ -110,8 +110,10 @@ impl Session {
     pub(crate) fn handle_build(&self, p: Params, only_references: bool, clean: bool) -> ApiResult<Value> {
         let id = p.u64("buildOrchestratorID")?;
         let project = p.str("project")?;
-        // Nested requests from client callbacks never reach here (Session::nested_request_allowed).
-        let mut orchestrators = self.build_state.orchestrators.lock().unwrap();
+        // Go holds `buildMu` for the whole build. A request re-entering from a client callback while a build
+        // holds it gets a bounded error instead of a deadlock.
+        let mut orchestrators = tsrs_api_transport::reentrancy::lock_for_request(&self.build_state.orchestrators, "the build orchestrator")
+            .map_err(|e| ApiError::internal(e.message))?;
         let Some(o) = orchestrators.get_mut(&id) else {
             let what = match (clean, only_references) {
                 (false, false) => format!("build orchestrator not found while building {project}"),
