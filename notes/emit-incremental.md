@@ -169,3 +169,33 @@ graph is `noEmit`, so there are no one-file incremental emits; F1 targets emitti
 the 15 projects peak at 320 MB at most in tsrs (253 MB in tsgo; `xstate-store-angular`, whose dependencies are the
 largest), so the graph's 1.1 GB at one builder is retained per-project data (about 60 MB per project above the
 shared baseline), where Go's peak (531 MB) stays near a few projects. Scope: measured, not changed.
+
+## Checkpoint `e4c6a96`: stack + `mfs-cx/emit-checker-thread-fix` `600723a` (on main `fb867b1`) — NOT merge-ready
+
+Normal merge (only conflict: EMIT.md section 13 rows, all kept). Measurements by the coordinator show `600723a`
+skips idle checker threads but does not reduce memory; the effective fix (the one-active-group caller-thread path of
+`52be3a5`) is being restored on that branch. This checkpoint records the evidence for `e4c6a96` only; it does not
+claim the memory fix.
+
+Gates on `e4c6a96` (base main `fb867b1`):
+- conformance errors + `--baselines types,symbols` identical in all four modes (lazy on/off x single/multi-threaded
+  test programs): 13,458 / 12,779 pass;
+- `--baselines js` 8,679 / 15,197, same pass list as `fb867b1` (4,712 crash at other waves' stubs, as on main); the 5
+  `@incremental` variants pass through the incremental program (on main they pass as plain programs);
+- fourslash 4,066 / 63, same pass list as `fb867b1`; `-D warnings --all-targets` exit 0; `emit_gate` 5/5;
+- oracle wrapper: `tools/oracle/emit/test_monorepo.sh` (main's fail-closed regression test) 0 failures; `--buildinfo`
+  checked fail-closed by hand on a throwaway one-package repo under /tmp (identical run exit 0; a tsrs wrapper that
+  appends a byte to the tsbuildinfo makes the package `FAIL(files)`, exit 1);
+- `fixtures/run-all.sh` identical; `graph` / `cycle` at `--builders 1/4/8` with and without `--stopBuildOnErrors`
+  identical to tsgo-ref.
+
+Public emitting graph `xsdts` (the xstate-main package graph with `declaration` + `emitDeclarationOnly`, `outDir`
+and an explicit `rootDir` per project under /tmp; without `rootDir` both tsgo and tsrs write the `.d.ts` next to the
+sources, so the checkout was cleaned and `rootDir` added): tsgo-ref and tsrs at `--builders 1/4/8` produce identical
+output (568 lines) and identical trees (142 `.d.ts` + 15 tsbuildinfo). Peak RSS, cold (max of 3) / rebuild of `core`
+after deleting its tsbuildinfo:
+- `e4c6a96`: 1,281 / 561 MB, 1,319 / 611 MB, 1,339 / 655 MB at 1 / 4 / 8 builders;
+- `535adce` (no checker fix): 1,273 / 559, 1,313 / 607, 1,350 / 647 MB;
+- tsgo-ref: 465 / 222, 1,072 / 389, 1,955 / 393 MB.
+So `600723a` changes nothing measurable here either; on this graph the per-project arena retention (see above), not
+checker threads, sets tsrs's peak at low builder counts.
