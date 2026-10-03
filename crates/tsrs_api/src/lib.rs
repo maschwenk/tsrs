@@ -11,7 +11,6 @@
 
 pub mod batch;
 pub mod build;
-pub mod callbackfs;
 pub mod config;
 pub mod diagnostics;
 pub mod handler;

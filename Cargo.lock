@@ -212,6 +212,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
 dependencies = [
  "serde_core",
+ "serde_derive",
 ]
 
 [[package]]
@@ -278,6 +279,7 @@ name = "tsrs_api"
 version = "0.2.3"
 dependencies = [
  "rustc-hash",
+ "tsrs_api_transport",
  "tsrs_ast",
  "tsrs_checker",
  "tsrs_compiler",
@@ -290,6 +292,32 @@ dependencies = [
  "tsrs_project",
  "tsrs_scanner",
  "tsrs_tsoptions",
+ "tsrs_vfs",
+]
+
+[[package]]
+name = "tsrs_api_codec"
+version = "0.2.3"
+dependencies = [
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_binder",
+ "tsrs_core",
+ "tsrs_parser",
+ "xxhash-rust",
+]
+
+[[package]]
+name = "tsrs_api_transport"
+version = "0.2.3"
+dependencies = [
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "tsrs_core",
+ "tsrs_ls",
+ "tsrs_lsproto",
+ "tsrs_project",
  "tsrs_vfs",
 ]
 
@@ -359,6 +387,7 @@ dependencies = [
  "rustc-hash",
  "similar",
  "tsrs_api",
+ "tsrs_api_transport",
  "tsrs_ast",
  "tsrs_binder",
  "tsrs_compiler",

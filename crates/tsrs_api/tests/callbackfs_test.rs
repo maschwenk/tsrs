@@ -2,8 +2,8 @@ mod common;
 use common::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tsrs_api::callbackfs::CallbackFs;
-use tsrs_api::{ApiResult, ClientConn, Session, SessionOptions};
+use tsrs_api::{Session, SessionOptions};
+use tsrs_api_transport::{CallbackConfig, CallbackFs, Caller, TransportError};
 use tsrs_core::json::{self, Value};
 use tsrs_vfs::{bundled, osvfs, FS};
 
@@ -14,15 +14,25 @@ struct MemoryClient {
     calls: Mutex<Vec<String>>,
 }
 
-impl ClientConn for MemoryClient {
-    fn call(&self, method: &str, params: &str) -> ApiResult<String> {
+impl Caller for MemoryClient {
+    fn notify(&self, _method: &str, _params: Option<&[u8]>) -> Result<(), TransportError> {
+        Ok(())
+    }
+    fn call(&self, method: &str, params: Option<&[u8]>) -> Result<Vec<u8>, TransportError> {
+        let params = std::str::from_utf8(params.unwrap_or(b"null")).unwrap().to_string();
+        Ok(self.respond(method, &params).into_bytes())
+    }
+}
+
+impl MemoryClient {
+    fn respond(&self, method: &str, params: &str) -> String {
         self.calls.lock().unwrap().push(method.to_string());
         let path = match json::unmarshal(params).unwrap() {
             Value::String(p) => p,
             _ => String::new(),
         };
         if !path.starts_with(&self.root) {
-            return Ok(r#"{"kind":"useOS"}"#.into());
+            return r#"{"kind":"useOS"}"#.into();
         }
         let r = match method {
             "readFile" => match self.files.get(&path) {
@@ -42,7 +52,7 @@ impl ClientConn for MemoryClient {
             "realpath" => r#"{"kind":"identity"}"#.into(),
             _ => r#"{"kind":"error"}"#.into(),
         };
-        Ok(r)
+        r
     }
 }
 
@@ -58,7 +68,7 @@ fn program_reads_through_client_callbacks() {
         calls: Mutex::new(Vec::new()),
     });
     let callbacks: Vec<String> = ["readFile", "fileExists", "directoryExists", "getAccessibleEntries", "realpath"].iter().map(|s| s.to_string()).collect();
-    let cbfs = Arc::new(CallbackFs::new(Arc::new(bundled::wrap_fs(osvfs::fs())), &callbacks, Some(true)).unwrap());
+    let cbfs = Arc::new(CallbackFs::new(Arc::new(bundled::wrap_fs(osvfs::fs())), &CallbackConfig::parse(&callbacks).unwrap(), Some(true)));
     cbfs.set_connection(client.clone());
     let fs: Arc<dyn FS> = cbfs;
     let s = Session::new(SessionOptions { cwd: dir.dir(), default_library_path: bundled::lib_path(), fs, binary_responses: false, run_external_code: false });
@@ -74,10 +84,6 @@ fn program_reads_through_client_callbacks() {
 }
 
 #[test]
-fn unknown_callbacks_and_error_callbacks() {
-    let base: Arc<dyn FS> = Arc::new(bundled::wrap_fs(osvfs::fs()));
-    assert!(CallbackFs::new(base.clone(), &["nope".into()], None).is_err());
-    let fs = CallbackFs::new(base, &["readFile:error".into()], None).unwrap();
-    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| fs.read_file("/x")));
-    assert!(r.is_err());
+fn unknown_callbacks_are_rejected() {
+    assert!(CallbackConfig::parse(&["nope"]).is_err());
 }

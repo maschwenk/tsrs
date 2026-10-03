@@ -76,6 +76,14 @@ impl Response {
 /// requests, and filesystem callbacks re-enter the transport while a request is in flight.
 pub trait Handler: Send + Sync {
     fn handle_request(&self, method: &str, params: &[u8]) -> ApiResult<Response>;
+    /// A request that arrives while the server is blocked in a server->client call on the same connection
+    /// (sync MessagePack mode: the client re-enters the API from a filesystem / resolver callback).
+    /// `depth >= 1`. The default treats it like a top-level request; `Session` rejects methods that could
+    /// block on resources held by the outer request (see `Session::nested_request_allowed`).
+    fn handle_nested_request(&self, method: &str, params: &[u8], depth: u32) -> ApiResult<Response> {
+        let _ = depth;
+        self.handle_request(method, params)
+    }
     fn handle_notification(&self, method: &str, params: &[u8]) -> ApiResult<()>;
 }
 

@@ -6,8 +6,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tsrs_api::build::{BuildBackend, BuildOrchestrator, BuildOutcome, BuildRequest};
-use tsrs_api::callbackfs::CallbackFs;
-use tsrs_api::{Session, SessionOptions};
+use tsrs_api::{ClientConn, Handler as _, Session, SessionOptions};
+use tsrs_api_transport as transport;
+use tsrs_api_transport::{CallbackConfig, CallbackFs};
 use tsrs_core::P;
 use tsrs_tsoptions::ParseConfigHost;
 use tsrs_vfs::{bundled, osvfs, FS};
@@ -60,35 +61,76 @@ pub(crate) fn parse_api_flags(args: &[String]) -> Result<ApiFlags, ()> {
     })
 }
 
-/// Go `StdioServer.Run` setup: the session and, when callbacks are enabled, the callback filesystem that must
-/// be connected to the client once the transport is up.
-pub(crate) fn new_api_session(flags: &ApiFlags) -> Result<(Arc<Session>, Option<Arc<CallbackFs>>), String> {
+/// Go `StdioServer.Run` setup: the session over bundled libs + OS filesystem, wrapped by the client
+/// callback filesystem (the CLI always passes a case-sensitivity setting, so Go always wraps).
+pub(crate) fn new_api_session(flags: &ApiFlags) -> Result<(Arc<Session>, Arc<CallbackFs>), String> {
     let base: Arc<dyn FS> = Arc::new(bundled::wrap_fs(osvfs::fs()));
-    // Go wraps whenever callbacks are requested or case sensitivity is given; the CLI always passes the latter.
-    let callback_fs = Arc::new(CallbackFs::new(base, &flags.callbacks, Some(flags.case_sensitive))?);
+    let config = CallbackConfig::parse(&flags.callbacks)?;
+    let callback_fs = Arc::new(CallbackFs::new(base, &config, Some(flags.case_sensitive)));
     let fs: Arc<dyn FS> = callback_fs.clone();
     let mut options = SessionOptions::new(flags.cwd.clone(), bundled::lib_path(), fs, !flags.is_async);
     options.run_external_code = flags.run_external_code;
     let session = Session::new(options);
     session.set_build_backend(Arc::new(CliBuildBackend));
-    Ok((session, Some(callback_fs)))
+    Ok((session, callback_fs))
 }
 
-/// `tsrs --api`.
+/// Adapts the core session to the transport's handler (contract: crates/tsrs_api_transport/README.md).
+struct SessionHandler(Arc<Session>);
+
+impl transport::Handler for SessionHandler {
+    fn handle_request(&self, cx: &transport::RequestContext, method: &str, params: &[u8]) -> Result<transport::Response, transport::ApiError> {
+        // Go: errors are CodeInternalError with err.Error().
+        match self.0.handle_nested_request(method, params, cx.depth) {
+            Ok(tsrs_api::Response::Json(s)) => Ok(transport::Response::Json(s.into_bytes())),
+            Ok(tsrs_api::Response::Binary(b)) => Ok(transport::Response::Binary(b)),
+            Err(e) => Err(transport::ApiError::internal(e.to_string())),
+        }
+    }
+
+    fn handle_notification(&self, _cx: &transport::RequestContext, method: &str, params: &[u8]) {
+        let _ = self.0.handle_notification(method, params);
+    }
+}
+
+impl Drop for SessionHandler {
+    fn drop(&mut self) {
+        self.0.close();
+    }
+}
+
+struct ClientConnAdapter(Arc<dyn transport::Caller>);
+
+impl ClientConn for ClientConnAdapter {
+    fn call(&self, method: &str, params: &str) -> tsrs_api::ApiResult<String> {
+        let raw = self.0.call(method, Some(params.as_bytes())).map_err(|e| tsrs_api::ApiError::internal(e.to_string()))?;
+        String::from_utf8(raw).map_err(|e| tsrs_api::ApiError::internal(e.to_string()))
+    }
+}
+
+/// `tsrs --api` (Go `runAPI` + `StdioServer.Run`). stdout carries only protocol bytes.
 pub fn run_api(args: &[String]) -> i32 {
     let Ok(flags) = parse_api_flags(args) else { return 2 };
-    let (session, _callback_fs) = match new_api_session(&flags) {
-        Ok(s) => s,
+    if let Err(err) = CallbackConfig::parse(&flags.callbacks) {
+        eprintln!("{err}");
+        return 2;
+    }
+    let mut options = transport::ServeOptions::new(flags.is_async);
+    options.collect_timing = flags.timing;
+    let pipe = (!flags.pipe_path.is_empty()).then(|| std::path::PathBuf::from(&flags.pipe_path));
+    let result = transport::serve(pipe.as_deref(), options, |caller| {
+        let (session, callback_fs) = new_api_session(&flags).expect("callbacks validated above");
+        callback_fs.set_connection(caller.clone());
+        session.set_connection(Arc::new(ClientConnAdapter(caller)));
+        Arc::new(SessionHandler(session))
+    });
+    match result {
+        Ok(()) => 0,
         Err(err) => {
             eprintln!("{err}");
-            return 2;
+            1
         }
-    };
-    // The wire runtime (crates/tsrs_api_transport, runtime lane) is not integrated on this branch yet. Fail
-    // explicitly instead of falling through to the compiler command line or speaking a different protocol.
-    let _ = (flags.pipe_path, flags.timing, session);
-    eprintln!("tsrs --api: the wire transport is not integrated in this build yet (see docs/NODE_API.md)");
-    1
+    }
 }
 
 /// Go `apiBuildSystem`: output is discarded, the filesystem is the session's host filesystem.
@@ -229,6 +271,7 @@ mod tests {
         let cwd = dir.canonicalize().unwrap().to_string_lossy().into_owned();
         let flags = ApiFlags { cwd: cwd.clone(), pipe_path: String::new(), callbacks: Vec::new(), case_sensitive: true, is_async: true, timing: false, run_external_code: false };
         let (s, _) = new_api_session(&flags).unwrap();
+        let s = s;
         let r = call(&s, "createBuildOrchestrator", r#"{"rootNames":["app"]}"#);
         let id = json::marshal(get(&r, "buildOrchestratorID")).unwrap();
 

@@ -232,6 +232,14 @@ impl Session {
         self.batch_pages.lock().unwrap().clear();
     }
 
+    /// Methods that are safe while an outer request on the same connection is blocked in a client callback:
+    /// they take no snapshot-building, checker, build-orchestrator or batch locks and do not read through the
+    /// callback filesystem. Everything else is rejected with an explicit client error instead of risking a
+    /// deadlock on a non-reentrant resource (exclusive checker leases, project-builder state, `buildMu`).
+    pub fn nested_request_allowed(method: &str) -> bool {
+        matches!(method, "echo" | "ping" | "initialize" | "parseCommandLine" | "transpileModule" | "transpileDeclaration" | "release")
+    }
+
     /// Go `getSnapshotData`: resolves a client snapshot handle, pinning it for the caller.
     pub fn snapshot_data(&self, handle: SnapshotID) -> ApiResult<Arc<SnapshotData>> {
         self.snapshots.read().unwrap().get(&handle).map(|(sd, _)| sd.clone()).ok_or_else(|| ApiError::client(format!("snapshot {handle} not found")))
@@ -367,6 +375,15 @@ impl Handler for Session {
                 Err(ApiError::internal(format!("panic: {message}")))
             }
         }
+    }
+
+    fn handle_nested_request(&self, method: &str, params: &[u8], depth: u32) -> ApiResult<Response> {
+        if depth > 0 && !Session::nested_request_allowed(method) {
+            return Err(ApiError::client(format!(
+                "{method} cannot be called from inside a server callback (nested request depth {depth}); only lock-free methods are supported re-entrantly"
+            )));
+        }
+        self.handle_request(method, params)
     }
 
     fn handle_notification(&self, _method: &str, _params: &[u8]) -> ApiResult<()> {
