@@ -52,10 +52,11 @@ describe("parity: AST and checker at the UTF-16/WTF-8 boundary", () => {
     // with an explicit error. It is todo so neither server is credited unless it actually passes.
     test("source text containing a lone surrogate", { todo: "pinned Go server panics on lone surrogates in callback file text" }, () => {
         const text = `export const raw = "x\uD83Dy";\nexport const after = 1;\n`;
-        const { api, program } = open({ "/src/lone.ts": text });
-        using _ = api;
+        const ctx = syncAPI({ "/tsconfig.json": `{ "compilerOptions": { "strict": true } }`, "/src/lone.ts": text });
+        using api = ctx.api;
         let outcome: string;
         try {
+            const program = api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json")!.program;
             outcome = program.getSourceFile("/src/lone.ts")!.text === text ? "round-trip" : "altered";
         }
         catch (e) {
