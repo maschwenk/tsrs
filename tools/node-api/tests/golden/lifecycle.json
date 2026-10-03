@@ -38,7 +38,6 @@
   "reentry.sync": {
     "status": 0,
     "nested": "ok",
-    "sawIndex": true,
     "after": true
   }
 }

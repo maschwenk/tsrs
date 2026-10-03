@@ -94,8 +94,35 @@ describe("parity: callbacks and process lifecycle", () => {
             return { nested: nested.startsWith("threw") ? "threw" : nested, nestedMessage: nested, sawIndex: names.includes("/src/index.ts"), after };
         `);
         assert.equal(r.timedOut, false, `re-entrant sync request hung (> 20s); stderr: ${r.stderr}`);
-        g.check("reentry.sync", { status: r.status, nested: r.result?.nested, sawIndex: r.result?.sawIndex, after: r.result?.after });
+        // sawIndex is not compared: see the todo test below.
+        g.check("reentry.sync", { status: r.status, nested: r.result?.nested, after: r.result?.after });
         soft.check(t, "reentry.sync.message", r.result?.nestedMessage ?? null);
+    });
+
+    // Pinned Go defect (b85298b6): a nested sync request issued from inside a readFile callback intermittently
+    // makes the file being read disappear from the program (observed 3/40 runs; 0/40 without the nested request,
+    // 0/40 with the async binding). Desired behavior asserted; todo so neither server is credited by chance.
+    test("re-entrant sync request inside readFile never drops the file being read", { todo: "pinned Go server intermittently drops the file when a nested sync request runs inside its readFile callback" }, () => {
+        const r = runIsolated(`
+            let dropped = 0;
+            for (let i = 0; i < 30; i++) {
+                const vfs = createVirtualFileSystem(${JSON.stringify(files)});
+                let api;
+                let nested = false;
+                const readFile = vfs.readFile.bind(vfs);
+                vfs.readFile = (p) => {
+                    if (p === "/src/index.ts" && !nested) { nested = true; api.parseCommandLine(["--strict"]); }
+                    return readFile(p);
+                };
+                api = new API({ cwd, fs: vfs });
+                const names = api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json").program.getSourceFileNames();
+                if (!names.includes("/src/index.ts")) dropped++;
+                api.close();
+            }
+            return { dropped };
+        `, 60_000);
+        assert.equal(r.timedOut, false, `hung (> 60s); stderr: ${r.stderr}`);
+        assert.equal(r.result?.dropped, 0, `file dropped in ${r.result?.dropped}/30 runs`);
     });
 
     test("re-entrant API request from inside a filesystem callback (async)", t => {
