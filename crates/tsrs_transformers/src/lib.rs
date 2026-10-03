@@ -18,7 +18,7 @@ pub(crate) use std::rc::Rc;
 
 pub(crate) use rustc_hash::{FxHashMap, FxHashSet};
 pub(crate) use tsrs_ast::{self as ast, *};
-pub(crate) use tsrs_core::collections::{MultiMap, OrderedSet, Set};
+pub(crate) use tsrs_core::collections::{MultiMap, OrderedSet, OrderedSetExt, Set};
 pub(crate) use tsrs_core::jsnum::{self, Number};
 pub(crate) use tsrs_core::tspath;
 pub(crate) use tsrs_core::{alloc_slice, alloc_str, alloc_vec, CompilerOptions, ModuleKind, ScriptKind, ScriptTarget, TextRange, Tristate, P};
