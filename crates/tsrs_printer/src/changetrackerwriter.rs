@@ -53,6 +53,7 @@ impl ChangeTrackerWriter {
         let p5 = self.positions.clone();
         let p6 = self.positions.clone();
         PrintHandlers {
+            map_source_position: None,
             on_before_emit_node: Some(Box::new(move |node_opt: Option<P<Node>>| {
                 if let Some(node) = node_opt {
                     set_pos(&p1, triviaPositionKey::Node(node));
