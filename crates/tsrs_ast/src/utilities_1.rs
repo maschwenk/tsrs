@@ -114,6 +114,11 @@ pub fn is_modifier(node: P<Node>) -> bool {
     is_modifier_kind(node.kind())
 }
 
+// utilities.go:108
+pub fn is_modifier_like(node: P<Node>) -> bool {
+    is_modifier(node) || is_decorator(node)
+}
+
 pub fn is_compound_assignment(token: Kind) -> bool {
     token >= Kind::FirstCompoundAssignment && token <= Kind::LastCompoundAssignment
 }
@@ -141,6 +146,27 @@ pub fn is_destructuring_assignment(node: P<Node>) -> bool {
         return kind == Kind::ObjectLiteralExpression || kind == Kind::ArrayLiteralExpression;
     }
     false
+}
+
+// utilities.go:140
+pub fn is_object_binding_or_assignment_element(node: P<Node>) -> bool {
+    matches!(node.kind(), Kind::BindingElement | Kind::PropertyAssignment | Kind::ShorthandPropertyAssignment | Kind::SpreadAssignment)
+}
+
+// utilities.go:151
+pub fn is_array_binding_or_assignment_element(node: P<Node>) -> bool {
+    match node.kind() {
+        Kind::BindingElement
+        | Kind::OmittedExpression
+        | Kind::SpreadElement
+        | Kind::ArrayLiteralExpression
+        | Kind::ObjectLiteralExpression
+        | Kind::Identifier
+        | Kind::PropertyAccessExpression
+        | Kind::ElementAccessExpression => return true,
+        _ => {}
+    }
+    is_assignment_expression(node, true /*excludeCompoundAssignment*/)
 }
 
 pub fn is_binding_pattern(node: P<Node>) -> bool {

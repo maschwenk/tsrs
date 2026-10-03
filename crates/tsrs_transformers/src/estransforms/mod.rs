@@ -3,10 +3,12 @@
 use crate::*;
 
 mod async_;
+mod classfields_1;
+mod classfields_2;
 mod classthis;
-mod classfields;
 mod definitions;
-mod esdecorator;
+mod esdecorator_1;
+mod esdecorator_2;
 mod exponentiation;
 mod forawait;
 mod logicalassignment;
@@ -21,10 +23,12 @@ mod using;
 mod utilities;
 
 pub use async_::*;
+pub use classfields_1::*;
+pub use classfields_2::*;
 pub use classthis::*;
-pub use classfields::*;
 pub use definitions::*;
-pub use esdecorator::*;
+pub use esdecorator_1::*;
+pub use esdecorator_2::*;
 pub use exponentiation::*;
 pub use forawait::*;
 pub use logicalassignment::*;
