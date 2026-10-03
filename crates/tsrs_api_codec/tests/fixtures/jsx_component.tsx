@@ -1,0 +1,12 @@
+import React from "react";
+interface Props { name: string; items?: string[] }
+export const Comp = <T,>({ name, items = [] }: Props) => (
+    <>
+        <div className="x" {...rest} data-a={1} ns:attr="v">
+            Hello, {name}! &amp; welcome
+            {items.map(i => <Item key={i} value={i} />)}
+            <Self.Closing />
+        </div>
+        {/* comment */}
+    </>
+);
