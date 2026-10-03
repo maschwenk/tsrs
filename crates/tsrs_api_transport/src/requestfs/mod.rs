@@ -57,6 +57,17 @@ pub struct RequestFileSystemParams {
     pub removed_paths: Option<Vec<String>>,
 }
 
+impl RequestFileSystemParams {
+    /// Decodes `fileSystem` params with the pinned decoder's strictness: duplicate member names at any
+    /// depth, invalid UTF-8 and unpaired surrogate escapes are errors (texts match jsontext). Use this
+    /// (or `strictjson::validate` on the whole request) instead of plain serde, which keeps the last
+    /// duplicate.
+    pub fn from_json(data: &[u8]) -> Result<Option<RequestFileSystemParams>, String> {
+        crate::strictjson::validate(data)?;
+        serde_json::from_slice(data).map_err(|e| format!("json: {e}"))
+    }
+}
+
 /// A snapshot filesystem as the API session sees it: either a request filesystem or anything else.
 #[derive(Clone)]
 pub enum AnyFs {

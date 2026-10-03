@@ -36,6 +36,8 @@ pub struct RequestContext {
     /// (e.g. an exclusive checker lease) across a callback must reject nested requests that need the
     /// same resource instead of blocking on it.
     pub depth: u32,
+    /// Connection-wide callback state (how many requests are blocked on the client).
+    pub callbacks: std::sync::Arc<crate::reentrancy::CallbackState>,
 }
 
 /// The API session. Implementations must be thread-safe: the async connection runs each request on

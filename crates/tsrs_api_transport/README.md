@@ -82,10 +82,32 @@ tsrs_api_transport::serve(pipe.as_deref(), options, |caller| {
 ```
 
 `--callbacks` is a comma-separated list (`CallbackConfig::parse`; unknown names are an error).
-Exclusive checker leases are not reentrant: in sync mode a nested request arrives on the thread that
-is blocked in a filesystem callback (`RequestContext.depth >= 1`, not visible through core's
-`Handler`); a session that holds a lease or a session-wide lock while reading files must not let a
-nested request block on it.
+
+## Re-entrancy (note for core: session locks and checker leases)
+
+A client callback may call the API while the request that triggered it is still running. Sync mode
+handles that nested request on the thread blocked in `Caller::call` (`depth >= 1`); async mode handles
+it on another thread. If the nested request blocks on something the waiting request holds (a session
+mutex, an exclusive checker lease, `languageServerUpdateMu`-style locks), the pinned Go server hangs.
+tsrs policy: never hang; succeed when no held resource is needed (as Go does), otherwise fail fast with
+`api: client error: <resource> is in use by a request that is waiting on a client callback; ...`.
+
+What the transport provides (no change to core's `Handler` signature needed):
+
+- `tsrs_api_transport::current_request()` (thread-local `RequestContext`: `depth`, `cancel`,
+  connection-wide `callbacks.waiting_on_client()`), valid inside `handle_request` on both conns.
+- `lock_for_request(&Mutex<T>, "resource name")`: blocks while the holder makes progress, returns the
+  error above when the lock is contended while a request on the connection waits for the client, and is
+  a plain lock outside requests.
+- `blocking_may_deadlock()`: check before waiting on a non-mutex resource (checker lease semaphore);
+  if true, return `reentrancy::reentrancy_error(..)` instead of waiting.
+
+Core (owns the session and adapter): take session-wide locks and exclusive checker leases through these
+helpers in any path that can reach the callback filesystem, or release them before filesystem access.
+`tests/reentrancy.rs` proves the policy with a session-shaped handler on both protocols (nested request
+needing the held lock errors, nested request not needing it succeeds at depth 1, plain contention waits,
+closing while a handler waits on a callback returns and releases the lock), all under a 20 s watchdog.
+Handlers that ignore the cancellation token can still delay `run`'s final join (Go also waits).
 
 ## Request filesystem (feature `requestfs`)
 
@@ -97,19 +119,35 @@ file-change summaries with symlink aliases. `RequestFs` implements `FS`, `FileHa
 `with_base_file_system` (Go `RebasableFileSystem`). Remaining integration (core / tsrs_project):
 `layer_overlay_file_system` must rebase a request filesystem over the overlay FS the way Go's
 `layerOverlayFileSystem` does (tsrs_project's `FsRef` has no rebasable variant yet), and errors map to
-`api: client error: ...`. Duplicate JSON keys in `files`/`directories` are last-wins here (Go's decoder
-rejects them).
+`api: client error: ...`. Decode params with `RequestFileSystemParams::from_json` (or run
+`strictjson::validate` on the whole request): plain serde would keep the last duplicate key, which the
+pinned decoder rejects.
+
+## Strict JSON (`strictjson`)
+
+The pinned decoder rejects duplicate member names anywhere in a document (even inside fields it
+ignores), unpaired surrogate escapes and invalid UTF-8 — nothing is replaced with U+FFFD.
+`decode_message` (JSON-RPC: a violation is a fatal read error, as in Go, so a lone surrogate in an async
+callback result ends the connection) and the callback filesystem (the triggering request fails with
+`panic: jsontext: ...`) apply it. Session params decoding is core's: apply `strictjson::validate` to
+request params before serde so duplicates are rejected like Go's `unmarshalPayload`.
 
 ## Tests
 
 - `tests/go_frames.rs`: byte-exact writes and reads against frames produced by the pinned Go code.
 - `tests/conn.rs`: real OS pipes: split frames, frame limits, callbacks, nested requests, remote
   errors, EOF with calls pending, protocol violations.
-- `tests/node_roundtrip.rs` + `tests/node/roundtrip.test.mjs`: the pinned Node `sync` and `async`
-  clients (from `ts-ref`, `node --conditions=@typescript/source`) against
+- `tests/node_roundtrip.rs` + `tests/node/roundtrip.test.mjs` (15 node tests): the pinned Node `sync`
+  and `async` clients (from `ts-ref`, `node --conditions=@typescript/source`) against
   `examples/transport_test_server.rs`, including fs callbacks with every serverFS sentinel, callback
-  re-entry, astral/lone-surrogate text, 5 MiB payloads, timing, server exit, and `--pipe` sockets.
-  Skipped with a message if node or ts-ref is missing (`TSRS_REQUIRE_NODE_TESTS=1` makes that fail).
+  re-entry, astral text, lone surrogates (rejected like Go), 5 MiB payloads, timing, server exit, and
+  `--pipe` sockets. Mandatory: it fails with install instructions when node or ts-ref is missing.
+  Rust-only: `cargo test -p tsrs_api_transport --lib --test conn --test go_frames --test strictjson_oracle --test reentrancy`.
+- `tests/strictjson_oracle.rs`: 38 inputs decoded by a Go binary built at the pinned commit
+  (duplicate names at any depth, lone/unpaired surrogates, invalid UTF-8, valid astral pairs): same
+  accept/reject decisions and identical error text for callback responses, JSON-RPC messages and
+  request-filesystem params.
+- `tests/reentrancy.rs`: see Re-entrancy.
 - `tests/requestfs_differential.rs` (feature `requestfs`): 142 query results and every step's
   file-change summary compared with the pinned Go request filesystem over the same scenarios, plus a
   real-OS-filesystem layering test.
@@ -121,7 +159,6 @@ rejects them).
 - A frame truncated after its first byte is an explicit `UnexpectedEof` error; Go reports some of
   these as a clean `io.EOF`.
 - JSON syntax error texts come from serde_json, not encoding/json/v2.
-- Lone UTF-16 surrogates in callback string values (`\udXXX` from JSON.stringify) decode to U+FFFD.
 
 ## Not supported
 

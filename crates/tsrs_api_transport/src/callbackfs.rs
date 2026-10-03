@@ -115,12 +115,16 @@ impl Decoded {
     }
 
     fn string_value(&self, name: &str) -> String {
-        let raw = self.value.as_deref().unwrap_or("null");
-        decode_json_string_lenient(raw).unwrap_or_else(|e| fail(format!("invalid {name} callback value: {e}")))
+        self.value::<String>(name)
     }
 }
 
 fn decode_callback_response(name: &str, result: &[u8]) -> Decoded {
+    // json.Unmarshal(result, &response): duplicate names, invalid UTF-8 and unpaired surrogate escapes
+    // anywhere in the response are errors (the callback panics; the request fails).
+    if let Err(e) = crate::strictjson::validate(result) {
+        fail(e);
+    }
     let response: CallbackResponse<'_> =
         serde_json::from_slice(result).unwrap_or_else(|e| fail(format!("invalid {name} callback response: {e}")));
     let kind = response.kind.unwrap_or_default();
@@ -485,73 +489,4 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let doy = (153 * mp + 2) / 5 + d - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     era * 146097 + doe - 719468
-}
-
-/// Decodes a JSON string value. JavaScript strings may contain lone surrogates, which
-/// JSON.stringify emits as `\udXXX` escapes; like Go's decoder (invalid UTF-8 allowed), those are
-/// replaced with U+FFFD instead of failing the whole callback.
-pub fn decode_json_string_lenient(raw: &str) -> Result<String, String> {
-    match serde_json::from_str::<String>(raw) {
-        Ok(s) => Ok(s),
-        Err(first) => {
-            let trimmed = raw.trim_matches(|c: char| c == ' ' || c == '\t' || c == '\n' || c == '\r');
-            let Some(body) = trimmed.strip_prefix('"').and_then(|t| t.strip_suffix('"')) else {
-                return Err(first.to_string());
-            };
-            decode_string_body(body).ok_or_else(|| first.to_string())
-        }
-    }
-}
-
-fn decode_string_body(body: &str) -> Option<String> {
-    let mut out = String::with_capacity(body.len());
-    let mut chars = body.chars().peekable();
-    let hex4 = |it: &mut std::iter::Peekable<std::str::Chars<'_>>| -> Option<u32> {
-        let mut v = 0u32;
-        for _ in 0..4 {
-            v = v * 16 + it.next()?.to_digit(16)?;
-        }
-        Some(v)
-    };
-    while let Some(c) = chars.next() {
-        match c {
-            '"' => return None,
-            c if (c as u32) < 0x20 => return None,
-            '\\' => match chars.next()? {
-                '"' => out.push('"'),
-                '\\' => out.push('\\'),
-                '/' => out.push('/'),
-                'b' => out.push('\u{8}'),
-                'f' => out.push('\u{c}'),
-                'n' => out.push('\n'),
-                'r' => out.push('\r'),
-                't' => out.push('\t'),
-                'u' => {
-                    let u = hex4(&mut chars)?;
-                    if (0xD800..0xDC00).contains(&u) {
-                        // High surrogate: pair only with an immediately following low surrogate escape.
-                        let mut look = chars.clone();
-                        if look.next() == Some('\\') && look.next() == Some('u') {
-                            if let Some(lo) = hex4(&mut look) {
-                                if (0xDC00..0xE000).contains(&lo) {
-                                    chars = look;
-                                    let cp = 0x10000 + ((u - 0xD800) << 10) + (lo - 0xDC00);
-                                    out.push(char::from_u32(cp)?);
-                                    continue;
-                                }
-                            }
-                        }
-                        out.push('\u{FFFD}');
-                    } else if (0xDC00..0xE000).contains(&u) {
-                        out.push('\u{FFFD}');
-                    } else {
-                        out.push(char::from_u32(u)?);
-                    }
-                }
-                _ => return None,
-            },
-            c => out.push(c),
-        }
-    }
-    Some(out)
 }

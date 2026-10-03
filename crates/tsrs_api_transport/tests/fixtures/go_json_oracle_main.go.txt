@@ -1,0 +1,80 @@
+// Oracle for tsrs: decodes inputs exactly as the pinned server does and prints the outcome.
+package main
+
+import (
+	"encoding/hex"
+	"io"
+	"os"
+
+	"github.com/microsoft/TypeScript/tsc/internal/api/requestfilesystem"
+	"github.com/microsoft/TypeScript/tsc/internal/json"
+	"github.com/microsoft/TypeScript/tsc/internal/jsonrpc"
+)
+
+type inCase struct {
+	Kind  string `json:"kind"`
+	Input string `json:"input"`
+}
+
+type outCase struct {
+	Kind   string     `json:"kind"`
+	Input  string     `json:"input"`
+	Error  string     `json:"error"`
+	Value  json.Value `json:"value,omitempty"`
+	HexStr string     `json:"hex,omitempty"`
+}
+
+// callbackfs.go callbackResponse + decodeCallbackResponse + the readFile "value" branch.
+type callbackResponse struct {
+	Kind  string     `json:"kind"`
+	Value json.Value `json:"value"`
+}
+
+func main() {
+	data, _ := io.ReadAll(os.Stdin)
+	var cases []inCase
+	if err := json.Unmarshal(data, &cases); err != nil {
+		panic(err)
+	}
+	var out []outCase
+	for _, c := range cases {
+		o := outCase{Kind: c.Kind, Input: c.Input}
+		raw, err := hex.DecodeString(c.Input)
+		if err != nil {
+			panic(err)
+		}
+		c.Input = string(raw)
+		switch c.Kind {
+		case "requestfs":
+			var fs *requestfilesystem.RequestFileSystem
+			if err := json.Unmarshal([]byte(c.Input), &fs); err != nil {
+				o.Error = err.Error()
+			} else {
+				v, _ := json.Marshal(fs)
+				o.Value = v
+			}
+		case "jsonrpc":
+			var m jsonrpc.Message
+			if err := json.Unmarshal([]byte(c.Input), &m); err != nil {
+				o.Error = err.Error()
+			} else {
+				o.Value = json.Value(`"ok"`)
+			}
+		case "readFile":
+			var r callbackResponse
+			if err := json.Unmarshal([]byte(c.Input), &r); err != nil {
+				o.Error = "response: " + err.Error()
+			} else {
+				var s string
+				if err := json.Unmarshal(r.Value, &s); err != nil {
+					o.Error = "value: " + err.Error()
+				} else {
+					o.HexStr = hex.EncodeToString([]byte(s))
+				}
+			}
+		}
+		out = append(out, o)
+	}
+	b, _ := json.Marshal(out)
+	os.Stdout.Write(b)
+}
