@@ -9,8 +9,8 @@ Both compilers run with the same flags; every output path is redirected (`--outD
 `--incremental false` is not passed: the reference writes its build info to the redirected path, which lies outside
 the compared output tree.
 
-Reference binary: $TSGO, else $TSRS_WORK/bin/tsgo-ref. tsrs binary: $TSRS (default target/release/tsrs), run with
-TSRS_EMIT=1.
+Reference binary: $TSGO, else $TSRS_WORK/bin/tsgo-ref. tsrs binary: $TSRS (default target/release/tsrs); both
+emit by default, so they run with the same arguments and environment.
 
 Prints `files: N identical, D different, M missing, X extra` (missing = emitted by the reference only, extra = by
 tsrs only), plus diagnostics/exit-code agreement; with --json one JSON object instead. Exit status 1 on any
@@ -128,9 +128,8 @@ def main():
         return ["-p", project, "--outDir", out, "--declarationDir", out, "--tsBuildInfoFile", out + ".tsbuildinfo", "--pretty", "false"] + extra
 
     env = dict(os.environ)
-    env.pop("TSRS_EMIT", None)
     go_status, go_text = run([reference_binary()] + flags(go_out), env, cwd, args.timeout)
-    env_rs = dict(env, TSRS_EMIT="1")
+    env_rs = dict(env)
     # A noembed reference (the npm tsgo: lib.d.ts next to the binary) reads its libraries from disk; match it.
     ref_dir = os.path.dirname(os.path.realpath(reference_binary()))
     if args.buildinfo and "TSRS_LIB_PATH" not in env_rs and os.path.exists(os.path.join(ref_dir, "lib.d.ts")):

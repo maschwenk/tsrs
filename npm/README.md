@@ -115,9 +115,10 @@ pnpm add -D @maschwenk/tsrs@0.1.0-ts7.1.0-dev.20260929
 
 # 2. Run it.
 pnpm exec tsrs --version
-pnpm exec tsrs -p path/to/project --extendedDiagnostics
+pnpm exec tsrs -p path/to/project --noEmit --extendedDiagnostics
 
-# 3. Switch a typecheck script from tsc to tsrs: the flags are the same.
+# 3. Switch a tsc script to tsrs: the flags are the same. Like tsc, tsrs emits unless the options say otherwise
+#    (`--noEmit` for a typecheck-only script).
 ```
 
 tsrs runs 4 checker threads by default, like tsgo (`--singleThreaded` for one). `GOMEMLIMIT` has no effect on tsrs.
