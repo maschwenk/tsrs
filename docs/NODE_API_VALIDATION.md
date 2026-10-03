@@ -126,8 +126,10 @@ temp project outside the repo. It then runs the installed binary through CLI pas
 and async API programs on the OS filesystem (diagnostics plus emit with `TSRS_EMIT` unset), and a nodenext
 typecheck of the published declarations that must report exactly one deliberate error.
 
-`.github/workflows/node-api.yml` runs on main pushes and manual dispatch only. It has read-only
-permissions, no secrets and never publishes. The `parity` job runs the Go oracle (must pass), then tsrs
+`.github/workflows/node-api.yml` runs on main pushes, manual dispatch, and `pull_request` into main for
+API paths. It never uses `pull_request_target`, has read-only permissions and no secrets, and never
+publishes. Manual dispatch only works once the file is on the default branch, so pull requests are how the
+API branches get validated before a merge. The `parity` job runs the Go oracle (must pass), then tsrs
 against the same suites, then the inventory, uploads the results, and fails on any tsrs failure. The
 `package` job builds, packs and runs `consumer.mjs` on linux-x64, linux-arm64 and darwin-arm64.
 
@@ -175,6 +177,33 @@ and goldens as the commit that adds this text; the later change is inventory rep
   - `unimplemented` 3 (the profiling methods).
 - Known upstream defects: tsrs passes todo 1 (lone surrogate: explicit error, keeps serving) and todo 2 (no
   dropped file in 30 runs). Todo 3 is a client defect and fails on both servers.
+
+### tsrs at core `d6d8e2a540cf`
+
+- Server: release build at that exact commit.
+- Harness: commit `6bda959`, the same tests and goldens as the copy at that commit plus the RSS probe.
+- Client: the unmodified pinned upstream client. The packaged SDK patches its async client for crashes, but
+  the harness doesn't use the packaged SDK.
+
+Results:
+
+- Full suite, traced, two runs: 902 tests, 899 passed, 0 failed, 3 todo. No timeouts, leaks or skipped
+  suites.
+- Server exits: only the intentional SIGKILLs from the crash tests.
+- `sync/api.test`: 339/339 in 6 consecutive runs.
+- Parity lifecycle/rss/snapshot/build/gaps stress: 10 runs, no crashes, failures, timeouts or leaks.
+- RSS probe, 120 cycles (MiB at start, then at the end):
+
+| Variant | Go | tsrs `a9b4354` | tsrs `d6d8e2a` |
+|---|---|---|---|
+| create-plain | 44→61 | 111→525 | 110→174, flat from cycle 40 |
+| update | 44→65 | flat 112–114 | flat 112 |
+| transpile | 45→117 | 109→171 | 104→113 |
+
+- Inventory over 172 methods:
+  - `tests-pass` 168;
+  - `error-only-unverified` 1 (`getCurrentLanguageServerSnapshot`);
+  - `unimplemented` 3 (the profiling methods).
 
 ## Known limitations
 
