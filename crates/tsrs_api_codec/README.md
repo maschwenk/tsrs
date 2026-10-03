@@ -22,6 +22,7 @@ Derived from TypeScript (Apache-2.0, Copyright (c) Microsoft Corporation); see t
 | `decode_source_file(&[u8]) -> DecodedNode` | `DecodeSourceFile` |
 | `decode_nodes_in_current_region(&[u8], &NodeFactory) -> P<Node>` | `DecodeNodes` into the caller's region |
 | `PositionMap` (WTF-8 aware UTF-8 ⇄ UTF-16) | `ast.PositionMap` |
+| `node_handle`, `parse_node_handle`, `resolve_node_index` | session.go `nodeHandleFrom`, `resolveNodeHandle` (parsing/index part) |
 
 Node handles on the wire are `"<index>.<kind>.<path>"` (session.go `nodeHandleFrom`); `index` is the
 `NodeIndexTable` index. The session owns building/caching the table per source file and must drop it together
@@ -41,15 +42,26 @@ port of Go's `NodeVisitor.VisitEachChild` with the encoder's `VisitNodes`/`Visit
 
 ## Verification
 
-* `tests/golden/*.bin` are produced by the pinned server itself (`gen/oracle.mjs`, typescript
-  `7.1.0-dev.20260930.4` = pinned commit + one CI-only commit) for public fixtures (`tests/fixtures`: TS, TSX,
-  `.d.ts`, checked JS with JSDoc, BOM/CRLF/astral identifiers, string escapes producing lone surrogates
-  (WTF-8), parse errors, empty file, triple-slash references, module augmentations, imports/exports of every
-  form). `golden_compat` requires byte equality of the whole encoding (header incl. xxh3 hash words and parse
-  options, string table, extended and structured msgpack data, every node record).
-* The decoder is tested on the Go server's bytes and on the JavaScript client encoder's bytes
-  (`*.client.bin`), and against malformed input.
-* `tests/node_client.mjs` decodes Rust-produced bytes with the real JavaScript client.
+`cargo test -p tsrs_api_codec` (set `TSRS_CODEC_ORACLE=<dir>/node_modules/typescript` for the Node test):
+
+* `golden_compat`: `tests/golden/*.bin` come from the pinned server itself (`gen/oracle.mjs` drives
+  `createSourceFile` on typescript `7.1.0-dev.20260930.4` = pinned commit + one CI-only commit). The Rust
+  encoding of every fixture must be byte-identical: header (protocol version, xxh3-128 hash words, parse
+  options, section offsets), string offsets/data, extended data, msgpack structured data (triple-slash
+  references, imports, module augmentations, ambient module names) and every node record (kind, UTF-16
+  pos/end, sibling/parent links, child masks, commonData, flags). Fixtures (`tests/fixtures`, public, written
+  for this crate): TS, TSX, `.d.ts`, checked JS with every JSDoc tag form, BOM + CRLF + astral identifiers,
+  escapes producing WTF-8 lone surrogates, parse errors, missing declarations, empty file. Together they
+  contain every node kind a parser can produce (`goldens_cover_every_parser_node_kind`); the remaining kinds
+  are checker/emit internal. Also: `build_node_index_table` == encoder table, `get_index`, node handles,
+  generator freshness.
+* `decoder`: decodes the Go server bytes and the pinned JS client encoder's bytes (`*.client.bin`) and
+  compares the re-encoded tree structurally (kinds, ranges, flags, masks, string/literal contents); a
+  subtree encoding; ~13k truncated/corrupted inputs must be rejected or decoded without a panic.
+* `node_client`: the pinned JS client (`RemoteSourceFile`, `decodeNode`) reads the Rust encodings and every
+  exposed property (source file metadata, references, imports, augmentations, external module indicator,
+  each node's kind/pos/end/flags/text/operator/… via `forEachChild` incl. NodeArrays) must equal its view
+  of the Go encoding; a factory-synthesized type node (pos -1, WTF-8 text) decodes as built.
 
 ## Known gaps / divergences
 

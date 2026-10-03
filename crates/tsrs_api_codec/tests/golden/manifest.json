@@ -32,9 +32,24 @@
       "clientBytes": 2877,
       "inline": false
     },
+    "jsdoc_tags.js": {
+      "bytes": 14571,
+      "clientBytes": 5605,
+      "inline": false
+    },
     "jsx_component.tsx": {
       "bytes": 3990,
       "clientBytes": 4196,
+      "inline": false
+    },
+    "missing.js": {
+      "bytes": 1173,
+      "clientBytes": 910,
+      "inline": false
+    },
+    "more_syntax.ts": {
+      "bytes": 7537,
+      "clientBytes": 7647,
       "inline": false
     },
     "unicode_escapes.ts": {

@@ -7,6 +7,7 @@
 pub mod decoder;
 pub mod encoder;
 pub mod format;
+pub mod handle;
 mod generated;
 pub mod msgpack;
 pub mod positionmap;
@@ -18,4 +19,5 @@ pub use encoder::{
     NodeIndexTable,
 };
 pub use format::PROTOCOL_VERSION;
+pub use handle::{node_handle, parse_node_handle, resolve_node_index, ParsedNodeHandle};
 pub use positionmap::PositionMap;
