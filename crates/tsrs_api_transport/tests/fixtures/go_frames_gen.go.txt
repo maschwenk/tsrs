@@ -1,0 +1,195 @@
+package zzframes
+
+import (
+	"bytes"
+	"encoding/hex"
+	"io"
+	"os"
+	"testing"
+
+	"github.com/microsoft/TypeScript/tsc/internal/ipc"
+	"github.com/microsoft/TypeScript/tsc/internal/json"
+	"github.com/microsoft/TypeScript/tsc/internal/jsonrpc"
+)
+
+type rw struct {
+	io.Reader
+	io.Writer
+}
+
+type writeCase struct {
+	Name string `json:"name"`
+	Hex  string `json:"hex"`
+}
+
+type readCase struct {
+	Name   string          `json:"name"`
+	Input  string          `json:"input"`
+	Msgs   []json.Value    `json:"messages"`
+	Err    string          `json:"error"`
+	IsEOF  bool            `json:"eof"`
+}
+
+func msgJSON(m *ipc.Message) json.Value {
+	type out struct {
+		ID     *string            `json:"id"`
+		Method string             `json:"method"`
+		Params *string            `json:"params"`
+		Result *string            `json:"result"`
+		Error  *jsonrpc.ResponseError `json:"error"`
+		Kind   string             `json:"kind"`
+	}
+	o := out{Method: m.Method, Error: m.Error}
+	if m.ID != nil {
+		s, _ := json.Marshal(m.ID)
+		ss := string(s)
+		o.ID = &ss
+	}
+	if m.Params != nil {
+		s := hex.EncodeToString(m.Params)
+		o.Params = &s
+	}
+	if m.Result != nil {
+		s := hex.EncodeToString(m.Result)
+		o.Result = &s
+	}
+	switch {
+	case m.IsRequest():
+		o.Kind = "request"
+	case m.IsNotification():
+		o.Kind = "notification"
+	case m.IsResponse():
+		o.Kind = "response"
+	}
+	b, _ := json.Marshal(o)
+	return b
+}
+
+func readAll(p ipc.Protocol) ([]json.Value, error) {
+	var msgs []json.Value
+	for {
+		m, err := p.ReadMessage()
+		if err != nil {
+			return msgs, err
+		}
+		msgs = append(msgs, msgJSON(m))
+	}
+}
+
+func TestDumpFrames(t *testing.T) {
+	astral := "/proj/src/\U0001F600-\u00e9-\U0001D7D8.ts"
+	big := bytes.Repeat([]byte("x"), 300)
+	huge := bytes.Repeat([]byte("y"), 70000)
+	var writes []writeCase
+	mp := func(name string, f func(p *MessagePackProtocol)) {
+		var buf bytes.Buffer
+		f(NewMessagePackProtocol(&rw{Reader: &bytes.Buffer{}, Writer: &buf}))
+		writes = append(writes, writeCase{Name: "msgpack/" + name, Hex: hex.EncodeToString(buf.Bytes())})
+	}
+	js := func(name string, f func(p *ipc.JSONRPCProtocol)) {
+		var buf bytes.Buffer
+		f(ipc.NewJSONRPCProtocol(&rw{Reader: &bytes.Buffer{}, Writer: &buf}))
+		writes = append(writes, writeCase{Name: "jsonrpc/" + name, Hex: hex.EncodeToString(buf.Bytes())})
+	}
+	mp("call_readFile", func(p *MessagePackProtocol) { p.WriteRequest(jsonrpc.NewIDString("readFile"), "readFile", astral) })
+	mp("call_nil", func(p *MessagePackProtocol) { p.WriteRequest(jsonrpc.NewIDString("x"), "x", nil) })
+	mp("call_writeFile", func(p *MessagePackProtocol) {
+		p.WriteRequest(nil, "writeFile", struct {
+			Path string `json:"path"`
+			Data string `json:"data"`
+		}{astral, "a<b>&\"\\\n\u2028"})
+	})
+	mp("response_json", func(p *MessagePackProtocol) { p.WriteResponse(jsonrpc.NewIDString("ping"), json.Value(`"pong"`)) })
+	mp("response_nil", func(p *MessagePackProtocol) { p.WriteResponse(jsonrpc.NewIDString("release"), nil) })
+	mp("response_binary_astral", func(p *MessagePackProtocol) { p.WriteResponse(jsonrpc.NewIDString("echo"), RawBinary(astral)) })
+	mp("response_binary_empty", func(p *MessagePackProtocol) { p.WriteResponse(jsonrpc.NewIDString("getSourceFile"), RawBinary(nil)) })
+	mp("response_bin16", func(p *MessagePackProtocol) { p.WriteResponse(jsonrpc.NewIDString("echo"), RawBinary(big)) })
+	mp("response_bin32", func(p *MessagePackProtocol) { p.WriteResponse(jsonrpc.NewIDString("echo"), RawBinary(huge)) })
+	mp("error", func(p *MessagePackProtocol) {
+		p.WriteError(jsonrpc.NewIDString("getSymbol"), &jsonrpc.ResponseError{Code: jsonrpc.CodeInternalError, Message: "api: client error: symbol \U0001F600 not found"})
+	})
+	mp("error_empty_id", func(p *MessagePackProtocol) {
+		p.WriteError(jsonrpc.NewIDString(""), &jsonrpc.ResponseError{Code: jsonrpc.CodeInternalError, Message: "x"})
+	})
+	js("request_readFile", func(p *ipc.JSONRPCProtocol) { p.WriteRequest(jsonrpc.NewIDString("api1"), "readFile", astral) })
+	js("request_nil_params", func(p *ipc.JSONRPCProtocol) { p.WriteRequest(jsonrpc.NewIDString("api2"), "x", nil) })
+	js("notification", func(p *ipc.JSONRPCProtocol) { p.WriteNotification("note", json.Value(`{"a":1}`)) })
+	js("response_int_id", func(p *ipc.JSONRPCProtocol) { p.WriteResponse(jsonrpc.NewIDInt(7), json.Value(`{"b":[1,2]}`)) })
+	js("response_str_id", func(p *ipc.JSONRPCProtocol) { p.WriteResponse(jsonrpc.NewIDString("q"), json.Value(`"`+astral+`"`)) })
+	js("response_nil", func(p *ipc.JSONRPCProtocol) { p.WriteResponse(jsonrpc.NewIDInt(3), nil) })
+	js("response_binary", func(p *ipc.JSONRPCProtocol) { p.WriteResponse(jsonrpc.NewIDInt(4), RawBinary(astral)) })
+	js("error", func(p *ipc.JSONRPCProtocol) {
+		p.WriteError(jsonrpc.NewIDInt(9), &jsonrpc.ResponseError{Code: jsonrpc.CodeInternalError, Message: "boom \U0001F600"})
+	})
+
+	var reads []readCase
+	rd := func(name string, input []byte, mk func(r io.Reader) ipc.Protocol) {
+		msgs, err := readAll(mk(bytes.NewReader(input)))
+		c := readCase{Name: name, Input: hex.EncodeToString(input), Msgs: msgs}
+		if err == io.EOF {
+			c.IsEOF = true
+		} else if err != nil {
+			c.Err = err.Error()
+		}
+		reads = append(reads, c)
+	}
+	mpr := func(r io.Reader) ipc.Protocol { return NewMessagePackProtocol(&rw{Reader: r, Writer: io.Discard}) }
+	jsr := func(r io.Reader) ipc.Protocol { return ipc.NewJSONRPCProtocol(&rw{Reader: r, Writer: io.Discard}) }
+	tuple := func(typ byte, method, payload []byte) []byte {
+		var b bytes.Buffer
+		w := NewMessagePackProtocol(&rw{Reader: &bytes.Buffer{}, Writer: &b})
+		w.writeTuple(MessageType(typ), string(method), payload)
+		return b.Bytes()
+	}
+	cat := func(parts ...[]byte) []byte { return bytes.Join(parts, nil) }
+	rd("msgpack/multi", cat(
+		tuple(1, []byte("getSourceFile"), []byte(`{"snapshot":"n1","file":"`+astral+`"}`)),
+		tuple(2, []byte("readFile"), []byte(`{"kind":"value","value":"x"}`)),
+		tuple(3, []byte("fileExists"), []byte("Error: boom")),
+		tuple(1, []byte("getServerTiming"), nil),
+		[]byte{0x93, 0xcc, 0x01, 0xc4, 0x04, 'p', 'i', 'n', 'g', 0xc4, 0x00},
+	), mpr)
+	rd("msgpack/empty_method_request", tuple(1, nil, []byte("{}")), mpr)
+	rd("msgpack/bad_marker", []byte{0x92, 0x01}, mpr)
+	rd("msgpack/bad_type_marker", []byte{0x93, 0xd0, 0x01}, mpr)
+	rd("msgpack/unknown_type", []byte{0x93, 0x07}, mpr)
+	rd("msgpack/zero_type", []byte{0x93, 0x00}, mpr)
+	rd("msgpack/client_sent_response", tuple(4, []byte("x"), nil), mpr)
+	rd("msgpack/bad_bin", []byte{0x93, 0x01, 0xa4, 'p', 'i', 'n', 'g'}, mpr)
+	rd("msgpack/truncated_payload", cat(tuple(1, []byte("a"), []byte("b")), []byte{0x93, 0x01, 0xc4, 0x01, 'p', 0xc4, 0x05, 'a', 'b'}), mpr)
+	rd("msgpack/eof_in_header", []byte{0x93, 0x01}, mpr)
+	frame := func(body string) []byte { return []byte("Content-Length: " + itoa(len(body)) + "\r\n\r\n" + body) }
+	rd("jsonrpc/multi", cat(
+		frame(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`),
+		frame(`{"jsonrpc":"2.0","id":"s","method":"getSourceFile","params":{"file":"`+astral+`"}}`),
+		frame(`{"jsonrpc":"2.0","id":"api1","result":{"kind":"value","value":"\ud83d\ude00"}}`),
+		frame(`{"jsonrpc":"2.0","id":"api2","error":{"code":-32603,"message":"nope","data":{"x":1}}}`),
+		frame(`{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":1}}`),
+		[]byte("Content-Type: application/vscode-jsonrpc; charset=utf-8\r\nContent-Length: 2\r\n\r\n{}"),
+		frame(`{"id":2,"method":"ping","extra":true}`),
+		frame(`{"jsonrpc":"2.0","id":null,"method":"n"}`),
+	), jsr)
+	rd("jsonrpc/bad_version", frame(`{"jsonrpc":"1.0","id":1,"method":"x"}`), jsr)
+	rd("jsonrpc/no_content_length", []byte("X: 1\r\n\r\n{}"), jsr)
+	rd("jsonrpc/negative_length", []byte("Content-Length: -1\r\n\r\n"), jsr)
+	rd("jsonrpc/bad_length", []byte("Content-Length: 1x\r\n\r\n"), jsr)
+	rd("jsonrpc/bad_header", []byte("garbage\r\n\r\n"), jsr)
+	rd("jsonrpc/truncated_body", []byte("Content-Length: 10\r\n\r\n{\"a\""), jsr)
+	rd("jsonrpc/eof_in_header", []byte("Content-Len"), jsr)
+	rd("jsonrpc/invalid_json", frame(`{"id":1,`), jsr)
+	rd("jsonrpc/float_id", frame(`{"id":1.5,"method":"x"}`), jsr)
+	rd("jsonrpc/duplicate_key", frame(`{"id":1,"id":2,"method":"x"}`), jsr)
+
+	out, err := json.Marshal(map[string]any{"writes": writes, "reads": reads})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(os.Getenv("FRAMES_OUT"), out, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func itoa(n int) string {
+	b, _ := json.Marshal(n)
+	return string(b)
+}
