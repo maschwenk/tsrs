@@ -1,6 +1,12 @@
 use std::sync::LazyLock;
 
-const VERSION: &str = "7.1.0-dev";
+// Go: `var version = "7.1.0-dev"`, overridden by ldflags in release builds (the npm nightly stamps
+// "7.1.0-dev.<date>.<n>"). tsrs: overridden at build time by TSRS_TS_VERSION (e.g. to match a tsgo binary's
+// tsbuildinfo `version`); default builds keep Go's source default.
+const VERSION: &str = match option_env!("TSRS_TS_VERSION") {
+    Some(v) => v,
+    None => "7.1.0-dev",
+};
 
 pub fn version() -> &'static str {
     VERSION

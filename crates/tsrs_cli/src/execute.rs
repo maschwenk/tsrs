@@ -216,8 +216,11 @@ fn tsc_compilation(sys: &'static dyn System, host: &'static sysParseConfigHost, 
     if config_options.watch.is_true() {
         return not_supported(sys, "watch mode (--watch)");
     }
-    // Incremental compilation (tsbuildinfo) is not supported; incremental projects are checked from scratch
-    // and nothing is written.
+    // Without TSRS_EMIT=1, incremental compilation (tsbuildinfo) is off: incremental projects are checked from
+    // scratch and nothing is written.
+    if emit_enabled() && config_for_compilation.compiler_options().unwrap().is_incremental() {
+        return perform_incremental_compilation(sys, config_for_compilation, &report_diagnostic, &report_error_summary, extended_config_cache, compile_times);
+    }
     perform_compilation(sys, config_for_compilation, &report_diagnostic, &report_error_summary, extended_config_cache, compile_times)
 }
 
@@ -271,9 +274,52 @@ fn perform_compilation(
         report_diagnostic,
         report_error_summary,
         compile_times,
+        incremental: None,
     });
     #[cfg(feature = "alloc-profile")]
     crate::census::run(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
+
+    CommandLineResult { status: result.status }
+}
+
+// tsc.go:308
+fn perform_incremental_compilation(
+    sys: &'static dyn System,
+    config: P<ParsedCommandLine>,
+    report_diagnostic: &tsc::DiagnosticReporter,
+    report_error_summary: &tsc::DiagnosticsReporter,
+    extended_config_cache: Arc<ExtendedConfigCache>,
+    mut compile_times: CompileTimes,
+) -> CommandLineResult {
+    let host = new_cached_fs_compiler_host(
+        sys.get_current_directory(),
+        sys.fs(),
+        sys.default_library_path(),
+        Some(extended_config_cache),
+        Some(Box::new(move |msg: &'static diagnostics::Message, args: &[&dyn std::fmt::Display]| {
+            sys.write(&format!("{}\n", msg.localize(args)));
+        })),
+    );
+    let build_info_read_start = sys.now();
+    let old_program = tsrs_incremental::read_build_info_program(config, &*tsrs_incremental::new_build_info_reader(host.clone()), &*host);
+    compile_times.build_info_read_time = sys.now() - build_info_read_start;
+
+    let parse_start = sys.now();
+    let program = new_program(ProgramOptions::new(config, host.clone()));
+    compile_times.parse_time = sys.now() - parse_start;
+    let changes_compute_start = sys.now();
+    let incremental_program =
+        tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), Some(std::time::Instant::now), false);
+    compile_times.changes_compute_time = sys.now() - changes_compute_start;
+    let (result, _) = emit_and_report_statistics(EmitInput {
+        sys,
+        program: incremental_program.get_program(),
+        config,
+        report_diagnostic,
+        report_error_summary,
+        compile_times,
+        incremental: Some(incremental_program),
+    });
 
     CommandLineResult { status: result.status }
 }

@@ -341,6 +341,7 @@ dependencies = [
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
+ "tsrs_incremental",
  "tsrs_lsp",
  "tsrs_module",
  "tsrs_parser",
@@ -433,6 +434,25 @@ name = "tsrs_fswatch"
 version = "0.2.3"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "tsrs_incremental"
+version = "0.2.3"
+dependencies = [
+ "bitflags",
+ "rayon",
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_binder",
+ "tsrs_checker",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_module",
+ "tsrs_tsoptions",
+ "tsrs_vfs",
+ "xxhash-rust",
 ]
 
 [[package]]

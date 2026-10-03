@@ -14,6 +14,8 @@ pub struct EmitInput<'a> {
     pub report_diagnostic: &'a DiagnosticReporter<'a>,
     pub report_error_summary: &'a DiagnosticsReporter<'a>,
     pub compile_times: CompileTimes,
+    // Go `EmitInput.ProgramLike` when it is an `*incremental.Program` (only under TSRS_EMIT=1).
+    pub incremental: Option<P<tsrs_incremental::Program>>,
 }
 
 pub fn emit_and_report_statistics(input: EmitInput) -> (CompileAndEmitResult, Option<Statistics>) {
@@ -44,6 +46,9 @@ pub fn emit_and_report_statistics(input: EmitInput) -> (CompileAndEmitResult, Op
 }
 
 pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
+    if let Some(incremental) = input.incremental {
+        return emit_files_and_report_errors_incremental(input, incremental);
+    }
     let mut times = input.compile_times;
     let bind_time = Cell::new(times.bind_time);
     let check_time = Cell::new(times.check_time);
@@ -128,4 +133,78 @@ fn list_files(input: &EmitInput, emit_result: &tsrs_compiler::EmitResult) {
         }
         input.sys.write(&out);
     }
+}
+
+// emit.go:72 EmitFilesAndReportErrors with an incremental program as the ProgramLike.
+fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<tsrs_incremental::Program>) -> CompileAndEmitResult {
+    use tsrs_incremental::emit::{get_diagnostics_of_any_program as get_diagnostics_of_any_program_like, EmitOptions, EmitResult, ProgramLike};
+    let mut times = input.compile_times;
+    let bind_time = Cell::new(times.bind_time);
+    let check_time = Cell::new(times.check_time);
+    let emit_time = Cell::new(times.emit_time);
+
+    let ctx = tsrs_compiler::Context::default();
+    let mut all_diagnostics = get_diagnostics_of_any_program_like(
+        &ctx,
+        &program_like,
+        None,
+        false,
+        &mut |ctx, file| {
+            // Options diagnostics include global diagnostics (even though we collect them separately),
+            // and global diagnostics create checkers, which then bind all of the files. Do this binding
+            // early so we can track the time.
+            let bind_start = input.sys.now();
+            let diags = program_like.get_bind_diagnostics(ctx, file);
+            bind_time.set(input.sys.now() - bind_start);
+            diags
+        },
+        &mut |ctx, file| {
+            let check_start = input.sys.now();
+            let diags = program_like.get_semantic_diagnostics(ctx, file);
+            check_time.set(input.sys.now() - check_start);
+            let nested_emit_time = program_like.take_nested_emit_time();
+            if nested_emit_time > check_time.get() {
+                check_time.set(std::time::Duration::ZERO);
+            } else {
+                check_time.set(check_time.get() - nested_emit_time);
+            }
+            emit_time.set(emit_time.get() + nested_emit_time);
+            diags
+        },
+    );
+    times.bind_time = bind_time.get();
+    times.check_time = check_time.get();
+    times.emit_time = emit_time.get();
+
+    let mut emit_result = Some(EmitResult { emit_skipped: true, ..Default::default() });
+    if !program_like.options().list_files_only.is_true() {
+        let emit_start = input.sys.now();
+        emit_result = program_like.emit(&ctx, EmitOptions::default());
+        times.emit_time += input.sys.now() - emit_start;
+    }
+    if let Some(emit_result) = &emit_result {
+        all_diagnostics.extend(emit_result.diagnostics.iter().copied());
+    }
+
+    let all_diagnostics = sort_and_deduplicate_diagnostics(&all_diagnostics);
+    for &diagnostic in &all_diagnostics {
+        (input.report_diagnostic)(diagnostic);
+    }
+
+    let options = input.program.options();
+    if options.list_emitted_files.is_true() {
+        let mut out = String::new();
+        for file in emit_result.as_ref().map(|r| r.emitted_files.as_slice()).unwrap_or_default() {
+            out.push_str("TSFILE: ");
+            out.push_str(&tsrs_core::tspath::get_normalized_absolute_path(file, input.program.get_current_directory()));
+            out.push('\n');
+        }
+        input.sys.write(&out);
+    }
+    list_files(input);
+
+    (input.report_error_summary)(&all_diagnostics);
+    // Go reads EmitResult.EmitSkipped through a nil result here only when the incremental program was cancelled.
+    let emit_skipped = emit_result.map(|r| r.emit_skipped).unwrap_or(false);
+    CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, status: ExitStatus::Success, times }
 }
