@@ -1,0 +1,4 @@
+/** @see Some.Name */
+function g() {}
+class Z { @dec }
+@dangling

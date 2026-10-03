@@ -1,0 +1,66 @@
+{
+  "oracle": "typescript@7.1.0-dev.20260930.4",
+  "gitHead": "9adc871ff47f79b3e99ff2b1cbe9efb140d76af8",
+  "files": {
+    "basic.ts": {
+      "bytes": 1316,
+      "clientBytes": 1330,
+      "inline": false
+    },
+    "complex.ts": {
+      "bytes": 26542,
+      "clientBytes": 27107,
+      "inline": false
+    },
+    "declarations.d.ts": {
+      "bytes": 3695,
+      "clientBytes": 3783,
+      "inline": false
+    },
+    "empty.ts": {
+      "bytes": 312,
+      "clientBytes": 312,
+      "inline": false
+    },
+    "errors.ts": {
+      "bytes": 1332,
+      "clientBytes": 1351,
+      "inline": false
+    },
+    "jsdoc_checked.js": {
+      "bytes": 6683,
+      "clientBytes": 2877,
+      "inline": false
+    },
+    "jsdoc_tags.js": {
+      "bytes": 14571,
+      "clientBytes": 5605,
+      "inline": false
+    },
+    "jsx_component.tsx": {
+      "bytes": 3990,
+      "clientBytes": 4196,
+      "inline": false
+    },
+    "missing.js": {
+      "bytes": 1173,
+      "clientBytes": 910,
+      "inline": false
+    },
+    "more_syntax.ts": {
+      "bytes": 7537,
+      "clientBytes": 7647,
+      "inline": false
+    },
+    "unicode_escapes.ts": {
+      "bytes": 1217,
+      "clientBytes": 1225,
+      "inline": false
+    },
+    "unicode_text.ts": {
+      "bytes": 1291,
+      "clientBytes": 1232,
+      "inline": false
+    }
+  }
+}
