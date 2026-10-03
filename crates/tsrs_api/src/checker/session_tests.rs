@@ -116,6 +116,14 @@ impl S {
         }
     }
 
+    fn call_raw(&self, method: &str, raw: &str) -> Result<Value, String> {
+        match self.session.handle_request(method, raw.as_bytes()) {
+            Ok(Response::Json(t)) => Ok(json::unmarshal(&t).unwrap()),
+            Ok(Response::Binary(b)) => panic!("{method}: unexpected binary ({} bytes)", b.len()),
+            Err(e) => Err(e.to_string().lines().next().unwrap_or_default().to_string()),
+        }
+    }
+
     pub(super) fn sp(&self, extra: &[(&str, Value)]) -> Value {
         let mut o = tsrs_core::collections::OrderedMap::default();
         o.insert("snapshot".to_string(), Value::Number(self.snapshot));
@@ -302,6 +310,35 @@ fn shapes() -> Vec<(String, Value)> {
     s.wrong("signatureToSignatureDeclaration(kind 100000)", "signatureToSignatureDeclaration", p);
     let p = s.sp(&[("signature", get(&sig0, "id")), ("index", n(-1))]);
     s.wrong("getParameterType(index -1)", "getParameterType", p);
+
+    // Missing / null / empty parameter values (same raw payloads as the Go probe).
+    let sp = format!(r#""snapshot":{},"project":{}"#, json::marshal(&n(s.snapshot)).unwrap(), json::marshal_string(&s.project));
+    for (method, raw) in [
+        ("getSymbolAtPosition", r#"{<sp>,"position":0}"#),
+        ("getSymbolAtPosition", r#"{<sp>,"file":null,"position":0}"#),
+        ("getSymbolAtPosition", r#"{<sp>,"file":{},"position":0}"#),
+        ("getSymbolAtPosition", r#"{<sp>,"file":{"uri":null},"position":0}"#),
+        ("getSymbolAtPosition", r#"{<sp>,"file":5,"position":0}"#),
+        ("getSymbolAtPosition", "null"),
+        ("getSymbolsOfSourceFiles", r#"{<sp>,"files":[null]}"#),
+        ("getSymbolsOfSourceFiles", r#"{<sp>,"files":[{}]}"#),
+        ("getSymbolsOfSourceFiles", r#"{<sp>,"files":null}"#),
+        ("resolveName", r#"{<sp>,"name":"Array","meaning":788968,"file":null,"position":0}"#),
+        ("resolveName", r#"{<sp>,"name":"box","meaning":111551,"file":"/p/main.ts","position":null}"#),
+        ("getSymbolsInScope", r#"{<sp>,"file":null,"position":0,"meaning":1}"#),
+        ("getSymbolsAtPositions", r#"{<sp>,"file":"/p/main.ts","positions":null}"#),
+        ("getTypesOfSymbols", r#"{<sp>,"symbols":[null]}"#),
+        ("getTypeOfSymbol", r#"{<sp>,"symbol":null}"#),
+        ("getSymbolAtLocation", r#"{<sp>,"location":null}"#),
+        ("getSymbolAtPosition", r#"{<sp>,"file":true,"position":0}"#),
+        ("getSymbolAtPosition", r#"{<sp>,"file":[],"position":0}"#),
+    ] {
+        let r = match s.call_raw(method, &raw.replace("<sp>", &sp)) {
+            Ok(r) => obj(&[("result", r)]),
+            Err(e) => obj(&[("error", Value::String(e))]),
+        };
+        s.lines.push((format!("params:{method} {raw}"), r));
+    }
     s.lines
 }
 
@@ -327,7 +364,16 @@ fn session_responses_match_pinned_go() {
             continue;
         };
         compared += 1;
-        let (go_n, rs_n) = (normalize(&go, &mut Ids::default(), false), normalize(rs, &mut Ids::default(), false));
+        let (mut go_n, mut rs_n) = (normalize(&go, &mut Ids::default(), false), normalize(rs, &mut Ids::default(), false));
+        // Go's json/v2 decoder picks "cannot unmarshal" or "unable to unmarshal" per process (observed
+        // both on regeneration); the rest of the text is compared exactly.
+        for v in [&mut go_n, &mut rs_n] {
+            if let Value::Object(o) = v {
+                if let Some(Value::String(e)) = o.get_mut("error") {
+                    *e = e.replace("json: unable to unmarshal", "json: cannot unmarshal");
+                }
+            }
+        }
         if go_n != rs_n {
             diffs.push(format!("{q}\n  go: {}\n  rs: {}", json::marshal(&go_n).unwrap(), json::marshal(&rs_n).unwrap()));
         }
