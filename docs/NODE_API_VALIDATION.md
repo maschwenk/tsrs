@@ -47,6 +47,28 @@ their outcome. Candidate status is one of `unexercised` (no upstream test sends 
 evidence, not a full-parity proof. Owner and claimed status come from `crates/tsrs_api/src/methods.rs`
 when present and are shown next to the measured status.
 
+### Parity tests and goldens
+
+`tools/node-api/tests/*.test.ts` use the pinned client like the upstream tests do and compare results with
+`tools/node-api/tests/golden/*.json`. Goldens are recorded only from the Go oracle
+(`run-upstream.mjs --suite parity --record`, which refuses any other binary). Covered so far: UTF-16
+positions after astral/BMP text, diagnostic chains and related info, config parsing, global and program
+diagnostics, `extends` through node_modules, package `exports`, root-file programs, and emit
+(`noEmit`, `noEmitOnError`, `emitDeclarationOnly` with declaration maps, `allowJs` declarations, source
+maps with inline sources, d.ts inputs, `emitToString` / `getJavaScriptEmit` / `getDeclarationEmit`).
+
+### Installed package and CI
+
+`tools/node-api/consumer.mjs --dist <pack dir>` installs the `npm/build.mjs --pack` tarballs offline into a
+temp project outside the repo. It then runs the installed binary through CLI pass/fail regressions, sync
+and async API programs on the OS filesystem (diagnostics plus emit with `TSRS_EMIT` unset), and a nodenext
+typecheck of the published declarations that must report exactly one deliberate error.
+
+`.github/workflows/node-api.yml` runs on main pushes and manual dispatch only. It has read-only
+permissions, no secrets and never publishes. The `parity` job runs the Go oracle (must pass), then tsrs
+against the same suites, then the inventory, uploads the results, and fails on any tsrs failure. The
+`package` job builds, packs and runs `consumer.mjs` on linux-x64, linux-arm64 and darwin-arm64.
+
 ## Current evidence
 
 Go oracle at the pin, Linux x64, Node 24.21: upstream sync+async suites 842/842 tests passed (7 files,
@@ -55,6 +77,10 @@ Not sent by any upstream test: `getCurrentLanguageServerSnapshot`, `getExportSym
 `getOuterTypeParametersOfType`, `getConstraintOfType`, `startCPUProfile`, `stopCPUProfile`,
 `saveHeapProfile`. These need harness tests before any claim (the profiling methods are Go-runtime
 specific).
+
+Parity tests on the Go oracle: 12/12. Consumer check with the SDK branch's packaging (`d97535a`) and
+the Go oracle as the packed binary: 18/18 checks. That validates the harness and packaging path only,
+not Rust.
 
 tsrs: no integrated `--api` candidate has been measured yet.
 
