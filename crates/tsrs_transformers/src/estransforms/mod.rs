@@ -16,6 +16,7 @@ mod optionalchain;
 mod taggedtemplate;
 mod usestrict;
 mod using;
+mod utilities;
 
 pub use async_::*;
 pub use classfields::*;
@@ -31,3 +32,4 @@ pub use optionalchain::*;
 pub use taggedtemplate::*;
 pub use usestrict::*;
 pub use using::*;
+pub use utilities::*;
