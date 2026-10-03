@@ -162,3 +162,10 @@ machinery (tsrs_project memregions). So tsrs's peak at `--builders 1` grows with
 for the graph vs 216 MB for its largest project) where Go's tracks the projects in flight (531 MB). No change is
 made here: calling `free_program` would not reclaim the arenas, and the reviewer did not reproduce a retention
 regression after F1 at the sizes they tested.
+
+F1 on the same graph (reviewer's `52be3a5` = `535adce` + the checkerpool fix, built locally): peak RSS 1,131 /
+1,163 / 1,175 MB at 1 / 4 / 8 builders vs 1,113 / 1,157 / 1,171 MB for `e92f7b5` (wall unchanged). Expected: this
+graph is `noEmit`, so there are no one-file incremental emits; F1 targets emitting builds. Single-project builds of
+the 15 projects peak at 320 MB at most in tsrs (253 MB in tsgo; `xstate-store-angular`, whose dependencies are the
+largest), so the graph's 1.1 GB at one builder is retained per-project data (about 60 MB per project above the
+shared baseline), where Go's peak (531 MB) stays near a few projects. Scope: measured, not changed.
