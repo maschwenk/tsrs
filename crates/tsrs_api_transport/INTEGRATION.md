@@ -302,3 +302,123 @@ for `--api`, so standalone `--api` cannot observe them. That remains a documente
   - async `buildDuringBuild`: error after 10.3 s;
   - nested snapshot operations: OK.
 - The checker lane's `lease_reentrancy` tests: 3/3 pass.
+
+# Review of core 7c34965 (PR 34)
+
+## Inputs
+
+- Core: `7c34965542c4b709a2d9e821b59f2543058ead00`, isolated worktree. It contains runtime 623ee28;
+  f0762dc is not included. `target/debug/tsrs` sha256 `16e482d8…5d08`.
+- Pinned Go: built at microsoft/TypeScript `b85298b6…` (`cmd/tsc`) as the server, and
+  `tsc/cmd/zzoracle` (`tests/fixtures/go_json_oracle_main.go.txt`) for JSON decoding.
+- Clients: the pinned `packages/typescript/src/api` at the same commit.
+- "c7 + runtime": c7 with this branch's `src/` copied in and rebuilt locally. Not committed to core.
+
+## Params shape probe
+
+All 172 methods, sync, against Go. Artifacts: `c7-shape-probe-{go,tsrs,tsrs-with-runtime}.json`.
+Each cell counts responses identical to Go.
+
+| payload | d6 | c7 | c7 + runtime |
+| --- | --- | --- | --- |
+| lone surrogate / duplicate / nested duplicate / bad UTF-8 / truncated | 171 | 171 | 171 |
+| `[1]` (array) | 1 | **171** | 171 |
+| `"x"` (string) | – | 171 | 171 |
+| `5` (number) | – | 1 | 1 |
+| empty payload | – | 1 | **171** |
+| `{}` | – | 167 | 167 |
+| `null` | – | 50 | 50 |
+| wrong field types | 18 | 18 | 18 |
+
+The method missing from each 171 is the profiling methods (`stopCPUProfile`, plus `startCPUProfile`
+and `saveHeapProfile` where those params apply). tsrs reports them as unsupported; that is explicit and expected.
+
+### Stable error semantics (class, accept or reject, Go type) still to fix in core
+
+1. **`null` params, 119 methods.** Go decodes `null` into the zero struct, so the handler runs with
+   zero fields. Most then fail with `api: client error: …`, for example `snapshot 0 not found`, and
+   `createModuleResolver` and `readConfigFile` succeed. tsrs answers
+   `api: invalid request: … params must be an object` for all 119.
+   - Cause: `dispatch` passes `Value::Null` through, and handlers call `Params::object()` or the
+     checker's `params::object()`, which reject null.
+   - Fix: in `session.rs` `dispatch`, map `Value::Null` to an empty object for methods that have a
+     params type (`methods::params_type(m).is_some()`).
+2. **Missing `DocumentIdentifier`.** Go reads a missing identifier as an empty file name (the zero
+   value). Affected: `{}` for `readConfigFile` (Go: OK with a 5083 "Cannot read file" diagnostic) and
+   `parseConfigFile` (Go: `client error: could not read file "/tmp"`). tsrs says
+   `invalid request: DocumentIdentifier: expected string or object`.
+   - Fix: `wire.rs` `DocumentIdentifier::parse(Value::Null)` should return
+     `FileName(String::new())` for required single identifiers. The checker's `params.rs:165` has
+     the same issue.
+3. **Field-type errors, 3 methods with the wrong class.** For `retainSourceFile`,
+   `getCachedSourceFile` and `resolveModuleName`, Go returns
+   `invalid request: failed to unmarshal *api.<T>: json: cannot unmarshal JSON number into Go api.SourceFileDescriptor …`.
+   tsrs returns `client error: invalid source file descriptor …`. Type-check the descriptor fields
+   before validating them semantically.
+
+### Go decoder wording (variable text, reported separately)
+
+- **Wrong field types:** 148 methods have the same class and the same `failed to unmarshal *api.<T>`
+  prefix, but the detail differs. Go: `json: cannot unmarshal JSON string into Go api.SnapshotID within
+  "/snapshot"`. tsrs: `json: snapshot must be a non-negative integer`. Reproducing Go's text needs
+  Go's Go-type names and pointers for every field.
+- **Number params:** Go writes `cannot unmarshal JSON number into Go api.<T>` with no literal; tsrs
+  appends the literal (`JSON number 5`). Fix in core's `session.rs`: drop the number text.
+- **Syntax wording (transport-owned): fixed on this branch.**
+  - `strictjson` now reproduces jsontext's grammar errors: pointer and offset rules, offset 0
+    omitted, `at start of value`, `after object value` / `after array element`, `in literal`,
+    `in number`, escape snippets, control characters, trailing-comma blame, and member-name errors.
+  - Test: `go_syntax_oracle.json` holds 106 inputs decoded by the pinned Go oracle; all 106 match
+    (`syntax_errors_match_pinned_go_text`), plus the 38 earlier cases.
+  - Through c7 + runtime, 30 of 30 syntax probes on `release` params match Go, and the empty-payload
+    row goes from 1 to 171 identical.
+
+## Symlink target notification (`tests/node/requestfs_alias_repro.mjs`, CREATE and UPDATE)
+
+Semantic diagnostics before → after:
+
+| | update / target | update / alias | update / none | create / target | create / alias | create / none |
+| --- | --- | --- | --- | --- | --- | --- |
+| Go | 1→0 | 1→0 | 1→1 | 1→0 | 1→0 | 1→0 |
+| d6 | **1→1** | 1→0 | 1→1 | 1→0 | 1→0 | 1→0 |
+| c7 | 1→0 | 1→0 | 1→1 | 1→0 | 1→0 | 1→0 |
+
+c7 fixes UPDATE. CREATE re-reads the file even without a notification, in both Go and tsrs, so CREATE
+does not distinguish whether expansion happens. It matches Go, but that is not evidence of expansion
+on create.
+
+## Invalid readFile answers during a program build (`tests/node/invalid_callback_repro.mjs`)
+
+Raw sync client: `b.ts`'s readFile is answered with each of these.
+
+| answer | pinned Go | c7 | c7 + runtime |
+| --- | --- | --- | --- |
+| `{"kind":"bogus"}` | server crash (exit 2), `panic: invalid readFile callback response kind: bogus` | error response, same text | same |
+| `"value":5` | crash, `panic: json: cannot unmarshal JSON number into Go string` | error, serde text | **error, Go's text** |
+| missing kind / lone surrogate / duplicate kind / truncated / serverFS.error / CallError | crash, `panic: <text>` | error, same text as Go | same |
+
+- **Text:** the panic text is now identical in all 8 cases.
+- **Deliberate divergence, explicitly kept:** pinned Go crashes the whole server when a callback fails
+  on a compiler worker goroutine (`[recovered, repanicked]`). tsrs answers that request with the
+  error and keeps the connection.
+- **Also fixed on this branch:** a present `null` readFile value now decodes to `""`, as in Go (it used
+  to fail), and an absent value fails with `jsontext: unexpected EOF`, Go's error for an absent value.
+
+## Callback context propagation (guidance for core; no core edits)
+
+This branch adds `RequestScope::current()` / `scope.enter(|| …)`. Client calls inside `enter` are
+attributed to that request. With that, worker-thread file reads stop being "unattributed", and the
+remaining async divergence (an unrelated waiter rejected after the grace period) goes away for those
+reads. Test: `scoped_worker_callback_is_attributed_and_does_not_reject_an_unrelated_waiter`.
+
+Where core can apply it:
+1. In `snapshots.rs` `handle_create_snapshot` / `handle_update_snapshot`, and in the build handler,
+   capture `RequestScope::current()`.
+2. Pass the snapshot host and build a filesystem wrapper whose `FS` methods run
+   `scope.enter(|| inner.<op>(..))`:
+   - `req.file_system = Some(Arc::new(ScopedFs { inner, scope }))`, layered under any request
+     filesystem;
+   - and for builds, `BuildRequest.fs`.
+3. Do not set `replace_file_system` for the wrapper.
+4. Snapshots may keep the wrapper after the request ends. Later lazy reads then count against a
+   finished request, which holds nothing, so they never cause a rejection.

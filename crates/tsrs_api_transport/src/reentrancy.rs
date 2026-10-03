@@ -153,6 +153,24 @@ pub fn current_request() -> Option<RequestContext> {
     CURRENT.with(|c| c.borrow().clone())
 }
 
+/// The current request's identity, to carry onto threads that do work for it (e.g. compiler workers
+/// reading files through the callback filesystem). Client calls made inside `enter` are attributed to
+/// that request instead of being unattributed (see module docs).
+#[derive(Clone, Debug)]
+pub struct RequestScope(RequestContext);
+
+impl RequestScope {
+    /// The request served on this thread (None outside a request).
+    pub fn current() -> Option<RequestScope> {
+        current_request().map(RequestScope)
+    }
+
+    /// Runs `f` on this thread as part of the captured request.
+    pub fn enter<R>(&self, f: impl FnOnce() -> R) -> R {
+        with_request(&self.0, f)
+    }
+}
+
 /// The request that holds an exclusive resource. Capture with `Holder::current()` right after
 /// acquiring the resource and keep it with the resource until release.
 #[derive(Clone, Debug)]

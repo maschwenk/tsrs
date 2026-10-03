@@ -53,6 +53,13 @@ func main() {
 				v, _ := json.Marshal(fs)
 				o.Value = v
 			}
+		case "any":
+			var v any
+			if err := json.Unmarshal([]byte(c.Input), &v); err != nil {
+				o.Error = err.Error()
+			} else {
+				o.Value = json.Value(`"ok"`)
+			}
 		case "jsonrpc":
 			var m jsonrpc.Message
 			if err := json.Unmarshal([]byte(c.Input), &m); err != nil {

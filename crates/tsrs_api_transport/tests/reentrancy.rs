@@ -38,6 +38,13 @@ impl Handler for SimSession {
                 let r = thread::spawn(move || caller.call("cb", Some(b"\"/worker.ts\""))).join().unwrap();
                 Ok(Response::Json(r.map_err(|e| ApiError::internal(e.to_string()))?))
             }
+            // Same, but the worker carries the request's identity (how core can attribute file reads).
+            "callbackFromScopedWorker" => {
+                let caller = self.caller.clone();
+                let scope = tsrs_api_transport::RequestScope::current().unwrap();
+                let r = thread::spawn(move || scope.enter(|| caller.call("cb", Some(b"\"/worker.ts\"")))).join().unwrap();
+                Ok(Response::Json(r.map_err(|e| ApiError::internal(e.to_string()))?))
+            }
             // Holds the lock while a worker thread waits on the client (genuine re-entry setup).
             "outerWorker" => {
                 let _g = lock_for_request(&self.registry, "the snapshot registry")?;
@@ -405,6 +412,27 @@ fn sequential_acquisitions_do_not_inherit_a_previous_wait() {
         let v = json(&mut r);
         let legacy = v["result"]["secondRejectedAfterMs"].as_u64().unwrap();
         assert!(legacy < 100, "legacy blocking_may_deadlock inherits the previous wait: {legacy} ms");
+        w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{},"result":"late"}}"#, call["id"]).as_bytes()).unwrap();
+        assert_eq!(json(&mut r)["result"], "late");
+        drop(w);
+        assert!(run.join().unwrap().is_ok());
+    });
+}
+
+#[test]
+fn scoped_worker_callback_is_attributed_and_does_not_reject_an_unrelated_waiter() {
+    // Like the unattributed case, but the worker runs inside `RequestScope::enter`: the pending callback
+    // belongs to request 1, which holds nothing, so the waiter waits for the holder like Go.
+    bounded("scoped worker callback", || {
+        let (mut w, mut r, run) = start_async_with(grace_opts());
+        w.write_frame(br#"{"jsonrpc":"2.0","id":1,"method":"callbackFromScopedWorker"}"#).unwrap();
+        let call = json(&mut r);
+        w.write_frame(br#"{"jsonrpc":"2.0","id":2,"method":"holdMs","params":400}"#).unwrap();
+        thread::sleep(Duration::from_millis(20));
+        w.write_frame(br#"{"jsonrpc":"2.0","id":3,"method":"needsLock"}"#).unwrap();
+        let mut got = vec![json(&mut r), json(&mut r)];
+        got.sort_by_key(|v| v["id"].as_i64());
+        assert_eq!(got[1]["result"], 0, "{got:?}");
         w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{},"result":"late"}}"#, call["id"]).as_bytes()).unwrap();
         assert_eq!(json(&mut r)["result"], "late");
         drop(w);
