@@ -336,3 +336,57 @@ fn external_struct_decoding_matches_go_classes() {
     let d = call(&s, "getProgramDiagnostics", &format!(r#"{{"snapshot":{},"project":{}}}"#, snapshot(&r), quote(&project)));
     assert!(tsrs_core::json::marshal(&d).unwrap().contains("not found"), "{}", tsrs_core::json::marshal(&d).unwrap());
 }
+
+/// runtime-f2-review (f2_enum_cases.json): unknown int32 enum values compile like pinned Go, and Go `*int`
+/// options keep their exact 64-bit value.
+#[test]
+fn unknown_enum_values_and_go_int_options_match_go() {
+    let dir = TempDir::new("f2enums");
+    let a = dir.write("a.ts", "export const a = 1;\n");
+    let j = dir.write("j.tsx", "const e = <div a=\"1\"></div>;\nexport { e };\n");
+    let s = session(&dir.dir(), false);
+    let raw = |method: &str, payload: &str| match tsrs_api::Handler::handle_request(&*s, method, payload.as_bytes()) {
+        Ok(tsrs_api::Response::Json(t)) => Ok(t),
+        Ok(_) => unreachable!(),
+        Err(e) => Err(e.to_string()),
+    };
+    let input = r#"class C { x = 1; #p = 2; m() { return this.#p ** 2; } }\nasync function f() { await 1; for await (const z of []) {} }\nexport const o: any = {}; export const v = o?.b ?? 1;\n"#;
+    let transpile = |options: &str| raw("transpileModule", &format!(r#"{{"input":"{input}","options":{{"compilerOptions":{options}}}}}"#)).unwrap();
+    // target: Go's switch defaults transform maximally; comparisons see the raw number.
+    for target in ["12345", "-1", "2147483647"] {
+        let out = transpile(&format!(r#"{{"target":{target}}}"#));
+        assert!(out.contains("__awaiter"), "target {target}: {out}");
+    }
+    assert!(!transpile(r#"{"target":99}"#).contains("__awaiter"));
+    // module: Go's default module transformer is CommonJS.
+    let module_input = r#"import { y } from './y';\nexport const x = y;\n"#;
+    for module in ["12345", "-1"] {
+        let out = raw("transpileModule", &format!(r#"{{"input":"{module_input}","options":{{"compilerOptions":{{"module":{module},"target":99}}}}}}"#)).unwrap();
+        assert!(out.contains("require(") && out.contains("exports"), "module {module}: {out}");
+    }
+    // jsx: an unknown value is not "unset" (no 17004), and preserves JSX on emit.
+    let r = call(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"jsx":12345,"target":99,"strict":true}}}}]}}"#, quote(&j)));
+    let snap = match get(&r, "snapshot") { tsrs_core::json::Value::Number(n) => *n as u64, _ => unreachable!() };
+    let diags = raw("getSemanticDiagnostics", &format!(r#"{{"snapshot":{snap},"project":"/dev/null/synthetic/1"}}"#)).unwrap();
+    assert!(diags.contains("\"code\":7026") && !diags.contains("\"code\":17004"), "{diags}");
+    assert!(json_text(&r).contains("\"jsx\":12345"));
+    // moduleResolution: pinned Go panics while resolving; tsrs answers a stable error.
+    let e = call_err(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"moduleResolution":12345}}}}]}}"#, quote(&a)));
+    assert_eq!(e, "api: client error: unsupported moduleResolution value 12345 (not a ModuleResolutionKind)");
+    // Go `*int`: any int64, echoed exactly; beyond int64, fractions and exponents are invalid (accepted builders
+    // values are covered with the CLI build backend in tsrs_cli `api::tests`).
+    for n in ["2147483648", "-2147483649", "9223372036854775807"] {
+        let out = raw("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"maxNodeModuleJsDepth":{n}}}}}]}}"#, quote(&a))).unwrap();
+        assert!(out.contains(&format!("\"maxNodeModuleJsDepth\":{n}")), "{n}: {out}");
+    }
+    for n in ["9223372036854775808", "1.5", "1e0", "1.0"] {
+        let e = raw("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"maxNodeModuleJsDepth":{n}}}}}]}}"#, quote(&a))).unwrap_err();
+        assert!(e.starts_with("api: invalid request:"), "{n}: {e}");
+        let e = raw("createBuildOrchestrator", &format!(r#"{{"rootNames":["/x/tsconfig.json"],"buildOptions":{{"builders":{n}}}}}"#)).unwrap_err();
+        assert!(e.starts_with("api: invalid request:"), "{n}: {e}");
+    }
+}
+
+fn json_text(v: &tsrs_core::json::Value) -> String {
+    tsrs_core::json::marshal(v).unwrap()
+}

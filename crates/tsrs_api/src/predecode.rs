@@ -145,24 +145,44 @@ fn check_struct(go_type: &str, o: &tsrs_core::collections::OrderedMap<String, Va
 }
 
 /// Integer fields of structs from other Go packages, decoded by `gojson` from the parsed value: Go's decoder
-/// needs plain integer syntax there too (`"target":1e1`, `"builders":1e1` are invalid syntax). Types, ranges
-/// and unknown enum numbers are handled by `gojson`.
+/// needs plain integer syntax within the Go type's range there too (`"target":1e1`, `"builders":1e1`, a `*int`
+/// above int64). Wrong JSON kinds and int32 ranges are reported by `gojson`.
 fn check_external_integers(go_type: &str, o: &tsrs_core::collections::OrderedMap<String, Value>, pointer: &str, lexemes: &HashMap<String, String>) -> Result<(), String> {
-    let (fields, go_int): (Vec<&str>, &str) = match base_type(go_type) {
-        "core.CompilerOptions" => (tsrs_tsoptions::gojson::compiler_options_integer_fields(), "int32"),
-        "core.BuildOptions" => (tsrs_tsoptions::gojson::BUILD_OPTIONS_INTEGER_FIELDS.to_vec(), "int"),
+    let fields: Vec<(&str, u32)> = match base_type(go_type) {
+        "core.CompilerOptions" => tsrs_tsoptions::gojson::compiler_options_integer_fields(),
+        "core.BuildOptions" => tsrs_tsoptions::gojson::BUILD_OPTIONS_INTEGER_FIELDS.to_vec(),
         _ => return Ok(()),
     };
-    for name in fields {
+    for (name, bits) in fields {
         if !matches!(o.get(name), Some(Value::Number(_))) {
             continue;
         }
         let p = format!("{pointer}/{}", token(name));
-        if let Some(lexeme) = lexemes.get(&p).filter(|l| l.contains(['.', 'e', 'E'])) {
+        let go_int = if bits == 64 { "int" } else { "int32" };
+        let Some(lexeme) = lexemes.get(&p) else { continue };
+        if lexeme.contains(['.', 'e', 'E']) {
             return Err(format!("cannot unmarshal JSON number {lexeme} into Go {go_int} within \"{p}\": invalid syntax"));
+        }
+        if bits == 64 && lexeme.parse::<i64>().is_err() {
+            return Err(format!("cannot unmarshal JSON number {lexeme} into Go {go_int} within \"{p}\": value out of range"));
         }
     }
     Ok(())
+}
+
+/// Replaces the `*int` options decoded from `value` (a core.CompilerOptions object of the current request) with
+/// their exact literals (f64 cannot hold every Go int).
+pub(crate) fn exact_compiler_options_ints(value: &Value, options: &mut tsrs_core::CompilerOptions) {
+    if let Some(n) = exact_i64(value, "maxNodeModuleJsDepth") {
+        options.max_node_module_js_depth = Some(n);
+    }
+}
+
+/// As `exact_compiler_options_ints`, for core.BuildOptions.
+pub(crate) fn exact_build_options_ints(value: &Value, options: &mut tsrs_core::BuildOptions) {
+    if let Some(n) = exact_i64(value, "builders") {
+        options.builders = Some(n);
+    }
 }
 
 /// requestfilesystem.RequestFileSystem (decoded by `requestfs.rs` from the parsed value): Go decodes the whole
@@ -559,6 +579,16 @@ pub(crate) fn exact_u64(object: &Value, key: &str) -> Option<u64> {
         let frame = f.last()?;
         let pointer = frame.objects.get(&(object as *const Value as usize))?;
         frame.lexemes.get(&format!("{pointer}/{}", token(key))).and_then(|s| s.parse::<u64>().ok())
+    })
+}
+
+/// The exact signed integer literal of member `key` of `object` (see `exact_u64`).
+pub(crate) fn exact_i64(object: &Value, key: &str) -> Option<i64> {
+    FRAMES.with(|f| {
+        let f = f.borrow();
+        let frame = f.last()?;
+        let pointer = frame.objects.get(&(object as *const Value as usize))?;
+        frame.lexemes.get(&format!("{pointer}/{}", token(key))).and_then(|s| s.parse::<i64>().ok())
     })
 }
 

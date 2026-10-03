@@ -236,7 +236,9 @@ struct ParsedTranspileOptions {
 fn parse_options(v: &Value) -> ApiResult<ParsedTranspileOptions> {
     let p = Params(v);
     let compiler_options = if p.has("compilerOptions") {
-        Some(gojson::compiler_options_from_go_json(p.get("compilerOptions")).map_err(ApiError::invalid_request)?)
+        let mut options = gojson::compiler_options_from_go_json(p.get("compilerOptions")).map_err(ApiError::invalid_request)?;
+        crate::predecode::exact_compiler_options_ints(p.get("compilerOptions"), &mut options);
+        Some(options)
     } else {
         None
     };

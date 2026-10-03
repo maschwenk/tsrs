@@ -135,7 +135,8 @@ impl Session {
         p.object()?;
         let cwd = self.current_directory();
         let root_file_names = DocumentIdentifier::parse_list(p.array("rootFiles")?, "rootFiles")?.iter().map(|d| d.to_absolute_file_name(cwd)).collect();
-        let options = gojson::compiler_options_from_go_json(p.get("compilerOptions")).map_err(ApiError::invalid_request)?;
+        let mut options = gojson::compiler_options_from_go_json(p.get("compilerOptions")).map_err(ApiError::invalid_request)?;
+        crate::predecode::exact_compiler_options_ints(p.get("compilerOptions"), &mut options);
         reject_unknown_module_resolution(&options)?;
         let mut request = APICreateProgramRequest {
             root_file_names,

@@ -82,9 +82,15 @@ impl Session {
             "" => self.current_directory().to_string(),
             c => c.to_string(),
         };
-        let build_options = if p.has("buildOptions") { Some(gojson::build_options_from_go_json(p.get("buildOptions")).map_err(ApiError::invalid_request)?) } else { None };
-        let compiler_options =
+        let mut build_options = if p.has("buildOptions") { Some(gojson::build_options_from_go_json(p.get("buildOptions")).map_err(ApiError::invalid_request)?) } else { None };
+        if let Some(options) = &mut build_options {
+            crate::predecode::exact_build_options_ints(p.get("buildOptions"), options);
+        }
+        let mut compiler_options =
             if p.has("compilerOptions") { Some(gojson::compiler_options_from_go_json(p.get("compilerOptions")).map_err(ApiError::invalid_request)?) } else { None };
+        if let Some(options) = &mut compiler_options {
+            crate::predecode::exact_compiler_options_ints(p.get("compilerOptions"), options);
+        }
         if let Some(options) = &compiler_options {
             crate::snapshots::reject_unknown_module_resolution(options)?;
         }

@@ -421,7 +421,8 @@ impl Session {
 
     pub(crate) fn handle_create_module_resolver(&self, p: Params) -> ApiResult<Value> {
         p.object()?;
-        let options = gojson::compiler_options_from_go_json(p.get("compilerOptions")).map_err(ApiError::invalid_request)?;
+        let mut options = gojson::compiler_options_from_go_json(p.get("compilerOptions")).map_err(ApiError::invalid_request)?;
+        crate::predecode::exact_compiler_options_ints(p.get("compilerOptions"), &mut options);
         let resolutions = self.compile_module_resolution_spec(p.get("moduleResolutions"))?;
         let id = self.module_resolvers.next_id.fetch_add(1, Ordering::SeqCst) + 1;
         let registration = Arc::new(ModuleResolverRegistration { id, compiler_options: P::new(options), resolutions, callback: p.str("resolveModuleNameCallback")?.to_string() });

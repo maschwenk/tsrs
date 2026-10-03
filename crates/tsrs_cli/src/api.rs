@@ -372,6 +372,15 @@ mod tests {
         assert_eq!(all(&r), ["index.d.ts", "index.js", "tsconfig.tsbuildinfo"], "{}", json::marshal(&r).unwrap());
         assert!(!dir.join("core/out/index.js").exists());
 
+        // Go `*int` builders: any int64 is accepted (API builds run one builder regardless; runtime-f2-review).
+        for n in ["2147483648", "-2147483649", "9223372036854775807"] {
+            let r = call(&s, "createBuildOrchestrator", &format!(r#"{{"rootNames":["app"],"buildOptions":{{"builders":{n}}}}}"#));
+            let other = json::marshal(get(&r, "buildOrchestratorID")).unwrap();
+            let r = call(&s, "build", &format!("{{\"buildOrchestratorID\":{other}}}"));
+            assert_eq!(get(&r, "status"), &Value::Number(0.0), "builders {n}: {}", json::marshal(&r).unwrap());
+            call(&s, "disposeBuildOrchestrator", &format!("{{\"buildOrchestratorID\":{other}}}"));
+        }
+
         assert_eq!(call(&s, "disposeBuildOrchestrator", &format!("{{\"buildOrchestratorID\":{id}}}")), Value::Bool(true));
         assert!(s.handle_request("build", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_err());
         let _ = std::fs::remove_dir_all(&dir);
