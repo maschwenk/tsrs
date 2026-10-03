@@ -308,9 +308,11 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   transport's `lock_for_request` (bounded error instead of deadlock); the checker lane gates its API checker
   lease the same way. Request params are validated with Go's strict JSON (unpaired surrogates, duplicate
   members) before decoding.
-- Memory: snapshots free their programs, checkers, emit allocations and (new) a full build's shared
-  processed-file data and loader resolution host when released (createSnapshot+release cycles stay flat;
-  `tests/memory_test.rs`). Still leaked: the project-reference file mapper of each full build (freeing it
-  was a use-after-free), ~25 KiB of heap state per transpile call (its arena allocations are freed), one
-  build orchestrator per API build handle, and other request-time allocations outside regions (config
-  parsing etc., as in the language server).
+- Memory: snapshots free their programs, checkers, emit allocations and a full build's shared data
+  (processed files, project-reference mapper, loader and dts-faking resolution hosts) with the build's base
+  region (createSnapshot+release cycles stay flat; `tests/memory_test.rs`). The first attempt at freeing
+  the mapper exposed a pre-existing use-after-free in `tsrs_project` (`update_program` read the replaced
+  program after dropping its owner); fixed, with a perturbation/ASAN-validated regression test
+  (`inferred_project_rebuild_frees_safely`). Still retained: ~37 KiB of heap state per transpile call
+  (its arenas are freed), one build orchestrator per API build handle, and other request-time allocations
+  outside regions (config parsing etc., as in the language server).
