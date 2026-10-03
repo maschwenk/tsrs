@@ -3,7 +3,8 @@
 # a temp dir) and runs the real script with the real compilers:
 #   1. clean run (one package with diagnostics: both compilers exit 2) -> exit 0
 #   2. a tsrs whose output differs (wrapper appends a line to one emitted .d.ts) -> exit 1
-#   3. dropped / duplicate / malformed result rows, fed to summarize.py from run 1's real report -> exit 1
+#   3. dropped / duplicate / malformed / unexpected rows, rows with null/bool/unknown/signal/NotImplemented statuses,
+#      a negative count and a non-object row, all from run 1's real report, fed to summarize.py -> exit 1
 #   4. empty selection -> nonzero
 #
 #   TSGO=<reference tsgo> TSRS=<tsrs binary> tools/oracle/emit/test_monorepo.sh
@@ -60,6 +61,27 @@ python3 "$here/summarize.py" "$sel" "$work/dup.jsonl" > /dev/null 2>&1; check "d
 python3 "$here/summarize.py" "$sel" "$work/bad.jsonl" > /dev/null 2>&1; check "malformed result" 1 $?
 { cat "$res"; grep '"packages__clean"' "$res" | sed 's/"packages__clean"/"packages__other"/'; } > "$work/unexpected.jsonl"
 python3 "$here/summarize.py" "$sel" "$work/unexpected.jsonl" > /dev/null 2>&1; check "unexpected result" 1 $?
+
+# Rows that look complete but carry invalid statuses/counts (the clean row rewritten), and a non-object row.
+mutate() { # python expression on row r -> results file with packages__clean replaced
+  python3 - "$res" "$1" > "$work/mut.jsonl" <<'PY'
+import json, sys
+for line in open(sys.argv[1]):
+    r = json.loads(line)
+    if r["name"] == "packages__clean":
+        exec(sys.argv[2])
+    print(json.dumps(r))
+PY
+}
+for case in 'r["ref_status"]=r["rs_status"]=None' 'r["ref_status"]=r["rs_status"]=False' \
+            'r["ref_status"]=r["rs_status"]="unknown"' 'r["ref_status"]=r["rs_status"]=-9' \
+            'r["ref_status"]=r["rs_status"]=5' 'r["missing"]=-1' 'r.clear(); r.update(name=None)'; do
+  mutate "$case"
+  python3 "$here/summarize.py" "$sel" "$work/mut.jsonl" > "$work/mut.txt" 2>&1; check "row: $case" 1 $?
+done
+{ grep -v '"packages__clean"' "$res"; echo '["packages__clean"]'; } > "$work/nonobj.jsonl"
+python3 "$here/summarize.py" "$sel" "$work/nonobj.jsonl" > "$work/nonobj.txt" 2>&1; check "non-object row" 1 $?
+grep -q "not a JSON object" "$work/nonobj.txt" || { echo "FAIL: non-object row not reported"; fails=$((fails + 1)); }
 
 run 4 "$TSRS" --filter 'no-such-package' "${flags[@]}"; st=$?
 [ $st -ne 0 ] && echo "ok   empty selection (exit $st)" || { echo "FAIL empty selection exited 0"; fails=$((fails + 1)); }

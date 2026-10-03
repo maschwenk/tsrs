@@ -4,15 +4,38 @@
     summarize.py <selected names file> <results jsonl>
 
 Prints one line per selected package and a totals line. Exit status 0 only when every selected package has exactly
-one well-formed result row and that row is identical: no different/missing/extra file, equal exit statuses (a
-nonzero status is fine when both compilers agree, e.g. normal diagnostics), equal diagnostics, no tsrs panic and no
-timeout. Exit 1 on any mismatch, missing/duplicate/unexpected/malformed row, or an empty selection.
+one well-formed result row and that row is identical: no different/missing/extra file, equal exit statuses that
+are tsc ExitStatus values 0-4 (a nonzero status is fine when both compilers agree, e.g. normal diagnostics; 5
+NotImplemented, signals/negative codes and other values fail even when equal), equal diagnostics, no tsrs panic and
+no timeout. Exit 1 on any mismatch, missing/duplicate/unexpected/malformed row, or an empty selection.
+
+A well-formed row is a JSON object with: name (str), identical/different/missing/extra (int >= 0, not bool),
+diagnostics_match (bool), rs_panic (str), ref_status/rs_status (int, not bool, or the string "timeout").
 """
 
 import json
 import sys
 
 FIELDS = {"name": str, "identical": int, "different": int, "missing": int, "extra": int, "diagnostics_match": bool, "rs_panic": str}
+COUNTS = ("identical", "different", "missing", "extra")
+# execute/tsc/compile.go: Success, DiagnosticsPresent_OutputsSkipped/Generated, InvalidProject_OutputsSkipped,
+# ProjectReferenceCycle_OutputsSkipped. NotImplemented (5), signals (negative returncodes) and anything else fail.
+NORMAL_STATUSES = (0, 1, 2, 3, 4)
+
+
+def is_int(v):
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def row_errors(r):
+    if not isinstance(r, dict):
+        return [f"not a JSON object ({type(r).__name__})"]
+    errors = [k for k, t in FIELDS.items() if not isinstance(r.get(k), t) or (t is int and not is_int(r.get(k)))]
+    errors += [f"{k}<0" for k in COUNTS if is_int(r.get(k)) and r[k] < 0]
+    for k in ("ref_status", "rs_status"):
+        if not (is_int(r.get(k)) or r.get(k) == "timeout"):
+            errors.append(f"{k}={r.get(k)!r}")
+    return errors
 
 
 def main():
@@ -30,9 +53,9 @@ def main():
             continue
         try:
             r = json.loads(line)
-            bad = [k for k, t in FIELDS.items() if not isinstance(r.get(k), t) or (t is int and isinstance(r.get(k), bool))]
-            if bad or "ref_status" not in r or "rs_status" not in r:
-                raise ValueError(f"bad or missing fields {bad or ['ref_status/rs_status']}")
+            bad = row_errors(r)
+            if bad:
+                raise ValueError(f"bad or missing fields {bad}")
         except ValueError as e:
             problems.append(f"malformed result line {n}: {e}: {line.strip()[:120]}")
             continue
@@ -61,6 +84,8 @@ def main():
             reasons.append("exit status")
         if "timeout" in (r["ref_status"], r["rs_status"]):
             reasons.append("timeout")
+        elif any(st not in NORMAL_STATUSES for st in (r["ref_status"], r["rs_status"])):
+            reasons.append("abnormal exit")
         if not r["diagnostics_match"]:
             reasons.append("diagnostics")
         if r["rs_panic"]:
