@@ -121,3 +121,44 @@ merged with the harness follow-up).
 - `TSRS_CHECK_SHARED=1` debug runs at `--builders 1/4/8` report no write to a shared object. tsctests unchanged
   (tsc 64/216, tsbuild 17/190, same pass list). Default mode unchanged: `-b` without `TSRS_EMIT=1` still writes nothing
   (`tests/emit_gate.rs` 5/5).
+
+## Clean scheduler layer `mfs-cx/emit-builders-stack` (on `mfs-cx/emit-incremental-harness` `7eb3e04`)
+
+Head `e92f7b5`: `7d8a5e4` (thread-safe build state), `51a44f7` (`--builders` scheduler), `e92f7b5` (docs). The code
+delta over `7eb3e04` is byte-identical to `535adce` over `da23dd6` (`git diff` of `crates/` and `tools/`); `535adce`
+itself is unchanged.
+
+Gates on `e92f7b5` (base: main `d3a2598`):
+- conformance errors + `--baselines types,symbols` identical in all four modes (lazy members on / `TSRS_LAZY_MEMBERS=0`
+  x single- / multi-threaded test programs): 13,458 pass, 12,779 types/symbols pass;
+- fourslash 4,066 / 63, same pass list; `--baselines js` 1,364, same pass list as `d3a2598`;
+- `RUSTFLAGS="-D warnings" cargo check --workspace --locked --all-targets` exit 0; `tests/emit_gate.rs` 5/5;
+- `fixtures/run-all.sh` identical to tsgo-ref; `graph` and `cycle` at `--builders 1/4/8`, with and without
+  `--stopBuildOnErrors`: identical output, trees and tsbuildinfo.
+
+Trial merge with main `0251527` (source maps; local commit, not pushed): the only conflict is the EMIT.md section 13
+table (both rows kept). `tools/oracle/emit/monorepo.sh` and `run.py` merge automatically: main's fail-closed result
+checks (`summarize.py` verdicts, missing rows) and this branch's `--buildinfo` coexist (`run.py --buildinfo` adds the
+tsbuildinfo to the same JSON row the summarizer judges). On the merged tree: four-mode errors/types/symbols identical
+to main `0251527`; `--baselines js` 1,364, same pass list as `0251527`; fourslash 4,066 / 63; emit_gate 5/5;
+`run-all.sh` identical.
+
+Bounded larger public graph (`xsgraph`: a solution with one project per xstate-main package, 14 projects plus the
+root, `include` pointing at the read-only checkout, `incremental` + `noEmit`, `types: []`; built under /tmp), measured
+on `e92f7b5` before the reviewer's checker-thread fix (F1, `52be3a5`):
+- tsgo-ref and tsrs at `--builders 1/4/8`: identical `-b --verbose` output (568 lines, same errors) and identical
+  tsbuildinfo files in all six runs.
+- Temporary start/end tracing (not committed): at most 1 / 4 / 8 projects building simultaneously at 1 / 4 / 8
+  builders; span 1.32 / 0.92 / 0.91 s.
+- Wall (best of 3) and peak RSS (max of 3): tsrs 1.14 s / 1,119 MB, 0.96 s / 1,161 MB, 0.95 s / 1,175 MB; tsgo 2.10 s /
+  531 MB, 1.10 s / 1,129 MB, 1.16 s / 1,857 MB. `-b core` alone (the largest project, 137 files): tsrs 216 MB, tsgo
+  183 MB.
+
+Program retention: Go's `buildOrCleanProject` sets `task.result.program = nil` when not testing and the GC reclaims
+the program (the host's cached `.d.ts`/JSON files stay). tsrs drops its `P<incremental::Program>` handle at the same
+point, but the memory stays: `free_program` (tsrs_compiler) only frees the `Program` struct and its resolution host,
+not the arena memory (AST, checker types) that makes up almost all of a program; that needs the LSP's region
+machinery (tsrs_project memregions). So tsrs's peak at `--builders 1` grows with the sum of all projects (1,119 MB
+for the graph vs 216 MB for its largest project) where Go's tracks the projects in flight (531 MB). No change is
+made here: calling `free_program` would not reclaim the arenas, and the reviewer did not reproduce a retention
+regression after F1 at the sizes they tested.
