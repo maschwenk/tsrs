@@ -136,10 +136,10 @@ Ported so far: 4,277 of 24,418 lines (the declaration transformer and the base).
 
 | Go file | lines | tsrs status |
 | --- | ---: | --- |
-| generator.go | 387 | missing (VLQ mappings, `RawSourceMap`, `Base64DataURL`, `String`) |
-| decoder.go | 253 | missing (`DecodeMappings`; also needed by the harness's `.sourcemap.txt` recorder) |
-| source_mapper.go | 313 | missing (`DocumentPositionMapper`; used by the language service. The `lsp` branch plans its own `tsrs_ls::sourcemap` for the parts `ls` uses; one crate for both is better, see section 11) |
-| lineinfo.go, util.go, source.go | 68 | missing |
+| generator.go | 387 | **ported** (`tsrs_sourcemap`, emit/sourcemaps; moved from `tsrs_ls::sourcemap`, which re-exports the crate) |
+| decoder.go | 253 | **ported** |
+| source_mapper.go | 313 | **ported** (shared with the language service) |
+| lineinfo.go, util.go, source.go | 68 | **ported** (`impl Source for SourceFile` lives in `tsrs_sourcemap`, orphan rule) |
 
 ### outputpaths/ (314 lines)
 
@@ -475,6 +475,11 @@ missing/duplicate/unexpected/malformed row (non-object, wrong field types, negat
 exits 1.
 `tools/oracle/emit/test_monorepo.sh` (`TSGO=... TSRS=...`) checks that on a throwaway two-package repo. `tsc --build` packages are emitted with `-p` until `-b` exists.
 
+**Reference binary.** Use a `tsgo` built from `ts-ref` (`cd ts-ref/tsc && go build -o $TSRS_WORK/bin/tsgo-ref ./cmd/tsc`,
+Go 1.27). The npm nightly `@typescript/typescript-linux-x64@7.1.0-dev.20260929.1` was built before the pinned commit
+b85298b6 and lacks microsoft/TypeScript#64460 ("Fix declaration maps for export assignment expressions", 21:04 on
+2026-09-29), so its `.d.ts.map` for `export default <identifier>` differs from the Go source tsrs ports.
+
 The reference binary already emits, so no Go oracle program is needed (add one under `ts-ref/tsc/cmd/` only if
 `EmitResult` internals are needed). Planned `tools/oracle/emit/run.py <tsconfig|dir> [--name N] [-- extra tsc flags]`:
 
@@ -505,6 +510,9 @@ identical to main in both modes, fourslash 4066/63, `-D warnings` check) held fo
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-03 | main d3a2598 (#9 merged) | E1+E2 | 1364 / 15197 | — | — | (as below) | declaration metric (`TSRS_TEST_DTS_ONLY=1`, below): 1754 pass / 0 fail / 13 crash (declarationMap) |
 | 2026-10-03 | emit/core (E2) | E1+E2 | 1364 / 15197 (12032 crash at stubs, 1800 skip) | — | — | dts: 2325/2325 files identical, 103/103 packages; full: 0 files (stubs: typeeraser 91, importelision 5, metadata 4; 3 packages emit nothing in both) | multi-threaded test programs give the same js pass list (one timeout aside) |
+| 2026-10-03 | emit/sourcemaps | E7 (part 1) | — | — | — | printer-level: 38/38 `.js.map` identical where the untransformed JS is identical | `tsrs_sourcemap` crate (32/32 Go generator tests), printer source-map paths, emitter glue, harness recorder (not wired: waits for emit/core). Gates: conformance + types/symbols identical to main (default and `TSRS_LAZY_MEMBERS=0`: 13457/12778/12778), fourslash 4066/63 same pass list |
+| 2026-10-03 | emit/sourcemaps (on main d3a2598) | E7 | 1363 / 15197 (same pass list as main; 2 timeouts flaky) | 0 pass / 12030 crash at E3 stubs / 3165 skip | same as `.js.map` | `--emitDeclarationOnly`: 103/103 packages fully identical, 4623/4623 files (2298 `.d.ts.map`) | `--baselines jsmap,sourcemap` wired; JS maps wait for the E3 transformers (typeeraser stub panics first) |
+| 2026-10-03 | emit/sourcemaps + emit/transforms (local integration) | E7 | 7322 | 86 pass, 0 fail, 63 crash (other stubs) | 93 pass, 0 fail, 63 crash | full mode: 83/103 packages identical, 0 different files; 2317 `.js.map` + 2166 `.d.ts.map` identical | remaining crashes: forawait, classfields, commonjsmodule, jsx, esdecorator, legacydecorators, metadata |
 
 ### E12 option sweep, declaration side (emit/core-2)
 

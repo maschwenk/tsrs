@@ -54,7 +54,7 @@ pub struct EmitResult {
 #[derive(Default, Clone)]
 pub struct SourceMapEmitResult {
     pub input_source_file_names: Vec<String>, // Input source file (which one can use on program to get the file), 1:1 mapping with the sourceMap.sources list
-    // SourceMap *sourcemap.RawSourceMap (TODO(emit/sourcemaps))
+    pub source_map: tsrs_sourcemap::RawSourceMap,
     pub generated_file: String,
 }
 
