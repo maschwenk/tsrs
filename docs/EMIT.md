@@ -136,10 +136,10 @@ Ported so far: 4,277 of 24,418 lines (the declaration transformer and the base).
 
 | Go file | lines | tsrs status |
 | --- | ---: | --- |
-| generator.go | 387 | missing (VLQ mappings, `RawSourceMap`, `Base64DataURL`, `String`) |
-| decoder.go | 253 | missing (`DecodeMappings`; also needed by the harness's `.sourcemap.txt` recorder) |
-| source_mapper.go | 313 | missing (`DocumentPositionMapper`; used by the language service. The `lsp` branch plans its own `tsrs_ls::sourcemap` for the parts `ls` uses; one crate for both is better, see section 11) |
-| lineinfo.go, util.go, source.go | 68 | missing |
+| generator.go | 387 | **ported** (`tsrs_sourcemap`, emit/sourcemaps; moved from `tsrs_ls::sourcemap`, which re-exports the crate) |
+| decoder.go | 253 | **ported** |
+| source_mapper.go | 313 | **ported** (shared with the language service) |
+| lineinfo.go, util.go, source.go | 68 | **ported** (`impl Source for SourceFile` lives in `tsrs_sourcemap`, orphan rule) |
 
 ### outputpaths/ (314 lines)
 
@@ -499,6 +499,7 @@ identical to main in both modes, fourslash 4066/63, `-D warnings` check) held fo
 | date | commit | wave | `.js` pass / total | `.js.map` | `.sourcemap.txt` | oracle | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-03 | emit/core (E2) | E1+E2 | 1364 / 15197 (12032 crash at stubs, 1800 skip) | — | — | dts: 2325/2325 files identical, 103/103 packages; full: 0 files (stubs: typeeraser 91, importelision 5, metadata 4; 3 packages emit nothing in both) | multi-threaded test programs give the same js pass list (one timeout aside) |
+| 2026-10-03 | emit/sourcemaps | E7 (part 1) | — | — | — | printer-level: 38/38 `.js.map` identical where the untransformed JS is identical | `tsrs_sourcemap` crate (32/32 Go generator tests), printer source-map paths, emitter glue, harness recorder (not wired: waits for emit/core). Gates: conformance + types/symbols identical to main (default and `TSRS_LAZY_MEMBERS=0`: 13457/12778/12778), fourslash 4066/63 same pass list |
 
 ## 14. Known gaps and risks
 
