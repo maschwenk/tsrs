@@ -5,7 +5,7 @@ pub struct LegacyDecoratorsTransformer {
     language_version: ScriptTarget,
     reference_resolver: ReferenceResolverRef,
 
-    /**
+    /*
      * A map that keeps track of aliases created for classes with decorators to avoid issues
      * with the double-binding behavior of classes.
      */
@@ -290,7 +290,7 @@ impl LegacyDecoratorsTransformer {
     }
 
     // legacydecorators.go:280
-    /**
+    /*
      * Transforms a non-decorated class declaration.
      *
      * @param node A ClassDeclaration node.
@@ -332,7 +332,7 @@ impl LegacyDecoratorsTransformer {
     }
 
     // legacydecorators.go:320
-    /**
+    /*
      * Transforms a decorated class declaration and appends the resulting statements. If
      * the class requires an alias to avoid issues with double-binding, the alias is returned.
      */
@@ -549,7 +549,7 @@ impl LegacyDecoratorsTransformer {
     }
 
     // legacydecorators.go:539
-    /**
+    /*
      * Gets a local alias for a class declaration if it is a decorated class with an internal
      * reference to the static side of the class. This is necessary to avoid issues with
      * double-binding semantics for the class name.
@@ -573,7 +573,7 @@ impl LegacyDecoratorsTransformer {
     }
 
     // legacydecorators.go:560
-    /**
+    /*
      * Generates a __decorate helper call for a class constructor.
      *
      * @param node The class node.
@@ -586,7 +586,7 @@ impl LegacyDecoratorsTransformer {
     }
 
     // legacydecorators.go:575
-    /**
+    /*
      * Generates a __decorate helper call for a class constructor.
      *
      * @param node The class node.
@@ -680,7 +680,7 @@ pub(crate) struct AllDecorators {
 }
 
 // legacydecorators.go:665
-/**
+/*
  * Gets an allDecorators object containing the decorators for the class and the decorators for the
  * parameters of the constructor of the class.
  *
@@ -701,7 +701,7 @@ fn get_all_decorators_of_class(node: P<Node>, use_legacy_decorators: bool) -> Op
 }
 
 // legacydecorators.go:685
-/**
+/*
  * Gets an allDecorators object containing the decorators for the member and its parameters.
  *
  * @param parent The class node that contains the member.
@@ -724,7 +724,7 @@ fn get_all_decorators_of_class_element(member: P<Node>, parent: P<Node>, use_leg
 }
 
 // legacydecorators.go:707
-/**
+/*
  * Gets an allDecorators object containing the decorators for the accessor and its parameters.
  *
  * @param parent The class node that contains the accessor.
@@ -786,7 +786,7 @@ fn get_all_decorators_of_method(method: P<Node>, use_legacy_decorators: bool) ->
 }
 
 // legacydecorators.go:768
-/**
+/*
  * Gets an array of arrays of decorators for the parameters of a function-like node.
  * The offset into the result array should correspond to the offset of the parameter.
  *
@@ -840,7 +840,7 @@ impl LegacyDecoratorsTransformer {
     }
 
     // legacydecorators.go:822
-    /**
+    /*
      * Generates statements used to apply decorators to either the static or instance members
      * of a class.
      *
@@ -859,7 +859,7 @@ impl LegacyDecoratorsTransformer {
 }
 
 // legacydecorators.go:837
-/**
+/*
  * Determines whether a class member is either a static or an instance member of a class
  * that is decorated, or has parameters that are decorated.
  *
@@ -870,7 +870,7 @@ fn is_decorated_class_element(member: P<Node>, is_static_element: bool, parent: 
 }
 
 // legacydecorators.go:849
-/**
+/*
  * Gets either the static or instance members of a class that are decorated, or have
  * parameters that are decorated.
  *
@@ -890,7 +890,7 @@ fn get_decorated_class_elements(node: P<Node>, is_static: bool) -> Vec<P<Node>> 
 
 impl LegacyDecoratorsTransformer {
     // legacydecorators.go:870
-    /**
+    /*
      * Generates expressions used to apply decorators to either the static or instance members
      * of a class.
      *
@@ -910,7 +910,7 @@ impl LegacyDecoratorsTransformer {
     }
 
     // legacydecorators.go:888
-    /**
+    /*
      * Generates an expression used to evaluate class element decorators at runtime.
      *
      * @param node The class node that contains the member.
@@ -980,7 +980,7 @@ impl LegacyDecoratorsTransformer {
     }
 
     // legacydecorators.go:960
-    /**
+    /*
      * Transforms all of the decorators for a declaration into an array of expressions.
      *
      * @param allDecorators An object containing all of the decorators for the declaration.
@@ -1016,7 +1016,7 @@ impl LegacyDecoratorsTransformer {
     }
 
     // legacydecorators.go:1000
-    /**
+    /*
      * Transforms a list of decorators into an expression.
      *
      * @param decorator The decorator node.

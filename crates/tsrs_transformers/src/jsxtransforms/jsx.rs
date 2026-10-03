@@ -159,7 +159,7 @@ impl JSXTransformer {
 }
 
 // jsx.go:141
-/**
+/*
  * The react jsx/jsxs transform falls back to `createElement` when an explicit `key` argument comes after a spread
  */
 fn has_key_after_props_spread(node: P<Node>) -> bool {
@@ -555,7 +555,7 @@ impl JSXTransformer {
     }
 
     // jsx.go:509
-    /**
+    /*
      * Emit an attribute name, which is quoted if it needs to be quoted. Because
      * these emit into an object literal property name, we don't need to be worried
      * about keywords, just non-identifier characters
@@ -838,7 +838,7 @@ fn add_line_of_jsx_text(b: &mut String, trimmed_line: &str, is_initial: bool) {
 }
 
 // jsx.go:810
-/**
+/*
  * JSX trims whitespace at the end and beginning of lines, except that the
  * start/end of a tag is considered a start/end of a line only if that line is
  * on the same line as the closing tag. See examples in
@@ -910,7 +910,7 @@ impl JSXTransformer {
 }
 
 // jsx.go:864
-/**
+/*
  * Replace entities like "&nbsp;", "&#123;", and "&#xDEADBEEF;" with the characters they encode.
  * See https://en.wikipedia.org/wiki/List_of_XML_and_HTML_character_entity_references
  */

@@ -288,7 +288,7 @@ impl MetadataTransformer {
     }
 
     // metadata.go:262
-    /**
+    /*
      * Gets optional type metadata for a declaration.
      *
      * @param node The declaration node.
@@ -366,7 +366,7 @@ impl MetadataTransformer {
     }
 
     // metadata.go:349
-    /**
+    /*
      * Determines whether to emit the "design:type" metadata based on the node's kind.
      * The caller should have already tested whether the node has decorators and whether the
      * emitDecoratorMetadata compiler option is set.
@@ -378,7 +378,7 @@ impl MetadataTransformer {
     }
 
     // metadata.go:365
-    /**
+    /*
      * Determines whether to emit the "design:returntype" metadata based on the node's kind.
      * The caller should have already tested whether the node has decorators and whether the
      * emitDecoratorMetadata compiler option is set.
@@ -390,7 +390,7 @@ impl MetadataTransformer {
     }
 
     // metadata.go:377
-    /**
+    /*
      * Determines whether to emit the "design:paramtypes" metadata based on the node's kind.
      * The caller should have already tested whether the node has decorators and whether the
      * emitDecoratorMetadata compiler option is set.

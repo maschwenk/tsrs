@@ -70,7 +70,7 @@ pub fn get_set_accessor_value_parameter(node: Option<P<Node>>) -> Option<P<Node>
 }
 
 // typeserializer.go:70
-/**
+/*
  * Get the type annotation for the value parameter.
  *
  * @internal
@@ -94,7 +94,7 @@ fn get_accessor_type_node(node: P<Node>, container: P<Node>) -> Option<P<Node>> 
 
 impl MetadataSerializer {
     // typeserializer.go:93
-    /**
+    /*
      * Serializes the type of a node for use with decorator type metadata.
      * @param node The node that should have its type serialized.
      */
@@ -108,7 +108,7 @@ impl MetadataSerializer {
     }
 
     // typeserializer.go:110
-    /**
+    /*
      * Serializes the type of a node for use with decorator type metadata.
      * @param node The node that should have its type serialized.
      */
@@ -156,7 +156,7 @@ fn get_parameters_of_decorated_declaration(node: P<Node>, container: Option<P<No
 
 impl MetadataSerializer {
     // typeserializer.go:151
-    /**
+    /*
      * Serializes the return type of a node for use with decorator type metadata.
      * @param node The node that should have its return type serialized.
      */
@@ -170,7 +170,7 @@ impl MetadataSerializer {
     }
 
     // typeserializer.go:178
-    /**
+    /*
      * Serializes a type node for use with decorator type metadata.
      *
      * Types are serialized in the following fashion:
@@ -321,7 +321,7 @@ impl MetadataSerializer {
     }
 
     // typeserializer.go:326
-    /**
+    /*
      * Serializes a TypeReferenceNode to an appropriate JS constructor value for use with decorator type metadata.
      * @param node The type reference node.
      */
@@ -377,7 +377,7 @@ impl MetadataSerializer {
     }
 
     // typeserializer.go:405
-    /**
+    /*
      * Serializes an entity name as an expression for decorator type metadata.
      * @param node The entity name to serialize.
      */
@@ -398,7 +398,7 @@ impl MetadataSerializer {
     }
 
     // typeserializer.go:425
-    /**
+    /*
      * Serializes an qualified name as an expression for decorator type metadata.
      * @param node The qualified name to serialize.
      */
@@ -408,7 +408,7 @@ impl MetadataSerializer {
     }
 
     // typeserializer.go:433
-    /**
+    /*
      * Serializes an entity name which may not exist at runtime, but whose access shouldn't throw
      * @param node The entity name to serialize.
      */
@@ -435,7 +435,7 @@ impl MetadataSerializer {
     }
 
     // typeserializer.go:467
-    /**
+    /*
      * Produces an expression that results in `right` if `left` is not undefined at runtime:
      *
      * ```
