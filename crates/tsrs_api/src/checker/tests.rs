@@ -68,7 +68,7 @@ export declare function make<T>(v: T): Box<T>;
 
 const TSCONFIG: &str = r#"{ "compilerOptions": { "strict": true, "target": "es2022", "module": "esnext", "moduleResolution": "bundler" }, "files": ["main.ts", "types.d.ts", "other.ts"] }"#;
 
-const OTHER: &str = "export const helper = 1;\n";
+const OTHER: &str = "export const helper = 1;\nexport function useArgs() { return arguments.length; }\ndeclare const notFn: number;\n// @ts-ignore\nnotFn();\n";
 
 struct TestHost {
     snapshot_host: Arc<SnapshotHost>,
@@ -103,6 +103,11 @@ fn node_table(file: P<SourceFile>) -> Vec<P<Node>> {
 
 impl TestHost {
     fn new(files: &[(&str, &str)]) -> TestHost {
+        TestHost::with_configs(files, &["/p/tsconfig.json"])
+    }
+
+    /// Opens every config; `project` is the first one.
+    fn with_configs(files: &[(&str, &str)], configs: &[&str]) -> TestHost {
         let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files.iter().map(|(k, v)| (k.to_string(), v.to_string())), true)));
         let init = SessionInit {
             background_ctx: Context::background(),
@@ -116,12 +121,14 @@ impl TestHost {
         };
         let snapshot_host = tsrs_project::new_snapshot_host(&init);
         let root = snapshot_host.new_root_snapshot();
-        let config = "/p/tsconfig.json".to_string();
-        let id = tsrs_project::parse_configured_project_id(&Path::new(config.clone())).unwrap().as_id();
         let mut open = Set::default();
-        open.add(config);
         let mut ensure = Set::default();
-        ensure.add(id.clone());
+        let ids: Vec<tsrs_project::ID> = configs.iter().map(|c| tsrs_project::parse_configured_project_id(&Path::new(c.to_string())).unwrap().as_id()).collect();
+        for (config, id) in configs.iter().zip(&ids) {
+            open.add(config.to_string());
+            ensure.add(id.clone());
+        }
+        let id = ids[0].clone();
         let request = APISnapshotRequest { open_projects: Some(open), ensure_programs: Some(ensure), ..Default::default() };
         let snapshot = match snapshot_host.clone_snapshot(&Context::background(), &root, FileChangeSummary::default(), Some(Arc::new(request))) {
             Ok(s) => s,
@@ -194,6 +201,11 @@ impl CheckerHost for TestHost {
     }
 
     fn acquire_cached_source_file(&self, descriptor: &Value) -> CheckerResult<CachedFileScope> {
+        // Mirrors core's lease cache: once the last snapshot holding the file is released it is gone
+        // (Go: "source file is not available").
+        if self.registry.is_released() {
+            return Err(CheckerError::client("source file is not available"));
+        }
         let path = str_of(field(descriptor, "path"));
         let file = self.program().get_source_file_by_path(&Path::new(path)).ok_or_else(|| CheckerError::client("source file not cached"))?;
         if self.source_file_descriptor(file)? != *descriptor {
@@ -530,9 +542,12 @@ fn structured_type_shapes_tuple_mapped_conditional_literal() {
     let tru = h.ok("getTrueTypeOfConditionalType", &h.sp(&format!(r#""objectId":{}"#, num(&c_t, "id"))));
     assert_eq!(h.type_string(&tru), "1");
     let constraint = h.ok("getConstraintOfTypeParameter", &h.sp(&format!(r#""objectId":{}"#, num(&check, "id"))));
-    // Not asserting the constraint value itself here (parity lane compares against pinned Go): only that
-    // the handler answers for a type parameter and rejects non-type-parameters.
-    assert!(matches!(constraint, Value::Null | Value::Object(_)));
+    // Pinned Go (b85298b6) answers with a *different* type parameter `T` of the same symbol (the
+    // declared, unconstrained T), whose own constraint is null; tsrs matches (see pinned_go_differential).
+    assert_eq!(h.type_string(&constraint), "T");
+    assert_ne!(num(&constraint, "id"), num(&check, "id"));
+    assert_eq!(field(field(&constraint, "symbol"), "id"), field(field(&check, "symbol"), "id"));
+    assert_eq!(h.tid("getConstraintOfTypeParameter", "objectId", &constraint), Value::Null);
     assert_eq!(h.call("getConstraintOfTypeParameter", &h.sp(&format!(r#""objectId":{}"#, num(&c_t, "id")))).unwrap_err().kind, CheckerErrorKind::Client);
     // Literal freshness and widening.
     let lit = h.type_at(MAIN_FILE, MAIN, "lit =");
@@ -686,9 +701,11 @@ fn locations_batches_and_symbol_relations() {
     let local_box = arr(&scope).iter().find(|s| str_of(field(s, "name")) == "box").unwrap().clone();
     let es = h.ok("getExportSymbolOfSymbol", &format!(r#"{{"symbol":{}}}"#, h.symbol_ref(&local_box)));
     let es2 = h.ok("getExportSymbolOfSymbolForChecker", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&local_box))));
-    assert_eq!(str_of(field(&es2, "name")), "box");
-    if es != Value::Null {
-        assert_eq!(str_of(field(&es, "name")), "box");
+    // Pinned Go: the local symbol (ExportValue, file-owned) maps to the exported variable `box` (flags 2).
+    assert_eq!(num(&local_box, "flags"), tsrs_ast::SymbolFlags::ExportValue.bits() as u64);
+    for exported in [&es, &es2] {
+        assert_eq!(str_of(field(exported, "name")), "box");
+        assert_eq!(num(exported, "flags"), tsrs_ast::SymbolFlags::BlockScopedVariable.bits() as u64);
     }
     // Shorthand, export specifier, references, narrowed type at location.
     let shorthand = h.ancestor_handle_at("box };", 1);
@@ -742,6 +759,8 @@ fn type_structure_accessors() {
     let lit = h.type_at(MAIN_FILE, MAIN, "lit =");
     let fresh = h.tid("getFreshTypeOfType", "objectId", &lit);
     assert_eq!(h.type_string(&fresh), "\"hi\"");
+    assert_eq!(num(&fresh, "id"), num(&lit, "freshType"));
+    assert_eq!(num(&regular_of(&h, &fresh), "id"), num(&lit, "regularType"));
     let wd = h.declared("WithDefault<T");
     let tp = arr(&h.tid("getTypeParametersOfType", "objectId", &wd))[0].clone();
     assert_eq!(h.type_string(&h.tid("getDefaultFromTypeParameter", "objectId", &tp)), "string");
@@ -875,4 +894,224 @@ fn core_session_hook_maps_errors_and_encodings() {
     assert_eq!(super::base64_encode(b"f"), "Zg==");
     assert_eq!(super::base64_encode(b"fo"), "Zm8=");
     assert_eq!(super::base64_encode(b"foobar"), "Zm9vYmFy");
+}
+
+/// Needles of the differential probe (same list the Go probe used to produce the golden file).
+const PROBE_NEEDLES: &[&str] = &[
+    "box:", "p:", "ünïcödé", "over(x: string)", "U = ", "Pair<A, B>", "isStr(", "Animal {", "Dog extends", "legs", "Red =", "r = over", "M = ",
+    "C<T> =", "lit =", "fn =", "o = {", "box };", "uni", "IA<T", "aw()", "maybe:", "doubled", "x * 2", "cb:", "n) => {}", "withThis(", "rest(",
+    "arr:", "S<T>", "WithDefault", "useAll", "box.value", "value +", "Up =", "TL =", "big =", "make }", "make(1)", "toString",
+];
+
+/// Differential check against the pinned Go API session (microsoft/TypeScript b85298b6, tsc/internal/api):
+/// testdata/go_probe_b85298b6.jsonl was produced by driving Go's `Session.HandleRequest` with the same
+/// fixture and the same request sequence (a local probe test in ts-ref, not part of this repo). Compares
+/// type strings, type/symbol flags, symbol names and ownership, file-owned lookups without a snapshot,
+/// resolveName with and without a location, constraint results and error texts. `objectFlags` are not
+/// compared: they carry lazily computed cache bits (e.g. MembersResolved) that differ even between two
+/// Go queries of the same type. Process-wide symbol ids are normalized to "same symbol as" booleans
+/// (the golden file was normalized the same way). Set `TSRS_CHECKER_PROBE_OUT=<file>` to dump the tsrs lines.
+#[test]
+fn pinned_go_differential() {
+    let lines = probe_lines();
+    if let Ok(out) = std::env::var("TSRS_CHECKER_PROBE_OUT") {
+        std::fs::write(out, lines.join("\n") + "\n").unwrap();
+    }
+    let golden = include_str!("testdata/go_probe_b85298b6.jsonl");
+    let parse = |l: &str| -> (String, Value) {
+        let v = json::unmarshal(l).unwrap();
+        let q = str_of(field(&v, "q"));
+        let mut r = field(&v, "r").clone();
+        if let Value::Object(o) = &mut r {
+            o.shift_remove("objectFlags");
+        }
+        (q, r)
+    };
+    let ours: std::collections::HashMap<String, Value> = lines.iter().map(|l| parse(l)).collect();
+    let mut compared = 0;
+    let mut diffs = Vec::new();
+    for line in golden.lines().filter(|l| !l.is_empty()) {
+        let (q, go) = parse(line);
+        let rs = ours.get(&q).cloned().unwrap_or_else(|| Value::String("<missing>".to_string()));
+        compared += 1;
+        let same = match q.as_str() {
+            // Same error class; the decoder wording differs (Go reports its json/v2 unmarshal error).
+            "err.badType" => str_of(&rs).starts_with("api: invalid request: ") && str_of(&go).starts_with("api: invalid request: "),
+            _ => rs == go,
+        };
+        if !same {
+            diffs.push(format!("{q}\n  go: {}\n  rs: {}", json::marshal(&go).unwrap(), json::marshal(&rs).unwrap()));
+        }
+    }
+    assert_eq!(compared, 71);
+    assert!(diffs.is_empty(), "{} differences from pinned Go:\n{}", diffs.len(), diffs.join("\n"));
+}
+
+fn probe_lines() -> Vec<String> {
+    let h = TestHost::with_configs(
+        &[
+            ("/p/tsconfig.json", TSCONFIG),
+            ("/p/main.ts", MAIN),
+            ("/p/types.d.ts", TYPES),
+            ("/p/other.ts", OTHER),
+            ("/q/tsconfig.json", r#"{"files":["q.ts"]}"#),
+            ("/q/q.ts", "export const q: number = 1;\n"),
+        ],
+        &["/p/tsconfig.json", "/q/tsconfig.json"],
+    );
+    let mut lines = Vec::new();
+    let mut emit = |q: &str, r: Value| {
+        let mut o = super::json::obj();
+        o.set("q", Value::String(q.to_string()));
+        o.set("r", r);
+        lines.push(json::marshal(&o.build()).unwrap());
+    };
+    let get = |v: &Value, k: &str| -> Value {
+        match v {
+            Value::Object(o) => o.get(k).cloned().unwrap_or(Value::Null),
+            _ => Value::Null,
+        }
+    };
+    let res = |r: CheckerResult<Value>| -> (Value, String) {
+        match r {
+            Ok(v) => (v, String::new()),
+            Err(e) => (Value::Null, e.to_string()),
+        }
+    };
+    let ts = |t: &Value| -> Value {
+        if *t == Value::Null {
+            return Value::Null;
+        }
+        match h.call("typeToString", &h.sp(&format!(r#""type":{}"#, num(t, "id")))) {
+            Ok(v) => v,
+            Err(e) => Value::String(e.to_string()),
+        }
+    };
+    let obj = |pairs: Vec<(&str, Value)>| {
+        let mut o = super::json::obj();
+        for (k, v) in pairs {
+            o.set(k, v);
+        }
+        o.build()
+    };
+    let s = |x: &str| Value::String(x.to_string());
+    let names = |v: &Value| match v {
+        Value::Array(a) => Value::Array(a.iter().map(|x| get(x, "name")).collect()),
+        other => other.clone(),
+    };
+    emit("flags", obj(vec![("Value", Value::Number(tsrs_ast::SymbolFlags::Value.bits() as f64)), ("Type", Value::Number(tsrs_ast::SymbolFlags::Type.bits() as f64))]));
+    for n in PROBE_NEEDLES.iter().copied() {
+        let pos = utf16_pos(MAIN, n);
+        let (ty, e1) = res(h.call("getTypeAtPosition", &h.sp(&format!(r#""file":"/p/main.ts","position":{pos}"#))));
+        let (sy, e2) = res(h.call("getSymbolAtPosition", &h.sp(&format!(r#""file":"/p/main.ts","position":{pos}"#))));
+        emit(
+            &format!("at:{n}"),
+            obj(vec![
+                ("type", ts(&ty)),
+                ("typeFlags", get(&ty, "flags")),
+                ("objectFlags", match get(&ty, "objectFlags") { Value::Null if ty != Value::Null => Value::Number(0.0), v => v }),
+                ("sym", get(&sy, "name")),
+                ("symFlags", get(&sy, "flags")),
+                ("kind", get(&get(&sy, "reference"), "kind")),
+                ("e", s(&(e1 + &e2))),
+            ]),
+        );
+    }
+    let sym_ref = |needle: &str| json::marshal(&get(&h.symbol_at(MAIN_FILE, MAIN, needle), "reference")).unwrap();
+    let declared = |needle: &str| h.ok("getDeclaredTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, sym_ref(needle))));
+    let c = declared("C<T> =");
+    let check = h.tid("getCheckTypeOfType", "objectId", &c);
+    let (cons, e) = res(h.call("getConstraintOfTypeParameter", &h.sp(&format!(r#""objectId":{}"#, num(&check, "id")))));
+    emit("C.check", obj(vec![("str", ts(&check)), ("flags", get(&check, "flags"))]));
+    emit("C.constraint", obj(vec![("str", ts(&cons)), ("flags", get(&cons, "flags")), ("sameAsCheck", Value::Bool(get(&cons, "id") == get(&check, "id"))), ("sameSymbolAsCheck", Value::Bool(get(&get(&cons, "symbol"), "id") == get(&get(&check, "symbol"), "id"))), ("e", s(&e))]));
+    if cons != Value::Null {
+        let cons2 = h.tid("getConstraintOfTypeParameter", "objectId", &cons);
+        emit("C.constraint.constraint", ts(&cons2));
+    }
+    let ia = declared("IA<T, K");
+    let k = h.tid("getIndexTypeOfType", "objectId", &ia);
+    emit("IA.K.constraint", ts(&h.tid("getConstraintOfTypeParameter", "objectId", &k)));
+    let dog = declared("Dog extends");
+    let props = h.tid("getPropertiesOfType", "type", &dog);
+    emit("Dog.props", names(&props));
+    let legs = arr(&props)[0].clone();
+    emit("legs.ref.kind", get(&get(&legs, "reference"), "kind"));
+    let (par, e) = res(h.call("getParentOfSymbol", &format!(r#"{{"symbol":{}}}"#, json::marshal(&get(&legs, "reference")).unwrap())));
+    emit("legs.parent", obj(vec![("name", get(&par, "name")), ("kind", get(&get(&par, "reference"), "kind")), ("e", s(&e))]));
+    let (mem, e) = res(h.call("getMembersOfSymbol", &format!(r#"{{"symbol":{}}}"#, sym_ref("Dog extends"))));
+    emit("Dog.members", obj(vec![("names", names(&mem)), ("e", s(&e))]));
+    let module = h.ok("getSymbolOfSourceFile", &h.sp(r#""file":"/p/main.ts""#));
+    let module_ref = json::marshal(&get(&module, "reference")).unwrap();
+    let (exp, e) = res(h.call("getExportsOfSymbol", &format!(r#"{{"symbol":{module_ref}}}"#)));
+    emit("main.exportsOfSymbol", obj(vec![("names", names(&exp)), ("e", s(&e))]));
+    let (expm, e) = res(h.call("getExportsOfModule", &h.sp(&format!(r#""symbol":{module_ref}"#))));
+    emit("main.exportsOfModule", obj(vec![("names", names(&expm)), ("e", s(&e))]));
+    let scope = h.ok("getSymbolsInScope", &h.sp(&format!(r#""file":"/p/main.ts","position":{},"meaning":{}"#, utf16_pos(MAIN, "box.value"), tsrs_ast::SymbolFlags::Value.bits())));
+    for sym in arr(&scope) {
+        if get(sym, "name") == s("box") {
+            let r = json::marshal(&get(sym, "reference")).unwrap();
+            let (es, e) = res(h.call("getExportSymbolOfSymbol", &format!(r#"{{"symbol":{r}}}"#)));
+            emit("box.local.exportSymbol", obj(vec![("name", get(&es, "name")), ("localFlags", get(sym, "flags")), ("localKind", get(&get(sym, "reference"), "kind")), ("exportFlags", get(&es, "flags")), ("e", s(&e))]));
+            let (es2, e) = res(h.call("getExportSymbolOfSymbolForChecker", &h.sp(&format!(r#""symbol":{r}"#))));
+            emit("box.local.exportSymbolForChecker", obj(vec![("name", get(&es2, "name")), ("flags", get(&es2, "flags")), ("e", s(&e))]));
+        }
+    }
+    let value = tsrs_ast::SymbolFlags::Value.bits();
+    let ty = tsrs_ast::SymbolFlags::Type.bits();
+    for (name, meaning) in [("Array", ty), ("box", value), ("Promise", value), ("Animal", value)] {
+        for (label, extra) in [("noloc", String::new()), ("loc", format!(r#","file":"/p/main.ts","position":{}"#, utf16_pos(MAIN, "r = over")))] {
+            let (r, e) = res(h.call("resolveName", &h.sp(&format!(r#""name":"{name}","meaning":{meaning}{extra}"#))));
+            emit(&format!("resolveName.{label}:{name}"), obj(vec![("name", get(&r, "name")), ("flags", get(&r, "flags")), ("kind", get(&get(&r, "reference"), "kind")), ("e", s(&e))]));
+        }
+    }
+    let boxt = h.type_at(MAIN_FILE, MAIN, "box:");
+    let id = num(&boxt, "id");
+    let (_, e) = res(h.call("getTypeArguments", &format!(r#"{{"snapshot":{},"project":"/other/tsconfig.json","type":{id}}}"#, h.handle)));
+    emit("err.unknownProject", s(&e));
+    let (r, e) = res(h.call("getTypeArguments", &format!(r#"{{"snapshot":{},"project":"/q/tsconfig.json","type":{id}}}"#, h.handle)));
+    emit("err.foreignProjectType", obj(vec![("r", r), ("e", s(&e))]));
+    let (_, e) = res(h.call("getTypeArguments", &h.sp(r#""type":999999"#)));
+    emit("err.unknownType", s(&e));
+    let (_, e) = res(h.call("getTypeArguments", &format!(r#"{{"snapshot":{},"project":{},"type":{id}}}"#, h.handle + 1000, json::marshal_string(&h.project))));
+    emit("err.unknownSnapshot", s(&e));
+    let (_, e) = res(h.call("getTypeArguments", &h.sp(r#""type":"x""#)));
+    emit("err.badType", s(&e));
+    let array = h.ok("resolveName", &h.sp(&format!(r#""name":"Array","meaning":{ty}"#)));
+    let aref = json::marshal(&get(&array, "reference")).unwrap();
+    let forged = aref.replace(&format!(r#""snapshot":{}"#, h.handle), &format!(r#""snapshot":{}"#, h.handle + 1));
+    let (_, e) = res(h.call("getTypeOfSymbol", &h.sp(&format!(r#""symbol":{forged}"#))));
+    emit("err.forgedSnapshotRef", s(&e));
+    let (qt, e) = res(h.call("getTypeOfSymbol", &format!(r#"{{"snapshot":{},"project":"/q/tsconfig.json","symbol":{aref}}}"#, h.handle)));
+    let qts = if qt == Value::Null { Value::Null } else { h.ok("typeToString", &format!(r#"{{"snapshot":{},"project":"/q/tsconfig.json","type":{}}}"#, h.handle, num(&qt, "id"))) };
+    emit("crossProject.snapshotSymbol", obj(vec![("type", qts), ("e", s(&e))]));
+    let (_, e) = res(h.call("getParentOfSymbol", r#"{"symbol":{"kind":0,"id":1}}"#));
+    emit("err.fileRefNoDescriptor", s(&e));
+    h.registry.release();
+    let (_, e2) = res(h.call("getTypeArguments", &h.sp(&format!(r#""type":{id}"#))));
+    emit("err.afterRelease", obj(vec![("release", s("")), ("e", s(&e2))]));
+    let (_, e) = res(h.call("getParentOfSymbol", &format!(r#"{{"symbol":{}}}"#, json::marshal(&get(&legs, "reference")).unwrap())));
+    emit("afterRelease.fileOwnedParent", s(&e));
+    drop(emit);
+    lines
+}
+
+fn regular_of(h: &TestHost, t: &Value) -> Value {
+    h.tid("getRegularTypeOfType", "objectId", t)
+}
+
+#[test]
+fn well_known_singletons_identify_checker_results() {
+    let h = fixture();
+    let wk = h.ok("getWellKnownSymbols", &h.sp(""));
+    let args = h.symbol_at("/p/other.ts", OTHER, "arguments");
+    assert_eq!(num(field(&args, "reference"), "kind"), 1, "arguments is a checker (transient) symbol");
+    assert_eq!(num(field(&args, "reference"), "id"), num(&wk, "arguments"));
+    let sigs = h.ok("getWellKnownSignatures", &h.sp(""));
+    let call = {
+        let sf = h.program().get_source_file("/p/other.ts").unwrap();
+        let ident = tsrs_astnav::get_touching_property_name(sf, OTHER.find("notFn()").unwrap() as i32);
+        h.node_handle(ident.parent().unwrap()).unwrap()
+    };
+    let resolved = h.ok("getResolvedSignature", &h.sp(&format!(r#""location":"{call}""#)));
+    assert_eq!(num(&resolved, "id"), num(&sigs, "unknown"), "an uncallable call resolves to the unknown signature");
 }

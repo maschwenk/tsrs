@@ -69,8 +69,16 @@ non-BMP text, plus stale / cross-project / released / malformed handle validatio
 
 What `Tested` does **not** mean yet (open gaps, for the integration lead):
 
-* No Node-client or pinned-Go parity run yet (parity lane). Field order and nullability follow the Go
-  structs, but byte-for-byte response comparison against tsgo has not been done.
+* `pinned_go_differential` compares 71 results against `testdata/go_probe_b85298b6.jsonl`, recorded from
+  pinned Go's `Session.HandleRequest` (built from b85298b6 with go1.27.1) over the same fixture and
+  request sequence: type strings and flags at 40 positions, symbol names/flags/ownership, file-owned
+  lookups without a snapshot (parent, members, exports, export symbol), `resolveName` with and without a
+  location, type-parameter constraints, and stale / foreign-project / forged / released handle errors.
+  All 71 match. The one tolerated difference is wording: on a malformed `type` param tsrs says
+  `field "type": expected an unsigned integer in range`, Go prints its json/v2 unmarshal error. Both
+  are `api: invalid request`. `objectFlags` are excluded: they include lazily computed cache bits
+  (`MembersResolved`), and those already differ between two Go queries of the same type. This is a
+  Go-server comparison, not a Node-client run; the broad upstream client suite belongs to the parity lane.
 * Through core's `Session` every handler that returns or accepts a node handle, a source-file descriptor
   or an encoded node fails with an explicit `api: unsupported` until `tsrs_api_codec` provides node
   index tables / `EncodeNode` and core provides `newSourceFileDescriptor` / the source-file cache
@@ -79,7 +87,5 @@ What `Tested` does **not** mean yet (open gaps, for the integration lead):
 * File-owned symbol references without a snapshot (`getParentOfSymbol`, `getMembersOfSymbol`,
   `getExportsOfSymbol`, `getExportSymbolOfSymbol` on `kind: 0` references) need core's
   `getCachedSourceFile` lease cache.
-* `getConstraintOfTypeParameter` on a conditional type's check type returns a type parameter in tsrs; not
-  yet compared with tsgo.
 * Panics from deep checker invariants are converted to errors by core's `catch_unwind`; the API checker
   is not discarded afterwards (Go keeps it too).
