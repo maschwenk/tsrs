@@ -110,7 +110,7 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 2 | `releaseSourceFile` | core | not implemented |  |
 | 3 | `retainSourceFile` | core | not implemented |  |
 | 4 | `getCachedSourceFile` | core | not implemented |  |
-| 5 | `batchRequests` | core | not implemented |  |
+| 5 | `batchRequests` | core | supported | batch_test (nesting error, pagination with continuation tokens); binary-in-batch base64 path untested until source-file methods land |
 | 6 | `initialize` | core | supported | config_test |
 | 7 | `createSnapshot` | core | partial | program_test; `fileSystem` and `options.moduleResolver` return explicit unsupported errors |
 | 8 | `updateSnapshot` | core | partial | program_test (fileNotifications, ensurePrograms, retained base); `fileSystem` unsupported |
@@ -147,14 +147,14 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 39 | `getNonMissingTypeOfSymbol` | checker | not implemented |  |
 | 40 | `getSourceFile` | core | not implemented |  |
 | 41 | `getSourceFileNames` | core | supported | program_test |
-| 42 | `getSourceFileMetadata` | core | not implemented |  |
+| 42 | `getSourceFileMetadata` | core | supported | program_test |
 | 43 | `getModeForUsageLocation` | core | not implemented |  |
 | 44 | `getModeForResolutionAtIndex` | core | not implemented |  |
 | 45 | `getResolvedModule` | core | not implemented |  |
 | 46 | `getResolvedModuleFromModuleSpecifier` | core | not implemented |  |
 | 47 | `getResolvedTypeReferenceDirective` | core | not implemented |  |
 | 48 | `getResolvedTypeReferenceDirectiveFromTypeReferenceDirective` | core | not implemented |  |
-| 49 | `getConfigFileNames` | core | not implemented |  |
+| 49 | `getConfigFileNames` | core | supported | program_test (extends chain, synthetic null) |
 | 50 | `getConfigSourceFile` | core | not implemented |  |
 | 51 | `resolveName` | checker | not implemented |  |
 | 52 | `getSymbolsInScope` | checker | not implemented |  |

@@ -168,3 +168,31 @@ fn emit_to_output(program: &'static Program, targets: Option<Vec<P<SourceFile>>>
         .set("outputFiles", Value::Array(files))
         .build()
 }
+
+impl Session {
+    /// Go `handleGetConfigFileNames` (`null` when the program has no tsconfig).
+    pub(crate) fn handle_get_config_file_names(&self, p: Params) -> ApiResult<Value> {
+        let (_sd, program) = self.program_of(&p)?;
+        let command_line = program.command_line();
+        let Some(config) = command_line.config_file else { return Ok(Value::Null) };
+        let mut names = vec![config.source_file.file_name().to_string()];
+        names.extend(command_line.extended_source_files());
+        Ok(strings(names))
+    }
+
+    /// Go `handleGetSourceFileMetadata` (`null` when the file is not in the program).
+    pub(crate) fn handle_get_source_file_metadata(&self, p: Params) -> ApiResult<Value> {
+        let (_sd, program) = self.program_of(&p)?;
+        let file = DocumentIdentifier::parse(p.get("file"), "file")?;
+        let Some(source_file) = program.get_source_file(&file.to_file_name()) else { return Ok(Value::Null) };
+        let path = source_file.path();
+        let meta = program.get_source_file_meta_data(&path);
+        Ok(Obj::new()
+            .set("isDefaultLibrary", b(program.is_source_file_default_library(&path)))
+            .set("isFromExternalLibrary", b(program.is_source_file_from_external_library(source_file)))
+            .set("packageJsonType", s(meta.package_json_type))
+            .set("packageJsonDirectory", s(meta.package_json_directory))
+            .set("impliedNodeFormat", Value::Number(meta.implied_node_format as i32 as f64))
+            .build())
+    }
+}

@@ -99,6 +99,8 @@ pub struct Session {
     snapshots: RwLock<HashMap<SnapshotID, (Arc<SnapshotData>, usize)>>,
     conn: Mutex<Option<Arc<dyn ClientConn>>>,
     closed: Mutex<bool>,
+    pub(crate) batch_pages: Mutex<HashMap<String, Vec<String>>>,
+    next_batch_page: AtomicU64,
 }
 
 impl Session {
@@ -137,11 +139,17 @@ impl Session {
             snapshots: RwLock::new(HashMap::new()),
             conn: Mutex::new(None),
             closed: Mutex::new(false),
+            batch_pages: Mutex::new(HashMap::new()),
+            next_batch_page: AtomicU64::new(0),
         })
     }
 
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    pub(crate) fn next_batch_page_id(&self) -> u64 {
+        self.next_batch_page.fetch_add(1, Ordering::SeqCst) + 1
     }
 
     pub fn set_connection(&self, conn: Arc<dyn ClientConn>) {
@@ -182,6 +190,7 @@ impl Session {
         *closed = true;
         let all: Vec<_> = self.snapshots.write().unwrap().drain().collect();
         drop(all);
+        self.batch_pages.lock().unwrap().clear();
     }
 
     /// Go `getSnapshotData`: resolves a client snapshot handle, pinning it for the caller.
@@ -258,6 +267,12 @@ impl Session {
             return checker::handle(self, method, &params).unwrap_or_else(|| Err(ApiError::unsupported(method)));
         }
         let p = Params(&params);
+        if method == "batchRequests" {
+            if !matches!(params, Value::Null) {
+                p.object()?;
+            }
+            return self.handle_batch_requests(p).map(Response::Json);
+        }
         let result = match method {
             "initialize" => Obj::new()
                 .set("useCaseSensitiveFileNames", Value::Bool(self.use_case_sensitive_file_names()))
@@ -272,6 +287,8 @@ impl Session {
             "release" => self.handle_release(p)?,
             "getDefaultProjectForFile" => self.handle_get_default_project_for_file(p)?,
             "getSourceFileNames" => self.handle_get_source_file_names(p)?,
+            "getConfigFileNames" => self.handle_get_config_file_names(p)?,
+            "getSourceFileMetadata" => self.handle_get_source_file_metadata(p)?,
             "getSyntacticDiagnostics" => self.handle_get_diagnostics(p, DiagnosticKind::Syntactic)?,
             "getBindDiagnostics" => self.handle_get_diagnostics(p, DiagnosticKind::Bind)?,
             "getSemanticDiagnostics" => self.handle_get_diagnostics(p, DiagnosticKind::Semantic)?,

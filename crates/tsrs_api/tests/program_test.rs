@@ -189,3 +189,30 @@ fn config_file_parsing_diagnostics_round_trip() {
     assert_eq!(get(&d, "0.code"), &Value::Number(5023.0));
     assert_eq!(str_of(get(&d, "0.text")), "Unknown compiler option 'x'.");
 }
+
+#[test]
+fn config_file_names_and_source_file_metadata() {
+    let dir = TempDir::new("meta");
+    let base = dir.write("base.json", r#"{ "compilerOptions": { "strict": true } }"#);
+    let cfg = dir.write("tsconfig.json", r#"{ "extends": "./base.json", "compilerOptions": { "noEmit": true, "module": "nodenext" }, "include": ["*.mts"] }"#);
+    let a = dir.write("a.mts", "export {};\n");
+    let s = session(&dir.dir(), false);
+    let r = call(&s, "createSnapshot", &format!("{{\"openProjects\":[{}]}}", quote(&cfg)));
+    let snap = match get(&r, "snapshot") { Value::Number(n) => *n as u64, _ => unreachable!() };
+    let project = str_of(get(&r, "projects.0.id")).to_string();
+    let sp = format!("\"snapshot\":{snap},\"project\":{}", quote(&project));
+    let names = call(&s, "getConfigFileNames", &format!("{{{sp}}}"));
+    assert_eq!(names, Value::Array(vec![Value::String(cfg.clone()), Value::String(base)]));
+    let m = call(&s, "getSourceFileMetadata", &format!("{{{sp},\"file\":{}}}", quote(&a)));
+    assert_eq!(get(&m, "isDefaultLibrary"), &Value::Bool(false));
+    assert_eq!(get(&m, "impliedNodeFormat"), &Value::Number(99.0));
+    let names = call(&s, "getSourceFileNames", &format!("{{{sp}}}"));
+    let lib = arr(&names).iter().map(|n| str_of(n).to_string()).find(|n| n.contains("lib.")).expect("a lib file");
+    let m = call(&s, "getSourceFileMetadata", &format!("{{{sp},\"file\":{}}}", quote(&lib)));
+    assert_eq!(get(&m, "isDefaultLibrary"), &Value::Bool(true));
+    assert_eq!(call(&s, "getSourceFileMetadata", &format!("{{{sp},\"file\":{}}}", quote(&dir.path("zz.ts")))), Value::Null);
+
+    // Synthetic programs have no config file.
+    let (snap2, p2) = create_program(&s, &[a], "{}");
+    assert_eq!(call(&s, "getConfigFileNames", &format!("{{\"snapshot\":{snap2},\"project\":{}}}", quote(&p2))), Value::Null);
+}
