@@ -266,9 +266,13 @@ retracted as an upper bound. The codec lane's audit reproduced five false passes
 - an unresolved oracle disagreement next to one equal exchange still gave `equal`;
 - a blanket base64 re-encoding equated distinct strings.
 
-Since the codec re-audits of `c3f1717` and `0333222`, further fixes apply, and the comparator passes
-`controls/run-controls.mjs`. That's 44/44: the 18 earlier controls, the 14 codec `scen2` cases, the 10
-codec `scen3` cases and a mirror case for R1.
+Since the codec re-audits of `c3f1717`, `0333222` and `385d300`, further fixes apply, and the comparator passes
+`controls/run-controls.mjs`. That's 58/58:
+
+- the 18 earlier controls;
+- the codec cases: 14 `scen2`, 10 `scen3`, 8 `scen4`;
+- the R1 mirror;
+- the D1 mirrors: run 2 missing, run 2 kind-split, locked to run 1, locked to run 2.
 
 - Order relaxation only at the exact array paths where the two oracle runs are permutations of each other.
   The request must match. Elements are matched by a bounded backtracking search on the per-process handle
@@ -279,6 +283,9 @@ codec `scen3` cases and a mirror case for R1.
   - A later exchange that matches only the locked-out run is `inconclusive`.
   - When locked to run 2 and neither run matches, it is a difference only where the two runs agree.
   - A run-1 error, where run 2 and the candidate both answered, is not a divergence.
+  - D1: when run 2 is present but has another kind than run 1 (one answered, one errored), that is oracle
+    disagreement. If neither run matches, the exchange is unverified. Only a missing run-2 exchange, or no second
+    run at all, leaves run 1 as the sole reference.
 - Oracle agreement and oracle order are judged under a per-process run1↔run2 handle mapping (R2). Elements
   that differ only in handles already known to be distinct are not mistaken for a renaming.
 - `unverified` covers unresolved oracle disagreement, differing hashes over 4 MiB, a match budget overrun, oracle
@@ -297,8 +304,8 @@ Known limits:
 - `unsupported` takes precedence over other statuses.
 - Work-tree paths are only normalized inside binary-method payloads, so captures must use the same label path.
 
-Recomputed with comparator `d5e40b4` on the same `b2769b8` captures (no new capture). Runtime is about 10 s.
-The categories and counts are unchanged from `c8ffcd0`.
+Recomputed with comparator `732c6ab` on the same `b2769b8` captures (no new capture). Runtime is about 10–12 s.
+The categories and counts are unchanged from `c8ffcd0`. No `b2769b8` difference had D1's shape.
 This is still provisional evidence, not a final gate:
 
 - equal: 159 methods, 4508 successful exchanges: 4477 strict, 16 equal to oracle run 2 under the history lock,
