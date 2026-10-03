@@ -161,3 +161,5 @@ fn base64_encode(data: &[u8]) -> String {
 mod tests;
 #[cfg(test)]
 mod session_tests;
+#[cfg(test)]
+mod lease_tests;
