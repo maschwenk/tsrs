@@ -781,7 +781,8 @@ fn read_cost_cache(path: &str) -> (FxHashMap<String, CostEntry>, usize) {
 // seconds summed over the checker passes and its checker. Files of other runs are dropped.
 pub(crate) fn write_cost_cache(program: &'static Program) {
     use std::fmt::Write;
-    let (Some(path), Some(state)) = (checker_cost_cache_path(), program.pool().state.get()) else {
+    // Programs with an external checker pool (language server / API projects) have no cost state to write.
+    let (Some(path), Some(state)) = (checker_cost_cache_path(), program.compiler_checker_pool().and_then(|pool| pool.state.get())) else {
         return;
     };
     if state.checkers.len() <= 1 {

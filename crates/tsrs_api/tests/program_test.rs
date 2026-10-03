@@ -216,3 +216,18 @@ fn config_file_names_and_source_file_metadata() {
     let (snap2, p2) = create_program(&s, &[a], "{}");
     assert_eq!(call(&s, "getConfigFileNames", &format!("{{\"snapshot\":{snap2},\"project\":{}}}", quote(&p2))), Value::Null);
 }
+
+#[test]
+fn no_emit_on_error_reports_diagnostics_without_output() {
+    let dir = TempDir::new("noemitonerror");
+    let a = dir.write("a.ts", "export const a: number = 'x';\n");
+    let s = session(&dir.dir(), false);
+    let (snap, project) = create_program(&s, &[a], &format!("{{\"noEmitOnError\":true,\"outDir\":{}}}", quote(&dir.path("out"))));
+    let sp = format!("\"snapshot\":{snap},\"project\":{}", quote(&project));
+    let out = call(&s, "emit", &format!("{{{sp}}}"));
+    assert_eq!(get(&out, "emitSkipped"), &Value::Bool(true));
+    assert_eq!(get(&out, "diagnostics.0.code"), &Value::Number(2322.0));
+    assert!(!std::path::Path::new(&dir.path("out/a.js")).exists());
+    let out = call(&s, "emitToString", &format!("{{{sp}}}"));
+    assert_eq!(get(&out, "emitSkipped"), &Value::Bool(true));
+}
