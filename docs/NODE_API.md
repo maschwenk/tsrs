@@ -322,6 +322,9 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   program after dropping its owner); fixed, with a perturbation/ASAN-validated regression test
   (`inferred_project_rebuild_frees_safely`). Transpile frees its one-file program including the compiler
   checker pool's checkers (previously leaked; ~5 KiB/call of allocator retention remains), and config
-  requests run in scratch regions. Still retained: one build orchestrator per API build handle and the
-  programs each `build` call creates (CLI `-b` semantics: finished projects stay in memory), plus the
-  request thread's arena use outside these paths.
+  requests run in scratch regions. API builds allocate in per-task regions (one builder, tasks
+  run on the request thread, programs single-threaded and freed after each project) and each build handle
+  keeps only its last build (for cleans); 120 rebuilds retain no more than one (`memory_tests` in
+  `crates/tsrs_cli/src/api.rs`; ~19 MiB per rebuild before). File texts parsed inside a freeable region are
+  copied into it and unregistered with it instead of leaked. Still retained: the request thread's arena use
+  outside these paths.

@@ -178,9 +178,11 @@ impl ParseConfigHost for ApiBuildSystem {
 
 struct CliBuildBackend;
 
-/// One API build orchestrator handle = one CLI `build.Orchestrator`, as in Go: `Build` rechecks all projects
-/// and regenerates the graph reusing unchanged tasks; `Clean` uses the current graph ("cleans the last built
-/// configuration"). The orchestrator is created on first use and kept for the handle's lifetime.
+/// One API build orchestrator handle. Go keeps one `build.Orchestrator`: `Build` rechecks every project in the
+/// build order (statuses, configs, mtimes, caches) and regenerates the graph; `Clean` uses the graph of the last
+/// build ("cleans the last built configuration"). Here each build gets a fresh CLI orchestrator (the state Go's
+/// recheck leaves) whose allocations live in collectable regions; it is kept for later cleans and freed when the
+/// next build replaces it or the handle is disposed, so memory stays bounded by one build.
 struct CliOrchestrator {
     sys: &'static ApiBuildSystem,
     command: P<tsrs_tsoptions::ParsedBuildCommandLine>,
@@ -188,8 +190,27 @@ struct CliOrchestrator {
 }
 
 impl CliOrchestrator {
-    fn get(&mut self) -> &'static crate::build::Orchestrator {
-        *self.orchestrator.get_or_insert_with(|| new_orchestrator(Options { sys: self.sys, command: self.command, testing: None }))
+    fn fresh(&self) -> &'static crate::build::Orchestrator {
+        let o = new_orchestrator(Options { sys: self.sys, command: self.command, testing: None });
+        o.enable_api_regions();
+        o
+    }
+
+    fn replace(&mut self, o: &'static crate::build::Orchestrator) {
+        if let Some(old) = self.orchestrator.replace(o) {
+            // SAFETY: no build is running on `old` (builds are serialized per handle) and its results were
+            // converted to owned `BuildOutcome`s.
+            unsafe { crate::build::free_api_orchestrator(old) };
+        }
+    }
+}
+
+impl Drop for CliOrchestrator {
+    fn drop(&mut self) {
+        if let Some(o) = self.orchestrator.take() {
+            // SAFETY: as in `replace`; the handle is being disposed.
+            unsafe { crate::build::free_api_orchestrator(o) };
+        }
     }
 }
 
@@ -209,6 +230,9 @@ impl BuildBackend for CliBuildBackend {
         if let Some(options) = request.build_options {
             command.build_options = options;
         }
+        // API builds allocate in per-task regions (CliOrchestrator); program construction and checking must stay on
+        // the task's thread so their allocations land there, not in the compiler worker pool's thread arenas.
+        command.compiler_options.single_threaded = tsrs_core::Tristate::True;
         Box::new(CliOrchestrator { sys, command: P::new(command), orchestrator: None })
     }
 }
@@ -226,10 +250,21 @@ fn outcome(result: crate::build::OrchestratorResult) -> BuildOutcome {
 
 impl BuildOrchestrator for CliOrchestrator {
     fn build(&mut self, project: &str, only_references: bool) -> BuildOutcome {
-        outcome(self.get().build_for_api(project, only_references))
+        let o = self.fresh();
+        let result = outcome(o.build_for_api(project, only_references));
+        self.replace(o);
+        result
     }
     fn clean(&mut self, project: &str, only_references: bool) -> BuildOutcome {
-        outcome(self.get().clean_for_api(project, only_references))
+        let o = match self.orchestrator {
+            Some(o) => o,
+            None => {
+                let o = self.fresh();
+                self.replace(o);
+                o
+            }
+        };
+        outcome(o.clean_for_api(project, only_references))
     }
 }
 
@@ -314,6 +349,64 @@ mod tests {
 
         assert_eq!(call(&s, "disposeBuildOrchestrator", &format!("{{\"buildOrchestratorID\":{id}}}")), Value::Bool(true));
         assert!(s.handle_request("build", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod memory_tests {
+    use super::*;
+    use tsrs_api::{Handler, Response};
+    use tsrs_core::json::{self, Value};
+
+    extern "C" {
+        fn malloc_trim(pad: usize) -> i32;
+    }
+
+    fn rss_kib() -> u64 {
+        // SAFETY: glibc `malloc_trim` has no preconditions.
+        unsafe { malloc_trim(0) };
+        std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| l.split_whitespace().nth(1)?.parse().ok()))
+            .unwrap_or(0)
+    }
+
+    /// Repeated rebuilds on one API build handle (an edit between builds forces a real program build).
+    #[test]
+    fn repeated_builds_memory() {
+        let dir = std::env::temp_dir().join(format!("tsrs-api-buildmem-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("tsconfig.json"), r#"{ "compilerOptions": { "composite": true, "outDir": "out" } }"#).unwrap();
+        let cwd = dir.canonicalize().unwrap().to_string_lossy().into_owned();
+        let flags = ApiFlags { cwd, pipe_path: String::new(), callbacks: Vec::new(), case_sensitive: true, is_async: true, timing: false, run_external_code: false };
+        let (s, _) = new_api_session(&flags).unwrap();
+        let id = match s.handle_request("createBuildOrchestrator", br#"{"rootNames":["."]}"#).unwrap() {
+            Response::Json(t) => {
+                let v = json::unmarshal(&t).unwrap();
+                let id = match &v {
+                    Value::Object(o) => o.get("buildOrchestratorID").unwrap().clone(),
+                    _ => unreachable!(),
+                };
+                json::marshal(&id).unwrap()
+            }
+            _ => unreachable!(),
+        };
+        let n: usize = std::env::var("N").ok().and_then(|v| v.parse().ok()).unwrap_or(40);
+        let mut before = 0;
+        for i in 0..n + 5 {
+            if i == 5 {
+                before = rss_kib();
+            }
+            std::fs::write(dir.join("a.ts"), format!("export const v{i}: number = {i};\n").repeat(50)).unwrap();
+            s.handle_request("build", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).unwrap();
+        }
+        let grown = rss_kib().saturating_sub(before);
+        eprintln!("BUILDMEM x{n}: rss grew {grown} KiB");
+        // Before per-build regions each rebuild retained ~19 MiB (lib files reparsed into never-freed arenas and
+        // leaked texts); now one build's worth stays (kept for cleans) and older builds are freed.
+        assert!(grown < (n as u64) * 512, "rss grew {grown} KiB over {n} builds");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

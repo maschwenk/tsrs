@@ -248,6 +248,9 @@ impl BuildTask {
     pub(crate) fn build_project(&'static self, orchestrator: &'static Orchestrator, path: &Path) {
         // Wait on upstream tasks to complete
         self.wait_on_upstream(orchestrator);
+        // API builds: the task allocates in its own collectable region, entered after the upstream wait and left
+        // before downstream tasks are released.
+        let region = orchestrator.enter_api_region();
         if self.pending.load(Ordering::SeqCst) {
             self.set_status(self.get_up_to_date_status(orchestrator, path));
             self.report_up_to_date_status(orchestrator);
@@ -273,6 +276,7 @@ impl BuildTask {
                 (result.as_ref().unwrap().diagnostic_reporter.as_ref().unwrap())(err);
             }
         }
+        drop(region);
         self.unblock_downstream();
     }
 

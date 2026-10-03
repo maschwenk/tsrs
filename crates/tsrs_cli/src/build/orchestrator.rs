@@ -85,6 +85,11 @@ pub struct Orchestrator {
     graph_generated: AtomicBool,
     // Set when a builder thread panicked (see range_tasks).
     pub(crate) aborted: AtomicBool,
+    // API builds (crates/tsrs_cli/src/api.rs): every thread that works on this orchestrator allocates in a
+    // region collected here, so the whole orchestrator (configs, programs, checkers' arenas, diagnostics) can be
+    // freed at once (`free_api_orchestrator`). Off for the CLI, whose single build runs to process exit.
+    regions: Mutex<Vec<tsrs_core::arena::Region>>,
+    use_regions: AtomicBool,
 
     error_summary_reporter: DiagnosticsReporter<'static>,
 
@@ -290,15 +295,35 @@ impl Orchestrator {
         CommandLineResult { status: self.start_worker("", false /*onlyReferences*/).status() }
     }
 
+    /// Makes this orchestrator allocate in collectable regions (API builds; see `regions`).
+    pub fn enable_api_regions(&self) {
+        self.use_regions.store(true, Ordering::SeqCst);
+    }
+
+    // A fresh region for the calling thread, registered for `free_api_orchestrator`; `None` for CLI builds.
+    pub(crate) fn enter_api_region(&self) -> Option<tsrs_core::arena::RegionScope> {
+        if !self.use_regions.load(Ordering::SeqCst) {
+            return None;
+        }
+        let region = tsrs_core::arena::Region::new(1 << 20);
+        let scope = region.enter();
+        self.regions.lock().unwrap().push(region);
+        Some(scope)
+    }
+
     // orchestrator.go:295/301 `Build` / `BuildReferences` entrypoints for the API: one orchestrator per API
     // handle, rechecked (statuses, configs, mtimes, caches) on every call; unchanged tasks are reused.
     pub fn build_for_api(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
-        self.recheck_all_projects(project);
+        {
+            let _region = self.enter_api_region();
+            self.recheck_all_projects(project);
+        }
         self.start_worker(project, only_references)
     }
 
     // orchestrator.go:354-414 `Clean` / `CleanReferences` entrypoints for the API.
     pub fn clean_for_api(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
+        let _region = self.enter_api_region();
         if !self.graph_generated.load(Ordering::SeqCst) {
             self.generate_graph();
         }
@@ -370,10 +395,13 @@ impl Orchestrator {
     // orchestrator.go:311
     fn start_worker(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
         // Content mappers are not supported by tsrs. Watch mode is not ported.
-        if self.graph_generated.load(Ordering::SeqCst) {
-            self.generate_graph_reusing_old_tasks();
-        } else {
-            self.generate_graph();
+        {
+            let _region = self.enter_api_region();
+            if self.graph_generated.load(Ordering::SeqCst) {
+                self.generate_graph_reusing_old_tasks();
+            } else {
+                self.generate_graph();
+            }
         }
         let Some(mut order) = self.get_build_order_for(project) else {
             return OrchestratorResult { status: Some(ExitStatus::InvalidProject_OutputsSkipped), ..Default::default() };
@@ -423,7 +451,23 @@ impl Orchestrator {
             ));
         }
         let mut build_result = OrchestratorResult::default();
-        if self.errors.lock().unwrap().is_empty() {
+        if self.errors.lock().unwrap().is_empty() && self.use_regions.load(Ordering::SeqCst) {
+            // API builds: one builder, run on the calling thread (a builder thread per build would leave its
+            // never-freed thread arena behind), then report in Order() like the reporter below. Everything outside
+            // the task regions goes to a region of this call (single thread: nothing else enters it).
+            let _region = self.enter_api_region();
+            build_result.statistics.projects = order.len();
+            for config in order {
+                let path = self.to_path(config);
+                let task = self.get_task(&path);
+                self.build_or_clean_project(task, &path);
+            }
+            for config in order {
+                let path = self.to_path(config);
+                let task = self.get_task(&path);
+                task.report(self, &path, &mut build_result);
+            }
+        } else if self.errors.lock().unwrap().is_empty() {
             build_result.statistics.projects = order.len();
             // Builders pick up projects in scheduleOrder; results are reported in Order(), waiting for each project to finish
             // (Go: a reporter goroutine; here the calling thread, while rangeTasks runs the builders on their own threads).
@@ -460,7 +504,12 @@ impl Orchestrator {
     // orchestrator.go:925
     fn range_tasks(&'static self, order: &[String], f: &(dyn Fn(&Path, P<BuildTask>) + Sync)) {
         let mut num_routines = 4;
-        if self.opts.command.compiler_options.single_threaded.is_true() {
+        if self.use_regions.load(Ordering::SeqCst) {
+            // API builds: one task region is entered at a time. Concurrent tasks could each wait to enter the
+            // other's region (`arena::enter_owner` for lazily filled data of a shared source file), so the API
+            // runs one builder.
+            num_routines = 1;
+        } else if self.opts.command.compiler_options.single_threaded.is_true() {
             num_routines = 1;
         } else if let Some(builders) = self.opts.command.build_options.builders {
             num_routines = builders as usize;
@@ -534,7 +583,15 @@ impl Orchestrator {
         if self.opts.testing.is_none() {
             // The program is only needed by Testing.OnProgram at report time; drop it now so a task
             // that has finished but is not yet reported does not keep its program alive.
-            task.result.lock().unwrap().as_mut().unwrap().program = None;
+            let program = task.result.lock().unwrap().as_mut().unwrap().program.take();
+            if let (true, Some(program)) = (self.use_regions.load(Ordering::SeqCst), program) {
+                // API builds free each project's program once it is built (its arenas go with the task region when
+                // the orchestrator is freed; this frees the heap side: program, checkers, processed data). It is a
+                // full build that shares nothing, and nothing reads it after its task (statistics and diagnostics are
+                // already taken).
+                // SAFETY: see above; no checker handle of it is held.
+                unsafe { tsrs_compiler::free_unshared_program(program.get_program()) };
+            }
         }
         task.built.close();
     }
@@ -565,6 +622,22 @@ impl Orchestrator {
     }
 }
 
+/// Frees an orchestrator created with `enable_api_regions` and everything its builds allocated.
+///
+/// # Safety
+/// `o` came from `new_orchestrator`, `enable_api_regions` was called before its first build, no build or clean
+/// is running, and nothing obtained from it (results, programs, diagnostics) is used afterwards.
+pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
+    let regions = std::mem::take(&mut *o.regions.lock().unwrap());
+    if std::env::var_os("TSRS_REGION_LOG").is_some() {
+        eprintln!("regions: api orchestrator freed ({} regions, {} KiB)", regions.len(), regions.iter().map(|r| r.allocated_bytes()).sum::<usize>() >> 10);
+    }
+    let h = o.host();
+    drop(Box::from_raw(h as *const host as *mut host));
+    drop(Box::from_raw(o as *const Orchestrator as *mut Orchestrator));
+    drop(regions);
+}
+
 // orchestrator.go:921
 pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
     let sys = opts.sys;
@@ -582,6 +655,8 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         aborted: AtomicBool::new(false),
         error_summary_reporter,
         schedule_order: Mutex::new(Vec::new()),
+        regions: Mutex::new(Vec::new()),
+        use_regions: AtomicBool::new(false),
     }));
     let cached_fs = Arc::new(tsrs_vfs::cachedvfs::from(sys.fs()));
     let compiler_host: Arc<dyn CompilerHost> =

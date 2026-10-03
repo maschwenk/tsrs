@@ -195,10 +195,20 @@ pub fn parse_source_file(opts: SourceFileParseOptions, source_text: &str, script
     parse_source_file_static(opts, alloc_str(source_text), script_kind)
 }
 
-/// `parse_source_file` for text the caller hands over (a file just read): it becomes the file's text without a
-/// copy into the arena (Go shares the string). Like the arena, the text is never freed.
+/// `parse_source_file` for text the caller hands over (a file just read): outside a region it becomes the file's
+/// text without a copy (Go shares the string) and, like the thread arena, is never freed. Inside a freeable region
+/// (native API transpile and builds) the text is copied into the region and unregistered when the region is freed,
+/// so the file's memory is reclaimed with it.
 pub fn parse_source_file_owned(opts: SourceFileParseOptions, source_text: String, script_kind: ScriptKind) -> P<SourceFile> {
-    parse_source_file_static(opts, source_text.leak(), script_kind)
+    match tsrs_core::arena::current_region() {
+        None => parse_source_file_static(opts, source_text.leak(), script_kind),
+        Some(region) => {
+            let file = parse_source_file(opts, &source_text, script_kind);
+            let text_index = file.text_index.get();
+            region.on_free(Box::new(move || ast::unregister_source_text(text_index)));
+            file
+        }
+    }
 }
 
 fn parse_source_file_static(opts: SourceFileParseOptions, source_text: &'static str, script_kind: ScriptKind) -> P<SourceFile> {

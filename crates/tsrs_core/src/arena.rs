@@ -810,6 +810,17 @@ impl Drop for RegionScope {
     }
 }
 
+/// The region that is the current thread's allocation target, if any (`None`: the thread's own arena).
+pub fn current_region() -> Option<Region> {
+    let p = CURRENT.with(|c| c.get());
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: a non-null `CURRENT` is the thread arena or the arena of a region kept alive by an entered scope.
+    let arena = unsafe { &*p };
+    arena.region.as_ref().and_then(|w| w.upgrade()).map(Region)
+}
+
 /// Makes the current thread's own (never freed) arena the allocation target until the scope is dropped: for data
 /// that outlives any region, such as process-wide lazily initialized statics.
 pub fn enter_thread_arena() -> RegionScope {
