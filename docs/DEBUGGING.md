@@ -92,8 +92,9 @@ mode (`TSRS_LAZY_MEMBERS=0`; ~30 min and ~122 GB peak for `types`). That mode's 
 
 `$PRIVATE_PROJECT`
 belongs to a working checkout of the private monorepo. Two agents have already written into it by accident (a `tsbuildinfo` from a `tsgo-ref`
-run without `--incremental false`; a bench script's results file). Rules: run only `tsrs` there, with its cwd elsewhere
-and every output path pointing into your worktree's `target/`; run `tsgo-ref` there only with `--noEmit --incremental false`;
+run without `--incremental false`; a bench script's results file). Rules: tsrs emits by default like tsc, so run both `tsrs` and
+`tsgo-ref` there only with `--noEmit --incremental false` (cwd elsewhere), or with every output path (`--outDir`,
+`--declarationDir`, `--tsBuildInfoFile`) redirected into your worktree's `target/` or `/tmp`;
 anything that writes (mutation testing, scripts that create files) uses the disposable clone at
 `$TSRS_WORK/project-clone`. Before you finish, run `git -C <pristine root> status --short`
 (read-only) and confirm it prints nothing.

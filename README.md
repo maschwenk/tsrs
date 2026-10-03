@@ -34,9 +34,10 @@ Runner: Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EP
 
 # tsrs
 
-A Rust port of the TypeScript 7 type checker and language server. As a compiler it is `tsc --noEmit`: same flags,
-same tsconfig, same diagnostics, byte for byte. As a language server it is `tsgo --lsp`: `tsrs --lsp -stdio`. No emit
-(`docs/EMIT.md` has the plan).
+A Rust port of the TypeScript 7 compiler and language server. As a compiler it is `tsc`: same flags, same tsconfig,
+same diagnostics, byte for byte, and it emits by default like tsc does (JavaScript, declarations, source maps,
+tsbuildinfo, `-b`), unless the options turn that off (`--noEmit`, `emitDeclarationOnly`, `noEmitOnError`). As a
+language server it is `tsgo --lsp`: `tsrs --lsp -stdio`. `docs/EMIT.md` describes the emit port.
 
 It ports the Go implementation in [microsoft/TypeScript](https://github.com/microsoft/TypeScript) (`tsc/internal`)
 at commit `b85298b6a81f` function for function, and the Go code is the specification: on the TypeScript conformance
@@ -47,8 +48,9 @@ baselines; the four exceptions are test-harness artifacts. `docs/STATUS.md` has 
 ## Use it
 
 ```sh
-npx -y @maschwenk/tsrs -p path/to/project        # macOS arm64, Linux x64/arm64
-npx -y @maschwenk/tsrs -p . --singleThreaded     # one checker thread (less memory)
+npx -y @maschwenk/tsrs -p path/to/project            # macOS arm64, Linux x64/arm64; emits like tsc
+npx -y @maschwenk/tsrs -p path/to/project --noEmit   # type check only
+npx -y @maschwenk/tsrs -p . --singleThreaded         # one checker thread (less memory)
 ```
 
 or `pnpm add -D @maschwenk/tsrs` and run `tsrs` from scripts. `--extendedDiagnostics` prints the usual counters.

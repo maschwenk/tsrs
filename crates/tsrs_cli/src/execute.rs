@@ -31,15 +31,8 @@ impl ParseConfigHost for sysParseConfigHost {
     }
 }
 
-/// docs/EMIT.md section 6: emit runs only when the environment variable `TSRS_EMIT` is exactly `1`. Without it tsrs
-/// keeps behaving like `tsc --noEmit` and never writes a file. Read once; the library crates never read it.
-pub(crate) fn emit_enabled() -> bool {
-    static EMIT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *EMIT.get_or_init(|| std::env::var("TSRS_EMIT").as_deref() == Ok("1"))
-}
-
 fn not_supported(sys: &dyn System, what: &str) -> CommandLineResult {
-    sys.write(&format!("error: {} is not supported by tsrs (type checking only).\n", what));
+    sys.write(&format!("error: {} is not supported by tsrs.\n", what));
     CommandLineResult { status: ExitStatus::NotImplemented }
 }
 
@@ -56,10 +49,6 @@ pub fn command_line_with_testing(
     if let Some(first) = command_line_args.first() {
         match first.to_lowercase().as_str() {
             "-b" | "--b" | "-build" | "--build" => {
-                // Without TSRS_EMIT=1 build mode stays unsupported (docs/EMIT.md section 6).
-                if !emit_enabled() {
-                    return not_supported(sys, "build mode (--build)");
-                }
                 let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
                 return tsc_build_compilation(sys, P::new(tsoptions::parse_build_command_line(&command_line_args, host)), testing);
             }
@@ -95,12 +84,6 @@ pub fn command_line_with_testing(
         tsrs_compiler::set_checker_cost_cache_from_cli(&path);
         args.drain(pos..pos + 2);
     }
-    // Without TSRS_EMIT=1 tsrs always behaves like `tsc --noEmit`; with it, the project's own noEmit /
-    // emitDeclarationOnly / noEmitOnError decide, as in tsc.
-    if !emit_enabled() && !args.iter().any(|a| a.eq_ignore_ascii_case("--noEmit") || a.eq_ignore_ascii_case("-noEmit")) {
-        args.push("--noEmit".to_string());
-    }
-
     let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
     tsc_compilation(sys, host, P::new(tsoptions::parse_command_line(&args, host)), testing)
 }
@@ -133,7 +116,7 @@ fn tsc_compilation(
 
     if command_line_options.help.is_true() || command_line_options.all.is_true() {
         print_version(sys);
-        sys.write("Usage: tsrs [-p <project>] [options] [files...]\n  Type-checks like `tsc --noEmit`. See `tsc --help` for options.\n");
+        sys.write("Usage: tsrs [-p <project>] [options] [files...]\n  Compiles like `tsc`. See `tsc --help` for options.\n");
         return CommandLineResult { status: ExitStatus::Success };
     }
 
@@ -237,9 +220,8 @@ fn tsc_compilation(
     if config_options.watch.is_true() {
         return not_supported(sys, "watch mode (--watch)");
     }
-    // Without TSRS_EMIT=1, incremental compilation (tsbuildinfo) is off: incremental projects are checked from
-    // scratch and nothing is written.
-    if emit_enabled() && config_for_compilation.compiler_options().unwrap().is_incremental() {
+    // tsc.go:245
+    if config_for_compilation.compiler_options().unwrap().is_incremental() {
         return perform_incremental_compilation(
             sys,
             config_for_compilation,

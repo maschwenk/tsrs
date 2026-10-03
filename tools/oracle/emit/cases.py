@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit oracle over conformance test cases, through the CLIs: tsgo vs `TSRS_EMIT=1 tsrs`.
+"""Emit oracle over conformance test cases, through the CLIs: tsgo vs tsrs (both emit by default).
 
     tools/oracle/emit/cases.py [--jobs N] [--show] <test file or directory>...
 
@@ -110,8 +110,7 @@ def one(path):
         roots = [r for r in roots if not r.endswith("tsconfig.json")]
         args = flags(variant) + roots
         rc1, out1 = run(TSGO, src, ["--outDir", "../go", "--pretty", "false"] + args)
-        env = dict(os.environ, TSRS_EMIT="1")
-        rc2, out2 = run(TSRS, src, ["--outDir", "../rs", "--pretty", "false"] + args, env)
+        rc2, out2 = run(TSRS, src, ["--outDir", "../rs", "--pretty", "false"] + args)
         go, rs = tree(os.path.join(work, "go")), tree(os.path.join(work, "rs"))
         if b"panicked" in out2 or rc2 < 0 or rc2 > 2:
             status = "crash"

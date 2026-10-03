@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Emit oracle over a pnpm monorepo (docs/EMIT.md section 12): for every workspace package whose `build` script runs
-# `tsc`, emit with the reference compiler into /tmp/emit-go/<pkg> and with `TSRS_EMIT=1 tsrs` into /tmp/emit-rs/<pkg>
+# `tsc`, emit with the reference compiler into /tmp/emit-go/<pkg> and with tsrs into /tmp/emit-rs/<pkg>
 # (same flags; outDir, declarationDir and tsBuildInfoFile always redirected), then diff every emitted file byte for
 # byte (tools/oracle/emit/run.py). The monorepo itself is never written: its `git status --short` is checked before
 # and after, and the script fails if it changed.
