@@ -178,14 +178,19 @@ impl ParseConfigHost for ApiBuildSystem {
 
 struct CliBuildBackend;
 
-/// One API build orchestrator. Go keeps one `build.Orchestrator`: `Build` rechecks all projects (resetting
-/// statuses, configs, mtimes and caches) and regenerates the graph, while `Clean` reuses the graph of the
-/// last build when there is one ("cleans the last built configuration"). This port builds a fresh
-/// orchestrator for every build (same observable state after Go's recheck) and keeps it for later cleans.
+/// One API build orchestrator handle = one CLI `build.Orchestrator`, as in Go: `Build` rechecks all projects
+/// and regenerates the graph reusing unchanged tasks; `Clean` uses the current graph ("cleans the last built
+/// configuration"). The orchestrator is created on first use and kept for the handle's lifetime.
 struct CliOrchestrator {
     sys: &'static ApiBuildSystem,
     command: P<tsrs_tsoptions::ParsedBuildCommandLine>,
-    last: Option<&'static crate::build::Orchestrator>,
+    orchestrator: Option<&'static crate::build::Orchestrator>,
+}
+
+impl CliOrchestrator {
+    fn get(&mut self) -> &'static crate::build::Orchestrator {
+        *self.orchestrator.get_or_insert_with(|| new_orchestrator(Options { sys: self.sys, command: self.command, testing: None }))
+    }
 }
 
 impl BuildBackend for CliBuildBackend {
@@ -204,7 +209,7 @@ impl BuildBackend for CliBuildBackend {
         if let Some(options) = request.build_options {
             command.build_options = options;
         }
-        Box::new(CliOrchestrator { sys, command: P::new(command), last: None })
+        Box::new(CliOrchestrator { sys, command: P::new(command), orchestrator: None })
     }
 }
 
@@ -221,20 +226,10 @@ fn outcome(result: crate::build::OrchestratorResult) -> BuildOutcome {
 
 impl BuildOrchestrator for CliOrchestrator {
     fn build(&mut self, project: &str, only_references: bool) -> BuildOutcome {
-        let orchestrator = new_orchestrator(Options { sys: self.sys, command: self.command, testing: None });
-        self.last = Some(orchestrator);
-        outcome(orchestrator.build_for_api(project, only_references))
+        outcome(self.get().build_for_api(project, only_references))
     }
     fn clean(&mut self, project: &str, only_references: bool) -> BuildOutcome {
-        let orchestrator = match self.last {
-            Some(o) => o,
-            None => {
-                let o = new_orchestrator(Options { sys: self.sys, command: self.command, testing: None });
-                self.last = Some(o);
-                o
-            }
-        };
-        outcome(orchestrator.clean_for_api(project, only_references))
+        outcome(self.get().clean_for_api(project, only_references))
     }
 }
 
@@ -305,6 +300,17 @@ mod tests {
         assert!(json::marshal(get(&r, "filesDeleted")).unwrap().contains("main.js"));
         assert!(!dir.join("app/out/main.js").exists());
         assert!(!dir.join("core/out/index.js").exists());
+
+        // Upstream "returns build response information after clean": clean one project, rebuild it, then
+        // cleanReferences of the downstream project deletes the rebuilt outputs too.
+        call(&s, "build", &format!("{{\"buildOrchestratorID\":{id}}}"));
+        let r = call(&s, "cleanBuild", &format!("{{\"buildOrchestratorID\":{id},\"project\":\"core\"}}"));
+        assert!(json::marshal(get(&r, "filesDeleted")).unwrap().contains("index.js"), "{}", json::marshal(&r).unwrap());
+        let r = call(&s, "build", &format!("{{\"buildOrchestratorID\":{id},\"project\":\"core\"}}"));
+        assert_eq!(get(get(&r, "statistics"), "ProjectsBuilt"), &Value::Number(1.0), "{}", json::marshal(&r).unwrap());
+        assert!(dir.join("core/out/index.js").exists());
+        let r = call(&s, "cleanReferences", &format!("{{\"buildOrchestratorID\":{id},\"project\":\"app\"}}"));
+        assert!(json::marshal(get(&r, "filesDeleted")).unwrap().contains("core/out/index.js"), "{}", json::marshal(&r).unwrap());
 
         assert_eq!(call(&s, "disposeBuildOrchestrator", &format!("{{\"buildOrchestratorID\":{id}}}")), Value::Bool(true));
         assert!(s.handle_request("build", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_err());

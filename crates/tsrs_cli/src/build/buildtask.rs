@@ -115,6 +115,8 @@ pub struct BuildTask {
     errors: Mutex<Vec<P<Diagnostic>>>,
     pub(crate) pending: AtomicBool,
     is_initial_cycle: AtomicBool,
+    // Go `dirty`: the config changed since the task was created (API rebuilds; watch mode is not ported).
+    pub(crate) dirty: AtomicBool,
 }
 
 fn diag(message: &'static Message, args: &[&dyn std::fmt::Display]) -> P<Diagnostic> {
@@ -136,7 +138,30 @@ impl BuildTask {
             errors: Mutex::new(Vec::new()),
             pending: AtomicBool::new(false),
             is_initial_cycle: AtomicBool::new(is_initial_cycle),
+            dirty: AtomicBool::new(false),
         }
+    }
+
+    // buildtask.go:831
+    pub(crate) fn reset_status(&self) {
+        *self.status.lock().unwrap() = None;
+        self.pending.store(true, Ordering::SeqCst);
+        self.errors.lock().unwrap().clear();
+    }
+
+    // buildtask.go:837
+    pub(crate) fn reset_config(&self, orchestrator: &Orchestrator, path: &Path) {
+        self.dirty.store(true, Ordering::SeqCst);
+        orchestrator.host().resolved_references.delete(path);
+    }
+
+    // orchestrator.go createBuildTasks / clean: a dirty task's build info entry carries over to its replacement.
+    pub(crate) fn take_build_info_entry(&self) -> Option<buildInfoEntry> {
+        self.build_info_entry.lock().unwrap().take()
+    }
+
+    pub(crate) fn set_build_info_entry(&self, entry: Option<buildInfoEntry>) {
+        *self.build_info_entry.lock().unwrap() = entry;
     }
 
     pub(crate) fn resolved_opt(&self) -> Option<P<ParsedCommandLine>> {

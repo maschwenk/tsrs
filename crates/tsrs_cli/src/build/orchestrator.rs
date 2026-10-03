@@ -150,11 +150,25 @@ impl Orchestrator {
     }
 
     // orchestrator.go:179
-    fn create_build_tasks(&self, configs: &[String]) {
+    fn create_build_tasks(&self, old_tasks: Option<&FxHashMap<Path, P<BuildTask>>>, configs: &[String]) {
         for config in configs {
             let path = self.to_path(config);
-            let task = P::new(BuildTask::new(config.clone(), true));
-            task.pending.store(true, Ordering::SeqCst);
+            let mut task = None;
+            let mut build_info = None;
+            if let Some(existing) = old_tasks.and_then(|old| old.get(&path)) {
+                if !existing.dirty.load(Ordering::SeqCst) {
+                    // Reuse existing task if config is same
+                    task = Some(*existing);
+                } else {
+                    build_info = existing.take_build_info_entry();
+                }
+            }
+            let task = task.unwrap_or_else(|| {
+                let task = P::new(BuildTask::new(config.clone(), old_tasks.is_none()));
+                task.pending.store(true, Ordering::SeqCst);
+                task.set_build_info_entry(build_info);
+                task
+            });
             if self.tasks.lock().unwrap().contains_key(&path) {
                 continue;
             }
@@ -162,7 +176,7 @@ impl Orchestrator {
             *task.resolved.lock().unwrap() = self.host().get_resolved_project_reference(config, path);
             task.up_stream.lock().unwrap().clear();
             if let Some(resolved) = task.resolved_opt() {
-                self.create_build_tasks(resolved.resolved_project_reference_paths());
+                self.create_build_tasks(old_tasks, resolved.resolved_project_reference_paths());
             }
         }
     }
@@ -218,9 +232,21 @@ impl Orchestrator {
 
     // orchestrator.go:265
     pub fn generate_graph(&self) {
+        self.generate_graph_with(None);
+    }
+
+    // orchestrator.go:252 GenerateGraphReusingOldTasks
+    fn generate_graph_reusing_old_tasks(&self) {
+        let old = std::mem::take(&mut *self.tasks.lock().unwrap());
+        self.order.lock().unwrap().clear();
+        self.errors.lock().unwrap().clear();
+        self.generate_graph_with(Some(&old));
+    }
+
+    fn generate_graph_with(&self, old_tasks: Option<&FxHashMap<Path, P<BuildTask>>>) {
         let projects = self.opts.command.resolved_project_paths().to_vec();
         // Parse all config files (Go: in parallel)
-        self.create_build_tasks(&projects);
+        self.create_build_tasks(old_tasks, &projects);
 
         // Generate the graph
         let mut completed = Set::default();
@@ -233,16 +259,41 @@ impl Orchestrator {
         self.graph_generated.store(true, Ordering::SeqCst);
     }
 
+    // orchestrator.go:337
+    fn recheck_all_projects(&'static self, project: &str) {
+        if !self.graph_generated.load(Ordering::SeqCst) {
+            return;
+        }
+        let Some(order) = self.get_build_order_for(project) else { return };
+        for config in &order {
+            let path = self.to_path(config);
+            let task = self.get_task(&path);
+            task.reset_status();
+            task.reset_config(self, &path);
+        }
+        *self.host().m_times.lock().unwrap() = Arc::new(Mutex::new(FxHashMap::default()));
+        self.reset_caches();
+    }
+
+    // orchestrator.go:506
+    fn reset_caches(&self) {
+        let h = self.host();
+        h.cached_fs.clear_cache();
+        *h.extended_config_cache.lock().unwrap() = Arc::new(tsc::ExtendedConfigCache::default());
+        h.source_files.reset();
+        h.config_times.lock().unwrap().clear();
+    }
+
     // tsc -b entrypoint
     // orchestrator.go:295
     pub fn start(&'static self) -> CommandLineResult {
         CommandLineResult { status: self.start_worker("", false /*onlyReferences*/).status() }
     }
 
-    // orchestrator.go:295/301 `Build` / `BuildReferences` entrypoints for the API. The API creates a fresh
-    // orchestrator per call (crates/tsrs_cli/src/api.rs), so Go's `recheckAllProjects` (which only resets
-    // state of an already generated graph) has nothing to reset here.
+    // orchestrator.go:295/301 `Build` / `BuildReferences` entrypoints for the API: one orchestrator per API
+    // handle, rechecked (statuses, configs, mtimes, caches) on every call; unchanged tasks are reused.
     pub fn build_for_api(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
+        self.recheck_all_projects(project);
         self.start_worker(project, only_references)
     }
 
@@ -279,8 +330,13 @@ impl Orchestrator {
             let inputs: Set<Path> = tsrs_core::collections::new_set_from_items(resolved.file_names().iter().map(|f| self.to_path(f)));
             let mut outputs: Vec<String> = resolved.get_output_file_names().into_iter().collect();
             outputs.push(resolved.get_build_info_file_name());
+            let mut deleted = false;
             for output_file in outputs {
-                self.clean_project_output_for_api(&output_file, &inputs, dry, &mut files_to_delete, &report_diagnostic);
+                deleted = self.clean_project_output_for_api(&output_file, &inputs, dry, &mut files_to_delete, &report_diagnostic) || deleted;
+            }
+            if deleted {
+                task.reset_status();
+                task.set_build_info_entry(None);
             }
         }
         if !files_to_delete.is_empty() {
@@ -292,7 +348,11 @@ impl Orchestrator {
 
     // orchestrator.go:452
     fn clean_project_output_for_api(&self, output_file: &str, inputs: &Set<Path>, dry: bool, files_to_delete: &mut Vec<String>, report: &DiagnosticReporter<'static>) -> bool {
-        let fs = tsrs_compiler::CompilerHost::fs(self.host());
+        // Existence is checked on the uncached system filesystem: this port's up-to-date checks may cache a
+        // negative `file_exists` for an output that the build then writes, and the cache is only cleared by the
+        // next recheck (Go's checks go through mtimes and do not populate that entry).
+        let sys_fs = self.opts.sys.fs();
+        let fs: &dyn tsrs_vfs::FS = &*sys_fs;
         if output_file.is_empty() || inputs.has(&self.to_path(output_file)) || !fs.file_exists(output_file) {
             return false;
         }
@@ -310,7 +370,11 @@ impl Orchestrator {
     // orchestrator.go:311
     fn start_worker(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
         // Content mappers are not supported by tsrs. Watch mode is not ported.
-        self.generate_graph();
+        if self.graph_generated.load(Ordering::SeqCst) {
+            self.generate_graph_reusing_old_tasks();
+        } else {
+            self.generate_graph();
+        }
         let Some(mut order) = self.get_build_order_for(project) else {
             return OrchestratorResult { status: Some(ExitStatus::InvalidProject_OutputsSkipped), ..Default::default() };
         };
@@ -519,10 +583,13 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         error_summary_reporter,
         schedule_order: Mutex::new(Vec::new()),
     }));
-    let compiler_host: Arc<dyn CompilerHost> = new_cached_fs_compiler_host(sys.get_current_directory(), sys.fs(), sys.default_library_path(), None, None);
+    let cached_fs = Arc::new(tsrs_vfs::cachedvfs::from(sys.fs()));
+    let compiler_host: Arc<dyn CompilerHost> =
+        tsrs_compiler::new_compiler_host(sys.get_current_directory(), cached_fs.clone(), sys.default_library_path(), None, None);
     let h: &'static host = Box::leak(Box::new(host {
         orchestrator: OnceLock::new(),
         host: compiler_host,
+        cached_fs,
         extended_config_cache: Mutex::new(Arc::new(tsc::ExtendedConfigCache::default())),
         source_files: parseCache::default(),
         config_times: Mutex::new(FxHashMap::default()),

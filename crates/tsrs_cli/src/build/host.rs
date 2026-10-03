@@ -22,6 +22,8 @@ pub(crate) type mTimeCache = Arc<Mutex<FxHashMap<Path, Option<SystemTime>>>>;
 pub(crate) struct host {
     pub(crate) orchestrator: OnceLock<&'static Orchestrator>,
     pub(crate) host: Arc<dyn CompilerHost>,
+    // The caching filesystem under `host` (Go `o.host.host.FS().(*cachedvfs.FS)`), cleared by `resetCaches`.
+    pub(crate) cached_fs: Arc<tsrs_vfs::cachedvfs::FS<Arc<dyn tsrs_vfs::FS>>>,
 
     // Caches that last only for build cycle and then cleared out
     pub(crate) extended_config_cache: Mutex<Arc<ExtendedConfigCache>>,
