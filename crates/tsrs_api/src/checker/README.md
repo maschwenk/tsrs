@@ -123,15 +123,28 @@ What `Tested` does **not** mean yet (open gaps, for the integration lead):
       recreated snapshot re-parses the file, so old references are "not part of the requested program".
 * **API checker re-entrancy** (`lease.rs`). This is a deliberate divergence: pinned Go blocks forever if
   a request issued from inside a client callback needs the API checker that the callback's own request
-  holds. tsrs takes a per-program gate before the checker slot:
+  holds. tsrs takes a per-program gate before the checker slot, using the runtime's holder-aware
+  contention API (`tsrs_api_transport::{Holder, ContentionWait}`, runtime f0762dc or later):
+  * The holder records `Holder::current()` when it takes the gate and clears it on release.
   * An uncontended request proceeds immediately.
-  * A contended request waits for the holder.
-  * Only a contended acquisition while a request on the connection waits on the client
-    (`blocking_may_deadlock`) fails, with the transport's bounded re-entrancy error.
+  * A contended acquisition uses one `ContentionWait` for its whole wait, updating the holder whenever it
+    changes, and waits like Go while the holder makes progress.
+  * It fails, with the transport's bounded re-entrancy error, only when the holder (or what the holder
+    waits for) has an attributed client call in flight, or when an unattributed call is in flight. On a
+    sync connection that is immediate; on an async one it is after the connection's grace period,
+    measured for this acquisition only.
   * Checker requests that do not need the API checker are never rejected.
 
-  Covered over real sync (MessagePack) and async (JSON-RPC) connections in
-  `session_tests::lease_reentrancy`.
+  `lease_tests.rs` covers this over real connections. The grace is configurable with
+  `TSRS_CHECKER_TEST_GRACE_MS` (default 300 ms). Cases:
+  * genuine re-entry: sync rejects at once; async rejects after the full grace period, while a lease-free
+    request on the same connection still succeeds;
+  * ordinary contention that lasts longer than the grace period still succeeds;
+  * an unrelated request's attributed callback does not reject a legitimate wait;
+  * two sequential waits in one request each get the full grace period;
+  * a waiter blocked behind a holder exits when the connection closes.
+
+  The unrelated-callback and two-waits tests fail with the legacy `blocking_may_deadlock()` predicate.
 * Node handles, source-file descriptors / leases and AST encoding come from core + `tsrs_api_codec`
   (wired in core's integration candidate a9b4354); `session_tests.rs` exercises them through `Session`,
   including snapshot-less file-owned lookups (`getMembersOfSymbol` / `getExportsOfSymbol` / `getParentOfSymbol`).

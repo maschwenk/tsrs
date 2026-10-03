@@ -88,10 +88,10 @@ fn normalize(v: &Value, ids: &mut Ids, in_symbol: bool) -> Value {
     }
 }
 
-struct S {
-    session: Arc<Session>,
-    snapshot: f64,
-    project: String,
+pub(super) struct S {
+    pub(super) session: Arc<Session>,
+    pub(super) snapshot: f64,
+    pub(super) project: String,
     lines: Vec<(String, Value)>,
 }
 
@@ -99,7 +99,7 @@ fn utf16_pos(text: &str, needle: &str) -> usize {
     text[..text.find(needle).unwrap_or_else(|| panic!("{needle:?}"))].encode_utf16().count()
 }
 
-fn get(v: &Value, k: &str) -> Value {
+pub(super) fn get(v: &Value, k: &str) -> Value {
     match v {
         Value::Object(o) => o.get(k).cloned().unwrap_or(Value::Null),
         _ => Value::Null,
@@ -107,7 +107,7 @@ fn get(v: &Value, k: &str) -> Value {
 }
 
 impl S {
-    fn call(&self, method: &str, params: &Value) -> Result<Value, String> {
+    pub(super) fn call(&self, method: &str, params: &Value) -> Result<Value, String> {
         let text = json::marshal(params).unwrap();
         match self.session.handle_request(method, text.as_bytes()) {
             Ok(Response::Json(t)) => Ok(json::unmarshal(&t).unwrap()),
@@ -116,7 +116,7 @@ impl S {
         }
     }
 
-    fn sp(&self, extra: &[(&str, Value)]) -> Value {
+    pub(super) fn sp(&self, extra: &[(&str, Value)]) -> Value {
         let mut o = tsrs_core::collections::OrderedMap::default();
         o.insert("snapshot".to_string(), Value::Number(self.snapshot));
         o.insert("project".to_string(), Value::String(self.project.clone()));
@@ -126,7 +126,7 @@ impl S {
         Value::Object(o)
     }
 
-    fn at(&self, needle: &str) -> Value {
+    pub(super) fn at(&self, needle: &str) -> Value {
         self.sp(&[("file", Value::String("/p/main.ts".into())), ("position", Value::Number(utf16_pos(MAIN, needle) as f64))])
     }
 
@@ -156,7 +156,7 @@ impl S {
     }
 }
 
-fn obj(pairs: &[(&str, Value)]) -> Value {
+pub(super) fn obj(pairs: &[(&str, Value)]) -> Value {
     let mut o = tsrs_core::collections::OrderedMap::default();
     for (k, v) in pairs {
         o.insert(k.to_string(), v.clone());
@@ -169,23 +169,31 @@ fn n(x: impl Into<f64>) -> Value {
 }
 
 fn session() -> S {
-    let files = [("/p/tsconfig.json", TSCONFIG), ("/p/main.ts", MAIN), ("/p/types.d.ts", TYPES), ("/p/other.ts", OTHER)];
+    session_with(&[], &["/p/tsconfig.json"])
+}
+
+/// A session over the fixture (plus `extra` files) with one snapshot opening `configs`; `S.project`
+/// is the `/p` project.
+pub(super) fn session_with(extra: &[(&str, &str)], configs: &[&str]) -> S {
+    let mut files = vec![("/p/tsconfig.json", TSCONFIG), ("/p/main.ts", MAIN), ("/p/types.d.ts", TYPES), ("/p/other.ts", OTHER)];
+    files.extend_from_slice(extra);
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files.iter().map(|(k, v)| (k.to_string(), v.to_string())), false)));
     let session = Session::new(SessionOptions::new("/".to_string(), bundled::lib_path(), fs, false));
     let mut s = S { session, snapshot: 0.0, project: String::new(), lines: Vec::new() };
-    let snap = s.call("createSnapshot", &obj(&[("openProjects", Value::Array(vec![Value::String("/p/tsconfig.json".into())]))])).unwrap();
+    let open = Value::Array(configs.iter().map(|c| Value::String(c.to_string())).collect());
+    let snap = s.call("createSnapshot", &obj(&[("openProjects", open)])).unwrap();
     s.snapshot = match get(&snap, "snapshot") {
         Value::Number(x) => x,
         other => panic!("{other:?}"),
     };
-    s.project = match get(&match get(&snap, "projects") {
-        Value::Array(a) => a[0].clone(),
-        other => panic!("{other:?}"),
-    }, "id")
-    {
-        Value::String(p) => p,
-        other => panic!("{other:?}"),
-    };
+    let Value::Array(projects) = get(&snap, "projects") else { panic!("no projects") };
+    s.project = projects
+        .iter()
+        .find_map(|p| match get(p, "id") {
+            Value::String(id) if id.starts_with("/p/") => Some(id),
+            _ => None,
+        })
+        .expect("/p project");
     s
 }
 
@@ -326,210 +334,4 @@ fn session_responses_match_pinned_go() {
     }
     assert_eq!(compared, GO_SHAPES.lines().filter(|l| !l.is_empty()).count());
     assert!(diffs.is_empty(), "{} of {compared} differ from pinned Go:\n{}", diffs.len(), diffs.join("\n"));
-}
-
-// --- API checker lease re-entrancy through the real transport (runtime's reentrancy hooks) ---
-
-mod lease_reentrancy {
-    use std::sync::mpsc;
-    use std::sync::Arc;
-    use std::thread;
-    use std::time::Duration;
-
-    use tsrs_api_transport as transport;
-    use tsrs_api_transport::jsonrpc::{FrameReader, FrameWriter};
-    use tsrs_api_transport::msgpack::{MessagePackReader, MessagePackWriter, MessageType};
-    use tsrs_core::json::{self, Value};
-
-    use super::{get, obj, session, utf16_pos, MAIN, S};
-    use crate::checker::lease;
-
-    /// Forwards to core's Session, plus test-only methods that hold the fixture program's API checker
-    /// gate while calling the client ("outerHold") or while sleeping ("slowHold").
-    struct H {
-        s: S,
-        caller: Arc<transport::LateCaller>,
-    }
-
-    impl H {
-        fn program(&self) -> &'static tsrs_compiler::Program {
-            let sd = self.s.session.snapshot_data(self.s.snapshot as u64).unwrap();
-            sd.get_program(&tsrs_project::ID(self.s.project.clone())).unwrap()
-        }
-    }
-
-    impl transport::Handler for H {
-        fn handle_request(&self, _cx: &transport::RequestContext, method: &str, params: &[u8]) -> Result<transport::Response, transport::ApiError> {
-            match method {
-                "outerHold" => {
-                    let _lease = lease::acquire(self.program()).map_err(|e| transport::ApiError::internal(e.message))?;
-                    let r = transport::Caller::call(&*self.caller, "cb", None).map_err(|e| transport::ApiError::internal(e.to_string()))?;
-                    Ok(transport::Response::Json(r))
-                }
-                "slowHold" => {
-                    let _lease = lease::acquire(self.program()).map_err(|e| transport::ApiError::internal(e.message))?;
-                    thread::sleep(Duration::from_millis(150));
-                    Ok(transport::Response::Json(b"\"held\"".to_vec()))
-                }
-                _ => match crate::handler::Handler::handle_request(&*self.s.session, method, params) {
-                    Ok(crate::handler::Response::Json(t)) => Ok(transport::Response::Json(t.into_bytes())),
-                    Ok(crate::handler::Response::Binary(b)) => Ok(transport::Response::Binary(b)),
-                    Err(e) => Err(transport::ApiError::internal(e.to_string())),
-                },
-            }
-        }
-
-        fn handle_notification(&self, _cx: &transport::RequestContext, _method: &str, _params: &[u8]) {}
-    }
-
-    fn bounded<T: Send + 'static>(what: &str, f: impl FnOnce() -> T + Send + 'static) -> T {
-        let (tx, rx) = mpsc::channel();
-        thread::spawn(move || {
-            let _ = tx.send(f());
-        });
-        rx.recv_timeout(Duration::from_secs(60)).unwrap_or_else(|_| panic!("{what}: hung"))
-    }
-
-    /// (params for a lease-needing checker request, params for a lease-free checker request)
-    fn requests(s: &S) -> (String, String) {
-        let needs = json::marshal(&s.at("box:")).unwrap();
-        let reference = super::get(&s.call("getSymbolAtPosition", &s.at("legs")).unwrap(), "reference");
-        let free = json::marshal(&obj(&[("symbol", reference)])).unwrap();
-        (needs, free)
-    }
-
-    const REENTRANT_PREFIX: &str = "api: client error: the program's API checker is in use by a request that is waiting on a client callback";
-
-    #[test]
-    fn async_reentry_on_held_api_checker_fails_boundedly_and_unrelated_requests_proceed() {
-        bounded("async api-checker re-entry", || {
-            let s = session();
-            let (needs, free) = requests(&s);
-            let keep_alive = s.session.snapshot_data(s.snapshot as u64).unwrap();
-            let program = keep_alive.get_program(&tsrs_project::ID(s.project.clone())).unwrap();
-            let late = transport::LateCaller::new();
-            let (server_r, client_w) = std::io::pipe().unwrap();
-            let (client_r, server_w) = std::io::pipe().unwrap();
-            let conn = transport::AsyncConn::new(
-                Box::new(FrameReader::new(server_r)),
-                Box::new(FrameWriter::new(server_w)),
-                Arc::new(H { s, caller: late.clone() }),
-                transport::ConnOptions::default(),
-                None,
-            );
-            late.set(conn.caller());
-            let run = thread::spawn(move || conn.run());
-            let mut w = FrameWriter::new(client_w);
-            let mut r = FrameReader::new(client_r);
-            let mut read = || json::unmarshal(std::str::from_utf8(&r.read_frame().unwrap()).unwrap()).unwrap();
-            w.write_frame(br#"{"jsonrpc":"2.0","id":1,"method":"outerHold"}"#).unwrap();
-            let call: Value = read();
-            assert_eq!(get(&call, "method"), Value::String("cb".into()));
-            // Needs the held API checker while its holder waits on the client: bounded error.
-            w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":2,"method":"getTypeAtPosition","params":{needs}}}"#).as_bytes()).unwrap();
-            let resp = read();
-            let message = match get(&get(&resp, "error"), "message") {
-                Value::String(m) => m,
-                other => panic!("expected error, got {other:?} in {}", json::marshal(&resp).unwrap()),
-            };
-            assert!(message.starts_with(REENTRANT_PREFIX), "{message}");
-            // A checker request that does not need the API checker is not rejected.
-            w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":3,"method":"getParentOfSymbol","params":{free}}}"#).as_bytes()).unwrap();
-            let resp = read();
-            assert_eq!(get(&get(&resp, "result"), "name"), Value::String("Dog".into()), "{}", json::marshal(&resp).unwrap());
-            let id = json::marshal(&get(&call, "id")).unwrap();
-            w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{id},"result":"done"}}"#).as_bytes()).unwrap();
-            let resp = read();
-            assert_eq!(get(&resp, "result"), Value::String("done".into()));
-            // Released: the same request now succeeds.
-            w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":4,"method":"getTypeAtPosition","params":{needs}}}"#).as_bytes()).unwrap();
-            let resp = read();
-            assert_eq!(get(&get(&resp, "result"), "flags"), Value::Number(1048576.0), "{}", json::marshal(&resp).unwrap());
-            drop(w);
-            assert!(run.join().unwrap().is_ok());
-            assert!(!lease::is_tracked(program), "the gate is dropped once unused");
-            drop(keep_alive);
-        });
-    }
-
-    #[test]
-    fn async_plain_contention_on_api_checker_waits() {
-        bounded("async api-checker contention", || {
-            let s = session();
-            let (needs, _) = requests(&s);
-            let late = transport::LateCaller::new();
-            let (server_r, client_w) = std::io::pipe().unwrap();
-            let (client_r, server_w) = std::io::pipe().unwrap();
-            let conn = transport::AsyncConn::new(
-                Box::new(FrameReader::new(server_r)),
-                Box::new(FrameWriter::new(server_w)),
-                Arc::new(H { s, caller: late.clone() }),
-                transport::ConnOptions::default(),
-                None,
-            );
-            late.set(conn.caller());
-            let run = thread::spawn(move || conn.run());
-            let mut w = FrameWriter::new(client_w);
-            let mut r = FrameReader::new(client_r);
-            w.write_frame(br#"{"jsonrpc":"2.0","id":1,"method":"slowHold"}"#).unwrap();
-            thread::sleep(Duration::from_millis(30));
-            w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":2,"method":"getTypeAtPosition","params":{needs}}}"#).as_bytes()).unwrap();
-            let mut results = Vec::new();
-            for _ in 0..2 {
-                let v: Value = json::unmarshal(std::str::from_utf8(&r.read_frame().unwrap()).unwrap()).unwrap();
-                assert_eq!(get(&v, "error"), Value::Null, "{}", json::marshal(&v).unwrap());
-                results.push(get(&v, "id"));
-            }
-            assert_eq!(results, [Value::Number(1.0), Value::Number(2.0)], "the waiter finishes after the holder");
-            drop(w);
-            assert!(run.join().unwrap().is_ok());
-        });
-    }
-
-    #[test]
-    fn sync_nested_request_on_held_api_checker_fails_boundedly() {
-        bounded("sync api-checker re-entry", || {
-            let s = session();
-            let (needs, free) = requests(&s);
-            let late = transport::LateCaller::new();
-            let (server_r, client_w) = std::io::pipe().unwrap();
-            let (client_r, server_w) = std::io::pipe().unwrap();
-            let conn = transport::SyncConn::new(
-                Box::new(MessagePackReader::new(server_r)),
-                Box::new(MessagePackWriter::new(server_w)),
-                Arc::new(H { s, caller: late.clone() }),
-                transport::ConnOptions::default(),
-            );
-            late.set(conn.caller());
-            let run = thread::spawn(move || conn.run());
-            let mut w = MessagePackWriter::new(client_w);
-            let mut r = MessagePackReader::new(client_r);
-            let mut recv = || {
-                let t = r.read_tuple().unwrap();
-                (t.msg_type, String::from_utf8(t.method).unwrap(), String::from_utf8(t.payload).unwrap())
-            };
-            w.write_tuple(MessageType::Request, b"outerHold", b"").unwrap();
-            assert_eq!(recv().0, MessageType::Call);
-            w.write_tuple(MessageType::Request, b"getTypeAtPosition", needs.as_bytes()).unwrap();
-            let (ty, method, payload) = recv();
-            assert_eq!((ty, method.as_str()), (MessageType::Error, "getTypeAtPosition"), "{payload}");
-            assert!(payload.starts_with(REENTRANT_PREFIX), "{payload}");
-            w.write_tuple(MessageType::Request, b"getParentOfSymbol", free.as_bytes()).unwrap();
-            let (ty, _, payload) = recv();
-            assert_eq!(ty, MessageType::Response, "{payload}");
-            assert!(payload.contains("\"name\":\"Dog\""), "{payload}");
-            w.write_tuple(MessageType::CallResponse, b"cb", b"\"done\"").unwrap();
-            assert_eq!(recv(), (MessageType::Response, "outerHold".into(), "\"done\"".into()));
-            w.write_tuple(MessageType::Request, b"getTypeAtPosition", needs.as_bytes()).unwrap();
-            let (ty, _, payload) = recv();
-            assert_eq!(ty, MessageType::Response, "{payload}");
-            drop(w);
-            assert!(run.join().unwrap().is_ok());
-        });
-    }
-
-    #[allow(unused)]
-    fn _uses(_: usize) {
-        let _ = utf16_pos(MAIN, "box");
-    }
 }
