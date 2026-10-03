@@ -100,21 +100,21 @@ transformers, the few name matches are accidental, so the honest figure is 0).
 | utilities.go | 375 | 3 of 22 ported (`IsSimpleCopiableExpression`, `IsOriginalNodeSingleLine`, `IsSimpleInlineableExpression`) |
 | chain.go | 62 | missing |
 | modifiervisitor.go | 28 | missing |
-| destructuring.go | 510 | missing |
+| destructuring.go | 510 | **ported** (emit/transforms) |
 | declarations/transform.go | 3002 | **ported completely** (transform_1/2/3.rs), but only run for diagnostics: no `.d.ts` is printed |
 | declarations/diagnostics.go, tracker.go, util.go, supplementalreferences.go | 1234 | **ported** |
-| tstransforms/typeeraser.go | 393 | missing |
-| tstransforms/importelision.go | 153 | missing |
-| tstransforms/runtimesyntax.go | 995 | missing (enums, namespaces, parameter properties) |
-| tstransforms/utilities.go | 29 | missing |
+| tstransforms/typeeraser.go | 393 | **ported** (emit/transforms) |
+| tstransforms/importelision.go | 153 | **ported** (emit/transforms) |
+| tstransforms/runtimesyntax.go | 995 | **ported** (emit/transforms) |
+| tstransforms/utilities.go | 29 | **ported** (emit/transforms) |
 | tstransforms/legacydecorators.go | 1038 | missing |
 | tstransforms/metadata.go | 390 | missing |
 | tstransforms/typeserializer.go | 511 | missing |
-| moduletransforms/commonjsmodule.go | 2162 | missing |
-| moduletransforms/esmodule.go | 372 | missing |
-| moduletransforms/externalmoduleinfo.go | 390 | missing |
+| moduletransforms/commonjsmodule.go | 2162 | **ported** (emit/transforms; commonjsmodule{,_2,_3,_4}.rs by line range) |
+| moduletransforms/esmodule.go | 372 | **ported** (emit/transforms) |
+| moduletransforms/externalmoduleinfo.go | 390 | **ported** (emit/transforms) |
 | moduletransforms/impliedmodule.go | 53 | missing |
-| moduletransforms/utilities.go | 118 | missing |
+| moduletransforms/utilities.go | 118 | **ported** (emit/transforms) |
 | estransforms/classfields.go | 3618 | missing |
 | estransforms/esdecorator.go | 2751 | missing |
 | estransforms/using.go | 799 | missing |
@@ -128,7 +128,7 @@ transformers, the few name matches are accidental, so the honest figure is 0).
 | estransforms/taggedtemplate.go | 175 | missing |
 | estransforms/logicalassignment.go, exponentiation.go, nullishcoalescing.go, optionalcatch.go | 289 | missing |
 | jsxtransforms/jsx.go | 1209 | missing |
-| inliners/constenum.go | 102 | missing |
+| inliners/constenum.go | 102 | **ported** (emit/transforms) |
 
 Ported so far: 4,277 of 24,418 lines (the declaration transformer and the base). Left: ~20,100 lines.
 
@@ -499,8 +499,12 @@ identical to main in both modes, fourslash 4066/63, `-D warnings` check) held fo
 | date | commit | wave | `.js` pass / total | `.js.map` | `.sourcemap.txt` | oracle | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-03 | emit/core (E2) | E1+E2 | 1364 / 15197 (12032 crash at stubs, 1800 skip) | — | — | dts: 2325/2325 files identical, 103/103 packages; full: 0 files (stubs: typeeraser 91, importelision 5, metadata 4; 3 packages emit nothing in both) | multi-threaded test programs give the same js pass list (one timeout aside) |
+| 2026-10-03 | emit/transforms | E3+E4 | 8579 / 15197, 0 fail (4811 crash at other waves' stubs: classfields 1933, forawait 1847, jsx 196, legacydecorators 165, esdecorator 114, sourcemaps 101, …; 1805 skip) | — | — | js mode (`-- --sourceMap false --declarationMap false`): 85/103 packages fully identical, 4545 files identical, 0 different, 951 not emitted (all 18 remaining packages panic in other waves' stubs: metadata 8, classfields 4, legacydecorators 3, jsx 3); reference = tsgo built from ts-ref b85298b6a81f (go1.27.1) | same js pass list on a second run; harness fix: source-file cache key includes moduleDetection `force` (Go keys on the whole parse options) |
 
 ## 14. Known gaps and risks
+
+- Oracle reference: use tsgo built from the pinned ts-ref commit (`go build -o tsgo-ref ./cmd/tsc` in `ts-ref/tsc`, Go 1.27).
+  The npm nightly 7.1.0-dev.20260929.1 predates the pin.
 
 - Go's own harness skips 8 emit tests (`skippedEmitTests`) as nondeterministic; mirror the list.
 - Go emits in parallel. Anything order-dependent inside a file (generated names, helper order) is per-file in Go
