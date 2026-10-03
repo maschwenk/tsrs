@@ -155,6 +155,103 @@ pub(crate) fn is_static_property_declaration_or_class_static_block(node: P<Node>
 }
 
 impl classFieldsTransformer {
+    // classfields.go:3400
+    pub(crate) fn get_properties(&self, node: P<Node>, require_initializer: bool, is_static: bool) -> Vec<P<Node>> {
+        let mut result = Vec::new();
+        for member in node.members() {
+            if ast::is_property_declaration(*member) && (!require_initializer || member.initializer().is_some()) && ast::has_static_modifier(*member) == is_static {
+                result.push(*member);
+            }
+        }
+        result
+    }
+
+    // classfields.go:3412
+    pub(crate) fn get_static_properties_and_class_static_block(&self, node: P<Node>) -> Vec<P<Node>> {
+        let mut result = Vec::new();
+        for member in node.members() {
+            if ast::is_class_static_block_declaration(*member) || (ast::is_property_declaration(*member) && ast::has_static_modifier(*member)) {
+                result.push(*member);
+            }
+        }
+        result
+    }
+}
+
+// classfields.go:3423
+// classHasClassThisAssignment checks if a class has a static block that is a class-this assignment.
+pub(crate) fn class_has_class_this_assignment(emit_context: P<EmitContext>, node: P<Node>) -> bool {
+    for member in node.members() {
+        if is_class_this_assignment_block(emit_context, *member) {
+            return true;
+        }
+    }
+    false
+}
+
+// classfields.go:3432
+pub(crate) fn is_non_static_method_or_accessor_with_private_name(member: P<Node>) -> bool {
+    !ast::is_static(member) && (ast::is_method_or_accessor(member) || ast::is_auto_accessor_property_declaration(member)) && ast::is_private_identifier(member.name().unwrap())
+}
+
+// classfields.go:3438
+pub(crate) fn create_member_access_for_property_name(factory: &printer::NodeFactory, emit_context: P<EmitContext>, receiver: P<Node>, name: P<Node>, location: P<Node>) -> P<Node> {
+    if ast::is_computed_property_name(name) {
+        let expression = factory.new_element_access_expression(receiver, None, name.expression().unwrap(), NodeFlags::None);
+        expression.set_loc(location.loc());
+        return expression;
+    }
+    let expression: P<Node>;
+    if ast::is_identifier(name) || ast::is_private_identifier(name) {
+        expression = factory.new_property_access_expression(receiver, None, name, NodeFlags::None);
+    } else {
+        // string or numeric literal
+        expression = factory.new_element_access_expression(receiver, None, name, NodeFlags::None);
+    }
+    emit_context.set_comment_range(expression, name.loc());
+    emit_context.set_source_map_range(expression, name.loc());
+    emit_context.add_emit_flags(expression, printer::EmitFlags::NoNestedSourceMaps);
+    expression
+}
+
+impl classFieldsTransformer {
+    // classfields.go:3457
+    // Returns (thisArg, target).
+    pub(crate) fn create_call_binding(&self, node: P<Node>) -> (P<Node>, P<Node>) {
+        if ast::is_super_property(node) {
+            return (self.factory().new_this_expression(), node);
+        }
+        if ast::is_property_access_expression(node) {
+            let expr = node.as_property_access_expression();
+            if should_be_captured_in_temp_variable(expr.expression) {
+                let this_arg = self.factory().new_temp_variable();
+                self.emit_context().add_variable_declaration(this_arg);
+                let target = self.factory().new_property_access_expression(
+                    self.factory().new_parenthesized_expression(
+                        // TODO: do we even need these?
+                        self.factory().new_assignment_expression(this_arg, expr.expression),
+                    ),
+                    None,
+                    expr.name(),
+                    NodeFlags::None,
+                );
+                return (this_arg, target);
+            }
+            return (expr.expression, node);
+        }
+        let this_arg = self.factory().new_void_zero_expression();
+        let target = node;
+        (this_arg, target)
+    }
+}
+
+// classfields.go:3483
+pub(crate) fn should_be_captured_in_temp_variable(node: P<Node>) -> bool {
+    let target = ast::skip_parentheses(node);
+    !matches!(target.kind(), Kind::Identifier | Kind::ThisKeyword | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::StringLiteral)
+}
+
+impl classFieldsTransformer {
     // classfields.go:3493
     pub(crate) fn create_accessor_property_get_redirector(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, receiver: P<Node>) -> P<Node> {
         let _ = (node, modifiers, name, receiver);

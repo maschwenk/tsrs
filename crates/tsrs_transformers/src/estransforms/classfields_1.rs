@@ -1317,18 +1317,229 @@ impl classFieldsTransformer {
         }
         self.visitor().visit_each_child(Some(node))
     }
+
+    // classfields.go:1244
+    pub(crate) fn visit_for_statement(&self, node: P<Node>) -> Option<P<Node>> {
+        let n = node.as_for_statement();
+        let initializer = self.discarded_value_visitor().visit_node(n.initializer);
+        let condition = self.visitor().visit_node(n.condition);
+        let incrementor = self.discarded_value_visitor().visit_node(n.incrementor);
+        let saved = self.in_iteration_statement.get();
+        self.in_iteration_statement.set(true);
+        let body = self.emit_context().visit_iteration_body(Some(n.statement()), &mut self.visitor());
+        self.in_iteration_statement.set(saved);
+        Some(self.factory().update_for_statement(node, initializer, condition, incrementor, body.unwrap()))
+    }
+
+    // classfields.go:1255
+    pub(crate) fn visit_expression_statement(&self, node: P<Node>) -> Option<P<Node>> {
+        let expression = node.as_expression_statement().expression;
+        // Preserve private identifiers that appear directly as the expression of an
+        // ExpressionStatement (e.g., `#;`). This is error-recovery output from the parser
+        // for invalid syntax. Keeping it ensures the runtime throws a SyntaxError rather
+        // than silently succeeding with an empty statement.
+        if ast::is_private_identifier(expression) && self.should_transform_private_elements_or_class_static_blocks.get() {
+            return Some(node);
+        }
+        Some(self.factory().update_expression_statement(node, self.discarded_value_visitor().visit_node(Some(expression)).unwrap()))
+    }
+
+    // classfields.go:1269
+    // Returns (readExpression, initializeExpression).
+    pub(crate) fn create_copiable_receiver_expr(&self, receiver: P<Node>) -> (P<Node>, Option<P<Node>>) {
+        let mut clone = receiver;
+        if !ast::node_is_synthesized(receiver) {
+            clone = receiver.clone_node(self.factory());
+        }
+        if is_simple_inlineable_expression(receiver) {
+            return (clone, None);
+        }
+        let read_expression = self.factory().new_temp_variable();
+        self.emit_context().add_variable_declaration(read_expression);
+        let initialize_expression = self.factory().new_assignment_expression(read_expression, clone);
+        (read_expression, Some(initialize_expression))
+    }
+
+    // classfields.go:1283
+    pub(crate) fn visit_call_expression(&self, node: P<Node>) -> Option<P<Node>> {
+        let call = node.as_call_expression();
+        if ast::is_property_access_expression(call.expression)
+            && ast::is_private_identifier(call.expression.as_property_access_expression().name())
+            && self.access_private_identifier(call.expression.as_property_access_expression().name()).is_some()
+        {
+            // obj.#x()
+
+            // Transform call expressions of private names to properly bind the `this` parameter.
+            let (this_arg, target) = self.create_call_binding(call.expression);
+            let visited_target = self.visitor().visit_node(Some(target)).unwrap();
+            let visited_this_arg = self.visitor().visit_node(Some(this_arg)).unwrap();
+            let visited_args = self.visitor().visit_nodes(Some(call.arguments)).unwrap();
+            let mut all_args: Vec<P<Node>> = Vec::with_capacity(1 + visited_args.nodes().len());
+            all_args.push(visited_this_arg);
+            all_args.extend_from_slice(visited_args.nodes());
+            if node.flags().intersects(NodeFlags::OptionalChain) {
+                return Some(self.factory().update_call_expression(
+                    node,
+                    self.factory().new_property_access_expression(visited_target, call.question_dot_token(), self.factory().new_identifier("call"), NodeFlags::OptionalChain),
+                    None, /*questionDotToken*/
+                    None, /*typeArguments*/
+                    self.factory().new_node_list(all_args),
+                    node.flags(),
+                ));
+            }
+            return Some(self.factory().update_call_expression(
+                node,
+                self.factory().new_property_access_expression(visited_target, None, self.factory().new_identifier("call"), NodeFlags::None),
+                None, /*questionDotToken*/
+                None, /*typeArguments*/
+                self.factory().new_node_list(all_args),
+                node.flags(),
+            ));
+        }
+
+        if self.should_transform_super_in_static_initializers.get()
+            && self.current_class_element.get().is_some()
+            && ast::is_super_property(call.expression)
+            && is_static_property_declaration_or_class_static_block(self.current_class_element.get().unwrap())
+            && self.lexical_environment.get().is_some_and(|l| l.data.get().is_some_and(|d| d.class_constructor.get().is_some()))
+        {
+            // super.x()
+            // super[x]()
+
+            // converts `super.f(...)` into `Reflect.get(_baseTemp, "f", _classTemp).call(_classTemp, ...)`
+            let invocation = self.factory().new_function_call_call(
+                self.visitor().visit_node(Some(call.expression)).unwrap(),
+                self.lexical_environment.get().unwrap().data.get().unwrap().class_constructor.get(),
+                self.visitor().visit_nodes(Some(call.arguments)).unwrap().nodes(),
+            );
+            self.emit_context().set_original(invocation, node);
+            invocation.set_loc(node.loc());
+            return Some(invocation);
+        }
+
+        self.visitor().visit_each_child(Some(node))
+    }
+
+    // classfields.go:1338
+    pub(crate) fn visit_tagged_template_expression(&self, node: P<Node>) -> Option<P<Node>> {
+        let tt = node.as_tagged_template_expression();
+        if ast::is_property_access_expression(tt.tag) && ast::is_private_identifier(tt.tag.as_property_access_expression().name()) && self.access_private_identifier(tt.tag.as_property_access_expression().name()).is_some() {
+            // Bind the `this` correctly for tagged template literals when the tag is a private identifier property access.
+            let (this_arg, target) = self.create_call_binding(tt.tag);
+            let bind_expr = self.factory().new_call_expression(
+                self.factory().new_property_access_expression(self.visitor().visit_node(Some(target)).unwrap(), None, self.factory().new_identifier("bind"), NodeFlags::None),
+                None, /*questionDotToken*/
+                None, /*typeArguments*/
+                self.factory().new_node_list(vec![self.visitor().visit_node(Some(this_arg)).unwrap()]),
+                NodeFlags::None,
+            );
+            return Some(self.factory().update_tagged_template_expression(
+                node,
+                bind_expr,
+                None, /*questionDotToken*/
+                None, /*typeArguments*/
+                self.visitor().visit_node(Some(tt.template)).unwrap(),
+                node.flags(),
+            ));
+        }
+
+        if self.should_transform_super_in_static_initializers.get()
+            && self.current_class_element.get().is_some()
+            && ast::is_super_property(tt.tag)
+            && is_static_property_declaration_or_class_static_block(self.current_class_element.get().unwrap())
+            && self.lexical_environment.get().is_some_and(|l| l.data.get().is_some_and(|d| d.class_constructor.get().is_some()))
+        {
+            // converts `` super.f`x` `` into `` Reflect.get(_baseTemp, "f", _classTemp).bind(_classTemp)`x` ``
+            let invocation = self.factory().new_function_bind_call(
+                self.visitor().visit_node(Some(tt.tag)).unwrap(),
+                self.lexical_environment.get().unwrap().data.get().unwrap().class_constructor.get().unwrap(),
+                &[],
+            );
+            self.emit_context().set_original(invocation, node);
+            invocation.set_loc(node.loc());
+            return Some(self.factory().update_tagged_template_expression(
+                node,
+                invocation,
+                None, /*questionDotToken*/
+                None, /*typeArguments*/
+                self.visitor().visit_node(Some(tt.template)).unwrap(),
+                node.flags(),
+            ));
+        }
+
+        self.visitor().visit_each_child(Some(node))
+    }
+
+    // classfields.go:1386
+    pub(crate) fn transform_class_static_block_declaration(&self, node: P<Node>) -> Option<P<Node>> {
+        if self.should_transform_private_elements_or_class_static_blocks.get() {
+            let body_statements = node.as_class_static_block_declaration().body.as_block().statements;
+            if is_class_this_assignment_block(self.emit_context(), node) {
+                let result = self.visitor().visit_node(body_statements.nodes()[0].expression());
+                // If the generated `_classThis` assignment is a noop (i.e., `_classThis = _classThis`), we can
+                // eliminate the expression
+                if let Some(r) = result {
+                    if ast::is_assignment_expression(r, true /*excludeCompoundAssignment*/) {
+                        let binary = r.as_binary_expression();
+                        if binary.left == binary.right() {
+                            return None;
+                        }
+                    }
+                }
+                return result;
+            }
+
+            if is_class_named_evaluation_helper_block(self.emit_context(), node) {
+                return self.visitor().visit_node(body_statements.nodes()[0].expression());
+            }
+
+            self.emit_context().start_variable_environment();
+            let mut statements = self.set_current_class_element_and_visit_statements(node, body_statements.nodes());
+            statements = self.emit_context().end_and_merge_variable_environment(&statements);
+
+            let iife = self.factory().new_immediately_invoked_arrow_function(statements);
+            let arrow_function = ast::skip_parentheses(iife.expression().unwrap());
+            self.emit_context().set_original(arrow_function, node);
+            self.emit_context().add_emit_flags(arrow_function, EmitFlags::NoLexicalArguments);
+            // Preserve the statement list source range so the printer can emit detached comments
+            // (e.g., `// do` inside an otherwise empty static block)
+            arrow_function.as_arrow_function().body().unwrap().as_block().statements.loc.set(body_statements.loc.get());
+            self.emit_context().set_original(iife, node);
+            self.emit_context().assign_source_map_range(iife, node);
+            self.emit_context().add_emit_flags(arrow_function, EmitFlags::NoLexicalThis);
+            return Some(iife);
+        }
+        None
+    }
+
+    // classfields.go:1424
+    pub(crate) fn set_current_class_element_and_visit_statements(&self, class_element: P<Node>, statements: &'static [P<Node>]) -> Vec<P<Node>> {
+        let saved_current_class_element = self.current_class_element.get();
+        self.current_class_element.set(Some(class_element));
+        let (result, _) = self.visitor().visit_slice(statements);
+        self.current_class_element.set(saved_current_class_element);
+        result.to_vec()
+    }
+
+    // classfields.go:1432
+    pub(crate) fn is_anonymous_class_needing_assigned_name_worker(&self, node: P<Node> /*anonymousFunctionDefinition*/) -> bool {
+        if ast::is_class_expression(node) && node.name().is_none() {
+            let static_properties_or_class_static_blocks = self.get_static_properties_and_class_static_block(node);
+            if static_properties_or_class_static_blocks.iter().any(|n| is_class_named_evaluation_helper_block(self.emit_context(), *n)) {
+                return false;
+            }
+            let has_transformable_statics = (self.should_transform_private_elements_or_class_static_blocks.get() || self.node_has_transform_private_static_elements_flag(node))
+                && static_properties_or_class_static_blocks.iter().any(|n| ast::is_class_static_block_declaration(*n) || ast::is_private_identifier_class_element_declaration(*n) || self.should_transform_initializers.get() && ast::is_initialized_property(*n));
+            return has_transformable_statics;
+        }
+        false
+    }
 }
 
 // TEMP(part 1 in progress): not yet ported part-1 functions.
 impl classFieldsTransformer {
-    pub(crate) fn visit_for_statement(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
-    pub(crate) fn visit_expression_statement(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
-    pub(crate) fn visit_call_expression(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
-    pub(crate) fn visit_tagged_template_expression(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
     pub(crate) fn visit_binary_expression(&self, node: P<Node>, discarded: bool) -> Option<P<Node>> { let _ = (node, discarded); todo!() }
     pub(crate) fn visit_parenthesized_expression(&self, node: P<Node>, discarded: bool) -> Option<P<Node>> { let _ = (node, discarded); todo!() }
-    pub(crate) fn is_anonymous_class_needing_assigned_name_worker(&self, node: P<Node>) -> bool { let _ = node; todo!() }
     pub(crate) fn visit_expression_with_type_arguments_in_heritage_clause(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
-    pub(crate) fn create_copiable_receiver_expr(&self, receiver: P<Node>) -> (P<Node>, Option<P<Node>>) { let _ = receiver; todo!() }
     pub(crate) fn create_private_identifier_assignment(&self, info: P<privateIdentifierInfo>, receiver: P<Node>, right: P<Node>, operator: Kind) -> P<Node> { let _ = (info, receiver, right, operator); todo!() }
 }
