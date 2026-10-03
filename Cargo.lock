@@ -619,6 +619,7 @@ dependencies = [
 name = "tsrs_transformers"
 version = "0.2.3"
 dependencies = [
+ "bitflags",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_binder",
