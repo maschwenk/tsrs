@@ -1,0 +1,128 @@
+package requestfilesystem
+
+import (
+	"os"
+	"slices"
+	"testing"
+
+	"github.com/microsoft/TypeScript/tsc/internal/json"
+	"github.com/microsoft/TypeScript/tsc/internal/project"
+	"github.com/microsoft/TypeScript/tsc/internal/vfs"
+	"github.com/microsoft/TypeScript/tsc/internal/vfs/vfstest"
+)
+
+type scenario struct {
+	Name          string `json:"name"`
+	CaseSensitive bool   `json:"caseSensitive"`
+	Cwd           string `json:"cwd"`
+	Host          struct {
+		Files    map[string]string `json:"files"`
+		Symlinks map[string]string `json:"symlinks"`
+	} `json:"host"`
+	Steps   []RequestFileSystem `json:"steps"`
+	Queries []string            `json:"queries"`
+}
+
+type statOut struct {
+	Name  string `json:"name"`
+	Size  int64  `json:"size"`
+	IsDir bool   `json:"isDir"`
+	Mode  uint32 `json:"mode"`
+}
+
+type entriesOut struct {
+	Files       []string `json:"files"`
+	Directories []string `json:"directories"`
+	Symlinks    []string `json:"symlinks"`
+}
+
+type queryOut struct {
+	Path            string     `json:"path"`
+	FileExists      bool       `json:"fileExists"`
+	DirectoryExists bool       `json:"directoryExists"`
+	ReadFile        *string    `json:"readFile"`
+	Realpath        string     `json:"realpath"`
+	Entries         entriesOut `json:"entries"`
+	Stat            *statOut   `json:"stat"`
+}
+
+type stepOut struct {
+	Error   string     `json:"error"`
+	Changed []string   `json:"changed"`
+	Created []string   `json:"created"`
+	Deleted []string   `json:"deleted"`
+	Outside bool       `json:"includesOutside"`
+	Queries []queryOut `json:"queries"`
+}
+
+
+func TestZZDump(t *testing.T) {
+	in, err := os.ReadFile(os.Getenv("SCENARIOS"))
+	if err != nil {
+		t.Skip("no SCENARIOS")
+	}
+	var scenarios []scenario
+	if err := json.Unmarshal(in, &scenarios); err != nil {
+		t.Fatal(err)
+	}
+	out := map[string][]stepOut{}
+	for _, sc := range scenarios {
+		files := map[string]any{}
+		for k, v := range sc.Host.Files {
+			files[k] = v
+		}
+		for k, v := range sc.Host.Symlinks {
+			files[k] = vfstest.Symlink(v)
+		}
+		var fs vfs.FS = vfstest.FromMap(files, sc.CaseSensitive)
+		var steps []stepOut
+		for i := range sc.Steps {
+			var changes project.FileChangeSummary
+			next, err := NewForUpdate(&sc.Steps[i], fs, sc.Cwd, &changes)
+			step := stepOut{}
+			if err != nil {
+				step.Error = err.Error()
+			} else {
+				fs = next
+				for u := range changes.Changed.Keys() {
+					step.Changed = append(step.Changed, string(u))
+				}
+				for u := range changes.Created.Keys() {
+					step.Created = append(step.Created, string(u))
+				}
+				for u := range changes.Deleted.Keys() {
+					step.Deleted = append(step.Deleted, string(u))
+				}
+				slices.Sort(step.Changed)
+				slices.Sort(step.Created)
+				slices.Sort(step.Deleted)
+				step.Outside = changes.IncludesWatchChangeOutsideNodeModules
+			}
+			for _, q := range sc.Queries {
+				r := queryOut{Path: q, FileExists: fs.FileExists(q), DirectoryExists: fs.DirectoryExists(q), Realpath: fs.Realpath(q)}
+				if c, ok := fs.ReadFile(q); ok {
+					r.ReadFile = &c
+				}
+				e := fs.GetAccessibleEntries(q)
+				r.Entries = entriesOut{Files: e.Files, Directories: e.Directories}
+				for s := range e.Symlinks {
+					r.Entries.Symlinks = append(r.Entries.Symlinks, s)
+				}
+				slices.Sort(r.Entries.Symlinks)
+				if info := fs.Stat(q); info != nil {
+					r.Stat = &statOut{Name: info.Name(), Size: info.Size(), IsDir: info.IsDir(), Mode: uint32(info.Mode())}
+				}
+				step.Queries = append(step.Queries, r)
+			}
+			steps = append(steps, step)
+		}
+		out[sc.Name] = steps
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(os.Getenv("SCENARIOS_OUT"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
