@@ -35,14 +35,41 @@ Runner: Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EP
 # tsrs
 
 A Rust port of the TypeScript 7 type checker and language server. As a compiler it is `tsc --noEmit`: same flags,
-same tsconfig, same diagnostics, byte for byte. As a language server it is `tsgo --lsp`: `tsrs --lsp -stdio`. No emit
-(`docs/EMIT.md` has the plan).
+same tsconfig, same diagnostics, byte for byte. As a language server it is `tsgo --lsp`: `tsrs --lsp -stdio`. Emit
+(JavaScript, declarations, source maps, `.tsbuildinfo`, `--build`) is ported too, but only on `main` and only with
+`TSRS_EMIT=1` (table below, `docs/EMIT.md`).
 
 It ports the Go implementation in [microsoft/TypeScript](https://github.com/microsoft/TypeScript) (`tsc/internal`)
 at commit `b85298b6a81f` function for function, and the Go code is the specification: on the TypeScript conformance
 suite the output matches the reference on 13,458 of 13,462 error baselines and on all 12,779 `.types` and `.symbols`
 baselines; the four exceptions are test-harness artifacts. `docs/STATUS.md` has the details and the comparison on a
 38k-file production codebase.
+
+## What it does and doesn't do
+
+Emit is opt-in and not released: npm `0.2.3` is checker-only, and without `TSRS_EMIT=1` a build from `main` still
+behaves like `tsc --noEmit` and never writes a file. "Match" and "identical" below are against tsgo built from the
+same pinned commit.
+
+| feature | status | evidence and notes |
+| --- | --- | --- |
+| Type checking (`tsc --noEmit`) | yes, the default | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match; same diagnostics on the 38k-file codebase |
+| Checker threads, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | |
+| Options TypeScript 7 removed (ES5 target, AMD/UMD/System modules, `node10`/`classic` resolution, `baseUrl`, …) | rejected, as in tsgo | same TS5102 / TS5108 errors |
+| JavaScript emit | `main`, `TSRS_EMIT=1` | all of tsgo's script transforms: type erasure, import elision, enums, namespaces, const enum inlining, CommonJS and ES modules, JSX, legacy and standard decorators, class fields, `using`, async and `for await`, and lowering for older targets (object rest/spread, `?.`, `??`, `**`, logical assignment). 13,392 `.js` baselines pass, 0 fail |
+| Declaration emit (`.d.ts`) | `main`, `TSRS_EMIT=1` | part of the `.js` baselines |
+| Source maps, declaration maps | `main`, `TSRS_EMIT=1` | 149 `.js.map` and 156 `.sourcemap.txt` baselines pass, 0 fail |
+| Incremental compilation (`.tsbuildinfo`) | `main`, `TSRS_EMIT=1` | tsbuildinfo files identical, also for `--noEmit` programs |
+| `--build` (project references, `--builders`, `--clean`, `--dry`, `--force`, `--verbose`) | `main`, `TSRS_EMIT=1` | 187 of 190 `tsbuild` and 187 of 216 `tsc` scenario baselines pass; the failures are CLI outputs tsrs does not port (`--help`, `--init`, `--showConfig`, `--locale`, `--generateTrace`, the `--version` line) and one message that prints an internal symbol name. Finished projects stay in memory (Go frees them), so peak memory grows with the graph |
+| Emit on the 38k-file codebase | `main`, `TSRS_EMIT=1` | all 96 packages built with `tsc`: 9,257 output files (JS, `.d.ts`, maps, `.tsbuildinfo`) byte-identical, same diagnostics and exit codes |
+| `--watch` (also `-b --watch`) | no | exits with "not supported" |
+| `--init`, `--showConfig` | no | exits with "not supported"; `--help` prints a short usage, not tsc's |
+| `--locale` | ignored | messages are English only |
+| `--generateTrace` | ignored | no trace is written |
+| Language server (`--lsp -stdio`) | yes | 4,066 of 4,546 fourslash tests pass; 13,869 of 13,869 responses identical in an xstate editor session (below) |
+| Content mappers, automatic type acquisition, telemetry, pprof requests (language server) | no | not ported |
+| `--api` (the IPC server behind TypeScript 7's Node API) | no | not ported |
+| Prebuilt binaries | macOS arm64, Linux x64/arm64 (glibc) | no Windows or Intel macOS binary |
 
 ## Use it
 
