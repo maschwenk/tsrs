@@ -422,3 +422,118 @@ Where core can apply it:
 3. Do not set `replace_file_system` for the wrapper.
 4. Snapshots may keep the wrapper after the request ends. Later lazy reads then count against a
    finished request, which holds nothing, so they never cause a rejection.
+
+# Review of core c2abd68 (PR 34)
+
+## Inputs
+
+- Core: `c2abd684c4d0b0f2df0cc69b5c0f558310a19c86`, isolated worktree. It contains runtime ddaebbc and
+  checker f11cc6b. `target/debug/tsrs` sha256 `eb44d50c…4827` (a rebuild reproduced the same hash).
+- Pinned Go server: microsoft/TypeScript `b85298b6…`, `cmd/tsc`.
+- Raw inputs and outputs: `/root/artifacts/c2-review/`, including the probes (`strict_probe3.mjs`,
+  `payload_probe.mjs`, `rmn_cases.json`, `tff.json`).
+- Go's decoder randomly says "cannot unmarshal" or "unable to unmarshal": 10 identical runs gave
+  9× "cannot" and 1× "unable". Exact-text comparisons below are therefore also given normalized,
+  with "unable" treated as "cannot".
+
+## resolveModuleName: the wrong-class payload
+
+Sync request `resolveModuleName` with params `{"snapshot":"x"}` (minimal form; the original probe
+payload `{"snapshot":"x","project":7,"file":7,"fileName":7}` behaves the same).
+
+| | answer |
+| --- | --- |
+| Go | `api: invalid request: failed to unmarshal *api.ResolveModuleNameParams: json: cannot unmarshal JSON string into Go api.SnapshotID within "/snapshot"` |
+| tsrs c2 | `api: client error: moduleName is empty` (with `"moduleName":"m"` added: `client error: module resolver 0 not found`) |
+
+The same class mismatch occurs for `{"resolver":"x"}`, `{"resolutionMode":"x"}` and
+`{"inProgressSnapshot":-1}`. Cause: `resolveModuleName` validates `moduleName` and looks up the
+resolver before it type-checks `snapshot`, `resolver`, `resolutionMode` and `inProgressSnapshot`.
+
+## 172-method inventory (sync), c7 → c2
+
+| payload | identical to Go, c7 | identical, c2 | c2 normalized | same class, c2 |
+| --- | --- | --- | --- | --- |
+| strictness ×5 (surrogate, duplicate, nested duplicate, bad UTF-8, truncated) | 171 | 171 | 171 | 171 |
+| `[1]`, `"x"`, `5`, empty | 1–171 | 1–171 | **171** | 171 |
+| `null` | 50 | **169** | 169 | 169 |
+| `{}` | 167 | **169** | 169 | 169 |
+| `{"zzz":[1,{"a":2}]}` (unknown field) | 167 | 169 | 169 | 169 |
+| `{"snapshot":"x"}` | 28 | 30 | 30 | 168 (resolveModuleName) |
+| `{"snapshot":"x","project":7,"file":7,"fileName":7}` | 18 | **5** | 5 | **155** |
+| `{"file":null}` | 150 | **112** | 112 | **123** |
+
+All rows exclude the 3 profiling methods, which tsrs reports as unsupported.
+
+## Omitted versus explicit null `DocumentIdentifier`: verified independently against Go
+
+- Omitted `file` (`{}`, or `null` params): the zero value. Go and tsrs agree.
+- Explicit `"file": null`: Go fails to decode only for the **19 methods whose params struct
+  actually has a `file DocumentIdentifier` field**: `formatNodeForInsertion`,
+  `getCompletionsAtPosition`, `getConfigSourceFile`, `getDefaultProjectForFile`,
+  `getImportAdderEdits`, `getModeForResolutionAtIndex`, `getModeForUsageLocation`,
+  `getReferencesToSymbolInFile`, `getResolvedModule`, `getResolvedTypeReferenceDirective`,
+  `getSourceFile`, `getSourceFileMetadata`, `getSymbolAtPosition`, `getSymbolOfSourceFile`,
+  `getSymbolsAtPositions`, `getTypeAtPosition`, `getTypesAtPositions`, `parseConfigFile`,
+  `readConfigFile`.
+- For every other method Go ignores the unknown key. For example, the `*FromFile` methods use
+  `fileName` and the diagnostics methods use `files`.
+- The checker probe's finding (explicit `file: null` is an invalid request) is therefore right only
+  for those 19 methods. A blanket "null means empty" rule was wrong; so is c2's blanket rejection.
+
+c2 regressions from c2abd68 (all were correct in c7):
+
+1. **Over-rejection: 40 methods.** tsrs validates a `file` key that the Go struct does not have,
+   whether `null` or `7`, and returns `invalid request: … DocumentIdentifier: expected string or
+   object`. Go ignores the key. Examples:
+   - `release`: Go `client error: empty handle`;
+   - `createSnapshot`, `batchRequests`, `transpileModule`, `parseCommandLine`,
+     `createBuildOrchestrator`, `createModuleResolver`: Go returns **OK**;
+   - `transpileModuleFromFile` / `transpileDeclarationFromFile` / `createSourceFileFromFile`
+     (`{"file":null}` or `{"file":7}`): Go `client error: could not read file "/tmp"`;
+   - all diagnostics and emit methods: Go `client error: snapshot 0 not found`.
+
+   The full list is in `c2_class_mismatch.json`. This regression also explains the field-type row
+   dropping from 18 to 5.
+2. **Under-rejection: 8 checker methods.** Decoding still happens after the lookup, so tsrs answers
+   `client error: snapshot 0 not found` where Go gives the decode error: `getCompletionsAtPosition`,
+   `getImportAdderEdits`, `getReferencesToSymbolInFile`, `getSymbolAtPosition`,
+   `getSymbolOfSourceFile`, `getSymbolsAtPositions`, `getTypeAtPosition`, `getTypesAtPositions`.
+
+Fix rule for core: apply the explicit-null `DocumentIdentifier` check only to the
+`DocumentIdentifier` fields of the method's own Go params struct (per method, like `PARAMS_TYPES`),
+and do it in the decode step, before any snapshot or project lookup. That includes the checker
+dispatch.
+
+## Exact wording differences in the same class (kept as-is, reported honestly)
+
+- Field type errors (`{"snapshot":"x"}` and similar), about 140 methods. Go:
+  `json: cannot unmarshal JSON string into Go api.SnapshotID within "/snapshot"`. tsrs:
+  `json: snapshot must be a non-negative integer`.
+- `DocumentIdentifier` errors. Go:
+  `json: cannot unmarshal into Go api.DocumentIdentifier within "/file": DocumentIdentifier: expected string or object, got null`.
+  tsrs drops the `cannot unmarshal into Go api.DocumentIdentifier within "<ptr>": ` part. For a
+  number, Go ends with `got number` and tsrs with `for containingDirectory`.
+- `{"file":7}` on `retainSourceFile` / `getCachedSourceFile`: Go `cannot unmarshal JSON number into
+  Go api.SourceFileDescriptor within "/file"`. tsrs omits `JSON number`.
+- `moduleName: 5`: Go `cannot unmarshal JSON number into Go string within "/moduleName"`. tsrs
+  `moduleName must be a string`.
+
+## Real callback attribution after ScopedFs and request-thread builds
+
+Instrumented local rebuild of c2, a 40-file `createSnapshot` plus `build` (`c2_attr.txt`):
+
+| | sync | async |
+| --- | --- | --- |
+| d6 | 260 of 262 callbacks unattributed | 260 of 262 unattributed |
+| c2 | **262 of 262 attributed** | **262 of 262 attributed** (131 on the build request thread, 130 on snapshot-build workers via ScopedFs) |
+
+So the worker-thread case behind the "unattributed" divergence no longer occurs for snapshot and
+build reads. An unrelated slow callback is now always counted against its own request, and a waiter
+is rejected after the grace period only when the resource holder itself waits on the client for
+longer than the grace period. Go waits forever in that case; this remains a bounded divergence.
+
+Real processes at c2:
+- `contention_repro.mjs`: build orchestrator 0/3 and API checker 0/3 spurious errors.
+- `reentry_repro.mjs`: `buildDuringBuild` gives an immediate error on sync and an error after 10.3 s
+  on async; `pingDuringBuild` and in-flight nested snapshots succeed.
