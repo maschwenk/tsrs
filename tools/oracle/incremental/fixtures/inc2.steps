@@ -1,0 +1,6 @@
+true
+true
+echo 'export const a: number = 1; export function f(x: string) { return x + "" }' > src/a.ts
+echo 'export const a: number = 1; export function f(x: string) { return 1 }' > src/a.ts
+echo 'export const enum E { A = 2 }' > src/e.ts
+echo 'export const a: number = 1; export function f(x: string) { return 1 } const q: string = 1;' > src/a.ts

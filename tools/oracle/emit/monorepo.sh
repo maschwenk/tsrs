@@ -5,7 +5,10 @@
 # byte (tools/oracle/emit/run.py). The monorepo itself is never written: its `git status --short` is checked before
 # and after, and the script fails if it changed.
 #
-#   tools/oracle/emit/monorepo.sh <monorepo root> [-j N] [--filter REGEX] [-- extra flags for both compilers]
+#   tools/oracle/emit/monorepo.sh <monorepo root> [-j N] [--filter REGEX] [--buildinfo] [-- extra flags for both compilers]
+#
+# --buildinfo also compares the tsbuildinfo files (run.py --buildinfo; use tsgo built from ts-ref, see run.py).
+# With `-- --noEmit` that is the incremental-only mode (tsbuildinfo of a noEmit program).
 #
 # Env: TSGO (reference tsgo binary, required), TSRS (default target/release/tsrs), TSRS_CHECKER_ASSIGNMENT (default
 # go), OUT_GO (/tmp/emit-go),
@@ -22,11 +25,13 @@ root="${1:?usage: monorepo.sh <monorepo root> [-j N] [--filter REGEX] [-- extra 
 shift
 jobs=4
 filter=""
+buildinfo=""
 extra=()
 while [ $# -gt 0 ]; do
   case "$1" in
     -j) jobs="$2"; shift 2 ;;
     --filter) filter="$2"; shift 2 ;;
+    --buildinfo) buildinfo="--buildinfo"; shift ;;
     --) shift; extra=("$@"); break ;;
     *) echo "unknown argument $1" >&2; exit 2 ;;
   esac
@@ -83,12 +88,12 @@ selected="$OUT_RS.selected.txt"
 printf '%s\n' "$list" | grep -v '^$' | cut -f1 | sed 's|/|__|g' > "$selected"
 results="$OUT_RS.results.jsonl"
 : > "$results"
-export here OUT_GO OUT_RS
+export here OUT_GO OUT_RS buildinfo
 export extra_flags="${extra[*]:-}"
 # run.py exits 1 on any difference; its verdict is re-derived by summarize.py from the JSON row, and a run.py that
 # dies without a row is caught there as a missing result.
 printf '%s\n' "$list" | grep -v '^$' | while IFS=$'\t' read -r rel cfg; do printf '%s\0%s\0' "$rel" "$cfg"; done |
-  xargs -0 -n 2 -P "$jobs" bash -c 'name="${0//\//__}"; python3 "$here/run.py" "$1" --name "$name" --go-out "$OUT_GO/$name" --rs-out "$OUT_RS/$name" --json -- $extra_flags || true' >> "$results"
+  xargs -0 -n 2 -P "$jobs" bash -c 'name="${0//\//__}"; python3 "$here/run.py" "$1" --name "$name" --go-out "$OUT_GO/$name" --rs-out "$OUT_RS/$name" --json $buildinfo -- $extra_flags || true' >> "$results"
 
 after="$(git -C "$root" status --short)"
 if [ -n "$after" ]; then

@@ -1,0 +1,44 @@
+--- a/internal/execute/tsctests/runner.go	2026-10-03 03:13:36.282114108 +0000
++++ b/internal/execute/tsctests/runner.go	2026-10-03 03:13:36.290986225 +0000
+@@ -73,6 +73,8 @@
+ 		// initial test tsc compile
+ 		baselineBuilder := &strings.Builder{}
+ 		sys := newTestSys(test, false)
++		dump := tsrsNewScenario(test, scenario, sys)
++		defer dump.write()
+ 		fmt.Fprint(
+ 			baselineBuilder,
+ 			"currentDirectory::",
+@@ -97,9 +99,11 @@
+ 			commandLineArgs := core.IfElse(do.commandLineArgs == nil, test.commandLineArgs, do.commandLineArgs)
+ 			wg.Queue(func() {
+ 				baselineBuilder.WriteString(fmt.Sprintf("\n\nEdit [%d]:: %s\n", index, do.caption))
+-				if do.edit != nil {
+-					do.edit(sys)
+-				}
++				dump.edit(index, sys, func() {
++					if do.edit != nil {
++						do.edit(sys)
++					}
++				})
+ 				changedPaths := sys.fsDiffer.ChangedPaths()
+ 				sys.baselineFSwithDiff(baselineBuilder)
+ 
+@@ -118,11 +122,13 @@
+ 			wg.Queue(func() {
+ 				// Compute build with all the edits
+ 				nonIncrementalSys = newTestSys(test, true)
+-				for i := range index + 1 {
+-					if test.edits[i].edit != nil {
+-						test.edits[i].edit(nonIncrementalSys)
++				dump.freshEdits(index, nonIncrementalSys, func() {
++					for i := range index + 1 {
++						if test.edits[i].edit != nil {
++							test.edits[i].edit(nonIncrementalSys)
++						}
+ 					}
+-				}
++				})
+ 				execute.CommandLine(ctx, nonIncrementalSys, commandLineArgs, nonIncrementalSys)
+ 			})
+ 			wg.RunAndWait()

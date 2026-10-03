@@ -403,3 +403,17 @@ pub fn format_diagnostic_to_string(diagnostic: P<Diagnostic>, format_opts: &Form
     write_format_diagnostic(&mut out, diagnostic, format_opts);
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
+
+// diagnosticwriter.go:584
+pub fn format_diagnostics_status_with_color_and_time(output: &mut dyn Write, time: &str, diag: P<Diagnostic>, format_opts: &FormattingOptions) {
+    w!(output, "[");
+    write_with_style_and_reset(output, time, FOREGROUND_COLOR_ESCAPE_GREY);
+    w!(output, "] ");
+    write_flattened_diagnostic_message(output, diag, &format_opts.new_line);
+}
+
+// diagnosticwriter.go:591
+pub fn format_diagnostics_status_and_time(output: &mut dyn Write, time: &str, diag: P<Diagnostic>, format_opts: &FormattingOptions) {
+    w!(output, "{} - ", time);
+    write_flattened_diagnostic_message(output, diag, &format_opts.new_line);
+}

@@ -250,7 +250,7 @@ fn compile_files_ex(
     #[cfg(feature = "checker")]
     if let Some(recorder) = recorder {
         let (diagnostics, program, emit_result) =
-            crate::emit_harness::compile_files_with_host_emit(host.clone(), config, harness_options, &|host, config| create_program(host, config));
+            crate::emit_harness::compile_files_with_host_emit(host.clone(), config, harness_options, &|host, config| create_program_like(host, config));
         let options = program.options().get();
         let emit = crate::emit_harness::new_emit_outputs(&recorder, program, options, &*host, emit_result);
         return Ok(CompilationResult { diagnostics, options, program, harness_options: harness_options.clone(), host, tsconfig, emit: Some(emit) });
@@ -258,7 +258,36 @@ fn compile_files_ex(
     Ok(compile_files_with_host(host, config, harness_options, tsconfig))
 }
 
-// harnessutil.go:970 (createProgram). Incremental programs are plain programs until E13 (TODO(emit/incremental)).
+// harnessutil.go:953 testBuildInfoReader: reads the build info as if this compiler had written it.
+#[cfg(feature = "checker")]
+struct testBuildInfoReader {
+    inner: Box<dyn tsrs_incremental::BuildInfoReader>,
+}
+
+#[cfg(feature = "checker")]
+impl tsrs_incremental::BuildInfoReader for testBuildInfoReader {
+    fn read_build_info(&self, config: &ParsedCommandLine) -> Option<tsrs_incremental::BuildInfo> {
+        let mut r = self.inner.read_build_info(config)?;
+        r.version = tsrs_core::version().to_string();
+        Some(r)
+    }
+}
+
+// harnessutil.go:970 (createProgram), used by the emit harness (`--baselines js`): an `incremental` program is
+// wrapped in `incremental.NewProgram` like Go's. The default mode (no emit baselines) keeps the plain program below.
+#[cfg(feature = "checker")]
+fn create_program_like(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> &'static dyn compiler::ProgramLike {
+    let program = create_program(host.clone(), config);
+    if config.compiler_options().unwrap().incremental.is_true() {
+        let reader = testBuildInfoReader { inner: tsrs_incremental::new_build_info_reader(host.clone()) };
+        let old_program = tsrs_incremental::read_build_info_program(config, &reader, &*host);
+        let incremental_program = tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), None, false);
+        return Box::leak(Box::new(incremental_program.get()));
+    }
+    Box::leak(Box::new(program))
+}
+
+// harnessutil.go:970 (createProgram) without the incremental wrapper: the default (type-check only) mode.
 fn create_program(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> &'static compiler::Program {
     let mut opts = compiler::ProgramOptions::new(config, host);
     if test_program_is_single_threaded() {

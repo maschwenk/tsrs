@@ -105,7 +105,7 @@ pub fn compile_files_with_host_emit(
     host: Arc<dyn CompilerHost>,
     config: P<ParsedCommandLine>,
     harness_options: &HarnessOptions,
-    create_program: &dyn Fn(Arc<dyn CompilerHost>, P<ParsedCommandLine>) -> &'static compiler::Program,
+    create_program: &dyn Fn(Arc<dyn CompilerHost>, P<ParsedCommandLine>) -> &'static dyn compiler::ProgramLike,
 ) -> (Vec<P<tsrs_ast::Diagnostic>>, &'static compiler::Program, compiler::EmitResult) {
     let ctx = &compiler::Context::default();
 
@@ -130,7 +130,8 @@ pub fn compile_files_with_host_emit(
     let pre_errors = compiler::sort_and_deduplicate_diagnostics(&pre_errors);
 
     let post_program = create_program(host, config);
-    let emit_result = post_program.emit(ctx, compiler::EmitOptions::default());
+    // Go `postProgram.Emit` returns nil only on cancellation.
+    let emit_result = post_program.emit(ctx, compiler::EmitOptions::default()).unwrap_or_default();
     let mut post_errors = Vec::new();
     post_errors.extend(post_program.get_config_file_parsing_diagnostics());
     post_errors.extend(post_program.get_program_diagnostics());
@@ -165,7 +166,7 @@ pub fn compile_files_with_host_emit(
         errors.push(diag);
     }
 
-    (errors, post_program, emit_result)
+    (errors, post_program.program(), emit_result)
 }
 
 // harnessutil.go:746 (the output part of newCompilationResult)

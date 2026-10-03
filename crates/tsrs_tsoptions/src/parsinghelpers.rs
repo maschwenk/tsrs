@@ -9,7 +9,7 @@ use tsrs_core::{
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 
-use crate::commandlineoption::{CommandLineOptionKind, CompilerOptionsValue};
+use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, CompilerOptionsValue};
 use crate::contentmappers::Mapper;
 use crate::enummaps::{
     FALLBACK_ENUM_MAP, JSX_OPTION_MAP, MODULE_DETECTION_OPTION_MAP, MODULE_OPTION_MAP, MODULE_RESOLUTION_OPTION_MAP, NEW_LINE_OPTION_MAP,
@@ -741,6 +741,120 @@ macro_rules! for_each_compiler_options_field {
 }
 
 pub(crate) use for_each_compiler_options_field;
+
+// A field of core.CompilerOptions seen through reflection (Go reflect.Value): IsZero and Interface.
+pub trait OptionFieldValue {
+    fn is_zero(&self) -> bool;
+    fn interface(&self) -> CompilerOptionsValue;
+}
+
+impl<T: IsZero + ToOptionsValue> OptionFieldValue for T {
+    fn is_zero(&self) -> bool {
+        IsZero::is_zero(self)
+    }
+    fn interface(&self) -> CompilerOptionsValue {
+        self.to_options_value()
+    }
+}
+
+pub(crate) trait ToOptionsValue {
+    fn to_options_value(&self) -> CompilerOptionsValue;
+}
+
+impl ToOptionsValue for Tristate {
+    fn to_options_value(&self) -> CompilerOptionsValue {
+        CompilerOptionsValue::Tristate(*self)
+    }
+}
+
+impl ToOptionsValue for String {
+    fn to_options_value(&self) -> CompilerOptionsValue {
+        CompilerOptionsValue::String(self.clone())
+    }
+}
+
+impl ToOptionsValue for Option<Vec<String>> {
+    fn to_options_value(&self) -> CompilerOptionsValue {
+        match self {
+            Some(v) => CompilerOptionsValue::StringArray(v.clone()),
+            None => CompilerOptionsValue::Null,
+        }
+    }
+}
+
+impl ToOptionsValue for Option<i32> {
+    fn to_options_value(&self) -> CompilerOptionsValue {
+        match self {
+            Some(v) => CompilerOptionsValue::Int(*v as i64),
+            None => CompilerOptionsValue::Null,
+        }
+    }
+}
+
+impl ToOptionsValue for Option<OrderedMap<String, Vec<String>>> {
+    fn to_options_value(&self) -> CompilerOptionsValue {
+        match self {
+            Some(m) => CompilerOptionsValue::Object(m.iter().map(|(k, v)| (k.clone(), CompilerOptionsValue::StringArray(v.clone()))).collect()),
+            None => CompilerOptionsValue::Null,
+        }
+    }
+}
+
+impl ToOptionsValue for Option<Vec<PluginImport>> {
+    fn to_options_value(&self) -> CompilerOptionsValue {
+        match self {
+            Some(v) => CompilerOptionsValue::Array(
+                v.iter()
+                    .map(|p| {
+                        let mut m = OrderedMap::default();
+                        m.insert("name".to_string(), CompilerOptionsValue::String(p.name.clone()));
+                        CompilerOptionsValue::Object(m)
+                    })
+                    .collect(),
+            ),
+            None => CompilerOptionsValue::Null,
+        }
+    }
+}
+
+macro_rules! impl_to_options_value_for_enum {
+    ($($ty:ident),*) => {
+        $(impl ToOptionsValue for $ty {
+            fn to_options_value(&self) -> CompilerOptionsValue {
+                CompilerOptionsValue::$ty(*self)
+            }
+        })*
+    };
+}
+
+impl_to_options_value_for_enum!(JsxEmit, ModuleKind, ModuleResolutionKind, ModuleDetectionKind, NewLineKind, ScriptTarget);
+
+// declscompiler.go:1234
+// Go walks the struct fields by reflection; `i` is the field index.
+pub fn for_each_compiler_option_value(
+    options: &CompilerOptions,
+    decl_filter: impl Fn(&CommandLineOption) -> bool,
+    mut f: impl FnMut(&CommandLineOption, &dyn OptionFieldValue, usize) -> bool,
+) -> bool {
+    let mut i = 0usize;
+    macro_rules! visit_fields {
+        ($($field:ident: $json:literal,)*) => {
+            $(
+                if let Some(option_declaration) = COMMAND_LINE_COMPILER_OPTIONS_MAP.get($json) {
+                    if decl_filter(option_declaration) {
+                        if f(option_declaration, &options.$field, i) {
+                            return true;
+                        }
+                    }
+                }
+                i += 1;
+            )*
+        };
+    }
+    for_each_compiler_options_field!(visit_fields);
+    let _ = i;
+    false
+}
 
 // mergeCompilerOptions merges the source compiler options into the target compiler options
 // with optional awareness of explicitly set null values in the raw JSON.

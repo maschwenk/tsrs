@@ -21,7 +21,7 @@ impl table {
         self.add(name, format_duration(d));
     }
 
-    fn print(&self, sys: &dyn System) {
+    fn print(&self, w: &dyn Fn(&str)) {
         let mut name_width = 0;
         let mut value_width = 0;
         for r in &self.rows {
@@ -35,7 +35,7 @@ impl table {
             let name = format!("{}:", r.name);
             out.push_str(&format!("{:<nw$} {:>vw$}\n", name, r.value, nw = name_width + 1, vw = value_width));
         }
-        sys.write(&out);
+        w(&out);
     }
 }
 
@@ -43,7 +43,12 @@ fn format_duration(d: Duration) -> String {
     format!("{:.3}s", d.as_secs_f64())
 }
 
+#[derive(Clone, Default)]
 pub struct Statistics {
+    is_aggregate: bool,
+    pub projects: usize,
+    pub projects_built: usize,
+    pub timestamp_updates: usize,
     files: usize,
     lines: usize,
     identifiers: usize,
@@ -73,6 +78,10 @@ fn memory_used_bytes() -> u64 {
 pub fn statistics_from_program(input: &EmitInput, times: &CompileTimes) -> Statistics {
     let program = input.program;
     Statistics {
+        is_aggregate: false,
+        projects: 0,
+        projects_built: 0,
+        timestamp_updates: 0,
         files: program.source_files().len(),
         lines: program.line_count(),
         identifiers: program.identifier_count(),
@@ -87,38 +96,57 @@ pub fn statistics_from_program(input: &EmitInput, times: &CompileTimes) -> Stati
 }
 
 impl Statistics {
-    pub fn report(&self, sys: &dyn System) {
-        let mut table = table::default();
+    pub fn report(&self, w: &dyn Fn(&str), testing: Option<&dyn super::CommandLineTesting>) {
+        if let Some(testing) = testing {
+            testing.on_statistics_start(w);
+        }
+        self.report_worker(w);
+        if let Some(testing) = testing {
+            testing.on_statistics_end(w);
+        }
+    }
 
-        table.add("Files", self.files);
-        table.add("Lines", self.lines);
-        table.add("Identifiers", self.identifiers);
-        table.add("Symbols", self.symbols);
-        table.add("Types", self.types);
-        table.add("Instantiations", self.instantiations);
-        table.add("Memory used", format!("{}K", self.memory_used / 1024));
-        table.add("Memory allocs", self.memory_allocs);
+    fn report_worker(&self, w: &dyn Fn(&str)) {
+        let mut table = table::default();
+        let prefix = if self.is_aggregate { "Aggregate " } else { "" };
+
+        if self.is_aggregate {
+            table.add("Projects in scope", self.projects);
+            table.add("Projects built", self.projects_built);
+            table.add("Timestamps only updates", self.timestamp_updates);
+        }
+        table.add(&format!("{prefix}Files"), self.files);
+        table.add(&format!("{prefix}Lines"), self.lines);
+        table.add(&format!("{prefix}Identifiers"), self.identifiers);
+        table.add(&format!("{prefix}Symbols"), self.symbols);
+        table.add(&format!("{prefix}Types"), self.types);
+        table.add(&format!("{prefix}Instantiations"), self.instantiations);
+        table.add(&format!("{prefix}Memory used"), format!("{}K", self.memory_used / 1024));
+        table.add(&format!("{prefix}Memory allocs"), self.memory_allocs);
         if !self.compile_times.config_time.is_zero() {
-            table.add_duration("Config time", self.compile_times.config_time);
+            table.add_duration(&format!("{prefix}Config time"), self.compile_times.config_time);
         }
         if !self.compile_times.build_info_read_time.is_zero() {
-            table.add_duration("BuildInfo read time", self.compile_times.build_info_read_time);
+            table.add_duration(&format!("{prefix}BuildInfo read time"), self.compile_times.build_info_read_time);
         }
-        table.add_duration("Parse time", self.compile_times.parse_time);
+        table.add_duration(&format!("{prefix}Parse time"), self.compile_times.parse_time);
         if !self.compile_times.bind_time.is_zero() {
-            table.add_duration("Bind time", self.compile_times.bind_time);
+            table.add_duration(&format!("{prefix}Bind time"), self.compile_times.bind_time);
         }
         if !self.compile_times.check_time.is_zero() {
-            table.add_duration("Check time", self.compile_times.check_time);
+            table.add_duration(&format!("{prefix}Check time"), self.compile_times.check_time);
         }
         if !self.compile_times.emit_time.is_zero() {
-            table.add_duration("Emit time", self.compile_times.emit_time);
+            table.add_duration(&format!("{prefix}Emit time"), self.compile_times.emit_time);
         }
         if !self.compile_times.changes_compute_time.is_zero() {
-            table.add_duration("Changes compute time", self.compile_times.changes_compute_time);
+            table.add_duration(&format!("{prefix}Changes compute time"), self.compile_times.changes_compute_time);
         }
-        table.add_duration("Total time", self.compile_times.total_time);
-        table.print(sys);
+        table.add_duration(&format!("{prefix}Total time"), self.compile_times.total_time);
+        table.print(w);
+        if self.is_aggregate {
+            return;
+        }
         // tsrs-only sub-phases (tsrs_core::phases), in the order they first ran.
         let mut table = table::default();
         for (name, value) in tsrs_core::phases::snapshot() {
@@ -127,13 +155,39 @@ impl Statistics {
                 tsrs_core::phases::PhaseValue::Count(n) => table.add(name, n),
             }
         }
-        table.print(sys);
+        table.print(w);
         if let Some(stats) = &self.lazy_member_stats {
             let mut table = table::default();
             for (name, value) in stats.rows() {
                 table.add(name, value);
             }
-            table.print(sys);
+            table.print(w);
         }
+    }
+
+    // statistics.go:155
+    pub fn aggregate(&mut self, stat: &Statistics) {
+        self.is_aggregate = true;
+        // Aggregate statistics
+        self.files += stat.files;
+        self.lines += stat.lines;
+        self.identifiers += stat.identifiers;
+        self.symbols += stat.symbols;
+        self.types += stat.types;
+        self.instantiations += stat.instantiations;
+        self.memory_used += stat.memory_used;
+        self.memory_allocs += stat.memory_allocs;
+        self.compile_times.config_time += stat.compile_times.config_time;
+        self.compile_times.build_info_read_time += stat.compile_times.build_info_read_time;
+        self.compile_times.parse_time += stat.compile_times.parse_time;
+        self.compile_times.bind_time += stat.compile_times.bind_time;
+        self.compile_times.check_time += stat.compile_times.check_time;
+        self.compile_times.emit_time += stat.compile_times.emit_time;
+        self.compile_times.changes_compute_time += stat.compile_times.changes_compute_time;
+    }
+
+    // statistics.go:178
+    pub fn set_total_time(&mut self, total_time: Duration) {
+        self.compile_times.total_time = total_time;
     }
 }

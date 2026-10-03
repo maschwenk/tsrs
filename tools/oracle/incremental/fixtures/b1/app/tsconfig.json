@@ -1,0 +1,1 @@
+{ "compilerOptions": { "incremental": true, "noEmit": true, "strict": true, "target": "esnext", "module": "nodenext" }, "references": [{ "path": "../logic" }, { "path": "../core" }] }

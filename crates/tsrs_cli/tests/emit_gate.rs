@@ -80,3 +80,31 @@ fn declarations_written_with_tsrs_emit() {
     assert_eq!(dts, "export declare const a: number;\nexport declare function f(x: string): string;\n");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn build_mode_writes_nothing_without_tsrs_emit() {
+    let dir = scratch("build-off");
+    let before = files_under(&dir);
+    let out = Command::new(env!("CARGO_BIN_EXE_tsrs")).arg("-b").arg(&dir).env_remove("TSRS_EMIT").output().unwrap();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("not supported"), "{}", String::from_utf8_lossy(&out.stdout));
+    assert_eq!(files_under(&dir), before, "-b wrote files");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn incremental_build_info_written_with_tsrs_emit() {
+    let dir = scratch("incr-on");
+    let args = ["-p".as_ref(), dir.as_os_str(), "--emitDeclarationOnly".as_ref(), "--declarationMap".as_ref(), "false".as_ref()];
+    let out = Command::new(env!("CARGO_BIN_EXE_tsrs")).args(args).env("TSRS_EMIT", "1").output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
+    let build_info = std::fs::read_to_string(dir.join("tsconfig.tsbuildinfo")).unwrap();
+    assert!(build_info.starts_with("{\"version\":"), "{build_info}");
+    assert!(build_info.contains("\"root\":["), "{build_info}");
+    // A second run reads it back and has nothing to do: the build info is not rewritten.
+    let m_time = std::fs::metadata(dir.join("tsconfig.tsbuildinfo")).unwrap().modified().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_tsrs")).args(args).env("TSRS_EMIT", "1").output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
+    assert_eq!(std::fs::metadata(dir.join("tsconfig.tsbuildinfo")).unwrap().modified().unwrap(), m_time);
+    let _ = std::fs::remove_dir_all(&dir);
+}

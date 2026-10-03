@@ -66,7 +66,13 @@ pub struct MapFS {
     inner: RwLock<MapFSInner>,
 
     use_case_sensitive_file_names: bool,
+
+    // vfstest.go Clock: the source of modification times (time.Now when absent).
+    clock: Option<Clock>,
 }
+
+// vfstest.go:38 Clock (Now; SinceStart is not used by MapFS).
+pub type Clock = std::sync::Arc<dyn Fn() -> SystemTime + Send + Sync>;
 
 #[derive(Default)]
 struct MapFSInner {
@@ -81,6 +87,27 @@ struct MapFSInner {
 // without trailing directory separators.
 // The paths must be all POSIX-style or all Windows-style, but not both.
 pub fn from_map<K: AsRef<str>, F: Into<MapFile>>(m: impl IntoIterator<Item = (K, F)>, use_case_sensitive_file_names: bool) -> IoVFS<MapFS> {
+    from_map_with_clock_option(m, use_case_sensitive_file_names, None)
+}
+
+// vfstest.go:80 FromMapWithClock
+pub fn from_map_with_clock<K: AsRef<str>, F: Into<MapFile>>(
+    m: impl IntoIterator<Item = (K, F)>,
+    use_case_sensitive_file_names: bool,
+    clock: Clock,
+) -> IoVFS<MapFS> {
+    from_map_with_clock_option(m, use_case_sensitive_file_names, Some(clock))
+}
+
+fn from_map_with_clock_option<K: AsRef<str>, F: Into<MapFile>>(
+    m: impl IntoIterator<Item = (K, F)>,
+    use_case_sensitive_file_names: bool,
+    clock: Option<Clock>,
+) -> IoVFS<MapFS> {
+    let now = |clock: &Option<Clock>| match clock {
+        Some(clock) => clock(),
+        None => SystemTime::now(),
+    };
     let mut posix = false;
     let mut windows = false;
 
@@ -109,7 +136,7 @@ pub fn from_map<K: AsRef<str>, F: Into<MapFile>>(m: impl IntoIterator<Item = (K,
         check_path(&p);
 
         let mut file = f;
-        file.mod_time = Some(SystemTime::now());
+        file.mod_time = Some(now(&clock));
 
         if file.mode.intersects(FileMode::Symlink) {
             let target = String::from_utf8_lossy(&file.data).into_owned();
@@ -127,13 +154,16 @@ pub fn from_map<K: AsRef<str>, F: Into<MapFile>>(m: impl IntoIterator<Item = (K,
         panic!("mixed posix and windows paths");
     }
 
-    iovfs::from(convert_map_fs(mfs, use_case_sensitive_file_names), use_case_sensitive_file_names)
+    let mut mapfs = convert_map_fs(mfs, use_case_sensitive_file_names);
+    mapfs.clock = clock;
+    iovfs::from(mapfs, use_case_sensitive_file_names)
 }
 
 fn convert_map_fs(input: Vec<(String, MapFile)>, use_case_sensitive_file_names: bool) -> MapFS {
     let m = MapFS {
         inner: RwLock::new(MapFSInner::default()),
         use_case_sensitive_file_names,
+        clock: None,
     };
 
     // Verify that the input is well-formed.
@@ -247,6 +277,13 @@ enum Opened {
 }
 
 impl MapFS {
+    fn now(&self) -> SystemTime {
+        match &self.clock {
+            Some(clock) => clock(),
+            None => SystemTime::now(),
+        }
+    }
+
     fn get_canonical_path(&self, p: &str) -> String {
         tspath::get_canonical_file_name(p, self.use_case_sensitive_file_names)
     }
@@ -377,7 +414,7 @@ impl MapFS {
                 MapFile {
                     data: Vec::new(),
                     mode: FileMode::Dir | FileMode::from_bits_retain(perm.bits() & !UMASK),
-                    mod_time: Some(SystemTime::now()),
+                    mod_time: Some(self.now()),
                 },
             );
         }
@@ -522,7 +559,7 @@ impl MapFS {
             &cp,
             MapFile {
                 data: data.as_bytes().to_vec(),
-                mod_time: Some(SystemTime::now()),
+                mod_time: Some(self.now()),
                 mode: FileMode::from_bits_retain(perm.bits() & !UMASK),
             },
         );
@@ -580,7 +617,7 @@ impl MapFS {
             &cp,
             MapFile {
                 data: combined,
-                mod_time: Some(SystemTime::now()),
+                mod_time: Some(self.now()),
                 mode,
             },
         );

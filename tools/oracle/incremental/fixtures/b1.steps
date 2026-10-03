@@ -1,0 +1,6 @@
+true
+true
+touch core/index.ts
+echo 'export const a: number = 1; export function f(x: string) { return x + "" }' > core/index.ts
+echo 'export const a: number = 1; export function f(x: string) { return 1 }' > core/index.ts
+true

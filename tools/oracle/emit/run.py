@@ -5,8 +5,9 @@ every emitted file byte for byte.
     tools/oracle/emit/run.py <tsconfig|dir> [--name N] [--go-out DIR] [--rs-out DIR] [--json] [-- extra tsc flags]
 
 Both compilers run with the same flags; every output path is redirected (`--outDir`, `--declarationDir`,
-`--tsBuildInfoFile`), so nothing is ever written into the project. `--incremental false` is not passed: the
-reference writes its build info to the redirected path, which lies outside the compared output tree.
+`--tsBuildInfoFile`; by default <W>/ref/out and <W>/rs/out), so nothing is ever written into the project.
+`--incremental false` is not passed: the reference writes its build info to the redirected path, which lies outside
+the compared output tree.
 
 Reference binary: $TSGO, else $TSRS_WORK/bin/tsgo-ref. tsrs binary: $TSRS (default target/release/tsrs), run with
 TSRS_EMIT=1.
@@ -87,13 +88,36 @@ def main():
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--timeout", type=int, default=900)
     ap.add_argument("--quiet", action="store_true")
+    # Also compare the tsbuildinfo files (<out>.tsbuildinfo) byte for byte. With tsgo built from ts-ref
+    # (`go build ./cmd/tsc`: embedded libs, version 7.1.0-dev) the default tsrs build matches as is. With the npm
+    # (noembed) tsgo, tsrs reads the libraries from tsgo's directory (TSRS_LIB_PATH) and must be built with
+    # TSRS_TS_VERSION=<tsgo --version>.
+    ap.add_argument("--buildinfo", action="store_true")
     args = ap.parse_args(argv)
 
     project = os.path.abspath(args.project)
     name = args.name or os.path.basename(project.rstrip("/"))
     work = os.path.join(REPO, "target", "scratch", "emit-oracle", name)
-    go_out = os.path.abspath(args.go_out or os.path.join(work, "ref"))
-    rs_out = os.path.abspath(args.rs_out or os.path.join(work, "rs"))
+    # Same basename and depth on both sides: tsbuildinfo stores outDir/declarationDir/tsBuildInfoFile and source
+    # paths relative to its own directory, so the two layouts must serialize identically (`--buildinfo`).
+    go_out = os.path.abspath(args.go_out or os.path.join(work, "ref", "out"))
+    rs_out = os.path.abspath(args.rs_out or os.path.join(work, "rs", "out"))
+    # The two sides must write disjoint trees: with equal or nested dirs one compiler overwrites (or deletes) the
+    # other's output and the comparison can pass falsely. Checked before anything is deleted or run.
+    def overlaps(a, b):
+        a, b = os.path.realpath(a), os.path.realpath(b)
+        return a == b or a.startswith(b + os.sep) or b.startswith(a + os.sep)
+
+    if any(overlaps(a, b) for a in (go_out, go_out + ".tsbuildinfo") for b in (rs_out, rs_out + ".tsbuildinfo")):
+        print(f"--go-out {go_out} and --rs-out {rs_out} overlap; the reference and tsrs outputs must be disjoint",
+              file=sys.stderr)
+        sys.exit(2)
+    if args.buildinfo:
+        layout = lambda out: (os.path.basename(out), os.path.relpath(project, os.path.dirname(out)))
+        if layout(go_out) != layout(rs_out):
+            print(f"--buildinfo needs --go-out and --rs-out with the same basename and the same path to the project "
+                  f"(got {layout(go_out)} and {layout(rs_out)}): tsbuildinfo serializes these paths", file=sys.stderr)
+            sys.exit(2)
     for d in (go_out, rs_out):
         shutil.rmtree(d, ignore_errors=True)
         if os.path.exists(d + ".tsbuildinfo"):
@@ -107,6 +131,10 @@ def main():
     env.pop("TSRS_EMIT", None)
     go_status, go_text = run([reference_binary()] + flags(go_out), env, cwd, args.timeout)
     env_rs = dict(env, TSRS_EMIT="1")
+    # A noembed reference (the npm tsgo: lib.d.ts next to the binary) reads its libraries from disk; match it.
+    ref_dir = os.path.dirname(os.path.realpath(reference_binary()))
+    if args.buildinfo and "TSRS_LIB_PATH" not in env_rs and os.path.exists(os.path.join(ref_dir, "lib.d.ts")):
+        env_rs["TSRS_LIB_PATH"] = ref_dir
     rs_status, rs_text = run([tsrs_binary()] + flags(rs_out), env_rs, cwd, args.timeout)
     rs_text_cmp = rs_text.replace(rs_out, "<OUT>")
     go_text_cmp = go_text.replace(go_out, "<OUT>")
@@ -128,6 +156,20 @@ def main():
                 details.append(f"--- {rel}: {first_diff(a, b, rel)}")
     for rel in sorted(rs_files):
         if rel not in ref_files:
+            extra_files.append(rel)
+    if args.buildinfo:
+        rel = os.path.basename(go_out) + ".tsbuildinfo"
+        gb, rb = go_out + ".tsbuildinfo", rs_out + ".tsbuildinfo"
+        if os.path.exists(gb):
+            if not os.path.exists(rb):
+                missing.append(rel)
+            elif open(gb, "rb").read() == open(rb, "rb").read():
+                identical.append(rel)
+            else:
+                different.append(rel)
+                if len(details) < 5:
+                    details.append(f"--- {rel}: {first_diff(open(gb, 'rb').read(), open(rb, 'rb').read(), rel)}")
+        elif os.path.exists(rb):
             extra_files.append(rel)
 
     panicked = "panicked at" in rs_text
