@@ -408,9 +408,11 @@ pub unsafe fn free_unshared_program(program: &'static Program) {
     shared.free();
 }
 
-/// The data program versions share (`processed`, the project reference file mapper, the file loader's
-/// resolution host and the mapper's dts-faking host), as an address pair that can be moved into a region's
-/// `on_free` hook.
+/// The data program versions share that is safe to free with them: the processed-file data and the file
+/// loader's resolution host (which keeps the compiler host and the build's file system alive). The project
+/// reference file mapper stays leaked: data derived from it can outlive the programs (freeing it caused
+/// use-after-free when the inferred project was rebuilt), and so do its dts-faking host and, when that exists,
+/// the loader host it wraps.
 pub struct SharedProgramData {
     processed: usize,
     mapper: usize,
@@ -428,15 +430,11 @@ impl SharedProgramData {
     /// # Safety
     /// Every program that shares this data has been freed, and nothing else refers to it.
     pub unsafe fn free(self) {
-        let mapper = self.mapper as *mut projectReferenceFileMapper;
-        let dts_faking_host = (*mapper).dts_faking_host.get().copied();
-        let loader_host = (*mapper).loader_host;
-        drop(Box::from_raw(mapper));
-        if let Some(h) = dts_faking_host {
-            drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
-        }
-        if let Some(h) = loader_host {
-            drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
+        let mapper = &mut *(self.mapper as *mut projectReferenceFileMapper);
+        if mapper.dts_faking_host.get().is_none() {
+            if let Some(h) = mapper.loader_host.take() {
+                drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
+            }
         }
         drop(Box::from_raw(self.processed as *mut processedFiles));
     }

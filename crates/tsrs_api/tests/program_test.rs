@@ -231,3 +231,25 @@ fn no_emit_on_error_reports_diagnostics_without_output() {
     let out = call(&s, "emitToString", &format!("{{{sp}}}"));
     assert_eq!(get(&out, "emitSkipped"), &Value::Bool(true));
 }
+
+/// Inferred project rebuilt while opening several node_modules files (a program is replaced, and its
+/// shared data freed, inside one snapshot build). Freeing the project-reference mapper there was a
+/// use-after-free; repeat to make the race likely to show.
+#[test]
+fn inferred_project_rebuild_frees_safely() {
+    let dir = TempDir::new("inferred");
+    dir.write("tsconfig.json", r#"{ "compilerOptions": { "strict": true } }"#);
+    dir.write("src/index.ts", "export const x = 1;");
+    dir.write("node_modules/my-lib/package.json", r#"{"name":"my-lib","types":"./index.d.ts"}"#);
+    let a = dir.write("node_modules/my-lib/index.d.ts", "export declare const foo: string;");
+    dir.write("node_modules/other-lib/package.json", r#"{"name":"other-lib","types":"./index.d.ts"}"#);
+    let b = dir.write("node_modules/other-lib/index.d.ts", "export declare const bar: number;");
+    let s = session(&dir.dir(), true);
+    for _ in 0..25 {
+        let r = call(&s, "createSnapshot", &format!("{{\"openFiles\":[{},{}]}}", quote(&a), quote(&b)));
+        let snap = match get(&r, "snapshot") { Value::Number(n) => *n as u64, _ => unreachable!() };
+        let dp = call(&s, "getDefaultProjectForFile", &format!("{{\"snapshot\":{snap},\"file\":{}}}", quote(&b)));
+        assert!(matches!(dp, Value::Object(_)));
+        call(&s, "release", &format!("{{\"snapshot\":{snap}}}"));
+    }
+}
