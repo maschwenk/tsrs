@@ -44,6 +44,15 @@ fn not_supported(sys: &dyn System, what: &str) -> CommandLineResult {
 }
 
 pub fn command_line(sys: &'static dyn System, command_line_args: Vec<String>) -> CommandLineResult {
+    command_line_with_testing(sys, command_line_args, None)
+}
+
+// tsc.go:56 CommandLine(ctx, sys, commandLineArgs, testing)
+pub fn command_line_with_testing(
+    sys: &'static dyn System,
+    command_line_args: Vec<String>,
+    testing: Option<&'static dyn tsc::CommandLineTesting>,
+) -> CommandLineResult {
     if let Some(first) = command_line_args.first() {
         match first.to_lowercase().as_str() {
             "-b" | "--b" | "-build" | "--build" => {
@@ -52,7 +61,7 @@ pub fn command_line(sys: &'static dyn System, command_line_args: Vec<String>) ->
                     return not_supported(sys, "build mode (--build)");
                 }
                 let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
-                return tsc_build_compilation(sys, P::new(tsoptions::parse_build_command_line(&command_line_args, host)));
+                return tsc_build_compilation(sys, P::new(tsoptions::parse_build_command_line(&command_line_args, host)), testing);
             }
             _ => {}
         }
@@ -93,10 +102,15 @@ pub fn command_line(sys: &'static dyn System, command_line_args: Vec<String>) ->
     }
 
     let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
-    tsc_compilation(sys, host, P::new(tsoptions::parse_command_line(&args, host)))
+    tsc_compilation(sys, host, P::new(tsoptions::parse_command_line(&args, host)), testing)
 }
 
-fn tsc_compilation(sys: &'static dyn System, host: &'static sysParseConfigHost, command_line: P<ParsedCommandLine>) -> CommandLineResult {
+fn tsc_compilation(
+    sys: &'static dyn System,
+    host: &'static sysParseConfigHost,
+    command_line: P<ParsedCommandLine>,
+    testing: Option<&'static dyn tsc::CommandLineTesting>,
+) -> CommandLineResult {
     let mut config_file_name = String::new();
     let command_line_options = command_line.compiler_options().unwrap();
     let report_diagnostic = create_diagnostic_reporter(sys, Some(&command_line_options));
@@ -226,9 +240,17 @@ fn tsc_compilation(sys: &'static dyn System, host: &'static sysParseConfigHost, 
     // Without TSRS_EMIT=1, incremental compilation (tsbuildinfo) is off: incremental projects are checked from
     // scratch and nothing is written.
     if emit_enabled() && config_for_compilation.compiler_options().unwrap().is_incremental() {
-        return perform_incremental_compilation(sys, config_for_compilation, &report_diagnostic, &report_error_summary, extended_config_cache, compile_times);
+        return perform_incremental_compilation(
+            sys,
+            config_for_compilation,
+            &report_diagnostic,
+            &report_error_summary,
+            extended_config_cache,
+            compile_times,
+            testing,
+        );
     }
-    perform_compilation(sys, config_for_compilation, &report_diagnostic, &report_error_summary, extended_config_cache, compile_times)
+    perform_compilation(sys, config_for_compilation, &report_diagnostic, &report_error_summary, extended_config_cache, compile_times, testing)
 }
 
 fn find_config_file(search_path: &str, file_exists: impl Fn(&str) -> bool, config_name: &str) -> String {
@@ -260,15 +282,14 @@ fn perform_compilation(
     report_error_summary: &tsc::DiagnosticsReporter,
     extended_config_cache: Arc<ExtendedConfigCache>,
     mut compile_times: CompileTimes,
+    testing: Option<&'static dyn tsc::CommandLineTesting>,
 ) -> CommandLineResult {
     let host = new_cached_fs_compiler_host(
         sys.get_current_directory(),
         sys.fs(),
         sys.default_library_path(),
         Some(extended_config_cache),
-        Some(Box::new(move |msg: &'static diagnostics::Message, args: &[&dyn std::fmt::Display]| {
-            sys.write(&format!("{}\n", msg.localize(args)));
-        })),
+        Some(get_trace_from_sys(sys, testing)),
     );
 
     let parse_start = sys.now();
@@ -284,7 +305,8 @@ fn perform_compilation(
         incremental: None,
         writer: None,
         write_file: None,
-        testing: None,
+        testing,
+        testing_m_times_cache: None,
     });
     #[cfg(feature = "alloc-profile")]
     crate::census::run(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
@@ -300,15 +322,14 @@ fn perform_incremental_compilation(
     report_error_summary: &tsc::DiagnosticsReporter,
     extended_config_cache: Arc<ExtendedConfigCache>,
     mut compile_times: CompileTimes,
+    testing: Option<&'static dyn tsc::CommandLineTesting>,
 ) -> CommandLineResult {
     let host = new_cached_fs_compiler_host(
         sys.get_current_directory(),
         sys.fs(),
         sys.default_library_path(),
         Some(extended_config_cache),
-        Some(Box::new(move |msg: &'static diagnostics::Message, args: &[&dyn std::fmt::Display]| {
-            sys.write(&format!("{}\n", msg.localize(args)));
-        })),
+        Some(get_trace_from_sys(sys, testing)),
     );
     let build_info_read_start = sys.now();
     let old_program = tsrs_incremental::read_build_info_program(config, &*tsrs_incremental::new_build_info_reader(host.clone()), &*host);
@@ -319,7 +340,7 @@ fn perform_incremental_compilation(
     compile_times.parse_time = sys.now() - parse_start;
     let changes_compute_start = sys.now();
     let incremental_program =
-        tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), Some(std::time::Instant::now), false);
+        tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), Some(std::time::Instant::now), testing.is_some());
     compile_times.changes_compute_time = sys.now() - changes_compute_start;
     let (result, _) = emit_and_report_statistics(EmitInput {
         sys,
@@ -331,14 +352,22 @@ fn perform_incremental_compilation(
         incremental: Some(incremental_program),
         writer: None,
         write_file: None,
-        testing: None,
+        testing,
+        testing_m_times_cache: None,
     });
 
+    if let Some(testing) = testing {
+        testing.on_program(incremental_program);
+    }
     CommandLineResult { status: result.status }
 }
 
 // tsc.go:93
-fn tsc_build_compilation(sys: &'static dyn System, build_command: P<tsoptions::ParsedBuildCommandLine>) -> CommandLineResult {
+fn tsc_build_compilation(
+    sys: &'static dyn System,
+    build_command: P<tsoptions::ParsedBuildCommandLine>,
+    testing: Option<&'static dyn tsc::CommandLineTesting>,
+) -> CommandLineResult {
     let report_diagnostic = create_diagnostic_reporter(sys, Some(&build_command.compiler_options));
 
     if !build_command.errors.is_empty() {
@@ -357,6 +386,11 @@ fn tsc_build_compilation(sys: &'static dyn System, build_command: P<tsoptions::P
         return not_supported(sys, "watch mode (--watch)");
     }
 
-    let orchestrator = crate::build::new_orchestrator(crate::build::Options { sys, command: build_command, testing: None });
+    let orchestrator = crate::build::new_orchestrator(crate::build::Options { sys, command: build_command, testing });
     orchestrator.start()
+}
+
+// tsc.go getTraceFromSys / tsc.GetTraceWithWriterFromSys
+fn get_trace_from_sys(sys: &'static dyn System, testing: Option<&'static dyn tsc::CommandLineTesting>) -> Box<tsrs_compiler::TraceFn> {
+    tsc::get_trace_with_writer_from_sys(std::sync::Arc::new(move |t: &str| sys.write(t)), true, testing)
 }

@@ -59,12 +59,24 @@ pub trait CommandLineTesting: Sync {
     fn on_statistics_end(&self, _w: &dyn Fn(&str)) {}
     fn on_build_status_report_start(&self, _w: &dyn Fn(&str)) {}
     fn on_build_status_report_end(&self, _w: &dyn Fn(&str)) {}
-    fn on_emitted_files(&self, _result: Option<&tsrs_compiler::EmitResult>) {}
+    fn on_emitted_files(&self, _result: Option<&tsrs_compiler::EmitResult>, _m_times_cache: Option<&MTimesCache>) {}
     fn on_program(&self, _program: P<tsrs_incremental::Program>) {}
     // Go `GetTrace(w, locale)`: the trace function for a program's compiler host, writing to `w`.
-    fn get_trace(&self, w: &(dyn Fn(&str) + Sync)) -> Option<Box<dyn Fn(&str) + Send + Sync>> {
-        let _ = w;
-        None
+    fn get_trace(&'static self, w: SyncWriter, is_sys_writer: bool) -> Box<tsrs_compiler::TraceFn>;
+}
+
+pub type SyncWriter = std::sync::Arc<dyn Fn(&str) + Send + Sync>;
+
+// The build host's mtime cache (Go `*collections.SyncMap[tspath.Path, time.Time]`, zero time = None).
+pub type MTimesCache = std::sync::Arc<std::sync::Mutex<rustc_hash::FxHashMap<tsrs_core::tspath::Path, Option<std::time::SystemTime>>>>;
+
+// emit.go:21 GetTraceWithWriterFromSys
+pub fn get_trace_with_writer_from_sys(w: SyncWriter, is_sys_writer: bool, testing: Option<&'static dyn CommandLineTesting>) -> Box<tsrs_compiler::TraceFn> {
+    match testing {
+        None => Box::new(move |msg: &'static tsrs_diagnostics::Message, args: &[&dyn std::fmt::Display]| {
+            w(&format!("{}\n", msg.localize(args)));
+        }),
+        Some(testing) => testing.get_trace(w, is_sys_writer),
     }
 }
 

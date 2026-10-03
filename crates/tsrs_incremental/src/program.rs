@@ -54,11 +54,7 @@ pub fn new_program(
 ) -> P<Program> {
     let snapshot = program_to_snapshot(program, old_program, testing);
     let testing_data = if testing {
-        let mut testing_data = TestingData::default();
-        testing_data.semantic_diagnostics_per_file = snapshot.semantic_diagnostics_per_file.keys();
-        if let Some(old_program) = old_program {
-            testing_data.old_program_semantic_diagnostics_per_file = old_program.snapshot.semantic_diagnostics_per_file.keys();
-        }
+        let testing_data = TestingData { old_snapshot: old_program.map(|p| p.snapshot), updated_signature_kinds: FxHashMap::default() };
         Some(Mutex::new(testing_data))
     } else {
         None
@@ -73,12 +69,19 @@ pub fn new_program(
     })
 }
 
-// Go's TestingData holds pointers to the live sync maps; Rust snapshots the key sets it is asked about.
-#[derive(Default)]
+// Go's TestingData holds pointers to the program's and the old program's semantic diagnostics maps; Rust keeps the
+// old snapshot and answers the questions the harness asks (Program::testing_semantic_diagnostics_state).
 pub struct TestingData {
-    pub semantic_diagnostics_per_file: Vec<Path>,
-    pub old_program_semantic_diagnostics_per_file: Vec<Path>,
+    old_snapshot: Option<P<Snapshot>>,
     pub updated_signature_kinds: FxHashMap<Path, SignatureUpdateKind>,
+}
+
+// The tsctests "SemanticDiagnostics::" line of a file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SemanticDiagnosticsState {
+    NotCached,
+    Refreshed,
+    Reused,
 }
 
 impl Program {
@@ -88,6 +91,23 @@ impl Program {
 
     pub fn get_testing_data(&self) -> Option<&Mutex<TestingData>> {
         self.testing_data.as_ref()
+    }
+
+    // sys.go OnProgram: `*refresh*` when the cached entry is not the one the old program had (by pointer).
+    pub fn testing_semantic_diagnostics_state(&self, path: &Path) -> SemanticDiagnosticsState {
+        let Some(diagnostics) = self.snapshot.semantic_diagnostics_per_file.load(path) else {
+            return SemanticDiagnosticsState::NotCached;
+        };
+        let testing_data = self.testing_data.as_ref().unwrap().lock().unwrap();
+        let old = testing_data.old_snapshot.and_then(|s| s.semantic_diagnostics_per_file.load(path));
+        match old {
+            Some(old) if std::sync::Arc::ptr_eq(&old, &diagnostics) => SemanticDiagnosticsState::Reused,
+            _ => SemanticDiagnosticsState::Refreshed,
+        }
+    }
+
+    pub fn testing_updated_signature_kind(&self, path: &Path) -> Option<SignatureUpdateKind> {
+        self.testing_data.as_ref().unwrap().lock().unwrap().updated_signature_kinds.get(path).copied()
     }
 
     // program.go:82

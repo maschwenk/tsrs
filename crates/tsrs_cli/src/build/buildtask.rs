@@ -227,11 +227,7 @@ impl BuildTask {
         let trace_builder = builder.clone();
         let compiler_host: Arc<dyn tsrs_compiler::CompilerHost> = Arc::new(compilerHost {
             host,
-            trace: Box::new(move |msg: &'static Message, args: &[&dyn std::fmt::Display]| {
-                let mut b = trace_builder.lock().unwrap();
-                b.push_str(&msg.localize(args));
-                b.push('\n');
-            }),
+            trace: tsc::get_trace_with_writer_from_sys(Arc::new(move |t: &str| trace_builder.lock().unwrap().push_str(t)), false, orchestrator.opts.testing),
         });
         let mut old_program = None;
         if !build_options.force.is_true() {
@@ -271,6 +267,7 @@ impl BuildTask {
             writer: Some(&writer),
             write_file: Some(&write_file),
             testing: orchestrator.opts.testing,
+            testing_m_times_cache: Some(host.m_times.lock().unwrap().clone()),
         });
         {
             let mut r = self.result.borrow_mut();
@@ -365,8 +362,7 @@ impl BuildTask {
         };
 
         // Solution - nothing to build
-        // Go tests `ProjectReferences() != nil`; tsrs does not keep an absent "references" apart from an empty one.
-        if resolved.file_names().is_empty() && !resolved.project_references().is_empty() {
+        if resolved.file_names().is_empty() && !resolved.project_references_is_nil() {
             return upToDateStatus::new(upToDateStatusType::Solution);
         }
 

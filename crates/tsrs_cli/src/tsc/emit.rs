@@ -20,6 +20,7 @@ pub struct EmitInput<'a> {
     pub writer: Option<&'a (dyn Fn(&str) + 'a)>,
     pub write_file: Option<tsrs_compiler::WriteFile<'a>>,
     pub testing: Option<&'a dyn super::CommandLineTesting>,
+    pub testing_m_times_cache: Option<super::MTimesCache>,
 }
 
 impl EmitInput<'_> {
@@ -108,6 +109,9 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
     }
     let emit_skipped = emit_result.emit_skipped;
     all_diagnostics.extend(emit_result.diagnostics.iter().copied());
+    if let Some(testing) = input.testing {
+        testing.on_emitted_files(Some(&emit_result), input.testing_m_times_cache.as_ref());
+    }
 
     let all_diagnostics = tsrs_core::phases::time("Diagnostics: sort", || sort_and_deduplicate_diagnostics(&all_diagnostics));
     tsrs_core::phases::time("Diagnostics: report", || {
@@ -210,7 +214,7 @@ fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<t
         all_diagnostics.extend(emit_result.diagnostics.iter().copied());
     }
     if let Some(testing) = input.testing {
-        testing.on_emitted_files(emit_result.as_ref());
+        testing.on_emitted_files(emit_result.as_ref(), input.testing_m_times_cache.as_ref());
     }
 
     let all_diagnostics = sort_and_deduplicate_diagnostics(&all_diagnostics);

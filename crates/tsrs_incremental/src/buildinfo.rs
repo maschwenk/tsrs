@@ -964,7 +964,7 @@ fn get_opt_string_array(o: &OrderedMap<String, Value>, key: &str) -> Result<Opti
     }
 }
 
-pub(crate) fn category_to_i32(c: Category) -> i32 {
+pub fn category_to_i32(c: Category) -> i32 {
     match c {
         Category::Warning => 0,
         Category::Error => 1,

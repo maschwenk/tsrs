@@ -17,5 +17,5 @@ mod snapshottobuildinfo;
 pub use buildinfo::*;
 pub use host::{create_host, get_m_time, Host};
 pub use incremental::{new_build_info_reader, read_build_info_program, BuildInfoReader};
-pub use program::{new_program, Program, SignatureUpdateKind, TestingData};
+pub use program::{new_program, Program, SemanticDiagnosticsState, SignatureUpdateKind, TestingData};
 pub use snapshot::{compute_hash, get_file_emit_kind, FileEmitKind, FileInfo};

@@ -95,6 +95,7 @@ pub fn new_parsed_command_line(
         parsed_config: ParsedOptions {
             compiler_options: Some(compiler_options),
             file_names: root_file_names,
+            project_references_is_nil: project_references.is_empty(),
             project_references,
             ..Default::default()
         },
@@ -358,6 +359,11 @@ impl ParsedCommandLine {
 
     pub fn project_references(&self) -> &[ProjectReference] {
         &self.parsed_config.project_references
+    }
+
+    // Go `ProjectReferences() == nil`.
+    pub fn project_references_is_nil(&self) -> bool {
+        self.parsed_config.project_references_is_nil
     }
 
     pub fn content_mappers(&self) -> &[Mapper] {

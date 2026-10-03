@@ -10,6 +10,8 @@ mod execute;
 mod lsp;
 mod sys;
 mod tsc;
+#[cfg(test)]
+mod tsctests;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();

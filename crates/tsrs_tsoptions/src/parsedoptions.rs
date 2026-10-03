@@ -10,5 +10,8 @@ pub struct ParsedOptions {
 
     pub file_names: Vec<String>,
     pub project_references: Vec<ProjectReference>,
+    // Go keeps `ProjectReferences` nil when the config has no "references" (build mode treats files: [] plus
+    // references: [] as a solution).
+    pub project_references_is_nil: bool,
     pub content_mappers: Vec<Mapper>,
 }

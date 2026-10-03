@@ -1924,6 +1924,7 @@ fn parse_json_config_file_content_worker(
             compiler_options: parsed_config.options.map(P::new),
             type_acquisition: parsed_config.type_acquisition,
             file_names,
+            project_references_is_nil: project_references.is_none(),
             project_references: project_references.unwrap_or_default(),
             content_mappers,
             watch_options: None,
