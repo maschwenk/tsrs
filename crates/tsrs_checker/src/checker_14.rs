@@ -1710,7 +1710,7 @@ impl Checker {
      * @returns the contextual type of an expression.
      */
     // checker.go:29832
-    pub(crate) fn get_contextual_type(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
+    pub fn get_contextual_type(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
         if node.flags().intersects(NodeFlags::InWithStatement) {
             // We cannot answer semantic questions within a with block, do not proceed any further
             return None;
@@ -2154,7 +2154,7 @@ impl Checker {
     }
 
     // checker.go:30261
-    pub(crate) fn get_contextual_type_for_argument_at_index(&mut self, call_target: P<Node>, arg_index: i32) -> Option<P<Type>> {
+    pub fn get_contextual_type_for_argument_at_index(&mut self, call_target: P<Node>, arg_index: i32) -> Option<P<Type>> {
         if is_import_call(call_target) {
             return if arg_index == 0 {
                 Some(self.string_type)
