@@ -218,3 +218,32 @@ takes about 6 s; same pass list with 1 and 8 harness jobs and on repeat; 57 cras
 47, forawait 5, jsx 4, objectrestspread 1); the 31 failures are unported `--help` / `--init` / `--showConfig` /
 `--locale` / `--generateTrace` output. `xsdts` (public emitting graph): output and trees identical to tsgo-ref at
 1/4/8 builders; cold peak RSS 1,130 / 1,301 / 1,410 MB (max of 3).
+
+## Checkpoint `db2ae47` (main `c5a1874` composition)
+
+Chain: PR13 `emit/incremental` `cde1215` = `a0d65f2` (mtimes lock fix) + main `c5a1874` (only conflict: EMIT.md
+section 13 rows). PR16 `mfs-cx/emit-incremental-harness` `2548617` = merge of `cde1215` (clean) + core's reviewed
+oracle patch (`/root/coordination/oracle-buildinfo-final-0538.patch`, sha256 `d14f7243…`, applied with
+`git apply --check` first). Stack `db2ae47` = merge of `2548617` (EMIT.md rows kept); scheduler code, checkerpool
+(= `fe0a875`, the effective `4121002` hunk) and the mtimes fix unchanged.
+
+Gates on `db2ae47` (base main `c5a1874`): four-mode errors/types/symbols identical (13,458 / 12,779); `--baselines js`
+13,293, same pass list as `c5a1874` (98 crash, as on main); fourslash 4,066 / 63 same pass list; `-D warnings
+--all-targets` exit 0; `emit_gate` 5/5; `test_run_buildinfo.sh` 9/9 and `test_monorepo.sh` 15/15 with tsgo-ref and
+this binary; `run-all.sh` identical; `graph` / `cycle` / `dmap` at `--builders 1/4/8` +/- `--stopBuildOnErrors`
+identical to tsgo-ref. (PR13 `cde1215` and PR16 `2548617` were checked with `emit_gate` and `run-all.sh`; PR16 also
+with both oracle tests.)
+
+tsctests on `db2ae47` (one bounded run, 7 s): tsc 187/216, tsbuild 187/190, 0 crashes. Failures: the 31 unported
+`--help` / `--init` / `--showConfig` / `--locale` / `--generateTrace` outputs, plus
+`tsc/incremental/internal-symbolname-in-tsbuildInfo` (newly reachable now that classfields exists): Go's internal
+symbol prefix is the invalid UTF-8 byte `\xFE`, printed as U+FFFD in TS2783's message and sanitized by the harness;
+tsrs uses `\x7f` (tsrs_ast symbol.rs, valid UTF-8), so the message and its unsanitized symbol id differ. A
+pre-existing AST/checker representation choice, not incremental/build code; left as is. The `e4c6a96` hang and its
+logs are kept under /root/evidence (local).
+
+Public emitting graph `xsdts` on `db2ae47`: output and trees identical to tsgo-ref at 1/4/8 builders, and after each of
+no-op, no-op, deleted `core/dist/index.d.ts`, no-op, deleted `xstate-react` tsbuildinfo, touched `core/tsconfig.json`,
+no-op (at 4 builders). Cold wall / peak RSS (best / max of 3): 1.22 s / 1,128 MB, 0.38 s / 1,311 MB, 0.29 s / 1,371 MB
+at 1 / 4 / 8 builders; tsgo-ref 2.05 s / 529 MB, 1.02 s / 1,106 MB, 1.29 s / 2,078 MB. The earlier `600723a` numbers
+are not evidence for this head.
