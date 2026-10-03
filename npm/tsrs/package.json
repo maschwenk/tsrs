@@ -2,7 +2,7 @@
     "name": "@maschwenk/tsrs",
     "version": "0.0.0-set-by-npm-build",
     "license": "Apache-2.0",
-    "description": "A Rust port of the TypeScript 7 type checker: `tsc --noEmit`, faster",
+    "description": "A Rust port of the TypeScript 7 type checker: `tsc --noEmit`, faster, with the TypeScript 7 unstable JS API",
     "keywords": [
         "TypeScript",
         "typecheck",
@@ -21,6 +21,9 @@
     "files": [
         "bin",
         "lib",
+        "dist",
+        "vendor",
+        "UPSTREAM.json",
         "NOTICE.txt"
     ],
     "bin": {
@@ -28,9 +31,68 @@
     },
     "exports": {
         "./package.json": "./package.json",
-        ".": "./lib/version.cjs"
+        ".": {
+            "types": "./lib/version.d.cts",
+            "default": "./lib/version.cjs"
+        },
+        "./unstable/sync": {
+            "@typescript/source": "./src/api/sync/api.ts",
+            "default": "./dist/api/sync/api.js"
+        },
+        "./unstable/async": {
+            "@typescript/source": "./src/api/async/api.ts",
+            "default": "./dist/api/async/api.js"
+        },
+        "./unstable/fs": {
+            "@typescript/source": "./src/api/fs.ts",
+            "default": "./dist/api/fs.js"
+        },
+        "./unstable/proto": {
+            "@typescript/source": "./src/api/proto.ts",
+            "default": "./dist/api/proto.js"
+        },
+        "./unstable/ast": {
+            "@typescript/source": "./src/ast/index.ts",
+            "default": "./dist/ast/index.js"
+        },
+        "./unstable/ast/is": {
+            "@typescript/source": "./src/ast/is.ts",
+            "default": "./dist/ast/is.js"
+        },
+        "./unstable/ast/factory": {
+            "@typescript/source": "./src/ast/factory.generated.ts",
+            "default": "./dist/ast/factory.generated.js"
+        },
+        "./unstable/ast/utils": {
+            "@typescript/source": "./src/ast/utils.ts",
+            "default": "./dist/ast/utils.js"
+        },
+        "./unstable/ast/scanner": {
+            "@typescript/source": "./src/ast/scanner.ts",
+            "default": "./dist/ast/scanner.js"
+        },
+        "./unstable/ast/visitor": {
+            "@typescript/source": "./src/ast/visitor.ts",
+            "default": "./dist/ast/visitor.js"
+        },
+        "./unstable/ast/clone": {
+            "@typescript/source": "./src/ast/clone.ts",
+            "default": "./dist/ast/clone.js"
+        }
     },
     "publishConfig": {
         "access": "public"
+    },
+    "imports": {
+        "#getExePath": "./lib/getExePath.js",
+        "#enums/*": {
+            "@typescript/source": {
+                "types": "./src/enums/*.enum.ts",
+                "default": "./src/enums/*.ts"
+            },
+            "types": "./dist/enums/*.enum.d.ts",
+            "default": "./dist/enums/*.js"
+        },
+        "#vscode-jsonrpc/node": "./vendor/vscode-jsonrpc/lib/node/main.js"
     }
 }
