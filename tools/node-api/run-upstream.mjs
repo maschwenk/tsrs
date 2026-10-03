@@ -20,7 +20,7 @@ const repoRoot = path.resolve(here, "..", "..");
 
 function usage(msg) {
     if (msg) console.error(`error: ${msg}`);
-    console.error("usage: run-upstream.mjs --binary <exe> --label <name> [--suite upstream|parity|all] [--no-trace] [--filter <s>]... [--timeout-min N] [--concurrency N] [--ref <ts-ref>]");
+    console.error("usage: run-upstream.mjs --binary <exe> --label <name> [--suite upstream|parity|all] [--no-trace] [--record] [--filter <s>]... [--timeout-min N] [--concurrency N] [--ref <ts-ref>]");
     process.exit(2);
 }
 
@@ -33,6 +33,7 @@ for (let i = 0; i < argv.length; i++) {
     else if (a === "--label") opts.label = v();
     else if (a === "--suite") opts.suite = v();
     else if (a === "--no-trace") opts.trace = false;
+    else if (a === "--record") opts.record = true;
     else if (a === "--filter") opts.filters.push(v());
     else if (a === "--timeout-min") opts.timeoutMin = Number(v());
     else if (a === "--concurrency") opts.concurrency = Number(v());
@@ -43,6 +44,10 @@ if (!opts.binary || !opts.label) usage("--binary and --label are required");
 if (!/^[\w.-]+$/.test(opts.label)) usage("label must be [A-Za-z0-9_.-]+");
 if (!fs.existsSync(opts.binary)) usage(`binary not found: ${opts.binary}`);
 if (!["upstream", "parity", "all"].includes(opts.suite)) usage(`bad --suite ${opts.suite}`);
+// Goldens are recorded from the Go oracle built by setup.sh, never from a candidate.
+const oracleExe = path.join(here, ".work", "oracle", process.platform === "win32" ? "tsc.exe" : "tsc");
+const isOracle = fs.existsSync(oracleExe) && fs.realpathSync(oracleExe) === fs.realpathSync(opts.binary);
+if (opts.record && !isOracle) usage(`--record only accepts the Go oracle at ${oracleExe}`);
 
 // ── pinned reference check ──────────────────────────────────────────
 const pinned = /\[workspace\.metadata\.typescript\][^[]*?commit\s*=\s*"([0-9a-f]{40})"/s.exec(fs.readFileSync(path.join(repoRoot, "Cargo.toml"), "utf8"))?.[1];
@@ -67,7 +72,7 @@ for (const entry of ["package.json", "src", "lib", "vendor", "test", "tsconfig.b
     const src = path.join(refPkg, entry);
     if (fs.existsSync(src)) fs.cpSync(src, path.join(pkg, entry), { recursive: true });
 }
-fs.cpSync(path.join(here, "tests"), path.join(pkg, "test", "parity"), { recursive: true });
+fs.cpSync(path.join(here, "tests"), path.join(pkg, "test", "parity"), { recursive: true, filter: src => !src.includes(`${path.sep}golden`) });
 // node_modules: everything ts-ref installed except the workspace self-link, so the client resolves to this copy.
 const nm = path.join(tree, "node_modules");
 fs.mkdirSync(nm);
@@ -115,7 +120,13 @@ const started = Date.now();
 const res = spawnSync(process.execPath, nodeArgs, {
     cwd: pkg,
     stdio: ["ignore", "inherit", "inherit"],
-    env: { ...process.env, NODE_API_TRACE_DIR: opts.trace ? traceDir : "" },
+    env: {
+        ...process.env,
+        NODE_API_TRACE_DIR: opts.trace ? traceDir : "",
+        NODE_API_GOLDEN_DIR: path.join(here, "tests", "golden"),
+        NODE_API_RECORD: opts.record ? "1" : "",
+        NODE_API_ORACLE: isOracle ? "1" : "",
+    },
     timeout: opts.timeoutMin * 60_000,
     killSignal: "SIGKILL",
 });
