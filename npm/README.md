@@ -55,6 +55,7 @@ commit, update `[workspace.metadata.typescript]`.
 
 ```sh
 cargo build --release -p tsrs_cli
+npm ci --prefix npm     # build-only compiler for the JS API
 node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 # -> npm/dist/maschwenk-tsrs-darwin-arm64-<version>.tgz, npm/dist/maschwenk-tsrs-<version>.tgz, npm/dist/packages.json
 ```
