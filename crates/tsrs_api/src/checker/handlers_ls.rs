@@ -207,25 +207,50 @@ pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> Chec
     let mut source_file = program.get_source_file(&file_name).ok_or_else(|| CheckerError::client(format!("source file not found: {}", file.display())))?;
     let project_id = LsProjectID(sd.project.clone());
 
-    // Decode actions up front (bounded, explicit errors) before any snapshot work.
-    let mut actions: Vec<(SymbolReference, bool)> = Vec::new();
-    for (i, action) in p.array("actions")?.iter().enumerate() {
-        let a = Params::new(action, "getImportAdderEdits")?;
-        match a.string("kind")? {
-            "importSymbol" => {
-                if a.raw("symbol").is_none() {
-                    return Err(CheckerError::client(format!("import adder action {i} missing symbol")));
-                }
-                let valid = match a.raw("isValidTypeOnlyUseSite") {
-                    None => true,
-                    Some(Value::Bool(b)) => *b,
-                    Some(_) => return Err(CheckerError::invalid("field \"isValidTypeOnlyUseSite\": expected a boolean")),
-                };
-                actions.push((a.symbol_ref("symbol")?, valid));
-            }
-            kind => return Err(CheckerError::client(format!("unknown import adder action kind {kind:?}"))),
-        }
+    // Decode actions like Go's unmarshalling of `[]ImportAdderAction` (before the handler runs, so a decode
+    // error consumes no snapshot): wrong JSON kinds are invalid requests; `null` elements and absent fields
+    // are zero values. Semantic validation (unknown kind, missing symbol, unresolvable symbol) is a client
+    // error raised later, after the auto-import snapshot clone, in Go's order (it consumes a snapshot ID).
+    struct Action {
+        kind: String,
+        symbol: Option<SymbolReference>,
+        valid: bool,
     }
+    let mut actions: Vec<Action> = Vec::new();
+    for action in p.array("actions")? {
+        if matches!(action, Value::Null) {
+            actions.push(Action { kind: String::new(), symbol: None, valid: true });
+            continue;
+        }
+        let a = Params::new(action, "getImportAdderEdits")?;
+        let valid = match a.raw("isValidTypeOnlyUseSite") {
+            None => true,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return Err(CheckerError::invalid("field \"isValidTypeOnlyUseSite\": expected a boolean")),
+        };
+        let symbol = match a.raw("symbol") {
+            None => None,
+            Some(_) => Some(a.symbol_ref("symbol")?),
+        };
+        actions.push(Action { kind: a.string("kind")?.to_string(), symbol, valid });
+    }
+    // Go `handleGetImportAdderEdits`: the per-action checks run inside the action loop, after the working
+    // snapshot (possibly a fresh auto-import clone) exists.
+    let validate = |sd: &SnapshotCtx, program: &'static Program| -> CheckerResult<Vec<(P<Symbol>, bool)>> {
+        let mut out = Vec::with_capacity(actions.len());
+        for (i, action) in actions.iter().enumerate() {
+            match action.kind.as_str() {
+                "importSymbol" => {
+                    let Some(r) = &action.symbol else {
+                        return Err(CheckerError::client(format!("import adder action {i} missing symbol")));
+                    };
+                    out.push((resolve_symbol_for_program(sd, program, r)?, action.valid));
+                }
+                kind => return Err(CheckerError::client(format!("unknown import adder action kind {kind:?}"))),
+            }
+        }
+        Ok(out)
+    };
 
     let mut working = sd.scope.snapshot.clone();
     let mut prepared: Option<Arc<Snapshot>> = None;
@@ -249,11 +274,17 @@ pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> Chec
             }
         }
     }
-    let result = import_adder_edits(host, &sd, &working, program, source_file, project_id, &actions);
-    if let Some(s) = prepared {
-        s.deref();
+    // Release the auto-import snapshot on every exit, including a panic in the import adder (Go: defer).
+    struct Release(Option<Arc<Snapshot>>);
+    impl Drop for Release {
+        fn drop(&mut self) {
+            if let Some(s) = self.0.take() {
+                s.deref();
+            }
+        }
     }
-    result
+    let _release = Release(prepared);
+    import_adder_edits(host, &sd, &working, program, source_file, project_id, &validate)
 }
 
 fn import_adder_edits(
@@ -263,13 +294,14 @@ fn import_adder_edits(
     program: &'static Program,
     source_file: P<tsrs_ast::SourceFile>,
     project_id: LsProjectID,
-    actions: &[(SymbolReference, bool)],
+    validate: &dyn Fn(&SnapshotCtx, &'static Program) -> CheckerResult<Vec<(P<Symbol>, bool)>>,
 ) -> CheckerResult<Value> {
     let Some(registry) = working.auto_import_registry() else {
+        // Go returns before looking at the actions.
         return Ok(Value::Array(Vec::new()));
     };
     // Resolve symbols against the working program (Go resolves through a checker-less checkerSetup).
-    let symbols: Vec<(P<Symbol>, bool)> = actions.iter().map(|(r, valid)| resolve_symbol_for_program(sd, program, r).map(|s| (s, *valid))).collect::<CheckerResult<_>>()?;
+    let symbols = validate(sd, program)?;
     let ctx = host.context();
     let mut checker = program.get_type_checker(&ctx);
     let preferences = working.user_preferences().clone();

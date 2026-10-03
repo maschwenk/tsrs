@@ -38,6 +38,8 @@ struct TestHost {
     registry: Arc<CheckerRegistry>,
     handle: u64,
     project: String,
+    /// Auto-import snapshots handed to handlers (to check they were released).
+    clones: std::sync::Mutex<Vec<Arc<Snapshot>>>,
 }
 
 impl Drop for TestHost {
@@ -98,7 +100,7 @@ impl TestHost {
         };
         root.deref();
         let handle = snapshot.id();
-        TestHost { snapshot_host, snapshot, registry: Arc::new(CheckerRegistry::new()), handle, project: id.0 }
+        TestHost { snapshot_host, snapshot, registry: Arc::new(CheckerRegistry::new()), handle, project: id.0, clones: Default::default() }
     }
 
     fn program(&self) -> &'static Program {
@@ -209,7 +211,9 @@ impl CheckerHost for TestHost {
 
     fn clone_snapshot_with_auto_imports(&self, base: &Snapshot, file_name: &str) -> CheckerResult<Arc<Snapshot>> {
         let uri = tsrs_ls::lsconv::file_name_to_document_uri(file_name);
-        Ok(self.snapshot_host.clone_snapshot_with_auto_imports(&Context::background(), base, &uri, None))
+        let s = self.snapshot_host.clone_snapshot_with_auto_imports(&Context::background(), base, &uri, None);
+        self.clones.lock().unwrap().push(s.clone());
+        Ok(s)
     }
 
     fn encode_node(&self, node: P<Node>) -> CheckerResult<Vec<u8>> {
@@ -1091,4 +1095,47 @@ fn well_known_singletons_identify_checker_results() {
     };
     let resolved = h.ok("getResolvedSignature", &h.sp(&format!(r#""location":"{call}""#)));
     assert_eq!(num(&resolved, "id"), num(&sigs, "unknown"), "an uncallable call resolves to the unknown signature");
+}
+
+/// getImportAdderEdits: pinned Go clones the auto-import snapshot (one snapshot id) before it looks at the
+/// actions, so client errors for unknown kinds, null actions and missing symbols happen after the clone;
+/// decode errors happen before the handler and clone nothing. Every clone must be released again.
+#[test]
+fn import_adder_client_errors_follow_go_ordering_and_release_the_clone() {
+    let h = fixture();
+    let helper = h.symbol_at("/p/other.ts", OTHER, "helper");
+    let r = h.symbol_ref(&helper);
+    let cases: [(&str, String, Option<&str>); 6] = [
+        ("bogus kind", r#"[{"kind":"bogus"}]"#.to_string(), Some(r#"api: client error: unknown import adder action kind "bogus""#)),
+        ("null action", "[null]".to_string(), Some(r#"api: client error: unknown import adder action kind """#)),
+        ("null symbol", r#"[{"kind":"importSymbol","symbol":null}]"#.to_string(), Some("api: client error: import adder action 0 missing symbol")),
+        ("valid then bogus", format!(r#"[{{"kind":"importSymbol","symbol":{r}}},{{"kind":"bogus"}}]"#), Some(r#"api: client error: unknown import adder action kind "bogus""#)),
+        ("valid", format!(r#"[{{"kind":"importSymbol","symbol":{r}}}]"#), None),
+        ("decode error", r#"[{"kind":"importSymbol","symbol":{"kind":0,"id":1},"isValidTypeOnlyUseSite":"x"}]"#.to_string(), None),
+    ];
+    for (label, actions, expected) in cases {
+        let before = h.clones.lock().unwrap().len();
+        let result = h.call("getImportAdderEdits", &h.sp(&format!(r#""file":"{MAIN_FILE}","actions":{actions}"#)));
+        let cloned = h.clones.lock().unwrap().len() - before;
+        match (label, expected) {
+            ("decode error", _) => {
+                assert_eq!(result.unwrap_err().kind, CheckerErrorKind::InvalidRequest);
+                assert_eq!(cloned, 0, "decode errors happen before the handler: no snapshot");
+            }
+            (_, Some(message)) => {
+                assert_eq!(result.unwrap_err().to_string(), message, "{label}");
+                assert_eq!(cloned, 1, "{label}: Go clones the auto-import snapshot first");
+            }
+            (_, None) => {
+                assert!(result.is_ok(), "{label}");
+                assert_eq!(cloned, 1);
+            }
+        }
+    }
+    // Every clone was dereferenced exactly once by the handler: one more deref underflows (Snapshot::deref
+    // panics below zero), which would not happen if the handler had leaked its reference.
+    for (i, s) in h.clones.lock().unwrap().drain(..).enumerate() {
+        let underflow = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.deref())).is_err();
+        assert!(underflow, "auto-import snapshot {i} was not released by the handler");
+    }
 }
