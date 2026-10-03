@@ -109,8 +109,62 @@ impl classFieldsTransformer {
 
     // classfields.go:3122
     pub(crate) fn create_hoisted_variable_for_class(&self, name_text: &str, node: P<Node>, suffix: &str) -> P<Node> {
-        let _ = (name_text, node, suffix);
-        unimplemented!("classfields part 2")
+        let _ = node;
+        let env = self.get_private_identifier_environment();
+        let identifier: P<Node>;
+        if let Some(class_name) = env.data.class_name.get() {
+            let prefix = format!("_{}_", class_name.text());
+            identifier = self.factory().new_unique_name_ex(
+                &format!("{}{}", prefix, name_text),
+                printer::AutoGenerateOptions { flags: printer::GeneratedIdentifierFlags::Optimistic | printer::GeneratedIdentifierFlags::ReservedInNestedScopes, suffix: alloc_str(suffix), ..Default::default() },
+            );
+        } else {
+            identifier = self.factory().new_unique_name_ex(
+                &format!("_{}", name_text),
+                printer::AutoGenerateOptions { flags: printer::GeneratedIdentifierFlags::Optimistic | printer::GeneratedIdentifierFlags::ReservedInNestedScopes, suffix: alloc_str(suffix), ..Default::default() },
+            );
+        }
+        if self.requires_block_scoped_var() {
+            self.emit_context().add_lexical_declaration(identifier);
+        } else {
+            self.emit_context().add_variable_declaration(identifier);
+        }
+        identifier
+    }
+
+    // classfields.go:3145
+    pub(crate) fn create_hoisted_variable_for_class_from_node(&self, name: P<Node>, suffix: &str) -> P<Node> {
+        let env = self.get_private_identifier_environment();
+        let prefix: String;
+        if let Some(class_name) = env.data.class_name.get() {
+            prefix = format!("_{}_", class_name.text());
+        } else {
+            prefix = "_".to_string();
+        }
+        let identifier = self.factory().new_generated_name_for_node_ex(
+            name,
+            printer::AutoGenerateOptions { flags: printer::GeneratedIdentifierFlags::Optimistic | printer::GeneratedIdentifierFlags::ReservedInNestedScopes, prefix: alloc_str(&prefix), suffix: alloc_str(suffix) },
+        );
+        if self.requires_block_scoped_var() {
+            self.emit_context().add_lexical_declaration(identifier);
+        } else {
+            self.emit_context().add_variable_declaration(identifier);
+        }
+        identifier
+    }
+
+    // classfields.go:3166
+    pub(crate) fn create_hoisted_variable_for_private_name(&self, name: P<Node>, suffix: &str) -> P<Node> {
+        // If the name is a generated identifier (e.g., auto-accessor backing field),
+        // use node-based name generation so the emitter can resolve the name properly.
+        if self.emit_context().has_auto_generate_info(Some(name)) {
+            return self.create_hoisted_variable_for_class_from_node(name, suffix);
+        }
+        let mut text = name.text();
+        if !text.is_empty() && text.as_bytes()[0] == b'#' {
+            text = &text[1..]; // strip leading '#'
+        }
+        self.create_hoisted_variable_for_class(text, name, suffix)
     }
 
     // classfields.go:3181
@@ -132,26 +186,165 @@ impl classFieldsTransformer {
 
     // classfields.go:3195
     pub(crate) fn wrap_private_identifier_for_destructuring_target(&self, node: P<Node>) -> Option<P<Node>> {
-        let _ = node;
-        unimplemented!("classfields part 2")
+        let prop = node.as_property_access_expression();
+        let parameter = self.factory().new_generated_name_for_node(node);
+        let info = self.access_private_identifier(prop.name());
+        let Some(info) = info else {
+            return self.visitor().visit_each_child(Some(node));
+        };
+        let mut receiver = prop.expression;
+        // We cannot copy `this` or `super` into the function because they will be bound
+        // differently inside the function.
+        let is_this_or_super_property = prop.expression.kind() == Kind::ThisKeyword || prop.expression.kind() == Kind::SuperKeyword;
+        if is_this_or_super_property || !is_simple_copiable_expression(prop.expression) {
+            receiver = self.factory().new_temp_variable_ex(printer::AutoGenerateOptions { flags: printer::GeneratedIdentifierFlags::ReservedInNestedScopes, ..Default::default() });
+            self.emit_context().add_variable_declaration(receiver);
+            let assignment = self.factory().new_assignment_expression(receiver, self.visitor().visit_node(Some(prop.expression)).unwrap());
+            self.pending_expressions.borrow_mut().push(assignment);
+        }
+        let assign_expr = self.create_private_identifier_assignment(info, receiver, parameter, Kind::EqualsToken);
+        Some(self.factory().new_assignment_target_wrapper(parameter, assign_expr))
+    }
+
+    // classfields.go:3220
+    pub(crate) fn visit_assignment_element(&self, mut node: P<Node>) -> Option<P<Node>> {
+        // 13.15.5.5 RS: IteratorDestructuringAssignmentEvaluation
+        //   AssignmentElement : DestructuringAssignmentTarget Initializer?
+        //     ...
+        //     4. If |Initializer| is present and _value_ is *undefined*, then
+        //        a. If IsAnonymousFunctionDefinition(|Initializer|) and IsIdentifierRef of |DestructuringAssignmentTarget| are both *true*, then
+        //           i. Let _v_ be ? NamedEvaluation of |Initializer| with argument _lref_.[[ReferencedName]].
+        //     ...
+
+        if is_named_evaluation_and(self.emit_context(), node, Some(&|n| self.is_anonymous_class_needing_assigned_name(n))) {
+            node = transform_named_evaluation(self.emit_context(), node, false /*ignoreEmptyStringLiteral*/, "" /*assignedName*/);
+        }
+        if ast::is_assignment_expression(node, true /*excludeCompoundAssignment*/) {
+            let b = node.as_binary_expression();
+            let left = self.visit_destructuring_assignment_target(b.left).unwrap();
+            let right = self.visitor().visit_node(Some(b.right())).unwrap();
+            return Some(self.factory().update_binary_expression(node, None, left, None, b.operator_token, right));
+        }
+        self.visit_destructuring_assignment_target(node)
+    }
+
+    // classfields.go:3247
+    pub(crate) fn visit_assignment_rest_element(&self, node: P<Node>) -> Option<P<Node>> {
+        let spread = node.as_spread_element();
+        if ast::is_left_hand_side_expression(spread.expression) {
+            let expr = self.visit_destructuring_assignment_target(spread.expression).unwrap();
+            return Some(self.factory().update_spread_element(node, expr));
+        }
+        self.visitor().visit_each_child(Some(node))
     }
 
     // classfields.go:3256
     pub(crate) fn visit_array_assignment_element(&self, node: P<Node>) -> Option<P<Node>> {
-        let _ = node;
-        unimplemented!("classfields part 2")
+        if ast::is_array_binding_or_assignment_element(node) {
+            if ast::is_spread_element(node) {
+                return self.visit_assignment_rest_element(node);
+            }
+            if node.kind() != Kind::OmittedExpression {
+                return self.visit_assignment_element(node);
+            }
+        }
+        self.visitor().visit_each_child(Some(node))
+    }
+
+    // classfields.go:3268
+    pub(crate) fn visit_assignment_property(&self, node: P<Node>) -> Option<P<Node>> {
+        // AssignmentProperty : PropertyName `:` AssignmentElement
+        // AssignmentElement : DestructuringAssignmentTarget Initializer?
+
+        // 13.15.5.6 RS: KeyedDestructuringAssignmentEvaluation
+        //   AssignmentElement : DestructuringAssignmentTarget Initializer?
+        //     ...
+        //     3. If |Initializer| is present and _v_ is *undefined*, then
+        //        a. If IsAnonymousfunctionDefinition(|Initializer|) and IsIdentifierRef of |DestructuringAssignmentTarget| are both *true*, then
+        //           i. Let _rhsValue_ be ? NamedEvaluation of |Initializer| with argument _lref_.[[ReferencedName]].
+        //     ...
+
+        let prop = node.as_property_assignment();
+        let name = self.visitor().visit_node(node.name()).unwrap();
+        let init = prop.initializer.get();
+        if ast::is_assignment_expression(init, true /*excludeCompoundAssignment*/) {
+            let assign_elem = self.visit_assignment_element(init).unwrap();
+            return Some(self.factory().update_property_assignment(node, None, name, None, None, assign_elem));
+        }
+        if ast::is_left_hand_side_expression(init) {
+            let target = self.visit_destructuring_assignment_target(init).unwrap();
+            return Some(self.factory().update_property_assignment(node, None, name, None, None, target));
+        }
+        self.visitor().visit_each_child(Some(node))
+    }
+
+    // classfields.go:3294
+    pub(crate) fn visit_shorthand_assignment_property(&self, mut node: P<Node>) -> Option<P<Node>> {
+        // AssignmentProperty : IdentifierReference Initializer?
+
+        // 13.15.5.3 RS: PropertyDestructuringAssignmentEvaluation
+        //   AssignmentProperty : IdentifierReference Initializer?
+        //     ...
+        //     4. If |Initializer?| is present and _v_ is *undefined*, then
+        //        a. If IsAnonymousFunctionDefinition(|Initializer|) is *true*, then
+        //           i. Set _v_ to ? NamedEvaluation of |Initializer| with argument _P_.
+        //     ...
+
+        if is_named_evaluation_and(self.emit_context(), node, Some(&|n| self.is_anonymous_class_needing_assigned_name(n))) {
+            node = transform_named_evaluation(self.emit_context(), node, false /*ignoreEmptyStringLiteral*/, "" /*assignedName*/);
+        }
+        self.visitor().visit_each_child(Some(node))
+    }
+
+    // classfields.go:3311
+    pub(crate) fn visit_assignment_rest_property(&self, node: P<Node>) -> Option<P<Node>> {
+        let spread = node.as_spread_assignment();
+        if ast::is_left_hand_side_expression(spread.expression) {
+            let expr = self.visit_destructuring_assignment_target(spread.expression).unwrap();
+            return Some(self.factory().update_spread_assignment(node, expr));
+        }
+        self.visitor().visit_each_child(Some(node))
     }
 
     // classfields.go:3320
     pub(crate) fn visit_object_assignment_element(&self, node: P<Node>) -> Option<P<Node>> {
-        let _ = node;
-        unimplemented!("classfields part 2")
+        assert!(ast::is_object_binding_or_assignment_element(node));
+        if ast::is_spread_assignment(node) {
+            return self.visit_assignment_rest_property(node);
+        }
+        if ast::is_shorthand_property_assignment(node) {
+            return self.visit_shorthand_assignment_property(node);
+        }
+        if ast::is_property_assignment(node) {
+            return self.visit_assignment_property(node);
+        }
+        self.visitor().visit_each_child(Some(node))
     }
 
     // classfields.go:3334
     pub(crate) fn visit_assignment_pattern(&self, node: P<Node>) -> Option<P<Node>> {
-        let _ = node;
-        unimplemented!("classfields part 2")
+        if ast::is_array_literal_expression(node) {
+            // Transforms private names in destructuring assignment array bindings.
+            // Transforms SuperProperty assignments in destructuring assignment array bindings in static initializers.
+            //
+            // Source:
+            // ([ this.#myProp ] = [ "hello" ]);
+            //
+            // Transformation:
+            // [ { set value(x) { this.#myProp = x; } }.value ] = [ "hello" ];
+            let arr = node.as_array_literal_expression();
+            return Some(self.factory().update_array_literal_expression(node, self.array_assignment_element_visitor().visit_nodes(Some(arr.elements)).unwrap(), arr.multi_line));
+        }
+        // Transforms private names in destructuring assignment object bindings.
+        // Transforms SuperProperty assignments in destructuring assignment object bindings in static initializers.
+        //
+        // Source:
+        // ({ stringProperty: this.#myProp } = { stringProperty: "hello" });
+        //
+        // Transformation:
+        // ({ stringProperty: { set value(x) { this.#myProp = x; } }.value }) = { stringProperty: "hello" };
+        let obj = node.as_object_literal_expression();
+        Some(self.factory().update_object_literal_expression(node, self.object_assignment_element_visitor().visit_nodes(Some(obj.properties)).unwrap(), obj.multi_line))
     }
 }
 
