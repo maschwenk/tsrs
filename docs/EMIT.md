@@ -448,8 +448,45 @@ then-current main:
   and inferred types printed into `.d.ts` files can depend on which files a checker saw first (2 of the private
   monorepo's 2,325 declaration files differed in property order). The monorepo oracle therefore runs tsrs with
   `TSRS_CHECKER_ASSIGNMENT=go`; with it every declaration file is identical.
-- **Incremental programs** (E13) are emitted as plain programs: under the gate, `incremental`/`composite` projects
-  write their JS and declarations but no `.tsbuildinfo`, and the harness builds plain programs too.
+- **Incremental programs** (E13, `emit/incremental`): under the gate the CLI runs `performIncrementalCompilation`
+  (reads and writes `.tsbuildinfo`, section 10b). The `--baselines js` harness still builds plain programs for the 5
+  `@incremental` test variants (Go's `createProgram` wraps them in `incremental.NewProgram`); all of them except
+  `jsEmitIntersectionProperty` currently stop at transformer stubs, so wire it once those land.
+
+## 10b. Design notes for E13/E14/E15 (implemented on `emit/incremental`)
+
+- **Crates.** `execute/incremental` is `tsrs_incremental` (one file per Go file). `execute/build` is the module
+  `tsrs_cli::build`, not a `tsrs_build` crate: it needs the `tsc` module of the binary crate (Go's `execute/tsc`), the
+  same reason Go keeps both under `execute/`. `compiler.ProgramLike` with `HandleNoEmitOptions` and
+  `GetDiagnosticsOfAnyProgram` over it live in `tsrs_incremental::emit` (TODO(emit/core): move into tsrs_compiler
+  next to the concrete-program versions).
+- **Gate.** Without `TSRS_EMIT=1` nothing changes: incremental projects are checked from scratch, no tsbuildinfo is
+  read or written, `-b` prints "not supported" (`crates/tsrs_cli/tests/emit_gate.rs` checks both).
+- **JSON.** `BuildInfo` is marshaled by building a `tsrs_core::json::Value` tree field by field in Go's declaration
+  order with Go's `omitzero` rules (nil vs empty kept where Go distinguishes them, e.g. `fileInfos: []`) and the
+  tuple encodings of the custom `MarshalJSON`s; unmarshaling follows the `UnmarshalJSON` fallbacks.
+- **Version.** The tsbuildinfo `version` is `core::version()` as in Go. Go's release builds stamp it with ldflags
+  (npm nightly: `7.1.0-dev.20260929.1`); tsrs reads `TSRS_TS_VERSION` at build time for the same purpose (default
+  `7.1.0-dev`, Go's source default), so a tsrs built with the tsgo version reads and writes tsbuildinfo files that tsgo
+  accepts, and vice versa. Different versions simply rebuild from scratch, as in Go.
+- **Default library path.** Go's embedded build reads libs from `bundled:///libs`, the npm (noembed) tsgo from its
+  executable directory; the path sorts differently against project files, which reorders `referencedMap` keys. Under
+  `TSRS_EMIT=1`, `TSRS_LIB_PATH=<dir>` makes tsrs read them from a directory like the noembed build (the oracles set it
+  to tsgo's directory).
+- **Concurrency.** Go runs the per-file snapshot and affected-file work and the build tasks on work groups; tsrs runs
+  them on the calling thread in a deterministic order (sorted paths, build order). The build orchestrator runs one
+  task at a time in `Order()` (Go's `--builders 1` path); output order is the same as Go's reporter goroutine's.
+  Emit itself still runs on the checker threads (emit/core), so the `WriteFile` callbacks only touch thread-safe
+  state.
+- **Shape signatures** follow Go: `computeDtsSignature` prints the `.d.ts` through `Program::emit` with
+  `EmitOnlyBuilderSignature`; files that were never shape-checked keep their version as signature (so the first edit
+  of a file after a cold build rechecks its importers, exactly like tsgo).
+- **tsctests (E15).** The Go scenario tables are closures, so `tools/oracle/tsctests/dump.sh` runs the Go tests once
+  with a recorder (`runner.patch` + `tsrs_dump.go`) and writes every scenario as JSON: inputs plus the file-system
+  ops of every edit, both in the incremental run and replayed from scratch for the non-incremental comparison. The
+  harness (`crates/tsrs_cli/src/tsctests`, a `#[cfg(test)]` module of the binary crate because it drives
+  `execute::command_line_with_testing`) replays them with a fake clock, the FS differ, the readable buildinfo and the
+  output sanitizer of `tsctests/sys.go`. Watch and content-mapper scenarios are skipped.
 
 ## 11. Coordination with the LSP port
 
@@ -499,6 +536,7 @@ identical to main in both modes, fourslash 4066/63, `-D warnings` check) held fo
 | date | commit | wave | `.js` pass / total | `.js.map` | `.sourcemap.txt` | oracle | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-03 | emit/core (E2) | E1+E2 | 1364 / 15197 (12032 crash at stubs, 1800 skip) | — | — | dts: 2325/2325 files identical, 103/103 packages; full: 0 files (stubs: typeeraser 91, importelision 5, metadata 4; 3 packages emit nothing in both) | multi-threaded test programs give the same js pass list (one timeout aside) |
+| 2026-10-03 | emit/incremental | E13+E14 (+E15 harness) | 1364 / 15197 (unchanged: same pass list as main) | — | — | `--buildinfo -- --noEmit`: 100/100 tsbuildinfo identical, 103/103 packages (exit codes and diagnostics too); `--buildinfo -- --emitDeclarationOnly --declarationMap false`: 2425/2425 files identical (d.ts + tsbuildinfo with emit signatures), 103/103 packages | tsctests harness (`cargo test --release -p tsrs_cli tsctests`): tsc 64/216, tsbuild 17/190 pass; 294 stop at other waves' stubs (typeeraser 215, importelision 64, commonjsmodule 12, sourcemap 2, esmodule 1), 31 fail on unported --help/--init/--showConfig/--locale/--generateTrace |
 
 ## 14. Known gaps and risks
 
@@ -511,4 +549,4 @@ identical to main in both modes, fourslash 4066/63, `-D warnings` check) held fo
   Running emit from the CLI under `TSRS_EMIT=1` may therefore change which node an error is first reported from,
   exactly as in tsc. The default mode is not affected.
 - `tsrs_compiler/src/outputpaths.rs` and `tsrs_tsoptions::outputpaths` overlap; consolidate in E1.
-- Incremental programs in the harness and in the CLI are plain programs until E13.
+- Incremental programs in the `--baselines js` harness are plain programs (section 10, "Incremental programs").
