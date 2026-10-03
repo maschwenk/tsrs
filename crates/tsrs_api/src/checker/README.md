@@ -105,6 +105,22 @@ What `Tested` does **not** mean yet (open gaps, for the integration lead):
     `panic: <value>`. tsrs returns the same first line as an error without panicking. Go answers some
     of them normally (`getBaseTypes`, `getConstraintOfTypeParameter`, `getDefaultFromTypeParameter` on
     a literal; `getSignaturesOfType` with an unknown kind), and so does tsrs.
+* `testdata/node/identity.test.ts` is a probe for the pinned upstream **sync** client (not part of the
+  parity suite). It checks cross-request object identity, symbols and types from a retained old snapshot
+  after an update, disposal in both orders, and old-snapshot checker requests issued from inside a
+  `readFile` callback of `update()`.
+  * **How to run.** Copy it into a `tools/node-api` harness work tree as
+    `packages/typescript/test/checker/`, then run
+    `node --conditions @typescript/source --test test/checker/identity.test.ts` with `CHECKER_OBS_OUT`
+    and `CHECKER_REENTRY_OUT` set. Run it once with the Go oracle as `built/local/tsc` and once with tsrs,
+    then compare the two JSON files.
+  * **Result on core d6d8e2a.** Identical output, 3/3 runs each.
+  * **Shared behavior worth knowing** (both servers):
+    * Type handles carry no snapshot. An old snapshot's type id used with the new snapshot's checker
+      resolves to whatever type the new checker registered under the same number. In the probe that is
+      even the "same" type (`Box<string>`), or another type entirely (`string`).
+    * A file-owned symbol of an unchanged file keeps its client object and id across snapshots. A
+      recreated snapshot re-parses the file, so old references are "not part of the requested program".
 * **API checker re-entrancy** (`lease.rs`). This is a deliberate divergence: pinned Go blocks forever if
   a request issued from inside a client callback needs the API checker that the callback's own request
   holds. tsrs takes a per-program gate before the checker slot:
