@@ -239,6 +239,74 @@ impl Orchestrator {
         CommandLineResult { status: self.start_worker("", false /*onlyReferences*/).status() }
     }
 
+    // orchestrator.go:295/301 `Build` / `BuildReferences` entrypoints for the API. The API creates a fresh
+    // orchestrator per call (crates/tsrs_cli/src/api.rs), so Go's `recheckAllProjects` (which only resets
+    // state of an already generated graph) has nothing to reset here.
+    pub fn build_for_api(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
+        self.start_worker(project, only_references)
+    }
+
+    // orchestrator.go:354-414 `Clean` / `CleanReferences` entrypoints for the API.
+    pub fn clean_for_api(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
+        if !self.graph_generated.load(Ordering::SeqCst) {
+            self.generate_graph();
+        }
+        let errors = self.errors.lock().unwrap().clone();
+        if !errors.is_empty() {
+            let mut result = OrchestratorResult { status: Some(ExitStatus::ProjectReferenceCycle_OutputsSkipped), errors: Some(errors), ..Default::default() };
+            result.report_with_files_to_delete(self, true);
+            return result;
+        }
+        let Some(mut order) = self.get_build_order_for(project) else {
+            return OrchestratorResult { status: Some(ExitStatus::InvalidProject_OutputsSkipped), ..Default::default() };
+        };
+        if only_references {
+            order.pop();
+        }
+        let mut result = OrchestratorResult::default();
+        result.statistics.projects = order.len();
+        let dry = self.opts.command.build_options.dry.is_true();
+        let report_diagnostic = self.create_diagnostic_reporter(None);
+        let mut files_to_delete = Vec::new();
+        for config in &order {
+            let task = self.get_task(&self.to_path(config));
+            let Some(resolved) = task.resolved_opt() else {
+                let diagnostic = new_compiler_diagnostic(&diagnostics::File_0_not_found, &[&task.config]);
+                report_diagnostic(diagnostic);
+                result.errors.get_or_insert_with(Vec::new).push(diagnostic);
+                continue;
+            };
+            let inputs: Set<Path> = tsrs_core::collections::new_set_from_items(resolved.file_names().iter().map(|f| self.to_path(f)));
+            let mut outputs: Vec<String> = resolved.get_output_file_names().into_iter().collect();
+            outputs.push(resolved.get_build_info_file_name());
+            for output_file in outputs {
+                self.clean_project_output_for_api(&output_file, &inputs, dry, &mut files_to_delete, &report_diagnostic);
+            }
+        }
+        if !files_to_delete.is_empty() {
+            result.files_to_delete = Some(files_to_delete);
+        }
+        result.report_with_files_to_delete(self, dry);
+        result
+    }
+
+    // orchestrator.go:452
+    fn clean_project_output_for_api(&self, output_file: &str, inputs: &Set<Path>, dry: bool, files_to_delete: &mut Vec<String>, report: &DiagnosticReporter<'static>) -> bool {
+        let fs = tsrs_compiler::CompilerHost::fs(self.host());
+        if output_file.is_empty() || inputs.has(&self.to_path(output_file)) || !fs.file_exists(output_file) {
+            return false;
+        }
+        files_to_delete.push(output_file.to_string());
+        if dry {
+            return false;
+        }
+        if fs.remove(output_file).is_err() {
+            report(new_compiler_diagnostic(&diagnostics::Failed_to_delete_file_0, &[&output_file]));
+            return false;
+        }
+        true
+    }
+
     // orchestrator.go:311
     fn start_worker(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
         // Content mappers are not supported by tsrs. Watch mode is not ported.

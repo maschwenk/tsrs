@@ -8,4 +8,4 @@ mod orchestrator;
 mod parsecache;
 mod uptodatestatus;
 
-pub use orchestrator::{new_orchestrator, Options, Orchestrator};
+pub use orchestrator::{new_orchestrator, Options, Orchestrator, OrchestratorResult};

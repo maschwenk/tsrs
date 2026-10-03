@@ -115,12 +115,12 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 7 | `createSnapshot` | core | supported | program_test, module_resolution_test, requestfs_test (full/layer request filesystems, removedPaths); fileNotifications alias expansion through request symlinks not applied |
 | 8 | `updateSnapshot` | core | supported | program_test, requestfs_test (layers compacted over full, retained base, release of base) |
 | 9 | `getCurrentLanguageServerSnapshot` | core | not implemented |  |
-| 10 | `createBuildOrchestrator` | core | not implemented |  |
-| 11 | `disposeBuildOrchestrator` | core | not implemented |  |
-| 12 | `build` | core | not implemented |  |
-| 13 | `buildReferences` | core | not implemented |  |
-| 14 | `cleanBuild` | core | not implemented |  |
-| 15 | `cleanReferences` | core | not implemented |  |
+| 10 | `createBuildOrchestrator` | core | supported | tsrs_cli api::tests (in-process CLI build backend; fresh orchestrator per call instead of Go's recheckAllProjects reuse) |
+| 11 | `disposeBuildOrchestrator` | core | supported | tsrs_cli api::tests |
+| 12 | `build` | core | supported | tsrs_cli api::tests (references, up-to-date rebuild) |
+| 13 | `buildReferences` | core | supported | tsrs_cli api::tests |
+| 14 | `cleanBuild` | core | supported | tsrs_cli api::tests |
+| 15 | `cleanReferences` | core | partial | dispatches to the ported Go clean(onlyReferences); no dedicated test yet |
 | 16 | `createModuleResolver` | core | supported | module_resolution_test (default, static entries, callback) |
 | 17 | `releaseModuleResolver` | core | supported | module_resolution_test |
 | 18 | `resolveModuleName` | core | supported | module_resolution_test (standalone, snapshot-scoped callback); inProgressSnapshot path exercised only via callbacks during program build |
@@ -286,8 +286,12 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   request symlinks (Go `ExpandFileChanges`) are not applied. Callback filesystems (`--callbacks`, Go
   `callbackfs.go`) are ported in `crates/tsrs_api/src/callbackfs.rs`; like Go, invalid callback responses
   panic and become request errors (a panic on a worker thread can poison shared caches; not yet hardened).
-- Build orchestration (`createBuildOrchestrator`, `build*`, `clean*`): the reusable boundary out of the
-  CLI build modules is not extracted yet.
+- Build orchestration runs the CLI's `tsc -b` orchestrator in-process through `tsrs_api::build::BuildBackend`
+  (installed by `tsrs --api`; library sessions without a backend report the methods as unsupported). Each
+  call builds a fresh orchestrator rather than reusing tasks like Go's `recheckAllProjects`; each leaks a
+  small system/orchestrator allocation.
+- `tsrs --api` currently exits 1 with an explicit message: the wire runtime (runtime lane) is not merged
+  into this branch yet.
 - Source files / AST (`getSourceFile`, `createSourceFile*`, leases, `printNode`, ...) wait on the codec
   lane's encoder and node index tables.
 - `transpile*`, `batchRequests`, `getSourceFileMetadata`, resolution queries, profiling and

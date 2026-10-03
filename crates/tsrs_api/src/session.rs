@@ -41,6 +41,12 @@ pub struct SessionOptions {
     pub run_external_code: bool,
 }
 
+impl SessionOptions {
+    pub fn new(cwd: String, default_library_path: String, fs: Arc<dyn FS>, binary_responses: bool) -> SessionOptions {
+        SessionOptions { cwd, default_library_path, fs, binary_responses, run_external_code: false }
+    }
+}
+
 /// Go `snapshotOpenState`: projects/files this client opened in a snapshot lineage.
 #[derive(Clone, Default)]
 pub(crate) struct OpenState {
@@ -104,6 +110,8 @@ pub struct Session {
     /// The session's base filesystem (Go `Session.FS()`), shared with resolver hosts.
     base_fs: Arc<dyn FS>,
     weak_self: std::sync::Weak<Session>,
+    pub(crate) build_state: crate::build::BuildState,
+    build_backend: Mutex<Option<Arc<dyn crate::build::BuildBackend>>>,
     next_batch_page: AtomicU64,
 }
 
@@ -149,11 +157,26 @@ impl Session {
             module_resolvers: Default::default(),
             base_fs,
             weak_self: weak_self.clone(),
+            build_state: Default::default(),
+            build_backend: Mutex::new(None),
         })
     }
 
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    /// Installs the in-process build orchestrator implementation (the CLI's `tsc -b`).
+    pub fn set_build_backend(&self, backend: Arc<dyn crate::build::BuildBackend>) {
+        *self.build_backend.lock().unwrap() = Some(backend);
+    }
+
+    pub(crate) fn build_backend(&self) -> Option<Arc<dyn crate::build::BuildBackend>> {
+        self.build_backend.lock().unwrap().clone()
+    }
+
+    pub fn default_library_path(&self) -> &str {
+        self.snapshot_host.default_library_path()
     }
 
     pub(crate) fn weak_self(&self) -> std::sync::Weak<Session> {
@@ -311,6 +334,12 @@ impl Session {
             "createModuleResolver" => self.handle_create_module_resolver(p)?,
             "releaseModuleResolver" => self.handle_release_module_resolver(p)?,
             "resolveModuleName" => self.handle_resolve_module_name(p)?,
+            "createBuildOrchestrator" => self.handle_create_build_orchestrator(p)?,
+            "disposeBuildOrchestrator" => self.handle_dispose_build_orchestrator(p)?,
+            "build" => self.handle_build(p, false, false)?,
+            "buildReferences" => self.handle_build(p, true, false)?,
+            "cleanBuild" => self.handle_build(p, false, true)?,
+            "cleanReferences" => self.handle_build(p, true, true)?,
             "transpileModule" => self.handle_transpile(p, false)?,
             "transpileDeclaration" => self.handle_transpile(p, true)?,
             "transpileModuleFromFile" => self.handle_transpile_from_file(p, false)?,

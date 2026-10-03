@@ -10,6 +10,7 @@
 // - runtime: crates/tsrs_api_transport (MessagePack tuple protocol, JSON-RPC, sync/async conns).
 
 pub mod batch;
+pub mod build;
 pub mod callbackfs;
 pub mod config;
 pub mod diagnostics;
