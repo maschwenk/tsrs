@@ -15,13 +15,14 @@ fn get_format_opts_of_sys(sys: &dyn System) -> FormattingOptions {
     }
 }
 
-pub type DiagnosticReporter<'a> = Box<dyn Fn(P<Diagnostic>) + 'a>;
+// Send + Sync: build mode reports from its builder threads (orchestrator.go rangeTasks).
+pub type DiagnosticReporter<'a> = Box<dyn Fn(P<Diagnostic>) + Send + Sync + 'a>;
 
 // Go `io.Writer` for the reporters: `sys.Writer()` or a build task's output buffer.
-pub type Writer<'a> = std::rc::Rc<dyn Fn(&str) + 'a>;
+pub type Writer<'a> = std::sync::Arc<dyn Fn(&str) + Send + Sync + 'a>;
 
 pub fn create_diagnostic_reporter<'a>(sys: &'a dyn System, options: Option<&CompilerOptions>) -> DiagnosticReporter<'a> {
-    create_diagnostic_reporter_with_writer(sys, std::rc::Rc::new(move |t: &str| sys.write(t)), options)
+    create_diagnostic_reporter_with_writer(sys, std::sync::Arc::new(move |t: &str| sys.write(t)), options)
 }
 
 // diagnostics.go:27 CreateDiagnosticReporter(sys, w, locale, options)
@@ -103,7 +104,7 @@ fn should_be_pretty(sys: &dyn System, options: Option<&CompilerOptions>) -> bool
     }
 }
 
-pub type DiagnosticsReporter<'a> = Box<dyn Fn(&[P<Diagnostic>]) + 'a>;
+pub type DiagnosticsReporter<'a> = Box<dyn Fn(&[P<Diagnostic>]) + Send + Sync + 'a>;
 
 pub fn create_report_error_summary<'a>(sys: &'a dyn System, options: &CompilerOptions) -> DiagnosticsReporter<'a> {
     if should_be_pretty(sys, Some(options)) {

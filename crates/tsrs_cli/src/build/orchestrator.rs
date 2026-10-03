@@ -5,7 +5,7 @@
 // `numRoutines == 1` path): a task's upstream tasks are always done before it starts, and each task's buffered output
 // is reported right after it, which is the order Go prints in.
 
-use std::cell::{Cell, RefCell};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use rustc_hash::FxHashMap;
@@ -77,15 +77,15 @@ pub struct Orchestrator {
     host: OnceLock<&'static host>,
 
     // order generation result
-    tasks: RefCell<FxHashMap<Path, P<BuildTask>>>,
-    order: RefCell<Vec<String>>,
-    errors: RefCell<Vec<P<Diagnostic>>>,
-    graph_generated: Cell<bool>,
+    tasks: Mutex<FxHashMap<Path, P<BuildTask>>>,
+    order: Mutex<Vec<String>>,
+    errors: Mutex<Vec<P<Diagnostic>>>,
+    graph_generated: AtomicBool,
 
     error_summary_reporter: DiagnosticsReporter<'static>,
 
     // order sorted by dependency depth, to reduce how often builders block on upstream projects
-    schedule_order: RefCell<Vec<String>>,
+    schedule_order: Mutex<Vec<String>>,
 }
 
 impl Orchestrator {
@@ -104,23 +104,23 @@ impl Orchestrator {
     }
 
     pub fn order(&self) -> Vec<String> {
-        self.order.borrow().clone()
+        self.order.lock().unwrap().clone()
     }
 
     // ScheduleOrder is the order in which builders pick up projects: Order() stably sorted by dependency depth.
     pub fn schedule_order(&self) -> Vec<String> {
-        self.schedule_order.borrow().clone()
+        self.schedule_order.lock().unwrap().clone()
     }
 
     // orchestrator.go:131
     fn compute_schedule_order(&self) -> Vec<String> {
-        let order = self.order.borrow().clone();
+        let order = self.order.lock().unwrap().clone();
         let mut entries: Vec<(String, usize)> = Vec::with_capacity(order.len());
         let mut depths: FxHashMap<P<BuildTask>, usize> = FxHashMap::default();
         for config in &order {
             let task = self.get_task(&self.to_path(config));
             let mut depth = 0;
-            for upstream in task.up_stream.borrow().iter() {
+            for upstream in task.up_stream.lock().unwrap().iter() {
                 depth = depth.max(depths.get(&upstream.task).copied().unwrap_or(0) + 1);
             }
             depths.insert(task, depth);
@@ -133,13 +133,13 @@ impl Orchestrator {
     // orchestrator.go:155
     pub fn upstream(&self, config_name: &str) -> Vec<String> {
         let task = self.get_task(&self.to_path(config_name));
-        let upstream = task.up_stream.borrow();
+        let upstream = task.up_stream.lock().unwrap();
         upstream.iter().map(|t| t.task.config.clone()).collect()
     }
 
     // orchestrator.go:171
     pub(crate) fn get_task(&self, path: &Path) -> P<BuildTask> {
-        match self.tasks.borrow().get(path) {
+        match self.tasks.lock().unwrap().get(path) {
             Some(task) => *task,
             None => panic!("No build task found for {}", path.as_str()),
         }
@@ -150,14 +150,14 @@ impl Orchestrator {
         for config in configs {
             let path = self.to_path(config);
             let task = P::new(BuildTask::new(config.clone(), true));
-            task.pending.set(true);
-            if self.tasks.borrow().contains_key(&path) {
+            task.pending.store(true, Ordering::SeqCst);
+            if self.tasks.lock().unwrap().contains_key(&path) {
                 continue;
             }
-            self.tasks.borrow_mut().insert(path.clone(), task);
-            task.resolved.set(self.host().get_resolved_project_reference(config, path));
-            task.up_stream.borrow_mut().clear();
-            if let Some(resolved) = task.resolved.get() {
+            self.tasks.lock().unwrap().insert(path.clone(), task);
+            *task.resolved.lock().unwrap() = self.host().get_resolved_project_reference(config, path);
+            task.up_stream.lock().unwrap().clear();
+            if let Some(resolved) = task.resolved_opt() {
                 self.create_build_tasks(resolved.resolved_project_reference_paths());
             }
         }
@@ -178,7 +178,7 @@ impl Orchestrator {
         if !completed.has(&path) {
             if analyzing.has(&path) {
                 if !in_circular_context {
-                    self.errors.borrow_mut().push(new_compiler_diagnostic(
+                    self.errors.lock().unwrap().push(new_compiler_diagnostic(
                         &diagnostics::Project_references_may_not_form_a_circular_graph_Cycle_detected_Colon_0,
                         &[&circularity_stack.join("\n")],
                     ));
@@ -187,7 +187,7 @@ impl Orchestrator {
             }
             analyzing.add(path.clone());
             circularity_stack.push(config_name.to_string());
-            if let Some(resolved) = task.resolved.get() {
+            if let Some(resolved) = task.resolved_opt() {
                 for (index, sub_reference) in resolved.resolved_project_reference_paths().iter().enumerate() {
                     let upstream = self.setup_build_task(
                         sub_reference,
@@ -198,13 +198,13 @@ impl Orchestrator {
                         circularity_stack,
                     );
                     if let Some(upstream) = upstream {
-                        task.up_stream.borrow_mut().push(super::buildtask::upstreamTask { task: upstream, ref_index: index });
+                        task.up_stream.lock().unwrap().push(super::buildtask::upstreamTask { task: upstream, ref_index: index });
                     }
                 }
             }
             circularity_stack.pop();
             completed.add(path);
-            self.order.borrow_mut().push(config_name.to_string());
+            self.order.lock().unwrap().push(config_name.to_string());
         }
         // Watch mode only: downStream links.
         Some(task)
@@ -223,8 +223,8 @@ impl Orchestrator {
         for project in &projects {
             self.setup_build_task(project, None, false, &mut completed, &mut analyzing, &mut circularity_stack);
         }
-        *self.schedule_order.borrow_mut() = self.compute_schedule_order();
-        self.graph_generated.set(true);
+        *self.schedule_order.lock().unwrap() = self.compute_schedule_order();
+        self.graph_generated.store(true, Ordering::SeqCst);
     }
 
     // tsc -b entrypoint
@@ -240,7 +240,7 @@ impl Orchestrator {
         let Some(mut order) = self.get_build_order_for(project) else {
             return OrchestratorResult { status: Some(ExitStatus::InvalidProject_OutputsSkipped), ..Default::default() };
         };
-        if only_references && self.errors.borrow().is_empty() {
+        if only_references && self.errors.lock().unwrap().is_empty() {
             if project.is_empty() {
                 return OrchestratorResult { status: Some(ExitStatus::InvalidProject_OutputsSkipped), ..Default::default() };
             }
@@ -252,11 +252,11 @@ impl Orchestrator {
     // orchestrator.go:426
     fn get_build_order_for(&self, project: &str) -> Option<Vec<String>> {
         if project.is_empty() {
-            return Some(self.order.borrow().clone());
+            return Some(self.order.lock().unwrap().clone());
         }
 
         let config = tsrs_core::resolve_config_file_name_of_project_reference(&tspath::resolve_path(self.opts.sys.get_current_directory(), &[project]));
-        let target = *self.tasks.borrow().get(&self.to_path(&config))?;
+        let target = *self.tasks.lock().unwrap().get(&self.to_path(&config))?;
 
         let mut projects: Set<Path> = Set::default();
         fn add_project_and_references(o: &Orchestrator, projects: &mut Set<Path>, task: P<BuildTask>) {
@@ -265,13 +265,13 @@ impl Orchestrator {
                 return;
             }
             projects.add(path);
-            for upstream in task.up_stream.borrow().iter() {
+            for upstream in task.up_stream.lock().unwrap().iter() {
                 add_project_and_references(o, projects, upstream.task);
             }
         }
         add_project_and_references(self, &mut projects, target);
 
-        let order: Vec<String> = self.order.borrow().iter().filter(|config| projects.has(&self.to_path(config))).cloned().collect();
+        let order: Vec<String> = self.order.lock().unwrap().iter().filter(|config| projects.has(&self.to_path(config))).cloned().collect();
         Some(order)
     }
 
@@ -285,7 +285,7 @@ impl Orchestrator {
             ));
         }
         let mut build_result = OrchestratorResult::default();
-        if self.errors.borrow().is_empty() {
+        if self.errors.lock().unwrap().is_empty() {
             build_result.statistics.projects = order.len();
             // Builders pick up projects in scheduleOrder; results are reported in Order(). Run sequentially in
             // Order() (see the file comment), reporting each project once it is built.
@@ -299,10 +299,10 @@ impl Orchestrator {
             // Circularity errors prevent any project from being built
             build_result.status = Some(ExitStatus::ProjectReferenceCycle_OutputsSkipped);
             let report_diagnostic = self.create_diagnostic_reporter(None);
-            for &err in self.errors.borrow().iter() {
+            for &err in self.errors.lock().unwrap().iter() {
                 report_diagnostic(err);
             }
-            build_result.errors = Some(self.errors.borrow().clone());
+            build_result.errors = Some(self.errors.lock().unwrap().clone());
         }
         build_result.report(self);
         build_result
@@ -311,11 +311,11 @@ impl Orchestrator {
     // orchestrator.go:888
     fn build_or_clean_project(&'static self, task: P<BuildTask>, path: &Path) {
         let builder: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
-        *task.result.borrow_mut() = Some(taskResult::new(builder));
+        *task.result.lock().unwrap() = Some(taskResult::new(builder));
         let report_status = self.create_builder_status_reporter(Some(task));
         let diagnostic_reporter = self.create_diagnostic_reporter(Some(task));
         {
-            let mut result = task.result.borrow_mut();
+            let mut result = task.result.lock().unwrap();
             let result = result.as_mut().unwrap();
             result.report_status = Some(report_status);
             result.diagnostic_reporter = Some(diagnostic_reporter);
@@ -328,7 +328,7 @@ impl Orchestrator {
         if self.opts.testing.is_none() {
             // The program is only needed by Testing.OnProgram at report time; drop it now so a task
             // that has finished but is not yet reported does not keep its program alive.
-            task.result.borrow_mut().as_mut().unwrap().program = None;
+            task.result.lock().unwrap().as_mut().unwrap().program = None;
         }
     }
 
@@ -336,13 +336,13 @@ impl Orchestrator {
     pub(crate) fn get_writer(&self, task: Option<P<BuildTask>>) -> Writer<'static> {
         let sys = self.opts.sys;
         match task {
-            None => std::rc::Rc::new(move |t: &str| sys.write(t)),
+            None => std::sync::Arc::new(move |t: &str| sys.write(t)),
             Some(task) => {
                 let builder = {
-                    let result = task.result.borrow();
+                    let result = task.result.lock().unwrap();
                     result.as_ref().unwrap().builder.clone()
                 };
-                std::rc::Rc::new(move |t: &str| builder.lock().unwrap().push_str(t))
+                std::sync::Arc::new(move |t: &str| builder.lock().unwrap().push_str(t))
             }
         }
     }
@@ -368,12 +368,12 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         opts,
         compare_paths_options,
         host: OnceLock::new(),
-        tasks: RefCell::new(FxHashMap::default()),
-        order: RefCell::new(Vec::new()),
-        errors: RefCell::new(Vec::new()),
-        graph_generated: Cell::new(false),
+        tasks: Mutex::new(FxHashMap::default()),
+        order: Mutex::new(Vec::new()),
+        errors: Mutex::new(Vec::new()),
+        graph_generated: AtomicBool::new(false),
         error_summary_reporter,
-        schedule_order: RefCell::new(Vec::new()),
+        schedule_order: Mutex::new(Vec::new()),
     }));
     let compiler_host: Arc<dyn CompilerHost> = new_cached_fs_compiler_host(sys.get_current_directory(), sys.fs(), sys.default_library_path(), None, None);
     let h: &'static host = Box::leak(Box::new(host {
@@ -385,7 +385,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         resolved_references: parseCache::default(),
         m_times: Mutex::new(Arc::new(Mutex::new(FxHashMap::default()))),
     }));
-    let _ = h.orchestrator.set(P::from_static(orchestrator));
+    let _ = h.orchestrator.set(orchestrator);
     let _ = orchestrator.host.set(h);
     orchestrator
 }
