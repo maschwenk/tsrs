@@ -5,7 +5,8 @@
 # steps-file: one shell command per line, run inside the project copy before each build (first line: initial build, use `true`).
 set -u
 src=$1; steps=$2; shift 2
-TSGO=${TSGO:-/root/bin/tsgo}
+[ -n "$(ls -A "$src" 2>/dev/null)" ] || { echo "empty or missing project $src" >&2; exit 2; }
+TSGO=${TSGO:-/root/bin/tsgo-ref}
 TSRS=${TSRS:-/root/tsrs/target/release/tsrs}
 W=$(mktemp -d /tmp/incr-oracle.XXXX)
 cp -r "$src" "$W/go"; cp -r "$src" "$W/rs"
@@ -18,11 +19,13 @@ while IFS= read -r step; do
   (cd "$W/go" && "$TSGO" "${PRE[@]}" "$@" > "$W/go.out$n" 2>&1; echo "exit $?" >> "$W/go.out$n")
   (cd "$W/rs" && TSRS_EMIT=1 "$TSRS" "${PRE[@]}" "$@" > "$W/rs.out$n" 2>&1; echo "exit $?" >> "$W/rs.out$n")
   sed -i -E 's/[0-9]{2}:[0-9]{2}:[0-9]{2} [AP]M/HH:MM:SS AM/g' "$W/go.out$n" "$W/rs.out$n"
+  # Absolute paths differ only in the copy's directory.
+  sed -i "s#$W/go#<W>#g" "$W/go.out$n"; sed -i "s#$W/rs#<W>#g" "$W/rs.out$n"
   if ! cmp -s "$W/go.out$n" "$W/rs.out$n"; then echo "step $n ($step): output differs"; diff "$W/go.out$n" "$W/rs.out$n" | head -10; fail=1; fi
   d=$(diff -r -q -x node_modules "$W/go" "$W/rs" 2>&1 | grep -v tsbuildinfo)
   if [ -n "$d" ]; then echo "step $n ($step): trees differ"; echo "$d" | head; fail=1; fi
   for b in $(cd "$W/go" && find . -name '*.tsbuildinfo'); do
-    if ! sed 's/"version":"[^"]*"/"version":"V"/' "$W/go/$b" | cmp -s - <(sed 's/"version":"[^"]*"/"version":"V"/' "$W/rs/$b"); then
+    if ! sed -e 's/"version":"[^"]*"/"version":"V"/' -e "s#$W/go#<W>#g" "$W/go/$b" | cmp -s - <(sed -e 's/"version":"[^"]*"/"version":"V"/' -e "s#$W/rs#<W>#g" "$W/rs/$b"); then
       echo "step $n ($step): $b differs"; fail=1
       python3 - "$W/go/$b" "$W/rs/$b" <<'PY'
 import json,sys
