@@ -71,3 +71,24 @@ compiler/decorator* + *Metadata* (213 variants).
 | decorators | 213 | 58 | 0 | 86 (forawait, commonjsmodule, classfields, esdecorator) | 69 |
 
 On `emit/jsx-decorators` alone (type eraser still a stub) nearly every variant crashes in typeeraser.
+
+## Full integration (local `int/all`, never pushed), 2026-10-03
+
+`int/all` = this branch (with origin/main) + origin/emit/transforms (4c40ea2, incl. commonjs) + emit/classfields +
+emit/async + emit/es2016-2020 + origin/emit/sourcemaps; reference = tsgo built from the pinned ts-ref commit
+(`go build ./cmd/tsc`, Go 1.27.1).
+
+- `--baselines js`, jsx group: 226 / 230 pass, 0 fail, 1 crash (`tsxEmit3`: emitter source-map stub path), 3 skip.
+- `--baselines js`, decorators group: 131 / 213 pass, 0 fail, 13 crash (ES decorators, out of scope), 69 skip.
+- `--baselines js`, whole suite: 13162 / 15197 pass, 15 fail, 214 crash (esdecorator 116, using 98), 1 timeout,
+  1805 skip. Of the 15 fails, 13 pass when rerun alone (`--list` with only that variant): they fail only when their
+  sibling `moduleDetection=` variants run in the same process (e.g. commentsOnJSXExpressionsArePreserved with
+  moduledetection=force loses `Object.defineProperty(exports, "__esModule", ...)`), so that is state shared across
+  variants in the harness/program setup, not the transformers. The other 2 (`exportNonInitializedVariablesInIfThenStatementNoCrash1`,
+  `labeledStatementExportDeclarationNoCrash1`, module=commonjs) are commonjs-transform diffs (emit/transforms).
+- Monorepo oracle, all 103 tsc-built packages, full emit with source and declaration maps: 103/103 packages fully
+  identical, 10,248 files identical, 0 different, 0 missing, 0 extra; checkout unchanged.
+
+Standalone (`emit/jsx-decorators` alone): `--baselines js` 1364 / 15197 pass, 0 fail (typeeraser still a stub here, so
+everything else crashes there); conformance errors + types/symbols identical to main in both lazy modes; fourslash
+4066/63 same pass list; `RUSTFLAGS="-D warnings" cargo check --workspace --locked --all-targets` clean; emit_gate 3/3.
