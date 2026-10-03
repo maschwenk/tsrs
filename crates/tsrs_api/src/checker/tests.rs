@@ -24,51 +24,13 @@ use super::dispatch::{handle, is_checker_method};
 use super::host::*;
 use super::registry::CheckerRegistry;
 
-const MAIN: &str = r#"import { type Box, make } from "./types";
-export type Pair<A, B> = [first: A, second: B];
-export type U = string | number;
-export function over(x: string): string;
-export function over(x: number): number;
-export function over(x: any) { return x; }
-const ünïcödé = "é😀";
-export const box: Box<number> = make(1);
-export const p: Pair<string, U> = ["a", 1];
-export function isStr(x: unknown): x is string { return typeof x === "string"; }
-/** Docs for Animal.
- * @deprecated use Dog */
-export class Animal { name = "a"; }
-export class Dog extends Animal { readonly legs = 4; }
-export enum Color { Red = 1, Green = 2 }
-export const r = over(42);
-export type M = { [K in "a" | "b"]: K };
-export type C<T> = T extends string ? 1 : 2;
-export const lit = "hi" as const;
-export const fn = <T,>(v: T) => v;
-export const o = { box };
-export { ünïcödé as uni };
-export type IA<T, K extends keyof T> = T[K];
-export async function aw(): Promise<number> { return 1; }
-export let maybe: string | undefined;
-export const doubled = [1, 2].map(x => x * 2);
-export const cb: (n: number) => void = (n) => {};
-export function withThis(this: Dog, a: number) { return a; }
-export function rest(a: string, ...xs: number[]) { return xs; }
-export const arr: number[] = [];
-export type S<T> = T extends string ? Box<T> : never;
-export interface WithDefault<T = string> { v: T }
-export function useAll() { return box.value + p[1].toString(); }
-export type Up = Uppercase<"a">;
-export type TL = `x${string}`;
-export const big = 10n;
-"#;
+const MAIN: &str = include_str!("testdata/go_probe/fixture/main.ts");
 
-const TYPES: &str = r#"export interface Box<T> { value: T; [key: string]: unknown }
-export declare function make<T>(v: T): Box<T>;
-"#;
+const TYPES: &str = include_str!("testdata/go_probe/fixture/types.d.ts");
 
-const TSCONFIG: &str = r#"{ "compilerOptions": { "strict": true, "target": "es2022", "module": "esnext", "moduleResolution": "bundler" }, "files": ["main.ts", "types.d.ts", "other.ts"] }"#;
+const TSCONFIG: &str = include_str!("testdata/go_probe/fixture/tsconfig.json");
 
-const OTHER: &str = "export const helper = 1;\nexport function useArgs() { return arguments.length; }\ndeclare const notFn: number;\n// @ts-ignore\nnotFn();\n";
+const OTHER: &str = include_str!("testdata/go_probe/fixture/other.ts");
 
 struct TestHost {
     snapshot_host: Arc<SnapshotHost>,
@@ -896,46 +858,56 @@ fn core_session_hook_maps_errors_and_encodings() {
     assert_eq!(super::base64_encode(b"foobar"), "Zm9vYmFy");
 }
 
-/// Needles of the differential probe (same list the Go probe used to produce the golden file).
-const PROBE_NEEDLES: &[&str] = &[
-    "box:", "p:", "ünïcödé", "over(x: string)", "U = ", "Pair<A, B>", "isStr(", "Animal {", "Dog extends", "legs", "Red =", "r = over", "M = ",
-    "C<T> =", "lit =", "fn =", "o = {", "box };", "uni", "IA<T", "aw()", "maybe:", "doubled", "x * 2", "cb:", "n) => {}", "withThis(", "rest(",
-    "arr:", "S<T>", "WithDefault", "useAll", "box.value", "value +", "Up =", "TL =", "big =", "make }", "make(1)", "toString",
-];
 
-/// Differential check against the pinned Go API session (microsoft/TypeScript b85298b6, tsc/internal/api):
-/// testdata/go_probe_b85298b6.jsonl was produced by driving Go's `Session.HandleRequest` with the same
-/// fixture and the same request sequence (a local probe test in ts-ref, not part of this repo). Compares
-/// type strings, type/symbol flags, symbol names and ownership, file-owned lookups without a snapshot,
-/// resolveName with and without a location, constraint results and error texts. `objectFlags` are not
-/// compared: they carry lazily computed cache bits (e.g. MembersResolved) that differ even between two
-/// Go queries of the same type. Process-wide symbol ids are normalized to "same symbol as" booleans
-/// (the golden file was normalized the same way). Set `TSRS_CHECKER_PROBE_OUT=<file>` to dump the tsrs lines.
+/// Differential check against the pinned Go API session (microsoft/TypeScript b85298b6, tsc/internal/api).
+/// testdata/go_probe/go_probe_b85298b6.jsonl is produced by testdata/go_probe/regen.sh, which runs
+/// testdata/go_probe/zz_tsrs_probe_test.go inside the pinned reference checkout against Go's
+/// `Session.HandleRequest` with the same fixture (testdata/go_probe/fixture) and needles; `probe_lines`
+/// issues the same request sequence through the tsrs handlers. Results are compared as JSON values (not
+/// bytes), with two explicit, narrow exceptions:
+/// * `objectFlags` are compared with only `ObjectFlags::MembersResolved` (1 << 21) masked out: it is a
+///   lazily set cache bit (Go reports different values for the same type at "box:" and "box.value").
+///   The raw differences are collected and must be confined to that bit.
+/// * `err.badType` (a string where a type id is expected): both are `api: invalid request: ...`, but
+///   tsrs says `field "type": expected an unsigned integer in range` while Go prints its json/v2 decoder
+///   error (whose wording itself varied between Go runs: "unable to unmarshal" / "cannot unmarshal").
+/// Process-wide symbol ids are reported as identity booleans on both sides. Set
+/// `TSRS_CHECKER_PROBE_OUT=<file>` to dump the tsrs lines.
 #[test]
 fn pinned_go_differential() {
+    const MEMBERS_RESOLVED: u64 = 1 << 21;
+    assert_eq!(MEMBERS_RESOLVED as u32, tsrs_checker::ObjectFlags::MembersResolved.bits());
     let lines = probe_lines();
     if let Ok(out) = std::env::var("TSRS_CHECKER_PROBE_OUT") {
         std::fs::write(out, lines.join("\n") + "\n").unwrap();
     }
-    let golden = include_str!("testdata/go_probe_b85298b6.jsonl");
-    let parse = |l: &str| -> (String, Value) {
+    let golden = include_str!("testdata/go_probe/go_probe_b85298b6.jsonl");
+    // Returns (query, result with objectFlags masked, raw objectFlags).
+    let parse = |l: &str| -> (String, Value, Option<u64>) {
         let v = json::unmarshal(l).unwrap();
         let q = str_of(field(&v, "q"));
         let mut r = field(&v, "r").clone();
+        let mut raw = None;
         if let Value::Object(o) = &mut r {
-            o.shift_remove("objectFlags");
+            if let Some(Value::Number(f)) = o.get("objectFlags").cloned() {
+                raw = Some(f as u64);
+                o.insert("objectFlags".to_string(), Value::Number((f as u64 & !MEMBERS_RESOLVED) as f64));
+            }
         }
-        (q, r)
+        (q, r, raw)
     };
-    let ours: std::collections::HashMap<String, Value> = lines.iter().map(|l| parse(l)).collect();
+    let ours: std::collections::HashMap<String, (Value, Option<u64>)> = lines.iter().map(|l| parse(l)).map(|(q, r, raw)| (q, (r, raw))).collect();
     let mut compared = 0;
     let mut diffs = Vec::new();
+    let mut raw_object_flag_diffs = Vec::new();
     for line in golden.lines().filter(|l| !l.is_empty()) {
-        let (q, go) = parse(line);
-        let rs = ours.get(&q).cloned().unwrap_or_else(|| Value::String("<missing>".to_string()));
+        let (q, go, go_raw) = parse(line);
+        let (rs, rs_raw) = ours.get(&q).cloned().unwrap_or((Value::String("<missing>".to_string()), None));
         compared += 1;
+        if go_raw != rs_raw {
+            raw_object_flag_diffs.push(format!("{q}: go={go_raw:?} rs={rs_raw:?}"));
+        }
         let same = match q.as_str() {
-            // Same error class; the decoder wording differs (Go reports its json/v2 unmarshal error).
             "err.badType" => str_of(&rs).starts_with("api: invalid request: ") && str_of(&go).starts_with("api: invalid request: "),
             _ => rs == go,
         };
@@ -943,6 +915,7 @@ fn pinned_go_differential() {
             diffs.push(format!("{q}\n  go: {}\n  rs: {}", json::marshal(&go).unwrap(), json::marshal(&rs).unwrap()));
         }
     }
+    eprintln!("raw objectFlags differences (MembersResolved only): {raw_object_flag_diffs:?}");
     assert_eq!(compared, 71);
     assert!(diffs.is_empty(), "{} differences from pinned Go:\n{}", diffs.len(), diffs.join("\n"));
 }
@@ -1000,7 +973,7 @@ fn probe_lines() -> Vec<String> {
         other => other.clone(),
     };
     emit("flags", obj(vec![("Value", Value::Number(tsrs_ast::SymbolFlags::Value.bits() as f64)), ("Type", Value::Number(tsrs_ast::SymbolFlags::Type.bits() as f64))]));
-    for n in PROBE_NEEDLES.iter().copied() {
+    for n in include_str!("testdata/go_probe/needles.txt").lines().filter(|l| !l.is_empty()) {
         let pos = utf16_pos(MAIN, n);
         let (ty, e1) = res(h.call("getTypeAtPosition", &h.sp(&format!(r#""file":"/p/main.ts","position":{pos}"#))));
         let (sy, e2) = res(h.call("getSymbolAtPosition", &h.sp(&format!(r#""file":"/p/main.ts","position":{pos}"#))));
