@@ -5,7 +5,7 @@
 #   tools/oracle/emit/monorepo.sh [--only jsx|decorators|all] [--keep] [package-dir ...]
 #
 # Environment: REPO (the monorepo checkout, read-only), TSGO (reference tsgo binary), TSRS (tsrs binary),
-# OUT (scratch root, default /tmp; outputs go to $OUT/emit-go/<pkg> and $OUT/emit-rs/<pkg>).
+# EXTRA (extra flags for both compilers, e.g. "--sourceMap false --declarationMap false"), OUT (scratch root, default /tmp; outputs go to $OUT/emit-go/<pkg> and $OUT/emit-rs/<pkg>).
 #
 # Nothing is written into $REPO: outDir, declarationDir and tsBuildInfoFile are always redirected, and the script
 # checks `git status --short` plus a newer-than-marker scan of the package directories before and after.
@@ -47,8 +47,8 @@ while IFS=$'\t' read -r dir config build target module jsx expdec meta decldir; 
     mkdir -p "$go" "$rs"
     cfg=$REPO/$dir/$config
     dd=(); [ "$decldir" != - ] && dd=(--declarationDir)
-    (cd "$REPO/$dir" && "$TSGO" -p "$cfg" --outDir "$go" ${dd[@]+"${dd[@]}" "$go"} --tsBuildInfoFile "$go.tsbuildinfo" > "$go.log" 2>&1)
-    (cd "$REPO/$dir" && TSRS_EMIT=1 "$TSRS" -p "$cfg" --outDir "$rs" ${dd[@]+"${dd[@]}" "$rs"} --tsBuildInfoFile "$rs.tsbuildinfo" > "$rs.log" 2>&1)
+    (cd "$REPO/$dir" && "$TSGO" -p "$cfg" --outDir "$go" ${dd[@]+"${dd[@]}" "$go"} --tsBuildInfoFile "$go.tsbuildinfo" ${EXTRA:-} > "$go.log" 2>&1)
+    (cd "$REPO/$dir" && TSRS_EMIT=1 "$TSRS" -p "$cfg" --outDir "$rs" ${dd[@]+"${dd[@]}" "$rs"} --tsBuildInfoFile "$rs.tsbuildinfo" ${EXTRA:-} > "$rs.log" 2>&1)
     if [ -n "$(find "$REPO/$dir" -newer "$marker" -type f -not -path '*/node_modules/*' | head -1)" ]; then
         echo "ERROR: $dir: files were written into the repository:" >&2
         find "$REPO/$dir" -newer "$marker" -type f -not -path '*/node_modules/*' >&2
