@@ -369,6 +369,7 @@ dependencies = [
  "tsrs_parser",
  "tsrs_printer",
  "tsrs_scanner",
+ "tsrs_sourcemap",
  "tsrs_transformers",
  "tsrs_tsoptions",
  "tsrs_vfs",
