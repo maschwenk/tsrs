@@ -1041,3 +1041,231 @@ impl esDecoratorTransformer {
         }
     }
 }
+
+impl esDecoratorTransformer {
+    // esdecorator.go:2462
+    // Creates a "value", "get", or "set" method for a pseudo-PropertyDescriptor object created for
+    // a private element.
+    pub(crate) fn create_descriptor_method(&self, original: P<Node>, name: P<Node> /*PrivateIdentifier*/, modifiers: Option<P<ModifierList>>, asterisk_token: Option<P<Node>>, kind: &'static str, parameters: Option<P<NodeList>>, body: Option<P<Node>>) -> P<Node> {
+        let f = self.base.factory();
+        let ec = self.base.emit_context();
+
+        let body = body.unwrap_or_else(|| f.new_block(f.new_node_list(vec![]), false));
+
+        let func_expr = f.new_function_expression(modifiers, asterisk_token, None /*name*/, None /*typeParameters*/, parameters, None /*type*/, None /*fullSignature*/, Some(body));
+        ec.set_original(func_expr, original);
+        ec.set_source_map_range(func_expr, move_range_past_decorators(original));
+        ec.set_emit_flags(func_expr, EmitFlags::NoComments);
+
+        let prefix = if kind == "get" || kind == "set" { kind } else { "" };
+        let function_name = f.new_string_literal_from_node(name);
+        let named_function = f.new_set_function_name_helper(func_expr, function_name, prefix);
+
+        let method = f.new_property_assignment(None, f.new_identifier(kind), None, None, named_function);
+        ec.set_original(method, original);
+        ec.set_source_map_range(method, move_range_past_decorators(original));
+        ec.set_emit_flags(method, EmitFlags::NoComments);
+        method
+    }
+
+    // esdecorator.go:2507
+    // Creates a pseudo-PropertyDescriptor object used when decorating a private MethodDeclaration.
+    pub(crate) fn create_method_descriptor_object(&self, member: P<Node>, modifiers: Option<P<ModifierList>>) -> P<Node> {
+        let f = self.base.factory();
+        let parameters = self.base.visitor().visit_nodes(member.parameter_list());
+        let body = self.base.visitor().visit_node(member.body());
+        let asterisk = member.as_method_declaration().asterisk_token();
+        f.new_object_literal_expression(f.new_node_list(vec![self.create_descriptor_method(member, member.name().unwrap(), modifiers, asterisk, "value", parameters, body)]), false)
+    }
+
+    // esdecorator.go:2521
+    // Creates a pseudo-PropertyDescriptor object used when decorating a private GetAccessor.
+    pub(crate) fn create_get_accessor_descriptor_object(&self, member: P<Node>, modifiers: Option<P<ModifierList>>) -> P<Node> {
+        let f = self.base.factory();
+        let body = self.base.visitor().visit_node(member.body());
+        f.new_object_literal_expression(f.new_node_list(vec![self.create_descriptor_method(member, member.name().unwrap(), modifiers, None, "get", Some(f.new_node_list(vec![])), body)]), false)
+    }
+
+    // esdecorator.go:2533
+    // Creates a pseudo-PropertyDescriptor object used when decorating a private SetAccessor.
+    pub(crate) fn create_set_accessor_descriptor_object(&self, member: P<Node>, modifiers: Option<P<ModifierList>>) -> P<Node> {
+        let f = self.base.factory();
+        let parameters = self.base.visitor().visit_nodes(member.parameter_list());
+        let body = self.base.visitor().visit_node(member.body());
+        f.new_object_literal_expression(f.new_node_list(vec![self.create_descriptor_method(member, member.name().unwrap(), modifiers, None, "set", parameters, body)]), false)
+    }
+
+    // esdecorator.go:2547
+    // Creates a pseudo-PropertyDescriptor object used when decorating a private auto-accessor PropertyDeclaration.
+    // The descriptor contains get/set methods that access the generated backing field.
+    pub(crate) fn create_accessor_property_descriptor_object(&self, member: P<Node>, _modifiers: Option<P<ModifierList>>) -> P<Node> {
+        //  {
+        //      get() { return this.${privateName}; },
+        //      set(value) { this.${privateName} = value; },
+        //  }
+        let f = self.base.factory();
+        let name = member.name().unwrap();
+        let backing_field_name = f.new_generated_private_name_for_node_ex(name, printer::AutoGenerateOptions { suffix: "_accessor_storage", ..Default::default() });
+        let getter = self.create_descriptor_method(
+            member,
+            name,
+            None,
+            None,
+            "get",
+            Some(f.new_node_list(vec![])),
+            Some(f.new_block(f.new_node_list(vec![f.new_return_statement(Some(f.new_property_access_expression(f.new_this_expression(), None, backing_field_name, NodeFlags::None)))]), false)),
+        );
+        let setter = self.create_descriptor_method(
+            member,
+            name,
+            None,
+            None,
+            "set",
+            Some(f.new_node_list(vec![f.new_parameter_declaration(None, None, f.new_identifier("value"), None, None, None)])),
+            Some(f.new_block(
+                f.new_node_list(vec![f.new_expression_statement(f.new_assignment_expression(f.new_property_access_expression(f.new_this_expression(), None, backing_field_name, NodeFlags::None), f.new_identifier("value")))]),
+                false,
+            )),
+        );
+        f.new_object_literal_expression(f.new_node_list(vec![getter, setter]), false)
+    }
+}
+
+impl esDecoratorTransformer {
+    // esdecorator.go:2585
+    // Creates a MethodDeclaration that forwards its invocation to a PropertyDescriptor object.
+    // (Go builds a GetAccessorDeclaration here; kept as is.)
+    pub(crate) fn create_method_descriptor_forwarder(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, descriptor_name: P<Node>) -> P<Node> {
+        let f = self.base.factory();
+        let static_only = self.static_only_modifier_visitor.get().unwrap().clone().visit_modifiers(modifiers);
+        f.new_get_accessor_declaration(
+            static_only,
+            name,
+            None, // typeParameters
+            Some(f.new_node_list(vec![])),
+            None, // type
+            None, // fullSignature
+            Some(f.new_block(f.new_node_list(vec![f.new_return_statement(Some(f.new_property_access_expression(descriptor_name, None, f.new_identifier("value"), NodeFlags::None)))]), false)),
+        )
+    }
+
+    // esdecorator.go:2604
+    // Creates a GetAccessor that forwards its invocation to a PropertyDescriptor object.
+    pub(crate) fn create_get_accessor_descriptor_forwarder(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, descriptor_name: P<Node>) -> P<Node> {
+        let f = self.base.factory();
+        let static_only = self.static_only_modifier_visitor.get().unwrap().clone().visit_modifiers(modifiers);
+        f.new_get_accessor_declaration(
+            static_only,
+            name,
+            None, // typeParameters
+            Some(f.new_node_list(vec![])),
+            None, // type
+            None, // fullSignature
+            Some(f.new_block(
+                f.new_node_list(vec![f.new_return_statement(Some(f.new_function_call_call(f.new_property_access_expression(descriptor_name, None, f.new_identifier("get"), NodeFlags::None), Some(f.new_this_expression()), &[])))]),
+                false,
+            )),
+        )
+    }
+
+    // esdecorator.go:2627
+    // Creates a SetAccessor that forwards its invocation to a PropertyDescriptor object.
+    pub(crate) fn create_set_accessor_descriptor_forwarder(&self, modifiers: Option<P<ModifierList>>, name: P<Node>, descriptor_name: P<Node>) -> P<Node> {
+        let f = self.base.factory();
+        let static_only = self.static_only_modifier_visitor.get().unwrap().clone().visit_modifiers(modifiers);
+        f.new_set_accessor_declaration(
+            static_only,
+            name,
+            None, // typeParameters
+            Some(f.new_node_list(vec![f.new_parameter_declaration(None, None, f.new_identifier("value"), None, None, None)])),
+            None, // type
+            None, // fullSignature
+            Some(f.new_block(
+                f.new_node_list(vec![f.new_return_statement(Some(f.new_function_call_call(f.new_property_access_expression(descriptor_name, None, f.new_identifier("set"), NodeFlags::None), Some(f.new_this_expression()), &[f.new_identifier("value")])))]),
+                false,
+            )),
+        )
+    }
+
+    // esdecorator.go:2651
+    pub(crate) fn create_metadata(&self, name: P<Node>, class_super: Option<P<Node>>) -> P<Node> {
+        let f = self.base.factory();
+
+        let super_metadata = match class_super {
+            Some(class_super) => self.create_symbol_metadata_reference(class_super),
+            None => f.new_token(Kind::NullKeyword),
+        };
+
+        let object_create = f.new_call_expression(f.new_property_access_expression(f.new_identifier("Object"), None, f.new_identifier("create"), NodeFlags::None), None, None, f.new_node_list(vec![super_metadata]), NodeFlags::None);
+
+        let symbol_check = f.new_logical_and_expression(f.new_type_check(f.new_identifier("Symbol"), "function"), f.new_property_access_expression(f.new_identifier("Symbol"), None, f.new_identifier("metadata"), NodeFlags::None));
+
+        let conditional = f.new_conditional_expression(symbol_check, f.new_token(Kind::QuestionToken), object_create, f.new_token(Kind::ColonToken), f.new_void_zero_expression());
+
+        let var_decl = f.new_variable_declaration(name, None, None, Some(conditional));
+        let var_decl_list = f.new_variable_declaration_list(f.new_node_list(vec![var_decl]), NodeFlags::Const);
+        f.new_variable_statement(None, var_decl_list)
+    }
+
+    // esdecorator.go:2686
+    pub(crate) fn create_symbol_metadata(&self, target: P<Node>, value: P<Node>) -> P<Node> {
+        let f = self.base.factory();
+
+        // Object.defineProperty(target, Symbol.metadata, { configurable: true, writable: true, enumerable: true, value })
+        let symbol_metadata = f.new_property_access_expression(f.new_identifier("Symbol"), None, f.new_identifier("metadata"), NodeFlags::None);
+
+        let descriptor_props = vec![
+            f.new_property_assignment(None, f.new_identifier("enumerable"), None, None, f.new_true_expression()),
+            f.new_property_assignment(None, f.new_identifier("configurable"), None, None, f.new_true_expression()),
+            f.new_property_assignment(None, f.new_identifier("writable"), None, None, f.new_true_expression()),
+            f.new_property_assignment(None, f.new_identifier("value"), None, None, value),
+        ];
+        let descriptor = f.new_object_literal_expression(f.new_node_list(descriptor_props), false);
+
+        let define_property = f.new_call_expression(f.new_property_access_expression(f.new_identifier("Object"), None, f.new_identifier("defineProperty"), NodeFlags::None), None, None, f.new_node_list(vec![target, symbol_metadata, descriptor]), NodeFlags::None);
+
+        let if_statement = f.new_if_statement(value, f.new_expression_statement(define_property), None);
+        self.base.emit_context().set_emit_flags(if_statement, EmitFlags::SingleLine);
+        if_statement
+    }
+
+    // esdecorator.go:2712
+    pub(crate) fn create_symbol_metadata_reference(&self, class_super: P<Node>) -> P<Node> {
+        let f = self.base.factory();
+        let symbol_metadata = f.new_property_access_expression(f.new_identifier("Symbol"), None, f.new_identifier("metadata"), NodeFlags::None);
+        let element_access = f.new_element_access_expression(class_super, None, symbol_metadata, NodeFlags::None);
+        f.new_binary_expression(None, element_access, None, f.new_token(Kind::QuestionQuestionToken), f.new_token(Kind::NullKeyword))
+    }
+}
+
+// esdecorator.go:2719
+pub(crate) fn inject_class_this_assignment_if_missing(ec: P<EmitContext>, f: &printer::NodeFactory, node: P<Node>, class_this: P<Node>) -> P<Node> {
+    if class_has_class_this_assignment(ec, node) {
+        return node;
+    }
+
+    // Create: static { _classThis = this; }
+    let expression = f.new_assignment_expression(class_this, f.new_this_expression());
+    let statement = f.new_expression_statement(expression);
+    let body = f.new_block(f.new_node_list(vec![statement]), false);
+    let static_block = f.new_class_static_block_declaration(None, body);
+    ec.set_class_this(static_block, class_this);
+
+    if let Some(name) = node.name() {
+        ec.set_source_map_range(statement, name.loc());
+    }
+
+    let mut new_members: Vec<P<Node>> = Vec::with_capacity(1 + node.members().len());
+    new_members.push(static_block);
+    new_members.extend_from_slice(node.members());
+    let members_list = f.new_node_list(new_members);
+    members_list.loc.set(node.member_list().unwrap().loc.get());
+
+    let updated_node = if ast::is_class_declaration(node) {
+        f.update_class_declaration(node, node.modifiers(), node.name(), None, node.as_class_declaration().heritage_clauses(), members_list)
+    } else {
+        f.update_class_expression(node, node.modifiers(), node.name(), None, node.as_class_expression().heritage_clauses(), members_list)
+    };
+    ec.set_class_this(updated_node, class_this);
+    updated_node
+}
