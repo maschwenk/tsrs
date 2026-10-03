@@ -1,9 +1,11 @@
 // Port of execute/build/orchestrator.go (the non-watch parts; watch mode is out of scope).
 //
-// Go runs the build tasks on `--builders` goroutines (default 4) that block on their upstream tasks' channels while a
-// reporter goroutine prints the task outputs in build order. tsrs runs the tasks one at a time in build order (Go's
-// `numRoutines == 1` path): a task's upstream tasks are always done before it starts, and each task's buffered output
-// is reported right after it, which is the order Go prints in.
+// Like Go, the build tasks run on `--builders` threads (default 4, 1 with --singleThreaded; `rangeTasks`) that take
+// projects from Order() by an atomic index and block on their upstream tasks' `done` signals, while the calling thread
+// (Go: a reporter goroutine) waits on each task's `built` signal in Order() and prints its buffered output. The
+// signals are Mutex + Condvar stand-ins for Go's closed channels (buildtask.rs closeSignal). Each task's state is
+// Mutex/atomic; the shared host caches are Mutex-guarded. At the pinned commit Go's builders iterate `order`, not
+// ScheduleOrder() (whose comment says otherwise); this port does the same.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -81,6 +83,8 @@ pub struct Orchestrator {
     order: Mutex<Vec<String>>,
     errors: Mutex<Vec<P<Diagnostic>>>,
     graph_generated: AtomicBool,
+    // Set when a builder thread panicked (see range_tasks).
+    pub(crate) aborted: AtomicBool,
 
     error_summary_reporter: DiagnosticsReporter<'static>,
 
@@ -204,6 +208,8 @@ impl Orchestrator {
             }
             circularity_stack.pop();
             completed.add(path);
+            task.built.reset();
+            task.done.reset();
             self.order.lock().unwrap().push(config_name.to_string());
         }
         // Watch mode only: downStream links.
@@ -287,14 +293,25 @@ impl Orchestrator {
         let mut build_result = OrchestratorResult::default();
         if self.errors.lock().unwrap().is_empty() {
             build_result.statistics.projects = order.len();
-            // Builders pick up projects in scheduleOrder; results are reported in Order(). Run sequentially in
-            // Order() (see the file comment), reporting each project once it is built.
-            for config in order {
-                let path = self.to_path(config);
-                let task = self.get_task(&path);
-                self.build_or_clean_project(task, &path);
-                task.report(self, &path, &mut build_result);
-            }
+            // Builders pick up projects in scheduleOrder; results are reported in Order(), waiting for each project to finish
+            // (Go: a reporter goroutine; here the calling thread, while rangeTasks runs the builders on their own threads).
+            let mut aborted_report = false;
+            std::thread::scope(|scope| {
+                let builders = scope.spawn(|| self.range_tasks(order, &|path, task| self.build_or_clean_project(task, path)));
+                for config in order {
+                    let path = self.to_path(config);
+                    let task = self.get_task(&path);
+                    if !task.built.wait(&self.aborted) {
+                        aborted_report = true;
+                        break;
+                    }
+                    task.report(self, &path, &mut build_result);
+                }
+                if let Err(panic) = builders.join() {
+                    std::panic::resume_unwind(panic);
+                }
+            });
+            assert!(!aborted_report, "build aborted");
         } else {
             // Circularity errors prevent any project from being built
             build_result.status = Some(ExitStatus::ProjectReferenceCycle_OutputsSkipped);
@@ -306,6 +323,63 @@ impl Orchestrator {
         }
         build_result.report(self);
         build_result
+    }
+
+    // orchestrator.go:925
+    fn range_tasks(&'static self, order: &[String], f: &(dyn Fn(&Path, P<BuildTask>) + Sync)) {
+        let mut num_routines = 4;
+        if self.opts.command.compiler_options.single_threaded.is_true() {
+            num_routines = 1;
+        } else if let Some(builders) = self.opts.command.build_options.builders {
+            num_routines = builders as usize;
+        }
+
+        let current_task_index = std::sync::atomic::AtomicUsize::new(0);
+        let get_next_task = || -> Option<(Path, P<BuildTask>)> {
+            let index = current_task_index.fetch_add(1, Ordering::SeqCst);
+            let config = order.get(index)?;
+            let path = self.to_path(config);
+            let task = self.get_task(&path);
+            Some((path, task))
+        };
+        let run_task = || {
+            while let Some((path, task)) = get_next_task() {
+                f(&path, task);
+            }
+        };
+
+        // Go's goroutines grow their stacks; checking and binding recurse deeply (main.rs runs on 512 MB too).
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..num_routines)
+                .map(|i| {
+                    std::thread::Builder::new()
+                        .name(format!("builder-{i}"))
+                        .stack_size(512 << 20)
+                        .spawn_scoped(scope, || {
+                            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(run_task));
+                            if result.is_err() {
+                                self.abort();
+                            }
+                            result
+                        })
+                        .unwrap()
+                })
+                .collect();
+            for handle in handles {
+                if let Err(panic) | Ok(Err(panic)) = handle.join() {
+                    std::panic::resume_unwind(panic);
+                }
+            }
+        });
+    }
+
+    // A builder panicked: release every waiter so the panic surfaces instead of a hang.
+    fn abort(&self) {
+        self.aborted.store(true, Ordering::SeqCst);
+        for task in self.tasks.lock().unwrap().values() {
+            task.done.wake();
+            task.built.wake();
+        }
     }
 
     // orchestrator.go:888
@@ -330,6 +404,7 @@ impl Orchestrator {
             // that has finished but is not yet reported does not keep its program alive.
             task.result.lock().unwrap().as_mut().unwrap().program = None;
         }
+        task.built.close();
     }
 
     // orchestrator.go:906
@@ -372,6 +447,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         order: Mutex::new(Vec::new()),
         errors: Mutex::new(Vec::new()),
         graph_generated: AtomicBool::new(false),
+        aborted: AtomicBool::new(false),
         error_summary_reporter,
         schedule_order: Mutex::new(Vec::new()),
     }));
