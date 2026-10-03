@@ -7,9 +7,11 @@ mod legacydecorators;
 mod metadata;
 mod runtimesyntax;
 mod typeeraser;
+mod utilities;
 
 pub use importelision::*;
 pub use legacydecorators::*;
 pub use metadata::*;
 pub use runtimesyntax::*;
 pub use typeeraser::*;
+pub(crate) use utilities::*;

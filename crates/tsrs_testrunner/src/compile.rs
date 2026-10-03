@@ -26,7 +26,7 @@ use crate::options::{parse_test_ts_config, test_compiler_options, unsupported_re
 
 thread_local! {
     // harnessutil sourceFileCache: parsed files are shared across the tests a worker runs (lib files above all).
-    static SOURCE_FILE_CACHE: RefCell<FxHashMap<(String, String, bool, String), P<SourceFile>>> = RefCell::new(FxHashMap::default());
+    static SOURCE_FILE_CACHE: RefCell<FxHashMap<(String, String, bool, bool, String), P<SourceFile>>> = RefCell::new(FxHashMap::default());
 }
 
 // cachedCompilerHost
@@ -53,7 +53,7 @@ impl CompilerHost for CachedCompilerHost {
         if script_kind == ScriptKind::Unknown {
             panic!("Unknown script kind for file  {}", opts.file_name);
         }
-        let key = (opts.file_name.clone(), opts.path.as_str().to_string(), opts.external_module_indicator_options.jsx, format!("{:?}{}", script_kind, text));
+        let key = (opts.file_name.clone(), opts.path.as_str().to_string(), opts.external_module_indicator_options.jsx, opts.external_module_indicator_options.force, format!("{:?}{}", script_kind, text));
         if let Some(cached) = SOURCE_FILE_CACHE.with(|c| c.borrow().get(&key).copied()) {
             return Some(cached);
         }
