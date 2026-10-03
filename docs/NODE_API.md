@@ -18,6 +18,15 @@ consecutive runs; one earlier run had a single unreproduced failure), `test/asyn
 These are suite results, not byte-level response parity; the parity lane's Go-oracle comparison is the
 authority for that.
 
+Allocator-perturbation run (`MALLOC_PERTURB_=165 TSRS_ARENA_POISON=1 cargo test --no-fail-fast -p <pkg> --
+--skip released_snapshots --skip create_and_release --skip repeated_transpile --skip repeated_config`; the four
+skipped tests measure RSS, which poison mode makes grow by design), counted per test binary at `c2abd68`:
+`tsrs_api` lib unit tests 27 (mostly the checker lane's), `batch_test` 1, `callbackfs_test` 2, `config_test` 7,
+`module_resolution_test` 2, `program_test` 9, `requestfs_test` 6, `sourcefile_test` 3, `transpile_test` 2
+(`tsrs_api` total 59); `tsrs_project` 102 (2 ignored); `tsrs_lsp` 41. "197"/"202" in earlier reports are these
+three packages summed at different heads; a count restricted to core-owned `tsrs_api` integration binaries is
+32. All pass, 0 fail.
+
 ## Lanes and ownership
 
 | lane | branch | owns |
@@ -295,10 +304,17 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   request symlinks (Go `ExpandFileChanges`) are not applied. Callback filesystems (`--callbacks`, Go
   `callbackfs.go`) are ported in `crates/tsrs_api/src/callbackfs.rs`; like Go, invalid callback responses
   panic and become request errors (a panic on a worker thread can poison shared caches; not yet hardened).
+- API builds differ from `tsrs -b` in how they run, not in what they write: each `build` call uses a fresh
+  CLI orchestrator (the state Go's `recheckAllProjects` leaves; reuse across builds comes from the
+  `.tsbuildinfo` files on disk, as for any rebuild), runs one project at a time on the request thread, and
+  builds programs single-threaded, so `--builders` and checker parallelism do not speed up API builds and
+  `singleThreaded` is forced on (it does not appear in outputs or build info). The output files, `.tsbuildinfo`
+  included, and the exit status are byte-identical to `tsrs -b` on the same graph
+  (`api_build_outputs_match_cli_build`), and up-to-date rebuilds build nothing (`api::tests`). This is what
+  makes per-build memory freeable; it trades build throughput for bounded memory.
 - Build orchestration runs the CLI's `tsc -b` orchestrator in-process through `tsrs_api::build::BuildBackend`
-  (installed by `tsrs --api`; library sessions without a backend report the methods as unsupported). One
-  orchestrator per API handle, rechecked and graph-regenerated with unchanged tasks reused like Go's
-  `recheckAllProjects`; clean existence checks use the uncached filesystem.
+  (installed by `tsrs --api`; library sessions without a backend report the methods as unsupported). Clean uses
+  the last build's graph like Go; clean existence checks use the uncached filesystem.
 - Profiling (`startCPUProfile`, `stopCPUProfile`, `saveHeapProfile`) is not implemented (no pprof
   equivalent). `getCurrentLanguageServerSnapshot` returns Go's standalone-session client error; LSP-attached
   API sessions are not ported.

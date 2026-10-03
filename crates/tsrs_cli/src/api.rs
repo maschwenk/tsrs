@@ -372,6 +372,59 @@ mod memory_tests {
             .unwrap_or(0)
     }
 
+    /// API builds (fresh orchestrator, task regions, one builder, single-threaded programs) write the same files,
+    /// byte for byte, as `tsrs -b` on the same project graph.
+    #[test]
+    fn api_build_outputs_match_cli_build() {
+        let base = std::env::temp_dir().join(format!("tsrs-api-buildeq-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let mk = |root: &std::path::Path| {
+            let w = |p: &str, t: &str| {
+                std::fs::create_dir_all(root.join(p).parent().unwrap()).unwrap();
+                std::fs::write(root.join(p), t).unwrap();
+            };
+            w("core/tsconfig.json", r#"{ "compilerOptions": { "composite": true, "outDir": "out", "declarationMap": true, "sourceMap": true } }"#);
+            w("core/index.ts", "export const one = 1;\nexport class C { x = 1; private y = 'a'; }\n");
+            w("app/tsconfig.json", r#"{ "compilerOptions": { "composite": true, "outDir": "out", "strict": true }, "references": [{ "path": "../core" }] }"#);
+            w("app/main.ts", "import { one, C } from '../core/index';\nexport const two: number = one + 1;\nexport const c = new C();\nlet bad: string = 1;\n");
+        };
+        let cli = base.join("cli");
+        let api = base.join("api");
+        mk(&cli);
+        mk(&api);
+        // The tsrs binary next to this test binary (target/<profile>/tsrs; `cargo build -p tsrs_cli` first).
+        let exe = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("tsrs");
+        assert!(exe.exists(), "build the tsrs binary first: {}", exe.display());
+        let status = std::process::Command::new(&exe).args(["-b", "app"]).current_dir(&cli).status().unwrap();
+        let cwd = api.canonicalize().unwrap().to_string_lossy().into_owned();
+        let flags = ApiFlags { cwd, pipe_path: String::new(), callbacks: Vec::new(), case_sensitive: true, is_async: true, timing: false, run_external_code: false };
+        let (s, _) = new_api_session(&flags).unwrap();
+        let r = match s.handle_request("createBuildOrchestrator", br#"{"rootNames":["app"]}"#).unwrap() {
+            Response::Json(t) => t,
+            _ => unreachable!(),
+        };
+        assert!(r.contains("\"buildOrchestratorID\":1"), "{r}");
+        let b = match s.handle_request("build", br#"{"buildOrchestratorID":1}"#).unwrap() {
+            Response::Json(t) => t,
+            _ => unreachable!(),
+        };
+        assert!(b.contains(&format!("\"status\":{}", status.code().unwrap())), "cli exit {:?} vs api {b}", status.code());
+        let mut files = Vec::new();
+        for proj in ["core/out", "app/out"] {
+            for e in std::fs::read_dir(cli.join(proj)).unwrap() {
+                files.push(format!("{proj}/{}", e.unwrap().file_name().to_string_lossy()));
+            }
+        }
+        files.sort();
+        assert!(files.len() >= 8, "{files:?}");
+        for f in &files {
+            let a = std::fs::read(cli.join(f)).unwrap();
+            let b = std::fs::read(api.join(f)).unwrap_or_else(|_| panic!("api build missing {f}"));
+            assert!(a == b, "{f} differs between tsrs -b and the API build");
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
     /// Repeated rebuilds on one API build handle (an edit between builds forces a real program build).
     #[test]
     fn repeated_builds_memory() {
