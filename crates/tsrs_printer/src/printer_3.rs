@@ -456,7 +456,7 @@ impl Printer {
                 self.unique_helper_names = Some(FxHashMap::default());
             }
             self.external_helpers_module_name = self.emit_context.get_external_helpers_module_name(source_file);
-            self.set_source_map_source(source_file);
+            self.set_source_map_source(source_file.get());
         }
 
         // !!!
@@ -467,10 +467,16 @@ impl Printer {
         let saved_writer = self.writer.take();
         let saved_unique_helper_names = self.unique_helper_names.take();
         let saved_source_maps_disabled = self.source_maps_disabled;
+        let saved_source_map_generator = self.source_map_generator;
         let saved_source_map_source = self.source_map_source;
+        let saved_source_map_source_index = self.source_map_source_index;
+        let saved_source_map_line_char_cache = self.source_map_line_char_cache.take();
 
         self.source_maps_disabled = source_map_generator.is_none();
+        self.source_map_generator = source_map_generator.map(|g| g as *mut SourceMapGenerator);
         self.source_map_source = None;
+        self.source_map_source_index = -1;
+        self.source_map_line_char_cache = None;
         self.text_state.target.set(self.options.target);
 
         self.set_source_file(source_file);
@@ -601,7 +607,10 @@ impl Printer {
         self.writer = saved_writer;
         self.unique_helper_names = saved_unique_helper_names;
         self.source_maps_disabled = saved_source_maps_disabled;
+        self.source_map_generator = saved_source_map_generator;
         self.source_map_source = saved_source_map_source;
+        self.source_map_source_index = saved_source_map_source_index;
+        self.source_map_line_char_cache = saved_source_map_line_char_cache;
     }
 }
 
@@ -1137,37 +1146,109 @@ impl Printer {
 //
 // Source Maps
 //
-// Source map emit is not ported: `Printer::write` never receives a generator, so `source_maps_disabled` is always
-// set during a write and `source_map_source` stays nil. The functions keep Go's guards; the generator calls past
-// them are unreachable.
 
 impl Printer {
-    pub(crate) fn set_source_map_source(&mut self, source: P<SourceFile>) {
+    // The generator borrowed by `write` (Go keeps the `*sourcemap.Generator` in a field for the duration of the call).
+    fn source_map_generator(&mut self) -> &mut SourceMapGenerator {
+        // SAFETY: `source_map_generator` is only set by `write`, from a `&mut SourceMapGenerator` that outlives the
+        // call, and is restored before `write` returns; the printer is the only user of that borrow meanwhile.
+        unsafe { &mut *self.source_map_generator.unwrap() }
+    }
+
+    // printer.go:5812
+    pub(crate) fn set_source_map_source(&mut self, source: SourceMapSource) {
         if self.source_maps_disabled {
             return;
         }
 
-        unreachable!("source maps are not ported");
-    }
-
-    pub(crate) fn emit_pos(&mut self, pos: i32) {
-        if self.source_maps_disabled || self.source_map_source.is_none() || position_is_synthesized(pos) {
+        self.source_map_source = Some(source);
+        self.source_map_line_char_cache = Some(new_line_character_cache(source));
+        if same_source_map_source(self.most_recent_source_map_source, Some(source)) {
+            self.source_map_source_index = self.most_recent_source_map_source_index;
             return;
         }
 
-        unreachable!("source maps are not ported");
+        self.source_map_source_is_json = tspath::file_extension_is(source.file_name(), tspath::EXTENSION_JSON);
+        if self.source_map_source_is_json {
+            return;
+        }
+
+        self.source_map_source_index = self.source_map_generator().add_source(source.file_name());
+        if self.options.inline_sources {
+            let index = self.source_map_source_index;
+            if let Err(err) = self.source_map_generator().set_source_content(index, source.text()) {
+                panic!("{}", err);
+            }
+        }
+
+        self.most_recent_source_map_source = Some(source);
+        self.most_recent_source_map_source_index = self.source_map_source_index;
     }
 
-    pub(crate) fn emit_source_pos(&mut self, source: Option<P<SourceFile>>, pos: i32) {
-        if source != self.source_map_source {
+    // printer.go:5840
+    pub(crate) fn emit_pos(&mut self, pos: i32) {
+        if self.source_maps_disabled || self.source_map_source.is_none() || self.source_map_generator.is_none() || self.source_map_source_is_json || position_is_synthesized(pos) {
+            return;
+        }
+
+        let mut pos = pos;
+        let source = self.source_map_source.unwrap();
+        let mut source_index = self.source_map_source_index;
+        // Go shares the cache through a pointer; `mapped_cache` holds the mapped source's fresh cache instead.
+        let mut mapped_cache: Option<lineCharacterCache> = None;
+        if let Some(map_source_position) = &self.print_handlers.map_source_position {
+            let Some((mapped_source, mapped_pos)) = map_source_position(source, pos) else {
+                let (line, column) = (self.writer().get_line(), self.writer().get_column());
+                if let Err(err) = self.source_map_generator().add_generated_mapping(line, column) {
+                    panic!("{}", err);
+                }
+                return;
+            };
+            pos = mapped_pos;
+            if !same_source_map_source(Some(mapped_source), Some(source)) {
+                let saved_source = self.source_map_source;
+                let saved_source_index = self.source_map_source_index;
+                let saved_source_is_json = self.source_map_source_is_json;
+                let saved_line_char_cache = self.source_map_line_char_cache.take();
+                self.set_source_map_source(mapped_source);
+                source_index = self.source_map_source_index;
+                mapped_cache = self.source_map_line_char_cache.take();
+                self.source_map_source = saved_source;
+                self.source_map_source_index = saved_source_index;
+                self.source_map_source_is_json = saved_source_is_json;
+                self.source_map_line_char_cache = saved_line_char_cache;
+            }
+        }
+
+        let (source_line, source_character) = match &mut mapped_cache {
+            Some(cache) => cache.get_line_and_character(pos),
+            None => self.source_map_line_char_cache.as_mut().unwrap().get_line_and_character(pos),
+        };
+        let (line, column) = (self.writer().get_line(), self.writer().get_column());
+        if let Err(err) = self.source_map_generator().add_source_mapping(line, column, source_index, source_line, source_character) {
+            panic!("{}", err);
+        }
+    }
+
+    // TODO: Support emitting nameIndex for source maps (Go emitPosName is commented out)
+
+    // printer.go:5904
+    pub(crate) fn emit_source_pos(&mut self, source: Option<SourceMapSource>, pos: i32) {
+        if !same_source_map_source(source, self.source_map_source) {
             let saved_source_map_source = self.source_map_source;
+            let saved_source_map_source_index = self.source_map_source_index;
+            let saved_source_map_line_char_cache = self.source_map_line_char_cache.take();
             self.set_source_map_source(source.unwrap());
             self.emit_pos(pos);
             self.source_map_source = saved_source_map_source;
+            self.source_map_source_index = saved_source_map_source_index;
+            self.source_map_line_char_cache = saved_source_map_line_char_cache;
         } else {
             self.emit_pos(pos);
         }
     }
+
+    // TODO: Support emitting nameIndex for source maps (Go emitSourcePosName is commented out)
 
     pub(crate) fn emit_source_maps_before_node(&mut self, node: P<Node>) -> Option<sourceMapState> {
         if !self.should_emit_source_maps(node) {

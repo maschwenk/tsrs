@@ -311,22 +311,55 @@ mod emit {
         fn print_source_file(&mut self, js_file_path: &str, source_map_file_path: &str, source_file: P<SourceFile>, mut printer_: Printer, map_options: &CompilerOptions, should_emit_source_maps: bool) {
             // !!! sourceMapGenerator
             let options = self.host.options();
-            let source_map_generator: Option<&mut SourceMapGenerator> = if should_emit_source_maps {
-                // TODO(emit/sourcemaps): sourcemap.NewGenerator(GetBaseFileName(NormalizeSlashes(jsFilePath)),
-                // getSourceRoot(mapOptions), e.getSourceMapDirectory(mapOptions, jsFilePath, sourceFile), ...).
-                let _ = (get_source_root(map_options), self.get_source_map_directory(map_options, js_file_path, Some(source_file)));
-                unimplemented!("emit: sourcemap/generator.go not ported (TODO(emit/sourcemaps))")
+            let mut source_map_generator: Option<SourceMapGenerator> = None;
+            if should_emit_source_maps {
+                source_map_generator = Some(tsrs_sourcemap::new_generator(
+                    &tspath::get_base_file_name(&tspath::normalize_slashes(js_file_path)),
+                    &get_source_root(map_options),
+                    &self.get_source_map_directory(map_options, js_file_path, Some(source_file)),
+                    ComparePathsOptions { use_case_sensitive_file_names: self.host.use_case_sensitive_file_names(), current_directory: self.host.get_current_directory().to_string() },
+                ));
+            }
+
+            printer_.write(source_file.as_node(), Some(source_file), &mut *self.writer, source_map_generator.as_mut());
+
+            let mut source_map_url_pos: i32 = -1;
+            if let Some(source_map_generator) = &mut source_map_generator {
+                if map_options.source_map.is_true() || map_options.inline_source_map.is_true() {
+                    self.emit_result.source_maps.push(SourceMapEmitResult {
+                        input_source_file_names: source_map_generator.sources().to_vec(),
+                        source_map: source_map_generator.raw_source_map(),
+                        generated_file: js_file_path.to_string(),
+                    });
+                }
+
+                let source_mapping_url = self.get_source_mapping_url(map_options, source_map_generator, js_file_path, source_map_file_path, Some(source_file));
+
+                if !source_mapping_url.is_empty() {
+                    if !self.writer.is_at_start_of_line() {
+                        self.writer.raw_write(if options.new_line == NewLineKind::CRLF { "\r\n" } else { "\n" });
+                    }
+                    source_map_url_pos = self.writer.get_text_pos();
+                    self.writer.write_comment("//# sourceMappingURL=");
+                    self.writer.write_comment(&source_mapping_url);
+                }
+
+                // Write the source map
+                if !source_map_file_path.is_empty() {
+                    let source_map = source_map_generator.string();
+                    let err = self.write_text(source_map_file_path, &source_map, &mut WriteFileData { source_file: Some(self.source_file), ..Default::default() });
+                    match err {
+                        Err(err) => {
+                            self.emitter_diagnostics.add(new_compiler_diagnostic(&diagnostics::Could_not_write_file_0_Colon_1, &[&js_file_path, &err]));
+                        }
+                        Ok(()) => {
+                            self.emit_result.emitted_files.push(source_map_file_path.to_string());
+                        }
+                    }
+                }
             } else {
-                None
-            };
-
-            printer_.write(source_file.as_node(), Some(source_file), &mut *self.writer, source_map_generator);
-
-            let source_map_url_pos: i32 = -1;
-            // Go: `if sourceMapGenerator != nil { ... }` (source maps, the //# sourceMappingURL comment and the .map
-            // file); unreachable until the generator exists (TODO(emit/sourcemaps)).
-            let _ = (source_map_file_path, &self.emit_result.source_maps as &Vec<SourceMapEmitResult>);
-            self.writer.write_line();
+                self.writer.write_line();
+            }
 
             // Write the output file
             let mut text = self.writer.string();
@@ -391,12 +424,18 @@ mod emit {
             tspath::get_directory_path(&tspath::normalize_path(file_path)).to_string()
         }
 
-        // emitter.go:488. Called by the source-map branch of print_source_file (TODO(emit/sourcemaps)); the
-        // generator's Base64DataURL is part of that wave.
-        pub(crate) fn get_source_mapping_url(&self, map_options: &CompilerOptions, source_map_file_path: &str, file_path: &str, source_file: Option<P<SourceFile>>) -> String {
+        // emitter.go:443
+        pub(crate) fn get_source_mapping_url(
+            &self,
+            map_options: &CompilerOptions,
+            source_map_generator: &mut SourceMapGenerator,
+            file_path: &str,
+            source_map_file_path: &str,
+            source_file: Option<P<SourceFile>>,
+        ) -> String {
             if map_options.inline_source_map.is_true() {
                 // Encode the sourceMap into the sourceMap url
-                unimplemented!("emit: sourcemap/generator.go not ported (TODO(emit/sourcemaps): Base64DataURL)")
+                return source_map_generator.base64_data_url();
             }
 
             let source_map_file = tspath::get_base_file_name(&tspath::normalize_slashes(source_map_file_path)).to_string();
@@ -431,6 +470,35 @@ mod emit {
                 }
             }
             stringutil::encode_uri(&source_map_file)
+        }
+    }
+
+    // emitter.go:295
+    // Go `declarationMapSource`: the original (content-mapped) source a declaration map points at.
+    pub(crate) struct declarationMapSource {
+        pub(crate) file_name: String,
+        pub(crate) text: &'static str,
+        pub(crate) line_map: Vec<tsrs_core::TextPos>,
+    }
+
+    // emitter.go:301
+    pub(crate) fn new_declaration_map_source(source_file: P<SourceFile>) -> &'static declarationMapSource {
+        let text = source_file.original_text();
+        P::new(declarationMapSource { file_name: source_file.original_file_name().to_string(), text, line_map: tsrs_core::compute_ecma_line_starts(text) }).get()
+    }
+
+    impl tsrs_sourcemap::Source for declarationMapSource {
+        // emitter.go:310
+        fn file_name(&self) -> &str {
+            &self.file_name
+        }
+        // emitter.go:311
+        fn text(&self) -> &str {
+            self.text
+        }
+        // emitter.go:312
+        fn ecma_line_map(&self) -> &[tsrs_core::TextPos] {
+            &self.line_map
         }
     }
 

@@ -11,8 +11,11 @@
 # go), OUT_GO (/tmp/emit-go),
 # OUT_RS (/tmp/emit-rs). A package built with `tsc -p <file>` uses that config; `tsc --build`/`-b` packages are
 # emitted with `-p` on their tsconfig until `-b` is ported (TODO(emit/incremental)).
-# Output: one line per package (identical/different/missing/extra counts, exit codes, diagnostics agreement,
-# tsrs panic) and totals; the per-package JSON lines go to $OUT_RS.results.jsonl.
+# Output: one line per selected package (verdict, identical/different/missing/extra counts, exit codes, diagnostics
+# agreement, tsrs panic) and totals (summarize.py); JSON rows in $OUT_RS.results.jsonl. Exit status: 0 only if every
+# selected package has one result and it is identical (nonzero compiler statuses are fine when both agree); 1 on any
+# mismatch, panic, timeout, missing/duplicate/unexpected/malformed result or empty selection; 2/3 for the
+# read-only guard.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="${1:?usage: monorepo.sh <monorepo root> [-j N] [--filter REGEX] [-- extra flags]}"
@@ -72,10 +75,18 @@ for pj in sorted(glob.glob(os.path.join(root, "apps/*/package.json")) + glob.glo
 EOF
 )"
 
+if [ -z "$(printf '%s' "$list" | tr -d '[:space:]')" ]; then
+  echo "ERROR: no package selected (filter '${filter}'); refusing to report success" >&2
+  exit 1
+fi
+selected="$OUT_RS.selected.txt"
+printf '%s\n' "$list" | grep -v '^$' | cut -f1 | sed 's|/|__|g' > "$selected"
 results="$OUT_RS.results.jsonl"
 : > "$results"
 export here OUT_GO OUT_RS
 export extra_flags="${extra[*]:-}"
+# run.py exits 1 on any difference; its verdict is re-derived by summarize.py from the JSON row, and a run.py that
+# dies without a row is caught there as a missing result.
 printf '%s\n' "$list" | grep -v '^$' | while IFS=$'\t' read -r rel cfg; do printf '%s\0%s\0' "$rel" "$cfg"; done |
   xargs -0 -n 2 -P "$jobs" bash -c 'name="${0//\//__}"; python3 "$here/run.py" "$1" --name "$name" --go-out "$OUT_GO/$name" --rs-out "$OUT_RS/$name" --json -- $extra_flags || true' >> "$results"
 
@@ -86,19 +97,5 @@ if [ -n "$after" ]; then
   exit 3
 fi
 
-python3 - "$results" <<'EOF'
-import json, sys
-rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip().startswith("{")]
-rows.sort(key=lambda r: r["name"])
-tot = {"identical": 0, "different": 0, "missing": 0, "extra": 0}
-full = 0
-for r in rows:
-    for k in tot:
-        tot[k] += r[k]
-    same = r["different"] == 0 and r["missing"] == 0 and r["extra"] == 0 and r["ref_status"] == r["rs_status"] and r["diagnostics_match"]
-    full += same
-    note = f"  [{r['rs_panic'][:90]}]" if r["rs_panic"] else ""
-    print(f"{r['name']:<45} identical {r['identical']:>5}  different {r['different']:>4}  not-emitted {r['missing']:>5}  extra {r['extra']:>3}  exit {r['ref_status']}/{r['rs_status']}  diags {'=' if r['diagnostics_match'] else '!='}{note}")
-print(f"packages: {len(rows)}, fully identical {full}; files: {tot['identical']} identical, {tot['different']} different, {tot['missing']} not emitted by tsrs, {tot['extra']} extra")
-EOF
 echo "monorepo git status unchanged (empty before and after)"
+python3 "$here/summarize.py" "$selected" "$results"
