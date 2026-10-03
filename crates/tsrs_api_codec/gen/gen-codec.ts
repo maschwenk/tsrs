@@ -453,7 +453,9 @@ function genCreateChildrenNode() {
             const cp = info.childProps[0];
             const ct = childType(cp);
             const v = ident(cp.goParamName());
-            if (ct === "rawNodeList") pre.push(`let ${v} = alloc_vec(child_indices.iter().map(|&ci| self.node_at(ci)).collect::<Result<Vec<_>, _>>()?);`);
+            // The pinned Go decoder fills `d.allocNodeSlice(n)` (a zero-length slice) by index, so it panics with
+            // "index out of range [0] with length 0" for any non-empty raw list; reproduce that failure.
+            if (ct === "rawNodeList") pre.push(`if !child_indices.is_empty() { return Err(DecodeError::GoDecoderPanic(format!("runtime error: index out of range [0] with length 0"))); }`, `let ${v}: &'static [P<Node>] = &[];`);
             else if (ct === "nodeList") pre.push(hasCommonData ? `let ${v} = from_list(self.list_at(child_indices.first().copied().unwrap_or(0))?)?;` : `let ${v} = from_list(self.single_node_list_child(child_indices)?)?;`);
             else if (ct === "modifierList") pre.push(`let ${v} = self.modifier_list_at(child_indices.first().copied().unwrap_or(0))?;`);
             else pre.push(`let ${v} = from_node(self.single_child(child_indices)?)?;`);

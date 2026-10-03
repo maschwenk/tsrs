@@ -1,6 +1,16 @@
 {
-  "oracle": "typescript@7.1.0-dev.20260930.4",
-  "gitHead": "9adc871ff47f79b3e99ff2b1cbe9efb140d76af8",
+  "server": {
+    "source": "microsoft/TypeScript",
+    "commit": "b85298b6a81f772d080b0455de0ca9d744cd6fd6",
+    "build": "cd ts-ref/tsc && GOWORK=off go build ./cmd/tsc",
+    "go": "go version go1.27.1 linux/amd64",
+    "version": "Version 7.1.0-dev",
+    "sha256": "ca0343b4af5a75949a55bd1b36d1ec8e4345194f1cfec3fe5b9309796a0d2be2"
+  },
+  "client": {
+    "package": "typescript@7.1.0-dev.20260930.4",
+    "gitHead": "9adc871ff47f79b3e99ff2b1cbe9efb140d76af8"
+  },
   "files": {
     "basic.ts": {
       "bytes": 1316,
@@ -62,5 +72,37 @@
       "clientBytes": 1232,
       "inline": false
     }
+  },
+  "print": {
+    "basic.ts": "printed",
+    "basic.ts.client": "printed",
+    "complex.ts": "printed",
+    "complex.ts.client": "printed",
+    "declarations.d.ts": "printed",
+    "declarations.d.ts.client": "printed",
+    "empty.ts": "printed",
+    "empty.ts.client": "printed",
+    "errors.ts": "printed",
+    "errors.ts.client": "printed",
+    "jsdoc_checked.js": "printed",
+    "jsdoc_checked.js.client": "printed",
+    "jsdoc_tags.js": "error",
+    "jsdoc_tags.js.client": "error",
+    "jsx_component.tsx": "printed",
+    "jsx_component.tsx.client": "printed",
+    "missing.js": "printed",
+    "missing.js.client": "printed",
+    "more_syntax.ts": "printed",
+    "more_syntax.ts.client": "printed",
+    "unicode_escapes.ts": "printed",
+    "unicode_escapes.ts.client": "printed",
+    "unicode_text.ts": "printed",
+    "unicode_text.ts.client": "printed",
+    "synthetic_union": "printed",
+    "synthetic_function": "printed",
+    "synthetic_source_file_empty_text": "printed",
+    "synthetic_source_file_with_text": "printed",
+    "mixed_unicode_text_ts": "printed",
+    "mixed_complex_ts": "printed"
   }
 }

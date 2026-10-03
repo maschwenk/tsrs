@@ -16,4 +16,5 @@ rustc-hash.workspace = true
 [dev-dependencies]
 tsrs_parser.workspace = true
 tsrs_binder.workspace = true
+tsrs_printer.workspace = true
 xxhash-rust = { version = "0.8", features = ["xxh3"] }

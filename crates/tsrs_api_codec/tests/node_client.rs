@@ -79,11 +79,39 @@ fn rust_encodings_decode_in_the_pinned_js_client() {
         let _scope = region.enter();
         let root = synthesized(&NodeFactory::default());
         let (bytes, _) = encode_node(root, None).unwrap();
+        std::fs::write(out_dir.join("synthetic.union.rust.bin"), &bytes).unwrap();
         let mut lines = Vec::new();
         expected_lines(root, 0, &mut lines);
-        std::fs::write(out_dir.join("synthetic.union.rust.bin"), bytes).unwrap();
         std::fs::write(out_dir.join("synthetic.union.expected.txt"), lines.join("\n") + "\n").unwrap();
+        // What a Rust printNode (decode + tsrs_printer) prints for these bytes; node_client.mjs compares it with the
+        // pinned server's printNode when TSRS_CODEC_TSC is set.
+        let decoded = decode_nodes(&bytes).unwrap();
+        let text = {
+            let _scope = decoded.region().enter();
+            tsrs_printer::new_printer(Default::default(), Default::default(), None).emit(decoded.root(), None)
+        };
+        std::fs::write(out_dir.join("synthetic.union.rust.print.txt"), text).unwrap();
     }
+    // Client-encoded synthesized/mixed trees (0xFFFFFFFF positions) decoded and re-encoded in Rust must look to
+    // the client exactly like the pinned Go DecodeNodes + EncodeNode result (tests/golden/reencode).
+    let print_dir = crate_dir().join("tests/golden/print");
+    let mut reencoded = 0;
+    for e in std::fs::read_dir(&print_dir).unwrap() {
+        let f = e.unwrap().file_name().into_string().unwrap();
+        let Some(case) = f.strip_suffix(".client.bin") else { continue };
+        let go = crate_dir().join(format!("tests/golden/reencode/{case}.client.goreencoded.bin"));
+        let bytes = std::fs::read(print_dir.join(&f)).unwrap();
+        let decoded = decode_nodes(&bytes).unwrap();
+        let (re, _) = {
+            let _scope = decoded.region().enter();
+            let root = decoded.root();
+            if root.kind() == Kind::SourceFile { encode_source_file(root.as_source_file()) } else { encode_node(root, None) }.unwrap()
+        };
+        std::fs::copy(&go, out_dir.join(format!("print_{case}.orig.bin"))).unwrap();
+        std::fs::write(out_dir.join(format!("print_{case}.rust.bin")), &re).unwrap();
+        reencoded += 1;
+    }
+    assert!(reencoded >= 6);
     let script = crate_dir().join("tests/node_client.mjs");
     let output = Command::new("node").arg(script).arg(&oracle).arg(&out_dir).arg(crate_dir().join("tests/golden")).output().expect("run node");
     let stdout = String::from_utf8_lossy(&output.stdout);

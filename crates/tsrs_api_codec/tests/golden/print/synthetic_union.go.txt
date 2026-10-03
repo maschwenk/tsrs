@@ -1,0 +1,1 @@
+Map<string, "a\uD800b"> | ((x?: number) => readonly boolean[]) | 42

@@ -12,7 +12,8 @@ use std::sync::OnceLock;
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::*;
-use tsrs_core::P;
+use tsrs_core::goslices::sort_func;
+use tsrs_core::{binary_search_unique_func, P};
 
 use crate::format::*;
 use crate::generated::{children_property_mask, node_common_data, node_data_type, record_extended_data, record_node_strings};
@@ -50,22 +51,28 @@ impl NodeIndexTable {
         NodeIndexTable { nodes, sorted: OnceLock::new() }
     }
 
-    /// Go `GetIndex`: the encoder index of `node`, or 0 when the node is not in the table. Go sorts by node id;
-    /// any total order on node identity gives the same result, so this sorts by address (no id side effects).
-    /// A node can occur at several indices (a JSDoc type reparsed into its host declaration is visited both
-    /// there and under its JSDoc comment); Go then returns whichever its binary search hits, this returns the
-    /// lowest index. Every such index resolves back to the same node.
+    /// Go `GetIndex`, ported exactly: on the first call the non-nil indices are sorted by node id with Go's
+    /// `slices.SortFunc` (pdqsort, `tsrs_core::goslices::sort_func`), assigning ids lazily in comparison order
+    /// like `ast.GetNodeId`, then looked up with `core.BinarySearchUniqueFunc`. A node can occur at several
+    /// indices (a JSDoc comment hosting `@typedef`/`@callback` is encoded under every declaration it is
+    /// attached to); which of them is returned is decided by that sort and search exactly as in Go, so the
+    /// handles sent to clients match. Returns 0 when the node is not in the table.
     pub fn get_index(&self, node: P<Node>) -> u32 {
         let sorted = self.sorted.get_or_init(|| {
             let mut idx: Vec<u32> = (0..self.nodes.len() as u32).filter(|&i| self.nodes[i as usize].is_some()).collect();
-            idx.sort_unstable_by_key(|&i| (self.nodes[i as usize].unwrap().addr(), i));
+            let nodes = &self.nodes;
+            sort_func(&mut idx, |&a, &b| {
+                let (ia, ib) = (get_node_id(nodes[a as usize].unwrap()), get_node_id(nodes[b as usize].unwrap()));
+                ia.cmp(&ib) as i32
+            });
             idx
         });
-        let target = node.addr();
-        let at = sorted.partition_point(|&i| self.nodes[i as usize].unwrap().addr() < target);
-        match sorted.get(at) {
-            Some(&i) if self.nodes[i as usize].unwrap().addr() == target => i,
-            _ => 0,
+        let target = get_node_id(node);
+        let (i, found) = binary_search_unique_func(sorted, |_, &el| get_node_id(self.nodes[el as usize].unwrap()).cmp(&target) as i32);
+        if found {
+            sorted[i]
+        } else {
+            0
         }
     }
 

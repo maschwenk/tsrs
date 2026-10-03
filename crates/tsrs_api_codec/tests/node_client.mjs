@@ -44,6 +44,20 @@ let files = 0, lines = 0, failures = 0;
 for (const entry of fs.readdirSync(rustDir).filter(f => f.endsWith(".rust.bin")).sort()) {
     const name = entry.slice(0, -".rust.bin".length);
     const rust = new Uint8Array(fs.readFileSync(path.join(rustDir, entry)));
+    if (name.startsWith("print_")) {
+        const orig = new Uint8Array(fs.readFileSync(path.join(rustDir, `${name}.orig.bin`)));
+        const a = [], b = [];
+        view(decodeNode(orig), 0, a);
+        view(decodeNode(rust), 0, b);
+        files++;
+        lines += b.length;
+        const i = a.findIndex((l, k) => l !== b[k]);
+        if (i >= 0 || a.length !== b.length) {
+            failures++;
+            console.error(`MISMATCH ${name} at line ${i}:\n  go re-enc:   ${a[i]}\n  rust re-enc:  ${b[i]}`);
+        }
+        continue;
+    }
     if (name.startsWith("synthetic.")) {
         const expected = fs.readFileSync(path.join(rustDir, `${name}.expected.txt`), "utf8").trimEnd().split("\n");
         const actual = [];
@@ -72,5 +86,24 @@ for (const entry of fs.readdirSync(rustDir).filter(f => f.endsWith(".rust.bin"))
         console.error(`MISMATCH ${name} at line ${i}:\n  go:   ${a[i]}\n  rust: ${b[i]}`);
     }
 }
+// With the pinned server available, its printNode of the Rust-encoded synthesized trees must equal what
+// decode_nodes + tsrs_printer print for the same bytes.
+let printed = 0;
+if (process.env.TSRS_CODEC_TSC) {
+    const { API } = await imp("dist/api/sync/api.js");
+    const api = new API({ cwd: "/", tsserverPath: process.env.TSRS_CODEC_TSC });
+    for (const entry of fs.readdirSync(rustDir).filter(f => f.startsWith("synthetic.") && f.endsWith(".rust.print.txt"))) {
+        const base = entry.slice(0, -".rust.print.txt".length);
+        const go = api.client.apiRequest("printNode", { data: fs.readFileSync(path.join(rustDir, `${base}.rust.bin`)).toString("base64") });
+        const rust = fs.readFileSync(path.join(rustDir, entry), "utf8");
+        printed++;
+        if (go !== rust) {
+            failures++;
+            console.error(`PRINT MISMATCH ${base}\n  go:   ${JSON.stringify(go)}\n  rust: ${JSON.stringify(rust)}`);
+        }
+    }
+    api.close();
+}
+console.log(`pinned server printNode of rust synthesized encodings: ${printed} compared`);
 console.log(`node client: ${files} encodings, ${lines} lines compared, ${failures} mismatches`);
 process.exit(failures === 0 && files > 0 ? 0 : 1);

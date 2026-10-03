@@ -306,6 +306,7 @@ dependencies = [
  "tsrs_binder",
  "tsrs_core",
  "tsrs_parser",
+ "tsrs_printer",
  "xxhash-rust",
 ]
 
