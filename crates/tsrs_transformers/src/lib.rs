@@ -27,7 +27,6 @@ pub mod nodebuilder {
     pub use tsrs_checker::{Flags, InternalFlags};
 }
 
-mod astutilities;
 mod chain;
 mod destructuring;
 mod emithost;
@@ -36,7 +35,6 @@ mod resolver;
 mod transformer;
 mod utilities;
 
-pub use astutilities::*;
 pub use chain::*;
 pub use destructuring::*;
 pub use emithost::*;
