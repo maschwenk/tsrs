@@ -122,7 +122,7 @@ fn null_params_are_the_zero_value_struct() {
     assert_eq!(r, r2);
     // An explicit null DocumentIdentifier is a decode error (Go's custom decoder), unlike an absent field.
     let e = call_err(&s, "readConfigFile", r#"{"file":null}"#);
-    assert_eq!(e, "api: invalid request: failed to unmarshal *api.ReadConfigFileParams: json: DocumentIdentifier: expected string or object, got null");
+    assert_eq!(e, "api: invalid request: failed to unmarshal *api.ReadConfigFileParams: json: cannot unmarshal into Go api.DocumentIdentifier within \"/file\": DocumentIdentifier: expected string or object, got null");
     let e = call_err(&s, "getDefaultProjectForFile", r#"{"snapshot":0,"file":null}"#);
     assert!(e.starts_with("api: invalid request: failed to unmarshal *api.GetDefaultProjectForFileParams:"), "{e}");
     // parseConfigFile({}): a client error (cannot read the file), not an invalid request.
@@ -135,4 +135,38 @@ fn null_params_are_the_zero_value_struct() {
         let e = call_err(&s, method, r#"{"file":{"scriptKind":"x"}}"#);
         assert!(e.starts_with("api: invalid request:"), "{method}: {e}");
     }
+}
+
+/// Every field of the method's pinned params struct is decoded before lookups; unknown keys are ignored
+/// (runtime review of c2abd68: payload matrix in crates/tsrs_api_transport/INTEGRATION.md).
+#[test]
+fn params_decode_before_lookups_and_ignore_unknown_keys() {
+    let dir = TempDir::new("predecode");
+    let s = session(&dir.dir(), false);
+    for (payload, field) in [
+        (r#"{"snapshot":"x"}"#, "/snapshot"),
+        (r#"{"snapshot":"x","moduleName":"m"}"#, "/snapshot"),
+        (r#"{"resolver":"x"}"#, "/resolver"),
+        (r#"{"resolutionMode":"x"}"#, "/resolutionMode"),
+        (r#"{"inProgressSnapshot":-1}"#, "/inProgressSnapshot"),
+    ] {
+        let e = call_err(&s, "resolveModuleName", payload);
+        assert!(e.starts_with("api: invalid request: failed to unmarshal *api.ResolveModuleNameParams: json:") && e.contains(field), "{payload}: {e}");
+    }
+    // A malformed file wins over an unknown snapshot, for checker-lane methods too.
+    for method in ["getSymbolAtPosition", "getTypeAtPosition", "getSymbolOfSourceFile", "getCompletionsAtPosition", "getSourceFile"] {
+        let e = call_err(&s, method, r#"{"snapshot":999,"project":"p","file":null}"#);
+        assert!(e.starts_with("api: invalid request:") && e.contains("DocumentIdentifier: expected string or object, got null"), "{method}: {e}");
+        // An absent file is the zero value; the lookup error comes back.
+        let e = call_err(&s, method, r#"{"snapshot":999,"project":"p"}"#);
+        assert!(e.starts_with("api: client error:"), "{method}: {e}");
+    }
+    // Unknown keys are ignored (Go): `file` is not a field of these methods.
+    call(&s, "transpileModule", r#"{"input":"let x = 1;","options":{},"file":7}"#);
+    call(&s, "parseCommandLine", r#"{"commandLine":[],"file":null}"#);
+    let r = call(&s, "createSnapshot", r#"{"file":null,"extra":[1]}"#);
+    assert!(matches!(get(&r, "snapshot"), tsrs_core::json::Value::Number(_)));
+    call(&s, "batchRequests", r#"{"requests":[],"file":null}"#);
+    let e = call_err(&s, "release", r#"{"snapshot":0,"file":null}"#);
+    assert!(e.contains("empty handle"), "{e}");
 }

@@ -331,6 +331,10 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   lease the same way. Request params are validated with Go's strict JSON (unpaired surrogates, duplicate
   members) before decoding; `null` params decode to the zero-value struct. Field-type mismatches have Go's
   invalid-request class and `failed to unmarshal *api.<Type>` prefix, but not Go's exact jsontext wording.
+  Every method's top-level params fields (generated from pinned `proto.go` into `paramfields.rs`) are
+  checked in Go's field order before any lookup, for core and checker methods alike (`predecode.rs`);
+  unknown keys are ignored. Nested structs (compiler options, request filesystems, symbol references) are
+  decoded by their handlers, so a nested type error can still lose to an earlier lookup error.
 - Memory: snapshots free their programs, checkers, emit allocations and a full build's shared data
   (processed files, project-reference mapper, loader and dts-faking resolution hosts) with the build's base
   region (createSnapshot+release cycles stay flat; `tests/memory_test.rs`). The first attempt at freeing

@@ -17,6 +17,8 @@ pub mod handler;
 pub mod module_resolution;
 pub mod methods;
 pub mod printing;
+pub(crate) mod paramfields;
+pub(crate) mod predecode;
 pub mod program;
 pub mod session;
 pub mod requestfs;
