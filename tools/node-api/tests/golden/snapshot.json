@@ -1,0 +1,129 @@
+{
+  "before": {
+    "names": [
+      "/src/a.ts",
+      "/src/b.ts",
+      "/src/c.ts"
+    ],
+    "bDiags": [
+      [
+        2307,
+        "Cannot find module './later' or its corresponding type declarations."
+      ]
+    ],
+    "typeAtUse": "number",
+    "aText": "export const value: number = 1;\n",
+    "c": "present"
+  },
+  "fresh": {
+    "names": [
+      "/src/a.ts",
+      "/src/b.ts",
+      "/src/later.ts"
+    ],
+    "bDiags": [],
+    "typeAtUse": "string",
+    "aText": "export const value: string = \"s\";\n",
+    "c": "undefined"
+  },
+  "fresh.afterOldDisposed": {
+    "names": [
+      "/src/a.ts",
+      "/src/b.ts",
+      "/src/later.ts"
+    ],
+    "bDiags": [],
+    "typeAtUse": "string",
+    "aText": "export const value: string = \"s\";\n",
+    "c": "undefined"
+  },
+  "lazy": {
+    "names": [
+      "/src/a.ts",
+      "/src/b.ts",
+      "/src/c.ts"
+    ],
+    "bDiags": [
+      [
+        2307,
+        "Cannot find module './later' or its corresponding type declarations."
+      ]
+    ],
+    "typeAtUse": "number",
+    "aText": "export const value: number = 1;\n",
+    "c": "present"
+  },
+  "new": {
+    "names": [
+      "/src/a.ts",
+      "/src/b.ts",
+      "/src/later.ts"
+    ],
+    "bDiags": [],
+    "typeAtUse": "string",
+    "aText": "export const value: string = \"s\";\n",
+    "c": "undefined"
+  },
+  "old.afterNewDisposed": {
+    "names": [
+      "/src/a.ts",
+      "/src/b.ts",
+      "/src/c.ts"
+    ],
+    "bDiags": [
+      [
+        2307,
+        "Cannot find module './later' or its corresponding type declarations."
+      ]
+    ],
+    "typeAtUse": "number",
+    "aText": "export const value: number = 1;\n",
+    "c": "present"
+  },
+  "old.afterUpdate": {
+    "names": [
+      "/src/a.ts",
+      "/src/b.ts",
+      "/src/c.ts"
+    ],
+    "bDiags": [
+      [
+        2307,
+        "Cannot find module './later' or its corresponding type declarations."
+      ]
+    ],
+    "typeAtUse": "number",
+    "aText": "export const value: number = 1;\n",
+    "c": "present"
+  },
+  "restore.s1": {
+    "names": [
+      "/src/dep.ts",
+      "/src/main.ts"
+    ],
+    "diags": []
+  },
+  "restore.s2": {
+    "names": [
+      "/src/main.ts"
+    ],
+    "diags": [
+      [
+        2307,
+        "Cannot find module './dep' or its corresponding type declarations."
+      ]
+    ]
+  },
+  "restore.s3": {
+    "names": [
+      "/src/dep.ts",
+      "/src/main.ts"
+    ],
+    "diags": [
+      [
+        2322,
+        "Type 'string' is not assignable to type 'number'."
+      ]
+    ]
+  }
+}

@@ -126,6 +126,8 @@ const res = spawnSync(process.execPath, nodeArgs, {
         NODE_API_GOLDEN_DIR: path.join(here, "tests", "golden"),
         NODE_API_RECORD: opts.record ? "1" : "",
         NODE_API_ORACLE: isOracle ? "1" : "",
+        NODE_API_BINARY: opts.binary,
+        NODE_API_EVIDENCE_DIR: path.join(out, "evidence"),
     },
     timeout: opts.timeoutMin * 60_000,
     killSignal: "SIGKILL",
@@ -144,10 +146,13 @@ const summary = {
     files: files.length,
     tests: leaves.length,
     pass: leaves.filter(r => r.ok && !r.skip && !r.todo).length,
-    fail: leaves.filter(r => !r.ok).length,
+    fail: leaves.filter(r => !r.ok && !r.todo).length,
     skip: leaves.filter(r => r.skip).length,
     todo: leaves.filter(r => r.todo).length,
+    // todo tests document known upstream defects; list whether each still fails rather than hiding it.
+    todoTests: leaves.filter(r => r.todo).map(r => `${r.ok ? "passing" : "failing"}: ${r.path}`),
     // A file whose process crashed shows up as a failed nesting-0 entry named after the file.
+    softMismatches: fs.existsSync(path.join(out, "run.tap")) ? (fs.readFileSync(path.join(out, "run.tap"), "utf8").match(/^\s*# soft-mismatch .*/gm) ?? []).map(l => l.trim().slice(2, 300)) : [],
     crashedFiles: results.filter(r => !r.ok && files.includes(r.path)).map(r => r.path),
     nodeExit: res.status,
     nodeSignal: res.signal,
