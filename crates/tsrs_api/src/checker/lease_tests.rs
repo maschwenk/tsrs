@@ -249,6 +249,8 @@ fn async_unrelated_attributed_callback_does_not_reject_a_legitimate_wait() {
         let mut a = Async::start(s, g);
         let hold = (g * 3).as_millis();
         a.send(1, "hold", &format!(r#"{{"which":"p","ms":{hold}}}"#));
+        // Let the holder take the gate before the waiter arrives (requests are dispatched concurrently).
+        thread::sleep(g / 6);
         // An unrelated request blocks on the client (attributed to that request) for the whole wait.
         a.send(2, "cbOnly", "");
         let (cb, _) = a.read_call("cbOnly");
@@ -366,4 +368,41 @@ fn gate_entries_are_dropped_once_unused() {
     let program = sd.get_program(&tsrs_project::ID(s.project.clone())).unwrap();
     drop(lease::acquire(program).unwrap());
     assert!(!lease::is_tracked(program));
+}
+
+#[test]
+fn sync_nested_request_reads_its_own_exact_uint64_literals() {
+    // A request issued from inside a client callback is dispatched while the outer request's literals
+    // are still current; it must look up its own exact values.
+    bounded("sync nested exact ids", Duration::from_secs(60), || {
+        let s = session_with(&[], &["/p/tsconfig.json"]);
+        let project = s.project.clone();
+        let late = transport::LateCaller::new();
+        let (server_r, client_w) = std::io::pipe().unwrap();
+        let (client_r, server_w) = std::io::pipe().unwrap();
+        let conn = transport::SyncConn::new(
+            Box::new(MessagePackReader::new(server_r)),
+            Box::new(MessagePackWriter::new(server_w)),
+            Arc::new(H { s, caller: late.clone() }),
+            transport::ConnOptions::default(),
+        );
+        late.set(conn.caller());
+        let run = thread::spawn(move || conn.run());
+        let mut w = MessagePackWriter::new(client_w);
+        let mut r = MessagePackReader::new(client_r);
+        let mut recv = || {
+            let t = r.read_tuple().unwrap();
+            (t.msg_type, String::from_utf8(t.method).unwrap(), String::from_utf8(t.payload).unwrap())
+        };
+        // Outer request (no checker lease involved) blocked in a client call.
+        w.write_tuple(MessageType::Request, b"cbOnly", b"").unwrap();
+        assert_eq!(recv().0, MessageType::Call);
+        let nested = format!(r#"{{"snapshot":9007199254740993,"project":{},"file":"/p/main.ts","position":0}}"#, json::marshal_string(&project));
+        w.write_tuple(MessageType::Request, b"getTypeAtPosition", nested.as_bytes()).unwrap();
+        assert_eq!(recv(), (MessageType::Error, "getTypeAtPosition".into(), "api: client error: snapshot 9007199254740993 not found".into()));
+        w.write_tuple(MessageType::CallResponse, b"cbOnly", b"null").unwrap();
+        assert_eq!(recv().0, MessageType::Response);
+        drop(w);
+        assert!(run.join().unwrap().is_ok());
+    });
 }

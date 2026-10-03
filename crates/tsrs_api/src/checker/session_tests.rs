@@ -381,3 +381,37 @@ fn session_responses_match_pinned_go() {
     assert_eq!(compared, GO_SHAPES.lines().filter(|l| !l.is_empty()).count());
     assert!(diffs.is_empty(), "{} of {compared} differ from pinned Go:\n{}", diffs.len(), diffs.join("\n"));
 }
+
+/// Exact uint64 handles through core's Session: values above 2^53 must reach the lookup unrounded (pinned Go
+/// reports the exact number), and small handles keep working. Recorded against pinned Go with
+/// testdata/node/numeric_ids_raw.mjs over raw sync/async payloads.
+#[test]
+fn uint64_handles_above_2_pow_53_are_looked_up_exactly() {
+    let s = session();
+    let raw = |method: &str, params: String| s.call_raw(method, &params);
+    let sp = format!(r#""snapshot":{},"project":{}"#, json::marshal(&n(s.snapshot)).unwrap(), json::marshal_string(&s.project));
+    // Small handles are unaffected (and register the project's type/signature registries first).
+    let t = s.call("getTypeAtPosition", &s.at("box:")).unwrap();
+    assert_eq!(raw("typeToString", format!(r#"{{{sp},"type":{}}}"#, json::marshal(&get(&t, "id")).unwrap())), Ok(Value::String("Box<number>".into())));
+    let over = s.call("getTypeAtPosition", &s.at("over(x: string)")).unwrap();
+    let Value::Array(sigs) = s.call("getSignaturesOfType", &s.sp(&[("type", get(&over, "id")), ("kind", n(0))])).unwrap() else { panic!() };
+    let ret = raw("getReturnTypeOfSignature", format!(r#"{{{sp},"objectId":{}}}"#, json::marshal(&get(&sigs[0], "id")).unwrap())).unwrap();
+    assert_eq!(get(&ret, "flags"), Value::Number(32.0), "string return type");
+    for id in ["9007199254740993", "9007199254740992", "18446744073709551615"] {
+        assert_eq!(
+            raw("getTypeAtPosition", format!(r#"{{"snapshot":{id},"project":{},"file":"/p/main.ts","position":0}}"#, json::marshal_string(&s.project))),
+            Err(format!("api: client error: snapshot {id} not found"))
+        );
+        assert_eq!(raw("getReturnTypeOfSignature", format!(r#"{{{sp},"objectId":{id}}}"#)), Err(format!("api: client error: signature handle {id} not found in project registry")));
+        assert_eq!(raw("getRestTypeOfSignature", format!(r#"{{{sp},"signature":{id}}}"#)), Err(format!("api: client error: signature handle {id} not found in project registry")));
+        // Escaped member names reach the same exact literal.
+        assert_eq!(
+            raw("getTypeAtPosition", format!(r#"{{"snap\u0073hot":{id},"project":{},"file":"/p/main.ts","position":0}}"#, json::marshal_string(&s.project))),
+            Err(format!("api: client error: snapshot {id} not found"))
+        );
+    }
+    // Type ids are uint32: above it is an invalid request (decode error), at the bound a lookup.
+    assert!(raw("typeToString", format!(r#"{{{sp},"type":4294967296}}"#)).unwrap_err().starts_with("api: invalid request: "));
+    assert_eq!(raw("typeToString", format!(r#"{{{sp},"type":4294967295}}"#)), Err("api: client error: type handle 4294967295 not found in project registry".to_string()));
+
+}
