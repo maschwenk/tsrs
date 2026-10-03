@@ -12,9 +12,11 @@ and dispatched but only covered by the upstream Node suites, a lane's own unit t
 divergence. Unimplemented methods return an explicit `api: unsupported: ...` error, never a fake success.
 
 Evidence on the integration branch (pinned upstream client, `node tools/node-api/run-upstream.mjs
---binary target/debug/tsrs --suite upstream --filter <file>`): `test/sync/api.test.ts` 339/339 pass,
-`test/async/api.test.ts` 347/348 pass (the failure expects Go's `panic:` text for `getTypeArguments` on a
-non-reference type; tsrs returns a client error). These are suite results, not byte-level parity.
+--binary target/debug/tsrs --suite upstream --filter <file>`): `test/sync/api.test.ts` 339/339 (three
+consecutive runs; one earlier run had a single unreproduced failure), `test/async/api.test.ts` 348/348,
+`sync/ast` 111/111, `sync/astnav` + `async/astnav` 4/4 each, `sync/api-generators` 43/43, parity `rss` 2/2.
+These are suite results, not byte-level response parity; the parity lane's Go-oracle comparison is the
+authority for that.
 
 ## Lanes and ownership
 
@@ -305,5 +307,9 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 - Re-entrancy: nested requests from client callbacks are served; the build orchestrator lock uses the
   transport's `lock_for_request` (bounded error instead of deadlock). Checker leases are acquired by the
   checker lane's setup without a contention probe yet.
-- Memory: request-time allocations outside project/checker regions go to the request thread's arena
-  (same as the language server today) and are not reclaimed until the thread exits.
+- Memory: snapshots free their programs, checkers, emit allocations and (new) a full build's shared
+  processed-file data and loader resolution host when released (createSnapshot+release cycles stay flat;
+  `tests/memory_test.rs`). Still leaked: the project-reference file mapper of each full build (freeing it
+  was a use-after-free), ~25 KiB of heap state per transpile call (its arena allocations are freed), one
+  build orchestrator per API build handle, and other request-time allocations outside regions (config
+  parsing etc., as in the language server).
