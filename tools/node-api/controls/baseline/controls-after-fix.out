@@ -16,4 +16,18 @@ ok   differing >4 MiB hash is inconclusive, not equal: getSourceFile inconclusiv
 ok   sync binary AST identical: getSourceFile equal (want equal) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
 ok   sync binary AST drift control: getSourceFile differs (want differs) {"okEqual":0,"strictEqual":0,"differ":1,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
 ok   legit reorder where oracle runs disagree on order: getSymbolsInScope equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":1,"oracleUnstable":0,"unverified":0}
-all 18 controls hold
+ok   N1 run2-then-use: wrong answer after a run-2 acceptance: getTypeOfSymbol inconclusive (want differs|inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":1}
+ok   N1 run2-then-use: the run-2 exchange itself: getSymbolsInScope equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   N1 control: correct answer on the run-2 history: getTypeOfSymbol equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   N3 extra trailing candidate exchange: getTypeOfSymbol inconclusive (want differs|inconclusive) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":1}
+ok   N3 extra candidate process: getSymbolAtPosition inconclusive (want differs|inconclusive) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":1}
+ok   N3 control: getSymbolAtPosition equal (want equal) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   N2 chained handles, valid renaming in a third order: getSymbolsInScope equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":1,"oracleUnstable":0,"unverified":0}
+ok   reorder keeps identity for later use: getTypeOfSymbol equal (want equal) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   reorder then swapped handle: getTypeOfSymbol inconclusive (want differs|inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":1,"unverified":1}
+ok   budget: large correct reorder: getSymbolsInScope inconclusive (want inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":1}
+ok   budget: large wrong reorder: getSymbolsInScope inconclusive (want inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":1}
+ok   budget: small correct reorder: getSymbolsInScope equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":1,"oracleUnstable":0,"unverified":0}
+ok   budget: small wrong reorder: getSymbolsInScope differs (want differs) {"okEqual":0,"strictEqual":0,"differ":1,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   N4 async-only binary method from the schema: getSourceFile equal (want equal) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+all 32 controls hold

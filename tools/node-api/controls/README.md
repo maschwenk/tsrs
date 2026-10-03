@@ -13,3 +13,6 @@ Synthetic captures in the proxy.mjs format that pin down compare-responses.mjs b
   - a genuine reorder where the two oracle runs disagree on order must be accepted.
 - `run-controls.mjs` runs every case and exits 1 unless each method gets the required status.
 - `baseline/controls-at-4c50d93.out` records the unfixed comparator, where 10 of the 18 cases fail.
+- `scen2.mjs` comes from the codec lane's re-audit of `c3f1717` (N1–N4), sha256 `d0c3b6e2…c471de`. Only the
+  `mk.mjs` import and the work-tree constant of the async-only-binary scenario are adapted to this checkout.
+  `baseline/codec-run2-at-c3f1717.out` is that audit reproduced unchanged here.

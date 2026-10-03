@@ -40,6 +40,21 @@ const cases = [
     ["sync binary AST identical", "scen-extra.mjs", "ce9", [], "getSourceFile", VERIFIED],
     ["sync binary AST drift control", "scen-extra.mjs", "ce9", ["--drift", "getSourceFile"], "getSourceFile", ["differs"]],
     ["legit reorder where oracle runs disagree on order", "scen-extra.mjs", "ce10-ctl", ["--a2", "syn-a2"], "getSymbolsInScope", VERIFIED],
+    // Codec re-audit of c3f1717 (scen2.mjs, verbatim except the mk.mjs import and its work-tree constant).
+    ["N1 run2-then-use: wrong answer after a run-2 acceptance", "scen2.mjs", "run2-then-use", ["--a2", "syn-a2"], "getTypeOfSymbol", NOT_VERIFIED],
+    ["N1 run2-then-use: the run-2 exchange itself", "scen2.mjs", "run2-then-use", ["--a2", "syn-a2"], "getSymbolsInScope", VERIFIED],
+    ["N1 control: correct answer on the run-2 history", "scen2.mjs", "run2-then-use-ctl", ["--a2", "syn-a2"], "getTypeOfSymbol", VERIFIED],
+    ["N3 extra trailing candidate exchange", "scen2.mjs", "extra-tail2", [], "getTypeOfSymbol", NOT_VERIFIED],
+    ["N3 extra candidate process", "scen2.mjs", "extra-proc", [], "getSymbolAtPosition", NOT_VERIFIED],
+    ["N3 control", "scen2.mjs", "extra-proc-ctl", [], "getSymbolAtPosition", VERIFIED],
+    ["N2 chained handles, valid renaming in a third order", "scen2.mjs", "greedy", ["--a2", "syn-a2"], "getSymbolsInScope", VERIFIED],
+    ["reorder keeps identity for later use", "scen2.mjs", "unordered-then-use", ["--a2", "syn-a2"], "getTypeOfSymbol", VERIFIED],
+    ["reorder then swapped handle", "scen2.mjs", "unordered-then-use-swap", ["--a2", "syn-a2"], "getTypeOfSymbol", NOT_VERIFIED],
+    ["budget: large correct reorder", "scen2.mjs", "bucket", ["--a2", "syn-a2"], "getSymbolsInScope", ["inconclusive"]],
+    ["budget: large wrong reorder", "scen2.mjs", "bucket-wrong", ["--a2", "syn-a2"], "getSymbolsInScope", ["inconclusive"]],
+    ["budget: small correct reorder", "scen2.mjs", "bucket-small", ["--a2", "syn-a2"], "getSymbolsInScope", VERIFIED],
+    ["budget: small wrong reorder", "scen2.mjs", "bucket-small-wrong", ["--a2", "syn-a2"], "getSymbolsInScope", ["differs"]],
+    ["N4 async-only binary method from the schema", "scen2.mjs", "async-binary-only", [], "getSourceFile", VERIFIED],
 ];
 
 let failed = 0;

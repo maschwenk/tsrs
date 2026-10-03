@@ -112,7 +112,7 @@ function normalizeText(t) {
 let currentTreeDir = "";
 let currentMethod = "";
 // Methods whose responses are binary (msgpack bin on the sync channel); on the async channel the same bytes
-// arrive as {"data": <base64>}. Filled from the sync captures before decoding (schema evidence, not key names).
+// arrive as {"data": <base64>}. Filled from the upstream schema before decoding (see below).
 const BINARY_METHODS = new Set();
 function canonicalBase64(v) {
     return typeof v === "string" && v.length > 0 && Buffer.from(v, "base64").toString("base64") === v;
@@ -296,8 +296,12 @@ const B = loadRun(opts.b);
 // synthesized names, the known nested-request defect), a candidate exchange equal to EITHER oracle run counts
 // as equal ("matchesOracleRun2"); differing from both is still a difference.
 const A2 = opts.a2 ? loadRun(opts.a2) : undefined;
-for (const run of [A, B, A2]) {
-    for (const list of run?.byTest.values() ?? []) for (const proc of list) for (const r of proc.records) if (r.kind === "response" && r.enc === "base64") BINARY_METHODS.add(r.method);
+// N4: the binary-response methods are pinned from the upstream schema at the pinned commit (APIMethodInfo entries
+// whose result is SourceFileResponse), never learned from captured output (a candidate could otherwise widen it).
+{
+    const generated = fs.readFileSync(path.join(here, "..", "..", "ts-ref", "packages", "typescript", "src", "api", "proto.generated.ts"), "utf8");
+    for (const m of generated.matchAll(/^\s+(\w+): APIMethod<\w+, SourceFileResponse(?: \| null)?>;/gm)) BINARY_METHODS.add(m[1]);
+    if (BINARY_METHODS.size === 0) throw new Error("no SourceFileResponse methods found in proto.generated.ts");
 }
 
 if (opts.drift) {
@@ -411,14 +415,14 @@ function setAt(v, p, value) {
 const MATCH_BUDGET = 20000;
 class BudgetExceeded extends Error {}
 /**
- * Reorders the candidate's arrays at exactly the given paths to the oracle's order, matching each oracle element
- * to a candidate element with the same structural key under the process bijection (extended as elements match;
- * a failed attempt is rolled back). Returns the reordered value, or undefined if some element has no counterpart.
- * Throws BudgetExceeded when more than MATCH_BUDGET element comparisons would be needed.
+ * Reorders the candidate's arrays at exactly the given paths to the oracle's order, matching oracle elements to
+ * candidate elements with the same structural key under the process bijection (backtracking, rolled back on
+ * failure). Returns the reordered value, or undefined if no matching exists (search exhausted). Throws
+ * BudgetExceeded when more than MATCH_BUDGET element comparisons would be needed.
  */
 function reorderCandidate(aVal, bVal, paths, bij) {
     let out = bVal;
-    let attempts = 0;
+    const budget = { attempts: 0 };
     for (const p of paths) {
         const xa = getAt(aVal, p);
         const xb = getAt(out, p);
@@ -429,21 +433,51 @@ function reorderCandidate(aVal, bVal, paths, bij) {
             if (!buckets.has(k)) buckets.set(k, []);
             buckets.get(k).push(j);
         });
-        const ordered = [];
-        for (const e of xa) {
-            const bucket = buckets.get(structKey(e)) ?? [];
-            let found = -1;
-            for (let i = 0; i < bucket.length && found < 0; i++) {
-                if (++attempts > MATCH_BUDGET) throw new BudgetExceeded();
+        const used = new Set();
+        const chosen = new Array(xa.length);
+        // Backtracking search (N2): first-fit can bind chained once-only handles wrongly and reject a valid
+        // renaming. Each candidate tried is one budgeted comparison; bindings of an abandoned branch are rolled
+        // back. Exhausting the search proves no matching exists; exceeding the budget throws (inconclusive).
+        // Iterative DFS (arrays can hold thousands of elements): frame = { pos in bucket, mark, j }.
+        const bucketOf = xa.map(e => buckets.get(structKey(e)) ?? []);
+        const frames = [];
+        let idx = 0;
+        let pos = 0;
+        let found = true;
+        while (idx < xa.length) {
+            const bucket = bucketOf[idx];
+            let advanced = false;
+            for (; pos < bucket.length; pos++) {
+                const j = bucket[pos];
+                if (used.has(j)) continue;
+                if (++budget.attempts > MATCH_BUDGET) throw new BudgetExceeded();
                 const m = bij.mark();
-                if (!diff(e, xb[bucket[i]], bij)) found = i;
-                else bij.rollback(m);
+                if (!diff(xa[idx], xb[j], bij)) {
+                    used.add(j);
+                    chosen[idx] = j;
+                    frames.push({ pos, m, j });
+                    idx++;
+                    pos = 0;
+                    advanced = true;
+                    break;
+                }
+                bij.rollback(m);
             }
-            if (found < 0) return undefined;
-            ordered.push(xb[bucket[found]]);
-            bucket.splice(found, 1);
+            if (advanced) continue;
+            // Dead end: undo the previous choice and try its next candidate.
+            const prev = frames.pop();
+            if (!prev) {
+                found = false;
+                break;
+            }
+            idx--;
+            used.delete(prev.j);
+            bij.rollback(prev.m);
+            pos = prev.pos + 1;
         }
-        out = setAt(out, p, ordered);
+        const search = () => found;
+        if (!search(0)) return undefined;
+        out = setAt(out, p, chosen.map(j => xb[j]));
     }
     return out;
 }
@@ -518,13 +552,14 @@ for (const [test, listA] of A.byTest) {
         const [pa, pb] = pairs[i];
         if (!pa || !pb) {
             unpaired.push({ test, index: i, missingIn: pa ? opts.b : opts.a });
-            // Fail closed: every oracle exchange of a process without a candidate counterpart is unverified.
-            if (pa) {
-                for (const e of exchanges(pa, A.treeDir).out.flatMap(expand)) {
-                    const c = counter(e.method);
-                    c.unverified = (c.unverified ?? 0) + 1;
-                    c.unpairedExchanges = (c.unpairedExchanges ?? 0) + 1;
-                }
+            // Fail closed: every exchange of a process without a counterpart (missing candidate process, or a
+            // surplus candidate process the oracle never started) is unverified.
+            const lone = pa ?? pb;
+            for (const e of exchanges(lone, (pa ? A : B).treeDir).out.flatMap(expand)) {
+                const c = counter(e.method);
+                c.unverified = (c.unverified ?? 0) + 1;
+                if (pa) c.unpairedExchanges = (c.unpairedExchanges ?? 0) + 1;
+                else c.surplusExchanges = (c.surplusExchanges ?? 0) + 1;
             }
             continue;
         }
@@ -536,6 +571,7 @@ for (const [test, listA] of A.byTest) {
         const bij = new Bijection();
         let ea2;
         const bij2 = new Bijection();
+        let branch = "both"; // "both" | "A" | "A2": which oracle history the accepted candidate exchanges follow
         if (A2) {
             const p2 = pairUp([pa], A2.byTest.get(test) ?? [])[0]?.[1];
             if (p2) ea2 = exchanges(p2, A2.treeDir).out.flatMap(expand);
@@ -567,20 +603,38 @@ for (const [test, listA] of A.byTest) {
             let outcome;
             const m1 = bij.mark();
             let d = cmp(a, b, bij);
-            if (d) bij.rollback(m1);
             const a2 = ea2?.[k];
             const aligned2 = a2 && a2.method === b.method && a2.kind === b.kind;
             let d2;
-            if (aligned2) {
-                // Run 2's per-process mapping is extended only by exchanges that match run 2 exactly.
-                const m2 = bij2.mark();
-                d2 = cmp(a2, b, bij2);
-                if (d2) bij2.rollback(m2);
+            const m2 = bij2.mark();
+            if (aligned2) d2 = cmp(a2, b, bij2);
+            const oraclesAgree = !aligned2 || looseEqual({ q: a.req?.json, r: a.res?.json }, { q: a2.req?.json, r: a2.res?.json });
+            // Branch lock (N1): once an exchange is accepted against only one oracle run, later exchanges may only
+            // be accepted against that same run's history and handle mapping; matching the other run instead is
+            // an incoherent history switch and stays unverified.
+            const accA = !d && branch !== "A2";
+            const accA2 = aligned2 && !d2 && branch !== "A";
+            if (!accA) bij.rollback(m1);
+            if (!accA2) bij2.rollback(m2);
+            if (accA) {
+                outcome = "strict";
+                if (aligned2 && d2) branch = "A";
             }
-            if (!d) outcome = "strict";
+            else if (accA2) {
+                outcome = "run2";
+                branch = "A2";
+            }
+            else if (!d || (aligned2 && !d2)) {
+                outcome = "inconclusive";
+                d = { path: "$branch", a: `history locked to oracle run ${branch === "A" ? 1 : 2}`, b: "matches only the other oracle run", inconclusive: true };
+                c.branchInconclusive = (c.branchInconclusive ?? 0) + 1;
+            }
             else if (d.inconclusive) outcome = "inconclusive";
-            else if (aligned2 && !d2) outcome = "run2";
-            else if (aligned2 && !looseEqual({ q: a.req?.json, r: a.res?.json }, { q: a2.req?.json, r: a2.res?.json })) {
+            else if (aligned2 && !oraclesAgree && branch === "A2") {
+                // The order relaxation works on run 1's mapping, which a run-2-locked history cannot use.
+                outcome = "unstable";
+            }
+            else if (aligned2 && !oraclesAgree) {
                 // The oracle runs disagree on this exchange. Accept the candidate only if (1) the oracle requests
                 // agree and the candidate request matches under the process mapping, and (2) the oracle responses
                 // differ only by order at exact array paths, and the candidate response equals the oracle response
@@ -606,7 +660,10 @@ for (const [test, listA] of A.byTest) {
                         }
                     }
                     if (d) bij.rollback(m3);
-                    else (c.unorderedPaths ??= new Set()).add(paths.join(","));
+                    else {
+                        (c.unorderedPaths ??= new Set()).add(paths.join(","));
+                        branch = "A"; // accepted on run 1's handle mapping
+                    }
                     outcome = !d ? "unordered" : d.inconclusive ? "inconclusive" : "differ";
                     if (d?.inconclusive) c.budgetInconclusive = (c.budgetInconclusive ?? 0) + 1;
                 }
@@ -645,13 +702,30 @@ for (const [test, listA] of A.byTest) {
             c.unverified = (c.unverified ?? 0) + 1;
             c.unpairedExchanges = (c.unpairedExchanges ?? 0) + 1;
         }
+        // Fail closed symmetrically (N3): candidate exchanges the oracle never made are unverified too; with an
+        // identical client, surplus candidate traffic means the server behaved differently.
+        for (let j = k; j < eb.length; j++) {
+            const c = counter(eb[j].method);
+            c.unverified = (c.unverified ?? 0) + 1;
+            c.surplusExchanges = (c.surplusExchanges ?? 0) + 1;
+        }
         if (ea.length !== eb.length) unpaired.push({ test, index: i, lengths: [ea.length, eb.length] });
         const ca = [...xa.calls].sort();
         const cb = [...xb.calls].sort();
         if (JSON.stringify(ca) !== JSON.stringify(cb)) callDiffs.push({ test, index: i, onlyA: ca.filter(([k, v]) => xb.calls.get(k) !== v).slice(0, 5).map(([k, v]) => `${v}x ${k.slice(0, 160)}`), onlyB: cb.filter(([k, v]) => xa.calls.get(k) !== v).slice(0, 5).map(([k, v]) => `${v}x ${k.slice(0, 160)}`) });
     }
 }
-for (const test of B.byTest.keys()) if (!A.byTest.has(test) && !todoTests.has(test)) unpaired.push({ test, missingIn: opts.a });
+for (const [test, listB] of B.byTest) {
+    if (A.byTest.has(test) || todoTests.has(test)) continue;
+    unpaired.push({ test, missingIn: opts.a });
+    for (const pb of listB) {
+        for (const e of exchanges(pb, B.treeDir).out.flatMap(expand)) {
+            const c = counter(e.method);
+            c.unverified = (c.unverified ?? 0) + 1;
+            c.surplusExchanges = (c.surplusExchanges ?? 0) + 1;
+        }
+    }
+}
 
 function truncate(d) {
     const s = v => {
@@ -693,6 +767,7 @@ const report = {
     drift: opts.drift ?? null,
     driftAt: opts.driftAt ?? null,
     idKeys: [...ID_KEYS],
+    binaryMethods: [...BINARY_METHODS],
     pairedProcesses,
     excludedTodoTests: [...todoTests],
     statusCounts: rows.reduce((acc, r) => ((acc[r.status] = (acc[r.status] ?? 0) + 1), acc), {}),
