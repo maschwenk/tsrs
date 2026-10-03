@@ -65,14 +65,49 @@ impl taskResult {
     }
 }
 
+// A Go `chan struct{}` that is only ever closed (orchestrator.go `task.done`, `task.built`): `wait` blocks until
+// `close`. `abort` also releases waiters (a builder panicked; Go would take the process down instead of hanging).
+#[derive(Default)]
+pub(crate) struct closeSignal {
+    closed: Mutex<bool>,
+    cond: std::sync::Condvar,
+}
+
+impl closeSignal {
+    pub(crate) fn reset(&self) {
+        *self.closed.lock().unwrap() = false;
+    }
+
+    pub(crate) fn close(&self) {
+        *self.closed.lock().unwrap() = true;
+        self.cond.notify_all();
+    }
+
+    // Returns false if released by an abort rather than a close.
+    pub(crate) fn wait(&self, aborted: &AtomicBool) -> bool {
+        let mut closed = self.closed.lock().unwrap();
+        while !*closed && !aborted.load(Ordering::SeqCst) {
+            closed = self.cond.wait(closed).unwrap();
+        }
+        *closed
+    }
+
+    pub(crate) fn wake(&self) {
+        let _guard = self.closed.lock().unwrap();
+        self.cond.notify_all();
+    }
+}
+
 pub struct BuildTask {
     pub(crate) config: String,
     pub(crate) resolved: Mutex<Option<P<ParsedCommandLine>>>,
     pub(crate) up_stream: Mutex<Vec<upstreamTask>>,
     pub(crate) status: Mutex<Option<upToDateStatus>>,
+    pub(crate) done: closeSignal,
 
     // task reporting
     pub(crate) result: Mutex<Option<taskResult>>,
+    pub(crate) built: closeSignal, // closed when result is ready to be reported
 
     build_info_entry: Mutex<Option<buildInfoEntry>>,
     package_jsons: Mutex<Vec<String>>,
@@ -93,7 +128,9 @@ impl BuildTask {
             resolved: Mutex::new(None),
             up_stream: Mutex::new(Vec::new()),
             status: Mutex::new(None),
+            done: closeSignal::default(),
             result: Mutex::new(None),
+            built: closeSignal::default(),
             build_info_entry: Mutex::new(None),
             package_jsons: Mutex::new(Vec::new()),
             errors: Mutex::new(Vec::new()),
@@ -127,10 +164,21 @@ impl BuildTask {
         self.result.lock().unwrap().as_mut().unwrap().exit_status = status;
     }
 
+    // buildtask.go:109
+    fn wait_on_upstream(&self, orchestrator: &Orchestrator) {
+        let upstream: Vec<P<BuildTask>> = self.up_stream.lock().unwrap().iter().map(|u| u.task).collect();
+        for task in upstream {
+            if !task.done.wait(&orchestrator.aborted) {
+                panic!("build aborted: a builder thread panicked");
+            }
+        }
+    }
+
     // buildtask.go:115
     fn unblock_downstream(&self) {
         self.pending.store(false, Ordering::SeqCst);
         self.is_initial_cycle.store(false, Ordering::SeqCst);
+        self.done.close();
     }
 
     // buildtask.go:121
@@ -173,7 +221,8 @@ impl BuildTask {
 
     // buildtask.go:154
     pub(crate) fn build_project(&'static self, orchestrator: &'static Orchestrator, path: &Path) {
-        // Upstream tasks are complete (tasks run in build order).
+        // Wait on upstream tasks to complete
+        self.wait_on_upstream(orchestrator);
         if self.pending.load(Ordering::SeqCst) {
             self.set_status(self.get_up_to_date_status(orchestrator, path));
             self.report_up_to_date_status(orchestrator);
