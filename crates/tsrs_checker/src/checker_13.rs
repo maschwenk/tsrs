@@ -1456,7 +1456,7 @@ impl Checker {
     }
 
     // checker.go:27405
-    pub(crate) fn get_indexed_access_type_or_undefined(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> Option<P<Type>> {
+    pub fn get_indexed_access_type_or_undefined(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> Option<P<Type>> {
         let mut index_type = index_type;
         let mut access_flags = access_flags;
         if object_type == self.wildcard_type || index_type == self.wildcard_type {
