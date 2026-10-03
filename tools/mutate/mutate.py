@@ -146,7 +146,7 @@ def run_compilers(outdir):
     t0 = time.time()
     pref = subprocess.Popen([REF, "-p", ".", "--noEmit", "--incremental", "false", "--pretty", "false", "--singleThreaded"],
                             cwd=CLONE, stdout=ref_out, stderr=subprocess.STDOUT)
-    pours = subprocess.Popen([OURS, "-p", ".", "--pretty", "false"], cwd=CLONE, stdout=our_out, stderr=subprocess.STDOUT)
+    pours = subprocess.Popen([OURS, "-p", ".", "--noEmit", "--incremental", "false", "--pretty", "false"], cwd=CLONE, stdout=our_out, stderr=subprocess.STDOUT)
     rc_ours = pours.wait()
     t_ours = time.time() - t0
     rc_ref = pref.wait()
