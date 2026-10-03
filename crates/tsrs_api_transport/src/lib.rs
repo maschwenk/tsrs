@@ -14,6 +14,8 @@ pub mod jsonrpc;
 pub mod message;
 pub mod msgpack;
 pub mod protocol;
+#[cfg(feature = "requestfs")]
+pub mod requestfs;
 pub mod timing;
 pub mod transport;
 

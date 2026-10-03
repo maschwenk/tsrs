@@ -13,3 +13,16 @@ tsrs_vfs.workspace = true
 rustc-hash.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
+# `requestfs` (request filesystem layering for createSnapshot/updateSnapshot) needs the project types.
+tsrs_core = { workspace = true, optional = true }
+tsrs_lsproto = { workspace = true, optional = true }
+tsrs_ls = { workspace = true, optional = true }
+tsrs_project = { workspace = true, optional = true }
+
+[features]
+default = []
+requestfs = ["dep:tsrs_core", "dep:tsrs_lsproto", "dep:tsrs_ls", "dep:tsrs_project"]
+
+[[test]]
+name = "requestfs_differential"
+required-features = ["requestfs"]
