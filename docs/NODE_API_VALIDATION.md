@@ -266,14 +266,21 @@ retracted as an upper bound. The codec lane's audit reproduced five false passes
 - an unresolved oracle disagreement next to one equal exchange still gave `equal`;
 - a blanket base64 re-encoding equated distinct strings.
 
-Since the codec re-audit of `c3f1717`, further fixes apply, and the comparator passes
-`controls/run-controls.mjs`. That's 32/32: the 18 earlier controls plus the 14 codec `scen2` cases.
+Since the codec re-audits of `c3f1717` and `0333222`, further fixes apply, and the comparator passes
+`controls/run-controls.mjs`. That's 44/44: the 18 earlier controls, the 14 codec `scen2` cases, the 10
+codec `scen3` cases and a mirror case for R1.
 
 - Order relaxation only at the exact array paths where the two oracle runs are permutations of each other.
   The request must match. Elements are matched by a bounded backtracking search on the per-process handle
   mapping, with rollback when a trial fails.
-- Per-process oracle history lock (N1). Once an exchange is accepted against only one oracle run, accepting a
-  later exchange against the other run is `inconclusive`.
+- Per-process oracle history lock (N1, R1), applied symmetrically over the full truth table:
+  - Any acceptance against exactly one viable oracle run locks the process to that run. That includes cases
+    where the other run differs, errored, is unaligned or is missing.
+  - A later exchange that matches only the locked-out run is `inconclusive`.
+  - When locked to run 2 and neither run matches, it is a difference only where the two runs agree.
+  - A run-1 error, where run 2 and the candidate both answered, is not a divergence.
+- Oracle agreement and oracle order are judged under a per-process run1↔run2 handle mapping (R2). Elements
+  that differ only in handles already known to be distinct are not mistaken for a renaming.
 - `unverified` covers unresolved oracle disagreement, differing hashes over 4 MiB, a match budget overrun, oracle
   exchanges without a candidate counterpart, and surplus candidate exchanges, processes and tests (N3). Any of
   these makes the method `inconclusive`.
@@ -290,7 +297,8 @@ Known limits:
 - `unsupported` takes precedence over other statuses.
 - Work-tree paths are only normalized inside binary-method payloads, so captures must use the same label path.
 
-Recomputed with comparator `c8ffcd0` on the same `b2769b8` captures (no new capture). Runtime is about 10 s.
+Recomputed with comparator `d5e40b4` on the same `b2769b8` captures (no new capture). Runtime is about 10 s.
+The categories and counts are unchanged from `c8ffcd0`.
 This is still provisional evidence, not a final gate:
 
 - equal: 159 methods, 4508 successful exchanges: 4477 strict, 16 equal to oracle run 2 under the history lock,
