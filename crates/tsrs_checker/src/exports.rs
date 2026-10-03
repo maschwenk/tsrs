@@ -370,8 +370,9 @@ impl Checker {
     }
 
     // exports.go:296
-    pub fn resolve_name_exported(&mut self, name: &str, location: P<Node>, meaning: SymbolFlags, exclude_globals: bool) -> Option<P<Symbol>> {
-        self.resolve_name(Some(location), name, meaning, None, true, exclude_globals)
+    // Go's location is nullable (the Node API resolves names without a location); existing callers pass a node.
+    pub fn resolve_name_exported(&mut self, name: &str, location: impl Into<Option<P<Node>>>, meaning: SymbolFlags, exclude_globals: bool) -> Option<P<Symbol>> {
+        self.resolve_name(location.into(), name, meaning, None, true, exclude_globals)
     }
 
     // exports.go:300
