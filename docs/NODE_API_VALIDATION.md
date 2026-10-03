@@ -257,14 +257,90 @@ Negative controls:
 
 Every control tried so far was detected.
 
-Result at `b2769b8`:
+Correction: the earlier result at `b2769b8` (161 equal, 7428 exchanges, comparator `4c50d93`/`476f9ba`) is
+retracted as an upper bound. The codec lane's audit reproduced five false passes:
 
-- 161 methods equal over 7428 successful exchanges; 160 of them also have a successful async pair.
-- 1 errors-only method.
-- 3 unsupported methods (profiling).
-- 7 methods differ: `updateSnapshot` `changes:{}` vs omitted, `cleanBuild` filesDeleted, missing ObjectFlags
-  `MembersResolved` in `getTypeAtLocation` and `getTypeFromTypeNode`, `elementFlags:[]` vs omitted, duplicate
-  fileNames for VS Code URIs, and the unsupported profiling method.
+- the order fallback sorted all nested arrays;
+- the order fallback used a fresh handle mapping;
+- the order fallback ignored the request;
+- an unresolved oracle disagreement next to one equal exchange still gave `equal`;
+- a blanket base64 re-encoding equated distinct strings.
+
+Since the codec re-audits of `c3f1717`, `0333222` and `385d300`, further fixes apply, and the comparator passes
+`controls/run-controls.mjs`. That's 58/58:
+
+- the 18 earlier controls;
+- the codec cases: 14 `scen2`, 10 `scen3`, 8 `scen4`;
+- the R1 mirror;
+- the D1 mirrors: run 2 missing, run 2 kind-split, locked to run 1, locked to run 2.
+
+- Order relaxation only at the exact array paths where the two oracle runs are permutations of each other.
+  The request must match. Elements are matched by a bounded backtracking search on the per-process handle
+  mapping, with rollback when a trial fails.
+- Per-process oracle history lock (N1, R1), applied symmetrically over the full truth table:
+  - Any acceptance against exactly one viable oracle run locks the process to that run. That includes cases
+    where the other run differs, errored, is unaligned or is missing.
+  - A later exchange that matches only the locked-out run is `inconclusive`.
+  - When locked to run 2 and neither run matches, it is a difference only where the two runs agree.
+  - A run-1 error, where run 2 and the candidate both answered, is not a divergence.
+  - D1: when run 2 is present but has another kind than run 1 (one answered, one errored), that is oracle
+    disagreement. If neither run matches, the exchange is unverified. Only a missing run-2 exchange, or no second
+    run at all, leaves run 1 as the sole reference.
+- Oracle agreement and oracle order are judged under a per-process run1↔run2 handle mapping (R2). Elements
+  that differ only in handles already known to be distinct are not mistaken for a renaming.
+- `unverified` covers unresolved oracle disagreement, differing hashes over 4 MiB, a match budget overrun, oracle
+  exchanges without a candidate counterpart, and surplus candidate exchanges, processes and tests (N3). Any of
+  these makes the method `inconclusive`.
+- Binary-response methods are pinned from the upstream schema (`SourceFileResponse` results in
+  `proto.generated.ts`), not learned from captures (N4). Base64 is normalized only for those methods and only
+  when canonical.
+- Counter-suffix renaming applies only to the `__@id@N` and `__"…"pattern@N` forms.
+
+Known limits:
+
+- Swapping handles that occur only once is indistinguishable from renaming them.
+- Hash-only (over 4 MiB) exchanges do not feed the handle mapping.
+- Callbacks are outside per-method matching.
+- `unsupported` takes precedence over other statuses.
+- Work-tree paths are only normalized inside binary-method payloads, so captures must use the same label path.
+
+Recomputed with comparator `732c6ab` on the same `b2769b8` captures (no new capture). Runtime is about 10–12 s.
+The categories and counts are unchanged from `c8ffcd0`. No `b2769b8` difference had D1's shape.
+This is still provisional evidence, not a final gate:
+
+- equal: 159 methods, 4508 successful exchanges: 4477 strict, 16 equal to oracle run 2 under the history lock,
+  and 15 equal-unordered (`getSymbolsInScope`). 4 are hash-only.
+- inconclusive: 2 methods, each with 1 exchange the oracle had but the candidate did not and 1 surplus candidate
+  exchange, both from the profiling test's divergence.
+  - `release`: 1264 strict, 8 run-2 matches.
+  - `parseCommandLine`: 315 strict.
+- error-only: 1, `getCurrentLanguageServerSnapshot`.
+- unsupported: 3, the profiling methods.
+- differ: 7, `createSnapshot`, `updateSnapshot`, `cleanBuild`, `getDefaultProjectForFile`, `getTypeAtLocation`,
+  `getTargetOfType`, `getTypeFromTypeNode`.
+
+Total: 159 + 2 + 1 + 3 + 7 = 172.
+
+All 9 real-capture controls are still detected. The 8 value drifts give `differs`. The handle drift gives
+`inconclusive` for `getNonMissingTypeOfSymbol`, because the generator test's oracle runs disagree on ids.
+
+VS Code URI roots (`probe-uri-filenames.ts`): 80 runs covering both binaries × sync/async × 4 input orders × 5
+repetitions.
+
+- Both servers report 5 `rootFiles`/`fileNames` for the 4 open documents, sorted by path, with one entry
+  duplicated.
+- Go duplicates a randomly varying document, in every input order and both modes. All 4 documents were seen
+  duplicated.
+- tsrs always duplicates the notebook cell, which is one of the variants Go produces.
+- The distinct sets are equal. The duplicate is a pinned-Go defect that tsrs reproduces deterministically. It
+  is not a candidate ordering bias, but the duplicate root is wrong on both sides.
+
+`getExportSymbolOfSymbol` through async (`async-export-symbol.test.ts`):
+
+- The public `Symbol.getExportSymbol()` answers from the async client's symbol cache.
+- The same test also sends a real `getExportSymbolOfSymbol` request with a valid symbol handle through the
+  same async connection, and checks that the answer is the cached export symbol.
+- This passes on Go and on `b2769b8`, and the wire request appears in both traces.
 
 ## Known limitations
 

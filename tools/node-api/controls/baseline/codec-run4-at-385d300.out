@@ -1,0 +1,10 @@
+t1-run2-error      getTypeAtPosition differs {"path":"$.value","a":"x","b":"WRONG"}
+t1-run2-value      getTypeAtPosition inconclusive {"path":"$.value","a":"x","b":"WRONG"}
+t1-run1-error      getTypeAtPosition inconclusive {"path":"$kind","a":"error","b":"response"}
+t1-run1-error-ok   getTypeAtPosition equal null
+t2                 getSymbolAtPosition equal-errors-only null
+t2                 getTypeOfSymbol inconclusive {"path":"$branch","a":"history locked to oracle run 2","b":"matches only the other oracle run","inconclusive":true}
+t2-ctl             getSymbolAtPosition equal-errors-only null
+t2-ctl             getTypeOfSymbol equal null
+t3                 getSymbolsInScope differs {"path":"$[0].declarations (order-relaxed)","a":"an oracle element","b":"no equal candidate element under the process handle mapping (exhaus
+t3-ctl             getSymbolsInScope equal null
