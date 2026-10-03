@@ -74,3 +74,52 @@ Branch `emit/sourcemaps`. Plan: docs/EMIT.md section 7 (E7).
 
 - `.js.map` / `.sourcemap.txt` baseline counts and the full monorepo oracle with maps, once the E3/E4 transformers
   land (nothing in this wave is known to be missing for them).
+
+## Checkpoint for review (2026-10-03) — draft PR body
+
+PR creation is blocked: `gh pr create` and `POST /repos/maschwenk/tsrs/pulls` with `PAT_FOR_OSS` both return
+`403 Resource not accessible by integration` (the token has repo push/admin but not pull-request write). Intended
+draft PR: head `emit/sourcemaps`, base `main`, title "emit/sourcemaps: E7 source maps + declaration maps", label
+`coder-task-generated`; body = this section.
+
+### Scope (this branch only)
+`tsrs_sourcemap` crate, printer source-map paths, emitter `printSourceFile` source-map branch / inline URL /
+`SourceMapEmitResult.source_map`, harness `--baselines jsmap,sourcemap`. No transformer code.
+
+### Gates (base = main d3a2598, head = emit/sourcemaps bb2a6f1; same box, run sequentially by /tmp/gate2.sh)
+- Conformance errors + `--baselines types,symbols`, default and `TSRS_LAZY_MEMBERS=0`: `diff -rq` of the whole
+  `target/test-results` trees: 0 differing files (summary.json excluded: timings). Both: 13457 pass / 2 codes / 2 fail
+  / 1 timeout; `.types`/`.symbols` 12778.
+- `--baselines js`: base 1363 pass, head 1363 pass, identical `js-pass.txt`; 2 timeouts on both sides.
+- The 2 timeouts (`crossProductUnionIntersectionRepeatedPropDeclarationsNoOOM1`, `intersectionConstructorReductionCrash`)
+  rechecked one at a time with `--jobs 1 --timeout 900 --baselines js,types,symbols`: pass errors/js/types/symbols on
+  both base and head (22 s / 41 s base, 21 s / 44 s head). So the js count is 1365 on both = main's 1365; the
+  timeouts are load-only, not regressions.
+- Fourslash: 4066 pass / 63 fail on both, identical pass list (exit 1 on both because of the 63 known failures).
+- `RUSTFLAGS="-D warnings" cargo check --workspace --locked --all-targets`: exit 0 (rustc 1.99.0).
+- `cargo test -p tsrs_cli --test emit_gate`: 3/3 pass. `cargo test -p tsrs_sourcemap`: 39 pass.
+
+### Monorepo oracle (standalone, this branch)
+Reference: tsgo built from pinned ts-ref (`cd ts-ref/tsc && go build -o /root/bin/tsgo-ref ./cmd/tsc`, Go 1.27.1).
+The npm nightly 7.1.0-dev.20260929.1 predates b85298b6 (lacks #64460); with it 187 `.d.ts.map` differ.
+```
+TSGO=/root/bin/tsgo-ref tools/oracle/emit/monorepo.sh /root/Owner -j 6 -- --emitDeclarationOnly
+```
+103/103 packages fully identical; 4623/4623 files, of which 2298 `.d.ts.map`. `/root/Owner` git status empty
+before and after.
+
+### Integration evidence (temporary local branch `int-local`, not pushed)
+`int-local` f315c3a = merge of `emit/sourcemaps` 9d8bf1f (same code as bb2a6f1; later commits are docs only) and
+`emit/transforms` 3dde949.
+- `tsrs-test run --suite all --baselines js,jsmap,sourcemap`: js 7322 pass / 1 fail / 6071 crash; `.js.map` 86 pass,
+  0 fail, 63 crash; `.sourcemap.txt` 93 pass, 0 fail, 63 crash. All 63 crashes are other waves' stubs (forawait 36,
+  classfields 15, commonjsmodule 6, jsx 3, esdecorator 2, legacydecorators 1); 2 more reference baselines are
+  content-mapper tests (unsupported).
+- `TSGO=/root/bin/tsgo-ref tools/oracle/emit/monorepo.sh /root/Owner -j 6` (configs' own sourceMap/declarationMap):
+  83/103 packages fully identical, 8996 files identical, 0 different, 1252 not emitted (20 packages panic in metadata
+  8, classfields 4, legacydecorators 3, commonjsmodule 3, jsx 2). Every emitted map identical: 2317 `.js.map`,
+  2166 `.d.ts.map`.
+
+### Dependencies / left
+- JS source maps for the remaining baselines and packages need E3/E4 (commonjsmodule, metadata, legacydecorators) and
+  E5/E6/E9/E10 (classfields, esdecorator, forawait, jsx). Nothing source-map-specific is known to be missing.
