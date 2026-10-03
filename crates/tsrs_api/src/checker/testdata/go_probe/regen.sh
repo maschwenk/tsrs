@@ -30,17 +30,20 @@ fi
 dest="$ref/tsc/internal/api/zz_tsrs_probe_test.go"
 out="$here/go_probe_${pinned:0:8}.jsonl"
 tmp="$out.tmp"
-cleanup() { rm -f "$dest" "$tmp"; }
+shapes="$here/go_shapes_${pinned:0:8}.jsonl"
+shapes_tmp="$shapes.tmp"
+cleanup() { rm -f "$dest" "$tmp" "$shapes_tmp"; }
 trap cleanup EXIT
 cp "$here/zz_tsrs_probe_test.go" "$dest"
 
-(cd "$ref/tsc" && TSRS_FX="$here/fixture" TSRS_NEEDLES_FILE="$here/needles.txt" TSRS_OUT="$tmp" \
-  go test ./internal/api -run '^TestTsrsCheckerProbe$' -count=1)
-test -s "$tmp"
+(cd "$ref/tsc" && TSRS_FX="$here/fixture" TSRS_NEEDLES_FILE="$here/needles.txt" TSRS_OUT="$tmp" TSRS_SHAPES_OUT="$shapes_tmp" \
+  go test ./internal/api -run '^TestTsrsChecker(Probe|Shapes)$' -count=1)
+test -s "$tmp" && test -s "$shapes_tmp"
 mv "$tmp" "$out"
+mv "$shapes_tmp" "$shapes"
 rm -f "$dest"
 if [ -n "$(git -C "$ref" status --porcelain)" ]; then
   echo "ts-ref is not clean after the run" >&2
   exit 1
 fi
-echo "wrote $out ($(wc -l < "$out") lines) from $(go version) at $pinned"
+echo "wrote $out ($(wc -l < "$out") lines), $shapes ($(wc -l < "$shapes") lines) from $(go version) at $pinned"

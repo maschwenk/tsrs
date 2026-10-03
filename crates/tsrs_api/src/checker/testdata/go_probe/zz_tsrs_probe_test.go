@@ -26,7 +26,13 @@ type probe struct {
 	out  *os.File
 }
 
-func (p *probe) call(method string, params map[string]any) (any, string) {
+func (p *probe) call(method string, params map[string]any) (result any, errText string) {
+	// Like the ipc connections (conn_sync.go / conn_async.go): a handler panic becomes "panic: <value>\n<stack>".
+	defer func() {
+		if r := recover(); r != nil {
+			result, errText = nil, fmt.Sprintf("panic: %v\n<stack>", r)
+		}
+	}()
 	b, _ := json.Marshal(params)
 	res, err := p.s.HandleRequest(context.Background(), method, json.Value(b))
 	if err != nil {
@@ -227,4 +233,130 @@ func ts2(p *probe, proj string, t any) any {
 		return e
 	}
 	return r
+}
+
+// TestTsrsCheckerShapes records full response objects (not just selected fields) and the outcome of
+// wrong-kind requests, for comparison with tsrs through its real Session (encoding/json v2 omitempty
+// and nil-slice rules, panic-vs-error behavior). Same fixture; ids are normalized by the comparison.
+func TestTsrsCheckerShapes(t *testing.T) {
+	dir := os.Getenv("TSRS_FX")
+	outPath := os.Getenv("TSRS_SHAPES_OUT")
+	if dir == "" || outPath == "" {
+		t.Skip("TSRS_FX / TSRS_SHAPES_OUT not set")
+	}
+	read := func(n string) string { b, _ := os.ReadFile(dir + "/" + n); return string(b) }
+	main := read("main.ts")
+	files := map[string]any{"/p/tsconfig.json": read("tsconfig.json"), "/p/main.ts": main, "/p/types.d.ts": read("types.d.ts"), "/p/other.ts": read("other.ts")}
+	init, _ := projecttestutil.GetSessionInitOptions(files, nil, &projecttestutil.TypingsInstallerOptions{})
+	s := NewStandaloneSession(init, nil)
+	defer s.Close()
+	out, _ := os.Create(outPath)
+	defer out.Close()
+	p := &probe{s: s, out: out}
+	snap, errs := p.call("createSnapshot", map[string]any{"openProjects": []string{"/p/tsconfig.json"}})
+	if errs != "" {
+		t.Fatal(errs)
+	}
+	p.snap = get(snap, "snapshot").(float64)
+	p.proj = get(get(snap, "projects").([]any)[0], "id").(string)
+	firstLine := func(e string) string { return strings.SplitN(e, "\n", 2)[0] }
+	shape := func(label, method string, params map[string]any) any {
+		r, e := p.call(method, params)
+		if e != "" {
+			p.emit("shape:"+label, map[string]any{"error": firstLine(e)})
+			return nil
+		}
+		p.emit("shape:"+label, r)
+		return r
+	}
+	wrong := func(label, method string, params map[string]any) {
+		r, e := p.call(method, params)
+		if e != "" {
+			p.emit("wrong:"+label, map[string]any{"error": firstLine(e)})
+		} else {
+			p.emit("wrong:"+label, map[string]any{"result": r})
+		}
+	}
+	at := func(n string) map[string]any { return p.sp("file", "/p/main.ts", "position", u16(main, n)) }
+	symRef := func(needle string) any {
+		sy, _ := p.call("getSymbolAtPosition", at(needle))
+		return get(sy, "reference")
+	}
+
+	lit := shape("type.literal", "getTypeAtPosition", at("lit ="))
+	box := shape("type.reference", "getTypeAtPosition", at("box:"))
+	shape("type.union", "getTypeAtPosition", at("maybe:"))
+	shape("type.bigint", "getTypeAtPosition", at("big ="))
+	pair, _ := p.call("getDeclaredTypeOfSymbol", p.sp("symbol", symRef("Pair<A, B>")))
+	shape("type.tupleTarget", "getTargetOfType", p.sp("objectId", get(pair, "id")))
+	boxTarget := shape("type.interfaceTarget", "getTargetOfType", p.sp("objectId", get(box, "id")))
+	shape("type.typeParameter", "getLocalTypeParametersOfType", p.sp("objectId", get(boxTarget, "id")))
+	shape("type.thisType", "getThisTypeOfType", p.sp("objectId", get(boxTarget, "id")))
+	shape("type.mapped", "getDeclaredTypeOfSymbol", p.sp("symbol", symRef("M = ")))
+	shape("type.conditional", "getDeclaredTypeOfSymbol", p.sp("symbol", symRef("C<T> =")))
+	shape("type.templateLiteral", "getDeclaredTypeOfSymbol", p.sp("symbol", symRef("TL = ")))
+	shape("type.indexedAccess", "getDeclaredTypeOfSymbol", p.sp("symbol", symRef("IA<T, K")))
+	str, _ := p.call("getStringType", p.sp())
+	shape("type.intrinsic", "getStringType", p.sp())
+	shape("indexInfos", "getIndexInfosOfType", p.sp("type", get(box, "id")))
+	shape("indexInfo.number.none", "getIndexInfoOfType", p.sp("type", get(str, "id"), "kind", 1))
+	shape("symbol.variable", "getSymbolAtPosition", at("box:"))
+	shape("symbol.class", "getSymbolAtPosition", at("Dog extends"))
+	shape("symbol.global", "resolveName", p.sp("name", "Array", "meaning", float64(ast.SymbolFlagsType)))
+	shape("symbol.none", "resolveName", p.sp("name", "nope", "meaning", float64(ast.SymbolFlagsValue)))
+	shape("members.empty", "getMembersOfSymbol", map[string]any{"symbol": symRef("box:")})
+	shape("exports.empty", "getExportsOfSymbol", map[string]any{"symbol": symRef("box:")})
+	shape("properties.empty", "getPropertiesOfType", p.sp("type", get(str, "id")))
+	shape("typeArguments", "getTypeArguments", p.sp("type", get(box, "id")))
+	shape("aliasTypeArguments.empty", "getAliasTypeArgumentsOfType", p.sp("objectId", get(box, "id")))
+	over, _ := p.call("getTypeAtPosition", at("over(x: string)"))
+	sigs := shape("signatures", "getSignaturesOfType", p.sp("type", get(over, "id"), "kind", 0))
+	shape("signatures.construct.empty", "getSignaturesOfType", p.sp("type", get(over, "id"), "kind", 1))
+	sig0 := sigs.([]any)[0]
+	shape("signature.typeParameters.empty", "getTypeParametersOfSignature", p.sp("objectId", get(sig0, "id")))
+	shape("signature.thisParameter.none", "getThisParameterOfSignature", p.sp("objectId", get(sig0, "id")))
+	isStr, _ := p.call("getTypeAtPosition", at("isStr("))
+	isStrSigs, _ := p.call("getSignaturesOfType", p.sp("type", get(isStr, "id"), "kind", 0))
+	shape("typePredicate", "getTypePredicateOfSignature", p.sp("signature", get(isStrSigs.([]any)[0], "id")))
+	shape("typePredicate.none", "getTypePredicateOfSignature", p.sp("signature", get(sig0, "id")))
+	shape("jsDocTags", "getJsDocTags", p.sp("symbol", symRef("Animal {")))
+	shape("jsDocTags.none", "getJsDocTags", p.sp("symbol", symRef("box:")))
+	shape("exportsOfModule.none", "getExportsOfModule", p.sp("symbol", symRef("box:")))
+	shape("baseTypes.none", "getBaseTypes", p.sp("type", get(boxTarget, "id")))
+	boxSym, _ := p.call("getSymbolAtPosition", at("box:"))
+	redSym, _ := p.call("getSymbolAtPosition", at("Red ="))
+	shape("constantValue.none", "getConstantValue", p.sp("location", get(boxSym, "declarations").([]any)[0]))
+	shape("constantValue.number", "getConstantValue", p.sp("location", get(redSym, "declarations").([]any)[0]))
+	shape("completions", "getCompletionsAtPosition", p.sp("file", "/p/main.ts", "position", u16(main, "box.value")+4))
+	shape("wellKnownSignatures", "getWellKnownSignatures", p.sp())
+
+	litID, objID := get(lit, "id"), get(box, "id")
+	wrong("getTypeArguments(literal)", "getTypeArguments", p.sp("type", litID))
+	wrong("getBaseTypes(literal)", "getBaseTypes", p.sp("type", litID))
+	wrong("getTargetOfType(literal)", "getTargetOfType", p.sp("objectId", litID))
+	wrong("getFreshTypeOfType(object)", "getFreshTypeOfType", p.sp("objectId", objID))
+	wrong("getRegularTypeOfType(object)", "getRegularTypeOfType", p.sp("objectId", objID))
+	wrong("getTypesOfType(literal)", "getTypesOfType", p.sp("objectId", litID))
+	wrong("getTypeParametersOfType(literal)", "getTypeParametersOfType", p.sp("objectId", litID))
+	wrong("getOuterTypeParametersOfType(literal)", "getOuterTypeParametersOfType", p.sp("objectId", litID))
+	wrong("getLocalTypeParametersOfType(literal)", "getLocalTypeParametersOfType", p.sp("objectId", litID))
+	wrong("getThisTypeOfType(literal)", "getThisTypeOfType", p.sp("objectId", litID))
+	wrong("getObjectTypeOfType(literal)", "getObjectTypeOfType", p.sp("objectId", litID))
+	wrong("getIndexTypeOfType(literal)", "getIndexTypeOfType", p.sp("objectId", litID))
+	wrong("getCheckTypeOfType(literal)", "getCheckTypeOfType", p.sp("objectId", litID))
+	wrong("getExtendsTypeOfType(literal)", "getExtendsTypeOfType", p.sp("objectId", litID))
+	wrong("getBaseTypeOfType(literal)", "getBaseTypeOfType", p.sp("objectId", litID))
+	wrong("getConstraintOfType(literal)", "getConstraintOfType", p.sp("objectId", litID))
+	wrong("getTypeParameterOfMappedType(literal)", "getTypeParameterOfMappedType", p.sp("objectId", litID))
+	wrong("getConstraintTypeOfMappedType(literal)", "getConstraintTypeOfMappedType", p.sp("objectId", litID))
+	wrong("getNameTypeOfMappedType(literal)", "getNameTypeOfMappedType", p.sp("objectId", litID))
+	wrong("getTemplateTypeOfMappedType(literal)", "getTemplateTypeOfMappedType", p.sp("objectId", litID))
+	wrong("getTrueTypeOfConditionalType(literal)", "getTrueTypeOfConditionalType", p.sp("objectId", litID))
+	wrong("getFalseTypeOfConditionalType(literal)", "getFalseTypeOfConditionalType", p.sp("objectId", litID))
+	wrong("getConstraintOfTypeParameter(literal)", "getConstraintOfTypeParameter", p.sp("objectId", litID))
+	wrong("getDefaultFromTypeParameter(literal)", "getDefaultFromTypeParameter", p.sp("objectId", litID))
+	wrong("getSignaturesOfType(kind 7)", "getSignaturesOfType", p.sp("type", objID, "kind", 7))
+	wrong("getIndexInfoOfType(kind 7)", "getIndexInfoOfType", p.sp("type", objID, "kind", 7))
+	wrong("signatureToSignatureDeclaration(kind 100000)", "signatureToSignatureDeclaration", p.sp("signature", get(sig0, "id"), "kind", 100000))
+	wrong("getParameterType(index -1)", "getParameterType", p.sp("signature", get(sig0, "id"), "index", -1))
 }

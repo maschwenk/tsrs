@@ -13,6 +13,7 @@ mod handlers_symbols;
 mod handlers_types;
 pub mod host;
 mod json;
+mod lease;
 mod params;
 pub mod registry;
 mod setup;
@@ -158,3 +159,5 @@ fn base64_encode(data: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod session_tests;

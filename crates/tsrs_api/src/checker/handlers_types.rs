@@ -5,7 +5,7 @@ use tsrs_checker::{ContextFlags, Flags as NodeBuilderFlags, IndexKind, Signature
 use tsrs_core::json::Value;
 use tsrs_core::P;
 
-use super::host::{CheckerError, CheckerHost, CheckerResponse, CheckerResult};
+use super::host::{CheckerError, CheckerErrorKind, CheckerHost, CheckerResponse, CheckerResult};
 use super::json::obj;
 use super::params::Params;
 use super::setup::{touching_property_name_at_utf16, Setup, SnapshotCtx};
@@ -14,16 +14,54 @@ fn setup<'h>(host: &'h dyn CheckerHost, p: &Params) -> CheckerResult<Setup<'h>> 
     Setup::new(host, p.u64("snapshot")?, p.project()?)
 }
 
-fn not_a(t: P<Type>, what: &str) -> CheckerError {
-    CheckerError::client(format!("type {} is not {what}", t.id().0))
+// Wrong-kind requests: pinned Go does not validate these; the handler panics and the ipc connection
+// (or batchRequests) recovers it as `panic: <value>\n<stack>`. The checks below reproduce the same
+// failure class and first line (recorded in testdata/go_probe/go_shapes_b85298b6.jsonl) without
+// actually panicking (no stack is attached).
+fn go_panic(message: impl std::fmt::Display) -> CheckerError {
+    CheckerError { kind: CheckerErrorKind::Internal, message: format!("panic: {message}") }
 }
 
-fn tagged(t: P<Type>, tag: TypeDataTag, what: &str) -> CheckerResult<P<Type>> {
+const GO_NIL_DEREF: &str = "runtime error: invalid memory address or nil pointer dereference";
+
+/// Go's name for the `checker.TypeData` implementation behind a type.
+fn go_type_data_name(tag: TypeDataTag) -> &'static str {
+    match tag {
+        TypeDataTag::Intrinsic => "IntrinsicType",
+        TypeDataTag::Literal => "LiteralType",
+        TypeDataTag::UniqueESSymbol => "UniqueESSymbolType",
+        TypeDataTag::Object => "ObjectType",
+        TypeDataTag::TypeReference => "TypeReference",
+        TypeDataTag::Interface => "InterfaceType",
+        TypeDataTag::Tuple => "TupleType",
+        TypeDataTag::InstantiationExpression => "InstantiationExpressionType",
+        TypeDataTag::Mapped => "MappedType",
+        TypeDataTag::ReverseMapped => "ReverseMappedType",
+        TypeDataTag::EvolvingArray => "EvolvingArrayType",
+        TypeDataTag::Union => "UnionType",
+        TypeDataTag::Intersection => "IntersectionType",
+        TypeDataTag::TypeParameter => "TypeParameter",
+        TypeDataTag::Index => "IndexType",
+        TypeDataTag::IndexedAccess => "IndexedAccessType",
+        TypeDataTag::TemplateLiteral => "TemplateLiteralType",
+        TypeDataTag::StringMapping => "StringMappingType",
+        TypeDataTag::Substitution => "SubstitutionType",
+        TypeDataTag::Conditional => "ConditionalType",
+    }
+}
+
+/// Go `t.AsXxx()` (a `t.data.(*Xxx)` type assertion).
+fn tagged(t: P<Type>, tag: TypeDataTag) -> CheckerResult<P<Type>> {
     if t.data_tag() == tag {
         Ok(t)
     } else {
-        Err(not_a(t, what))
+        Err(go_panic(format!("interface conversion: checker.TypeData is *checker.{}, not *checker.{}", go_type_data_name(t.data_tag()), go_type_data_name(tag))))
     }
+}
+
+/// Go `t.AsInterfaceType()` (nil for non-interfaces) followed by a field read.
+fn interface_of(t: P<Type>) -> CheckerResult<&'static tsrs_checker::InterfaceType> {
+    t.try_as_interface_type().ok_or_else(|| go_panic(GO_NIL_DEREF))
 }
 
 // --- Location / position types ---
@@ -92,23 +130,23 @@ fn type_property(t: P<Type>, property: TypeProperty) -> CheckerResult<Option<P<T
     Ok(match property {
         TypeProperty::Target => {
             if !t.flags().intersects(TypeFlags::Object | TypeFlags::TypeParameter | TypeFlags::Index | TypeFlags::StringMapping) {
-                return Err(not_a(t, "an object, type parameter, index or string mapping type"));
+                return Err(go_panic("Unhandled case in Type.Target"));
             }
             t.target()
         }
-        TypeProperty::FreshType => tagged(t, TypeDataTag::Literal, "a literal type")?.as_literal_type().fresh_type(),
-        TypeProperty::RegularType => tagged(t, TypeDataTag::Literal, "a literal type")?.as_literal_type().regular_type(),
-        TypeProperty::ThisType => t.try_as_interface_type().ok_or_else(|| not_a(t, "an interface type"))?.this_type(),
-        TypeProperty::ObjectType => tagged(t, TypeDataTag::IndexedAccess, "an indexed access type")?.as_indexed_access_type().object_type(),
-        TypeProperty::IndexType => tagged(t, TypeDataTag::IndexedAccess, "an indexed access type")?.as_indexed_access_type().index_type(),
-        TypeProperty::CheckType => tagged(t, TypeDataTag::Conditional, "a conditional type")?.as_conditional_type().check_type(),
-        TypeProperty::ExtendsType => tagged(t, TypeDataTag::Conditional, "a conditional type")?.as_conditional_type().extends_type(),
-        TypeProperty::BaseType => tagged(t, TypeDataTag::Substitution, "a substitution type")?.as_substitution_type().base_type(),
-        TypeProperty::SubstConstraint => tagged(t, TypeDataTag::Substitution, "a substitution type")?.as_substitution_type().subst_constraint(),
-        TypeProperty::MappedTypeParameter => tagged(t, TypeDataTag::Mapped, "a mapped type")?.as_mapped_type().type_parameter(),
-        TypeProperty::MappedConstraintType => tagged(t, TypeDataTag::Mapped, "a mapped type")?.as_mapped_type().constraint_type(),
-        TypeProperty::MappedNameType => tagged(t, TypeDataTag::Mapped, "a mapped type")?.as_mapped_type().name_type(),
-        TypeProperty::MappedTemplateType => tagged(t, TypeDataTag::Mapped, "a mapped type")?.as_mapped_type().template_type(),
+        TypeProperty::FreshType => tagged(t, TypeDataTag::Literal)?.as_literal_type().fresh_type(),
+        TypeProperty::RegularType => tagged(t, TypeDataTag::Literal)?.as_literal_type().regular_type(),
+        TypeProperty::ThisType => interface_of(t)?.this_type(),
+        TypeProperty::ObjectType => tagged(t, TypeDataTag::IndexedAccess)?.as_indexed_access_type().object_type(),
+        TypeProperty::IndexType => tagged(t, TypeDataTag::IndexedAccess)?.as_indexed_access_type().index_type(),
+        TypeProperty::CheckType => tagged(t, TypeDataTag::Conditional)?.as_conditional_type().check_type(),
+        TypeProperty::ExtendsType => tagged(t, TypeDataTag::Conditional)?.as_conditional_type().extends_type(),
+        TypeProperty::BaseType => tagged(t, TypeDataTag::Substitution)?.as_substitution_type().base_type(),
+        TypeProperty::SubstConstraint => tagged(t, TypeDataTag::Substitution)?.as_substitution_type().subst_constraint(),
+        TypeProperty::MappedTypeParameter => tagged(t, TypeDataTag::Mapped)?.as_mapped_type().type_parameter(),
+        TypeProperty::MappedConstraintType => tagged(t, TypeDataTag::Mapped)?.as_mapped_type().constraint_type(),
+        TypeProperty::MappedNameType => tagged(t, TypeDataTag::Mapped)?.as_mapped_type().name_type(),
+        TypeProperty::MappedTemplateType => tagged(t, TypeDataTag::Mapped)?.as_mapped_type().template_type(),
     })
 }
 
@@ -136,17 +174,17 @@ pub(crate) fn resolve_type_array_property(host: &dyn CheckerHost, p: &Params, pr
     let types: &[P<Type>] = match property {
         TypeArrayProperty::Types => {
             if !t.flags().intersects(TypeFlags::UnionOrIntersection | TypeFlags::TemplateLiteral) {
-                return Err(not_a(t, "a union, intersection or template literal type"));
+                return Err(go_panic("Unhandled case in Type.Types"));
             }
             t.types()
         }
-        TypeArrayProperty::TypeParameters => t.try_as_interface_type().ok_or_else(|| not_a(t, "an interface type"))?.type_parameters(),
-        TypeArrayProperty::OuterTypeParameters => t.try_as_interface_type().ok_or_else(|| not_a(t, "an interface type"))?.outer_type_parameters(),
-        TypeArrayProperty::LocalTypeParameters => t.try_as_interface_type().ok_or_else(|| not_a(t, "an interface type"))?.local_type_parameters(),
+        TypeArrayProperty::TypeParameters => interface_of(t)?.type_parameters(),
+        TypeArrayProperty::OuterTypeParameters => interface_of(t)?.outer_type_parameters(),
+        TypeArrayProperty::LocalTypeParameters => interface_of(t)?.local_type_parameters(),
         TypeArrayProperty::AliasTypeArguments => t.alias().map_or(&[], |a| a.type_arguments()),
     };
     if types.is_empty() {
-        return Ok(Value::Null);
+        return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     s.types_response(types)
 }
@@ -200,21 +238,12 @@ pub(crate) fn type_op(host: &dyn CheckerHost, p: &Params, field: &str, op: TypeO
         TypeOp::Widened => Some(c.get_widened_type_exported(t)),
         TypeOp::Apparent => Some(c.get_apparent_type_exported(t)),
         TypeOp::Reduced => Some(c.get_reduced_type_exported(t)),
-        TypeOp::ConstraintOfTypeParameter => {
-            if !t.flags().intersects(TypeFlags::TypeParameter) {
-                return Err(not_a(t, "a type parameter"));
-            }
-            c.get_constraint_of_type_parameter_exported(t)
-        }
-        TypeOp::DefaultFromTypeParameter => {
-            if !t.flags().intersects(TypeFlags::TypeParameter) {
-                return Err(not_a(t, "a type parameter"));
-            }
-            c.get_default_from_type_parameter_exported(t)
-        }
+        // Pinned Go answers null for non-type-parameters (no panic).
+        TypeOp::ConstraintOfTypeParameter => c.get_constraint_of_type_parameter_exported(t),
+        TypeOp::DefaultFromTypeParameter => c.get_default_from_type_parameter_exported(t),
         TypeOp::BaseConstraint => c.get_base_constraint_of_type_exported(t),
-        TypeOp::TrueTypeOfConditional => Some(c.get_true_type_of_conditional_type(tagged(t, TypeDataTag::Conditional, "a conditional type")?)),
-        TypeOp::FalseTypeOfConditional => Some(c.get_false_type_of_conditional_type(tagged(t, TypeDataTag::Conditional, "a conditional type")?)),
+        TypeOp::TrueTypeOfConditional => Some(c.get_true_type_of_conditional_type(tagged(t, TypeDataTag::Conditional)?)),
+        TypeOp::FalseTypeOfConditional => Some(c.get_false_type_of_conditional_type(tagged(t, TypeDataTag::Conditional)?)),
     };
     s.opt_type_response(result)
 }
@@ -229,21 +258,18 @@ pub(crate) fn type_list_op(host: &dyn CheckerHost, p: &Params, op: TypeListOp) -
     let mut s = setup(host, p)?;
     let t = s.resolve_type(p.u32("type")?)?;
     let types = match op {
-        TypeListOp::BaseTypes => {
-            if t.try_as_interface_type().is_none() {
-                return Err(not_a(t, "a class or interface type"));
-            }
-            s.c().get_base_types_exported(t)
-        }
+        // Pinned Go answers [] for non-class/interface types (getBaseTypes checks the object flags first).
+        TypeListOp::BaseTypes => s.c().get_base_types_exported(t),
+        // Pinned Go dereferences a nil `AsTypeReference()` here.
         TypeListOp::TypeArguments => {
             if t.try_as_type_reference().is_none() {
-                return Err(not_a(t, "a type reference"));
+                return Err(go_panic(GO_NIL_DEREF));
             }
             s.c().get_type_arguments_exported(t)
         }
     };
     if types.is_empty() {
-        return Ok(Value::Null);
+        return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     s.types_response(types)
 }
@@ -275,7 +301,7 @@ pub(crate) fn get_properties_of_type(host: &dyn CheckerHost, p: &Params) -> Chec
     let t = s.resolve_type(p.u32("type")?)?;
     let props = s.c().get_properties_of_type_exported(t);
     if props.is_empty() {
-        return Ok(Value::Null);
+        return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     s.symbols_response(props)
 }
@@ -306,7 +332,7 @@ pub(crate) fn get_index_infos_of_type(host: &dyn CheckerHost, p: &Params) -> Che
     let t = s.resolve_type(p.u32("type")?)?;
     let infos = s.c().get_index_infos_of_type_exported(t);
     if infos.is_empty() {
-        return Ok(Value::Null);
+        return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     let mut out = Vec::with_capacity(infos.len());
     for info in infos {
@@ -338,7 +364,8 @@ pub(crate) fn get_signatures_of_type(host: &dyn CheckerHost, p: &Params) -> Chec
     let kind = match p.i32("kind")? {
         0 => SignatureKind::Call,
         1 => SignatureKind::Construct,
-        k => return Err(CheckerError::client(format!("invalid signature kind {k}"))),
+        // Pinned Go passes any value through as `checker.SignatureKind` and finds no signatures.
+        _ => return Ok(Value::Array(Vec::new())),
     };
     let sigs = s.c().get_signatures_of_type_exported(t, kind);
     Ok(Value::Array(sigs.iter().map(|sig| s.signature_response(*sig)).collect::<CheckerResult<_>>()?))
@@ -416,7 +443,7 @@ pub(crate) fn get_type_parameters_of_signature(host: &dyn CheckerHost, p: &Param
     let sig = s.resolve_signature(p.u64("objectId")?)?;
     let types = sig.type_parameters();
     if types.is_empty() {
-        return Ok(Value::Null);
+        return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     s.types_response(types)
 }
@@ -437,7 +464,7 @@ pub(crate) fn signature_property(host: &dyn CheckerHost, p: &Params, property: S
         SignatureProperty::Parameters => {
             let params = sig.parameters();
             if params.is_empty() {
-                return Ok(Value::Null);
+                return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
             }
             Ok(Value::Array(params.iter().map(|sym| sd.symbol_response(*sym, &sd.project)).collect::<CheckerResult<_>>()?))
         }
@@ -607,7 +634,8 @@ pub(crate) fn signature_to_signature_declaration(host: &dyn CheckerHost, p: &Par
     let enclosing = enclosing(&s, p)?;
     let kind = p.i32("kind")?;
     if kind < 0 || kind > Kind::Count as i32 {
-        return Err(CheckerError::client(format!("invalid declaration kind {kind}")));
+        // Out of the AST kind range Go hits the same default case as any unhandled kind.
+        return Err(go_panic("Unhandled kind in signatureToSignatureDeclarationHelper"));
     }
     let kind = Kind::from_i16(kind as i16);
     let flags = NodeBuilderFlags::from_bits_retain(p.i32("flags")? as u32);

@@ -87,17 +87,37 @@ What `Tested` does **not** mean yet (open gaps, for the integration lead):
     `box.value` (Go 538968068, tsrs 536870916). No other objectFlags bit differed.
   * For a malformed `type` param, both return `api: invalid request: ...`, but the wording differs.
     tsrs says `field "type": expected an unsigned integer in range`; Go prints its json/v2 decoder
-    error, whose wording also varied between Go runs ("unable to" vs "cannot unmarshal").
+    error, whose wording itself changes between Go processes ("unable to" vs "cannot unmarshal"; observed on
+    regeneration, so the committed line is whichever run produced it).
 
   This is a Go-server comparison through tsrs' test-only node table. It is not a Node-client or
   `Session` run; the broad upstream client suite belongs to the parity lane.
-* Through core's `Session` every handler that returns or accepts a node handle, a source-file descriptor
-  or an encoded node fails with an explicit `api: unsupported` until `tsrs_api_codec` provides node
-  index tables / `EncodeNode` and core provides `newSourceFileDescriptor` / the source-file cache
-  (`SessionHost` in `checker.rs`). In practice that is nearly every method (symbol responses carry
-  declaration handles). The unit tests use a test-only node table instead.
-* File-owned symbol references without a snapshot (`getParentOfSymbol`, `getMembersOfSymbol`,
-  `getExportsOfSymbol`, `getExportSymbolOfSymbol` on `kind: 0` references) need core's
-  `getCachedSourceFile` lease cache.
+* `session_responses_match_pinned_go` (checker/session_tests.rs) runs through core's real `Session`, with
+  codec node handles, source-file descriptors and leases. It compares 66 full responses with
+  `testdata/go_probe/go_shapes_b85298b6.jsonl`, recorded by `TestTsrsCheckerShapes` in the same probe.
+  All 66 match after normalizing per-process counters: type, signature and symbol ids, source-file node
+  ids, and the symbol id embedded in `__@iterator@<id>` names. Node handles, content hashes, flags and
+  error texts are compared as is. It pins:
+  * **encoding/json v2 rules.** `omitempty` drops only null, "", [] and {}. So `objectFlags: 0`,
+    `isTupleType`, `isThisType` and `isReadonly: false` are always sent, nil slices are `[]` (not
+    `null`), and completion `kind: 0` is sent.
+  * **Wrong-kind requests.** Pinned Go does not validate these; it panics and the connection reports
+    `panic: <value>`. tsrs returns the same first line as an error without panicking. Go answers some
+    of them normally (`getBaseTypes`, `getConstraintOfTypeParameter`, `getDefaultFromTypeParameter` on
+    a literal; `getSignaturesOfType` with an unknown kind), and so does tsrs.
+* **API checker re-entrancy** (`lease.rs`). This is a deliberate divergence: pinned Go blocks forever if
+  a request issued from inside a client callback needs the API checker that the callback's own request
+  holds. tsrs takes a per-program gate before the checker slot:
+  * An uncontended request proceeds immediately.
+  * A contended request waits for the holder.
+  * Only a contended acquisition while a request on the connection waits on the client
+    (`blocking_may_deadlock`) fails, with the transport's bounded re-entrancy error.
+  * Checker requests that do not need the API checker are never rejected.
+
+  Covered over real sync (MessagePack) and async (JSON-RPC) connections in
+  `session_tests::lease_reentrancy`.
+* Node handles, source-file descriptors / leases and AST encoding come from core + `tsrs_api_codec`
+  (wired in core's integration candidate a9b4354); `session_tests.rs` exercises them through `Session`,
+  including snapshot-less file-owned lookups (`getMembersOfSymbol` / `getExportsOfSymbol` / `getParentOfSymbol`).
 * Panics from deep checker invariants are converted to errors by core's `catch_unwind`; the API checker
   is not discarded afterwards (Go keeps it too).
