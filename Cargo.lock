@@ -372,6 +372,7 @@ dependencies = [
  "tsrs_parser",
  "tsrs_printer",
  "tsrs_scanner",
+ "tsrs_sourcemap",
  "tsrs_transformers",
  "tsrs_tsoptions",
  "tsrs_vfs",
@@ -478,6 +479,7 @@ dependencies = [
  "tsrs_printer",
  "tsrs_projectutil",
  "tsrs_scanner",
+ "tsrs_sourcemap",
  "tsrs_tsoptions",
  "tsrs_vfs",
 ]
@@ -560,6 +562,7 @@ dependencies = [
  "tsrs_core",
  "tsrs_parser",
  "tsrs_scanner",
+ "tsrs_sourcemap",
  "tsrs_vfs",
 ]
 
@@ -617,6 +620,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_sourcemap"
+version = "0.2.3"
+dependencies = [
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_core",
+ "tsrs_scanner",
+]
+
+[[package]]
 name = "tsrs_testrunner"
 version = "0.2.3"
 dependencies = [
@@ -634,6 +647,7 @@ dependencies = [
  "tsrs_incremental",
  "tsrs_parser",
  "tsrs_scanner",
+ "tsrs_sourcemap",
  "tsrs_tsoptions",
  "tsrs_vfs",
 ]
