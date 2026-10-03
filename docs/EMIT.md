@@ -468,7 +468,12 @@ Implemented: `tools/oracle/emit/run.py` (one project, as planned below; `$TSGO` 
 `tools/oracle/emit/monorepo.sh <monorepo root> [-j N] [--filter RE] [-- flags]` (every workspace package whose
 `build` script runs `tsc`; outputs in `/tmp/emit-go/<pkg>` and `/tmp/emit-rs/<pkg>`; refuses to start unless the
 monorepo's `git status --short` is empty and fails if it changed; `TSRS_CHECKER_ASSIGNMENT=go` by default, see
-section 10). `tsc --build` packages are emitted with `-p` until `-b` exists.
+section 10). It fails closed (`summarize.py`): exit 0 only when every selected package has exactly one result row and that
+row is identical (equal nonzero tsc statuses 0-4 are fine; 5 NotImplemented, signals and non-integer statuses
+fail even when equal); any file difference, status or diagnostics difference, tsrs panic, timeout,
+missing/duplicate/unexpected/malformed row (non-object, wrong field types, negative counts) or an empty selection
+exits 1.
+`tools/oracle/emit/test_monorepo.sh` (`TSGO=... TSRS=...`) checks that on a throwaway two-package repo. `tsc --build` packages are emitted with `-p` until `-b` exists.
 
 The reference binary already emits, so no Go oracle program is needed (add one under `ts-ref/tsc/cmd/` only if
 `EmitResult` internals are needed). Planned `tools/oracle/emit/run.py <tsconfig|dir> [--name N] [-- extra tsc flags]`:
@@ -498,9 +503,21 @@ identical to main in both modes, fourslash 4066/63, `-D warnings` check) held fo
 
 | date | commit | wave | `.js` pass / total | `.js.map` | `.sourcemap.txt` | oracle | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-03 | main d3a2598 (#9 merged) | E1+E2 | 1364 / 15197 | — | — | (as below) | declaration metric (`TSRS_TEST_DTS_ONLY=1`, below): 1754 pass / 0 fail / 13 crash (declarationMap) |
 | 2026-10-03 | emit/core (E2) | E1+E2 | 1364 / 15197 (12032 crash at stubs, 1800 skip) | — | — | dts: 2325/2325 files identical, 103/103 packages; full: 0 files (stubs: typeeraser 91, importelision 5, metadata 4; 3 packages emit nothing in both) | multi-threaded test programs give the same js pass list (one timeout aside) |
 | 2026-10-03 | emit/transforms | E3+E4 | 8579 / 15197, 0 fail (4811 crash at other waves' stubs: classfields 1933, forawait 1847, jsx 196, legacydecorators 165, esdecorator 114, sourcemaps 101, …; 1805 skip) | — | — | js mode (`-- --sourceMap false --declarationMap false`): 85/103 packages fully identical, 4545 files identical, 0 different, 951 not emitted (all 18 remaining packages panic in other waves' stubs: metadata 8, classfields 4, legacydecorators 3, jsx 3); reference = tsgo built from ts-ref b85298b6a81f (go1.27.1) | same js pass list on a second run; harness fix: source-file cache key includes moduleDetection `force` (Go keys on the whole parse options) |
 | 2026-10-03 | mfs-cx/emit-using | E6 (using.go) | 8607 / 15197, 0 fail (+28 using variants; others stop at legacydecorators/esdecorator/forawait/classfields stubs); composed with E5/E8/E9/E10/E11 branches locally: 13094, using variants 179 pass / 0 fail / 25 esdecorator-stub | — | — | CLI oracle (pinned tsgo) on 65 using test files x 4 module/target modes: 65/65 identical, diagnostics identical | deps: namedevaluation/utilities/classthis copied from emit/classfields d949ed9 |
+
+### E12 option sweep, declaration side (emit/core-2)
+
+`TSRS_TEST_DTS_ONLY=1 TSRS_TEST_RESULTS=<dir> tsrs-test run --suite all --baselines js` forces `emitDeclarationOnly`
+on every test that emits declarations (and `noEmit` on the others) and compares only the `.d.ts` outputs with the
+`.d.ts` sections of the reference `.js` baseline. It is a metric, not a gate (forcing the option can change
+diagnostics). On main d3a2598: **1754 pass, 0 fail**, 13 crash (all `declarationMap`, E7). The options of the sweep
+that affect declaration files (`removeComments`, `stripInternal`, `newLine`, `emitBOM`, `preserveConstEnums`,
+`outDir`/`rootDir`/`declarationDir`, `emitDeclarationOnly`, `noEmitOnError`, `isolatedDeclarations`) also match
+tsgo in CLI runs through `tools/oracle/emit/run.py` (output bytes, diagnostics, exit codes), and the monorepo oracle
+in declaration-only mode is 2325/2325. The JS side of the sweep waits for the transformers.
 
 ## 14. Known gaps and risks
 

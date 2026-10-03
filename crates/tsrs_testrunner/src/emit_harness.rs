@@ -248,7 +248,7 @@ fn get_output_path(program: &'static compiler::Program, options: &CompilerOption
 }
 
 // js_emit_baseline.go:174
-fn file_output(file: &TestFile, settings: &HarnessOptions) -> String {
+pub(crate) fn file_output(file: &TestFile, settings: &HarnessOptions) -> String {
     let file_name = if settings.full_emit_paths {
         tsbaseline::remove_test_path_prefixes(&file.unit_name, false /*retainTrailingDirectorySeparator*/)
     } else {

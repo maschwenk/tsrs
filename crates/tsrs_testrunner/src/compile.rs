@@ -102,6 +102,15 @@ pub struct CompilationResult {
     pub emit: Option<crate::emit_harness::EmitOutputs>,
 }
 
+/// Dev metric for the option sweep (docs/EMIT.md section 13, wave E12): `TSRS_TEST_DTS_ONLY=1` with `--baselines js`
+/// compiles every test that emits declarations with `emitDeclarationOnly` forced on and compares only the `.d.ts`
+/// outputs with the `.d.ts` sections of the reference `.js` baseline (compiler_runner::extract_dts_block). Not a gate:
+/// forcing the option can change diagnostics. Write the results elsewhere (`TSRS_TEST_RESULTS=...`).
+pub fn dts_only_mode() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("TSRS_TEST_DTS_ONLY").as_deref() == Ok("1"))
+}
+
 fn js_baselines() -> bool {
     cfg!(feature = "checker") && !crate::syntax_only() && crate::extra_baselines() & crate::EXTRA_JS != 0
 }
@@ -130,7 +139,14 @@ fn compile_files(
     current_directory: &str,
     symlinks: &BTreeMap<String, String>,
 ) -> Result<Compiled, String> {
-    let (compiler_options, harness_options) = test_compiler_options(test_config, tsconfig, current_directory)?;
+    let (mut compiler_options, harness_options) = test_compiler_options(test_config, tsconfig, current_directory)?;
+    if dts_only_mode() && js_baselines() {
+        if compiler_options.get_emit_declarations() {
+            compiler_options.emit_declaration_only = Tristate::True;
+        } else {
+            compiler_options.no_emit = Tristate::True;
+        }
+    }
     if let Some(reason) = unsupported_reason(&compiler_options) {
         return Ok(Compiled::Unsupported(reason));
     }
@@ -347,6 +363,17 @@ fn verify_javascript_output(
     }
     if SKIPPED_EMIT_TESTS.contains(&tspath::get_base_file_name(&item.path).as_ref()) {
         return None;
+    }
+    if dts_only_mode() {
+        if !result.options.get_emit_declarations() {
+            return None;
+        }
+        let outputs = result.emit.as_ref().unwrap();
+        let mut text = String::new();
+        for file in outputs.dts.values() {
+            text.push_str(&crate::emit_harness::file_output(file, &result.harness_options));
+        }
+        return Some(Ok(if text.is_empty() { crate::baseline::NO_CONTENT.to_string() } else { text }));
     }
     let header_components =
         tspath::get_path_components_relative_to(&compiler_runner::testdata_path().to_string_lossy(), &item.path, &ComparePathsOptions::default());

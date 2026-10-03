@@ -15,7 +15,8 @@ use tsrs_core::P;
 
 use crate::checkerpool::Context;
 use crate::emitter::{emitter, EmitOnly};
-use crate::program::{get_diagnostics_of_any_program, Program};
+use crate::program::Program;
+use crate::programlike::{get_diagnostics_of_any_program_like, ProgramLike};
 use tsrs_tsoptions::outputpaths::{self, ForceEmitPaths};
 
 // program.go:1845
@@ -61,7 +62,7 @@ impl Program {
     // program.go:1875
     pub fn emit(&'static self, ctx: &Context, options: EmitOptions) -> EmitResult {
         if !options.force_emit && options.emit_only != EmitOnly::EmitOnlyBuilderSignature {
-            let result = handle_no_emit_options(ctx, self, options.target_source_files.as_deref(), None);
+            let result = handle_no_emit_options(ctx, &self, options.target_source_files.as_deref(), None);
             if let Some(result) = result {
                 return result;
             }
@@ -132,15 +133,14 @@ pub fn combine_emit_results(results: Vec<Option<EmitResult>>) -> EmitResult {
     result
 }
 
-// program.go:1984. `program` is Go's `ProgramLike`; the incremental program (TODO(emit/incremental)) passes its own
-// `emitBuildInfo`.
-pub fn handle_no_emit_options(ctx: &Context, program: &'static Program, files: Option<&[P<SourceFile>]>, emit_build_info: Option<&dyn Fn() -> Option<EmitResult>>) -> Option<EmitResult> {
+// program.go:1984. The incremental program passes its own `emitBuildInfo`.
+pub fn handle_no_emit_options(ctx: &Context, program: &dyn ProgramLike, files: Option<&[P<SourceFile>]>, emit_build_info: Option<&dyn Fn() -> Option<EmitResult>>) -> Option<EmitResult> {
     if !program.options().no_emit.is_true() {
         if !program.options().no_emit_on_error.is_true() {
             return None; // NoEmit is false and NoEmitOnError is also false, so we can proceed with normal emit
         }
 
-        let diagnostics = get_diagnostics_of_any_program(
+        let diagnostics = get_diagnostics_of_any_program_like(
             ctx,
             program,
             files,
