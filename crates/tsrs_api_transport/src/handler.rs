@@ -77,8 +77,6 @@ pub(crate) fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
         (*s).to_string()
     } else if let Some(s) = payload.downcast_ref::<String>() {
         s.clone()
-    } else if let Some(e) = payload.downcast_ref::<crate::callbackfs::CallbackFsPanic>() {
-        e.0.clone()
     } else {
         "<non-string panic payload>".to_string()
     };

@@ -40,13 +40,10 @@ pub fn is_callback_name(name: &str) -> bool {
     CALLBACK_NAMES.contains(&name)
 }
 
-/// Panic payload raised by a failed or invalid filesystem callback (Go: panic(...)). The
+/// A failed or invalid filesystem callback panics with a String payload (Go: panic(...)); the
 /// connection reports it to the client as `panic: <message>`.
-#[derive(Debug, Clone)]
-pub struct CallbackFsPanic(pub String);
-
 fn fail(message: impl Into<String>) -> ! {
-    std::panic::panic_any(CallbackFsPanic(message.into()))
+    std::panic::panic_any(message.into())
 }
 
 /// Parses the `--callbacks` list (comma-separated by the CLI). Unknown names are an error
