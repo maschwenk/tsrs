@@ -12,21 +12,15 @@ pub fn crate_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-/// Fixture names with a golden encoding from the pinned server (tests/golden/manifest.json).
+/// Every fixture (tests/fixtures); each has a golden encoding from the pinned server (gen/oracle.mjs).
 pub fn fixtures() -> Vec<(String, String)> {
-    let manifest = std::fs::read_to_string(crate_dir().join("tests/golden/manifest.json")).unwrap();
-    let mut out = Vec::new();
-    for line in manifest.lines() {
-        let line = line.trim();
-        if let Some(rest) = line.strip_prefix('"') {
-            if let Some((name, tail)) = rest.split_once("\": {").filter(|(n, _)| *n != "files") {
-                let _ = tail;
-                let bytes = std::fs::read(crate_dir().join("tests/fixtures").join(name)).unwrap();
-                out.push((name.to_string(), String::from_utf8(bytes).unwrap()));
-            }
-        }
-    }
-    assert!(out.len() >= 9, "manifest lists {} fixtures", out.len());
+    let dir = crate_dir().join("tests/fixtures");
+    let mut names: Vec<String> =
+        std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).filter(|n| !n.starts_with('.')).collect();
+    names.sort();
+    let out: Vec<(String, String)> =
+        names.into_iter().map(|n| (n.clone(), String::from_utf8(std::fs::read(dir.join(&n)).unwrap()).unwrap())).collect();
+    assert_eq!(out.len(), 12, "fixture count");
     out
 }
 

@@ -8,6 +8,17 @@ use tsrs_api_codec::*;
 use tsrs_ast::*;
 
 fn roundtrip(name: &str, bytes: &[u8], what: &str) -> Result<(), String> {
+    let suffix = if what == "js client" { ".client" } else { "" };
+    let go_err = crate_dir().join(format!("tests/golden/reencode/{name}{suffix}.goreencoded.err"));
+    if let Ok(go_err) = std::fs::read_to_string(go_err) {
+        // The pinned Go decoder fails on this input; the Rust decoder must fail the same way.
+        let rust = decode_source_file(bytes).err().map(|e| e.to_string());
+        return if rust.as_deref() == Some(go_err.trim().trim_start_matches("panic: ")) {
+            Ok(())
+        } else {
+            Err(format!("{name} ({what}): go failed with {go_err:?}, rust {rust:?}"))
+        };
+    }
     let decoded = decode_source_file(bytes).map_err(|e| format!("{name} ({what}): decode failed: {e}"))?;
     let root = decoded.root();
     let sf = root.as_source_file();
@@ -137,4 +148,47 @@ fn decode_rejects_malformed_input_without_panicking() {
     }
     eprintln!("malformed inputs: {cases} cases, {errors} rejected, none panicked");
     assert!(errors > cases / 10);
+}
+
+/// Go `DecodeNodes` followed by `EncodeNode(node, nil)` (`EncodeSourceFile` for a SourceFile root), run by the
+/// pinned sources (gen/goprobe.sh, tests/golden/reencode), against the same in Rust, byte for byte. Covers the
+/// server's SourceFile encodings and every client-encoded print input, incl. synthesized trees whose wire
+/// positions are 0xFFFFFFFF (Go decodes them to int 4294967295, Rust to -1; both write 0xFFFFFFFF back).
+#[test]
+fn decode_reencode_matches_pinned_go() {
+    let dir = crate_dir().join("tests/golden/reencode");
+    let (mut identical, mut both_failed, mut failures) = (0, 0, Vec::new());
+    let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+    names.sort();
+    for f in &names {
+        let (base, go) = if let Some(b) = f.strip_suffix(".goreencoded.bin") {
+            (b, Ok(std::fs::read(dir.join(f)).unwrap()))
+        } else if let Some(b) = f.strip_suffix(".goreencoded.err") {
+            (b, Err(std::fs::read_to_string(dir.join(f)).unwrap()))
+        } else {
+            continue;
+        };
+        let input_path = [crate_dir().join(format!("tests/golden/{base}.bin")), crate_dir().join(format!("tests/golden/print/{base}.bin"))]
+            .into_iter()
+            .find(|p| p.exists())
+            .unwrap();
+        let input = std::fs::read(input_path).unwrap();
+        let rust = decode_nodes(&input).map_err(|e| e.to_string()).and_then(|d| {
+            let _scope = d.region().enter();
+            let root = d.root();
+            let r = if root.kind() == Kind::SourceFile { encode_source_file(root.as_source_file()) } else { encode_node(root, None) };
+            r.map(|(b, _)| b).map_err(|e| e.to_string())
+        });
+        match (go, rust) {
+            (Ok(go), Ok(rust)) => match first_difference(&go, &rust) {
+                None => identical += 1,
+                Some(d) => failures.push(format!("== {base}\n{d}")),
+            },
+            (Err(go), Err(rust)) if go.trim().trim_start_matches("panic: ") == rust => both_failed += 1,
+            (go, rust) => failures.push(format!("== {base}: go {:?} rust {:?}", go.map(|b| b.len()), rust.map(|b| b.len()))),
+        }
+    }
+    eprintln!("decode+re-encode vs pinned Go: {} cases, {identical} byte-identical, {both_failed} identical failures, {} mismatches", identical + both_failed + failures.len(), failures.len());
+    assert!(identical + both_failed >= 30);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

@@ -36,7 +36,7 @@ fn build_node_index_table_matches_encode() {
             assert_eq!(built.node(i), encoded.node(i), "{name}: index {i}");
             if let Some(n) = encoded.node(i) {
                 let idx = encoded.get_index(n);
-                assert!(idx != 0 && idx <= i && encoded.node(idx) == Some(n), "{name}: get_index({i}) = {idx}");
+                assert!(idx != 0 && encoded.node(idx) == Some(n), "{name}: get_index({i}) = {idx}");
                 assert_eq!(built.get_index(n), idx, "{name}: get_index (built)");
             }
         }
@@ -133,4 +133,41 @@ fn bench_encode_large_file() {
     eprintln!("{} bytes text, {} records, encoded {} bytes: encode {encode:?}, index {index:?}, decode {decode:?}", text.len(), table.len(), bytes.len());
     assert_eq!(built.len(), table.len());
     assert_eq!(decoded.root().as_source_file().statements.nodes().len(), file.statements.nodes().len());
+}
+
+/// Go `NodeIndexTable.GetIndex` on freshly parsed+bound files (no prior node ids from a checker): for nodes
+/// encoded at several indices, the index Go returns is decided by its id sort and binary search. Golden from
+/// the pinned sources (gen/goprobe.sh).
+#[test]
+fn get_index_matches_pinned_go() {
+    let expected = std::fs::read_to_string(crate_dir().join("tests/golden/get_index.txt")).unwrap();
+    let mut actual = String::new();
+    let (mut repeated, mut total) = (0, 0);
+    for (name, text) in fixtures() {
+        let (_region, file) = parse_like_server(&name, &text);
+        let table = build_node_index_table(file.get());
+        for i in 0..table.len() as u32 {
+            if let Some(n) = table.node(i) {
+                let idx = table.get_index(n);
+                assert_eq!(table.node(idx), Some(n), "{name}: get_index({i}) resolves to another node");
+                actual += &format!("{name} {i} {idx}\n");
+                total += 1;
+                repeated += (idx != i) as usize;
+            }
+        }
+        // A table rebuilt later for the same live file (ids now fixed) and the encoder's own table agree, so a
+        // handle produced from any of them names the same record for the file's lifetime.
+        let rebuilt = build_node_index_table(file.get());
+        let (_, encoded) = encode_source_file(file.get()).unwrap();
+        for i in 0..table.len() as u32 {
+            if let Some(n) = table.node(i) {
+                assert_eq!(rebuilt.get_index(n), table.get_index(n), "{name}: rebuilt table");
+                assert_eq!(encoded.get_index(n), table.get_index(n), "{name}: encoder table");
+            }
+        }
+    }
+    eprintln!("get_index: {total} nodes, {repeated} resolved to another occurrence");
+    if let Some(d) = diff_lines(&expected.lines().map(String::from).collect::<Vec<_>>(), &actual.lines().map(String::from).collect::<Vec<_>>()) {
+        panic!("get_index differs from pinned Go: {d}");
+    }
 }

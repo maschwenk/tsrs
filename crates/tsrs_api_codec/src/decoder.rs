@@ -26,6 +26,9 @@ pub enum DecodeError {
     MissingChild,
     InvalidSourceFileName(String),
     Unsupported(Kind),
+    /// Input on which the pinned Go decoder panics (the server recovers and returns `panic: <message>`); the
+    /// Rust decoder fails at the same point instead of decoding more than Go can.
+    GoDecoderPanic(String),
 }
 
 impl std::fmt::Display for DecodeError {
@@ -44,6 +47,7 @@ impl std::fmt::Display for DecodeError {
             DecodeError::MissingChild => write!(f, "missing required child"),
             DecodeError::InvalidSourceFileName(s) => write!(f, "invalid source file name {s:?}"),
             DecodeError::Unsupported(k) => write!(f, "{k:?} cannot be decoded"),
+            DecodeError::GoDecoderPanic(m) => write!(f, "{m}"),
         }
     }
 }

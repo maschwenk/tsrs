@@ -1941,7 +1941,8 @@ impl Decoder<'_> {
                 f.new_jsx_expression(dot_dot_dot_token, expression)
             }
             Kind::SyntaxList => {
-                let children = alloc_vec(child_indices.iter().map(|&ci| self.node_at(ci)).collect::<Result<Vec<_>, _>>()?);
+                if !child_indices.is_empty() { return Err(DecodeError::GoDecoderPanic(format!("runtime error: index out of range [0] with length 0"))); }
+                let children: &'static [P<Node>] = &[];
                 f.new_syntax_list(children)
             }
             Kind::JSDoc => {
@@ -2188,7 +2189,8 @@ impl Decoder<'_> {
             }
             Kind::JSDocTypeLiteral => {
                 let is_array_type = common_data & 1 != 0;
-                let jsdoc_property_tags = alloc_vec(child_indices.iter().map(|&ci| self.node_at(ci)).collect::<Result<Vec<_>, _>>()?);
+                if !child_indices.is_empty() { return Err(DecodeError::GoDecoderPanic(format!("runtime error: index out of range [0] with length 0"))); }
+                let jsdoc_property_tags: &'static [P<Node>] = &[];
                 f.new_jsdoc_type_literal(jsdoc_property_tags, is_array_type)
             }
             Kind::JSDocParameterTag | Kind::JSDocPropertyTag => {
