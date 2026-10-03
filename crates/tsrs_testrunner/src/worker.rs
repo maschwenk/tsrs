@@ -19,6 +19,15 @@ thread_local! {
     static LAST_PANIC: RefCell<Option<PanicInfo>> = const { RefCell::new(None) };
 }
 
+// The last panic on any thread: a test whose program runs on checker threads (multi-threaded test programs, emit)
+// panics there and the payload is re-raised on the worker thread, whose thread-local stays empty. A worker runs
+// one item at a time, so the process-wide slot belongs to the current item.
+static ANY_THREAD_PANIC: std::sync::Mutex<Option<PanicInfo>> = std::sync::Mutex::new(None);
+
+fn take_panic_info() -> Option<PanicInfo> {
+    LAST_PANIC.with(|p| p.borrow_mut().take()).or_else(|| ANY_THREAD_PANIC.lock().unwrap().take())
+}
+
 #[derive(Clone, Debug)]
 pub struct PanicInfo {
     pub message: String,
@@ -39,6 +48,7 @@ pub fn install_panic_hook(quiet: bool) {
                 let _ = f.write_all(trace.as_bytes());
             }
         }
+        *ANY_THREAD_PANIC.lock().unwrap() = Some(PanicInfo { message: message.clone(), location: location.clone() });
         LAST_PANIC.with(|p| *p.borrow_mut() = Some(PanicInfo { message, location }));
     }));
 }
@@ -96,6 +106,7 @@ pub fn results_dir() -> PathBuf {
 pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
     let start = Instant::now();
     LAST_PANIC.with(|p| *p.borrow_mut() = None);
+    *ANY_THREAD_PANIC.lock().unwrap() = None;
     let outcome = panic::catch_unwind(AssertUnwindSafe(|| backend.run(item)));
     let ms = start.elapsed().as_millis();
     let mut r = ItemResult {
@@ -115,7 +126,7 @@ pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
     match outcome {
         Err(_) => {
             r.class = Class::Crash;
-            r.panic = Some(LAST_PANIC.with(|p| p.borrow_mut().take()).unwrap_or(PanicInfo { message: "<unknown panic>".into(), location: String::new() }));
+            r.panic = Some(take_panic_info().unwrap_or(PanicInfo { message: "<unknown panic>".into(), location: String::new() }));
             for (ext, _) in EXTRA_KINDS {
                 extras.push((ext, ExtraResult::plain(Class::Crash, "errors phase panicked".to_string())));
             }
@@ -284,5 +295,5 @@ pub fn worker_main(backend_spec: crate::BackendSpec) {
 
 /// The message of the last panic caught on this thread (for panics caught inside a test, like Go's RecoverAndFail).
 pub fn take_last_panic_message() -> String {
-    LAST_PANIC.with(|p| p.borrow_mut().take()).map(|p| format!("{} at {}", p.message, p.location)).unwrap_or_else(|| "<unknown panic>".to_string())
+    take_panic_info().map(|p| format!("{} at {}", p.message, p.location)).unwrap_or_else(|| "<unknown panic>".to_string())
 }
