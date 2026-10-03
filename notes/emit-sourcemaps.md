@@ -55,7 +55,7 @@ Branch `emit/sourcemaps`. Plan: docs/EMIT.md section 7 (E7).
 - `--baselines js`: 1363 pass, same pass list as main (the 2 timeouts are the usual flaky ones).
 - `--baselines jsmap,sourcemap`: 0 pass, 12030 crash, 3165 skip: every test with source maps panics in the E3 stubs
   (typeeraser) before printing. Needs emit/transforms.
-- Monorepo oracle (`tools/oracle/emit/monorepo.sh /root/Owner -- --emitDeclarationOnly`, reference = tsgo built from
+- Monorepo oracle (`tools/oracle/emit/monorepo.sh <private-monorepo> -- --emitDeclarationOnly`, reference = tsgo built from
   ts-ref): 103/103 packages fully identical, 4623/4623 files, including 2298 `.d.ts.map`.
 - Reference binary: the npm nightly 7.1.0-dev.20260929.1 predates the pinned commit and lacks #64460 (declaration
   maps of `export default <identifier>`); with it 187 `.d.ts.map` differ. Use a tsgo built from ts-ref.
@@ -103,9 +103,9 @@ draft PR: head `emit/sourcemaps`, base `main`, title "emit/sourcemaps: E7 source
 Reference: tsgo built from pinned ts-ref (`cd ts-ref/tsc && go build -o /root/bin/tsgo-ref ./cmd/tsc`, Go 1.27.1).
 The npm nightly 7.1.0-dev.20260929.1 predates b85298b6 (lacks #64460); with it 187 `.d.ts.map` differ.
 ```
-TSGO=/root/bin/tsgo-ref tools/oracle/emit/monorepo.sh /root/Owner -j 6 -- --emitDeclarationOnly
+TSGO=/root/bin/tsgo-ref tools/oracle/emit/monorepo.sh <private-monorepo> -j 6 -- --emitDeclarationOnly
 ```
-103/103 packages fully identical; 4623/4623 files, of which 2298 `.d.ts.map`. `/root/Owner` git status empty
+103/103 packages fully identical; 4623/4623 files, of which 2298 `.d.ts.map`. `<private-monorepo>` git status empty
 before and after.
 
 ### Integration evidence (temporary local branch `int-local`, not pushed)
@@ -115,7 +115,7 @@ before and after.
   0 fail, 63 crash; `.sourcemap.txt` 93 pass, 0 fail, 63 crash. All 63 crashes are other waves' stubs (forawait 36,
   classfields 15, commonjsmodule 6, jsx 3, esdecorator 2, legacydecorators 1); 2 more reference baselines are
   content-mapper tests (unsupported).
-- `TSGO=/root/bin/tsgo-ref tools/oracle/emit/monorepo.sh /root/Owner -j 6` (configs' own sourceMap/declarationMap):
+- `TSGO=/root/bin/tsgo-ref tools/oracle/emit/monorepo.sh <private-monorepo> -j 6` (configs' own sourceMap/declarationMap):
   83/103 packages fully identical, 8996 files identical, 0 different, 1252 not emitted (20 packages panic in metadata
   8, classfields 4, legacydecorators 3, commonjsmodule 3, jsx 2). Every emitted map identical: 2317 `.js.map`,
   2166 `.d.ts.map`.
