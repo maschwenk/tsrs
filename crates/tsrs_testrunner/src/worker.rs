@@ -65,6 +65,8 @@ pub struct ItemResult {
     pub types: Option<ExtraResult>,
     pub symbols: Option<ExtraResult>,
     pub js: Option<ExtraResult>,
+    pub jsmap: Option<ExtraResult>,
+    pub sourcemap: Option<ExtraResult>,
 }
 
 pub struct ExtraResult {
@@ -93,7 +95,13 @@ impl ExtraResult {
     }
 }
 
-pub const EXTRA_KINDS: [(&str, u8); 3] = [("types", crate::EXTRA_TYPES), ("symbols", crate::EXTRA_SYMBOLS), ("js", crate::EXTRA_JS)];
+pub const EXTRA_KINDS: [(&str, u8); 5] = [
+    ("types", crate::EXTRA_TYPES),
+    ("symbols", crate::EXTRA_SYMBOLS),
+    ("js", crate::EXTRA_JS),
+    ("js.map", crate::EXTRA_JSMAP),
+    ("sourcemap.txt", crate::EXTRA_SOURCEMAP),
+];
 
 pub fn results_dir() -> PathBuf {
     match std::env::var_os("TSRS_TEST_RESULTS") {
@@ -120,6 +128,8 @@ pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
         types: None,
         symbols: None,
         js: None,
+        jsmap: None,
+        sourcemap: None,
     };
     let want = crate::extra_baselines();
     let mut extras: Vec<(&str, ExtraResult)> = Vec::new();
@@ -145,10 +155,21 @@ pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
                 extras.push((ext, ExtraResult::plain(Class::Fail, r.diff.clone())));
             }
         }
-        Ok(Outcome::Baseline(actual, types_and_symbols, js)) => {
+        Ok(Outcome::Baseline(actual, types_and_symbols, js, maps)) => {
             match &js {
                 None => extras.push(("js", ExtraResult::plain(Class::Skip, "no js output".to_string()))),
                 Some(js) => extras.push(("js", ExtraResult::classify(item, "js", js))),
+            }
+            // `.js.map` / `.sourcemap.txt`: a test whose generated baseline is `NoContent` and that has no reference
+            // passes trivially in Go; it is reported as a skip so the pass counts mean something.
+            for (ext, generated) in [("js.map", maps.as_ref().and_then(|m| m.js_map.as_ref())), ("sourcemap.txt", maps.as_ref().and_then(|m| m.sourcemap.as_ref()))] {
+                match generated {
+                    None => extras.push((ext, ExtraResult::plain(Class::Skip, "no source map baseline".to_string()))),
+                    Some(Ok(actual)) if actual == baseline::NO_CONTENT && compiler_runner::read_reference_extra_baseline(&item.suite, &item.name, ext).is_none() => {
+                        extras.push((ext, ExtraResult::plain(Class::Skip, "no source maps".to_string())))
+                    }
+                    Some(generated) => extras.push((ext, ExtraResult::classify(item, ext, generated))),
+                }
             }
             match &types_and_symbols {
                 None => {
@@ -175,6 +196,8 @@ pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
             "types" if want & crate::EXTRA_TYPES != 0 => r.types = Some(e),
             "symbols" if want & crate::EXTRA_SYMBOLS != 0 => r.symbols = Some(e),
             "js" if want & crate::EXTRA_JS != 0 => r.js = Some(e),
+            "js.map" if want & crate::EXTRA_JSMAP != 0 => r.jsmap = Some(e),
+            "sourcemap.txt" if want & crate::EXTRA_SOURCEMAP != 0 => r.sourcemap = Some(e),
             _ => {}
         }
     }
@@ -185,6 +208,8 @@ pub fn extra_result<'a>(r: &'a ItemResult, ext: &str) -> Option<&'a ExtraResult>
     match ext {
         "types" => r.types.as_ref(),
         "js" => r.js.as_ref(),
+        "js.map" => r.jsmap.as_ref(),
+        "sourcemap.txt" => r.sourcemap.as_ref(),
         _ => r.symbols.as_ref(),
     }
 }

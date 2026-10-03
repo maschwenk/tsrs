@@ -48,7 +48,7 @@ mod refs_smoke_test;
 mod rename;
 pub mod lsconv;
 pub mod lsutil;
-pub mod sourcemap;
+pub use tsrs_sourcemap as sourcemap;
 mod selectionranges;
 mod semantictokens;
 mod source_map;

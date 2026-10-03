@@ -1,13 +1,11 @@
 use crate::*;
+use tsrs_checker::LiteralValue;
 
-// Gate stub (docs/EMIT.md section 7): the constructor is ported; `visit` has no `SubtreeFacts` early return in Go.
-
-// constenum.go:15
 pub struct ConstEnumInliningTransformer {
     pub base: Transformer,
-    pub compiler_options: P<CompilerOptions>,
-    pub current_source_file: Cell<Option<P<SourceFile>>>,
-    pub emit_resolver: Option<Resolver>,
+    compiler_options: P<CompilerOptions>,
+    current_source_file: Cell<Option<P<SourceFile>>>,
+    emit_resolver: Option<Resolver>,
 }
 
 // constenum.go:22
@@ -24,6 +22,80 @@ pub fn new_const_enum_inlining_transformer(opt: &TransformOptions) -> Option<P<T
 impl ConstEnumInliningTransformer {
     // constenum.go:32
     fn visit(&self, node: P<Node>) -> Option<P<Node>> {
-        unimplemented!("emit: constenum.go not ported")
+        let emit_context = self.base.emit_context();
+        let f = self.base.factory();
+        if let Kind::PropertyAccessExpression | Kind::ElementAccessExpression = node.kind() {
+            let Some(parse) = emit_context.parse_node(Some(node)) else {
+                return self.base.visitor().visit_each_child(Some(node));
+            };
+            let value = self.emit_resolver.unwrap().get_constant_value(parse);
+            if let Some(value) = value {
+                let mut replacement: Option<P<Node>> = None;
+                match value {
+                    LiteralValue::Number(v) => {
+                        if v.is_inf() {
+                            if v.abs() == v {
+                                replacement = Some(f.new_identifier("Infinity"));
+                            } else {
+                                replacement = Some(f.new_prefix_unary_expression(Kind::MinusToken, f.new_identifier("Infinity")));
+                            }
+                        } else if v.is_nan() {
+                            replacement = Some(f.new_identifier("NaN"));
+                        } else if v.abs() == v {
+                            replacement = Some(f.new_numeric_literal(alloc_str(&v.string()), TokenFlags::None));
+                        } else {
+                            replacement = Some(f.new_prefix_unary_expression(Kind::MinusToken, f.new_numeric_literal(alloc_str(&v.abs().string()), TokenFlags::None)));
+                        }
+                    }
+                    LiteralValue::String(v) => {
+                        replacement = Some(f.new_string_literal(v, TokenFlags::None));
+                    }
+                    LiteralValue::BigInt(v) => {
+                        // technically not supported by strada, and issues a checker error, handled here for completeness
+                        if v == jsnum::PseudoBigInt::default() {
+                            replacement = Some(f.new_big_int_literal("0", TokenFlags::None));
+                        } else if !v.negative {
+                            replacement = Some(f.new_big_int_literal(v.base10_value, TokenFlags::None));
+                        } else {
+                            replacement = Some(f.new_prefix_unary_expression(Kind::MinusToken, f.new_big_int_literal(v.base10_value, TokenFlags::None)));
+                        }
+                    }
+                    LiteralValue::Boolean(_) => {}
+                }
+
+                if self.compiler_options.remove_comments.is_false_or_unknown() {
+                    let original = emit_context.most_original(Some(node));
+                    if let Some(original) = original {
+                        if !ast::node_is_synthesized(original) {
+                            let original_text = scanner::get_text_of_node(original);
+                            let escaped_text = safe_multi_line_comment(&original_text);
+                            // Go dereferences a nil replacement here (a boolean constant value cannot occur).
+                            emit_context.add_synthetic_trailing_comment(replacement.unwrap(), Kind::MultiLineCommentTrivia, &escaped_text, false);
+                        }
+                    }
+                }
+                return replacement;
+            }
+            return self.base.visitor().visit_each_child(Some(node));
+        }
+        self.base.visitor().visit_each_child(Some(node))
     }
+}
+
+// constenum.go:86
+fn safe_multi_line_comment(text: &str) -> String {
+    let mut b = String::with_capacity(text.len() + 2);
+    b.push(' ');
+    let mut text = text;
+    loop {
+        let Some(i) = text.find("*/") else {
+            break;
+        };
+        b.push_str(&text[..i]);
+        b.push_str("*_/");
+        text = &text[i + 2..];
+    }
+    b.push_str(text);
+    b.push(' ');
+    b
 }
