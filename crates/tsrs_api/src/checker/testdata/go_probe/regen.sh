@@ -32,18 +32,22 @@ out="$here/go_probe_${pinned:0:8}.jsonl"
 tmp="$out.tmp"
 shapes="$here/go_shapes_${pinned:0:8}.jsonl"
 shapes_tmp="$shapes.tmp"
-cleanup() { rm -f "$dest" "$tmp" "$shapes_tmp"; }
+flags="$here/go_flags_${pinned:0:8}.jsonl"
+flags_tmp="$flags.tmp"
+cleanup() { rm -f "$dest" "$tmp" "$shapes_tmp" "$flags_tmp"; }
 trap cleanup EXIT
 cp "$here/zz_tsrs_probe_test.go" "$dest"
 
 (cd "$ref/tsc" && TSRS_FX="$here/fixture" TSRS_NEEDLES_FILE="$here/needles.txt" TSRS_OUT="$tmp" TSRS_SHAPES_OUT="$shapes_tmp" \
-  go test ./internal/api -run '^TestTsrsChecker(Probe|Shapes)$' -count=1)
-test -s "$tmp" && test -s "$shapes_tmp"
+  TSRS_FLAGS_DIR="$here/flags" TSRS_FLAGS_OUT="$flags_tmp" \
+  go test ./internal/api -run '^TestTsrsChecker(Probe|Shapes|Flags)$' -count=1)
+test -s "$tmp" && test -s "$shapes_tmp" && test -s "$flags_tmp"
 mv "$tmp" "$out"
 mv "$shapes_tmp" "$shapes"
+mv "$flags_tmp" "$flags"
 rm -f "$dest"
 if [ -n "$(git -C "$ref" status --porcelain)" ]; then
   echo "ts-ref is not clean after the run" >&2
   exit 1
 fi
-echo "wrote $out ($(wc -l < "$out") lines), $shapes ($(wc -l < "$shapes") lines) from $(go version) at $pinned"
+echo "wrote $out ($(wc -l < "$out") lines), $shapes ($(wc -l < "$shapes") lines), $flags ($(wc -l < "$flags") lines) from $(go version) at $pinned"

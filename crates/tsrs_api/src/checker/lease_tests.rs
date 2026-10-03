@@ -31,6 +31,33 @@ fn grace() -> Duration {
 struct H {
     s: S,
     caller: Arc<transport::LateCaller>,
+    ctl: Arc<Ctl>,
+}
+
+/// In-process synchronization for tests that need ordering guarantees instead of sleeps: handlers report
+/// milestones on `events`, and `holdGate` keeps the gate until the test sets `released`.
+#[derive(Default)]
+struct Ctl {
+    events: std::sync::Mutex<Option<mpsc::Sender<&'static str>>>,
+    released: std::sync::Mutex<bool>,
+    cv: std::sync::Condvar,
+}
+
+impl Ctl {
+    fn event(&self, e: &'static str) {
+        if let Some(tx) = self.events.lock().unwrap().as_ref() {
+            let _ = tx.send(e);
+        }
+    }
+    fn subscribe(&self) -> mpsc::Receiver<&'static str> {
+        let (tx, rx) = mpsc::channel();
+        *self.events.lock().unwrap() = Some(tx);
+        rx
+    }
+    fn release(&self) {
+        *self.released.lock().unwrap() = true;
+        self.cv.notify_all();
+    }
 }
 
 impl H {
@@ -81,7 +108,17 @@ impl transport::Handler for H {
                 Ok(transport::Response::Json(b"\"held\"".to_vec()))
             }
             "cbOnly" => Ok(transport::Response::Json(call("cbOnly", "null")?)),
+            "holdGate" => {
+                let _lease = self.acquire(&which(params))?;
+                self.ctl.event("holding");
+                let mut released = self.ctl.released.lock().unwrap();
+                while !*released {
+                    released = self.ctl.cv.wait(released).unwrap();
+                }
+                Ok(transport::Response::Json(b"\"held\"".to_vec()))
+            }
             "waitOne" => {
+                self.ctl.event("waiting");
                 let start = Instant::now();
                 drop(self.acquire(&which(params))?);
                 Ok(transport::Response::Json(start.elapsed().as_millis().to_string().into_bytes()))
@@ -120,6 +157,7 @@ fn requests(s: &S) -> (String, String) {
 }
 
 struct Async {
+    ctl: Arc<Ctl>,
     w: FrameWriter<std::io::PipeWriter>,
     r: FrameReader<std::io::PipeReader>,
     run: thread::JoinHandle<Result<(), transport::TransportError>>,
@@ -127,19 +165,20 @@ struct Async {
 
 impl Async {
     fn start(s: S, grace: Duration) -> Async {
+        let ctl = Arc::new(Ctl::default());
         let late = transport::LateCaller::new();
         let (server_r, client_w) = std::io::pipe().unwrap();
         let (client_r, server_w) = std::io::pipe().unwrap();
         let conn = transport::AsyncConn::new(
             Box::new(FrameReader::new(server_r)),
             Box::new(FrameWriter::new(server_w)),
-            Arc::new(H { s, caller: late.clone() }),
+            Arc::new(H { s, caller: late.clone(), ctl: ctl.clone() }),
             transport::ConnOptions { reentrancy_grace: grace, ..Default::default() },
             None,
         );
         late.set(conn.caller());
         let run = thread::spawn(move || conn.run());
-        Async { w: FrameWriter::new(client_w), r: FrameReader::new(client_r), run }
+        Async { ctl, w: FrameWriter::new(client_w), r: FrameReader::new(client_r), run }
     }
 
     fn send(&mut self, id: u32, method: &str, params: &str) {
@@ -243,24 +282,33 @@ fn async_ordinary_contention_waits_past_the_grace_period() {
 
 #[test]
 fn async_unrelated_attributed_callback_does_not_reject_a_legitimate_wait() {
+    // Ordering is established with in-process events, not sleeps: the holder has the gate before the
+    // waiter is sent, the unrelated callback is pending before the waiter starts, and the gate stays held
+    // for three grace periods after the waiter has started contending. (A previous version slept a fixed
+    // g/6 and measured the waiter against a timed holder, so a slow dispatch could shorten the measured wait.)
     let g = grace();
     bounded("async unrelated callback", g * 20 + Duration::from_secs(30), move || {
         let s = session_with(&[], &["/p/tsconfig.json"]);
         let mut a = Async::start(s, g);
-        let hold = (g * 3).as_millis();
-        a.send(1, "hold", &format!(r#"{{"which":"p","ms":{hold}}}"#));
-        // Let the holder take the gate before the waiter arrives (requests are dispatched concurrently).
-        thread::sleep(g / 6);
+        let events = a.ctl.subscribe();
+        let next = |what: &str| events.recv_timeout(Duration::from_secs(20)).unwrap_or_else(|_| panic!("no {what} event"));
+        a.send(1, "holdGate", r#"{"which":"p"}"#);
+        assert_eq!(next("holding"), "holding");
         // An unrelated request blocks on the client (attributed to that request) for the whole wait.
         a.send(2, "cbOnly", "");
         let (cb, _) = a.read_call("cbOnly");
         a.send(3, "waitOne", r#"{"which":"p"}"#);
+        assert_eq!(next("waiting"), "waiting");
+        // Longer than the grace period: a spurious rejection would have answered request 3 by now.
+        thread::sleep(g * 3);
+        a.ctl.release();
         let first = a.read();
-        assert_eq!(get(&first, "id"), Value::Number(1.0));
+        assert_eq!(get(&first, "id"), Value::Number(1.0), "the holder answers first: {}", json::marshal(&first).unwrap());
         result(&first);
         let waiter = a.read();
         assert_eq!(get(&waiter, "id"), Value::Number(3.0));
-        assert!(ms(&result(&waiter)) >= (g * 2).as_millis(), "{}", json::marshal(&waiter).unwrap());
+        // Not rejected, and it really waited behind the holder for longer than the grace period.
+        assert!(ms(&result(&waiter)) >= (g * 3).as_millis(), "{}", json::marshal(&waiter).unwrap());
         a.answer(&cb, "null");
         assert_eq!(get(&a.read(), "id"), Value::Number(2.0));
         a.finish();
@@ -309,7 +357,7 @@ fn async_waiter_exits_when_the_connection_closes() {
         a.send(2, "waitOne", r#"{"which":"p"}"#);
         thread::sleep(Duration::from_millis(50));
         let start = Instant::now();
-        let Async { w, r, run } = a;
+        let Async { w, r, run, .. } = a;
         drop(w);
         drop(r);
         let _ = run.join().unwrap();
@@ -329,7 +377,7 @@ fn sync_genuine_reentry_fails_immediately_and_lease_free_requests_proceed() {
         let conn = transport::SyncConn::new(
             Box::new(MessagePackReader::new(server_r)),
             Box::new(MessagePackWriter::new(server_w)),
-            Arc::new(H { s, caller: late.clone() }),
+            Arc::new(H { s, caller: late.clone(), ctl: Arc::new(Ctl::default()) }),
             transport::ConnOptions { reentrancy_grace: Duration::from_secs(600), ..Default::default() },
         );
         late.set(conn.caller());
@@ -383,7 +431,7 @@ fn sync_nested_request_reads_its_own_exact_uint64_literals() {
         let conn = transport::SyncConn::new(
             Box::new(MessagePackReader::new(server_r)),
             Box::new(MessagePackWriter::new(server_w)),
-            Arc::new(H { s, caller: late.clone() }),
+            Arc::new(H { s, caller: late.clone(), ctl: Arc::new(Ctl::default()) }),
             transport::ConnOptions::default(),
         );
         late.set(conn.caller());

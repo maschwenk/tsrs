@@ -15,7 +15,9 @@ import (
 	"unicode/utf16"
 
 	"github.com/microsoft/TypeScript/tsc/internal/ast"
+	"github.com/microsoft/TypeScript/tsc/internal/astnav"
 	"github.com/microsoft/TypeScript/tsc/internal/json"
+	"github.com/microsoft/TypeScript/tsc/internal/project"
 	"github.com/microsoft/TypeScript/tsc/internal/testutil/projecttestutil"
 )
 
@@ -406,6 +408,89 @@ func TestTsrsCheckerShapes(t *testing.T) {
 			p.emit(label, map[string]any{"error": firstLine(e)})
 		} else {
 			p.emit(label, map[string]any{"result": r})
+		}
+	}
+}
+
+// TestTsrsCheckerFlags records full type responses (including objectFlags) for the cases in flags/cases.txt
+// (fixture directories flags/t and flags/m, mounted at /t and /m), each followed by getTargetOfType when the
+// type has a target (the property request takes the type itself). Requests run in file order on one snapshot per fixture.
+func TestTsrsCheckerFlags(t *testing.T) {
+	dir := os.Getenv("TSRS_FLAGS_DIR")
+	outPath := os.Getenv("TSRS_FLAGS_OUT")
+	if dir == "" || outPath == "" {
+		t.Skip("TSRS_FLAGS_DIR / TSRS_FLAGS_OUT not set")
+	}
+	casesText, _ := os.ReadFile(dir + "/cases.txt")
+	read := func(n string) string { b, _ := os.ReadFile(dir + "/" + n); return string(b) }
+	files := map[string]any{}
+	for _, fx := range []string{"t", "m"} {
+		entries, _ := os.ReadDir(dir + "/" + fx)
+		for _, e := range entries {
+			files["/"+fx+"/"+e.Name()] = read(fx + "/" + e.Name())
+		}
+	}
+	init, _ := projecttestutil.GetSessionInitOptions(files, nil, &projecttestutil.TypingsInstallerOptions{})
+	s := NewStandaloneSession(init, nil)
+	defer s.Close()
+	out, _ := os.Create(outPath)
+	defer out.Close()
+	p := &probe{s: s, out: out}
+	snaps := map[string][2]any{}
+	for _, fx := range []string{"t", "m"} {
+		r, e := p.call("createSnapshot", map[string]any{"openProjects": []string{"/" + fx + "/tsconfig.json"}})
+		if e != "" {
+			t.Fatal(e)
+		}
+		snaps[fx] = [2]any{get(r, "snapshot"), get(get(r, "projects").([]any)[0], "id")}
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(casesText)), "\n") {
+		f := strings.Split(line, "\t")
+		fx, file, needle, kind, method := f[0], f[1], f[2], f[3], f[4]
+		snap, proj := snaps[fx][0], snaps[fx][1]
+		sd, _ := s.getSnapshotData(SnapshotID(snap.(float64)))
+		program, _ := sd.getProgram(project.ID(proj.(string)))
+		sf := program.GetSourceFile("/" + fx + "/" + file)
+		text := sf.Text()
+		pos := strings.Index(text, needle) + len(needle)
+		if kind != "alias" {
+			pos--
+		}
+		node := astnav.GetTouchingPropertyName(sf, pos)
+		for node != nil {
+			if kind == "alias" && node.Parent != nil && node.Parent.Kind == ast.KindTypeAliasDeclaration {
+				break
+			}
+			if kind == "ArrayLiteralExpression" && node.Kind == ast.KindArrayLiteralExpression {
+				break
+			}
+			node = node.Parent
+		}
+		// "<method>+prop:<name>": the method, then getPropertyOfType(<name>) on its result, then the method again
+		// (the second response is recorded).
+		prop := ""
+		if i := strings.Index(method, "+prop:"); i >= 0 {
+			method, prop = method[:i], method[i+len("+prop:"):]
+		}
+		sp := map[string]any{"snapshot": snap, "project": proj, "location": string(nodeHandleFrom(node))}
+		r, e := p.call(method, sp)
+		if prop != "" && e == "" {
+			p.call("getPropertyOfType", map[string]any{"snapshot": snap, "project": proj, "type": get(r, "id"), "name": prop})
+			r, e = p.call(method, sp)
+		}
+		label := fx + "/" + file + " " + method + " @" + needle
+		if e != "" {
+			p.emit(label, map[string]any{"error": strings.SplitN(e, "\n", 2)[0]})
+			continue
+		}
+		p.emit(label, r)
+		if get(r, "target") != nil {
+			tr, te := p.call("getTargetOfType", map[string]any{"snapshot": snap, "project": proj, "objectId": get(r, "id")})
+			if te != "" {
+				p.emit(label+" target", map[string]any{"error": te})
+			} else {
+				p.emit(label+" target", tr)
+			}
 		}
 	}
 }
