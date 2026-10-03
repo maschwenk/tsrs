@@ -1086,16 +1086,241 @@ impl classFieldsTransformer {
         }
         self.transform_public_field_initializer(node)
     }
+
+    // classfields.go:1001
+    pub(crate) fn should_transform_auto_accessors_in_current_class(&self) -> bool {
+        if self.should_transform_auto_accessors.get() {
+            return true;
+        }
+        // When targeting ESNext with useDefineForClassFields: false, auto-accessors are only
+        // transformed if the current class will hoist initializers to the constructor.
+        self.lexical_environment.get().is_some_and(|l| l.data.get().is_some_and(|d| d.facts.get().intersects(classFacts::WillHoistInitializersToConstructor)))
+    }
+
+    // classfields.go:1011
+    pub(crate) fn visit_property_declaration(&self, node: P<Node>) -> Option<P<Node>> {
+        // If this is an auto-accessor, we defer to `transformAutoAccessor`. That function
+        // will in turn call `transformFieldInitializer` as needed.
+        if ast::is_auto_accessor_property_declaration(node) && (self.should_transform_auto_accessors_in_current_class() || ast::has_static_modifier(node) && self.should_always_transform_private_static_elements(node)) {
+            return self.transform_auto_accessor(node);
+        }
+        self.transform_field_initializer(node)
+    }
+
+    // classfields.go:1022
+    pub(crate) fn create_private_identifier_access(&self, info: P<privateIdentifierInfo>, receiver: P<Node>) -> P<Node> {
+        let receiver = self.visitor().visit_node(Some(receiver)).unwrap();
+        self.create_private_identifier_access_helper(info, receiver)
+    }
+
+    // classfields.go:1027
+    pub(crate) fn create_private_identifier_access_helper(&self, info: P<privateIdentifierInfo>, receiver: P<Node>) -> P<Node> {
+        self.emit_context().set_comment_range(receiver, tsrs_core::TextRange::new(-1, receiver.end()));
+
+        match info.kind {
+            PrivateIdentifierKind::Accessor => self.factory().new_class_private_field_get_helper(receiver, info.brand_check_identifier.unwrap(), info.kind, info.getter_name.get()),
+            PrivateIdentifierKind::Method => self.factory().new_class_private_field_get_helper(receiver, info.brand_check_identifier.unwrap(), info.kind, info.method_name),
+            PrivateIdentifierKind::Field => {
+                let mut f: Option<P<Node>> = None;
+                if info.is_static {
+                    f = info.variable_name;
+                }
+                self.factory().new_class_private_field_get_helper(receiver, info.brand_check_identifier.unwrap(), info.kind, f)
+            }
+            PrivateIdentifierKind::Untransformed => tsrs_core::debug::fail("Access helpers should not be created for untransformed private elements"),
+        }
+    }
+
+    // classfields.go:1064
+    pub(crate) fn visit_property_access_expression(&self, node: P<Node>) -> Option<P<Node>> {
+        let pa = node.as_property_access_expression();
+        if ast::is_private_identifier(pa.name()) {
+            let info = self.access_private_identifier(pa.name());
+            if let Some(info) = info {
+                let result = self.create_private_identifier_access(info, pa.expression);
+                self.emit_context().set_original(result, node);
+                result.set_loc(node.loc());
+                return Some(result);
+            }
+        }
+        if self.should_transform_super_in_static_initializers.get()
+            && self.current_class_element.get().is_some()
+            && ast::is_super_property(node)
+            && ast::is_identifier(pa.name())
+            && is_static_property_declaration_or_class_static_block(self.current_class_element.get().unwrap())
+            && self.lexical_environment.get().is_some_and(|l| l.data.get().is_some())
+        {
+            let data = self.lexical_environment.get().unwrap().data.get().unwrap();
+            if data.facts.get().intersects(classFacts::ClassWasDecorated) {
+                return self.visit_invalid_super_property(node);
+            }
+            if let (Some(class_constructor), Some(super_class_reference)) = (data.class_constructor.get(), data.super_class_reference.get()) {
+                // converts `super.x` into `Reflect.get(_baseTemp, "x", _classTemp)`
+                let super_property = self.factory().new_reflect_get_call(super_class_reference, self.factory().new_string_literal_from_node(pa.name()), class_constructor);
+                self.emit_context().set_original(super_property, pa.expression);
+                super_property.set_loc(pa.expression.loc());
+                return Some(super_property);
+            }
+        }
+        // Visit only the expression, not the name (when it's a regular identifier), to prevent
+        // substitution of property names. Strada's onSubstituteNode only fires for
+        // EmitHint.Expression, which excludes the .name of PropertyAccessExpression.
+        // Private identifier names are still visited through VisitEachChild so they can be
+        // transformed by visitPrivateIdentifier.
+        if ast::is_identifier(pa.name()) {
+            return Some(self.visit_property_access_expression_for_substitution(node));
+        }
+        self.visitor().visit_each_child(Some(node))
+    }
+
+    // classfields.go:1108
+    // visitPropertyAccessExpressionForSubstitution visits only the expression of a PropertyAccessExpression,
+    // leaving the name unchanged. This prevents the name from being treated as a standalone identifier
+    // reference and incorrectly substituted with a class alias.
+    pub(crate) fn visit_property_access_expression_for_substitution(&self, node: P<Node>) -> P<Node> {
+        let pa = node.as_property_access_expression();
+        let expression = self.visitor().visit_node(Some(pa.expression)).unwrap();
+        if expression != pa.expression {
+            return self.factory().update_property_access_expression(node, expression, pa.question_dot_token(), pa.name(), node.flags());
+        }
+        node
+    }
+
+    // classfields.go:1116
+    pub(crate) fn visit_element_access_expression(&self, node: P<Node>) -> Option<P<Node>> {
+        let ea = node.as_element_access_expression();
+        if self.should_transform_super_in_static_initializers.get()
+            && self.current_class_element.get().is_some()
+            && ast::is_super_property(node)
+            && is_static_property_declaration_or_class_static_block(self.current_class_element.get().unwrap())
+            && self.lexical_environment.get().is_some_and(|l| l.data.get().is_some())
+        {
+            let data = self.lexical_environment.get().unwrap().data.get().unwrap();
+            if data.facts.get().intersects(classFacts::ClassWasDecorated) {
+                return self.visit_invalid_super_property(node);
+            }
+            if let (Some(class_constructor), Some(super_class_reference)) = (data.class_constructor.get(), data.super_class_reference.get()) {
+                // converts `super[x]` into `Reflect.get(_baseTemp, x, _classTemp)`
+                let super_property = self.factory().new_reflect_get_call(super_class_reference, self.visitor().visit_node(Some(ea.argument_expression)).unwrap(), class_constructor);
+                self.emit_context().set_original(super_property, ea.expression);
+                super_property.set_loc(ea.expression.loc());
+                return Some(super_property);
+            }
+        }
+        self.visitor().visit_each_child(Some(node))
+    }
+
+    // classfields.go:1140
+    pub(crate) fn visit_pre_or_postfix_unary_expression(&self, node: P<Node>, discarded: bool) -> Option<P<Node>> {
+        let operator: Kind;
+        let operand: P<Node>;
+        if ast::is_prefix_unary_expression(node) {
+            operator = node.as_prefix_unary_expression().operator;
+            operand = node.as_prefix_unary_expression().operand;
+        } else {
+            operator = node.as_postfix_unary_expression().operator;
+            operand = node.as_postfix_unary_expression().operand;
+        }
+
+        if operator == Kind::PlusPlusToken || operator == Kind::MinusMinusToken {
+            let operand_skipped = ast::skip_parentheses(operand);
+
+            // Private identifier property access
+            if ast::is_property_access_expression(operand_skipped) && ast::is_private_identifier(operand_skipped.name().unwrap()) {
+                let info = self.access_private_identifier(operand_skipped.name().unwrap());
+                if let Some(info) = info {
+                    let receiver = self.visitor().visit_node(operand_skipped.expression()).unwrap();
+                    let (read_expression, initialize_expression) = self.create_copiable_receiver_expr(receiver);
+
+                    let mut expression = self.create_private_identifier_access_helper(info, read_expression);
+                    let mut temp: Option<P<Node>> = None;
+                    if !ast::is_prefix_unary_expression(node) && !discarded {
+                        temp = Some(self.factory().new_temp_variable());
+                        self.emit_context().add_variable_declaration(temp.unwrap());
+                    }
+                    expression = expand_pre_or_postfix_increment_or_decrement_expression(self.factory(), self.emit_context(), node, expression, temp);
+                    let mut assign_receiver = read_expression;
+                    if let Some(initialize_expression) = initialize_expression {
+                        assign_receiver = initialize_expression;
+                    }
+                    expression = self.create_private_identifier_assignment(info, assign_receiver, expression, Kind::EqualsToken);
+                    self.emit_context().set_original(expression, node);
+                    expression.set_loc(node.loc());
+                    if let Some(temp) = temp {
+                        expression = self.factory().new_comma_expression(expression, temp);
+                        expression.set_loc(node.loc());
+                    }
+                    return Some(expression);
+                }
+            } else if self.should_transform_super_in_static_initializers.get()
+                && self.current_class_element.get().is_some()
+                && ast::is_super_property(operand_skipped)
+                && is_static_property_declaration_or_class_static_block(self.current_class_element.get().unwrap())
+                && self.lexical_environment.get().is_some_and(|l| l.data.get().is_some())
+            {
+                // converts `++super.a` into `(Reflect.set(_baseTemp, "a", (_a = Reflect.get(_baseTemp, "a", _classTemp), _b = ++_a), _classTemp), _b)`
+                // converts `++super[f()]` into `(Reflect.set(_baseTemp, _a = f(), (_b = Reflect.get(_baseTemp, _a, _classTemp), _c = ++_b), _classTemp), _c)`
+                // converts `--super.a` into `(Reflect.set(_baseTemp, "a", (_a = Reflect.get(_baseTemp, "a", _classTemp), _b = --_a), _classTemp), _b)`
+                // converts `--super[f()]` into `(Reflect.set(_baseTemp, _a = f(), (_b = Reflect.get(_baseTemp, _a, _classTemp), _c = --_b), _classTemp), _c)`
+                // converts `super.a++` into `(Reflect.set(_baseTemp, "a", (_a = Reflect.get(_baseTemp, "a", _classTemp), _b = _a++), _classTemp), _b)`
+                // converts `super[f()]++` into `(Reflect.set(_baseTemp, _a = f(), (_b = Reflect.get(_baseTemp, _a, _classTemp), _c = _b++), _classTemp), _c)`
+                // converts `super.a--` into `(Reflect.set(_baseTemp, "a", (_a = Reflect.get(_baseTemp, "a", _classTemp), _b = _a--), _classTemp), _b)`
+                // converts `super[f()]--` into `(Reflect.set(_baseTemp, _a = f(), (_b = Reflect.get(_baseTemp, _a, _classTemp), _c = _b--), _classTemp), _c)`
+                let data = self.lexical_environment.get().unwrap().data.get().unwrap();
+                if data.facts.get().intersects(classFacts::ClassWasDecorated) {
+                    let visited_expr = self.visit_invalid_super_property(operand_skipped).unwrap();
+                    if ast::is_prefix_unary_expression(node) {
+                        return Some(self.factory().update_prefix_unary_expression(node, node.as_prefix_unary_expression().operator, visited_expr));
+                    }
+                    return Some(self.factory().update_postfix_unary_expression(node, visited_expr, node.as_postfix_unary_expression().operator));
+                }
+                if let (Some(class_constructor), Some(super_class_reference)) = (data.class_constructor.get(), data.super_class_reference.get()) {
+                    let mut setter_name: Option<P<Node>> = None;
+                    let mut getter_name: Option<P<Node>> = None;
+                    if ast::is_property_access_expression(operand_skipped) {
+                        if ast::is_identifier(operand_skipped.name().unwrap()) {
+                            getter_name = Some(self.factory().new_string_literal_from_node(operand_skipped.name().unwrap()));
+                            setter_name = getter_name;
+                        }
+                    } else if ast::is_element_access_expression(operand_skipped) {
+                        let argument_expression = operand_skipped.as_element_access_expression().argument_expression;
+                        if is_simple_inlineable_expression(argument_expression) {
+                            getter_name = Some(argument_expression);
+                            setter_name = getter_name;
+                        } else {
+                            getter_name = Some(self.factory().new_temp_variable());
+                            self.emit_context().add_variable_declaration(getter_name.unwrap());
+                            setter_name = Some(self.factory().new_assignment_expression(getter_name.unwrap(), self.visitor().visit_node(Some(argument_expression)).unwrap()));
+                        }
+                    }
+                    if let (Some(setter_name), Some(getter_name)) = (setter_name, getter_name) {
+                        let mut expression = self.factory().new_reflect_get_call(super_class_reference, getter_name, class_constructor);
+                        expression.set_loc(operand_skipped.loc());
+
+                        let mut temp: Option<P<Node>> = None;
+                        if !discarded {
+                            temp = Some(self.factory().new_temp_variable());
+                            self.emit_context().add_variable_declaration(temp.unwrap());
+                        }
+                        expression = expand_pre_or_postfix_increment_or_decrement_expression(self.factory(), self.emit_context(), node, expression, temp);
+                        expression = self.factory().new_reflect_set_call(super_class_reference, setter_name, expression, class_constructor);
+                        self.emit_context().set_original(expression, node);
+                        expression.set_loc(node.loc());
+                        if let Some(temp) = temp {
+                            expression = self.factory().new_comma_expression(expression, temp);
+                            expression.set_loc(node.loc());
+                        }
+                        return Some(expression);
+                    }
+                }
+            }
+        }
+        self.visitor().visit_each_child(Some(node))
+    }
 }
 
 // TEMP(part 1 in progress): not yet ported part-1 functions.
 impl classFieldsTransformer {
-    pub(crate) fn should_transform_auto_accessors_in_current_class(&self) -> bool { todo!() }
-    pub(crate) fn visit_property_declaration(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
-    pub(crate) fn visit_property_access_expression(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
-    pub(crate) fn visit_property_access_expression_for_substitution(&self, node: P<Node>) -> P<Node> { let _ = node; todo!() }
-    pub(crate) fn visit_element_access_expression(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
-    pub(crate) fn visit_pre_or_postfix_unary_expression(&self, node: P<Node>, discarded: bool) -> Option<P<Node>> { let _ = (node, discarded); todo!() }
     pub(crate) fn visit_for_statement(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
     pub(crate) fn visit_expression_statement(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
     pub(crate) fn visit_call_expression(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
@@ -1104,4 +1329,6 @@ impl classFieldsTransformer {
     pub(crate) fn visit_parenthesized_expression(&self, node: P<Node>, discarded: bool) -> Option<P<Node>> { let _ = (node, discarded); todo!() }
     pub(crate) fn is_anonymous_class_needing_assigned_name_worker(&self, node: P<Node>) -> bool { let _ = node; todo!() }
     pub(crate) fn visit_expression_with_type_arguments_in_heritage_clause(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
+    pub(crate) fn create_copiable_receiver_expr(&self, receiver: P<Node>) -> (P<Node>, Option<P<Node>>) { let _ = receiver; todo!() }
+    pub(crate) fn create_private_identifier_assignment(&self, info: P<privateIdentifierInfo>, receiver: P<Node>, right: P<Node>, operator: Kind) -> P<Node> { let _ = (info, receiver, right, operator); todo!() }
 }

@@ -208,3 +208,44 @@ pub(crate) fn find_computed_property_name_cache_assignment(emit_context: P<EmitC
     }
     None
 }
+
+// classfields.go:3580
+pub(crate) fn expand_pre_or_postfix_increment_or_decrement_expression(factory: &printer::NodeFactory, emit_context: P<EmitContext>, node: P<Node>, expression: P<Node>, result_variable: Option<P<Node>>) -> P<Node> {
+    let operator: Kind;
+    let operand: P<Node>;
+    if ast::is_prefix_unary_expression(node) {
+        operator = node.as_prefix_unary_expression().operator;
+        operand = node.as_prefix_unary_expression().operand;
+    } else {
+        operator = node.as_postfix_unary_expression().operator;
+        operand = node.as_postfix_unary_expression().operand;
+    }
+
+    let temp = factory.new_temp_variable();
+    emit_context.add_variable_declaration(temp);
+    let mut expression = factory.new_assignment_expression(temp, expression);
+    expression.set_loc(operand.loc());
+
+    let mut operation: P<Node>;
+    if ast::is_prefix_unary_expression(node) {
+        operation = factory.new_prefix_unary_expression(operator, temp);
+    } else {
+        operation = factory.new_postfix_unary_expression(temp, operator);
+    }
+    operation.set_loc(node.loc());
+
+    if let Some(result_variable) = result_variable {
+        operation = factory.new_assignment_expression(result_variable, operation);
+        operation.set_loc(node.loc());
+    }
+
+    expression = factory.new_comma_expression(expression, operation);
+    expression.set_loc(node.loc());
+
+    if ast::is_postfix_unary_expression(node) {
+        expression = factory.new_comma_expression(expression, temp);
+        expression.set_loc(node.loc());
+    }
+
+    expression
+}
