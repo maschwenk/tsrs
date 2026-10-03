@@ -326,9 +326,10 @@ impl Session {
             }
         };
         // Go decodes the whole params struct before any lookup (see predecode.rs).
-        if let Some(t) = crate::methods::params_type(method) {
-            crate::predecode::predecode(method, t, &params, raw_params)?;
-        }
+        let _lexemes = match crate::methods::params_type(method) {
+            Some(t) => Some(crate::predecode::enter_lexemes(crate::predecode::predecode(method, t, &params, raw_params)?)),
+            None => None,
+        };
         let go_type = crate::methods::params_type(method);
         let typed = |e: ApiError| match (e.kind.clone(), go_type) {
             // Field-level decode errors are Go unmarshal errors of the params struct (the exact jsontext wording

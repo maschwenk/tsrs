@@ -214,3 +214,26 @@ fn field_values_match_go_classes() {
     let e = call_err(&s, "release", r#"{"snapshot":4294967296000}"#);
     assert!(e.starts_with("api: client error: snapshot"), "{e}");
 }
+
+/// Integer bounds use the exact literal, IDs keep their exact value, and escaped member names are matched like
+/// the decoded object keys (review of b2769b8).
+#[test]
+fn exact_integer_literals_and_escaped_keys() {
+    let dir = TempDir::new("exactints");
+    let s = session(&dir.dir(), false);
+    // u64::MAX and i64-range values are in range (f64 would round them out of range).
+    let e = call_err(&s, "release", r#"{"snapshot":18446744073709551615}"#);
+    assert_eq!(e, "api: client error: snapshot 18446744073709551615 not found");
+    let e = call_err(&s, "release", r#"{"snapshot":18446744073709551616}"#);
+    assert!(e.starts_with("api: invalid request:"), "{e}");
+    // An exact ID above 2^53 is looked up as written.
+    let e = call_err(&s, "release", r#"{"snapshot":9007199254740993}"#);
+    assert_eq!(e, "api: client error: snapshot 9007199254740993 not found");
+    // batchRequests maxResponseBytesPerPage is a Go int: i64::MAX is in range, 2^63 is not.
+    call(&s, "batchRequests", r#"{"requests":[],"maxResponseBytesPerPage":9223372036854775807}"#);
+    let e = call_err(&s, "batchRequests", r#"{"requests":[],"maxResponseBytesPerPage":9223372036854775808}"#);
+    assert!(e.starts_with("api: invalid request:"), "{e}");
+    // An escaped member name is the same field.
+    let e = call_err(&s, "release", r#"{"snap\u0073hot":1e3}"#);
+    assert!(e.starts_with("api: invalid request: failed to unmarshal *api.ReleaseParams"), "{e}");
+}

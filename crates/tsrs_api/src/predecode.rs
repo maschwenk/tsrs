@@ -65,19 +65,22 @@ enum IntRange {
     U64,
 }
 
-/// A JSON number decoded into a Go integer: plain integer syntax (no fraction or exponent) within range.
+/// A JSON number decoded into a Go integer: plain integer syntax (no fraction or exponent) within range, checked on
+/// the exact literal (f64 would round i64::MAX / u64::MAX up to 2^63 / 2^64).
 fn int_ok(v: &Value, lexeme: Option<&str>, range: IntRange) -> bool {
     let Value::Number(n) = v else { return false };
-    if lexeme.is_some_and(|l| l.contains(['.', 'e', 'E'])) || n.fract() != 0.0 {
-        return false;
-    }
-    let n = *n;
+    let exact: Option<i128> = match lexeme {
+        Some(l) if l.contains(['.', 'e', 'E']) => return false,
+        Some(l) => l.parse::<i128>().ok(),
+        None if n.fract() == 0.0 && n.abs() < 1e30 => Some(*n as i128),
+        None => None,
+    };
+    let Some(n) = exact else { return false };
     match range {
-        IntRange::I32 => (i32::MIN as f64..=i32::MAX as f64).contains(&n),
-        // i64::MAX is not representable in f64; 2^63 is the first value out of range.
-        IntRange::I64 => n >= -9223372036854775808.0 && n < 9223372036854775808.0,
-        IntRange::U32 => (0.0..=u32::MAX as f64).contains(&n),
-        IntRange::U64 => n >= 0.0 && n < 18446744073709551616.0,
+        IntRange::I32 => (i32::MIN as i128..=i32::MAX as i128).contains(&n),
+        IntRange::I64 => (i64::MIN as i128..=i64::MAX as i128).contains(&n),
+        IntRange::U32 => (0..=u32::MAX as i128).contains(&n),
+        IntRange::U64 => (0..=u64::MAX as i128).contains(&n),
     }
 }
 
@@ -168,8 +171,9 @@ fn number_lexemes(raw: &[u8]) -> HashMap<String, String> {
                 self.i += 1;
             }
         }
+        // A string token, decoded like the parsed value's object keys (escapes such as `\u0073`).
         fn string(&mut self) -> String {
-            let start = self.i + 1;
+            let start = self.i;
             self.i += 1;
             while self.i < self.b.len() && self.b[self.i] != b'"' {
                 if self.b[self.i] == b'\\' {
@@ -177,9 +181,12 @@ fn number_lexemes(raw: &[u8]) -> HashMap<String, String> {
                 }
                 self.i += 1;
             }
-            let s = String::from_utf8_lossy(&self.b[start..self.i.min(self.b.len())]).into_owned();
             self.i += 1;
-            s
+            let raw = String::from_utf8_lossy(&self.b[start..self.i.min(self.b.len())]).into_owned();
+            match tsrs_core::json::unmarshal(&raw) {
+                Ok(Value::String(s)) => s,
+                _ => raw.trim_matches('"').to_string(),
+            }
         }
         // Skips one value; records number lexemes at `pointer`, and for `depth < 2` recurses into arrays.
         fn value(&mut self, pointer: Option<String>, depth: u32) {
@@ -250,15 +257,42 @@ fn number_lexemes(raw: &[u8]) -> HashMap<String, String> {
 
 /// Checks `params` (an object, or `{}` for `null`) against the method's pinned params struct. `raw` is the
 /// request payload the value was parsed from.
-pub(crate) fn predecode(method: &str, go_type: &str, params: &Value, raw: &[u8]) -> ApiResult<()> {
-    let Value::Object(o) = params else { return Ok(()) };
+pub(crate) fn predecode(method: &str, go_type: &str, params: &Value, raw: &[u8]) -> ApiResult<HashMap<String, String>> {
+    let Value::Object(o) = params else { return Ok(HashMap::new()) };
     let lexemes = number_lexemes(raw);
     for spec in params_fields(method) {
         if let Some(v) = o.get(spec.name) {
             check_field(spec, v, &lexemes).map_err(|e| ApiError::invalid_request(format!("failed to unmarshal *api.{go_type}: json: {e}")))?;
         }
     }
-    Ok(())
+    Ok(lexemes)
+}
+
+thread_local! {
+    // Number literals of the request being dispatched on this thread (top-level fields), so typed accessors read
+    // exact integers (`Params::u64`). Stacked for nested dispatch (batchRequests, callback re-entry).
+    static LEXEMES: std::cell::RefCell<Vec<HashMap<String, String>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Makes `lexemes` the current request's number literals until the guard is dropped.
+pub(crate) fn enter_lexemes(lexemes: HashMap<String, String>) -> LexemeGuard {
+    LEXEMES.with(|l| l.borrow_mut().push(lexemes));
+    LexemeGuard(())
+}
+
+pub(crate) struct LexemeGuard(());
+
+impl Drop for LexemeGuard {
+    fn drop(&mut self) {
+        LEXEMES.with(|l| {
+            l.borrow_mut().pop();
+        });
+    }
+}
+
+/// The exact unsigned integer literal of top-level field `key` of the current request, if it has one.
+pub(crate) fn exact_u64(key: &str) -> Option<u64> {
+    LEXEMES.with(|l| l.borrow().last().and_then(|m| m.get(&format!("/{key}")).and_then(|s| s.parse::<u64>().ok())))
 }
 
 #[cfg(test)]
@@ -269,5 +303,7 @@ mod tests {
         assert_eq!(m.get("/a").map(String::as_str), Some("1e3"));
         assert_eq!(m.get("/b/1").map(String::as_str), Some("2.5"));
         assert!(!m.contains_key("/d/e") && !m.contains_key("/f") && !m.contains_key("/b/2"));
+        let m = super::number_lexemes(br#"{"snap\u0073hot":1e3}"#);
+        assert_eq!(m.get("/snapshot").map(String::as_str), Some("1e3"));
     }
 }
