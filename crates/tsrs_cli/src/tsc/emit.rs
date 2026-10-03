@@ -191,17 +191,7 @@ fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<t
         (input.report_diagnostic)(diagnostic);
     }
 
-    let options = input.program.options();
-    if options.list_emitted_files.is_true() {
-        let mut out = String::new();
-        for file in emit_result.as_ref().map(|r| r.emitted_files.as_slice()).unwrap_or_default() {
-            out.push_str("TSFILE: ");
-            out.push_str(&tsrs_core::tspath::get_normalized_absolute_path(file, input.program.get_current_directory()));
-            out.push('\n');
-        }
-        input.sys.write(&out);
-    }
-    list_files(input);
+    list_files(input, &emit_result.clone().unwrap_or_default());
 
     (input.report_error_summary)(&all_diagnostics);
     // Go reads EmitResult.EmitSkipped through a nil result here only when the incremental program was cancelled.

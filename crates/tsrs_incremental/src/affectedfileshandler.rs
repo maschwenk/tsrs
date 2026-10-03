@@ -77,13 +77,14 @@ impl affectedFilesHandler<'_> {
 
     // affectedfileshandler.go:68
     fn compute_dts_signature(&self, file: P<SourceFile>) -> String {
-        let signature = RefCell::new(String::new());
+        let signature = std::sync::Mutex::new(String::new());
         let done = self.program.begin_nested_emit();
+        let program = self.program;
         let write_file = |file_name: &str, text: &str, data: &mut WriteFileData| -> Result<(), String> {
             if !tspath::is_declaration_file_name(file_name) {
                 panic!("File extension for signature expected to be dts, got : {file_name}");
             }
-            *signature.borrow_mut() = self.program.snapshot.compute_signature_with_diagnostics(file, text, data);
+            *signature.lock().unwrap() = program.snapshot.compute_signature_with_diagnostics(file, text, data);
             Ok(())
         };
         compiler_program_emit(
@@ -92,7 +93,7 @@ impl affectedFilesHandler<'_> {
             EmitOptions { target_source_files: Some(vec![file]), emit_only: EmitOnly::EmitOnlyBuilderSignature, write_file: Some(&write_file), ..Default::default() },
         );
         done();
-        signature.into_inner()
+        signature.into_inner().unwrap()
     }
 
     // affectedfileshandler.go:87
@@ -359,7 +360,7 @@ impl affectedFilesHandler<'_> {
                 info.signature = update.signature.clone();
                 snapshot.file_infos.store(file_path.clone(), info);
                 if let Some(testing_data) = &self.program.testing_data {
-                    testing_data.borrow_mut().updated_signature_kinds.insert(file_path.clone(), update.kind);
+                    testing_data.lock().unwrap().updated_signature_kinds.insert(file_path.clone(), update.kind);
                 }
             }
         }

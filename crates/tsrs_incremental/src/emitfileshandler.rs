@@ -1,6 +1,7 @@
 // Port of execute/incremental/emitfileshandler.go.
 
-use std::cell::{Cell, RefCell};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{Diagnostic, SourceFile};
@@ -23,12 +24,12 @@ struct emitFilesHandler<'a> {
     ctx: &'a Context,
     program: P<Program>,
     is_for_dts_errors: bool,
-    signatures: RefCell<FxHashMap<Path, String>>,
-    emit_signatures: RefCell<FxHashMap<Path, EmitSignature>>,
-    latest_changed_dts_files: RefCell<FxHashMap<Path, String>>,
-    deleted_pending_kinds: RefCell<FxHashSet<Path>>,
-    emit_updates: RefCell<FxHashMap<Path, emitUpdate>>,
-    has_emit_diagnostics: Cell<bool>,
+    signatures: Mutex<FxHashMap<Path, String>>,
+    emit_signatures: Mutex<FxHashMap<Path, EmitSignature>>,
+    latest_changed_dts_files: Mutex<FxHashMap<Path, String>>,
+    deleted_pending_kinds: Mutex<FxHashSet<Path>>,
+    emit_updates: Mutex<FxHashMap<Path, emitUpdate>>,
+    has_emit_diagnostics: AtomicBool,
 }
 
 impl<'a> emitFilesHandler<'a> {
@@ -77,10 +78,10 @@ impl<'a> emitFilesHandler<'a> {
                 for result in &results {
                     self.update_has_emit_diagnostics(Some(result));
                 }
-                Some(combine_emit_results(results))
+                Some(combine_emit_results(results.into_iter().map(Some).collect()))
             } else {
                 // Combine results and update buildInfo
-                let mut result = combine_emit_results(results);
+                let mut result = combine_emit_results(results.into_iter().map(Some).collect());
                 self.update_has_emit_diagnostics(Some(&result));
                 self.emit_build_info(options, &mut result);
                 Some(result)
@@ -110,7 +111,7 @@ impl<'a> emitFilesHandler<'a> {
     fn update_has_emit_diagnostics(&self, result: Option<&EmitResult>) {
         if let Some(result) = result {
             if !result.diagnostics.is_empty() {
-                self.has_emit_diagnostics.set(true);
+                self.has_emit_diagnostics.store(true, Ordering::Relaxed);
             }
         }
     }
@@ -141,7 +142,7 @@ impl<'a> emitFilesHandler<'a> {
         for (path, emit_kind) in pending {
             let affected_file = program.get_source_file_by_path(&path);
             let Some(affected_file) = affected_file.filter(|&f| program.source_file_may_be_emitted(f, false)) else {
-                self.deleted_pending_kinds.borrow_mut().insert(path);
+                self.deleted_pending_kinds.lock().unwrap().insert(path);
                 continue;
             };
             let pending_kind = self.get_pending_emit_kind_for_emit_options(emit_kind, options);
@@ -169,7 +170,7 @@ impl<'a> emitFilesHandler<'a> {
 
                 // Update the pendingEmit for the file
                 self.emit_updates
-                    .borrow_mut()
+                    .lock().unwrap()
                     .insert(path, emitUpdate { pending_kind: get_pending_emit_kind(emit_kind, pending_kind), result, dts_errors_from_cache: false });
             }
         }
@@ -185,16 +186,16 @@ impl<'a> emitFilesHandler<'a> {
         });
         cached.sort_by(|a, b| a.0.cmp(&b.0));
         for (path, diagnostics) in cached {
-            if self.emit_updates.borrow().contains_key(&path) {
+            if self.emit_updates.lock().unwrap().contains_key(&path) {
                 continue;
             }
             let affected_file = program.get_source_file_by_path(&path);
             let Some(affected_file) = affected_file.filter(|&f| program.source_file_may_be_emitted(f, false)) else {
-                self.deleted_pending_kinds.borrow_mut().insert(path);
+                self.deleted_pending_kinds.lock().unwrap().insert(path);
                 continue;
             };
             let pending_kind = self.program.snapshot.affected_files_pending_emit.load(&path).unwrap_or_default();
-            self.emit_updates.borrow_mut().insert(
+            self.emit_updates.lock().unwrap().insert(
                 path,
                 emitUpdate {
                     pending_kind,
@@ -209,7 +210,7 @@ impl<'a> emitFilesHandler<'a> {
 
     // Go's getEmitOptions returns options whose WriteFile closes over the handler; Rust builds the closure
     // separately (it must outlive the returned options).
-    fn get_emit_write_file(&self, options: &EmitOptions<'a>) -> Option<Box<dyn Fn(&str, &str, &mut WriteFileData) -> Result<(), String> + '_>> {
+    fn get_emit_write_file(&self, options: &EmitOptions<'a>) -> Option<Box<dyn Fn(&str, &str, &mut WriteFileData) -> Result<(), String> + Sync + '_>> {
         if !self.program.snapshot.options().get_emit_declarations() {
             return None;
         }
@@ -229,7 +230,7 @@ impl<'a> emitFilesHandler<'a> {
                     }
                     if signature != info.version {
                         // Update it
-                        self.signatures.borrow_mut().insert(source_file.path().clone(), signature);
+                        self.signatures.lock().unwrap().insert(source_file.path().clone(), signature);
                     }
                 }
 
@@ -256,9 +257,9 @@ impl<'a> emitFilesHandler<'a> {
     }
 
     // emitfileshandler.go:209
-    fn get_emit_options<'b>(&self, options: &EmitOptions<'b>, write_file: Option<&'b (dyn Fn(&str, &str, &mut WriteFileData) -> Result<(), String> + 'b)>) -> EmitOptions<'b> {
+    fn get_emit_options<'b>(&self, options: &EmitOptions<'b>, write_file: Option<&'b (dyn Fn(&str, &str, &mut WriteFileData) -> Result<(), String> + Sync + 'b)>) -> EmitOptions<'b> {
         if !self.program.snapshot.options().get_emit_declarations() {
-            return options.clone();
+            return EmitOptions { target_source_files: options.target_source_files.clone(), emit_only: options.emit_only, force_emit: options.force_emit, write_file: options.write_file };
         }
         EmitOptions { target_source_files: options.target_source_files.clone(), emit_only: options.emit_only, force_emit: options.force_emit, write_file }
     }
@@ -302,9 +303,9 @@ impl<'a> emitFilesHandler<'a> {
                 *differs_only_in_map = self.program.options().build.is_true();
             }
         } else {
-            self.latest_changed_dts_files.borrow_mut().insert(file.path().clone(), output_file_name.to_string());
+            self.latest_changed_dts_files.lock().unwrap().insert(file.path().clone(), output_file_name.to_string());
         }
-        self.emit_signatures.borrow_mut().insert(file.path().clone(), EmitSignature { signature: new_signature, signature_with_different_options: None });
+        self.emit_signatures.lock().unwrap().insert(file.path().clone(), EmitSignature { signature: new_signature, signature_with_different_options: None });
         false
     }
 
@@ -312,28 +313,28 @@ impl<'a> emitFilesHandler<'a> {
     fn update_snapshot(&self) -> Vec<EmitResult> {
         let snapshot = &self.program.snapshot;
         if snapshot.can_use_incremental_state() {
-            for (file, signature) in self.signatures.borrow().iter() {
+            for (file, signature) in self.signatures.lock().unwrap().iter() {
                 let mut info = snapshot.file_infos.load(file).unwrap();
                 info.signature = signature.clone();
                 snapshot.file_infos.store(file.clone(), info);
                 if let Some(testing_data) = &self.program.testing_data {
-                    testing_data.borrow_mut().updated_signature_kinds.insert(file.clone(), SignatureUpdateKind::StoredAtEmit);
+                    testing_data.lock().unwrap().updated_signature_kinds.insert(file.clone(), SignatureUpdateKind::StoredAtEmit);
                 }
                 snapshot.build_info_emit_pending.set(true);
             }
-            for (file, signature) in self.emit_signatures.borrow().iter() {
+            for (file, signature) in self.emit_signatures.lock().unwrap().iter() {
                 snapshot.emit_signatures.store(file.clone(), signature.clone());
                 snapshot.build_info_emit_pending.set(true);
             }
-            for file in self.deleted_pending_kinds.borrow().iter() {
+            for file in self.deleted_pending_kinds.lock().unwrap().iter() {
                 snapshot.affected_files_pending_emit.delete(file);
                 snapshot.build_info_emit_pending.set(true);
             }
             // Always use correct order when to collect the result
             let mut results = Vec::new();
-            let mut emit_updates = self.emit_updates.borrow_mut();
+            let mut emit_updates = self.emit_updates.lock().unwrap();
             for &file in self.program.p().get_source_files() {
-                if let Some(latest_changed_dts_file) = self.latest_changed_dts_files.borrow().get(file.path()) {
+                if let Some(latest_changed_dts_file) = self.latest_changed_dts_files.lock().unwrap().get(file.path()) {
                     *snapshot.latest_changed_dts_file.borrow_mut() = latest_changed_dts_file.clone();
                     snapshot.build_info_emit_pending.set(true);
                     snapshot.has_changed_dts_file.set(true);
@@ -358,7 +359,7 @@ impl<'a> emitFilesHandler<'a> {
                 }
             }
             return results;
-        } else if self.has_emit_diagnostics.get() {
+        } else if self.has_emit_diagnostics.load(Ordering::Relaxed) {
             snapshot.has_emit_diagnostics.set(true);
         }
         Vec::new()
@@ -376,7 +377,7 @@ pub(crate) fn emit_files(ctx: &Context, program: P<Program>, options: EmitOption
         latest_changed_dts_files: Default::default(),
         deleted_pending_kinds: Default::default(),
         emit_updates: Default::default(),
-        has_emit_diagnostics: Cell::new(false),
+        has_emit_diagnostics: AtomicBool::new(false),
     };
 
     // Single file emit - do direct from program

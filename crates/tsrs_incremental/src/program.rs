@@ -1,6 +1,6 @@
 // Port of execute/incremental/program.go.
 
-use std::cell::RefCell;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use rustc_hash::FxHashMap;
@@ -35,20 +35,20 @@ struct nestedEmitState {
 pub struct Program {
     pub(crate) snapshot: P<Snapshot>,
     pub(crate) program: Option<&'static CompilerProgram>,
-    pub(crate) host: Option<Box<dyn Host>>,
+    pub(crate) host: Option<Box<dyn Host + Send + Sync>>,
 
     // Testing data
-    pub(crate) testing_data: Option<RefCell<TestingData>>,
+    pub(crate) testing_data: Option<Mutex<TestingData>>,
 
     nested_emit_now: Option<fn() -> Instant>,
-    nested_emit: RefCell<nestedEmitState>,
+    nested_emit: Mutex<nestedEmitState>,
 }
 
 // program.go:46
 pub fn new_program(
     program: &'static CompilerProgram,
     old_program: Option<P<Program>>,
-    host: Box<dyn Host>,
+    host: Box<dyn Host + Send + Sync>,
     nested_emit_now: Option<fn() -> Instant>,
     testing: bool,
 ) -> P<Program> {
@@ -59,7 +59,7 @@ pub fn new_program(
         if let Some(old_program) = old_program {
             testing_data.old_program_semantic_diagnostics_per_file = old_program.snapshot.semantic_diagnostics_per_file.keys();
         }
-        Some(RefCell::new(testing_data))
+        Some(Mutex::new(testing_data))
     } else {
         None
     };
@@ -69,7 +69,7 @@ pub fn new_program(
         host: Some(host),
         testing_data,
         nested_emit_now,
-        nested_emit: RefCell::new(nestedEmitState::default()),
+        nested_emit: Mutex::new(nestedEmitState::default()),
     })
 }
 
@@ -83,10 +83,10 @@ pub struct TestingData {
 
 impl Program {
     pub(crate) fn new_from_snapshot(snapshot: P<Snapshot>) -> P<Program> {
-        P::new(Program { snapshot, program: None, host: None, testing_data: None, nested_emit_now: None, nested_emit: RefCell::new(nestedEmitState::default()) })
+        P::new(Program { snapshot, program: None, host: None, testing_data: None, nested_emit_now: None, nested_emit: Mutex::new(nestedEmitState::default()) })
     }
 
-    pub fn get_testing_data(&self) -> Option<&RefCell<TestingData>> {
+    pub fn get_testing_data(&self) -> Option<&Mutex<TestingData>> {
         self.testing_data.as_ref()
     }
 
@@ -94,7 +94,7 @@ impl Program {
     pub(crate) fn begin_nested_emit(&self) -> impl FnOnce() + '_ {
         let now = self.nested_emit_now;
         if let Some(now) = now {
-            let mut state = self.nested_emit.borrow_mut();
+            let mut state = self.nested_emit.lock().unwrap();
             if state.depth == 0 {
                 state.start = Some(now());
             }
@@ -102,7 +102,7 @@ impl Program {
         }
         move || {
             if let Some(now) = now {
-                let mut state = self.nested_emit.borrow_mut();
+                let mut state = self.nested_emit.lock().unwrap();
                 state.depth -= 1;
                 if state.depth == 0 {
                     let elapsed = now() - state.start.unwrap();
@@ -114,7 +114,7 @@ impl Program {
 
     // program.go:105
     pub fn take_nested_emit_time(&self) -> Duration {
-        let mut state = self.nested_emit.borrow_mut();
+        let mut state = self.nested_emit.lock().unwrap();
         std::mem::take(&mut state.time)
     }
 
@@ -274,7 +274,7 @@ impl Program {
         let text = build_info.marshal();
         let err = match options.write_file {
             Some(write_file) => {
-                let mut data = WriteFileData { build_info: Some(build_info), ..Default::default() };
+                let mut data = WriteFileData { build_info: Some(std::sync::Arc::new(build_info)), ..Default::default() };
                 write_file(&build_info_file_name, &text, &mut data)
             }
             None => program.host().fs().write_file(&build_info_file_name, &text),

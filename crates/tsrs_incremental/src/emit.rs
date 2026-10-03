@@ -1,67 +1,12 @@
-// The emit surface of Go's compiler package that the incremental program uses (compiler/program.go:1845-2073,
-// compiler/emitter.go:24).
-//
-// TODO(emit/core): `Program.Emit`, `EmitOptions`, `EmitResult`, `WriteFileData`, `ProgramLike`,
-// `CombineEmitResults` and `HandleNoEmitOptions` belong in tsrs_compiler (wave E1). Until that branch has landed,
-// they live here and `Program.Emit` writes nothing: the builder-signature emit produces no `.d.ts` text, so file
-// signatures fall back to the file version (Go's `useFileVersionAsSignature` path).
+// The `compiler.ProgramLike` side of Go's compiler package (compiler/program.go:1965-2073): the interface, and
+// `HandleNoEmitOptions` / `GetDiagnosticsOfAnyProgram` over it. tsrs_compiler has the concrete-program versions
+// (emit/core); the incremental program needs the interface. TODO(emit/core): move `ProgramLike` into tsrs_compiler.
 
 use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_compiler::{Context, Program as CompilerProgram};
 use tsrs_core::{CompilerOptions, P};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum EmitOnly {
-    #[default]
-    EmitAll,
-    EmitOnlyJs,
-    EmitOnlyDts,
-    EmitOnlyBuilderSignature,
-}
-
-pub struct WriteFileData {
-    pub source_map_url_pos: i32,
-    pub build_info: Option<crate::buildinfo::BuildInfo>,
-    pub diagnostics: Vec<P<Diagnostic>>,
-    pub skipped_dts_write: bool,
-    pub source_file: Option<P<SourceFile>>,
-}
-
-impl Default for WriteFileData {
-    fn default() -> Self {
-        WriteFileData { source_map_url_pos: -1, build_info: None, diagnostics: Vec::new(), skipped_dts_write: false, source_file: None }
-    }
-}
-
-pub type WriteFile<'a> = &'a dyn Fn(&str, &str, &mut WriteFileData) -> Result<(), String>;
-
-#[derive(Clone, Default)]
-pub struct EmitOptions<'a> {
-    pub target_source_files: Option<Vec<P<SourceFile>>>, // Source files to emit. If `nil`, emits all files
-    pub emit_only: EmitOnly,
-    pub force_emit: bool,
-    pub write_file: Option<WriteFile<'a>>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct EmitResult {
-    pub emit_skipped: bool,
-    pub diagnostics: Vec<P<Diagnostic>>, // Contains declaration emit diagnostics
-    pub emitted_files: Vec<String>,      // Array of files the compiler wrote to disk
-}
-
-// program.go:1947
-pub fn combine_emit_results(results: Vec<EmitResult>) -> EmitResult {
-    let mut result = EmitResult::default();
-    for emit_result in results {
-        if emit_result.emit_skipped {
-            result.emit_skipped = true;
-        }
-        result.diagnostics.extend(emit_result.diagnostics);
-        result.emitted_files.extend(emit_result.emitted_files);
-    }
-    result
-}
+pub use tsrs_compiler::{combine_emit_results, EmitOnly, EmitOptions, EmitResult, WriteFile, WriteFileData};
 
 // compiler.ProgramLike (program.go:1965).
 pub trait ProgramLike {
@@ -135,15 +80,9 @@ impl ProgramLike for &'static CompilerProgram {
     }
 }
 
-// TODO(emit/core): Go `(*compiler.Program).Emit` (program.go:1875). Nothing is printed yet: with
-// `EmitOnlyBuilderSignature` no `.d.ts` reaches `WriteFile`, so callers fall back to the file version.
+// Go `(*compiler.Program).Emit` (program.go:1875).
 pub fn compiler_program_emit(program: &'static CompilerProgram, ctx: &Context, options: EmitOptions) -> Option<EmitResult> {
-    if !options.force_emit && options.emit_only != EmitOnly::EmitOnlyBuilderSignature {
-        if let Some(result) = handle_no_emit_options(ctx, &program, options.target_source_files.as_deref(), None::<&dyn Fn() -> Option<EmitResult>>) {
-            return Some(result);
-        }
-    }
-    Some(EmitResult::default())
+    Some(program.emit(ctx, options))
 }
 
 // program.go:1984

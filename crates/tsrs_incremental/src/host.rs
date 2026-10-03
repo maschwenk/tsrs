@@ -32,7 +32,7 @@ impl Host for host {
     }
 }
 
-pub fn create_host(compiler_host: Arc<dyn CompilerHost>) -> Box<dyn Host> {
+pub fn create_host(compiler_host: Arc<dyn CompilerHost>) -> Box<dyn Host + Send + Sync> {
     Box::new(host { host: compiler_host })
 }
 
