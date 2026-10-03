@@ -54,3 +54,6 @@ pub mod inliners;
 pub mod jsxtransforms;
 pub mod moduletransforms;
 pub mod tstransforms;
+
+#[cfg(test)]
+mod emit_test;
