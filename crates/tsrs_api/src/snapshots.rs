@@ -346,7 +346,12 @@ impl Session {
                         projects.push(project_response(new));
                     }
                 }
-                out = out.set("projects", Value::Array(projects)).set("changes", compute_snapshot_changes(base, snapshot));
+                out = out.set("projects", Value::Array(projects));
+                // `json:"changes,omitempty"` (json/v2): a SnapshotChanges that encodes as `{}` is omitted.
+                let changes = compute_snapshot_changes(base, snapshot);
+                if !matches!(&changes, Value::Object(o) if o.is_empty()) {
+                    out = out.set("changes", changes);
+                }
             }
         }
         Ok(out.set("operation", operation.build()).build())

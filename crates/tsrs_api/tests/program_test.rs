@@ -123,6 +123,12 @@ fn configured_project_update_and_retained_old_snapshot() {
     assert_eq!(arr(&call(&s, "getSemanticDiagnostics", &format!("{{{sp2}}}"))).len(), 1);
     assert_eq!(call(&s, "getSemanticDiagnostics", &format!("{{{sp1}}}")), Value::Array(vec![]));
 
+    // An update with no project changes omits `changes` (Go `omitempty`, json/v2: `{}` is empty); parity f703.
+    let r3 = call(&s, "updateSnapshot", &format!("{{\"snapshot\":{snap2}}}"));
+    let Value::Object(o3) = &r3 else { unreachable!() };
+    assert!(o3.get("changes").is_none(), "{}", tsrs_core::json::marshal(&r3).unwrap());
+    call(&s, "release", &format!("{{\"snapshot\":{}}}", match get(&r3, "snapshot") { Value::Number(n) => *n as u64, _ => unreachable!() }));
+
     // Releasing the newer snapshot leaves the old one usable; a second session cannot use these handles.
     call(&s, "release", &format!("{{\"snapshot\":{snap2}}}"));
     assert_eq!(call(&s, "getSemanticDiagnostics", &format!("{{{sp1}}}")), Value::Array(vec![]));
