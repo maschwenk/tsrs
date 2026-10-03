@@ -22,3 +22,6 @@ pub use emit_stubs::*;
 pub mod jsxtransforms;
 pub mod tstransforms;
 
+
+#[cfg(test)]
+mod emit_test;

@@ -818,7 +818,7 @@ impl JSXTransformer {
 
     // jsx.go:777
     fn visit_jsx_text(&self, text: P<Node>) -> Option<P<Node>> {
-        let fixed = fixup_whitespace_and_decode_entities(text.text());
+        let fixed = fixup_whitespace_and_decode_entities(text.as_jsx_text().text());
         if fixed.is_empty() {
             return None;
         }
