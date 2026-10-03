@@ -40,10 +40,12 @@ pub fn is_callback_name(name: &str) -> bool {
     CALLBACK_NAMES.contains(&name)
 }
 
-/// A failed or invalid filesystem callback panics with a String payload (Go: panic(...)); the
-/// connection reports it to the client as `panic: <message>`.
+/// A failed or invalid filesystem callback unwinds with a String payload (Go: panic(...) recovered by
+/// the connection); the connection reports it to the client as `panic: <message>`. `resume_unwind`
+/// skips the panic hook, so an expected callback failure (e.g. the client disconnecting while a callback
+/// is pending) does not print a panic report to stderr, matching Go's silent recover.
 fn fail(message: impl Into<String>) -> ! {
-    std::panic::panic_any(message.into())
+    std::panic::resume_unwind(Box::new(message.into()))
 }
 
 /// Parses the `--callbacks` list (comma-separated by the CLI). Unknown names are an error
