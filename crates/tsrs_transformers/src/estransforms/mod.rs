@@ -3,7 +3,8 @@
 use crate::*;
 
 mod async_;
-mod classfields;
+mod classfields_1;
+mod classfields_2;
 mod classthis;
 mod definitions;
 mod esdecorator;
@@ -21,7 +22,8 @@ mod using;
 mod utilities;
 
 pub use async_::*;
-pub use classfields::*;
+pub use classfields_1::*;
+pub use classfields_2::*;
 pub use classthis::*;
 pub use definitions::*;
 pub use esdecorator::*;
