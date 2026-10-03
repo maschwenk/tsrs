@@ -21,7 +21,7 @@ const repoRoot = path.resolve(here, "..", "..");
 
 function usage(msg) {
     if (msg) console.error(`error: ${msg}`);
-    console.error("usage: run-upstream.mjs --binary <exe> --label <name> [--suite upstream|parity|all] [--no-trace] [--record] [--filter <s>]... [--timeout-min N] [--idle-sec N] [--test-timeout-sec N] [--concurrency N] [--ref <ts-ref>]");
+    console.error("usage: run-upstream.mjs --binary <exe> --label <name> [--suite upstream|parity|all] [--no-trace] [--record] [--capture] [--filter <s>]... [--timeout-min N] [--idle-sec N] [--test-timeout-sec N] [--concurrency N] [--ref <ts-ref>]");
     process.exit(2);
 }
 
@@ -35,6 +35,7 @@ for (let i = 0; i < argv.length; i++) {
     else if (a === "--suite") opts.suite = v();
     else if (a === "--no-trace") opts.trace = false;
     else if (a === "--record") opts.record = true;
+    else if (a === "--capture") opts.capture = true;
     else if (a === "--filter") opts.filters.push(v());
     else if (a === "--timeout-min") opts.timeoutMin = Number(v());
     else if (a === "--idle-sec") opts.idleSec = Number(v());
@@ -50,6 +51,7 @@ if (!["upstream", "parity", "all"].includes(opts.suite)) usage(`bad --suite ${op
 // Goldens are recorded from the Go oracle built by setup.sh, never from a candidate.
 const oracleExe = path.join(here, ".work", "oracle", process.platform === "win32" ? "tsc.exe" : "tsc");
 const isOracle = fs.existsSync(oracleExe) && fs.realpathSync(oracleExe) === fs.realpathSync(opts.binary);
+if (opts.capture && !opts.trace) usage("--capture needs tracing (drop --no-trace)");
 if (opts.record && !isOracle) usage(`--record only accepts the Go oracle at ${oracleExe}`);
 
 // ── pinned reference check ──────────────────────────────────────────
@@ -149,6 +151,7 @@ const child = spawn(process.execPath, nodeArgs, {
     env: {
         ...process.env,
         NODE_API_TRACE_DIR: opts.trace ? traceDir : "",
+        NODE_API_CAPTURE: opts.capture ? "1" : "",
         NODE_API_GOLDEN_DIR: path.join(here, "tests", "golden"),
         NODE_API_RECORD: opts.record ? "1" : "",
         NODE_API_ORACLE: isOracle ? "1" : "",
