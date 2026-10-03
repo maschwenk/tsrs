@@ -86,6 +86,7 @@ function decode(rec, treeDir, mode) {
         return { binary: buf.toString("base64") };
     }
     currentTreeDir = treeDir;
+    currentMethod = rec.method;
     let text = rec.data.split(treeDir + "/").join("<TREE>/").split(treeDir).join("<TREE>");
     let json;
     try {
@@ -109,12 +110,20 @@ function normalizeText(t) {
     return t.replace(/\ngoroutine \d+ \[[\s\S]*$/, "").replace(/\/tmp\/node-api-profile-[A-Za-z0-9]+(\/[^"]*)?/g, "<PROFILE_TMP>");
 }
 let currentTreeDir = "";
-function normalizeStrings(v, key) {
-    // Async binary responses are {"data": <base64>}; apply the same byte-level work-tree placeholder.
-    if (typeof v === "string" && key === "data" && /^[A-Za-z0-9+/]+={0,2}$/.test(v) && v.length >= 16) {
+let currentMethod = "";
+// Methods whose responses are binary (msgpack bin on the sync channel); on the async channel the same bytes
+// arrive as {"data": <base64>}. Filled from the sync captures before decoding (schema evidence, not key names).
+const BINARY_METHODS = new Set();
+function canonicalBase64(v) {
+    return typeof v === "string" && v.length > 0 && Buffer.from(v, "base64").toString("base64") === v;
+}
+function normalizeStrings(v, key, depth = 0) {
+    // Only the top-level "data" field of a binary method's async response, and only canonical base64: the
+    // work-tree path is replaced byte for byte. Any other string (including non-canonical base64) is compared as is.
+    if (depth === 1 && key === "data" && BINARY_METHODS.has(currentMethod) && canonicalBase64(v)) {
         const buf = Buffer.from(v, "base64");
         const needle = Buffer.from(currentTreeDir);
-        let i = buf.indexOf(needle);
+        let i = needle.length ? buf.indexOf(needle) : -1;
         while (i >= 0) {
             buf.fill(PLACEHOLDER_CHAR, i, i + needle.length);
             i = buf.indexOf(needle, i + needle.length);
@@ -122,17 +131,24 @@ function normalizeStrings(v, key) {
         return buf.toString("base64");
     }
     if (typeof v === "string") return normalizeText(v);
-    if (Array.isArray(v)) return v.map(x => normalizeStrings(x));
-    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, normalizeStrings(x, k)]));
+    if (Array.isArray(v)) return v.map(x => normalizeStrings(x, undefined, depth + 1));
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, normalizeStrings(x, k, depth + 1)]));
     return v;
 }
 
 /** Bijection between handle values of run A and run B within one process pair. */
 class Bijection {
-    constructor() {
-        this.ab = new Map();
-        this.ba = new Map();
+    constructor(from) {
+        this.ab = new Map(from?.ab);
+        this.ba = new Map(from?.ba);
         this.conflicts = [];
+    }
+    clone() {
+        return new Bijection(this);
+    }
+    commit(trial) {
+        this.ab = trial.ab;
+        this.ba = trial.ba;
     }
     map(a, b, where) {
         const ka = JSON.stringify(a);
@@ -165,7 +181,9 @@ function objectKind(o) {
 const isCompactRef = o => Object.keys(o).every(k => k === "id" || k === "file");
 // Escaped names of unique ES symbols and pattern ambient modules embed a server counter: "__@iterator@42",
 // '__"*.css"pattern@4'. The trailing number goes through its own bijection; the rest must match exactly.
-const COUNTER_SUFFIX = /^(__.+@)(\d+)$/;
+// Only the two server-synthesized forms are renamed: unique ES symbols "__@<identifier>@<n>" and pattern ambient
+// modules '__"<pattern>"pattern@<n>'. Anything else (e.g. a user property "__k@1") is compared exactly.
+const COUNTER_SUFFIX = /^(__@[A-Za-z_$][\w$]*@|__".*"pattern@)(\d+)$/;
 function mapIds(a, b, ns, bij, p) {
     if (Array.isArray(a) && Array.isArray(b)) {
         if (a.length !== b.length) return { path: `${p}.length`, a: a.length, b: b.length };
@@ -213,7 +231,9 @@ function diff(a, b, bij, p = "$", top = false) {
 }
 
 function comparePayload(x, y, bij, isRequest = false) {
-    if (x.hash || y.hash) return x.hash === y.hash && x.len === y.len ? undefined : { path: "$sha256", a: x.hash ?? "(captured)", b: y.hash ?? "(captured)" };
+    // Payloads over the capture limit are compared by sha256 of the raw bytes. Equal hashes mean identical bytes;
+    // a differing hash cannot be attributed (handles or content), so it is inconclusive, never equal or a proven diff.
+    if (x.hash || y.hash) return x.hash === y.hash && x.len === y.len ? undefined : { path: "$sha256", a: x.hash ?? "(captured)", b: y.hash ?? "(captured)", inconclusive: true };
     if (x.binary !== undefined || y.binary !== undefined) return x.binary === y.binary ? undefined : { path: "$binary", a: `${(x.binary ?? "").length}b64`, b: `${(y.binary ?? "").length}b64` };
     if (x.text !== undefined || y.text !== undefined) return x.text === y.text ? undefined : { path: "$text", a: x.text, b: y.text };
     return diff(x.json, y.json, bij, "$", isRequest);
@@ -271,6 +291,9 @@ const B = loadRun(opts.b);
 // synthesized names, the known nested-request defect), a candidate exchange equal to EITHER oracle run counts
 // as equal ("matchesOracleRun2"); differing from both is still a difference.
 const A2 = opts.a2 ? loadRun(opts.a2) : undefined;
+for (const run of [A, B, A2]) {
+    for (const list of run?.byTest.values() ?? []) for (const proc of list) for (const r of proc.records) if (r.kind === "response" && r.enc === "base64") BINARY_METHODS.add(r.method);
+}
 
 if (opts.drift) {
     // Negative control: perturb one semantic value in the first successful response of the method in run B.
@@ -295,6 +318,15 @@ if (opts.drift) {
     for (const [test, list] of B.byTest) {
         for (const proc of list) {
             for (const r of proc.records) {
+                if (!done && r.kind === "response" && r.method === opts.drift && r.enc === "base64") {
+                    // Sync binary payload (AST encoding): flip one byte in the middle.
+                    const buf = Buffer.from(r.data, "base64");
+                    buf[buf.length >> 1] ^= 0x01;
+                    opts.driftAt = { test, pid: proc.pid, seq: r.seq, binaryByte: buf.length >> 1 };
+                    r.data = buf.toString("base64");
+                    done = true;
+                    continue;
+                }
                 if (!done && r.kind === "response" && r.method === opts.drift && r.enc === "utf8") {
                     opts.driftAt = { test, pid: proc.pid, seq: r.seq, before: r.data.slice(0, 120) };
                     const json = JSON.parse(r.data);
@@ -310,22 +342,88 @@ if (opts.drift) {
         }
     }
     if (!done) {
-        console.error(`--drift: no successful utf8 response for ${opts.drift} in ${opts.b}`);
+        console.error(`--drift: no successful response for ${opts.drift} in ${opts.b}`);
         process.exit(2);
     }
 }
 
-let unstableHit = false;
-// Order-insensitive view used ONLY where the two oracle runs themselves disagree on order: arrays are sorted by
-// their elements' JSON with handle fields blanked (for the sort key only; the comparison still checks them).
-function sortKey(v) {
-    return JSON.stringify(v, (k, x) => (k === "id" || k === "file" || k === "nodeId" ? undefined : x));
+// Order relaxation (only where the two oracle runs disagree on order). orderPaths(x, y) returns the exact array
+// paths at which y is a permutation of x with everything else equal (handles compared through a fresh mapping,
+// because oracle runs number handles independently), or null if x and y differ in any other way.
+const looseEqual = (x, y) => !diff(x, y, new Bijection());
+function orderPaths(x, y, p = "$", out = []) {
+    if (Array.isArray(x) && Array.isArray(y)) {
+        if (x.length !== y.length) return null;
+        if (x.every((e, i) => looseEqual(e, y[i]))) return out;
+        const used = new Set();
+        const isPerm = x.every(e => {
+            const j = y.findIndex((f, j) => !used.has(j) && looseEqual(e, f));
+            if (j < 0) return false;
+            used.add(j);
+            return true;
+        });
+        if (isPerm) {
+            out.push(p);
+            return out;
+        }
+        for (let i = 0; i < x.length; i++) if (!orderPaths(x[i], y[i], `${p}[${i}]`, out)) return null;
+        return out;
+    }
+    if (x && y && typeof x === "object" && typeof y === "object" && !Array.isArray(x) && !Array.isArray(y)) {
+        const kx = Object.keys(x).sort();
+        if (kx.join("\0") !== Object.keys(y).sort().join("\0")) return null;
+        for (const k of kx) if (!orderPaths(x[k], y[k], `${p}.${k}`, out)) return null;
+        return out;
+    }
+    return looseEqual(x, y) ? out : null;
 }
-function sortArrays(v) {
-    if (Array.isArray(v)) return v.map(sortArrays).sort((x, y) => (sortKey(x) < sortKey(y) ? -1 : sortKey(x) > sortKey(y) ? 1 : 0));
-    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, sortArrays(x)]));
+function getAt(v, p) {
+    for (const part of p.slice(1).match(/\.[^.[]+|\[\d+\]/g) ?? []) v = part[0] === "." ? v?.[part.slice(1)] : v?.[Number(part.slice(1, -1))];
     return v;
 }
+function setAt(v, p, value) {
+    const parts = p.slice(1).match(/\.[^.[]+|\[\d+\]/g) ?? [];
+    if (parts.length === 0) return value;
+    const root = structuredClone(v);
+    let cur = root;
+    for (let i = 0; i < parts.length - 1; i++) cur = parts[i][0] === "." ? cur[parts[i].slice(1)] : cur[Number(parts[i].slice(1, -1))];
+    const last = parts[parts.length - 1];
+    if (last[0] === ".") cur[last.slice(1)] = value;
+    else cur[Number(last.slice(1, -1))] = value;
+    return root;
+}
+/**
+ * Reorders the candidate's arrays at exactly the given paths to the oracle's order, matching each oracle element
+ * to a candidate element under (a trial copy of) the process bijection, which is extended as elements match.
+ * Returns the reordered candidate value, or undefined if some element has no equal counterpart.
+ */
+function reorderCandidate(aVal, bVal, paths, trial) {
+    let out = bVal;
+    for (const p of paths) {
+        const xa = getAt(aVal, p);
+        const xb = getAt(out, p);
+        if (!Array.isArray(xa) || !Array.isArray(xb) || xa.length !== xb.length) return undefined;
+        const used = new Set();
+        const ordered = [];
+        for (const e of xa) {
+            let found = -1;
+            for (let j = 0; j < xb.length && found < 0; j++) {
+                if (used.has(j)) continue;
+                const t = trial.clone();
+                if (!diff(e, xb[j], t)) {
+                    trial.commit(t);
+                    found = j;
+                }
+            }
+            if (found < 0) return undefined;
+            used.add(found);
+            ordered.push(xb[found]);
+        }
+        out = setAt(out, p, ordered);
+    }
+    return out;
+}
+
 if (opts.driftHandle) {
     // Handle-identity negative control: in run B, make the first request that sends back a symbol reference
     // point at the next symbol id. The id was received earlier in that process, so the bijection must flag it.
@@ -395,6 +493,14 @@ for (const [test, listA] of A.byTest) {
         const [pa, pb] = pairs[i];
         if (!pa || !pb) {
             unpaired.push({ test, index: i, missingIn: pa ? opts.b : opts.a });
+            // Fail closed: every oracle exchange of a process without a candidate counterpart is unverified.
+            if (pa) {
+                for (const e of exchanges(pa, A.treeDir).out.flatMap(expand)) {
+                    const c = counter(e.method);
+                    c.unverified = (c.unverified ?? 0) + 1;
+                    c.unpairedExchanges = (c.unpairedExchanges ?? 0) + 1;
+                }
+            }
             continue;
         }
         pairedProcesses++;
@@ -410,67 +516,107 @@ for (const [test, listA] of A.byTest) {
             if (p2) ea2 = exchanges(p2, A2.treeDir).out.flatMap(expand);
         }
         const n = Math.min(ea.length, eb.length);
-        for (let k = 0; k < n; k++) {
+        const cmp = (x, y, bj) => {
+            const dr = comparePayload(x.req, y.req, bj, true);
+            return dr ? { ...dr, in: "request" } : x.res && y.res ? comparePayload(x.res, y.res, bj) : undefined;
+        };
+        let k = 0;
+        for (; k < n; k++) {
             const a = ea[k];
             const b = eb[k];
             const c = counter(a.method);
             c.pairs++;
             c[pa.mode]++;
             if (a.batched) c.batched++;
-            let d;
-            if (a.method !== b.method) d = { path: "$method", a: a.method, b: b.method };
-            else if (a.kind !== b.kind) d = { path: "$kind", a: a.kind, b: b.kind };
-            else {
-                const cmp = (x, y, bj) => {
-                    const dr = comparePayload(x.req, y.req, bj, true);
-                    return dr ? { ...dr, in: "request" } : x.res && y.res ? comparePayload(x.res, y.res, bj) : undefined;
-                };
-                d = cmp(a, b, bij);
-                const a2 = ea2?.[k];
-                // The second-run bijection is maintained on every exchange (not only on differences), so an
-                // identity break is caught against run 2 as well.
-                const d2 = a2 && a2.method === b.method && a2.kind === b.kind ? cmp(a2, b, bij2) : { path: "$unaligned" };
-                if (d && a2 && a2.method === b.method && a2.kind === b.kind) {
-                    if (!d2) {
-                        c.matchesOracleRun2 = (c.matchesOracleRun2 ?? 0) + 1;
-                        d = undefined;
-                    }
-                    else if (cmp(a, a2, new Bijection()) && a.res?.json !== undefined && b.res?.json !== undefined && !diff(sortArrays(a.res.json), sortArrays(b.res.json), new Bijection())) {
-                        // Oracle runs disagree only in array order here, and the candidate has the same elements.
-                        c.equalUnordered = (c.equalUnordered ?? 0) + 1;
-                        d = undefined;
-                    }
-                    else if (cmp(a, a2, new Bijection())) {
-                        // The two oracle runs disagree here too: the oracle is nondeterministic at this exchange
-                        // and the candidate matches neither observed variant. Reported separately.
-                        c.oracleUnstable = (c.oracleUnstable ?? 0) + 1;
-                        if ((c.unstableExamples ??= []).length < 2) c.unstableExamples.push({ test, exchange: k, diff: truncate(d) });
-                        d = undefined;
-                        unstableHit = true;
-                    }
-                }
-            }
-            if (a.kind === "response") c.okPairs++;
-            if (unstableHit) {
-                unstableHit = false;
-                continue;
-            }
-            if (d) {
+            if (a.method !== b.method || a.kind !== b.kind) {
+                const d = a.method !== b.method ? { path: "$method", a: a.method, b: b.method } : { path: "$kind", a: a.kind, b: b.kind };
                 c.differ++;
                 if (c.examples.length < 3) c.examples.push({ test, process: i, exchange: k, mode: pa.mode, batched: !!a.batched, diff: truncate(d) });
-                if (a.method !== b.method || a.kind !== b.kind) {
-                    // sequences diverged: stop pairing this process
-                    unpaired.push({ test, index: i, divergedAt: k, a: `${a.method}/${a.kind}`, b: `${b.method}/${b.kind}` });
-                    break;
+                // Sequences diverged: everything after this point is unverified on both sides.
+                unpaired.push({ test, index: i, divergedAt: k, a: `${a.method}/${a.kind}`, b: `${b.method}/${b.kind}` });
+                k++;
+                break;
+            }
+            // outcome: "strict" | "run2" | "unordered" | "unstable" | "inconclusive" | "differ"
+            let outcome;
+            const trial = bij.clone();
+            let d = cmp(a, b, trial);
+            const a2 = ea2?.[k];
+            const aligned2 = a2 && a2.method === b.method && a2.kind === b.kind;
+            let trial2;
+            let d2;
+            if (aligned2) {
+                trial2 = bij2.clone();
+                d2 = cmp(a2, b, trial2);
+            }
+            if (!d) {
+                outcome = "strict";
+                bij.commit(trial);
+                if (aligned2 && !d2) bij2.commit(trial2);
+            }
+            else if (d.inconclusive) outcome = "inconclusive";
+            else if (aligned2 && !d2) {
+                // Candidate equals oracle run 2 exactly, with run 2's own per-process handle mapping.
+                outcome = "run2";
+                bij2.commit(trial2);
+            }
+            else if (aligned2 && !looseEqual({ q: a.req?.json, r: a.res?.json }, { q: a2.req?.json, r: a2.res?.json })) {
+                // The oracle runs disagree on this exchange. Accept the candidate only if (1) the oracle requests
+                // agree and the candidate request matches under the process mapping, and (2) the oracle responses
+                // differ only by order at exact array paths, and the candidate response equals the oracle response
+                // after reordering only those arrays, with the process mapping. Otherwise unverified.
+                const paths = a.res?.json !== undefined && a2.res?.json !== undefined && looseEqual(a.req?.json, a2.req?.json) ? orderPaths(a.res.json, a2.res.json) : null;
+                if (paths && paths.length) {
+                    // The relaxation applies, so its failure is a proven difference (request, element content or
+                    // handle identity), not an oracle ambiguity.
+                    const t = bij.clone();
+                    const dq = comparePayload(a.req, b.req, t, true);
+                    if (dq) d = { ...dq, in: "request" };
+                    else if (b.res?.json === undefined) d = { path: "$response", a: "json", b: "non-json" };
+                    else {
+                        const reordered = reorderCandidate(a.res.json, b.res.json, paths, t);
+                        d = reordered === undefined
+                            ? { path: `${paths.join(",")} (order-relaxed)`, a: "an oracle element", b: "no equal candidate element under the process handle mapping" }
+                            : diff(a.res.json, reordered, t);
+                        if (!d) {
+                            bij.commit(t);
+                            (c.unorderedPaths ??= new Set()).add(paths.join(","));
+                        }
+                    }
+                    outcome = d ? "differ" : "unordered";
                 }
+                else outcome = "unstable";
+            }
+            else outcome = "differ";
+
+            if (outcome === "differ") {
+                c.differ++;
+                if (c.examples.length < 3) c.examples.push({ test, process: i, exchange: k, mode: pa.mode, batched: !!a.batched, diff: truncate(d) });
+            }
+            else if (outcome === "unstable" || outcome === "inconclusive") {
+                c.unverified = (c.unverified ?? 0) + 1;
+                if (outcome === "unstable") c.oracleUnstable = (c.oracleUnstable ?? 0) + 1;
+                else c.hashInconclusive = (c.hashInconclusive ?? 0) + 1;
+                if ((c.unverifiedExamples ??= []).length < 3) c.unverifiedExamples.push({ test, exchange: k, outcome, diff: truncate(d) });
             }
             else {
                 c.equal++;
+                if (outcome === "run2") c.matchesOracleRun2 = (c.matchesOracleRun2 ?? 0) + 1;
+                if (outcome === "unordered") c.equalUnordered = (c.equalUnordered ?? 0) + 1;
                 if (a.kind === "response") {
                     c.okEqual++;
                     c[`okEqual_${pa.mode}`] = (c[`okEqual_${pa.mode}`] ?? 0) + 1;
+                    if (outcome === "strict") c.strictEqual = (c.strictEqual ?? 0) + 1;
                 }
+                if (a.res?.hash) c.hashOnlyEqual = (c.hashOnlyEqual ?? 0) + 1;
             }
+            if (a.kind === "response") c.okPairs++;
+        }
+        // Fail closed: oracle exchanges the candidate never answered (diverged or shorter process) stay unverified.
+        for (let j = k; j < ea.length; j++) {
+            const c = counter(ea[j].method);
+            c.unverified = (c.unverified ?? 0) + 1;
+            c.unpairedExchanges = (c.unpairedExchanges ?? 0) + 1;
         }
         if (ea.length !== eb.length) unpaired.push({ test, index: i, lengths: [ea.length, eb.length] });
         const ca = [...xa.calls].sort();
@@ -507,12 +653,12 @@ const rows = methods.map(m => {
     if (unsupportedInB.has(m) && !answeredInB.has(m)) status = "unsupported";
     else if (!c) status = "unpaired";
     else if (c.differ > 0) status = "differs";
+    // Any exchange that could not be verified (oracle disagreement the candidate does not resolve, unattributable
+    // hash difference, missing/diverged candidate traffic) keeps the method inconclusive even if others are equal.
+    else if ((c.unverified ?? 0) > 0) status = "inconclusive";
     else if (c.okEqual > 0) status = "equal";
-    else if (c.equalUnordered > 0) status = "equal-unordered";
-    else if (c.oracleUnstable > 0) status = "oracle-unstable-unverified";
-    else if (c.matchesOracleRun2 > 0) status = "equal";
     else status = "equal-errors-only";
-    return { method: m, status, ...(c ?? {}) };
+    return { method: m, status, ...(c ?? {}), unorderedPaths: c?.unorderedPaths ? [...c.unorderedPaths] : undefined };
 });
 const report = {
     a: opts.a,

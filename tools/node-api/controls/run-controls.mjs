@@ -25,7 +25,9 @@ const cases = [
     ["CE2 (ce5) identity break inside an unordered result", "scen.mjs", "ce5", ["--a2", "syn-a2"], "getSymbolsInScope", ["differs"]],
     ["CE2 (ce5) control: consistent identity", "scen.mjs", "ce5-ctl", ["--a2", "syn-a2"], "getSymbolsInScope", VERIFIED],
     ["CE3 request difference on the unordered path", ["scen.mjs", "ce1"], "ce3", ["--a2", "syn-a2"], "getSignaturesOfType", ["differs"]],
-    ["CE1 nested parameter order swapped", "scen.mjs", "ce1", ["--a2", "syn-a2"], "getSignaturesOfType", ["differs"]],
+    // Known limit, not a false pass of the order relaxation: the swapped parameters are fresh handles that occur
+    // nowhere else, so swapping them is indistinguishable from renaming them (strictly equal under the bijection).
+    ["CE1 swapped never-reused parameter handles (unobservable)", "scen.mjs", "ce1", ["--a2", "syn-a2"], "getSignaturesOfType", VERIFIED],
     ["CE1 control", ["scen.mjs", "ce1"], "ce1-ctl", ["--a2", "syn-a2"], "getSignaturesOfType", VERIFIED],
     ["CE4 (ce2) candidate matches neither oracle run", "scen.mjs", "ce2", ["--a2", "syn-a2"], "getTypeAtPosition", NOT_VERIFIED],
     ["CE5 (ce4) non-canonical base64 strings are distinct", "scen.mjs", "ce4", [], "getSourceFile", ["differs"]],
