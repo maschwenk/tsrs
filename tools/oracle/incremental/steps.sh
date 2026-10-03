@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs a scripted sequence of edits on a copy of a small project with tsgo and with TSRS_EMIT=1 tsrs, and compares
+# Runs a scripted sequence of edits on a copy of a small project with tsgo and with tsrs, and compares
 # the tsbuildinfo (modulo the build-stamped version) and the emitted files after every step.
 # usage: steps.sh <project-dir> <steps-file> [extra tsc flags...]
 # steps-file: one shell command per line, run inside the project copy before each build (first line: initial build, use `true`).
@@ -17,7 +17,7 @@ while IFS= read -r step; do
   n=$((n+1))
   (cd "$W/go" && eval "$step"); (cd "$W/rs" && eval "$step")
   (cd "$W/go" && "$TSGO" "${PRE[@]}" "$@" > "$W/go.out$n" 2>&1; echo "exit $?" >> "$W/go.out$n")
-  (cd "$W/rs" && TSRS_EMIT=1 "$TSRS" "${PRE[@]}" "$@" > "$W/rs.out$n" 2>&1; echo "exit $?" >> "$W/rs.out$n")
+  (cd "$W/rs" && "$TSRS" "${PRE[@]}" "$@" > "$W/rs.out$n" 2>&1; echo "exit $?" >> "$W/rs.out$n")
   sed -i -E 's/[0-9]{2}:[0-9]{2}:[0-9]{2} [AP]M/HH:MM:SS AM/g' "$W/go.out$n" "$W/rs.out$n"
   # Absolute paths differ only in the copy's directory.
   sed -i "s#$W/go#<W>#g" "$W/go.out$n"; sed -i "s#$W/rs#<W>#g" "$W/rs.out$n"

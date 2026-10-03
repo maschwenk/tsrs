@@ -1,10 +1,11 @@
 # Emit plan: JavaScript, declarations, source maps, `--build`
 
-Status (2026-10-03): **wave E1 (pipeline) landed on branch `emit/core`.** The `TSRS_EMIT=1` gate (section 6) is
-implemented; without it tsrs still forces `--noEmit` and writes nothing (release guard: `crates/tsrs_cli/tests/emit_gate.rs`).
-Under the gate, `Program::emit` runs the full Go pipeline: `.d.ts` files are printed (the declaration transformer is
-complete), and every script transformer that is not ported yet is a gate stub that panics with
-`emit: <file>.go not ported` once its `SubtreeFacts` early return does not apply. Progress: section 13.
+Status (2026-10-03): **tsrs emits by default, like tsgo** (branch `mfs-cx/default-emit`, at the user's request). The
+`TSRS_EMIT=1` opt-in gate of section 6 is removed: no forced `--noEmit`, `-b` and incremental compilation run without
+an environment flag, and the project's/CLI's `noEmit`, `emitDeclarationOnly`, `noEmitOnError` and
+`incremental`/`composite` decide as in Go (an incremental `--noEmit` program still writes its tsbuildinfo). The old
+variable no longer changes anything. Regression test: `crates/tsrs_cli/tests/default_emit.rs`. The sections below are
+the history of the emit port (written while emit was opt-in); progress: section 13.
 
 ## Why the work stopped after phase 0
 
@@ -22,11 +23,11 @@ Reference commit: the same as the rest of the port (`ts-ref/tsc` = microsoft/Typ
 - Same porting rules as the checker (PORTING.md, BODY_PORTING.md): one Rust file per Go file, functions in Go
   order, snake_case Go names, `// file.go:LINE` origin markers, Go quirks kept, no "improvements", never
   special-case a test. Signatures come from `tools/gosig` (section 9).
-- **The default behavior does not change until the user signs off.** Released binaries are used as a type checker
-  in a large private monorepo, and a release must never start writing files. Every emit path stays behind
-  `TSRS_EMIT=1` (section 6). Do not remove the gate and do not tag releases from emit work.
-- Land on `main` in small commits (rebase, gates, `git push origin HEAD:main`, never force-push). Emit is additive
-  and gated, so partial waves can land as long as the gates hold:
+- **tsrs emits by default, like tsc.** The `TSRS_EMIT=1` gate (section 6) was removed once the user signed off;
+  `--noEmit` (which the 38k-file codebase passes everywhere) is the only thing that keeps files from being written.
+  Nothing may change what `--noEmit` prints or writes (nothing).
+- Land on `main` in small commits (rebase, gates, `git push origin HEAD:main`, never force-push). Emit is additive,
+  so partial waves can land as long as the gates hold:
   - conformance suite errors plus `--baselines types,symbols` byte-identical to the base binary, in the default
     mode and with `TSRS_LAZY_MEMBERS=0`, with single- and multi-threaded test programs (compare whole
     `target/test-results` trees);
@@ -239,7 +240,7 @@ the TestEmit table is already ported), `printer/namegenerator_test.go` (640),
 | execute/build | `tsrs_build` | new crate |
 | testutil tsbaseline/harnessutil emit parts, tsctests | `tsrs_testrunner` | |
 
-## 6. The `TSRS_EMIT=1` gate (implemented: tsrs_cli `execute::emit_enabled`, `tsc/emit.rs`)
+## 6. The `TSRS_EMIT=1` gate (historical; removed by `mfs-cx/default-emit`, tsrs now emits by default)
 
 The rule: **without `TSRS_EMIT=1`, the bytes tsrs prints and the files it writes (none) are unchanged.**
 

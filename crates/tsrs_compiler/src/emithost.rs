@@ -151,7 +151,7 @@ impl tsrs_transformers::EmitHost for EmitHost {
     }
 
     // emitHost.go:130. The program host's file system (the CLI: the cached FS over the OS FS, which creates missing
-    // directories). Only reached through `Program::emit`, which the CLI calls only under TSRS_EMIT=1.
+    // directories). Reached through `Program::emit`.
     fn write_file(&self, file_name: &str, text: &str) -> Result<(), String> {
         self.program.host().fs().write_file(file_name, text)
     }

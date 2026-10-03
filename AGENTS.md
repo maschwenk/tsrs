@@ -22,7 +22,7 @@ How to update it:
   number from `notes/` or a PR instead, say so in the PR description.
 - Compare against tsgo built from the pinned commit, not the npm nightly.
 - Keep the status column to a short state: `yes`, `no`, `ignored`, or the condition it needs (such as
-  `TSRS_EMIT=1`). Put numbers and caveats in the evidence column.
+  `--incremental`). Put numbers and caveats in the evidence column.
 - Keep the README intro, `docs/EMIT.md`, `docs/LSP.md` and `docs/STATUS.md` consistent with the table.
 - Do not name the private monorepo; call it "the 38k-file codebase".
 - Do not edit the benchmark section between `<!-- bench:start -->` and `<!-- bench:end -->`. The bench workflow
