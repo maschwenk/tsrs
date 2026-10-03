@@ -357,3 +357,13 @@ pub fn get_non_assignment_operator_for_compound_assignment(kind: Kind) -> Kind {
 fn is_super_call(node: P<Node>) -> bool {
     ast::is_call_expression(node) && node.expression().unwrap().kind() == Kind::SuperKeyword
 }
+
+// ast/utilities.go:4038 (Go ast.IsEmptyObjectLiteral; here because tsrs_checker glob-imports its own copy)
+pub fn is_empty_object_literal(expression: P<Node>) -> bool {
+    ast::is_object_literal_expression(expression) && expression.properties().is_empty()
+}
+
+// ast/utilities.go:4042 (Go ast.IsEmptyArrayLiteral; same reason)
+pub fn is_empty_array_literal(expression: P<Node>) -> bool {
+    ast::is_array_literal_expression(expression) && expression.elements().is_empty()
+}
