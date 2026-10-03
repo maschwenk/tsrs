@@ -635,7 +635,11 @@ impl checkerPool {
                 *cpu[checker_idx].lock().unwrap() = thread_cpu_seconds() - cpu_start;
             }
         };
-        run_work_group(single_threaded || self.single_threaded, state.checkers.len(), run);
+        // Go queues one goroutine per checker group (cheap); here each group is an OS thread, so spawn threads only for
+        // the checkers that own at least one of `files`. A one-file call (incremental emit of one affected file) then
+        // runs on the calling thread instead of creating `checkers.len()` threads per file.
+        let active: Vec<usize> = (0..state.checkers.len()).filter(|&i| files.iter().any(|f| state.file_associations.get(f) == Some(&i))).collect();
+        run_work_group(single_threaded || self.single_threaded, active.len(), |k| run(active[k]));
         if stats {
             state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_cpu.lock().unwrap().push(cpu.into_iter().map(|t| t.into_inner().unwrap()).collect());
