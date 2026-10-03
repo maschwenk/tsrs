@@ -5,7 +5,8 @@
 //
 // Variants: create-plain (createSnapshot + dispose, no queries), create-diag (+ semantic diagnostics),
 // create-type (+ checker query), create-edit (+ file edit), update (Snapshot.update + dispose), transpile
-// (transpileModule only, no snapshots). Prints one JSON line: samples every cycles/10 cycles, in MiB.
+// (transpileModule only, no snapshots), build (createBuildOrchestrator + build + dispose of a 2-project
+// reference graph per cycle, with an edit). Prints one JSON line: samples every cycles/10 cycles, in MiB.
 
 import { API } from "@typescript/typescript/unstable/sync";
 import fs from "node:fs";
@@ -15,14 +16,29 @@ const [binary, variant, cyclesArg] = process.argv.slice(2);
 const cycles = Number(cyclesArg ?? 120);
 const gen = (i: number) => `export const version = ${i};\n` + Array.from({ length: 150 }, (_, k) => `export function f${k}(a: { x: number }) { return a.x + ${i}; }`).join("\n");
 const use = `import { f1 } from "./gen"; export const r = f1({ x: 1 });\n`;
-const vfs = createVirtualFileSystem({ "/tsconfig.json": `{ "compilerOptions": { "strict": true }, "include": ["src"] }`, "/src/gen.ts": gen(0), "/src/use.ts": use });
+const vfs = createVirtualFileSystem({
+    "/tsconfig.json": `{ "compilerOptions": { "strict": true }, "include": ["src"] }`,
+    "/src/gen.ts": gen(0),
+    "/src/use.ts": use,
+    "/a/tsconfig.json": JSON.stringify({ compilerOptions: { composite: true, outDir: "dist", rootDir: "src" }, files: ["src/index.ts"] }),
+    "/a/src/index.ts": `export const a: number = 0;\n`,
+    "/c/tsconfig.json": JSON.stringify({ compilerOptions: { composite: true, outDir: "dist", rootDir: "src" }, files: ["src/index.ts"], references: [{ path: "../a" }] }),
+    "/c/src/index.ts": `import { a } from "../../a/src/index";\nexport const c: number = a;\n`,
+});
 const api = new API({ cwd: "/", fs: vfs, tsserverPath: binary });
 let snap = api.createSnapshot({ openProject: "/tsconfig.json" });
 const child = (api as any).client.channel.child;
 const rss = () => Math.round(Number(/VmRSS:\s+(\d+)/.exec(fs.readFileSync(`/proc/${child.pid}/status`, "utf8"))![1]) / 1024);
 const samples: number[] = [rss()];
 for (let i = 1; i <= cycles; i++) {
-    if (variant === "transpile") {
+    if (variant === "build") {
+        vfs.writeFile("/a/src/index.ts", `export const a: number = ${i};\n`);
+        const o = api.createBuildOrchestrator(["/c/tsconfig.json"], { cwd: "/" });
+        const r = o.build();
+        if (r.status !== 0) throw new Error(`build status ${r.status}`);
+        o.dispose();
+    }
+    else if (variant === "transpile") {
         api.transpileModule(gen(i), { compilerOptions: { module: 99 as any } } as any);
     }
     else {
