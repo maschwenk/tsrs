@@ -326,9 +326,9 @@ impl Session {
             }
         };
         // Go decodes the whole params struct before any lookup (see predecode.rs).
-        let _lexemes = match crate::methods::params_type(method) {
-            Some(t) => Some(crate::predecode::enter_lexemes(crate::predecode::predecode(method, t, &params, raw_params)?)),
-            None => None,
+        let lexemes = match crate::methods::params_type(method) {
+            Some(t) => crate::predecode::predecode(method, t, &params, raw_params)?,
+            None => Default::default(),
         };
         let go_type = crate::methods::params_type(method);
         let typed = |e: ApiError| match (e.kind.clone(), go_type) {
@@ -339,11 +339,13 @@ impl Session {
             }
             _ => e,
         };
-        self.dispatch_parsed(method, &params, info.owner).map_err(typed)
+        self.dispatch_parsed(method, &params, info.owner, lexemes).map_err(typed)
     }
 
-    fn dispatch_parsed(&self, method: &str, params: &Value, owner: Owner) -> ApiResult<Response> {
+    fn dispatch_parsed(&self, method: &str, params: &Value, owner: Owner, lexemes: std::collections::HashMap<String, String>) -> ApiResult<Response> {
         let params = params.clone();
+        // Exact number literals apply to this top-level params object only (identified by address).
+        let _lexemes = crate::predecode::enter_lexemes(lexemes, &params);
         if *self.closed.lock().unwrap() {
             return Err(ApiError::client("session is closed"));
         }

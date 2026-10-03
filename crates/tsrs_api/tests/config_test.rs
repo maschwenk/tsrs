@@ -237,3 +237,20 @@ fn exact_integer_literals_and_escaped_keys() {
     let e = call_err(&s, "release", r#"{"snap\u0073hot":1e3}"#);
     assert!(e.starts_with("api: invalid request: failed to unmarshal *api.ReleaseParams"), "{e}");
 }
+
+/// `removePrograms` elements are project.SyntheticProjectID (custom decoder): `null` is rejected before any
+/// snapshot is allocated, so the next snapshot ID is unchanged (runtime review of b2769b8).
+#[test]
+fn remove_programs_null_is_rejected_before_allocation() {
+    let dir = TempDir::new("removenull");
+    let s = session(&dir.dir(), false);
+    let first = call(&s, "createSnapshot", "{}");
+    let first_id = match get(&first, "snapshot") { tsrs_core::json::Value::Number(n) => *n as u64, _ => unreachable!() };
+    let e = call_err(&s, "createSnapshot", r#"{"removePrograms":[null]}"#);
+    assert!(e.starts_with("api: invalid request: failed to unmarshal *api.CreateSnapshotParams: json: cannot unmarshal into Go project.SyntheticProjectID within \"/removePrograms/0\""), "{e}");
+    let next = call(&s, "createSnapshot", "{}");
+    let next_id = match get(&next, "snapshot") { tsrs_core::json::Value::Number(n) => *n as u64, _ => unreachable!() };
+    assert_eq!(next_id, first_id + 1, "the rejected request must not consume a snapshot ID");
+    // ensurePrograms is []project.ID: a null element is the zero ID (accepted).
+    call(&s, "createSnapshot", r#"{"ensurePrograms":[null]}"#);
+}

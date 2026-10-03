@@ -113,6 +113,20 @@ fn field_elem(kind: FieldKind) -> Option<Elem> {
 
 fn check_field(spec: &FieldSpec, v: &Value, lexemes: &HashMap<String, String>) -> Result<(), String> {
     let pointer = format!("/{}", spec.name);
+    // project.SyntheticProjectID has its own decoder: unlike a plain string, a null element is an error.
+    if spec.go_type == "[]project.SyntheticProjectID" {
+        if let Value::Array(items) = v {
+            for (i, item) in items.iter().enumerate() {
+                if !matches!(item, Value::String(_)) {
+                    return Err(format!(
+                        "cannot unmarshal into Go project.SyntheticProjectID within \"{pointer}/{i}\": expected a string, got {}",
+                        json_kind(item)
+                    ));
+                }
+            }
+            return Ok(());
+        }
+    }
     let mismatch = |v: &Value, pointer: &str, go_type: &str| format!("cannot unmarshal JSON {} into Go {} within \"{pointer}\"", json_kind(v), go_type_name(go_type));
     if matches!(v, Value::Null) && spec.kind != FieldKind::Doc && spec.kind != FieldKind::DocList {
         // `null` into a non-pointer field leaves the zero value; into a pointer it is nil.
@@ -271,12 +285,12 @@ pub(crate) fn predecode(method: &str, go_type: &str, params: &Value, raw: &[u8])
 thread_local! {
     // Number literals of the request being dispatched on this thread (top-level fields), so typed accessors read
     // exact integers (`Params::u64`). Stacked for nested dispatch (batchRequests, callback re-entry).
-    static LEXEMES: std::cell::RefCell<Vec<HashMap<String, String>>> = const { std::cell::RefCell::new(Vec::new()) };
+    static LEXEMES: std::cell::RefCell<Vec<(usize, HashMap<String, String>)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// Makes `lexemes` the current request's number literals until the guard is dropped.
-pub(crate) fn enter_lexemes(lexemes: HashMap<String, String>) -> LexemeGuard {
-    LEXEMES.with(|l| l.borrow_mut().push(lexemes));
+/// Makes `lexemes` the number literals of the top-level params object `root` until the guard is dropped.
+pub(crate) fn enter_lexemes(lexemes: HashMap<String, String>, root: &Value) -> LexemeGuard {
+    LEXEMES.with(|l| l.borrow_mut().push((root as *const Value as usize, lexemes)));
     LexemeGuard(())
 }
 
@@ -290,9 +304,17 @@ impl Drop for LexemeGuard {
     }
 }
 
-/// The exact unsigned integer literal of top-level field `key` of the current request, if it has one.
-pub(crate) fn exact_u64(key: &str) -> Option<u64> {
-    LEXEMES.with(|l| l.borrow().last().and_then(|m| m.get(&format!("/{key}")).and_then(|s| s.parse::<u64>().ok())))
+/// The exact unsigned integer literal of field `key` when `object` is the current request's top-level params
+/// object (by address; a nested object with the same key never matches), if it has one.
+pub(crate) fn exact_u64(object: &Value, key: &str) -> Option<u64> {
+    LEXEMES.with(|l| {
+        let l = l.borrow();
+        let (root, m) = l.last()?;
+        if *root != object as *const Value as usize {
+            return None;
+        }
+        m.get(&format!("/{key}")).and_then(|s| s.parse::<u64>().ok())
+    })
 }
 
 #[cfg(test)]
@@ -303,6 +325,13 @@ mod tests {
         assert_eq!(m.get("/a").map(String::as_str), Some("1e3"));
         assert_eq!(m.get("/b/1").map(String::as_str), Some("2.5"));
         assert!(!m.contains_key("/d/e") && !m.contains_key("/f") && !m.contains_key("/b/2"));
+        // Exact literals apply to the registered top-level object only, never to a nested object with the same key.
+        let root = tsrs_core::json::unmarshal(r#"{"snapshot":9007199254740993,"inner":{"snapshot":9007199254740992}}"#).unwrap();
+        let lex = super::number_lexemes(br#"{"snapshot":9007199254740993,"inner":{"snapshot":9007199254740992}}"#);
+        let _g = super::enter_lexemes(lex, &root);
+        assert_eq!(super::exact_u64(&root, "snapshot"), Some(9007199254740993));
+        let tsrs_core::json::Value::Object(o) = &root else { unreachable!() };
+        assert_eq!(super::exact_u64(o.get("inner").unwrap(), "snapshot"), None);
         let m = super::number_lexemes(br#"{"snap\u0073hot":1e3}"#);
         assert_eq!(m.get("/snapshot").map(String::as_str), Some("1e3"));
     }

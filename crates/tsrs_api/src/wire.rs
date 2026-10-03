@@ -87,15 +87,13 @@ impl<'a> Params<'a> {
     pub fn has(&self, key: &str) -> bool {
         !matches!(self.get(key), Value::Null)
     }
-    /// An unsigned integer field. For a top-level field of the current request the exact literal is used (f64
-    /// would turn e.g. 9007199254740993 into another ID); a nested object with the same key falls back to the
-    /// parsed value unless the literal agrees with it.
+    /// An unsigned integer field. For a field of the current request's top-level params object the exact
+    /// literal is used (f64 would turn e.g. 9007199254740993 into another ID); nested objects use the parsed
+    /// value (their literals are not recorded).
     pub fn u64(&self, key: &str) -> ApiResult<u64> {
-        if let Value::Number(parsed) = self.get(key) {
-            if let Some(n) = crate::predecode::exact_u64(key) {
-                if n as f64 == *parsed {
-                    return Ok(n);
-                }
+        if let Value::Number(_) = self.get(key) {
+            if let Some(n) = crate::predecode::exact_u64(self.0, key) {
+                return Ok(n);
             }
         }
         as_u64(self.get(key), key)
