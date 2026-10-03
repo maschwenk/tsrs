@@ -93,7 +93,7 @@ impl AsyncConn {
             request_error: Mutex::new(None),
             closer,
             handler_stack_size: DEFAULT_HANDLER_STACK_SIZE,
-            callbacks: Arc::default(),
+            callbacks: Arc::new(crate::reentrancy::CallbackState::new(false, options.reentrancy_grace)),
         })
     }
 

@@ -7,23 +7,50 @@
 // request that is waiting for the client, nothing can make progress: the pinned Go server hangs there.
 // tsrs instead reports a deliberate error. Handlers do not need the transport's types for this: the
 // connection publishes the current request context in a thread-local for the duration of a request.
+//
+// When is a contended acquisition a deadlock?
+// - Sync: only one top-level request runs at a time, so a request thread that finds the resource taken
+//   while some request is blocked on the client is a nested request issued from a callback: the
+//   conflict is certain and is reported immediately.
+// - Async: requests run concurrently and the transport cannot tell whether the client's pending
+//   callback is the one that issued this request (filesystem callbacks also come from worker threads
+//   that carry no request identity). An unrelated slow callback plus ordinary contention is not a
+//   deadlock (pinned Go just waits), so the waiter keeps waiting; it fails only after the contention
+//   has coexisted with a blocked client call for the whole grace period (`ConnOptions::
+//   reentrancy_grace`, default 10 s). A real async re-entry deadlock therefore ends with the error
+//   after the grace period instead of hanging, and valid concurrency is never rejected early.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, TryLockError};
-use std::time::Duration;
+use std::cell::Cell;
+use std::time::{Duration, Instant};
 
 use crate::handler::RequestContext;
 use crate::message::ApiError;
 
+pub const DEFAULT_ASYNC_GRACE: Duration = Duration::from_secs(10);
+
 /// Connection-wide count of requests currently blocked waiting for a client callback answer.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct CallbackState {
     waiting: AtomicUsize,
     lock: Mutex<()>,
     changed: Condvar,
+    sync: bool,
+    grace: Duration,
+}
+
+impl Default for CallbackState {
+    fn default() -> Self {
+        CallbackState::new(false, DEFAULT_ASYNC_GRACE)
+    }
 }
 
 impl CallbackState {
+    pub(crate) fn new(sync: bool, grace: Duration) -> CallbackState {
+        CallbackState { waiting: AtomicUsize::new(0), lock: Mutex::new(()), changed: Condvar::new(), sync, grace }
+    }
+
     pub fn waiting_on_client(&self) -> usize {
         self.waiting.load(Ordering::SeqCst)
     }
@@ -79,11 +106,36 @@ pub fn current_request() -> Option<RequestContext> {
     CURRENT.with(|c| c.borrow().clone())
 }
 
-/// True when blocking now could deadlock: this thread serves a request and some request on the same
-/// connection is waiting for the client. Check before blocking on an exclusive resource (e.g. a checker
-/// lease) that cannot use `lock_for_request`.
+thread_local! {
+    /// (start, last check) of the current contended wait on this thread, for the async grace period.
+    static EPISODE: Cell<Option<(Instant, Instant)>> = const { Cell::new(None) };
+}
+
+/// A gap between checks longer than this starts a new contention episode (wait loops re-check every
+/// few milliseconds).
+const EPISODE_GAP: Duration = Duration::from_millis(200);
+
+/// Call repeatedly while waiting for a contended exclusive resource (e.g. a checker lease) that cannot
+/// use `lock_for_request`; when it returns true, give up with `reentrancy_error`. True when waiting could
+/// deadlock on a client callback: immediately on a sync connection while a request is blocked on the
+/// client; on an async connection only once that has been the case for the whole grace period (see
+/// module docs). Always false outside a request.
 pub fn blocking_may_deadlock() -> bool {
-    current_request().is_some_and(|cx| cx.callbacks.waiting_on_client() > 0)
+    let Some(cx) = current_request() else { return false };
+    if cx.callbacks.waiting_on_client() == 0 {
+        EPISODE.with(|e| e.set(None));
+        return false;
+    }
+    if cx.callbacks.sync {
+        return true;
+    }
+    let now = Instant::now();
+    let start = match EPISODE.with(|e| e.get()) {
+        Some((start, last)) if now.duration_since(last) < EPISODE_GAP => start,
+        _ => now,
+    };
+    EPISODE.with(|e| e.set(Some((start, now))));
+    now.duration_since(start) >= cx.callbacks.grace
 }
 
 pub fn reentrancy_error(resource: &str) -> ApiError {
@@ -103,11 +155,14 @@ pub fn lock_for_request<'a, T>(mutex: &'a Mutex<T>, resource: &str) -> Result<Mu
     };
     loop {
         match mutex.try_lock() {
-            Ok(g) => return Ok(g),
+            Ok(g) => {
+                EPISODE.with(|e| e.set(None));
+                return Ok(g);
+            }
             Err(TryLockError::Poisoned(p)) => return Ok(p.into_inner()),
             Err(TryLockError::WouldBlock) => {}
         }
-        if cx.callbacks.waiting_on_client() > 0 {
+        if blocking_may_deadlock() {
             return Err(reentrancy_error(resource));
         }
         if cx.cancel.is_cancelled() {
