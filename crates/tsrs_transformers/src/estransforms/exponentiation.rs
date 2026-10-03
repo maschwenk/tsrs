@@ -87,7 +87,7 @@ impl exponentiationTransformer {
         result
     }
 
-    // exponentiation.go:78
+    // exponentiation.go:79
     fn visit_exponentiation_expression(&self, node: P<Node>) -> P<Node> {
         let b = node.as_binary_expression();
         let left = self.visitor().visit_node(Some(b.left)).unwrap();
