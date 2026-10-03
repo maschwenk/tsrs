@@ -45,10 +45,8 @@ pub use resolver::*;
 pub use transformer::*;
 pub use utilities::*;
 
-mod ast_ext;
 mod destructuring;
 
-pub(crate) use ast_ext::*;
 pub use destructuring::*;
 
 pub mod estransforms;
