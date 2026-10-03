@@ -612,6 +612,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_transformers"
+version = "0.2.3"
+dependencies = [
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_binder",
+ "tsrs_checker",
+ "tsrs_core",
+ "tsrs_declarations",
+ "tsrs_printer",
+ "tsrs_scanner",
+ "tsrs_tsoptions",
+]
+
+[[package]]
 name = "tsrs_tsoptions"
 version = "0.2.3"
 dependencies = [

@@ -1,0 +1,19 @@
+[package]
+name = "tsrs_transformers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tsrs_core.workspace = true
+tsrs_ast.workspace = true
+tsrs_scanner.workspace = true
+tsrs_binder.workspace = true
+tsrs_tsoptions.workspace = true
+tsrs_checker.workspace = true
+tsrs_printer.workspace = true
+tsrs_declarations.workspace = true
+rustc-hash.workspace = true
