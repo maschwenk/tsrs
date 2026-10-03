@@ -442,7 +442,10 @@ for (const [test, listA] of A.byTest) {
             }
             else {
                 c.equal++;
-                if (a.kind === "response") c.okEqual++;
+                if (a.kind === "response") {
+                    c.okEqual++;
+                    c[`okEqual_${pa.mode}`] = (c[`okEqual_${pa.mode}`] ?? 0) + 1;
+                }
             }
         }
         if (ea.length !== eb.length) unpaired.push({ test, index: i, lengths: [ea.length, eb.length] });
@@ -492,4 +495,15 @@ const report = {
 };
 fs.mkdirSync(opts.out, { recursive: true });
 fs.writeFileSync(path.join(opts.out, "compare.json"), JSON.stringify(report, null, 2) + "\n");
+// Markdown: every proto.go method with its outcome, per-mode successful equal pairs, and the exact differences.
+const md = [`# Paired responses: ${opts.a} vs ${opts.b}${opts.a2 ? ` (second oracle run ${opts.a2})` : ""}${opts.drift ? ` [negative control: drift ${opts.drift}]` : ""}`, ""];
+md.push(`Paired server processes: ${pairedProcesses}. Status counts: ${Object.entries(report.statusCounts).map(([k, v]) => `${k} ${v}`).join(", ")}. Unpaired/diverged processes: ${unpaired.length}. Callback multiset differences: ${callDiffs.length} processes (callback order/duplication is server-internal; not used for method status).`, "");
+md.push("| method | status | pairs | ok equal (sync/async) | errors equal | matches oracle run 2 | equal unordered | oracle unstable | differ | first difference |");
+md.push("|---|---|---|---|---|---|---|---|---|---|");
+for (const r of rows) {
+    const ex = r.examples?.[0];
+    const first = ex ? `${ex.diff.in === "request" ? "request " : ""}${ex.diff.path}: ${JSON.stringify(ex.diff.a)} vs ${JSON.stringify(ex.diff.b)} (${ex.test})`.replace(/\|/g, "\\|").slice(0, 300) : "";
+    md.push(`| \`${r.method}\` | ${r.status} | ${r.pairs ?? 0} | ${r.okEqual_sync ?? 0}/${r.okEqual_async ?? 0} | ${(r.equal ?? 0) - (r.okEqual ?? 0)} | ${r.matchesOracleRun2 ?? 0} | ${r.equalUnordered ?? 0} | ${r.oracleUnstable ?? 0} | ${r.differ ?? 0} | ${first} |`);
+}
+fs.writeFileSync(path.join(opts.out, "compare.md"), md.join("\n") + "\n");
 console.log(JSON.stringify({ out: opts.out, pairedProcesses, statusCounts: report.statusCounts, unpaired: unpaired.length, callMultisetDiffs: callDiffs.length, differing: rows.filter(r => r.status === "differs").map(r => `${r.method}(${r.differ}/${r.pairs})`) }, null, 1));

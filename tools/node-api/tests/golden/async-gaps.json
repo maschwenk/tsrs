@@ -1,0 +1,70 @@
+{
+  "arrayLike": [
+    true,
+    false
+  ],
+  "exportSymbol": {
+    "local": "exported",
+    "export": "exported"
+  },
+  "localTypeParameters": [
+    "U"
+  ],
+  "outerTypeParameters": [
+    "T"
+  ],
+  "parameterTypes": [
+    "number",
+    "string"
+  ],
+  "referencesInFile": [
+    [
+      6,
+      79,
+      "/src/index.ts"
+    ],
+    [
+      85,
+      79,
+      "/src/index.ts"
+    ],
+    [
+      107,
+      79,
+      "/src/index.ts"
+    ]
+  ],
+  "resolverReleased": true,
+  "signatureDeclaration": {
+    "kind": 263,
+    "parameters": 2
+  },
+  "substitution": {
+    "type": "T",
+    "base": "T",
+    "constraint": "string"
+  },
+  "symbolsAtLocations": [
+    "use",
+    "lit",
+    "arr"
+  ],
+  "symbolsAtPositions": [
+    "exported",
+    "Inner",
+    "lit",
+    "arr"
+  ],
+  "typeAtLocations": [
+    "readonly [number, string]",
+    "1",
+    "number[]"
+  ],
+  "typesOfSymbols": [
+    "(n: number, s: string) => readonly [number, string]",
+    "typeof Inner",
+    "1",
+    "number[]"
+  ],
+  "widened": "1"
+}
