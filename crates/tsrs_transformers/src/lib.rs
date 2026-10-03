@@ -21,6 +21,10 @@ pub(crate) use tsrs_checker::{self as checker, Checker, CheckerSlot, EmitResolve
 pub(crate) use tsrs_core::{alloc_slice, alloc_str, alloc_vec, CompilerOptions, ModuleKind, ScriptTarget, Tristate, P};
 pub(crate) use tsrs_printer::{self as printer, EmitContext, EmitFlags};
 pub(crate) use tsrs_scanner as scanner;
+pub(crate) use tsrs_core::collections::{MultiMap, OrderedSet, OrderedSetExt, Set};
+pub(crate) use tsrs_core::jsnum::{self, Number};
+pub(crate) use tsrs_core::{tspath, ScriptKind, TextRange};
+pub(crate) use tsrs_printer::{AssignedNameOptions, AutoGenerateOptions, EmitHelper, GeneratedIdentifierFlags, NameOptions};
 
 /// Go package `nodebuilder` (flags only).
 pub mod nodebuilder {
@@ -28,7 +32,6 @@ pub mod nodebuilder {
 }
 
 mod chain;
-mod destructuring;
 mod emithost;
 mod modifiervisitor;
 mod resolver;
@@ -36,12 +39,15 @@ mod transformer;
 mod utilities;
 
 pub use chain::*;
-pub use destructuring::*;
 pub use emithost::*;
 pub use modifiervisitor::*;
 pub use resolver::*;
 pub use transformer::*;
 pub use utilities::*;
+
+mod destructuring;
+
+pub use destructuring::*;
 
 pub mod estransforms;
 pub mod inliners;

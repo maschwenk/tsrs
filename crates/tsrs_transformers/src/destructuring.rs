@@ -1,6 +1,4 @@
 use crate::*;
-use printer::{AssignedNameOptions, NameOptions};
-use tsrs_core::TextRange;
 
 // FlattenLevel controls how deeply binding/assignment patterns are decomposed.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
