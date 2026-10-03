@@ -264,7 +264,7 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 147 | `getProgramDiagnostics` | core | supported | program_test (empty case) |
 | 148 | `getGlobalDiagnostics` | core | supported | program_test (empty case) |
 | 149 | `getConfigFileParsingDiagnostics` | core | supported | program_test (client-supplied diagnostics round trip) |
-| 150 | `printNode` | core | partial | upstream sync printNode/printFile tests pass; printer kind-text prefix divergence noted by codec lane |
+| 150 | `printNode` | core | partial | upstream sync printNode/printFile tests pass; recovered printer panics use Go's `Kind…` names (`printing.rs` unit test) |
 | 151 | `formatNodeForInsertion` | core | partial | upstream sync formatNodeForInsertion tests pass |
 | 152 | `emit` | core | supported | program_test (write-through, no TSRS_EMIT), requestfs_test (full filesystem returns emittedFilesContents, no disk write) |
 | 153 | `emitToString` | core | supported | program_test |
@@ -302,8 +302,8 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 - Profiling (`startCPUProfile`, `stopCPUProfile`, `saveHeapProfile`) is not implemented (no pprof
   equivalent). `getCurrentLanguageServerSnapshot` returns Go's standalone-session client error; LSP-attached
   API sessions are not ported.
-- Node index tables are cached per live source file keyed by (address, node id) and dropped with the
-  file's region; Go stores them on the file itself.
+- Node index tables are cached per live source file keyed by the file's address (lookups never assign the
+  file's lazy node id) and evicted when the file's region is freed; Go stores them on the file itself.
 - Re-entrancy: nested requests from client callbacks are served; the build orchestrator lock uses the
   transport's `lock_for_request` (bounded error instead of deadlock); the checker lane gates its API checker
   lease the same way. Request params are validated with Go's strict JSON (unpaired surrogates, duplicate
