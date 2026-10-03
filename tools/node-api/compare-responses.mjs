@@ -138,17 +138,21 @@ function normalizeStrings(v, key, depth = 0) {
 
 /** Bijection between handle values of run A and run B within one process pair. */
 class Bijection {
-    constructor(from) {
-        this.ab = new Map(from?.ab);
-        this.ba = new Map(from?.ba);
+    constructor() {
+        this.ab = new Map();
+        this.ba = new Map();
+        this.log = []; // keys added, in order, so a failed trial can be undone without copying the maps
         this.conflicts = [];
     }
-    clone() {
-        return new Bijection(this);
+    mark() {
+        return this.log.length;
     }
-    commit(trial) {
-        this.ab = trial.ab;
-        this.ba = trial.ba;
+    rollback(mark) {
+        while (this.log.length > mark) {
+            const [ka, kb] = this.log.pop();
+            this.ab.delete(ka);
+            this.ba.delete(kb);
+        }
     }
     map(a, b, where) {
         const ka = JSON.stringify(a);
@@ -158,10 +162,11 @@ class Bijection {
         if (prevB === undefined && prevA === undefined) {
             this.ab.set(ka, kb);
             this.ba.set(kb, ka);
+            this.log.push([ka, kb]);
             return true;
         }
         if (prevB === kb && prevA === ka) return true;
-        this.conflicts.push({ where, a, b, aWasMappedTo: prevB, bWasMappedFrom: prevA });
+        if (this.conflicts.length < 20) this.conflicts.push({ where, a, b, aWasMappedTo: prevB, bWasMappedFrom: prevA });
         return false;
     }
 }
@@ -348,25 +353,35 @@ if (opts.drift) {
 }
 
 // Order relaxation (only where the two oracle runs disagree on order). orderPaths(x, y) returns the exact array
-// paths at which y is a permutation of x with everything else equal (handles compared through a fresh mapping,
-// because oracle runs number handles independently), or null if x and y differ in any other way.
+// paths at which y is a permutation of x with everything else equal, or null if x and y differ in any other way.
+// Oracle runs number handles independently, so oracle-vs-oracle element equality ignores handle values.
+//
+// structKey(v): the value with every handle-valued field blanked and counter suffixes cut. Two values that are
+// equal under any handle bijection have the same key, so bucketing by key never rejects a valid match; it only
+// avoids trying elements that cannot match.
+const HANDLE_FIELDS = new Set(["id", "file", "nodeId", "target", ...TYPE_ID_KEYS]);
+function structKey(v) {
+    return JSON.stringify(v, (k, x) => (HANDLE_FIELDS.has(k) ? undefined : typeof x === "string" && COUNTER_SUFFIX.test(x) ? COUNTER_SUFFIX.exec(x)[1] : x));
+}
 const looseEqual = (x, y) => !diff(x, y, new Bijection());
 function orderPaths(x, y, p = "$", out = []) {
     if (Array.isArray(x) && Array.isArray(y)) {
         if (x.length !== y.length) return null;
-        if (x.every((e, i) => looseEqual(e, y[i]))) return out;
-        const used = new Set();
-        const isPerm = x.every(e => {
-            const j = y.findIndex((f, j) => !used.has(j) && looseEqual(e, f));
-            if (j < 0) return false;
-            used.add(j);
-            return true;
-        });
-        if (isPerm) {
-            out.push(p);
+        const kx = x.map(structKey);
+        const ky = y.map(structKey);
+        if (kx.every((k, i) => k === ky[i])) {
+            for (let i = 0; i < x.length; i++) if (!orderPaths(x[i], y[i], `${p}[${i}]`, out)) return null;
             return out;
         }
-        for (let i = 0; i < x.length; i++) if (!orderPaths(x[i], y[i], `${p}[${i}]`, out)) return null;
+        // Same multiset of elements (up to handles) in another order: an order-only difference at exactly p.
+        const count = new Map();
+        for (const k of kx) count.set(k, (count.get(k) ?? 0) + 1);
+        for (const k of ky) {
+            const n = count.get(k);
+            if (!n) return null;
+            count.set(k, n - 1);
+        }
+        out.push(p);
         return out;
     }
     if (x && y && typeof x === "object" && typeof y === "object" && !Array.isArray(x) && !Array.isArray(y)) {
@@ -392,32 +407,41 @@ function setAt(v, p, value) {
     else cur[Number(last.slice(1, -1))] = value;
     return root;
 }
+// Matching attempts allowed per exchange in reorderCandidate; beyond it the exchange is inconclusive (never equal).
+const MATCH_BUDGET = 20000;
+class BudgetExceeded extends Error {}
 /**
  * Reorders the candidate's arrays at exactly the given paths to the oracle's order, matching each oracle element
- * to a candidate element under (a trial copy of) the process bijection, which is extended as elements match.
- * Returns the reordered candidate value, or undefined if some element has no equal counterpart.
+ * to a candidate element with the same structural key under the process bijection (extended as elements match;
+ * a failed attempt is rolled back). Returns the reordered value, or undefined if some element has no counterpart.
+ * Throws BudgetExceeded when more than MATCH_BUDGET element comparisons would be needed.
  */
-function reorderCandidate(aVal, bVal, paths, trial) {
+function reorderCandidate(aVal, bVal, paths, bij) {
     let out = bVal;
+    let attempts = 0;
     for (const p of paths) {
         const xa = getAt(aVal, p);
         const xb = getAt(out, p);
         if (!Array.isArray(xa) || !Array.isArray(xb) || xa.length !== xb.length) return undefined;
-        const used = new Set();
+        const buckets = new Map();
+        xb.forEach((e, j) => {
+            const k = structKey(e);
+            if (!buckets.has(k)) buckets.set(k, []);
+            buckets.get(k).push(j);
+        });
         const ordered = [];
         for (const e of xa) {
+            const bucket = buckets.get(structKey(e)) ?? [];
             let found = -1;
-            for (let j = 0; j < xb.length && found < 0; j++) {
-                if (used.has(j)) continue;
-                const t = trial.clone();
-                if (!diff(e, xb[j], t)) {
-                    trial.commit(t);
-                    found = j;
-                }
+            for (let i = 0; i < bucket.length && found < 0; i++) {
+                if (++attempts > MATCH_BUDGET) throw new BudgetExceeded();
+                const m = bij.mark();
+                if (!diff(e, xb[bucket[i]], bij)) found = i;
+                else bij.rollback(m);
             }
             if (found < 0) return undefined;
-            used.add(found);
-            ordered.push(xb[found]);
+            ordered.push(xb[bucket[found]]);
+            bucket.splice(found, 1);
         }
         out = setAt(out, p, ordered);
     }
@@ -446,6 +470,7 @@ const counter = m => {
     return perMethod.get(m);
 };
 const unpaired = [];
+const slowExchanges = [];
 const callDiffs = [];
 let pairedProcesses = 0;
 // Processes of one test started concurrently can start in either order; pair each A process with the first
@@ -538,28 +563,23 @@ for (const [test, listA] of A.byTest) {
                 break;
             }
             // outcome: "strict" | "run2" | "unordered" | "unstable" | "inconclusive" | "differ"
+            const started = Date.now();
             let outcome;
-            const trial = bij.clone();
-            let d = cmp(a, b, trial);
+            const m1 = bij.mark();
+            let d = cmp(a, b, bij);
+            if (d) bij.rollback(m1);
             const a2 = ea2?.[k];
             const aligned2 = a2 && a2.method === b.method && a2.kind === b.kind;
-            let trial2;
             let d2;
             if (aligned2) {
-                trial2 = bij2.clone();
-                d2 = cmp(a2, b, trial2);
+                // Run 2's per-process mapping is extended only by exchanges that match run 2 exactly.
+                const m2 = bij2.mark();
+                d2 = cmp(a2, b, bij2);
+                if (d2) bij2.rollback(m2);
             }
-            if (!d) {
-                outcome = "strict";
-                bij.commit(trial);
-                if (aligned2 && !d2) bij2.commit(trial2);
-            }
+            if (!d) outcome = "strict";
             else if (d.inconclusive) outcome = "inconclusive";
-            else if (aligned2 && !d2) {
-                // Candidate equals oracle run 2 exactly, with run 2's own per-process handle mapping.
-                outcome = "run2";
-                bij2.commit(trial2);
-            }
+            else if (aligned2 && !d2) outcome = "run2";
             else if (aligned2 && !looseEqual({ q: a.req?.json, r: a.res?.json }, { q: a2.req?.json, r: a2.res?.json })) {
                 // The oracle runs disagree on this exchange. Accept the candidate only if (1) the oracle requests
                 // agree and the candidate request matches under the process mapping, and (2) the oracle responses
@@ -569,26 +589,33 @@ for (const [test, listA] of A.byTest) {
                 if (paths && paths.length) {
                     // The relaxation applies, so its failure is a proven difference (request, element content or
                     // handle identity), not an oracle ambiguity.
-                    const t = bij.clone();
-                    const dq = comparePayload(a.req, b.req, t, true);
+                    const m3 = bij.mark();
+                    const dq = comparePayload(a.req, b.req, bij, true);
                     if (dq) d = { ...dq, in: "request" };
                     else if (b.res?.json === undefined) d = { path: "$response", a: "json", b: "non-json" };
                     else {
-                        const reordered = reorderCandidate(a.res.json, b.res.json, paths, t);
-                        d = reordered === undefined
-                            ? { path: `${paths.join(",")} (order-relaxed)`, a: "an oracle element", b: "no equal candidate element under the process handle mapping" }
-                            : diff(a.res.json, reordered, t);
-                        if (!d) {
-                            bij.commit(t);
-                            (c.unorderedPaths ??= new Set()).add(paths.join(","));
+                        try {
+                            const reordered = reorderCandidate(a.res.json, b.res.json, paths, bij);
+                            d = reordered === undefined
+                                ? { path: `${paths.join(",")} (order-relaxed)`, a: "an oracle element", b: "no equal candidate element under the process handle mapping" }
+                                : diff(a.res.json, reordered, bij);
+                        }
+                        catch (e) {
+                            if (!(e instanceof BudgetExceeded)) throw e;
+                            d = { path: `${paths.join(",")} (order-relaxed)`, a: `more than ${MATCH_BUDGET} element comparisons`, b: "matching budget exceeded", inconclusive: true };
                         }
                     }
-                    outcome = d ? "differ" : "unordered";
+                    if (d) bij.rollback(m3);
+                    else (c.unorderedPaths ??= new Set()).add(paths.join(","));
+                    outcome = !d ? "unordered" : d.inconclusive ? "inconclusive" : "differ";
+                    if (d?.inconclusive) c.budgetInconclusive = (c.budgetInconclusive ?? 0) + 1;
                 }
                 else outcome = "unstable";
             }
             else outcome = "differ";
 
+            const took = Date.now() - started;
+            if (took > 1000) slowExchanges.push({ test, process: i, exchange: k, method: a.method, ms: took, outcome });
             if (outcome === "differ") {
                 c.differ++;
                 if (c.examples.length < 3) c.examples.push({ test, process: i, exchange: k, mode: pa.mode, batched: !!a.batched, diff: truncate(d) });
@@ -596,7 +623,7 @@ for (const [test, listA] of A.byTest) {
             else if (outcome === "unstable" || outcome === "inconclusive") {
                 c.unverified = (c.unverified ?? 0) + 1;
                 if (outcome === "unstable") c.oracleUnstable = (c.oracleUnstable ?? 0) + 1;
-                else c.hashInconclusive = (c.hashInconclusive ?? 0) + 1;
+                else if (d?.path === "$sha256") c.hashInconclusive = (c.hashInconclusive ?? 0) + 1;
                 if ((c.unverifiedExamples ??= []).length < 3) c.unverifiedExamples.push({ test, exchange: k, outcome, diff: truncate(d) });
             }
             else {
@@ -671,6 +698,7 @@ const report = {
     statusCounts: rows.reduce((acc, r) => ((acc[r.status] = (acc[r.status] ?? 0) + 1), acc), {}),
     unpairedCount: unpaired.length,
     callMultisetDiffs: callDiffs.length,
+    slowExchanges,
     rows,
     extraMethods: Object.fromEntries([...perMethod].filter(([m]) => !methods.includes(m)).map(([m, c]) => [m, { pairs: c.pairs, differ: c.differ }])),
     unpaired: unpaired.slice(0, 200),

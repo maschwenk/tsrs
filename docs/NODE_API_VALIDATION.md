@@ -257,20 +257,39 @@ Negative controls:
 
 Every control tried so far was detected.
 
-Result at `b2769b8`. The four categories are disjoint and cover all 172 methods:
+Correction: the earlier result at `b2769b8` (161 equal, 7428 exchanges, comparator `4c50d93`/`476f9ba`) is
+retracted as an upper bound. The codec lane's audit reproduced five false passes:
 
-- 161 equal: 7428 successful exchanges.
-  - 160 have both sync and async successful pairs.
-  - `getExportSymbolOfSymbol` has only a sync wire pair in the suites. Its async coverage is in
-    `async-export-symbol.test.ts`, below.
-- 1 error-only: `getCurrentLanguageServerSnapshot`.
-- 3 unsupported: `startCPUProfile`, `stopCPUProfile`, `saveHeapProfile`.
-- 7 differ:
-  - `createSnapshot` and `getDefaultProjectForFile`: duplicate VS Code URI root (see below);
-  - `updateSnapshot`: `changes:{}` where Go omits it;
-  - `cleanBuild`: `filesDeleted`;
-  - `getTypeAtLocation` and `getTypeFromTypeNode`: ObjectFlags `MembersResolved`;
-  - `getTargetOfType`: `elementFlags:[]` where Go omits it.
+- the order fallback sorted all nested arrays;
+- the order fallback used a fresh handle mapping;
+- the order fallback ignored the request;
+- an unresolved oracle disagreement next to one equal exchange still gave `equal`;
+- a blanket base64 re-encoding equated distinct strings.
+
+The comparator now passes `controls/run-controls.mjs` (18/18; 10/18 failed at `4c50d93`):
+
+- Order relaxation only at the exact array paths where the two oracle runs are permutations of each other. The
+  request must match. Element matching uses the per-process handle mapping, with rollback when a trial fails.
+- Unresolved oracle disagreement, differing hashes over 4 MiB, a match budget overrun, and oracle exchanges
+  without a candidate counterpart are `unverified`, which makes the method `inconclusive`.
+- Base64 is normalized only for binary methods, and only when canonical.
+- Counter-suffix renaming applies only to the `__@id@N` and `__"…"pattern@N` forms.
+
+Recomputed on the same `b2769b8` captures (no new capture). This is still provisional evidence, not a final
+gate:
+
+- equal: 159 methods; 4508 successful exchanges, of which 4493 strict and 15 equal-unordered (all
+  `getSymbolsInScope`, paths `$` and `$.result`). 4 are byte-equal by hash only.
+- inconclusive: 2 methods, `release` and `parseCommandLine` (1272/1273 and 315/316 strict). Each has 1
+  unverified exchange after the profiling test's divergence.
+- error-only: 1, `getCurrentLanguageServerSnapshot`.
+- unsupported: 3, the profiling methods.
+- differ: 7, `createSnapshot`, `updateSnapshot`, `cleanBuild`, `getDefaultProjectForFile`, `getTypeAtLocation`,
+  `getTargetOfType`, `getTypeFromTypeNode`.
+
+Total: 159 + 2 + 1 + 3 + 7 = 172.
+
+All 9 earlier negative controls on the real captures are still detected.
 
 VS Code URI roots (`probe-uri-filenames.ts`): 80 runs covering both binaries × sync/async × 4 input orders × 5
 repetitions.
