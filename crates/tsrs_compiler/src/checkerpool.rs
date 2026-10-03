@@ -206,6 +206,16 @@ struct CheckerSlot(Mutex<Box<Checker>>);
 unsafe impl Send for CheckerSlot {}
 unsafe impl Sync for CheckerSlot {}
 
+// A pool is dropped only with its program (`free_program` / `free_unshared_program`: no checker handle is held
+// any more), so the leaked checkers can be freed with it. Programs that are never freed (the CLI) never get here.
+impl Drop for poolState {
+    fn drop(&mut self) {
+        // SAFETY: `checkers` came from `Box::leak` of a boxed slice in `create_checkers`, and no handle borrowing a
+        // checker outlives the pool's program.
+        unsafe { drop(Box::from_raw(self.checkers as *const [CheckerSlot] as *mut [CheckerSlot])) };
+    }
+}
+
 pub(crate) struct poolState {
     // Leaked like the program that owns the pool, so a handle can hold a checker's lock without borrowing the pool.
     checkers: &'static [CheckerSlot],
@@ -538,7 +548,8 @@ impl checkerPool {
             run_work_group(self.single_threaded, self.checker_count, |i| {
                 *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
             });
-            let checkers: &'static [CheckerSlot] = Vec::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect());
+            let checkers: &'static [CheckerSlot] =
+                Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
             tsrs_core::phases::record("Checkers: create", create_start.elapsed());
 
             let files = &program.files;

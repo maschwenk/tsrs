@@ -361,10 +361,12 @@ impl Session {
                 .set("useCaseSensitiveFileNames", Value::Bool(self.use_case_sensitive_file_names()))
                 .set("currentDirectory", Value::String(self.current_directory().to_string()))
                 .build(),
-            "parseCommandLine" => self.handle_parse_command_line(p)?,
-            "readConfigFile" => self.handle_read_config_file(p)?,
-            "parseJsonConfigFileContent" => self.handle_parse_json_config_file_content(p)?,
-            "parseConfigFile" => self.handle_parse_config_file(p)?,
+            // Config requests allocate their parsed command lines in a scratch region freed once the response
+            // value (owned JSON) is built.
+            "parseCommandLine" => scratch(|| self.handle_parse_command_line(p))?,
+            "readConfigFile" => scratch(|| self.handle_read_config_file(p))?,
+            "parseJsonConfigFileContent" => scratch(|| self.handle_parse_json_config_file_content(p))?,
+            "parseConfigFile" => scratch(|| self.handle_parse_config_file(p))?,
             "createSnapshot" => self.handle_create_snapshot(p)?,
             "updateSnapshot" => self.handle_update_snapshot(p)?,
             "release" => self.handle_release(p)?,
@@ -432,6 +434,18 @@ impl Handler for Session {
         // Go `Session.HandleNotification` ignores all notifications.
         Ok(())
     }
+}
+
+/// Runs `f` with a fresh arena region as the allocation target and frees the region afterwards. Only for
+/// work whose result is owned data (JSON values) and that stores nothing arena-allocated in longer-lived state.
+pub(crate) fn scratch<T>(f: impl FnOnce() -> T) -> T {
+    let region = tsrs_core::arena::Region::new(64 << 10);
+    let result = {
+        let _scope = region.enter();
+        f()
+    };
+    drop(region);
+    result
 }
 
 /// Parses request params (raw JSON bytes; empty means absent, Go `UnmarshalParams` returns nil).

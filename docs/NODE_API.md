@@ -313,6 +313,8 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   region (createSnapshot+release cycles stay flat; `tests/memory_test.rs`). The first attempt at freeing
   the mapper exposed a pre-existing use-after-free in `tsrs_project` (`update_program` read the replaced
   program after dropping its owner); fixed, with a perturbation/ASAN-validated regression test
-  (`inferred_project_rebuild_frees_safely`). Still retained: ~37 KiB of heap state per transpile call
-  (its arenas are freed), one build orchestrator per API build handle, and other request-time allocations
-  outside regions (config parsing etc., as in the language server).
+  (`inferred_project_rebuild_frees_safely`). Transpile frees its one-file program including the compiler
+  checker pool's checkers (previously leaked; ~5 KiB/call of allocator retention remains), and config
+  requests run in scratch regions. Still retained: one build orchestrator per API build handle and the
+  programs each `build` call creates (CLI `-b` semantics: finished projects stay in memory), plus the
+  request thread's arena use outside these paths.

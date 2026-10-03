@@ -120,7 +120,34 @@ fn repeated_transpile_reclaims_scratch_memory() {
     }
     let grown = rss_kib().saturating_sub(before);
     eprintln!("transpile x{n}: rss grew {grown} KiB");
-    // Before scratch regions each call retained ~530 KiB; the remainder (~25 KiB/call, heap state of the
-    // compiler/emitter outside arenas) is a documented gap. Guard against regressions to the old behavior.
-    assert!(grown < (n as u64) * 128, "rss grew {grown} KiB over {n} iterations");
+    // Before scratch regions each call retained ~530 KiB, then ~42 KiB while the compiler checker pool's
+    // checkers were leaked; now ~5 KiB (allocator retention).
+    assert!(grown < (n as u64) * 24, "rss grew {grown} KiB over {n} iterations");
+}
+
+/// Config requests build their parsed command lines in a scratch region that is freed after the response is
+/// serialized.
+#[test]
+fn repeated_config_parsing_reclaims_memory() {
+    let _g = MEMORY.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = TempDir::new("cfgloop");
+    let cfg = dir.write("tsconfig.json", &format!("{{ \"compilerOptions\": {{ \"strict\": true, \"paths\": {{ {} }} }}, \"include\": [\"src\"] }}", (0..200).map(|i| format!("\"p{i}/*\": [\"src/p{i}/*\"]")).collect::<Vec<_>>().join(",")));
+    for i in 0..50 {
+        dir.write(&format!("src/f{i}.ts"), "export {};\n");
+    }
+    let s = session(&dir.dir(), false);
+    let n: usize = std::env::var("TSRS_API_STRESS").ok().and_then(|v| v.parse().ok()).unwrap_or(300);
+    let req = format!("{{\"file\":{}}}", quote(&cfg));
+    let first = call(&s, "parseConfigFile", &req);
+    for _ in 0..10 {
+        call(&s, "parseConfigFile", &req);
+    }
+    let before = rss_kib();
+    for _ in 0..n {
+        assert_eq!(call(&s, "parseConfigFile", &req), first);
+        call(&s, "readConfigFile", &req);
+    }
+    let grown = rss_kib().saturating_sub(before);
+    eprintln!("parseConfigFile+readConfigFile x{n}: rss grew {grown} KiB");
+    assert!(grown < (n as u64) * 8, "rss grew {grown} KiB over {n} iterations");
 }
