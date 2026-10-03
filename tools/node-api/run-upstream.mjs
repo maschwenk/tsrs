@@ -4,13 +4,14 @@
 // the Go oracle built from ts-ref, or a tsrs build. Nothing in the client is replaced or patched.
 //
 //   node tools/node-api/run-upstream.mjs --binary <exe> --label <name> [--suite upstream|parity|all]
-//        [--no-trace] [--filter <substring>]... [--timeout-min 30] [--concurrency N]
+//        [--no-trace] [--record] [--filter <path segment>]... [--timeout-min 30] [--idle-sec 180]
+//        [--test-timeout-sec 120] [--concurrency N]
 //
 // Output goes to tools/node-api/.work/<label>/: results.jsonl (one line per test, from reporter.mjs), run.tap,
 // trace/*.jsonl (per-process frame traces from proxy.mjs), summary.json (real counts) and meta.json.
 // The exit code is 0 only if node --test ran and every test passed; inspect summary.json either way.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -20,11 +21,11 @@ const repoRoot = path.resolve(here, "..", "..");
 
 function usage(msg) {
     if (msg) console.error(`error: ${msg}`);
-    console.error("usage: run-upstream.mjs --binary <exe> --label <name> [--suite upstream|parity|all] [--no-trace] [--record] [--filter <s>]... [--timeout-min N] [--concurrency N] [--ref <ts-ref>]");
+    console.error("usage: run-upstream.mjs --binary <exe> --label <name> [--suite upstream|parity|all] [--no-trace] [--record] [--filter <s>]... [--timeout-min N] [--idle-sec N] [--test-timeout-sec N] [--concurrency N] [--ref <ts-ref>]");
     process.exit(2);
 }
 
-const opts = { suite: "all", trace: true, filters: [], timeoutMin: 30, ref: path.join(repoRoot, "ts-ref") };
+const opts = { suite: "all", trace: true, filters: [], timeoutMin: 30, idleSec: 180, testTimeoutSec: 120, ref: path.join(repoRoot, "ts-ref") };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -36,6 +37,8 @@ for (let i = 0; i < argv.length; i++) {
     else if (a === "--record") opts.record = true;
     else if (a === "--filter") opts.filters.push(v());
     else if (a === "--timeout-min") opts.timeoutMin = Number(v());
+    else if (a === "--idle-sec") opts.idleSec = Number(v());
+    else if (a === "--test-timeout-sec") opts.testTimeoutSec = Number(v());
     else if (a === "--concurrency") opts.concurrency = Number(v());
     else if (a === "--ref") opts.ref = path.resolve(v());
     else usage(`unknown argument ${a}`);
@@ -94,13 +97,27 @@ else if (process.platform === "win32") fs.copyFileSync(opts.binary, exe);
 else fs.symlinkSync(opts.binary, exe);
 
 // ── select test files ───────────────────────────────────────────────
+// --filter is matched by path segments, never by raw substring: "sync/api.test" selects only test/sync/api.test.ts
+// (not test/async/api.test.ts), "sync" selects the directory, "api.test" or "api" selects that basename in every
+// directory, and "test/sync/api.test.ts" is exact. A filter that matches nothing is an error.
+function matchesFilter(rel, filter) {
+    const norm = x => x.replace(/\\/g, "/").replace(/^\.?\//, "").replace(/^test\//, "").replace(/\.ts$/, "");
+    const r = norm(rel); // e.g. sync/api.test
+    const f = norm(filter).replace(/\/$/, "");
+    const base = r.split("/").pop();
+    return r === f || r === `${f}.test` || r.startsWith(`${f}/`) || base === f || base === `${f}.test`;
+}
+for (const f of opts.filters) {
+    const any = dirs => dirs.some(d => fs.readdirSync(path.join(pkg, d)).some(n => n.endsWith(".test.ts") && matchesFilter(`${d}/${n}`, f)));
+    if (!any(["test/sync", "test/async", "test/parity"])) usage(`--filter ${f} matches no test file`);
+}
 const files = [];
 const dirs = { upstream: ["test/sync", "test/async"], parity: ["test/parity"], all: ["test/sync", "test/async", "test/parity"] }[opts.suite];
 for (const d of dirs) {
     for (const f of fs.readdirSync(path.join(pkg, d)).sort()) {
         if (!f.endsWith(".test.ts")) continue;
         const rel = `${d}/${f}`;
-        if (opts.filters.length && !opts.filters.some(s => rel.includes(s))) continue;
+        if (opts.filters.length && !opts.filters.some(s => matchesFilter(rel, s))) continue;
         files.push(rel);
     }
 }
@@ -113,22 +130,84 @@ const nodeArgs = [
     "--test-reporter", path.join(here, "reporter.mjs"), "--test-reporter-destination", path.join(out, "results.jsonl"),
     "--test-reporter", "tap", "--test-reporter-destination", path.join(out, "run.tap"),
 ];
+// A single hung test fails on its own instead of stalling its file.
+nodeArgs.push(`--test-timeout=${opts.testTimeoutSec * 1000}`);
 if (opts.concurrency) nodeArgs.push(`--test-concurrency=${opts.concurrency}`);
 nodeArgs.push(...files);
 
 const started = Date.now();
-const res = spawnSync(process.execPath, nodeArgs, {
+// The run gets its own process group so that a timeout, or servers/test files leaked after node --test exits, can
+// be killed as a unit. Two bounds: --timeout-min for the whole run and --idle-sec without any new result line
+// (a hung test or a file process that never exits). Either one is recorded as a timeout failure, not a pass.
+const child = spawn(process.execPath, nodeArgs, {
     cwd: pkg,
     stdio: ["ignore", "inherit", "inherit"],
+    detached: process.platform !== "win32",
     env: {
         ...process.env,
         NODE_API_TRACE_DIR: opts.trace ? traceDir : "",
         NODE_API_GOLDEN_DIR: path.join(here, "tests", "golden"),
         NODE_API_RECORD: opts.record ? "1" : "",
         NODE_API_ORACLE: isOracle ? "1" : "",
+        NODE_API_BINARY: opts.binary,
+        NODE_API_EVIDENCE_DIR: path.join(out, "evidence"),
     },
-    timeout: opts.timeoutMin * 60_000,
-    killSignal: "SIGKILL",
+});
+const resultsFile = path.join(out, "results.jsonl");
+const resultCount = () => {
+    try {
+        return fs.readFileSync(resultsFile, "utf8").split("\n").filter(Boolean).length;
+    }
+    catch {
+        return 0;
+    }
+};
+function groupMembers() {
+    if (process.platform === "win32") return [];
+    const ps = spawnSync("ps", ["-eo", "pid=,pgid=,args="], { encoding: "utf8" });
+    return (ps.stdout ?? "").split("\n").map(l => l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/)).filter(m => m && Number(m[2]) === child.pid && Number(m[1]) !== child.pid).map(m => ({ pid: Number(m[1]), args: m[3].slice(0, 200) }));
+}
+function killGroup() {
+    try {
+        if (process.platform === "win32") child.kill("SIGKILL");
+        else process.kill(-child.pid, "SIGKILL");
+    }
+    catch {}
+}
+for (const sig of ["SIGINT", "SIGTERM"]) {
+    process.on(sig, () => {
+        killGroup();
+        process.exit(130);
+    });
+}
+const res = await new Promise(resolve => {
+    let timedOut = false;
+    let leakedAtTimeout = [];
+    let lastCount = 0;
+    let lastChange = Date.now();
+    const watchdog = setInterval(() => {
+        const n = resultCount();
+        if (n !== lastCount) {
+            lastCount = n;
+            lastChange = Date.now();
+        }
+        const idle = (Date.now() - lastChange) / 1000;
+        if (Math.round((Date.now() - started) / 1000) % 30 < 5) console.error(`[run-upstream ${opts.label}] ${n} results, idle ${Math.round(idle)}s`);
+        if (Date.now() - started > opts.timeoutMin * 60_000) timedOut = "total";
+        else if (idle > opts.idleSec) timedOut = "idle";
+        if (timedOut) {
+            leakedAtTimeout = groupMembers();
+            console.error(`[run-upstream ${opts.label}] ${timedOut} timeout: killing the test process group (${leakedAtTimeout.length} processes)`);
+            killGroup();
+        }
+    }, 5000);
+    child.on("exit", (status, signal) => {
+        clearInterval(watchdog);
+        // node --test is gone; anything left in its group (test files, API servers) leaked.
+        const leaked = groupMembers();
+        if (leaked.length) killGroup();
+        resolve({ status, signal, timedOut, leaked: (timedOut ? leakedAtTimeout : leaked).slice(0, 50) });
+    });
 });
 
 // ── summarize from the JSONL results (never from the exit code alone) ──
@@ -144,18 +223,23 @@ const summary = {
     files: files.length,
     tests: leaves.length,
     pass: leaves.filter(r => r.ok && !r.skip && !r.todo).length,
-    fail: leaves.filter(r => !r.ok).length,
+    fail: leaves.filter(r => !r.ok && !r.todo).length,
     skip: leaves.filter(r => r.skip).length,
     todo: leaves.filter(r => r.todo).length,
+    // todo tests document known upstream defects; list whether each still fails rather than hiding it.
+    todoTests: leaves.filter(r => r.todo).map(r => `${r.ok ? "passing" : "failing"}: ${r.path}`),
     // A file whose process crashed shows up as a failed nesting-0 entry named after the file.
+    softMismatches: fs.existsSync(path.join(out, "run.tap")) ? (fs.readFileSync(path.join(out, "run.tap"), "utf8").match(/^\s*# soft-mismatch .*/gm) ?? []).map(l => l.trim().slice(2, 300)) : [],
     crashedFiles: results.filter(r => !r.ok && files.includes(r.path)).map(r => r.path),
     nodeExit: res.status,
     nodeSignal: res.signal,
-    timedOut: res.error?.code === "ETIMEDOUT",
+    timedOut: res.timedOut,
+    leakedProcesses: res.leaked,
+    filesWithoutResults: files.filter(f => !results.some(r => r.file === f)),
     seconds: Math.round((Date.now() - started) / 1000),
 };
 fs.writeFileSync(path.join(out, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
 const binHead = spawnSync(opts.binary, ["--version"], { encoding: "utf8", timeout: 10_000 });
 fs.writeFileSync(path.join(out, "meta.json"), JSON.stringify({ argv: process.argv.slice(2), node: process.version, platform: `${process.platform}-${process.arch}`, binaryVersion: (binHead.stdout ?? "").trim() }, null, 2) + "\n");
 console.log(JSON.stringify(summary, null, 2));
-process.exit(summary.fail === 0 && summary.tests > 0 && res.status === 0 ? 0 : 1);
+process.exit(summary.fail === 0 && summary.tests > 0 && res.status === 0 && !res.timedOut && res.leaked.length === 0 ? 0 : 1);
