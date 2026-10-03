@@ -261,6 +261,7 @@ impl toBuildInfo<'_> {
             file_infos.push(new_build_info_file_info(&info));
         }
         self.build_info.file_infos = file_infos;
+        self.build_info.file_infos_non_nil = true;
     }
 
     // snapshottobuildinfo.go:256

@@ -571,6 +571,8 @@ pub struct BuildInfo {
     // IncrementalProgram info
     pub file_names: Vec<String>,
     pub file_infos: Vec<BuildInfoFileInfo>,
+    // Go marshals a non-nil empty `FileInfos` (a program without files) as `[]`; omitzero drops only nil.
+    pub file_infos_non_nil: bool,
     pub file_ids_list: Vec<Vec<BuildInfoFileId>>,
     pub options: Option<OrderedMap<String, Value>>,
     pub referenced_map: Vec<BuildInfoReferenceMapEntry>,
@@ -600,7 +602,9 @@ impl BuildInfo {
         if !self.file_names.is_empty() {
             o.set("fileNames", strings(&self.file_names));
         }
-        o.list("fileInfos", &self.file_infos, BuildInfoFileInfo::marshal_json);
+        if self.file_infos_non_nil || !self.file_infos.is_empty() {
+            o.set("fileInfos", Value::Array(self.file_infos.iter().map(BuildInfoFileInfo::marshal_json).collect()));
+        }
         o.list("fileIdsList", &self.file_ids_list, |ids| Value::Array(ids.iter().map(|&id| num(id)).collect()));
         if let Some(options) = &self.options {
             // omitzero on a pointer: only nil is omitted.
@@ -631,6 +635,7 @@ impl BuildInfo {
             content_mapper_identities: get_opt_string_array(o, "contentMapperIdentities")?,
             file_names: get_string_array(o, "fileNames")?,
             file_infos: get_array(o, "fileInfos", BuildInfoFileInfo::unmarshal_json)?,
+            file_infos_non_nil: matches!(o.get("fileInfos"), Some(Value::Array(_))),
             file_ids_list: get_array(o, "fileIdsList", |v| as_int_list(v).ok_or_else(|| "invalid fileIdsList".to_string()))?,
             options: match o.get("options") {
                 None | Some(Value::Null) => None,
