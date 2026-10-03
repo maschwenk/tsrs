@@ -414,6 +414,32 @@ fn uint64_handles_above_2_pow_53_are_looked_up_exactly() {
     assert!(raw("typeToString", format!(r#"{{{sp},"type":4294967296}}"#)).unwrap_err().starts_with("api: invalid request: "));
     assert_eq!(raw("typeToString", format!(r#"{{{sp},"type":4294967295}}"#)), Err("api: client error: type handle 4294967295 not found in project registry".to_string()));
 
+    // Nested symbol references (and import-adder actions) read their own exact literals, never a same-named
+    // top-level field (core integration of predecode::exact_u64(object, key) at any depth).
+    let snap = json::marshal(&n(s.snapshot)).unwrap();
+    let project = json::marshal_string(&s.project);
+    for id in ["9007199254740993", "18446744073709551615"] {
+        let symbol = format!(r#"{{"kind":1,"snapshot":{snap},"project":{project},"id":{id}}}"#);
+        let missing = Err(format!("api: client error: symbol handle {id} not found in snapshot registry"));
+        assert_eq!(raw("getTypeOfSymbol", format!(r#"{{{sp},"symbol":{symbol}}}"#)), missing);
+        assert_eq!(raw("getTypesOfSymbols", format!(r#"{{{sp},"symbols":[{symbol}]}}"#)), missing);
+        let r = raw("getImportAdderEdits", format!(r#"{{{sp},"file":"/p/main.ts","actions":[{{"kind":"importSymbol","symbol":{symbol}}}]}}"#));
+        assert!(matches!(&r, Err(e) if e.contains(id)), "{r:?}");
+        // The nested snapshot is exact too, and is not taken from the top-level `snapshot` literal.
+        let r = raw("getParentOfSymbol", format!(r#"{{"snapshot":{snap},"symbol":{{"kind":1,"snapshot":{id},"project":{project},"id":1}}}}"#));
+        assert_eq!(r, Err(format!("api: client error: snapshot {id} not found")));
+    }
+    for bad in ["1e3", "1.0", "18446744073709551616"] {
+        let symbol = format!(r#"{{"kind":1,"snapshot":{snap},"project":{project},"id":{bad}}}"#);
+        for (method, params) in [
+            ("getTypeOfSymbol", format!(r#"{{{sp},"symbol":{symbol}}}"#)),
+            ("getTypesOfSymbols", format!(r#"{{{sp},"symbols":[{symbol}]}}"#)),
+            ("getImportAdderEdits", format!(r#"{{{sp},"file":"/p/main.ts","actions":[{{"kind":"importSymbol","symbol":{symbol}}}]}}"#)),
+        ] {
+            let e = raw(method, params).unwrap_err();
+            assert!(e.starts_with("api: invalid request: failed to unmarshal"), "{method} {bad}: {e}");
+        }
+    }
 }
 
 /// Full type responses (objectFlags included) for the cases in testdata/go_probe/flags/cases.txt, compared

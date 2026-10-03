@@ -53,15 +53,15 @@ fn json_kind(v: &Value) -> &'static str {
 
 /// A Go `uint64` (`SnapshotID`, `SymbolID`, `SignatureID`) at JSON pointer `pointer` of the current
 /// request. The parsed value is an f64, which rounds above 2^53 (9007199254740993 would become another
-/// handle). For a field of the top-level params object (`root`: the instance core dispatched and registered)
-/// the exact literal recorded by core's pre-decode (`predecode::exact_u64(root, key)`) is used. Nested
-/// fields (symbol references) have no recorded literal yet and use the parsed value. Range and
-/// integer-syntax errors of top-level fields are reported by core's pre-decode before dispatch; this only
-/// rejects what cannot be a uint64 at all.
-fn unsigned64(v: &Value, root: Option<&Value>, key: &str, pointer: &str, go_type: &str) -> CheckerResult<u64> {
+/// handle). `object` is the object holding the field, as it sits in the params tree core dispatched; core's
+/// pre-decode records every literal of that tree and `predecode::exact_u64(object, key)` returns the field's
+/// own exact value, at any depth (symbol references, import-adder actions). Range and integer-syntax errors
+/// are reported by core's pre-decode before dispatch, nested api structs included; this only rejects what
+/// cannot be a uint64 at all. A value outside the dispatched tree falls back to the parsed f64.
+fn unsigned64(v: &Value, object: &Value, key: &str, pointer: &str, go_type: &str) -> CheckerResult<u64> {
     match v {
         Value::Number(n) if n.fract() == 0.0 && *n >= 0.0 && *n <= u64::MAX as f64 => {
-            Ok(root.and_then(|root| crate::predecode::exact_u64(root, key)).unwrap_or(*n as u64))
+            Ok(crate::predecode::exact_u64(object, key).unwrap_or(*n as u64))
         }
         Value::Number(_) => Err(CheckerError::invalid(format!("cannot unmarshal JSON number into Go {go_type} within \"{pointer}\""))),
         other => Err(CheckerError::invalid(format!("cannot unmarshal JSON {} into Go {go_type} within \"{pointer}\"", json_kind(other)))),
@@ -80,17 +80,17 @@ pub(crate) struct Params<'a> {
     obj: &'a tsrs_core::collections::OrderedMap<String, Value>,
     /// JSON pointer of this object within the request params ("" at the top level).
     pointer: String,
-    /// The top-level params value as dispatched by core (None for nested objects), for exact literals.
-    root: Option<&'a Value>,
+    /// This object's value within the params tree dispatched by core (its identity selects exact literals).
+    value: &'a Value,
 }
 
 impl<'a> Params<'a> {
     pub(crate) fn new(params: &'a Value, method: &str) -> CheckerResult<Params<'a>> {
-        Ok(Params { obj: object(params, method)?, pointer: String::new(), root: Some(params) })
+        Ok(Params { obj: object(params, method)?, pointer: String::new(), value: params })
     }
 
     fn nested(v: &'a Value, pointer: String) -> CheckerResult<Params<'a>> {
-        Ok(Params { obj: object(v, &pointer)?, pointer, root: None })
+        Ok(Params { obj: object(v, &pointer)?, pointer, value: v })
     }
 
     pub(crate) fn raw(&self, name: &str) -> Option<&'a Value> {
@@ -103,7 +103,7 @@ impl<'a> Params<'a> {
     }
 
     pub(crate) fn u64_typed(&self, name: &str, go_type: &str) -> CheckerResult<u64> {
-        self.raw(name).map_or(Ok(0), |v| unsigned64(v, self.root, name, &format!("{}/{name}", self.pointer), go_type))
+        self.raw(name).map_or(Ok(0), |v| unsigned64(v, self.value, name, &format!("{}/{name}", self.pointer), go_type))
     }
 
     /// Go `uint32` (type ids, positions, symbol flags). Missing → 0.
