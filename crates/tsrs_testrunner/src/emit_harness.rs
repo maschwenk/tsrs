@@ -94,6 +94,9 @@ pub struct EmitOutputs {
     pub js: IndexMap<String, TestFile>,
     pub dts: IndexMap<String, TestFile>,
     pub maps: IndexMap<String, TestFile>,
+    // Go `CompilationResult.inputs` (every program source file) and `.outputs` (the per-input JS/DTS/map outputs).
+    pub inputs: Vec<TestFile>,
+    pub outputs: Vec<TestFile>,
 }
 
 // harnessutil.go:626 (from the pre-emit program on). Returns the diagnostics and the emit result of the post-emit
@@ -186,6 +189,7 @@ pub fn new_emit_outputs(recorder: &OutputRecorderFS, program: &'static compiler:
 
     // using the order from the inputs, populate the outputs
     for &source_file in program.get_source_files() {
+        c.inputs.push(TestFile { unit_name: source_file.file_name().to_string(), content: source_file.text().to_string() });
         if !tspath::is_declaration_file_name(source_file.file_name()) {
             let extname = outputpaths::get_output_extension(source_file.file_name(), options.jsx);
             let out_js = js.get(&get_output_path(program, options, host, source_file.file_name(), extname)).cloned();
@@ -193,14 +197,17 @@ pub fn new_emit_outputs(recorder: &OutputRecorderFS, program: &'static compiler:
             let out_map = maps.get(&get_output_path(program, options, host, source_file.file_name(), &format!("{extname}.map"))).cloned();
             if let Some(f) = out_js {
                 js.shift_remove(&f.unit_name);
+                c.outputs.push(f.clone());
                 c.js.insert(f.unit_name.clone(), f);
             }
             if let Some(f) = out_dts {
                 dts.shift_remove(&f.unit_name);
+                c.outputs.push(f.clone());
                 c.dts.insert(f.unit_name.clone(), f);
             }
             if let Some(f) = out_map {
                 maps.shift_remove(&f.unit_name);
+                c.outputs.push(f.clone());
                 c.maps.insert(f.unit_name.clone(), f);
             }
         }
@@ -248,7 +255,7 @@ fn get_output_path(program: &'static compiler::Program, options: &CompilerOption
 }
 
 // js_emit_baseline.go:174
-fn file_output(file: &TestFile, settings: &HarnessOptions) -> String {
+pub(crate) fn file_output(file: &TestFile, settings: &HarnessOptions) -> String {
     let file_name = if settings.full_emit_paths {
         tsbaseline::remove_test_path_prefixes(&file.unit_name, false /*retainTrailingDirectorySeparator*/)
     } else {

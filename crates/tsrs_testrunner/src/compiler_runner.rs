@@ -88,7 +88,49 @@ pub fn read_reference_baseline(suite: &str, name: &str) -> Option<String> {
 // The reference `.types` / `.symbols` baseline (`ext` = "types" | "symbols").
 pub fn read_reference_extra_baseline(suite: &str, name: &str, ext: &str) -> Option<String> {
     let path = testdata_path().join("baselines/reference").join(suite).join(format!("{name}.{ext}"));
-    std::fs::read(path).ok().map(|b| String::from_utf8_lossy(&b).into_owned())
+    let text = std::fs::read(path).ok().map(|b| String::from_utf8_lossy(&b).into_owned());
+    #[cfg(feature = "checker")]
+    if ext == "js" && crate::compile::dts_only_mode() {
+        let block = extract_dts_block(text.as_deref().unwrap_or(""));
+        return (block != crate::baseline::NO_CONTENT).then_some(block);
+    }
+    text
+}
+
+// The `.d.ts` outputs of a `.js` baseline (DoJSEmitBaseline writes them as the last run of `//// [name]` sections
+// before `//// [DtsFileErrors]` / `!!!! File`), for the TSRS_TEST_DTS_ONLY metric.
+pub fn extract_dts_block(text: &str) -> String {
+    let mut text = text;
+    for marker in ["\r\n\r\n//// [DtsFileErrors]", "\r\n\r\n!!!! File "] {
+        if let Some(i) = text.find(marker) {
+            text = &text[..i];
+        }
+    }
+    let mut starts: Vec<usize> = Vec::new();
+    let mut pos = 0;
+    while let Some(i) = text[pos..].find("//// [") {
+        let at = pos + i;
+        if at == 0 || text.as_bytes()[at - 1] == b'\n' {
+            starts.push(at);
+        }
+        pos = at + 6;
+    }
+    let is_dts = |at: usize| {
+        let line_end = text[at..].find("\r\n").map_or(text.len(), |e| at + e);
+        let name = &text[at + 6..line_end].trim_end_matches(']');
+        tsrs_core::tspath::is_declaration_file_name(name)
+    };
+    let mut first = starts.len();
+    while first > 0 && is_dts(starts[first - 1]) {
+        first -= 1;
+    }
+    if first == starts.len() {
+        return crate::baseline::NO_CONTENT.to_string();
+    }
+    // Declaration inputs can precede the outputs; the output block starts after Go's "\r\n\r\n" separator, and the
+    // `.d.ts` outputs inside it follow each other directly.
+    let begin = starts[first..].iter().rev().find(|&&at| text[..at].ends_with("\r\n\r\n")).copied().unwrap_or(starts[first]);
+    text[begin..].to_string()
 }
 
 pub fn enumerate_test_files(suite: &str) -> Vec<String> {
@@ -184,11 +226,19 @@ pub enum Outcome {
     // `.types`/`.symbols` baselines when they were requested and the test does not set @noTypesAndSymbols.
     // The third element is the `.js` baseline when `--baselines js` asked for it and the test emits (Go
     // verifyJavaScriptOutput: `hasNonDtsFiles` and not in `skippedEmitTests`); `Err` holds a panic message.
-    Baseline(String, Option<TypesAndSymbols>, Option<Result<String, String>>),
+    // The fourth element holds the `.js.map` / `.sourcemap.txt` baselines (`--baselines jsmap,sourcemap`).
+    Baseline(String, Option<TypesAndSymbols>, Option<Result<String, String>>, Option<SourceMapBaselines>),
     // SkipUnsupportedCompilerOptions
     Skip(String),
     // A harness-level failure that is not a panic (t.Fatalf in Go).
     Error(String),
+}
+
+// The generated `.js.map` (Go DoSourcemapBaseline) and `.sourcemap.txt` (DoSourcemapRecordBaseline) baselines; `None`
+// when Go writes no baseline, `Err` for a panic or a `t.Fatal`.
+pub struct SourceMapBaselines {
+    pub js_map: Option<Result<String, String>>,
+    pub sourcemap: Option<Result<String, String>>,
 }
 
 // The generated `.types` and `.symbols` baselines; `Err` holds the panic message of a walk that panicked.
