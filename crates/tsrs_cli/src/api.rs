@@ -268,6 +268,10 @@ impl BuildOrchestrator for CliOrchestrator {
     }
 }
 
+/// Serializes the API build tests: `memory_tests` measure process RSS, which a concurrent build test inflates.
+#[cfg(test)]
+static BUILD_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,6 +303,7 @@ mod tests {
 
     #[test]
     fn build_orchestrator_builds_references_and_cleans() {
+        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("tsrs-api-build-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("core")).unwrap();
@@ -396,6 +401,7 @@ mod memory_tests {
     /// byte for byte, as `tsrs -b` on the same project graph.
     #[test]
     fn api_build_outputs_match_cli_build() {
+        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
         let base = std::env::temp_dir().join(format!("tsrs-api-buildeq-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let mk = |root: &std::path::Path| {
@@ -448,6 +454,7 @@ mod memory_tests {
     /// Repeated rebuilds on one API build handle (an edit between builds forces a real program build).
     #[test]
     fn repeated_builds_memory() {
+        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("tsrs-api-buildmem-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
