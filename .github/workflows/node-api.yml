@@ -1,6 +1,9 @@
 # Node programmatic API (`tsrs --api`, unstable/sync + unstable/async) validation. See docs/NODE_API_VALIDATION.md.
 # Security: read-only GITHUB_TOKEN, no secrets, nothing is published (no npm publish, no tags, no releases).
-# Like ci.yml it runs on pushes to main and manual dispatch only; pull requests do not trigger it.
+# Triggers: pushes to main, manual dispatch (needs this file on the default branch), and pull requests into main
+# that touch the API surface. `pull_request` (never `pull_request_target`) runs with a read-only token and no
+# secrets; fork PRs additionally wait for the repository's approval setting. This lets the API branches be
+# validated before anything is merged.
 
 name: Node API
 
@@ -14,11 +17,21 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/node-api.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "npm/**"
+      - "tools/node-api/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/node-api.yml"
   workflow_dispatch:
 
+# Pushes to main each run to completion; a newer commit on the same pull request cancels the older run.
 concurrency:
-  group: node-api-${{ github.sha }}
-  cancel-in-progress: false
+  group: node-api-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
