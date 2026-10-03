@@ -92,3 +92,27 @@ emit/async + emit/es2016-2020 + origin/emit/sourcemaps; reference = tsgo built f
 Standalone (`emit/jsx-decorators` alone): `--baselines js` 1364 / 15197 pass, 0 fail (typeeraser still a stub here, so
 everything else crashes there); conformance errors + types/symbols identical to main in both lazy modes; fourslash
 4066/63 same pass list; `RUSTFLAGS="-D warnings" cargo check --workspace --locked --all-targets` clean; emit_gate 3/3.
+
+## Draft PR body (gh pr create was refused for this token: "Resource not accessible by integration")
+
+Waves E10 (JSX) + E11 (legacy decorators) of docs/EMIT.md. Based on main (emit/core merged). `TSRS_EMIT` stays opt-in; default behavior unchanged.
+
+## What
+- `tsrs_transformers::jsxtransforms::jsx`: full port of `jsxtransforms/jsx.go` (classic `React.createElement` incl. jsxFactory/jsxFragmentFactory/reactNamespace, `react-jsx`/`react-jsxdev` automatic runtime import/require, createElement fallback for key-after-spread, entity decoding, whitespace fixup). `preserve`/`react-native` don't run the transformer (emitter.go).
+- `tsrs_transformers::tstransforms::{legacydecorators, metadata, typeserializer}`: full ports.
+- `emit_test.rs` isolated smoke tests; `tools/oracle/emit/cases.py` (per-variant CLI oracle vs tsgo) and `list-packages.js`.
+- notes/emit-jsx-decorators.md, docs/EMIT.md progress row.
+
+Kept separate on purpose (other branches, not in this PR): E5 classfields (`emit/classfields`), E9 async/forawait (`emit/async`), E8 ES2016–2020 (`emit/es2016-2020`).
+
+## Evidence — standalone (this branch)
+- Conformance errors + `--baselines types,symbols`: whole `target/test-results` trees identical to main, default and `TSRS_LAZY_MEMBERS=0`.
+- Fourslash 4066 pass / 63 fail, same pass list. `RUSTFLAGS="-D warnings" cargo check --workspace --locked --all-targets` clean (rustc 1.99.0); `emit_gate` 3/3.
+- `--baselines js`: 1364 / 15197 pass, **0 fail** (the type eraser is still a stub on this branch, so TS inputs crash there; 12032 crashes are all other waves' stubs).
+
+## Evidence — temporary local integration (never pushed)
+This branch + emit/transforms (4c40ea2) + emit/classfields + emit/async + emit/es2016-2020 + emit/sourcemaps, reference tsgo built from the pinned ts-ref commit:
+- `--baselines js`, conformance/jsx variants: 226 / 230 pass, 0 fail (1 crash in the emitter source-map stub path, 3 skip).
+- decorators (conformance/decorators, compiler/decorator*, *Metadata*): 131 / 213 pass, 0 fail (13 crash = ES decorators, out of scope; 69 skip).
+- Whole suite: 13162 / 15197 pass, 15 fail (13 pass when rerun alone: cross-variant `moduleDetection` state in the harness; 2 commonjs-transform diffs), 214 crash (esdecorator, using).
+- Monorepo emit oracle (private corpus, read-only, all 103 tsc-built packages, full emit with JS/declaration maps): 103/103 packages fully identical, 10,248 files identical, 0 different.
