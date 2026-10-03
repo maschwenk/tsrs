@@ -233,3 +233,72 @@ With this applied locally, tsrs gives `target: 1 → 0`, matching Go.
 Overlay rebasing and the "overlay dropped" branch are only reachable from LSP-connected API sessions.
 `getCurrentLanguageServerSnapshot` returns `requires an LSP-connected API session` in both Go and tsrs
 for `--api`, so standalone `--api` cannot observe them. That remains a documented gap.
+
+# Follow-up on 623ee28: callback ownership, and grace measured per acquisition
+
+## Can callback ownership reach the resource holder?
+
+- **The protocol does not carry it.** Sync callbacks are matched by method name, and async ones by
+  `api<N>` IDs that only the server side knows. A callback can only be attributed to the request whose
+  thread made the call.
+- **Most callbacks come from worker threads.** I instrumented d6 locally (not committed) and ran a
+  40-file `createSnapshot` + `build`. 260 of the 262 filesystem callbacks were made from compiler worker
+  threads that serve no request. Only 2 came from request threads.
+- **The transport now tracks what it can:**
+  - every request has a `RequestState`;
+  - calls made on a request thread are attributed to that request;
+  - `lock_for_request` records the lock's holder;
+  - `ContentionWait` accepts a `Holder`;
+  - a waiter whose holder is waiting on a request it can see follows that chain; a wait-for cycle
+    counts as stuck.
+- **What that means for a waiter:**
+  - it is rejected only when the holder (or the chain behind it) has an attributed call in flight, or
+    when some unattributed call is in flight;
+  - an unrelated attributed callback no longer counts against it;
+  - otherwise it waits like Go, however long the holder takes.
+- **What remains impossible without core help:** attributing worker-thread file reads. Core could
+  propagate request identity into the filesystem that a request's program build uses, so worker reads
+  carry it. That is not done.
+- **Bounded divergence, async only, not claimed fixed:** a waiter that has nothing to do with the
+  re-entry is rejected after the grace period (default 10 s) in two cases. Pinned Go waits forever in
+  both.
+  1. An unattributed callback (a worker-thread read on the connection) stays pending longer than the
+     grace period.
+  2. The holder itself waits on its own client callback for longer than the grace period.
+- **Genuine re-entry is unchanged:** sync fails immediately, async fails after the grace period, and
+  the cancel/EOF exits stay in place.
+
+## Per-acquisition grace
+
+- **Problem:** `blocking_may_deadlock()` keeps the grace start in a thread-local, reset only after a
+  200 ms gap. The checker lease never resets it on success. So a second contended acquisition by the
+  same request within 200 ms inherits the first wait's start. Regression test: with a 100 ms grace, the
+  legacy path rejects the second wait about 20 ms in.
+- **Fix:** `ContentionWait` keeps the state per acquisition. `lock_for_request` uses it.
+- **Legacy predicate:** `blocking_may_deadlock()` is kept for compatibility, now keyed by request. It
+  still has the same-request inheritance problem, which is documented in the code and covered by a test.
+- **Checker lane (owners):** migrate `lease.rs` to the per-acquisition API, about 3 lines, no signature
+  changes elsewhere.
+  - When acquiring the gate: `gate.holder = Holder::current()`.
+  - In the wait loop: `let mut wait = ContentionWait::new(gate.holder.as_ref());`, then
+    `wait.set_holder(...)` and `if wait.may_deadlock() { … }` in place of `blocking_may_deadlock()`.
+
+## Tests
+
+`tests/reentrancy.rs` gains these real-transport tests, using a 100 ms grace and handler holds of at most 1 s:
+
+| test | result |
+| --- | --- |
+| unrelated attributed callback and holder both outlast the grace period | the waiter succeeds, as in Go; with 623ee28 it would have been rejected |
+| unattributed callback outlasts the grace period | the waiter is rejected after ≥ 100 ms (the documented divergence) |
+| genuine re-entry through a worker-thread callback | sync: immediate error; async: error after the grace period |
+| two sequential acquisitions | `ContentionWait` grants the full grace; the legacy path fails early |
+
+## Re-check on d6 with this transport, applied locally and rebuilt
+
+- `contention_repro.mjs`: build orchestrator 0/3 errors, API checker 0/3.
+- `reentry_repro.mjs`:
+  - sync `buildDuringBuild`: immediate error;
+  - async `buildDuringBuild`: error after 10.3 s;
+  - nested snapshot operations: OK.
+- The checker lane's `lease_reentrancy` tests: 3/3 pass.

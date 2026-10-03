@@ -38,6 +38,8 @@ pub struct RequestContext {
     pub depth: u32,
     /// Connection-wide callback state (how many requests are blocked on the client).
     pub callbacks: std::sync::Arc<crate::reentrancy::CallbackState>,
+    /// This request's own re-entrancy state (attributed client calls, what it waits for).
+    pub(crate) state: std::sync::Arc<crate::reentrancy::RequestState>,
 }
 
 /// The API session. Implementations must be thread-safe: the async connection runs each request on
