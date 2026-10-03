@@ -15,6 +15,7 @@ mod optionalcatch;
 mod optionalchain;
 mod taggedtemplate;
 mod usestrict;
+mod utilities;
 mod using;
 
 pub use async_::*;
@@ -30,4 +31,5 @@ pub use optionalcatch::*;
 pub use optionalchain::*;
 pub use taggedtemplate::*;
 pub use usestrict::*;
+pub(crate) use utilities::*;
 pub use using::*;
