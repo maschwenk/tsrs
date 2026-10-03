@@ -19,6 +19,15 @@ thread_local! {
     static LAST_PANIC: RefCell<Option<PanicInfo>> = const { RefCell::new(None) };
 }
 
+// The last panic on any thread: a test whose program runs on checker threads (multi-threaded test programs, emit)
+// panics there and the payload is re-raised on the worker thread, whose thread-local stays empty. A worker runs
+// one item at a time, so the process-wide slot belongs to the current item.
+static ANY_THREAD_PANIC: std::sync::Mutex<Option<PanicInfo>> = std::sync::Mutex::new(None);
+
+fn take_panic_info() -> Option<PanicInfo> {
+    LAST_PANIC.with(|p| p.borrow_mut().take()).or_else(|| ANY_THREAD_PANIC.lock().unwrap().take())
+}
+
 #[derive(Clone, Debug)]
 pub struct PanicInfo {
     pub message: String,
@@ -39,6 +48,7 @@ pub fn install_panic_hook(quiet: bool) {
                 let _ = f.write_all(trace.as_bytes());
             }
         }
+        *ANY_THREAD_PANIC.lock().unwrap() = Some(PanicInfo { message: message.clone(), location: location.clone() });
         LAST_PANIC.with(|p| *p.borrow_mut() = Some(PanicInfo { message, location }));
     }));
 }
@@ -54,6 +64,7 @@ pub struct ItemResult {
     // `.types` / `.symbols` (only when requested with --baselines).
     pub types: Option<ExtraResult>,
     pub symbols: Option<ExtraResult>,
+    pub js: Option<ExtraResult>,
 }
 
 pub struct ExtraResult {
@@ -82,7 +93,7 @@ impl ExtraResult {
     }
 }
 
-pub const EXTRA_KINDS: [(&str, u8); 2] = [("types", crate::EXTRA_TYPES), ("symbols", crate::EXTRA_SYMBOLS)];
+pub const EXTRA_KINDS: [(&str, u8); 3] = [("types", crate::EXTRA_TYPES), ("symbols", crate::EXTRA_SYMBOLS), ("js", crate::EXTRA_JS)];
 
 pub fn results_dir() -> PathBuf {
     match std::env::var_os("TSRS_TEST_RESULTS") {
@@ -95,6 +106,7 @@ pub fn results_dir() -> PathBuf {
 pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
     let start = Instant::now();
     LAST_PANIC.with(|p| *p.borrow_mut() = None);
+    *ANY_THREAD_PANIC.lock().unwrap() = None;
     let outcome = panic::catch_unwind(AssertUnwindSafe(|| backend.run(item)));
     let ms = start.elapsed().as_millis();
     let mut r = ItemResult {
@@ -107,13 +119,14 @@ pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
         actual: None,
         types: None,
         symbols: None,
+        js: None,
     };
     let want = crate::extra_baselines();
     let mut extras: Vec<(&str, ExtraResult)> = Vec::new();
     match outcome {
         Err(_) => {
             r.class = Class::Crash;
-            r.panic = Some(LAST_PANIC.with(|p| p.borrow_mut().take()).unwrap_or(PanicInfo { message: "<unknown panic>".into(), location: String::new() }));
+            r.panic = Some(take_panic_info().unwrap_or(PanicInfo { message: "<unknown panic>".into(), location: String::new() }));
             for (ext, _) in EXTRA_KINDS {
                 extras.push((ext, ExtraResult::plain(Class::Crash, "errors phase panicked".to_string())));
             }
@@ -132,10 +145,14 @@ pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
                 extras.push((ext, ExtraResult::plain(Class::Fail, r.diff.clone())));
             }
         }
-        Ok(Outcome::Baseline(actual, types_and_symbols)) => {
+        Ok(Outcome::Baseline(actual, types_and_symbols, js)) => {
+            match &js {
+                None => extras.push(("js", ExtraResult::plain(Class::Skip, "no js output".to_string()))),
+                Some(js) => extras.push(("js", ExtraResult::classify(item, "js", js))),
+            }
             match &types_and_symbols {
                 None => {
-                    for (ext, _) in EXTRA_KINDS {
+                    for ext in ["types", "symbols"] {
                         extras.push((ext, ExtraResult::plain(Class::Skip, "noTypesAndSymbols".to_string())));
                     }
                 }
@@ -157,6 +174,7 @@ pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
         match ext {
             "types" if want & crate::EXTRA_TYPES != 0 => r.types = Some(e),
             "symbols" if want & crate::EXTRA_SYMBOLS != 0 => r.symbols = Some(e),
+            "js" if want & crate::EXTRA_JS != 0 => r.js = Some(e),
             _ => {}
         }
     }
@@ -164,10 +182,10 @@ pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
 }
 
 pub fn extra_result<'a>(r: &'a ItemResult, ext: &str) -> Option<&'a ExtraResult> {
-    if ext == "types" {
-        r.types.as_ref()
-    } else {
-        r.symbols.as_ref()
+    match ext {
+        "types" => r.types.as_ref(),
+        "js" => r.js.as_ref(),
+        _ => r.symbols.as_ref(),
     }
 }
 
@@ -273,4 +291,9 @@ pub fn worker_main(backend_spec: crate::BackendSpec) {
         })
         .unwrap();
     let _ = handle.join();
+}
+
+/// The message of the last panic caught on this thread (for panics caught inside a test, like Go's RecoverAndFail).
+pub fn take_last_panic_message() -> String {
+    take_panic_info().map(|p| format!("{} at {}", p.message, p.location)).unwrap_or_else(|| "<unknown panic>".to_string())
 }

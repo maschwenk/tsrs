@@ -1,170 +1,109 @@
 #!/usr/bin/env bash
-# Emit oracle over a monorepo (read-only): for every package whose package.json `build` script runs `tsc`, run
-# `tsgo` and `TSRS_EMIT=1 tsrs` with the same flags, every output path redirected under /tmp, and diff every emitted
-# file byte for byte. Prints per-package identical / different / missing (not emitted by tsrs) / extra counts and a
-# total. Nothing is ever written into the monorepo: outDir, declarationDir and tsBuildInfoFile are always
-# overridden, and `git status --short` of the monorepo is checked before and after.
+# Emit oracle over a pnpm monorepo (docs/EMIT.md section 12): for every workspace package whose `build` script runs
+# `tsc`, emit with the reference compiler into /tmp/emit-go/<pkg> and with `TSRS_EMIT=1 tsrs` into /tmp/emit-rs/<pkg>
+# (same flags; outDir, declarationDir and tsBuildInfoFile always redirected), then diff every emitted file byte for
+# byte (tools/oracle/emit/run.py). The monorepo itself is never written: its `git status --short` is checked before
+# and after, and the script fails if it changed.
 #
-# usage: tools/oracle/emit/monorepo.sh [--root DIR] [--mode emit|noemit|dts] [--filter REGEX] [--jobs N]
-#   --mode emit    (default) the package's own options
-#   --mode noemit  adds --noEmit: compares only the tsbuildinfo (incremental packages)
-#   --mode dts     adds --emitDeclarationOnly --declarationMap false: .d.ts + tsbuildinfo (emit signatures)
-# env: TSGO (reference binary), TSRS (tsrs binary; build it with TSRS_TS_VERSION=<tsgo --version> for byte-equal
-#      tsbuildinfo `version` fields), OUT (default /tmp; results in $OUT/emit-go, $OUT/emit-rs).
-# Packages built with `tsc -b`/`--build` are compiled with -p on their tsconfig (build mode would write next to the
-# sources); the report marks them with (b).
-set -u
-ROOT=/root/Owner
-MODE=emit
-FILTER=.
-JOBS=4
+#   tools/oracle/emit/monorepo.sh <monorepo root> [-j N] [--filter REGEX] [--buildinfo] [-- extra flags for both compilers]
+#
+# --buildinfo also compares the tsbuildinfo files (run.py --buildinfo; build tsrs with TSRS_TS_VERSION=<tsgo
+# --version>). With `-- --noEmit` that is the incremental-only mode (tsbuildinfo of a noEmit program).
+#
+# Env: TSGO (reference tsgo binary, required), TSRS (default target/release/tsrs), TSRS_CHECKER_ASSIGNMENT (default
+# go), OUT_GO (/tmp/emit-go),
+# OUT_RS (/tmp/emit-rs). A package built with `tsc -p <file>` uses that config; `tsc --build`/`-b` packages are
+# emitted with `-p` on their tsconfig until `-b` is ported (TODO(emit/incremental)).
+# Output: one line per package (identical/different/missing/extra counts, exit codes, diagnostics agreement,
+# tsrs panic) and totals; the per-package JSON lines go to $OUT_RS.results.jsonl.
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+root="${1:?usage: monorepo.sh <monorepo root> [-j N] [--filter REGEX] [-- extra flags]}"
+shift
+jobs=4
+filter=""
+buildinfo=""
+extra=()
 while [ $# -gt 0 ]; do
-  case $1 in
-    --root) ROOT=$2; shift 2 ;;
-    --mode) MODE=$2; shift 2 ;;
-    --filter) FILTER=$2; shift 2 ;;
-    --jobs) JOBS=$2; shift 2 ;;
+  case "$1" in
+    -j) jobs="$2"; shift 2 ;;
+    --filter) filter="$2"; shift 2 ;;
+    --buildinfo) buildinfo="--buildinfo"; shift ;;
+    --) shift; extra=("$@"); break ;;
     *) echo "unknown argument $1" >&2; exit 2 ;;
   esac
 done
-TSGO=${TSGO:-/root/bin/tsgo}
-TSRS=${TSRS:-$(cd "$(dirname "$0")/../../.." && pwd)/target/release/tsrs}
-OUT=${OUT:-/tmp}
-# Read the default libraries from tsgo's directory like the npm (noembed) tsgo does (crates/tsrs_cli/src/sys.rs).
-export TSRS_LIB_PATH=${TSRS_LIB_PATH:-$(dirname "$(readlink -f "$TSGO")")}
-GO_OUT=$OUT/emit-go
-RS_OUT=$OUT/emit-rs
+: "${TSGO:?set TSGO to the reference tsgo binary}"
+export TSGO
+export TSRS="${TSRS:-$here/../../../target/release/tsrs}"
+# Go assigns files to checkers with FENNEL; tsrs defaults to directory locality, and printed types (inferred
+# declaration types) can depend on which files a checker saw first. Compare in the Go assignment by default.
+export TSRS_CHECKER_ASSIGNMENT="${TSRS_CHECKER_ASSIGNMENT:-go}"
+OUT_GO="${OUT_GO:-/tmp/emit-go}"
+OUT_RS="${OUT_RS:-/tmp/emit-rs}"
+mkdir -p "$OUT_GO" "$OUT_RS"
 
-before=$(git -C "$ROOT" status --short)
-
-list=$(mktemp)
-python3 - "$ROOT" "$FILTER" > "$list" <<'PY'
-import json, os, re, subprocess, sys
-root, flt = sys.argv[1], sys.argv[2]
-files = subprocess.run(["git", "-C", root, "ls-files", "*package.json"], capture_output=True, text=True).stdout.split()
-for p in sorted(files):
-    if "node_modules" in p:
-        continue
-    try:
-        d = json.load(open(os.path.join(root, p)))
-    except Exception:
-        continue
-    b = d.get("scripts", {}).get("build", "")
-    m = re.search(r"(?:^|[\s;&|(])tsc((?:\s+[^\s;&|)]+)*)", b)
-    if not m:
-        continue
-    pkg = os.path.dirname(p) or "."
-    if not re.search(flt, pkg):
-        continue
-    args = m.group(1).split()
-    build = any(a in ("-b", "--b", "-build", "--build") for a in args)
-    cfg = "tsconfig.json"
-    rest = []
-    i = 0
-    while i < len(args):
-        a = args[i]
-        if a in ("-p", "--project") and i + 1 < len(args):
-            cfg = args[i + 1]; i += 2; continue
-        if a in ("-b", "--b", "-build", "--build"):
-            i += 1; continue
-        if build and not a.startswith("-"):
-            cfg = a; i += 1; continue
-        if a in ("--verbose", "-v", "--force", "-f"):
-            i += 1; continue
-        rest.append(a); i += 1
-    if os.path.isdir(os.path.join(root, pkg, cfg)):
-        cfg = os.path.join(cfg, "tsconfig.json")
-    print("\t".join([pkg, cfg, "b" if build else "", " ".join(rest)]))
-PY
-
-run_pkg() {
-  local pkg=$1 cfg=$2 build=$3 rest=$4
-  local name=${pkg//\//__}
-  local dir=$ROOT/$pkg
-  # Effective options decide which redirects are valid (tsBuildInfoFile needs incremental/composite,
-  # declarationDir needs declaration).
-  local opts
-  opts=$(cd "$dir" && "$TSGO" -p "$cfg" --showConfig 2>/dev/null | python3 -c '
-import json,sys
-try: c=json.load(sys.stdin).get("compilerOptions",{})
-except Exception: c={}
-print(int(bool(c.get("incremental") or c.get("composite"))), int(bool(c.get("declaration") or c.get("composite"))), int(bool(c.get("declarationDir"))))')
-  local inc=${opts:0:1} decl=${opts:2:1} ddir=${opts:4:1}
-  local extra=()
-  case $MODE in
-    noemit) extra+=(--noEmit) ;;
-    dts) extra+=(--emitDeclarationOnly --declarationMap false) ;;
-  esac
-  for side in go rs; do
-    local o=$OUT/emit-$side/$name
-    rm -rf "$o" "$o.tsbuildinfo"
-    mkdir -p "$o"
-    local flags=(-p "$cfg" --outDir "$o")
-    [ "$ddir" = 1 ] && flags+=(--declarationDir "$o")
-    [ "$inc" = 1 ] && flags+=(--tsBuildInfoFile "$o.tsbuildinfo")
-    # shellcheck disable=SC2086
-    if [ $side = go ]; then
-      (cd "$dir" && "$TSGO" "${flags[@]}" $rest "${extra[@]}" > "$o.stdout" 2>&1; echo "exit $?" >> "$o.stdout")
-    else
-      (cd "$dir" && TSRS_EMIT=1 timeout 600 "$TSRS" "${flags[@]}" $rest "${extra[@]}" > "$o.stdout" 2>&1; echo "exit $?" >> "$o.stdout")
-    fi
-    [ -f "$o.tsbuildinfo" ] && cp "$o.tsbuildinfo" "$o/.tsbuildinfo"
-  done
-  python3 - "$GO_OUT/$name" "$RS_OUT/$name" "$pkg" "$build" <<'PY'
-import os, sys
-go, rs, pkg, build = sys.argv[1:5]
-def files(d):
-    out = {}
-    for r, _, fs in os.walk(d):
-        for f in fs:
-            p = os.path.join(r, f)
-            out[os.path.relpath(p, d)] = p
-    return out
-g, r = files(go), files(rs)
-ident = diff = missing = 0
-first = ""
-for k in sorted(g):
-    if k not in r:
-        missing += 1
-        continue
-    if open(g[k], "rb").read() == open(r[k], "rb").read():
-        ident += 1
-    else:
-        diff += 1
-        first = first or k
-extra = len([k for k in r if k not in g])
-out_same = open(go + ".stdout", "rb").read() == open(rs + ".stdout", "rb").read()
-crash = b"panicked at" in open(rs + ".stdout", "rb").read()
-print(f"{pkg}{' (b)' if build else ''}\tidentical {ident}\tdifferent {diff}\tnot-emitted {missing}\textra {extra}\tstdout {'same' if out_same else 'differs'}{'  CRASH' if crash else ''}{'  first-diff ' + first if first else ''}")
-PY
-}
-export -f run_pkg
-export ROOT MODE TSGO TSRS OUT GO_OUT RS_OUT
-
-results=$(mktemp)
-while IFS=$'\t' read -r pkg cfg build rest; do
-  printf '%s\0%s\0%s\0%s\0' "$pkg" "$cfg" "$build" "$rest"
-done < "$list" | xargs -0 -n 4 -P "$JOBS" bash -c 'run_pkg "$@"' _ | tee "$results"
-
-python3 - "$results" <<'PY'
-import re, sys
-t = {"identical": 0, "different": 0, "not-emitted": 0, "extra": 0}
-pk = {"all-identical": 0, "packages": 0, "stdout-same": 0, "crash": 0}
-for l in open(sys.argv[1]):
-    pk["packages"] += 1
-    for k in t:
-        t[k] += int(re.search(k + r" (\d+)", l).group(1))
-    if "different 0" in l and "not-emitted 0" in l and "extra 0" in l:
-        pk["all-identical"] += 1
-    pk["stdout-same"] += "stdout same" in l
-    pk["crash"] += "CRASH" in l
-print("TOTAL files: " + ", ".join(f"{v} {k}" for k, v in t.items()))
-print("TOTAL packages: " + ", ".join(f"{v} {k}" for k, v in pk.items()))
-PY
-
-after=$(git -C "$ROOT" status --short)
-if [ "$before" != "$after" ]; then
-  echo "ERROR: $ROOT changed during the run" >&2
-  exit 1
+before="$(git -C "$root" status --short)"
+if [ -n "$before" ]; then
+  echo "monorepo has local changes before the run; refusing to start (git status --short not empty)" >&2
+  exit 2
 fi
-rm -f "$list" "$results"
+
+# package dir <TAB> tsconfig path
+list="$(python3 - "$root" "$filter" <<'EOF'
+import glob, json, os, re, sys
+root, flt = sys.argv[1], sys.argv[2]
+for pj in sorted(glob.glob(os.path.join(root, "apps/*/package.json")) + glob.glob(os.path.join(root, "packages/*/package.json"))):
+    d = os.path.dirname(pj)
+    rel = os.path.relpath(d, root)
+    if flt and not re.search(flt, rel):
+        continue
+    build = json.load(open(pj)).get("scripts", {}).get("build", "")
+    # the commands of the script that invoke tsc directly
+    for cmd in re.split(r"&&|;|\|\|", build):
+        words = cmd.split()
+        if not words or words[0] not in ("tsc", "tsgo"):
+            continue
+        cfg = "tsconfig.json"
+        for i, w in enumerate(words):
+            if w in ("-p", "--project") and i + 1 < len(words):
+                cfg = words[i + 1]
+        cfg = os.path.join(d, cfg)
+        if os.path.isdir(cfg):
+            cfg = os.path.join(cfg, "tsconfig.json")
+        if os.path.exists(cfg):
+            print(f"{rel}\t{cfg}")
+        break
+EOF
+)"
+
+results="$OUT_RS.results.jsonl"
+: > "$results"
+export here OUT_GO OUT_RS buildinfo
+export extra_flags="${extra[*]:-}"
+printf '%s\n' "$list" | grep -v '^$' | while IFS=$'\t' read -r rel cfg; do printf '%s\0%s\0' "$rel" "$cfg"; done |
+  xargs -0 -n 2 -P "$jobs" bash -c 'name="${0//\//__}"; python3 "$here/run.py" "$1" --name "$name" --go-out "$OUT_GO/$name" --rs-out "$OUT_RS/$name" --json $buildinfo -- $extra_flags || true' >> "$results"
+
+after="$(git -C "$root" status --short)"
+if [ -n "$after" ]; then
+  echo "ERROR: the monorepo changed during the run:" >&2
+  echo "$after" >&2
+  exit 3
+fi
+
+python3 - "$results" <<'EOF'
+import json, sys
+rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip().startswith("{")]
+rows.sort(key=lambda r: r["name"])
+tot = {"identical": 0, "different": 0, "missing": 0, "extra": 0}
+full = 0
+for r in rows:
+    for k in tot:
+        tot[k] += r[k]
+    same = r["different"] == 0 and r["missing"] == 0 and r["extra"] == 0 and r["ref_status"] == r["rs_status"] and r["diagnostics_match"]
+    full += same
+    note = f"  [{r['rs_panic'][:90]}]" if r["rs_panic"] else ""
+    print(f"{r['name']:<45} identical {r['identical']:>5}  different {r['different']:>4}  not-emitted {r['missing']:>5}  extra {r['extra']:>3}  exit {r['ref_status']}/{r['rs_status']}  diags {'=' if r['diagnostics_match'] else '!='}{note}")
+print(f"packages: {len(rows)}, fully identical {full}; files: {tot['identical']} identical, {tot['different']} different, {tot['missing']} not emitted by tsrs, {tot['extra']} extra")
+EOF
+echo "monorepo git status unchanged (empty before and after)"
