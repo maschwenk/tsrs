@@ -1,0 +1,71 @@
+{"q":"flags","r":{"Value":111551,"Type":788968}}
+{"q":"at:box:","r":{"symFlags":2,"kind":0,"e":"","type":"Box<number>","typeFlags":1048576,"objectFlags":536870916,"sym":"box"}}
+{"q":"at:p:","r":{"symFlags":2,"kind":0,"e":"","type":"Pair<string, U>","typeFlags":1048576,"objectFlags":524292,"sym":"p"}}
+{"r":{"type":"\"é😀\"","typeFlags":1024,"objectFlags":0,"sym":"ünïcödé","symFlags":2,"kind":0,"e":""},"q":"at:ünïcödé"}
+{"q":"at:over(x: string)","r":{"kind":0,"e":"","type":"{ (x: string): string; (x: number): number; }","typeFlags":1048576,"objectFlags":16,"sym":"over","symFlags":16}}
+{"q":"at:U = ","r":{"typeFlags":134217728,"objectFlags":0,"sym":"U","symFlags":524288,"kind":0,"e":"","type":"U"}}
+{"q":"at:Pair<A, B>","r":{"kind":0,"e":"","type":"Pair<A, B>","typeFlags":1048576,"objectFlags":1572868,"sym":"Pair","symFlags":524288}}
+{"q":"at:isStr(","r":{"type":"(x: unknown) => x is string","typeFlags":1048576,"objectFlags":16,"sym":"isStr","symFlags":16,"kind":0,"e":""}}
+{"r":{"type":"Animal","typeFlags":1048576,"objectFlags":5,"sym":"Animal","symFlags":32,"kind":0,"e":""},"q":"at:Animal {"}
+{"q":"at:Dog extends","r":{"typeFlags":1048576,"objectFlags":5,"sym":"Dog","symFlags":32,"kind":0,"e":"","type":"Dog"}}
+{"q":"at:legs","r":{"e":"","type":"4","typeFlags":2048,"objectFlags":0,"sym":"legs","symFlags":4,"kind":0}}
+{"q":"at:Red =","r":{"kind":0,"e":"","type":"Color.Red","typeFlags":34816,"objectFlags":0,"sym":"Red","symFlags":8}}
+{"q":"at:r = over","r":{"kind":0,"e":"","type":"number","typeFlags":64,"objectFlags":0,"sym":"r","symFlags":2}}
+{"q":"at:M = ","r":{"kind":0,"e":"","type":"M","typeFlags":1048576,"objectFlags":32,"sym":"M","symFlags":524288}}
+{"q":"at:C<T> =","r":{"e":"","type":"C<T>","typeFlags":67108864,"objectFlags":0,"sym":"C","symFlags":524288,"kind":0}}
+{"q":"at:lit =","r":{"sym":"lit","symFlags":2,"kind":0,"e":"","type":"\"hi\"","typeFlags":1024,"objectFlags":0}}
+{"q":"at:fn =","r":{"sym":"fn","symFlags":2,"kind":0,"e":"","type":"<T>(v: T) => T","typeFlags":1048576,"objectFlags":2097168}}
+{"r":{"e":"","type":"{ box: Box<number>; }","typeFlags":1048576,"objectFlags":2097168,"sym":"o","symFlags":2,"kind":0},"q":"at:o = {"}
+{"q":"at:box };","r":{"type":"Box<number>","typeFlags":1048576,"objectFlags":536870916,"sym":"box","symFlags":4,"kind":0,"e":""}}
+{"q":"at:uni","r":{"type":"\"é😀\"","typeFlags":1024,"objectFlags":0,"sym":"uni","symFlags":2097152,"kind":0,"e":""}}
+{"q":"at:IA<T","r":{"type":"IA<T, K>","typeFlags":33554432,"objectFlags":0,"sym":"IA","symFlags":524288,"kind":0,"e":""}}
+{"q":"at:aw()","r":{"typeFlags":1048576,"objectFlags":16,"sym":"aw","symFlags":16,"kind":0,"e":"","type":"() => Promise<number>"}}
+{"q":"at:maybe:","r":{"type":"string | undefined","typeFlags":134217728,"objectFlags":0,"sym":"maybe","symFlags":2,"kind":0,"e":""}}
+{"q":"at:doubled","r":{"sym":"doubled","symFlags":2,"kind":0,"e":"","type":"number[]","typeFlags":1048576,"objectFlags":2621444}}
+{"r":{"type":"number","typeFlags":64,"objectFlags":0,"sym":"x","symFlags":1,"kind":0,"e":""},"q":"at:x * 2"}
+{"q":"at:cb:","r":{"kind":0,"e":"","type":"(n: number) => void","typeFlags":1048576,"objectFlags":16,"sym":"cb","symFlags":2}}
+{"r":{"kind":0,"e":"","type":"number","typeFlags":64,"objectFlags":0,"sym":"n","symFlags":1},"q":"at:n) => {}"}
+{"q":"at:withThis(","r":{"kind":0,"e":"","type":"(this: Dog, a: number) => number","typeFlags":1048576,"objectFlags":16,"sym":"withThis","symFlags":16}}
+{"q":"at:rest(","r":{"objectFlags":16,"sym":"rest","symFlags":16,"kind":0,"e":"","type":"(a: string, ...xs: number[]) => number[]","typeFlags":1048576}}
+{"q":"at:arr:","r":{"objectFlags":2621444,"sym":"arr","symFlags":2,"kind":0,"e":"","type":"number[]","typeFlags":1048576}}
+{"q":"at:S<T>","r":{"objectFlags":0,"sym":"S","symFlags":524288,"kind":0,"e":"","type":"S<T>","typeFlags":67108864}}
+{"q":"at:WithDefault","r":{"symFlags":64,"kind":0,"e":"","type":"WithDefault<T>","typeFlags":1048576,"objectFlags":6,"sym":"WithDefault"}}
+{"q":"at:useAll","r":{"e":"","type":"() => string","typeFlags":1048576,"objectFlags":16,"sym":"useAll","symFlags":16,"kind":0}}
+{"q":"at:box.value","r":{"type":"Box<number>","typeFlags":1048576,"objectFlags":538968068,"sym":"box","symFlags":2,"kind":0,"e":""}}
+{"q":"at:value +","r":{"e":"","type":"number","typeFlags":64,"objectFlags":0,"sym":"value","symFlags":33554436,"kind":1}}
+{"q":"at:Up =","r":{"kind":0,"e":"","type":"\"A\"","typeFlags":1024,"objectFlags":0,"sym":"Up","symFlags":524288}}
+{"q":"at:TL =","r":{"sym":"TL","symFlags":524288,"kind":0,"e":"","type":"`x${string}`","typeFlags":4194304,"objectFlags":0}}
+{"q":"at:big =","r":{"kind":0,"e":"","type":"10n","typeFlags":4096,"objectFlags":0,"sym":"big","symFlags":2}}
+{"q":"at:make }","r":{"e":"","type":"<T>(v: T) => Box<T>","typeFlags":1048576,"objectFlags":16,"sym":"make","symFlags":2097152,"kind":0}}
+{"q":"at:make(1)","r":{"objectFlags":2097168,"sym":"make","symFlags":2097152,"kind":0,"e":"","type":"<T>(v: T) => Box<T>","typeFlags":1048576}}
+{"r":{"e":"","type":"(() => string) | ((radix?: number | undefined) => string)","typeFlags":134217728,"objectFlags":0,"sym":"toString","symFlags":33554436,"kind":1},"q":"at:toString"}
+{"q":"C.check","r":{"flags":524288,"str":"T"}}
+{"q":"C.constraint","r":{"e":"","str":"T","flags":524288,"sameAsCheck":false,"sameSymbolAsCheck":true}}
+{"q":"C.constraint.constraint","r":null}
+{"q":"IA.K.constraint","r":"keyof T"}
+{"q":"Dog.props","r":["legs","name"]}
+{"q":"legs.ref.kind","r":0}
+{"q":"legs.parent","r":{"name":"Dog","kind":0,"e":""}}
+{"q":"Dog.members","r":{"names":["legs"],"e":""}}
+{"q":"main.exportsOfSymbol","r":{"names":["Pair","U","over","box","p","isStr","Animal","Dog","Color","r","M","C","lit","fn","o","uni","IA","aw","maybe","doubled","cb","withThis","rest","arr","S","WithDefault","useAll","Up","TL","big"],"e":""}}
+{"q":"main.exportsOfModule","r":{"names":["Pair","U","over","box","p","isStr","Animal","Dog","Color","r","M","C","lit","fn","o","uni","IA","aw","maybe","doubled","cb","withThis","rest","arr","S","WithDefault","useAll","Up","TL","big"],"e":""}}
+{"q":"box.local.exportSymbol","r":{"localKind":0,"exportFlags":2,"e":"","name":"box","localFlags":1048576}}
+{"q":"box.local.exportSymbolForChecker","r":{"name":"box","flags":2,"e":""}}
+{"q":"resolveName.noloc:Array","r":{"name":"Array","flags":33554497,"kind":1,"e":""}}
+{"q":"resolveName.loc:Array","r":{"e":"","name":"Array","flags":33554497,"kind":1}}
+{"q":"resolveName.noloc:box","r":{"name":null,"flags":null,"kind":null,"e":""}}
+{"q":"resolveName.loc:box","r":{"name":"box","flags":2,"kind":0,"e":""}}
+{"q":"resolveName.noloc:Promise","r":{"flags":33554497,"kind":1,"e":"","name":"Promise"}}
+{"q":"resolveName.loc:Promise","r":{"name":"Promise","flags":33554497,"kind":1,"e":""}}
+{"q":"resolveName.noloc:Animal","r":{"flags":null,"kind":null,"e":"","name":null}}
+{"q":"resolveName.loc:Animal","r":{"kind":0,"e":"","name":"Animal","flags":32}}
+{"q":"err.unknownProject","r":"api: client error: project /other/tsconfig.json not found"}
+{"q":"err.foreignProjectType","r":{"e":"api: client error: type handle 89 not found (no registry for project /q/tsconfig.json)","r":null}}
+{"q":"err.unknownType","r":"api: client error: type handle 999999 not found in project registry"}
+{"q":"err.unknownSnapshot","r":"api: client error: snapshot 1001 not found"}
+{"q":"err.badType","r":"api: invalid request: failed to unmarshal *api.CheckerTypeParams: json: unable to unmarshal JSON string into Go api.TypeID within \"/type\""}
+{"q":"err.forgedSnapshotRef","r":"api: client error: snapshot symbol reference does not match the requested checker"}
+{"q":"crossProject.snapshotSymbol","r":{"type":"ArrayConstructor","e":""}}
+{"q":"err.fileRefNoDescriptor","r":"api: client error: invalid file symbol reference"}
+{"q":"err.afterRelease","r":{"release":"","e":"api: client error: snapshot 1 not found"}}
+{"q":"afterRelease.fileOwnedParent","r":"api: client error: source file is not available"}
