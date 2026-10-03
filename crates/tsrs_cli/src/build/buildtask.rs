@@ -256,6 +256,10 @@ impl BuildTask {
         // Called from the checker threads: capture arena handles (P is Send + Sync).
         let (task_p, orchestrator_p) = (P::from_static(this), P::from_static(orchestrator));
         let write_file = move |file_name: &str, text: &str, data: &mut WriteFileData| task_p.write_file(&orchestrator_p, file_name, text, data);
+        // Go passes `orchestrator.host.mTimes` (the map pointer). Take the Arc here: a guard created inside the call's
+        // argument list would live until the call returns, and `host.get_m_time` (WriteFile of a `.d.ts` that differs
+        // only in its map, emitfileshandler.go:240) locks the same mutex during emit, which deadlocked.
+        let testing_m_times_cache = host.m_times.lock().unwrap().clone();
         let (result, statistics) = emit_and_report_statistics(EmitInput {
             sys,
             program,
@@ -267,7 +271,7 @@ impl BuildTask {
             writer: Some(&writer),
             write_file: Some(&write_file),
             testing: orchestrator.opts.testing,
-            testing_m_times_cache: Some(host.m_times.lock().unwrap().clone()),
+            testing_m_times_cache: Some(testing_m_times_cache),
         });
         {
             let mut r = self.result.borrow_mut();
