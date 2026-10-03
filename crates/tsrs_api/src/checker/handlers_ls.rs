@@ -49,7 +49,7 @@ pub(crate) fn get_signature_usages(host: &dyn CheckerHost, p: &Params) -> Checke
     let ls = language_service(&sd.scope.snapshot, program, &sd.project, "")?;
     let usages = ls.get_signature_usages(&host.context(), decl);
     if usages.is_empty() {
-        return Ok(Value::Null);
+        return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     let mut out = Vec::with_capacity(usages.len());
     for usage in usages {
@@ -71,7 +71,7 @@ pub(crate) fn get_referenced_symbols_for_node(host: &dyn CheckerHost, p: &Params
     let ls = language_service(&sd.scope.snapshot, program, &sd.project, "")?;
     let entries = ls.get_referenced_symbols_for_node_exported(&host.context(), position, node, program.get_source_files());
     if entries.is_empty() {
-        return Ok(Value::Null);
+        return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     let mut out = Vec::new();
     for entry in &entries {
@@ -91,8 +91,8 @@ pub(crate) fn get_referenced_symbols_for_node(host: &dyn CheckerHost, p: &Params
         out.push(o.build());
     }
     if out.is_empty() {
-        // Go: `var result []ReferencedSymbolEntry` stays nil when every entry lacks a definition.
-        return Ok(Value::Null);
+        // Go: `var result []ReferencedSymbolEntry` stays nil when every entry lacks a definition (encodes as []).
+        return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     Ok(Value::Array(out))
 }
@@ -118,6 +118,8 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
         };
         let ls = language_service(snapshot, program, &sd.project, "")?;
         let internal = source_file.get_position_map().utf16_to_utf8(i32::try_from(position).unwrap_or(i32::MAX));
+        // With includeSymbol the language service takes the API checker itself (Go: same).
+        let _lease = if include_symbol { Some(super::lease::acquire(program)?) } else { None };
         Ok(ls.get_completions_at_position(ctx, source_file, internal, trigger, include_symbol))
     };
 
@@ -158,23 +160,26 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
         let ci = &item.completion_item;
         let mut o = obj();
         o.set("name", Value::String(ci.label.clone()));
-        if let Some(kind) = &ci.kind {
-            o.nonzero("kind", kind.0 as f64);
-        }
+        // encoding/json v2 `omitempty`: a uint32 0 is still emitted; `*string` pointing at "" and an
+        // all-empty labelDetails object ({}) are omitted.
+        o.num("kind", ci.kind.as_ref().map_or(0, |k| k.0) as f64);
         for (key, value) in [("sortText", &ci.sort_text), ("insertText", &ci.insert_text), ("filterText", &ci.filter_text), ("detail", &ci.detail)] {
             if let Some(v) = value {
-                o.set(key, Value::String(v.clone()));
+                o.str_nonempty(key, v);
             }
         }
         if let Some(details) = &ci.label_details {
             let mut d = obj();
             if let Some(v) = &details.detail {
-                d.set("detail", Value::String(v.clone()));
+                d.str_nonempty("detail", v);
             }
             if let Some(v) = &details.description {
-                d.set("description", Value::String(v.clone()));
+                d.str_nonempty("description", v);
             }
-            o.set("labelDetails", d.build());
+            let d = d.build();
+            if !matches!(&d, Value::Object(m) if m.is_empty()) {
+                o.set("labelDetails", d);
+            }
         }
         if let Some(symbol) = item.symbol {
             uses_prepared_symbols |= prepared.is_some();

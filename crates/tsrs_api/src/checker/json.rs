@@ -22,28 +22,21 @@ impl Obj {
         self.set(key, Value::Number(n));
     }
 
-    /// `omitzero` numbers.
+    /// `omitzero` numbers (encoding/json v2 `omitempty` would still emit 0).
     pub(crate) fn nonzero(&mut self, key: &str, n: f64) {
         if n != 0.0 {
             self.num(key, n);
         }
     }
 
-    /// `omitempty` strings.
+    /// `omitempty` strings ("" is an empty JSON value under encoding/json v2).
     pub(crate) fn str_nonempty(&mut self, key: &str, s: &str) {
         if !s.is_empty() {
             self.set(key, Value::String(s.to_string()));
         }
     }
 
-    /// `omitempty` bools.
-    pub(crate) fn bool_true(&mut self, key: &str, b: bool) {
-        if b {
-            self.set(key, Value::Bool(true));
-        }
-    }
-
-    /// `omitempty` id slices.
+    /// `omitempty` id slices ([] is an empty JSON value under encoding/json v2).
     pub(crate) fn ids(&mut self, key: &str, ids: impl Iterator<Item = f64>) {
         let ids: Vec<Value> = ids.map(Value::Number).collect();
         if !ids.is_empty() {

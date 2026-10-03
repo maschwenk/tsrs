@@ -92,6 +92,8 @@ impl<'h> SnapshotCtx<'h> {
 /// Go `checkerSetup`. Field order matters: the checker handle is released before the snapshot scope.
 pub(crate) struct Setup<'h> {
     pub(crate) checker: CheckerHandle,
+    // Dropped after `checker`: the gate is released only once the checker slot is free again.
+    _lease: super::lease::ApiCheckerLease,
     pub(crate) checker_id: u32,
     pub(crate) program: &'static Program,
     pub(crate) sd: SnapshotCtx<'h>,
@@ -104,10 +106,11 @@ impl<'h> Setup<'h> {
     pub(crate) fn new(host: &'h dyn CheckerHost, snapshot: u64, project: &str) -> CheckerResult<Setup<'h>> {
         let sd = SnapshotCtx::new(host, snapshot, project)?;
         let program = sd.program()?;
+        let lease = super::lease::acquire(program)?;
         let ctx = with_checker_lifetime(&host.context(), CheckerLifetime::API);
         let checker = program.get_type_checker(&ctx);
         let checker_id = checker.id;
-        Ok(Setup { checker, checker_id, program, sd })
+        Ok(Setup { checker, _lease: lease, checker_id, program, sd })
     }
 
     pub(crate) fn c(&mut self) -> &mut Checker {
@@ -187,7 +190,7 @@ impl<'h> Setup<'h> {
         let mut o = Obj::new();
         o.set("keyType", self.type_response(info.key_type())?);
         o.set("valueType", self.type_response(info.value_type())?);
-        o.bool_true("isReadonly", info.is_readonly());
+        o.set("isReadonly", Value::Bool(info.is_readonly()));
         if let Some(decl) = info.declaration() {
             o.str_nonempty("declaration", &self.sd.host.node_handle(decl)?);
         }
@@ -352,20 +355,23 @@ fn type_response_base(t: P<Type>, id: u32) -> Obj {
     } else if flags.intersects(TypeFlags::StringMapping) {
         target = t.as_string_mapping_type().target().map_or(0, |x| x.id().0);
     } else if flags.intersects(TypeFlags::TypeParameter) {
-        late.bool_true("isThisType", t.as_type_parameter().is_this_type());
+        late.set("isThisType", Value::Bool(t.as_type_parameter().is_this_type()));
     } else if flags.intersects(TypeFlags::Intrinsic) {
         late.str_nonempty("intrinsicName", t.as_intrinsic_type().intrinsic_name());
     }
-    if object_flags != 0 {
-        o.num("objectFlags", object_flags as f64);
-    }
-    o.bool_true("isTupleType", is_tuple);
+    // encoding/json v2 `omitempty` only drops empty JSON values (null, "", [], {}): uint32 0 and false
+    // are emitted (pinned Go always sends objectFlags, isTupleType and isThisType).
+    o.num("objectFlags", object_flags as f64);
+    o.set("isTupleType", Value::Bool(is_tuple));
     o.set("value", value);
     o.nonzero("target", target as f64);
     if let Some(alias) = t.alias() {
         late.ids("aliasTypeArguments", alias.type_arguments().iter().map(|x| x.id().0 as f64));
     }
     o.extend(late);
+    if !flags.intersects(TypeFlags::TypeParameter) {
+        o.set("isThisType", Value::Bool(false));
+    }
     o
 }
 

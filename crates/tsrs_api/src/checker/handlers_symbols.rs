@@ -172,7 +172,7 @@ pub(crate) fn get_exports_of_module(host: &dyn CheckerHost, p: &Params) -> Check
     let symbol = s.resolve_symbol(&p.symbol_ref("symbol")?)?;
     let mut exports = s.c().get_exports_of_module_exported(symbol);
     if exports.is_empty() {
-        return Ok(Value::Null);
+        return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     sort_by_checker(&mut s, &mut exports);
     s.symbols_response(&exports)
@@ -190,7 +190,7 @@ pub(crate) fn get_jsdoc_tags(host: &dyn CheckerHost, p: &Params) -> CheckerResul
     let symbol = s.resolve_symbol(&p.symbol_ref("symbol")?)?;
     let tags = tsrs_ls::get_symbol_jsdoc_tags(Some(symbol));
     if tags.is_empty() {
-        return Ok(Value::Null);
+        return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     let mut out = Vec::with_capacity(tags.len());
     for tag in tags {
@@ -307,7 +307,7 @@ pub(crate) fn symbol_table_property(host: &dyn CheckerHost, p: &Params, property
         SymbolTableProperty::Exports => symbol.exports(),
     };
     let Some(table) = table.filter(|t| !t.is_empty()) else {
-        return Ok(Value::Null);
+        return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     };
     let mut symbols = table.values();
     if symbols.len() == 1 {

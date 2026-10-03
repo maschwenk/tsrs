@@ -510,7 +510,8 @@ fn structured_type_shapes_tuple_mapped_conditional_literal() {
     assert_ne!(num(&constraint, "id"), num(&check, "id"));
     assert_eq!(field(field(&constraint, "symbol"), "id"), field(field(&check, "symbol"), "id"));
     assert_eq!(h.tid("getConstraintOfTypeParameter", "objectId", &constraint), Value::Null);
-    assert_eq!(h.call("getConstraintOfTypeParameter", &h.sp(&format!(r#""objectId":{}"#, num(&c_t, "id")))).unwrap_err().kind, CheckerErrorKind::Client);
+    // Pinned Go answers null (no error) for a non-type-parameter.
+    assert_eq!(h.tid("getConstraintOfTypeParameter", "objectId", &c_t), Value::Null);
     // Literal freshness and widening.
     let lit = h.type_at(MAIN_FILE, MAIN, "lit =");
     assert_eq!(field(&lit, "value"), &Value::String("hi".to_string()));
@@ -518,11 +519,13 @@ fn structured_type_shapes_tuple_mapped_conditional_literal() {
     assert_eq!(h.type_string(&regular), "\"hi\"");
     let base = h.ok("getBaseTypeOfLiteralType", &h.sp(&format!(r#""type":{}"#, num(&lit, "id"))));
     assert_eq!(h.type_string(&base), "string");
-    // Wrong-kind property requests are explicit client errors, not panics.
+    // Wrong-kind property requests fail like pinned Go's recovered panics (same first line), without
+    // actually panicking the server.
     let err = h.call("getCheckTypeOfType", &h.sp(&format!(r#""objectId":{}"#, num(&lit, "id")))).unwrap_err();
-    assert_eq!(err.kind, CheckerErrorKind::Client);
+    assert_eq!(err.kind, CheckerErrorKind::Internal);
+    assert_eq!(err.message, "panic: interface conversion: checker.TypeData is *checker.LiteralType, not *checker.ConditionalType");
     let err = h.call("getTypesOfType", &h.sp(&format!(r#""objectId":{}"#, num(&lit, "id")))).unwrap_err();
-    assert_eq!(err.kind, CheckerErrorKind::Client);
+    assert_eq!(err.message, "panic: Unhandled case in Type.Types");
 }
 
 #[test]
@@ -699,7 +702,8 @@ fn locations_batches_and_symbol_relations() {
 fn type_structure_accessors() {
     let h = fixture();
     let box_target = h.tid("getTargetOfType", "objectId", &h.type_at(MAIN_FILE, MAIN, "box:"));
-    assert_eq!(h.tid("getOuterTypeParametersOfType", "objectId", &box_target), Value::Null);
+    // Go nil slice → [] under encoding/json v2.
+    assert_eq!(h.tid("getOuterTypeParametersOfType", "objectId", &box_target), Value::Array(Vec::new()));
     let local = h.tid("getLocalTypeParametersOfType", "objectId", &box_target);
     assert_eq!(h.type_string(&arr(&local)[0]), "T");
     let this_t = h.tid("getThisTypeOfType", "objectId", &box_target);
