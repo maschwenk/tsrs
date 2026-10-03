@@ -117,6 +117,7 @@ pub(crate) struct jsxRuntimeImportSpecifier {
 fn add_project_reference_tasks(opts: &ProgramConfig, host: std::sync::Arc<dyn CompilerHost>, _single_threaded: bool) -> projectReferenceFileMapperBuilder {
     let mut mapper = projectReferenceFileMapper::new(opts.config, opts.can_use_project_reference_source());
     let resolution_host = resolution_host_for(host.clone());
+    mapper.loader_host = Some(resolution_host);
     let project_references = opts.config.resolved_project_reference_paths();
     if project_references.is_empty() {
         return projectReferenceFileMapperBuilder { mapper: Box::leak(Box::new(mapper)), host: resolution_host };
@@ -135,9 +136,26 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
     let supported_extensions = tsoptions::get_supported_extensions(Some(&compiler_options), &[]);
     let supported_extensions_with_json_if_resolve_json_module =
         tsoptions::get_supported_extensions_with_json_if_resolve_json_module(Some(&compiler_options), &supported_extensions);
-    let max_node_module_js_depth = compiler_options.max_node_module_js_depth.unwrap_or(0);
+    // Go `int`. It is only compared with node_modules depths (small non-negative counts), so saturating to i32 keeps
+    // every comparison's result.
+    let max_node_module_js_depth = compiler_options.max_node_module_js_depth.unwrap_or(0).clamp(i32::MIN as i64, i32::MAX as i64) as i32;
     let host = opts.host.clone();
     let project_references = add_project_reference_tasks(&opts.program_config(), host.clone(), single_threaded);
+    // The mapper (with its resolution hosts) is leaked for the program to own (`SharedProgramData`). If loading
+    // unwinds (a panic while loading, e.g. the module resolver's `Unexpected moduleResolution`, which the API turns
+    // into an error), no program will own it: free it then. Declared before the resolver and loader, so it is
+    // dropped after them.
+    struct FreeMapperOnUnwind(&'static projectReferenceFileMapper);
+    impl Drop for FreeMapperOnUnwind {
+        fn drop(&mut self) {
+            if std::thread::panicking() {
+                // SAFETY: loading unwound, so no program was created from this mapper; the resolver and loader that
+                // referred to it were dropped first.
+                unsafe { crate::program::free_project_reference_file_mapper(self.0 as *const projectReferenceFileMapper as *mut projectReferenceFileMapper) };
+            }
+        }
+    }
+    let _free_mapper_on_unwind = FreeMapperOnUnwind(project_references.mapper);
     let resolver_options = module::ResolverOptions {
         host: project_references.host,
         compiler_options,

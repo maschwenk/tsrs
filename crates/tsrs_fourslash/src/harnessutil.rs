@@ -188,7 +188,7 @@ pub fn skip_unsupported_compiler_options(t: &T, options: &CompilerOptions) {
     }
     match options.module_resolution {
         ModuleResolutionKind::Node10 | ModuleResolutionKind::Classic => {
-            t.skip(&format!("unsupported module resolution kind {}", options.module_resolution as i32))
+            t.skip(&format!("unsupported module resolution kind {}", options.module_resolution.value()))
         }
         _ => {}
     }

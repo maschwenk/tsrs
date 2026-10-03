@@ -24,7 +24,7 @@ use crate::extendedconfigcache::ExtendedConfigCache;
 use crate::filechange::FileChangeSummary;
 use crate::logging::LogTree;
 use crate::overlayfs::{OverlayMap, ToPath};
-use crate::parsecache::{ContentMappedParseCache, ParseCache};
+use crate::parsecache::{ContentMappedParseCache, ParseCache, ParseCacheJournal};
 use crate::project::{
     inferred_project_id, new_configured_project, new_inferred_project, new_inferred_project_command_line, new_synthetic_project, new_synthetic_project_id,
     ConfiguredProjectID, Kind, ModuleResolverFactoryRef, Project, ProgramUpdateKind, SyntheticProjectID, ID,
@@ -54,6 +54,8 @@ pub(crate) enum projectEntry {
 pub struct ProjectCollectionBuilder {
     pub(crate) session_options: Arc<SessionOptions>,
     pub(crate) parse_cache: Arc<ParseCache>,
+    /// The parse-cache references this clone's programs take (rolled back if the clone unwinds).
+    pub(crate) parse_cache_journal: Arc<ParseCacheJournal>,
     content_mapped_parse_cache: Arc<ContentMappedParseCache>,
     extended_config_cache: Arc<ExtendedConfigCache>,
     pub(crate) to_path: ToPath,
@@ -111,6 +113,7 @@ pub(crate) fn new_project_collection_builder(
         inferred_content_mappers,
         inferred_content_mapper_extensions,
         parse_cache,
+        parse_cache_journal: Arc::default(),
         content_mapped_parse_cache,
         extended_config_cache: extended_config_cache.clone(),
         config_file_registry_builder: Arc::new(new_config_file_registry_builder(
@@ -1580,6 +1583,10 @@ impl ProjectCollectionBuilder {
                 entry.change(&mut |project: &mut Project| {
                     let old_host = project.host.clone();
                     let old_program = project.program;
+                    // Keeps the old program alive until `release_dropped_project_references` below has read it:
+                    // replacing `program_owner` drops the last reference to a program built earlier in the same
+                    // snapshot build, which frees it (and its shared data). Found with AddressSanitizer.
+                    let _old_program_owner = project.program_owner.clone();
                     let old_checker_pool = project.checker_pool.clone();
                     project.host = Some(new_compiler_host(&project.current_directory.clone(), project, self, logger.fork("CompilerHost")));
                     let result = project.create_program();

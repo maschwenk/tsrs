@@ -22,6 +22,8 @@ rustc-hash.workspace = true
 tsrs_lsp.workspace = true
 tsrs_project.workspace = true
 tsrs_incremental.workspace = true
+tsrs_api.workspace = true
+tsrs_api_transport.workspace = true
 mimalloc = "0.1.52"
 libc = "0.2"
 [dev-dependencies]

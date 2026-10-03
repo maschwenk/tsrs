@@ -1,0 +1,96 @@
+{
+  "async.eofImmediately": {
+    "bounded": true,
+    "frames": []
+  },
+  "async.garbageText": {
+    "bounded": true,
+    "frames": []
+  },
+  "async.hugeDeclaredLength": {
+    "bounded": true,
+    "frames": []
+  },
+  "async.invalidJsonBody": {
+    "bounded": true,
+    "frames": []
+  },
+  "async.invalidParamsType": {
+    "bounded": true,
+    "frames": [
+      "error:3"
+    ]
+  },
+  "async.nonNumericLength": {
+    "bounded": true,
+    "frames": []
+  },
+  "async.nonObjectMessage": {
+    "bounded": true,
+    "frames": []
+  },
+  "async.truncatedBody": {
+    "bounded": true,
+    "frames": []
+  },
+  "async.unknownMethodThenEcho": {
+    "bounded": true,
+    "frames": [
+      "error:1",
+      "result:2"
+    ]
+  },
+  "async.validEchoThenEOF": {
+    "bounded": true,
+    "frames": [
+      "result:1"
+    ]
+  },
+  "sync.badTupleArity": {
+    "bounded": true,
+    "frames": []
+  },
+  "sync.eofImmediately": {
+    "bounded": true,
+    "frames": []
+  },
+  "sync.garbageText": {
+    "bounded": true,
+    "frames": []
+  },
+  "sync.hugeDeclaredPayload": {
+    "bounded": true,
+    "frames": []
+  },
+  "sync.invalidJsonParams": {
+    "bounded": true,
+    "frames": [
+      "5:getSourceFileNames"
+    ]
+  },
+  "sync.nonBinMethod": {
+    "bounded": true,
+    "frames": []
+  },
+  "sync.truncatedFrame": {
+    "bounded": true,
+    "frames": []
+  },
+  "sync.unknownMessageType": {
+    "bounded": true,
+    "frames": []
+  },
+  "sync.unknownMethodThenEcho": {
+    "bounded": true,
+    "frames": [
+      "5:noSuchMethod",
+      "4:echo"
+    ]
+  },
+  "sync.validEchoThenEOF": {
+    "bounded": true,
+    "frames": [
+      "4:echo"
+    ]
+  }
+}

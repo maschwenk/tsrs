@@ -21,7 +21,8 @@ crate map, progress table and list of known gaps. Work happens on branch `lsp` u
 | `compiler` (program reuse, pluggable checker pool) | `tsrs_compiler` | `UpdateProgram` / `ReuseProgram`, `ProgramOptions.CreateCheckerPool`, the `CheckerPool` interface |
 | `cmd/tsc/lsp.go` | `tsrs_cli` (`lsp.rs`) | `tsrs --lsp -stdio` |
 
-Out of scope until further notice: `api` (IPC API sessions), content mappers (`contentmapper`, `spanmap`: no
+Out of scope until further notice: API sessions attached to the language server (the standalone `tsrs --api`
+server is ported, `docs/NODE_API.md`), content mappers (`contentmapper`, `spanmap`: no
 mapper is ever registered, so every "is this file content-mapped" branch takes the plain path; the branch structure
 is kept), ATA (`project/ata`), telemetry, pprof requests, localization (English only).
 
@@ -333,7 +334,8 @@ checkers and old file versions are freed).
 
 ## Known gaps
 
-- Content mappers, `api`, ATA, telemetry, pprof requests: not ported (see above).
+- Content mappers, LSP-attached API sessions, ATA, telemetry, pprof requests: not ported (see above;
+  standalone `tsrs --api` is in `docs/NODE_API.md`).
 - Memory: see the memory plan (regions; phase 4).
 - Cancellation: ported (robust wave): the checker polls the request context at Go's points; canceled checkers are disposed.
 - `tsrs_ls::autoimport` (ported, actions wave): the registry builds buckets sequentially where Go fans out to

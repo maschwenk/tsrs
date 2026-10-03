@@ -1,0 +1,96 @@
+[
+  {
+    "name": "full replaces host",
+    "caseSensitive": true, "cwd": "/home/src",
+    "host": {"files": {"/p/a.ts": "host a", "/p/b.ts": "host b", "/p/dir/c.ts": "c"}},
+    "steps": [{"kind": "full", "files": {"/p/a.ts": "req a", "new/n.ts": "relative"}}],
+    "queries": ["/p/a.ts", "/p/b.ts", "/p", "/p/dir", "/p/dir/c.ts", "/home/src/new/n.ts", "/home/src/new", "/", "/home", "/nope"]
+  },
+  {
+    "name": "layer over host with removals",
+    "caseSensitive": true, "cwd": "/home/src",
+    "host": {"files": {"/p/a.ts": "host a", "/p/b.ts": "host b", "/p/dir/c.ts": "c", "/p/dir/sub/d.ts": "d", "/p/keep.ts": "k"}},
+    "steps": [{"kind": "layer", "files": {"/p/a.ts": "req a \ud83d\ude00", "/p/z.ts": "z"}, "removedPaths": ["/p/b.ts", "/p/dir"]}],
+    "queries": ["/p/a.ts", "/p/b.ts", "/p/z.ts", "/p/keep.ts", "/p", "/p/dir", "/p/dir/c.ts", "/p/dir/sub", "/p/dir/sub/d.ts"]
+  },
+  {
+    "name": "explicit directory listings full and layer",
+    "caseSensitive": true, "cwd": "/",
+    "host": {"files": {"/p/d/host.ts": "h", "/p/e/host.ts": "h"}},
+    "steps": [
+      {"kind": "layer", "files": {"/p/d/x.ts": "x"}, "directories": {"/p/d": {"files": ["x.ts", "listed-only.ts"], "directories": ["kid"]}, "/p/e": {"files": [], "directories": []}}},
+      {"kind": "layer", "files": {"/p/d/y.ts": "y"}, "removedPaths": ["/p/d/x.ts"]}
+    ],
+    "queries": ["/p/d", "/p/d/x.ts", "/p/d/y.ts", "/p/d/host.ts", "/p/d/listed-only.ts", "/p/d/kid", "/p/e", "/p/e/host.ts", "/p"]
+  },
+  {
+    "name": "explicit order is preserved",
+    "caseSensitive": true, "cwd": "/",
+    "host": {"files": {}},
+    "steps": [{"kind": "full", "files": {"/r/b.ts": "b", "/r/a.ts": "a"}, "directories": {"/r": {"files": ["b.ts", "a.ts", "c.ts"], "directories": ["z", "y"]}}}],
+    "queries": ["/r", "/r/a.ts", "/r/c.ts", "/r/z"]
+  },
+  {
+    "name": "request symlinks, host symlinks and cycles",
+    "caseSensitive": true, "cwd": "/",
+    "host": {"files": {"/host/real/h.ts": "host h", "/p/target/t0.ts": "host t0"}, "symlinks": {"/host/hlink": "/host/real"}},
+    "steps": [{"kind": "layer",
+      "files": {"/p/target/t.ts": "t", "/p/target/deep/u.ts": "u"},
+      "symlinks": {"/p/link": {"target": "/p/target"}, "/p/rel": {"target": "target/deep"}, "/p/tohost": {"target": "/host/real", "host": true},
+                   "/p/loop1": {"target": "/p/loop2"}, "/p/loop2": {"target": "/p/loop1"}, "/p/flink.ts": {"target": "/p/target/t.ts"}}}],
+    "queries": ["/p", "/p/link", "/p/link/t.ts", "/p/link/t0.ts", "/p/link/deep/u.ts", "/p/rel/u.ts", "/p/tohost/h.ts", "/p/tohost", "/p/loop1", "/p/loop1/x.ts", "/p/flink.ts", "/host/hlink/h.ts", "/p/target", "/host/hlink"]
+  },
+  {
+    "name": "case-insensitive names",
+    "caseSensitive": false, "cwd": "/Work",
+    "host": {"files": {"/Work/Src/Main.ts": "host main", "/Work/Src/Other.ts": "other"}},
+    "steps": [{"kind": "layer", "files": {"src/MAIN.ts": "req main", "SRC/extra.TS": "extra"}, "removedPaths": ["/work/src/other.ts"]}],
+    "queries": ["/Work/Src/Main.ts", "/work/src/main.ts", "/WORK/SRC/OTHER.TS", "/Work/Src", "/work/src/Extra.ts", "/Work"]
+  },
+  {
+    "name": "layer chain compaction, tombstone override and full reset",
+    "caseSensitive": true, "cwd": "/",
+    "host": {"files": {"/p/a.ts": "host a", "/p/b.ts": "host b", "/p/dir/c.ts": "c"}},
+    "steps": [
+      {"kind": "layer", "removedPaths": ["/p/dir", "/p/a.ts"]},
+      {"kind": "layer", "files": {"/p/dir/new.ts": "new"}},
+      {"kind": "layer", "files": {"/p/a.ts": "back"}, "removedPaths": ["/p/b.ts"]},
+      {"kind": "layer"},
+      {"kind": "full", "files": {"/q/only.ts": "only"}},
+      {"kind": "layer", "files": {"/q/more.ts": "more"}}
+    ],
+    "queries": ["/p/a.ts", "/p/b.ts", "/p/dir", "/p/dir/c.ts", "/p/dir/new.ts", "/p", "/q", "/q/only.ts", "/q/more.ts"]
+  },
+  {
+    "name": "file ancestors and directories replaced by files",
+    "caseSensitive": true, "cwd": "/",
+    "host": {"files": {"/p/x/inner.ts": "inner", "/p/f.ts": "f"}},
+    "steps": [{"kind": "layer", "files": {"/p/x": "now a file"}}],
+    "queries": ["/p/x", "/p/x/inner.ts", "/p/f.ts/child", "/p"]
+  },
+  {
+    "name": "file change summaries with aliases",
+    "caseSensitive": true, "cwd": "/",
+    "host": {"files": {"/p/target/a.ts": "a", "/p/old.ts": "old", "/p/gone/x.ts": "x"}},
+    "steps": [
+      {"kind": "layer", "symlinks": {"/p/link": {"target": "/p/target"}, "/p/link2": {"target": "/p/link"}}},
+      {"kind": "layer", "files": {"/p/target/a.ts": "a2", "/p/target/b.ts": "b"}, "removedPaths": ["/p/old.ts", "/p/gone", "/p/never.ts"]},
+      {"kind": "layer", "directories": {"/p/target": {"files": ["a.ts"], "directories": []}}}
+    ],
+    "queries": ["/p/link/a.ts", "/p/link2/b.ts", "/p/link2", "/p/target", "/p/old.ts", "/p/gone"]
+  },
+  {
+    "name": "astral paths",
+    "caseSensitive": true, "cwd": "/",
+    "host": {"files": {"/\ud83d\ude00/host.ts": "h"}},
+    "steps": [{"kind": "layer", "files": {"/\ud83d\ude00/\u00e9\ud835\udfd8.ts": "\ud835\udfd8"}}],
+    "queries": ["/\ud83d\ude00", "/\ud83d\ude00/\u00e9\ud835\udfd8.ts", "/\ud83d\ude00/host.ts"]
+  },
+  {
+    "name": "errors",
+    "caseSensitive": false, "cwd": "/",
+    "host": {"files": {}},
+    "steps": [{"kind": "layer", "files": {"/A.ts": "1", "/a.ts": "2"}}, {"kind": "bogus"}],
+    "queries": ["/a.ts"]
+  }
+]

@@ -1,0 +1,43 @@
+{
+  "close.async": {
+    "settled": 50,
+    "afterClose": "rejected"
+  },
+  "crash.async.observed": {
+    "status": 13
+  },
+  "crash.sync": {
+    "status": 0,
+    "next": "threw",
+    "closeOk": false,
+    "error": null
+  },
+  "handles.threw": {
+    "valid.names": false,
+    "invalid.snapshot": true,
+    "invalid.project": true,
+    "invalid.position": false,
+    "invalid.file": true,
+    "invalid.location": true,
+    "invalid.symbol": true,
+    "invalid.params": true,
+    "unknown.method": true,
+    "release.invalid": true,
+    "foreign.sameIdOtherSession": false,
+    "released.snapshot": true,
+    "released.clientObject": true,
+    "released.twice": true,
+    "survives": true,
+    "otherSurvives": true
+  },
+  "reentry.async": {
+    "status": 0,
+    "nested": "ok",
+    "sawIndex": true
+  },
+  "reentry.sync": {
+    "status": 0,
+    "nested": "ok",
+    "after": true
+  }
+}

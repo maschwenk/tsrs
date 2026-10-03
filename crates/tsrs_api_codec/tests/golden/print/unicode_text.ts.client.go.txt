@@ -1,0 +1,4 @@
+// BOM, CRLF and non-ASCII
+const café = "na\u00EFve \u20AC \uD83D\uDE00";
+const 𝒜 = `日本 ${café} 🎉`;
+function λ() { }

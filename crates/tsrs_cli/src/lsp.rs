@@ -196,25 +196,25 @@ struct flagDef {
     value: flagValue,
 }
 
-struct flagSet {
+pub(crate) struct flagSet {
     name: &'static str,
     flags: Vec<flagDef>,
 }
 
 impl flagSet {
-    fn new(name: &'static str) -> flagSet {
+    pub(crate) fn new(name: &'static str) -> flagSet {
         flagSet { name, flags: Vec::new() }
     }
 
-    fn bool(&mut self, name: &'static str, usage: &'static str) {
+    pub(crate) fn bool(&mut self, name: &'static str, usage: &'static str) {
         self.flags.push(flagDef { name, usage, value: flagValue::Bool(false) });
     }
 
-    fn string(&mut self, name: &'static str, usage: &'static str) {
+    pub(crate) fn string(&mut self, name: &'static str, usage: &'static str) {
         self.flags.push(flagDef { name, usage, value: flagValue::String(String::new()) });
     }
 
-    fn int(&mut self, name: &'static str, usage: &'static str) {
+    pub(crate) fn int(&mut self, name: &'static str, usage: &'static str) {
         self.flags.push(flagDef { name, usage, value: flagValue::Int(0) });
     }
 
@@ -222,18 +222,18 @@ impl flagSet {
         self.flags.iter().find(|f| f.name == name)
     }
 
-    fn bool_value(&self, name: &str) -> bool {
+    pub(crate) fn bool_value(&self, name: &str) -> bool {
         matches!(self.lookup(name).map(|f| &f.value), Some(flagValue::Bool(true)))
     }
 
-    fn string_value(&self, name: &str) -> String {
+    pub(crate) fn string_value(&self, name: &str) -> String {
         match self.lookup(name).map(|f| &f.value) {
             Some(flagValue::String(s)) => s.clone(),
             _ => String::new(),
         }
     }
 
-    fn int_value(&self, name: &str) -> i64 {
+    pub(crate) fn int_value(&self, name: &str) -> i64 {
         match self.lookup(name).map(|f| &f.value) {
             Some(flagValue::Int(i)) => *i,
             _ => 0,
@@ -273,7 +273,7 @@ impl flagSet {
     }
 
     // flag.(*FlagSet).Parse
-    fn parse(&mut self, args: &[String]) -> Result<(), ()> {
+    pub(crate) fn parse(&mut self, args: &[String]) -> Result<(), ()> {
         let mut i = 0;
         while i < args.len() {
             let s = &args[i];

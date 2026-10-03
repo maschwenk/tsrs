@@ -206,6 +206,16 @@ struct CheckerSlot(Mutex<Box<Checker>>);
 unsafe impl Send for CheckerSlot {}
 unsafe impl Sync for CheckerSlot {}
 
+// A pool is dropped only with its program (`free_program` / `free_unshared_program`: no checker handle is held
+// any more), so the leaked checkers can be freed with it. Programs that are never freed (the CLI) never get here.
+impl Drop for poolState {
+    fn drop(&mut self) {
+        // SAFETY: `checkers` came from `Box::leak` of a boxed slice in `create_checkers`, and no handle borrowing a
+        // checker outlives the pool's program.
+        unsafe { drop(Box::from_raw(self.checkers as *const [CheckerSlot] as *mut [CheckerSlot])) };
+    }
+}
+
 pub(crate) struct poolState {
     // Leaked like the program that owns the pool, so a handle can hold a checker's lock without borrowing the pool.
     checkers: &'static [CheckerSlot],
@@ -477,14 +487,15 @@ fn get_checker_association_weights(base_weights: &[i64], import_counts: &[i64]) 
 impl checkerPool {
     // checkerpool.go:305 newCheckerPool / checkerpool.go:309 newCheckerPoolWithTracing (tracing is not ported).
     pub(crate) fn new(program: &'static Program) -> checkerPool {
-        let mut checker_count = 4;
+        let mut checker_count: i64 = 4;
         if program.single_threaded() {
             checker_count = 1;
         } else if let Some(c) = program.options().checkers {
-            checker_count = c as usize;
+            checker_count = c;
         }
 
-        checker_count = checker_count.min(program.files.len()).min(256).max(1);
+        // Go `max(min(checkerCount, len(files), 256), 1)` on int: a negative or zero count is one checker.
+        let checker_count = checker_count.min(program.files.len() as i64).min(256).max(1) as usize;
 
         checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new() }
     }
@@ -538,7 +549,8 @@ impl checkerPool {
             run_work_group(self.single_threaded, self.checker_count, |i| {
                 *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
             });
-            let checkers: &'static [CheckerSlot] = Vec::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect());
+            let checkers: &'static [CheckerSlot] =
+                Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
             tsrs_core::phases::record("Checkers: create", create_start.elapsed());
 
             let files = &program.files;
@@ -781,7 +793,8 @@ fn read_cost_cache(path: &str) -> (FxHashMap<String, CostEntry>, usize) {
 // seconds summed over the checker passes and its checker. Files of other runs are dropped.
 pub(crate) fn write_cost_cache(program: &'static Program) {
     use std::fmt::Write;
-    let (Some(path), Some(state)) = (checker_cost_cache_path(), program.pool().state.get()) else {
+    // Programs with an external checker pool (language server / API projects) have no cost state to write.
+    let (Some(path), Some(state)) = (checker_cost_cache_path(), program.compiler_checker_pool().and_then(|pool| pool.state.get())) else {
         return;
     };
     if state.checkers.len() <= 1 {

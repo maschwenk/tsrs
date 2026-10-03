@@ -5,6 +5,11 @@
 //   node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 //   node npm/build.mjs --artifacts dir/ --pack      # dir/<target triple>/tsrs[.exe], as the release workflow lays out
 //   node npm/build.mjs --print-version          # also --print-typescript-commit, --check-tag <tag>
+//   node npm/build.mjs --sdk-only               # just compile the JS API (npm/tsrs/src -> npm/tsrs/dist)
+//
+// The main package also carries TypeScript 7's unstable JS API (`@maschwenk/tsrs/unstable/sync`, `/async`, `/ast`, ...),
+// copied from microsoft/TypeScript packages/typescript by npm/sdk/sync-upstream.mjs. It is compiled here with the
+// build-only compiler in npm/package.json (`npm ci --prefix npm` first; `--tsc <path>` to use another TypeScript 7 tsc).
 //
 // The package name comes from npm/tsrs/package.json; platform packages are `<name>-<os>-<cpu>`. The version is
 // `<workspace version>-ts<[workspace.metadata.typescript] version>` from the workspace Cargo.toml. The main package
@@ -30,7 +35,8 @@ const TARGETS = {
 function usage(message) {
     if (message) console.error(`error: ${message}\n`);
     console.error(
-        "usage: node npm/build.mjs [--binary <triple>=<path>]... [--artifacts <dir>] [--out <dir>] [--pack]\n" +
+        "usage: node npm/build.mjs [--binary <triple>=<path>]... [--artifacts <dir>] [--out <dir>] [--pack] [--tsc <path>]\n" +
+            "                          [--sdk-only]\n" +
             "                          [--check-tag <git tag>] [--print-version | --print-typescript-commit]\n" +
             `triples: ${Object.keys(TARGETS).join(", ")}`,
     );
@@ -38,7 +44,7 @@ function usage(message) {
 }
 
 function parseArgs(argv) {
-    const opts = { binaries: new Map(), out: path.join(npmDir, "dist"), pack: false };
+    const opts = { binaries: new Map(), out: path.join(npmDir, "dist"), pack: false, sdkOnly: false, tsc: undefined };
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i];
         const value = () => argv[++i] ?? usage(`${arg} needs a value`);
@@ -65,6 +71,12 @@ function parseArgs(argv) {
                 break;
             case "--pack":
                 opts.pack = true;
+                break;
+            case "--sdk-only":
+                opts.sdkOnly = true;
+                break;
+            case "--tsc":
+                opts.tsc = path.resolve(value());
                 break;
             case "--check-tag":
                 opts.checkTag = value();
@@ -122,6 +134,54 @@ function copyDir(src, dst) {
     }
 }
 
+// Compiles npm/tsrs/src (the TypeScript 7 JS API) into npm/tsrs/dist with `tsc -b`, like upstream's
+// packages/typescript build. The output dir must stay npm/tsrs/dist: the `#enums/*` import map points its types at
+// dist, which tsc maps back to the sources of the project being built.
+function buildSdk(tscPath) {
+    const pkgDir = path.join(npmDir, "tsrs");
+    const tsc = tscPath ?? path.join(npmDir, "node_modules", "typescript", "bin", "tsc");
+    if (!fs.existsSync(tsc)) {
+        throw new Error(`the JS API build compiler is not installed (${path.relative(process.cwd(), tsc)}); run \`npm ci --prefix npm\` or pass --tsc`);
+    }
+    fs.rmSync(path.join(pkgDir, "dist"), { recursive: true, force: true });
+    fs.rmSync(path.join(pkgDir, "tsconfig.tsbuildinfo"), { force: true });
+    const isJs = /\.[cm]?js$/.test(tsc);
+    execFileSync(isJs ? process.execPath : tsc, [...(isJs ? [tsc] : []), "-b", path.join(pkgDir, "tsconfig.json")], { stdio: "inherit" });
+
+    // Like upstream: published declarations may only import relative paths or the package's own `#` imports.
+    const errors = [];
+    const walk = dir => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const file = path.join(dir, entry.name);
+            if (entry.isDirectory()) walk(file);
+            else if (entry.name.endsWith(".d.ts")) {
+                for (const [i, line] of fs.readFileSync(file, "utf8").split("\n").entries()) {
+                    const specs = [
+                        line.match(/(?:import|export)\s.*?\sfrom\s+["']([^"']+)["']/)?.[1],
+                        ...[...line.matchAll(/import\(["']([^"']+)["']\)/g)].map(m => m[1]),
+                    ];
+                    for (const spec of specs) {
+                        if (spec && !spec.startsWith(".") && !spec.startsWith("#") && !spec.startsWith("node:")) {
+                            errors.push(`${path.relative(pkgDir, file)}:${i + 1}: external import "${spec}"`);
+                        }
+                    }
+                }
+            }
+        }
+    };
+    walk(path.join(pkgDir, "dist"));
+    if (errors.length) throw new Error(`external imports in the JS API declarations:\n  ${errors.join("\n  ")}`);
+}
+
+// The `@typescript/source` export/import conditions point at .ts sources, which are not published.
+function stripSourceConditions(value) {
+    if (Array.isArray(value)) return value.map(stripSourceConditions);
+    if (value === null || typeof value !== "object") return value;
+    return Object.fromEntries(
+        Object.entries(value).filter(([key]) => key !== "@typescript/source").map(([key, v]) => [key, stripSourceConditions(v)]),
+    );
+}
+
 function npmPack(dir, out) {
     const stdout = execFileSync("npm", ["pack", "--json", "--pack-destination", out], {
         cwd: dir,
@@ -148,7 +208,12 @@ function main() {
         return;
     }
     if (opts.checkTag !== undefined && opts.binaries.size === 0) return;
+    if (opts.sdkOnly) {
+        buildSdk(opts.tsc);
+        return;
+    }
     if (opts.binaries.size === 0) usage("no binaries given (--binary or --artifacts)");
+    buildSdk(opts.tsc);
 
     const template = JSON.parse(fs.readFileSync(path.join(npmDir, "tsrs", "package.json"), "utf8"));
     const name = template.name;
@@ -205,12 +270,19 @@ function main() {
     }
 
     const mainDir = path.join(opts.out, baseName);
-    copyDir(path.join(npmDir, "tsrs"), mainDir);
+    // Only what the package's `files` publishes (plus package.json/README); the .ts sources and tests stay behind.
+    fs.mkdirSync(mainDir, { recursive: true });
+    for (const entry of ["README.md", "UPSTREAM.json", ...template.files]) {
+        const from = path.join(npmDir, "tsrs", entry);
+        if (!fs.existsSync(from)) continue;
+        if (fs.statSync(from).isDirectory()) copyDir(from, path.join(mainDir, entry));
+        else fs.copyFileSync(from, path.join(mainDir, entry));
+    }
     fs.chmodSync(path.join(mainDir, "bin", "tsrs"), 0o755);
     fs.writeFileSync(path.join(mainDir, "LICENSE"), license);
     fs.writeFileSync(path.join(mainDir, "NOTICE.txt"), notice);
     writeJson(path.join(mainDir, "package.json"), {
-        ...template,
+        ...stripSourceConditions(template),
         version,
         tsrs: { typescriptVersion: versions.typescriptVersion, typescriptCommit: versions.typescriptCommit },
         optionalDependencies,

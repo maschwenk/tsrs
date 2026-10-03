@@ -2629,6 +2629,14 @@ impl Checker {
         (type_parameters, type_arguments)
     }
 
+    /// Whether Go's checker would report `ObjectFlagsMembersResolved` for `t` at this point: its members were
+    /// resolved, or a member query was answered through a lazy member table (the port's replacement for
+    /// `resolveStructuredTypeMembers` on instantiated references, which leaves the flag unset). Read-only;
+    /// never resolves anything. Used by the Node API to report Go's objectFlags.
+    pub fn members_resolved_like_go(&self, t: P<Type>) -> bool {
+        t.object_flags().intersects(ObjectFlags::MembersResolved) || self.lazy_member_tables.contains_key(&t)
+    }
+
     // Returns nil if t has no lazy member table or it is still being prepared.
     pub(crate) fn get_ready_lazy_member_table(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMemberTable>> {
         if !self.lazy_members || !may_have_lazy_members(t) {

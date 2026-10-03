@@ -11,6 +11,9 @@ pub enum Value {
     Null,
     Bool(bool),
     Number(f64),
+    /// An exact integer to encode as written (never produced by `unmarshal`): Go `int`/`int64` values that f64
+    /// cannot hold, e.g. a `*int` option echoed back to an API client.
+    Integer(i64),
     String(String),
     Array(Vec<Value>),
     Object(OrderedMap<String, Value>),
@@ -99,6 +102,7 @@ fn write_value(out: &mut String, v: &Value, prefix: &str, indent: &str, depth: u
         Value::Null => out.push_str("null"),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         Value::Number(n) => out.push_str(&marshal_f64(*n)?),
+        Value::Integer(n) => out.push_str(&n.to_string()),
         Value::String(s) => write_string(out, s),
         Value::Array(items) => {
             out.push('[');

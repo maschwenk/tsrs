@@ -1,0 +1,30 @@
+run2-then-use            getSymbolsInScope equal {"okEqual":1,"differ":0,"run2":1}
+run2-then-use            getTypeOfSymbol equal {"okEqual":1,"strict":1,"differ":0}
+   unpaired: 0
+run2-then-use-ctl        getSymbolsInScope equal {"okEqual":1,"differ":0,"run2":1}
+run2-then-use-ctl        getTypeOfSymbol equal {"okEqual":1,"differ":0,"run2":1}
+   unpaired: 0
+extra-tail2              getTypeOfSymbol equal {"okEqual":1,"strict":1,"differ":0}
+   unpaired: 1
+extra-proc               getSymbolAtPosition equal {"okEqual":1,"strict":1,"differ":0}
+   unpaired: 1
+extra-proc-ctl           getSymbolAtPosition equal {"okEqual":1,"strict":1,"differ":0}
+   unpaired: 0
+greedy                   getSymbolsInScope differs {"okEqual":0,"differ":1}
+   unpaired: 0
+unordered-then-use       getSymbolsInScope equal {"okEqual":1,"differ":0,"unordered":1}
+unordered-then-use       getTypeOfSymbol equal {"okEqual":1,"strict":1,"differ":0}
+   unpaired: 0
+unordered-then-use-swap  getSymbolsInScope equal {"okEqual":1,"differ":0,"unordered":1}
+unordered-then-use-swap  getTypeOfSymbol inconclusive {"okEqual":0,"differ":0,"unverified":1}
+   unpaired: 0
+bucket                   getSymbolsInScope inconclusive {"okEqual":0,"differ":0,"unverified":1,"budget":1}
+   unpaired: 0
+bucket-wrong             getSymbolsInScope inconclusive {"okEqual":0,"differ":0,"unverified":1,"budget":1}
+   unpaired: 0
+bucket-small             getSymbolsInScope equal {"okEqual":1,"differ":0,"unordered":1}
+   unpaired: 0
+bucket-small-wrong       getSymbolsInScope differs {"okEqual":0,"differ":1}
+   unpaired: 0
+async-binary-only        getSourceFile differs {"okEqual":0,"differ":1}
+   unpaired: 0

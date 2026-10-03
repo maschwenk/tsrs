@@ -2042,7 +2042,9 @@ pub fn create_diagnostic_at_reference_syntax(
     message: &'static Message,
     args: &[&dyn Display],
 ) -> Option<P<Diagnostic>> {
-    let source_file = config.config_file.unwrap().source_file;
+    // Programs created through the API have references but no config file: the caller reports the diagnostic
+    // without a location (Go dereferences nil here).
+    let source_file = config.config_file?.source_file;
     for_each_ts_config_prop_array(Some(source_file), "references", |property| {
         let initializer = property.initializer().unwrap();
         if tsrs_ast::is_array_literal_expression(initializer) {
@@ -2596,12 +2598,12 @@ fn write_json(out: &mut String, value: &CompilerOptionsValue) {
             Tristate::False => "false",
             Tristate::True => "true",
         }),
-        CompilerOptionsValue::ModuleKind(v) => out.push_str(&(*v as i32).to_string()),
-        CompilerOptionsValue::ModuleResolutionKind(v) => out.push_str(&(*v as i32).to_string()),
-        CompilerOptionsValue::ModuleDetectionKind(v) => out.push_str(&(*v as i32).to_string()),
-        CompilerOptionsValue::ScriptTarget(v) => out.push_str(&(*v as i32).to_string()),
-        CompilerOptionsValue::JsxEmit(v) => out.push_str(&(*v as i32).to_string()),
-        CompilerOptionsValue::NewLineKind(v) => out.push_str(&(*v as i32).to_string()),
+        CompilerOptionsValue::ModuleKind(v) => out.push_str(&v.value().to_string()),
+        CompilerOptionsValue::ModuleResolutionKind(v) => out.push_str(&v.value().to_string()),
+        CompilerOptionsValue::ModuleDetectionKind(v) => out.push_str(&v.value().to_string()),
+        CompilerOptionsValue::ScriptTarget(v) => out.push_str(&v.value().to_string()),
+        CompilerOptionsValue::JsxEmit(v) => out.push_str(&v.value().to_string()),
+        CompilerOptionsValue::NewLineKind(v) => out.push_str(&v.value().to_string()),
         CompilerOptionsValue::WatchFileKind(v) => out.push_str(&(*v as i32).to_string()),
         CompilerOptionsValue::WatchDirectoryKind(v) => out.push_str(&(*v as i32).to_string()),
         CompilerOptionsValue::PollingKind(v) => out.push_str(&(*v as i32).to_string()),
