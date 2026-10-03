@@ -23,11 +23,11 @@ Reference commit: the same as the rest of the port (`ts-ref/tsc` = microsoft/Typ
 - Same porting rules as the checker (PORTING.md, BODY_PORTING.md): one Rust file per Go file, functions in Go
   order, snake_case Go names, `// file.go:LINE` origin markers, Go quirks kept, no "improvements", never
   special-case a test. Signatures come from `tools/gosig` (section 9).
-- **The default behavior does not change until the user signs off.** Released binaries are used as a type checker
-  in a large private monorepo, and a release must never start writing files. Every emit path stays behind
-  `TSRS_EMIT=1` (section 6). Do not remove the gate and do not tag releases from emit work.
-- Land on `main` in small commits (rebase, gates, `git push origin HEAD:main`, never force-push). Emit is additive
-  and gated, so partial waves can land as long as the gates hold:
+- **tsrs emits by default, like tsc.** The `TSRS_EMIT=1` gate (section 6) was removed once the user signed off;
+  `--noEmit` (which the 38k-file codebase passes everywhere) is the only thing that keeps files from being written.
+  Nothing may change what `--noEmit` prints or writes (nothing).
+- Land on `main` in small commits (rebase, gates, `git push origin HEAD:main`, never force-push). Emit is additive,
+  so partial waves can land as long as the gates hold:
   - conformance suite errors plus `--baselines types,symbols` byte-identical to the base binary, in the default
     mode and with `TSRS_LAZY_MEMBERS=0`, with single- and multi-threaded test programs (compare whole
     `target/test-results` trees);
