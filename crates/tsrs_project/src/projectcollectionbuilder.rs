@@ -1580,6 +1580,10 @@ impl ProjectCollectionBuilder {
                 entry.change(&mut |project: &mut Project| {
                     let old_host = project.host.clone();
                     let old_program = project.program;
+                    // Keeps the old program alive until `release_dropped_project_references` below has read it:
+                    // replacing `program_owner` drops the last reference to a program built earlier in the same
+                    // snapshot build, which frees it (and its shared data). Found with AddressSanitizer.
+                    let _old_program_owner = project.program_owner.clone();
                     let old_checker_pool = project.checker_pool.clone();
                     project.host = Some(new_compiler_host(&project.current_directory.clone(), project, self, logger.fork("CompilerHost")));
                     let result = project.create_program();
