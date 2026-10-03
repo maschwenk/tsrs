@@ -266,22 +266,39 @@ retracted as an upper bound. The codec lane's audit reproduced five false passes
 - an unresolved oracle disagreement next to one equal exchange still gave `equal`;
 - a blanket base64 re-encoding equated distinct strings.
 
-The comparator now passes `controls/run-controls.mjs` (18/18; 10/18 failed at `4c50d93`):
+Since the codec re-audit of `c3f1717`, further fixes apply, and the comparator passes
+`controls/run-controls.mjs`. That's 32/32: the 18 earlier controls plus the 14 codec `scen2` cases.
 
-- Order relaxation only at the exact array paths where the two oracle runs are permutations of each other. The
-  request must match. Element matching uses the per-process handle mapping, with rollback when a trial fails.
-- Unresolved oracle disagreement, differing hashes over 4 MiB, a match budget overrun, and oracle exchanges
-  without a candidate counterpart are `unverified`, which makes the method `inconclusive`.
-- Base64 is normalized only for binary methods, and only when canonical.
+- Order relaxation only at the exact array paths where the two oracle runs are permutations of each other.
+  The request must match. Elements are matched by a bounded backtracking search on the per-process handle
+  mapping, with rollback when a trial fails.
+- Per-process oracle history lock (N1). Once an exchange is accepted against only one oracle run, accepting a
+  later exchange against the other run is `inconclusive`.
+- `unverified` covers unresolved oracle disagreement, differing hashes over 4 MiB, a match budget overrun, oracle
+  exchanges without a candidate counterpart, and surplus candidate exchanges, processes and tests (N3). Any of
+  these makes the method `inconclusive`.
+- Binary-response methods are pinned from the upstream schema (`SourceFileResponse` results in
+  `proto.generated.ts`), not learned from captures (N4). Base64 is normalized only for those methods and only
+  when canonical.
 - Counter-suffix renaming applies only to the `__@id@N` and `__"…"pattern@N` forms.
 
-Recomputed on the same `b2769b8` captures (no new capture). This is still provisional evidence, not a final
-gate:
+Known limits:
 
-- equal: 159 methods; 4508 successful exchanges, of which 4493 strict and 15 equal-unordered (all
-  `getSymbolsInScope`, paths `$` and `$.result`). 4 are byte-equal by hash only.
-- inconclusive: 2 methods, `release` and `parseCommandLine` (1272/1273 and 315/316 strict). Each has 1
-  unverified exchange after the profiling test's divergence.
+- Swapping handles that occur only once is indistinguishable from renaming them.
+- Hash-only (over 4 MiB) exchanges do not feed the handle mapping.
+- Callbacks are outside per-method matching.
+- `unsupported` takes precedence over other statuses.
+- Work-tree paths are only normalized inside binary-method payloads, so captures must use the same label path.
+
+Recomputed with comparator `c8ffcd0` on the same `b2769b8` captures (no new capture). Runtime is about 10 s.
+This is still provisional evidence, not a final gate:
+
+- equal: 159 methods, 4508 successful exchanges: 4477 strict, 16 equal to oracle run 2 under the history lock,
+  and 15 equal-unordered (`getSymbolsInScope`). 4 are hash-only.
+- inconclusive: 2 methods, each with 1 exchange the oracle had but the candidate did not and 1 surplus candidate
+  exchange, both from the profiling test's divergence.
+  - `release`: 1264 strict, 8 run-2 matches.
+  - `parseCommandLine`: 315 strict.
 - error-only: 1, `getCurrentLanguageServerSnapshot`.
 - unsupported: 3, the profiling methods.
 - differ: 7, `createSnapshot`, `updateSnapshot`, `cleanBuild`, `getDefaultProjectForFile`, `getTypeAtLocation`,
@@ -289,7 +306,8 @@ gate:
 
 Total: 159 + 2 + 1 + 3 + 7 = 172.
 
-All 9 earlier negative controls on the real captures are still detected.
+All 9 real-capture controls are still detected. The 8 value drifts give `differs`. The handle drift gives
+`inconclusive` for `getNonMissingTypeOfSymbol`, because the generator test's oracle runs disagree on ids.
 
 VS Code URI roots (`probe-uri-filenames.ts`): 80 runs covering both binaries × sync/async × 4 input orders × 5
 repetitions.
