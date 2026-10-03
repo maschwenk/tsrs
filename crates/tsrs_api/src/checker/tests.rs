@@ -44,13 +44,31 @@ export type M = { [K in "a" | "b"]: K };
 export type C<T> = T extends string ? 1 : 2;
 export const lit = "hi" as const;
 export const fn = <T,>(v: T) => v;
+export const o = { box };
+export { ünïcödé as uni };
+export type IA<T, K extends keyof T> = T[K];
+export async function aw(): Promise<number> { return 1; }
+export let maybe: string | undefined;
+export const doubled = [1, 2].map(x => x * 2);
+export const cb: (n: number) => void = (n) => {};
+export function withThis(this: Dog, a: number) { return a; }
+export function rest(a: string, ...xs: number[]) { return xs; }
+export const arr: number[] = [];
+export type S<T> = T extends string ? Box<T> : never;
+export interface WithDefault<T = string> { v: T }
+export function useAll() { return box.value + p[1].toString(); }
+export type Up = Uppercase<"a">;
+export type TL = `x${string}`;
+export const big = 10n;
 "#;
 
 const TYPES: &str = r#"export interface Box<T> { value: T; [key: string]: unknown }
 export declare function make<T>(v: T): Box<T>;
 "#;
 
-const TSCONFIG: &str = r#"{ "compilerOptions": { "strict": true, "target": "es2022", "module": "esnext", "moduleResolution": "bundler" }, "files": ["main.ts", "types.d.ts"] }"#;
+const TSCONFIG: &str = r#"{ "compilerOptions": { "strict": true, "target": "es2022", "module": "esnext", "moduleResolution": "bundler" }, "files": ["main.ts", "types.d.ts", "other.ts"] }"#;
+
+const OTHER: &str = "export const helper = 1;\n";
 
 struct TestHost {
     snapshot_host: Arc<SnapshotHost>,
@@ -215,6 +233,11 @@ impl CheckerHost for TestHost {
         node_table(file).get(idx.wrapping_sub(1)).copied().ok_or_else(|| CheckerError::client("stale node handle"))
     }
 
+    fn clone_snapshot_with_auto_imports(&self, base: &Snapshot, file_name: &str) -> CheckerResult<Arc<Snapshot>> {
+        let uri = tsrs_ls::lsconv::file_name_to_document_uri(file_name);
+        Ok(self.snapshot_host.clone_snapshot_with_auto_imports(&Context::background(), base, &uri, None))
+    }
+
     fn encode_node(&self, node: P<Node>) -> CheckerResult<Vec<u8>> {
         // Test stand-in for the codec: the node kind is enough to check the handler built a node.
         Ok(format!("{:?}", node.kind()).into_bytes())
@@ -262,7 +285,7 @@ fn utf16_pos(text: &str, needle: &str) -> usize {
 }
 
 fn fixture() -> TestHost {
-    TestHost::new(&[("/p/tsconfig.json", TSCONFIG), ("/p/main.ts", MAIN), ("/p/types.d.ts", TYPES)])
+    TestHost::new(&[("/p/tsconfig.json", TSCONFIG), ("/p/main.ts", MAIN), ("/p/types.d.ts", TYPES), ("/p/other.ts", OTHER)])
 }
 
 const MAIN_FILE: &str = "/p/main.ts";
@@ -603,7 +626,253 @@ fn replaced_api_checker_makes_old_handles_stale() {
 fn unowned_methods_fall_through() {
     let h = fixture();
     let params = json::unmarshal(&h.sp("")).unwrap();
-    for method in ["getCompletionsAtPosition", "getImportAdderEdits", "getSourceFile", "createSnapshot"] {
+    for method in ["getSourceFile", "createSnapshot", "emit", "printNode"] {
         assert!(handle(&h, method, &params).is_none(), "{method}");
     }
+}
+
+impl TestHost {
+    /// Handle of the `levels`-th ancestor of the token touching `needle`.
+    fn ancestor_handle_at(&self, needle: &str, levels: usize) -> String {
+        let sf = self.program().get_source_file(MAIN_FILE).unwrap();
+        let mut node = tsrs_astnav::get_touching_property_name(sf, MAIN.find(needle).unwrap() as i32);
+        for _ in 0..levels {
+            node = node.parent().unwrap();
+        }
+        self.node_handle(node).unwrap()
+    }
+
+    fn declared(&self, needle: &str) -> Value {
+        let s = self.symbol_at(MAIN_FILE, MAIN, needle);
+        self.ok("getDeclaredTypeOfSymbol", &self.sp(&format!(r#""symbol":{}"#, self.symbol_ref(&s))))
+    }
+
+    fn sig0(&self, t: &Value) -> Value {
+        arr(&self.ok("getSignaturesOfType", &self.sp(&format!(r#""type":{},"kind":0"#, num(t, "id")))))[0].clone()
+    }
+
+    fn tid(&self, method: &str, field_name: &str, t: &Value) -> Value {
+        self.ok(method, &self.sp(&format!(r#""{field_name}":{}"#, num(t, "id"))))
+    }
+}
+
+#[test]
+fn locations_batches_and_symbol_relations() {
+    let h = fixture();
+    let b = h.handle_at(MAIN_FILE, MAIN, "box.value");
+    let pp = h.handle_at(MAIN_FILE, MAIN, "p[1]");
+    let syms = h.ok("getSymbolsAtLocations", &h.sp(&format!(r#""locations":["{b}","{pp}"]"#)));
+    assert_eq!(names(&syms), ["box", "p"]);
+    let one = h.ok("getSymbolAtLocation", &h.sp(&format!(r#""location":"{b}""#)));
+    assert_eq!(str_of(field(&one, "name")), "box");
+    let t = h.ok("getTypeAtLocation", &h.sp(&format!(r#""location":"{b}""#)));
+    assert_eq!(h.type_string(&t), "Box<number>");
+    let ts = h.ok("getTypeAtLocations", &h.sp(&format!(r#""locations":["{b}","{pp}"]"#)));
+    assert_eq!(arr(&ts).iter().map(|t| h.type_string(t)).collect::<Vec<_>>(), ["Box<number>", "Pair<string, U>"]);
+    let modules = h.ok("getSymbolsOfSourceFiles", &h.sp(r#""files":["/p/main.ts",{"uri":"file:///p/types.d.ts"}]"#));
+    assert_eq!(names(&modules), ["\"/p/main\"", "\"/p/types\""]);
+    // File-owned relations resolve without a snapshot.
+    let dog_t = h.declared("Dog extends");
+    let legs = arr(&h.ok("getPropertiesOfType", &h.sp(&format!(r#""type":{}"#, num(&dog_t, "id")))))[0].clone();
+    let parent = h.ok("getParentOfSymbol", &format!(r#"{{"symbol":{}}}"#, h.symbol_ref(&legs)));
+    assert_eq!(str_of(field(&parent, "name")), "Dog");
+    let module = h.ok("getSymbolOfSourceFile", &h.sp(&format!(r#""file":"{MAIN_FILE}""#)));
+    let exports = h.ok("getExportsOfSymbol", &format!(r#"{{"symbol":{}}}"#, h.symbol_ref(&module)));
+    let export_names = names(&exports);
+    assert_eq!(&export_names[..3], ["Pair", "U", "over"], "file-owned tables are ordered by declaration position");
+    assert!(export_names.iter().any(|n| n == "uni"));
+    // Local symbol -> export symbol.
+    let scope = h.ok("getSymbolsInScope", &h.sp(&format!(r#""file":"{MAIN_FILE}","position":{},"meaning":{}"#, utf16_pos(MAIN, "box.value"), tsrs_ast::SymbolFlags::Value.bits())));
+    let local_box = arr(&scope).iter().find(|s| str_of(field(s, "name")) == "box").unwrap().clone();
+    let es = h.ok("getExportSymbolOfSymbol", &format!(r#"{{"symbol":{}}}"#, h.symbol_ref(&local_box)));
+    let es2 = h.ok("getExportSymbolOfSymbolForChecker", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&local_box))));
+    assert_eq!(str_of(field(&es2, "name")), "box");
+    if es != Value::Null {
+        assert_eq!(str_of(field(&es, "name")), "box");
+    }
+    // Shorthand, export specifier, references, narrowed type at location.
+    let shorthand = h.ancestor_handle_at("box };", 1);
+    let v = h.ok("getShorthandAssignmentValueSymbol", &h.sp(&format!(r#""location":"{shorthand}""#)));
+    assert_eq!(str_of(field(&v, "name")), "box");
+    let spec = h.ancestor_handle_at("ünïcödé as uni", 1);
+    let local = h.ok("getExportSpecifierLocalTargetSymbol", &h.sp(&format!(r#""location":"{spec}""#)));
+    assert_eq!(str_of(field(&local, "name")), "ünïcödé");
+    let box_sym = h.symbol_at(MAIN_FILE, MAIN, "box:");
+    let refs = h.ok("getReferencesToSymbolInFile", &h.sp(&format!(r#""file":"{MAIN_FILE}","symbol":{}"#, h.symbol_ref(&box_sym))));
+    assert!(arr(&refs).len() >= 3, "{}", json::marshal(&refs).unwrap());
+    let at = h.ok("getTypeOfSymbolAtLocation", &h.sp(&format!(r#""symbol":{},"location":"{b}""#, h.symbol_ref(&box_sym))));
+    assert_eq!(h.type_string(&at), "Box<number>");
+    let maybe = h.symbol_at(MAIN_FILE, MAIN, "maybe:");
+    let nm = h.ok("getNonMissingTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&maybe))));
+    assert_eq!(h.type_string(&nm), "string | undefined");
+    // Instantiated property -> target symbol; type of property.
+    let box_t = h.type_at(MAIN_FILE, MAIN, "box:");
+    let value = h.ok("getPropertyOfType", &h.sp(&format!(r#""type":{},"name":"value""#, num(&box_t, "id"))));
+    let target = h.ok("getTargetSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&value))));
+    assert_eq!(str_of(field(&target, "name")), "value");
+    let vt = h.ok("getTypeOfPropertyOfType", &h.sp(&format!(r#""type":{},"name":"value""#, num(&box_t, "id"))));
+    assert_eq!(h.type_string(&vt), "number");
+    let sym_of_type = h.tid("getSymbolOfType", "objectId", &box_t);
+    assert_eq!(str_of(field(&sym_of_type, "name")), "Box");
+}
+
+#[test]
+fn type_structure_accessors() {
+    let h = fixture();
+    let box_target = h.tid("getTargetOfType", "objectId", &h.type_at(MAIN_FILE, MAIN, "box:"));
+    assert_eq!(h.tid("getOuterTypeParametersOfType", "objectId", &box_target), Value::Null);
+    let local = h.tid("getLocalTypeParametersOfType", "objectId", &box_target);
+    assert_eq!(h.type_string(&arr(&local)[0]), "T");
+    let this_t = h.tid("getThisTypeOfType", "objectId", &box_target);
+    assert_eq!(field(&this_t, "isThisType"), &Value::Bool(true));
+    let p = h.type_at(MAIN_FILE, MAIN, "p:");
+    let alias_args = h.tid("getAliasTypeArgumentsOfType", "objectId", &p);
+    assert_eq!(arr(&alias_args).iter().map(|t| h.type_string(t)).collect::<Vec<_>>(), ["string", "U"]);
+    let ia = h.declared("IA<T, K");
+    assert_eq!(h.type_string(&h.tid("getObjectTypeOfType", "objectId", &ia)), "T");
+    let k = h.tid("getIndexTypeOfType", "objectId", &ia);
+    assert_eq!(h.type_string(&k), "K");
+    let k_base = h.tid("getBaseConstraintOfType", "type", &k);
+    assert_eq!(h.type_string(&k_base), "string | number | symbol");
+    let c = h.declared("C<T> =");
+    assert_eq!(h.type_string(&h.tid("getExtendsTypeOfType", "objectId", &c)), "string");
+    assert_eq!(h.type_string(&h.tid("getFalseTypeOfConditionalType", "objectId", &c)), "2");
+    let m = h.declared("M = ");
+    assert_eq!(h.type_string(&h.tid("getTemplateTypeOfMappedType", "objectId", &m)), "K");
+    let lit = h.type_at(MAIN_FILE, MAIN, "lit =");
+    let fresh = h.tid("getFreshTypeOfType", "objectId", &lit);
+    assert_eq!(h.type_string(&fresh), "\"hi\"");
+    let wd = h.declared("WithDefault<T");
+    let tp = arr(&h.tid("getTypeParametersOfType", "objectId", &wd))[0].clone();
+    assert_eq!(h.type_string(&h.tid("getDefaultFromTypeParameter", "objectId", &tp)), "string");
+    let up = h.declared("Up = ");
+    assert_eq!(h.type_string(&up), "\"A\"");
+    let tl = h.declared("TL = ");
+    assert_eq!(field(&tl, "texts"), &json::unmarshal(r#"["x",""]"#).unwrap());
+    assert_eq!(arr(&h.tid("getTypesOfType", "objectId", &tl)).iter().map(|t| h.type_string(t)).collect::<Vec<_>>(), ["string"]);
+    // Substitution type: `T` in the true branch of `T extends string ? Box<T> : never`.
+    let t_ref = h.ancestor_handle_at("T> : never", 1);
+    let sub = h.ok("getTypeFromTypeNode", &h.sp(&format!(r#""location":"{t_ref}""#)));
+    assert_ne!(num(&sub, "flags") as u32 & tsrs_checker::TypeFlags::Substitution.bits(), 0);
+    assert_eq!(num(&sub, "baseType"), num(&h.tid("getBaseTypeOfType", "objectId", &sub), "id"));
+    assert_eq!(h.type_string(&h.tid("getBaseTypeOfType", "objectId", &sub)), "T");
+    assert_eq!(h.type_string(&h.tid("getConstraintOfType", "objectId", &sub)), "string");
+    let arr_node = h.ancestor_handle_at("number[] = []", 1);
+    let arr_t = h.ok("getTypeFromTypeNode", &h.sp(&format!(r#""location":"{arr_node}""#)));
+    assert_eq!(h.type_string(&arr_t), "number[]");
+    assert_eq!(h.tid("isArrayType", "type", &arr_t), Value::Bool(true));
+    assert_eq!(h.tid("isArrayLikeType", "type", &arr_t), Value::Bool(true));
+    assert_eq!(h.tid("isArrayType", "type", &h.type_at(MAIN_FILE, MAIN, "box:")), Value::Bool(false));
+}
+
+#[test]
+fn checker_operations_on_types_and_signatures() {
+    let h = fixture();
+    let aw = h.type_at(MAIN_FILE, MAIN, "aw()");
+    let ret = h.tid("getReturnTypeOfSignature", "objectId", &h.sig0(&aw));
+    assert_eq!(h.type_string(&ret), "Promise<number>");
+    assert_eq!(h.type_string(&h.tid("getAwaitedType", "type", &ret)), "number");
+    let maybe = h.type_at(MAIN_FILE, MAIN, "maybe:");
+    assert_eq!(h.type_string(&h.tid("getNonNullableType", "objectId", &maybe)), "string");
+    let lit = h.type_at(MAIN_FILE, MAIN, "lit =");
+    assert_eq!(h.type_string(&h.tid("getWidenedType", "type", &lit)), "\"hi\"");
+    let num_t = h.ok("getNumberType", &h.sp(""));
+    assert_eq!(h.type_string(&h.tid("getApparentType", "objectId", &num_t)), "Number");
+    let u = h.declared("U = ");
+    assert_eq!(h.type_string(&h.tid("getReducedType", "objectId", &u)), "U");
+    let str_t = h.ok("getStringType", &h.sp(""));
+    let apparent = h.tid("getApparentPropertiesOfType", "objectId", &str_t);
+    assert!(names(&apparent).iter().any(|n| n == "length"));
+    // Signatures: this parameter, rest type, type parameter at position, target of instantiation.
+    let with_this = h.sig0(&h.type_at(MAIN_FILE, MAIN, "withThis("));
+    let this_p = h.ok("getThisParameterOfSignature", &h.sp(&format!(r#""objectId":{}"#, num(&with_this, "id"))));
+    assert_eq!(str_of(field(&this_p, "name")), "this");
+    let rest = h.sig0(&h.type_at(MAIN_FILE, MAIN, "rest("));
+    assert_eq!(h.type_string(&h.ok("getRestTypeOfSignature", &h.sp(&format!(r#""signature":{}"#, num(&rest, "id"))))), "number", "rest type is the rest element type (tryGetRestTypeOfSignature)");
+    let tpa = h.ok("getTypeParameterAtPosition", &h.sp(&format!(r#""signature":{},"index":1"#, num(&rest, "id"))));
+    assert_eq!(h.type_string(&tpa), "number", "getTypeAtPosition of a rest position is the element type");
+    let make_call = h.ancestor_handle_at("make(1)", 1);
+    let resolved = h.ok("getResolvedSignature", &h.sp(&format!(r#""location":"{make_call}""#)));
+    assert_ne!(num(&resolved, "target"), 0);
+    let target = h.ok("getTargetOfSignature", &h.sp(&format!(r#""objectId":{}"#, num(&resolved, "id"))));
+    assert_eq!(num(&target, "id"), num(&resolved, "target"));
+    let decl = str_of(&arr(field(&h.symbol_at(MAIN_FILE, MAIN, "over(x: string)"), "declarations"))[0]);
+    let from_decl = h.ok("getSignatureFromDeclaration", &h.sp(&format!(r#""location":"{decl}""#)));
+    assert_eq!(h.type_string(&h.tid("getReturnTypeOfSignature", "objectId", &from_decl)), "string");
+    // Contextual typing.
+    let arrow = h.ancestor_handle_at("n) => {}", 2);
+    let ctx = h.ok("getContextualType", &h.sp(&format!(r#""location":"{arrow}""#)));
+    assert_eq!(h.type_string(&ctx), "(n: number) => void");
+    assert_eq!(h.ok("isContextSensitive", &h.sp(&format!(r#""location":"{arrow}""#))), Value::Bool(true));
+    let one = h.ancestor_handle_at("1, 2]", 0);
+    assert_eq!(h.ok("isContextSensitive", &h.sp(&format!(r#""location":"{one}""#))), Value::Bool(false));
+    let map_call = h.ancestor_handle_at("map(x", 2);
+    let arg_ctx = h.ok("getContextualTypeForArgument", &h.sp(&format!(r#""location":"{map_call}","index":0"#)));
+    assert_eq!(h.type_string(&arg_ctx), "(value: number, index: number, array: number[]) => number");
+    // Remaining intrinsics and flags-driven display.
+    for (method, expected) in [("getBooleanType", "boolean"), ("getVoidType", "void"), ("getUndefinedType", "undefined"), ("getNullType", "null"), ("getBigIntType", "bigint")] {
+        assert_eq!(h.type_string(&h.ok(method, &h.sp(""))), expected, "{method}");
+    }
+    let big = h.type_at(MAIN_FILE, MAIN, "big =");
+    assert_eq!(field(&big, "value"), &Value::String("10".to_string()));
+    let no_trunc = h.ok("typeToString", &h.sp(&format!(r#""type":{},"flags":{}"#, num(&u, "id"), tsrs_checker::TypeFormatFlags::InTypeAlias.bits())));
+    assert_eq!(str_of(&no_trunc), "string | number");
+}
+
+#[test]
+fn language_service_backed_methods() {
+    let h = fixture();
+    // getSignatureUsages: usages of the overloaded `over` (declarations excluded, call attached).
+    let over = h.symbol_at(MAIN_FILE, MAIN, "over(x: string)");
+    let decl = str_of(&arr(field(&over, "declarations"))[0]);
+    let usages = h.ok("getSignatureUsages", &h.sp(&format!(r#""signatureDecl":"{decl}""#)));
+    let usages = arr(&usages);
+    assert_eq!(usages.len(), 1, "{}", json::marshal(&Value::Array(usages.clone())).unwrap());
+    assert_eq!(str_of(field(&usages[0], "call")), h.ancestor_handle_at("over(42)", 1));
+    // getReferencedSymbolsForNode on the `box` declaration name.
+    let name = h.handle_at(MAIN_FILE, MAIN, "box:");
+    let pos = MAIN.find("box:").unwrap();
+    let refs = h.ok("getReferencedSymbolsForNode", &h.sp(&format!(r#""node":"{name}","position":{pos}"#)));
+    let entry = &arr(&refs)[0];
+    assert_eq!(str_of(field(field(entry, "symbol"), "name")), "box");
+    assert!(arr(field(entry, "references")).len() >= 3);
+    // Completions after `box.` with symbols.
+    let at = utf16_pos(MAIN, "box.value") + 4;
+    let list = h.ok("getCompletionsAtPosition", &h.sp(&format!(r#""file":"{MAIN_FILE}","position":{at},"includeSymbol":true"#)));
+    let value = arr(field(&list, "entries")).iter().find(|e| str_of(field(e, "name")) == "value").expect("value completion").clone();
+    assert_eq!(str_of(field(field(&value, "symbol"), "name")), "value");
+    assert_eq!(field(&list, "isIncomplete"), &Value::Bool(false));
+    let missing = h.ok("getCompletionsAtPosition", &h.sp(&format!(r#""file":"/p/nope.ts","position":0"#)));
+    assert_eq!(missing, Value::Null);
+    // Import adder: import `helper` from ./other into main.ts.
+    let helper = h.symbol_at("/p/other.ts", OTHER, "helper");
+    let edits = h.ok("getImportAdderEdits", &h.sp(&format!(r#""file":"{MAIN_FILE}","actions":[{{"kind":"importSymbol","symbol":{}}}]"#, h.symbol_ref(&helper))));
+    let edits = arr(&edits);
+    assert_eq!(edits.len(), 1, "{}", json::marshal(&Value::Array(edits.clone())).unwrap());
+    assert!(str_of(field(&edits[0], "newText")).contains("helper"), "{}", json::marshal(&edits[0]).unwrap());
+    let bad = h.call("getImportAdderEdits", &h.sp(&format!(r#""file":"{MAIN_FILE}","actions":[{{"kind":"nope"}}]"#))).unwrap_err();
+    assert_eq!(bad.kind, CheckerErrorKind::Client);
+}
+
+#[test]
+fn core_session_hook_maps_errors_and_encodings() {
+    use crate::handler::{ErrorKind, Handler};
+    let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(Vec::<(String, String)>::new(), true)));
+    let session = crate::session::Session::new(crate::session::SessionOptions {
+        cwd: "/".to_string(),
+        default_library_path: bundled::lib_path(),
+        fs,
+        binary_responses: false,
+        run_external_code: false,
+    });
+    let err = session.handle_request("getTypeAtPosition", br#"{"snapshot":1,"project":"/p/tsconfig.json","file":"/p/a.ts","position":0}"#).unwrap_err();
+    assert_eq!(err.kind, ErrorKind::ClientError, "{err}");
+    let err = session.handle_request("getTypeAtPosition", br#"{"snapshot":"x"}"#).unwrap_err();
+    assert_eq!(err.kind, ErrorKind::InvalidRequest, "{err}");
+    let err = session.handle_request("getTypeAtPosition", b"[1]").unwrap_err();
+    assert_eq!(err.kind, ErrorKind::InvalidRequest, "{err}");
+    assert_eq!(super::base64_encode(b""), "");
+    assert_eq!(super::base64_encode(b"f"), "Zg==");
+    assert_eq!(super::base64_encode(b"fo"), "Zm8=");
+    assert_eq!(super::base64_encode(b"foobar"), "Zm9vYmFy");
 }

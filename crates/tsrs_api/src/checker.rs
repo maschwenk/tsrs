@@ -8,6 +8,7 @@
 // `SessionHost` adapts core's `Session` to it.
 
 mod dispatch;
+mod handlers_ls;
 mod handlers_symbols;
 mod handlers_types;
 pub mod host;
@@ -27,6 +28,7 @@ use tsrs_compiler::Program;
 use tsrs_core::context::Context;
 use tsrs_core::json::Value;
 use tsrs_core::P;
+use tsrs_project::Snapshot;
 
 pub use dispatch::{is_checker_method, CHECKER_METHODS};
 pub use host::{CachedFileScope, CheckerError, CheckerErrorKind, CheckerHost, CheckerResponse, CheckerResult, SnapshotScope};
@@ -126,6 +128,12 @@ impl CheckerHost for SessionHost<'_> {
 
     fn encode_node(&self, _node: P<Node>) -> CheckerResult<Vec<u8>> {
         Err(CheckerError::unsupported(CODEC_PENDING))
+    }
+
+    fn clone_snapshot_with_auto_imports(&self, base: &Snapshot, file_name: &str) -> CheckerResult<Arc<Snapshot>> {
+        let file_name = tsrs_core::tspath::get_normalized_absolute_path(file_name, self.session.current_directory());
+        let uri = tsrs_ls::lsconv::file_name_to_document_uri(&file_name);
+        Ok(self.session.snapshot_host.clone_snapshot_with_auto_imports(&self.context(), base, &uri, None))
     }
 }
 

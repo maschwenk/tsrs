@@ -204,30 +204,7 @@ impl<'h> Setup<'h> {
 
     /// Go `checkerSetup.resolveSymbolHandle`.
     pub(crate) fn resolve_symbol(&self, r: &SymbolReference) -> CheckerResult<P<Symbol>> {
-        match r.kind {
-            SYMBOL_OWNER_KIND_SNAPSHOT => {
-                if r.snapshot != self.sd.scope.handle || r.file.is_some() {
-                    return Err(CheckerError::client("snapshot symbol reference does not match the requested checker"));
-                }
-                self.sd.scope.registry.resolve_symbol(r.id)
-            }
-            SYMBOL_OWNER_KIND_FILE => {
-                if r.file.is_none() || r.snapshot != 0 || !r.project.is_empty() {
-                    return Err(CheckerError::client("invalid file symbol reference"));
-                }
-                let path = r.file_path().unwrap_or_default();
-                let source_file = self.program.get_source_file_by_path(&Path::new(path));
-                let matches = match source_file {
-                    Some(f) => Some(&self.sd.host.source_file_descriptor(f)?) == r.file.as_ref(),
-                    None => false,
-                };
-                if !matches {
-                    return Err(CheckerError::client("source file is not part of the requested program"));
-                }
-                source_file_symbol(source_file.unwrap(), r.id).ok_or_else(|| CheckerError::client(format!("symbol handle {} not found in source file", r.id)))
-            }
-            kind => Err(CheckerError::client(format!("invalid symbol reference kind {kind}"))),
-        }
+        resolve_symbol_for_program(&self.sd, self.program, r)
     }
 
     pub(crate) fn source_file(&self, file: &DocumentIdentifier) -> CheckerResult<P<SourceFile>> {
@@ -427,3 +404,32 @@ const TYPE_RESPONSE_FIELD_ORDER: &[&str] = &[
     "aliasSymbol",
     "symbol",
 ];
+
+/// Go `checkerSetup{sd, snapshot, program, projectID}.resolveSymbolHandle(ref)`: snapshot-owned references
+/// must name this snapshot; file-owned references must name a file of `program` with an identical descriptor.
+pub(crate) fn resolve_symbol_for_program(sd: &SnapshotCtx, program: &'static Program, r: &SymbolReference) -> CheckerResult<P<Symbol>> {
+    match r.kind {
+        SYMBOL_OWNER_KIND_SNAPSHOT => {
+            if r.snapshot != sd.scope.handle || r.file.is_some() {
+                return Err(CheckerError::client("snapshot symbol reference does not match the requested checker"));
+            }
+            sd.scope.registry.resolve_symbol(r.id)
+        }
+        SYMBOL_OWNER_KIND_FILE => {
+            if r.file.is_none() || r.snapshot != 0 || !r.project.is_empty() {
+                return Err(CheckerError::client("invalid file symbol reference"));
+            }
+            let path = r.file_path().unwrap_or_default();
+            let source_file = program.get_source_file_by_path(&Path::new(path));
+            let matches = match source_file {
+                Some(f) => Some(&sd.host.source_file_descriptor(f)?) == r.file.as_ref(),
+                None => false,
+            };
+            if !matches {
+                return Err(CheckerError::client("source file is not part of the requested program"));
+            }
+            source_file_symbol(source_file.unwrap(), r.id).ok_or_else(|| CheckerError::client(format!("symbol handle {} not found in source file", r.id)))
+        }
+        kind => Err(CheckerError::client(format!("invalid symbol reference kind {kind}"))),
+    }
+}

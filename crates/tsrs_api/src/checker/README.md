@@ -54,13 +54,32 @@ if let Some(result) = tsrs_api::checker::handle(&host, method, &params) { /* map
 
 ## Coverage
 
-`coverage_table.rs` has one row per `Method` constant in pinned `proto.go` (172), with the owning lane and
-this lane's status; `tests.rs` checks the table against `ts-ref` when present and checks every row marked
-`Implemented`/`Tested` is actually dispatched. Status meanings: `Planned` (owned, not dispatched),
-`Implemented` (dispatched, no dedicated real-program test yet), `Tested` (dispatched and exercised by a
-real-program test in `tests.rs`).
+`coverage_table.rs` has one row per `Method` constant in pinned `proto.go` (172, same order as core's
+`methods.rs`). 115 are owned by this lane (the 111 checker/symbol/type/signature methods plus the four
+language-service backed ones: `getCompletionsAtPosition`, `getReferencedSymbolsForNode`,
+`getSignatureUsages`, `getImportAdderEdits`). `tests.rs` checks the table against core's inventory and
+`ts-ref/tsc/internal/api/proto.go` (when checked out) and that every `Implemented`/`Tested` row is
+dispatched.
 
-Not owned here (recorded for the integration lead): the four language-service backed methods
-`getImportAdderEdits`, `getReferencedSymbolsForNode`, `getSignatureUsages`, `getCompletionsAtPosition`
-(lane `Ls`), and all snapshot / program / source-file / diagnostics / emit / config / build / module
-resolution / print methods (lane `Other`).
+Status today: all 115 are `Tested` = dispatched and exercised by a real-program Rust test (real
+`tsrs_project` snapshot of a tsconfig project + the program's persistent API checker; fixtures cover
+generics, unions, aliases, overloads, `.d.ts` imports, labeled tuples, mapped / conditional /
+substitution / template-literal types, enums, JSDoc, unicode identifiers and UTF-16 positions after
+non-BMP text, plus stale / cross-project / released / malformed handle validation).
+
+What `Tested` does **not** mean yet (open gaps, for the integration lead):
+
+* No Node-client or pinned-Go parity run yet (parity lane). Field order and nullability follow the Go
+  structs, but byte-for-byte response comparison against tsgo has not been done.
+* Through core's `Session` every handler that returns or accepts a node handle, a source-file descriptor
+  or an encoded node fails with an explicit `api: unsupported` until `tsrs_api_codec` provides node
+  index tables / `EncodeNode` and core provides `newSourceFileDescriptor` / the source-file cache
+  (`SessionHost` in `checker.rs`). In practice that is nearly every method (symbol responses carry
+  declaration handles). The unit tests use a test-only node table instead.
+* File-owned symbol references without a snapshot (`getParentOfSymbol`, `getMembersOfSymbol`,
+  `getExportsOfSymbol`, `getExportSymbolOfSymbol` on `kind: 0` references) need core's
+  `getCachedSourceFile` lease cache.
+* `getConstraintOfTypeParameter` on a conditional type's check type returns a type parameter in tsrs; not
+  yet compared with tsgo.
+* Panics from deep checker invariants are converted to errors by core's `catch_unwind`; the API checker
+  is not discarded afterwards (Go keeps it too).

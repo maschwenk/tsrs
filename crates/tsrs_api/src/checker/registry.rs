@@ -33,6 +33,9 @@ struct RegistryState {
     // Go `symbolCanonicalProjects`: first writer wins.
     symbol_projects: FxHashMap<u64, String>,
     projects: FxHashMap<String, ProjectRegistry>,
+    // Snapshots derived during a request (auto-import preparation) whose symbols were handed out;
+    // dereferenced on release so those pointers stay valid exactly as long as the registry.
+    retained: Vec<std::sync::Arc<tsrs_project::Snapshot>>,
 }
 
 #[derive(Default)]
@@ -52,6 +55,23 @@ impl CheckerRegistry {
         st.symbols = FxHashMap::default();
         st.symbol_projects = FxHashMap::default();
         st.projects = FxHashMap::default();
+        let retained = std::mem::take(&mut st.retained);
+        drop(st);
+        for snapshot in retained {
+            snapshot.deref();
+        }
+    }
+
+    /// Takes over one reference of `snapshot` until `release` (see `retained`).
+    pub fn retain_snapshot(&self, snapshot: std::sync::Arc<tsrs_project::Snapshot>) -> CheckerResult<()> {
+        let mut st = self.lock();
+        if st.released {
+            drop(st);
+            snapshot.deref();
+            return Err(CheckerError::client("snapshot has been released"));
+        }
+        st.retained.push(snapshot);
+        Ok(())
     }
 
     pub fn is_released(&self) -> bool {

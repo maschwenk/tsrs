@@ -129,4 +129,8 @@ pub trait CheckerHost {
 
     /// Go `encoder.EncodeNode(node, nil)` for a synthesized node.
     fn encode_node(&self, node: P<Node>) -> CheckerResult<Vec<u8>>;
+
+    /// Go `snapshotHost.CloneSnapshotWithAutoImports(ctx, base, file.ToURI(cwd), nil)`. The returned
+    /// snapshot carries one reference owned by the caller (Go `defer preparedSnapshot.Deref()`).
+    fn clone_snapshot_with_auto_imports(&self, base: &Snapshot, file_name: &str) -> CheckerResult<Arc<Snapshot>>;
 }

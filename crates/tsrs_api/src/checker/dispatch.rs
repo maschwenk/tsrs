@@ -3,6 +3,7 @@
 
 use tsrs_core::json::Value;
 
+use super::handlers_ls as ls;
 use super::handlers_symbols::{self as sym, AliasQuery, SymbolProperty, SymbolTableProperty, SymbolTypeQuery};
 use super::handlers_types::{self as ty, Intrinsic, NodeTypeOp, ParameterAt, SignatureProperty, SignatureTypeOp, TypeArrayProperty, TypeListOp, TypeOp, TypePredicateOp, TypeProperty, TypeSymbolProperty};
 use super::host::{CheckerHost, CheckerResponse, CheckerResult};
@@ -131,6 +132,10 @@ fn dispatch(h: &dyn CheckerHost, method: &str, p: &Params) -> CheckerResult<Chec
         "isArrayType" => ty::type_predicate_op(h, p, TypePredicateOp::IsArray),
         "isReadonlySymbol" => sym::is_readonly_symbol(h, p),
         "getReferencesToSymbolInFile" => sym::get_references_to_symbol_in_file(h, p),
+        "getReferencedSymbolsForNode" => ls::get_referenced_symbols_for_node(h, p),
+        "getSignatureUsages" => ls::get_signature_usages(h, p),
+        "getCompletionsAtPosition" => ls::get_completions_at_position(h, p),
+        "getImportAdderEdits" => ls::get_import_adder_edits(h, p),
 
         "getAnyType" => ty::get_intrinsic_type(h, p, Intrinsic::Any),
         "getStringType" => ty::get_intrinsic_type(h, p, Intrinsic::String),
@@ -172,7 +177,8 @@ pub const CHECKER_METHODS: &[&str] = &[
     "getFalseTypeOfConditionalType", "getConstantValue", "getSignatureFromDeclaration", "getExportSpecifierLocalTargetSymbol",
     "getAliasedSymbol", "getImmediateAliasedSymbol", "getTargetSymbol", "getExportSymbolOfSymbolForChecker", "getFullyQualifiedName",
     "getExportsOfModule", "getMemberInModuleExports", "getJsDocTags", "getDocumentationComment", "isArrayType", "isReadonlySymbol",
-    "getReferencesToSymbolInFile", "getAnyType", "getStringType", "getNumberType", "getBooleanType", "getVoidType",
+    "getReferencesToSymbolInFile", "getReferencedSymbolsForNode", "getSignatureUsages", "getCompletionsAtPosition",
+    "getImportAdderEdits", "getAnyType", "getStringType", "getNumberType", "getBooleanType", "getVoidType",
     "getUndefinedType", "getNullType", "getNeverType", "getUnknownType", "getBigIntType", "getESSymbolType", "getNonPrimitiveType",
     "getWellKnownSymbols", "getWellKnownSignatures",
 ];
