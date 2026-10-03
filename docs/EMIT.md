@@ -586,6 +586,14 @@ in declaration-only mode is 2325/2325. The JS side of the sweep waits for the tr
 
 ## 14. Known gaps and risks
 
+- **tsbuildinfo vs the npm nightly (2026-10-03, not a gap):** on the 38k-file private monorepo tsrs's
+  `tsconfig.tsbuildinfo` differs from the one written by `typescript@7.1.0-dev.20260929.1` only in `version`
+  (`7.1.0-dev` vs the publish-time stamp) and in the *order* of `referencedMap` entries (same pairs, same
+  `fileIdsList`, first divergence at entry 32,041 of 39,204; both compilers deterministic across runs). That nightly
+  was built from `0681ef7f`, 31 commits before the commit tsrs ports (`b85298b6`); tsrs is byte-identical to tsgo
+  built from `b85298b6`. Each compiler therefore starts cold on the other's buildinfo, as any two TypeScript versions
+  do. Resolves itself when tsrs tracks a release.
+
 - Oracle reference: use tsgo built from the pinned ts-ref commit (`go build -o tsgo-ref ./cmd/tsc` in `ts-ref/tsc`, Go 1.27).
   The npm nightly 7.1.0-dev.20260929.1 predates the pin.
 
