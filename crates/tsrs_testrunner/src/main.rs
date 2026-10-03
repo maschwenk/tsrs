@@ -16,6 +16,10 @@ mod options;
 mod oracle;
 mod pool;
 mod report;
+#[cfg(feature = "compiler")]
+mod sourcemap_recorder;
+#[cfg(feature = "compiler")]
+mod sourcemap_baseline;
 mod test_case_parser;
 mod tsbaseline;
 #[cfg(feature = "checker")]

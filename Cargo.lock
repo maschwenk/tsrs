@@ -623,6 +623,7 @@ dependencies = [
  "tsrs_diagnostics",
  "tsrs_parser",
  "tsrs_scanner",
+ "tsrs_sourcemap",
  "tsrs_tsoptions",
  "tsrs_vfs",
 ]
