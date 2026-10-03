@@ -435,7 +435,7 @@ for E1–E6); mui-docs (JSX).
 
 | date | commit | wave | `.js` pass / total | `.js.map` | `.sourcemap.txt` | oracle | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| | | | | | | | |
+| 2026-10-03 | emit/jsx-decorators | E10 + E11 | n/a (`--baselines js` not landed; CLI oracle `tools/oracle/emit/cases.py` on the 604 `@jsx`/`@experimentalDecorators`/`@emitDecoratorMetadata` tests: 980 variants, 244 identical + 43 both empty, 0 different, 693 stop in other waves' stubs) | | | monorepo (local integration, maps off): JSX 703/703 files identical (marketing-emails needs commonjs); decorators 318/318 identical, 7 es2024 packages need classfields (E5) | jsx.go, legacydecorators.go, metadata.go, typeserializer.go complete; E5 (classfields) and E9 (async, forawait) taken up on `emit/classfields` / `emit/async` because they block these gates; notes/emit-jsx-decorators.md |
 
 ## 14. Known gaps and risks
 
