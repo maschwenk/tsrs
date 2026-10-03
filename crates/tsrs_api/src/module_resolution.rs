@@ -276,29 +276,34 @@ fn mode_from(v: &Value, what: &str) -> ApiResult<Option<ResolutionMode>> {
     }
 }
 
+/// Go `NewPackageId` (nil when the package has no name).
+pub fn package_id_response(p: &tsrs_module::PackageId) -> Option<Value> {
+    (!p.name.is_empty()).then(|| {
+        Obj::new()
+            .set("name", s(p.name))
+            .set("subModuleName", s(p.sub_module_name))
+            .set("version", s(p.version))
+            .set("peerDependencies", s(p.peer_dependencies))
+            .build()
+    })
+}
+
 /// Go `newResolvedModuleResponse`.
 pub fn resolved_module_response(r: &ResolvedModule) -> Value {
     if !r.is_resolved() {
         return Value::Null;
     }
-    let pkg = (!r.package_id.name.is_empty()).then(|| {
-        Obj::new()
-            .set("name", s(r.package_id.name))
-            .set("subModuleName", s(r.package_id.sub_module_name))
-            .set("version", s(r.package_id.version))
-            .set("peerDependencies", s(r.package_id.peer_dependencies))
-            .build()
-    });
+    let pkg = package_id_response(&r.package_id);
     Obj::new()
         .set("resolvedFileName", s(r.resolved_file_name))
-        .set_opt("originalPath", (!r.original_path.is_empty()).then(|| s(r.original_path)))
+        .set_omitempty("originalPath", s(r.original_path))
         .set("extension", s(r.extension))
         // encoding/json/v2 `omitempty` keeps `false`.
         .set("resolvedUsingTsExtension", b(r.resolved_using_ts_extension))
         .set("resolvedUsingExtraExtensions", b(r.resolved_using_extra_extensions))
         .set_opt("packageId", pkg)
         .set("isExternalLibraryImport", b(r.is_external_library_import))
-        .set_opt("alternateResult", (!r.alternate_result.is_empty()).then(|| s(r.alternate_result)))
+        .set_omitempty("alternateResult", s(r.alternate_result))
         .build()
 }
 

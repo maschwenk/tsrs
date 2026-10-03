@@ -28,6 +28,45 @@ pub fn base64_encode(data: &[u8]) -> String {
     out
 }
 
+/// Go `base64.StdEncoding.DecodeString` (padding required, no whitespace).
+pub fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
+    let b = text.as_bytes();
+    if b.len() % 4 != 0 {
+        return Err(format!("illegal base64 data at input byte {}", b.len() - b.len() % 4));
+    }
+    let val = |c: u8| -> Option<u32> {
+        Some(match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return None,
+        } as u32)
+    };
+    let mut out = Vec::with_capacity(b.len() / 4 * 3);
+    for (ci, chunk) in b.chunks(4).enumerate() {
+        let last = ci == b.len() / 4 - 1;
+        let pad = chunk.iter().rev().take_while(|&&c| c == b'=').count();
+        if pad > 2 || (pad > 0 && !last) {
+            return Err(format!("illegal base64 data at input byte {}", ci * 4 + 4 - pad));
+        }
+        let mut n = 0u32;
+        for (i, &c) in chunk.iter().enumerate() {
+            let v = if i >= 4 - pad { 0 } else { val(c).ok_or_else(|| format!("illegal base64 data at input byte {}", ci * 4 + i))? };
+            n = n << 6 | v;
+        }
+        out.push((n >> 16) as u8);
+        if pad < 2 {
+            out.push((n >> 8) as u8);
+        }
+        if pad < 1 {
+            out.push(n as u8);
+        }
+    }
+    Ok(out)
+}
+
 fn encode_batch_response(method: &str, result: &str, error: Option<&str>) -> String {
     let mut out = String::from("{\"method\":");
     out.push_str(&json::marshal_string(method));

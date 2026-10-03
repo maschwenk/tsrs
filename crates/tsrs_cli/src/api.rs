@@ -178,12 +178,14 @@ impl ParseConfigHost for ApiBuildSystem {
 
 struct CliBuildBackend;
 
-/// One API build orchestrator. Go keeps one `build.Orchestrator` and rechecks all projects on every call
-/// (`recheckAllProjects` resets statuses, configs, mtimes and caches); this port builds a fresh orchestrator
-/// per call from the same parsed command line, which re-reads the same state from disk.
+/// One API build orchestrator. Go keeps one `build.Orchestrator`: `Build` rechecks all projects (resetting
+/// statuses, configs, mtimes and caches) and regenerates the graph, while `Clean` reuses the graph of the
+/// last build when there is one ("cleans the last built configuration"). This port builds a fresh
+/// orchestrator for every build (same observable state after Go's recheck) and keeps it for later cleans.
 struct CliOrchestrator {
     sys: &'static ApiBuildSystem,
     command: P<tsrs_tsoptions::ParsedBuildCommandLine>,
+    last: Option<&'static crate::build::Orchestrator>,
 }
 
 impl BuildBackend for CliBuildBackend {
@@ -202,7 +204,7 @@ impl BuildBackend for CliBuildBackend {
         if let Some(options) = request.build_options {
             command.build_options = options;
         }
-        Box::new(CliOrchestrator { sys, command: P::new(command) })
+        Box::new(CliOrchestrator { sys, command: P::new(command), last: None })
     }
 }
 
@@ -220,10 +222,18 @@ fn outcome(result: crate::build::OrchestratorResult) -> BuildOutcome {
 impl BuildOrchestrator for CliOrchestrator {
     fn build(&mut self, project: &str, only_references: bool) -> BuildOutcome {
         let orchestrator = new_orchestrator(Options { sys: self.sys, command: self.command, testing: None });
+        self.last = Some(orchestrator);
         outcome(orchestrator.build_for_api(project, only_references))
     }
     fn clean(&mut self, project: &str, only_references: bool) -> BuildOutcome {
-        let orchestrator = new_orchestrator(Options { sys: self.sys, command: self.command, testing: None });
+        let orchestrator = match self.last {
+            Some(o) => o,
+            None => {
+                let o = new_orchestrator(Options { sys: self.sys, command: self.command, testing: None });
+                self.last = Some(o);
+                o
+            }
+        };
         outcome(orchestrator.clean_for_api(project, only_references))
     }
 }
