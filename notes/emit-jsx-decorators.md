@@ -64,3 +64,15 @@ emit/core + a minimal esmodule.go, built as `tsrs`; outputs compared with tsgo (
   tests with `@jsx`, `@experimentalDecorators` or `@emitDecoratorMetadata`: 980 variants, 244 identical, 43 both
   empty, **0 different**, 693 stop in other waves' gate stubs (commonjsmodule 195, forawait 175, classfields 163,
   using 144, objectrestspread 7, esdecorator 3, nullishcoalescing 1, int/local esmodule gaps 4).
+
+## `--baselines js` (E2 harness), local integration build (`int/local`), 2026-10-03
+
+Test lists: every variant of the tests in conformance/jsx (230 variants), and of conformance/decorators +
+compiler/decorator* + *Metadata* (213 variants).
+
+| group | total | pass | fail | crash (other waves' stubs) | skip |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| jsx | 230 | 90 | 0 | 137 (forawait, commonjsmodule, classfields, source maps) | 3 |
+| decorators | 213 | 58 | 0 | 86 (forawait, commonjsmodule, classfields, esdecorator) | 69 |
+
+On `emit/jsx-decorators` alone (type eraser still a stub) nearly every variant crashes in typeeraser.
