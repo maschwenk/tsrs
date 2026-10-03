@@ -304,6 +304,13 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   API sessions are not ported.
 - Node index tables are cached per live source file keyed by the file's address (lookups never assign the
   file's lazy node id) and evicted when the file's region is freed; Go stores them on the file itself.
+- Re-entrancy attribution limit: client callbacks made on compiler worker threads (most file reads while a
+  program is built in parallel) carry no request context, so the transport counts them as possibly
+  belonging to any lock holder. A request waiting for the build-orchestrator lock (or, in the checker lane,
+  the API checker lease) while another request builds a program with callbacks can therefore fail with the
+  re-entrancy error after the transport's configurable grace period instead of waiting. Carrying the request
+  context into worker threads needs a propagation hook in the compiler's worker pool (follow-up with the
+  runtime lane); it is a bounded, configurable divergence, not exact Go behavior (Go would wait or hang).
 - Re-entrancy: nested requests from client callbacks are served; the build orchestrator lock uses the
   transport's `lock_for_request` (bounded error instead of deadlock); the checker lane gates its API checker
   lease the same way. Request params are validated with Go's strict JSON (unpaired surrogates, duplicate
