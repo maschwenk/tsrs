@@ -112,7 +112,7 @@ pub(crate) fn get_declaration_diagnostics(host: &'static crate::emithost::EmitHo
 
 // ---------------------------------------------------------------------------------------------------------------
 // The emitter (emitter.go:23 onwards, minus the parts above). Only built with the checker: emit needs the emit
-// resolver. Nothing here runs unless a caller invokes `Program::emit` (the CLI does so only under TSRS_EMIT=1).
+// resolver. Nothing here runs unless a caller invokes `Program::emit` (the CLI does unless the options disable emit).
 // ---------------------------------------------------------------------------------------------------------------
 
 #[cfg(feature = "checker")]

@@ -14,7 +14,7 @@ pub struct EmitInput<'a> {
     pub report_diagnostic: &'a DiagnosticReporter<'a>,
     pub report_error_summary: &'a DiagnosticsReporter<'a>,
     pub compile_times: CompileTimes,
-    // Go `EmitInput.ProgramLike` when it is an `*incremental.Program` (only under TSRS_EMIT=1).
+    // Go `EmitInput.ProgramLike` when it is an `*incremental.Program`.
     pub incremental: Option<P<tsrs_incremental::Program>>,
     // Go `EmitInput.Writer` (nil here means `sys.Writer()`), `EmitInput.WriteFile` and `EmitInput.Testing`.
     pub writer: Option<&'a (dyn Fn(&str) + 'a)>,
@@ -93,19 +93,12 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
     times.bind_time = bind_time.get();
     times.check_time = check_time.get();
 
-    // Without TSRS_EMIT=1 (docs/EMIT.md section 6) emit is never called: under --listFilesOnly Go skips emit
-    // (EmitSkipped); otherwise the program always has noEmit set, and HandleNoEmitOptions returns an empty,
-    // non-skipped result.
+    // emit.go:115
     let mut emit_result = tsrs_compiler::EmitResult { emit_skipped: true, ..Default::default() };
-    if crate::execute::emit_enabled() {
-        // emit.go:115
-        if !program.options().list_files_only.is_true() {
-            let emit_start = input.sys.now();
-            emit_result = tsrs_core::phases::time("Emit", || program.emit(&ctx, tsrs_compiler::EmitOptions::default()));
-            times.emit_time += input.sys.now() - emit_start;
-        }
-    } else {
-        emit_result.emit_skipped = program.options().list_files_only.is_true() || !program.options().no_emit.is_true();
+    if !program.options().list_files_only.is_true() {
+        let emit_start = input.sys.now();
+        emit_result = tsrs_core::phases::time("Emit", || program.emit(&ctx, tsrs_compiler::EmitOptions { write_file: input.write_file, ..Default::default() }));
+        times.emit_time += input.sys.now() - emit_start;
     }
     let emit_skipped = emit_result.emit_skipped;
     all_diagnostics.extend(emit_result.diagnostics.iter().copied());

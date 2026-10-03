@@ -328,8 +328,6 @@ fn collect(dir: &FsPath, out: &mut Vec<PathBuf>) {
 
 #[test]
 fn tsctests() {
-    // Emit, incremental and --build only run under the gate (docs/EMIT.md section 6).
-    std::env::set_var("TSRS_EMIT", "1");
     let root = repo_root();
     let dump = std::env::var("TSCTESTS_DUMP").map(PathBuf::from).unwrap_or_else(|_| root.join("target/tsctests-dump"));
     let filter = std::env::var("TSCTESTS_FILTER").unwrap_or_default();
