@@ -395,6 +395,21 @@ pub unsafe fn free_program(program: &'static Program) {
     drop(Box::from_raw(resolution_host as *mut dyn ResolutionHost));
 }
 
+// Frees a program from `new_program` that never shared data with another version (it was not the source or the
+// result of `update_program`), including its processed-file data and project reference file mapper, which
+// `free_program` keeps because language-server program versions share them. Used for one-shot programs (the
+// native API's transpileModule / transpileDeclaration).
+//
+// # Safety
+// As `free_program`, and additionally: no other program refers to `program`'s processed files or mapper.
+pub unsafe fn free_unshared_program(program: &'static Program) {
+    let processed = program.processed as *const processedFiles as *mut processedFiles;
+    let mapper = program.project_reference_file_mapper as *const projectReferenceFileMapper as *mut projectReferenceFileMapper;
+    free_program(program);
+    drop(Box::from_raw(processed));
+    drop(Box::from_raw(mapper));
+}
+
 impl Program {
     // program.go:323
     // Return an updated program for which it is known that only the file with the given path has changed.

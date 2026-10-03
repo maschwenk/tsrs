@@ -1,8 +1,8 @@
 // Port of tsc/internal/transpile (transpile.go, fs.go) plus session.go handleTranspile /
 // handleTranspileFromFile / transpileOutput.
 //
-// Memory: each call builds a one-file program that is not freed (same lifetime model as the CLI; see the
-// "Known gaps" section of docs/NODE_API.md).
+// Memory: each call builds its one-file program inside a scratch `Region` that is freed (with the program)
+// before returning; only owned strings / JSON values leave the region.
 
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -109,12 +109,23 @@ impl FS for TranspileFS {
 
 pub struct TranspileOutput {
     pub output_text: String,
-    pub diagnostics: Vec<P<tsrs_ast::Diagnostic>>,
+    /// Already serialized (the diagnostics themselves live in the freed scratch region).
+    pub diagnostics: Vec<Value>,
     pub source_map_text: String,
 }
 
-/// Go `transpileWorker`.
+/// Go `transpileWorker` in a scratch region (see the module comment).
 pub fn transpile(input: &str, base: Option<&CompilerOptions>, file_name: &str, report_diagnostics: bool, declaration: bool) -> ApiResult<TranspileOutput> {
+    let region = tsrs_core::arena::Region::new(1 << 20);
+    let result = {
+        let _scope = region.enter();
+        transpile_in_current_region(input, base, file_name, report_diagnostics, declaration)
+    };
+    drop(region);
+    result
+}
+
+fn transpile_in_current_region(input: &str, base: Option<&CompilerOptions>, file_name: &str, report_diagnostics: bool, declaration: bool) -> ApiResult<TranspileOutput> {
     let mut opts = base.cloned().unwrap_or_default();
     opts.incremental = Tristate::Unknown;
     opts.declaration = Tristate::Unknown;
@@ -170,6 +181,9 @@ pub fn transpile(input: &str, base: Option<&CompilerOptions>, file_name: &str, r
     let config = tsrs_tsoptions::new_parsed_command_line(P::new(opts), vec![input_file_name.clone()], Vec::new(), tspath::ComparePathsOptions::default());
     let mut program_options = ProgramOptions::new(P::new(config), host);
     program_options.skip_module_resolution = true;
+    // Single-threaded: parsing, binding and checking must allocate on this thread so everything lands in the
+    // scratch region (worker threads would allocate into their own never-freed arenas).
+    program_options.single_threaded = Tristate::True;
     let program = tsrs_compiler::new_program(program_options);
 
     let ctx = Context::background();
@@ -192,19 +206,23 @@ pub fn transpile(input: &str, base: Option<&CompilerOptions>, file_name: &str, r
     };
     let emit_only = if declaration { EmitOnly::EmitOnlyDts } else { EmitOnly::EmitAll };
     let result = program.emit(&ctx, EmitOptions { target_source_files: None, emit_only, force_emit: declaration, write_file: Some(&write) });
+    all.extend(result.diagnostics);
+    let diagnostics: Vec<Value> = all.iter().map(|d| crate::diagnostics::diagnostic_response(d)).collect();
+    drop(all);
+    // SAFETY: nothing derived from the program (diagnostics are serialized above) is used after this.
+    unsafe { tsrs_compiler::free_unshared_program(program) };
     if let Some(err) = fs.unexpected.lock().unwrap().take() {
         return Err(ApiError::internal(format!("transpile: {err}")));
     }
-    all.extend(result.diagnostics);
     let (output_text, source_map_text) = outputs.into_inner().unwrap();
     let output_text = output_text.ok_or_else(|| ApiError::internal("transpile: Output generation failed"))?;
-    Ok(TranspileOutput { output_text, diagnostics: all, source_map_text: source_map_text.unwrap_or_default() })
+    Ok(TranspileOutput { output_text, diagnostics, source_map_text: source_map_text.unwrap_or_default() })
 }
 
 fn transpile_response(out: TranspileOutput) -> Value {
     Obj::new()
         .set("outputText", s(out.output_text))
-        .set_opt("diagnostics", (!out.diagnostics.is_empty()).then(|| diagnostic_responses(&out.diagnostics)))
+        .set_opt("diagnostics", (!out.diagnostics.is_empty()).then(|| Value::Array(out.diagnostics)))
         .set_opt("sourceMapText", (!out.source_map_text.is_empty()).then(|| s(out.source_map_text)))
         .build()
 }
