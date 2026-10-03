@@ -136,3 +136,74 @@ pub fn first_difference(expected: &[u8], actual: &[u8]) -> Option<String> {
     }
     Some(msg)
 }
+
+fn string_at(b: &[u8], idx: u32) -> String {
+    let (so, sd) = (rd(b, HEADER_OFFSET_STRING_OFFSETS) as usize, rd(b, HEADER_OFFSET_STRING_DATA) as usize);
+    let (s, e) = (rd(b, so + idx as usize * 4) as usize, rd(b, so + idx as usize * 4 + 4) as usize);
+    format!("{:?}", String::from_utf8_lossy(&b[sd + s..sd + e]))
+}
+
+/// Encoding-independent view of a tree: one line per record with its depth, kind, range, flags, child mask /
+/// commonData and the *contents* of its strings and extended data (not their table indices). Subtrees rooted
+/// at `JSDoc` records are dropped (the decoders attach no JSDoc, as in Go) unless `keep_jsdoc`. The root
+/// SourceFile line omits its extended data (structured metadata is not reconstructed by DecodeNodes).
+pub fn structural(b: &[u8], keep_jsdoc: bool) -> Vec<String> {
+    let nodes = rd(b, HEADER_OFFSET_NODES) as usize;
+    let ext = rd(b, HEADER_OFFSET_EXTENDED_DATA) as usize;
+    let count = (b.len() - nodes) / NODE_SIZE;
+    let field = |i: usize, f: usize| rd(b, nodes + i * NODE_SIZE + f);
+    let mut depth = vec![0usize; count];
+    let mut out = Vec::new();
+    let mut skip_below: Option<usize> = None;
+    for i in 1..count {
+        let parent = field(i, NODE_OFFSET_PARENT) as usize;
+        depth[i] = if i == 1 { 0 } else { depth[parent] + 1 };
+        if let Some(d) = skip_below {
+            if depth[i] > d {
+                continue;
+            }
+            skip_below = None;
+        }
+        let kind = field(i, NODE_OFFSET_KIND);
+        let data = field(i, NODE_OFFSET_DATA);
+        let name = if kind == SYNTAX_KIND_NODE_LIST { "NodeList".to_string() } else { format!("{:?}", kind_from_u32(kind).unwrap()) };
+        if name == "JSDoc" && !keep_jsdoc {
+            skip_below = Some(depth[i]);
+            continue;
+        }
+        let detail = if kind == SYNTAX_KIND_NODE_LIST {
+            format!("len={} trailingComma={}", data, field(i, NODE_OFFSET_FLAGS))
+        } else {
+            match data & NODE_DATA_TYPE_MASK {
+                NODE_DATA_TYPE_STRING => format!("common={} text={}", (data >> 24) & 0x3f, string_at(b, data & NODE_DATA_STRING_INDEX_MASK)),
+                NODE_DATA_TYPE_EXTENDED_DATA if i == 1 && name == "SourceFile" => "sourceFile".to_string(),
+                NODE_DATA_TYPE_EXTENDED_DATA => {
+                    let off = ext + (data & NODE_DATA_STRING_INDEX_MASK) as usize;
+                    if name.starts_with("Template") {
+                        format!("text={} raw={} flags={}", string_at(b, rd(b, off)), string_at(b, rd(b, off + 4)), rd(b, off + 8))
+                    } else {
+                        format!("text={} flags={}", string_at(b, rd(b, off)), rd(b, off + 4))
+                    }
+                }
+                _ => format!("data={:#010x}", data),
+            }
+        };
+        out.push(format!(
+            "{}{name} [{}, {}) flags={:#x} {detail}",
+            "  ".repeat(depth[i]),
+            field(i, NODE_OFFSET_POS),
+            field(i, NODE_OFFSET_END),
+            if kind == SYNTAX_KIND_NODE_LIST { 0 } else { field(i, NODE_OFFSET_FLAGS) },
+        ));
+    }
+    out
+}
+
+pub fn diff_lines(expected: &[String], actual: &[String]) -> Option<String> {
+    for (k, (e, a)) in expected.iter().zip(actual).enumerate() {
+        if e != a {
+            return Some(format!("line {k}:\n  expected {e}\n  actual   {a}"));
+        }
+    }
+    (expected.len() != actual.len()).then(|| format!("line count: expected {} actual {}", expected.len(), actual.len()))
+}
