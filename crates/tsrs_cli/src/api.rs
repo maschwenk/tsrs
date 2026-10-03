@@ -372,6 +372,16 @@ mod tests {
         assert_eq!(all(&r), ["index.d.ts", "index.js", "tsconfig.tsbuildinfo"], "{}", json::marshal(&r).unwrap());
         assert!(!dir.join("core/out/index.js").exists());
 
+        // moduleResolution with no named kind: Go creates the orchestrator (and panics while building); tsrs keeps
+        // creation, cleaning and disposal and fails builds with a stable error (runtime f552 review).
+        let r = call(&s, "createBuildOrchestrator", r#"{"rootNames":["app"],"compilerOptions":{"moduleResolution":12345,"checkers":9223372036854775807}}"#);
+        let other = json::marshal(get(&r, "buildOrchestratorID")).unwrap();
+        let e = s.handle_request("build", format!("{{\"buildOrchestratorID\":{other}}}").as_bytes()).unwrap_err();
+        assert_eq!(e.to_string(), "api: client error: cannot build with unsupported moduleResolution value 12345 (not a ModuleResolutionKind)");
+        let r = call(&s, "cleanBuild", &format!("{{\"buildOrchestratorID\":{other}}}"));
+        assert_eq!(get(&r, "status"), &Value::Number(0.0), "{}", json::marshal(&r).unwrap());
+        assert_eq!(call(&s, "disposeBuildOrchestrator", &format!("{{\"buildOrchestratorID\":{other}}}")), Value::Bool(true));
+
         // Go `*int` builders: any int64 is accepted (API builds run one builder regardless; runtime-f2-review).
         for n in ["2147483648", "-2147483649", "9223372036854775807"] {
             let r = call(&s, "createBuildOrchestrator", &format!(r#"{{"rootNames":["app"],"buildOptions":{{"builders":{n}}}}}"#));

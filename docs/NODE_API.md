@@ -350,10 +350,15 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   switch defaults and comparisons see the raw value (e.g. `target:12345` transforms maximally, `module:-1`
   emits CommonJS, `jsx:12345` keeps JSX without the "--jsx not set" error); checked against
   runtime-f2-review's cases. `moduleResolution` with no named kind (pinned Go panics while resolving) is a
-  client error on createPrograms/createBuildOrchestrator; unknown `moduleDetection`/`newLine` numbers are
-  echoed but compile as unset (unverified against Go). Go `*int` options (`maxNodeModuleJsDepth`,
-  `builders`) take any int64, exact from the request literal and echoed exactly (`json::Value::Integer`);
-  above int64 is out of range. The internal `checkers` option is still int32. Malformed
+  client error on createPrograms; createBuildOrchestrator accepts it (ID, clean and dispose work as in Go)
+  and `build`/`buildReferences` return a stable client error where Go panics (Go could still succeed for a
+  project that never resolves a module). Unknown `moduleDetection`/`newLine` numbers are echoed and
+  compile like Go's fallback (runtime f552 review). Go `*int` options (`maxNodeModuleJsDepth`, `builders`,
+  `checkers`) take any int64, exact from the request literal and echoed exactly (`json::Value::Integer`);
+  above int64 is out of range. `checkers` is clamped like Go (`max(min(n, files, 256), 1)`; tsrs used to
+  turn a negative count into the file count). Prior limitation, not API-specific: a tsconfig float far
+  outside int64 (`9.3e18`, `1e19`) for these options saturates in Rust; Go's float-to-int conversion is
+  architecture dependent there (amd64 gives MinInt64, arm64 saturates). Malformed
   tristates and unknown options are ignored, as in Go. Request filesystems are type-checked before any
   lookup (`kind`, `files`, `directories`, `symlinks.target/host`, `removedPaths`), with `null` values and
   elements as zero values. Pinned Go crashes on a relative, empty or null project reference path and on a

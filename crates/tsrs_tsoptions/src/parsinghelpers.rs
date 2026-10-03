@@ -463,7 +463,7 @@ pub(crate) fn parse_compiler_options_worker(key: &str, value: &CompilerOptionsVa
         "pprofDir" => all_options.pprof_dir = parse_string(value),
         "singleThreaded" => all_options.single_threaded = parse_tristate(value),
         "quiet" => all_options.quiet = parse_tristate(value),
-        "checkers" => all_options.checkers = parse_number(value),
+        "checkers" => all_options.checkers = parse_number_int(value),
         "runExternalCode" => all_options.run_external_code = parse_tristate(value),
         _ => {
             // different than any key above

@@ -379,6 +379,20 @@ fn unknown_enum_values_and_go_int_options_match_go() {
         let out = raw("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"maxNodeModuleJsDepth":{n}}}}}]}}"#, quote(&a))).unwrap();
         assert!(out.contains(&format!("\"maxNodeModuleJsDepth\":{n}")), "{n}: {out}");
     }
+    // `checkers` is a Go *int too; the checker pool clamps it like Go (max(min(n, files, 256), 1)).
+    for n in ["2147483648", "9223372036854775807", "-1", "0", "4"] {
+        let out = raw("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"checkers":{n}}}}}]}}"#, quote(&a))).unwrap();
+        assert!(out.contains(&format!("\"checkers\":{n}")) || n == "0", "{n}: {out}");
+        let snap = match get(&tsrs_core::json::unmarshal(&out).unwrap(), "snapshot") { tsrs_core::json::Value::Number(n) => *n as u64, _ => unreachable!() };
+        assert_eq!(raw("getSemanticDiagnostics", &format!(r#"{{"snapshot":{snap},"project":"/dev/null/synthetic/1"}}"#)).unwrap(), "[]");
+        raw("transpileModule", &format!(r#"{{"input":"const x = 1;","options":{{"compilerOptions":{{"checkers":{n}}}}}}}"#)).unwrap();
+    }
+    for n in ["9223372036854775808", "1.5", "1e0", "1.0"] {
+        let e = raw("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"checkers":{n}}}}}]}}"#, quote(&a))).unwrap_err();
+        assert!(e.starts_with("api: invalid request:"), "checkers {n}: {e}");
+        let e = raw("transpileModule", &format!(r#"{{"input":"const x = 1;","options":{{"compilerOptions":{{"checkers":{n}}}}}}}"#)).unwrap_err();
+        assert!(e.starts_with("api: invalid request:"), "checkers {n}: {e}");
+    }
     for n in ["9223372036854775808", "1.5", "1e0", "1.0"] {
         let e = raw("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"maxNodeModuleJsDepth":{n}}}}}]}}"#, quote(&a))).unwrap_err();
         assert!(e.starts_with("api: invalid request:"), "{n}: {e}");

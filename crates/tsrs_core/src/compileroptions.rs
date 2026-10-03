@@ -163,7 +163,8 @@ pub struct CompilerOptions {
     pub pprof_dir: String,
     pub single_threaded: Tristate,
     pub quiet: Tristate,
-    pub checkers: Option<i32>,
+    // Go `*int` (64-bit).
+    pub checkers: Option<i64>,
 }
 
 pub static EMPTY_COMPILER_OPTIONS: LazyLock<CompilerOptions> = LazyLock::new(CompilerOptions::default);

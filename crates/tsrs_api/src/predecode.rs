@@ -176,6 +176,9 @@ pub(crate) fn exact_compiler_options_ints(value: &Value, options: &mut tsrs_core
     if let Some(n) = exact_i64(value, "maxNodeModuleJsDepth") {
         options.max_node_module_js_depth = Some(n);
     }
+    if let Some(n) = exact_i64(value, "checkers") {
+        options.checkers = Some(n);
+    }
 }
 
 /// As `exact_compiler_options_ints`, for core.BuildOptions.

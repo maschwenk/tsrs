@@ -487,14 +487,15 @@ fn get_checker_association_weights(base_weights: &[i64], import_counts: &[i64]) 
 impl checkerPool {
     // checkerpool.go:305 newCheckerPool / checkerpool.go:309 newCheckerPoolWithTracing (tracing is not ported).
     pub(crate) fn new(program: &'static Program) -> checkerPool {
-        let mut checker_count = 4;
+        let mut checker_count: i64 = 4;
         if program.single_threaded() {
             checker_count = 1;
         } else if let Some(c) = program.options().checkers {
-            checker_count = c as usize;
+            checker_count = c;
         }
 
-        checker_count = checker_count.min(program.files.len()).min(256).max(1);
+        // Go `max(min(checkerCount, len(files), 256), 1)` on int: a negative or zero count is one checker.
+        let checker_count = checker_count.min(program.files.len() as i64).min(256).max(1) as usize;
 
         checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new() }
     }
