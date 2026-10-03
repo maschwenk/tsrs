@@ -4,6 +4,8 @@ use crate::*;
 use printer::EmitFlags;
 use tsrs_core::collections::OrderedMap;
 
+use super::*;
+
 // esdecorator.go:48
 // lexicalEntryKind discriminates the kind of lexical scope entry.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

@@ -568,7 +568,7 @@ impl esDecoratorTransformer {
         let initializer = discarded().visit_node(fs.initializer);
         let condition = self.base.visitor().visit_node(fs.condition);
         let incrementor = discarded().visit_node(fs.incrementor);
-        let statement = self.base.emit_context().visit_iteration_body(Some(fs.statement), &mut self.base.visitor());
+        let statement = self.base.emit_context().visit_iteration_body(Some(fs.statement()), &mut self.base.visitor());
         self.base.factory().update_for_statement(node, initializer, condition, incrementor, statement.unwrap())
     }
 
