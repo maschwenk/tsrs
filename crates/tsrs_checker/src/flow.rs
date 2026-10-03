@@ -2397,7 +2397,7 @@ impl Checker {
     }
 
     // flow.go:2107
-    pub(crate) fn get_property_name_for_known_symbol_name(&mut self, symbol_name: &str) -> String {
+    pub fn get_property_name_for_known_symbol_name(&mut self, symbol_name: &str) -> String {
         let ctor_type = self.get_global_es_symbol_constructor_symbol_or_nil();
         if let Some(ctor_type) = ctor_type {
             let ctor_symbol_type = self.get_type_of_symbol(ctor_type);
