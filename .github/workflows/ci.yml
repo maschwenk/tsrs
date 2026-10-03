@@ -68,8 +68,16 @@ jobs:
       - name: Fourslash (language service) suite
         run: .github/scripts/fourslash-gate.sh
 
+      # Node 24 matches release.yml; the build-only TypeScript compiler in npm/package.json needs >=16.20.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      # npm/build.mjs compiles the unstable/* JS API with npm/package.json's build-only tools when that manifest
+      # exists; branches without it have nothing to install.
       - name: npm packaging smoke test
         run: |
+          if [ -f npm/package-lock.json ]; then npm ci --prefix npm --no-audit --no-fund; fi
           node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/release/tsrs --pack
           dir=$(mktemp -d)
           cd "$dir"
