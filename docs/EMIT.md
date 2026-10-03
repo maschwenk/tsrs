@@ -239,7 +239,7 @@ the TestEmit table is already ported), `printer/namegenerator_test.go` (640),
 | execute/build | `tsrs_build` | new crate |
 | testutil tsbaseline/harnessutil emit parts, tsctests | `tsrs_testrunner` | |
 
-## 6. The `TSRS_EMIT=1` gate (design, not implemented)
+## 6. The `TSRS_EMIT=1` gate (implemented: tsrs_cli `execute::emit_enabled`, `tsc/emit.rs`)
 
 The rule: **without `TSRS_EMIT=1`, the bytes tsrs prints and the files it writes (none) are unchanged.**
 
@@ -315,6 +315,15 @@ Phase gates:
 
 ## 8. Baseline harness plan (`tsrs-test --baselines js`)
 
+Implemented on `emit/core` for `.js` (`crates/tsrs_testrunner/src/emit_harness.rs`: OutputRecorderFS,
+compileFilesWithHost's pre-/post-emit programs, newCompilationResult's output ordering, DoJSEmitBaseline with
+DtsFileErrors and the noCheck repeat; `compile.rs`: `verify_javascript_output`, `SKIPPED_EMIT_TESTS`, the
+`Recompile` hook for `CompileFilesEx` re-runs). `tsrs-test show <name> --js` shows the first differing hunk.
+Deviations: `baseline.DiffText` (Go's patience diff, used only by the 2 baselines with a `!!!! File ... differs ...
+in noCheck emit` section) uses the `similar` crate's patience algorithm and unified format; a stub panic on a
+checker thread with multi-threaded test programs is reported as `<unknown panic>` (the panic hook's message is
+thread-local). `.js.map`/`.sourcemap.txt` are E7.
+
 Port Go's flow exactly (testrunner/compiler_runner.go, testutil/harnessutil, testutil/tsbaseline):
 
 - New kinds in `--baselines`: `js` (`.js`), `jsmap` (`.js.map`), `sourcemap` (`.sourcemap.txt`), next to
@@ -374,30 +383,73 @@ then-current main:
   `&mut Generator`, plus everything in declarations.json's map. Then run `tools/sigs-from-rust.py` so that
   `docs/sigs/*.txt` is generated from the sources.
 
-## 10. Design notes for E1 (decided by reading the existing code)
+## 10. Design notes for E1 (decided and implemented on `emit/core`)
 
+- **Crates.** `tsrs_transformers` (new) holds transformer.go, chain.go, modifiervisitor.go, utilities.go (the 3
+  functions the declaration transformer uses so far), `Resolver` (moved from `tsrs_declarations`, plus wrappers for the
+  rest of `printer.EmitResolver`: `is_referenced_alias_declaration`, `mark_linked_references_recursively`,
+  `get_constant_value`, `get_type_reference_serialization_kind`, the JSX factory entities,
+  `set_referenced_import_declaration` and the embedded `binder.ReferenceResolver` methods), `ReferenceResolverRef`
+  (Go's `binder.ReferenceResolver` interface value: `Emit(Resolver)` or `Plain(P<ReferenceResolver<()>>)`, chosen in
+  `getScriptTransformers`), `TransformOptions` and the `EmitHost` trait. Go keeps `EmitHost` in package `printer`, but
+  its `GetEmitResolver` returns the `Resolver`, which needs the checker, so the trait lives in `tsrs_transformers`
+  (`tsrs_printer` does not depend on the checker). `tsrs_declarations` depends on it and re-exports `Transformer`,
+  `Resolver` and the 3 utilities, so existing paths keep compiling.
 - **Transformer handles.** Go returns `*transformers.Transformer`, whose visitor closes over the concrete
-  transformer. In Rust, `P<Transformer>`: `new_transformer(visit, ctx)` stores the `NodeVisitor`, and the `visit`
-  closure captures `P<XTransformer>` (arena handle, `&self` methods, `Cell`/`RefCell` fields), exactly as
-  `DeclarationTransformer` does today. `Chain` builds a `chainedTransformer` the same way. Factories are plain `fn`s.
+  transformer. In Rust, `P<Transformer>` points at the `base: Transformer` field of an arena-allocated concrete
+  transformer: `tx.get().base.new_transformer(visit, Some(ctx))` returns `P::from_static(&tx.base)`, and the `visit`
+  closure captures the `P<XTransformer>` (`&self` methods, `Cell`/`RefCell` fields), exactly as
+  `DeclarationTransformer` does. Factories are `fn(&TransformOptions) -> Option<P<Transformer>>`
+  (`TransformerFactory`; `None` is Go's nil from `newClassFieldsTransformer` and friends). Go's package-level
+  `transformers.Chain(...)` vars are functions that call `chain(&[...])(opts)` (estransforms/definitions.rs).
+- **Gate stubs.** One file per Go file. Each stub has the Go struct fields its constructor sets, the constructor
+  (including Go's nil returns and panics), and `visit` with the Go `SubtreeFacts` early return; past it,
+  `unimplemented!("emit: <file>.go not ported")`. Transformers whose Go `visit` has no early return (importelision,
+  esmodule, constenum) stop at their first statement. Ported in full because they are tiny or pure dispatch:
+  estransforms/definitions.go, usestrict.go, moduletransforms/impliedmodule.go and esdecorator.go's
+  `visitSourceFile` (it visits every file for every target below ESNext, so a stub there would block everything).
+  async/forawait's early return goes through `fallbackVisitor`, whose own early return always holds while nothing
+  is captured.
 - **Checker access.** Go's `newEmitHost` locks the file's checker for the whole emit of that file. Rust lends the
   checker to a `CheckerSlot` for the whole `emitter.emit()` (transform + print, JS + declarations), and `Resolver`
-  borrows it per call: the mechanism `get_declaration_diagnostics` already uses (program.rs:1301,
-  emitter.rs:100).
-- **Threading.** Go emits files in parallel through a work group. Rust runs one emit pass per checker group on the
-  checker threads (`for_each_checker_group_do`), with files in program order within a group. Results go into a
-  per-file-index vector, and `CombineEmitResults` runs in input order, which is Go's observable order. Writers come
-  from a per-thread pool (Go `writerPool`); emit contexts come from `get_emit_context()` (already ported).
-- **Writing files.** `EmitOptions.write_file: Option<&dyn Fn(&str, &str, &WriteFileData) -> Result<(), String>>`
-  (harness: the recorder FS; CLI: `sys` write with directory creation, which is Go's `host.WriteFile`). The CLI
-  never reaches this unless `TSRS_EMIT=1`.
-- **Source maps** (E7). Replace the uninhabited `SourceMapGenerator` with `tsrs_sourcemap::Generator`, and the two
-  `unreachable!`s in printer_3.rs with the Go bodies. The printer keeps the borrowed generator for the duration of
-  `write`, like the borrowed writer (one `unsafe` adapter already exists for the writer; reuse that pattern).
-- **Helpers.** Helper definitions are `static`s with `&'static str` text. `EmitContext` already keeps the helper
-  lists, and the printer already emits them.
-- **Content mappers** are not supported by tsrs (the harness skips `runExternalCode`). Keep Go's branch structure
-  where emit code checks `ContentMapper()`/`SpanMap()`, with the mapper always absent.
+  borrows it per call, the mechanism `get_declaration_diagnostics` already uses.
+- **Threading (where emit runs).** `Program::emit` (`tsrs_compiler/src/program_emit.rs`) runs one emit pass per
+  checker group on the checker threads (`for_each_checker_group_do` over the files to emit, files in program order
+  within a group), like `get_declaration_diagnostics`. Each file's `EmitResult` goes into a slot indexed by its
+  position in the emit list, and `combine_emit_results` runs in input order, which is Go's observable order. With an
+  external checker pool (the project system), files take their checker from the pool one by one, as in Go. A fresh
+  text writer is created per file (Go pools them; the output is the same); emit contexts come from
+  `get_emit_context()`. `EmitOptions.write_file` is a `&(dyn Fn(&str, &str, &mut WriteFileData) -> Result<(),
+  String> + Sync)`, since it is called from the checker threads.
+- **Arena and regions.** Transformed and synthesized nodes, emit contexts and transformer objects are allocated with
+  `P::new` in the arena of the thread that runs the emit (a checker thread in the CLI and the harness), exactly like
+  the nodes the checker's node builder synthesizes. Nothing is freed and no recycling site is added: emit uses no
+  free list, no checkpoint and no `arena_pin`, so the census free-gate (notes/mem-recycle.md) has nothing new to
+  verify; the precise walk does not visit emit output because nothing in the program points to it after emit. The
+  language server (notes/lsp-mem.md regions) does not emit; if it ever does, emit would run inside the checker's
+  region and its nodes would be freed with that region, which is correct because emit output is not stored in the
+  program.
+- **Writing files.** Go's `emitHost.WriteFile` is `program.Host().FS().WriteFile`. Rust: the compiler's
+  `EmitHost::write_file` calls `program.host().fs().write_file` (`tsrs_vfs`): the CLI's cached FS over the OS FS,
+  which creates missing directories (iovfs `write_file_ensuring_dir`); the harness's recorder FS over the
+  in-memory test FS. `Program::emit` is only called by the CLI under `TSRS_EMIT=1` and by the harness under
+  `--baselines js`.
+- **Source maps** (E7). `print_source_file` keeps Go's structure; when `shouldEmitSourceMaps` is true it is
+  `unimplemented!` (`TODO(emit/sourcemaps)`): replace the uninhabited `SourceMapGenerator` with
+  `tsrs_sourcemap::Generator`, the two `unreachable!`s in printer_3.rs with the Go bodies, and add the
+  `sourceMapGenerator != nil` branch of `printSourceFile` (emitter.rs). `get_source_mapping_url`,
+  `get_source_map_directory` and `get_source_root` are ported already.
+- **Helpers.** helpers.go definitions are `static`s in `tsrs_printer/src/helpers_defs.rs` (text copied byte for
+  byte), handed out with `P::from_static` (now a `const fn`), so identity comparisons behave like Go's pointers.
+  The rest of factory.go is `tsrs_printer/src/factory_2.rs` (`PrivateIdentifierKind` is an enum with `as_str`).
+- **Content mappers** are not supported by tsrs (the harness skips `runExternalCode`). Go's branch structure is
+  kept where emit code checks `ContentMapper()`/`SpanMap()`, with the mapper always absent.
+- **Checker assignment.** With several checkers, tsrs assigns files to checkers by directory locality (Go: FENNEL),
+  and inferred types printed into `.d.ts` files can depend on which files a checker saw first (2 of the private
+  monorepo's 2,325 declaration files differed in property order). The monorepo oracle therefore runs tsrs with
+  `TSRS_CHECKER_ASSIGNMENT=go`; with it every declaration file is identical.
+- **Incremental programs** (E13) are emitted as plain programs: under the gate, `incremental`/`composite` projects
+  write their JS and declarations but no `.tsbuildinfo`, and the harness builds plain programs too.
 
 ## 11. Coordination with the LSP port
 
@@ -411,6 +463,12 @@ then-current main:
 - `printer/changetrackerwriter.go` is language-service code. Leave it to the LSP effort.
 
 ## 12. Oracle: `tools/oracle/emit`
+
+Implemented: `tools/oracle/emit/run.py` (one project, as planned below; `$TSGO` names the reference binary) and
+`tools/oracle/emit/monorepo.sh <monorepo root> [-j N] [--filter RE] [-- flags]` (every workspace package whose
+`build` script runs `tsc`; outputs in `/tmp/emit-go/<pkg>` and `/tmp/emit-rs/<pkg>`; refuses to start unless the
+monorepo's `git status --short` is empty and fails if it changed; `TSRS_CHECKER_ASSIGNMENT=go` by default, see
+section 10). `tsc --build` packages are emitted with `-p` until `-b` exists.
 
 The reference binary already emits, so no Go oracle program is needed (add one under `ts-ref/tsc/cmd/` only if
 `EmitResult` internals are needed). Planned `tools/oracle/emit/run.py <tsconfig|dir> [--name N] [-- extra tsc flags]`:
@@ -431,11 +489,16 @@ sides and emit still happens); webpack (JS only: `allowJs`, `target: ES2017`, co
 chain on `.js` input); vscode `src` (`ES2024`, nodenext, `preserveConstEnums`, `outDir`; large, a good stress test
 for E1–E6); mui-docs (JSX).
 
-## 13. Progress tables (empty until work resumes)
+## 13. Progress tables
+
+`.js` = `tsrs-test run --suite all --baselines js` (js pass / js total, crash = gate stub reached). Oracle =
+`tools/oracle/emit/monorepo.sh <private monorepo>` (103 packages whose `build` runs `tsc`); "dts" mode adds
+`--sourceMap false --declarationMap false --emitDeclarationOnly`. Gates (conformance errors + types/symbols
+identical to main in both modes, fourslash 4066/63, `-D warnings` check) held for every row.
 
 | date | commit | wave | `.js` pass / total | `.js.map` | `.sourcemap.txt` | oracle | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| | | | | | | | |
+| 2026-10-03 | emit/core (E2) | E1+E2 | 1364 / 15197 (12032 crash at stubs, 1800 skip) | — | — | dts: 2325/2325 files identical, 103/103 packages; full: 0 files (stubs: typeeraser 91, importelision 5, metadata 4; 3 packages emit nothing in both) | multi-threaded test programs give the same js pass list (one timeout aside) |
 
 ## 14. Known gaps and risks
 
