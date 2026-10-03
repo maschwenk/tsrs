@@ -205,6 +205,28 @@ Results:
   - `error-only-unverified` 1 (`getCurrentLanguageServerSnapshot`);
   - `unimplemented` 3 (the profiling methods).
 
+### tsrs at core `7c34965` and `f70371e`
+
+`7c34965` (harness `cc303bd`):
+
+- Full suite, twice: 902 tests, 899 passed, 0 failed, 3 todo.
+- `sync/api` + shutdown: 40/40 runs at 340/340.
+- Lifecycle stress: 40/40 runs clean.
+- Build RSS probe: grows about 25.7 MiB per orchestrator create/build/dispose.
+
+`f70371e` (harness `1731464`):
+
+- Full suite, run 1: one failure from the RSS late-growth check (+22 MiB in the last third, +17 MiB in the
+  first).
+- Full suite, run 2: 903 tests, 900 passed, 0 failed, 3 todo.
+- That RSS test re-run: 5/5 passed.
+- `createSnapshot` probe: flat over 600 cycles.
+- Build probe: flat at about 140 MiB over 400 builds.
+- Inventory over 172 methods: `tests-pass` 168, `error-only-unverified` 1, `unimplemented` 3.
+
+Pinned Go build semantics, recorded and matched by tsrs: through the API, `dry` still writes outputs,
+`force` on an up-to-date graph writes nothing, and `stopBuildOnErrors` still builds downstream projects.
+
 ## Known limitations
 
 - Tracing needs Linux (`/proc`); other platforms run with `--no-trace` and only get test counts.
