@@ -1,7 +1,10 @@
 # Emit plan: JavaScript, declarations, source maps, `--build`
 
-Status (2026-10-02): **phase 0 only (survey and plan). No emit code has been written.** tsrs still forces
-`--noEmit`, and the `TSRS_EMIT=1` gate below is a design that has not been implemented yet.
+Status (2026-10-03): **wave E1 (pipeline) landed on branch `emit/core`.** The `TSRS_EMIT=1` gate (section 6) is
+implemented; without it tsrs still forces `--noEmit` and writes nothing (release guard: `crates/tsrs_cli/tests/emit_gate.rs`).
+Under the gate, `Program::emit` runs the full Go pipeline: `.d.ts` files are printed (the declaration transformer is
+complete), and every script transformer that is not ported yet is a gate stub that panics with
+`emit: <file>.go not ported` once its `SubtreeFacts` early return does not apply. Progress: section 13.
 
 ## Why the work stopped after phase 0
 

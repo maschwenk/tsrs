@@ -53,7 +53,7 @@ impl NodeFactory {
         self.emit_context.set(Some(context));
     }
 
-    fn emit_context(&self) -> P<EmitContext> {
+    pub(crate) fn emit_context(&self) -> P<EmitContext> {
         self.emit_context.get().unwrap()
     }
 
