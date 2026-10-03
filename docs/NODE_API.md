@@ -112,7 +112,7 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 4 | `getCachedSourceFile` | core | not implemented |  |
 | 5 | `batchRequests` | core | supported | batch_test (nesting error, pagination with continuation tokens); binary-in-batch base64 path untested until source-file methods land |
 | 6 | `initialize` | core | supported | config_test |
-| 7 | `createSnapshot` | core | partial | program_test; `fileSystem` and `options.moduleResolver` return explicit unsupported errors |
+| 7 | `createSnapshot` | core | partial | program_test, module_resolution_test (moduleResolver option incl. callback); `fileSystem` returns an explicit unsupported error |
 | 8 | `updateSnapshot` | core | partial | program_test (fileNotifications, ensurePrograms, retained base); `fileSystem` unsupported |
 | 9 | `getCurrentLanguageServerSnapshot` | core | not implemented |  |
 | 10 | `createBuildOrchestrator` | core | not implemented |  |
@@ -121,9 +121,9 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 13 | `buildReferences` | core | not implemented |  |
 | 14 | `cleanBuild` | core | not implemented |  |
 | 15 | `cleanReferences` | core | not implemented |  |
-| 16 | `createModuleResolver` | core | not implemented |  |
-| 17 | `releaseModuleResolver` | core | not implemented |  |
-| 18 | `resolveModuleName` | core | not implemented |  |
+| 16 | `createModuleResolver` | core | supported | module_resolution_test (default, static entries, callback) |
+| 17 | `releaseModuleResolver` | core | supported | module_resolution_test |
+| 18 | `resolveModuleName` | core | supported | module_resolution_test (standalone, snapshot-scoped callback); inProgressSnapshot path exercised only via callbacks during program build |
 | 19 | `parseCommandLine` | core | supported | config_test |
 | 20 | `readConfigFile` | core | supported | config_test |
 | 21 | `parseJsonConfigFileContent` | core | supported | config_test |
@@ -284,7 +284,6 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 - Request filesystems (`createSnapshot`/`updateSnapshot` `fileSystem`, Go `requestfilesystem`) and
   callback filesystems (`--callbacks`, Go `callbackfs.go`) are not ported yet; requests using them get an
   explicit unsupported error.
-- Module resolvers (`createModuleResolver`, `resolveModuleName`, `options.moduleResolver`) are not ported.
 - Build orchestration (`createBuildOrchestrator`, `build*`, `clean*`): the reusable boundary out of the
   CLI build modules is not extracted yet.
 - Source files / AST (`getSourceFile`, `createSourceFile*`, leases, `printNode`, ...) wait on the codec

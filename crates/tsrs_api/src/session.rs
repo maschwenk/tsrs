@@ -100,6 +100,10 @@ pub struct Session {
     conn: Mutex<Option<Arc<dyn ClientConn>>>,
     closed: Mutex<bool>,
     pub(crate) batch_pages: Mutex<HashMap<String, Vec<String>>>,
+    pub(crate) module_resolvers: crate::module_resolution::ModuleResolvers,
+    /// The session's base filesystem (Go `Session.FS()`), shared with resolver hosts.
+    base_fs: Arc<dyn FS>,
+    weak_self: std::sync::Weak<Session>,
     next_batch_page: AtomicU64,
 }
 
@@ -131,7 +135,8 @@ impl Session {
         let parse_config_host: &'static crate::config::ApiParseConfigHost =
             Box::leak(Box::new(crate::config::ApiParseConfigHost { fs: init.fs.clone(), cwd: init.options.current_directory.clone() }));
         let id = SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
-        Arc::new(Session {
+        let base_fs = init.fs.clone();
+        Arc::new_cyclic(|weak_self| Session {
             id: format!("api-session-{id}"),
             snapshot_host: tsrs_project::new_snapshot_host(&init),
             parse_config_host,
@@ -141,11 +146,22 @@ impl Session {
             closed: Mutex::new(false),
             batch_pages: Mutex::new(HashMap::new()),
             next_batch_page: AtomicU64::new(0),
+            module_resolvers: Default::default(),
+            base_fs,
+            weak_self: weak_self.clone(),
         })
     }
 
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    pub(crate) fn weak_self(&self) -> std::sync::Weak<Session> {
+        self.weak_self.clone()
+    }
+
+    pub(crate) fn snapshot_host_fs(&self) -> Arc<dyn FS> {
+        self.base_fs.clone()
     }
 
     pub(crate) fn next_batch_page_id(&self) -> u64 {
@@ -241,11 +257,6 @@ impl Session {
         Ok(())
     }
 
-    /// Module resolvers (Go `moduleResolverFactory`) are not ported yet.
-    pub(crate) fn module_resolver_factory(&self, id: u64) -> ApiResult<(Arc<dyn tsrs_project::ModuleResolverFactory>, u64)> {
-        Err(ApiError::unsupported(&format!("createProgram options.moduleResolver ({id})")))
-    }
-
     fn dispatch(&self, method: &str, params: &[u8]) -> ApiResult<Response> {
         match method {
             "echo" => {
@@ -297,6 +308,9 @@ impl Session {
             "getProgramDiagnostics" => self.handle_get_program_diagnostics(p)?,
             "getGlobalDiagnostics" => self.handle_get_global_diagnostics(p)?,
             "getConfigFileParsingDiagnostics" => self.handle_get_config_file_parsing_diagnostics(p)?,
+            "createModuleResolver" => self.handle_create_module_resolver(p)?,
+            "releaseModuleResolver" => self.handle_release_module_resolver(p)?,
+            "resolveModuleName" => self.handle_resolve_module_name(p)?,
             "transpileModule" => self.handle_transpile(p, false)?,
             "transpileDeclaration" => self.handle_transpile(p, true)?,
             "transpileModuleFromFile" => self.handle_transpile_from_file(p, false)?,

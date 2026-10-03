@@ -13,6 +13,7 @@ pub mod batch;
 pub mod config;
 pub mod diagnostics;
 pub mod handler;
+pub mod module_resolution;
 pub mod methods;
 pub mod program;
 pub mod session;
