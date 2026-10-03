@@ -7,8 +7,8 @@
 #
 #   tools/oracle/emit/monorepo.sh <monorepo root> [-j N] [--filter REGEX] [--buildinfo] [-- extra flags for both compilers]
 #
-# --buildinfo also compares the tsbuildinfo files (run.py --buildinfo; build tsrs with TSRS_TS_VERSION=<tsgo
-# --version>). With `-- --noEmit` that is the incremental-only mode (tsbuildinfo of a noEmit program).
+# --buildinfo also compares the tsbuildinfo files (run.py --buildinfo; use tsgo built from ts-ref, see run.py).
+# With `-- --noEmit` that is the incremental-only mode (tsbuildinfo of a noEmit program).
 #
 # Env: TSGO (reference tsgo binary, required), TSRS (default target/release/tsrs), TSRS_CHECKER_ASSIGNMENT (default
 # go), OUT_GO (/tmp/emit-go),

@@ -87,9 +87,10 @@ def main():
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--timeout", type=int, default=900)
     ap.add_argument("--quiet", action="store_true")
-    # Also compare the tsbuildinfo files (<out>.tsbuildinfo) byte for byte. tsrs then reads the default libraries
-    # from tsgo's directory like the npm (noembed) tsgo does (TSRS_LIB_PATH, crates/tsrs_cli/src/sys.rs); build tsrs
-    # with TSRS_TS_VERSION=<tsgo --version> so the `version` fields agree.
+    # Also compare the tsbuildinfo files (<out>.tsbuildinfo) byte for byte. With tsgo built from ts-ref
+    # (`go build ./cmd/tsc`: embedded libs, version 7.1.0-dev) the default tsrs build matches as is. With the npm
+    # (noembed) tsgo, tsrs reads the libraries from tsgo's directory (TSRS_LIB_PATH) and must be built with
+    # TSRS_TS_VERSION=<tsgo --version>.
     ap.add_argument("--buildinfo", action="store_true")
     args = ap.parse_args(argv)
 
@@ -111,8 +112,10 @@ def main():
     env.pop("TSRS_EMIT", None)
     go_status, go_text = run([reference_binary()] + flags(go_out), env, cwd, args.timeout)
     env_rs = dict(env, TSRS_EMIT="1")
-    if args.buildinfo and "TSRS_LIB_PATH" not in env_rs:
-        env_rs["TSRS_LIB_PATH"] = os.path.dirname(os.path.realpath(reference_binary()))
+    # A noembed reference (the npm tsgo: lib.d.ts next to the binary) reads its libraries from disk; match it.
+    ref_dir = os.path.dirname(os.path.realpath(reference_binary()))
+    if args.buildinfo and "TSRS_LIB_PATH" not in env_rs and os.path.exists(os.path.join(ref_dir, "lib.d.ts")):
+        env_rs["TSRS_LIB_PATH"] = ref_dir
     rs_status, rs_text = run([tsrs_binary()] + flags(rs_out), env_rs, cwd, args.timeout)
     rs_text_cmp = rs_text.replace(rs_out, "<OUT>")
     go_text_cmp = go_text.replace(go_out, "<OUT>")

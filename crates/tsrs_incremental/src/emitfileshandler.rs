@@ -300,7 +300,7 @@ impl<'a> emitFilesHandler<'a> {
             } else {
                 // Mark as differsOnlyInMap so that we can reverse the timestamp with --build so that
                 // the downstream projects dont detect this as change in d.ts file
-                *differs_only_in_map = self.program.options().build.is_true();
+                *differs_only_in_map = self.program.snapshot.options().build.is_true();
             }
         } else {
             self.latest_changed_dts_files.lock().unwrap().insert(file.path().clone(), output_file_name.to_string());

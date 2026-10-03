@@ -425,7 +425,8 @@ fn normalize_package_jsons(mut package_jsons: Vec<String>) -> Vec<String> {
     package_jsons
 }
 
-impl ProgramLike for P<Program> {
+// `&'static Program` (not `P<Program>`: the orphan rule forbids a foreign trait on the foreign `P`).
+impl ProgramLike for &'static Program {
     // Options implements compiler.AnyProgram interface.
     fn options(&self) -> P<CompilerOptions> {
         self.snapshot.options()
@@ -479,7 +480,7 @@ impl ProgramLike for P<Program> {
     // GetDeclarationDiagnostics implements compiler.AnyProgram interface.
     fn get_declaration_diagnostics(&self, ctx: &Context, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         self.panic_if_no_program("GetDeclarationDiagnostics");
-        let result = emit_files(ctx, *self, EmitOptions { target_source_files: file.map(|f| vec![f]), ..Default::default() }, true);
+        let result = emit_files(ctx, P::from_static(*self), EmitOptions { target_source_files: file.map(|f| vec![f]), ..Default::default() }, true);
         match result {
             Some(result) => result.diagnostics,
             None => Vec::new(),
@@ -517,7 +518,7 @@ impl ProgramLike for P<Program> {
             }
             return Some(result);
         }
-        emit_files(ctx, *self, options, false)
+        emit_files(ctx, P::from_static(*self), options, false)
     }
 
     // CommonSourceDirectory implements compiler.AnyProgram interface.

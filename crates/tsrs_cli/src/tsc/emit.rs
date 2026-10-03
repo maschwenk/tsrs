@@ -165,6 +165,7 @@ fn list_files_worker(input: &EmitInput, emit_result: &tsrs_compiler::EmitResult)
 
 // emit.go:72 EmitFilesAndReportErrors with an incremental program as the ProgramLike.
 fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<tsrs_incremental::Program>) -> CompileAndEmitResult {
+    let program_like: &'static tsrs_incremental::Program = program_like.get();
     use tsrs_incremental::emit::{get_diagnostics_of_any_program as get_diagnostics_of_any_program_like, EmitOptions, EmitResult, ProgramLike};
     let mut times = input.compile_times;
     let bind_time = Cell::new(times.bind_time);
