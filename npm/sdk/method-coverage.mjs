@@ -90,6 +90,11 @@ function runSuite(server) {
         entry[`${variant}${outcome === "ok" ? "Ok" : "Error"}`]++;
         counts.set(method, entry);
     }
+    // The upstream astnav tests silently define no tests when the compiler fixtures are missing (they read them from
+    // <repo>/ts-ref/tsc/testdata); that would quietly drop 8 tests from the counts, so treat it as an error.
+    if (output.includes("Skipping astnav tests: compiler fixtures not available")) {
+        throw new Error(`${server.label}: astnav tests were skipped because ts-ref/tsc/testdata is missing; check out the pinned commit as ts-ref`);
+    }
     const failing = [...output.matchAll(/^test at (\S+)$/gm)].map(m => m[1]);
     return { ...server, totals, counts, failing, exit: result.status };
 }
