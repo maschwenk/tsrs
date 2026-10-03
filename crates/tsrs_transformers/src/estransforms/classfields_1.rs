@@ -1891,8 +1891,55 @@ impl classFieldsTransformer {
         }
         self.heritage_clause_visitor().visit_each_child(Some(node))
     }
-}
 
-// TEMP(part 1 in progress): not yet ported part-1 functions.
-impl classFieldsTransformer {
+    // classfields.go:1835
+    pub(crate) fn visit_in_new_class_lexical_environment(&self, node: P<Node>, visitor: fn(&Self, P<Node>, classFacts) -> Option<P<Node>>) -> Option<P<Node>> {
+        let saved_current_class_container = self.current_class_container.get();
+        let saved_pending_expressions = std::mem::take(&mut *self.pending_expressions.borrow_mut());
+        let saved_lexical_environment = self.lexical_environment.get();
+        self.current_class_container.set(Some(node));
+        self.start_class_lexical_environment();
+        let original = self.emit_context().most_original(Some(node)).unwrap();
+        self.enclosing_class_declarations.borrow_mut().insert(original);
+
+        if self.should_transform_private_elements_or_class_static_blocks.get() || self.node_has_transform_private_static_elements_flag(node) {
+            let name = ast::get_name_of_declaration(node);
+            if let Some(name) = name.filter(|n| ast::is_identifier(*n)) {
+                self.get_private_identifier_environment().data.class_name.set(Some(name));
+            } else if let Some(assigned_name) = self.emit_context().assigned_name(node) {
+                if ast::is_string_literal(assigned_name) {
+                    // If the assigned name has a textSourceNode that is an identifier, use it directly.
+                    if let Some(text_source_node) = self.emit_context().text_source(assigned_name).filter(|t| ast::is_identifier(*t)) {
+                        self.get_private_identifier_environment().data.class_name.set(Some(text_source_node));
+                    } else if scanner::is_identifier_text(assigned_name.text(), tsrs_core::LanguageVariant::Standard) {
+                        // If the text is a valid identifier, create an identifier from it.
+                        let prefix_name = self.factory().new_identifier(assigned_name.text());
+                        self.get_private_identifier_environment().data.class_name.set(Some(prefix_name));
+                    }
+                }
+            }
+        }
+
+        if self.should_transform_private_elements_or_class_static_blocks.get() {
+            let private_instance_methods_and_accessors = self.get_private_instance_methods_and_accessors(node);
+            if !private_instance_methods_and_accessors.is_empty() {
+                let weak_set_name = self.create_hoisted_variable_for_class("instances", private_instance_methods_and_accessors[0].name().unwrap(), "");
+                self.get_private_identifier_environment().data.weak_set_name.set(Some(weak_set_name));
+            }
+        }
+
+        let facts = self.get_class_facts(node);
+        if facts != classFacts::None {
+            self.get_class_lexical_environment().facts.set(facts);
+        }
+
+        let result = visitor(self, node, facts);
+        self.enclosing_class_declarations.borrow_mut().remove(&original);
+        self.end_class_lexical_environment();
+        assert!(self.lexical_environment.get() == saved_lexical_environment);
+        self.current_class_container.set(saved_current_class_container);
+        *self.pending_expressions.borrow_mut() = saved_pending_expressions;
+        self.lexical_environment.set(saved_lexical_environment);
+        result
+    }
 }

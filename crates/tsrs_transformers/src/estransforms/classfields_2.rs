@@ -107,6 +107,12 @@ impl classFieldsTransformer {
         env.members.borrow().get(name.text()).copied()
     }
 
+    // classfields.go:3122
+    pub(crate) fn create_hoisted_variable_for_class(&self, name_text: &str, node: P<Node>, suffix: &str) -> P<Node> {
+        let _ = (name_text, node, suffix);
+        unimplemented!("classfields part 2")
+    }
+
     // classfields.go:3181
     pub(crate) fn access_private_identifier(&self, name: P<Node>) -> Option<P<privateIdentifierInfo>> {
         let mut env = self.lexical_environment.get();
