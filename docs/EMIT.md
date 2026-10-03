@@ -468,7 +468,10 @@ Implemented: `tools/oracle/emit/run.py` (one project, as planned below; `$TSGO` 
 `tools/oracle/emit/monorepo.sh <monorepo root> [-j N] [--filter RE] [-- flags]` (every workspace package whose
 `build` script runs `tsc`; outputs in `/tmp/emit-go/<pkg>` and `/tmp/emit-rs/<pkg>`; refuses to start unless the
 monorepo's `git status --short` is empty and fails if it changed; `TSRS_CHECKER_ASSIGNMENT=go` by default, see
-section 10). `tsc --build` packages are emitted with `-p` until `-b` exists.
+section 10). It fails closed (`summarize.py`): exit 0 only when every selected package has exactly one result row and that
+row is identical (equal nonzero compiler statuses are fine); any file difference, status or diagnostics difference,
+tsrs panic, timeout, missing/duplicate/unexpected/malformed row or an empty selection exits 1.
+`tools/oracle/emit/test_monorepo.sh` (`TSGO=... TSRS=...`) checks that on a throwaway two-package repo. `tsc --build` packages are emitted with `-p` until `-b` exists.
 
 The reference binary already emits, so no Go oracle program is needed (add one under `ts-ref/tsc/cmd/` only if
 `EmitResult` internals are needed). Planned `tools/oracle/emit/run.py <tsconfig|dir> [--name N] [-- extra tsc flags]`:
