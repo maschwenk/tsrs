@@ -101,8 +101,13 @@ pub struct CallbackFs {
 struct CallbackResponse<'a> {
     #[serde(default)]
     kind: Option<String>,
-    #[serde(borrow, default)]
+    // Present `null` must stay distinguishable from an absent value (Go: zero value vs unexpected EOF).
+    #[serde(borrow, default, deserialize_with = "present_raw")]
     value: Option<&'a RawValue>,
+}
+
+fn present_raw<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<&'de RawValue>, D::Error> {
+    <&RawValue>::deserialize(d).map(Some)
 }
 
 struct Decoded {
@@ -116,8 +121,39 @@ impl Decoded {
         serde_json::from_str(raw).unwrap_or_else(|e| fail(format!("invalid {name} callback value: {e}")))
     }
 
-    fn string_value(&self, name: &str) -> String {
-        self.value::<String>(name)
+    /// json.Unmarshal(value, &string) as callbackfs.go does: an absent value is `unexpected EOF`, `null`
+    /// leaves the zero value, any other JSON kind is Go's type error (the panic text is Go's).
+    fn string_value(&self, _name: &str) -> String {
+        match self.go_scalar("string") {
+            Some(raw) => serde_json::from_str(raw).unwrap_or_else(|e| fail(format!("json: {e}"))),
+            None => String::new(),
+        }
+    }
+
+    fn bool_value(&self, _name: &str) -> bool {
+        match self.go_scalar("bool") {
+            Some(raw) => serde_json::from_str(raw).unwrap_or_else(|e| fail(format!("json: {e}"))),
+            None => false,
+        }
+    }
+
+    /// The raw value when it has the Go target's JSON kind; None for `null`; panics with Go's text otherwise.
+    fn go_scalar(&self, go_type: &str) -> Option<&str> {
+        let Some(raw) = self.value.as_deref() else { fail("jsontext: unexpected EOF") };
+        let raw = raw.trim_matches(|c: char| c == ' ' || c == '\t' || c == '\n' || c == '\r');
+        let kind = match raw.as_bytes().first() {
+            Some(b'n') => return None,
+            Some(b'"') => "string",
+            Some(b't' | b'f') => "boolean",
+            Some(b'[') => "array",
+            Some(b'{') => "object",
+            _ => "number",
+        };
+        let wanted = if go_type == "string" { "string" } else { "boolean" };
+        if kind != wanted {
+            fail(format!("json: cannot unmarshal JSON {kind} into Go {go_type}"));
+        }
+        Some(raw)
     }
 }
 
@@ -223,7 +259,7 @@ impl FS for CallbackFs {
         if self.is_enabled(CALLBACK_FILE_EXISTS) {
             let response = self.call_path(CALLBACK_FILE_EXISTS, path);
             return match response.kind.as_str() {
-                "value" => response.value::<bool>(CALLBACK_FILE_EXISTS),
+                "value" => response.bool_value(CALLBACK_FILE_EXISTS),
                 "useOS" => self.base.file_exists(path),
                 _ => invalid_kind(CALLBACK_FILE_EXISTS, &response),
             };
@@ -236,7 +272,7 @@ impl FS for CallbackFs {
         if self.is_enabled(CALLBACK_DIRECTORY_EXISTS) {
             let response = self.call_path(CALLBACK_DIRECTORY_EXISTS, path);
             return match response.kind.as_str() {
-                "value" => response.value::<bool>(CALLBACK_DIRECTORY_EXISTS),
+                "value" => response.bool_value(CALLBACK_DIRECTORY_EXISTS),
                 "useOS" => self.base.directory_exists(path),
                 _ => invalid_kind(CALLBACK_DIRECTORY_EXISTS, &response),
             };

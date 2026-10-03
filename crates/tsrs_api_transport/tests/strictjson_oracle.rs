@@ -97,3 +97,42 @@ fn deep_nesting_is_bounded() {
     let ok = format!("{}{}", "[".repeat(5000), "]".repeat(5000));
     assert!(tsrs_api_transport::strictjson::validate(ok.as_bytes()).is_ok());
 }
+
+/// Grammar errors: every input of go_syntax_oracle.json (decoded by the pinned Go binary into `any`)
+/// is accepted or rejected exactly as Go does, with Go's error text (pointer and offset rules included).
+#[test]
+fn syntax_errors_match_pinned_go_text() {
+    let cases: Vec<Value> = serde_json::from_str(include_str!("fixtures/go_syntax_oracle.json")).unwrap();
+    let mut mismatches = Vec::new();
+    for case in &cases {
+        let input = hex(case["input"].as_str().unwrap());
+        let go = case["error"].as_str().unwrap();
+        let ours = tsrs_api_transport::strictjson::validate(&input).err().unwrap_or_default();
+        if ours != go {
+            mismatches.push(format!("{:?}\n   go: {go}\n  ours: {ours}", String::from_utf8_lossy(&input)));
+        }
+    }
+    assert!(cases.len() >= 100, "{}", cases.len());
+    assert!(mismatches.is_empty(), "{} of {} differ:\n{}", mismatches.len(), cases.len(), mismatches.join("\n"));
+}
+
+/// readFile `value` decoding follows Go's json.Unmarshal into a string (absent, null, wrong kinds).
+#[test]
+fn read_file_value_kinds_match_pinned_go() {
+    let cases = [
+        (r#"{"kind":"value"}"#, Err("jsontext: unexpected EOF")),
+        (r#"{"kind":"value","value":null}"#, Ok("")),
+        (r#"{"kind":"value","value":5}"#, Err("json: cannot unmarshal JSON number into Go string")),
+        (r#"{"kind":"value","value":true}"#, Err("json: cannot unmarshal JSON boolean into Go string")),
+        (r#"{"kind":"value","value":[]}"#, Err("json: cannot unmarshal JSON array into Go string")),
+        (r#"{"kind":"value","value":{}}"#, Err("json: cannot unmarshal JSON object into Go string")),
+        (r#"{"kind":"value","value":-1.5e3}"#, Err("json: cannot unmarshal JSON number into Go string")),
+    ];
+    for (input, want) in cases {
+        let got = read_file_via_callback(input.as_bytes().to_vec());
+        match want {
+            Ok(content) => assert_eq!(got.as_ref().map(|c| c.as_deref()), Ok(Some(content)), "{input}"),
+            Err(text) => assert_eq!(got.unwrap_err(), text, "{input}"),
+        }
+    }
+}
