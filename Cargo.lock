@@ -598,6 +598,7 @@ dependencies = [
 name = "tsrs_testrunner"
 version = "0.2.3"
 dependencies = [
+ "indexmap",
  "mimalloc",
  "regex",
  "rustc-hash",

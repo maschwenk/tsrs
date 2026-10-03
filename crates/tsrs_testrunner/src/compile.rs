@@ -95,6 +95,30 @@ pub struct CompilationResult {
     pub options: &'static CompilerOptions,
     pub program: &'static compiler::Program,
     pub harness_options: HarnessOptions,
+    pub host: Arc<dyn CompilerHost>,
+    pub tsconfig: Option<P<ParsedCommandLine>>,
+    // The emit outputs, only under `--baselines js` (docs/EMIT.md section 8).
+    #[cfg(feature = "checker")]
+    pub emit: Option<crate::emit_harness::EmitOutputs>,
+}
+
+fn js_baselines() -> bool {
+    cfg!(feature = "checker") && !crate::syntax_only() && crate::extra_baselines() & crate::EXTRA_JS != 0
+}
+
+// Go `result.Repeat` / `compileDeclarationFiles` call CompileFilesEx again with the test's harness settings.
+#[cfg(feature = "checker")]
+struct Recompiler<'a> {
+    harness_options: &'a HarnessOptions,
+    current_directory: &'a str,
+    symlinks: &'a BTreeMap<String, String>,
+}
+
+#[cfg(feature = "checker")]
+impl crate::emit_harness::Recompile for Recompiler<'_> {
+    fn compile(&self, input_files: &[TestFile], other_files: &[TestFile], options: CompilerOptions, tsconfig: Option<P<ParsedCommandLine>>) -> CompilationResult {
+        compile_files_ex(input_files, other_files, self.harness_options, options, self.current_directory, self.symlinks, tsconfig).unwrap()
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -185,6 +209,13 @@ fn compile_files_ex(
 
     let fs = vfstest::from_map(testfs, harness_options.use_case_sensitive_file_names);
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(fs));
+    #[cfg(feature = "checker")]
+    let recorder = js_baselines().then(|| crate::emit_harness::new_output_recorder_fs(fs.clone()));
+    #[cfg(feature = "checker")]
+    let fs: Arc<dyn FS> = match &recorder {
+        Some(r) => r.clone(),
+        None => fs,
+    };
 
     let config_file = tsconfig.and_then(|t| t.config_file);
     let errors = tsconfig.map(|t| t.errors.clone()).unwrap_or_default();
@@ -195,15 +226,28 @@ fn compile_files_ex(
 
     let inner = compiler::new_compiler_host(current_directory, fs, &bundled::lib_path(), None, None);
     let host: Arc<dyn CompilerHost> = Arc::new(CachedCompilerHost { inner });
-    Ok(compile_files_with_host(host, config, harness_options))
+    #[cfg(feature = "checker")]
+    if let Some(recorder) = recorder {
+        let (diagnostics, program, emit_result) =
+            crate::emit_harness::compile_files_with_host_emit(host.clone(), config, harness_options, &|host, config| create_program(host, config));
+        let options = program.options().get();
+        let emit = crate::emit_harness::new_emit_outputs(&recorder, program, options, &*host, emit_result);
+        return Ok(CompilationResult { diagnostics, options, program, harness_options: harness_options.clone(), host, tsconfig, emit: Some(emit) });
+    }
+    Ok(compile_files_with_host(host, config, harness_options, tsconfig))
 }
 
-fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>, harness_options: &HarnessOptions) -> CompilationResult {
+// harnessutil.go:970 (createProgram). Incremental programs are plain programs until E13 (TODO(emit/incremental)).
+fn create_program(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> &'static compiler::Program {
     let mut opts = compiler::ProgramOptions::new(config, host);
     if test_program_is_single_threaded() {
         opts.single_threaded = Tristate::True;
     }
-    let program = compiler::new_program(opts);
+    compiler::new_program(opts)
+}
+
+fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>, harness_options: &HarnessOptions, tsconfig: Option<P<ParsedCommandLine>>) -> CompilationResult {
+    let program = create_program(host.clone(), config);
     let harness_options = harness_options.clone();
     let ctx = &compiler::Context::default();
     let mut errors = Vec::new();
@@ -221,7 +265,16 @@ fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandL
         errors.extend(program.get_declaration_diagnostics(ctx, None));
     }
     let errors = compiler::sort_and_deduplicate_diagnostics(&errors);
-    CompilationResult { diagnostics: errors, options: program.options().get(), program, harness_options }
+    CompilationResult {
+        diagnostics: errors,
+        options: program.options().get(),
+        program,
+        harness_options,
+        host,
+        tsconfig,
+        #[cfg(feature = "checker")]
+        emit: None,
+    }
 }
 
 // newCompilerTest + verifyDiagnostics
@@ -255,12 +308,75 @@ pub fn run(item: &TestItem, table: &OptionTable) -> Outcome {
     let diags = convert_diagnostics(&result.diagnostics);
     let files: Vec<TestFile> = ts_config_files.iter().chain(&to_be_compiled).chain(&other_files).cloned().collect();
     let errors = tsbaseline::do_error_baseline(&files, &diags, result.options.pretty.is_true());
+    let js = verify_javascript_output(item, &result, &ts_config_files, &to_be_compiled, &other_files, &payload, &current_directory);
     let types_and_symbols = verify_types_and_symbols(item, &result, &to_be_compiled, &other_files);
-    Outcome::Baseline(errors, types_and_symbols)
+    Outcome::Baseline(errors, types_and_symbols, js)
+}
+
+// compiler_runner.go:429
+const SKIPPED_EMIT_TESTS: [&str; 8] = [
+    "filesEmittingIntoSameOutput.ts",
+    "jsFileCompilationWithJsEmitPathSameAsInput.ts",
+    "grammarErrors.ts",
+    "jsFileCompilationEmitBlockedCorrectly.ts",
+    "jsDeclarationsReexportAliasesEsModuleInterop.ts",
+    "jsFileCompilationWithoutJsExtensions.ts",
+    "typeOnlyMerge2.ts",
+    "typeOnlyMerge3.ts",
+];
+
+// compiler_runner.go:440 (verifyJavaScriptOutput). `None`: no `.js` baseline for this test (not requested, no
+// non-declaration files, or a skipped emit test); a panic while building it is `Err` (Go RecoverAndFail).
+#[cfg(feature = "checker")]
+fn verify_javascript_output(
+    item: &TestItem,
+    result: &CompilationResult,
+    ts_config_files: &[TestFile],
+    to_be_compiled: &[TestFile],
+    other_files: &[TestFile],
+    payload: &test_case_parser::TestCaseContent,
+    current_directory: &str,
+) -> Option<Result<String, String>> {
+    if !js_baselines() || result.emit.is_none() {
+        return None;
+    }
+    // compiler_runner.go:286
+    let has_non_dts_files = payload.test_unit_data.iter().any(|unit| !tspath::file_extension_is(&unit.name, tspath::EXTENSION_DTS));
+    if !has_non_dts_files {
+        return None;
+    }
+    if SKIPPED_EMIT_TESTS.contains(&tspath::get_base_file_name(&item.path).as_ref()) {
+        return None;
+    }
+    let header_components =
+        tspath::get_path_components_relative_to(&compiler_runner::testdata_path().to_string_lossy(), &item.path, &ComparePathsOptions::default());
+    let header = tspath::get_path_from_path_components(&header_components);
+    let recompiler = Recompiler { harness_options: &result.harness_options, current_directory, symlinks: &payload.symlinks };
+    let run = std::panic::AssertUnwindSafe(|| {
+        crate::emit_harness::do_js_emit_baseline(&header, result.options, result, ts_config_files, to_be_compiled, other_files, &result.harness_options, &recompiler)
+    });
+    match std::panic::catch_unwind(run) {
+        Ok(r) => Some(r),
+        Err(_) => Some(Err(crate::worker::take_last_panic_message())),
+    }
+}
+
+#[cfg(not(feature = "checker"))]
+fn verify_javascript_output(
+    _: &TestItem,
+    _: &CompilationResult,
+    _: &[TestFile],
+    _: &[TestFile],
+    _: &[TestFile],
+    _: &test_case_parser::TestCaseContent,
+    _: &str,
+) -> Option<Result<String, String>> {
+    None
 }
 
 // verifyTypesAndSymbols (compiler_runner.go). Go runs the JS emit (verifyJavaScriptOutput) between the error
-// baseline and this; emit is not ported, so checker work the emitter would do first does not happen here.
+// baseline and this; it runs here only under `--baselines js`, so in the default mode checker work the emitter
+// would do first does not happen.
 #[cfg(feature = "checker")]
 fn verify_types_and_symbols(
     item: &TestItem,

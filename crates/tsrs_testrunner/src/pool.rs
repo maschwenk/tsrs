@@ -36,11 +36,12 @@ pub struct TestResult {
     // `.types` / `.symbols` results (class, first difference) when those baselines were requested.
     pub types: Option<(Class, String)>,
     pub symbols: Option<(Class, String)>,
+    pub js: Option<(Class, String)>,
 }
 
 impl TestResult {
     pub fn harness(class: Class, ms: u64, panic: String) -> TestResult {
-        TestResult { class, ms, diff: String::new(), panic, loc: String::new(), skip: String::new(), types: None, symbols: None }
+        TestResult { class, ms, diff: String::new(), panic, loc: String::new(), skip: String::new(), types: None, symbols: None, js: None }
     }
 }
 
@@ -129,6 +130,7 @@ fn parse_result(v: &Value) -> TestResult {
         skip: s("skip"),
         types: v["types"].as_str().and_then(Class::parse).map(|c| (c, s("types_diff"))),
         symbols: v["symbols"].as_str().and_then(Class::parse).map(|c| (c, s("symbols_diff"))),
+        js: v["js"].as_str().and_then(Class::parse).map(|c| (c, s("js_diff"))),
     }
 }
 

@@ -6,6 +6,8 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 mod baseline;
 #[cfg(feature = "compiler")]
 mod compile;
+#[cfg(feature = "checker")]
+mod emit_harness;
 mod compiler_runner;
 mod diagnosticwriter;
 mod harnessutil;
@@ -36,9 +38,10 @@ use crate::harnessutil::OptionTable;
 const USAGE: &str = "usage:
   tsrs-test run [--suite compiler|conformance|all] [--filter <substr|regex>] [--list <file>]
                 [--jobs N] [--timeout S] [--recycle N] [--mem-limit MB] [--json <path>] [--panic-summary]
-                [--baselines types,symbols | --types --symbols]   also compare .types/.symbols baselines
+                [--baselines types,symbols,js | --types --symbols --js]   also compare .types/.symbols/.js baselines
+                  (js: emit through Go's pre-/post-emit programs, docs/EMIT.md section 8)
                   (results: <suite>/<name>.{types,symbols}.{actual,diff}, lists types-<class>.txt, symbols-<class>.txt)
-  tsrs-test show <name> [--full] [--types] [--symbols]
+  tsrs-test show <name> [--full] [--types] [--symbols] [--js]
                                       expected vs actual for one test (id, variant stem or file name); with
                                       --types/--symbols: the first differing hunk of those baselines (--full: whole diff)
   tsrs-test crashes [--top N] [--examples N] [--json <path>]
@@ -67,6 +70,9 @@ pub fn syntax_only() -> bool {
 pub static EXTRA_BASELINES: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 pub const EXTRA_TYPES: u8 = 1;
 pub const EXTRA_SYMBOLS: u8 = 2;
+// `.js` emit baselines (docs/EMIT.md section 8). Asking for them switches the compilation to Go's pre-/post-emit
+// programs, so the error and `.types`/`.symbols` baselines then come from the post-emit program as in Go.
+pub const EXTRA_JS: u8 = 4;
 
 pub fn extra_baselines() -> u8 {
     EXTRA_BASELINES.load(std::sync::atomic::Ordering::Relaxed)
@@ -80,8 +86,9 @@ fn parse_baselines(v: &str) -> u8 {
             "types" => EXTRA_TYPES,
             "symbols" => EXTRA_SYMBOLS,
             "all" => EXTRA_TYPES | EXTRA_SYMBOLS,
+            "js" => EXTRA_JS,
             _ => {
-                eprintln!("--baselines: unknown baseline kind {part} (errors, types, symbols, all)");
+                eprintln!("--baselines: unknown baseline kind {part} (errors, types, symbols, js, all)");
                 std::process::exit(2)
             }
         };
@@ -114,6 +121,9 @@ impl BackendSpec {
             }
             if extra_baselines() & EXTRA_SYMBOLS != 0 {
                 kinds.push("symbols");
+            }
+            if extra_baselines() & EXTRA_JS != 0 {
+                kinds.push("js");
             }
             v.extend(["--baselines".to_string(), kinds.join(",")]);
         }
@@ -296,6 +306,9 @@ fn cmd_run(mut args: Args, spec: BackendSpec) {
             if extra_baselines() & EXTRA_SYMBOLS != 0 && r.symbols.is_none() {
                 r.symbols = Some((r.class, r.panic.clone()));
             }
+            if extra_baselines() & EXTRA_JS != 0 && r.js.is_none() {
+                r.js = Some((r.class, r.panic.clone()));
+            }
         }
         let mut entry = report::Entry::from(&r);
         // An errors-only (or types-only) run keeps the other baselines' previous results.
@@ -305,6 +318,9 @@ fn cmd_run(mut args: Args, spec: BackendSpec) {
             }
             if entry.symbols.is_none() {
                 entry.symbols = old.symbols.clone();
+            }
+            if entry.js.is_none() {
+                entry.js = old.js.clone();
             }
         }
         summary.insert(item.id(), entry);
@@ -474,6 +490,9 @@ fn main() {
     }
     if args.flag("--symbols") {
         extra |= EXTRA_SYMBOLS;
+    }
+    if args.flag("--js") {
+        extra |= EXTRA_JS;
     }
     EXTRA_BASELINES.store(extra, std::sync::atomic::Ordering::Relaxed);
     match cmd.as_str() {

@@ -19,7 +19,7 @@ pub(crate) use rustc_hash::{FxHashMap, FxHashSet};
 pub(crate) use tsrs_ast::{self as ast, *};
 pub(crate) use tsrs_checker::{self as checker, Checker, CheckerSlot, EmitResolver, SymbolAccessibilityResult, SymbolTracker};
 pub(crate) use tsrs_core::{alloc_slice, alloc_str, alloc_vec, CompilerOptions, ModuleKind, ScriptTarget, Tristate, P};
-pub(crate) use tsrs_printer::{self as printer, EmitContext};
+pub(crate) use tsrs_printer::{self as printer, EmitContext, EmitFlags};
 pub(crate) use tsrs_scanner as scanner;
 
 /// Go package `nodebuilder` (flags only).

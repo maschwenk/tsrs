@@ -182,7 +182,9 @@ pub fn find_configuration(content: &str, table: &OptionTable, config: &str) -> R
 pub enum Outcome {
     // The generated error baseline text (baseline.NoContent when there were no diagnostics), and the
     // `.types`/`.symbols` baselines when they were requested and the test does not set @noTypesAndSymbols.
-    Baseline(String, Option<TypesAndSymbols>),
+    // The third element is the `.js` baseline when `--baselines js` asked for it and the test emits (Go
+    // verifyJavaScriptOutput: `hasNonDtsFiles` and not in `skippedEmitTests`); `Err` holds a panic message.
+    Baseline(String, Option<TypesAndSymbols>, Option<Result<String, String>>),
     // SkipUnsupportedCompilerOptions
     Skip(String),
     // A harness-level failure that is not a panic (t.Fatalf in Go).

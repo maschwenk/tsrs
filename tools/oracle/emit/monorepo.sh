@@ -1,77 +1,104 @@
 #!/usr/bin/env bash
-# Monorepo emit oracle: for every package whose `build` script runs tsc, emit with tsgo and with `TSRS_EMIT=1 tsrs`
-# into scratch directories and compare every emitted file byte for byte.
+# Emit oracle over a pnpm monorepo (docs/EMIT.md section 12): for every workspace package whose `build` script runs
+# `tsc`, emit with the reference compiler into /tmp/emit-go/<pkg> and with `TSRS_EMIT=1 tsrs` into /tmp/emit-rs/<pkg>
+# (same flags; outDir, declarationDir and tsBuildInfoFile always redirected), then diff every emitted file byte for
+# byte (tools/oracle/emit/run.py). The monorepo itself is never written: its `git status --short` is checked before
+# and after, and the script fails if it changed.
 #
-#   tools/oracle/emit/monorepo.sh [--only jsx|decorators|all] [--keep] [package-dir ...]
+#   tools/oracle/emit/monorepo.sh <monorepo root> [-j N] [--filter REGEX] [-- extra flags for both compilers]
 #
-# Environment: REPO (the monorepo checkout, read-only), TSGO (reference tsgo binary), TSRS (tsrs binary),
-# EXTRA (extra flags for both compilers, e.g. "--sourceMap false --declarationMap false"), OUT (scratch root, default /tmp; outputs go to $OUT/emit-go/<pkg> and $OUT/emit-rs/<pkg>).
-#
-# Nothing is written into $REPO: outDir, declarationDir and tsBuildInfoFile are always redirected, and the script
-# checks `git status --short` plus a newer-than-marker scan of the package directories before and after.
-# Packages built with `tsc -b` are compiled with `-p` (the oracle compares single-project emit).
-set -u
-REPO=${REPO:-/root/Owner}
-TSGO=${TSGO:-$REPO/node_modules/.pnpm/@typescript+typescript-linux-x64@7.1.0-dev.20260929.1/node_modules/@typescript/typescript-linux-x64/lib/tsc}
-TSRS=${TSRS:-$(cd "$(dirname "$0")/../../.." && pwd)/target/release/tsrs}
-OUT=${OUT:-/tmp}
-ONLY=all
-KEEP=0
-PKGS=()
+# Env: TSGO (reference tsgo binary, required), TSRS (default target/release/tsrs), TSRS_CHECKER_ASSIGNMENT (default
+# go), OUT_GO (/tmp/emit-go),
+# OUT_RS (/tmp/emit-rs). A package built with `tsc -p <file>` uses that config; `tsc --build`/`-b` packages are
+# emitted with `-p` on their tsconfig until `-b` is ported (TODO(emit/incremental)).
+# Output: one line per package (identical/different/missing/extra counts, exit codes, diagnostics agreement,
+# tsrs panic) and totals; the per-package JSON lines go to $OUT_RS.results.jsonl.
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+root="${1:?usage: monorepo.sh <monorepo root> [-j N] [--filter REGEX] [-- extra flags]}"
+shift
+jobs=4
+filter=""
+extra=()
 while [ $# -gt 0 ]; do
-    case "$1" in
-        --only) ONLY=$2; shift 2 ;;
-        --keep) KEEP=1; shift ;;
-        *) PKGS+=("$1"); shift ;;
-    esac
+  case "$1" in
+    -j) jobs="$2"; shift 2 ;;
+    --filter) filter="$2"; shift 2 ;;
+    --) shift; extra=("$@"); break ;;
+    *) echo "unknown argument $1" >&2; exit 2 ;;
+  esac
 done
-HERE=$(cd "$(dirname "$0")" && pwd)
-LIST=$OUT/emit-oracle-packages.tsv
-[ -s "$LIST" ] || node "$HERE/list-packages.js" "$REPO" "$TSGO" > "$LIST"
+: "${TSGO:?set TSGO to the reference tsgo binary}"
+export TSGO
+export TSRS="${TSRS:-$here/../../../target/release/tsrs}"
+# Go assigns files to checkers with FENNEL; tsrs defaults to directory locality, and printed types (inferred
+# declaration types) can depend on which files a checker saw first. Compare in the Go assignment by default.
+export TSRS_CHECKER_ASSIGNMENT="${TSRS_CHECKER_ASSIGNMENT:-go}"
+OUT_GO="${OUT_GO:-/tmp/emit-go}"
+OUT_RS="${OUT_RS:-/tmp/emit-rs}"
+mkdir -p "$OUT_GO" "$OUT_RS"
 
-before=$(git -C "$REPO" status --short)
-marker=$(mktemp)
-tot_same=0; tot_diff=0; tot_missing=0; tot_extra=0; npkg=0
-printf '%-45s %9s %9s %11s %6s\n' package identical different not-emitted extra
-while IFS=$'\t' read -r dir config build target module jsx expdec meta decldir; do
-    if [ ${#PKGS[@]} -gt 0 ]; then
-        hit=0; for p in "${PKGS[@]}"; do [ "$p" = "$dir" ] && hit=1; done; [ $hit = 1 ] || continue
-    fi
-    case "$ONLY" in
-        jsx) [ "$jsx" != - ] || continue ;;
-        decorators) [ "$expdec" = 1 ] || continue ;;
-    esac
-    name=${dir//\//_}
-    go=$OUT/emit-go/$name; rs=$OUT/emit-rs/$name
-    rm -rf "$go" "$rs" "$go.tsbuildinfo" "$rs.tsbuildinfo"
-    mkdir -p "$go" "$rs"
-    cfg=$REPO/$dir/$config
-    dd=(); [ "$decldir" != - ] && dd=(--declarationDir)
-    (cd "$REPO/$dir" && "$TSGO" -p "$cfg" --outDir "$go" ${dd[@]+"${dd[@]}" "$go"} --tsBuildInfoFile "$go.tsbuildinfo" ${EXTRA:-} > "$go.log" 2>&1)
-    (cd "$REPO/$dir" && TSRS_EMIT=1 "$TSRS" -p "$cfg" --outDir "$rs" ${dd[@]+"${dd[@]}" "$rs"} --tsBuildInfoFile "$rs.tsbuildinfo" ${EXTRA:-} > "$rs.log" 2>&1)
-    if [ -n "$(find "$REPO/$dir" -newer "$marker" -type f -not -path '*/node_modules/*' | head -1)" ]; then
-        echo "ERROR: $dir: files were written into the repository:" >&2
-        find "$REPO/$dir" -newer "$marker" -type f -not -path '*/node_modules/*' >&2
-        exit 2
-    fi
-    same=0; diff=0; missing=0; extra=0
-    while IFS= read -r f; do
-        if [ ! -f "$rs/$f" ]; then missing=$((missing+1)); echo "$f" >> "$rs.missing"
-        elif cmp -s "$go/$f" "$rs/$f"; then same=$((same+1))
-        else diff=$((diff+1)); echo "$f" >> "$rs.different"; fi
-    done < <(cd "$go" && find . -type f | sort)
-    extra=$(cd "$rs" && find . -type f | while IFS= read -r f; do [ -f "$go/$f" ] || echo x; done | wc -l)
-    printf '%-45s %9d %9d %11d %6d\n' "$dir" $same $diff $missing $extra
-    tot_same=$((tot_same+same)); tot_diff=$((tot_diff+diff)); tot_missing=$((tot_missing+missing)); tot_extra=$((tot_extra+extra)); npkg=$((npkg+1))
-    if [ $KEEP = 0 ] && [ $diff = 0 ] && [ $missing = 0 ] && [ $extra = 0 ]; then rm -rf "$go" "$rs"; fi
-done < "$LIST"
-printf '%-45s %9d %9d %11d %6d\n' "TOTAL ($npkg packages)" $tot_same $tot_diff $tot_missing $tot_extra
-
-after=$(git -C "$REPO" status --short)
-written=$(find "$REPO/apps" "$REPO/packages" "$REPO/kotlin" -newer "$marker" -type f -not -path '*/node_modules/*' 2>/dev/null)
-rm -f "$marker"
-if [ "$before" != "$after" ] || [ -n "$written" ]; then
-    echo "ERROR: files were written into $REPO:" >&2
-    echo "$written" >&2
-    exit 2
+before="$(git -C "$root" status --short)"
+if [ -n "$before" ]; then
+  echo "monorepo has local changes before the run; refusing to start (git status --short not empty)" >&2
+  exit 2
 fi
+
+# package dir <TAB> tsconfig path
+list="$(python3 - "$root" "$filter" <<'EOF'
+import glob, json, os, re, sys
+root, flt = sys.argv[1], sys.argv[2]
+for pj in sorted(glob.glob(os.path.join(root, "apps/*/package.json")) + glob.glob(os.path.join(root, "packages/*/package.json"))):
+    d = os.path.dirname(pj)
+    rel = os.path.relpath(d, root)
+    if flt and not re.search(flt, rel):
+        continue
+    build = json.load(open(pj)).get("scripts", {}).get("build", "")
+    # the commands of the script that invoke tsc directly
+    for cmd in re.split(r"&&|;|\|\|", build):
+        words = cmd.split()
+        if not words or words[0] not in ("tsc", "tsgo"):
+            continue
+        cfg = "tsconfig.json"
+        for i, w in enumerate(words):
+            if w in ("-p", "--project") and i + 1 < len(words):
+                cfg = words[i + 1]
+        cfg = os.path.join(d, cfg)
+        if os.path.isdir(cfg):
+            cfg = os.path.join(cfg, "tsconfig.json")
+        if os.path.exists(cfg):
+            print(f"{rel}\t{cfg}")
+        break
+EOF
+)"
+
+results="$OUT_RS.results.jsonl"
+: > "$results"
+export here OUT_GO OUT_RS
+export extra_flags="${extra[*]:-}"
+printf '%s\n' "$list" | grep -v '^$' | while IFS=$'\t' read -r rel cfg; do printf '%s\0%s\0' "$rel" "$cfg"; done |
+  xargs -0 -n 2 -P "$jobs" bash -c 'name="${0//\//__}"; python3 "$here/run.py" "$1" --name "$name" --go-out "$OUT_GO/$name" --rs-out "$OUT_RS/$name" --json -- $extra_flags || true' >> "$results"
+
+after="$(git -C "$root" status --short)"
+if [ -n "$after" ]; then
+  echo "ERROR: the monorepo changed during the run:" >&2
+  echo "$after" >&2
+  exit 3
+fi
+
+python3 - "$results" <<'EOF'
+import json, sys
+rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip().startswith("{")]
+rows.sort(key=lambda r: r["name"])
+tot = {"identical": 0, "different": 0, "missing": 0, "extra": 0}
+full = 0
+for r in rows:
+    for k in tot:
+        tot[k] += r[k]
+    same = r["different"] == 0 and r["missing"] == 0 and r["extra"] == 0 and r["ref_status"] == r["rs_status"] and r["diagnostics_match"]
+    full += same
+    note = f"  [{r['rs_panic'][:90]}]" if r["rs_panic"] else ""
+    print(f"{r['name']:<45} identical {r['identical']:>5}  different {r['different']:>4}  not-emitted {r['missing']:>5}  extra {r['extra']:>3}  exit {r['ref_status']}/{r['rs_status']}  diags {'=' if r['diagnostics_match'] else '!='}{note}")
+print(f"packages: {len(rows)}, fully identical {full}; files: {tot['identical']} identical, {tot['different']} different, {tot['missing']} not emitted by tsrs, {tot['extra']} extra")
+EOF
+echo "monorepo git status unchanged (empty before and after)"

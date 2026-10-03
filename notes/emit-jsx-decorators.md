@@ -12,7 +12,7 @@ Branch `emit/jsx-decorators`, based on `emit/core` (merged, not rebased).
 - `crates/tsrs_transformers/src/utilities.rs`: `IsGeneratedIdentifier`, `MoveRangePastModifiers`,
   `MoveRangePastDecorators` (utilities.go; emit/transforms has the same functions in its `todo_core.rs`, keep one).
 - `crates/tsrs_transformers/src/emit_test.rs`: isolated smoke tests (program + lent checker + transforms + printer).
-- `tools/oracle/emit/monorepo.sh` + `list-packages.js`: the monorepo emit oracle (see below).
+- `tools/oracle/emit/list-packages.js`: classifies the monorepo packages (jsx / decorators); the oracle itself is emit/core's `tools/oracle/emit/monorepo.sh`.
 
 ## Decisions / deviations in shape
 
