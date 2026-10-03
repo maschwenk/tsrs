@@ -633,6 +633,9 @@ pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
         eprintln!("regions: api orchestrator freed ({} regions, {} KiB)", regions.len(), regions.iter().map(|r| r.allocated_bytes()).sum::<usize>() >> 10);
     }
     let h = o.host();
+    // Order: the host and orchestrator are dropped before the regions. Their destructors only free heap containers
+    // (maps of `P<..>` pointers, Arcs); none dereferences arena memory, which is still alive here. Keep it that way:
+    // a destructor that reads region memory must run before `drop(regions)`.
     drop(Box::from_raw(h as *const host as *mut host));
     drop(Box::from_raw(o as *const Orchestrator as *mut Orchestrator));
     drop(regions);

@@ -199,6 +199,11 @@ pub fn parse_source_file(opts: SourceFileParseOptions, source_text: &str, script
 /// text without a copy (Go shares the string) and, like the thread arena, is never freed. Inside a freeable region
 /// (native API transpile and builds) the text is copied into the region and unregistered when the region is freed,
 /// so the file's memory is reclaimed with it.
+///
+/// Lifetime footgun: the returned file now lives exactly as long as the region that was current at the call. A
+/// caller that parses inside a region must not keep the file (or anything derived from it) past that region.
+/// Unregistering frees the text but not its source-text slot: slots are never reused (`register_source_text` has a
+/// fixed capacity, after which lookups take the slower fallback path).
 pub fn parse_source_file_owned(opts: SourceFileParseOptions, source_text: String, script_kind: ScriptKind) -> P<SourceFile> {
     match tsrs_core::arena::current_region() {
         None => parse_source_file_static(opts, source_text.leak(), script_kind),

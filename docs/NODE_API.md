@@ -347,4 +347,6 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   keeps only its last build (for cleans); 120 rebuilds retain no more than one (`memory_tests` in
   `crates/tsrs_cli/src/api.rs`; ~19 MiB per rebuild before). File texts parsed inside a freeable region are
   copied into it and unregistered with it instead of leaked. Still retained: the request thread's arena use
-  outside these paths.
+  outside these paths. Unregistered
+  source texts free their memory but not their registry slot; slots are never reused, so a very long-lived
+  session that parses more than 2^20 files in freeable regions falls back to the slower text lookup path.
