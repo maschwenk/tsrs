@@ -72,6 +72,26 @@ PATH=<go>:$PATH tools/oracle/tsctests/dump.sh && cargo test --release -p tsrs_cl
 - JS emit, source maps and declaration maps come from the other waves; until they merge, projects that emit JS stop
   at their gate stubs (see above for what changes with transforms merged).
 - Build mode builds one project at a time (Go: `--builders`, default 4); watch mode (`-w`, `-b -w`) is not ported.
-- The `--baselines js` harness still builds plain programs for the 5 `@incremental` test variants.
+- `@incremental` js-baseline variants: done on branch `mfs-cx/emit-incremental-harness` (see below).
 - A draft PR could not be opened from the sandbox (`gh pr create` and the REST API answer 403 for the token); this
   note is the PR description.
+
+## Follow-up: `mfs-cx/emit-incremental-harness` (based on `da23dd6`)
+
+- `b1b1ba1`: `--baselines js` runs the emit harness through `compiler.ProgramLike` and wraps `@incremental` variants in
+  `incremental.NewProgram` with Go's `testBuildInfoReader` (harnessutil.go `createProgram`); the default mode keeps the
+  plain program. All 5 variants (`incrementalConcurrentSafeAliasFollowing`, `incrementalConfig`,
+  `incrementalInvalid`, `incrementalTsBuildInfoFile`, `jsEmitIntersectionProperty`) take the incremental path for the
+  pre-emit, post-emit, DtsFileErrors and noCheck programs (checked with a temporary trace, not committed).
+  `jsEmitIntersectionProperty` passes its `.js` and error baselines that way; the other 4 stop at the importelision
+  gate stub (dependency: emit/transforms; before this change they stopped at typeeraser). In the default mode all 5
+  pass their error baselines (and types/symbols where they have them).
+- Gates vs main `d3a2598`: conformance errors + `--baselines types,symbols` identical (default and
+  `TSRS_LAZY_MEMBERS=0`); fourslash 4,066 / 63 same pass list; `--baselines js` 1,364 same pass list (only the
+  crash message of `incrementalConcurrentSafeAliasFollowing` changes); `RUSTFLAGS="-D warnings" cargo check
+  --workspace --locked --all-targets` exit 0; `tests/emit_gate.rs` 5/5.
+- Build concurrency assessment (docs/EMIT.md section 10b, "Build concurrency"): `--builders` is parsed and validated
+  like Go (TS5002 for 0 and -1, TS5073 for a non-number; same bytes and exit codes as tsgo built from ts-ref) and then
+  ignored; output is identical to tsgo for `--builders 1` and `--builders 8` on a five-project graph because both
+  report in `Order()`. Smallest faithful next step: `rangeTasks` with N threads over `ScheduleOrder()`, `done`/`built`
+  signals per task, `Mutex`-guarded task state, reporter in `Order()`; measure peak memory first.
