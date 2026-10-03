@@ -30,6 +30,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(dist, "packages.json"), "u
 const tarballs = manifest.packages.map(p => p.tarball);
 if (tarballs.some(t => !t)) throw new Error("packages.json has no tarballs; run npm/build.mjs with --pack");
 
+const failures = [];
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tsrs-consumer-"));
 const run = (cmd, argv, opts = {}) => {
     console.log(`$ ${[cmd, ...argv].join(" ")}`);
@@ -67,9 +68,17 @@ try {
         fs.writeFileSync(path.join(dir, "bad.ts"), 'const x: number = "no";\n');
         const bad = spawnSync(node, [path.join(dir, "node_modules/@maschwenk/tsrs/bin/tsrs"), "--noEmit", "--ignoreConfig", "bad.ts"], { cwd: dir, encoding: "utf8" });
         if (bad.status !== 2 || !bad.stdout.includes("TS2322")) throw new Error(`launcher under node ${version}: expected exit 2 with TS2322, got ${bad.status}\n${bad.stdout}${bad.stderr}`);
-        const out = run(node, ["consumer.mjs", path.join(dir, "project")]);
-        process.stdout.write(`[node ${version}] ${out}`);
-        if (!out.includes("smoke ok")) throw new Error(`consumer under node ${version} did not report success`);
+        // The consumer runs every step and reports each; a failing step does not stop the other Node versions.
+        const consumer = spawnSync(node, ["consumer.mjs", path.join(dir, "project")], { cwd: dir, encoding: "utf8", timeout: 300_000 });
+        for (const line of `${consumer.stdout}`.split("\n").filter(Boolean)) console.log(`[node ${version}] ${line}`);
+        if (consumer.stderr) process.stderr.write(consumer.stderr.split("\n").map(l => l && `[node ${version}] stderr: ${l}`).join("\n"));
+        if (consumer.status !== 0 || !consumer.stdout.includes("smoke ok")) {
+            failures.push(`node ${version}: consumer exit ${consumer.status}${consumer.signal ? ` (${consumer.signal})` : ""}`);
+        }
+    }
+    if (failures.length) {
+        process.exitCode = 1;
+        console.log(`FAILED: ${failures.join("; ")}`);
     }
 }
 finally {
