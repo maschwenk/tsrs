@@ -608,3 +608,87 @@ All are in the same class, and none change whether a request is accepted.
 - **1: `resolveModuleName {"inProgressSnapshot":-1}`.** Same as the number-literal case.
 
 Nested struct decode order and exact jsontext wording inside nested structs remain documented gaps.
+
+# Review of core b2769b8 (PR 34): integer ranges, array elements
+
+## Inputs
+
+- Core: `b2769b86a49a28c8e78a3aa011cb6b223fd4458a`, confirmed with `git ls-remote` before fetching.
+  `target/debug/tsrs` sha256 `77d26329…e2b3`.
+- Pinned Go: `b85298b6…`, binary sha256 `98159140…eacc`.
+- Raw data and scripts: `/root/artifacts/b2-review/`.
+  - `payload_probe2.mjs` sends the payload bytes verbatim, over sync MessagePack or as the `params`
+    text of a JSON-RPC frame.
+- Comparisons treat Go's "unable"/"cannot" as equal. The 3 profiling methods are excluded.
+
+## Source concern 1 confirmed: integers are range-checked and passed on as f64
+
+Results were identical over sync and async.
+
+| payload | pinned Go | tsrs b2769b8 | effect |
+| --- | --- | --- | --- |
+| `release {"snapshot":9007199254740993}` (2^53+1) | `client error: snapshot 9007199254740993 not found` | `snapshot 9007199254740992 not found` | **looks up the wrong ID** |
+| `release {"snapshot":9223372036854775807}` (i64 MAX) | `snapshot 9223372036854775807 not found` | `snapshot 9223372036854775808 not found` | wrong ID |
+| `release {"snapshot":18446744073709551614}` / `…615` (u64 MAX-1 / MAX) | `snapshot … not found` (valid u64) | invalid request | **rejects a value Go accepts** |
+| `release {"snapshot":18446744073709551616}` (u64 MAX+1) | invalid request (`: value out of range`) | invalid request | same class |
+| `batchRequests {"maxResponseBytesPerPage":9223372036854775807}` (int, i64 MAX) | OK | invalid request | **rejects a value Go accepts** |
+| `batchRequests {"maxResponseBytesPerPage":-9223372036854775809}` (i64 MIN-1) | invalid request (`value out of range`) | **OK** | accepts out-of-range input |
+| `-9223372036854775808`, 2^53-1, 2^53, u32 MAX, i32 MIN/MAX | same as Go | same | |
+| `position 4294967296`, `flags ±2147483648/9` | invalid request | invalid request | wording only |
+
+Cause: `predecode.rs` `int_ok` compares a rounded f64 against the range. `wire::as_u64` then casts
+the rounded f64. Core fix: parse the raw decimal lexeme as i64/u64 exactly, both for the range check
+and for the value that gets used. For example, `lexeme.parse::<u64>()` / `parse::<i64>()` on lexemes
+with no `.`, `e` or `E`.
+
+## Source concern 2 confirmed: escaped keys bypass the raw-lexeme check
+
+Results were identical over sync and async.
+
+| payload | pinned Go | tsrs |
+| --- | --- | --- |
+| `release {"snap\u0073hot":1e3}` | invalid request (`1e3 … invalid syntax`) | **`client error: snapshot 1000 not found`** |
+| `releaseSourceFile {"le\u0061se":1e3}` | invalid request | **`client error: source file lease 1000 not found`** |
+| `getSymbolsAtPositions {"positi\u006fns":[1e3]}` | invalid request | **`client error: snapshot 0 not found`** |
+| `release {"snap\u0073hot":9007199254740993}` | `snapshot 9007199254740993 not found` | `…992` (concern 1) |
+| `release {"snap\u0073hot":-1}`, `{"positi\u006fns":[4294967296]}` | invalid request | invalid request (the sign and range check still runs on the decoded value) |
+| `release {"snap\u0073hot":"x"}`, `{"snap\u0073hot":1}`, `{"loc\u0061tions":[1]}`, `{"requests":[{"meth\u006fd":"ping"}]}` | same as Go | same | |
+
+Cause: `number_lexemes` keys the raw lexemes by undecoded key bytes, while parsed params use decoded
+keys. So when a key contains an escape, no lexeme is found and the exponent/fraction check is skipped.
+Core fix: decode JSON escapes in the lexeme map's keys, the way `strictjson` already decodes names.
+The transport delivers the payload bytes unchanged in both modes, so no transport change is needed.
+
+## Full matrices at b2769b8
+
+| check | f70371e | b2769b8 |
+| --- | --- | --- |
+| Shape matrix, 15 payloads × 169 methods | 2535/2535 | **2535/2535** |
+| Field/value matrix, 8837 cases: identical | 7269 | 7288 |
+| … same class, wording only | 1149 | 1548 |
+| … class mismatches | 419 | **1** |
+
+The matrix's values are `1e3`, 2^31, 2^32 and 2^64. It does not include escaped keys or values
+between 2^53 and 2^64 in range; those are covered by the targeted table above.
+
+- **Remaining class mismatch:** `createSnapshot {"removePrograms":[null]}`.
+  - Go: invalid request (`cannot unmarshal into Go project.SyntheticProjectID within "/removePrograms/0": invalid synthetic project ID: `).
+  - tsrs: `client error: failed to create snapshot: synthetic program not found for removal: `.
+  - It also uses up a snapshot ID, so every later `createSnapshot` in the same session returns an ID
+    one higher than Go's. Seen in the matrix as `"snapshot":16` versus Go's `15`.
+- **Wording-only differences (1548):**
+  - 872: number literal and Go's `: invalid syntax` / `: value out of range` suffix omitted. This
+    grew because the out-of-range classes now match;
+  - 277: with several invalid fields, Go reports document order, tsrs struct order;
+  - 215: `api.` package qualifier missing from Go type names;
+  - 45: `core.ModuleKind` alias name;
+  - 139: custom or nested messages. Examples: `ensurePrograms`/`removePrograms` text, `[]api.DocumentIdentifier`,
+    and the ID drift above showing up in OK bodies.
+
+## Real sync and async array/batch smoke (`array_batch_flow.mjs`, pinned clients)
+
+The async client sends the concurrent array requests as one `batchRequests`. Calls covered:
+`getSymbolsAtPositions` and `getTypesAtPositions` (6 positions), `getSemanticDiagnostics` and
+`getSyntacticDiagnostics` with `files` arrays, `getTypesOfSymbols` with 6 symbol references, 6×
+`typeToString`, and `release`. Result: 7/7 steps identical to Go in both modes, for example
+`["Dog","string","number","Dog","(n: number) => string","number"]`.
