@@ -200,7 +200,8 @@ impl Session {
         }
         let remove = p.strings("removePrograms")?;
         for id in remove {
-            let program_id = SyntheticProjectID(id);
+            // Decoded (and validated by `predecode`) like Go's SyntheticProjectID, which normalizes the number.
+            let program_id = parse_synthetic_project_id(&id).unwrap_or(SyntheticProjectID(id));
             if reconfigured.has(&program_id) {
                 return Err(ApiError::client(format!("synthetic program cannot be reconfigured and removed: {}", program_id.0)));
             }

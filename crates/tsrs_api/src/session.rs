@@ -339,13 +339,13 @@ impl Session {
             }
             _ => e,
         };
-        self.dispatch_parsed(method, &params, info.owner, lexemes).map_err(typed)
+        self.dispatch_parsed(method, &params, info.owner, raw_params, lexemes).map_err(typed)
     }
 
-    fn dispatch_parsed(&self, method: &str, params: &Value, owner: Owner, lexemes: std::collections::HashMap<String, String>) -> ApiResult<Response> {
+    fn dispatch_parsed(&self, method: &str, params: &Value, owner: Owner, raw: &[u8], lexemes: std::collections::HashMap<String, String>) -> ApiResult<Response> {
         let params = params.clone();
-        // Exact number literals apply to this top-level params object only (identified by address).
-        let _lexemes = crate::predecode::enter_lexemes(lexemes, &params);
+        // Raw payload and exact number literals of this request, for the objects of this params tree (by address).
+        let _request = crate::predecode::enter_request(raw, lexemes, &params);
         if *self.closed.lock().unwrap() {
             return Err(ApiError::client("session is closed"));
         }

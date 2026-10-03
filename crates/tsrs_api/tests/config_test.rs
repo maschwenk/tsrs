@@ -254,3 +254,28 @@ fn remove_programs_null_is_rejected_before_allocation() {
     // ensurePrograms is []project.ID: a null element is the zero ID (accepted).
     call(&s, "createSnapshot", r#"{"ensurePrograms":[null]}"#);
 }
+
+/// Nested api structs are decoded like Go (whole params struct): integer syntax and exact values apply to the
+/// value's own literal, never to a same-named top-level field (runtime af8 review).
+#[test]
+fn nested_integer_literals_are_exact_and_checked() {
+    let dir = TempDir::new("nestedints");
+    let s = session(&dir.dir(), false);
+    let program = |resolver: &str| format!(r#"{{"moduleResolver":9007199254740993,"createPrograms":[{{"rootFiles":[],"compilerOptions":{{}},"options":{{"moduleResolver":{resolver}}}}}]}}"#);
+    let e = call_err(&s, "createSnapshot", &program("9007199254740992"));
+    assert_eq!(e, "api: client error: module resolver 9007199254740992 not found");
+    let e = call_err(&s, "createSnapshot", &program("9007199254740993"));
+    assert_eq!(e, "api: client error: module resolver 9007199254740993 not found");
+    for bad in ["1e3", "1.0", "18446744073709551616", "-1", "\"x\""] {
+        let e = call_err(&s, "createSnapshot", &program(bad));
+        assert!(e.starts_with("api: invalid request: failed to unmarshal *api.CreateSnapshotParams"), "{bad}: {e}");
+    }
+    // Synthetic project IDs are decoded by project.SyntheticProjectID (invalid text is a decode error).
+    for payload in [r#"{"removePrograms":["x"]}"#, r#"{"reconfigurePrograms":[{"id":"x","rootFiles":[],"compilerOptions":{}}]}"#] {
+        let e = call_err(&s, "createSnapshot", payload);
+        assert!(e.starts_with("api: invalid request: failed to unmarshal *api.CreateSnapshotParams"), "{payload}: {e}");
+    }
+    // Nested wrong kinds inside arrays of structs.
+    let e = call_err(&s, "getTypesOfSymbols", r#"{"snapshot":1,"project":"p","symbols":[{"id":1e3}]}"#);
+    assert!(e.starts_with("api: invalid request: failed to unmarshal"), "{e}");
+}

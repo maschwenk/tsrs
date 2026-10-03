@@ -338,8 +338,17 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   null elements of `[]string`-like arrays are zero values, as in Go. Remaining wording differences (runtime
   matrix on f70371e): Go includes the number literal and `: invalid syntax`, reports the first invalid field
   in document order (this reports struct order), qualifies element types (`[]api.BatchRequest`) and prints
-  alias names (`core.ModuleKind`). Nested structs (compiler options, request filesystems, symbol references) are
-  decoded by their handlers, so a nested type error can still lose to an earlier lookup error.
+  alias names (`core.ModuleKind`). Nested api-package structs (program options, symbol references, import
+  adder actions, module-resolution specs, diagnostics, file notifications) are checked the same way before
+  any lookup, and `project.SyntheticProjectID` values go through Go's decoder rules (null and non-synthetic
+  text are decode errors). Integer IDs are read from their own literal (by position in the parsed params
+  tree), so values above 2^53 are exact at any depth; batch items keep their raw params bytes (Go
+  `json.Value`). Structs from other Go packages (`core.CompilerOptions`, `core.BuildOptions`, request
+  filesystems, project references) are decoded by their handlers from the parsed value, so a type error or
+  exponent-syntax integer there can still lose to an earlier lookup error or be accepted.
+- Response shapes from paired runs (parity f703): `updateSnapshot` omits an empty `changes` (json/v2
+  `omitempty`); `cleanBuild` keeps Go's per-orchestrator existence answers until the next build, so a clean
+  after a clean lists the project's outputs again.
 - Memory: snapshots free their programs, checkers, emit allocations and a full build's shared data
   (processed files, project-reference mapper, loader and dts-faking resolution hosts) with the build's base
   region (createSnapshot+release cycles stay flat; `tests/memory_test.rs`). The first attempt at freeing

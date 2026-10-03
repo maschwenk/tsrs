@@ -149,7 +149,8 @@ fn malformed_snapshot_params_are_bounded_errors() {
     let e = call_err(&s, "createSnapshot", r#"{"createPrograms":[{"rootFiles":[],"compilerOptions":{"target":"es5"}}]}"#);
     assert!(e.starts_with("api: invalid request"), "{e}");
     let e = call_err(&s, "createSnapshot", r#"{"reconfigurePrograms":[{"id":"bogus","rootFiles":[],"compilerOptions":{}}]}"#);
-    assert!(e.contains("invalid synthetic project handle"), "{e}");
+    // Go: project.SyntheticProjectID's decoder rejects it while decoding the params (invalid request).
+    assert!(e.starts_with("api: invalid request:") && e.ends_with("invalid synthetic project ID: bogus"), "{e}");
     let e = call_err(&s, "updateSnapshot", r#"{"snapshot":12345}"#);
     assert!(e.contains("snapshot 12345 not found"), "{e}");
     let e = call_err(&s, "release", r#"{"snapshot":0}"#);

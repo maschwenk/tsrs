@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use tsrs_core::json::Value;
 
 use crate::handler::{ApiError, ApiResult};
-use crate::paramfields::{params_fields, Elem, FieldKind, FieldSpec};
+use crate::paramfields::{params_fields, struct_fields, Elem, FieldKind, FieldSpec};
 
 fn json_kind(v: &Value) -> &'static str {
     match v {
@@ -111,29 +111,66 @@ fn field_elem(kind: FieldKind) -> Option<Elem> {
     })
 }
 
-fn check_field(spec: &FieldSpec, v: &Value, lexemes: &HashMap<String, String>) -> Result<(), String> {
-    let pointer = format!("/{}", spec.name);
-    // project.SyntheticProjectID has its own decoder: unlike a plain string, a null element is an error.
-    if spec.go_type == "[]project.SyntheticProjectID" {
-        if let Value::Array(items) = v {
-            for (i, item) in items.iter().enumerate() {
-                if !matches!(item, Value::String(_)) {
-                    return Err(format!(
-                        "cannot unmarshal into Go project.SyntheticProjectID within \"{pointer}/{i}\": expected a string, got {}",
-                        json_kind(item)
-                    ));
-                }
-            }
-            return Ok(());
+/// JSON pointer token for an object member name (RFC 6901 escaping).
+fn token(key: &str) -> String {
+    key.replace('~', "~0").replace('/', "~1")
+}
+
+/// proto.go / project.go `SyntheticProjectID.UnmarshalJSONFrom`: a string (null decodes as "") that parses as a
+/// synthetic project ID.
+fn check_synthetic_id(v: &Value, pointer: &str) -> Result<(), String> {
+    let text = match v {
+        Value::String(s) => s.as_str(),
+        Value::Null => "",
+        _ => return Err(format!("cannot unmarshal JSON {} into Go string within \"{pointer}\"", json_kind(v))),
+    };
+    match tsrs_project::parse_synthetic_project_id(text) {
+        Some(_) => Ok(()),
+        None => Err(format!("cannot unmarshal into Go project.SyntheticProjectID within \"{pointer}\": invalid synthetic project ID: {text}")),
+    }
+}
+
+fn base_type(go_type: &str) -> &str {
+    go_type.trim_start_matches('*').trim_start_matches("[]").trim_start_matches('*')
+}
+
+/// The fields of an api-package struct value at `pointer`, recursively (Go decodes the whole params struct).
+fn check_struct(go_type: &str, o: &tsrs_core::collections::OrderedMap<String, Value>, pointer: &str, lexemes: &HashMap<String, String>) -> Result<(), String> {
+    for spec in struct_fields(base_type(go_type)) {
+        if let Some(v) = o.get(spec.name) {
+            check_field(spec, v, &format!("{pointer}/{}", token(spec.name)), lexemes)?;
         }
     }
+    Ok(())
+}
+
+fn check_field(spec: &FieldSpec, v: &Value, pointer: &str, lexemes: &HashMap<String, String>) -> Result<(), String> {
+    let pointer = pointer.to_string();
     let mismatch = |v: &Value, pointer: &str, go_type: &str| format!("cannot unmarshal JSON {} into Go {} within \"{pointer}\"", json_kind(v), go_type_name(go_type));
+    // project.SyntheticProjectID has its own decoder, called for null too (unlike a plain string).
+    if base_type(spec.go_type) == "project.SyntheticProjectID" {
+        return match v {
+            Value::Array(items) if spec.go_type.starts_with("[]") => {
+                for (i, item) in items.iter().enumerate() {
+                    check_synthetic_id(item, &format!("{pointer}/{i}"))?;
+                }
+                Ok(())
+            }
+            Value::Null if spec.go_type.starts_with("[]") => Ok(()),
+            _ if spec.go_type.starts_with("[]") => Err(mismatch(v, &pointer, spec.go_type)),
+            _ => check_synthetic_id(v, &pointer),
+        };
+    }
     if matches!(v, Value::Null) && spec.kind != FieldKind::Doc && spec.kind != FieldKind::DocList {
         // `null` into a non-pointer field leaves the zero value; into a pointer it is nil.
         return Ok(());
     }
     if let Some(elem) = field_elem(spec.kind) {
-        return check_scalar(elem, v, lexemes.get(&pointer).map(String::as_str)).then_some(()).ok_or_else(|| mismatch(v, &pointer, spec.go_type));
+        check_scalar(elem, v, lexemes.get(&pointer).map(String::as_str)).then_some(()).ok_or_else(|| mismatch(v, &pointer, spec.go_type))?;
+        if let Value::Object(o) = v {
+            check_struct(spec.go_type, o, &pointer, lexemes)?;
+        }
+        return Ok(());
     }
     match spec.kind {
         FieldKind::Doc => {
@@ -162,6 +199,9 @@ fn check_field(spec: &FieldSpec, v: &Value, lexemes: &HashMap<String, String>) -
                     if !matches!(item, Value::Null) && !check_scalar(elem, item, lexemes.get(&p).map(String::as_str)) {
                         return Err(mismatch(item, &p, elem_type));
                     }
+                    if let Value::Object(o) = item {
+                        check_struct(elem_type, o, &p, lexemes)?;
+                    }
                 }
                 Ok(())
             }
@@ -171,168 +211,305 @@ fn check_field(spec: &FieldSpec, v: &Value, lexemes: &HashMap<String, String>) -
     }
 }
 
-/// Number lexemes of the top-level members and of their array elements, keyed by JSON pointer (`/key`,
-/// `/key/<i>`). `raw` was validated as strict JSON.
-fn number_lexemes(raw: &[u8]) -> HashMap<String, String> {
-    struct S<'a> {
-        b: &'a [u8],
-        i: usize,
-        out: HashMap<String, String>,
-    }
-    impl S<'_> {
-        fn ws(&mut self) {
-            while self.i < self.b.len() && matches!(self.b[self.i], b' ' | b'\t' | b'\n' | b'\r') {
-                self.i += 1;
-            }
-        }
-        // A string token, decoded like the parsed value's object keys (escapes such as `\u0073`).
-        fn string(&mut self) -> String {
-            let start = self.i;
-            self.i += 1;
-            while self.i < self.b.len() && self.b[self.i] != b'"' {
-                if self.b[self.i] == b'\\' {
-                    self.i += 1;
-                }
-                self.i += 1;
-            }
-            self.i += 1;
-            let raw = String::from_utf8_lossy(&self.b[start..self.i.min(self.b.len())]).into_owned();
-            match tsrs_core::json::unmarshal(&raw) {
-                Ok(Value::String(s)) => s,
-                _ => raw.trim_matches('"').to_string(),
-            }
-        }
-        // Skips one value; records number lexemes at `pointer`, and for `depth < 2` recurses into arrays.
-        fn value(&mut self, pointer: Option<String>, depth: u32) {
-            self.ws();
-            if self.i >= self.b.len() {
-                return;
-            }
-            match self.b[self.i] {
-                b'"' => {
-                    self.string();
-                }
-                b'{' => {
-                    self.i += 1;
-                    loop {
-                        self.ws();
-                        if self.i >= self.b.len() || self.b[self.i] == b'}' {
-                            self.i += 1;
-                            return;
-                        }
-                        if self.b[self.i] == b',' {
-                            self.i += 1;
-                            continue;
-                        }
-                        let key = self.string();
-                        self.ws();
-                        self.i += 1; // ':'
-                        let p = if depth == 0 { Some(format!("/{}", key.replace('~', "~0").replace('/', "~1"))) } else { None };
-                        self.value(p, depth + 1);
-                    }
-                }
-                b'[' => {
-                    self.i += 1;
-                    let mut index = 0;
-                    loop {
-                        self.ws();
-                        if self.i >= self.b.len() || self.b[self.i] == b']' {
-                            self.i += 1;
-                            return;
-                        }
-                        if self.b[self.i] == b',' {
-                            self.i += 1;
-                            continue;
-                        }
-                        let p = if depth == 1 { pointer.as_ref().map(|p| format!("{p}/{index}")) } else { None };
-                        self.value(p, depth + 1);
-                        index += 1;
-                    }
-                }
-                _ => {
-                    let start = self.i;
-                    while self.i < self.b.len() && !matches!(self.b[self.i], b',' | b'}' | b']' | b' ' | b'\t' | b'\n' | b'\r') {
-                        self.i += 1;
-                    }
-                    if let Some(p) = pointer {
-                        let lexeme = String::from_utf8_lossy(&self.b[start..self.i]).into_owned();
-                        if lexeme.starts_with(|c: char| c == '-' || c.is_ascii_digit()) {
-                            self.out.insert(p, lexeme);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    let mut s = S { b: raw, i: 0, out: HashMap::new() };
-    s.value(None, 0);
-    s.out
+/// A strict-JSON scanner over the raw request bytes (already validated by `strictjson`).
+struct Scanner<'a> {
+    b: &'a [u8],
+    i: usize,
 }
 
-/// Checks `params` (an object, or `{}` for `null`) against the method's pinned params struct. `raw` is the
-/// request payload the value was parsed from.
+impl<'a> Scanner<'a> {
+    fn ws(&mut self) {
+        while self.i < self.b.len() && matches!(self.b[self.i], b' ' | b'\t' | b'\n' | b'\r') {
+            self.i += 1;
+        }
+    }
+    // A string token, decoded like the parsed value's object keys (escapes such as `\u0073`).
+    fn string(&mut self) -> String {
+        let start = self.i;
+        self.i += 1;
+        while self.i < self.b.len() && self.b[self.i] != b'"' {
+            if self.b[self.i] == b'\\' {
+                self.i += 1;
+            }
+            self.i += 1;
+        }
+        self.i += 1;
+        let raw = String::from_utf8_lossy(&self.b[start..self.i.min(self.b.len())]).into_owned();
+        match tsrs_core::json::unmarshal(&raw) {
+            Ok(Value::String(s)) => s,
+            _ => raw.trim_matches('"').to_string(),
+        }
+    }
+    fn skip_string(&mut self) {
+        self.i += 1;
+        while self.i < self.b.len() && self.b[self.i] != b'"' {
+            if self.b[self.i] == b'\\' {
+                self.i += 1;
+            }
+            self.i += 1;
+        }
+        self.i += 1;
+    }
+    /// Scans one value. `path` is its JSON pointer; with `numbers`, number literals are recorded by pointer.
+    fn value(&mut self, path: &mut String, numbers: Option<&mut HashMap<String, String>>) {
+        let mut numbers = numbers;
+        self.ws();
+        if self.i >= self.b.len() {
+            return;
+        }
+        match self.b[self.i] {
+            b'"' => self.skip_string(),
+            b'{' => {
+                self.i += 1;
+                loop {
+                    self.ws();
+                    if self.i >= self.b.len() || self.b[self.i] == b'}' {
+                        self.i += 1;
+                        return;
+                    }
+                    if self.b[self.i] == b',' {
+                        self.i += 1;
+                        continue;
+                    }
+                    let key = self.string();
+                    self.ws();
+                    self.i += 1; // ':'
+                    let len = path.len();
+                    path.push('/');
+                    path.push_str(&token(&key));
+                    self.value(path, numbers.as_deref_mut());
+                    path.truncate(len);
+                }
+            }
+            b'[' => {
+                self.i += 1;
+                let mut index = 0;
+                loop {
+                    self.ws();
+                    if self.i >= self.b.len() || self.b[self.i] == b']' {
+                        self.i += 1;
+                        return;
+                    }
+                    if self.b[self.i] == b',' {
+                        self.i += 1;
+                        continue;
+                    }
+                    let len = path.len();
+                    path.push('/');
+                    path.push_str(&index.to_string());
+                    self.value(path, numbers.as_deref_mut());
+                    path.truncate(len);
+                    index += 1;
+                }
+            }
+            _ => {
+                let start = self.i;
+                while self.i < self.b.len() && !matches!(self.b[self.i], b',' | b'}' | b']' | b' ' | b'\t' | b'\n' | b'\r') {
+                    self.i += 1;
+                }
+                if let Some(numbers) = numbers {
+                    let lexeme = &self.b[start..self.i];
+                    if lexeme.first().is_some_and(|c| *c == b'-' || c.is_ascii_digit()) {
+                        numbers.insert(path.clone(), String::from_utf8_lossy(lexeme).into_owned());
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Number literals anywhere in `raw`, keyed by JSON pointer (`/key`, `/key/<i>/inner`).
+fn number_lexemes(raw: &[u8]) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    Scanner { b: raw, i: 0 }.value(&mut String::new(), Some(&mut out));
+    out
+}
+
+/// The raw bytes of the value at JSON pointer `pointer` in `raw` (strict JSON), if present.
+pub(crate) fn raw_value_at<'a>(raw: &'a [u8], pointer: &str) -> Option<&'a [u8]> {
+    let mut s = Scanner { b: raw, i: 0 };
+    let mut tokens = pointer.split('/').skip(1);
+    loop {
+        s.ws();
+        let Some(want) = tokens.next() else {
+            let start = s.i;
+            s.value(&mut String::new(), None);
+            return Some(&raw[start..s.i.min(raw.len())]);
+        };
+        match raw.get(s.i)? {
+            b'{' => {
+                s.i += 1;
+                loop {
+                    s.ws();
+                    match raw.get(s.i)? {
+                        b'}' => return None,
+                        b',' => {
+                            s.i += 1;
+                            continue;
+                        }
+                        _ => {}
+                    }
+                    let key = s.string();
+                    s.ws();
+                    s.i += 1; // ':'
+                    if token(&key) == want {
+                        break;
+                    }
+                    s.value(&mut String::new(), None);
+                }
+            }
+            b'[' => {
+                let want: usize = want.parse().ok()?;
+                s.i += 1;
+                let mut index = 0;
+                loop {
+                    s.ws();
+                    match raw.get(s.i)? {
+                        b']' => return None,
+                        b',' => {
+                            s.i += 1;
+                            continue;
+                        }
+                        _ => {}
+                    }
+                    if index == want {
+                        break;
+                    }
+                    s.value(&mut String::new(), None);
+                    index += 1;
+                }
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// Checks `params` (an object, or `{}` for `null`) against the method's pinned params struct, nested api structs
+/// included. `raw` is the request payload the value was parsed from. Returns the number literals by pointer.
 pub(crate) fn predecode(method: &str, go_type: &str, params: &Value, raw: &[u8]) -> ApiResult<HashMap<String, String>> {
     let Value::Object(o) = params else { return Ok(HashMap::new()) };
     let lexemes = number_lexemes(raw);
     for spec in params_fields(method) {
         if let Some(v) = o.get(spec.name) {
-            check_field(spec, v, &lexemes).map_err(|e| ApiError::invalid_request(format!("failed to unmarshal *api.{go_type}: json: {e}")))?;
+            check_field(spec, v, &format!("/{}", token(spec.name)), &lexemes)
+                .map_err(|e| ApiError::invalid_request(format!("failed to unmarshal *api.{go_type}: json: {e}")))?;
         }
     }
     Ok(lexemes)
 }
 
+/// The current request on this thread: its raw payload, number literals by pointer, and the JSON pointer of each
+/// object of the parsed params tree by address (so typed accessors find a value's own literal, never a same-named
+/// field elsewhere). Stacked for nested dispatch (batchRequests, callback re-entry).
+struct Frame {
+    raw: Vec<u8>,
+    lexemes: HashMap<String, String>,
+    objects: HashMap<usize, String>,
+}
+
 thread_local! {
-    // Number literals of the request being dispatched on this thread (top-level fields), so typed accessors read
-    // exact integers (`Params::u64`). Stacked for nested dispatch (batchRequests, callback re-entry).
-    static LEXEMES: std::cell::RefCell<Vec<(usize, HashMap<String, String>)>> = const { std::cell::RefCell::new(Vec::new()) };
+    static FRAMES: std::cell::RefCell<Vec<Frame>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// Makes `lexemes` the number literals of the top-level params object `root` until the guard is dropped.
-pub(crate) fn enter_lexemes(lexemes: HashMap<String, String>, root: &Value) -> LexemeGuard {
-    LEXEMES.with(|l| l.borrow_mut().push((root as *const Value as usize, lexemes)));
-    LexemeGuard(())
+fn index_objects(v: &Value, pointer: &mut String, out: &mut HashMap<usize, String>) {
+    match v {
+        Value::Object(o) => {
+            out.insert(v as *const Value as usize, pointer.clone());
+            for (k, item) in o.iter() {
+                let len = pointer.len();
+                pointer.push('/');
+                pointer.push_str(&token(k));
+                index_objects(item, pointer, out);
+                pointer.truncate(len);
+            }
+        }
+        Value::Array(items) => {
+            for (i, item) in items.iter().enumerate() {
+                let len = pointer.len();
+                pointer.push('/');
+                pointer.push_str(&i.to_string());
+                index_objects(item, pointer, out);
+                pointer.truncate(len);
+            }
+        }
+        _ => {}
+    }
 }
 
-pub(crate) struct LexemeGuard(());
+/// Makes `root` (the parsed params, alive and unmodified until the guard drops), its raw payload and number
+/// literals the current request.
+pub(crate) fn enter_request(raw: &[u8], lexemes: HashMap<String, String>, root: &Value) -> RequestGuard {
+    let mut objects = HashMap::new();
+    if !lexemes.is_empty() {
+        index_objects(root, &mut String::new(), &mut objects);
+    }
+    FRAMES.with(|f| f.borrow_mut().push(Frame { raw: raw.to_vec(), lexemes, objects }));
+    RequestGuard(())
+}
 
-impl Drop for LexemeGuard {
+pub(crate) struct RequestGuard(());
+
+impl Drop for RequestGuard {
     fn drop(&mut self) {
-        LEXEMES.with(|l| {
-            l.borrow_mut().pop();
+        FRAMES.with(|f| {
+            f.borrow_mut().pop();
         });
     }
 }
 
-/// The exact unsigned integer literal of field `key` when `object` is the current request's top-level params
-/// object (by address; a nested object with the same key never matches), if it has one.
+/// The exact unsigned integer literal of member `key` of `object`, when `object` is part of the current request's
+/// params tree (by address) and the member is a number literal.
 pub(crate) fn exact_u64(object: &Value, key: &str) -> Option<u64> {
-    LEXEMES.with(|l| {
-        let l = l.borrow();
-        let (root, m) = l.last()?;
-        if *root != object as *const Value as usize {
-            return None;
-        }
-        m.get(&format!("/{key}")).and_then(|s| s.parse::<u64>().ok())
+    FRAMES.with(|f| {
+        let f = f.borrow();
+        let frame = f.last()?;
+        let pointer = frame.objects.get(&(object as *const Value as usize))?;
+        frame.lexemes.get(&format!("{pointer}/{}", token(key))).and_then(|s| s.parse::<u64>().ok())
     })
+}
+
+/// The raw bytes of the value at `pointer` in the current request's payload.
+pub(crate) fn current_raw_at(pointer: &str) -> Option<Vec<u8>> {
+    FRAMES.with(|f| f.borrow().last().and_then(|frame| raw_value_at(&frame.raw, pointer).map(<[u8]>::to_vec)))
 }
 
 #[cfg(test)]
 mod tests {
+    use tsrs_core::json::Value;
+
     #[test]
     fn number_lexemes() {
         let m = super::number_lexemes(br#"{"a":1e3,"b":[1,2.5,{"c":3}],"d":{"e":4},"f":"9"}"#);
         assert_eq!(m.get("/a").map(String::as_str), Some("1e3"));
         assert_eq!(m.get("/b/1").map(String::as_str), Some("2.5"));
-        assert!(!m.contains_key("/d/e") && !m.contains_key("/f") && !m.contains_key("/b/2"));
-        // Exact literals apply to the registered top-level object only, never to a nested object with the same key.
-        let root = tsrs_core::json::unmarshal(r#"{"snapshot":9007199254740993,"inner":{"snapshot":9007199254740992}}"#).unwrap();
-        let lex = super::number_lexemes(br#"{"snapshot":9007199254740993,"inner":{"snapshot":9007199254740992}}"#);
-        let _g = super::enter_lexemes(lex, &root);
-        assert_eq!(super::exact_u64(&root, "snapshot"), Some(9007199254740993));
-        let tsrs_core::json::Value::Object(o) = &root else { unreachable!() };
-        assert_eq!(super::exact_u64(o.get("inner").unwrap(), "snapshot"), None);
+        assert_eq!(m.get("/b/2/c").map(String::as_str), Some("3"));
+        assert_eq!(m.get("/d/e").map(String::as_str), Some("4"));
+        assert!(!m.contains_key("/f"));
         let m = super::number_lexemes(br#"{"snap\u0073hot":1e3}"#);
         assert_eq!(m.get("/snapshot").map(String::as_str), Some("1e3"));
+    }
+
+    #[test]
+    fn exact_literals_by_object_identity() {
+        let raw = br#"{"snapshot":9007199254740993,"inner":{"snapshot":9007199254740992},"list":[{"snapshot":9007199254740995}]}"#;
+        let root = tsrs_core::json::unmarshal(std::str::from_utf8(raw).unwrap()).unwrap();
+        let _g = super::enter_request(raw, super::number_lexemes(raw), &root);
+        assert_eq!(super::exact_u64(&root, "snapshot"), Some(9007199254740993));
+        let Value::Object(o) = &root else { unreachable!() };
+        assert_eq!(super::exact_u64(o.get("inner").unwrap(), "snapshot"), Some(9007199254740992));
+        let Value::Array(list) = o.get("list").unwrap() else { unreachable!() };
+        assert_eq!(super::exact_u64(&list[0], "snapshot"), Some(9007199254740995));
+        // A copy outside the tree has no recorded literal.
+        let copy = o.get("inner").unwrap().clone();
+        assert_eq!(super::exact_u64(&copy, "snapshot"), None);
+    }
+
+    #[test]
+    fn raw_values_by_pointer() {
+        let raw = br#"{"requests":[{"method":"a","params":{"x":1e3}},{"par\u0061ms": {"snapshot":9007199254740993} ,"method":"b"}]}"#;
+        assert_eq!(super::raw_value_at(raw, "/requests/0/params"), Some(&br#"{"x":1e3}"#[..]));
+        assert_eq!(super::raw_value_at(raw, "/requests/1/params"), Some(&br#"{"snapshot":9007199254740993}"#[..]));
+        assert_eq!(super::raw_value_at(raw, "/requests/2/params"), None);
+        assert_eq!(super::raw_value_at(raw, "/requests/0/nope"), None);
     }
 }
