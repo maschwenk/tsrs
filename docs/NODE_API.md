@@ -112,8 +112,8 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 4 | `getCachedSourceFile` | core | not implemented |  |
 | 5 | `batchRequests` | core | supported | batch_test (nesting error, pagination with continuation tokens); binary-in-batch base64 path untested until source-file methods land |
 | 6 | `initialize` | core | supported | config_test |
-| 7 | `createSnapshot` | core | partial | program_test, module_resolution_test (moduleResolver option incl. callback); `fileSystem` returns an explicit unsupported error |
-| 8 | `updateSnapshot` | core | partial | program_test (fileNotifications, ensurePrograms, retained base); `fileSystem` unsupported |
+| 7 | `createSnapshot` | core | supported | program_test, module_resolution_test, requestfs_test (full/layer request filesystems, removedPaths); fileNotifications alias expansion through request symlinks not applied |
+| 8 | `updateSnapshot` | core | supported | program_test, requestfs_test (layers compacted over full, retained base, release of base) |
 | 9 | `getCurrentLanguageServerSnapshot` | core | not implemented |  |
 | 10 | `createBuildOrchestrator` | core | not implemented |  |
 | 11 | `disposeBuildOrchestrator` | core | not implemented |  |
@@ -257,7 +257,7 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 149 | `getConfigFileParsingDiagnostics` | core | supported | program_test (client-supplied diagnostics round trip) |
 | 150 | `printNode` | core | not implemented |  |
 | 151 | `formatNodeForInsertion` | core | not implemented |  |
-| 152 | `emit` | core | partial | program_test write-through emit, no TSRS_EMIT; request-filesystem snapshots unsupported |
+| 152 | `emit` | core | supported | program_test (write-through, no TSRS_EMIT), requestfs_test (full filesystem returns emittedFilesContents, no disk write) |
 | 153 | `emitToString` | core | supported | program_test |
 | 154 | `getJavaScriptEmit` | core | supported | program_test |
 | 155 | `getDeclarationEmit` | core | supported | program_test |
@@ -281,9 +281,10 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 
 ## Known gaps (core lane, tracked for follow-up)
 
-- Request filesystems (`createSnapshot`/`updateSnapshot` `fileSystem`, Go `requestfilesystem`) and
-  callback filesystems (`--callbacks`, Go `callbackfs.go`) are not ported yet; requests using them get an
-  explicit unsupported error.
+- Request filesystems are ported (`crates/tsrs_api/src/requestfs.rs`) but enter the project snapshot as a
+  plain host filesystem: LSP overlay rebasing and alias expansion of client `fileNotifications` through
+  request symlinks (Go `ExpandFileChanges`) are not applied. Callback filesystems (`--callbacks`, Go
+  `callbackfs.go`) are not ported yet.
 - Build orchestration (`createBuildOrchestrator`, `build*`, `clean*`): the reusable boundary out of the
   CLI build modules is not extracted yet.
 - Source files / AST (`getSourceFile`, `createSourceFile*`, leases, `printNode`, ...) wait on the codec

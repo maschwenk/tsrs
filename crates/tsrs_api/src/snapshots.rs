@@ -19,6 +19,7 @@ use tsrs_tsoptions::gojson;
 use crate::config::config_file_response;
 use crate::diagnostics::diagnostic_from_response;
 use crate::handler::{ApiError, ApiResult};
+use crate::requestfs::{self, RequestFileSystem, RequestParams};
 use crate::session::{OpenState, Session};
 use crate::wire::{b, s, strings, DocumentIdentifier, Obj, Params};
 
@@ -360,21 +361,37 @@ impl Session {
         Ok(())
     }
 
-    fn reject_unported_snapshot_params(p: &Params) -> ApiResult<()> {
-        if p.has("fileSystem") {
-            return Err(ApiError::unsupported("createSnapshot/updateSnapshot with fileSystem (request filesystem is not ported yet)"));
+    /// Go `requestfilesystem.NewForUpdate` for the request's optional `fileSystem`.
+    fn request_file_system(
+        &self,
+        p: &Params,
+        base: Option<&RequestFileSystem>,
+        file_changes: &mut FileChangeSummary,
+    ) -> ApiResult<Option<(Arc<RequestFileSystem>, bool)>> {
+        if !p.has("fileSystem") {
+            return Ok(None);
         }
-        Ok(())
+        let params = RequestParams::parse(p.get("fileSystem")).map_err(ApiError::client)?;
+        let fs = requestfs::new_for_update(&params, self.snapshot_host_fs(), base, self.current_directory(), file_changes).map_err(ApiError::client)?;
+        // Go sets ReplaceFileSystem from the *request's* kind, not the compacted result's.
+        Ok(Some((Arc::new(fs), params.kind == requestfs::Kind::Full)))
     }
 
     pub(crate) fn handle_create_snapshot(&self, p: Params) -> ApiResult<Value> {
         if !matches!(p.0, Value::Null) {
             p.object()?;
         }
-        Self::reject_unported_snapshot_params(&p)?;
         let (mut req, echo) = self.to_api_snapshot_request(&p)?;
         let open_state = self.reconcile_snapshot_opens(&mut req, &OpenState::default());
-        let file_changes = self.to_file_change_summary(p.get("fileNotifications"))?;
+        let mut file_changes = self.to_file_change_summary(p.get("fileNotifications"))?;
+        let snapshot_fs = match self.request_file_system(&p, None, &mut file_changes)? {
+            Some((fs, replace)) => {
+                req.file_system = Some(fs.clone() as Arc<dyn tsrs_vfs::FS>);
+                req.replace_file_system = replace;
+                Some(fs)
+            }
+            None => None,
+        };
         let ctx = tsrs_core::context::Context::background();
         let root = self.snapshot_host.new_root_snapshot();
         let result = self.snapshot_host.clone_snapshot(&ctx, &root, file_changes, Some(Arc::new(req)));
@@ -397,7 +414,7 @@ impl Session {
                 return Err(e);
             }
         };
-        self.register_snapshot(snapshot, open_state, None);
+        self.register_snapshot(snapshot, open_state, snapshot_fs);
         Ok(response)
     }
 
@@ -410,12 +427,15 @@ impl Session {
         if !matches!(changes.0, Value::Null) {
             changes.object()?;
         }
-        Self::reject_unported_snapshot_params(&changes)?;
         let (mut req, echo) = self.to_api_snapshot_request(&changes)?;
         let open_state = self.reconcile_snapshot_opens(&mut req, &base.open_state);
-        let file_changes = self.to_file_change_summary(changes.get("fileNotifications"))?;
-        if let Some(fs) = &base.file_system {
-            req.file_system = Some(fs.clone());
+        let mut file_changes = self.to_file_change_summary(changes.get("fileNotifications"))?;
+        let new_fs = self.request_file_system(&changes, base.file_system.as_deref(), &mut file_changes)?;
+        let replaced = new_fs.as_ref().is_some_and(|(_, replace)| *replace);
+        let snapshot_fs = new_fs.map(|(fs, _)| fs).or_else(|| base.file_system.clone());
+        if let Some(fs) = &snapshot_fs {
+            req.file_system = Some(fs.clone() as Arc<dyn tsrs_vfs::FS>);
+            req.replace_file_system = replaced;
         }
         let ctx = tsrs_core::context::Context::background();
         let snapshot = match self.snapshot_host.clone_snapshot(&ctx, &base.snapshot, file_changes, Some(Arc::new(req))) {
@@ -436,7 +456,7 @@ impl Session {
                 return Err(e);
             }
         };
-        self.register_snapshot(snapshot, open_state, base.file_system.clone());
+        self.register_snapshot(snapshot, open_state, snapshot_fs);
         Ok(response)
     }
 

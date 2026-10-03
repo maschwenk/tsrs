@@ -108,22 +108,35 @@ impl Session {
         }
     }
 
-    /// Go `handleEmit` (write-through; request filesystems are not ported, so `emittedFilesContents` is empty).
+    /// Go `handleEmit`: outputs are captured in memory for snapshots with a full request filesystem and
+    /// written through the session host filesystem otherwise.
     pub(crate) fn handle_emit(&self, p: Params) -> ApiResult<Value> {
         let (sd, program) = self.program_of(&p)?;
         let emit_only = Self::emit_only(&p)?;
-        if sd.file_system.is_some() {
-            return Err(ApiError::unsupported("emit from a snapshot with a request filesystem"));
-        }
+        let capture = sd.file_system.as_ref().is_some_and(|fs| fs.is_full());
+        let outputs: Mutex<std::collections::HashMap<String, String>> = Mutex::new(Default::default());
         let fs = self.base_fs();
-        let write = |file_name: &str, text: &str, _data: &mut WriteFileData| -> Result<(), String> { fs.write_file(file_name, text) };
+        let write = |file_name: &str, text: &str, _data: &mut WriteFileData| -> Result<(), String> {
+            if capture {
+                outputs.lock().unwrap().insert(file_name.to_string(), text.to_string());
+                Ok(())
+            } else {
+                fs.write_file(file_name, text)
+            }
+        };
         let ctx = Context::background();
         let result = program.emit(&ctx, EmitOptions { target_source_files: None, emit_only, force_emit: false, write_file: Some(&write) });
+        let outputs = outputs.into_inner().unwrap();
+        let contents = if capture {
+            result.emitted_files.iter().map(|f| s(outputs.get(f).cloned().unwrap_or_default())).collect()
+        } else {
+            Vec::new()
+        };
         Ok(Obj::new()
             .set("emitSkipped", b(result.emit_skipped))
             .set("diagnostics", diagnostic_responses(&result.diagnostics))
             .set("emittedFiles", strings(result.emitted_files.iter().cloned()))
-            .set("emittedFilesContents", Value::Array(Vec::new()))
+            .set("emittedFilesContents", Value::Array(contents))
             .build())
     }
 

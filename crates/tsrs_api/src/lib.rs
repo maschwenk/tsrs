@@ -17,6 +17,7 @@ pub mod module_resolution;
 pub mod methods;
 pub mod program;
 pub mod session;
+pub mod requestfs;
 pub mod snapshots;
 pub mod transpile;
 pub mod wire;

@@ -53,7 +53,7 @@ pub struct SnapshotData {
     pub handle: SnapshotID,
     pub snapshot: Arc<Snapshot>,
     /// Request filesystem the snapshot was created with (inherited by updates), if any.
-    pub(crate) file_system: Option<Arc<dyn FS>>,
+    pub(crate) file_system: Option<Arc<crate::requestfs::RequestFileSystem>>,
     pub(crate) open_state: OpenState,
     /// Registries owned by the checker lane (symbols, types, signatures).
     pub checker_state: CheckerSnapshotState,
@@ -225,7 +225,7 @@ impl Session {
 
     /// Go `registerSnapshot`: the same snapshot id returned twice (no changes) bumps the API ref count so
     /// each client-side snapshot can be disposed independently.
-    pub(crate) fn register_snapshot(&self, snapshot: Arc<Snapshot>, open_state: OpenState, file_system: Option<Arc<dyn FS>>) -> SnapshotID {
+    pub(crate) fn register_snapshot(&self, snapshot: Arc<Snapshot>, open_state: OpenState, file_system: Option<Arc<crate::requestfs::RequestFileSystem>>) -> SnapshotID {
         let handle = snapshot.id();
         let mut snapshots = self.snapshots.write().unwrap();
         if let Some(entry) = snapshots.get_mut(&handle) {
