@@ -199,3 +199,22 @@ after deleting its tsbuildinfo:
 - tsgo-ref: 465 / 222, 1,072 / 389, 1,955 / 393 MB.
 So `600723a` changes nothing measurable here either; on this graph the per-project arena retention (see above), not
 checker threads, sets tsrs's peak at low builder counts.
+
+## Checkpoint `27da392` (stack + effective checker fix `fe0a875`/`4121002` + mtimes deadlock fix)
+
+The earlier tsctests run on `e4c6a96` hung (all threads in futex waits; backtrace kept locally): a checker thread in
+`WriteFile` -> `host.get_m_time` waited on the build host's `m_times` mutex, held by a guard created inside
+`compile_and_emit`'s `EmitInput` argument list for the whole emit. Reached only when a `.d.ts` differs only in its map
+option (`differsOnlyInMap`), i.e. once declaration maps exist; present since `baa9fc6` (so in `da23dd6` too), and it
+hangs at `--builders 1` as well, so it is not scheduler-specific. Fix in `27da392`: take the Arc before the call.
+Reproducer: fixture `dmap` (composite + emitDeclarationOnly, enable `declarationMap`, `-b` again); per-scenario runs
+with 40 s timeouts isolated `tsbuild/commandLine/different-options` and `tsbuild/sample/when-declarationMap-changes`.
+
+Gates on `27da392` (base main `fb867b1`): four-mode errors/types/symbols identical (13,458 / 12,779); js 8,679, same
+pass list; fourslash 4,066 / 63 same pass list; `-D warnings --all-targets` exit 0; `emit_gate` 5/5;
+`test_monorepo.sh` 0 failures; `run-all.sh` (with `dmap`) identical; `graph` / `cycle` at 1/4/8 builders +/-
+`--stopBuildOnErrors` identical. tsctests (406 non-watch scenarios): tsc 161/216, tsbuild 157/190 pass; the full run
+takes about 6 s; same pass list with 1 and 8 harness jobs and on repeat; 57 crash at other waves' stubs (classfields
+47, forawait 5, jsx 4, objectrestspread 1); the 31 failures are unported `--help` / `--init` / `--showConfig` /
+`--locale` / `--generateTrace` output. `xsdts` (public emitting graph): output and trees identical to tsgo-ref at
+1/4/8 builders; cold peak RSS 1,130 / 1,301 / 1,410 MB (max of 3).
