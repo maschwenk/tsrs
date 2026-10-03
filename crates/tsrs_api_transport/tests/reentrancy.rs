@@ -38,6 +38,11 @@ impl Handler for SimSession {
                 Response::json("held")
             }
             "free" => Response::json(&current_request().unwrap().depth),
+            // Waits on the client without holding the lock (an unrelated slow callback).
+            "callbackNoLock" => {
+                let r = self.caller.call("cb", Some(b"\"/slow.ts\"")).map_err(|e| ApiError::internal(e.to_string()))?;
+                Ok(Response::Json(r))
+            }
             _ => Err(ApiError::internal("unknown")),
         }
     }
@@ -93,6 +98,12 @@ fn sync_nested_request_gets_a_deliberate_error_not_a_hang() {
 }
 
 fn start_async() -> (FrameWriter<std::io::PipeWriter>, FrameReader<std::io::PipeReader>, thread::JoinHandle<Result<(), TransportError>>) {
+    start_async_with(ConnOptions::default())
+}
+
+fn start_async_with(
+    options: ConnOptions,
+) -> (FrameWriter<std::io::PipeWriter>, FrameReader<std::io::PipeReader>, thread::JoinHandle<Result<(), TransportError>>) {
     let (server_r, client_w) = std::io::pipe().unwrap();
     let (client_r, server_w) = std::io::pipe().unwrap();
     let late = LateCaller::new();
@@ -101,7 +112,7 @@ fn start_async() -> (FrameWriter<std::io::PipeWriter>, FrameReader<std::io::Pipe
         Box::new(FrameReader::new(server_r)),
         Box::new(FrameWriter::new(server_w)),
         session,
-        ConnOptions::default(),
+        options,
         None,
     );
     late.set(conn.caller());
@@ -114,14 +125,17 @@ fn json(r: &mut FrameReader<std::io::PipeReader>) -> serde_json::Value {
 }
 
 #[test]
-fn async_nested_request_gets_a_deliberate_error_not_a_hang() {
+fn async_nested_request_gets_a_deliberate_error_after_the_grace_period_not_a_hang() {
     bounded("async re-entry", || {
-        let (mut w, mut r, run) = start_async();
+        let grace = Duration::from_millis(300);
+        let (mut w, mut r, run) = start_async_with(ConnOptions { reentrancy_grace: grace, ..ConnOptions::default() });
         w.write_frame(br#"{"jsonrpc":"2.0","id":1,"method":"outer"}"#).unwrap();
         let call = json(&mut r);
         assert_eq!(call["method"], "cb");
+        let start = std::time::Instant::now();
         w.write_frame(br#"{"jsonrpc":"2.0","id":2,"method":"needsLock"}"#).unwrap();
         assert_eq!(json(&mut r), serde_json::json!({"jsonrpc": "2.0", "id": 2, "error": {"code": -32603, "message": REENTRANT}}));
+        assert!(start.elapsed() >= grace, "async conflicts wait out the grace period: {:?}", start.elapsed());
         w.write_frame(br#"{"jsonrpc":"2.0","id":3,"method":"free"}"#).unwrap();
         assert_eq!(json(&mut r)["result"], 0);
         w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{},"result":"done"}}"#, call["id"]).as_bytes()).unwrap();
@@ -182,5 +196,29 @@ fn closing_while_a_handler_waits_on_a_callback_is_bounded() {
         let _ = run.join().unwrap();
         // The lock was released on the way out: nothing stays wedged.
         assert!(session.registry.try_lock().is_ok());
+    });
+}
+
+#[test]
+fn async_unrelated_slow_callback_does_not_reject_ordinary_contention() {
+    // Request 1 waits on a slow client callback without holding anything; request 2 holds the lock for a
+    // while; request 3 contends for it. Nobody re-enters: request 3 must wait for 2 and succeed (pinned
+    // Go behavior), not fail because *some* request is waiting on the client.
+    bounded("async unrelated callback", || {
+        let (mut w, mut r, run) = start_async();
+        w.write_frame(br#"{"jsonrpc":"2.0","id":1,"method":"callbackNoLock"}"#).unwrap();
+        let call = json(&mut r);
+        assert_eq!(call["params"], "/slow.ts");
+        w.write_frame(br#"{"jsonrpc":"2.0","id":2,"method":"slowHold"}"#).unwrap();
+        thread::sleep(Duration::from_millis(20));
+        w.write_frame(br#"{"jsonrpc":"2.0","id":3,"method":"needsLock"}"#).unwrap();
+        let mut got = vec![json(&mut r), json(&mut r)];
+        got.sort_by_key(|v| v["id"].as_i64());
+        assert_eq!(got[0]["result"], "held", "{got:?}");
+        assert_eq!(got[1]["result"], 0, "{got:?}");
+        w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{},"result":"late"}}"#, call["id"]).as_bytes()).unwrap();
+        assert_eq!(json(&mut r)["result"], "late");
+        drop(w);
+        assert!(run.join().unwrap().is_ok());
     });
 }

@@ -17,10 +17,20 @@ struct SyncIo {
     writer: Box<dyn ProtocolWriter>,
 }
 
-#[derive(Default, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct ConnOptions {
     /// SetCollectTiming: answer getServerTiming/resetServerTiming with collected data.
     pub collect_timing: bool,
+    /// Async connections only: how long a contended re-entrancy-aware acquisition waits while some
+    /// request on the connection is blocked on the client before it fails (see `reentrancy`). Sync
+    /// connections fail such acquisitions immediately (the conflict is provably a re-entry there).
+    pub reentrancy_grace: std::time::Duration,
+}
+
+impl Default for ConnOptions {
+    fn default() -> Self {
+        ConnOptions { collect_timing: false, reentrancy_grace: crate::reentrancy::DEFAULT_ASYNC_GRACE }
+    }
 }
 
 pub struct SyncConn {
@@ -43,7 +53,7 @@ impl SyncConn {
             handler,
             timing: options.collect_timing.then(TimingCollector::default),
             cancel: CancellationToken::new(),
-            callbacks: Arc::default(),
+            callbacks: Arc::new(crate::reentrancy::CallbackState::new(true, options.reentrancy_grace)),
         })
     }
 
