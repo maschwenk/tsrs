@@ -133,7 +133,7 @@ impl SyncConn {
             _ => {}
         }
         let start = self.timing.as_ref().map(|_| Instant::now());
-        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: self.callbacks.clone() };
+        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: self.callbacks.clone(), state: Default::default() };
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()))
         }));
@@ -149,7 +149,7 @@ impl SyncConn {
     }
 
     fn handle_notification(&self, msg: Message, depth: u32) {
-        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: self.callbacks.clone() };
+        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: self.callbacks.clone(), state: Default::default() };
         let _ = catch_unwind(AssertUnwindSafe(|| self.handler.handle_notification(&cx, &msg.method, msg.params_bytes())));
     }
 

@@ -27,5 +27,5 @@ pub use conn_sync::{ConnOptions, SyncConn};
 pub use handler::{Caller, CancellationToken, Handler, RequestContext};
 pub use message::{ApiError, Id, Message, Response, ResponseError, TransportError};
 pub use protocol::WireProtocol;
-pub use reentrancy::{blocking_may_deadlock, current_request, lock_for_request};
+pub use reentrancy::{blocking_may_deadlock, current_request, lock_for_request, ContentionWait, Holder};
 pub use transport::{serve, Connection, LateCaller, PipeListener, ServeOptions, Stream};

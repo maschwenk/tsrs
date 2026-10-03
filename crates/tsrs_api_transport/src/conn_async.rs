@@ -163,7 +163,7 @@ impl AsyncConn {
 
     fn dispatch(&self, msg: Message) {
         if msg.is_notification() {
-            let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: self.callbacks.clone() };
+            let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: self.callbacks.clone(), state: Default::default() };
             let _ = catch_unwind(AssertUnwindSafe(|| self.handler.handle_notification(&cx, &msg.method, msg.params_bytes())));
             return;
         }
@@ -221,7 +221,7 @@ impl AsyncConn {
             _ => {}
         }
         let start = self.timing.as_ref().map(|_| Instant::now());
-        let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: self.callbacks.clone() };
+        let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: self.callbacks.clone(), state: Default::default() };
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()))
         }));

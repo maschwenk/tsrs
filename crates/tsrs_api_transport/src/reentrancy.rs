@@ -1,4 +1,4 @@
-// Re-entrancy policy for API handlers (see README "Re-entrancy").
+// Re-entrancy policy for API handlers (see README "Re-entrancy" and INTEGRATION.md).
 //
 // A client filesystem callback may issue API requests while the server request that triggered the
 // callback is still running. In sync (MessagePack) mode the nested request runs on the very thread that
@@ -8,32 +8,53 @@
 // tsrs instead reports a deliberate error. Handlers do not need the transport's types for this: the
 // connection publishes the current request context in a thread-local for the duration of a request.
 //
-// When is a contended acquisition a deadlock?
-// - Sync: only one top-level request runs at a time, so a request thread that finds the resource taken
-//   while some request is blocked on the client is a nested request issued from a callback: the
-//   conflict is certain and is reported immediately.
-// - Async: requests run concurrently and the transport cannot tell whether the client's pending
-//   callback is the one that issued this request (filesystem callbacks also come from worker threads
-//   that carry no request identity). An unrelated slow callback plus ordinary contention is not a
-//   deadlock (pinned Go just waits), so the waiter keeps waiting; it fails only after the contention
-//   has coexisted with a blocked client call for the whole grace period (`ConnOptions::
-//   reentrancy_grace`, default 10 s). A real async re-entry deadlock therefore ends with the error
-//   after the grace period instead of hanging, and valid concurrency is never rejected early.
+// Ownership. Every request has a `RequestState`. A client call made on a thread that is serving a
+// request is *attributed* to that request; a call made on any other thread (compiler worker threads
+// reading files during a program build, which carry no request identity) is *unattributed*: the
+// protocol does not say which request a callback belongs to, so attribution is only as good as the
+// thread that makes the call. A waiter that knows the resource holder (`Holder`, recorded by
+// `lock_for_request` and by `ContentionWait` users) treats the holder as possibly stuck on the client
+// when the holder (or a request the holder itself waits for, transitively) has an attributed call in
+// flight, or when any unattributed call is in flight (it might be the holder's). Otherwise the waiter
+// waits like Go, however long the holder takes.
+//
+// When a possibly-stuck holder is found:
+// - Sync: only one top-level request runs at a time, so the waiter is a nested request issued from a
+//   callback: the conflict is certain and is reported immediately.
+// - Async: the transport cannot know whether the pending callback issued this waiter, so it fails only
+//   after the holder has been possibly-stuck for the whole grace period (`ConnOptions::
+//   reentrancy_grace`, default 10 s), measured per acquisition. A real async re-entry deadlock ends with
+//   the error after the grace period instead of hanging.
+//
+// Known divergence from pinned Go (async only, bounded): an unrelated waiter is rejected after the
+// grace period if the holder itself waits on a client callback for longer than the grace period, or if
+// an unattributed callback (any worker-thread file read on the connection) stays pending that long,
+// because those cannot be told apart from a re-entry deadlock. Go waits forever in both cases.
 
+use std::cell::Cell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, TryLockError};
-use std::cell::Cell;
 use std::time::{Duration, Instant};
+
+use rustc_hash::FxHashMap;
 
 use crate::handler::RequestContext;
 use crate::message::ApiError;
 
 pub const DEFAULT_ASYNC_GRACE: Duration = Duration::from_secs(10);
 
-/// Connection-wide count of requests currently blocked waiting for a client callback answer.
+/// Per-request re-entrancy state: attributed client calls in flight and the request it is blocked on.
+#[derive(Debug, Default)]
+pub struct RequestState {
+    waiting: AtomicUsize,
+    blocked_on: Mutex<Option<Arc<RequestState>>>,
+}
+
+/// Connection-wide client-call accounting.
 #[derive(Debug)]
 pub struct CallbackState {
     waiting: AtomicUsize,
+    unattributed: AtomicUsize,
     lock: Mutex<()>,
     changed: Condvar,
     sync: bool,
@@ -48,17 +69,36 @@ impl Default for CallbackState {
 
 impl CallbackState {
     pub(crate) fn new(sync: bool, grace: Duration) -> CallbackState {
-        CallbackState { waiting: AtomicUsize::new(0), lock: Mutex::new(()), changed: Condvar::new(), sync, grace }
+        CallbackState {
+            waiting: AtomicUsize::new(0),
+            unattributed: AtomicUsize::new(0),
+            lock: Mutex::new(()),
+            changed: Condvar::new(),
+            sync,
+            grace,
+        }
     }
 
+    /// Client calls in flight on the connection (attributed or not).
     pub fn waiting_on_client(&self) -> usize {
         self.waiting.load(Ordering::SeqCst)
     }
 
+    /// Client calls in flight that were made outside any request thread.
+    pub fn unattributed_waiting(&self) -> usize {
+        self.unattributed.load(Ordering::SeqCst)
+    }
+
+    /// Registers a client call made on the current thread until the guard drops.
     pub(crate) fn enter(self: &Arc<Self>) -> WaitingGuard {
+        let owner = current_request().map(|cx| cx.state.clone());
+        match &owner {
+            Some(state) => state.waiting.fetch_add(1, Ordering::SeqCst),
+            None => self.unattributed.fetch_add(1, Ordering::SeqCst),
+        };
         self.waiting.fetch_add(1, Ordering::SeqCst);
         self.notify();
-        WaitingGuard(self.clone())
+        WaitingGuard { conn: self.clone(), owner }
     }
 
     fn notify(&self) {
@@ -72,12 +112,19 @@ impl CallbackState {
     }
 }
 
-pub(crate) struct WaitingGuard(Arc<CallbackState>);
+pub(crate) struct WaitingGuard {
+    conn: Arc<CallbackState>,
+    owner: Option<Arc<RequestState>>,
+}
 
 impl Drop for WaitingGuard {
     fn drop(&mut self) {
-        self.0.waiting.fetch_sub(1, Ordering::SeqCst);
-        self.0.notify();
+        match &self.owner {
+            Some(state) => state.waiting.fetch_sub(1, Ordering::SeqCst),
+            None => self.conn.unattributed.fetch_sub(1, Ordering::SeqCst),
+        };
+        self.conn.waiting.fetch_sub(1, Ordering::SeqCst);
+        self.conn.notify();
     }
 }
 
@@ -106,20 +153,118 @@ pub fn current_request() -> Option<RequestContext> {
     CURRENT.with(|c| c.borrow().clone())
 }
 
-thread_local! {
-    /// (start, last check) of the current contended wait on this thread, for the async grace period.
-    static EPISODE: Cell<Option<(Instant, Instant)>> = const { Cell::new(None) };
+/// The request that holds an exclusive resource. Capture with `Holder::current()` right after
+/// acquiring the resource and keep it with the resource until release.
+#[derive(Clone, Debug)]
+pub struct Holder(Arc<RequestState>);
+
+impl Holder {
+    /// The request served on this thread (None outside a request).
+    pub fn current() -> Option<Holder> {
+        current_request().map(|cx| Holder(cx.state.clone()))
+    }
 }
 
-/// A gap between checks longer than this starts a new contention episode (wait loops re-check every
-/// few milliseconds).
+/// Whether `holder` might be blocked on the client: it (or a request it waits for) has an attributed
+/// client call in flight, or an unattributed call is in flight. A wait-for cycle counts as stuck.
+fn holder_possibly_stuck(holder: &Arc<RequestState>, conn: &CallbackState) -> bool {
+    if conn.unattributed_waiting() > 0 {
+        return true;
+    }
+    let mut r = holder.clone();
+    for _ in 0..64 {
+        if r.waiting.load(Ordering::SeqCst) > 0 {
+            return true;
+        }
+        let next = r.blocked_on.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        match next {
+            Some(n) if Arc::ptr_eq(&n, holder) => return true,
+            Some(n) => r = n,
+            None => return false,
+        }
+    }
+    true
+}
+
+/// Per-acquisition contention state for an exclusive resource that cannot use `lock_for_request`
+/// (e.g. a checker lease). Create one when an acquisition first finds the resource taken, call
+/// `may_deadlock` on every re-check, and drop it when the acquisition ends (success or failure).
+pub struct ContentionWait {
+    holder: Option<Arc<RequestState>>,
+    stuck_since: Option<Instant>,
+    registered: Option<Arc<RequestState>>,
+}
+
+impl ContentionWait {
+    /// `holder`: the resource's current holder if known (`Holder::current()` captured by the holder).
+    /// Without it, any client call in flight on the connection counts as the holder's (conservative).
+    pub fn new(holder: Option<&Holder>) -> ContentionWait {
+        ContentionWait { holder: holder.map(|h| h.0.clone()), stuck_since: None, registered: None }
+    }
+
+    /// Updates the holder (it can change between re-checks).
+    pub fn set_holder(&mut self, holder: Option<&Holder>) {
+        let h = holder.map(|h| h.0.clone());
+        let same = match (&h, &self.holder) {
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        };
+        if !same {
+            self.holder = h;
+            self.stuck_since = None;
+            if let Some(me) = &self.registered {
+                *me.blocked_on.lock().unwrap_or_else(|e| e.into_inner()) = self.holder.clone();
+            }
+        }
+    }
+
+    /// True when waiting any longer could deadlock on a client callback: immediately on a sync
+    /// connection when the holder is possibly stuck; on an async connection once the holder has been
+    /// possibly stuck for the grace period during *this* acquisition. Always false outside a request.
+    pub fn may_deadlock(&mut self) -> bool {
+        let Some(cx) = current_request() else { return false };
+        if self.registered.is_none() {
+            *cx.state.blocked_on.lock().unwrap_or_else(|e| e.into_inner()) = self.holder.clone();
+            self.registered = Some(cx.state.clone());
+        }
+        let stuck = match &self.holder {
+            Some(h) => holder_possibly_stuck(h, &cx.callbacks),
+            None => cx.callbacks.waiting_on_client() > 0,
+        };
+        if !stuck {
+            self.stuck_since = None;
+            return false;
+        }
+        if cx.callbacks.sync {
+            return true;
+        }
+        let now = Instant::now();
+        let since = *self.stuck_since.get_or_insert(now);
+        now.duration_since(since) >= cx.callbacks.grace
+    }
+}
+
+impl Drop for ContentionWait {
+    fn drop(&mut self) {
+        if let Some(me) = &self.registered {
+            *me.blocked_on.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        }
+    }
+}
+
+thread_local! {
+    /// (request, start, last check) of the current contended wait on this thread, for the legacy
+    /// `blocking_may_deadlock` (no per-acquisition state).
+    static EPISODE: Cell<Option<(usize, Instant, Instant)>> = const { Cell::new(None) };
+}
+
 const EPISODE_GAP: Duration = Duration::from_millis(200);
 
-/// Call repeatedly while waiting for a contended exclusive resource (e.g. a checker lease) that cannot
-/// use `lock_for_request`; when it returns true, give up with `reentrancy_error`. True when waiting could
-/// deadlock on a client callback: immediately on a sync connection while a request is blocked on the
-/// client; on an async connection only once that has been the case for the whole grace period (see
-/// module docs). Always false outside a request.
+/// Legacy predicate without per-acquisition state; prefer `ContentionWait`. Treats any client call on
+/// the connection as the holder's. On async connections the grace period is tracked per thread and
+/// request: a new acquisition by the same request within 200 ms of a previous contended check inherits
+/// that wait's start, so it can fail up to one grace period early. Kept so existing callers compile.
 pub fn blocking_may_deadlock() -> bool {
     let Some(cx) = current_request() else { return false };
     if cx.callbacks.waiting_on_client() == 0 {
@@ -129,12 +274,13 @@ pub fn blocking_may_deadlock() -> bool {
     if cx.callbacks.sync {
         return true;
     }
+    let key = Arc::as_ptr(&cx.state) as usize;
     let now = Instant::now();
     let start = match EPISODE.with(|e| e.get()) {
-        Some((start, last)) if now.duration_since(last) < EPISODE_GAP => start,
+        Some((k, start, last)) if k == key && now.duration_since(last) < EPISODE_GAP => start,
         _ => now,
     };
-    EPISODE.with(|e| e.set(Some((start, now))));
+    EPISODE.with(|e| e.set(Some((key, start, now))));
     now.duration_since(start) >= cx.callbacks.grace
 }
 
@@ -145,30 +291,73 @@ pub fn reentrancy_error(resource: &str) -> ApiError {
     ))
 }
 
-/// Locks `mutex` for an API request without deadlocking on callback re-entry: waits while the holder
-/// is making progress, and fails with `reentrancy_error` when the lock is contended while a request on
-/// this connection is waiting for the client. Outside a request it is a plain blocking lock. Poisoned
-/// locks are recovered (the connection already reported the panic).
-pub fn lock_for_request<'a, T>(mutex: &'a Mutex<T>, resource: &str) -> Result<MutexGuard<'a, T>, ApiError> {
+/// Holders of mutexes locked through `lock_for_request`, keyed by mutex address (entries exist only
+/// while the guard is alive).
+static LOCK_HOLDERS: Mutex<Option<FxHashMap<usize, Arc<RequestState>>>> = Mutex::new(None);
+
+fn lock_holders() -> MutexGuard<'static, Option<FxHashMap<usize, Arc<RequestState>>>> {
+    LOCK_HOLDERS.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Guard returned by `lock_for_request`; derefs to the locked value.
+pub struct RequestGuard<'a, T> {
+    key: Option<usize>,
+    guard: MutexGuard<'a, T>,
+}
+
+impl<T> std::ops::Deref for RequestGuard<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.guard
+    }
+}
+
+impl<T> std::ops::DerefMut for RequestGuard<'_, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.guard
+    }
+}
+
+impl<T> Drop for RequestGuard<'_, T> {
+    fn drop(&mut self) {
+        if let Some(key) = self.key {
+            if let Some(map) = lock_holders().as_mut() {
+                map.remove(&key);
+            }
+        }
+    }
+}
+
+/// Locks `mutex` for an API request without deadlocking on callback re-entry: waits like Go while the
+/// holder makes progress, and fails with `reentrancy_error` when the holder is possibly stuck on the
+/// client (immediately on sync, after the grace period on async; see module docs). Outside a request it
+/// is a plain blocking lock. Poisoned locks are recovered (the connection already reported the panic).
+pub fn lock_for_request<'a, T>(mutex: &'a Mutex<T>, resource: &str) -> Result<RequestGuard<'a, T>, ApiError> {
+    let key = mutex as *const Mutex<T> as usize;
     let Some(cx) = current_request() else {
-        return Ok(mutex.lock().unwrap_or_else(|e| e.into_inner()));
+        return Ok(RequestGuard { key: None, guard: mutex.lock().unwrap_or_else(|e| e.into_inner()) });
     };
+    let acquired = |guard: MutexGuard<'a, T>| {
+        lock_holders().get_or_insert_with(FxHashMap::default).insert(key, cx.state.clone());
+        RequestGuard { key: Some(key), guard }
+    };
+    let mut wait: Option<ContentionWait> = None;
     loop {
         match mutex.try_lock() {
-            Ok(g) => {
-                EPISODE.with(|e| e.set(None));
-                return Ok(g);
-            }
-            Err(TryLockError::Poisoned(p)) => return Ok(p.into_inner()),
+            Ok(g) => return Ok(acquired(g)),
+            Err(TryLockError::Poisoned(p)) => return Ok(acquired(p.into_inner())),
             Err(TryLockError::WouldBlock) => {}
         }
-        if blocking_may_deadlock() {
+        let holder = lock_holders().as_ref().and_then(|m| m.get(&key).cloned()).map(Holder);
+        let w = wait.get_or_insert_with(|| ContentionWait::new(holder.as_ref()));
+        w.set_holder(holder.as_ref());
+        if w.may_deadlock() {
             return Err(reentrancy_error(resource));
         }
         if cx.cancel.is_cancelled() {
             return Err(ApiError::internal("ipc: connection closed"));
         }
-        // Woken early when a request starts waiting on the client; otherwise re-check shortly.
+        // Woken early when a client call starts or ends; otherwise re-check shortly.
         cx.callbacks.wait_for_change(Duration::from_millis(2));
     }
 }
