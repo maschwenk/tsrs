@@ -117,6 +117,7 @@ pub(crate) struct jsxRuntimeImportSpecifier {
 fn add_project_reference_tasks(opts: &ProgramConfig, host: std::sync::Arc<dyn CompilerHost>, _single_threaded: bool) -> projectReferenceFileMapperBuilder {
     let mut mapper = projectReferenceFileMapper::new(opts.config, opts.can_use_project_reference_source());
     let resolution_host = resolution_host_for(host.clone());
+    mapper.loader_host = Some(resolution_host);
     let project_references = opts.config.resolved_project_reference_paths();
     if project_references.is_empty() {
         return projectReferenceFileMapperBuilder { mapper: Box::leak(Box::new(mapper)), host: resolution_host };

@@ -1,0 +1,23 @@
+{
+  "close.async.split": {
+    "fulfilled": 50,
+    "rejected": 0,
+    "sample": null
+  },
+  "crash.async.rejected": null,
+  "crash.sync.message": "EBADF: bad file descriptor, write",
+  "handles.foreign.sameIdOtherSession": null,
+  "handles.invalid.file": "api: client error: source file not found: /src/missing.ts",
+  "handles.invalid.location": "api: client error: invalid node handle \"not-a-node-handle\"",
+  "handles.invalid.params": "api: invalid request: failed to unmarshal *api.GetSourceFileNamesParams: json: cannot unmarshal JSON string into Go api.SnapshotID within \"/snapshot\"",
+  "handles.invalid.position": null,
+  "handles.invalid.project": "api: client error: project /nope/tsconfig.json not found",
+  "handles.invalid.snapshot": "api: client error: snapshot 987654 not found",
+  "handles.invalid.symbol": "api: client error: symbol handle 1073741824 not found in source file",
+  "handles.release.invalid": "api: client error: snapshot 424242 not found",
+  "handles.released.snapshot": "api: client error: snapshot 1 not found",
+  "handles.unknown.method": "api: invalid request: unknown API method \"noSuchMethod\"",
+  "handles.valid.names": null,
+  "reentry.async.message": "ok",
+  "reentry.sync.message": "ok"
+}

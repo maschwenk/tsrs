@@ -9,3 +9,6 @@ bench/.work/
 .env
 .env.*
 .npmrc
+npm/node_modules/
+npm/tsrs/dist/
+npm/tsrs/tsconfig.tsbuildinfo

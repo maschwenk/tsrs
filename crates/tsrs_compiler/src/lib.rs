@@ -38,6 +38,6 @@ pub use file_include::FileIncludeReason;
 pub use fileloader::{DuplicateSourceFile, LibFile};
 pub use host::{new_cached_fs_compiler_host, new_compiler_host, CompilerHost, TraceFn};
 pub use program::{
-    filter_no_emit_semantic_diagnostics, free_program, get_diagnostics_of_any_program, new_program, sort_and_deduplicate_diagnostics, CreateCheckerPool,
+    filter_no_emit_semantic_diagnostics, free_program, free_unshared_program, shared_program_data, SharedProgramData, get_diagnostics_of_any_program, new_program, sort_and_deduplicate_diagnostics, CreateCheckerPool,
     CreateModuleResolver, Program, ProgramConfig, ProgramOptions,
 };

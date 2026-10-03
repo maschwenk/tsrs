@@ -1,0 +1,7 @@
+export async function run<T extends object>(a?: string, ...rest: number[]): Promise<void> {
+    const s = `t\u00E9\`x`;
+    if (!a)
+        return;
+    await console.log(a, ...rest);
+}
+let café = "\uD83D\uDE00";

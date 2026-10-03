@@ -395,6 +395,53 @@ pub unsafe fn free_program(program: &'static Program) {
     drop(Box::from_raw(resolution_host as *mut dyn ResolutionHost));
 }
 
+// Frees a program from `new_program` that never shared data with another version (it was not the source or the
+// result of `update_program`), including its processed-file data and project reference file mapper, which
+// `free_program` keeps because language-server program versions share them. Used for one-shot programs (the
+// native API's transpileModule / transpileDeclaration).
+//
+// # Safety
+// As `free_program`, and additionally: no other program refers to `program`'s processed files or mapper.
+pub unsafe fn free_unshared_program(program: &'static Program) {
+    let shared = shared_program_data(program);
+    free_program(program);
+    shared.free();
+}
+
+/// The data program versions share (`processed`, the project reference file mapper, the file loader's
+/// resolution host and the mapper's dts-faking host), as an address pair that can be moved into a region's
+/// `on_free` hook.
+pub struct SharedProgramData {
+    processed: usize,
+    mapper: usize,
+}
+
+/// See `SharedProgramData`.
+pub fn shared_program_data(program: &'static Program) -> SharedProgramData {
+    SharedProgramData {
+        processed: program.processed as *const processedFiles as usize,
+        mapper: program.project_reference_file_mapper as *const projectReferenceFileMapper as usize,
+    }
+}
+
+impl SharedProgramData {
+    /// # Safety
+    /// Every program that shares this data has been freed, and nothing else refers to it.
+    pub unsafe fn free(self) {
+        let mapper = self.mapper as *mut projectReferenceFileMapper;
+        let dts_faking_host = (*mapper).dts_faking_host.get().copied();
+        let loader_host = (*mapper).loader_host;
+        drop(Box::from_raw(mapper));
+        if let Some(h) = dts_faking_host {
+            drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
+        }
+        if let Some(h) = loader_host {
+            drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
+        }
+        drop(Box::from_raw(self.processed as *mut processedFiles));
+    }
+}
+
 impl Program {
     // program.go:323
     // Return an updated program for which it is known that only the file with the given path has changed.

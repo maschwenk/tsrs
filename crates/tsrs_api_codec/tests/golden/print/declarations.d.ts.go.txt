@@ -1,0 +1,19 @@
+declare const VERSION: string;
+declare function overload(a: string): string;
+declare function overload(a: number): number;
+declare class Klass {
+    private constructor();
+    static create(): Klass;
+    readonly [index: number]: string;
+}
+export declare namespace API {
+    function call<T>(x: T): T;
+}
+export as namespace MyLib;
+declare module "*.css" {
+    const classes: {
+        [key: string]: string;
+    };
+    export default classes;
+}
+export type { Klass as K };

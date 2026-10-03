@@ -1,0 +1,17 @@
+{
+  "exportSymbol": {
+    "local": "exported",
+    "exportName": "exported",
+    "distinct": true
+  },
+  "lsSnapshot.threw": true,
+  "outerTypeParameters": [
+    "T"
+  ],
+  "profiling.serverSurvives": true,
+  "substitutionConstraint": {
+    "flags": 16777216,
+    "type": "T",
+    "constraint": "string"
+  }
+}

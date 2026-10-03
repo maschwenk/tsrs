@@ -1,0 +1,21 @@
+{
+  "lsSnapshot.message": "api: client error: getCurrentLanguageServerSnapshot requires an LSP-connected API session",
+  "profiling": {
+    "start": {
+      "ok": true,
+      "value": null
+    },
+    "stop": {
+      "ok": true,
+      "value": "N-N-cpuprofile.pb.gz"
+    },
+    "heap": {
+      "ok": true,
+      "value": "N-N-heapprofile.pb.gz"
+    },
+    "written": [
+      "N-N-cpuprofile.pb.gz",
+      "N-N-heapprofile.pb.gz"
+    ]
+  }
+}

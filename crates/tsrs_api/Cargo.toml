@@ -1,0 +1,30 @@
+[package]
+name = "tsrs_api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tsrs_core.workspace = true
+tsrs_diagnostics.workspace = true
+tsrs_ast.workspace = true
+tsrs_parser.workspace = true
+tsrs_vfs.workspace = true
+tsrs_module.workspace = true
+tsrs_tsoptions.workspace = true
+tsrs_compiler.workspace = true
+tsrs_checker.workspace = true
+# checker lane: GetTouchingPropertyName, JSDoc tags / documentation comments
+tsrs_astnav.workspace = true
+tsrs_ls.workspace = true
+tsrs_lsproto.workspace = true
+tsrs_project.workspace = true
+rustc-hash.workspace = true
+tsrs_scanner.workspace = true
+tsrs_printer.workspace = true
+tsrs_api_codec.workspace = true
+# Re-entrancy helpers only (thread-local request context set by the connection); no protocol code.
+tsrs_api_transport.workspace = true

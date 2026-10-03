@@ -1,0 +1,46 @@
+interface I extends A.B.C<string>, D {
+    (x: number): string;
+    new (x: string): I;
+    method?<T>(a?: T): void;
+    readonly [k: string]: unknown;
+}
+class K extends Base implements I, J.K {
+    ;
+    m = cond ? a : b;
+    static n = class Inner {
+    };
+}
+type Opt = [
+    string?,
+    ...number[]
+];
+type Q = A.B.C;
+let nst = `plain`;
+while (x)
+    ;
+;
+let fnT: typeof a.b;
+let gen = <T,>() => { };
+@decorated
+export abstract class Decorated {
+}
+declare const enum DE {
+    A
+}
+type Abs = abstract new () => object;
+type Acc = {
+    get x(): number;
+    set x(v: number);
+};
+let opt = ((a?.b)!).c?.(d)?.[e];
+x = y, z;
+for (;;) {
+    break;
+}
+if (a)
+    b();
+else if (c)
+    d();
+else {
+    e();
+}

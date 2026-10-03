@@ -16,6 +16,7 @@ mod parsinghelpers;
 mod tsconfigparsing;
 mod wildcarddirectories;
 
+pub mod gojson;
 pub mod outputpaths;
 
 pub mod tsoptionstest;
