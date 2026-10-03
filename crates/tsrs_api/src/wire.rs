@@ -76,6 +76,14 @@ impl<'a> Params<'a> {
             _ => &NULL,
         }
     }
+    /// A `DocumentIdentifier` field: absent is Go's zero value (empty file name); explicit `null` is an error.
+    pub fn document(&self, key: &str) -> ApiResult<DocumentIdentifier> {
+        match self.0 {
+            Value::Object(o) if !o.contains_key(key) => Ok(DocumentIdentifier::FileName(String::new())),
+            _ => DocumentIdentifier::parse(self.get(key), key),
+        }
+    }
+
     pub fn has(&self, key: &str) -> bool {
         !matches!(self.get(key), Value::Null)
     }
@@ -139,8 +147,9 @@ impl DocumentIdentifier {
     pub fn parse(v: &Value, key: &str) -> ApiResult<DocumentIdentifier> {
         match v {
             Value::String(s) => Ok(DocumentIdentifier::FileName(s.clone())),
-            // Go zero value: an absent or null DocumentIdentifier is an empty file name.
-            Value::Null => Ok(DocumentIdentifier::FileName(String::new())),
+            // proto.go `DocumentIdentifier.UnmarshalJSONFrom`: an explicit null is an error (an absent field is the
+            // zero value; see `Params::document`).
+            Value::Null => Err(ApiError::invalid_request("DocumentIdentifier: expected string or object, got null")),
             Value::Object(o) => match o.get("uri") {
                 Some(Value::String(u)) => Ok(DocumentIdentifier::Uri(u.clone())),
                 // Go reads `{}` (no uri) as an empty file name.

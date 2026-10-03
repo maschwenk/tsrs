@@ -120,6 +120,11 @@ fn null_params_are_the_zero_value_struct() {
     assert_eq!(get(&r, "error.code"), &tsrs_core::json::Value::Number(5083.0));
     let r2 = call(&s, "readConfigFile", "{}");
     assert_eq!(r, r2);
+    // An explicit null DocumentIdentifier is a decode error (Go's custom decoder), unlike an absent field.
+    let e = call_err(&s, "readConfigFile", r#"{"file":null}"#);
+    assert_eq!(e, "api: invalid request: failed to unmarshal *api.ReadConfigFileParams: json: DocumentIdentifier: expected string or object, got null");
+    let e = call_err(&s, "getDefaultProjectForFile", r#"{"snapshot":0,"file":null}"#);
+    assert!(e.starts_with("api: invalid request: failed to unmarshal *api.GetDefaultProjectForFileParams:"), "{e}");
     // parseConfigFile({}): a client error (cannot read the file), not an invalid request.
     let e = call_err(&s, "parseConfigFile", "null");
     assert!(e.starts_with("api: client error: could not read file"), "{e}");

@@ -460,7 +460,7 @@ impl Session {
         let data = self.registration(p.u64("resolver")?)?;
         let mode = mode_from(p.get("resolutionMode"), "request")?.unwrap_or(ModuleKind::None);
         let cwd = self.current_directory().to_string();
-        let dir = DocumentIdentifier::parse(p.get("containingDirectory"), "containingDirectory")?;
+        let dir = p.document("containingDirectory")?;
         let containing_directory = tspath::get_normalized_absolute_path(&dir.to_absolute_file_name(&cwd), &cwd);
         let snapshot = p.u64("snapshot")?;
         let in_progress = p.u64("inProgressSnapshot")?;

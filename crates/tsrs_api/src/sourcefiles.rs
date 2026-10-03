@@ -285,7 +285,7 @@ impl Session {
     pub(crate) fn handle_get_source_file(&self, p: Params) -> ApiResult<Response> {
         let sd = self.snapshot_data(p.u64("snapshot")?)?;
         let program = sd.get_program(&tsrs_project::ID(p.str("project")?.to_string()))?;
-        let file = DocumentIdentifier::parse(p.get("file"), "file")?;
+        let file = p.document("file")?;
         let r = self.encode_source_file_response(program.get_source_file(&file.to_file_name()));
         drop(sd);
         r
@@ -294,7 +294,7 @@ impl Session {
     pub(crate) fn handle_get_config_source_file(&self, p: Params) -> ApiResult<Response> {
         let sd = self.snapshot_data(p.u64("snapshot")?)?;
         let program = sd.get_program(&tsrs_project::ID(p.str("project")?.to_string()))?;
-        let file = DocumentIdentifier::parse(p.get("file"), "file")?;
+        let file = p.document("file")?;
         let command_line = program.command_line();
         let Some(config) = command_line.config_file else { return self.encode_source_file_response(None) };
         let cs = self.use_case_sensitive_file_names();

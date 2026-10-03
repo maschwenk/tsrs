@@ -118,7 +118,7 @@ impl Session {
     }
 
     pub(crate) fn handle_read_config_file(&self, p: Params) -> ApiResult<Value> {
-        let file = DocumentIdentifier::parse(p.get("file"), "file")?;
+        let file = p.document("file")?;
         let config_file_name = file.to_absolute_file_name(self.current_directory());
         let Some(content) = self.base_fs().read_file(&config_file_name) else {
             let diag = tsrs_ast::new_compiler_diagnostic(&tsrs_diagnostics::Cannot_read_file_0, &[&config_file_name]);
@@ -141,7 +141,7 @@ impl Session {
         let (base_path, config_file_name) = if has_dir {
             (tspath::get_normalized_absolute_path(p.str("configDirectory")?, cwd), String::new())
         } else {
-            let name = DocumentIdentifier::parse(p.get("configFileName"), "configFileName")?.to_absolute_file_name(cwd);
+            let name = p.document("configFileName")?.to_absolute_file_name(cwd);
             (tspath::get_directory_path(&name).to_string(), name)
         };
         let parsed = tsrs_tsoptions::parse_json_config_file_content(
@@ -157,7 +157,7 @@ impl Session {
     }
 
     pub(crate) fn handle_parse_config_file(&self, p: Params) -> ApiResult<Value> {
-        let file = DocumentIdentifier::parse(p.get("file"), "file")?;
+        let file = p.document("file")?;
         let config_file_name = file.to_absolute_file_name(self.current_directory());
         let Some(content) = self.base_fs().read_file(&config_file_name) else {
             return Err(ApiError::client(format!("could not read file {config_file_name:?}")));

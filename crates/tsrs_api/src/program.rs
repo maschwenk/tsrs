@@ -194,7 +194,7 @@ impl Session {
     /// Go `handleGetSourceFileMetadata` (`null` when the file is not in the program).
     pub(crate) fn handle_get_source_file_metadata(&self, p: Params) -> ApiResult<Value> {
         let (_sd, program) = self.program_of(&p)?;
-        let file = DocumentIdentifier::parse(p.get("file"), "file")?;
+        let file = p.document("file")?;
         let Some(source_file) = program.get_source_file(&file.to_file_name()) else { return Ok(Value::Null) };
         let path = source_file.path();
         let meta = program.get_source_file_meta_data(&path);

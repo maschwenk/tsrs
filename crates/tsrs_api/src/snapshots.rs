@@ -477,8 +477,9 @@ impl Session {
     }
 
     pub(crate) fn handle_get_default_project_for_file(&self, p: Params) -> ApiResult<Value> {
+        // Go decodes all params before looking anything up.
+        let file = p.document("file")?;
         let sd = self.snapshot_data(p.u64("snapshot")?)?;
-        let file = DocumentIdentifier::parse(p.get("file"), "file")?;
         Ok(match sd.snapshot.get_default_project(&file.to_uri(self.current_directory())) {
             Some(proj) => project_response(&proj),
             None => Value::Null,

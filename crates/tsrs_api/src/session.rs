@@ -324,6 +324,26 @@ impl Session {
                 }
             }
         };
+        // Go decodes the whole params struct before any lookup, so a decode error in a DocumentIdentifier field
+        // wins over e.g. an unknown snapshot. Core-owned non-pointer DocumentIdentifier fields:
+        if let (Some(t), Value::Object(o)) = (crate::methods::params_type(method), &params) {
+            let doc_fields: &[&str] = match method {
+                "resolveModuleName" => &["containingDirectory"],
+                "getResolvedTypeReferenceDirectiveFromTypeReferenceDirective" => &["sourceFile"],
+                // `file` is a SourceFileDescriptor struct there (null = zero value).
+                "retainSourceFile" | "getCachedSourceFile" => &[],
+                _ => &["file"],
+            };
+            for key in doc_fields {
+                if let Some(v) = o.get(*key) {
+                    if crate::methods::method_info(method).is_some_and(|m| m.owner == Owner::Core) {
+                        if let Err(e) = crate::wire::DocumentIdentifier::parse(v, key) {
+                            return Err(ApiError::invalid_request(format!("failed to unmarshal *api.{t}: json: {}", e.message)));
+                        }
+                    }
+                }
+            }
+        }
         let go_type = crate::methods::params_type(method);
         let typed = |e: ApiError| match (e.kind.clone(), go_type) {
             // Field-level decode errors are Go unmarshal errors of the params struct (the exact jsontext wording
