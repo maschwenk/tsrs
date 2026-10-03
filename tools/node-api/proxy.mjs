@@ -10,6 +10,7 @@
 // are LSP-style `Content-Length` JSON-RPC (vscode-jsonrpc). Windows named-pipe mode (`--pipe`) is not traced.
 
 import { spawn } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -50,9 +51,49 @@ function flush() {
     fs.writeSync(traceFd, records.join("\n") + "\n");
     records.length = 0;
 }
-if (traceDir) record({ kind: "start", mode: isAsync ? "async" : "sync", testFile: testFile && path.basename(testFile), test: process.env.NODE_API_TEST || undefined });
+if (traceDir) record({ kind: "start", t: Date.now(), mode: isAsync ? "async" : "sync", testFile: testFile && path.basename(testFile), test: process.env.NODE_API_TEST || undefined });
 
 const child = spawn(real, args, { stdio: ["pipe", "pipe", "inherit"] });
+
+// Payload capture (NODE_API_CAPTURE=1): every request/response/callback payload is hashed in full and stored
+// up to CAPTURE_MAX bytes in <pid>.capture.jsonl for paired-response comparison (compare-responses.mjs).
+// Bytes are still forwarded unchanged; capture only observes them.
+const capturing = Boolean(traceDir) && process.env.NODE_API_CAPTURE === "1";
+const CAPTURE_MAX = 4 << 20;
+let captureFd;
+let captureSeq = 0;
+function newCapture() {
+    if (!capturing) return undefined;
+    return { hash: crypto.createHash("sha256"), parts: [], kept: 0 };
+}
+function feedCapture(c, chunk) {
+    if (!c) return;
+    c.hash.update(chunk);
+    if (c.kept < CAPTURE_MAX) {
+        const take = chunk.subarray(0, CAPTURE_MAX - c.kept);
+        c.parts.push(Buffer.from(take));
+        c.kept += take.length;
+    }
+}
+function writeCapture(c, meta, len) {
+    if (!c) return;
+    const body = Buffer.concat(c.parts);
+    const rec = { seq: captureSeq++, t: Date.now(), ...meta, len, sha256: c.hash.digest("hex") };
+    if (body.length < len) rec.enc = "truncated";
+    else {
+        const text = body.toString("utf8");
+        if (Buffer.from(text, "utf8").equals(body)) {
+            rec.enc = "utf8";
+            rec.data = text;
+        }
+        else {
+            rec.enc = "base64";
+            rec.data = body.toString("base64");
+        }
+    }
+    captureFd ??= fs.openSync(path.join(traceDir, `${process.pid}.capture.jsonl`), "a");
+    fs.writeSync(captureFd, JSON.stringify(rec) + "\n");
+}
 
 // Both parsers keep only frame headers (and a bounded body prefix) in memory, then skip the rest of each
 // payload as it streams past, so multi-hundred-megabyte batch responses stay linear-time.
@@ -96,6 +137,11 @@ function binLen(buf, off) {
     if (m === 0xc6) return off + 5 <= buf.length ? [buf.readUInt32BE(off + 1), off + 5] : undefined;
     throw new Error(`bad bin marker 0x${m?.toString(16)}`);
 }
+function finishSyncCapture(rec) {
+    if (!rec.capture) return;
+    writeCapture(rec.capture, { dir: rec.dir, kind: rec.kind, method: rec.method }, rec.bytes);
+    delete rec.capture;
+}
 function syncParser(dir) {
     let head = Buffer.alloc(0); // unparsed header bytes
     let skip = 0; // payload bytes still to pass
@@ -110,6 +156,7 @@ function syncParser(dir) {
                 if (skip > 0) {
                     const n = Math.min(skip, buf.length);
                     if (cur.message !== undefined && prefix.length < 300) prefix.push(...buf.subarray(0, Math.min(n, 300 - prefix.length)));
+                    feedCapture(cur.capture, buf.subarray(0, n));
                     if (cur.batch !== undefined && cur.batchBytes < KEEP) {
                         const take = buf.subarray(0, Math.min(n, KEEP - cur.batchBytes));
                         cur.batch.push(take);
@@ -120,6 +167,7 @@ function syncParser(dir) {
                     if (skip > 0) return;
                     if (cur.message !== undefined) cur.message = Buffer.from(prefix).toString("utf8");
                     finishBatch(cur);
+                    finishSyncCapture(cur);
                     record(cur);
                     cur = undefined;
                     prefix = [];
@@ -146,6 +194,7 @@ function syncParser(dir) {
                 const [payLen, payOff] = p;
                 const kind = SYNC_TYPES[type] ?? `type${type}`;
                 cur = { dir, kind, method: head.toString("utf8", nameOff, nameOff + nameLen), bytes: payLen };
+                cur.capture = newCapture();
                 if (kind === "error" || kind === "callError") cur.message = "";
                 if ((kind === "request" || kind === "response") && cur.method === "batchRequests") {
                     cur.batch = [];
@@ -156,6 +205,7 @@ function syncParser(dir) {
                 skip = payLen;
                 if (skip === 0) {
                     finishBatch(cur);
+                    finishSyncCapture(cur);
                     record(cur);
                     cur = undefined;
                 }
@@ -170,7 +220,7 @@ function syncParser(dir) {
 
 // ── async JSON-RPC parser ───────────────────────────────────────────
 const idMethods = new Map(); // `${dir}:${id}` -> method; requests from either side
-function classifyAsync(dir, body, len) {
+function classifyAsync(dir, body, len, capture) {
     let msg;
     if (body.length === len) msg = JSON.parse(body.toString("utf8"));
     else {
@@ -194,6 +244,7 @@ function classifyAsync(dir, body, len) {
             if (body.length < len) rec.innerTruncated = true;
         }
         record(rec);
+        writeCapture(capture, { dir, kind: rec.kind, method: msg.method, id: msg.id }, len);
         return;
     }
     const method = idMethods.get(`${other}:${msg.id}`);
@@ -204,6 +255,7 @@ function classifyAsync(dir, body, len) {
     if (method === "batchRequests" && !failed) rec.innerErrors = innerErrors(body.toString("utf8"));
     if (failed) rec.message = String(msg.error?.message ?? "").slice(0, 300);
     record(rec);
+    writeCapture(capture, { dir, kind, method, id: msg.id }, len);
 }
 function asyncParser(dir) {
     let head = Buffer.alloc(0);
@@ -211,6 +263,7 @@ function asyncParser(dir) {
     let len = 0;
     let parts = [];
     let kept = 0;
+    let capture;
     let broken = false;
     return chunk => {
         if (!traceDir || broken) return;
@@ -219,6 +272,7 @@ function asyncParser(dir) {
             for (;;) {
                 if (need > 0) {
                     const n = Math.min(need, buf.length);
+                    feedCapture(capture, buf.subarray(0, n));
                     if (kept < KEEP) {
                         const take = buf.subarray(0, Math.min(n, KEEP - kept));
                         parts.push(take);
@@ -227,7 +281,8 @@ function asyncParser(dir) {
                     need -= n;
                     buf = buf.subarray(n);
                     if (need > 0) return;
-                    classifyAsync(dir, Buffer.concat(parts), len);
+                    classifyAsync(dir, Buffer.concat(parts), len, capture);
+                    capture = undefined;
                     parts = [];
                     kept = 0;
                 }
@@ -242,9 +297,10 @@ function asyncParser(dir) {
                 const m = /Content-Length:\s*(\d+)/i.exec(head.toString("ascii", 0, hdrEnd));
                 if (!m) throw new Error("missing Content-Length");
                 len = need = Number(m[1]);
+                capture = newCapture();
                 buf = head.subarray(hdrEnd + 4);
                 head = Buffer.alloc(0);
-                if (need === 0) classifyAsync(dir, Buffer.alloc(0), 0);
+                if (need === 0) classifyAsync(dir, Buffer.alloc(0), 0, capture);
             }
         }
         catch (e) {
