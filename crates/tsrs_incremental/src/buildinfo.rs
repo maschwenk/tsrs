@@ -158,7 +158,7 @@ impl BuildInfoFileInfo {
             o.str("version", &no_signature.version);
             o.bool("noSignature", no_signature.no_signature);
             o.bool("affectsGlobalScope", no_signature.affects_global_scope);
-            o.int("impliedNodeFormat", no_signature.implied_node_format as i32);
+            o.int("impliedNodeFormat", no_signature.implied_node_format.value());
             return o.done();
         }
         let file_info = self.file_info.as_ref().unwrap();
@@ -166,7 +166,7 @@ impl BuildInfoFileInfo {
         o.str("version", &file_info.version);
         o.str("signature", &file_info.signature);
         o.bool("affectsGlobalScope", file_info.affects_global_scope);
-        o.int("impliedNodeFormat", file_info.implied_node_format as i32);
+        o.int("impliedNodeFormat", file_info.implied_node_format.value());
         o.done()
     }
 
@@ -335,7 +335,7 @@ impl BuildInfoRepopulateInfo {
         let mut o = Obj::default();
         o.set("kind", num(self.kind as i32));
         o.str("moduleReference", &self.module_reference);
-        o.int("mode", self.mode as i32);
+        o.int("mode", self.mode.value());
         o.str("packageName", &self.package_name);
         o.done()
     }
@@ -1006,6 +1006,7 @@ pub(crate) fn json_to_option_value(v: &Value) -> CompilerOptionsValue {
     match v {
         Value::Null => CompilerOptionsValue::Null,
         Value::Bool(b) => CompilerOptionsValue::Bool(*b),
+        Value::Integer(n) => CompilerOptionsValue::Float(*n as f64),
         Value::Number(n) => CompilerOptionsValue::Float(*n),
         Value::String(s) => CompilerOptionsValue::String(s.clone()),
         Value::Array(items) => CompilerOptionsValue::Array(items.iter().map(json_to_option_value).collect()),

@@ -189,7 +189,7 @@ impl Dumper {
         for r in refs {
             let _ = write!(self.sb, "{} {} {} ", tag, r.pos(), r.end());
             escape(&mut self.sb, &r.file_name);
-            let _ = writeln!(self.sb, " {} {}", r.resolution_mode as i32, r.preserve);
+            let _ = writeln!(self.sb, " {} {}", r.resolution_mode.value(), r.preserve);
         }
     }
 }

@@ -68,6 +68,15 @@ pub(crate) fn parse_number(value: &CompilerOptionsValue) -> Option<i32> {
     }
 }
 
+// parseNumber into a Go `*int` (64-bit) option.
+pub(crate) fn parse_number_int(value: &CompilerOptionsValue) -> Option<i64> {
+    match value {
+        CompilerOptionsValue::Int(num) => Some(*num),
+        CompilerOptionsValue::Float(num) => Some(*num as i64),
+        _ => None,
+    }
+}
+
 pub(crate) struct ProjectReferenceParseResult {
     pub(crate) reference: ProjectReference,
     pub(crate) has_path: bool,
@@ -441,7 +450,7 @@ pub(crate) fn parse_compiler_options_worker(key: &str, value: &CompilerOptionsVa
         "version" => all_options.version = parse_tristate(value),
         "help" => all_options.help = parse_tristate(value),
         "all" => all_options.all = parse_tristate(value),
-        "maxNodeModuleJsDepth" => all_options.max_node_module_js_depth = parse_number(value),
+        "maxNodeModuleJsDepth" => all_options.max_node_module_js_depth = parse_number_int(value),
         "skipLibCheck" => all_options.skip_lib_check = parse_tristate(value),
         "noEmit" => all_options.no_emit = parse_tristate(value),
         "showConfig" => all_options.show_config = parse_tristate(value),
@@ -475,7 +484,7 @@ macro_rules! float_or_int32_to_flag {
                     let n = *f as i32;
                     for v in $map.values() {
                         if let CompilerOptionsValue::$ty(v) = v {
-                            if *v as i32 == n {
+                            if v.value() == n {
                                 return *v;
                             }
                         }
@@ -551,7 +560,7 @@ pub fn parse_build_options(key: &str, value: &CompilerOptionsValue, all_options:
         "clean" => all_options.clean = parse_tristate(value),
         "dry" => all_options.dry = parse_tristate(value),
         "force" => all_options.force = parse_tristate(value),
-        "builders" => all_options.builders = parse_number(value),
+        "builders" => all_options.builders = parse_number_int(value),
         "stopBuildOnErrors" => all_options.stop_build_on_errors = parse_tristate(value),
         "verbose" => all_options.verbose = parse_tristate(value),
         _ => {}
@@ -777,6 +786,15 @@ impl ToOptionsValue for Option<Vec<String>> {
     fn to_options_value(&self) -> CompilerOptionsValue {
         match self {
             Some(v) => CompilerOptionsValue::StringArray(v.clone()),
+            None => CompilerOptionsValue::Null,
+        }
+    }
+}
+
+impl ToOptionsValue for Option<i64> {
+    fn to_options_value(&self) -> CompilerOptionsValue {
+        match self {
+            Some(v) => CompilerOptionsValue::Int(*v),
             None => CompilerOptionsValue::Null,
         }
     }

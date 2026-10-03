@@ -85,6 +85,9 @@ impl Session {
         let build_options = if p.has("buildOptions") { Some(gojson::build_options_from_go_json(p.get("buildOptions")).map_err(ApiError::invalid_request)?) } else { None };
         let compiler_options =
             if p.has("compilerOptions") { Some(gojson::compiler_options_from_go_json(p.get("compilerOptions")).map_err(ApiError::invalid_request)?) } else { None };
+        if let Some(options) = &compiler_options {
+            crate::snapshots::reject_unknown_module_resolution(options)?;
+        }
         let orchestrator = backend.create(BuildRequest {
             fs: self.snapshot_host_fs(),
             default_library_path: self.default_library_path().to_string(),

@@ -15,8 +15,9 @@ pub struct PluginImport {
 // Go `[]string` options are `Option<Vec<String>>` because the Go code distinguishes nil (unset) from empty.
 #[derive(Clone, Debug, Default)]
 pub struct CompilerOptions {
-    /// API only (`gojson`): enum options decoded from the wire with a numeric value that has no Rust variant
-    /// (Go keeps any int32), by JSON name. The typed field stays at its default; the value is echoed back.
+    /// API only (`gojson`): `moduleResolution`, `moduleDetection` and `newLine` numbers decoded from the wire with
+    /// no Rust variant (Go keeps any int32), by JSON name. The typed field stays at its default and the value is
+    /// echoed back. (`target`, `module` and `jsx` hold any int32 directly.)
     pub api_unknown_enum_values: Vec<(&'static str, i32)>,
 
     pub allow_js: Tristate,
@@ -120,7 +121,8 @@ pub struct CompilerOptions {
     pub use_define_for_class_fields: Tristate,
     pub use_unknown_in_catch_variables: Tristate,
     pub verbatim_module_syntax: Tristate,
-    pub max_node_module_js_depth: Option<i32>,
+    // Go `*int` (64-bit).
+    pub max_node_module_js_depth: Option<i64>,
 
     // Deprecated: Do not use outside of options parsing and validation.
     pub allow_synthetic_default_imports: Tristate,
@@ -350,32 +352,75 @@ pub enum ModuleDetectionKind {
     Force = 3,
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-pub enum ModuleKind {
-    #[default]
-    None = 0,
-    CommonJS = 1,
-    // Deprecated: Do not use outside of options parsing and validation.
-    AMD = 2,
-    // Deprecated: Do not use outside of options parsing and validation.
-    UMD = 3,
-    // Deprecated: Do not use outside of options parsing and validation.
-    System = 4,
-    // NOTE: ES module kinds should be contiguous to more easily check whether a module kind is *any* ES module kind.
-    //       Non-ES module kinds should not come between ES2015 (the earliest ES module kind) and ESNext (the last ES
-    //       module kind).
-    ES2015 = 5,
-    ES2020 = 6,
-    ES2022 = 7,
-    ESNext = 99,
-    // Node16+ is an amalgam of commonjs (albeit updated) and es2022+, and represents a distinct module system from es2020/esnext
-    Node16 = 100,
-    Node18 = 101,
-    Node20 = 102,
-    NodeNext = 199,
-    // Emit as written
-    Preserve = 200,
+impl ModuleDetectionKind {
+    /// The Go int32 value.
+    pub fn value(self) -> i32 {
+        self as i32
+    }
+}
+
+/// Go `type ModuleKind int32`: any int32 is representable (the API can receive values with no named constant, which
+/// Go keeps and compiles with). Named values are associated constants, usable as patterns.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub struct ModuleKind(pub i32);
+
+#[allow(non_upper_case_globals)]
+impl ModuleKind {
+    pub const None: ModuleKind = ModuleKind(0);
+    pub const CommonJS: ModuleKind = ModuleKind(1);
+    pub const AMD: ModuleKind = ModuleKind(2);
+    pub const UMD: ModuleKind = ModuleKind(3);
+    pub const System: ModuleKind = ModuleKind(4);
+    pub const ES2015: ModuleKind = ModuleKind(5);
+    pub const ES2020: ModuleKind = ModuleKind(6);
+    pub const ES2022: ModuleKind = ModuleKind(7);
+    pub const ESNext: ModuleKind = ModuleKind(99);
+    pub const Node16: ModuleKind = ModuleKind(100);
+    pub const Node18: ModuleKind = ModuleKind(101);
+    pub const Node20: ModuleKind = ModuleKind(102);
+    pub const NodeNext: ModuleKind = ModuleKind(199);
+    pub const Preserve: ModuleKind = ModuleKind(200);
+
+    /// The Go constant name of a named value.
+    pub fn name(self) -> Option<&'static str> {
+        match self.0 {
+            0 => Some("None"),
+            1 => Some("CommonJS"),
+            2 => Some("AMD"),
+            3 => Some("UMD"),
+            4 => Some("System"),
+            5 => Some("ES2015"),
+            6 => Some("ES2020"),
+            7 => Some("ES2022"),
+            99 => Some("ESNext"),
+            100 => Some("Node16"),
+            101 => Some("Node18"),
+            102 => Some("Node20"),
+            199 => Some("NodeNext"),
+            200 => Some("Preserve"),
+            _ => None,
+        }
+    }
+
+    /// Whether this is one of Go's named constants.
+    pub fn is_named(self) -> bool {
+        self.name().is_some()
+    }
+
+    /// The Go int32 value.
+    pub fn value(self) -> i32 {
+        self.0
+    }
+}
+
+impl fmt::Debug for ModuleKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.name() {
+            Some(n) => f.write_str(n),
+            None => write!(f, "ModuleKind({})", self.0),
+        }
+    }
 }
 
 impl ModuleKind {
@@ -390,29 +435,18 @@ impl ModuleKind {
         ModuleKind::Node18 <= self && self <= ModuleKind::NodeNext || self == ModuleKind::Preserve || self == ModuleKind::ESNext
     }
 
-    pub fn string(self) -> &'static str {
-        match self {
-            ModuleKind::None => "None",
-            ModuleKind::CommonJS => "CommonJS",
-            ModuleKind::AMD => "AMD",
-            ModuleKind::UMD => "UMD",
-            ModuleKind::System => "System",
-            ModuleKind::ES2015 => "ES2015",
-            ModuleKind::ES2020 => "ES2020",
-            ModuleKind::ES2022 => "ES2022",
-            ModuleKind::ESNext => "ESNext",
-            ModuleKind::Node16 => "Node16",
-            ModuleKind::Node18 => "Node18",
-            ModuleKind::Node20 => "Node20",
-            ModuleKind::NodeNext => "NodeNext",
-            ModuleKind::Preserve => "Preserve",
+    /// Go stringer: the constant name, or `ModuleKind(<n>)`.
+    pub fn string(self) -> std::borrow::Cow<'static, str> {
+        match self.name() {
+            Some(n) => std::borrow::Cow::Borrowed(n),
+            None => std::borrow::Cow::Owned(format!("ModuleKind({})", self.0)),
         }
     }
 }
 
 impl fmt::Display for ModuleKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.string())
+        f.write_str(&self.string())
     }
 }
 
@@ -440,6 +474,13 @@ pub enum ModuleResolutionKind {
     Node16 = 3,
     NodeNext = 99, // Not simply `Node16` so that compiled code linked against TS can use the `Next` value reliably (same as with `ModuleKind`)
     Bundler = 100,
+}
+
+impl ModuleResolutionKind {
+    /// The Go int32 value.
+    pub fn value(self) -> i32 {
+        self as i32
+    }
 }
 
 pub static MODULE_KIND_TO_MODULE_RESOLUTION_KIND: LazyLock<FxHashMap<ModuleKind, ModuleResolutionKind>> = LazyLock::new(|| {
@@ -484,6 +525,13 @@ pub enum NewLineKind {
     LF = 2,
 }
 
+impl NewLineKind {
+    /// The Go int32 value.
+    pub fn value(self) -> i32 {
+        self as i32
+    }
+}
+
 pub fn get_new_line_kind(s: &str) -> NewLineKind {
     match s {
         "\r\n" => NewLineKind::CRLF,
@@ -501,71 +549,139 @@ impl NewLineKind {
     }
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-pub enum ScriptTarget {
-    #[default]
-    None = 0,
-    // Deprecated: Do not use outside of options parsing and validation.
-    ES5 = 1,
-    ES2015 = 2,
-    ES2016 = 3,
-    ES2017 = 4,
-    ES2018 = 5,
-    ES2019 = 6,
-    ES2020 = 7,
-    ES2021 = 8,
-    ES2022 = 9,
-    ES2023 = 10,
-    ES2024 = 11,
-    ES2025 = 12,
-    ES2026 = 13,
-    ESNext = 99,
-    JSON = 100,
+/// Go `type ScriptTarget int32`: any int32 is representable (the API can receive values with no named constant, which
+/// Go keeps and compiles with). Named values are associated constants, usable as patterns.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub struct ScriptTarget(pub i32);
+
+#[allow(non_upper_case_globals)]
+impl ScriptTarget {
+    pub const None: ScriptTarget = ScriptTarget(0);
+    pub const ES5: ScriptTarget = ScriptTarget(1);
+    pub const ES2015: ScriptTarget = ScriptTarget(2);
+    pub const ES2016: ScriptTarget = ScriptTarget(3);
+    pub const ES2017: ScriptTarget = ScriptTarget(4);
+    pub const ES2018: ScriptTarget = ScriptTarget(5);
+    pub const ES2019: ScriptTarget = ScriptTarget(6);
+    pub const ES2020: ScriptTarget = ScriptTarget(7);
+    pub const ES2021: ScriptTarget = ScriptTarget(8);
+    pub const ES2022: ScriptTarget = ScriptTarget(9);
+    pub const ES2023: ScriptTarget = ScriptTarget(10);
+    pub const ES2024: ScriptTarget = ScriptTarget(11);
+    pub const ES2025: ScriptTarget = ScriptTarget(12);
+    pub const ES2026: ScriptTarget = ScriptTarget(13);
+    pub const ESNext: ScriptTarget = ScriptTarget(99);
+    pub const JSON: ScriptTarget = ScriptTarget(100);
+
+    /// The Go constant name of a named value.
+    pub fn name(self) -> Option<&'static str> {
+        match self.0 {
+            0 => Some("None"),
+            1 => Some("ES5"),
+            2 => Some("ES2015"),
+            3 => Some("ES2016"),
+            4 => Some("ES2017"),
+            5 => Some("ES2018"),
+            6 => Some("ES2019"),
+            7 => Some("ES2020"),
+            8 => Some("ES2021"),
+            9 => Some("ES2022"),
+            10 => Some("ES2023"),
+            11 => Some("ES2024"),
+            12 => Some("ES2025"),
+            13 => Some("ES2026"),
+            99 => Some("ESNext"),
+            100 => Some("JSON"),
+            _ => None,
+        }
+    }
+
+    /// Whether this is one of Go's named constants.
+    pub fn is_named(self) -> bool {
+        self.name().is_some()
+    }
+
+    /// The Go int32 value.
+    pub fn value(self) -> i32 {
+        self.0
+    }
+}
+
+impl fmt::Debug for ScriptTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.name() {
+            Some(n) => f.write_str(n),
+            None => write!(f, "ScriptTarget({})", self.0),
+        }
+    }
 }
 
 impl ScriptTarget {
     pub const Latest: ScriptTarget = ScriptTarget::ESNext;
     pub const LatestStandard: ScriptTarget = ScriptTarget::ES2026;
 
-    pub fn string(self) -> &'static str {
-        match self {
-            ScriptTarget::None => "None",
-            ScriptTarget::ES5 => "ES5",
-            ScriptTarget::ES2015 => "ES2015",
-            ScriptTarget::ES2016 => "ES2016",
-            ScriptTarget::ES2017 => "ES2017",
-            ScriptTarget::ES2018 => "ES2018",
-            ScriptTarget::ES2019 => "ES2019",
-            ScriptTarget::ES2020 => "ES2020",
-            ScriptTarget::ES2021 => "ES2021",
-            ScriptTarget::ES2022 => "ES2022",
-            ScriptTarget::ES2023 => "ES2023",
-            ScriptTarget::ES2024 => "ES2024",
-            ScriptTarget::ES2025 => "ES2025",
-            ScriptTarget::ES2026 => "ES2026",
-            ScriptTarget::ESNext => "ESNext",
-            ScriptTarget::JSON => "JSON",
+    /// Go stringer: the constant name, or `ScriptTarget(<n>)`.
+    pub fn string(self) -> std::borrow::Cow<'static, str> {
+        match self.name() {
+            Some(n) => std::borrow::Cow::Borrowed(n),
+            None => std::borrow::Cow::Owned(format!("ScriptTarget({})", self.0)),
         }
     }
 }
 
 impl fmt::Display for ScriptTarget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.string())
+        f.write_str(&self.string())
     }
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-pub enum JsxEmit {
-    #[default]
-    None = 0,
-    Preserve = 1,
-    React = 2,
-    ReactNative = 3,
-    ReactJSX = 4,
-    ReactJSXDev = 5,
+/// Go `type JsxEmit int32`: any int32 is representable (the API can receive values with no named constant, which
+/// Go keeps and compiles with). Named values are associated constants, usable as patterns.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub struct JsxEmit(pub i32);
+
+#[allow(non_upper_case_globals)]
+impl JsxEmit {
+    pub const None: JsxEmit = JsxEmit(0);
+    pub const Preserve: JsxEmit = JsxEmit(1);
+    pub const React: JsxEmit = JsxEmit(2);
+    pub const ReactNative: JsxEmit = JsxEmit(3);
+    pub const ReactJSX: JsxEmit = JsxEmit(4);
+    pub const ReactJSXDev: JsxEmit = JsxEmit(5);
+
+    /// The Go constant name of a named value.
+    pub fn name(self) -> Option<&'static str> {
+        match self.0 {
+            0 => Some("None"),
+            1 => Some("Preserve"),
+            2 => Some("React"),
+            3 => Some("ReactNative"),
+            4 => Some("ReactJSX"),
+            5 => Some("ReactJSXDev"),
+            _ => None,
+        }
+    }
+
+    /// Whether this is one of Go's named constants.
+    pub fn is_named(self) -> bool {
+        self.name().is_some()
+    }
+
+    /// The Go int32 value.
+    pub fn value(self) -> i32 {
+        self.0
+    }
+}
+
+impl fmt::Debug for JsxEmit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.name() {
+            Some(n) => f.write_str(n),
+            None => write!(f, "JsxEmit({})", self.0),
+        }
+    }
 }
 
 impl JsxEmit {
@@ -577,6 +693,7 @@ impl JsxEmit {
             JsxEmit::React => "react",
             JsxEmit::ReactJSX => "react-jsx",
             JsxEmit::ReactJSXDev => "react-jsxdev",
+            _ => panic!("unhandled case in JsxEmit.String"),
         }
     }
 }

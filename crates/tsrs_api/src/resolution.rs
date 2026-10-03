@@ -27,7 +27,7 @@ fn mode_param(p: &Params, key: &str) -> ApiResult<ResolutionMode> {
 }
 
 fn mode_value(m: ResolutionMode) -> Value {
-    Value::Number(m as i32 as f64)
+    Value::Number(m.value() as f64)
 }
 
 /// Go `newResolvedTypeReferenceDirectiveResponse`.

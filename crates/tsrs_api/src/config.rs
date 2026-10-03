@@ -53,11 +53,11 @@ pub fn options_value_to_json(v: &CompilerOptionsValue) -> Value {
             tsrs_core::Tristate::False => Value::Bool(false),
             tsrs_core::Tristate::True => Value::Bool(true),
         },
-        CompilerOptionsValue::ModuleKind(x) => Value::Number(*x as i32 as f64),
+        CompilerOptionsValue::ModuleKind(x) => Value::Number(x.value() as f64),
         CompilerOptionsValue::ModuleResolutionKind(x) => Value::Number(*x as i32 as f64),
         CompilerOptionsValue::ModuleDetectionKind(x) => Value::Number(*x as i32 as f64),
-        CompilerOptionsValue::ScriptTarget(x) => Value::Number(*x as i32 as f64),
-        CompilerOptionsValue::JsxEmit(x) => Value::Number(*x as i32 as f64),
+        CompilerOptionsValue::ScriptTarget(x) => Value::Number(x.value() as f64),
+        CompilerOptionsValue::JsxEmit(x) => Value::Number(x.value() as f64),
         CompilerOptionsValue::NewLineKind(x) => Value::Number(*x as i32 as f64),
         // toProtocolJSONValue: watch enums are shifted to the public (TS5) numbering.
         CompilerOptionsValue::WatchFileKind(x) => Value::Number((*x as i32 - 1) as f64),
@@ -71,6 +71,7 @@ pub fn json_to_options_value(v: &Value) -> CompilerOptionsValue {
     match v {
         Value::Null => CompilerOptionsValue::Null,
         Value::Bool(b) => CompilerOptionsValue::Bool(*b),
+        Value::Integer(n) => CompilerOptionsValue::Float(*n as f64),
         Value::Number(n) => CompilerOptionsValue::Float(*n),
         Value::String(s) => CompilerOptionsValue::String(s.clone()),
         Value::Array(a) => CompilerOptionsValue::Array(a.iter().map(json_to_options_value).collect()),

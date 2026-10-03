@@ -19,7 +19,7 @@ fn json_kind(v: &Value) -> &'static str {
     match v {
         Value::Null => "null",
         Value::Bool(_) => "boolean",
-        Value::Number(_) => "number",
+        Value::Number(_) | Value::Integer(_) => "number",
         Value::String(_) => "string",
         Value::Array(_) => "array",
         Value::Object(_) => "object",
@@ -49,7 +49,7 @@ fn check_document(v: &Value, pointer: &str) -> Result<(), String> {
             }
         }
         Value::Null => "null",
-        Value::Number(_) => "number",
+        Value::Number(_) | Value::Integer(_) => "number",
         Value::Bool(true) => "true",
         Value::Bool(false) => "false",
         Value::Array(_) => "[",

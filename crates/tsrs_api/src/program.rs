@@ -203,7 +203,7 @@ impl Session {
             .set("isFromExternalLibrary", b(program.is_source_file_from_external_library(source_file)))
             .set("packageJsonType", s(meta.package_json_type))
             .set("packageJsonDirectory", s(meta.package_json_directory))
-            .set("impliedNodeFormat", Value::Number(meta.implied_node_format as i32 as f64))
+            .set("impliedNodeFormat", Value::Number(meta.implied_node_format.value() as f64))
             .build())
     }
 }

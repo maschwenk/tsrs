@@ -136,7 +136,9 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
     let supported_extensions = tsoptions::get_supported_extensions(Some(&compiler_options), &[]);
     let supported_extensions_with_json_if_resolve_json_module =
         tsoptions::get_supported_extensions_with_json_if_resolve_json_module(Some(&compiler_options), &supported_extensions);
-    let max_node_module_js_depth = compiler_options.max_node_module_js_depth.unwrap_or(0);
+    // Go `int`. It is only compared with node_modules depths (small non-negative counts), so saturating to i32 keeps
+    // every comparison's result.
+    let max_node_module_js_depth = compiler_options.max_node_module_js_depth.unwrap_or(0).clamp(i32::MIN as i64, i32::MAX as i64) as i32;
     let host = opts.host.clone();
     let project_references = add_project_reference_tasks(&opts.program_config(), host.clone(), single_threaded);
     let resolver_options = module::ResolverOptions {

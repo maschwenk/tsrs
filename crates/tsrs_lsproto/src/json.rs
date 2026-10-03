@@ -153,7 +153,7 @@ pub fn kind(v: &Value) -> u8 {
         Value::Null => b'n',
         Value::Bool(true) => b't',
         Value::Bool(false) => b'f',
-        Value::Number(_) => b'0',
+        Value::Number(_) | Value::Integer(_) => b'0',
         Value::String(_) => b'"',
         Value::Array(_) => b'[',
         Value::Object(_) => b'{',

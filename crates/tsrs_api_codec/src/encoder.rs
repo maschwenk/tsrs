@@ -590,7 +590,7 @@ fn encode_file_references(refs: &[P<FileReference>], pm: &PositionMap, buf: &mut
         msgpack::write_uint(buf, pm.utf8_to_utf16(r.text_range.pos() as i64) as u32);
         msgpack::write_uint(buf, pm.utf8_to_utf16(r.text_range.end() as i64) as u32);
         msgpack::write_string(buf, &r.file_name);
-        msgpack::write_uint(buf, r.resolution_mode as u32);
+        msgpack::write_uint(buf, r.resolution_mode.value() as u32);
         msgpack::write_bool(buf, r.preserve);
     }
     offset

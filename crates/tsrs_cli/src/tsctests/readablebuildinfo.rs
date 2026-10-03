@@ -85,7 +85,7 @@ impl readable<'_> {
                     let mut r = obj::default();
                     r.set("kind", Value::Number(info.kind as i32 as f64));
                     r.str("moduleReference", &info.module_reference);
-                    r.int("mode", info.mode as i64);
+                    r.int("mode", info.mode.value() as i64);
                     r.str("packageName", &info.package_name);
                     o.set("repopulateInfo", r.done());
                 }

@@ -188,7 +188,7 @@ impl CallbackResolver {
         let params = Obj::new()
             .set("moduleName", s(module_name))
             .set("containingDirectory", s(containing_directory))
-            .set("resolutionMode", Value::Number(mode as i32 as f64))
+            .set("resolutionMode", Value::Number(mode.value() as f64))
             .set_opt("snapshot", (self.snapshot != 0).then(|| Value::Number(self.snapshot as f64)))
             .set_opt("inProgressSnapshot", (self.context_id != 0).then(|| Value::Number(self.context_id as f64)))
             .build();
