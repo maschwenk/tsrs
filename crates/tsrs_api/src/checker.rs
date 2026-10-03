@@ -163,3 +163,5 @@ mod tests;
 mod session_tests;
 #[cfg(test)]
 mod lease_tests;
+#[cfg(test)]
+mod lifetime_tests;
