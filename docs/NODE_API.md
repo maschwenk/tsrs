@@ -369,6 +369,12 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 - Response shapes from paired runs (parity f703): `updateSnapshot` omits an empty `changes` (json/v2
   `omitempty`); `cleanBuild` keeps Go's per-orchestrator existence answers until the next build, so a clean
   after a clean lists the project's outputs again.
+- Unwinding builds (a panic while building a program that the API answers as an error, today the module
+  resolver's `Unexpected moduleResolution`): a snapshot clone rolls back the parse-cache references its
+  programs took (journal in `ProjectCollectionBuilder`), the file loader frees its project reference mapper,
+  createSnapshot releases its root reference and an API build frees its fresh orchestrator, so repeated
+  failures stay flat (codec d9be067 probe; `failed_program_builds_release_their_files`,
+  `failed_builds_free_their_orchestrator`). Other state an arbitrary panic could leave is not audited.
 - Memory: snapshots free their programs, checkers, emit allocations and a full build's shared data
   (processed files, project-reference mapper, loader and dts-faking resolution hosts) with the build's base
   region (createSnapshot+release cycles stay flat; `tests/memory_test.rs`). The first attempt at freeing
