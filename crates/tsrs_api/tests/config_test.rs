@@ -81,3 +81,31 @@ fn strict_json_params_like_go() {
         r => panic!("{r:?}"),
     }
 }
+
+/// Go decodes params into the method's struct: a non-object payload is an invalid request, never a success
+/// (runtime review of d6: `[1]` used to create a build orchestrator).
+#[test]
+fn non_object_params_are_typed_invalid_requests() {
+    let dir = TempDir::new("shape");
+    let s = session(&dir.dir(), false);
+    for (method, ty) in [
+        ("createBuildOrchestrator", "CreateBuildOrchestratorParams"),
+        ("parseCommandLine", "ParseCommandLineParams"),
+        ("createSourceFile", "CreateSourceFileParams"),
+        ("transpileModule", "TranspileParams"),
+        ("transpileDeclaration", "TranspileParams"),
+        ("createSnapshot", "CreateSnapshotParams"),
+        ("getTypeAtPosition", "GetTypeAtPositionParams"),
+    ] {
+        let e = call_err(&s, method, "[1]");
+        assert_eq!(e, format!("api: invalid request: failed to unmarshal *api.{ty}: json: cannot unmarshal JSON array into Go api.{ty}"));
+        let e = call_err(&s, method, "\"x\"");
+        assert!(e.contains("cannot unmarshal JSON string"), "{e}");
+    }
+    // Wrong field type: an invalid request of the params type.
+    let e = call_err(&s, "parseCommandLine", r#"{"commandLine":"x"}"#);
+    assert!(e.starts_with("api: invalid request: failed to unmarshal *api.ParseCommandLineParams: json:"), "{e}");
+    // `null` decodes to the zero value (Go): parseCommandLine with no args succeeds.
+    let r = call(&s, "parseCommandLine", "null");
+    assert!(matches!(get(&r, "fileNames"), tsrs_core::json::Value::Array(_)));
+}

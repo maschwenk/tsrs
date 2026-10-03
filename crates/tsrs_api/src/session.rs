@@ -304,13 +304,39 @@ impl Session {
             Some(go_type) => {
                 tsrs_api_transport::strictjson::validate(params)
                     .map_err(|e| ApiError::invalid_request(format!("failed to unmarshal *api.{go_type}: {e}")))?;
-                parse_params(params)?
+                let value = parse_params(params)?;
+                // encoding/json/v2 into a struct: `null` leaves the zero value; any other non-object is an error.
+                let kind = match &value {
+                    Value::Null | Value::Object(_) => None,
+                    Value::Array(_) => Some("JSON array".to_string()),
+                    Value::String(_) => Some("JSON string".to_string()),
+                    Value::Bool(_) => Some("JSON boolean".to_string()),
+                    Value::Number(_) => Some(format!("JSON number {}", String::from_utf8_lossy(params).trim())),
+                };
+                if let Some(kind) = kind {
+                    return Err(ApiError::invalid_request(format!("failed to unmarshal *api.{go_type}: json: cannot unmarshal {kind} into Go api.{go_type}")));
+                }
+                value
             }
         };
+        let go_type = crate::methods::params_type(method);
+        let typed = |e: ApiError| match (e.kind.clone(), go_type) {
+            // Field-level decode errors are Go unmarshal errors of the params struct (the exact jsontext wording
+            // for nested type mismatches is not reproduced).
+            (crate::handler::ErrorKind::InvalidRequest, Some(t)) if !e.message.starts_with("failed to unmarshal") => {
+                ApiError::invalid_request(format!("failed to unmarshal *api.{t}: json: {}", e.message))
+            }
+            _ => e,
+        };
+        self.dispatch_parsed(method, &params, info.owner).map_err(typed)
+    }
+
+    fn dispatch_parsed(&self, method: &str, params: &Value, owner: Owner) -> ApiResult<Response> {
+        let params = params.clone();
         if *self.closed.lock().unwrap() {
             return Err(ApiError::client("session is closed"));
         }
-        if info.owner == Owner::Checker {
+        if owner == Owner::Checker {
             return checker::handle(self, method, &params).unwrap_or_else(|| Err(ApiError::unsupported(method)));
         }
         let p = Params(&params);
