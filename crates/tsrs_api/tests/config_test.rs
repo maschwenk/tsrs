@@ -170,3 +170,47 @@ fn params_decode_before_lookups_and_ignore_unknown_keys() {
     let e = call_err(&s, "release", r#"{"snapshot":0,"file":null}"#);
     assert!(e.contains("empty handle"), "{e}");
 }
+
+/// Runtime field/value matrix on f70371e (crates/tsrs_api_transport/INTEGRATION.md, "419 class mismatches").
+#[test]
+fn field_values_match_go_classes() {
+    let dir = TempDir::new("fieldvalues");
+    let s = session(&dir.dir(), false);
+    // Accepted by Go: signed int field, null elements of []string / []project.ID.
+    call(&s, "batchRequests", r#"{"requests":[],"maxResponseBytesPerPage":-1}"#);
+    let r = call(&s, "parseCommandLine", r#"{"commandLine":[null]}"#);
+    assert!(matches!(get(&r, "fileNames"), tsrs_core::json::Value::Array(_)));
+    call(&s, "createSnapshot", r#"{"ensurePrograms":[null]}"#);
+    // Exponent / fraction syntax for integers is invalid syntax in Go, before any lookup.
+    for (method, payload) in [
+        ("release", r#"{"snapshot":1e3}"#),
+        ("release", r#"{"snapshot":1.0}"#),
+        ("getSourceFileNames", r#"{"snapshot":1E2,"project":"p"}"#),
+        ("getTypesAtPositions", r#"{"snapshot":1,"project":"p","file":"/a.ts","positions":[1e1]}"#),
+    ] {
+        let e = call_err(&s, method, payload);
+        assert!(e.starts_with("api: invalid request: failed to unmarshal"), "{method} {payload}: {e}");
+    }
+    // Out of the Go type's range.
+    for (method, payload) in [
+        ("resolveModuleName", r#"{"resolutionMode":4294967296}"#),
+        ("resolveModuleName", r#"{"resolutionMode":2147483648}"#),
+        ("release", r#"{"snapshot":18446744073709551616}"#),
+        ("getTypesAtPositions", r#"{"snapshot":1,"project":"p","file":"/a.ts","positions":[4294967296]}"#),
+    ] {
+        let e = call_err(&s, method, payload);
+        assert!(e.starts_with("api: invalid request: failed to unmarshal"), "{method} {payload}: {e}");
+    }
+    // Array element kinds are part of decoding: no lookup, no per-item batch error.
+    for (method, payload) in [
+        ("getSymbolsAtLocations", r#"{"snapshot":0,"project":"p","locations":[1]}"#),
+        ("getTypesAtPositions", r#"{"snapshot":0,"project":"p","file":"/a.ts","positions":["x"]}"#),
+        ("batchRequests", r#"{"requests":[1]}"#),
+    ] {
+        let e = call_err(&s, method, payload);
+        assert!(e.starts_with("api: invalid request: failed to unmarshal"), "{method} {payload}: {e}");
+    }
+    // A large uint64 in range is a lookup, as in Go.
+    let e = call_err(&s, "release", r#"{"snapshot":4294967296000}"#);
+    assert!(e.starts_with("api: client error: snapshot"), "{e}");
+}

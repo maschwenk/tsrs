@@ -333,7 +333,12 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   invalid-request class and `failed to unmarshal *api.<Type>` prefix, but not Go's exact jsontext wording.
   Every method's top-level params fields (generated from pinned `proto.go` into `paramfields.rs`) are
   checked in Go's field order before any lookup, for core and checker methods alike (`predecode.rs`);
-  unknown keys are ignored. Nested structs (compiler options, request filesystems, symbol references) are
+  unknown keys are ignored. Integer fields are checked against the raw number lexeme and the Go type's range
+  (`1e3`/`1.0` are invalid syntax; int32/uint32/int/uint64 bounds), array element kinds are checked, and
+  null elements of `[]string`-like arrays are zero values, as in Go. Remaining wording differences (runtime
+  matrix on f70371e): Go includes the number literal and `: invalid syntax`, reports the first invalid field
+  in document order (this reports struct order), qualifies element types (`[]api.BatchRequest`) and prints
+  alias names (`core.ModuleKind`). Nested structs (compiler options, request filesystems, symbol references) are
   decoded by their handlers, so a nested type error can still lose to an earlier lookup error.
 - Memory: snapshots free their programs, checkers, emit allocations and a full build's shared data
   (processed files, project-reference mapper, loader and dts-faking resolution hosts) with the build's base

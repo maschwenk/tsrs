@@ -122,6 +122,8 @@ impl<'a> Params<'a> {
             .iter()
             .map(|v| match v {
                 Value::String(s) => Ok(s.clone()),
+                // Go: a null element of a []string is the zero string.
+                Value::Null => Ok(String::new()),
                 _ => Err(ApiError::invalid_request(format!("{key} must be an array of strings"))),
             })
             .collect()
@@ -130,7 +132,8 @@ impl<'a> Params<'a> {
 
 pub fn as_u64(v: &Value, key: &str) -> ApiResult<u64> {
     match v {
-        Value::Number(x) if *x >= 0.0 && x.fract() == 0.0 && *x <= 9007199254740991.0 => Ok(*x as u64),
+        // Range and syntax were checked by `predecode` against the field's Go type.
+        Value::Number(x) if *x >= 0.0 && x.fract() == 0.0 && *x < 18446744073709551616.0 => Ok(*x as u64),
         Value::Null => Ok(0),
         _ => Err(ApiError::invalid_request(format!("{key} must be a non-negative integer"))),
     }

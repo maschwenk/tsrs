@@ -213,6 +213,8 @@ impl Session {
                 for item in items {
                     match item {
                         Value::String(id) => req.ensure_programs.get_or_insert_with(Set::new).add(ProjectID(id.clone())),
+                        // Go decodes into []project.ID: null is the zero ID.
+                        Value::Null => req.ensure_programs.get_or_insert_with(Set::new).add(ProjectID(String::new())),
                         _ => return Err(ApiError::invalid_request("ensurePrograms must be true or an array of project IDs")),
                     }
                 }

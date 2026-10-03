@@ -118,8 +118,9 @@ impl Session {
     }
 
     pub(crate) fn handle_batch_requests(&self, p: Params) -> ApiResult<String> {
-        let max = match p.opt_u64("maxResponseBytesPerPage")? {
-            Some(n) if n > 0 => n as usize,
+        // Go `int`: zero or negative selects the default page size.
+        let max = match p.get("maxResponseBytesPerPage") {
+            Value::Number(n) if *n >= 1.0 => *n as usize,
             _ => DEFAULT_MAX_RESPONSE_BYTES_PER_PAGE,
         };
         let token = p.str("continuationToken")?;

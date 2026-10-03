@@ -296,6 +296,7 @@ impl Session {
             _ => {}
         }
         let info = method_info(method).ok_or_else(|| ApiError::invalid_request(format!("unknown API method {method:?}")))?;
+        let raw_params = params;
         // Go `unmarshalPayload`: `noParams` methods ignore the payload; the others decode with Go's strict
         // JSON (unpaired surrogates and duplicate members are errors), reported as
         // `failed to unmarshal *api.<Type>: <jsontext error>`.
@@ -326,7 +327,7 @@ impl Session {
         };
         // Go decodes the whole params struct before any lookup (see predecode.rs).
         if let Some(t) = crate::methods::params_type(method) {
-            crate::predecode::predecode(method, t, &params)?;
+            crate::predecode::predecode(method, t, &params, raw_params)?;
         }
         let go_type = crate::methods::params_type(method);
         let typed = |e: ApiError| match (e.kind.clone(), go_type) {
