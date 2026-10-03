@@ -359,6 +359,8 @@ impl Session {
             "buildReferences" => self.handle_build(p, true, false)?,
             "cleanBuild" => self.handle_build(p, false, true)?,
             "cleanReferences" => self.handle_build(p, true, true)?,
+            // Go: standalone (non-LSP) sessions reject it the same way.
+            "getCurrentLanguageServerSnapshot" => return Err(ApiError::client("getCurrentLanguageServerSnapshot requires an LSP-connected API session")),
             "printNode" => self.handle_print_node(p)?,
             "formatNodeForInsertion" => self.handle_format_node_for_insertion(p)?,
             "transpileModule" => self.handle_transpile(p, false)?,
