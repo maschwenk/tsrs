@@ -35,6 +35,13 @@ impl programOwner {
     pub(crate) fn new(program: &'static Program, checker_pool: Option<Arc<checkerPool>>, region: Region, base: Region, full_build: bool) -> programOwner {
         if full_build {
             base.adopt_owner(processed_files_addr(program));
+            // The data shared by every version cloned from this build lives exactly as long as `base` (each
+            // version's owner holds `base`), so it is freed with it. Before this it was leaked per full build.
+            let shared = tsrs_compiler::shared_program_data(program);
+            base.on_free(Box::new(move || {
+                // SAFETY: `base` is freed after the last program owner holding it freed its program.
+                unsafe { shared.free() }
+            }));
         }
         let files = Region::containing_all(program.source_files().iter().map(|f| f.addr())).into_iter().flatten().collect();
         log_region(|| format!("program {:p}: created (region {} KiB, base {} KiB)", program, region.allocated_bytes() >> 10, base.allocated_bytes() >> 10));

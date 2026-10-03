@@ -26,7 +26,11 @@ pub(crate) struct projectReferenceFileMapper {
 
     // Go builds a new dts-faking host on every `resolutionHost` call; the mapper is immutable once built, so the
     // host is built once (its caches only memoize file system queries).
-    dts_faking_host: OnceLock<&'static dyn ResolutionHost>,
+    pub(crate) dts_faking_host: OnceLock<&'static dyn ResolutionHost>,
+    // The leaked `resolution_host_for` host the file loader created for this mapper's program build
+    // (it keeps the compiler host, and with it the build's file system, alive). Freed with the mapper
+    // (`SharedProgramData::free`).
+    pub(crate) loader_host: Option<&'static dyn ResolutionHost>,
 }
 
 pub(crate) struct projectReferenceFileMapperBuilder {
@@ -66,6 +70,7 @@ impl projectReferenceFileMapper {
             output_dts_to_project_reference: FxHashMap::default(),
             realpath_dts_to_source: SyncMap::default(),
             dts_faking_host: OnceLock::new(),
+            loader_host: None,
         }
     }
 

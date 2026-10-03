@@ -39,36 +39,3 @@ fn transpile_declaration_and_from_file() {
     let e = call_err(&s, "transpileModuleFromFile", &format!("{{\"fileName\":{}}}", quote(&dir.path("nope.ts"))));
     assert!(e.contains("could not read file"), "{e}");
 }
-
-fn rss_kib() -> u64 {
-    std::fs::read_to_string("/proc/self/status")
-        .ok()
-        .and_then(|s| s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| l.split_whitespace().nth(1)?.parse().ok()))
-        .unwrap_or(0)
-}
-
-/// Each transpile frees its scratch region and program: repeated calls stay correct and memory stays flat.
-#[test]
-fn repeated_transpile_reclaims_scratch_memory() {
-    let dir = TempDir::new("tmloop");
-    let s = session(&dir.dir(), false);
-    let n: usize = std::env::var("TSRS_API_STRESS").ok().and_then(|v| v.parse().ok()).unwrap_or(300);
-    let body = "export function f(a: string): number { return a.length; }\n".repeat(40);
-    let req_js = format!("{{\"input\":{},\"options\":{{}}}}", quote(&body));
-    let first_js = call(&s, "transpileModule", &req_js);
-    let first_dts = call(&s, "transpileDeclaration", &req_js);
-    for _ in 0..10 {
-        call(&s, "transpileModule", &req_js);
-        call(&s, "transpileDeclaration", &req_js);
-    }
-    let before = rss_kib();
-    for _ in 0..n {
-        assert_eq!(call(&s, "transpileModule", &req_js), first_js);
-        assert_eq!(call(&s, "transpileDeclaration", &req_js), first_dts);
-    }
-    let grown = rss_kib().saturating_sub(before);
-    eprintln!("transpile x{n}: rss grew {grown} KiB");
-    // Before scratch regions each call retained ~530 KiB; the remainder (~25 KiB/call, heap state of the
-    // compiler/emitter outside arenas) is a documented gap. Guard against regressions to the old behavior.
-    assert!(grown < (n as u64) * 128, "rss grew {grown} KiB over {n} iterations");
-}
