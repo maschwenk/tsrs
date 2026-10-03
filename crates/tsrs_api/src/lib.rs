@@ -9,9 +9,12 @@
 // - codec: crates/tsrs_api_codec (AST binary encoder/decoder, node index tables).
 // - runtime: crates/tsrs_api_transport (MessagePack tuple protocol, JSON-RPC, sync/async conns).
 
+pub mod config;
+pub mod diagnostics;
 pub mod handler;
 pub mod methods;
 pub mod session;
+pub mod wire;
 
 pub(crate) mod checker;
 

@@ -1,0 +1,65 @@
+mod common;
+use common::*;
+use tsrs_core::json::{self, Value};
+
+#[test]
+fn initialize_and_unknown_methods() {
+    let dir = TempDir::new("init");
+    let s = session(&dir.dir(), false);
+    let r = call(&s, "initialize", "");
+    assert_eq!(str_of(get(&r, "currentDirectory")), dir.dir());
+    assert!(matches!(get(&r, "useCaseSensitiveFileNames"), Value::Bool(_)));
+    assert_eq!(call(&s, "ping", ""), Value::String("pong".into()));
+    let e = call_err(&s, "noSuchMethod", "{}");
+    assert!(e.starts_with("api: invalid request: unknown API method"), "{e}");
+    let e = call_err(&s, "initialize", "{not json");
+    assert!(e.starts_with("api: invalid request:"), "{e}");
+}
+
+#[test]
+fn parse_config_file_reads_options_and_files() {
+    let dir = TempDir::new("cfg");
+    let cfg = dir.write("tsconfig.json", r#"{ "compilerOptions": { "strict": true, "target": "es2020", "outDir": "out" }, "include": ["src"] }"#);
+    let a = dir.write("src/a.ts", "export const a = 1;");
+    let s = session(&dir.dir(), false);
+    let r = call(&s, "parseConfigFile", &format!("{{\"file\":{}}}", quote(&cfg)));
+    assert_eq!(get(&r, "fileNames"), &Value::Array(vec![Value::String(a.clone())]));
+    assert_eq!(get(&r, "options.strict"), &Value::Bool(true));
+    assert_eq!(get(&r, "options.target"), &Value::Number(7.0));
+    assert_eq!(str_of(get(&r, "options.outDir")), dir.path("out"));
+    assert_eq!(get(&r, "errors"), &Value::Array(vec![]));
+    assert!(matches!(get(&r, "raw"), Value::Object(_)));
+
+    // Missing file is a client error, not a fake success.
+    let e = call_err(&s, "parseConfigFile", &format!("{{\"file\":{}}}", quote(&dir.path("nope.json"))));
+    assert!(e.contains("api: client error: could not read file"), "{e}");
+}
+
+#[test]
+fn read_config_file_and_errors() {
+    let dir = TempDir::new("read");
+    let cfg = dir.write("tsconfig.json", r#"{ "compilerOptions": { "strict": true, } "#);
+    let s = session(&dir.dir(), false);
+    let r = call(&s, "readConfigFile", &format!("{{\"file\":{}}}", quote(&cfg)));
+    assert_eq!(get(&r, "config.compilerOptions.strict"), &Value::Bool(true));
+    assert_eq!(get(&r, "error.category"), &Value::Number(1.0));
+    let r = call(&s, "readConfigFile", &format!("{{\"file\":{}}}", quote(&dir.path("missing.json"))));
+    assert_eq!(get(&r, "error.code"), &Value::Number(5083.0));
+}
+
+#[test]
+fn parse_json_config_file_content_and_command_line() {
+    let dir = TempDir::new("json");
+    let a = dir.write("a.ts", "let x = 1;");
+    let s = session(&dir.dir(), false);
+    let r = call(&s, "parseJsonConfigFileContent", &format!("{{\"json\":{{\"compilerOptions\":{{\"noEmit\":true}},\"files\":[\"a.ts\"]}},\"configDirectory\":{}}}", quote(&dir.dir())));
+    assert_eq!(get(&r, "fileNames"), &Value::Array(vec![Value::String(a)]));
+    assert_eq!(get(&r, "options.noEmit"), &Value::Bool(true));
+    let e = call_err(&s, "parseJsonConfigFileContent", "{\"json\":{}}");
+    assert!(e.contains("exactly one of configDirectory or configFileName"), "{e}");
+
+    let r = call(&s, "parseCommandLine", r#"{"commandLine":["--strict","--target","es2022","x.ts"]}"#);
+    assert_eq!(get(&r, "options.strict"), &Value::Bool(true));
+    assert_eq!(get(&r, "options.target"), &Value::Number(9.0));
+    assert_eq!(json::marshal(get(&r, "fileNames")).unwrap(), "[\"x.ts\"]");
+}

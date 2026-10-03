@@ -22,6 +22,7 @@ use tsrs_vfs::FS;
 use crate::checker::{self, CheckerSnapshotState};
 use crate::handler::{ApiError, ApiResult, ClientConn, Handler, Response};
 use crate::methods::{method_info, Owner};
+use crate::wire::{Obj, Params};
 
 pub type SnapshotID = u64;
 
@@ -81,6 +82,8 @@ pub struct CheckerSetup {
 pub struct Session {
     id: String,
     pub(crate) snapshot_host: Arc<SnapshotHost>,
+    /// Leaked once per session: tsoptions requires a `&'static dyn ParseConfigHost`.
+    pub(crate) parse_config_host: &'static crate::config::ApiParseConfigHost,
     binary_responses: bool,
     snapshots: RwLock<HashMap<SnapshotID, Arc<SnapshotData>>>,
     conn: Mutex<Option<Arc<dyn ClientConn>>>,
@@ -112,10 +115,13 @@ impl Session {
             parse_cache: None,
             content_mapped_parse_cache: None,
         };
+        let parse_config_host: &'static crate::config::ApiParseConfigHost =
+            Box::leak(Box::new(crate::config::ApiParseConfigHost { fs: init.fs.clone(), cwd: init.options.current_directory.clone() }));
         let id = SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
         Arc::new(Session {
             id: format!("api-session-{id}"),
             snapshot_host: tsrs_project::new_snapshot_host(&init),
+            parse_config_host,
             binary_responses: options.binary_responses,
             snapshots: RwLock::new(HashMap::new()),
             conn: Mutex::new(None),
@@ -141,6 +147,15 @@ impl Session {
 
     pub fn current_directory(&self) -> &str {
         self.snapshot_host.get_current_directory()
+    }
+
+    /// Go `Session.FS()` for a standalone session: the host filesystem (possibly callback-backed).
+    pub fn base_fs(&self) -> &dyn FS {
+        self.snapshot_host.fs()
+    }
+
+    pub fn to_path(&self, file_name: &str) -> tsrs_core::tspath::Path {
+        tsrs_core::tspath::to_path(file_name, self.current_directory(), self.use_case_sensitive_file_names())
     }
 
     pub fn use_case_sensitive_file_names(&self) -> bool {
@@ -205,15 +220,19 @@ impl Session {
         if info.owner == Owner::Checker {
             return checker::handle(self, method, &params).unwrap_or_else(|| Err(ApiError::unsupported(method)));
         }
-        match method {
-            "initialize" => {
-                let mut obj = tsrs_core::collections::OrderedMap::default();
-                obj.insert("useCaseSensitiveFileNames".to_string(), Value::Bool(self.use_case_sensitive_file_names()));
-                obj.insert("currentDirectory".to_string(), Value::String(self.current_directory().to_string()));
-                json_response(&Value::Object(obj))
-            }
-            _ => Err(ApiError::unsupported(method)),
-        }
+        let p = Params(&params);
+        let result = match method {
+            "initialize" => Obj::new()
+                .set("useCaseSensitiveFileNames", Value::Bool(self.use_case_sensitive_file_names()))
+                .set("currentDirectory", Value::String(self.current_directory().to_string()))
+                .build(),
+            "parseCommandLine" => self.handle_parse_command_line(p)?,
+            "readConfigFile" => self.handle_read_config_file(p)?,
+            "parseJsonConfigFileContent" => self.handle_parse_json_config_file_content(p)?,
+            "parseConfigFile" => self.handle_parse_config_file(p)?,
+            _ => return Err(ApiError::unsupported(method)),
+        };
+        json_response(&result)
     }
 }
 
