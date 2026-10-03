@@ -9,7 +9,7 @@ comma-separated values, as the harness's variants) plus `--outDir out`. Every em
 byte. This is a stand-in for `tsrs-test --baselines js` (E2): it compares against the reference compiler instead of
 the stored baselines, and harness-only directives are ignored.
 
-Environment: TSGO, TSRS (binaries), OUT (scratch root, default /tmp/emit-cases).
+Environment: TSGO (reference tsgo built from ts-ref, required), TSRS (binaries), OUT (scratch root, default /tmp/emit-cases).
 """
 import concurrent.futures
 import itertools
@@ -19,7 +19,7 @@ import shutil
 import subprocess
 import sys
 
-TSGO = os.environ.get("TSGO", "/root/Owner/node_modules/.pnpm/@typescript+typescript-linux-x64@7.1.0-dev.20260929.1/node_modules/@typescript/typescript-linux-x64/lib/tsc")
+TSGO = os.environ["TSGO"]
 TSRS = os.environ.get("TSRS", os.path.join(os.path.dirname(__file__), "../../../target/release/tsrs"))
 OUT = os.environ.get("OUT", "/tmp/emit-cases")
 

@@ -35,14 +35,11 @@ runs tsc (`list-packages.js`, effective options from `tsgo --showConfig`), emits
 `TSRS_EMIT=1 tsrs` into `$OUT/emit-go/<pkg>` / `$OUT/emit-rs/<pkg>` (redirecting `outDir`, `declarationDir` when
 the config sets one, and `tsBuildInfoFile`) and compares every file byte for byte. It aborts if anything under the
 package directory is newer than its start marker, and checks `git status` before/after. (An early version
-mis-parsed empty TSV columns and let one package write `dist/types` into the checkout; the files were removed and the
-script now refuses to continue on the first stray write.)
+mis-parsed empty TSV columns and wrote one package's declaration output into the read-only checkout; the files were
+removed (checkout verified clean) and the script now stops at the first stray write.)
 
-JSX packages (11): apps/guest-app-screenshots (noEmit), dionysus-customizer, icons-react-native, mailer,
-marketing-emails, online-ordering, pos-network, sightglass, telemetry-react-native, transport, user-journey-mobile.
-Decorator packages (13): adm-entities, api-client, parallel, provider-abstract-pool, service-auth, service-env,
-service-feature-flags, service-framework-utils, service-olympus-client, service-utils, temporal-utils,
-threat-intel-entities, vulnmgmt-entities.
+The private monorepo has 11 packages that compile JSX and 13 that use experimentalDecorators (names not recorded
+here: the corpus is private).
 
 ## Status / blocked on
 
@@ -55,10 +52,8 @@ Local, unpushed branch `int/local` = this branch + emit/transforms' typeeraser/i
 emit/core + a minimal esmodule.go, built as `tsrs`; outputs compared with tsgo (source maps off on both sides,
 `EXTRA="--sourceMap false --declarationMap false"`, because the generator is emit/sourcemaps'):
 
-- Monorepo, JSX packages: 703 files identical, 0 different; marketing-emails not emitted (commonjs, E4).
-- Monorepo, decorator packages: 318 identical, 0 different; 104 not emitted, all in the es2024 packages
-  (adm-entities, service-auth, service-feature-flags, service-framework-utils, temporal-utils, threat-intel-entities,
-  vulnmgmt-entities), which need classfields.go (E5, unassigned) because target < ESNext runs the class fields
+- Monorepo, JSX packages: 703 files identical, 0 different; 1 package not emitted (commonjs, E4).
+- Monorepo, decorator packages: 318 identical, 0 different; 104 not emitted, all in the 7 es2024 packages, which need classfields.go (E5, unassigned) because target < ESNext runs the class fields
   transformer.
 - `tools/oracle/emit/cases.py` (tsgo vs tsrs through the CLIs, per test variant) over the 604 compiler/conformance
   tests with `@jsx`, `@experimentalDecorators` or `@emitDecoratorMetadata`: 980 variants, 244 identical, 43 both
