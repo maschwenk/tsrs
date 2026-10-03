@@ -114,3 +114,23 @@ fn node_handles_round_trip() {
     }
     assert_eq!(resolve_node_index(&table, 1_000_000), None);
 }
+
+/// `cargo test -p tsrs_api_codec --release --test golden_compat -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn bench_encode_large_file() {
+    let text = std::fs::read_to_string(crate_dir().join("tests/fixtures/more_syntax.ts")).unwrap().repeat(400);
+    let (_region, file) = parse_like_server("large.ts", &text);
+    let t = std::time::Instant::now();
+    let (bytes, table) = encode_source_file(file.get()).unwrap();
+    let encode = t.elapsed();
+    let t = std::time::Instant::now();
+    let built = build_node_index_table(file.get());
+    let index = t.elapsed();
+    let t = std::time::Instant::now();
+    let decoded = decode_source_file(&bytes).unwrap();
+    let decode = t.elapsed();
+    eprintln!("{} bytes text, {} records, encoded {} bytes: encode {encode:?}, index {index:?}, decode {decode:?}", text.len(), table.len(), bytes.len());
+    assert_eq!(built.len(), table.len());
+    assert_eq!(decoded.root().as_source_file().statements.nodes().len(), file.statements.nodes().len());
+}
