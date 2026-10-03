@@ -224,7 +224,14 @@
       "text": "Type 'null' is not assignable to type 'string'."
     }
   ],
-  "modules.external": false,
+  "modules.external": true,
+  "modules.metadata": {
+    "isDefaultLibrary": false,
+    "isFromExternalLibrary": true,
+    "packageJsonType": "module",
+    "packageJsonDirectory": "/node_modules/pkg",
+    "impliedNodeFormat": 99
+  },
   "modules.names": [
     "/node_modules/pkg/dist/index.d.ts",
     "/node_modules/pkg/dist/sub.d.ts",

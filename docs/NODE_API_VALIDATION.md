@@ -59,9 +59,19 @@ JSON-RPC, including method names inside `batchRequests` and per-entry batch erro
 
 `inventory.mjs` reads the 172 `Method` constants from the pinned `proto.go` and, per method, reports
 oracle and candidate sends, answers, errors, explicit unsupported errors, and the tests that sent it with
-their outcome. Candidate status is one of `unexercised` (no upstream test sends it), `not-sent`,
-`unimplemented`, `passing` (every test that sent it passed) or `failing`. `passing` is per-test
-evidence, not a full-parity proof. Owner and claimed status come from `crates/tsrs_api/src/methods.rs`
+their outcome. Candidate status is one of:
+
+- `unexercised`: no test sends it.
+- `not-sent`: the oracle sends it, the candidate run did not.
+- `unimplemented`: only explicit unsupported errors.
+- `failing`: a non-todo test that sent it failed, or it errored more often than on the oracle.
+- `error-only-unverified`: both servers only returned errors; equal counts are not proof the errors are
+  equivalent.
+- `tests-pass`: every test that sent it passed under its own assertions.
+
+`tests-pass` is not response-level parity. Error-text differences between the two runs are listed per
+method regardless of status. Traffic from todo tests (known upstream defects) is excluded from the
+per-method counts and listed separately. Owner and claimed status come from `crates/tsrs_api/src/methods.rs`
 when present and are shown next to the measured status.
 
 ### Parity tests and goldens
@@ -144,8 +154,27 @@ and bounded exits. There were 2 soft differences from Go, and they are stricter 
 sync payload or async `Content-Length` is rejected before EOF, where Go fails only at EOF. That server is a
 transport fixture, not the API session, so this says nothing about method parity.
 
-tsrs: no integrated `--api` candidate has been measured yet. Published core `e0b9728` has no `--api`
-dispatch in `main.rs`.
+tsrs at core `a9b435432f4f`, release build, measured with harness `ad6a61b`. That harness has the same tests
+and goldens as the commit that adds this text; the later change is inventory reporting only.
+
+- Results: 902 tests, 897 passed, 2 failed, 3 todo. 0 timeouts, 0 leaks, 0 skipped suites. A no-trace
+  rerun gave the same results.
+- Upstream suites:
+  - sync/api 339/339, async/api 347/348;
+  - ast 111/111, generators 43/43, shutdown 1/1;
+  - astnav sync+async 8/8, each checking 9772 positions.
+- Parity tests: 46/48.
+- Failures:
+  - RSS grows about 3 MiB per `createSnapshot`+dispose cycle. The update path plateaus.
+  - The upstream batchContext test expects a Go `panic:` in `getTypeArguments`; tsrs returns an explicit
+    client error instead.
+- Inventory over 172 methods:
+  - `tests-pass` 158;
+  - `failing` 10, all attributed to those 2 tests;
+  - `error-only-unverified` 1 (`getCurrentLanguageServerSnapshot`);
+  - `unimplemented` 3 (the profiling methods).
+- Known upstream defects: tsrs passes todo 1 (lone surrogate: explicit error, keeps serving) and todo 2 (no
+  dropped file in 30 runs). Todo 3 is a client defect and fails on both servers.
 
 ## Known limitations
 

@@ -75,7 +75,8 @@ describe("parity: programs and diagnostics", () => {
         const program = api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json")!.program;
         g.check("modules.semantic", diags(program.getSemanticDiagnostics("/src/index.ts")));
         g.check("modules.names", program.getSourceFileNames().filter(f => !f.includes("lib.")).sort());
-        g.check("modules.external", program.isSourceFileFromExternalLibrary("/node_modules/pkg/dist/index.d.ts"));
+        g.check("modules.external", program.isSourceFileFromExternalLibrary(program.getSourceFile("/node_modules/pkg/dist/index.d.ts")!));
+        g.check("modules.metadata", program.getSourceFileMetadata("/node_modules/pkg/dist/index.d.ts"));
     });
 
     test("root-file program created without a tsconfig", () => {

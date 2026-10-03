@@ -76,6 +76,9 @@ for (const entry of ["package.json", "src", "lib", "vendor", "test", "tsconfig.b
     if (fs.existsSync(src)) fs.cpSync(src, path.join(pkg, entry), { recursive: true });
 }
 fs.cpSync(path.join(here, "tests"), path.join(pkg, "test", "parity"), { recursive: true, filter: src => !src.includes(`${path.sep}golden`) });
+// Upstream astnav tests read tsc/testdata (fixtures and baselines) relative to the repo root and silently
+// return zero tests when it is missing, so the tree links the pinned tsc/ in.
+fs.symlinkSync(path.join(opts.ref, "tsc"), path.join(tree, "tsc"), "junction");
 // node_modules: everything ts-ref installed except the workspace self-link, so the client resolves to this copy.
 const nm = path.join(tree, "node_modules");
 fs.mkdirSync(nm);
@@ -164,8 +167,9 @@ const resultCount = () => {
 };
 function groupMembers() {
     if (process.platform === "win32") return [];
-    const ps = spawnSync("ps", ["-eo", "pid=,pgid=,args="], { encoding: "utf8" });
-    return (ps.stdout ?? "").split("\n").map(l => l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/)).filter(m => m && Number(m[2]) === child.pid && Number(m[1]) !== child.pid).map(m => ({ pid: Number(m[1]), args: m[3].slice(0, 200) }));
+    // Zombies (state Z) have already exited; they are skipped because some sandboxes run a PID 1 that never reaps.
+    const ps = spawnSync("ps", ["-eo", "pid=,pgid=,stat=,args="], { encoding: "utf8" });
+    return (ps.stdout ?? "").split("\n").map(l => l.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/)).filter(m => m && Number(m[2]) === child.pid && Number(m[1]) !== child.pid && !m[3].startsWith("Z")).map(m => ({ pid: Number(m[1]), args: m[4].slice(0, 200) }));
 }
 function killGroup() {
     try {
@@ -230,6 +234,9 @@ const summary = {
     todoTests: leaves.filter(r => r.todo).map(r => `${r.ok ? "passing" : "failing"}: ${r.path}`),
     // A file whose process crashed shows up as a failed nesting-0 entry named after the file.
     softMismatches: fs.existsSync(path.join(out, "run.tap")) ? (fs.readFileSync(path.join(out, "run.tap"), "utf8").match(/^\s*# soft-mismatch .*/gm) ?? []).map(l => l.trim().slice(2, 300)) : [],
+    // Upstream suites that print "Skipping ..." and register no tests (e.g. astnav without fixtures) would
+    // otherwise look green; any such line fails the run.
+    skippedSuites: fs.existsSync(path.join(out, "run.tap")) ? (fs.readFileSync(path.join(out, "run.tap"), "utf8").match(/^\s*# Skipping .*/gm) ?? []).map(l => l.trim().slice(2, 200)) : [],
     crashedFiles: results.filter(r => !r.ok && files.includes(r.path)).map(r => r.path),
     nodeExit: res.status,
     nodeSignal: res.signal,
@@ -242,4 +249,4 @@ fs.writeFileSync(path.join(out, "summary.json"), JSON.stringify(summary, null, 2
 const binHead = spawnSync(opts.binary, ["--version"], { encoding: "utf8", timeout: 10_000 });
 fs.writeFileSync(path.join(out, "meta.json"), JSON.stringify({ argv: process.argv.slice(2), node: process.version, platform: `${process.platform}-${process.arch}`, binaryVersion: (binHead.stdout ?? "").trim() }, null, 2) + "\n");
 console.log(JSON.stringify(summary, null, 2));
-process.exit(summary.fail === 0 && summary.tests > 0 && res.status === 0 && !res.timedOut && res.leaked.length === 0 ? 0 : 1);
+process.exit(summary.fail === 0 && summary.tests > 0 && res.status === 0 && !res.timedOut && res.leaked.length === 0 && summary.skippedSuites.length === 0 ? 0 : 1);
