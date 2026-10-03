@@ -68,6 +68,8 @@ mod checker_08;
 pub(crate) use checker_08::*;
 mod checker_09;
 pub(crate) use checker_09::*;
+// Public for lint rules (tsgolint's shim exposes checker.IsNonDeferredTypeReference).
+pub use checker_09::is_non_deferred_type_reference;
 mod checker_10;
 pub(crate) use checker_10::*;
 mod checker_11;
