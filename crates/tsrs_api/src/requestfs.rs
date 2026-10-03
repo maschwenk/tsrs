@@ -301,7 +301,15 @@ impl RequestParams {
         let str_list = |v: &Value, what: &str| -> Result<Vec<String>, String> {
             match v {
                 Value::Null => Ok(Vec::new()),
-                Value::Array(a) => a.iter().map(|x| if let Value::String(s) = x { Ok(s.clone()) } else { Err(format!("{what} must contain strings")) }).collect(),
+                // Go: a null element of a []string is "".
+                Value::Array(a) => a
+                    .iter()
+                    .map(|x| match x {
+                        Value::String(s) => Ok(s.clone()),
+                        Value::Null => Ok(String::new()),
+                        _ => Err(format!("{what} must contain strings")),
+                    })
+                    .collect(),
                 _ => Err(format!("{what} must be an array")),
             }
         };
@@ -312,6 +320,8 @@ impl RequestParams {
                 for (k, v) in m.iter() {
                     match v {
                         Value::String(c) => files.push((k.clone(), c.clone())),
+                        // Go map[string]string: a null value is "".
+                        Value::Null => files.push((k.clone(), String::new())),
                         _ => return Err("fileSystem.files values must be strings".to_string()),
                     }
                 }
@@ -340,6 +350,7 @@ impl RequestParams {
                     let s = Params(v);
                     let target = match s.get("target") {
                         Value::String(t) => t.clone(),
+                        Value::Null => String::new(),
                         _ => return Err("symlink target must be a string".to_string()),
                     };
                     symlinks.push((k.clone(), target, matches!(s.get("host"), Value::Bool(true))));

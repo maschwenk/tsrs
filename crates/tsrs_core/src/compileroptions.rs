@@ -15,6 +15,9 @@ pub struct PluginImport {
 // Go `[]string` options are `Option<Vec<String>>` because the Go code distinguishes nil (unset) from empty.
 #[derive(Clone, Debug, Default)]
 pub struct CompilerOptions {
+    /// API only (`gojson`): enum options decoded from the wire with a numeric value that has no Rust variant
+    /// (Go keeps any int32), by JSON name. The typed field stays at its default; the value is echoed back.
+    pub api_unknown_enum_values: Vec<(&'static str, i32)>,
 
     pub allow_js: Tristate,
     pub allow_arbitrary_extensions: Tristate,

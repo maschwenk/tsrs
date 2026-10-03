@@ -16,6 +16,13 @@ pub trait GoJson: Sized {
     /// `None` when the value is Go's zero value (omitted under `omitzero`).
     fn to_go_json(&self) -> Option<Value>;
     fn from_go_json(value: &Value, field: &str) -> Result<Self, String>;
+    /// Go decodes this field from a JSON integer (int32 enums, `*int`): exponent/fraction syntax is invalid.
+    const INTEGER: bool = false;
+    /// Like `from_go_json`, but an integer with no Rust enum variant (Go keeps any int32) is returned beside the
+    /// default value instead of being an error.
+    fn from_go_json_keeping_unknown(value: &Value, field: &str) -> Result<(Self, Option<i32>), String> {
+        Self::from_go_json(value, field).map(|v| (v, None))
+    }
 }
 
 fn type_error(field: &str, expected: &str, value: &Value) -> String {
@@ -93,6 +100,7 @@ fn int_from(value: &Value, field: &str) -> Result<i32, String> {
 }
 
 impl GoJson for Option<i32> {
+    const INTEGER: bool = true;
     fn to_go_json(&self) -> Option<Value> {
         self.map(|v| Value::Number(v as f64))
     }
@@ -196,6 +204,15 @@ macro_rules! enum_go_json {
                 $(if n == $ty::$variant as i32 { return Ok($ty::$variant); })*
                 Err(format!("json: invalid value {n} for field {field:?} of type {}", stringify!($ty)))
             }
+            const INTEGER: bool = true;
+            fn from_go_json_keeping_unknown(value: &Value, field: &str) -> Result<(Self, Option<i32>), String> {
+                if matches!(value, Value::Null) {
+                    return Ok((<$ty>::default(), None));
+                }
+                let n = int_from(value, field)?;
+                $(if n == $ty::$variant as i32 { return Ok(($ty::$variant, None)); })*
+                Ok((<$ty>::default(), Some(n)))
+            }
         })*
     };
 }
@@ -219,21 +236,47 @@ fn object<'a>(value: &'a Value, what: &str) -> Result<Option<&'a OrderedMap<Stri
 
 pub fn compiler_options_to_go_json(options: &CompilerOptions) -> Value {
     let mut o = OrderedMap::default();
+    let unknown = |json: &str| options.api_unknown_enum_values.iter().find(|(k, _)| *k == json).map(|(_, n)| Value::Number(*n as f64));
     macro_rules! fields {
         ($($field:ident: $json:literal,)*) => {
-            $(if let Some(v) = options.$field.to_go_json() { o.insert($json.to_string(), v); })*
+            $(if let Some(v) = unknown($json).or_else(|| options.$field.to_go_json()) { o.insert($json.to_string(), v); })*
         };
     }
     for_each_compiler_options_field!(fields);
     Value::Object(o)
 }
 
+/// JSON names of the core.CompilerOptions fields Go decodes from JSON integers.
+pub fn compiler_options_integer_fields() -> Vec<&'static str> {
+    let mut out = Vec::new();
+    let options = CompilerOptions::default();
+    fn integer<T: GoJson>(_: &T) -> bool {
+        T::INTEGER
+    }
+    macro_rules! fields {
+        ($($field:ident: $json:literal,)*) => {
+            $(if integer(&options.$field) { out.push($json); })*
+        };
+    }
+    for_each_compiler_options_field!(fields);
+    out
+}
+
+/// JSON names of the core.BuildOptions fields Go decodes from JSON integers.
+pub const BUILD_OPTIONS_INTEGER_FIELDS: &[&str] = &["builders"];
+
 pub fn compiler_options_from_go_json(value: &Value) -> Result<CompilerOptions, String> {
     let mut options = CompilerOptions::default();
     let Some(o) = object(value, "core.CompilerOptions")? else { return Ok(options) };
     macro_rules! fields {
         ($($field:ident: $json:literal,)*) => {
-            $(if let Some(v) = o.get($json) { options.$field = GoJson::from_go_json(v, $json)?; })*
+            $(if let Some(v) = o.get($json) {
+                let (value, unknown) = GoJson::from_go_json_keeping_unknown(v, $json)?;
+                options.$field = value;
+                if let Some(n) = unknown {
+                    options.api_unknown_enum_values.push(($json, n));
+                }
+            })*
         };
     }
     for_each_compiler_options_field!(fields);

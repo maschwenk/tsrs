@@ -140,7 +140,19 @@ impl Session {
             request.project_references = opts
                 .array("projectReferences")?
                 .iter()
-                .map(|r| gojson::project_reference_from_go_json(r).map_err(ApiError::invalid_request))
+                .enumerate()
+                .map(|(i, r)| {
+                    let reference = gojson::project_reference_from_go_json(r).map_err(ApiError::invalid_request)?;
+                    // Go resolves references without making them absolute and crashes on a relative, empty or
+                    // null path; reject it instead.
+                    if !tsrs_core::tspath::is_rooted_disk_path(&reference.path) {
+                        return Err(ApiError::client(format!(
+                            "projectReferences[{i}].path must be an absolute path to a project directory or tsconfig file, got {:?}",
+                            reference.path
+                        )));
+                    }
+                    Ok(reference)
+                })
                 .collect::<ApiResult<_>>()?;
         }
         request.config_file_parsing_diagnostics = opts.array("configFileParsingDiagnostics")?.iter().map(diagnostic_from_response).collect::<ApiResult<_>>()?;

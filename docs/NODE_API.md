@@ -343,9 +343,17 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   any lookup, and `project.SyntheticProjectID` values go through Go's decoder rules (null and non-synthetic
   text are decode errors). Integer IDs are read from their own literal (by position in the parsed params
   tree), so values above 2^53 are exact at any depth; batch items keep their raw params bytes (Go
-  `json.Value`). Structs from other Go packages (`core.CompilerOptions`, `core.BuildOptions`, request
-  filesystems, project references) are decoded by their handlers from the parsed value, so a type error or
-  exponent-syntax integer there can still lose to an earlier lookup error or be accepted.
+  `json.Value`). Structs from other Go packages are decoded from the parsed value with Go's rules, checked
+  against runtime's c246 session review: integer fields of `core.CompilerOptions` (int32 enums, `*int`) and
+  `core.BuildOptions.builders` need plain integer syntax (`1e1` is invalid); an enum number with no Rust
+  variant (`"target":12345`, accepted by Go) is kept and echoed in project responses, but the program
+  compiles as if that option were unset (Rust cannot hold the value; Go compiles with it). Malformed
+  tristates and unknown options are ignored, as in Go. Request filesystems are type-checked before any
+  lookup (`kind`, `files`, `directories`, `symlinks.target/host`, `removedPaths`), with `null` values and
+  elements as zero values. Pinned Go crashes on a relative, empty or null project reference path and on a
+  missing referenced project; tsrs instead returns a client error for non-absolute paths and reports a
+  missing project as a `File '…' not found` program diagnostic. Remaining: `*int` options accept only the
+  int32 range (Go: int64), and error wording is encoding/json v1 style.
 - Response shapes from paired runs (parity f703): `updateSnapshot` omits an empty `changes` (json/v2
   `omitempty`); `cleanBuild` keeps Go's per-orchestrator existence answers until the next build, so a clean
   after a clean lists the project's outputs again.

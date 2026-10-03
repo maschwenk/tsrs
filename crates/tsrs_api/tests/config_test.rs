@@ -279,3 +279,60 @@ fn nested_integer_literals_are_exact_and_checked() {
     let e = call_err(&s, "getTypesOfSymbols", r#"{"snapshot":1,"project":"p","symbols":[{"id":1e3}]}"#);
     assert!(e.starts_with("api: invalid request: failed to unmarshal"), "{e}");
 }
+
+/// Request params from runtime's c246 session review (REPORT.md findings 2-5), sent verbatim.
+#[test]
+fn external_struct_decoding_matches_go_classes() {
+    let dir = TempDir::new("external");
+    let a = dir.write("a.ts", "export const a = 1;\n");
+    let s = session(&dir.dir(), false);
+    let f = quote(&a);
+    let snapshot = |r: &tsrs_core::json::Value| match get(r, "snapshot") { tsrs_core::json::Value::Number(n) => *n as u64, _ => unreachable!() };
+    let invalid = |method: &str, payload: &str| {
+        let e = call_err(&s, method, payload);
+        assert!(e.starts_with("api: invalid request:"), "{method} {payload}: {e}");
+    };
+    // CompilerOptions: Go keeps an unknown int32 enum value (echoed back); exponent syntax is invalid; malformed
+    // tristates and unknown options are ignored.
+    call(&s, "transpileModule", r#"{"input":"const x: number = 1;","options":{"compilerOptions":{"target":12345}}}"#);
+    let r = call(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{f}],"compilerOptions":{{"target":12345,"module":1}}}}]}}"#));
+    assert_eq!(get(&r, "projects.0.compilerOptions.target"), &tsrs_core::json::Value::Number(12345.0), "{}", tsrs_core::json::marshal(&r).unwrap());
+    assert_eq!(get(&r, "projects.0.parsedCommandLine.options.target"), &tsrs_core::json::Value::Number(12345.0));
+    assert_eq!(get(&r, "projects.0.compilerOptions.module"), &tsrs_core::json::Value::Number(1.0));
+    invalid("transpileModule", r#"{"input":"const x: number = 1;","options":{"compilerOptions":{"target":1e1}}}"#);
+    invalid("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{f}],"compilerOptions":{{"target":1e1}}}}]}}"#));
+    invalid("transpileModule", r#"{"input":"const x: number = 1;","options":{"compilerOptions":{"target":9007199254740993}}}"#);
+    for co in [r#"{"strict":"yes"}"#, r#"{"strict":null}"#, r#"{"strict":1}"#, r#"{"bogusOption":true}"#, r#"{"noEmit":{}}"#] {
+        call(&s, "transpileModule", &format!(r#"{{"input":"const x: number = 1;","options":{{"compilerOptions":{co}}}}}"#));
+    }
+    // BuildOptions.builders is a Go *int.
+    invalid("createBuildOrchestrator", r#"{"rootNames":["/x/tsconfig.json"],"buildOptions":{"builders":1e1}}"#);
+    // Request filesystem: wrong JSON kinds are decode errors; null values are zero values.
+    let base = snapshot(&call(&s, "createSnapshot", "{}"));
+    for fs in [
+        r#"{"kind":1}"#,
+        r#"{"kind":"layer","files":{"/v/x.ts":5}}"#,
+        r#"{"kind":"layer","files":["x"]}"#,
+        r#"{"kind":"layer","directories":{"/v":{"files":"x"}}}"#,
+        r#"{"kind":"layer","symlinks":{"/v/l":{"target":5}}}"#,
+        r#"{"kind":"layer","symlinks":{"/v/l":{"target":"/v","host":"yes"}}}"#,
+        r#"{"kind":"layer","removedPaths":[1]}"#,
+    ] {
+        invalid("createSnapshot", &format!(r#"{{"fileSystem":{fs}}}"#));
+        invalid("updateSnapshot", &format!(r#"{{"snapshot":{base},"changes":{{"fileSystem":{fs}}}}}"#));
+    }
+    for fs in [r#"{"kind":"layer","removedPaths":[null]}"#, r#"{"kind":"layer","files":{"/v/x.ts":null}}"#] {
+        call(&s, "createSnapshot", &format!(r#"{{"fileSystem":{fs}}}"#));
+        call(&s, "updateSnapshot", &format!(r#"{{"snapshot":{base},"changes":{{"fileSystem":{fs}}}}}"#));
+    }
+    // Project references: pinned Go crashes on these; tsrs answers a stable error (relative/null) or reports
+    // the missing project as a program diagnostic, and stays up.
+    for refs in [r#"[{"path":"../q"}]"#, r#"[null]"#, r#"[{"path":"x"}]"#] {
+        let e = call_err(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{f}],"compilerOptions":{{}},"options":{{"projectReferences":{refs}}}}}]}}"#));
+        assert!(e.starts_with("api: client error: projectReferences[0].path must be an absolute path"), "{refs}: {e}");
+    }
+    let r = call(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{f}],"compilerOptions":{{}},"options":{{"projectReferences":[{{"path":"/nonexistent/q"}}]}}}}]}}"#));
+    let project = str_of(get(&r, "projects.0.id")).to_string();
+    let d = call(&s, "getProgramDiagnostics", &format!(r#"{{"snapshot":{},"project":{}}}"#, snapshot(&r), quote(&project)));
+    assert!(tsrs_core::json::marshal(&d).unwrap().contains("not found"), "{}", tsrs_core::json::marshal(&d).unwrap());
+}

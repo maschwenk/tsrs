@@ -144,6 +144,98 @@ fn check_struct(go_type: &str, o: &tsrs_core::collections::OrderedMap<String, Va
     Ok(())
 }
 
+/// Integer fields of structs from other Go packages, decoded by `gojson` from the parsed value: Go's decoder
+/// needs plain integer syntax there too (`"target":1e1`, `"builders":1e1` are invalid syntax). Types, ranges
+/// and unknown enum numbers are handled by `gojson`.
+fn check_external_integers(go_type: &str, o: &tsrs_core::collections::OrderedMap<String, Value>, pointer: &str, lexemes: &HashMap<String, String>) -> Result<(), String> {
+    let (fields, go_int): (Vec<&str>, &str) = match base_type(go_type) {
+        "core.CompilerOptions" => (tsrs_tsoptions::gojson::compiler_options_integer_fields(), "int32"),
+        "core.BuildOptions" => (tsrs_tsoptions::gojson::BUILD_OPTIONS_INTEGER_FIELDS.to_vec(), "int"),
+        _ => return Ok(()),
+    };
+    for name in fields {
+        if !matches!(o.get(name), Some(Value::Number(_))) {
+            continue;
+        }
+        let p = format!("{pointer}/{}", token(name));
+        if let Some(lexeme) = lexemes.get(&p).filter(|l| l.contains(['.', 'e', 'E'])) {
+            return Err(format!("cannot unmarshal JSON number {lexeme} into Go {go_int} within \"{p}\": invalid syntax"));
+        }
+    }
+    Ok(())
+}
+
+/// requestfilesystem.RequestFileSystem (decoded by `requestfs.rs` from the parsed value): Go decodes the whole
+/// struct first, so a wrong JSON kind anywhere in it is an invalid request. `null` is the zero value (a null
+/// file content is "", a null path element is ""), as in Go.
+fn check_request_file_system(go_type: &str, o: &tsrs_core::collections::OrderedMap<String, Value>, pointer: &str) -> Result<(), String> {
+    if base_type(go_type) != "requestfilesystem.RequestFileSystem" {
+        return Ok(());
+    }
+    let err = |v: &Value, p: &str, t: &str| Err(format!("cannot unmarshal JSON {} into Go {t} within \"{p}\"", json_kind(v)));
+    let strings = |v: &Value, p: &str| -> Result<(), String> {
+        match v {
+            Value::Null => Ok(()),
+            Value::Array(items) => {
+                for (i, item) in items.iter().enumerate() {
+                    if !matches!(item, Value::Null | Value::String(_)) {
+                        return err(item, &format!("{p}/{i}"), "string");
+                    }
+                }
+                Ok(())
+            }
+            _ => err(v, p, "[]string"),
+        }
+    };
+    // Each member's map, checked as `map[string]<elem>` with `check` per non-null value.
+    let map = |name: &str, go: &str, check: &dyn Fn(&Value, &str) -> Result<(), String>| -> Result<(), String> {
+        let p = format!("{pointer}/{name}");
+        match o.get(name) {
+            None | Some(Value::Null) => Ok(()),
+            Some(Value::Object(m)) => {
+                for (k, v) in m.iter() {
+                    if !matches!(v, Value::Null) {
+                        check(v, &format!("{p}/{}", token(k)))?;
+                    }
+                }
+                Ok(())
+            }
+            Some(v) => err(v, &p, go),
+        }
+    };
+    if let Some(v) = o.get("kind").filter(|v| !matches!(v, Value::Null | Value::String(_))) {
+        return err(v, &format!("{pointer}/kind"), "requestfilesystem.Kind");
+    }
+    map("files", "map[string]string", &|v, p| if matches!(v, Value::String(_)) { Ok(()) } else { err(v, p, "string") })?;
+    map("directories", "map[string]requestfilesystem.RequestDirectoryEntries", &|v, p| match v {
+        Value::Object(d) => {
+            for name in ["files", "directories"] {
+                if let Some(x) = d.get(name) {
+                    strings(x, &format!("{p}/{name}"))?;
+                }
+            }
+            Ok(())
+        }
+        _ => err(v, p, "requestfilesystem.RequestDirectoryEntries"),
+    })?;
+    map("symlinks", "map[string]requestfilesystem.RequestSymlink", &|v, p| match v {
+        Value::Object(s) => {
+            if let Some(x) = s.get("target").filter(|x| !matches!(x, Value::Null | Value::String(_))) {
+                return err(x, &format!("{p}/target"), "string");
+            }
+            if let Some(x) = s.get("host").filter(|x| !matches!(x, Value::Null | Value::Bool(_))) {
+                return err(x, &format!("{p}/host"), "bool");
+            }
+            Ok(())
+        }
+        _ => err(v, p, "requestfilesystem.RequestSymlink"),
+    })?;
+    if let Some(v) = o.get("removedPaths") {
+        strings(v, &format!("{pointer}/removedPaths"))?;
+    }
+    Ok(())
+}
+
 fn check_field(spec: &FieldSpec, v: &Value, pointer: &str, lexemes: &HashMap<String, String>) -> Result<(), String> {
     let pointer = pointer.to_string();
     let mismatch = |v: &Value, pointer: &str, go_type: &str| format!("cannot unmarshal JSON {} into Go {} within \"{pointer}\"", json_kind(v), go_type_name(go_type));
@@ -169,6 +261,8 @@ fn check_field(spec: &FieldSpec, v: &Value, pointer: &str, lexemes: &HashMap<Str
         check_scalar(elem, v, lexemes.get(&pointer).map(String::as_str)).then_some(()).ok_or_else(|| mismatch(v, &pointer, spec.go_type))?;
         if let Value::Object(o) = v {
             check_struct(spec.go_type, o, &pointer, lexemes)?;
+            check_external_integers(spec.go_type, o, &pointer, lexemes)?;
+            check_request_file_system(spec.go_type, o, &pointer)?;
         }
         return Ok(());
     }
