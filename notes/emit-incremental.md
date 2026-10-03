@@ -13,8 +13,8 @@ tsbuildinfo and rejects `-b` (`crates/tsrs_cli/tests/emit_gate.rs`).
   referencemap, affectedfileshandler (shape signatures by printing the `.d.ts` with `EmitOnlyBuilderSignature`),
   emitfileshandler, program, incremental, host.
 - `performIncrementalCompilation` and the `-b` entry (tsc.go); `tsrs_cli::build` (Go `execute/build`: orchestrator,
-  buildtask, uptodatestatus, host, parseCache, compilerHost). Watch mode is not ported; projects build one at a time
-  in build order (Go's `--builders 1` path; same output order). `tsc` module: `CommandLineTesting` hooks, writer /
+  buildtask, uptodatestatus, host, parseCache, compilerHost). Watch mode is not ported. On this checkpoint projects build one at a
+  time in build order (Go's `--builders 1` path; same output order); `--builders` concurrency is the follow-up below. `tsc` module: `CommandLineTesting` hooks, writer /
   `WriteFile` / mtime cache in `EmitInput`, aggregate statistics, builder status reporter.
 - E15: `crates/tsrs_cli/src/tsctests` (runner.go, sys.go, fs.go, readablebuildinfo.go, the fsbaselineutil differ,
   TracerForBaselining) replaying the scenarios that `tools/oracle/tsctests/dump.sh` records from the Go tests.
@@ -71,7 +71,25 @@ PATH=<go>:$PATH tools/oracle/tsctests/dump.sh && cargo test --release -p tsrs_cl
 
 - JS emit, source maps and declaration maps come from the other waves; until they merge, projects that emit JS stop
   at their gate stubs (see above for what changes with transforms merged).
-- Build mode builds one project at a time (Go: `--builders`, default 4); watch mode (`-w`, `-b -w`) is not ported.
+- Watch mode (`-w`, `-b -w`) is not ported. `--builders` concurrency: done on `mfs-cx/emit-builders` (below).
 - The `--baselines js` harness still builds plain programs for the 5 `@incremental` test variants.
 - A draft PR could not be opened from the sandbox (`gh pr create` and the REST API answer 403 for the token); this
   note is the PR description.
+
+## Follow-up: `mfs-cx/emit-builders` (based on `da23dd6`)
+
+- `b5dfe98`: build-mode state made genuinely thread-safe (Mutex/atomic task state, `Send + Sync` reporters, the host
+  holds the orchestrator by `&'static` so `Sync` is compiler-checked); behaviour unchanged.
+- `8a790a0`: Go's `rangeTasks` on `--builders` threads (default 4, 1 with `--singleThreaded`) over `Order()`, task
+  `done`/`built` signals (Mutex + Condvar for Go's closed channels), `waitOnUpstream`, reporting in `Order()` on the
+  calling thread. Design and evidence: docs/EMIT.md section 10b, "Build concurrency".
+- Validation against tsgo built from ts-ref (`go build ./cmd/tsc` at `b85298b6`): `graph` and `cycle` fixtures at
+  `--builders 1/4/8`, with and without `--stopBuildOnErrors`, through `tools/oracle/incremental/steps.sh` (cold build,
+  no-op, fixing the failing project, no-op): identical output, trees and tsbuildinfo; `--dry`, `--clean --dry`,
+  `--clean`, `--force` at 4/8 builders identical; the existing fixtures (`run-all.sh`) unchanged; 20 cold runs per
+  builder count, one output each. Concurrency verified with temporary per-task tracing (not committed): at
+  `--builders 4` four of the five independent projects of a wide graph ran simultaneously, at 8 all five.
+  Peak RSS (`graph`, best of 3): tsrs 291 / 313 / 309 MB, tsgo 122 / 175 / 199 MB at 1 / 4 / 8 builders.
+- `TSRS_CHECK_SHARED=1` debug runs at `--builders 1/4/8` report no write to a shared object. tsctests unchanged
+  (tsc 64/216, tsbuild 17/190, same pass list). Default mode unchanged: `-b` without `TSRS_EMIT=1` still writes nothing
+  (`tests/emit_gate.rs` 5/5).
