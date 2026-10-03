@@ -468,9 +468,64 @@ pub(crate) fn exact_u64(object: &Value, key: &str) -> Option<u64> {
     })
 }
 
-/// The raw bytes of the value at `pointer` in the current request's payload.
-pub(crate) fn current_raw_at(pointer: &str) -> Option<Vec<u8>> {
-    FRAMES.with(|f| f.borrow().last().and_then(|frame| raw_value_at(&frame.raw, pointer).map(<[u8]>::to_vec)))
+/// The raw `params` bytes of each element of the top-level `requests` array of the current request
+/// (batchRequests), indexed in one pass over the payload; `None` where an element has no `params`.
+pub(crate) fn current_batch_params() -> Vec<Option<Vec<u8>>> {
+    FRAMES.with(|f| f.borrow().last().map(|frame| batch_params(&frame.raw)).unwrap_or_default())
+}
+
+fn batch_params(raw: &[u8]) -> Vec<Option<Vec<u8>>> {
+    let Some(requests) = raw_value_at(raw, "/requests") else { return Vec::new() };
+    let mut out = Vec::new();
+    let mut s = Scanner { b: requests, i: 0 };
+    s.ws();
+    if requests.first() != Some(&b'[') {
+        return out;
+    }
+    s.i += 1;
+    loop {
+        s.ws();
+        match requests.get(s.i) {
+            None | Some(b']') => return out,
+            Some(b',') => {
+                s.i += 1;
+                continue;
+            }
+            Some(b'{') => {
+                let mut params = None;
+                s.i += 1;
+                loop {
+                    s.ws();
+                    match requests.get(s.i) {
+                        None => return out,
+                        Some(b'}') => {
+                            s.i += 1;
+                            break;
+                        }
+                        Some(b',') => {
+                            s.i += 1;
+                            continue;
+                        }
+                        _ => {}
+                    }
+                    let key = s.string();
+                    s.ws();
+                    s.i += 1; // ':'
+                    s.ws();
+                    let start = s.i;
+                    s.value(&mut String::new(), None);
+                    if key == "params" {
+                        params = Some(requests[start..s.i.min(requests.len())].to_vec());
+                    }
+                }
+                out.push(params);
+            }
+            Some(_) => {
+                s.value(&mut String::new(), None);
+                out.push(None);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -511,5 +566,10 @@ mod tests {
         assert_eq!(super::raw_value_at(raw, "/requests/1/params"), Some(&br#"{"snapshot":9007199254740993}"#[..]));
         assert_eq!(super::raw_value_at(raw, "/requests/2/params"), None);
         assert_eq!(super::raw_value_at(raw, "/requests/0/nope"), None);
+        let params = super::batch_params(raw);
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0].as_deref(), Some(&br#"{"x":1e3}"#[..]));
+        assert_eq!(params[1].as_deref(), Some(&br#"{"snapshot":9007199254740993}"#[..]));
+        assert_eq!(super::batch_params(br#"{"requests":[1,{"method":"ping"},null]}"#), vec![None, None, None]);
     }
 }

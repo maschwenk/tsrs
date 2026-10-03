@@ -59,3 +59,19 @@ fn batch_items_decode_raw_params() {
     assert_eq!(str_of(get(&r, "responses.3.error")), "api: client error: snapshot 18446744073709551615 not found");
     assert_eq!(str_of(get(&r, "responses.5.error")), "api: client error: snapshot 9007199254740995 not found");
 }
+
+/// Item params are indexed in one pass over the batch payload: 20k items with params finish quickly (rescanning
+/// the payload prefix per item was quadratic: ~20 GB of scanning for this payload).
+#[test]
+fn large_batch_params_are_indexed_once() {
+    let dir = TempDir::new("batchscale");
+    let s = session(&dir.dir(), false);
+    let item = r#"{"method":"ping","params":{"pad":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","n":9007199254740993}}"#;
+    let payload = format!(r#"{{"requests":[{}],"maxResponseBytesPerPage":1073741824}}"#, vec![item; 20_000].join(","));
+    let start = std::time::Instant::now();
+    let r = call(&s, "batchRequests", &payload);
+    let elapsed = start.elapsed();
+    assert_eq!(match get(&r, "responses") { Value::Array(a) => a.len(), _ => 0 }, 20_000);
+    assert!(elapsed < std::time::Duration::from_secs(20), "{elapsed:?}");
+    eprintln!("BATCH20K {elapsed:?}");
+}

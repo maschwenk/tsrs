@@ -84,7 +84,7 @@ fn encode_batch_response(method: &str, result: &str, error: Option<&str>) -> Str
 
 impl Session {
     /// Go `handleBatchRequest`.
-    fn handle_batch_request(&self, index: usize, request: &Value) -> String {
+    fn handle_batch_request(&self, request: &Value, raw_params: Option<Vec<u8>>) -> String {
         let p = Params(request);
         let method = match p.get("method") {
             Value::String(m) => m.clone(),
@@ -97,7 +97,7 @@ impl Session {
         // literals (`1e3`, integers above 2^53) and so change decoding.
         let params = match p.get("params") {
             Value::Null => Vec::new(),
-            v => crate::predecode::current_raw_at(&format!("/requests/{index}/params")).unwrap_or_else(|| json::marshal(v).unwrap_or_default().into_bytes()),
+            v => raw_params.unwrap_or_else(|| json::marshal(v).unwrap_or_default().into_bytes()),
         };
         // `handle_request` already turns panics into errors.
         match crate::handler::Handler::handle_request(self, &method, &params) {
@@ -129,7 +129,12 @@ impl Session {
         let encoded = if !token.is_empty() {
             self.batch_pages.lock().unwrap().remove(token).ok_or_else(|| ApiError::client("invalid batch continuation token"))?
         } else {
-            p.array("requests")?.iter().enumerate().map(|(i, r)| self.handle_batch_request(i, r)).collect()
+            {
+            // Raw params of every item, indexed in one pass (rescanning per item would be quadratic).
+            let requests = p.array("requests")?;
+            let mut raw = crate::predecode::current_batch_params().into_iter();
+            requests.iter().map(|r| self.handle_batch_request(r, raw.next().flatten())).collect()
+        }
         };
         Ok(self.paginate_batch_responses(encoded, max))
     }
