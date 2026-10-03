@@ -16,6 +16,7 @@ pub mod methods;
 pub mod program;
 pub mod session;
 pub mod snapshots;
+pub mod transpile;
 pub mod wire;
 
 pub(crate) mod checker;

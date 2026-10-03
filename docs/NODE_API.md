@@ -130,10 +130,10 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 22 | `parseConfigFile` | core | supported | config_test |
 | 23 | `createSourceFile` | core | not implemented |  |
 | 24 | `createSourceFileFromFile` | core | not implemented |  |
-| 25 | `transpileModule` | core | not implemented |  |
-| 26 | `transpileModuleFromFile` | core | not implemented |  |
-| 27 | `transpileDeclaration` | core | not implemented |  |
-| 28 | `transpileDeclarationFromFile` | core | not implemented |  |
+| 25 | `transpileModule` | core | supported | transpile_test |
+| 26 | `transpileModuleFromFile` | core | supported | transpile_test |
+| 27 | `transpileDeclaration` | core | supported | transpile_test (upstream api.test.ts expectations); observed: no TS9007 for `export function g() { return 1; }` under isolatedDeclarations, unverified against tsgo |
+| 28 | `transpileDeclarationFromFile` | core | supported | transpile_test |
 | 29 | `getDefaultProjectForFile` | core | supported | program_test |
 | 30 | `getSymbolAtPosition` | checker | not implemented |  |
 | 31 | `getSymbolsAtPositions` | checker | not implemented |  |
