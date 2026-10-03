@@ -296,17 +296,18 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   `callbackfs.go`) are ported in `crates/tsrs_api/src/callbackfs.rs`; like Go, invalid callback responses
   panic and become request errors (a panic on a worker thread can poison shared caches; not yet hardened).
 - Build orchestration runs the CLI's `tsc -b` orchestrator in-process through `tsrs_api::build::BuildBackend`
-  (installed by `tsrs --api`; library sessions without a backend report the methods as unsupported). Each
-  call builds a fresh orchestrator rather than reusing tasks like Go's `recheckAllProjects`; each leaks a
-  small system/orchestrator allocation.
+  (installed by `tsrs --api`; library sessions without a backend report the methods as unsupported). One
+  orchestrator per API handle, rechecked and graph-regenerated with unchanged tasks reused like Go's
+  `recheckAllProjects`; clean existence checks use the uncached filesystem.
 - Profiling (`startCPUProfile`, `stopCPUProfile`, `saveHeapProfile`) is not implemented (no pprof
   equivalent). `getCurrentLanguageServerSnapshot` returns Go's standalone-session client error; LSP-attached
   API sessions are not ported.
 - Node index tables are cached per live source file keyed by (address, node id) and dropped with the
   file's region; Go stores them on the file itself.
 - Re-entrancy: nested requests from client callbacks are served; the build orchestrator lock uses the
-  transport's `lock_for_request` (bounded error instead of deadlock). Checker leases are acquired by the
-  checker lane's setup without a contention probe yet.
+  transport's `lock_for_request` (bounded error instead of deadlock); the checker lane gates its API checker
+  lease the same way. Request params are validated with Go's strict JSON (unpaired surrogates, duplicate
+  members) before decoding.
 - Memory: snapshots free their programs, checkers, emit allocations and (new) a full build's shared
   processed-file data and loader resolution host when released (createSnapshot+release cycles stay flat;
   `tests/memory_test.rs`). Still leaked: the project-reference file mapper of each full build (freeing it
