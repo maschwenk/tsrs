@@ -2490,7 +2490,7 @@ impl Checker {
      * @return a signature of the call-like expression or undefined if one can't be found
      */
     // checker.go:8581
-    pub(crate) fn get_resolved_signature(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
+    pub fn get_resolved_signature(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
         let links = self.signature_links.get(node);
         // If getResolvedSignature has already been called, we will have cached the resolvedSignature.
         // However, it is possible that either candidatesOutArray was not passed in the first time,
