@@ -490,10 +490,22 @@ function truncate(d) {
 
 const proto = fs.readFileSync(path.join(here, "..", "..", "ts-ref", "tsc", "internal", "api", "proto.go"), "utf8");
 const methods = [...proto.matchAll(/^\s*Method\w+\s+Method\s*=\s*"([^"]+)"/gm)].map(m => m[1]);
+// Methods the candidate rejects as explicitly unsupported (never answered successfully) form their own category.
+const unsupportedInB = new Set();
+const answeredInB = new Set();
+for (const list of B.byTest.values()) {
+    for (const proc of list) {
+        for (const r of proc.records) {
+            if (r.kind === "response" && r.dir === "s2c") answeredInB.add(r.method);
+            if (r.kind === "error" && /unsupported|not implemented by tsrs/i.test(r.data ?? "")) unsupportedInB.add(r.method);
+        }
+    }
+}
 const rows = methods.map(m => {
     const c = perMethod.get(m);
     let status;
-    if (!c) status = "unpaired";
+    if (unsupportedInB.has(m) && !answeredInB.has(m)) status = "unsupported";
+    else if (!c) status = "unpaired";
     else if (c.differ > 0) status = "differs";
     else if (c.okEqual > 0) status = "equal";
     else if (c.equalUnordered > 0) status = "equal-unordered";

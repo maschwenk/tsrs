@@ -257,14 +257,38 @@ Negative controls:
 
 Every control tried so far was detected.
 
-Result at `b2769b8`:
+Result at `b2769b8`. The four categories are disjoint and cover all 172 methods:
 
-- 161 methods equal over 7428 successful exchanges; 160 of them also have a successful async pair.
-- 1 errors-only method.
-- 3 unsupported methods (profiling).
-- 7 methods differ: `updateSnapshot` `changes:{}` vs omitted, `cleanBuild` filesDeleted, missing ObjectFlags
-  `MembersResolved` in `getTypeAtLocation` and `getTypeFromTypeNode`, `elementFlags:[]` vs omitted, duplicate
-  fileNames for VS Code URIs, and the unsupported profiling method.
+- 161 equal: 7428 successful exchanges.
+  - 160 have both sync and async successful pairs.
+  - `getExportSymbolOfSymbol` has only a sync wire pair in the suites. Its async coverage is in
+    `async-export-symbol.test.ts`, below.
+- 1 error-only: `getCurrentLanguageServerSnapshot`.
+- 3 unsupported: `startCPUProfile`, `stopCPUProfile`, `saveHeapProfile`.
+- 7 differ:
+  - `createSnapshot` and `getDefaultProjectForFile`: duplicate VS Code URI root (see below);
+  - `updateSnapshot`: `changes:{}` where Go omits it;
+  - `cleanBuild`: `filesDeleted`;
+  - `getTypeAtLocation` and `getTypeFromTypeNode`: ObjectFlags `MembersResolved`;
+  - `getTargetOfType`: `elementFlags:[]` where Go omits it.
+
+VS Code URI roots (`probe-uri-filenames.ts`): 80 runs covering both binaries × sync/async × 4 input orders × 5
+repetitions.
+
+- Both servers report 5 `rootFiles`/`fileNames` for the 4 open documents, sorted by path, with one entry
+  duplicated.
+- Go duplicates a randomly varying document, in every input order and both modes. All 4 documents were seen
+  duplicated.
+- tsrs always duplicates the notebook cell, which is one of the variants Go produces.
+- The distinct sets are equal. The duplicate is a pinned-Go defect that tsrs reproduces deterministically. It
+  is not a candidate ordering bias, but the duplicate root is wrong on both sides.
+
+`getExportSymbolOfSymbol` through async (`async-export-symbol.test.ts`):
+
+- The public `Symbol.getExportSymbol()` answers from the async client's symbol cache.
+- The same test also sends a real `getExportSymbolOfSymbol` request with a valid symbol handle through the
+  same async connection, and checks that the answer is the cached export symbol.
+- This passes on Go and on `b2769b8`, and the wire request appears in both traces.
 
 ## Known limitations
 
