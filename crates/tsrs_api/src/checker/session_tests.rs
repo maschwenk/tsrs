@@ -381,3 +381,120 @@ fn session_responses_match_pinned_go() {
     assert_eq!(compared, GO_SHAPES.lines().filter(|l| !l.is_empty()).count());
     assert!(diffs.is_empty(), "{} of {compared} differ from pinned Go:\n{}", diffs.len(), diffs.join("\n"));
 }
+
+/// Exact uint64 handles through core's Session: values above 2^53 must reach the lookup unrounded (pinned Go
+/// reports the exact number), and small handles keep working. Recorded against pinned Go with
+/// testdata/node/numeric_ids_raw.mjs over raw sync/async payloads.
+#[test]
+fn uint64_handles_above_2_pow_53_are_looked_up_exactly() {
+    let s = session();
+    let raw = |method: &str, params: String| s.call_raw(method, &params);
+    let sp = format!(r#""snapshot":{},"project":{}"#, json::marshal(&n(s.snapshot)).unwrap(), json::marshal_string(&s.project));
+    // Small handles are unaffected (and register the project's type/signature registries first).
+    let t = s.call("getTypeAtPosition", &s.at("box:")).unwrap();
+    assert_eq!(raw("typeToString", format!(r#"{{{sp},"type":{}}}"#, json::marshal(&get(&t, "id")).unwrap())), Ok(Value::String("Box<number>".into())));
+    let over = s.call("getTypeAtPosition", &s.at("over(x: string)")).unwrap();
+    let Value::Array(sigs) = s.call("getSignaturesOfType", &s.sp(&[("type", get(&over, "id")), ("kind", n(0))])).unwrap() else { panic!() };
+    let ret = raw("getReturnTypeOfSignature", format!(r#"{{{sp},"objectId":{}}}"#, json::marshal(&get(&sigs[0], "id")).unwrap())).unwrap();
+    assert_eq!(get(&ret, "flags"), Value::Number(32.0), "string return type");
+    for id in ["9007199254740993", "9007199254740992", "18446744073709551615"] {
+        assert_eq!(
+            raw("getTypeAtPosition", format!(r#"{{"snapshot":{id},"project":{},"file":"/p/main.ts","position":0}}"#, json::marshal_string(&s.project))),
+            Err(format!("api: client error: snapshot {id} not found"))
+        );
+        assert_eq!(raw("getReturnTypeOfSignature", format!(r#"{{{sp},"objectId":{id}}}"#)), Err(format!("api: client error: signature handle {id} not found in project registry")));
+        assert_eq!(raw("getRestTypeOfSignature", format!(r#"{{{sp},"signature":{id}}}"#)), Err(format!("api: client error: signature handle {id} not found in project registry")));
+        // Escaped member names reach the same exact literal.
+        assert_eq!(
+            raw("getTypeAtPosition", format!(r#"{{"snap\u0073hot":{id},"project":{},"file":"/p/main.ts","position":0}}"#, json::marshal_string(&s.project))),
+            Err(format!("api: client error: snapshot {id} not found"))
+        );
+    }
+    // Type ids are uint32: above it is an invalid request (decode error), at the bound a lookup.
+    assert!(raw("typeToString", format!(r#"{{{sp},"type":4294967296}}"#)).unwrap_err().starts_with("api: invalid request: "));
+    assert_eq!(raw("typeToString", format!(r#"{{{sp},"type":4294967295}}"#)), Err("api: client error: type handle 4294967295 not found in project registry".to_string()));
+
+}
+
+/// Full type responses (objectFlags included) for the cases in testdata/go_probe/flags/cases.txt, compared
+/// with go_flags_b85298b6.jsonl recorded by `TestTsrsCheckerFlags` (same fixtures, same request order).
+#[test]
+fn type_flags_and_tuple_targets_match_pinned_go() {
+    const CASES: &str = include_str!("testdata/go_probe/flags/cases.txt");
+    const GOLDEN: &str = include_str!("testdata/go_probe/go_flags_b85298b6.jsonl");
+    let files = [
+        ("/t/tsconfig.json", include_str!("testdata/go_probe/flags/t/tsconfig.json")),
+        ("/t/main.ts", include_str!("testdata/go_probe/flags/t/main.ts")),
+        ("/m/tsconfig.json", include_str!("testdata/go_probe/flags/m/tsconfig.json")),
+        ("/m/models.ts", include_str!("testdata/go_probe/flags/m/models.ts")),
+    ];
+    let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files.iter().map(|(k, v)| (k.to_string(), v.to_string())), false)));
+    let session = Session::new(SessionOptions::new("/".to_string(), bundled::lib_path(), fs, false));
+    let s = S { session: session.clone(), snapshot: 0.0, project: String::new(), lines: Vec::new() };
+    let mut snaps = HashMap::new();
+    for fx in ["t", "m"] {
+        let r = s.call("createSnapshot", &obj(&[("openProjects", Value::Array(vec![Value::String(format!("/{fx}/tsconfig.json"))]))])).unwrap();
+        let Value::Number(snap) = get(&r, "snapshot") else { panic!() };
+        let Value::Array(projects) = get(&r, "projects") else { panic!() };
+        let Value::String(project) = get(&projects[0], "id") else { panic!() };
+        snaps.insert(fx, (snap, project));
+    }
+    let mut ours = Vec::new();
+    for line in CASES.lines().filter(|l| !l.is_empty()) {
+        let f: Vec<&str> = line.split('\t').collect();
+        let (fx, file, needle, kind, method) = (f[0], f[1], f[2], f[3], f[4]);
+        let (snap, project) = snaps[fx].clone();
+        let program = session.snapshot_data(snap as u64).unwrap().get_program(&tsrs_project::ID(project.clone())).unwrap();
+        let sf = program.get_source_file(&format!("/{fx}/{file}")).unwrap();
+        let text = sf.text();
+        let mut pos = text.find(needle).unwrap() + needle.len();
+        if kind != "alias" {
+            pos -= 1;
+        }
+        let mut node = Some(tsrs_astnav::get_touching_property_name(sf, pos as i32));
+        while let Some(n) = node {
+            if kind == "alias" && n.parent().is_some_and(|p| p.kind() == tsrs_ast::Kind::TypeAliasDeclaration) {
+                break;
+            }
+            if kind == "ArrayLiteralExpression" && n.kind() == tsrs_ast::Kind::ArrayLiteralExpression {
+                break;
+            }
+            node = n.parent();
+        }
+        let handle = session.node_handle_from(node.unwrap()).unwrap();
+        let sp = |extra: (&str, Value)| obj(&[("snapshot", n(snap)), ("project", Value::String(project.clone())), extra]);
+        let (method, prop) = match method.split_once("+prop:") {
+            Some((m, p)) => (m, Some(p)),
+            None => (method, None),
+        };
+        let label = format!("{fx}/{file} {method} @{needle}");
+        let mut r = s.call(method, &sp(("location", Value::String(handle.clone())))).unwrap();
+        if let Some(prop) = prop {
+            s.call("getPropertyOfType", &obj(&[("snapshot", n(snap)), ("project", Value::String(project.clone())), ("type", get(&r, "id")), ("name", Value::String(prop.into()))])).unwrap();
+            r = s.call(method, &sp(("location", Value::String(handle)))).unwrap();
+        }
+        ours.push((label.clone(), r.clone()));
+        if get(&r, "target") != Value::Null {
+            ours.push((format!("{label} target"), s.call("getTargetOfType", &sp(("objectId", get(&r, "id")))).unwrap()));
+        }
+    }
+    let golden: Vec<(String, Value)> = GOLDEN
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(|l| {
+            let v = json::unmarshal(l).unwrap();
+            let Value::String(q) = get(&v, "q") else { panic!() };
+            (q, get(&v, "r"))
+        })
+        .collect();
+    assert_eq!(golden.len(), ours.len(), "{ours:#?}");
+    let mut diffs = Vec::new();
+    for ((gq, go), (rq, rs)) in golden.iter().zip(&ours) {
+        assert_eq!(gq, rq);
+        let (go_n, rs_n) = (normalize(go, &mut Ids::default(), false), normalize(rs, &mut Ids::default(), false));
+        if go_n != rs_n {
+            diffs.push(format!("{gq}\n  go: {}\n  rs: {}", json::marshal(&go_n).unwrap(), json::marshal(&rs_n).unwrap()));
+        }
+    }
+    assert!(diffs.is_empty(), "{} of {} differ from pinned Go:\n{}", diffs.len(), golden.len(), diffs.join("\n"));
+}

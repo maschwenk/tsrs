@@ -40,6 +40,34 @@ fn unsigned(v: &Value, name: &str, max: f64) -> CheckerResult<u64> {
     }
 }
 
+fn json_kind(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
+/// A Go `uint64` (`SnapshotID`, `SymbolID`, `SignatureID`) at JSON pointer `pointer` of the current
+/// request. The parsed value is an f64, which rounds above 2^53 (9007199254740993 would become another
+/// handle). For a field of the top-level params object (`root`: the instance core dispatched and registered)
+/// the exact literal recorded by core's pre-decode (`predecode::exact_u64(root, key)`) is used. Nested
+/// fields (symbol references) have no recorded literal yet and use the parsed value. Range and
+/// integer-syntax errors of top-level fields are reported by core's pre-decode before dispatch; this only
+/// rejects what cannot be a uint64 at all.
+fn unsigned64(v: &Value, root: Option<&Value>, key: &str, pointer: &str, go_type: &str) -> CheckerResult<u64> {
+    match v {
+        Value::Number(n) if n.fract() == 0.0 && *n >= 0.0 && *n <= u64::MAX as f64 => {
+            Ok(root.and_then(|root| crate::predecode::exact_u64(root, key)).unwrap_or(*n as u64))
+        }
+        Value::Number(_) => Err(CheckerError::invalid(format!("cannot unmarshal JSON number into Go {go_type} within \"{pointer}\""))),
+        other => Err(CheckerError::invalid(format!("cannot unmarshal JSON {} into Go {go_type} within \"{pointer}\"", json_kind(other)))),
+    }
+}
+
 fn signed32(v: &Value, name: &str) -> CheckerResult<i32> {
     match v {
         Value::Number(n) if n.fract() == 0.0 && *n >= i32::MIN as f64 && *n <= i32::MAX as f64 => Ok(*n as i32),
@@ -50,20 +78,32 @@ fn signed32(v: &Value, name: &str) -> CheckerResult<i32> {
 /// A typed view over one request's params object.
 pub(crate) struct Params<'a> {
     obj: &'a tsrs_core::collections::OrderedMap<String, Value>,
+    /// JSON pointer of this object within the request params ("" at the top level).
+    pointer: String,
+    /// The top-level params value as dispatched by core (None for nested objects), for exact literals.
+    root: Option<&'a Value>,
 }
 
 impl<'a> Params<'a> {
     pub(crate) fn new(params: &'a Value, method: &str) -> CheckerResult<Params<'a>> {
-        Ok(Params { obj: object(params, method)? })
+        Ok(Params { obj: object(params, method)?, pointer: String::new(), root: Some(params) })
+    }
+
+    fn nested(v: &'a Value, pointer: String) -> CheckerResult<Params<'a>> {
+        Ok(Params { obj: object(v, &pointer)?, pointer, root: None })
     }
 
     pub(crate) fn raw(&self, name: &str) -> Option<&'a Value> {
         get(self.obj, name)
     }
 
-    /// Go `uint64` ids (snapshot, symbol, signature handles). Missing → 0.
+    /// Go `uint64` ids (snapshot, symbol, signature handles), exact over the full uint64 range. Missing → 0.
     pub(crate) fn u64(&self, name: &str) -> CheckerResult<u64> {
-        self.raw(name).map_or(Ok(0), |v| unsigned(v, name, MAX_SAFE_INTEGER))
+        self.u64_typed(name, "uint64")
+    }
+
+    pub(crate) fn u64_typed(&self, name: &str, go_type: &str) -> CheckerResult<u64> {
+        self.raw(name).map_or(Ok(0), |v| unsigned64(v, self.root, name, &format!("{}/{name}", self.pointer), go_type))
     }
 
     /// Go `uint32` (type ids, positions, symbol flags). Missing → 0.
@@ -146,7 +186,7 @@ impl<'a> Params<'a> {
     pub(crate) fn symbol_ref(&self, name: &str) -> CheckerResult<SymbolReference> {
         match self.raw(name) {
             None => Ok(SymbolReference::default()),
-            Some(v) => SymbolReference::decode(v, name),
+            Some(v) => SymbolReference::decode(v, format!("{}/{name}", self.pointer)),
         }
     }
 
@@ -154,7 +194,8 @@ impl<'a> Params<'a> {
     pub(crate) fn symbol_refs(&self, name: &str) -> CheckerResult<Vec<SymbolReference>> {
         self.array(name)?
             .iter()
-            .map(|v| if matches!(v, Value::Null) { Ok(SymbolReference::default()) } else { SymbolReference::decode(v, name) })
+            .enumerate()
+            .map(|(i, v)| if matches!(v, Value::Null) { Ok(SymbolReference::default()) } else { SymbolReference::decode(v, format!("{}/{name}/{i}", self.pointer)) })
             .collect()
     }
 }
@@ -226,17 +267,25 @@ pub(crate) struct SymbolReference {
 }
 
 impl SymbolReference {
-    fn decode(v: &Value, name: &str) -> CheckerResult<SymbolReference> {
+    /// `pointer`: JSON pointer of the reference in the request (`/symbol`, `/symbols/0`), used for exact
+    /// integer literals and Go-style error locations.
+    fn decode(v: &Value, pointer: String) -> CheckerResult<SymbolReference> {
         let Value::Object(_) = v else {
-            return Err(wrong_type(name, "a symbol reference object"));
+            return Err(CheckerError::invalid(format!("cannot unmarshal JSON {} into Go api.SymbolReference within \"{pointer}\"", json_kind(v))));
         };
-        let p = Params::new(v, name)?;
+        let p = Params::nested(v, pointer)?;
         let file = match p.raw("file") {
             None => None,
             Some(f @ Value::Object(_)) => Some(f.clone()),
             Some(_) => return Err(wrong_type("file", "a source file descriptor object")),
         };
-        Ok(SymbolReference { kind: p.u32("kind")?, file, snapshot: p.u64("snapshot")?, project: p.string("project")?.to_string(), id: p.u64("id")? })
+        Ok(SymbolReference {
+            kind: p.u32("kind")?,
+            file,
+            snapshot: p.u64_typed("snapshot", "api.SnapshotID")?,
+            project: p.string("project")?.to_string(),
+            id: p.u64_typed("id", "api.SymbolID")?,
+        })
     }
 
     /// The `path` of a file reference's descriptor.

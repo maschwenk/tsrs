@@ -145,6 +145,15 @@ impl<'h> Setup<'h> {
     pub(crate) fn type_response(&mut self, t: P<Type>) -> CheckerResult<Value> {
         let id = self.register_type(t)?;
         let mut o = type_response_base(t, id);
+        // The port answers member queries on instantiated references through lazy member tables without
+        // setting MembersResolved; report the flag where pinned Go's resolveStructuredTypeMembers would have
+        // set it (only when such a query actually happened, never for unresolved types).
+        if t.flags().intersects(TypeFlags::Object)
+            && !t.object_flags().intersects(ObjectFlags::MembersResolved)
+            && self.checker.members_resolved_like_go(t)
+        {
+            o.num("objectFlags", (t.object_flags() | ObjectFlags::MembersResolved).bits() as f64);
+        }
         if let Some(symbol) = t.symbol() {
             o.set("symbol", compact_symbol_reference(self.sd.host, symbol)?);
         }
@@ -318,7 +327,11 @@ fn type_response_base(t: P<Type>, id: u32) -> Obj {
         if of.intersects(ObjectFlags::Reference) {
             if tsrs_checker::is_tuple_type_target(t) {
                 let tuple = t.as_tuple_type();
-                late.set("elementFlags", Value::Array(tuple.element_flags().iter().map(|f| Value::Number(f.bits() as f64)).collect()));
+                // `elementFlags` is `omitempty`: an empty tuple target omits it (fixedLength/readonly are pointers).
+                let element_flags = tuple.element_flags();
+                if !element_flags.is_empty() {
+                    late.set("elementFlags", Value::Array(element_flags.iter().map(|f| Value::Number(f.bits() as f64)).collect()));
+                }
                 late.num("fixedLength", tuple.fixed_length() as f64);
                 late.set("readonly", Value::Bool(tuple.is_readonly()));
             }
