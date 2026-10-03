@@ -878,4 +878,56 @@ pub(crate) fn calculate_indent(text: &str, pos: i32, end: i32) -> i32 {
     current_line_indent
 }
 
-// lineCharacterCache (source map line/character lookups) is not ported: source map emit is out of scope.
+// utilities.go:886
+// lineCharacterCache provides cached line/character lookups for a source file,
+// optimized for monotonically increasing positions (e.g., during source map emit).
+//
+// When positions increase within the same line, only the delta between the last
+// position and the new position needs to be scanned for UTF-16 code unit counts,
+// turning what would be O(n²) into O(n) for long lines.
+//
+// Character offsets are measured in UTF-16 code units per the source map specification.
+#[derive(Clone, Copy)]
+pub(crate) struct lineCharacterCache {
+    pub(crate) line_map: &'static [TextPos],
+    pub(crate) text: &'static str,
+    pub(crate) cached_line: i32,
+    pub(crate) cached_pos: i32,
+    pub(crate) cached_char: UTF16Offset,
+    pub(crate) has_cached: bool,
+}
+
+// utilities.go:903
+pub(crate) fn new_line_character_cache(source: &'static dyn tsrs_sourcemap::Source) -> lineCharacterCache {
+    lineCharacterCache { line_map: source.ecma_line_map(), text: source.text(), cached_line: 0, cached_pos: 0, cached_char: 0, has_cached: false }
+}
+
+impl lineCharacterCache {
+    // utilities.go:912
+    // getLineAndCharacter returns the 0-based line number and UTF-16 code unit
+    // offset from the start of that line for the given byte position.
+    pub(crate) fn get_line_and_character(&mut self, pos: i32) -> (i32, UTF16Offset) {
+        let line = scanner::compute_line_of_position(self.line_map, pos);
+        let line_start = self.line_map[line as usize] as i32;
+        // When pos is beyond the source text (e.g., for error-recovery tokens like
+        // missing closing braces), we can't slice past the text end. Compute the
+        // UTF-16 length up to EOF and add the remaining byte offset arithmetically,
+        // matching TypeScript's computeLineAndCharacterOfPosition which uses
+        // arithmetic (position - lineStarts[lineNumber]) and handles this implicitly.
+        let end_pos = pos.min(self.text.len() as i32);
+        let mut character = if self.has_cached && line == self.cached_line && end_pos >= self.cached_pos {
+            // Incremental: only count UTF-16 code units from the last cached position.
+            self.cached_char + utf16_len(&self.text[self.cached_pos as usize..end_pos as usize])
+        } else {
+            // Full computation from line start.
+            utf16_len(&self.text[line_start as usize..end_pos as usize])
+        };
+        let cached_char = character;
+        character += (pos - end_pos) as UTF16Offset;
+        self.cached_line = line;
+        self.cached_pos = end_pos;
+        self.cached_char = cached_char;
+        self.has_cached = true;
+        (line, character)
+    }
+}

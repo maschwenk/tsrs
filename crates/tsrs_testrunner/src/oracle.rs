@@ -59,7 +59,7 @@ pub fn render_record(rec: &Value) -> Outcome {
         let texts = &rec["texts"];
         let diags: Vec<Diag> =
             rec["diags"].as_array().map(|a| a.iter().map(|d| to_diag(d, texts, &mut file_cache)).collect()).unwrap_or_default();
-        Outcome::Baseline(tsbaseline::do_error_baseline(&files, &diags, rec["pretty"].as_bool().unwrap_or(false)), None, None)
+        Outcome::Baseline(tsbaseline::do_error_baseline(&files, &diags, rec["pretty"].as_bool().unwrap_or(false)), None, None, None)
     }
 }
 
@@ -150,7 +150,7 @@ mod tests {
     fn renders_like_go() {
         // Go-captured diagnostics (message chains, related information, two files) and Go's own rendering.
         let rec: Value = serde_json::from_str(include_str!("../testdata/importTag23.oracle.json")).unwrap();
-        let Outcome::Baseline(actual, _, _) = render_record(&rec) else { panic!("expected a baseline") };
+        let Outcome::Baseline(actual, _, _, _) = render_record(&rec) else { panic!("expected a baseline") };
         assert_eq!(actual, rec["baseline"].as_str().unwrap());
     }
 }
