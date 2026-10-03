@@ -9,26 +9,67 @@ use printer::PrivateIdentifierKind;
 impl classFieldsTransformer {
     // classfields.go:1889
     pub(crate) fn visit_class_declaration(&self, node: P<Node>) -> Option<P<Node>> {
-        let _ = node;
+        self.visit_in_new_class_lexical_environment(node, Self::visit_class_declaration_in_new_class_lexical_environment)
+    }
+
+    // classfields.go:1893
+    pub(crate) fn visit_class_declaration_in_new_class_lexical_environment(&self, node: P<Node>, facts: classFacts) -> Option<P<Node>> {
+        let _ = (node, facts);
         unimplemented!("classfields part 2")
     }
 
     // classfields.go:2003
     pub(crate) fn visit_class_expression(&self, node: P<Node>) -> Option<P<Node>> {
-        let _ = node;
+        self.visit_in_new_class_lexical_environment(node, Self::visit_class_expression_in_new_class_lexical_environment)
+    }
+
+    // classfields.go:2007
+    pub(crate) fn visit_class_expression_in_new_class_lexical_environment(&self, node: P<Node>, facts: classFacts) -> Option<P<Node>> {
+        let _ = (node, facts);
         unimplemented!("classfields part 2")
     }
 
     // classfields.go:2181
     pub(crate) fn visit_class_static_block_declaration(&self, node: P<Node>) -> Option<P<Node>> {
-        let _ = node;
-        unimplemented!("classfields part 2")
+        if !self.should_transform_private_elements_or_class_static_blocks.get() {
+            return self.visitor().visit_each_child(Some(node));
+        }
+        // ClassStaticBlockDeclaration for classes are transformed in visitClassDeclaration/visitClassExpression.
+        None
     }
 
     // classfields.go:2194
+    // visitThisExpression replaces Strada's substituteThisExpression / onSubstituteNode.
+    // Strada substitutes `this` at emit time; we do it eagerly during transformation.
+    //
+    // The Strada noSubstitution set (ensureDynamicThisIfNeeded) is not needed because
+    // transformAutoAccessor() passes the receiver directly rather than emitting `this`.
     pub(crate) fn visit_this_expression(&self, node: P<Node>) -> Option<P<Node>> {
-        let _ = node;
-        unimplemented!("classfields part 2")
+        if self.inside_computed_property_name.get() && self.should_transform_this_in_static_initializers.get() && self.lexical_environment.get().is_some_and(|l| l.data.get().is_some()) {
+            // Don't replace `this` in computed property names for ES-decorated classes.
+            // The esDecorator transformer wraps them in an arrow IIFE where `this` already
+            // refers to the correct outer scope.
+            if !self.lexical_environment.get().unwrap().data.get().unwrap().facts.get().intersects(classFacts::ClassWasDecorated) || self.legacy_decorators {
+                if let Some(class_this) = self.try_get_class_this_no_container() {
+                    return Some(class_this);
+                }
+            }
+        }
+        if self.should_transform_this_in_static_initializers.get()
+            && self.current_class_element.get().is_some_and(|e| ast::is_class_static_block_declaration(e) || (ast::is_property_declaration(e) && ast::has_static_modifier(e)))
+            && self.lexical_environment.get().is_some_and(|l| l.data.get().is_some())
+        {
+            if let Some(class_this) = self.try_get_class_this_no_container() {
+                return Some(class_this);
+            }
+            // When the class was decorated with legacy decorators and no class constructor
+            // reference is available, the decorator may replace the constructor, so `this`
+            // cannot reliably point to the class. Use `(void 0)` instead.
+            if self.lexical_environment.get().unwrap().data.get().unwrap().facts.get().intersects(classFacts::ClassWasDecorated) && self.legacy_decorators {
+                return Some(self.factory().new_parenthesized_expression(self.factory().new_void_zero_expression()));
+            }
+        }
+        Some(node)
     }
 
     // classfields.go:2365
@@ -45,14 +86,58 @@ impl classFieldsTransformer {
 
     // classfields.go:2853
     pub(crate) fn visit_invalid_super_property(&self, node: P<Node>) -> Option<P<Node>> {
-        let _ = node;
-        unimplemented!("classfields part 2")
+        if ast::is_property_access_expression(node) {
+            return Some(self.factory().update_property_access_expression(node, self.factory().new_void_zero_expression(), None, node.name().unwrap(), node.flags()));
+        }
+        Some(self.factory().update_element_access_expression(
+            node,
+            self.factory().new_void_zero_expression(),
+            None,
+            self.visitor().visit_node(Some(node.as_element_access_expression().argument_expression)).unwrap(),
+            node.flags(),
+        ))
     }
 
     // classfields.go:2876
+    // getPropertyNameExpressionIfNeeded transforms a computed property name, then either returns an expression
+    // which caches the value of the result or the expression itself if the value is either unused or safe to
+    // inline into multiple locations.
+    // shouldHoist indicates whether the expression needs to be reused (i.e., for an initializer or a decorator).
     pub(crate) fn get_property_name_expression_if_needed(&self, name: P<Node>, should_hoist: bool) -> Option<P<Node>> {
-        let _ = (name, should_hoist);
-        unimplemented!("classfields part 2")
+        if !ast::is_computed_property_name(name) {
+            return None;
+        }
+        let cache_assignment = find_computed_property_name_cache_assignment(self.emit_context(), name);
+        // Switch to outer lex env for computed property name expressions, matching
+        // Strada reference's onEmitNode behavior for ComputedPropertyName.
+        let saved_lexical_environment = self.lexical_environment.get();
+        let saved_inside_computed_property_name = self.inside_computed_property_name.get();
+        self.inside_computed_property_name.set(true);
+        if let Some(previous) = self.lexical_environment.get().and_then(|l| l.previous) {
+            self.lexical_environment.set(Some(previous));
+        }
+        let expression = self.visitor().visit_node(name.expression()).unwrap();
+        self.lexical_environment.set(saved_lexical_environment);
+        self.inside_computed_property_name.set(saved_inside_computed_property_name);
+        let inner_expression = ast::skip_partially_emitted_expressions(expression);
+        let inlinable = is_simple_inlineable_expression(inner_expression);
+        let already_transformed = cache_assignment.is_some()
+            || (ast::is_assignment_expression(inner_expression, true /*excludeCompoundAssignment*/)
+                && ast::is_identifier(inner_expression.as_binary_expression().left)
+                && is_generated_identifier(self.emit_context(), inner_expression.as_binary_expression().left));
+        if !already_transformed && !inlinable && should_hoist {
+            let generated_name = self.factory().new_generated_name_for_node(name);
+            if self.requires_block_scoped_var() {
+                self.emit_context().add_lexical_declaration(generated_name);
+            } else {
+                self.emit_context().add_variable_declaration(generated_name);
+            }
+            return Some(self.factory().new_assignment_expression(generated_name, expression));
+        }
+        if inlinable || ast::is_identifier(inner_expression) {
+            return None;
+        }
+        Some(expression)
     }
 
     // classfields.go:2910
