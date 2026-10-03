@@ -237,7 +237,6 @@ macro_rules! enum_go_json {
 
 enum_go_json! {
     ModuleDetectionKind { None, Auto, Legacy, Force }
-    ModuleResolutionKind { Unknown, Classic, Node10, Node16, NodeNext, Bundler }
     NewLineKind { None, CRLF, LF }
 }
 
@@ -260,7 +259,7 @@ macro_rules! int32_go_json {
     };
 }
 
-int32_go_json! { ModuleKind ScriptTarget JsxEmit }
+int32_go_json! { ModuleKind ScriptTarget JsxEmit ModuleResolutionKind }
 
 fn object<'a>(value: &'a Value, what: &str) -> Result<Option<&'a OrderedMap<String, Value>>, String> {
     match value {

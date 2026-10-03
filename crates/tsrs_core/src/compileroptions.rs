@@ -15,9 +15,9 @@ pub struct PluginImport {
 // Go `[]string` options are `Option<Vec<String>>` because the Go code distinguishes nil (unset) from empty.
 #[derive(Clone, Debug, Default)]
 pub struct CompilerOptions {
-    /// API only (`gojson`): `moduleResolution`, `moduleDetection` and `newLine` numbers decoded from the wire with
-    /// no Rust variant (Go keeps any int32), by JSON name. The typed field stays at its default and the value is
-    /// echoed back. (`target`, `module` and `jsx` hold any int32 directly.)
+    /// API only (`gojson`): `moduleDetection` and `newLine` numbers decoded from the wire with no Rust variant (Go
+    /// keeps any int32), by JSON name. The typed field stays at its default (which behaves like Go's fallback) and
+    /// the value is echoed back. (`target`, `module`, `jsx` and `moduleResolution` hold any int32 directly.)
     pub api_unknown_enum_values: Vec<(&'static str, i32)>,
 
     pub allow_js: Tristate,
@@ -458,29 +458,49 @@ pub const RESOLUTION_MODE_NONE: ResolutionMode = ModuleKind::None;
 pub const RESOLUTION_MODE_COMMON_JS: ResolutionMode = ModuleKind::CommonJS;
 pub const RESOLUTION_MODE_ESM: ResolutionMode = ModuleKind::ESNext;
 
-#[repr(i32)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-pub enum ModuleResolutionKind {
-    #[default]
-    Unknown = 0,
-    // Deprecated: Do not use outside of options parsing and validation.
-    Classic = 1,
-    // Deprecated: Do not use outside of options parsing and validation.
-    Node10 = 2,
-    // Starting with node16, node's module resolver has significant departures from traditional cjs resolution
-    // to better support ECMAScript modules and their use within node - however more features are still being added.
-    // TypeScript's Node ESM support was introduced after Node 12 went end-of-life, and Node 14 is the earliest stable
-    // version that supports both pattern trailers - *but*, Node 16 is the first version that also supports ECMAScript 2022.
-    // In turn, we offer both a `NodeNext` moving resolution target, and a `Node16` version-anchored resolution target
-    Node16 = 3,
-    NodeNext = 99, // Not simply `Node16` so that compiled code linked against TS can use the `Next` value reliably (same as with `ModuleKind`)
-    Bundler = 100,
+/// Go `type ModuleResolutionKind int32`: any int32 is representable (the API can receive values with no named constant; Go keeps
+/// them and panics only when a module is actually resolved, see `tsrs_module` resolver). Named values are
+/// associated constants, usable as patterns.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub struct ModuleResolutionKind(pub i32);
+
+#[allow(non_upper_case_globals)]
+impl ModuleResolutionKind {
+    pub const Unknown: ModuleResolutionKind = ModuleResolutionKind(0);
+    pub const Classic: ModuleResolutionKind = ModuleResolutionKind(1);
+    pub const Node10: ModuleResolutionKind = ModuleResolutionKind(2);
+    pub const Node16: ModuleResolutionKind = ModuleResolutionKind(3);
+    pub const NodeNext: ModuleResolutionKind = ModuleResolutionKind(99);
+    pub const Bundler: ModuleResolutionKind = ModuleResolutionKind(100);
+
+    /// The Go constant name of a named value.
+    pub fn name(self) -> Option<&'static str> {
+        match self.0 {
+            0 => Some("Unknown"),
+            1 => Some("Classic"),
+            2 => Some("Node10"),
+            3 => Some("Node16"),
+            99 => Some("NodeNext"),
+            100 => Some("Bundler"),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Debug for ModuleResolutionKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.name() {
+            Some(n) => f.write_str(n),
+            None => write!(f, "ModuleResolutionKind({})", self.0),
+        }
+    }
 }
 
 impl ModuleResolutionKind {
     /// The Go int32 value.
     pub fn value(self) -> i32 {
-        self as i32
+        self.0
     }
 }
 
@@ -507,6 +527,7 @@ impl ModuleResolutionKind {
             ModuleResolutionKind::Node16 => "Node16",
             ModuleResolutionKind::NodeNext => "NodeNext",
             ModuleResolutionKind::Bundler => "Bundler",
+            _ => panic!("unhandled case in ModuleResolutionKind.String"),
         }
     }
 }

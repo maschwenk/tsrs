@@ -117,15 +117,6 @@ struct RequestEcho {
     open_files: Option<Vec<DocumentIdentifier>>,
 }
 
-/// Pinned Go keeps a `moduleResolution` number with no named kind and then panics (`Unexpected moduleResolution`)
-/// when resolving; tsrs rejects it before building instead.
-pub(crate) fn reject_unknown_module_resolution(options: &tsrs_core::CompilerOptions) -> ApiResult<()> {
-    match options.api_unknown_enum_values.iter().find(|(k, _)| *k == "moduleResolution") {
-        Some((_, n)) => Err(ApiError::client(format!("unsupported moduleResolution value {n} (not a ModuleResolutionKind)"))),
-        None => Ok(()),
-    }
-}
-
 impl Session {
     fn create_programs_request(&self, item: &Value, what: &str, i: usize) -> ApiResult<APICreateProgramRequest> {
         if matches!(item, Value::Null) {
@@ -137,7 +128,6 @@ impl Session {
         let root_file_names = DocumentIdentifier::parse_list(p.array("rootFiles")?, "rootFiles")?.iter().map(|d| d.to_absolute_file_name(cwd)).collect();
         let mut options = gojson::compiler_options_from_go_json(p.get("compilerOptions")).map_err(ApiError::invalid_request)?;
         crate::predecode::exact_compiler_options_ints(p.get("compilerOptions"), &mut options);
-        reject_unknown_module_resolution(&options)?;
         let mut request = APICreateProgramRequest {
             root_file_names,
             compiler_options: Some(P::new(options)),

@@ -372,15 +372,25 @@ mod tests {
         assert_eq!(all(&r), ["index.d.ts", "index.js", "tsconfig.tsbuildinfo"], "{}", json::marshal(&r).unwrap());
         assert!(!dir.join("core/out/index.js").exists());
 
-        // moduleResolution with no named kind: Go creates the orchestrator (and panics while building); tsrs keeps
-        // creation, cleaning and disposal and fails builds with a stable error (runtime f552 review).
-        let r = call(&s, "createBuildOrchestrator", r#"{"rootNames":["app"],"compilerOptions":{"moduleResolution":12345,"checkers":9223372036854775807}}"#);
+        // moduleResolution with no named kind (runtime 0689274 review): pinned Go builds import-free projects and
+        // panics only when a module is resolved; tsrs answers a stable client error there and stays usable.
+        let r = call(&s, "createBuildOrchestrator", r#"{"rootNames":["core"],"compilerOptions":{"moduleResolution":12345,"checkers":9223372036854775807}}"#);
+        let other = json::marshal(get(&r, "buildOrchestratorID")).unwrap();
+        let r = call(&s, "build", &format!("{{\"buildOrchestratorID\":{other}}}"));
+        assert_eq!(get(&r, "status"), &Value::Number(0.0), "{}", json::marshal(&r).unwrap());
+        assert_eq!(get(get(&r, "statistics"), "ProjectsBuilt"), &Value::Number(1.0));
+        assert!(dir.join("core/out/index.js").exists());
+        let r = call(&s, "cleanBuild", &format!("{{\"buildOrchestratorID\":{other}}}"));
+        assert!(json::marshal(get(&r, "filesDeleted")).unwrap().contains("index.js"), "{}", json::marshal(&r).unwrap());
+        assert_eq!(call(&s, "disposeBuildOrchestrator", &format!("{{\"buildOrchestratorID\":{other}}}")), Value::Bool(true));
+        let r = call(&s, "createBuildOrchestrator", r#"{"rootNames":["app"],"compilerOptions":{"moduleResolution":-1}}"#);
         let other = json::marshal(get(&r, "buildOrchestratorID")).unwrap();
         let e = s.handle_request("build", format!("{{\"buildOrchestratorID\":{other}}}").as_bytes()).unwrap_err();
-        assert_eq!(e.to_string(), "api: client error: cannot build with unsupported moduleResolution value 12345 (not a ModuleResolutionKind)");
+        assert_eq!(e.to_string(), "api: client error: unsupported moduleResolution value -1 (not a ModuleResolutionKind)");
         let r = call(&s, "cleanBuild", &format!("{{\"buildOrchestratorID\":{other}}}"));
         assert_eq!(get(&r, "status"), &Value::Number(0.0), "{}", json::marshal(&r).unwrap());
         assert_eq!(call(&s, "disposeBuildOrchestrator", &format!("{{\"buildOrchestratorID\":{other}}}")), Value::Bool(true));
+        call(&s, "createBuildOrchestrator", r#"{"rootNames":["app"]}"#);
 
         // Go `*int` builders: any int64 is accepted (API builds run one builder regardless; runtime-f2-review).
         for n in ["2147483648", "-2147483649", "9223372036854775807"] {

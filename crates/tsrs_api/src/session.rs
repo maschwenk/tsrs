@@ -438,6 +438,11 @@ impl Handler for Session {
                     .map(String::as_str)
                     .or_else(|| panic.downcast_ref::<&str>().copied())
                     .unwrap_or("unknown panic");
+                // tsrs_module's resolver, like pinned Go's (resolver.go `Unexpected moduleResolution`), panics when a
+                // module is resolved with a moduleResolution number that names no kind; Go's server crashes there.
+                if let Some(n) = message.strip_prefix("Unexpected moduleResolution: ") {
+                    return Err(ApiError::client(format!("unsupported moduleResolution value {n} (not a ModuleResolutionKind)")));
+                }
                 Err(ApiError::internal(format!("panic: {message}")))
             }
         }

@@ -456,7 +456,7 @@ fn option_value_to_json(v: &CompilerOptionsValue) -> Value {
             tsrs_core::Tristate::Unknown => Value::Null,
         },
         V::ModuleKind(k) => Value::Number(k.value() as f64),
-        V::ModuleResolutionKind(k) => Value::Number(*k as i32 as f64),
+        V::ModuleResolutionKind(k) => Value::Number(k.value() as f64),
         V::ModuleDetectionKind(k) => Value::Number(*k as i32 as f64),
         V::ScriptTarget(k) => Value::Number(k.value() as f64),
         V::JsxEmit(k) => Value::Number(k.value() as f64),

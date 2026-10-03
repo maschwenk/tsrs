@@ -60,9 +60,6 @@ pub(crate) struct BuildState {
 
 struct Orchestrator {
     backend: Box<dyn BuildOrchestrator>,
-    /// A `moduleResolution` number with no named kind: pinned Go creates the orchestrator and panics while
-    /// resolving modules during a build (`Unexpected moduleResolution`); tsrs fails the build with a stable error.
-    unknown_module_resolution: Option<i32>,
 }
 
 fn outcome_response(o: BuildOutcome, clean: bool) -> Value {
@@ -98,9 +95,6 @@ impl Session {
         if let Some(options) = &mut compiler_options {
             crate::predecode::exact_compiler_options_ints(p.get("compilerOptions"), options);
         }
-        let unknown_module_resolution = compiler_options
-            .as_ref()
-            .and_then(|o| o.api_unknown_enum_values.iter().find(|(k, _)| *k == "moduleResolution").map(|(_, n)| *n));
         let orchestrator = backend.create(BuildRequest {
             fs: self.snapshot_host_fs(),
             default_library_path: self.default_library_path().to_string(),
@@ -110,13 +104,15 @@ impl Session {
             compiler_options,
         });
         let id = self.build_state.next_id.fetch_add(1, Ordering::SeqCst) + 1;
-        self.build_state.orchestrators.lock().unwrap().insert(id, Orchestrator { backend: orchestrator, unknown_module_resolution });
+        // A build that failed by unwinding (the moduleResolution boundary above) leaves the map intact; its lock
+        // is only poisoned.
+        self.build_state.orchestrators.lock().unwrap_or_else(|e| e.into_inner()).insert(id, Orchestrator { backend: orchestrator });
         Ok(Obj::new().set("buildOrchestratorID", Value::Number(id as f64)).build())
     }
 
     pub(crate) fn handle_dispose_build_orchestrator(&self, p: Params) -> ApiResult<Value> {
         let id = p.u64("buildOrchestratorID")?;
-        match self.build_state.orchestrators.lock().unwrap().remove(&id) {
+        match self.build_state.orchestrators.lock().unwrap_or_else(|e| e.into_inner()).remove(&id) {
             Some(_) => Ok(Value::Bool(true)),
             None => Err(ApiError::internal("build orchestrator not found while disposing")),
         }
@@ -139,14 +135,9 @@ impl Session {
             };
             return Err(ApiError::internal(what));
         };
-        let outcome = if clean {
-            o.backend.clean(project, only_references)
-        } else {
-            if let Some(n) = o.unknown_module_resolution {
-                return Err(ApiError::client(format!("cannot build with unsupported moduleResolution value {n} (not a ModuleResolutionKind)")));
-            }
-            o.backend.build(project, only_references)
-        };
+        // A moduleResolution number with no named kind fails (stable client error, see `Session::handle_request`)
+        // only where a module is actually resolved, where pinned Go panics; import-free builds succeed as in Go.
+        let outcome = if clean { o.backend.clean(project, only_references) } else { o.backend.build(project, only_references) };
         Ok(outcome_response(outcome, clean))
     }
 }

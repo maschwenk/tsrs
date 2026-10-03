@@ -349,10 +349,12 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   are int32 newtypes (as in Go), so any number Go accepts is kept, echoed and compiled with Go's semantics:
   switch defaults and comparisons see the raw value (e.g. `target:12345` transforms maximally, `module:-1`
   emits CommonJS, `jsx:12345` keeps JSX without the "--jsx not set" error); checked against
-  runtime-f2-review's cases. `moduleResolution` with no named kind (pinned Go panics while resolving) is a
-  client error on createPrograms; createBuildOrchestrator accepts it (ID, clean and dispose work as in Go)
-  and `build`/`buildReferences` return a stable client error where Go panics (Go could still succeed for a
-  project that never resolves a module). Unknown `moduleDetection`/`newLine` numbers are echoed and
+  runtime-f2-review's cases. `moduleResolution` is an int32 newtype too: a number with no named kind is kept
+  (createPrograms, createBuildOrchestrator, builds of import-free projects and their outputs/cleans work as
+  in Go), and resolving a module with it reaches the ported resolver's `Unexpected moduleResolution` panic at
+  the same point as pinned Go (resolver.go `ResolveModuleName`); Go's server crashes there, tsrs converts that
+  panic to the stable client error `unsupported moduleResolution value N (not a ModuleResolutionKind)` and
+  stays usable (orchestrator map lock poisoning is tolerated). Unknown `moduleDetection`/`newLine` numbers are echoed and
   compile like Go's fallback (runtime f552 review). Go `*int` options (`maxNodeModuleJsDepth`, `builders`,
   `checkers`) take any int64, exact from the request literal and echoed exactly (`json::Value::Integer`);
   above int64 is out of range. `checkers` is clamped like Go (`max(min(n, files, 256), 1)`; tsrs used to

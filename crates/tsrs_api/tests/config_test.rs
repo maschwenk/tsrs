@@ -370,9 +370,13 @@ fn unknown_enum_values_and_go_int_options_match_go() {
     let diags = raw("getSemanticDiagnostics", &format!(r#"{{"snapshot":{snap},"project":"/dev/null/synthetic/1"}}"#)).unwrap();
     assert!(diags.contains("\"code\":7026") && !diags.contains("\"code\":17004"), "{diags}");
     assert!(json_text(&r).contains("\"jsx\":12345"));
-    // moduleResolution: pinned Go panics while resolving; tsrs answers a stable error.
-    let e = call_err(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"moduleResolution":12345}}}}]}}"#, quote(&a)));
-    assert_eq!(e, "api: client error: unsupported moduleResolution value 12345 (not a ModuleResolutionKind)");
+    // moduleResolution with no named kind: an import-free program works as in Go; resolving a module is where
+    // pinned Go panics, and tsrs answers a stable client error and stays usable.
+    call(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"moduleResolution":12345}}}}]}}"#, quote(&a)));
+    let imp = dir.write("imp.ts", "import { a } from './a';\nexport const b = a;\n");
+    let e = call_err(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"moduleResolution":-1}}}}]}}"#, quote(&imp)));
+    assert_eq!(e, "api: client error: unsupported moduleResolution value -1 (not a ModuleResolutionKind)");
+    call(&s, "createSnapshot", "{}");
     // Go `*int`: any int64, echoed exactly; beyond int64, fractions and exponents are invalid (accepted builders
     // values are covered with the CLI build backend in tsrs_cli `api::tests`).
     for n in ["2147483648", "-2147483649", "9223372036854775807"] {

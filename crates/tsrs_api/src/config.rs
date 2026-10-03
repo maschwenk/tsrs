@@ -54,7 +54,7 @@ pub fn options_value_to_json(v: &CompilerOptionsValue) -> Value {
             tsrs_core::Tristate::True => Value::Bool(true),
         },
         CompilerOptionsValue::ModuleKind(x) => Value::Number(x.value() as f64),
-        CompilerOptionsValue::ModuleResolutionKind(x) => Value::Number(*x as i32 as f64),
+        CompilerOptionsValue::ModuleResolutionKind(x) => Value::Number(x.value() as f64),
         CompilerOptionsValue::ModuleDetectionKind(x) => Value::Number(*x as i32 as f64),
         CompilerOptionsValue::ScriptTarget(x) => Value::Number(x.value() as f64),
         CompilerOptionsValue::JsxEmit(x) => Value::Number(x.value() as f64),
