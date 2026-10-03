@@ -535,8 +535,20 @@ identical to main in both modes, fourslash 4066/63, `-D warnings` check) held fo
 
 | date | commit | wave | `.js` pass / total | `.js.map` | `.sourcemap.txt` | oracle | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-03 | main d3a2598 (#9 merged) | E1+E2 | 1364 / 15197 | — | — | (as below) | declaration metric (`TSRS_TEST_DTS_ONLY=1`, below): 1754 pass / 0 fail / 13 crash (declarationMap) |
 | 2026-10-03 | emit/core (E2) | E1+E2 | 1364 / 15197 (12032 crash at stubs, 1800 skip) | — | — | dts: 2325/2325 files identical, 103/103 packages; full: 0 files (stubs: typeeraser 91, importelision 5, metadata 4; 3 packages emit nothing in both) | multi-threaded test programs give the same js pass list (one timeout aside) |
 | 2026-10-03 | emit/incremental | E13+E14 (+E15 harness) | 1364 / 15197 (unchanged: same pass list as main) | — | — | `--buildinfo -- --noEmit`: 100/100 tsbuildinfo identical, 103/103 packages (exit codes and diagnostics too); `--buildinfo -- --emitDeclarationOnly --declarationMap false`: 2425/2425 files identical (d.ts + tsbuildinfo with emit signatures), 103/103 packages | tsctests harness (`cargo test --release -p tsrs_cli tsctests`): tsc 64/216, tsbuild 17/190 pass; 294 stop at other waves' stubs (typeeraser 215, importelision 64, commonjsmodule 12, sourcemap 2, esmodule 1), 31 fail on unported --help/--init/--showConfig/--locale/--generateTrace |
+
+### E12 option sweep, declaration side (emit/core-2)
+
+`TSRS_TEST_DTS_ONLY=1 TSRS_TEST_RESULTS=<dir> tsrs-test run --suite all --baselines js` forces `emitDeclarationOnly`
+on every test that emits declarations (and `noEmit` on the others) and compares only the `.d.ts` outputs with the
+`.d.ts` sections of the reference `.js` baseline. It is a metric, not a gate (forcing the option can change
+diagnostics). On main d3a2598: **1754 pass, 0 fail**, 13 crash (all `declarationMap`, E7). The options of the sweep
+that affect declaration files (`removeComments`, `stripInternal`, `newLine`, `emitBOM`, `preserveConstEnums`,
+`outDir`/`rootDir`/`declarationDir`, `emitDeclarationOnly`, `noEmitOnError`, `isolatedDeclarations`) also match
+tsgo in CLI runs through `tools/oracle/emit/run.py` (output bytes, diagnostics, exit codes), and the monorepo oracle
+in declaration-only mode is 2325/2325. The JS side of the sweep waits for the transformers.
 
 ## 14. Known gaps and risks
 
