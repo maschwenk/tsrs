@@ -23,8 +23,8 @@ tsrs_ls.workspace = true
 tsrs_lsproto.workspace = true
 tsrs_project.workspace = true
 rustc-hash.workspace = true
-tsrs_ls.workspace = true
 tsrs_scanner.workspace = true
+tsrs_api_codec.workspace = true
 
 [dev-dependencies]
 tsrs_api_transport.workspace = true

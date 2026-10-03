@@ -279,6 +279,7 @@ name = "tsrs_api"
 version = "0.2.3"
 dependencies = [
  "rustc-hash",
+ "tsrs_api_codec",
  "tsrs_api_transport",
  "tsrs_ast",
  "tsrs_astnav",
