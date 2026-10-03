@@ -33,6 +33,7 @@ for (let i = 0; i < argv.length; i++) {
     else if (a === "--a2") opts.a2 = v();
     else if (a === "--out") opts.out = path.resolve(v());
     else if (a === "--drift") opts.drift = v();
+    else if (a === "--drift-handle") opts.driftHandle = true;
     else if (a === "--ids") opts.idKeys = v().split(",");
     else {
         console.error(`unknown argument ${a}`);
@@ -43,7 +44,7 @@ if (!opts.a || !opts.b) {
     console.error("usage: compare-responses.mjs --a <label> --b <label> [--out dir] [--drift method]");
     process.exit(2);
 }
-opts.out ??= path.join(here, ".work", `compare-${opts.a}-vs-${opts.b}${opts.drift ? `-drift-${opts.drift}` : ""}`);
+opts.out ??= path.join(here, ".work", `compare-${opts.a}-vs-${opts.b}${opts.drift ? `-drift-${opts.drift}` : ""}${opts.driftHandle ? "-drift-handle" : ""}`);
 
 // Fields whose values are server-assigned handles (numeric or string). Kept minimal and evidence-driven.
 // Evidence (Go vs Go, two runs): symbol/type "id" values vary between runs of the same server because checking is
@@ -289,14 +290,19 @@ if (opts.drift) {
             v[k] = typeof v[k] === "string" ? `${v[k]}~drift` : typeof v[k] === "number" ? v[k] + 1 : typeof v[k] === "boolean" ? !v[k] : mutate(v[k]);
             return v;
         }
-        return typeof v === "string" ? `${v}~drift` : typeof v === "number" ? v + 1 : typeof v === "boolean" ? !v : "drift";
+        return typeof v === "string" && /^[A-Za-z0-9+/]{16,}={0,2}$/.test(v) ? `A${v.slice(1)}`.replace(/^AA/, "AB") : typeof v === "string" ? `${v}~drift` : typeof v === "number" ? v + 1 : typeof v === "boolean" ? !v : "drift";
     };
-    for (const list of B.byTest.values()) {
+    for (const [test, list] of B.byTest) {
         for (const proc of list) {
             for (const r of proc.records) {
                 if (!done && r.kind === "response" && r.method === opts.drift && r.enc === "utf8") {
+                    opts.driftAt = { test, pid: proc.pid, seq: r.seq, before: r.data.slice(0, 120) };
                     const json = JSON.parse(r.data);
-                    r.data = JSON.stringify(mutate(json));
+                    // Mutate the payload the comparison sees: the JSON-RPC result, not the envelope.
+                    if (json && typeof json === "object" && json.jsonrpc && "result" in json) json.result = mutate(json.result);
+                    else mutate(json);
+                    r.data = JSON.stringify(json);
+                    opts.driftAt.after = r.data.slice(0, 120);
                     r.drifted = true;
                     done = true;
                 }
@@ -319,6 +325,22 @@ function sortArrays(v) {
     if (Array.isArray(v)) return v.map(sortArrays).sort((x, y) => (sortKey(x) < sortKey(y) ? -1 : sortKey(x) > sortKey(y) ? 1 : 0));
     if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, sortArrays(x)]));
     return v;
+}
+if (opts.driftHandle) {
+    // Handle-identity negative control: in run B, make the first request that sends back a symbol reference
+    // point at the next symbol id. The id was received earlier in that process, so the bijection must flag it.
+    outer: for (const [test, list] of B.byTest) {
+        for (const proc of list) {
+            for (const r of proc.records) {
+                const m = r.kind === "request" && r.enc === "utf8" && /("symbol":\{[^{}]*"id":)(\d+)/.exec(r.data);
+                if (m) {
+                    opts.driftAt = { test, method: r.method, before: m[0] };
+                    r.data = r.data.replace(m[0], `${m[1]}${Number(m[2]) + 1}`);
+                    break outer;
+                }
+            }
+        }
+    }
 }
 const perMethod = new Map();
 const counter = m => {
@@ -405,8 +427,10 @@ for (const [test, listA] of A.byTest) {
                 };
                 d = cmp(a, b, bij);
                 const a2 = ea2?.[k];
+                // The second-run bijection is maintained on every exchange (not only on differences), so an
+                // identity break is caught against run 2 as well.
+                const d2 = a2 && a2.method === b.method && a2.kind === b.kind ? cmp(a2, b, bij2) : { path: "$unaligned" };
                 if (d && a2 && a2.method === b.method && a2.kind === b.kind) {
-                    const d2 = cmp(a2, b, bij2);
                     if (!d2) {
                         c.matchesOracleRun2 = (c.matchesOracleRun2 ?? 0) + 1;
                         d = undefined;
@@ -482,6 +506,7 @@ const report = {
     a: opts.a,
     b: opts.b,
     drift: opts.drift ?? null,
+    driftAt: opts.driftAt ?? null,
     idKeys: [...ID_KEYS],
     pairedProcesses,
     excludedTodoTests: [...todoTests],
@@ -506,4 +531,4 @@ for (const r of rows) {
     md.push(`| \`${r.method}\` | ${r.status} | ${r.pairs ?? 0} | ${r.okEqual_sync ?? 0}/${r.okEqual_async ?? 0} | ${(r.equal ?? 0) - (r.okEqual ?? 0)} | ${r.matchesOracleRun2 ?? 0} | ${r.equalUnordered ?? 0} | ${r.oracleUnstable ?? 0} | ${r.differ ?? 0} | ${first} |`);
 }
 fs.writeFileSync(path.join(opts.out, "compare.md"), md.join("\n") + "\n");
-console.log(JSON.stringify({ out: opts.out, pairedProcesses, statusCounts: report.statusCounts, unpaired: unpaired.length, callMultisetDiffs: callDiffs.length, differing: rows.filter(r => r.status === "differs").map(r => `${r.method}(${r.differ}/${r.pairs})`) }, null, 1));
+console.log(JSON.stringify({ out: opts.out, driftAt: opts.driftAt, pairedProcesses, statusCounts: report.statusCounts, unpaired: unpaired.length, callMultisetDiffs: callDiffs.length, differing: rows.filter(r => r.status === "differs").map(r => `${r.method}(${r.differ}/${r.pairs})`) }, null, 1));

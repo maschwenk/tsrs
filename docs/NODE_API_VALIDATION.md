@@ -227,6 +227,45 @@ Results:
 Pinned Go build semantics, recorded and matched by tsrs: through the API, `dry` still writes outputs,
 `force` on an up-to-date graph writes nothing, and `stopBuildOnErrors` still builds downstream projects.
 
+### Paired responses (compare-responses.mjs)
+
+`run-upstream.mjs --capture` records every payload, hashed in full and stored up to 4 MiB. Run the oracle twice
+and the candidate once, each under the same label and therefore the same work-tree path, renaming the result
+directory after each run. Then run
+`compare-responses.mjs --a <go-1> --b <candidate> --a2 <go-2>`.
+
+How exchanges are paired:
+
+- Server processes are paired by test file, test name and request-method signature.
+- Sync exchanges are aligned by order and async exchanges by JSON-RPC id. `batchRequests` is expanded into
+  its inner calls.
+
+The only normalizations:
+
+- Namespaced handle bijections (symbol, type and signature ids, file node IDs, counter suffixes in escaped
+  names). These are checked across dependent calls.
+- Go panic stacks are stripped.
+- Profiling temp paths are replaced.
+
+Where the oracle is nondeterministic, a candidate exchange that equals either oracle run counts as equal.
+Order is ignored only where the two oracle runs themselves disagree on order.
+
+Negative controls:
+
+- `--drift <method>` changes one candidate response.
+- `--drift-handle` breaks one symbol reference.
+
+Every control tried so far was detected.
+
+Result at `b2769b8`:
+
+- 161 methods equal over 7428 successful exchanges; 160 of them also have a successful async pair.
+- 1 errors-only method.
+- 3 unsupported methods (profiling).
+- 7 methods differ: `updateSnapshot` `changes:{}` vs omitted, `cleanBuild` filesDeleted, missing ObjectFlags
+  `MembersResolved` in `getTypeAtLocation` and `getTypeFromTypeNode`, `elementFlags:[]` vs omitted, duplicate
+  fileNames for VS Code URIs, and the unsupported profiling method.
+
 ## Known limitations
 
 - Tracing needs Linux (`/proc`); other platforms run with `--no-trace` and only get test counts.
