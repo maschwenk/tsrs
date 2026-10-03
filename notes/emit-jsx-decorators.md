@@ -48,3 +48,19 @@ threat-intel-entities, vulnmgmt-entities.
 
 - End-to-end emit of any TS file needs the type eraser, import elision, runtime syntax (emit/transforms, E3) and the
   ES module transformer (E4); the `.js` baseline harness (`--baselines js`) is E2 on emit/core.
+
+## Local integration results (2026-10-03)
+
+Local, unpushed branch `int/local` = this branch + emit/transforms' typeeraser/importelision/runtimesyntax adapted to
+emit/core + a minimal esmodule.go, built as `tsrs`; outputs compared with tsgo (source maps off on both sides,
+`EXTRA="--sourceMap false --declarationMap false"`, because the generator is emit/sourcemaps'):
+
+- Monorepo, JSX packages: 703 files identical, 0 different; marketing-emails not emitted (commonjs, E4).
+- Monorepo, decorator packages: 318 identical, 0 different; 104 not emitted, all in the es2024 packages
+  (adm-entities, service-auth, service-feature-flags, service-framework-utils, temporal-utils, threat-intel-entities,
+  vulnmgmt-entities), which need classfields.go (E5, unassigned) because target < ESNext runs the class fields
+  transformer.
+- `tools/oracle/emit/cases.py` (tsgo vs tsrs through the CLIs, per test variant) over the 604 compiler/conformance
+  tests with `@jsx`, `@experimentalDecorators` or `@emitDecoratorMetadata`: 980 variants, 244 identical, 43 both
+  empty, **0 different**, 693 stop in other waves' gate stubs (commonjsmodule 195, forawait 175, classfields 163,
+  using 144, objectrestspread 7, esdecorator 3, nullishcoalescing 1, int/local esmodule gaps 4).
