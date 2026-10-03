@@ -1701,10 +1701,198 @@ impl classFieldsTransformer {
         let expression = self.visitor().visit_node(Some(inner)).unwrap();
         Some(self.factory().update_parenthesized_expression(node, expression))
     }
+
+    // classfields.go:1627
+    pub(crate) fn create_private_identifier_assignment(&self, info: P<privateIdentifierInfo>, receiver: P<Node>, right: P<Node>, operator: Kind) -> P<Node> {
+        let mut receiver = self.visitor().visit_node(Some(receiver)).unwrap();
+        let mut right = self.visitor().visit_node(Some(right)).unwrap();
+
+        if ast::is_compound_assignment(operator) {
+            let (read_expression, initialize_expression) = self.create_copiable_receiver_expr(receiver);
+            if let Some(initialize_expression) = initialize_expression {
+                receiver = initialize_expression;
+            } else {
+                receiver = read_expression;
+            }
+            right = self.factory().new_binary_expression(
+                None,
+                self.create_private_identifier_access_helper(info, read_expression),
+                None,
+                self.factory().new_token(get_non_assignment_operator_for_compound_assignment(operator)),
+                right,
+            );
+        }
+
+        self.emit_context().set_comment_range(receiver, tsrs_core::TextRange::new(-1, receiver.end()));
+
+        match info.kind {
+            PrivateIdentifierKind::Accessor => self.factory().new_class_private_field_set_helper(receiver, info.brand_check_identifier.unwrap(), right, info.kind, info.setter_name.get()),
+            PrivateIdentifierKind::Method => self.factory().new_class_private_field_set_helper(receiver, info.brand_check_identifier.unwrap(), right, info.kind, None),
+            PrivateIdentifierKind::Field => {
+                let mut f: Option<P<Node>> = None;
+                if info.is_static {
+                    f = info.variable_name;
+                }
+                self.factory().new_class_private_field_set_helper(receiver, info.brand_check_identifier.unwrap(), right, info.kind, f)
+            }
+            PrivateIdentifierKind::Untransformed => tsrs_core::debug::fail("Access helpers should not be created for untransformed private elements"),
+        }
+    }
+
+    // classfields.go:1686
+    pub(crate) fn get_private_instance_methods_and_accessors(&self, node: P<Node>) -> Vec<P<Node>> {
+        node.members().iter().copied().filter(|m| is_non_static_method_or_accessor_with_private_name(*m)).collect()
+    }
+
+    // classfields.go:1695
+    // memberContainsConstructorReference checks if a class member's body contains an identifier
+    // that resolves to the class declaration. Replaces Strada's resolver.hasNodeCheckFlag(member,
+    // NodeCheckFlags.ContainsConstructorReference) by walking the AST with the EmitResolver.
+    // Only checks member bodies (not computed property names), since computed property names
+    // are evaluated during class definition when the binding is still correct.
+    pub(crate) fn member_contains_constructor_reference(&self, member: P<Node>, class_decl: P<Node>) -> bool {
+        let class_original = self.emit_context().most_original(Some(class_decl));
+        let class_name = ast::get_name_of_declaration(class_decl);
+        fn check(tx: &classFieldsTransformer, class_original: Option<P<Node>>, class_name: Option<P<Node>>, n: P<Node>) -> bool {
+            if ast::is_identifier(n) && Some(n) != class_name {
+                let decl = tx.resolver.get_referenced_value_declaration(n);
+                if decl == class_original {
+                    return true;
+                }
+            }
+            // For PropertyAccessExpression, only check the expression, not the name.
+            // The .Name() is a property access name, not a value reference to the class.
+            if ast::is_property_access_expression(n) {
+                return check(tx, class_original, class_name, n.expression().unwrap());
+            }
+            n.for_each_child(&mut |c| check(tx, class_original, class_name, c))
+        }
+        // Check only the body/initializer of the member, not the name (which may be
+        // a computed property name that shouldn't trigger alias substitution).
+        if ast::is_class_static_block_declaration(member) {
+            let body = member.as_class_static_block_declaration().body;
+            if check(self, class_original, class_name, body) {
+                return true;
+            }
+        } else {
+            let body = member.body();
+            if let Some(body) = body {
+                if check(self, class_original, class_name, body) {
+                    return true;
+                }
+            }
+        }
+        if ast::is_property_declaration(member) {
+            let init = member.initializer();
+            if let Some(init) = init {
+                if check(self, class_original, class_name, init) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    // classfields.go:1738
+    // classContainsConstructorReference checks if any member of a class contains
+    // references to the class's own constructor. Replaces Strada's
+    // resolver.hasNodeCheckFlag(node, NodeCheckFlags.ContainsConstructorReference).
+    pub(crate) fn class_contains_constructor_reference(&self, node: P<Node>) -> bool {
+        for member in node.members() {
+            if self.member_contains_constructor_reference(*member, node) {
+                return true;
+            }
+        }
+        false
+    }
+
+    // classfields.go:1747
+    pub(crate) fn get_class_facts(&self, node: P<Node>) -> classFacts {
+        let mut facts = classFacts::None;
+
+        let original = self.emit_context().most_original(Some(node)).unwrap();
+        if ast::is_class_like(original) && ast::class_or_constructor_parameter_is_decorated(self.legacy_decorators /*useLegacyDecorators*/, original) {
+            facts |= classFacts::ClassWasDecorated;
+        }
+
+        if self.should_transform_private_elements_or_class_static_blocks.get() && (class_has_class_this_assignment(self.emit_context(), node) || class_has_explicitly_assigned_name(self.emit_context(), node)) {
+            facts |= classFacts::NeedsClassConstructorReference;
+        }
+
+        let mut contains_public_instance_fields = false;
+        let mut contains_initialized_public_instance_fields = false;
+        let mut contains_instance_private_elements = false;
+        let mut contains_instance_auto_accessors = false;
+
+        for member in node.members() {
+            let member = *member;
+            if ast::is_static(member) {
+                if member.name().is_some_and(|n| ast::is_private_identifier(n) || ast::is_auto_accessor_property_declaration(member)) && self.should_transform_private_elements_or_class_static_blocks.get() {
+                    facts |= classFacts::NeedsClassConstructorReference;
+                } else if ast::is_auto_accessor_property_declaration(member) && self.should_transform_auto_accessors.get() && node.name().is_none() && self.emit_context().class_this(node).is_none() {
+                    facts |= classFacts::NeedsClassConstructorReference;
+                }
+                if ast::is_property_declaration(member) || ast::is_class_static_block_declaration(member) {
+                    if self.should_transform_this_in_static_initializers.get() && member.subtree_facts().intersects(SubtreeFacts::ContainsLexicalThis) {
+                        facts |= classFacts::NeedsSubstitutionForThisInClassStaticField;
+                        if !facts.intersects(classFacts::ClassWasDecorated) {
+                            facts |= classFacts::NeedsClassConstructorReference;
+                        }
+                    }
+                    if self.should_transform_super_in_static_initializers.get() && member.subtree_facts().intersects(SubtreeFacts::ContainsLexicalSuper) {
+                        if !facts.intersects(classFacts::ClassWasDecorated) {
+                            facts |= classFacts::NeedsClassConstructorReference | classFacts::NeedsClassSuperReference;
+                        }
+                    }
+                }
+            } else if !ast::has_abstract_modifier(self.emit_context().most_original(Some(member)).unwrap()) {
+                if ast::is_auto_accessor_property_declaration(member) {
+                    contains_instance_auto_accessors = true;
+                    contains_instance_private_elements = contains_instance_private_elements || ast::is_private_identifier_class_element_declaration(member);
+                } else if ast::is_private_identifier_class_element_declaration(member) {
+                    contains_instance_private_elements = true;
+                    if self.member_contains_constructor_reference(member, node) {
+                        facts |= classFacts::NeedsClassConstructorReference;
+                    }
+                } else if ast::is_property_declaration(member) {
+                    contains_public_instance_fields = true;
+                    contains_initialized_public_instance_fields = contains_initialized_public_instance_fields || member.initializer().is_some();
+                }
+            }
+        }
+
+        let will_hoist_initializers_to_constructor = (self.should_transform_initializers_using_define.get() && contains_public_instance_fields)
+            || (self.should_transform_initializers_using_set.get() && contains_initialized_public_instance_fields)
+            || (self.should_transform_private_elements_or_class_static_blocks.get() && contains_instance_private_elements)
+            || (self.should_transform_private_elements_or_class_static_blocks.get() && contains_instance_auto_accessors && self.should_transform_auto_accessors.get());
+
+        if will_hoist_initializers_to_constructor {
+            facts |= classFacts::WillHoistInitializersToConstructor;
+        }
+
+        facts
+    }
+
+    // classfields.go:1815
+    pub(crate) fn visit_expression_with_type_arguments_in_heritage_clause(&self, node: P<Node>) -> Option<P<Node>> {
+        let mut facts = classFacts::None;
+        if let Some(data) = self.lexical_environment.get().and_then(|l| l.data.get()) {
+            facts = data.facts.get();
+        }
+        if facts.intersects(classFacts::NeedsClassSuperReference) {
+            let temp = self.factory().new_temp_variable_ex(printer::AutoGenerateOptions { flags: printer::GeneratedIdentifierFlags::ReservedInNestedScopes, ..Default::default() });
+            self.emit_context().add_variable_declaration(temp);
+            self.get_class_lexical_environment().super_class_reference.set(Some(temp));
+            return Some(self.factory().update_expression_with_type_arguments(
+                node,
+                self.factory().new_assignment_expression(temp, self.visitor().visit_node(Some(node.as_expression_with_type_arguments().expression)).unwrap()),
+                None, /*typeArguments*/
+            ));
+        }
+        self.heritage_clause_visitor().visit_each_child(Some(node))
+    }
 }
 
 // TEMP(part 1 in progress): not yet ported part-1 functions.
 impl classFieldsTransformer {
-    pub(crate) fn visit_expression_with_type_arguments_in_heritage_clause(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
-    pub(crate) fn create_private_identifier_assignment(&self, info: P<privateIdentifierInfo>, receiver: P<Node>, right: P<Node>, operator: Kind) -> P<Node> { let _ = (info, receiver, right, operator); todo!() }
 }
