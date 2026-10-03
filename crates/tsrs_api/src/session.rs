@@ -111,6 +111,7 @@ pub struct Session {
     base_fs: Arc<dyn FS>,
     weak_self: std::sync::Weak<Session>,
     pub(crate) build_state: crate::build::BuildState,
+    pub(crate) source_files: crate::sourcefiles::SourceFileState,
     build_backend: Mutex<Option<Arc<dyn crate::build::BuildBackend>>>,
     next_batch_page: AtomicU64,
 }
@@ -158,6 +159,7 @@ impl Session {
             base_fs,
             weak_self: weak_self.clone(),
             build_state: Default::default(),
+            source_files: Default::default(),
             build_backend: Mutex::new(None),
         })
     }
@@ -230,6 +232,7 @@ impl Session {
         let all: Vec<_> = self.snapshots.write().unwrap().drain().collect();
         drop(all);
         self.batch_pages.lock().unwrap().clear();
+        self.source_files.release_all_leases();
     }
 
     /// Methods that are safe while an outer request on the same connection is blocked in a client callback:
@@ -314,6 +317,16 @@ impl Session {
                 p.object()?;
             }
             return self.handle_batch_requests(p).map(Response::Json);
+        }
+        match method {
+            "getSourceFile" => return self.handle_get_source_file(p),
+            "getConfigSourceFile" => return self.handle_get_config_source_file(p),
+            "createSourceFile" => return self.handle_create_source_file(p),
+            "createSourceFileFromFile" => return self.handle_create_source_file_from_file(p),
+            "retainSourceFile" => return self.handle_retain_source_file(p),
+            "releaseSourceFile" => return self.handle_release_source_file(p),
+            "getCachedSourceFile" => return self.handle_get_cached_source_file(p),
+            _ => {}
         }
         let result = match method {
             "initialize" => Obj::new()

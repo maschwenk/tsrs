@@ -20,6 +20,7 @@ pub mod program;
 pub mod session;
 pub mod requestfs;
 pub mod snapshots;
+pub mod sourcefiles;
 pub mod transpile;
 pub mod wire;
 

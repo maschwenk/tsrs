@@ -106,28 +106,29 @@ impl CheckerHost for SessionHost<'_> {
         Ok(SnapshotScope { handle, snapshot, registry, release: Some(Box::new(move || drop(sd))) })
     }
 
-    fn acquire_cached_source_file(&self, _descriptor: &Value) -> CheckerResult<CachedFileScope> {
-        Err(CheckerError::unsupported("file-owned symbol references without a snapshot require core's source-file cache (retainSourceFile/getCachedSourceFile), which is not implemented yet"))
+    fn acquire_cached_source_file(&self, descriptor: &Value) -> CheckerResult<CachedFileScope> {
+        let lease = self.session.acquire_cached_source_file(descriptor).map_err(from_api_error)?;
+        Ok(CachedFileScope { file: lease.source_file(), release: Some(Box::new(move || lease.release())) })
     }
 
-    fn source_file_descriptor(&self, _file: P<SourceFile>) -> CheckerResult<Value> {
-        Err(CheckerError::unsupported(CODEC_PENDING))
+    fn source_file_descriptor(&self, file: P<SourceFile>) -> CheckerResult<Value> {
+        Ok(crate::sourcefiles::source_file_descriptor(file))
     }
 
-    fn source_file_node_id(&self, _file: P<SourceFile>) -> CheckerResult<u64> {
-        Err(CheckerError::unsupported(CODEC_PENDING))
+    fn source_file_node_id(&self, file: P<SourceFile>) -> CheckerResult<u64> {
+        Ok(crate::sourcefiles::source_file_node_id(file))
     }
 
-    fn node_handle(&self, _node: P<Node>) -> CheckerResult<String> {
-        Err(CheckerError::unsupported(CODEC_PENDING))
+    fn node_handle(&self, node: P<Node>) -> CheckerResult<String> {
+        self.session.node_handle_from(node).map_err(from_api_error)
     }
 
-    fn resolve_node_handle(&self, _program: &'static Program, _handle: &str) -> CheckerResult<P<Node>> {
-        Err(CheckerError::unsupported(CODEC_PENDING))
+    fn resolve_node_handle(&self, program: &'static Program, handle: &str) -> CheckerResult<P<Node>> {
+        self.session.resolve_node_handle(program, handle).map_err(from_api_error)
     }
 
-    fn encode_node(&self, _node: P<Node>) -> CheckerResult<Vec<u8>> {
-        Err(CheckerError::unsupported(CODEC_PENDING))
+    fn encode_node(&self, node: P<Node>) -> CheckerResult<Vec<u8>> {
+        self.session.encode_node(node).map_err(from_api_error)
     }
 
     fn clone_snapshot_with_auto_imports(&self, base: &Snapshot, file_name: &str) -> CheckerResult<Arc<Snapshot>> {
