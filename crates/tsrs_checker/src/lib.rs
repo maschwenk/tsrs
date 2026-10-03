@@ -126,6 +126,7 @@ pub use exports::{
     get_declaration_modifier_flags_from_symbol_exported, get_property_name_from_type_exported, is_distributed_type_parameter, is_tuple_type_exported,
     is_tuple_type_target, is_type_usable_as_property_name_exported,
 };
+pub use checker_09::is_non_deferred_type_reference;
 pub use nodebuilder::{new_node_builder, new_node_builder_ex};
 pub use nodebuilderimpl_1::try_get_module_specifier_from_declaration;
 pub use printer::new_symbol_tracker_impl;
