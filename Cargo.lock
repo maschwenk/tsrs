@@ -623,11 +623,13 @@ dependencies = [
  "tsrs_ast",
  "tsrs_binder",
  "tsrs_checker",
+ "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
  "tsrs_printer",
  "tsrs_scanner",
  "tsrs_tsoptions",
+ "tsrs_vfs",
 ]
 
 [[package]]

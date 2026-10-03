@@ -499,6 +499,7 @@ identical to main in both modes, fourslash 4066/63, `-D warnings` check) held fo
 | date | commit | wave | `.js` pass / total | `.js.map` | `.sourcemap.txt` | oracle | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-03 | emit/core (E2) | E1+E2 | 1364 / 15197 (12032 crash at stubs, 1800 skip) | — | — | dts: 2325/2325 files identical, 103/103 packages; full: 0 files (stubs: typeeraser 91, importelision 5, metadata 4; 3 packages emit nothing in both) | multi-threaded test programs give the same js pass list (one timeout aside) |
+| 2026-10-03 | emit/jsx-decorators | E10 + E11 | standalone: 1364 / 15197, 0 fail (TS inputs crash in the typeeraser stub on this branch); scratch integration with transforms/classfields/async/es2016-2020/sourcemaps: jsx 226 / 230, decorators 131 / 213, 0 fail in both | — | — | scratch integration, private monorepo (read-only, all 103 tsc-built packages, full emit with maps): 103/103 packages, 10,248 files identical | jsx.go, legacydecorators.go, metadata.go, typeserializer.go complete; notes/emit-jsx-decorators.md |
 
 ## 14. Known gaps and risks
 
