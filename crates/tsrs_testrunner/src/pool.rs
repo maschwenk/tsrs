@@ -37,11 +37,13 @@ pub struct TestResult {
     pub types: Option<(Class, String)>,
     pub symbols: Option<(Class, String)>,
     pub js: Option<(Class, String)>,
+    pub jsmap: Option<(Class, String)>,
+    pub sourcemap: Option<(Class, String)>,
 }
 
 impl TestResult {
     pub fn harness(class: Class, ms: u64, panic: String) -> TestResult {
-        TestResult { class, ms, diff: String::new(), panic, loc: String::new(), skip: String::new(), types: None, symbols: None, js: None }
+        TestResult { class, ms, diff: String::new(), panic, loc: String::new(), skip: String::new(), types: None, symbols: None, js: None, jsmap: None, sourcemap: None }
     }
 }
 
@@ -131,6 +133,8 @@ fn parse_result(v: &Value) -> TestResult {
         types: v["types"].as_str().and_then(Class::parse).map(|c| (c, s("types_diff"))),
         symbols: v["symbols"].as_str().and_then(Class::parse).map(|c| (c, s("symbols_diff"))),
         js: v["js"].as_str().and_then(Class::parse).map(|c| (c, s("js_diff"))),
+        jsmap: v["js.map"].as_str().and_then(Class::parse).map(|c| (c, s("js.map_diff"))),
+        sourcemap: v["sourcemap.txt"].as_str().and_then(Class::parse).map(|c| (c, s("sourcemap.txt_diff"))),
     }
 }
 

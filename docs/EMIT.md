@@ -100,21 +100,21 @@ transformers, the few name matches are accidental, so the honest figure is 0).
 | utilities.go | 375 | 3 of 22 ported (`IsSimpleCopiableExpression`, `IsOriginalNodeSingleLine`, `IsSimpleInlineableExpression`) |
 | chain.go | 62 | missing |
 | modifiervisitor.go | 28 | missing |
-| destructuring.go | 510 | missing |
+| destructuring.go | 510 | **ported** (emit/transforms) |
 | declarations/transform.go | 3002 | **ported completely** (transform_1/2/3.rs), but only run for diagnostics: no `.d.ts` is printed |
 | declarations/diagnostics.go, tracker.go, util.go, supplementalreferences.go | 1234 | **ported** |
-| tstransforms/typeeraser.go | 393 | missing |
-| tstransforms/importelision.go | 153 | missing |
-| tstransforms/runtimesyntax.go | 995 | missing (enums, namespaces, parameter properties) |
-| tstransforms/utilities.go | 29 | missing |
+| tstransforms/typeeraser.go | 393 | **ported** (emit/transforms) |
+| tstransforms/importelision.go | 153 | **ported** (emit/transforms) |
+| tstransforms/runtimesyntax.go | 995 | **ported** (emit/transforms) |
+| tstransforms/utilities.go | 29 | **ported** (emit/transforms) |
 | tstransforms/legacydecorators.go | 1038 | missing |
 | tstransforms/metadata.go | 390 | missing |
 | tstransforms/typeserializer.go | 511 | missing |
-| moduletransforms/commonjsmodule.go | 2162 | missing |
-| moduletransforms/esmodule.go | 372 | missing |
-| moduletransforms/externalmoduleinfo.go | 390 | missing |
+| moduletransforms/commonjsmodule.go | 2162 | **ported** (emit/transforms; commonjsmodule{,_2,_3,_4}.rs by line range) |
+| moduletransforms/esmodule.go | 372 | **ported** (emit/transforms) |
+| moduletransforms/externalmoduleinfo.go | 390 | **ported** (emit/transforms) |
 | moduletransforms/impliedmodule.go | 53 | missing |
-| moduletransforms/utilities.go | 118 | missing |
+| moduletransforms/utilities.go | 118 | **ported** (emit/transforms) |
 | estransforms/classfields.go | 3618 | missing |
 | estransforms/esdecorator.go | 2751 | missing |
 | estransforms/using.go | 799 | missing |
@@ -128,7 +128,7 @@ transformers, the few name matches are accidental, so the honest figure is 0).
 | estransforms/taggedtemplate.go | 175 | missing |
 | estransforms/logicalassignment.go, exponentiation.go, nullishcoalescing.go, optionalcatch.go | 289 | missing |
 | jsxtransforms/jsx.go | 1209 | missing |
-| inliners/constenum.go | 102 | missing |
+| inliners/constenum.go | 102 | **ported** (emit/transforms) |
 
 Ported so far: 4,277 of 24,418 lines (the declaration transformer and the base). Left: ~20,100 lines.
 
@@ -136,10 +136,10 @@ Ported so far: 4,277 of 24,418 lines (the declaration transformer and the base).
 
 | Go file | lines | tsrs status |
 | --- | ---: | --- |
-| generator.go | 387 | missing (VLQ mappings, `RawSourceMap`, `Base64DataURL`, `String`) |
-| decoder.go | 253 | missing (`DecodeMappings`; also needed by the harness's `.sourcemap.txt` recorder) |
-| source_mapper.go | 313 | missing (`DocumentPositionMapper`; used by the language service. The `lsp` branch plans its own `tsrs_ls::sourcemap` for the parts `ls` uses; one crate for both is better, see section 11) |
-| lineinfo.go, util.go, source.go | 68 | missing |
+| generator.go | 387 | **ported** (`tsrs_sourcemap`, emit/sourcemaps; moved from `tsrs_ls::sourcemap`, which re-exports the crate) |
+| decoder.go | 253 | **ported** |
+| source_mapper.go | 313 | **ported** (shared with the language service) |
+| lineinfo.go, util.go, source.go | 68 | **ported** (`impl Source for SourceFile` lives in `tsrs_sourcemap`, orphan rule) |
 
 ### outputpaths/ (314 lines)
 
@@ -468,7 +468,17 @@ Implemented: `tools/oracle/emit/run.py` (one project, as planned below; `$TSGO` 
 `tools/oracle/emit/monorepo.sh <monorepo root> [-j N] [--filter RE] [-- flags]` (every workspace package whose
 `build` script runs `tsc`; outputs in `/tmp/emit-go/<pkg>` and `/tmp/emit-rs/<pkg>`; refuses to start unless the
 monorepo's `git status --short` is empty and fails if it changed; `TSRS_CHECKER_ASSIGNMENT=go` by default, see
-section 10). `tsc --build` packages are emitted with `-p` until `-b` exists.
+section 10). It fails closed (`summarize.py`): exit 0 only when every selected package has exactly one result row and that
+row is identical (equal nonzero tsc statuses 0-4 are fine; 5 NotImplemented, signals and non-integer statuses
+fail even when equal); any file difference, status or diagnostics difference, tsrs panic, timeout,
+missing/duplicate/unexpected/malformed row (non-object, wrong field types, negative counts) or an empty selection
+exits 1.
+`tools/oracle/emit/test_monorepo.sh` (`TSGO=... TSRS=...`) checks that on a throwaway two-package repo. `tsc --build` packages are emitted with `-p` until `-b` exists.
+
+**Reference binary.** Use a `tsgo` built from `ts-ref` (`cd ts-ref/tsc && go build -o $TSRS_WORK/bin/tsgo-ref ./cmd/tsc`,
+Go 1.27). The npm nightly `@typescript/typescript-linux-x64@7.1.0-dev.20260929.1` was built before the pinned commit
+b85298b6 and lacks microsoft/TypeScript#64460 ("Fix declaration maps for export assignment expressions", 21:04 on
+2026-09-29), so its `.d.ts.map` for `export default <identifier>` differs from the Go source tsrs ports.
 
 The reference binary already emits, so no Go oracle program is needed (add one under `ts-ref/tsc/cmd/` only if
 `EmitResult` internals are needed). Planned `tools/oracle/emit/run.py <tsconfig|dir> [--name N] [-- extra tsc flags]`:
@@ -498,10 +508,29 @@ identical to main in both modes, fourslash 4066/63, `-D warnings` check) held fo
 
 | date | commit | wave | `.js` pass / total | `.js.map` | `.sourcemap.txt` | oracle | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-03 | main d3a2598 (#9 merged) | E1+E2 | 1364 / 15197 | — | — | (as below) | declaration metric (`TSRS_TEST_DTS_ONLY=1`, below): 1754 pass / 0 fail / 13 crash (declarationMap) |
 | 2026-10-03 | emit/core (E2) | E1+E2 | 1364 / 15197 (12032 crash at stubs, 1800 skip) | — | — | dts: 2325/2325 files identical, 103/103 packages; full: 0 files (stubs: typeeraser 91, importelision 5, metadata 4; 3 packages emit nothing in both) | multi-threaded test programs give the same js pass list (one timeout aside) |
 | 2026-10-03 | emit/jsx-decorators | E10 + E11 | standalone: 1364 / 15197, 0 fail (TS inputs crash in the typeeraser stub on this branch); scratch integration with transforms/classfields/async/es2016-2020/sourcemaps: jsx 226 / 230, decorators 131 / 213, 0 fail in both | — | — | scratch integration, private monorepo (read-only, all 103 tsc-built packages, full emit with maps): 103/103 packages, 10,248 files identical | jsx.go, legacydecorators.go, metadata.go, typeserializer.go complete; notes/emit-jsx-decorators.md |
+| 2026-10-03 | emit/transforms | E3+E4 | 8579 / 15197, 0 fail (4811 crash at other waves' stubs: classfields 1933, forawait 1847, jsx 196, legacydecorators 165, esdecorator 114, sourcemaps 101, …; 1805 skip) | — | — | js mode (`-- --sourceMap false --declarationMap false`): 85/103 packages fully identical, 4545 files identical, 0 different, 951 not emitted (all 18 remaining packages panic in other waves' stubs: metadata 8, classfields 4, legacydecorators 3, jsx 3); reference = tsgo built from ts-ref b85298b6a81f (go1.27.1) | same js pass list on a second run; harness fix: source-file cache key includes moduleDetection `force` (Go keys on the whole parse options) |
+| 2026-10-03 | emit/sourcemaps | E7 (part 1) | — | — | — | printer-level: 38/38 `.js.map` identical where the untransformed JS is identical | `tsrs_sourcemap` crate (32/32 Go generator tests), printer source-map paths, emitter glue, harness recorder (not wired: waits for emit/core). Gates: conformance + types/symbols identical to main (default and `TSRS_LAZY_MEMBERS=0`: 13457/12778/12778), fourslash 4066/63 same pass list |
+| 2026-10-03 | emit/sourcemaps (on main d3a2598) | E7 | 1363 / 15197 (same pass list as main; 2 timeouts flaky) | 0 pass / 12030 crash at E3 stubs / 3165 skip | same as `.js.map` | `--emitDeclarationOnly`: 103/103 packages fully identical, 4623/4623 files (2298 `.d.ts.map`) | `--baselines jsmap,sourcemap` wired; JS maps wait for the E3 transformers (typeeraser stub panics first) |
+| 2026-10-03 | emit/sourcemaps + emit/transforms (local integration) | E7 | 7322 | 86 pass, 0 fail, 63 crash (other stubs) | 93 pass, 0 fail, 63 crash | full mode: 83/103 packages identical, 0 different files; 2317 `.js.map` + 2166 `.d.ts.map` identical | remaining crashes: forawait, classfields, commonjsmodule, jsx, esdecorator, legacydecorators, metadata |
+
+### E12 option sweep, declaration side (emit/core-2)
+
+`TSRS_TEST_DTS_ONLY=1 TSRS_TEST_RESULTS=<dir> tsrs-test run --suite all --baselines js` forces `emitDeclarationOnly`
+on every test that emits declarations (and `noEmit` on the others) and compares only the `.d.ts` outputs with the
+`.d.ts` sections of the reference `.js` baseline. It is a metric, not a gate (forcing the option can change
+diagnostics). On main d3a2598: **1754 pass, 0 fail**, 13 crash (all `declarationMap`, E7). The options of the sweep
+that affect declaration files (`removeComments`, `stripInternal`, `newLine`, `emitBOM`, `preserveConstEnums`,
+`outDir`/`rootDir`/`declarationDir`, `emitDeclarationOnly`, `noEmitOnError`, `isolatedDeclarations`) also match
+tsgo in CLI runs through `tools/oracle/emit/run.py` (output bytes, diagnostics, exit codes), and the monorepo oracle
+in declaration-only mode is 2325/2325. The JS side of the sweep waits for the transformers.
 
 ## 14. Known gaps and risks
+
+- Oracle reference: use tsgo built from the pinned ts-ref commit (`go build -o tsgo-ref ./cmd/tsc` in `ts-ref/tsc`, Go 1.27).
+  The npm nightly 7.1.0-dev.20260929.1 predates the pin.
 
 - Go's own harness skips 8 emit tests (`skippedEmitTests`) as nondeterministic; mirror the list.
 - Go emits in parallel. Anything order-dependent inside a file (generated names, helper order) is per-file in Go

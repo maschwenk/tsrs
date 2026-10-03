@@ -17,6 +17,8 @@ mod processing_diagnostic;
 mod program;
 #[cfg(feature = "checker")]
 mod program_emit;
+#[cfg(feature = "checker")]
+mod programlike;
 mod projectreferencedtsfakinghost;
 mod projectreferencefilemapper;
 mod projectreferenceparser;
@@ -28,6 +30,8 @@ mod modulespecifiers_oracle_test;
 pub use checkerpool::{assignment_stats_enabled, set_checker_assignment_from_cli, set_checker_cost_cache_from_cli, Checker, CheckerHandle, CheckerPool, Context, PooledChecker};
 #[cfg(feature = "checker")]
 pub use emitter::EmitOnly;
+#[cfg(feature = "checker")]
+pub use programlike::{get_diagnostics_of_any_program_like, ProgramLike};
 #[cfg(feature = "checker")]
 pub use program_emit::{combine_emit_results, handle_no_emit_options, EmitOptions, EmitResult, SourceMapEmitResult, WriteFile, WriteFileData};
 pub use file_include::FileIncludeReason;

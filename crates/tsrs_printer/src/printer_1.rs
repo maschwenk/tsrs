@@ -49,16 +49,29 @@ pub struct PrinterOptions {
     pub terminate_unterminated_literals: bool, // !!!
 }
 
-/// Stand-in for Go's `*sourcemap.Generator` (source map emit is not ported); uninhabited, so only `None` can be
-/// passed to `Printer::write`.
-pub enum SourceMapGenerator {}
+/// Go's `*sourcemap.Generator`.
+pub type SourceMapGenerator = tsrs_sourcemap::Generator;
+
+/// Go's `sourcemap.Source` interface value: sources live in the arena (`SourceFile`) or are leaked by the emitter
+/// (`declarationMapSource`), and Go compares them by identity.
+pub type SourceMapSource = &'static dyn tsrs_sourcemap::Source;
+
+pub(crate) fn same_source_map_source(a: Option<SourceMapSource>, b: Option<SourceMapSource>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => std::ptr::addr_eq(a as *const dyn tsrs_sourcemap::Source, b as *const dyn tsrs_sourcemap::Source),
+        (None, None) => true,
+        _ => false,
+    }
+}
 
 #[derive(Default)]
 pub struct PrintHandlers {
     // A hook used by the Printer when generating unique names to avoid collisions with
     // globally defined names that exist outside of the current source file.
     pub has_global_name: Option<Rc<dyn Fn(&str) -> bool>>,
-    // MapSourcePosition (source-map composition) is not ported: source map emit is out of scope.
+    // MapSourcePosition composes source-map positions before they reach the generator.
+    // Returning ok=false (here `None`) emits a generated-only mapping for the current output position.
+    pub map_source_position: Option<Box<dyn Fn(SourceMapSource, i32) -> Option<(SourceMapSource, i32)>>>,
 
     // !!! OnEmitNode, IsEmitNotificationEnabled, SubstituteNode, OnEmitSourceMapOf* (commented out in Go)
     pub on_before_emit_node: Option<Box<dyn FnMut(Option<P<Node>>)>>,
@@ -90,9 +103,15 @@ pub struct Printer {
     pub(crate) own_writer: Option<Box<dyn EmitTextWriter>>,
     pub(crate) write_kind: WriteKind,
     pub(crate) source_maps_disabled: bool,
-    // Go's sourceMapGenerator/sourceMapSource*/lineCharCache: there is never a generator, so only the source
-    // (always nil) is kept to preserve the checks.
-    pub(crate) source_map_source: Option<P<SourceFile>>,
+    // Borrowed from the caller of `write` for the duration of the call (Go `*sourcemap.Generator`); see
+    // `source_map_generator()`.
+    pub(crate) source_map_generator: Option<*mut SourceMapGenerator>,
+    pub(crate) source_map_source: Option<SourceMapSource>,
+    pub(crate) source_map_source_index: tsrs_sourcemap::SourceIndex,
+    pub(crate) source_map_source_is_json: bool,
+    pub(crate) source_map_line_char_cache: Option<lineCharacterCache>,
+    pub(crate) most_recent_source_map_source: Option<SourceMapSource>,
+    pub(crate) most_recent_source_map_source_index: tsrs_sourcemap::SourceIndex,
     pub(crate) container_pos: i32,
     pub(crate) container_end: i32,
     pub(crate) declaration_list_container_end: i32,
@@ -150,7 +169,13 @@ pub fn new_printer(options: PrinterOptions, handlers: PrintHandlers, emit_contex
         own_writer: None,
         write_kind: WriteKind::None,
         source_maps_disabled: false,
+        source_map_generator: None,
         source_map_source: None,
+        source_map_source_index: 0,
+        source_map_source_is_json: false,
+        source_map_line_char_cache: None,
+        most_recent_source_map_source: None,
+        most_recent_source_map_source_index: 0,
         container_pos: 0,
         container_end: 0,
         declaration_list_container_end: 0,

@@ -8,7 +8,7 @@
 //! - `new_printer(options: PrinterOptions, handlers: PrintHandlers, emit_context: Option<P<EmitContext>>) -> Printer`
 //!   (Go `NewPrinter`; `None` creates a fresh context). `Printer` is a `&mut self` state machine, returned by value.
 //!   - `Printer::write(&mut self, node: P<Node>, source_file: Option<P<SourceFile>>, writer: &mut (dyn EmitTextWriter + 'static),
-//!     source_map_generator: Option<&mut SourceMapGenerator>)` (pass `None`; `SourceMapGenerator` is uninhabited).
+//!     source_map_generator: Option<&mut SourceMapGenerator>)` (`SourceMapGenerator` = `tsrs_sourcemap::Generator`).
 //!     A `Box<dyn EmitTextWriter>` can be passed as `&mut writer` or `&mut *writer`.
 //!   - `Printer::emit(&mut self, node: P<Node>, source_file: Option<P<SourceFile>>) -> String`,
 //!     `Printer::emit_source_file(&mut self, source_file: P<SourceFile>) -> String`.
