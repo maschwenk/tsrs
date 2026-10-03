@@ -348,6 +348,33 @@ impl classFieldsTransformer {
     }
 }
 
+// classfields.go:3365
+pub(crate) fn create_private_static_field_initializer(factory: &printer::NodeFactory, variable_name: P<Node>, initializer: Option<P<Node>>) -> P<Node> {
+    let initializer = initializer.unwrap_or_else(|| factory.new_void_zero_expression());
+    factory.new_assignment_expression(
+        variable_name,
+        factory.new_object_literal_expression(factory.new_node_list(vec![factory.new_property_assignment(None, factory.new_identifier("value"), None, None, initializer)]), false),
+    )
+}
+
+// classfields.go:3380
+pub(crate) fn create_private_instance_field_initializer(factory: &printer::NodeFactory, receiver: P<Node>, initializer: Option<P<Node>>, weak_map_name: P<Node>) -> P<Node> {
+    let initializer = initializer.unwrap_or_else(|| factory.new_void_zero_expression());
+    factory.new_method_call(weak_map_name, factory.new_identifier("set"), vec![receiver, initializer])
+}
+
+// classfields.go:3387
+pub(crate) fn create_private_instance_method_initializer(factory: &printer::NodeFactory, receiver: P<Node>, weak_set_name: P<Node>) -> P<Node> {
+    factory.new_method_call(weak_set_name, factory.new_identifier("add"), vec![receiver])
+}
+
+impl classFieldsTransformer {
+    // classfields.go:3391
+    pub(crate) fn is_reserved_private_name(&self, node: P<Node>) -> bool {
+        !(ast::is_private_identifier(node) && self.emit_context().has_auto_generate_info(Some(node))) && node.text() == "#constructor"
+    }
+}
+
 // classfields.go:3395
 pub(crate) fn is_static_property_declaration_or_class_static_block(node: P<Node>) -> bool {
     ast::is_class_static_block_declaration(node) || (ast::is_property_declaration(node) && ast::has_static_modifier(node))
@@ -453,14 +480,46 @@ pub(crate) fn should_be_captured_in_temp_variable(node: P<Node>) -> bool {
 impl classFieldsTransformer {
     // classfields.go:3493
     pub(crate) fn create_accessor_property_get_redirector(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, receiver: P<Node>) -> P<Node> {
-        let _ = (node, modifiers, name, receiver);
-        unimplemented!("classfields part 2")
+        let f = self.factory();
+        let backing_field_name = f.new_generated_private_name_for_node_ex(node.name().unwrap(), printer::AutoGenerateOptions { suffix: "_accessor_storage", ..Default::default() });
+        let return_expr = f.new_property_access_expression(receiver, None, backing_field_name, NodeFlags::None);
+        let return_stmt = f.new_return_statement(Some(return_expr));
+        let body = f.new_block(f.new_node_list(vec![return_stmt]), false);
+        f.new_get_accessor_declaration(
+            modifiers,
+            name,
+            None, /*typeParameters*/
+            Some(f.new_node_list(vec![])),
+            None, /*returnType*/
+            None, /*fullSignature*/
+            Some(body),
+        )
     }
 
     // classfields.go:3514
     pub(crate) fn create_accessor_property_set_redirector(&self, node: P<Node>, modifiers: Option<P<ModifierList>>, name: P<Node>, receiver: P<Node>) -> P<Node> {
-        let _ = (node, modifiers, name, receiver);
-        unimplemented!("classfields part 2")
+        let f = self.factory();
+        let backing_field_name = f.new_generated_private_name_for_node_ex(node.name().unwrap(), printer::AutoGenerateOptions { suffix: "_accessor_storage", ..Default::default() });
+        let value_param = f.new_parameter_declaration(
+            None, /*modifiers*/
+            None, /*dotDotDotToken*/
+            f.new_identifier("value"),
+            None, /*questionToken*/
+            None, /*typeNode*/
+            None, /*initializer*/
+        );
+        let assign_expr = f.new_assignment_expression(f.new_property_access_expression(receiver, None, backing_field_name, NodeFlags::None), f.new_identifier("value"));
+        let expr_stmt = f.new_expression_statement(assign_expr);
+        let body = f.new_block(f.new_node_list(vec![expr_stmt]), false);
+        f.new_set_accessor_declaration(
+            modifiers,
+            name,
+            None, /*typeParameters*/
+            Some(f.new_node_list(vec![value_param])),
+            None, /*returnType*/
+            None, /*fullSignature*/
+            Some(body),
+        )
     }
 }
 
