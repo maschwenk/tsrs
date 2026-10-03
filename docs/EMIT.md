@@ -117,7 +117,7 @@ transformers, the few name matches are accidental, so the honest figure is 0).
 | moduletransforms/utilities.go | 118 | **ported** (emit/transforms) |
 | estransforms/classfields.go | 3618 | missing |
 | estransforms/esdecorator.go | 2751 | missing |
-| estransforms/using.go | 799 | missing |
+| estransforms/using.go | 799 | **ported** (mfs-cx/emit-using) |
 | estransforms/namedevaluation.go | 535 | missing |
 | estransforms/utilities.go | 289 | missing |
 | estransforms/classthis.go, definitions.go, usestrict.go | 122 | missing |
@@ -500,6 +500,7 @@ identical to main in both modes, fourslash 4066/63, `-D warnings` check) held fo
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-03 | emit/core (E2) | E1+E2 | 1364 / 15197 (12032 crash at stubs, 1800 skip) | — | — | dts: 2325/2325 files identical, 103/103 packages; full: 0 files (stubs: typeeraser 91, importelision 5, metadata 4; 3 packages emit nothing in both) | multi-threaded test programs give the same js pass list (one timeout aside) |
 | 2026-10-03 | emit/transforms | E3+E4 | 8579 / 15197, 0 fail (4811 crash at other waves' stubs: classfields 1933, forawait 1847, jsx 196, legacydecorators 165, esdecorator 114, sourcemaps 101, …; 1805 skip) | — | — | js mode (`-- --sourceMap false --declarationMap false`): 85/103 packages fully identical, 4545 files identical, 0 different, 951 not emitted (all 18 remaining packages panic in other waves' stubs: metadata 8, classfields 4, legacydecorators 3, jsx 3); reference = tsgo built from ts-ref b85298b6a81f (go1.27.1) | same js pass list on a second run; harness fix: source-file cache key includes moduleDetection `force` (Go keys on the whole parse options) |
+| 2026-10-03 | mfs-cx/emit-using | E6 (using.go) | 8607 / 15197, 0 fail (+28 using variants; others stop at legacydecorators/esdecorator/forawait/classfields stubs); composed with E5/E8/E9/E10/E11 branches locally: 13094, using variants 179 pass / 0 fail / 25 esdecorator-stub | — | — | CLI oracle (pinned tsgo) on 65 using test files x 4 module/target modes: 65/65 identical, diagnostics identical | deps: namedevaluation/utilities/classthis copied from emit/classfields d949ed9 |
 
 ## 14. Known gaps and risks
 
