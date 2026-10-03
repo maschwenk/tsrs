@@ -184,11 +184,19 @@ pub enum Outcome {
     // `.types`/`.symbols` baselines when they were requested and the test does not set @noTypesAndSymbols.
     // The third element is the `.js` baseline when `--baselines js` asked for it and the test emits (Go
     // verifyJavaScriptOutput: `hasNonDtsFiles` and not in `skippedEmitTests`); `Err` holds a panic message.
-    Baseline(String, Option<TypesAndSymbols>, Option<Result<String, String>>),
+    // The fourth element holds the `.js.map` / `.sourcemap.txt` baselines (`--baselines jsmap,sourcemap`).
+    Baseline(String, Option<TypesAndSymbols>, Option<Result<String, String>>, Option<SourceMapBaselines>),
     // SkipUnsupportedCompilerOptions
     Skip(String),
     // A harness-level failure that is not a panic (t.Fatalf in Go).
     Error(String),
+}
+
+// The generated `.js.map` (Go DoSourcemapBaseline) and `.sourcemap.txt` (DoSourcemapRecordBaseline) baselines; `None`
+// when Go writes no baseline, `Err` for a panic or a `t.Fatal`.
+pub struct SourceMapBaselines {
+    pub js_map: Option<Result<String, String>>,
+    pub sourcemap: Option<Result<String, String>>,
 }
 
 // The generated `.types` and `.symbols` baselines; `Err` holds the panic message of a walk that panicked.
