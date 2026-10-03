@@ -4,9 +4,10 @@
 //
 // Node index tables: Go caches one table per AST on the source file itself (`GetOrComputeData`), created
 // either by the first encode or by the first node-handle request. tsrs source files have no per-file data
-// slot, so the session keeps the cache keyed by (file address, file node id). An entry is removed when the
-// region owning the file is freed (`Region::on_free`), so a table never outlives the nodes it points to and a
-// reused address cannot match (the node id differs). Files outside any region live for the process.
+// slot, so the session keeps the cache keyed by the file's address. Looking a table up must not assign the
+// file's lazy node id (that would change `NodeIndexTable::get_index` order relative to Go). An entry is
+// removed when the region owning the file is freed (`Region::on_free` runs before the memory is reused), so a
+// table never outlives the nodes it points to; files outside any region live for the process.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -25,7 +26,7 @@ use crate::wire::{s, DocumentIdentifier, Obj, Params};
 
 #[derive(Default)]
 pub(crate) struct SourceFileState {
-    tables: Mutex<HashMap<usize, (u64, Arc<NodeIndexTable>)>>,
+    tables: Mutex<HashMap<usize, Arc<NodeIndexTable>>>,
     leases: Mutex<HashMap<u64, Arc<SourceFileLease>>>,
     next_lease: std::sync::atomic::AtomicU64,
 }
@@ -102,35 +103,27 @@ impl Session {
     /// Go `encoder.GetNodeIndexTable` (cached per live file; see the module comment).
     pub(crate) fn node_index_table(&self, file: P<SourceFile>) -> Arc<NodeIndexTable> {
         let addr = file.as_node().addr();
-        let id = source_file_node_id(file);
-        if let Some((cached_id, t)) = self.source_files.tables.lock().unwrap().get(&addr) {
-            if *cached_id == id {
-                return t.clone();
-            }
+        if let Some(t) = self.source_files.tables.lock().unwrap().get(&addr) {
+            return t.clone();
         }
         // SAFETY of lifetime: `file` is reachable from a live snapshot/lease for the whole request.
         let file_ref: &'static SourceFile = unsafe { &*(&*file as *const SourceFile) };
-        self.store_table(addr, id, Arc::new(codec::build_node_index_table(file_ref)))
+        self.store_table(addr, Arc::new(codec::build_node_index_table(file_ref)))
     }
 
-    /// Go `GetOrComputeData`: keeps an existing table for the same AST, else stores `table`.
-    fn store_table(&self, addr: usize, id: u64, table: Arc<NodeIndexTable>) -> Arc<NodeIndexTable> {
+    /// Go `GetOrComputeData`: keeps an existing table for the file, else stores `table`.
+    fn store_table(&self, addr: usize, table: Arc<NodeIndexTable>) -> Arc<NodeIndexTable> {
         let mut tables = self.source_files.tables.lock().unwrap();
-        if let Some((cached_id, t)) = tables.get(&addr) {
-            if *cached_id == id {
-                return t.clone();
-            }
+        if let Some(t) = tables.get(&addr) {
+            return t.clone();
         }
-        tables.insert(addr, (id, table.clone()));
+        tables.insert(addr, table.clone());
         drop(tables);
         if let Some(region) = tsrs_core::arena::Region::containing(addr) {
             let weak = self.weak_self();
             region.on_free(Box::new(move || {
                 if let Some(s) = weak.upgrade() {
-                    let mut tables = s.source_files.tables.lock().unwrap();
-                    if tables.get(&addr).is_some_and(|(cached, _)| *cached == id) {
-                        tables.remove(&addr);
-                    }
+                    s.source_files.tables.lock().unwrap().remove(&addr);
                 }
             }));
         }
@@ -141,7 +134,8 @@ impl Session {
     fn encode_source_file(&self, file: P<SourceFile>) -> ApiResult<Vec<u8>> {
         let file_ref: &'static SourceFile = unsafe { &*(&*file as *const SourceFile) };
         let (mut data, table) = codec::encode_source_file(file_ref).map_err(|e| ApiError::internal(format!("failed to encode source file: {e}")))?;
-        self.store_table(file.as_node().addr(), source_file_node_id(file), Arc::new(table));
+        self.store_table(file.as_node().addr(), Arc::new(table));
+        // Go `SetSourceFileID(data, sourceFileNodeID(file))` after encoding.
         codec::set_source_file_id(&mut data, source_file_node_id(file));
         Ok(data)
     }
@@ -300,8 +294,16 @@ impl Session {
                 continue;
             }
             let Some(text) = sd.snapshot.read_file(&name) else { return self.encode_source_file_response(None) };
-            let parsed = tsrs_tsoptions::new_tsconfig_source_file_from_file_path(&name, requested, &text);
-            return self.encode_source_file_response(Some(parsed.source_file));
+            // Go parses a fresh tsconfig source file per call; here it lives in a scratch region freed after
+            // encoding (its cached node index table is evicted with the region).
+            let region = tsrs_core::arena::Region::new(64 << 10);
+            let response = {
+                let _scope = region.enter();
+                let parsed = tsrs_tsoptions::new_tsconfig_source_file_from_file_path(&name, requested, &text);
+                self.encode_source_file_response(Some(parsed.source_file))
+            };
+            drop(region);
+            return response;
         }
         self.encode_source_file_response(None)
     }

@@ -56,3 +56,31 @@ fn create_source_file_leases() {
     let e = call_err(&s, "retainSourceFile", r#"{"file":{"fileName":"/a.ts","path":"/a.ts","contentHash":"00","parseOptionsKey":"0","scriptKind":3,"nodeId":"1"}}"#);
     assert!(e.contains("invalid source file descriptor"), "{e}");
 }
+
+#[test]
+fn get_config_source_file_root_and_extended_repeatedly() {
+    let dir = TempDir::new("cfgsf");
+    let base = dir.write("base.json", r#"{ "compilerOptions": { "strict": true } }"#);
+    let cfg = dir.write("tsconfig.json", r#"{ "extends": "./base.json", "include": ["*.ts"] }"#);
+    dir.write("a.ts", "export {};\n");
+    let s = session(&dir.dir(), true);
+    let r = call(&s, "createSnapshot", &format!("{{\"openProjects\":[{}]}}", quote(&cfg)));
+    let snap = match get(&r, "snapshot") { Value::Number(n) => *n as u64, _ => unreachable!() };
+    let project = str_of(get(&r, "projects.0.id")).to_string();
+    let req = |f: &str| format!("{{\"snapshot\":{snap},\"project\":{},\"file\":{}}}", quote(&project), quote(f));
+    let get_bin = |f: &str| match s.handle_request("getConfigSourceFile", req(f).as_bytes()).unwrap() {
+        Response::Binary(b) => b,
+        r => panic!("{r:?}"),
+    };
+    let root = get_bin(&cfg);
+    assert!(!root.is_empty());
+    let first = get_bin(&base);
+    assert!(!first.is_empty());
+    for _ in 0..50 {
+        let again = get_bin(&base);
+        // Same content each time (the source file id header word differs per fresh parse, like Go).
+        assert_eq!(again.len(), first.len());
+        tsrs_api_codec::decode_source_file(&again).expect("decodes");
+    }
+    assert!(get_bin(&dir.path("other.json")).is_empty());
+}

@@ -37,10 +37,13 @@ impl Session {
             let _scope = decoded.region().enter();
             let node = decoded.root();
             let source_file = tsrs_ast::is_source_file(node).then(|| node.as_source_file_p());
-            new_printer(options, PrintHandlers::default(), None).emit(node, source_file)
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| new_printer(options, PrintHandlers::default(), None).emit(node, source_file)))
         };
         drop(decoded);
-        Ok(s(text))
+        match text {
+            Ok(text) => Ok(s(text)),
+            Err(panic) => Err(ApiError::internal(format!("panic: {}", go_kind_text(&panic_message(&*panic))))),
+        }
     }
 
     pub(crate) fn handle_format_node_for_insertion(&self, p: Params) -> ApiResult<Value> {
@@ -71,5 +74,32 @@ impl Session {
         };
         drop(decoded);
         Ok(s(text))
+    }
+}
+
+fn panic_message(p: &(dyn std::any::Any + Send)) -> String {
+    p.downcast_ref::<String>().cloned().or_else(|| p.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_else(|| "unknown panic".to_string())
+}
+
+/// The printer's panics print a node kind with `{:?}` (`TypeLiteral`); Go's `%v` of `ast.Kind` prints
+/// `KindTypeLiteral`. Rewrites a trailing kind name in the recovered message only (printer output itself is
+/// unchanged).
+fn go_kind_text(message: &str) -> String {
+    if let Some((head, tail)) = message.rsplit_once(": ") {
+        let is_kind_name = !tail.is_empty() && tail.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && tail.chars().all(|c| c.is_ascii_alphanumeric());
+        if is_kind_name && !tail.starts_with("Kind") {
+            return format!("{head}: Kind{tail}");
+        }
+    }
+    message.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn go_kind_text() {
+        assert_eq!(super::go_kind_text("unexpected node: TypeLiteral"), "unexpected node: KindTypeLiteral");
+        assert_eq!(super::go_kind_text("unexpected node: KindTypeLiteral"), "unexpected node: KindTypeLiteral");
+        assert_eq!(super::go_kind_text("index out of range: 3"), "index out of range: 3");
     }
 }
