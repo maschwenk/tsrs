@@ -23,7 +23,7 @@ impl ParseConfigHost for ConfigHost {
     }
 }
 
-fn emit(files: &[(&str, &str)], file: &str, transforms: &[fn(&TransformOptions) -> P<Transformer>]) -> String {
+fn emit(files: &[(&str, &str)], file: &str, transforms: &[TransformerFactory]) -> String {
     let fs: Arc<dyn FS> = Arc::new(vfstest::from_map(files.iter().map(|&(k, v)| (k, v)), true));
     let host: &'static ConfigHost = Box::leak(Box::new(ConfigHost { fs: fs.clone() }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/src/tsconfig.json", None, None, host, None);
@@ -38,10 +38,10 @@ fn emit(files: &[(&str, &str)], file: &str, transforms: &[fn(&TransformOptions) 
     let options = program.options();
     slot.lend(&mut checker, || {
         let context = printer::new_emit_context();
-        let opts = TransformOptions { context, compiler_options: options, resolver: ReferenceResolverRef::Emit(resolver), emit_resolver: resolver };
+        let opts = TransformOptions { context, compiler_options: options, resolver: ReferenceResolverRef::Emit(resolver), emit_resolver: Some(resolver), get_emit_module_format_of_file: Rc::new(|_| tsrs_core::ModuleKind::ESNext) };
         let mut result = source_file;
         for t in transforms {
-            result = t(&opts).transform_source_file(result);
+            result = t(&opts).unwrap().transform_source_file(result);
         }
         let mut p = printer::new_printer(printer::PrinterOptions { target: options.get_emit_script_target(), ..Default::default() }, printer::PrintHandlers::default(), Some(context));
         p.emit_source_file(result)

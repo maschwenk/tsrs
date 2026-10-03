@@ -128,6 +128,62 @@ impl Resolver {
         self.lock(|c| self.r.try_js_type_node_to_type_node(c, emit_context, type_node, enclosing_declaration, flags, internal_flags, tracker))
     }
 
+    // The rest of Go's `printer.EmitResolver` (used by the script transformers).
+
+    pub fn is_referenced_alias_declaration(&self, node: P<Node>) -> bool {
+        self.lock(|c| self.r.is_referenced_alias_declaration(c, node))
+    }
+
+    pub fn is_value_alias_declaration(&self, node: P<Node>) -> bool {
+        self.lock(|c| self.r.is_value_alias_declaration(c, node))
+    }
+
+    pub fn is_top_level_value_import_equals_with_entity_name(&self, node: P<Node>) -> bool {
+        self.lock(|c| self.r.is_top_level_value_import_equals_with_entity_name(c, node))
+    }
+
+    pub fn mark_linked_references_recursively(&self, file: P<SourceFile>) {
+        self.lock(|c| self.r.mark_linked_references_recursively(c, Some(file)))
+    }
+
+    pub fn get_external_module_file_from_declaration(&self, node: P<Node>) -> Option<P<SourceFile>> {
+        self.lock(|c| self.r.get_external_module_file_from_declaration(c, node))
+    }
+
+    pub fn get_type_reference_serialization_kind(&self, name: P<Node>, serial_scope: Option<P<Node>>) -> checker::TypeReferenceSerializationKind {
+        self.lock(|c| self.r.get_type_reference_serialization_kind(c, Some(name), serial_scope))
+    }
+
+    pub fn get_constant_value(&self, node: P<Node>) -> Option<checker::LiteralValue> {
+        self.lock(|c| self.r.get_constant_value(c, node))
+    }
+
+    pub fn get_jsx_factory_entity(&self, location: P<Node>) -> Option<P<Node>> {
+        self.lock(|c| self.r.get_jsx_factory_entity(c, location))
+    }
+
+    pub fn get_jsx_fragment_factory_entity(&self, location: P<Node>) -> Option<P<Node>> {
+        self.lock(|c| self.r.get_jsx_fragment_factory_entity(c, location))
+    }
+
+    pub fn set_referenced_import_declaration(&self, node: P<Node>, ref_: P<Node>) {
+        self.lock(|c| self.r.set_referenced_import_declaration(c, node, ref_))
+    }
+
+    // binder.ReferenceResolver (embedded in Go's EmitResolver).
+
+    pub fn get_referenced_export_container(&self, node: P<Node>, prefix_locals: bool) -> Option<P<Node>> {
+        self.lock(|c| self.r.get_referenced_export_container(c, node, prefix_locals))
+    }
+
+    pub fn get_referenced_import_declaration(&self, node: P<Node>) -> Option<P<Node>> {
+        self.lock(|c| self.r.get_referenced_import_declaration(c, node))
+    }
+
+    pub fn get_referenced_value_declarations(&self, node: P<Node>) -> Vec<P<Node>> {
+        self.lock(|c| self.r.get_referenced_value_declarations(c, node))
+    }
+
     // Non-locking methods (called with the checker already borrowed, from symbol tracker callbacks).
 
     pub fn is_symbol_accessible(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult {
@@ -148,5 +204,57 @@ impl Resolver {
 
     pub fn get_properties_of_container_function(&self, c: &mut Checker, node: Option<P<Node>>) -> Vec<P<Symbol>> {
         self.r.get_properties_of_container_function(c, node)
+    }
+}
+
+/// Go `binder.ReferenceResolver` as `getScriptTransformers` picks it: the emit resolver (which embeds the
+/// interface), or a plain binder `ReferenceResolver` without hooks.
+#[derive(Clone, Copy)]
+pub enum ReferenceResolverRef {
+    Emit(Resolver),
+    Plain(P<tsrs_binder::ReferenceResolver<()>>),
+}
+
+impl ReferenceResolverRef {
+    pub fn get_referenced_export_container(&self, node: P<Node>, prefix_locals: bool) -> Option<P<Node>> {
+        match self {
+            ReferenceResolverRef::Emit(r) => r.get_referenced_export_container(node, prefix_locals),
+            ReferenceResolverRef::Plain(r) => r.get_referenced_export_container(&mut (), node, prefix_locals),
+        }
+    }
+
+    pub fn get_referenced_import_declaration(&self, node: P<Node>) -> Option<P<Node>> {
+        match self {
+            ReferenceResolverRef::Emit(r) => r.get_referenced_import_declaration(node),
+            ReferenceResolverRef::Plain(r) => r.get_referenced_import_declaration(&mut (), node),
+        }
+    }
+
+    pub fn get_referenced_value_declaration(&self, node: P<Node>) -> Option<P<Node>> {
+        match self {
+            ReferenceResolverRef::Emit(r) => r.get_referenced_value_declaration(node),
+            ReferenceResolverRef::Plain(r) => r.get_referenced_value_declaration(&mut (), node),
+        }
+    }
+
+    pub fn get_referenced_value_declarations(&self, node: P<Node>) -> Vec<P<Node>> {
+        match self {
+            ReferenceResolverRef::Emit(r) => r.get_referenced_value_declarations(node),
+            ReferenceResolverRef::Plain(r) => r.get_referenced_value_declarations(&mut (), node),
+        }
+    }
+
+    pub fn get_element_access_expression_name(&self, expression: P<Node>) -> String {
+        match self {
+            ReferenceResolverRef::Emit(r) => r.get_element_access_expression_name(expression),
+            ReferenceResolverRef::Plain(r) => r.get_element_access_expression_name(&mut (), Some(expression)),
+        }
+    }
+
+    pub fn get_referenced_member_value_declaration(&self, node: P<Node>) -> Option<P<Node>> {
+        match self {
+            ReferenceResolverRef::Emit(r) => r.get_referenced_member_value_declaration(node),
+            ReferenceResolverRef::Plain(r) => r.get_referenced_member_value_declaration(&mut (), node),
+        }
     }
 }

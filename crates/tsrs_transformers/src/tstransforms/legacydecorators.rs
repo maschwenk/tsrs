@@ -1,4 +1,5 @@
 use crate::*;
+use printer::{AssignedNameOptions, EmitFlags, NameOptions};
 
 pub struct LegacyDecoratorsTransformer {
     pub base: Transformer,
@@ -14,7 +15,7 @@ pub struct LegacyDecoratorsTransformer {
 }
 
 // legacydecorators.go:25
-pub fn new_legacy_decorators_transformer(opt: &TransformOptions) -> P<Transformer> {
+pub fn new_legacy_decorators_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(LegacyDecoratorsTransformer {
         base: Transformer::default(),
         language_version: opt.compiler_options.get_emit_script_target(),
@@ -22,8 +23,7 @@ pub fn new_legacy_decorators_transformer(opt: &TransformOptions) -> P<Transforme
         class_aliases: RefCell::new(None),
         enclosing_classes: RefCell::new(Vec::new()),
     });
-    tx.base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(opt.context));
-    P::from_static(&tx.get().base)
+    Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(opt.context)))
 }
 
 impl LegacyDecoratorsTransformer {
@@ -617,7 +617,7 @@ impl LegacyDecoratorsTransformer {
         // use the local name for the class
         let f = self.factory();
         let local_name = f.get_declaration_name_ex(node, NameOptions { allow_comments: false, allow_source_maps: true });
-        let decorate = f.new_decorate_helper(&decorator_expressions, local_name, None, None);
+        let decorate = f.new_decorate_helper(decorator_expressions, local_name, None, None);
         let mut assignment_target = decorate;
         if let Some(class_alias) = class_alias {
             assignment_target = f.new_assignment_expression(class_alias, decorate);
@@ -967,7 +967,7 @@ impl LegacyDecoratorsTransformer {
             f.new_keyword_expression(Kind::NullKeyword)
         };
 
-        let helper = f.new_decorate_helper(&decorator_expressions, prefix, Some(member_name), Some(descriptor));
+        let helper = f.new_decorate_helper(decorator_expressions, prefix, Some(member_name), Some(descriptor));
 
         self.emit_context().set_emit_flags(helper, EmitFlags::NoComments);
         self.emit_context().set_source_map_range(helper, move_range_past_modifiers(member));
@@ -1006,7 +1006,7 @@ impl LegacyDecoratorsTransformer {
         for (i, decorators) in parameters.iter().enumerate() {
             if !decorators.is_empty() {
                 for decorator in decorators {
-                    let helper = self.factory().new_param_helper(self.visitor().visit_node(decorator.expression()).unwrap(), i, decorator.expression().unwrap().loc());
+                    let helper = self.factory().new_param_helper(self.visitor().visit_node(decorator.expression()).unwrap(), i as i32, decorator.expression().unwrap().loc());
                     self.emit_context().set_emit_flags(helper, EmitFlags::NoComments);
                     results.push(helper);
                 }

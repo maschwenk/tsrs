@@ -1529,3 +1529,8 @@ pub fn get_assigned_name(node: P<Node>) -> Option<P<Node>> {
     }
     None
 }
+
+// utilities.go:80 (added for emit)
+pub fn range_is_synthesized(loc: tsrs_core::TextRange) -> bool {
+    position_is_synthesized(loc.pos()) || position_is_synthesized(loc.end())
+}

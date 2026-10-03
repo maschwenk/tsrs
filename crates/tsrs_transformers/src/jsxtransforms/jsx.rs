@@ -1,4 +1,7 @@
 use crate::*;
+use printer::EmitFlags;
+use tsrs_core::collections::OrderedMap;
+use tsrs_core::TextRange;
 use tsrs_core::stringutil;
 use tsrs_core::{JsxEmit, LanguageVariant};
 
@@ -16,21 +19,20 @@ pub struct JSXTransformer {
 }
 
 // jsx.go:32
-pub fn new_jsx_transformer(opts: &TransformOptions) -> P<Transformer> {
+pub fn new_jsx_transformer(opts: &TransformOptions) -> Option<P<Transformer>> {
     let compiler_options = opts.compiler_options;
     let emit_context = opts.context;
     let tx = P::new(JSXTransformer {
         base: Transformer::default(),
         compiler_options,
-        emit_resolver: opts.emit_resolver,
+        emit_resolver: opts.emit_resolver.unwrap(),
         import_specifier: RefCell::new(String::new()),
         filename_declaration: Cell::new(None),
         utilized_implicit_runtime_imports: RefCell::new(OrderedMap::default()),
         in_jsx_child: Cell::new(false),
         current_source_file: Cell::new(None),
     });
-    tx.base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(Some(n))), Some(emit_context));
-    P::from_static(&tx.get().base)
+    Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(Some(n))), Some(emit_context)))
 }
 
 impl JSXTransformer {
@@ -493,7 +495,7 @@ impl JSXTransformer {
         if expressions.len() == 1 {
             return expressions[0];
         }
-        f.new_assign_helper(&expressions, self.compiler_options.get_emit_script_target())
+        f.new_assign_helper(expressions, self.compiler_options.get_emit_script_target())
     }
 
     // jsx.go:456

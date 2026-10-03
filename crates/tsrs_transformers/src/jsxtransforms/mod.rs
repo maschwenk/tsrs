@@ -1,4 +1,6 @@
-// Go package `transformers/jsxtransforms`.
+//! Go package `transformers/jsxtransforms`.
+
+use crate::*;
 
 mod jsx;
 

@@ -20,6 +20,8 @@ tsrs_tsoptions.workspace = true
 tsrs_modulespecifiers.workspace = true
 tsrs_checker = { workspace = true, optional = true }
 tsrs_declarations = { workspace = true, optional = true }
+tsrs_printer = { workspace = true, optional = true }
+tsrs_transformers = { workspace = true, optional = true }
 rustc-hash.workspace = true
 indexmap.workspace = true
 bitflags.workspace = true
@@ -29,7 +31,7 @@ rayon.workspace = true
 # The checker crate is being ported concurrently; without this feature the program still loads,
 # parses and binds files (enough for --listFilesOnly), but has no type checker.
 default = ["checker"]
-checker = ["dep:tsrs_checker", "dep:tsrs_declarations"]
+checker = ["dep:tsrs_checker", "dep:tsrs_declarations", "dep:tsrs_printer", "dep:tsrs_transformers"]
 # Creation-site counters of checker objects (tsrs_core::sitecount).
 site-counts = ["tsrs_checker?/site-counts"]
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files.

@@ -329,7 +329,7 @@ impl MetadataSerializer {
         let type_name = node.as_type_reference_node().type_name;
         let c = self.c.get();
         let serial_scope = c.current_name_scope.or(c.current_lexical_scope);
-        let kind = self.resolver.get_type_reference_serialization_kind(self.ec.parse_node(Some(type_name)), self.ec.parse_node(serial_scope));
+        let kind = self.resolver.get_type_reference_serialization_kind(self.ec.parse_node(Some(type_name)).unwrap(), self.ec.parse_node(serial_scope));
         match kind {
             TypeReferenceSerializationKind::Unknown => {
                 // From conditional type type reference that cannot be resolved is Similar to any or unknown

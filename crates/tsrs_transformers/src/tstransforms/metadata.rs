@@ -18,19 +18,18 @@ pub struct MetadataTransformer {
 }
 
 // metadata.go:24
-pub fn new_metadata_transformer(opt: &TransformOptions) -> P<Transformer> {
+pub fn new_metadata_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(MetadataTransformer {
         base: Transformer::default(),
         legacy_decorators: opt.compiler_options.experimental_decorators.is_true(),
-        resolver: opt.emit_resolver,
+        resolver: opt.emit_resolver.unwrap(),
         serializer: Cell::new(None),
         language_version: opt.compiler_options.get_emit_script_target(),
         strict_null_checks: opt.compiler_options.get_strict_option_value(opt.compiler_options.strict_null_checks),
         parent: Cell::new(None),
         current_lexical_scope: Cell::new(None),
     });
-    tx.base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| Some(tx.visit(n))), Some(opt.context));
-    P::from_static(&tx.get().base)
+    Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| Some(tx.visit(n))), Some(opt.context)))
 }
 
 impl MetadataTransformer {
