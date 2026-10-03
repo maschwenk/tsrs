@@ -2719,7 +2719,7 @@ impl Checker {
     }
 
     // flow.go:2389
-    pub(crate) fn get_type_with_default(&mut self, t: P<Type>, default_expression: Option<P<Node>>) -> P<Type> {
+    pub fn get_type_with_default(&mut self, t: P<Type>, default_expression: Option<P<Node>>) -> P<Type> {
         if let Some(default_expression) = default_expression {
             let non_undefined_type = self.get_non_undefined_type(t);
             let default_type = self.get_type_of_expression(default_expression);
@@ -2732,7 +2732,7 @@ impl Checker {
     // For example, when a variable of type number | string | boolean is assigned a value of type number | boolean,
     // we remove type string.
     // flow.go:2399
-    pub(crate) fn get_assignment_reduced_type(&mut self, declared_type: P<Type>, assigned_type: P<Type>) -> P<Type> {
+    pub fn get_assignment_reduced_type(&mut self, declared_type: P<Type>, assigned_type: P<Type>) -> P<Type> {
         if declared_type == assigned_type {
             return declared_type;
         }

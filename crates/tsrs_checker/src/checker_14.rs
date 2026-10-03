@@ -1419,12 +1419,12 @@ impl Checker {
     }
 
     // checker.go:29576
-    pub(crate) fn remove_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
+    pub fn remove_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
         self.filter_type(t, |c, t| c.has_type_facts(t, TypeFacts::Truthy))
     }
 
     // checker.go:29580
-    pub(crate) fn extract_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
+    pub fn extract_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
         self.map_type(t, |c, t| Some(c.get_definitely_falsy_part_of_type(t))).unwrap()
     }
 
