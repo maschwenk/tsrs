@@ -1,5 +1,18 @@
 # Status
 
+## 2026-10-03: 0.3.0 release
+
+The npm package includes default JavaScript/declaration/source-map emit, incremental builds and project references,
+plus the synchronous and asynchronous Node API. Type checking without output requires `--noEmit`.
+The TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929).
+
+Validation carried forward from the merged Node API candidate: both CI workflows passed, packed consumers passed
+on Node 16/18/20/22/24, and separate Go/Go/Rust captures each passed 902 tests with three known upstream TODOs.
+Successful responses matched for 163 of 172 methods; five remain inconclusive, one has only error-path evidence,
+and three profiling methods are unsupported. See [Node API limitations](NODE_API.md) and [emit progress](EMIT.md).
+The release workflow checks installed packages against the actual PGO binaries on every supported platform before
+publishing them.
+
 ## 2026-09-30: first end-to-end runs
 
 All checker bodies are merged and the workspace compiles. Type/symbol/signature printing (`printer.rs`) still has

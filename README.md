@@ -48,20 +48,21 @@ baselines; the four exceptions are test-harness artifacts. `docs/STATUS.md` has 
 
 ## What it does and doesn't do
 
-Emit is on by default, as in tsc (the `TSRS_EMIT` opt-in is gone); it is not released yet: npm `0.2.3` is
-checker-only. "Match" and "identical" below are against tsgo built from the same pinned commit.
+Starting with `0.3.0`, the npm package includes default emit, incremental builds and the `unstable/*` Node API.
+Use `--noEmit` for type checking only; `TSRS_EMIT` no longer changes behavior. "Match" and "identical" below are
+against tsgo built from the same pinned commit.
 
 | feature | status | evidence and notes |
 | --- | --- | --- |
-| Type checking (`tsc --noEmit`) | yes, the default | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match; same diagnostics on the 38k-file codebase |
+| Type checking (`tsc --noEmit`) | yes | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match; same diagnostics on the 38k-file codebase |
 | Checker threads, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | |
 | Options TypeScript 7 removed (ES5 target, AMD/UMD/System modules, `node10`/`classic` resolution, `baseUrl`, …) | rejected, as in tsgo | same TS5102 / TS5108 errors |
-| JavaScript emit | yes, the default (not in npm `0.2.3`) | all of tsgo's script transforms: type erasure, import elision, enums, namespaces, const enum inlining, CommonJS and ES modules, JSX, legacy and standard decorators, class fields, `using`, async and `for await`, and lowering for older targets (object rest/spread, `?.`, `??`, `**`, logical assignment). 13,392 `.js` baselines pass, 0 fail |
-| Declaration emit (`.d.ts`) | yes, the default (not in npm `0.2.3`) | part of the `.js` baselines |
-| Source maps, declaration maps | yes, the default (not in npm `0.2.3`) | 149 `.js.map` and 156 `.sourcemap.txt` baselines pass, 0 fail |
-| Incremental compilation (`.tsbuildinfo`) | yes, the default (not in npm `0.2.3`) | tsbuildinfo files identical, also for `--noEmit` programs |
-| `--build` (project references, `--builders`, `--clean`, `--dry`, `--force`, `--verbose`) | yes, the default (not in npm `0.2.3`) | 187 of 190 `tsbuild` and 187 of 216 `tsc` scenario baselines pass; the failures are CLI outputs tsrs does not port (`--help`, `--init`, `--showConfig`, `--locale`, `--generateTrace`, the `--version` line) and one message that prints an internal symbol name. Finished projects stay in memory (Go frees them), so peak memory grows with the graph |
-| Emit on the 38k-file codebase | yes, the default (not in npm `0.2.3`) | all 96 packages built with `tsc`: 9,257 output files (JS, `.d.ts`, maps, `.tsbuildinfo`) byte-identical, same diagnostics and exit codes |
+| JavaScript emit | yes (since `0.3.0`) | all of tsgo's script transforms: type erasure, import elision, enums, namespaces, const enum inlining, CommonJS and ES modules, JSX, legacy and standard decorators, class fields, `using`, async and `for await`, and lowering for older targets (object rest/spread, `?.`, `??`, `**`, logical assignment). 13,392 `.js` baselines pass, 0 fail |
+| Declaration emit (`.d.ts`) | yes (since `0.3.0`) | part of the `.js` baselines |
+| Source maps, declaration maps | yes (since `0.3.0`) | 149 `.js.map` and 156 `.sourcemap.txt` baselines pass, 0 fail |
+| Incremental compilation (`.tsbuildinfo`) | yes (since `0.3.0`) | tsbuildinfo files identical, also for `--noEmit` programs |
+| `--build` (project references, `--builders`, `--clean`, `--dry`, `--force`, `--verbose`) | yes (since `0.3.0`) | 187 of 190 `tsbuild` and 187 of 216 `tsc` scenario baselines pass; the failures are CLI outputs tsrs does not port (`--help`, `--init`, `--showConfig`, `--locale`, `--generateTrace`, the `--version` line) and one message that prints an internal symbol name. Finished projects stay in memory (Go frees them), so peak memory grows with the graph |
+| Emit on the 38k-file codebase | yes (since `0.3.0`) | all 96 packages built with `tsc`: 9,257 output files (JS, `.d.ts`, maps, `.tsbuildinfo`) byte-identical, same diagnostics and exit codes |
 | `--watch` (also `-b --watch`) | no | exits with "not supported" |
 | `--init`, `--showConfig` | no | exits with "not supported"; `--help` prints a short usage, not tsc's |
 | `--locale` | ignored | messages are English only |
