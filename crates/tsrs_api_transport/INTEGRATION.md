@@ -537,3 +537,74 @@ Real processes at c2:
 - `contention_repro.mjs`: build orchestrator 0/3 and API checker 0/3 spurious errors.
 - `reentry_repro.mjs`: `buildDuringBuild` gives an immediate error on sync and an error after 10.3 s
   on async; `pingDuringBuild` and in-flight nested snapshots succeed.
+
+# Review of core f70371e (PR 34): generated predecode
+
+## Inputs
+
+- Core: `f70371e5acffd258c3bc5ddbb559c9c51d7d6477`, isolated worktree. `target/debug/tsrs` sha256
+  `4d528789…9f29`.
+- Pinned Go server: built at `b85298b6…`.
+- Raw data and scripts: `/root/artifacts/f7-review/`.
+  - `gen_fields.py` derives every params struct's fields and Go types from the pinned `proto.go`:
+    170 methods, 505 fields.
+- Comparisons treat Go's randomized "unable"/"cannot" as equal. The 3 profiling methods are excluded.
+
+## Results
+
+| check | result |
+| --- | --- |
+| Shape matrix: 15 payloads × 169 methods (strictness, `[1]`, `"x"`, `5`, empty, `null`, `{}`, unknown key, `{"file":null}`, `{"snapshot":"x"}`, mixed bad fields) | **2535 / 2535 identical**. c2 had 112 for `{"file":null}`, 5 for mixed field types and 30 for `{"snapshot":"x"}` |
+| Unknown `file` regression (`{"file":null}`, `{"file":7}` on `*FromFile`) | 7/7 identical |
+| `resolveModuleName` payloads (37) | 36 identical, plus one wording difference |
+| Field/value matrix, 8837 cases. Each field gets 15 values: `"x"`, 7, -1, 1.5, 1e3, 2^31, 2^32, 2^64, true, [], [1], {}, null, [null], unknown-object. Plus mixed invalid pairs in both orders | 7269 identical; 1149 same class, wording only; 419 class mismatches |
+| Ordinary pinned sync and async clients: createSnapshot, getSourceFileNames, semantic/syntactic diagnostics, getSymbolAtPosition (`Dog`), getTypeAtPosition + typeToString (`Dog`), transpileModule, emitToString, updateSnapshot with a layer, release, request after release | all 24 results identical to Go |
+
+## The 419 class mismatches
+
+### Malformed input that tsrs accepts or looks up before rejecting (415)
+
+In these cases Go answers `invalid request` and tsrs answers a later client error, an untyped error
+or OK.
+
+| case | count | example |
+| --- | --- | --- |
+| Exponent-notation integers (`1e3`). Go: `cannot unmarshal JSON number 1e3 into Go api.SnapshotID … : invalid syntax`; tsrs treats it as 1000 | 232 | `release {"snapshot":1e3}` gives `client error: snapshot 1000 not found` |
+| Integers out of the field type's range (2^31 for int32, 2^32 for uint32/ResolutionMode, 2^64 for uint64/SnapshotID) | 169 | `resolveModuleName {"resolutionMode":4294967296}` |
+| Array element types not predecoded (`[]NodeHandle`, `[]SymbolReference`, `[]ImportAdderAction`, `[]*ReconfigureSnapshotProgramParams`, `[]BatchRequest`, `positions []uint32`) | 14 | `getSymbolsAtLocations {"locations":[1]}` gives `client error: snapshot 0 not found`; `batchRequests {"requests":[1]}` gives **OK** with a per-item error |
+
+### Input Go accepts that tsrs rejects (4)
+
+These are the only cases where a request Go serves fails in tsrs. None appear in normal client traffic.
+
+| case | Go | tsrs |
+| --- | --- | --- |
+| `batchRequests {"maxResponseBytesPerPage":-1}` (field is `int`) | OK | `maxResponseBytesPerPage must be a non-negative integer` |
+| `createBuildOrchestrator {"rootNames":[null]}` | OK (null element becomes "") | invalid request |
+| `parseCommandLine {"commandLine":[null]}` | OK | invalid request |
+| `createSnapshot {"ensurePrograms":[null]}` | OK | invalid request |
+
+A JS client produces `[null]` when an array holds `undefined`.
+
+## Wording-only differences (1149)
+
+All are in the same class, and none change whether a request is accepted.
+
+- **594: number literal omitted.** For a non-integer, out-of-range or negative-for-unsigned number,
+  Go says `cannot unmarshal JSON number 1.5 into Go int … : invalid syntax`. tsrs omits the literal
+  and the `: invalid syntax` suffix.
+- **About 280: field order with several invalid fields.** Go reports the first invalid field in
+  *document* order; tsrs reports the first in *struct declaration* order. Example:
+  `batchRequests {"continuationToken":[{"bad":1}],"requests":"bad"}`. Go reports
+  `/continuationToken`, tsrs reports `/requests`.
+- **215: package qualifier.** `[]api.BatchRequest` / `[]api.DocumentIdentifier` versus tsrs's
+  `[]BatchRequest`.
+- **15: alias names.** `core.ResolutionMode` is an alias of `core.ModuleKind`, and Go prints
+  `core.ModuleKind`.
+- **17: own messages.** Some custom-unmarshaler types have their own text, for example
+  `removePrograms` / `ensurePrograms` (`cannot unmarshal into Go project.SyntheticProjectID within
+  "/removePrograms/0": …`), and a nested element (`createPrograms [1]`) gives `params must be an
+  object`.
+- **1: `resolveModuleName {"inProgressSnapshot":-1}`.** Same as the number-literal case.
+
+Nested struct decode order and exact jsontext wording inside nested structs remain documented gaps.
