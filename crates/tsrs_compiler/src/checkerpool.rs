@@ -172,22 +172,14 @@ pub const CHECKER_STACK_SIZE: usize = 512 << 20;
 // Go core.WorkGroup as used by the checker pool: runs `task(i)` for every index, each on its own OS thread,
 // and waits for all of them. Single-threaded runs execute the tasks in order on the calling thread.
 fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sync) {
-    run_work_group_for(single_threaded, count, &(0..count).collect::<Vec<_>>(), task)
-}
-
-// `run_work_group` over a subset `indices` of `0..count`: the same threads (one per index, named and sized as before)
-// and the same single-threaded rule (`count`, not `indices.len()`, decides), but no thread for an index outside
-// `indices`.
-fn run_work_group_for(single_threaded: bool, count: usize, indices: &[usize], task: impl Fn(usize) + Sync) {
     if single_threaded || count <= 1 {
-        indices.iter().copied().for_each(task);
+        (0..count).for_each(task);
         return;
     }
     std::thread::scope(|s| {
         let task = &task;
-        let handles: Vec<_> = indices
-            .iter()
-            .map(|&i| {
+        let handles: Vec<_> = (0..count)
+            .map(|i| {
                 std::thread::Builder::new()
                     .name(format!("checker-{i}"))
                     .stack_size(CHECKER_STACK_SIZE)
@@ -643,11 +635,11 @@ impl checkerPool {
                 *cpu[checker_idx].lock().unwrap() = thread_cpu_seconds() - cpu_start;
             }
         };
-        // Go queues one goroutine per checker group; here each group is an OS thread, so no thread is started for a
-        // checker that owns none of `files` (e.g. the per-file `Program::emit` calls of incremental emit, which would
-        // otherwise start `checkers.len()` threads per file). Groups with files run exactly as before.
+        // Go queues one goroutine per checker group (cheap); here each group is an OS thread, so spawn threads only for
+        // the checkers that own at least one of `files`. A one-file call (incremental emit of one affected file) then
+        // runs on the calling thread instead of creating `checkers.len()` threads per file.
         let active: Vec<usize> = (0..state.checkers.len()).filter(|&i| files.iter().any(|f| state.file_associations.get(f) == Some(&i))).collect();
-        run_work_group_for(single_threaded || self.single_threaded, state.checkers.len(), &active, run);
+        run_work_group(single_threaded || self.single_threaded, active.len(), |k| run(active[k]));
         if stats {
             state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_cpu.lock().unwrap().push(cpu.into_iter().map(|t| t.into_inner().unwrap()).collect());

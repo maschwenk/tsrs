@@ -1,25 +1,41 @@
-# Checker-thread fix (draft, not merge-ready)
+# Checker-thread fix (draft; coordinator-approved design: original six-line hunk)
 
-Status: DRAFT, not merge-ready. Base: main fb867b1. Result: this contract-preserving revision is output-neutral but does
-NOT fix the memory regression (measured below); only the earlier six-line hunk (52be3a5) does.
+Base: main fb867b1. Code at this head = the six-line `checkerpool.rs` hunk of 52be3a5 (mfs-cx/emit-builders-review,
+unchanged), byte-identical in its +/- lines. Commits 600723a/4bf81a6 on this branch (contract-preserving
+`run_work_group_for` revision) are SUPERSEDED: measured output-neutral but no memory gain (table below), and removed by
+this head.
 
 ## Change
-`crates/tsrs_compiler/src/checkerpool.rs`: `for_each_checker_group_do` no longer starts a thread for a checker that owns
-none of `files`. New `run_work_group_for(single_threaded, count, indices, task)`; `run_work_group` delegates to it with
-all indices (all other callers unchanged).
+`crates/tsrs_compiler/src/checkerpool.rs`, `for_each_checker_group_do`: only checkers that own at least one of `files`
+form groups; `run_work_group(single_threaded, active.len(), |k| run(active[k]))`. With one active group,
+`run_work_group`'s `count <= 1` rule runs it on the calling thread (no checker thread); with several, one
+`checker-{k}` thread (512 MB stack) per active group, numbered by position among the active groups.
 
-## Why this revision differs from the earlier six-line hunk (52be3a5 on mfs-cx/emit-builders-review, kept unchanged)
-The earlier hunk called `run_work_group(.., active.len(), ..)`, whose `count <= 1` rule ran a single active group on
-the *calling* thread instead of a 512 MB `checker-N` thread, and renumbered thread names. That changes threading
-semantics beyond filtering empty groups (stack size and thread identity of every one-file call). This revision keeps
-the original contract exactly: the single-threaded decision still uses `checkers.len()`, each active group still gets
-its own `checker-{index}` thread with `CHECKER_STACK_SIZE`; only groups with no files are skipped.
+## Single-group path: who the calling thread is
+Callers of `for_each_checker_group_do` (built-in checker pool only; the language server uses an external pool and is not
+affected): `Program::emit` (program_emit.rs:105), `collect_checker_diagnostics_from_files` (program.rs:868),
+`get_declaration_diagnostics` (program.rs:1784). Their calling threads:
+- CLI: the 512 MB main thread (crates/tsrs_cli/src/main.rs:23).
+- `-b` (incremental/build branches, e.g. 535adce): the 512 MB `builder-N` threads (build/orchestrator.rs:357).
+- `tsrs-test` workers: 256 MB (crates/tsrs_testrunner/src/worker.rs:16); fourslash test threads: 256 MB
+  (crates/tsrs_fourslash/src/runner.rs:162).
+Checker threads use 512 MB (`CHECKER_STACK_SIZE`); gates below pass on the 256 MB test threads.
 
-## Problem it addresses (measured on the incremental/build branches, earlier revision)
-Incremental emit calls `Program::emit` once per affected file; each call started `checkers.len()` threads, each keeping
-its own arena chunk and allocator heap. 8 composite projects x 150 files, `TSRS_EMIT=1 tsrs -b . --builders 4`:
-535adce 1.73 GB / 1.21 s; earlier revision 52be3a5 0.40 GB / 0.47 s; tsgo 0.26 GB / 0.34 s. On main (no incremental
-or `-b` yet) the CLI only calls this with all files, so the change is expected to be output-neutral there.
+## Problem (why)
+Incremental emit calls `Program::emit` once per affected file; before the fix each call started `checkers.len()`
+threads, each with its own arena chunk and allocator heap that are never reused.
+
+## Measurements (`TSRS_EMIT=1 tsrs -b . --builders N`, 8 composite projects x 150 files, peak RSS / wall)
+`checkerpool.rs` is byte-identical at fb867b1 and 535adce, so each hunk was applied unchanged to 535adce (local builds).
+
+| binary | builders 1 | builders 4 | builders 8 | threads created (b4) |
+|---|---|---|---|---|
+| 535adce (no fix) | 1694 MB / 1.40 s | 1727 MB / 1.21 s | 1749 MB / 1.18 s | 4.9 K |
+| 535adce + six-line hunk (this head's code) | 354 MB / 0.52 s | 393 MB / 0.46 s | 409 MB / 0.47 s | 171 |
+| 535adce + 600723a (superseded) | 1691 MB / 1.27 s | 1717 MB / 1.13 s | 1746 MB / 1.14 s | 1.3 K |
+| tsgo (ts-ref b85298b6) | 192 MB / 0.55 s | 257 MB / 0.34 s | 353 MB / 0.36 s | — |
+
+Single 150-file composite project, `TSRS_EMIT=1 tsrs -p .`, 4 checkers: threads created 654 -> 54, peak RSS 306 -> 131 MB.
 
 ## Reproduction
 Generator (python3), writes /tmp/rv/mem/n{1,2,4,8}:
@@ -47,41 +63,14 @@ export const c{i} = new C{i}(v{i}).map(x => x.nested).map(n => n.a.length);
     json.dump({"files":[],"references":refs}, open(f"{root}/tsconfig.json","w"))
 for n in (1,2,4,8): gen(f"/tmp/rv/mem/n{n}", n)
 ```
-Measure (peak RSS via `resource.getrusage(RUSAGE_CHILDREN).ru_maxrss`; thread creations via `MIMALLOC_SHOW_STATS=1`,
-`threads` total column), on a fresh copy each run:
+Measure on a fresh copy each run (peak RSS via `getrusage(RUSAGE_CHILDREN).ru_maxrss`; thread creations via
+`MIMALLOC_SHOW_STATS=1`, `threads` total column):
 ```sh
 cp -r /tmp/rv/mem/n8 /tmp/rv/memrun && cd /tmp/rv/memrun
 TSRS_EMIT=1 python3 -c 'import resource,subprocess,sys;subprocess.run(sys.argv[1:]);print(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss//1024,"MB")' <tsrs> -b . --builders 4
-cd p0 && rm -rf out *.tsbuildinfo && TSRS_EMIT=1 MIMALLOC_SHOW_STATS=1 <tsrs> -p . 2>&1 | grep -E 'threads|peak rss'
+TSRS_EMIT=1 MIMALLOC_SHOW_STATS=1 <tsrs> -b . --builders 4 2>&1 | grep -E '^ *threads'
 ```
-`-b`/incremental need a binary that has them (e.g. this hunk applied on the incremental/build branch); on main use the
-gates below.
+`-b` needs a binary that has it (this hunk applied to the incremental/build branch).
 
-## Measurements of this exact revision (600723a)
-`checkerpool.rs` is byte-identical at fb867b1 and 535adce, so the 600723a hunk was applied unchanged to 535adce (local
-build, not pushed) for `-b`. n8 fixture, peak RSS / wall, fresh copy per run:
-
-| binary | builders 1 | builders 4 | builders 8 | threads created (b4) |
-|---|---|---|---|---|
-| 535adce (no fix) | 1694 MB / 1.40 s | 1727 MB / 1.21 s | 1749 MB / 1.18 s | 4.9 K |
-| 535adce + 52be3a5 six-line hunk | 354 MB / 0.52 s | 393 MB / 0.46 s | 409 MB / 0.47 s | 171 |
-| 535adce + this revision | 1691 MB / 1.27 s | 1717 MB / 1.13 s | 1746 MB / 1.14 s | 1.3 K |
-
-Conclusion: the memory comes from the one *active* `checker-N` thread that each one-file `Program::emit` still starts
-(each new thread gets its own arena chunk and allocator heap that are never reused); the idle threads that this revision
-removes cost little. The six-line hunk works because a single active group runs on the calling thread
-(`run_work_group`'s `count <= 1` rule), i.e. exactly the threading change this revision avoids. Choosing between them is
-a design decision for the coordinator: keep the original contract (this revision; no memory gain) or accept that
-one-group calls run on the caller's thread (52be3a5; CLI callers are the 512 MB main/builder threads).
-
-## Gates of this exact revision vs main fb867b1 (both built from these heads)
-- conformance errors + `--baselines types,symbols`, `--timeout 60`: result trees identical, default and
-  `TSRS_LAZY_MEMBERS=0` (13458 pass each).
-- `--baselines js --timeout 60`: same pass list (8680 pass in both).
-- fourslash 4066/63, same pass list; `RUSTFLAGS="-D warnings" cargo check --workspace --locked --all-targets` clean;
-  `tests/emit_gate.rs` 3/3.
-- Timeout noise: `compiler/intersectionConstructorReductionCrash` needs ~20 s with the default 20 s per-test timeout
-  (direct CLI, 3 alternating runs: main 20.50-20.69 s, this revision 20.71-20.76 s; `tsrs-test show`: 19.97 s vs
-  20.24-20.30 s). It flips to timeout at the default limit and passes in both at 60 s; it is a single-file program, for
-  which this revision starts one checker thread instead of four idle-plus-one. Treated as load/layout noise, not a
-  source failure.
+## Gates of this head
+(see the commit message / section below once run)
