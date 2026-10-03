@@ -1,6 +1,6 @@
 # Emit plan: JavaScript, declarations, source maps, `--build`
 
-Status (2026-10-03): **tsrs emits by default, like tsgo** (branch `mfs-cx/default-emit`, at the user's request). The
+Status (2026-10-03): **tsrs 0.3.0 emits by default, like tsgo**. The
 `TSRS_EMIT=1` opt-in gate of section 6 is removed: no forced `--noEmit`, `-b` and incremental compilation run without
 an environment flag, and the project's/CLI's `noEmit`, `emitDeclarationOnly`, `noEmitOnError` and
 `incremental`/`composite` decide as in Go (an incremental `--noEmit` program still writes its tsbuildinfo). The old
