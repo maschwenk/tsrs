@@ -3,7 +3,6 @@
 // nested client request (issued from inside a client callback) is handled with the protocol lock
 // released, so callbacks can re-enter the API without deadlocking.
 
-use std::cell::Cell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::Instant;
@@ -12,10 +11,6 @@ use crate::handler::{panic_message, Caller, CancellationToken, Handler, RequestC
 use crate::message::{Message, Response, ResponseError, TransportError};
 use crate::protocol::{ProtocolReader, ProtocolWriter};
 use crate::timing::{server_timing_snapshot, TimingCollector, METHOD_GET_SERVER_TIMING, METHOD_RESET_SERVER_TIMING};
-
-thread_local! {
-    static DEPTH: Cell<u32> = const { Cell::new(0) };
-}
 
 struct SyncIo {
     reader: Box<dyn ProtocolReader>,
@@ -33,6 +28,7 @@ pub struct SyncConn {
     handler: Arc<dyn Handler>,
     timing: Option<TimingCollector>,
     cancel: CancellationToken,
+    callbacks: Arc<crate::reentrancy::CallbackState>,
 }
 
 impl SyncConn {
@@ -47,6 +43,7 @@ impl SyncConn {
             handler,
             timing: options.collect_timing.then(TimingCollector::default),
             cancel: CancellationToken::new(),
+            callbacks: Arc::default(),
         })
     }
 
@@ -126,10 +123,10 @@ impl SyncConn {
             _ => {}
         }
         let start = self.timing.as_ref().map(|_| Instant::now());
-        let cx = RequestContext { cancel: self.cancel.clone(), depth };
-        let prev = DEPTH.with(|d| d.replace(depth));
-        let outcome = catch_unwind(AssertUnwindSafe(|| self.handler.handle_request(&cx, &msg.method, msg.params_bytes())));
-        DEPTH.with(|d| d.set(prev));
+        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: self.callbacks.clone() };
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()))
+        }));
         if let (Some(t), Some(start)) = (&self.timing, start) {
             t.record(&msg.method, start.elapsed());
         }
@@ -142,7 +139,7 @@ impl SyncConn {
     }
 
     fn handle_notification(&self, msg: Message, depth: u32) {
-        let cx = RequestContext { cancel: self.cancel.clone(), depth };
+        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: self.callbacks.clone() };
         let _ = catch_unwind(AssertUnwindSafe(|| self.handler.handle_notification(&cx, &msg.method, msg.params_bytes())));
     }
 
@@ -154,7 +151,8 @@ impl SyncConn {
         }
         let id = crate::message::Id::string(method);
         io.writer.write_request(&id, method, params)?;
-        let depth = DEPTH.with(|d| d.get()) + 1;
+        let depth = crate::reentrancy::current_request().map_or(0, |cx| cx.depth) + 1;
+        let _waiting = self.callbacks.enter();
         loop {
             let msg = match io.reader.read_message() {
                 Ok(msg) => msg,

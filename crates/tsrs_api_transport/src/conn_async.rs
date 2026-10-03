@@ -67,6 +67,7 @@ pub struct AsyncConn {
     /// Closes the underlying stream (Go: rwc.Close) after a fatal write error so the reader unblocks.
     closer: Option<Box<dyn Fn() + Send + Sync>>,
     handler_stack_size: usize,
+    callbacks: Arc<crate::reentrancy::CallbackState>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -92,6 +93,7 @@ impl AsyncConn {
             request_error: Mutex::new(None),
             closer,
             handler_stack_size: DEFAULT_HANDLER_STACK_SIZE,
+            callbacks: Arc::default(),
         })
     }
 
@@ -161,7 +163,7 @@ impl AsyncConn {
 
     fn dispatch(&self, msg: Message) {
         if msg.is_notification() {
-            let cx = RequestContext { cancel: self.cancel.clone(), depth: 0 };
+            let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: self.callbacks.clone() };
             let _ = catch_unwind(AssertUnwindSafe(|| self.handler.handle_notification(&cx, &msg.method, msg.params_bytes())));
             return;
         }
@@ -219,8 +221,10 @@ impl AsyncConn {
             _ => {}
         }
         let start = self.timing.as_ref().map(|_| Instant::now());
-        let cx = RequestContext { cancel: self.cancel.clone(), depth: 0 };
-        let outcome = catch_unwind(AssertUnwindSafe(|| self.handler.handle_request(&cx, &msg.method, msg.params_bytes())));
+        let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: self.callbacks.clone() };
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()))
+        }));
         if let (Some(t), Some(start)) = (&self.timing, start) {
             t.record(&msg.method, start.elapsed());
         }
@@ -251,6 +255,7 @@ impl AsyncConn {
             }
         }
         let _guard = Unregister(self, id.clone());
+        let _waiting = self.callbacks.enter();
         lock(&self.writer).write_request(&id, method, params)?;
         match rx.recv() {
             Ok(resp) => {

@@ -91,7 +91,11 @@ describe("sync client (MessagePack, pinned SyncRpcChannel)", () => {
             assert.equal(fs("readFile", "/v/main.ts"), ASTRAL);
             assert.equal(fs("readFile", "/v/missing.ts"), null);
             assert.equal(fs("readFile", join(tmp, "real.ts")), ASTRAL);
-            assert.equal(fs("readFile", "/v/lone.ts"), "x\ufffdy");
+            // Pinned decoder (jsontext) rejects unpaired surrogate escapes; the request fails, the
+            // sync connection survives.
+            assert.throws(() => fs("readFile", "/v/lone.ts"), {
+                message: "panic: jsontext: invalid surrogate pair `\\ud800y\"}` in string within \"/value\" after offset 26",
+            });
             assert.equal(fs("readFile", "/v/big.ts").length, 5 * 1024 * 1024);
             assert.equal(fs("fileExists", "/v/main.ts"), true);
             assert.equal(fs("fileExists", "/v/nope.ts"), false);
@@ -242,17 +246,15 @@ describe("async client (JSON-RPC, pinned vscode-jsonrpc client)", () => {
         const c = asyncClient({ fs: virtualFS(log) });
         try {
             const fs = (op, path, data) => c.apiRequest("test/fs", { op, path, data });
-            const [a, b, missing, lone, big] = await Promise.all([
+            const [a, b, missing, big] = await Promise.all([
                 fs("readFile", "/v/main.ts"),
                 fs("readFile", join(tmp, "real.ts")),
                 fs("readFile", "/v/missing.ts"),
-                fs("readFile", "/v/lone.ts"),
                 fs("readFile", "/v/big.ts"),
             ]);
             assert.equal(a, ASTRAL);
             assert.equal(b, ASTRAL);
             assert.equal(missing, null);
-            assert.equal(lone, "x\ufffdy");
             assert.equal(big.length, 5 * 1024 * 1024);
             assert.equal((await fs("stat", "/v/main.ts")).mtimeMs, Date.parse("2024-02-29T12:34:56.789Z"));
             assert.equal(await fs("writeFile", "/v/out.js", "o"), null);
@@ -285,6 +287,21 @@ describe("async client (JSON-RPC, pinned vscode-jsonrpc client)", () => {
             await assert.rejects(c.apiRequest("test/fs", { op: "readFile", path: "/v/throws.ts" }), /panic: ipc: remote error \[-32603\]: .*callback exploded/);
             await assert.rejects(c.apiRequest("test/callClient", { method: "notRegistered" }), /ipc: remote error \[-32601\]/);
             assert.equal(await c.apiRequest("ping", null), "pong");
+        }
+        finally {
+            await c.close();
+        }
+    });
+
+    test("unpaired surrogate in a callback result is a fatal JSON-RPC decode error, as in pinned Go", async () => {
+        // jsonrpc.Message decoding (jsontext) rejects the response frame; the connection's Run fails and
+        // the server exits non-zero instead of hanging.
+        const c = asyncClient({ fs: virtualFS() });
+        try {
+            await c.connect();
+            const exited = new Promise(resolve => c.process.once("exit", code => resolve(code)));
+            c.apiRequest("test/fs", { op: "readFile", path: "/v/lone.ts" }).catch(() => {});
+            assert.equal(await exited, 1);
         }
         finally {
             await c.close();
