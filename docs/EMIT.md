@@ -474,28 +474,28 @@ then-current main:
   executable directory; the path sorts differently against project files, which reorders `referencedMap` keys. Under
   `TSRS_EMIT=1`, `TSRS_LIB_PATH=<dir>` makes tsrs read them from a directory like the noembed build (the oracles set it
   to tsgo's directory).
-- **Concurrency.** Go runs the per-file snapshot and affected-file work and the build tasks on work groups; tsrs runs
-  them on the calling thread in a deterministic order (sorted paths, build order). The build orchestrator runs one
-  task at a time in `Order()` (Go's `--builders 1` path); output order is the same as Go's reporter goroutine's.
-  Emit itself still runs on the checker threads (emit/core), so the `WriteFile` callbacks only touch thread-safe
-  state.
-- **Build concurrency (assessment, not implemented).** Go's `--builders N` (declsbuild.go: number, `minValue` 1,
-  default 4, 1 under `--singleThreaded`) sets the goroutine count of `Orchestrator.rangeTasks`; builders take projects
-  in `ScheduleOrder()` and block on their upstream tasks' `done` channels, while one reporter goroutine waits on each
-  task's `built` channel in `Order()` and prints its buffered output. tsrs parses and validates the option exactly
-  like Go (`--builders 0` / `-1`: TS5002, `--builders x`: TS5073, same exit codes and bytes as tsgo built from
-  ts-ref) and then ignores the value: `build_or_clean_order` builds and reports each task in `Order()`. Because Go
-  reports in `Order()` too, the output is the same: a five-project graph (four independent leaves with errors and a
-  root) gives byte-identical `-b --verbose` output and exit codes for tsgo `--builders 1`, tsgo `--builders 8`, tsrs
-  `--builders 1` and tsrs `--builders 8` (timestamps normalized), and the `b1` fixture matches with and without
-  `--builders 2`. Only wall time differs (independent projects are not built concurrently); Go's per-task output
-  buffers already hide any interleaving. Smallest faithful next step: port
-  `rangeTasks` with `numRoutines` OS threads over an atomic index into `ScheduleOrder()` (already computed), give
-  `BuildTask` the `done`/`built` signals (a `Mutex<bool>` + `Condvar` each, Go's closed channels) and
-  `waitOnUpstream`, keep the reporter in `Order()`, and move the task fields the builders mutate (`status`, `result`,
-  `errors`, `pending`, `package_jsons`) from `Cell`/`RefCell` to `Mutex`/atomics; the host caches are already
-  `Mutex`-guarded. Each concurrent project also runs its own checker threads, and the build mode does not free finished programs (`free_program` is not called),
-  so peak memory grows with N; measure that before raising the default above 1.
+- **Concurrency.** Go runs the per-file snapshot and affected-file work on work groups; tsrs runs it on the calling
+  thread in a deterministic order (sorted paths). Emit runs on the checker threads (emit/core), so the `WriteFile`
+  callbacks only touch thread-safe state.
+- **Build concurrency** (branch `mfs-cx/emit-builders`). `--builders N` (declsbuild.go: number, `minValue` 1, default
+  4, 1 under `--singleThreaded`; validated like Go: TS5002 / TS5073) sets the number of builder threads of
+  `rangeTasks`. As at the pinned commit, builders take projects from `Order()` by an atomic index (the stale comment
+  in orchestrator.go mentions ScheduleOrder, but `rangeTasks` is called with `order`), wait on their upstream tasks'
+  `done` signals (`waitOnUpstream`) and close `done` / `built` when finished; the calling thread plays Go's reporter
+  goroutine and prints each task's buffered output in `Order()` once `built` is closed. Go's closed channels are a
+  `Mutex<bool>` + `Condvar` (`closeSignal`); task state is `Mutex`/atomic, the host caches were already
+  `Mutex`-guarded, the reporter types are `Send + Sync`, and the host holds the orchestrator by `&'static` so the
+  compiler checks `Sync` (no reliance on `P`'s blanket `Send`/`Sync` for these objects). Builder threads get 512 MB
+  stacks (main.rs does the same). A panicking builder releases every waiter and the panic resurfaces (Go would abort
+  the process). Programs built concurrently share the host's cached `.d.ts`/JSON source files (bound once under
+  `Once`, read-only afterwards); a debug build with `TSRS_CHECK_SHARED=1` reports no write to a shared object at
+  `--builders 1/4/8`. Evidence (fixtures in `tools/oracle/incremental/fixtures`, against tsgo built from ts-ref):
+  identical output and trees at `--builders 1/4/8` with and without `--stopBuildOnErrors` (`graph`: errors, a skipped
+  dependency chain, a solution config; `cycle`), and with `--dry`, `--clean`, `--force`; 20 cold runs per builder
+  count give one output each; temporary tracing (not committed) showed 4 of 5 independent projects of a wide graph
+  building at the same time at `--builders 4` and all 5 at `--builders 8`. Peak RSS on the `graph` fixture: tsrs 291 /
+  313 / 309 MB at 1 / 4 / 8 builders (tsgo 122 / 175 / 199 MB). The build mode does not free finished programs
+  (`free_program` is not called), so peak memory grows with the projects in flight on large graphs.
 - **Shape signatures** follow Go: `computeDtsSignature` prints the `.d.ts` through `Program::emit` with
   `EmitOnlyBuilderSignature`; files that were never shape-checked keep their version as signature (so the first edit
   of a file after a cold build rechecks its importers, exactly like tsgo).
@@ -579,4 +579,4 @@ in declaration-only mode is 2325/2325. The JS side of the sweep waits for the tr
   Running emit from the CLI under `TSRS_EMIT=1` may therefore change which node an error is first reported from,
   exactly as in tsc. The default mode is not affected.
 - `tsrs_compiler/src/outputpaths.rs` and `tsrs_tsoptions::outputpaths` overlap; consolidate in E1.
-- `--build` runs one project at a time whatever `--builders` says (section 10b, "Build concurrency").
+- Build mode does not free finished programs (section 10b, "Build concurrency"); Go drops them for the GC.
