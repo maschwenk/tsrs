@@ -1,0 +1,11 @@
+{
+    "name": "tsrs-npm-tooling",
+    "private": true,
+    "description": "Build-time tooling for npm/build.mjs (compiles the npm/tsrs JS API and runs its tests). Not published; nothing here is a runtime dependency.",
+    "type": "module",
+    "devDependencies": {
+        "@types/node": "22.20.1",
+        "tinybench": "6.1.6",
+        "typescript": "7.1.0-dev.20260929.1"
+    }
+}

@@ -21,5 +21,39 @@ binary through the same launcher, set `TSRS_BINARY=/path/to/tsrs`.
 
 `require("@maschwenk/tsrs")` exports `version`, `typescriptVersion` and `typescriptCommit`.
 
+## JS API (unstable)
+
+The package also ships TypeScript 7's programmatic API, copied unchanged from microsoft/TypeScript
+`packages/typescript` at the commit the binary ports (see `UPSTREAM.json`), under the same subpaths as the `typescript`
+7 package:
+
+| subpath | contents |
+| --- | --- |
+| `@maschwenk/tsrs/unstable/sync` | `API` with synchronous calls (MessagePack over the server's stdio) |
+| `@maschwenk/tsrs/unstable/async` | `API` with promise-returning calls (JSON-RPC) |
+| `@maschwenk/tsrs/unstable/ast` (`/is`, `/factory`, `/utils`, `/scanner`, `/visitor`, `/clone`) | AST types, guards, factory and traversal |
+| `@maschwenk/tsrs/unstable/fs`, `/proto` | filesystem callbacks/request filesystems, protocol types |
+
+```js
+import { API } from "@maschwenk/tsrs/unstable/sync";
+
+const api = new API({ cwd: process.cwd() });            // spawns `tsrs --api`; tsserverPath overrides the binary
+const snapshot = api.createSnapshot({ openProject: "/abs/path/tsconfig.json" });
+const project = snapshot.getConfiguredProject("/abs/path/tsconfig.json");
+console.log(project.program.getSemanticDiagnostics("/abs/path/src/index.ts"));
+project.program.emit();                                  // follows the project's compiler options
+api.close();
+```
+
+The code is TypeScript's, with one intentional difference: if the server process dies, the async API rejects
+every pending and later request with an error starting `API server connection lost: ` instead of leaving them
+pending forever (see `npm/README.md` in the repository).
+
+These entry points are unstable upstream and here. The API is served by the `tsrs` binary (`tsrs --api`), whose
+coverage of the protocol is still incomplete; `npm/sdk/METHODS.md` in the repository tracks it per method.
+TypeScript consumers need `esnext.disposable` (or a newer lib) for the declarations' `Symbol.dispose` members.
+The JS API runs on the package's minimum Node (16.20; checked on 16.20, 18, 20, 22 and 24). Where Node has no
+`Symbol.dispose` (before 18.18/20.4), call `close()` / `dispose()` instead of `using`.
+
 Licensed under Apache-2.0. tsrs is a derivative work of TypeScript (Copyright (c) Microsoft Corporation); the
 bundled `lib.*.d.ts` files and the structure of the code come from that project. See `LICENSE` and `NOTICE.txt`.
