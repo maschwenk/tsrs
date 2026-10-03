@@ -20,7 +20,7 @@ use crate::tsc::ExtendedConfigCache;
 pub(crate) type mTimeCache = Arc<Mutex<FxHashMap<Path, Option<SystemTime>>>>;
 
 pub(crate) struct host {
-    pub(crate) orchestrator: OnceLock<P<Orchestrator>>,
+    pub(crate) orchestrator: OnceLock<&'static Orchestrator>,
     pub(crate) host: Arc<dyn CompilerHost>,
 
     // Caches that last only for build cycle and then cleared out
@@ -34,7 +34,7 @@ pub(crate) struct host {
 }
 
 impl host {
-    fn o(&self) -> P<Orchestrator> {
+    fn o(&self) -> &'static Orchestrator {
         *self.orchestrator.get().unwrap()
     }
 
@@ -161,7 +161,7 @@ impl BuildInfoReader for host {
         let o = self.o();
         let config_path = o.to_path(config.config_name());
         let task = o.get_task(&config_path);
-        let (build_info, _) = task.load_or_store_build_info(&o, &o.to_path(config.config_name()), &config.get_build_info_file_name());
+        let (build_info, _) = task.load_or_store_build_info(o, &o.to_path(config.config_name()), &config.get_build_info_file_name());
         build_info.map(|b| (*b).clone())
     }
 }

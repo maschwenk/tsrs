@@ -1,6 +1,6 @@
 // Port of execute/build/buildtask.go (the non-watch parts; content mappers are not supported by tsrs).
 
-use std::cell::{Cell, RefCell};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -67,19 +67,19 @@ impl taskResult {
 
 pub struct BuildTask {
     pub(crate) config: String,
-    pub(crate) resolved: Cell<Option<P<ParsedCommandLine>>>,
-    pub(crate) up_stream: RefCell<Vec<upstreamTask>>,
-    pub(crate) status: RefCell<Option<upToDateStatus>>,
+    pub(crate) resolved: Mutex<Option<P<ParsedCommandLine>>>,
+    pub(crate) up_stream: Mutex<Vec<upstreamTask>>,
+    pub(crate) status: Mutex<Option<upToDateStatus>>,
 
     // task reporting
-    pub(crate) result: RefCell<Option<taskResult>>,
+    pub(crate) result: Mutex<Option<taskResult>>,
 
     build_info_entry: Mutex<Option<buildInfoEntry>>,
-    package_jsons: RefCell<Vec<String>>,
+    package_jsons: Mutex<Vec<String>>,
 
-    errors: RefCell<Vec<P<Diagnostic>>>,
-    pub(crate) pending: Cell<bool>,
-    is_initial_cycle: Cell<bool>,
+    errors: Mutex<Vec<P<Diagnostic>>>,
+    pub(crate) pending: AtomicBool,
+    is_initial_cycle: AtomicBool,
 }
 
 fn diag(message: &'static Message, args: &[&dyn std::fmt::Display]) -> P<Diagnostic> {
@@ -90,59 +90,63 @@ impl BuildTask {
     pub(crate) fn new(config: String, is_initial_cycle: bool) -> BuildTask {
         BuildTask {
             config,
-            resolved: Cell::new(None),
-            up_stream: RefCell::new(Vec::new()),
-            status: RefCell::new(None),
-            result: RefCell::new(None),
+            resolved: Mutex::new(None),
+            up_stream: Mutex::new(Vec::new()),
+            status: Mutex::new(None),
+            result: Mutex::new(None),
             build_info_entry: Mutex::new(None),
-            package_jsons: RefCell::new(Vec::new()),
-            errors: RefCell::new(Vec::new()),
-            pending: Cell::new(false),
-            is_initial_cycle: Cell::new(is_initial_cycle),
+            package_jsons: Mutex::new(Vec::new()),
+            errors: Mutex::new(Vec::new()),
+            pending: AtomicBool::new(false),
+            is_initial_cycle: AtomicBool::new(is_initial_cycle),
         }
     }
 
+    pub(crate) fn resolved_opt(&self) -> Option<P<ParsedCommandLine>> {
+        *self.resolved.lock().unwrap()
+    }
+
     fn resolved(&self) -> P<ParsedCommandLine> {
-        self.resolved.get().unwrap()
+        self.resolved_opt().unwrap()
     }
 
     fn status(&self) -> upToDateStatus {
-        self.status.borrow().clone().unwrap()
+        self.status.lock().unwrap().clone().unwrap()
     }
 
     fn set_status(&self, status: upToDateStatus) {
-        *self.status.borrow_mut() = Some(status);
+        *self.status.lock().unwrap() = Some(status);
     }
 
     fn report_status(&self, d: P<Diagnostic>) {
-        let result = self.result.borrow();
+        let result = self.result.lock().unwrap();
         (result.as_ref().unwrap().report_status.as_ref().unwrap())(d);
     }
 
     fn set_exit_status(&self, status: ExitStatus) {
-        self.result.borrow_mut().as_mut().unwrap().exit_status = status;
+        self.result.lock().unwrap().as_mut().unwrap().exit_status = status;
     }
 
     // buildtask.go:115
     fn unblock_downstream(&self) {
-        self.pending.set(false);
-        self.is_initial_cycle.set(false);
+        self.pending.store(false, Ordering::SeqCst);
+        self.is_initial_cycle.store(false, Ordering::SeqCst);
     }
 
     // buildtask.go:121
     fn report_diagnostic(&self, err: P<Diagnostic>) {
-        self.errors.borrow_mut().push(err);
-        let result = self.result.borrow();
+        self.errors.lock().unwrap().push(err);
+        let result = self.result.lock().unwrap();
         (result.as_ref().unwrap().diagnostic_reporter.as_ref().unwrap())(err);
     }
 
     // buildtask.go:126
     pub(crate) fn report(&self, orchestrator: &Orchestrator, _config_path: &Path, build_result: &mut OrchestratorResult) {
-        let errors = self.errors.borrow();
+        let errors = self.errors.lock().unwrap();
         if !errors.is_empty() {
             build_result.errors.get_or_insert_with(Vec::new).extend(errors.iter().copied());
         }
-        let result = self.result.borrow_mut().take().unwrap();
+        let result = self.result.lock().unwrap().take().unwrap();
         orchestrator.opts.sys.write(&result.builder.lock().unwrap());
         if result.exit_status as i32 > build_result.status() as i32 {
             build_result.status = Some(result.exit_status);
@@ -170,26 +174,26 @@ impl BuildTask {
     // buildtask.go:154
     pub(crate) fn build_project(&'static self, orchestrator: &'static Orchestrator, path: &Path) {
         // Upstream tasks are complete (tasks run in build order).
-        if self.pending.get() {
+        if self.pending.load(Ordering::SeqCst) {
             self.set_status(self.get_up_to_date_status(orchestrator, path));
             self.report_up_to_date_status(orchestrator);
             if !self.handle_status_that_doesnt_require_build(orchestrator) {
                 self.compile_and_emit(orchestrator, path);
                 self.update_downstream(orchestrator, path);
             } else {
-                if let Some(resolved) = self.resolved.get() {
+                if let Some(resolved) = self.resolved_opt() {
                     for diagnostic in resolved.get_config_file_parsing_diagnostics() {
                         self.report_diagnostic(diagnostic);
                     }
                 }
-                if !self.errors.borrow().is_empty() {
+                if !self.errors.lock().unwrap().is_empty() {
                     self.set_exit_status(ExitStatus::DiagnosticsPresent_OutputsSkipped);
                 }
             }
-        } else if !self.errors.borrow().is_empty() {
+        } else if !self.errors.lock().unwrap().is_empty() {
             self.report_up_to_date_status(orchestrator);
-            let errors = self.errors.borrow().clone();
-            let result = self.result.borrow();
+            let errors = self.errors.lock().unwrap().clone();
+            let result = self.result.lock().unwrap();
             for err in errors {
                 // Should not add the diagnostics so just reporting
                 (result.as_ref().unwrap().diagnostic_reporter.as_ref().unwrap())(err);
@@ -200,7 +204,7 @@ impl BuildTask {
 
     // buildtask.go:184
     fn update_downstream(&self, orchestrator: &Orchestrator, _path: &Path) {
-        if self.is_initial_cycle.get() {
+        if self.is_initial_cycle.load(Ordering::SeqCst) {
             return;
         }
         if orchestrator.opts.command.build_options.stop_build_on_errors.is_true() && self.status().is_error() {
@@ -211,7 +215,7 @@ impl BuildTask {
 
     // buildtask.go:225
     fn compile_and_emit(&'static self, orchestrator: &'static Orchestrator, path: &Path) {
-        self.errors.borrow_mut().clear();
+        self.errors.lock().unwrap().clear();
         let build_options = &orchestrator.opts.command.build_options;
         if build_options.verbose.is_true() {
             self.report_status(diag(&diagnostics::Building_project_0, &[&orchestrator.relative_file_name(&self.config)]));
@@ -223,7 +227,7 @@ impl BuildTask {
         compile_times.config_time = host.config_times.lock().unwrap().get(path).copied().unwrap_or_default();
         let sys = orchestrator.opts.sys;
         let build_info_read_start = sys.now();
-        let builder = self.result.borrow().as_ref().unwrap().builder.clone();
+        let builder = self.result.lock().unwrap().as_ref().unwrap().builder.clone();
         let trace_builder = builder.clone();
         let compiler_host: Arc<dyn tsrs_compiler::CompilerHost> = Arc::new(compilerHost {
             host,
@@ -245,7 +249,7 @@ impl BuildTask {
             Some(std::time::Instant::now),
             orchestrator.opts.testing.is_some(),
         );
-        self.result.borrow_mut().as_mut().unwrap().program = Some(incremental_program);
+        self.result.lock().unwrap().as_mut().unwrap().program = Some(incremental_program);
         compile_times.changes_compute_time = sys.now() - changes_compute_start;
 
         let this: &'static BuildTask = self;
@@ -253,9 +257,8 @@ impl BuildTask {
         let report_error_summary = tsc::quiet_diagnostics_reporter();
         let writer_builder = builder.clone();
         let writer = move |t: &str| writer_builder.lock().unwrap().push_str(t);
-        // Called from the checker threads: capture arena handles (P is Send + Sync).
-        let (task_p, orchestrator_p) = (P::from_static(this), P::from_static(orchestrator));
-        let write_file = move |file_name: &str, text: &str, data: &mut WriteFileData| task_p.write_file(&orchestrator_p, file_name, text, data);
+        // Called from the checker threads: BuildTask and Orchestrator are Sync (Mutex/atomic state).
+        let write_file = move |file_name: &str, text: &str, data: &mut WriteFileData| this.write_file(orchestrator, file_name, text, data);
         let (result, statistics) = emit_and_report_statistics(EmitInput {
             sys,
             program,
@@ -270,12 +273,12 @@ impl BuildTask {
             testing_m_times_cache: Some(host.m_times.lock().unwrap().clone()),
         });
         {
-            let mut r = self.result.borrow_mut();
+            let mut r = self.result.lock().unwrap();
             let r = r.as_mut().unwrap();
             r.exit_status = result.status;
             r.statistics = statistics;
         }
-        *self.package_jsons.borrow_mut() = incremental_program.package_json_lookup_paths();
+        *self.package_jsons.lock().unwrap() = incremental_program.package_json_lookup_paths();
         let emitted_files = result.emitted_files.clone();
         if (!program.options().no_emit_on_error.is_true() || result.diagnostics.is_empty())
             && (!emitted_files.is_empty() || self.status().kind != upToDateStatusType::OutOfDateBuildInfoWithErrors)
@@ -283,7 +286,7 @@ impl BuildTask {
             // Update time stamps for rest of the outputs
             self.update_time_stamps(orchestrator, &emitted_files, &diagnostics::Updating_unchanged_output_timestamps_of_project_0);
         }
-        self.result.borrow_mut().as_mut().unwrap().build_kind = buildKind::Program;
+        self.result.lock().unwrap().as_mut().unwrap().build_kind = buildKind::Program;
         if result.status == ExitStatus::DiagnosticsPresent_OutputsSkipped || result.status == ExitStatus::DiagnosticsPresent_OutputsGenerated {
             self.set_status(upToDateStatus::new(upToDateStatusType::BuildErrors));
         } else {
@@ -339,7 +342,7 @@ impl BuildTask {
 
             self.update_time_stamps(orchestrator, &[], &diagnostics::Updating_output_timestamps_of_project_0);
             self.set_status(upToDateStatus::with(upToDateStatusType::UpToDate, status.data.clone()));
-            self.result.borrow_mut().as_mut().unwrap().build_kind = buildKind::Pseudo;
+            self.result.lock().unwrap().as_mut().unwrap().build_kind = buildKind::Pseudo;
             return true;
         }
 
@@ -353,11 +356,11 @@ impl BuildTask {
 
     // buildtask.go:353
     fn get_up_to_date_status(&self, orchestrator: &Orchestrator, config_path: &Path) -> upToDateStatus {
-        if let Some(status) = self.status.borrow().clone() {
+        if let Some(status) = self.status.lock().unwrap().clone() {
             return status;
         }
         // Config file not found
-        let Some(resolved) = self.resolved.get() else {
+        let Some(resolved) = self.resolved_opt() else {
             return upToDateStatus::new(upToDateStatusType::ConfigFileNotFound);
         };
 
@@ -367,7 +370,7 @@ impl BuildTask {
         }
 
         let build_options = &orchestrator.opts.command.build_options;
-        for upstream in self.up_stream.borrow().iter() {
+        for upstream in self.up_stream.lock().unwrap().iter() {
             if build_options.stop_build_on_errors.is_true() && upstream.task.status().is_error() {
                 // Upstream project has errors, so we cannot build this project
                 return upToDateStatus::with(
@@ -574,7 +577,7 @@ impl BuildTask {
         }
 
         let mut ref_dts_unchanged = false;
-        for upstream in self.up_stream.borrow().iter() {
+        for upstream in self.up_stream.lock().unwrap().iter() {
             let upstream_status = upstream.task.status();
             if upstream_status.kind == upToDateStatusType::Solution {
                 // Not dependent on the status or this upstream project
@@ -670,7 +673,7 @@ impl BuildTask {
         }
         let mut all = package_jsons;
         all.extend(missing_package_jsons);
-        *self.package_jsons.borrow_mut() = all;
+        *self.package_jsons.lock().unwrap() = all;
 
         upToDateStatus::with(
             if ref_dts_unchanged {
@@ -817,7 +820,7 @@ impl BuildTask {
 
     // buildtask.go:777
     pub(crate) fn clean_project(&self, orchestrator: &Orchestrator, _path: &Path) {
-        let Some(resolved) = self.resolved.get() else {
+        let Some(resolved) = self.resolved_opt() else {
             self.report_diagnostic(diag(&diagnostics::File_0_not_found, &[&self.config]));
             self.set_exit_status(ExitStatus::DiagnosticsPresent_OutputsSkipped);
             return;
@@ -844,7 +847,7 @@ impl BuildTask {
                     self.report_diagnostic(diag(&diagnostics::Failed_to_delete_file_0, &[&output_file]));
                 }
             } else {
-                self.result.borrow_mut().as_mut().unwrap().files_to_delete.push(output_file.to_string());
+                self.result.lock().unwrap().as_mut().unwrap().files_to_delete.push(output_file.to_string());
             }
         }
     }
@@ -918,7 +921,7 @@ impl BuildTask {
         if err.is_ok() {
             if let Some(build_info) = data.build_info.clone() {
                 let build_info = build_info.downcast::<BuildInfo>().unwrap();
-                let has_changed_dts_file = self.result.borrow().as_ref().unwrap().program.unwrap().has_changed_dts_file();
+                let has_changed_dts_file = self.result.lock().unwrap().as_ref().unwrap().program.unwrap().has_changed_dts_file();
                 self.on_build_info_emit(orchestrator, file_name, build_info, has_changed_dts_file);
             } else if self.store_output_time_stamp(orchestrator) {
                 // Store time stamps
