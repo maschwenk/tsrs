@@ -65,4 +65,41 @@ describe("parity: project references and buildinfo", () => {
             g.check("bodyOnly.writes", take());
         }
     });
+
+    test("build options: dry, force, stopBuildOnErrors, clean then rebuild, use after dispose", t => {
+        const broken = { ...files, "/a/src/index.ts": `export const a: number = "bad";\nexport function twice(n: number) { return n * 2; }\n` };
+        const { vfs, writes } = recordingFS(files);
+        const take = () => {
+            const w = Object.keys(writes).sort();
+            for (const k of w) delete writes[k];
+            return w;
+        };
+        using api = new API({ cwd, fs: vfs });
+        const dry = api.createBuildOrchestrator(["/c/tsconfig.json"], { cwd: "/", dry: true });
+        g.check("opts.dry", { response: summary(dry.build()), writes: take() });
+        dry.dispose();
+        const o = api.createBuildOrchestrator(["/c/tsconfig.json"], { cwd: "/" });
+        g.check("opts.first", { response: summary(o.build()), writes: take() });
+        const forced = api.createBuildOrchestrator(["/c/tsconfig.json"], { cwd: "/", force: true });
+        g.check("opts.force", { response: summary(forced.build()), writes: take() });
+        forced.dispose();
+        const clean = o.clean();
+        g.check("opts.clean", { status: clean.status, filesDeleted: [...(clean.filesDeleted ?? [])].sort() });
+        g.check("opts.afterClean", { response: summary(o.build()), writes: take() });
+        o.dispose();
+        let threw = false;
+        try {
+            o.build();
+        }
+        catch {
+            threw = true;
+        }
+        g.check("opts.useAfterDispose", threw);
+
+        const { vfs: bvfs, writes: bwrites } = recordingFS(broken);
+        using api2 = new API({ cwd, fs: bvfs });
+        const stop = api2.createBuildOrchestrator(["/c/tsconfig.json"], { cwd: "/", stopBuildOnErrors: true });
+        g.check("opts.stopBuildOnErrors", { response: summary(stop.build()), writes: Object.keys(bwrites).sort() });
+        soft.check(t, "opts.stopBuildOnErrors.buildinfo", buildinfoShape(bvfs.readFile("/a/tsconfig.tsbuildinfo") as any));
+    });
 });
