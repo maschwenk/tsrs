@@ -118,7 +118,8 @@ impl CommonJSModuleTransformer {
         commit_pending_expressions(&mut st);
         let mut statements = st.statements;
         self.append_exports_of_variable_statement(&mut statements, node);
-        single_or_many(Some(statements), f)
+        // Go's `statements` slice stays nil when nothing was appended (SingleOrMany(nil) is nil, not an empty list).
+        single_or_many(if statements.is_empty() { None } else { Some(statements) }, f)
     }
 
     // commonjsmodule.go:1110
