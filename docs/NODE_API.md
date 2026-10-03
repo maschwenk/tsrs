@@ -304,17 +304,17 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   API sessions are not ported.
 - Node index tables are cached per live source file keyed by the file's address (lookups never assign the
   file's lazy node id) and evicted when the file's region is freed; Go stores them on the file itself.
-- Re-entrancy attribution limit: client callbacks made on compiler worker threads (most file reads while a
-  program is built in parallel) carry no request context, so the transport counts them as possibly
-  belonging to any lock holder. A request waiting for the build-orchestrator lock (or, in the checker lane,
-  the API checker lease) while another request builds a program with callbacks can therefore fail with the
-  re-entrancy error after the transport's configurable grace period instead of waiting. Carrying the request
-  context into worker threads needs a propagation hook in the compiler's worker pool (follow-up with the
-  runtime lane); it is a bounded, configurable divergence, not exact Go behavior (Go would wait or hang).
+- Re-entrancy attribution: snapshot builds read files through a `ScopedFs` that enters the creating
+  request's transport `RequestScope`, so client callbacks from compiler worker threads are attributed to
+  that request; API builds run their tasks on the request thread. Remaining divergence: a request whose own
+  slow client callback holds a contended resource cannot be told apart from callback re-entry by attribution
+  alone, so a waiter can still get the re-entrancy error after the transport's configurable grace period
+  where Go would wait (or hang). Reads made later by a retained snapshot count against its finished request.
 - Re-entrancy: nested requests from client callbacks are served; the build orchestrator lock uses the
   transport's `lock_for_request` (bounded error instead of deadlock); the checker lane gates its API checker
   lease the same way. Request params are validated with Go's strict JSON (unpaired surrogates, duplicate
-  members) before decoding.
+  members) before decoding; `null` params decode to the zero-value struct. Field-type mismatches have Go's
+  invalid-request class and `failed to unmarshal *api.<Type>` prefix, but not Go's exact jsontext wording.
 - Memory: snapshots free their programs, checkers, emit allocations and a full build's shared data
   (processed files, project-reference mapper, loader and dts-faking resolution hosts) with the build's base
   region (createSnapshot+release cycles stay flat; `tests/memory_test.rs`). The first attempt at freeing

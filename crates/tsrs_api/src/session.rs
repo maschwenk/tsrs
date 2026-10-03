@@ -311,12 +311,17 @@ impl Session {
                     Value::Array(_) => Some("JSON array".to_string()),
                     Value::String(_) => Some("JSON string".to_string()),
                     Value::Bool(_) => Some("JSON boolean".to_string()),
-                    Value::Number(_) => Some(format!("JSON number {}", String::from_utf8_lossy(params).trim())),
+                    Value::Number(_) => Some("JSON number".to_string()),
                 };
                 if let Some(kind) = kind {
                     return Err(ApiError::invalid_request(format!("failed to unmarshal *api.{go_type}: json: cannot unmarshal {kind} into Go api.{go_type}")));
                 }
-                value
+                // `null` decodes to the zero-value struct: handlers see `{}`.
+                if matches!(value, Value::Null) {
+                    Value::Object(Default::default())
+                } else {
+                    value
+                }
             }
         };
         let go_type = crate::methods::params_type(method);

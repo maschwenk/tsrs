@@ -109,3 +109,25 @@ fn non_object_params_are_typed_invalid_requests() {
     let r = call(&s, "parseCommandLine", "null");
     assert!(matches!(get(&r, "fileNames"), tsrs_core::json::Value::Array(_)));
 }
+
+/// Go decodes `null` params into the zero-value struct (runtime review of 7c34965).
+#[test]
+fn null_params_are_the_zero_value_struct() {
+    let dir = TempDir::new("nullparams");
+    let s = session(&dir.dir(), false);
+    // readConfigFile({}): file "" resolves to the cwd, which cannot be read: config {} plus TS5083.
+    let r = call(&s, "readConfigFile", "null");
+    assert_eq!(get(&r, "error.code"), &tsrs_core::json::Value::Number(5083.0));
+    let r2 = call(&s, "readConfigFile", "{}");
+    assert_eq!(r, r2);
+    // parseConfigFile({}): a client error (cannot read the file), not an invalid request.
+    let e = call_err(&s, "parseConfigFile", "null");
+    assert!(e.starts_with("api: client error: could not read file"), "{e}");
+    // Source file descriptor field types are decoding errors.
+    for method in ["retainSourceFile", "getCachedSourceFile"] {
+        let e = call_err(&s, method, r#"{"file":{"fileName":1}}"#);
+        assert!(e.starts_with("api: invalid request:"), "{method}: {e}");
+        let e = call_err(&s, method, r#"{"file":{"scriptKind":"x"}}"#);
+        assert!(e.starts_with("api: invalid request:"), "{method}: {e}");
+    }
+}

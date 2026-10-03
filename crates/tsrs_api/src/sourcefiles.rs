@@ -191,6 +191,20 @@ impl Session {
 
     /// Go `acquireCachedSourceFile`.
     pub(crate) fn acquire_cached_source_file(&self, descriptor: &Value) -> ApiResult<SourceFileLease> {
+        // Field types are part of decoding the request (Go json): mismatches are invalid requests, not client
+        // errors about the descriptor's contents.
+        if let Value::Object(o) = descriptor {
+            for key in ["fileName", "path", "contentHash", "parseOptionsKey", "nodeId"] {
+                if !matches!(o.get(key), None | Some(Value::Null) | Some(Value::String(_))) {
+                    return Err(ApiError::invalid_request(format!("cannot unmarshal into Go string within \"/file/{key}\"")));
+                }
+            }
+            if !matches!(o.get("scriptKind"), None | Some(Value::Null) | Some(Value::Number(_))) {
+                return Err(ApiError::invalid_request("cannot unmarshal into Go core.ScriptKind within \"/file/scriptKind\""));
+            }
+        } else if !matches!(descriptor, Value::Null) {
+            return Err(ApiError::invalid_request("cannot unmarshal into Go api.SourceFileDescriptor within \"/file\""));
+        }
         let key = parse_cache_key(descriptor).map_err(|e| ApiError::client(format!("invalid source file descriptor: {e}")))?;
         let lease = self.snapshot_host.acquire_existing_source_file(key).ok_or_else(|| ApiError::client("source file is not available"))?;
         if source_file_descriptor(lease.source_file()) != *descriptor_normalized(descriptor) {

@@ -372,7 +372,7 @@ impl Session {
             return Ok(None);
         }
         let params = RequestParams::parse(p.get("fileSystem")).map_err(ApiError::client)?;
-        let fs = requestfs::new_for_update(&params, self.snapshot_host_fs(), base, self.current_directory(), file_changes).map_err(ApiError::client)?;
+        let fs = requestfs::new_for_update(&params, ScopedFs::wrap(self.snapshot_host_fs()), base, self.current_directory(), file_changes).map_err(ApiError::client)?;
         // Go sets ReplaceFileSystem from the *request's* kind, not the compacted result's.
         Ok(Some((Arc::new(fs), params.kind == requestfs::Kind::Full)))
     }
@@ -390,7 +390,11 @@ impl Session {
                 req.replace_file_system = replace;
                 Some(fs)
             }
-            None => None,
+            None => {
+                // Attribution only: same host filesystem, never a replacement.
+                req.file_system = Some(ScopedFs::wrap(self.snapshot_host_fs()));
+                None
+            }
         };
         let ctx = tsrs_core::context::Context::background();
         let root = self.snapshot_host.new_root_snapshot();
@@ -436,6 +440,9 @@ impl Session {
         if let Some(fs) = &snapshot_fs {
             req.layered_file_system = Some(fs.clone() as Arc<dyn tsrs_project::LayeredFileSystem>);
             req.replace_file_system = replaced;
+        } else {
+            // Attribution only: same host filesystem, never a replacement.
+            req.file_system = Some(ScopedFs::wrap(self.snapshot_host_fs()));
         }
         let ctx = tsrs_core::context::Context::background();
         let snapshot = match self.snapshot_host.clone_snapshot(&ctx, &base.snapshot, file_changes, Some(Arc::new(req))) {
@@ -476,5 +483,61 @@ impl Session {
             Some(proj) => project_response(&proj),
             None => Value::Null,
         })
+    }
+}
+
+/// Runs every filesystem call inside the request that created the snapshot (`RequestScope`), so client
+/// callbacks made from compiler worker threads while the program is built are attributed to that request by
+/// the transport's re-entrancy checks (crates/tsrs_api_transport/INTEGRATION.md). A snapshot may keep the
+/// wrapper after its request ended; later lazy reads then count against a finished request, which holds
+/// nothing.
+pub(crate) struct ScopedFs {
+    inner: Arc<dyn tsrs_vfs::FS>,
+    scope: tsrs_api_transport::reentrancy::RequestScope,
+}
+
+impl ScopedFs {
+    /// Wraps `inner` when the current thread serves a transport request; otherwise returns `inner`.
+    pub(crate) fn wrap(inner: Arc<dyn tsrs_vfs::FS>) -> Arc<dyn tsrs_vfs::FS> {
+        match tsrs_api_transport::reentrancy::RequestScope::current() {
+            Some(scope) => Arc::new(ScopedFs { inner, scope }),
+            None => inner,
+        }
+    }
+}
+
+impl tsrs_vfs::FS for ScopedFs {
+    fn use_case_sensitive_file_names(&self) -> bool {
+        self.inner.use_case_sensitive_file_names()
+    }
+    fn file_exists(&self, path: &str) -> bool {
+        self.scope.enter(|| self.inner.file_exists(path))
+    }
+    fn read_file(&self, path: &str) -> Option<String> {
+        self.scope.enter(|| self.inner.read_file(path))
+    }
+    fn write_file(&self, path: &str, data: &str) -> Result<(), String> {
+        self.scope.enter(|| self.inner.write_file(path, data))
+    }
+    fn append_file(&self, path: &str, data: &str) -> Result<(), String> {
+        self.scope.enter(|| self.inner.append_file(path, data))
+    }
+    fn remove(&self, path: &str) -> Result<(), String> {
+        self.scope.enter(|| self.inner.remove(path))
+    }
+    fn chtimes(&self, path: &str, a: std::time::SystemTime, m: std::time::SystemTime) -> Result<(), String> {
+        self.scope.enter(|| self.inner.chtimes(path, a, m))
+    }
+    fn directory_exists(&self, path: &str) -> bool {
+        self.scope.enter(|| self.inner.directory_exists(path))
+    }
+    fn get_accessible_entries(&self, path: &str) -> tsrs_vfs::Entries {
+        self.scope.enter(|| self.inner.get_accessible_entries(path))
+    }
+    fn stat(&self, path: &str) -> Option<tsrs_vfs::FileInfo> {
+        self.scope.enter(|| self.inner.stat(path))
+    }
+    fn realpath(&self, path: &str) -> String {
+        self.scope.enter(|| self.inner.realpath(path))
     }
 }
