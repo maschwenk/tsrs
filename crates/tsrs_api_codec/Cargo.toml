@@ -1,0 +1,19 @@
+[package]
+name = "tsrs_api_codec"
+description = "Binary AST codec of the TypeScript native API (port of the pinned tsc/internal/api/encoder)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tsrs_core.workspace = true
+tsrs_ast.workspace = true
+rustc-hash.workspace = true
+
+[dev-dependencies]
+tsrs_parser.workspace = true
+tsrs_binder.workspace = true
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
