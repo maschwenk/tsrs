@@ -138,7 +138,14 @@ Defect 2's 30-iteration loop test, added afterwards, is a third todo. With it, t
 the Go oracle as the packed binary: 18/18 checks. That validates the harness and packaging path only,
 not Rust.
 
-tsrs: no integrated `--api` candidate has been measured yet.
+Runtime lane's test server (`mfs-cx/node-api-runtime` `fe051ba`,
+`examples/transport_test_server`, release build): malformed-framing gates 20/20, with protocol-clean stdout
+and bounded exits. There were 2 soft differences from Go, and they are stricter than Go: a huge declared
+sync payload or async `Content-Length` is rejected before EOF, where Go fails only at EOF. That server is a
+transport fixture, not the API session, so this says nothing about method parity.
+
+tsrs: no integrated `--api` candidate has been measured yet. Published core `e0b9728` has no `--api`
+dispatch in `main.rs`.
 
 ## Known limitations
 
