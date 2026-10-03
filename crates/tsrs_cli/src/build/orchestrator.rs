@@ -90,6 +90,9 @@ pub struct Orchestrator {
     // freed at once (`free_api_orchestrator`). Off for the CLI, whose single build runs to process exit.
     regions: Mutex<Vec<tsrs_core::arena::Region>>,
     use_regions: AtomicBool,
+    // API clean existence answers, kept until the next build (which uses a fresh orchestrator): Go's `Clean` asks
+    // the orchestrator's cachedvfs, which only `Build`'s recheck clears, so a later clean reuses them.
+    api_clean_exists: Mutex<std::collections::HashMap<String, bool>>,
 
     error_summary_reporter: DiagnosticsReporter<'static>,
 
@@ -378,7 +381,13 @@ impl Orchestrator {
         // next recheck (Go's checks go through mtimes and do not populate that entry).
         let sys_fs = self.opts.sys.fs();
         let fs: &dyn tsrs_vfs::FS = &*sys_fs;
-        if output_file.is_empty() || inputs.has(&self.to_path(output_file)) || !fs.file_exists(output_file) {
+        if output_file.is_empty() || inputs.has(&self.to_path(output_file)) {
+            return false;
+        }
+        // Go caches the answer (cachedvfs) and `Clean` never clears it, so a file deleted by an earlier clean is
+        // reported (and removed, a no-op) again by the next clean before a build, and one created in between is not.
+        let exists = *self.api_clean_exists.lock().unwrap().entry(output_file.to_string()).or_insert_with(|| fs.file_exists(output_file));
+        if !exists {
             return false;
         }
         files_to_delete.push(output_file.to_string());
@@ -660,6 +669,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         schedule_order: Mutex::new(Vec::new()),
         regions: Mutex::new(Vec::new()),
         use_regions: AtomicBool::new(false),
+        api_clean_exists: Mutex::new(std::collections::HashMap::new()),
     }));
     let cached_fs = Arc::new(tsrs_vfs::cachedvfs::from(sys.fs()));
     let compiler_host: Arc<dyn CompilerHost> =

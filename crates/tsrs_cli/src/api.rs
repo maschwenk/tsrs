@@ -347,6 +347,26 @@ mod tests {
         let r = call(&s, "cleanReferences", &format!("{{\"buildOrchestratorID\":{id},\"project\":\"app\"}}"));
         assert!(json::marshal(get(&r, "filesDeleted")).unwrap().contains("core/out/index.js"), "{}", json::marshal(&r).unwrap());
 
+        // Upstream "cleans and rebuilds ..." tail, parity f703: after build + clean, the client recreates only one
+        // output; Go's next clean reuses the cached existence answers (cachedvfs, cleared only by a build), so it
+        // lists every output of the project again (index.js, index.d.ts, tsbuildinfo) and status stays 0.
+        call(&s, "build", &format!("{{\"buildOrchestratorID\":{id}}}"));
+        let all = |r: &Value| {
+            let mut v: Vec<String> = match get(r, "filesDeleted") {
+                Value::Array(a) => a.iter().map(|f| json::marshal(f).unwrap().rsplit('/').next().unwrap().trim_end_matches('"').to_string()).collect(),
+                _ => Vec::new(),
+            };
+            v.sort();
+            v
+        };
+        let r = call(&s, "cleanBuild", &format!("{{\"buildOrchestratorID\":{id},\"project\":\"core\"}}"));
+        assert_eq!(all(&r), ["index.d.ts", "index.js", "tsconfig.tsbuildinfo"], "{}", json::marshal(&r).unwrap());
+        w("core/out/index.js", "export const one = 1;\n");
+        let r = call(&s, "cleanBuild", &format!("{{\"buildOrchestratorID\":{id},\"project\":\"core\"}}"));
+        assert_eq!(get(&r, "status"), &Value::Number(0.0), "{}", json::marshal(&r).unwrap());
+        assert_eq!(all(&r), ["index.d.ts", "index.js", "tsconfig.tsbuildinfo"], "{}", json::marshal(&r).unwrap());
+        assert!(!dir.join("core/out/index.js").exists());
+
         assert_eq!(call(&s, "disposeBuildOrchestrator", &format!("{{\"buildOrchestratorID\":{id}}}")), Value::Bool(true));
         assert!(s.handle_request("build", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_err());
         let _ = std::fs::remove_dir_all(&dir);
