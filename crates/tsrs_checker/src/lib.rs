@@ -68,8 +68,6 @@ mod checker_08;
 pub(crate) use checker_08::*;
 mod checker_09;
 pub(crate) use checker_09::*;
-// Public for lint rules (tsgolint's shim exposes checker.IsNonDeferredTypeReference).
-pub use checker_09::is_non_deferred_type_reference;
 mod checker_10;
 pub(crate) use checker_10::*;
 mod checker_11;
@@ -129,6 +127,7 @@ pub use exports::{
     is_tuple_type_target, is_type_usable_as_property_name_exported,
 };
 pub use checker_09::is_non_deferred_type_reference;
+pub use checker_14::get_mapped_type_modifiers;
 pub use nodebuilder::{new_node_builder, new_node_builder_ex};
 pub use nodebuilderimpl_1::try_get_module_specifier_from_declaration;
 pub use printer::new_symbol_tracker_impl;

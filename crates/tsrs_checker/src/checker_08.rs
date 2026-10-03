@@ -1586,7 +1586,7 @@ impl Checker {
     }
 
     // checker.go:16720
-    pub(crate) fn get_declaration_of_alias_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Node>> {
+    pub fn get_declaration_of_alias_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Node>> {
         symbol.declarations().iter().rev().copied().find(|d| ast::is_alias_symbol_declaration(*d))
     }
 
