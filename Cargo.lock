@@ -279,14 +279,17 @@ version = "0.2.3"
 dependencies = [
  "rustc-hash",
  "tsrs_ast",
+ "tsrs_astnav",
  "tsrs_checker",
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
+ "tsrs_ls",
  "tsrs_lsproto",
  "tsrs_module",
  "tsrs_parser",
  "tsrs_project",
+ "tsrs_scanner",
  "tsrs_tsoptions",
  "tsrs_vfs",
 ]

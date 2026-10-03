@@ -1,23 +1,151 @@
-// OWNED BY THE CHECKER LANE (mfs-cx/node-api-checker). Core only provides this placeholder so the
-// crate compiles; the checker lane replaces the body (and may add `src/checker/**`).
+// Node API checker lane (mfs-cx/node-api-checker): port of the checker / symbol / type / signature
+// request handlers of the pinned tsgo API (microsoft/TypeScript b85298b6, tsc/internal/api/session.go +
+// proto.go). See checker/README.md for the contract, id ownership and the per-method coverage inventory.
 //
-// Contract (docs/NODE_API.md, "checker hook"):
-// - `handle` receives every request whose `methods::METHODS` owner is `Owner::Checker`.
-// - Return `None` only for methods the checker lane does not recognize; core turns that into an
-//   explicit `ApiError::unsupported`. Never return a success value for unimplemented behavior.
-// - Per-snapshot checker state (symbol/type/signature registries) lives in `CheckerSnapshotState`,
-//   which core stores inside each registered snapshot and drops when the snapshot is released.
+// Core hook (docs/NODE_API.md, "checker hook"): `handle(session, method, params)` and
+// `CheckerSnapshotState`. Internally the handlers run against the `CheckerHost` trait so they only
+// borrow snapshots, node handles, source-file descriptors and the AST encoder for one request;
+// `SessionHost` adapts core's `Session` to it.
 
-use crate::handler::{ApiResult, Response};
-use crate::session::Session;
+mod dispatch;
+mod handlers_symbols;
+mod handlers_types;
+pub mod host;
+mod json;
+mod params;
+pub mod registry;
+mod setup;
+mod symbol_index;
+
+pub mod coverage_table;
+pub mod coverage_types;
+
+use std::sync::Arc;
+
+use tsrs_ast::{Node, SourceFile};
+use tsrs_compiler::Program;
+use tsrs_core::context::Context;
 use tsrs_core::json::Value;
+use tsrs_core::P;
 
-/// Per-snapshot registries owned by the checker lane. Core creates it with `Default` when a snapshot
-/// is registered and drops it with the snapshot.
+pub use dispatch::{is_checker_method, CHECKER_METHODS};
+pub use host::{CachedFileScope, CheckerError, CheckerErrorKind, CheckerHost, CheckerResponse, CheckerResult, SnapshotScope};
+pub use registry::CheckerRegistry;
+
+use crate::handler::{ApiError, ApiResult, ErrorKind, Response};
+use crate::session::{json_response, Session};
+use crate::wire::Obj;
+
+/// Per-snapshot checker registries (Go `snapshotData.symbolRegistry` + `projectRegistries`). Core
+/// creates it with `Default` when a snapshot is registered and drops it with the snapshot; dropping
+/// releases every registered pointer.
 #[derive(Default)]
-pub struct CheckerSnapshotState {}
-
-pub(crate) fn handle(session: &Session, method: &str, params: &Value) -> Option<ApiResult<Response>> {
-    let _ = (session, method, params);
-    None
+pub struct CheckerSnapshotState {
+    pub(crate) registry: Arc<CheckerRegistry>,
 }
+
+impl Drop for CheckerSnapshotState {
+    fn drop(&mut self) {
+        self.registry.release();
+    }
+}
+
+/// Core entry point. `None` only for methods this lane does not recognize.
+pub(crate) fn handle(session: &Session, method: &str, params: &Value) -> Option<ApiResult<Response>> {
+    let host = SessionHost { session };
+    let result = dispatch::handle(&host, method, params)?;
+    Some(result.map_err(to_api_error).and_then(|response| match response {
+        CheckerResponse::Json(value) => json_response(&value),
+        CheckerResponse::EncodedNode(bytes) => {
+            if session.binary_responses() {
+                Ok(Response::Binary(bytes))
+            } else {
+                json_response(&Obj::new().set("data", Value::String(base64_encode(&bytes))).build())
+            }
+        }
+    }))
+}
+
+fn to_api_error(e: CheckerError) -> ApiError {
+    match e.kind {
+        CheckerErrorKind::InvalidRequest => ApiError::invalid_request(e.message),
+        CheckerErrorKind::Client => ApiError::client(e.message),
+        CheckerErrorKind::Unsupported => ApiError { kind: ErrorKind::Unsupported, message: e.message },
+        CheckerErrorKind::Internal => ApiError::internal(e.message),
+    }
+}
+
+fn from_api_error(e: ApiError) -> CheckerError {
+    match e.kind {
+        ErrorKind::InvalidRequest => CheckerError::invalid(e.message),
+        ErrorKind::ClientError => CheckerError::client(e.message),
+        ErrorKind::Unsupported => CheckerError::unsupported(e.message),
+        ErrorKind::Internal => CheckerError { kind: CheckerErrorKind::Internal, message: e.message },
+    }
+}
+
+const CODEC_PENDING: &str = "node handles, source-file descriptors and AST encoding require tsrs_api_codec, which is not integrated yet";
+
+/// Adapts core's `Session` to `CheckerHost`.
+struct SessionHost<'a> {
+    session: &'a Session,
+}
+
+impl CheckerHost for SessionHost<'_> {
+    fn context(&self) -> Context {
+        Context::background()
+    }
+
+    fn snapshot(&self, handle: u64) -> CheckerResult<SnapshotScope> {
+        let sd = self.session.snapshot_data(handle).map_err(from_api_error)?;
+        let snapshot = sd.snapshot.clone();
+        let registry = sd.checker_state.registry.clone();
+        // The scope pins `SnapshotData` (and with it the project snapshot) until the request ends.
+        Ok(SnapshotScope { handle, snapshot, registry, release: Some(Box::new(move || drop(sd))) })
+    }
+
+    fn acquire_cached_source_file(&self, _descriptor: &Value) -> CheckerResult<CachedFileScope> {
+        Err(CheckerError::unsupported("file-owned symbol references without a snapshot require core's source-file cache (retainSourceFile/getCachedSourceFile), which is not implemented yet"))
+    }
+
+    fn source_file_descriptor(&self, _file: P<SourceFile>) -> CheckerResult<Value> {
+        Err(CheckerError::unsupported(CODEC_PENDING))
+    }
+
+    fn source_file_node_id(&self, _file: P<SourceFile>) -> CheckerResult<u64> {
+        Err(CheckerError::unsupported(CODEC_PENDING))
+    }
+
+    fn node_handle(&self, _node: P<Node>) -> CheckerResult<String> {
+        Err(CheckerError::unsupported(CODEC_PENDING))
+    }
+
+    fn resolve_node_handle(&self, _program: &'static Program, _handle: &str) -> CheckerResult<P<Node>> {
+        Err(CheckerError::unsupported(CODEC_PENDING))
+    }
+
+    fn encode_node(&self, _node: P<Node>) -> CheckerResult<Vec<u8>> {
+        Err(CheckerError::unsupported(CODEC_PENDING))
+    }
+}
+
+/// Standard base64 with padding (Go `base64.StdEncoding`).
+fn base64_encode(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(ALPHABET[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests;
