@@ -1145,7 +1145,9 @@ function createMessageConnection(messageReader, messageWriter, _logger, options)
                     responsePromises.delete(id);
                     responsePromise.reject(new messages_1.ResponseError(messages_1.ErrorCodes.MessageWriteError, error.message ? error.message : 'Unknown reason'));
                     logger.error(`Sending request failed.`);
-                    throw error;
+                    // tsrs patch (npm/sdk/patches/vscode-jsonrpc-send-request-write-error.patch): the request promise
+                    // is already rejected above; rethrowing from this async executor was an unhandled rejection that
+                    // crashed Node when a request was written to a server that had just died.
                 }
             });
         },

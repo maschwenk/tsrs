@@ -22,10 +22,22 @@
         "test/async/api.test.ts",
         "test/async/astnav.test.ts"
     ],
+    "patchedFiles": {
+        "src/api/async/client.ts": {
+            "upstreamSha256": "975c6d195057c74c9d0db6a7bb4289fc35a34e13365e5009833b79b9e1b2fe21",
+            "patch": "npm/sdk/patches/async-client-connection-loss.patch",
+            "patchSha256": "de1242d2ba7125d6ff64afb31a02b6aaa12b8b7bbb900cf24e862191aa915e01"
+        },
+        "vendor/vscode-jsonrpc/lib/common/connection.js": {
+            "upstreamSha256": "0a3a46fad254b78fc2ee371d8438037c860b9bc73124fddb038bf3bb5a3c94f4",
+            "patch": "npm/sdk/patches/vscode-jsonrpc-send-request-write-error.patch",
+            "patchSha256": "17f5c65f76c6c496fc18ac4a49ae93d5ff2d9378066ec3f9903044d34887d32d"
+        }
+    },
     "files": {
         "lib/getExePath.d.ts": "e6110f9086cf143dd2dde7530c89cda637b2ce3ea4731c14b0a75434ab68573f",
         "src/api/async/api.ts": "6a5e81be4398407f697665e0c52a4320b12de3aa5a0093506f0dbd7b2d3427d0",
-        "src/api/async/client.ts": "975c6d195057c74c9d0db6a7bb4289fc35a34e13365e5009833b79b9e1b2fe21",
+        "src/api/async/client.ts": "92663ae282d49479a8bd2d658674f3dab79cfead4e2055d84934d47e44850266",
         "src/api/async/types.ts": "e59dbb687007e71e3ba55b889f696efcc123126cbfaa2322740449d3d7f1cea8",
         "src/api/diagnosticFormatter.ts": "d6de84fcaf6919ed3b21fec22bcf426a9fd5c01f657392e090ceb2815c14d7cc",
         "src/api/fs.ts": "8d0b0cb07e5be3ca2b0fcd0b7913c12c06a23793466c4e6ad32312e145a51a65",
@@ -171,7 +183,7 @@
         "vendor/vscode-jsonrpc/lib/common/cancellation.d.ts": "392dd7b1117b588cba36c04909efd24b0458980506e8e8c1966114f8989058e2",
         "vendor/vscode-jsonrpc/lib/common/cancellation.js": "b851c4246fa5a644bcebe56b1fb74048948eab0886d706e59e2090fa7e41550b",
         "vendor/vscode-jsonrpc/lib/common/connection.d.ts": "86beb461bcefd29f17e932d32affa1dd08ab05ceb80c00befebe67bf5072f608",
-        "vendor/vscode-jsonrpc/lib/common/connection.js": "0a3a46fad254b78fc2ee371d8438037c860b9bc73124fddb038bf3bb5a3c94f4",
+        "vendor/vscode-jsonrpc/lib/common/connection.js": "7c9485b8a2d8c20525ae3449e88e266750b0c3a39b429fe829ba8c646851a502",
         "vendor/vscode-jsonrpc/lib/common/disposable.d.ts": "f0745ab78e18a2befaf1d9951481973318722c4e2f33e859239f55fa999ff2b1",
         "vendor/vscode-jsonrpc/lib/common/disposable.js": "ad43f37a324cf41af376ea66004063ac5867a2e3dfce81b47ab617b9105a0a7d",
         "vendor/vscode-jsonrpc/lib/common/encoding.d.ts": "e445daedeac3005da51d0a3e3258be16096e1c0116701e8979272aaf7aba5fb4",

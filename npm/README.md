@@ -99,6 +99,21 @@ The tests and the inventory can run against a tsgo built from the pinned commit 
 /tmp/tsgo ./cmd/tsc`) as the reference server. The SDK spawns `getExePath()` (so `TSRS_BINARY` applies) unless the
 caller passes `tsserverPath`.
 
+Deliberate patches (the only differences from the pinned sources; each patch file explains itself, and
+`sync-upstream.mjs` applies them strictly and records the original sha256 in `UPSTREAM.json` `patchedFiles`):
+
+- `npm/sdk/patches/async-client-connection-loss.patch` (`src/api/async/client.ts`): upstream, if the server dies or
+  closes the connection while the async client is open, in-flight and queued requests never settle. Now every
+  pending and later request rejects with an `Error` whose message starts with `API server connection lost: `.
+  A normal `close()` is unchanged; `close()` after a crash rejects promptly with that error if it had snapshots to
+  release.
+- `npm/sdk/patches/vscode-jsonrpc-send-request-write-error.patch` (vendored vscode-jsonrpc 9.0.2): a request written
+  to a dead server also became an unhandled rejection that terminated Node; the request's own rejection is kept.
+
+The sync client is unpatched: after a server crash its next call throws at once with the raw pipe error.
+`npm/sdk/smoke/consumer.mjs` kills the real server with work in flight to cover all of this (the unpatched
+package hangs those requests and crashes on the unhandled rejection).
+
 Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `tsc/internal/ipc`, `src/api/options.ts`):
 
 - argv: `--api [--async] --cwd <dir> --useCaseSensitiveFileNames=<bool> [--callbacks=<names>] [--timing]

@@ -37,6 +37,10 @@ function writeProject(dir) {
 }
 
 const results = [];
+// An unhandled rejection would terminate Node (the unpatched vscode-jsonrpc did this on a failed write); record it
+// as a failure instead so the remaining steps still run.
+const unhandled = [];
+process.on("unhandledRejection", reason => unhandled.push(String(reason?.message ?? reason)));
 async function step(label, fn) {
     try {
         await fn();
@@ -50,6 +54,25 @@ async function step(label, fn) {
 }
 
 const codes = diagnostics => diagnostics.map(d => d.code);
+
+// Settles within `ms` or reports a hang (the failure mode of the unpatched async client).
+function settle(promise, ms = 10_000) {
+    let timer;
+    const hung = new Promise(resolve => timer = setTimeout(resolve, ms, { state: "hung" }));
+    const settled = promise.then(value => ({ state: "resolved", value }), error => ({ state: "rejected", error }));
+    return Promise.race([settled, hung]).finally(() => clearTimeout(timer));
+}
+const tick = () => new Promise(resolve => setImmediate(resolve));
+// The server child process, reached through the client's private fields (no public accessor upstream).
+const serverProcess = api => api.client?.process ?? api.client?.channel?.child;
+async function waitForExit(child, ms = 10_000) {
+    const start = Date.now();
+    while (child.exitCode === null && child.signalCode === null) {
+        if (Date.now() - start > ms) throw new Error(`server pid ${child.pid} still running after ${ms} ms`);
+        await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    return child.signalCode ?? child.exitCode;
+}
 
 async function runVariant(variant, API) {
     const dir = path.join(base, variant);
@@ -185,9 +208,120 @@ async function runVariant(variant, API) {
     });
 }
 
+// Killing the real server: the async client must reject in-flight, queued and later requests with one stable
+// error (tsrs patch npm/sdk/patches/async-client-connection-loss.patch); the sync client throws on the next call.
+async function crashAndClose(dir, config, main) {
+    await step("async: server killed with requests in flight rejects them all", async () => {
+        const api = new asyncApi.API({ cwd: dir });
+        let child;
+        try {
+            const warm = await api.createSnapshot({ openProject: config });
+            child = serverProcess(api);
+            assert.ok(child?.pid, "async server process");
+            // Whole-program semantic diagnostics (default lib included) keep the server busy for well over 20 ms;
+            // the unpatched client never settles these once the server dies.
+            const program = warm.getConfiguredProject(config).program;
+            const inFlight = [program.getSemanticDiagnostics(), program.getGlobalDiagnostics()];
+            await new Promise(resolve => setTimeout(resolve, 20)); // the batch is on the server
+            child.kill("SIGKILL");
+            const queued = api.parseConfigFile(config); // issued before the client noticed
+            const results = await Promise.all([...inFlight, queued].map(p => settle(p)));
+            const summary = results.map(r => r.state === "rejected" ? `rejected(${r.error.message})` : r.state).join(", ");
+            assert.ok(results.slice(0, 2).every(r => r.state !== "resolved"), `in-flight work finished before the kill; the test needs more work in flight: ${summary}`);
+            assert.ok(results.every(r => r.state === "rejected" && /^API server connection lost: /.test(r.error.message)), summary);
+            assert.equal(await waitForExit(child), "SIGKILL");
+            const later = await settle(api.parseConfigFile(config));
+            // Same error for every request; the detail is the exit signal/code or "server closed the connection",
+            // whichever the client observed first.
+            assert.match(later.error?.message ?? later.state, /^API server connection lost: (server process exited with signal SIGKILL|server closed the connection|writing to the server failed: .*)$/);
+        }
+        catch (e) {
+            child?.kill("SIGKILL");
+            await settle(api.close(), 2000);
+            throw e;
+        }
+        // close() releases the open snapshot first; with the server gone that release rejects with the same error,
+        // so close() rejects promptly (it never hangs) and still closes the client.
+        const closed = await settle(api.close());
+        assert.notEqual(closed.state, "hung", "close() after a crash settles");
+        if (closed.state === "rejected") assert.match(closed.error.message, /^API server connection lost: /);
+        assert.match((await settle(api.parseConfigFile(config))).error?.message ?? "", /Client is closed/);
+    });
+
+    await step("async: request written after the server died, before the client noticed", async () => {
+        const api = new asyncApi.API({ cwd: dir });
+        try {
+            await api.parseConfigFile(config);
+            const child = serverProcess(api);
+            child.kill("SIGKILL");
+            // Block this thread until the process is a zombie (Linux /proc; elsewhere a fixed 300 ms), so the next
+            // request is written to a dead pipe before the client has seen the exit or the stream end.
+            const sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+            const stat = `/proc/${child.pid}/stat`;
+            if (fs.existsSync(stat)) {
+                const deadline = Date.now() + 5000;
+                while (Date.now() < deadline && !/^\d+ \(.*\) [ZX]/s.test(fs.readFileSync(stat, "utf8"))) sleep(5);
+            }
+            else sleep(300);
+            const results = await Promise.all([api.parseConfigFile(config), api.parseConfigFile(config)].map(p => settle(p)));
+            assert.deepEqual(results.map(r => r.state), ["rejected", "rejected"]);
+            for (const r of results) assert.match(r.error.message, /^API server connection lost: /);
+        }
+        finally {
+            await settle(api.close());
+        }
+    });
+
+    await step("async: close() with a request in flight settles it and stops the server", async () => {
+        const api = new asyncApi.API({ cwd: dir });
+        await api.parseConfigFile(config);
+        const child = serverProcess(api);
+        const pending = api.createSnapshot({ openProject: config });
+        await tick();
+        const closed = await settle(api.close());
+        assert.equal(closed.state, "resolved");
+        const result = await settle(pending);
+        assert.notEqual(result.state, "hung", "pending request settled after close()");
+        if (result.state === "rejected") assert.doesNotMatch(result.error.message, /connection lost/);
+        const later = await settle(api.parseConfigFile(config));
+        assert.equal(later.state, "rejected");
+        assert.match(later.error.message, /Client is closed/);
+        assert.equal(await waitForExit(child), 0, "server exits 0 after close()");
+    });
+
+    await step("sync: server killed between calls throws on the next call; close() is clean", async () => {
+        const api = new sync.API({ cwd: dir });
+        api.parseConfigFile(config);
+        const child = serverProcess(api);
+        assert.ok(child?.pid, "sync server process");
+        child.kill("SIGKILL");
+        await waitForExit(child);
+        // Unpatched upstream sync client: the next call fails at once, with the raw pipe error (EBADF/EPIPE on write)
+        // or "Unexpected EOF ..." on read.
+        assert.throws(() => api.parseConfigFile(config), /Unexpected EOF|EPIPE|EBADF/);
+        api.close();
+        const normal = new sync.API({ cwd: dir });
+        normal.parseConfigFile(config);
+        const normalChild = serverProcess(normal);
+        normal.close();
+        assert.throws(() => normal.parseConfigFile(config), /closed/);
+        const code = await waitForExit(normalChild);
+        assert.ok(code === 0 || code === "SIGTERM", `sync server after close(): ${code}`);
+    });
+}
+
 if (only !== "async") await runVariant("sync", sync.API);
 if (only !== "sync") await runVariant("async", asyncApi.API);
+if (!only) {
+    const { config, main } = writeProject(path.join(base, "lifecycle"));
+    await crashAndClose(path.join(base, "lifecycle"), config, main);
+}
 
+await new Promise(resolve => setTimeout(resolve, 100));
+if (unhandled.length) {
+    results.push(["no unhandled rejections", "FAIL"]);
+    console.log(`FAIL no unhandled rejections: ${unhandled.join(" | ")}`);
+}
 const failed = results.filter(([, r]) => r !== "ok");
 console.log(`${failed.length ? "smoke FAILED" : "smoke ok"}: ${results.length - failed.length}/${results.length} steps passed`);
 process.exitCode = failed.length ? 1 : 0;

@@ -45,6 +45,10 @@ project.program.emit();                                  // follows the project'
 api.close();
 ```
 
+The code is TypeScript's, with one intentional difference: if the server process dies, the async API rejects
+every pending and later request with an error starting `API server connection lost: ` instead of leaving them
+pending forever (see `npm/README.md` in the repository).
+
 These entry points are unstable upstream and here. The API is served by the `tsrs` binary (`tsrs --api`), whose
 coverage of the protocol is still incomplete; `npm/sdk/METHODS.md` in the repository tracks it per method.
 TypeScript consumers need `esnext.disposable` (or a newer lib) for the declarations' `Symbol.dispose` members.
