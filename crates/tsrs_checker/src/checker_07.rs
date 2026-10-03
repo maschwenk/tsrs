@@ -915,7 +915,7 @@ impl Checker {
 
     // We approximate own properties as non-methods plus methods that are inside the object literal
     // checker.go:13798
-    pub(crate) fn is_spreadable_property(&mut self, prop: P<Symbol>) -> bool {
+    pub fn is_spreadable_property(&mut self, prop: P<Symbol>) -> bool {
         let declarations = prop.declarations();
         !declarations.iter().any(|&d| ast::is_private_identifier_class_element_declaration(d))
             && !prop.flags().intersects(SymbolFlags::Method | SymbolFlags::GetAccessor | SymbolFlags::SetAccessor)

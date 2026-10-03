@@ -1144,7 +1144,7 @@ impl Checker {
     }
 
     // checker.go:31467
-    pub(crate) fn has_type_facts(&mut self, t: P<Type>, mask: TypeFacts) -> bool {
+    pub fn has_type_facts(&mut self, t: P<Type>, mask: TypeFacts) -> bool {
         self.get_type_facts(t, mask) != TypeFacts::None
     }
 

@@ -1419,12 +1419,12 @@ impl Checker {
     }
 
     // checker.go:29576
-    pub(crate) fn remove_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
+    pub fn remove_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
         self.filter_type(t, |c, t| c.has_type_facts(t, TypeFacts::Truthy))
     }
 
     // checker.go:29580
-    pub(crate) fn extract_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
+    pub fn extract_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
         self.map_type(t, |c, t| Some(c.get_definitely_falsy_part_of_type(t))).unwrap()
     }
 
@@ -1710,7 +1710,7 @@ impl Checker {
      * @returns the contextual type of an expression.
      */
     // checker.go:29832
-    pub(crate) fn get_contextual_type(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
+    pub fn get_contextual_type(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
         if node.flags().intersects(NodeFlags::InWithStatement) {
             // We cannot answer semantic questions within a with block, do not proceed any further
             return None;

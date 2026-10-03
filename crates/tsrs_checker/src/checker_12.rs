@@ -2603,7 +2603,7 @@ impl Checker {
     // circularly reference themselves and therefore cannot be subtype reduced during their declaration.
     // For example, "type Item = string | (() => Item" is a named type that circularly references itself.
     // checker.go:26098
-    pub(crate) fn get_union_type_ex(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> {
+    pub fn get_union_type_ex(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> {
         if types.is_empty() {
             return self.never_type;
         }
