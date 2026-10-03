@@ -287,5 +287,100 @@
       "TimestampUpdates": 0
     }
   },
-  "noop.writes": []
+  "noop.writes": [],
+  "opts.afterClean": {
+    "response": {
+      "status": 0,
+      "statistics": {
+        "Projects": 2,
+        "ProjectsBuilt": 2,
+        "TimestampUpdates": 0
+      }
+    },
+    "writes": [
+      "/a/dist/index.d.ts",
+      "/a/dist/index.js",
+      "/a/tsconfig.tsbuildinfo",
+      "/c/dist/index.d.ts",
+      "/c/dist/index.js",
+      "/c/tsconfig.tsbuildinfo"
+    ]
+  },
+  "opts.clean": {
+    "status": 0,
+    "filesDeleted": [
+      "/a/dist/index.d.ts",
+      "/a/dist/index.js",
+      "/a/tsconfig.tsbuildinfo",
+      "/c/dist/index.d.ts",
+      "/c/dist/index.js",
+      "/c/tsconfig.tsbuildinfo"
+    ]
+  },
+  "opts.dry": {
+    "response": {
+      "status": 0,
+      "statistics": {
+        "Projects": 2,
+        "ProjectsBuilt": 2,
+        "TimestampUpdates": 0
+      }
+    },
+    "writes": [
+      "/a/dist/index.d.ts",
+      "/a/dist/index.js",
+      "/a/tsconfig.tsbuildinfo",
+      "/c/dist/index.d.ts",
+      "/c/dist/index.js",
+      "/c/tsconfig.tsbuildinfo"
+    ]
+  },
+  "opts.first": {
+    "response": {
+      "status": 0,
+      "statistics": {
+        "Projects": 2,
+        "ProjectsBuilt": 2,
+        "TimestampUpdates": 0
+      }
+    },
+    "writes": []
+  },
+  "opts.force": {
+    "response": {
+      "status": 0,
+      "statistics": {
+        "Projects": 2,
+        "ProjectsBuilt": 2,
+        "TimestampUpdates": 0
+      }
+    },
+    "writes": []
+  },
+  "opts.stopBuildOnErrors": {
+    "response": {
+      "status": 2,
+      "statistics": {
+        "Projects": 2,
+        "ProjectsBuilt": 2,
+        "TimestampUpdates": 0
+      },
+      "diagnostics": [
+        [
+          "/a/src/index.ts",
+          2322,
+          "Type 'string' is not assignable to type 'number'."
+        ]
+      ]
+    },
+    "writes": [
+      "/a/dist/index.d.ts",
+      "/a/dist/index.js",
+      "/a/tsconfig.tsbuildinfo",
+      "/c/dist/index.d.ts",
+      "/c/dist/index.js",
+      "/c/tsconfig.tsbuildinfo"
+    ]
+  },
+  "opts.useAfterDispose": true
 }
