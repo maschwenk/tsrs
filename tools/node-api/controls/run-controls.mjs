@@ -68,6 +68,21 @@ const cases = [
     ["chain-use-swap (abandoned branch handle)", "scen3.mjs", "chain-use-swap", ["--a2", "syn-a2"], "getTypeOfSymbol", NOT_VERIFIED],
     ["N4 async-only binary, same AST", "scen3.mjs", "n4-ok", [], "getSourceFile", VERIFIED],
     ["N4 async-only binary, one AST byte different", "scen3.mjs", "n4-wrong", [], "getSourceFile", ["differs"]],
+    // Codec audit of 385d300 (scen4.mjs, verbatim except the mk.mjs import) and D1 mirrors (scen-extra.mjs).
+    ["D1 run 1 value, run 2 error, candidate neither", "scen4.mjs", "t1-run2-error", ["--a2", "syn-a2"], "getTypeAtPosition", ["inconclusive"]],
+    ["D1 run 1 value, run 2 other value, candidate neither", "scen4.mjs", "t1-run2-value", ["--a2", "syn-a2"], "getTypeAtPosition", ["inconclusive"]],
+    ["D1 mirror: run 1 error, run 2 value, candidate neither", "scen4.mjs", "t1-run1-error", ["--a2", "syn-a2"], "getTypeAtPosition", ["inconclusive"]],
+    ["D1 mirror: run 1 error, candidate equals run 2", "scen4.mjs", "t1-run1-error-ok", ["--a2", "syn-a2"], "getTypeAtPosition", VERIFIED],
+    ["T2 locked to run 2 by its error, then run-1 value", "scen4.mjs", "t2", ["--a2", "syn-a2"], "getTypeOfSymbol", ["inconclusive"]],
+    ["T2 control", "scen4.mjs", "t2-ctl", ["--a2", "syn-a2"], "getTypeOfSymbol", VERIFIED],
+    ["T3 candidate permutes the outer array the oracle never permuted", "scen4.mjs", "t3", ["--a2", "syn-a2"], "getSymbolsInScope", ["differs"]],
+    ["T3 control", "scen4.mjs", "t3-ctl", ["--a2", "syn-a2"], "getSymbolsInScope", VERIFIED],
+    ["D1 run-2 exchange missing: run 1 is the sole reference", "scen-extra.mjs", "d1-missing2", ["--a2", "syn-a2"], "getTypeAtPosition", ["differs"]],
+    ["D1 no second oracle run: compared against run 1 only", "scen-extra.mjs", "d1-missing2", [], "getTypeAtPosition", ["differs"]],
+    ["D1 run 2 error, candidate equals run 1", "scen-extra.mjs", "d1-run2-error-ok", ["--a2", "syn-a2"], "getTypeAtPosition", VERIFIED],
+    ["D1 locked to run 1, then run 2 error, candidate neither", "scen-extra.mjs", "d1-locked1", ["--a2", "syn-a2"], "getTypeAtPosition", ["inconclusive"]],
+    ["D1 locked to run 2, then run 2 error, candidate neither", "scen-extra.mjs", "d1-locked2", ["--a2", "syn-a2"], "getTypeAtPosition", ["inconclusive"]],
+    ["D1 locked to run 2, then run 1 error, candidate neither", "scen-extra.mjs", "d1-locked2-mirror", ["--a2", "syn-a2"], "getTypeAtPosition", ["inconclusive"]],
 ];
 
 let failed = 0;

@@ -42,4 +42,18 @@ ok   chain-use after backtracking: getTypeOfSymbol equal (want equal) {"okEqual"
 ok   chain-use-swap (abandoned branch handle): getTypeOfSymbol inconclusive (want differs|inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":1}
 ok   N4 async-only binary, same AST: getSourceFile equal (want equal) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
 ok   N4 async-only binary, one AST byte different: getSourceFile differs (want differs) {"okEqual":0,"strictEqual":0,"differ":1,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
-all 44 controls hold
+ok   D1 run 1 value, run 2 error, candidate neither: getTypeAtPosition inconclusive (want inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":1,"unverified":1}
+ok   D1 run 1 value, run 2 other value, candidate neither: getTypeAtPosition inconclusive (want inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":1,"unverified":1}
+ok   D1 mirror: run 1 error, run 2 value, candidate neither: getTypeAtPosition inconclusive (want inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":1,"unverified":1}
+ok   D1 mirror: run 1 error, candidate equals run 2: getTypeAtPosition equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   T2 locked to run 2 by its error, then run-1 value: getTypeOfSymbol inconclusive (want inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":1}
+ok   T2 control: getTypeOfSymbol equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   T3 candidate permutes the outer array the oracle never permuted: getSymbolsInScope differs (want differs) {"okEqual":0,"strictEqual":0,"differ":1,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   T3 control: getSymbolsInScope equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   D1 run-2 exchange missing: run 1 is the sole reference: getTypeAtPosition differs (want differs) {"okEqual":0,"strictEqual":0,"differ":1,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   D1 no second oracle run: compared against run 1 only: getTypeAtPosition differs (want differs) {"okEqual":0,"strictEqual":0,"differ":1,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   D1 run 2 error, candidate equals run 1: getTypeAtPosition equal (want equal) {"okEqual":1,"strictEqual":1,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   D1 locked to run 1, then run 2 error, candidate neither: getTypeAtPosition inconclusive (want inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":1,"unverified":1}
+ok   D1 locked to run 2, then run 2 error, candidate neither: getTypeAtPosition inconclusive (want inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":1,"unverified":1}
+ok   D1 locked to run 2, then run 1 error, candidate neither: getTypeAtPosition inconclusive (want inconclusive) {"okEqual":0,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":1,"unverified":1}
+all 58 controls hold

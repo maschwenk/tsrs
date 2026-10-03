@@ -635,7 +635,11 @@ for (const [test, listA] of A.byTest) {
                 dAA = a.kind !== a2.kind ? { path: "$kind", a: a.kind, b: a2.kind } : cmp(a, a2, bijAA);
                 if (dAA) bijAA.rollback(mAA);
             }
-            const oraclesAgree = !aligned2 || !dAA;
+            // Run 2 present for this request but with another kind than run 1 (e.g. run 1 answered, run 2 errored)
+            // is visible oracle disagreement (D1), not absent evidence. Only a missing run-2 exchange (or no second
+            // run) leaves run 1 as the sole reference.
+            const kindSplit2 = Boolean(!aligned2 && a2 && a2.method === a.method && a2.kind !== a.kind);
+            const oraclesAgree = aligned2 ? !dAA : !kindSplit2;
             // Truth table (R1/N1). viable1/viable2: the candidate equals run 1 / run 2 under that run's process
             // mapping. An acceptance against exactly one viable run (the other differs, errors, is unaligned or
             // missing) locks the process to that run; afterwards only that run's history can accept exchanges.
@@ -733,6 +737,10 @@ for (const [test, listA] of A.byTest) {
                         c.budgetInconclusive = (c.budgetInconclusive ?? 0) + 1;
                     }
                 }
+            }
+            else if (!oraclesAgree) {
+                // Neither run viable and the oracle runs disagree by kind: the candidate matches no observed variant.
+                outcome = "unstable";
             }
             else outcome = "differ";
 

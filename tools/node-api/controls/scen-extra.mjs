@@ -82,3 +82,36 @@ if (scen === "n1c" || scen === "n1c-ctl") {
     run("syn-a2", [{ mode: "sync", test: "t", ex: [[...q1, sym(2, "x")], [...tos(2), T(8, "ty")]] }]);
     run("syn-b", [{ mode: "sync", test: "t", ex: [[...q1, sym(5, "x")], [...tos(5), T(9, scen === "n1c" ? "tx" : "ty")]] }]);
 }
+// D1 present/missing and locked/unlocked mirrors (run 2 kind-split vs run 2 absent).
+{
+    const R = v => ["getTypeAtPosition", { ...P, file: "/f.ts", position: 9 }, { id: 3, flags: 128, value: v }];
+    const E = ["getTypeAtPosition", { ...P, file: "/f.ts", position: 9 }, "boom", "error"];
+    const q1 = ["getSymbolAtPosition", { ...P, file: "/f.ts", position: 4 }];
+    // lock exchange: only the named run's symbol name equals the candidate's
+    const lockTo = (run2) => ({ a: [...q1, sym(1, run2 ? "p" : "q")], a2: [...q1, sym(1, run2 ? "q" : "p")], b: [...q1, sym(5, "q")] });
+    if (scen === "d1-missing2") {
+        // run 2 has no exchange for this request: run 1 is the only reference, so a wrong answer is a difference
+        run("syn-a", [{ mode: "sync", test: "t", ex: [R("x")] }]);
+        run("syn-a2", [{ mode: "sync", test: "t", ex: [] }]);
+        run("syn-b", [{ mode: "sync", test: "t", ex: [R("WRONG")] }]);
+    }
+    if (scen === "d1-run2-error-ok") {
+        run("syn-a", [{ mode: "sync", test: "t", ex: [R("x")] }]);
+        run("syn-a2", [{ mode: "sync", test: "t", ex: [E] }]);
+        run("syn-b", [{ mode: "sync", test: "t", ex: [R("x")] }]);
+    }
+    if (scen === "d1-locked1" || scen === "d1-locked2") {
+        // locked to run 1 (d1-locked1) or run 2 (d1-locked2) first; then run 1 "x", run 2 error, candidate "WRONG"
+        const L = lockTo(scen === "d1-locked2");
+        run("syn-a", [{ mode: "sync", test: "t", ex: [L.a, R("x")] }]);
+        run("syn-a2", [{ mode: "sync", test: "t", ex: [L.a2, E] }]);
+        run("syn-b", [{ mode: "sync", test: "t", ex: [L.b, R("WRONG")] }]);
+    }
+    if (scen === "d1-locked2-mirror") {
+        // locked to run 2, then run 1 error, run 2 "y", candidate "WRONG"
+        const L = lockTo(true);
+        run("syn-a", [{ mode: "sync", test: "t", ex: [L.a, E] }]);
+        run("syn-a2", [{ mode: "sync", test: "t", ex: [L.a2, R("y")] }]);
+        run("syn-b", [{ mode: "sync", test: "t", ex: [L.b, R("WRONG")] }]);
+    }
+}

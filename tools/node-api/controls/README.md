@@ -20,3 +20,6 @@ Synthetic captures in the proxy.mjs format that pin down compare-responses.mjs b
   way. `baseline/codec-run3-at-0333222.out` is that audit reproduced here; all statuses are identical, and only the
   base64 placeholder length differs because the checkout path differs. `scen-extra.mjs` `n1c` is the mirror of
   R1, where run 1 errored and run 2 answered.
+- `scen4.mjs` comes from the codec lane's audit of `385d300` (D1, T2, T3), sha256 `fbe68138…dfdb3`. Only the
+  `mk.mjs` import is adapted. `baseline/codec-run4-at-385d300.out` is that audit reproduced here, and it is
+  identical. `scen-extra.mjs` `d1-*` adds the present/missing and locked/unlocked mirrors.
