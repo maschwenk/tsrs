@@ -231,3 +231,39 @@ fn no_emit_on_error_reports_diagnostics_without_output() {
     let out = call(&s, "emitToString", &format!("{{{sp}}}"));
     assert_eq!(get(&out, "emitSkipped"), &Value::Bool(true));
 }
+
+fn rss_kib() -> u64 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| l.split_whitespace().nth(1)?.parse().ok()))
+        .unwrap_or(0)
+}
+
+/// Program, checker and emit allocations are owned by the snapshot's regions: creating, checking, emitting
+/// and releasing snapshots repeatedly must not accumulate them.
+#[test]
+fn released_snapshots_free_program_and_emit_memory() {
+    let dir = TempDir::new("snaploop");
+    let body = "export function f(a: string): number { return a.length; }\nexport class C { x = 1; m() { return this.x; } }\n".repeat(30);
+    let a = dir.write("a.ts", &body);
+    let s = session(&dir.dir(), false);
+    let n: usize = std::env::var("TSRS_API_STRESS").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
+    let round = |s: &tsrs_api::Session| {
+        let (snap, project) = create_program(s, &[a.clone()], "{\"declaration\":true,\"noLib\":true}");
+        let sp = format!("\"snapshot\":{snap},\"project\":{}", quote(&project));
+        call(s, "getSemanticDiagnostics", &format!("{{{sp}}}"));
+        let out = call(s, "emitToString", &format!("{{{sp}}}"));
+        assert_eq!(arr(get(&out, "outputFiles")).len(), 2);
+        call(s, "release", &format!("{{\"snapshot\":{snap}}}"));
+    };
+    for _ in 0..5 {
+        round(&s);
+    }
+    let before = rss_kib();
+    for _ in 0..n {
+        round(&s);
+    }
+    let grown = rss_kib().saturating_sub(before);
+    eprintln!("snapshot+emit+release x{n}: rss grew {grown} KiB");
+    assert!(grown < (n as u64) * 256, "rss grew {grown} KiB over {n} rounds");
+}
