@@ -69,3 +69,71 @@ pub fn move_range_past_decorators(node: P<Node>) -> tsrs_core::TextRange {
     }
     node.loc()
 }
+
+// utilities.go:275
+// FindSuperStatementIndexPath finds a path of indices to a statement containing a `super()` call.
+pub fn find_super_statement_index_path(statements: &[P<Node>], start: usize) -> Vec<usize> {
+    let mut indices = find_super_statement_index_path_worker(statements, start, Vec::new()).unwrap_or_default();
+    indices.reverse();
+    indices
+}
+
+// utilities.go:281
+fn find_super_statement_index_path_worker(statements: &[P<Node>], start: usize, indices: Vec<usize>) -> Option<Vec<usize>> {
+    for i in start..statements.len() {
+        let statement = statements[i];
+        if get_super_call_from_statement(statement).is_some() {
+            let mut indices = indices;
+            indices.push(i);
+            return Some(indices);
+        } else if ast::is_try_statement(statement) {
+            if let Some(mut result) = find_super_statement_index_path_worker(statement.as_try_statement().try_block.statements(), 0, indices.clone()) {
+                result.push(i);
+                return Some(result);
+            }
+        }
+    }
+    None
+}
+
+// utilities.go:296
+// GetSuperCallFromStatement extracts the super() call expression from an expression statement, if any.
+pub fn get_super_call_from_statement(statement: P<Node>) -> Option<P<Node>> {
+    if !ast::is_expression_statement(statement) {
+        return None;
+    }
+    let expression = ast::skip_parentheses(statement.expression().unwrap());
+    if is_super_call(expression) {
+        return Some(expression);
+    }
+    None
+}
+
+// utilities.go:341
+// GetNonAssignmentOperatorForCompoundAssignment returns the non-assignment operator for a compound assignment.
+pub fn get_non_assignment_operator_for_compound_assignment(kind: Kind) -> Kind {
+    match kind {
+        Kind::PlusEqualsToken => Kind::PlusToken,
+        Kind::MinusEqualsToken => Kind::MinusToken,
+        Kind::AsteriskEqualsToken => Kind::AsteriskToken,
+        Kind::AsteriskAsteriskEqualsToken => Kind::AsteriskAsteriskToken,
+        Kind::SlashEqualsToken => Kind::SlashToken,
+        Kind::PercentEqualsToken => Kind::PercentToken,
+        Kind::LessThanLessThanEqualsToken => Kind::LessThanLessThanToken,
+        Kind::GreaterThanGreaterThanEqualsToken => Kind::GreaterThanGreaterThanToken,
+        Kind::GreaterThanGreaterThanGreaterThanEqualsToken => Kind::GreaterThanGreaterThanGreaterThanToken,
+        Kind::AmpersandEqualsToken => Kind::AmpersandToken,
+        Kind::BarEqualsToken => Kind::BarToken,
+        Kind::CaretEqualsToken => Kind::CaretToken,
+        Kind::BarBarEqualsToken => Kind::BarBarToken,
+        Kind::AmpersandAmpersandEqualsToken => Kind::AmpersandAmpersandToken,
+        Kind::QuestionQuestionEqualsToken => Kind::QuestionQuestionToken,
+        _ => kind,
+    }
+}
+
+// ast/utilities.go:2138 (kept here: tsrs_checker has a private `is_super_call` that a tsrs_ast export would make
+// ambiguous through its glob imports)
+pub fn is_super_call(node: P<Node>) -> bool {
+    ast::is_call_expression(node) && node.expression().unwrap().kind() == Kind::SuperKeyword
+}
