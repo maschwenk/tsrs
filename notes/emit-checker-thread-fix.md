@@ -1,7 +1,7 @@
 # Checker-thread fix (draft, not merge-ready)
 
-Status: DRAFT checkpoint for independent validation. Base: main fb867b1. Gating and measurement of this exact revision
-are in progress; numbers below marked "earlier revision" do NOT measure this code.
+Status: DRAFT, not merge-ready. Base: main fb867b1. Result: this contract-preserving revision is output-neutral but does
+NOT fix the memory regression (measured below); only the earlier six-line hunk (52be3a5) does.
 
 ## Change
 `crates/tsrs_compiler/src/checkerpool.rs`: `for_each_checker_group_do` no longer starts a thread for a checker that owns
@@ -56,3 +56,32 @@ cd p0 && rm -rf out *.tsbuildinfo && TSRS_EMIT=1 MIMALLOC_SHOW_STATS=1 <tsrs> -p
 ```
 `-b`/incremental need a binary that has them (e.g. this hunk applied on the incremental/build branch); on main use the
 gates below.
+
+## Measurements of this exact revision (600723a)
+`checkerpool.rs` is byte-identical at fb867b1 and 535adce, so the 600723a hunk was applied unchanged to 535adce (local
+build, not pushed) for `-b`. n8 fixture, peak RSS / wall, fresh copy per run:
+
+| binary | builders 1 | builders 4 | builders 8 | threads created (b4) |
+|---|---|---|---|---|
+| 535adce (no fix) | 1694 MB / 1.40 s | 1727 MB / 1.21 s | 1749 MB / 1.18 s | 4.9 K |
+| 535adce + 52be3a5 six-line hunk | 354 MB / 0.52 s | 393 MB / 0.46 s | 409 MB / 0.47 s | 171 |
+| 535adce + this revision | 1691 MB / 1.27 s | 1717 MB / 1.13 s | 1746 MB / 1.14 s | 1.3 K |
+
+Conclusion: the memory comes from the one *active* `checker-N` thread that each one-file `Program::emit` still starts
+(each new thread gets its own arena chunk and allocator heap that are never reused); the idle threads that this revision
+removes cost little. The six-line hunk works because a single active group runs on the calling thread
+(`run_work_group`'s `count <= 1` rule), i.e. exactly the threading change this revision avoids. Choosing between them is
+a design decision for the coordinator: keep the original contract (this revision; no memory gain) or accept that
+one-group calls run on the caller's thread (52be3a5; CLI callers are the 512 MB main/builder threads).
+
+## Gates of this exact revision vs main fb867b1 (both built from these heads)
+- conformance errors + `--baselines types,symbols`, `--timeout 60`: result trees identical, default and
+  `TSRS_LAZY_MEMBERS=0` (13458 pass each).
+- `--baselines js --timeout 60`: same pass list (8680 pass in both).
+- fourslash 4066/63, same pass list; `RUSTFLAGS="-D warnings" cargo check --workspace --locked --all-targets` clean;
+  `tests/emit_gate.rs` 3/3.
+- Timeout noise: `compiler/intersectionConstructorReductionCrash` needs ~20 s with the default 20 s per-test timeout
+  (direct CLI, 3 alternating runs: main 20.50-20.69 s, this revision 20.71-20.76 s; `tsrs-test show`: 19.97 s vs
+  20.24-20.30 s). It flips to timeout at the default limit and passes in both at 60 s; it is a single-file program, for
+  which this revision starts one checker thread instead of four idle-plus-one. Treated as load/layout noise, not a
+  source failure.
