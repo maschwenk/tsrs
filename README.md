@@ -1,35 +1,35 @@
 <!-- bench:start -->
 ## Benchmark: tsrs vs tsgo 7.0.2
 
-tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, "tsgo"). Each row type-checks one project from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the suite the TypeScript team benchmarks tsgo on (vscode, xstate-main, webpack, mui-docs, Compiler, Compiler-Unions), with tsgo 7.0.2 (npm `typescript@7.0.2`) and with tsrs at commit `03b8539a8c0f` (the PGO-optimized `dist` build, built like the npm release binaries): `tsc -p <project> --noEmit`, median of 3 interleaved runs, on Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor).
+tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, "tsgo"). Each row type-checks one project from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the suite the TypeScript team benchmarks tsgo on (vscode, xstate-main, webpack, mui-docs, Compiler, Compiler-Unions), with tsgo 7.0.2 (npm `typescript@7.0.2`) and with tsrs at commit `a6d4ae047d75` (the PGO-optimized `dist` build, built like the npm release binaries): `tsc -p <project> --noEmit`, median of 3 interleaved runs, on Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor).
 
 **Default mode: 4 checker threads in both (tsrs also resolves members lazily, its default)**
 
 | project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | tsrs peak memory | memory, tsrs / tsgo |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| vscode | 359 / 371 (ref 371) | 11.94 | 3.44 | 3.47x | 7.45 GiB | 2.95 GiB | 0.40x |
-| xstate-main | 0 / 0 | 0.87 | 0.26 | 3.34x | 767 MiB | 511 MiB | 0.67x |
-| webpack | 848 / 840 (ref 840) | 1.44 | 0.48 | 3.02x | 1.21 GiB | 699 MiB | 0.57x |
-| mui-docs | 0 / 0 | 13.12 | 1.85 | 7.09x | 8.18 GiB | 1.37 GiB | 0.17x |
-| Compiler | 43 / 43 | 0.27 | 0.08 | 3.30x | 224 MiB | 226 MiB | 1.01x |
-| Compiler-Unions | 41 / 41 | 0.53 | 0.16 | 3.32x | 250 MiB | 218 MiB | 0.87x |
+| vscode | 359 / 371 (ref 371) | 11.48 | 3.31 | 3.47x | 7.75 GiB | 2.97 GiB | 0.38x |
+| xstate-main | 0 / 0 | 0.85 | 0.25 | 3.40x | 774 MiB | 507 MiB | 0.65x |
+| webpack | 848 / 840 (ref 840) | 1.39 | 0.46 | 3.04x | 1.21 GiB | 687 MiB | 0.56x |
+| mui-docs | 0 / 0 | 13.10 | 1.77 | 7.42x | 8.19 GiB | 1.36 GiB | 0.17x |
+| Compiler | 43 / 43 | 0.27 | 0.08 | 3.31x | 217 MiB | 226 MiB | 1.04x |
+| Compiler-Unions | 41 / 41 | 0.52 | 0.16 | 3.30x | 250 MiB | 220 MiB | 0.88x |
 
 **`--singleThreaded`: one checker thread in both**
 
 | project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | tsrs peak memory | memory, tsrs / tsgo |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| vscode | 359 / 371 (ref 371) | 31.06 | 11.02 | 2.82x | 6.54 GiB | 2.43 GiB | 0.37x |
-| xstate-main | 0 / 0 | 1.69 | 0.65 | 2.61x | 618 MiB | 268 MiB | 0.43x |
-| webpack | 848 / 840 (ref 840) | 3.09 | 1.18 | 2.61x | 957 MiB | 420 MiB | 0.44x |
-| mui-docs | 0 / 0 | 14.64 | 3.51 | 4.18x | 3.49 GiB | 933 MiB | 0.26x |
-| Compiler | 43 / 43 | 0.48 | 0.18 | 2.66x | 173 MiB | 99 MiB | 0.57x |
-| Compiler-Unions | 41 / 41 | 0.83 | 0.34 | 2.44x | 204 MiB | 111 MiB | 0.55x |
+| vscode | 359 / 371 (ref 371) | 30.49 | 10.58 | 2.88x | 6.51 GiB | 2.42 GiB | 0.37x |
+| xstate-main | 0 / 0 | 1.65 | 0.64 | 2.56x | 633 MiB | 268 MiB | 0.42x |
+| webpack | 848 / 840 (ref 840) | 2.93 | 1.14 | 2.58x | 915 MiB | 421 MiB | 0.46x |
+| mui-docs | 0 / 0 | 14.77 | 3.44 | 4.29x | 3.63 GiB | 933 MiB | 0.25x |
+| Compiler | 43 / 43 | 0.47 | 0.18 | 2.69x | 182 MiB | 99 MiB | 0.54x |
+| Compiler-Unions | 41 / 41 | 0.83 | 0.34 | 2.43x | 205 MiB | 111 MiB | 0.54x |
 
 errors: the number of type errors each compiler reports on the project; they must be equal (a bold cell is a disagreement, i.e. a correctness bug). wall: process wall-clock time. speedup: tsgo wall / tsrs wall (above 1 = tsrs faster). peak memory: maximum resident set size. memory, tsrs / tsgo: below 1 = tsrs uses less.
 
 (ref N): tsgo 7.0.2 and tsrs disagree, but `typescript@7.1.0-dev.20260930.4`, built from the TypeScript commit tsrs ports (`b85298b6`), reports exactly tsrs's errors: a TypeScript 7.0 vs 7.1-dev difference, not a tsrs bug.
 
-Runner: Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Date: 2026-10-03 06:27 UTC. tsrs commit: `03b8539a8c0f`. Numbers from shared CI machines are noisy; compare trends, not single runs. How it is measured: [`bench/README.md`](bench/README.md).
+Runner: Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Date: 2026-10-03 13:56 UTC. tsrs commit: `a6d4ae047d75`. Numbers from shared CI machines are noisy; compare trends, not single runs. How it is measured: [`bench/README.md`](bench/README.md).
 <!-- bench:end -->
 
 # tsrs
@@ -37,13 +37,40 @@ Runner: Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EP
 A Rust port of the TypeScript 7 compiler and language server. As a compiler it is `tsc`: same flags, same tsconfig,
 same diagnostics, byte for byte, and it emits by default like tsc does (JavaScript, declarations, source maps,
 tsbuildinfo, `-b`), unless the options turn that off (`--noEmit`, `emitDeclarationOnly`, `noEmitOnError`). As a
-language server it is `tsgo --lsp`: `tsrs --lsp -stdio`. `docs/EMIT.md` describes the emit port.
+language server it is `tsgo --lsp`: `tsrs --lsp -stdio`. `docs/EMIT.md` describes the emit port. `tsrs --api` serves TypeScript 7's Node API
+(`unstable/sync`, `unstable/async`), with the gaps listed below and in `docs/NODE_API.md`.
 
 It ports the Go implementation in [microsoft/TypeScript](https://github.com/microsoft/TypeScript) (`tsc/internal`)
 at commit `b85298b6a81f` function for function, and the Go code is the specification: on the TypeScript conformance
 suite the output matches the reference on 13,458 of 13,462 error baselines and on all 12,779 `.types` and `.symbols`
 baselines; the four exceptions are test-harness artifacts. `docs/STATUS.md` has the details and the comparison on a
 38k-file production codebase.
+
+## What it does and doesn't do
+
+Emit is opt-in and not released: npm `0.2.3` is checker-only, and without `TSRS_EMIT=1` a build from `main` still
+behaves like `tsc --noEmit` and never writes a file. "Match" and "identical" below are against tsgo built from the
+same pinned commit.
+
+| feature | status | evidence and notes |
+| --- | --- | --- |
+| Type checking (`tsc --noEmit`) | yes, the default | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match; same diagnostics on the 38k-file codebase |
+| Checker threads, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | |
+| Options TypeScript 7 removed (ES5 target, AMD/UMD/System modules, `node10`/`classic` resolution, `baseUrl`, …) | rejected, as in tsgo | same TS5102 / TS5108 errors |
+| JavaScript emit | `main`, `TSRS_EMIT=1` | all of tsgo's script transforms: type erasure, import elision, enums, namespaces, const enum inlining, CommonJS and ES modules, JSX, legacy and standard decorators, class fields, `using`, async and `for await`, and lowering for older targets (object rest/spread, `?.`, `??`, `**`, logical assignment). 13,392 `.js` baselines pass, 0 fail |
+| Declaration emit (`.d.ts`) | `main`, `TSRS_EMIT=1` | part of the `.js` baselines |
+| Source maps, declaration maps | `main`, `TSRS_EMIT=1` | 149 `.js.map` and 156 `.sourcemap.txt` baselines pass, 0 fail |
+| Incremental compilation (`.tsbuildinfo`) | `main`, `TSRS_EMIT=1` | tsbuildinfo files identical, also for `--noEmit` programs |
+| `--build` (project references, `--builders`, `--clean`, `--dry`, `--force`, `--verbose`) | `main`, `TSRS_EMIT=1` | 187 of 190 `tsbuild` and 187 of 216 `tsc` scenario baselines pass; the failures are CLI outputs tsrs does not port (`--help`, `--init`, `--showConfig`, `--locale`, `--generateTrace`, the `--version` line) and one message that prints an internal symbol name. Finished projects stay in memory (Go frees them), so peak memory grows with the graph |
+| Emit on the 38k-file codebase | `main`, `TSRS_EMIT=1` | all 96 packages built with `tsc`: 9,257 output files (JS, `.d.ts`, maps, `.tsbuildinfo`) byte-identical, same diagnostics and exit codes |
+| `--watch` (also `-b --watch`) | no | exits with "not supported" |
+| `--init`, `--showConfig` | no | exits with "not supported"; `--help` prints a short usage, not tsc's |
+| `--locale` | ignored | messages are English only |
+| `--generateTrace` | ignored | no trace is written |
+| Language server (`--lsp -stdio`) | yes | 4,066 of 4,546 fourslash tests pass; 13,869 of 13,869 responses identical in an xstate editor session (below) |
+| Content mappers, automatic type acquisition, telemetry, pprof requests (language server) | no | not ported |
+| `--api` (the IPC server behind TypeScript 7's Node API: `unstable/sync` MessagePack, `unstable/async` JSON-RPC) | yes, with gaps | pinned upstream client suites against a debug build of the integration branch: `test/sync/api.test.ts` 339/339, `test/async/api.test.ts` 348/348, `ast` 111/111, `astnav` 4/4 + 4/4, `api-generators` 43/43; suite passes are not byte-level response parity. Not implemented: CPU/heap profiling requests; `getCurrentLanguageServerSnapshot` returns the standalone-session error (no LSP-attached API session); no Windows named pipes. Per-method status in `docs/NODE_API.md` |
+| Prebuilt binaries | macOS arm64, Linux x64/arm64 (glibc) | no Windows or Intel macOS binary |
 
 ## Use it
 
