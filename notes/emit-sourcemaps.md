@@ -40,9 +40,27 @@ Branch `emit/sourcemaps`. Plan: docs/EMIT.md section 7 (E7).
   - `tools/oracle/emit/monorepo.sh`: the monorepo emit oracle (all packages whose `build` runs `tsc`; outputs redirected
     to /tmp; repo status checked before/after).
 
-## Not done yet / waiting on emit/core
+- **Wired on top of E1/E2** (main d3a2598): `printSourceFile`'s source-map branch (generator, `SourceMaps` in the emit
+  result, `//# sourceMappingURL=`, the `.map` write), `getSourceMappingURL`'s inline `Base64DataURL`,
+  `SourceMapEmitResult.source_map`; `emitDeclarationFile` already passes the declaration-map options. The duplicate
+  free functions this branch had in emitter.rs were dropped in favor of E1's methods.
+- **Harness**: `tsrs-test run --baselines jsmap,sourcemap` (kinds `js.map`, `sourcemap.txt`; result lists
+  `js.map-<class>.txt`, `sourcemap.txt-<class>.txt`; `show <name> --jsmap --sourcemap`). They use E2's emitting
+  compilation. A test whose generated baseline is `NoContent` and that has no reference file passes trivially in Go;
+  here it is reported as `skip` so the pass counts are meaningful. `EmitOutputs` gained Go's `inputs`/`outputs`
+  lists (needed by `createSourceMapPreviewLink`).
 
-- Wiring: `printSourceFile` (generator creation, `SourceMaps` in the emit result, `//# sourceMappingURL=`, writing
-  the `.map`), `emitDeclarationFile`'s declaration-map printer options and `MapSourcePosition` (content mappers are
-  not ported, so the span map is always nil and the handler is never installed, as in Go without a mapper).
-- `--baselines jsmap,sourcemap` in the test runner on top of the E2 `CompilationResult`.
+## Numbers (2026-10-03, on main d3a2598)
+
+- `--baselines js`: 1363 pass, same pass list as main (the 2 timeouts are the usual flaky ones).
+- `--baselines jsmap,sourcemap`: 0 pass, 12030 crash, 3165 skip: every test with source maps panics in the E3 stubs
+  (typeeraser) before printing. Needs emit/transforms.
+- Monorepo oracle (`tools/oracle/emit/monorepo.sh /root/Owner -- --emitDeclarationOnly`, reference = tsgo built from
+  ts-ref): 103/103 packages fully identical, 4623/4623 files, including 2298 `.d.ts.map`.
+- Reference binary: the npm nightly 7.1.0-dev.20260929.1 predates the pinned commit and lacks #64460 (declaration
+  maps of `export default <identifier>`); with it 187 `.d.ts.map` differ. Use a tsgo built from ts-ref.
+
+## Left
+
+- `.js.map` / `.sourcemap.txt` baseline counts and the full monorepo oracle with maps, once the E3/E4 transformers
+  land (nothing in this wave is known to be missing for them).
