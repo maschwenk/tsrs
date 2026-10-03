@@ -726,7 +726,7 @@ impl classFieldsTransformer {
     // classfields.go:656
     pub(crate) fn visit_constructor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         if let Some(container) = self.current_class_container.get() {
-            return self.transform_constructor(node, container);
+            return self.transform_constructor(Some(node), container);
         }
         self.visitor().visit_each_child(Some(node))
     }
