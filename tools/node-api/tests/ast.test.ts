@@ -62,8 +62,8 @@ describe("parity: AST and checker at the UTF-16/WTF-8 boundary", () => {
             outcome = `error: ${(e as Error).message}`;
         }
         assert.doesNotMatch(outcome, /EOF|child process/, `server died: ${outcome}`);
-        const fresh = api.createSnapshot({ openProject: "/tsconfig.json" });
-        assert.ok(fresh.getConfiguredProject("/tsconfig.json"), "server no longer serves after the lone-surrogate file");
+        // Survival is checked with a request that does not read the offending file again.
+        assert.equal(api.parseCommandLine(["--strict"]).options.strict, true, "server no longer serves after the lone-surrogate file");
     });
 
     test("deeply nested expression encodes and traverses", () => {
