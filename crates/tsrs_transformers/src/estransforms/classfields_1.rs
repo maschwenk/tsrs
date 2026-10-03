@@ -1534,12 +1534,177 @@ impl classFieldsTransformer {
         }
         false
     }
+
+    // classfields.go:1452
+    pub(crate) fn visit_binary_expression(&self, mut node: P<Node>, discarded: bool) -> Option<P<Node>> {
+        if ast::is_destructuring_assignment(node) {
+            // ({ x: obj.#x } = ...)
+            // ({ x: super.x } = ...)
+            // ({ x: super[x] } = ...)
+            let b = node.as_binary_expression();
+            let saved_pending_expressions = std::mem::take(&mut *self.pending_expressions.borrow_mut());
+            let updated = self.factory().update_binary_expression(
+                node,
+                None,
+                self.assignment_target_visitor().visit_node(Some(b.left)).unwrap(),
+                None,
+                b.operator_token,
+                self.visitor().visit_node(Some(b.right())).unwrap(),
+            );
+            let result: P<Node>;
+            if !self.pending_expressions.borrow().is_empty() {
+                let mut exprs = self.pending_expressions.borrow().clone();
+                exprs.push(updated);
+                result = self.factory().inline_expressions(&exprs).unwrap();
+            } else {
+                result = updated;
+            }
+            *self.pending_expressions.borrow_mut() = saved_pending_expressions;
+            return Some(result);
+        }
+
+        if ast::is_assignment_expression(node, false /*excludeCompound*/) {
+            // 13.15.2 RS: Evaluation
+            //   AssignmentExpression : LeftHandSideExpression `=` AssignmentExpression
+            //     1. If |LeftHandSideExpression| is neither an |ObjectLiteral| nor an |ArrayLiteral|, then
+            //        a. Let _lref_ be ? Evaluation of |LeftHandSideExpression|.
+            //        b. If IsAnonymousFunctionDefinition(|AssignmentExpression|) and IsIdentifierRef of |LeftHandSideExpression| are both *true*, then
+            //           i. Let _rval_ be ? NamedEvaluation of |AssignmentExpression| with argument _lref_.[[ReferencedName]].
+            //     ...
+            //
+            //   AssignmentExpression : LeftHandSideExpression `&&=` AssignmentExpression
+            //     ...
+            //     5. If IsAnonymousFunctionDefinition(|AssignmentExpression|) is *true* and IsIdentifierRef of |LeftHandSideExpression| is *true*, then
+            //        a. Let _rval_ be ? NamedEvaluation of |AssignmentExpression| with argument _lref_.[[ReferencedName]].
+            //     ...
+            //
+            //   AssignmentExpression : LeftHandSideExpression `||=` AssignmentExpression
+            //     ...
+            //     5. If IsAnonymousFunctionDefinition(|AssignmentExpression|) is *true* and IsIdentifierRef of |LeftHandSideExpression| is *true*, then
+            //        a. Let _rval_ be ? NamedEvaluation of |AssignmentExpression| with argument _lref_.[[ReferencedName]].
+            //     ...
+            //
+            //   AssignmentExpression : LeftHandSideExpression `??=` AssignmentExpression
+            //     ...
+            //     4. If IsAnonymousFunctionDefinition(|AssignmentExpression|) is *true* and IsIdentifierRef of |LeftHandSideExpression| is *true*, then
+            //        a. Let _rval_ be ? NamedEvaluation of |AssignmentExpression| with argument _lref_.[[ReferencedName]].
+            //     ...
+
+            if is_named_evaluation_and(self.emit_context(), node, Some(&|n| self.is_anonymous_class_needing_assigned_name(n))) {
+                node = transform_named_evaluation(self.emit_context(), node, false, "");
+                assert!(ast::is_assignment_expression(node, false));
+            }
+            let b = node.as_binary_expression();
+
+            let left = ast::skip_outer_expressions(b.left, OuterExpressionKinds::PartiallyEmittedExpressions | OuterExpressionKinds::Parentheses);
+            if ast::is_property_access_expression(left) && ast::is_private_identifier(left.name().unwrap()) {
+                // obj.#x = ...
+                let info = self.access_private_identifier(left.name().unwrap());
+                if let Some(info) = info {
+                    let result = self.create_private_identifier_assignment(info, left.expression().unwrap(), b.right(), b.operator_token.kind());
+                    self.emit_context().set_original(result, node);
+                    result.set_loc(node.loc());
+                    return Some(result);
+                }
+            } else if self.should_transform_super_in_static_initializers.get()
+                && self.current_class_element.get().is_some()
+                && ast::is_super_property(b.left)
+                && is_static_property_declaration_or_class_static_block(self.current_class_element.get().unwrap())
+                && self.lexical_environment.get().is_some_and(|l| l.data.get().is_some())
+            {
+                // super.x = ...
+                // super[x] = ...
+                // super.x += ...
+                // super.x -= ...
+                let data = self.lexical_environment.get().unwrap().data.get().unwrap();
+                if data.facts.get().intersects(classFacts::ClassWasDecorated) {
+                    return Some(self.factory().update_binary_expression(node, None, self.visit_invalid_super_property(b.left).unwrap(), None, b.operator_token, self.visitor().visit_node(Some(b.right())).unwrap()));
+                }
+                if let (Some(class_constructor), Some(super_class_reference)) = (data.class_constructor.get(), data.super_class_reference.get()) {
+                    let mut setter_name: Option<P<Node>> = None;
+                    if ast::is_element_access_expression(b.left) {
+                        setter_name = self.visitor().visit_node(Some(b.left.as_element_access_expression().argument_expression));
+                    } else if ast::is_property_access_expression(b.left) && ast::is_identifier(b.left.as_property_access_expression().name()) {
+                        setter_name = Some(self.factory().new_string_literal_from_node(b.left.as_property_access_expression().name()));
+                    }
+                    if let Some(mut setter_name) = setter_name {
+                        // converts `super.x = 1` into `(Reflect.set(_baseTemp, "x", _a = 1, _classTemp), _a)`
+                        // converts `super[f()] = 1` into `(Reflect.set(_baseTemp, f(), _a = 1, _classTemp), _a)`
+                        // converts `super.x += 1` into `(Reflect.set(_baseTemp, "x", _a = Reflect.get(_baseTemp, "x", _classtemp) + 1, _classTemp), _a)`
+                        // converts `super[f()] += 1` into `(Reflect.set(_baseTemp, _a = f(), _b = Reflect.get(_baseTemp, _a, _classtemp) + 1, _classTemp), _b)`
+
+                        let mut expression = self.visitor().visit_node(Some(b.right())).unwrap();
+                        if ast::is_compound_assignment(b.operator_token.kind()) {
+                            let mut getter_name = setter_name;
+                            if !is_simple_inlineable_expression(setter_name) {
+                                getter_name = self.factory().new_temp_variable();
+                                self.emit_context().add_variable_declaration(getter_name);
+                                setter_name = self.factory().new_assignment_expression(getter_name, setter_name);
+                            }
+                            let super_property_get = self.factory().new_reflect_get_call(super_class_reference, getter_name, class_constructor);
+                            self.emit_context().set_original(super_property_get, b.left);
+                            super_property_get.set_loc(b.left.loc());
+                            expression = self.factory().new_binary_expression(
+                                None,
+                                super_property_get,
+                                None,
+                                self.factory().new_token(get_non_assignment_operator_for_compound_assignment(b.operator_token.kind())),
+                                expression,
+                            );
+                            expression.set_loc(node.loc());
+                        }
+
+                        let mut temp: Option<P<Node>> = None;
+                        if !discarded {
+                            temp = Some(self.factory().new_temp_variable());
+                            self.emit_context().add_variable_declaration(temp.unwrap());
+                        }
+                        if let Some(temp) = temp {
+                            expression = self.factory().new_assignment_expression(temp, expression);
+                            expression.set_loc(node.loc());
+                        }
+
+                        expression = self.factory().new_reflect_set_call(super_class_reference, setter_name, expression, class_constructor);
+                        self.emit_context().set_original(expression, node);
+                        expression.set_loc(node.loc());
+
+                        if let Some(temp) = temp {
+                            expression = self.factory().new_comma_expression(expression, temp);
+                            expression.set_loc(node.loc());
+                        }
+                        return Some(expression);
+                    }
+                }
+            }
+        }
+
+        let b = node.as_binary_expression();
+        if b.operator_token.kind() == Kind::InKeyword && ast::is_private_identifier(b.left) {
+            // #x in obj
+            return self.transform_private_identifier_in_in_expression(node);
+        }
+
+        self.visitor().visit_each_child(Some(node))
+    }
+
+    // classfields.go:1614
+    pub(crate) fn visit_parenthesized_expression(&self, node: P<Node>, discarded: bool) -> Option<P<Node>> {
+        // 8.4.5 RS: NamedEvaluation
+        //   ParenthesizedExpression : `(` Expression `)`
+        //     ...
+        //     2. Return ? NamedEvaluation of |Expression| with argument _name_.
+        let inner = node.as_parenthesized_expression().expression.get();
+        if discarded {
+            let expression = self.discarded_value_visitor().visit_node(Some(inner)).unwrap();
+            return Some(self.factory().update_parenthesized_expression(node, expression));
+        }
+        let expression = self.visitor().visit_node(Some(inner)).unwrap();
+        Some(self.factory().update_parenthesized_expression(node, expression))
+    }
 }
 
 // TEMP(part 1 in progress): not yet ported part-1 functions.
 impl classFieldsTransformer {
-    pub(crate) fn visit_binary_expression(&self, node: P<Node>, discarded: bool) -> Option<P<Node>> { let _ = (node, discarded); todo!() }
-    pub(crate) fn visit_parenthesized_expression(&self, node: P<Node>, discarded: bool) -> Option<P<Node>> { let _ = (node, discarded); todo!() }
     pub(crate) fn visit_expression_with_type_arguments_in_heritage_clause(&self, node: P<Node>) -> Option<P<Node>> { let _ = node; todo!() }
     pub(crate) fn create_private_identifier_assignment(&self, info: P<privateIdentifierInfo>, receiver: P<Node>, right: P<Node>, operator: Kind) -> P<Node> { let _ = (info, receiver, right, operator); todo!() }
 }
