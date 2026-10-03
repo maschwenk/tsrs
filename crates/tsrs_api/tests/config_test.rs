@@ -12,8 +12,10 @@ fn initialize_and_unknown_methods() {
     assert_eq!(call(&s, "ping", ""), Value::String("pong".into()));
     let e = call_err(&s, "noSuchMethod", "{}");
     assert!(e.starts_with("api: invalid request: unknown API method"), "{e}");
-    let e = call_err(&s, "initialize", "{not json");
-    assert!(e.starts_with("api: invalid request:"), "{e}");
+    // Go `noParams`: initialize ignores its payload.
+    call(&s, "initialize", "{not json");
+    let e = call_err(&s, "parseCommandLine", "{not json");
+    assert!(e.starts_with("api: invalid request: failed to unmarshal *api.ParseCommandLineParams:"), "{e}");
 }
 
 #[test]
@@ -62,4 +64,20 @@ fn parse_json_config_file_content_and_command_line() {
     assert_eq!(get(&r, "options.strict"), &Value::Bool(true));
     assert_eq!(get(&r, "options.target"), &Value::Number(9.0));
     assert_eq!(json::marshal(get(&r, "fileNames")).unwrap(), "[\"x.ts\"]");
+}
+
+#[test]
+fn strict_json_params_like_go() {
+    let dir = TempDir::new("strict");
+    let s = session(&dir.dir(), true);
+    let e = call_err(&s, "parseConfigFile", r#"{"file":"/p/\udc00.json"}"#);
+    assert!(e.starts_with("api: invalid request: failed to unmarshal *api.ParseConfigFileParams: jsontext:"), "{e}");
+    let e = call_err(&s, "createSnapshot", r#"{"fileSystem":{"kind":"full","files":{"/p/a.ts":"x","/p/a.ts":"y"}}}"#);
+    assert!(e.contains("failed to unmarshal *api.CreateSnapshotParams") && e.contains("duplicate object member name"), "{e}");
+    // noParams methods ignore their payload; echo returns it verbatim.
+    call(&s, "initialize", "not json");
+    match tsrs_api::Handler::handle_request(&*s, "echo", br#""x\ud800""#).unwrap() {
+        tsrs_api::Response::Binary(b) => assert_eq!(b, br#""x\ud800""#.to_vec()),
+        r => panic!("{r:?}"),
+    }
 }

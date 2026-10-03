@@ -296,7 +296,17 @@ impl Session {
             _ => {}
         }
         let info = method_info(method).ok_or_else(|| ApiError::invalid_request(format!("unknown API method {method:?}")))?;
-        let params = parse_params(params)?;
+        // Go `unmarshalPayload`: `noParams` methods ignore the payload; the others decode with Go's strict
+        // JSON (unpaired surrogates and duplicate members are errors), reported as
+        // `failed to unmarshal *api.<Type>: <jsontext error>`.
+        let params = match crate::methods::params_type(method) {
+            None => Value::Null,
+            Some(go_type) => {
+                tsrs_api_transport::strictjson::validate(params)
+                    .map_err(|e| ApiError::invalid_request(format!("failed to unmarshal *api.{go_type}: {e}")))?;
+                parse_params(params)?
+            }
+        };
         if *self.closed.lock().unwrap() {
             return Err(ApiError::client("session is closed"));
         }
