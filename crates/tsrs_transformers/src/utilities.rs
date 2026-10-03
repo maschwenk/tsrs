@@ -354,6 +354,6 @@ pub fn get_non_assignment_operator_for_compound_assignment(kind: Kind) -> Kind {
 }
 
 // ast/utilities.go:2138 (Go ast.IsSuperCall; kept here because tsrs_checker has its own glob-imported copy)
-fn is_super_call(node: P<Node>) -> bool {
+pub fn is_super_call(node: P<Node>) -> bool {
     ast::is_call_expression(node) && node.expression().unwrap().kind() == Kind::SuperKeyword
 }
