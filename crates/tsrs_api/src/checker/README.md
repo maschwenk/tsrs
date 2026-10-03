@@ -69,16 +69,28 @@ non-BMP text, plus stale / cross-project / released / malformed handle validatio
 
 What `Tested` does **not** mean yet (open gaps, for the integration lead):
 
-* `pinned_go_differential` compares 71 results against `testdata/go_probe_b85298b6.jsonl`, recorded from
-  pinned Go's `Session.HandleRequest` (built from b85298b6 with go1.27.1) over the same fixture and
-  request sequence: type strings and flags at 40 positions, symbol names/flags/ownership, file-owned
-  lookups without a snapshot (parent, members, exports, export symbol), `resolveName` with and without a
-  location, type-parameter constraints, and stale / foreign-project / forged / released handle errors.
-  All 71 match. The one tolerated difference is wording: on a malformed `type` param tsrs says
-  `field "type": expected an unsigned integer in range`, Go prints its json/v2 unmarshal error. Both
-  are `api: invalid request`. `objectFlags` are excluded: they include lazily computed cache bits
-  (`MembersResolved`), and those already differ between two Go queries of the same type. This is a
-  Go-server comparison, not a Node-client run; the broad upstream client suite belongs to the parity lane.
+* `pinned_go_differential` compares 71 results with `testdata/go_probe/go_probe_b85298b6.jsonl`. The
+  file is recorded from pinned Go's `Session.HandleRequest` (built from b85298b6, go1.27.1). Regenerate
+  it with `testdata/go_probe/regen.sh`. The script checks that `ts-ref` is clean and at the commit pinned
+  in `Cargo.toml`, copies `zz_tsrs_probe_test.go` into it for the run only, and removes it again,
+  failing if the checkout is not clean afterwards. Fixture and needles are shared with the Rust side
+  (`testdata/go_probe/fixture`, `needles.txt`).
+
+  The comparison covers type strings, type flags and objectFlags at 40 positions, symbol names, flags
+  and ownership, file-owned lookups without a snapshot (parent, members, exports, export symbol),
+  `resolveName` with and without a location, type-parameter constraints, and stale, foreign-project,
+  forged and released handle errors. Results are compared as JSON values, not bytes, with two
+  explicit exceptions:
+  * objectFlags ignore only `MembersResolved` (1 << 21). It is a lazily set cache bit; Go itself
+    reports 536870916 vs 538968068 for `box` at two positions, and 16 vs 2097168 for `make`. The raw
+    differences from tsrs are only in that bit: `doubled` and `arr` (Go 2621444, tsrs 524292) and
+    `box.value` (Go 538968068, tsrs 536870916). No other objectFlags bit differed.
+  * For a malformed `type` param, both return `api: invalid request: ...`, but the wording differs.
+    tsrs says `field "type": expected an unsigned integer in range`; Go prints its json/v2 decoder
+    error, whose wording also varied between Go runs ("unable to" vs "cannot unmarshal").
+
+  This is a Go-server comparison through tsrs' test-only node table. It is not a Node-client or
+  `Session` run; the broad upstream client suite belongs to the parity lane.
 * Through core's `Session` every handler that returns or accepts a node handle, a source-file descriptor
   or an encoded node fails with an explicit `api: unsupported` until `tsrs_api_codec` provides node
   index tables / `EncodeNode` and core provides `newSourceFileDescriptor` / the source-file cache
