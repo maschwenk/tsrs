@@ -753,3 +753,291 @@ impl esDecoratorTransformer {
         self.base.factory().update_computed_property_name(node, expression)
     }
 }
+
+impl esDecoratorTransformer {
+    // esdecorator.go:2134
+    pub(crate) fn visit_destructuring_assignment_target(&self, node: P<Node>) -> P<Node> {
+        if ast::is_object_literal_expression(node) || ast::is_array_literal_expression(node) {
+            return self.visit_assignment_pattern(node);
+        }
+
+        if let (true, Some(class_this), Some(class_super)) = (ast::is_super_property(node), self.class_this.get(), self.class_super.get()) {
+            let f = self.base.factory();
+            let ec = self.base.emit_context();
+            let mut property_name: Option<P<Node>> = None;
+            if ast::is_element_access_expression(node) {
+                property_name = self.base.visitor().visit_node(Some(node.as_element_access_expression().argument_expression));
+            } else if ast::is_property_access_expression(node) && ast::is_identifier(node.as_property_access_expression().name) {
+                property_name = Some(f.new_string_literal_from_node(node.as_property_access_expression().name));
+            }
+            if let Some(property_name) = property_name {
+                let param_name = f.new_temp_variable();
+                let expression = f.new_assignment_target_wrapper(param_name, f.new_reflect_set_call(class_super, property_name, param_name, class_this));
+                ec.set_original(expression, node);
+                expression.set_loc(node.loc());
+                return expression;
+            }
+        }
+
+        self.base.visitor().visit_each_child(Some(node)).unwrap()
+    }
+
+    // esdecorator.go:2168
+    pub(crate) fn visit_assignment_element(&self, node: P<Node>) -> P<Node> {
+        // 13.15.5.5 RS: IteratorDestructuringAssignmentEvaluation (see esdecorator.go)
+        if ast::is_assignment_expression(node, true /*excludeCompoundAssignment*/) {
+            let f = self.base.factory();
+            let mut node = node;
+            if is_named_evaluation_and(self.base.emit_context(), node, Some(&is_anonymous_class_needing_assigned_name)) {
+                node = transform_named_evaluation(self.base.emit_context(), node, can_ignore_empty_string_literal_in_assigned_name(Some(node.as_binary_expression().right())), "");
+            }
+            let bin = node.as_binary_expression();
+            let assignment_target = self.visit_destructuring_assignment_target(bin.left);
+            let initializer = self.base.visitor().visit_node(Some(bin.right())).unwrap();
+            return f.update_binary_expression(node, None, assignment_target, None, bin.operator_token, initializer);
+        }
+        self.visit_destructuring_assignment_target(node)
+    }
+
+    // esdecorator.go:2190
+    pub(crate) fn visit_assignment_rest_element(&self, node: P<Node>) -> P<Node> {
+        let se_expression = node.as_spread_element().expression;
+        if ast::is_left_hand_side_expression(se_expression) {
+            let expression = self.visit_destructuring_assignment_target(se_expression);
+            return self.base.factory().update_spread_element(node, expression);
+        }
+        self.base.visitor().visit_each_child(Some(node)).unwrap()
+    }
+
+    // esdecorator.go:2200
+    pub(crate) fn visit_array_assignment_element(&self, node: P<Node>) -> Option<P<Node>> {
+        assert!(ast::is_array_binding_or_assignment_element(node));
+        if ast::is_spread_element(node) {
+            return Some(self.visit_assignment_rest_element(node));
+        }
+        if !ast::is_omitted_expression(node) {
+            return Some(self.visit_assignment_element(node));
+        }
+        self.base.visitor().visit_each_child(Some(node))
+    }
+
+    // esdecorator.go:2211
+    pub(crate) fn visit_assignment_property_node(&self, node: P<Node>) -> P<Node> {
+        // AssignmentProperty : PropertyName `:` AssignmentElement (see esdecorator.go for the spec steps)
+        let f = self.base.factory();
+        let pa = node.as_property_assignment();
+        let name = self.base.visitor().visit_node(node.name()).unwrap();
+        let initializer = pa.initializer();
+        if ast::is_assignment_expression(initializer, true /*excludeCompoundAssignment*/) {
+            let assignment_element = self.visit_assignment_element(initializer);
+            return f.update_property_assignment(node, None, name, None, None, assignment_element);
+        }
+        if ast::is_left_hand_side_expression(initializer) {
+            let assignment_element = self.visit_destructuring_assignment_target(initializer);
+            return f.update_property_assignment(node, None, name, None, None, assignment_element);
+        }
+        self.base.visitor().visit_each_child(Some(node)).unwrap()
+    }
+
+    // esdecorator.go:2237
+    pub(crate) fn visit_shorthand_assignment_property(&self, node: P<Node>) -> P<Node> {
+        // AssignmentProperty : IdentifierReference Initializer? (see esdecorator.go for the spec steps)
+        let mut node = node;
+        if is_named_evaluation_and(self.base.emit_context(), node, Some(&is_anonymous_class_needing_assigned_name)) {
+            node = transform_named_evaluation(self.base.emit_context(), node, can_ignore_empty_string_literal_in_assigned_name(node.as_shorthand_property_assignment().object_assignment_initializer()), "");
+        }
+        self.base.visitor().visit_each_child(Some(node)).unwrap()
+    }
+
+    // esdecorator.go:2253
+    pub(crate) fn visit_assignment_rest_property(&self, node: P<Node>) -> P<Node> {
+        let sa_expression = node.as_spread_assignment().expression;
+        if ast::is_left_hand_side_expression(sa_expression) {
+            let expression = self.visit_destructuring_assignment_target(sa_expression);
+            return self.base.factory().update_spread_assignment(node, expression);
+        }
+        self.base.visitor().visit_each_child(Some(node)).unwrap()
+    }
+
+    // esdecorator.go:2263
+    pub(crate) fn visit_object_assignment_element(&self, node: P<Node>) -> Option<P<Node>> {
+        assert!(ast::is_object_binding_or_assignment_element(node));
+        if ast::is_spread_assignment(node) {
+            return Some(self.visit_assignment_rest_property(node));
+        }
+        if ast::is_shorthand_property_assignment(node) {
+            return Some(self.visit_shorthand_assignment_property(node));
+        }
+        if ast::is_property_assignment(node) {
+            return Some(self.visit_assignment_property_node(node));
+        }
+        self.base.visitor().visit_each_child(Some(node))
+    }
+
+    // esdecorator.go:2277
+    pub(crate) fn visit_assignment_pattern(&self, node: P<Node>) -> P<Node> {
+        let f = self.base.factory();
+        if ast::is_array_literal_expression(node) {
+            let ale = node.as_array_literal_expression();
+            let elements = self.array_assignment_visitor.get().unwrap().clone().visit_nodes(Some(ale.elements));
+            return f.update_array_literal_expression(node, elements.unwrap(), ale.multi_line);
+        }
+        let ole = node.as_object_literal_expression();
+        let properties = self.object_assignment_visitor.get().unwrap().clone().visit_nodes(Some(ole.properties));
+        f.update_object_literal_expression(node, properties.unwrap(), ole.multi_line)
+    }
+}
+
+impl esDecoratorTransformer {
+    // esdecorator.go:2289
+    pub(crate) fn visit_export_assignment(&self, node: P<Node>) -> P<Node> {
+        // 16.2.3.7 RS: Evaluation (see esdecorator.go)
+        self.visit_named_evaluation_site(node, node.expression())
+    }
+
+    // esdecorator.go:2298
+    pub(crate) fn visit_parenthesized_expression(&self, node: P<Node>, discarded: bool) -> P<Node> {
+        // 8.4.5 RS: NamedEvaluation
+        //   ParenthesizedExpression : `(` Expression `)`
+        //     ...
+        //     2. Return ? NamedEvaluation of |Expression| with argument _name_.
+        let inner = node.as_parenthesized_expression().expression();
+        let expression = if discarded { self.discarded_visitor.get().unwrap().clone().visit_node(Some(inner)) } else { self.base.visitor().visit_node(Some(inner)) };
+        self.base.factory().update_parenthesized_expression(node, expression.unwrap())
+    }
+
+    // esdecorator.go:2315
+    pub(crate) fn visit_partially_emitted_expression(&self, node: P<Node>, discarded: bool) -> P<Node> {
+        // Emulates 8.4.5 RS: NamedEvaluation
+        let inner = node.as_partially_emitted_expression().expression;
+        let expression = if discarded { self.discarded_visitor.get().unwrap().clone().visit_node(Some(inner)) } else { self.base.visitor().visit_node(Some(inner)) };
+        self.base.factory().update_partially_emitted_expression(node, expression.unwrap())
+    }
+
+    // esdecorator.go:2329
+    // prependExpressions prepends a list of expressions before a target expression, preserving
+    // parenthesization. If expression is nil, the pending expressions are inlined alone.
+    pub(crate) fn prepend_expressions(&self, pending: &[P<Node>], expression: Option<P<Node>>) -> Option<P<Node>> {
+        let f = self.base.factory();
+        if pending.is_empty() {
+            return expression;
+        }
+        let Some(expression) = expression else {
+            return f.inline_expressions(pending);
+        };
+        if ast::is_parenthesized_expression(expression) {
+            let mut exprs: Vec<P<Node>> = pending.to_vec();
+            exprs.push(expression.as_parenthesized_expression().expression());
+            return Some(f.update_parenthesized_expression(expression, f.inline_expressions(&exprs).unwrap()));
+        }
+        let mut exprs: Vec<P<Node>> = pending.to_vec();
+        exprs.push(expression);
+        f.inline_expressions(&exprs)
+    }
+
+    // esdecorator.go:2350
+    pub(crate) fn inject_pending_expressions(&self, expression: P<Node>) -> P<Node> {
+        let pending = self.pending_expressions.borrow().clone().unwrap_or_default();
+        let result = self.prepend_expressions(&pending, Some(expression));
+        assert!(result.is_some());
+        if result != Some(expression) {
+            *self.pending_expressions.borrow_mut() = None;
+        }
+        result.unwrap()
+    }
+
+    // esdecorator.go:2359
+    pub(crate) fn inject_pending_initializers(&self, ci: P<classInfo>, is_static: bool, expression: Option<P<Node>>) -> Option<P<Node>> {
+        let pending = if is_static { &ci.pending_static_initializers } else { &ci.pending_instance_initializers };
+        let current = pending.borrow().clone();
+        let result = self.prepend_expressions(&current, expression);
+        if result != expression {
+            pending.borrow_mut().clear();
+        }
+        result
+    }
+
+    // esdecorator.go:2374
+    // Transforms all of the decorators for a declaration into an array of expressions.
+    pub(crate) fn transform_all_decorators_of_declaration(&self, decorators: &[P<Node>]) -> Vec<P<Node>> {
+        let mut result: Vec<P<Node>> = Vec::with_capacity(decorators.len());
+        for d in decorators {
+            result.push(self.transform_decorator(*d));
+        }
+        result
+    }
+
+    // esdecorator.go:2386
+    // Transforms a decorator into an expression.
+    pub(crate) fn transform_decorator(&self, decorator: P<Node>) -> P<Node> {
+        let f = self.base.factory();
+        let expression = self.base.visitor().visit_node(Some(decorator.as_decorator().expression)).unwrap();
+        self.base.emit_context().set_emit_flags(expression, EmitFlags::NoComments);
+
+        // preserve the 'this' binding for an access expression
+        let inner_expression = ast::skip_outer_expressions(expression, OuterExpressionKinds::All);
+        if ast::is_access_expression(inner_expression) {
+            let (target, this_arg) = self.create_call_binding(expression);
+            let bind_call = f.new_function_bind_call(target, this_arg, &[]);
+            return f.restore_outer_expressions(Some(expression), bind_call, OuterExpressionKinds::All);
+        }
+        expression
+    }
+
+    // esdecorator.go:2400
+    pub(crate) fn create_call_binding(&self, expression: P<Node>) -> (P<Node>, P<Node>) {
+        let f = self.base.factory();
+        let ec = self.base.emit_context();
+        let callee = ast::skip_outer_expressions(expression, OuterExpressionKinds::All);
+        if ast::is_super_property(callee) {
+            return (callee, f.new_this_expression());
+        }
+        if callee.kind() == Kind::SuperKeyword {
+            return (callee, f.new_this_expression());
+        }
+        if ec.emit_flags(callee).intersects(EmitFlags::HelperName) {
+            return (callee, f.new_void_zero_expression());
+        }
+        if ast::is_property_access_expression(callee) {
+            let pa = callee.as_property_access_expression();
+            if self.should_be_captured_in_temp_variable(pa.expression) {
+                let this_arg = f.new_temp_variable();
+                ec.add_variable_declaration(this_arg);
+                let assign = f.new_assignment_expression(this_arg, pa.expression);
+                assign.set_loc(pa.expression.loc());
+                let target = f.new_property_access_expression(assign, None, pa.name, NodeFlags::None);
+                target.set_loc(callee.loc());
+                return (target, this_arg);
+            }
+            return (callee, pa.expression);
+        }
+        if ast::is_element_access_expression(callee) {
+            let ea = callee.as_element_access_expression();
+            if self.should_be_captured_in_temp_variable(ea.expression) {
+                let this_arg = f.new_temp_variable();
+                ec.add_variable_declaration(this_arg);
+                let assign = f.new_assignment_expression(this_arg, ea.expression);
+                assign.set_loc(ea.expression.loc());
+                let target = f.new_element_access_expression(assign, None, ea.argument_expression, NodeFlags::None);
+                target.set_loc(callee.loc());
+                return (target, this_arg);
+            }
+            return (callee, ea.expression);
+        }
+        (expression, f.new_void_zero_expression())
+    }
+
+    // esdecorator.go:2441
+    pub(crate) fn should_be_captured_in_temp_variable(&self, node: P<Node>) -> bool {
+        // This is a simplified version of the general shouldBeCapturedInTempVariable from
+        // nodeFactory with cacheIdentifiers=true, since createCallBinding in this transform
+        // always caches identifiers.
+        let target = ast::skip_parentheses(node);
+        match target.kind() {
+            // cacheIdentifiers is always true for this transform's createCallBinding
+            Kind::Identifier => true,
+            Kind::ThisKeyword | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::StringLiteral => false,
+            _ => true,
+        }
+    }
+}
