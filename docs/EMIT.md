@@ -470,6 +470,11 @@ Implemented: `tools/oracle/emit/run.py` (one project, as planned below; `$TSGO` 
 monorepo's `git status --short` is empty and fails if it changed; `TSRS_CHECKER_ASSIGNMENT=go` by default, see
 section 10). `tsc --build` packages are emitted with `-p` until `-b` exists.
 
+**Reference binary.** Use a `tsgo` built from `ts-ref` (`cd ts-ref/tsc && go build -o $TSRS_WORK/bin/tsgo-ref ./cmd/tsc`,
+Go 1.27). The npm nightly `@typescript/typescript-linux-x64@7.1.0-dev.20260929.1` was built before the pinned commit
+b85298b6 and lacks microsoft/TypeScript#64460 ("Fix declaration maps for export assignment expressions", 21:04 on
+2026-09-29), so its `.d.ts.map` for `export default <identifier>` differs from the Go source tsrs ports.
+
 The reference binary already emits, so no Go oracle program is needed (add one under `ts-ref/tsc/cmd/` only if
 `EmitResult` internals are needed). Planned `tools/oracle/emit/run.py <tsconfig|dir> [--name N] [-- extra tsc flags]`:
 
