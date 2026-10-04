@@ -93,12 +93,15 @@ pub(crate) fn merge_file_change_summary(dst: &mut FileChangeSummary, src: &FileC
     if src.invalidate_all {
         dst.invalidate_all = true;
     }
+    #[expect(clippy::iter_over_hash_type, reason = "pure set union into dst; Go ranges the set too")]
     for uri in src.changed.keys() {
         dst.changed.add(uri.clone());
     }
+    #[expect(clippy::iter_over_hash_type, reason = "pure set union into dst; Go ranges the set too")]
     for uri in src.created.keys() {
         dst.created.add(uri.clone());
     }
+    #[expect(clippy::iter_over_hash_type, reason = "pure set union into dst; Go ranges the set too")]
     for uri in src.deleted.keys() {
         dst.deleted.add(uri.clone());
     }

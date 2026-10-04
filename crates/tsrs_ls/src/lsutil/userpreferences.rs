@@ -989,7 +989,7 @@ pub(crate) fn set_field_from_value(field: FieldMut<'_>, val: &Value) {
         }
         FieldMut::String(f) => {
             if let Value::String(s) = val {
-                *f = s.clone();
+                f.clone_from(s);
             }
         }
         FieldMut::WorkspaceSymbolsScope(f) => {

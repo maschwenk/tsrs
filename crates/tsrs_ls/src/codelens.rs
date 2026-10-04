@@ -181,7 +181,7 @@ impl LanguageService {
 
         let mut cmd = lsproto::Command { title: lens_title, ..Default::default() };
         if let Some(show_locations_command_name) = show_locations_command_name.filter(|_| !locs.is_empty()) {
-            cmd.command = show_locations_command_name.clone();
+            cmd.command.clone_from(show_locations_command_name);
             cmd.arguments = Some(vec![uri.to_json(), code_lens.range.start.to_json(), locs.to_json()]);
         }
 

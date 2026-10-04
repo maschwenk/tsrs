@@ -130,7 +130,7 @@ pub(crate) fn new_project_loading_progress_from_reporter(reporter: Arc<dyn progr
         }),
         delay,
     });
-    let runner = p.clone();
+    let runner = Arc::clone(&p);
     std::thread::Builder::new().name("lsp-progress".to_string()).spawn(move || runner.run()).expect("failed to spawn the progress thread");
     p
 }
@@ -138,7 +138,7 @@ pub(crate) fn new_project_loading_progress_from_reporter(reporter: Arc<dyn progr
 impl projectLoadingProgress {
     fn send_event(&self, ev: progressEvent) {
         let done = self.reporter.done();
-        let ch = self.ch.clone();
+        let ch = Arc::clone(&self.ch);
         let guard = self.ch.state.lock().unwrap();
         let wake = move || {
             drop(ch.state.lock().unwrap());
@@ -182,7 +182,7 @@ impl projectLoadingProgress {
         let mut delay_fired = false; // true after the delay timer fires
 
         let done = self.reporter.done();
-        let ch = self.ch.clone();
+        let ch = Arc::clone(&self.ch);
         let _stop = done.after_func(move || {
             drop(ch.state.lock().unwrap());
             ch.not_empty.notify_all();

@@ -122,6 +122,7 @@ impl ProjectCollection {
     // projectcollection.go:98
     fn fill_configured_projects(&self, projects: &mut Vec<Shared<Project>>) {
         let start = projects.len();
+        #[expect(clippy::iter_over_hash_type, reason = "collected, then sorted by unique project id as in Go")]
         for p in self.configured_projects.values() {
             projects.push(p.clone());
         }
@@ -189,12 +190,12 @@ impl ProjectCollection {
         let mut projects: Vec<Arc<dyn ls::Project>> = Vec::new();
         for project in self.configured_projects() {
             if project.contains_file(path) {
-                projects.push(project.arc().clone());
+                projects.push(Arc::<Project>::clone(project.arc()));
             }
         }
         if let Some(inferred_project) = &self.inferred_project {
             if inferred_project.contains_file(path) {
-                projects.push(inferred_project.arc().clone());
+                projects.push(Arc::<Project>::clone(inferred_project.arc()));
             }
         }
         projects
@@ -203,9 +204,10 @@ impl ProjectCollection {
     // projectcollection.go:179
     // GetOpenConfiguredProjects returns configured projects containing at least one open file.
     pub fn get_open_configured_projects(&self) -> Arc<Set<ConfiguredProjectID>> {
-        self.open_configured_projects
+        Arc::clone(self.open_configured_projects
             .get_or_init(|| {
                 let mut open_projects = new_set_with_size_hint(self.configured_projects.len());
+                #[expect(clippy::iter_over_hash_type, reason = "only inserts into a set; Go ranges the set too")]
                 for path in self.open_files.keys() {
                     if let Some(project_id) = self.file_default_projects.as_ref().and_then(|m| m.get(path)) {
                         if let Some(configured_id) = project_id.configured() {
@@ -216,6 +218,7 @@ impl ProjectCollection {
                         }
                     }
 
+                    #[expect(clippy::iter_over_hash_type, reason = "only inserts into a set; Go ranges the map too")]
                     for project in self.configured_projects.values() {
                         if project.contains_file(path) {
                             let configured_id = project.id().configured().unwrap();
@@ -224,8 +227,7 @@ impl ProjectCollection {
                     }
                 }
                 Arc::new(open_projects)
-            })
-            .clone()
+            }))
     }
 
     // projectcollection.go:211
@@ -358,11 +360,11 @@ impl ProjectCollection {
     // clone creates a shallow copy of the project collection.
     pub(crate) fn clone_collection(&self) -> ProjectCollection {
         ProjectCollection {
-            to_path: self.to_path.clone(),
-            config_file_registry: self.config_file_registry.clone(),
-            configured_projects: self.configured_projects.clone(),
-            synthetic_projects: self.synthetic_projects.clone(),
-            open_files: self.open_files.clone(),
+            to_path: Arc::clone(&self.to_path),
+            config_file_registry: Arc::clone(&self.config_file_registry),
+            configured_projects: Arc::clone(&self.configured_projects),
+            synthetic_projects: Arc::clone(&self.synthetic_projects),
+            open_files: Arc::clone(&self.open_files),
             inferred_project: self.inferred_project.clone(),
             file_default_projects: self.file_default_projects.clone(),
             api_state: self.api_state.clone(),
@@ -374,6 +376,7 @@ impl ProjectCollection {
 // projectcollection.go:202
 pub(crate) fn open_file_paths(overlays: &OverlayMap) -> Set<Path> {
     let mut open_files = new_set_with_size_hint(overlays.len());
+    #[expect(clippy::iter_over_hash_type, reason = "pure set insert; Go ranges the map too")]
     for path in overlays.keys() {
         open_files.add(path.clone());
     }

@@ -31,7 +31,7 @@ pub(crate) struct cachedLayeredFileSystem {
 
 // snapshotfs.go:38
 pub(crate) fn new_cached_layered_file_system(file_system: Arc<dyn LayeredFileSystem>) -> Arc<dyn LayeredFileSystem> {
-    Arc::new(cachedLayeredFileSystem { fs: cachedvfs::from(file_system.clone()), layered: file_system })
+    Arc::new(cachedLayeredFileSystem { fs: cachedvfs::from(Arc::clone(&file_system)), layered: file_system })
 }
 
 impl FileHandleSource for cachedLayeredFileSystem {
@@ -167,7 +167,7 @@ impl FileHandleSource for SnapshotFS {
     // snapshotfs.go:121
     fn get_file_by_path(&self, file_name: &str, path: &Path) -> Option<Arc<dyn FileHandle>> {
         if let Some(file) = self.cache_files.get(path) {
-            return Some(file.arc().clone());
+            return Some(Arc::<cachedFile>::clone(file.arc()));
         }
         let new_entry: memoizedCachedFile = Arc::new(OnceLock::new());
         let (entry, _) = self.read_files.load_or_store(path.clone(), new_entry);
@@ -196,7 +196,7 @@ impl FileSource for SnapshotFS {
             return lower_entries;
         };
         merge_cached_directory_entries(
-            lower_entries,
+            &lower_entries,
             directory,
             |path| self.cache_files.contains_key(path) || self.fs.file_exists(path),
             self.fs.use_case_sensitive_file_names(),
@@ -206,7 +206,7 @@ impl FileSource for SnapshotFS {
 
 // snapshotfs.go:144
 fn merge_cached_directory_entries(
-    directory_entries: Entries,
+    directory_entries: &Entries,
     cached_entries: &CloneableMap<Path, String>,
     is_cached_file: impl Fn(&Path) -> bool,
     use_case_sensitive_file_names: bool,
@@ -342,6 +342,7 @@ impl snapshotFSBuilder {
         }
 
         if let Some(deleted) = &deleted {
+            #[expect(clippy::iter_over_hash_type, reason = "removes each path from its parent dir and prunes emptied dirs; the end state is order-free; Go ranges the map too")]
             for path in deleted.keys() {
                 self.on_deleted_file_or_directory(path);
             }
@@ -350,6 +351,7 @@ impl snapshotFSBuilder {
         // Prune deleted symlink paths from realpath alias sets before finalizing,
         // so that empty sets are dropped during finalization.
         if let Some(deleted) = &deleted {
+            #[expect(clippy::iter_over_hash_type, reason = "per-path removal from alias sets; commutes; Go ranges the map too")]
             for (deleted_path, deleted_file) in deleted {
                 let Some(deleted_file) = deleted_file else {
                     continue;
@@ -374,12 +376,12 @@ impl snapshotFSBuilder {
 
         (
             SnapshotFS {
-                fs: self.fs.clone(),
+                fs: Arc::clone(&self.fs),
                 cache_files,
                 cache_directories: self.cache_directories.finalize().0,
                 read_files: SyncMap::default(),
                 node_modules_realpath_aliases,
-                to_path: self.to_path.clone(),
+                to_path: Arc::clone(&self.to_path),
             },
             changed || aliases_changed,
         )
@@ -450,7 +452,7 @@ impl snapshotFSBuilder {
         let mut file_name = String::new();
         entry.locked(&mut |e: &dyn Value<cachedFile>| {
             if let Some(v) = e.value() {
-                file_name = v.base.file_name.clone();
+                file_name.clone_from(&v.base.file_name);
             }
         });
         if file_name.is_empty() {
@@ -471,7 +473,7 @@ impl snapshotFSBuilder {
                 e.delete();
             }
         });
-        entry.value().map(|v| v.arc().clone() as Arc<dyn FileHandle>)
+        entry.value().map(|v| Arc::clone(v.arc()) as Arc<dyn FileHandle>)
     }
 
     // snapshotfs.go:424
@@ -480,7 +482,7 @@ impl snapshotFSBuilder {
         entry.locked(&mut |e: &dyn Value<cachedFile>| {
             if let Some(v) = e.value() {
                 if !v.matches_disk_text() {
-                    file_name = v.base.file_name.clone();
+                    file_name.clone_from(&v.base.file_name);
                 }
             }
         });
@@ -503,7 +505,7 @@ impl snapshotFSBuilder {
                 }
             });
         }
-        entry.value().map(|v| v.arc().clone() as Arc<dyn FileHandle>)
+        entry.value().map(|v| Arc::clone(v.arc()) as Arc<dyn FileHandle>)
     }
 
     // snapshotfs.go:455
@@ -513,6 +515,7 @@ impl snapshotFSBuilder {
         previous_open_files: &FxHashMap<Path, Arc<dyn FileHandle>>,
         open_files: &FxHashMap<Path, Arc<dyn FileHandle>>,
     ) -> bool {
+        #[expect(clippy::iter_over_hash_type, reason = "pure lookup any(); returns a bool only; Go ranges the set too")]
         for uri in change.changed.keys() {
             let path = (self.to_path)(&uri.file_name());
             if previous_open_files.contains_key(&path) || open_files.contains_key(&path) {
@@ -525,6 +528,7 @@ impl snapshotFSBuilder {
                 return true;
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "pure lookup any(); returns a bool only; Go ranges the set too")]
         for uri in change.deleted.keys() {
             let path = (self.to_path)(&uri.file_name());
             if previous_open_files.contains_key(&path) || open_files.contains_key(&path) {
@@ -567,6 +571,7 @@ impl snapshotFSBuilder {
         if change.changed.len() > 0 {
             let filtered_changed: SyncSet<lsproto::DocumentUri> = SyncSet::default();
             let wg = new_work_group(false);
+            #[expect(clippy::iter_over_hash_type, reason = "per-entry reload plus a set insert; Go runs these in parallel")]
             for uri in change.changed.keys() {
                 let path = (self.to_path)(&uri.file_name());
                 if let Some(file) = self.fs.get_file_by_path(&uri.file_name(), &path) {
@@ -595,6 +600,7 @@ impl snapshotFSBuilder {
             }
             change.changed = new_changed;
         }
+        #[expect(clippy::iter_over_hash_type, reason = "only deletes cache entries; Go ranges the set too")]
         for uri in change.deleted.keys() {
             let path = (self.to_path)(&uri.file_name());
             if let Some(entry) = self.cache_files.load(&path) {
@@ -683,6 +689,7 @@ impl snapshotFSBuilder {
     ) -> FileChangeSummary {
         if change.deleted.len() > 0 {
             let mut filtered_deleted: Set<lsproto::DocumentUri> = Set::default();
+            #[expect(clippy::iter_over_hash_type, reason = "filters into a new set; pure inserts; Go ranges the set too")]
             for uri in change.deleted.keys() {
                 let path = (self.to_path)(&uri.file_name());
                 if self.cache_directories.get(&path).is_some() || has_open_file_within(&path, previous_open_files, open_files) {
@@ -699,6 +706,7 @@ impl snapshotFSBuilder {
 
         if change.changed.len() > 0 {
             let mut filtered_changed: Set<lsproto::DocumentUri> = Set::default();
+            #[expect(clippy::iter_over_hash_type, reason = "filters into a new set; pure inserts; Go ranges the set too")]
             for uri in change.changed.keys() {
                 if self.is_relevant_file_name(uri, content_mapper_extensions, content_mapper_watched_files, open_files) {
                     filtered_changed.add(uri.clone());
@@ -724,11 +732,13 @@ impl snapshotFSBuilder {
         previous_open_files: &FxHashMap<Path, Arc<dyn FileHandle>>,
         open_files: &FxHashMap<Path, Arc<dyn FileHandle>>,
     ) {
+        #[expect(clippy::iter_over_hash_type, reason = "pure set inserts; Go ranges the map too")]
         for (path, file) in open_files {
             if dir_path.contains_path(path) {
                 files.add(lsconv::file_name_to_document_uri(file.file_name()));
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "pure set inserts; Go ranges the map too")]
         for (path, file) in previous_open_files {
             if dir_path.contains_path(path) {
                 files.add(lsconv::file_name_to_document_uri(file.file_name()));
@@ -847,7 +857,7 @@ impl FileSource for snapshotFSBuilder {
         };
         let directory = directory.value().unwrap();
         merge_cached_directory_entries(
-            lower_entries,
+            &lower_entries,
             &directory,
             |path| self.cache_files.load(path).is_some_and(|entry| entry.value().is_some()) || self.fs.file_exists(path),
             self.fs.use_case_sensitive_file_names(),
@@ -867,6 +877,7 @@ impl SnapshotFS {
         }
 
         let mut additional_changed: Set<lsproto::DocumentUri> = Set::default();
+        #[expect(clippy::iter_over_hash_type, reason = "pure set unions; Go ranges the set too")]
         for uri in change.changed.keys() {
             let path = (self.to_path)(&uri.file_name());
             if let Some(aliases) = self.node_modules_realpath_aliases.get(&path) {
@@ -875,11 +886,13 @@ impl SnapshotFS {
                 }
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "pure set unions; Go ranges the set too")]
         for uri in additional_changed.keys() {
             change.changed.add(uri.clone());
         }
 
         let mut additional_deleted: Set<lsproto::DocumentUri> = Set::default();
+        #[expect(clippy::iter_over_hash_type, reason = "pure set unions; Go ranges the set too")]
         for uri in change.deleted.keys() {
             let path = (self.to_path)(&uri.file_name());
             if let Some(aliases) = self.node_modules_realpath_aliases.get(&path) {
@@ -888,6 +901,7 @@ impl SnapshotFS {
                 }
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "pure set unions; Go ranges the set too")]
         for uri in additional_deleted.keys() {
             change.deleted.add(uri.clone());
         }
@@ -913,11 +927,13 @@ pub(crate) fn is_node_modules_path(path: &Path) -> bool {
 
 // snapshotfs.go:693
 fn has_open_file_within(path: &Path, previous_open_files: &FxHashMap<Path, Arc<dyn FileHandle>>, open_files: &FxHashMap<Path, Arc<dyn FileHandle>>) -> bool {
+    #[expect(clippy::iter_over_hash_type, reason = "pure any() predicate; Go ranges the map too")]
     for open_file_path in open_files.keys() {
         if path.contains_path(open_file_path) {
             return true;
         }
     }
+    #[expect(clippy::iter_over_hash_type, reason = "pure any() predicate; Go ranges the map too")]
     for open_file_path in previous_open_files.keys() {
         if path.contains_path(open_file_path) {
             return true;

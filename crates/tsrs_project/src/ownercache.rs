@@ -36,7 +36,7 @@ pub fn new_owner_cache<K: Hash + Eq, V, LoadArgs>(
 
 impl<K: Hash + Eq + Clone, V: Clone, LoadArgs> OwnerCache<K, V, LoadArgs> {
     // ownercache.go:38
-    pub fn load_and_acquire(&self, identity: K, owner: u64, load_args: LoadArgs) -> V {
+    pub fn load_and_acquire(&self, identity: &K, owner: u64, load_args: &LoadArgs) -> V {
         self.load_or_store_locked_entry(&identity, |entry, loaded| {
             if !loaded || self.is_expired.as_ref().is_some_and(|is_expired| is_expired(&identity, entry.value.as_ref().unwrap(), &load_args)) {
                 entry.value = Some((self.parse)(&identity, &load_args));
@@ -47,7 +47,7 @@ impl<K: Hash + Eq + Clone, V: Clone, LoadArgs> OwnerCache<K, V, LoadArgs> {
     }
 
     // ownercache.go:48
-    pub fn acquire(&self, identity: K, owner: u64, value: V) {
+    pub fn acquire(&self, identity: &K, owner: u64, value: V) {
         self.load_or_store_locked_entry(&identity, |entry, loaded| {
             if !loaded {
                 entry.value = Some(value);
@@ -95,7 +95,7 @@ impl<K: Hash + Eq + Clone, V: Clone, LoadArgs> OwnerCache<K, V, LoadArgs> {
         loop {
             let entry = Arc::new(ownerCacheEntry { mu: Mutex::new(ownerCacheEntryState { value: None, owners: FxHashSet::default() }) });
             let mut guard = entry.mu.lock().unwrap();
-            let (existing, loaded) = self.entries.load_or_store(key.clone(), entry.clone());
+            let (existing, loaded) = self.entries.load_or_store(key.clone(), Arc::clone(&entry));
             if loaded {
                 drop(guard);
                 let mut existing_guard = existing.mu.lock().unwrap();

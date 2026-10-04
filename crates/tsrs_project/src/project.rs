@@ -277,7 +277,7 @@ pub fn new_inferred_project(
 
 // project.go:234
 pub(crate) fn new_synthetic_project(
-    id: SyntheticProjectID,
+    id: &SyntheticProjectID,
     current_directory: &str,
     compiler_options: P<CompilerOptions>,
     root_file_names: Vec<String>,
@@ -541,6 +541,7 @@ impl Project {
                 }
             }
         } else if let Some(potential_project_references) = &self.potential_project_references {
+            #[expect(clippy::iter_over_hash_type, reason = "pure membership any(); Go ranges the set too")]
             for path in potential_project_references.keys() {
                 if project_tree_request.is_project_referenced(path) {
                     return true;
@@ -560,17 +561,17 @@ impl Project {
         let pool_slot: Arc<Mutex<Option<Arc<checkerPool>>>> = Arc::new(Mutex::new(None));
         let create_checker_pool: CreateCheckerPool = {
             let options = host.session_options.checker_pool_options;
-            let pool_slot = pool_slot.clone();
+            let pool_slot = Arc::clone(&pool_slot);
             Arc::new(move |program: &'static Program| -> Box<dyn CheckerPool> {
                 let pool = new_checker_pool(options, program, None);
-                *pool_slot.lock().unwrap() = Some(pool.clone());
+                *pool_slot.lock().unwrap() = Some(Arc::clone(&pool));
                 Box::new(checkerPoolHandle(pool))
             })
         };
         let cleanup_module_resolver: Arc<Mutex<Option<Box<dyn FnOnce() + Send>>>> = Arc::new(Mutex::new(None));
         let create_module_resolver: CreateModuleResolver = {
             let factory = self.module_resolver_factory.clone();
-            let cleanup_module_resolver = cleanup_module_resolver.clone();
+            let cleanup_module_resolver = Arc::clone(&cleanup_module_resolver);
             let ctx = host.builder_ctx();
             Arc::new(move |options: ResolverOptions| -> Box<dyn Resolver> {
                 let Some(factory) = &factory else {
@@ -593,7 +594,7 @@ impl Project {
         if reuse {
             let old_program = self.program.unwrap();
             let (program, dirty_file, cloned) =
-                old_program.update_program(&self.dirty_file_path, host.clone(), Some(create_checker_pool), Some(create_module_resolver));
+                old_program.update_program(&self.dirty_file_path, Arc::<compilerHost>::clone(&host), Some(create_checker_pool), Some(create_module_resolver));
             new_program_result = program;
             program_cloned = cloned;
             let (parse_cache, journal) = host.builder_parse_cache_journal();
@@ -620,7 +621,7 @@ impl Project {
         } else {
             let mut typings_location = String::new();
             if self.get_type_acquisition().is_some_and(|ta| ta.enable.is_true()) {
-                typings_location = host.session_options.typings_location.clone();
+                typings_location.clone_from(&host.session_options.typings_location);
             }
             let mut opts = ProgramOptions::new(command_line.unwrap(), host);
             opts.use_source_of_project_reference = true;

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, DiagnosticExt as _, ModifierFlags, Node, SourceFile, Symbol};
 use tsrs_checker::{self as checker, Checker, Type};
@@ -49,7 +50,7 @@ fn get_code_actions_to_fix_class_incorrectly_implements_interface(context: &Cont
 
     let mut actions = Vec::new();
     for &implemented_type_node in implements_types {
-        let mut change_tracker = change::new_tracker(context, &fix_context.program.options(), fix_context.ls.format_options(), fix_context.ls.converters.clone());
+        let mut change_tracker = change::new_tracker(context, &fix_context.program.options(), fix_context.ls.format_options(), Arc::clone(&fix_context.ls.converters));
         let mut import_adder = create_import_adder(context, fix_context, &mut type_checker)?;
 
         add_changes(context, fix_context, &mut change_tracker, import_adder.as_deref_mut(), &mut type_checker, class_declaration, implemented_type_node);
@@ -77,7 +78,7 @@ fn get_all_code_actions_to_fix_class_incorrectly_implements_interface(
 
     let mut type_checker = fix_context.program.get_type_checker_for_file(context, fix_context.source_file);
 
-    let mut change_tracker = change::new_tracker(context, &fix_context.program.options(), fix_context.ls.format_options(), fix_context.ls.converters.clone());
+    let mut change_tracker = change::new_tracker(context, &fix_context.program.options(), fix_context.ls.format_options(), Arc::clone(&fix_context.ls.converters));
     let mut import_adder = create_import_adder(context, fix_context, &mut type_checker)?;
 
     let mut seen_class_declarations: Set<P<Node>> = Set::new();
@@ -275,7 +276,7 @@ fn create_import_adder(context: &Context, fix_context: &CodeFixContext, type_che
         fix_context.source_file,
         view,
         fix_context.ls.format_options(),
-        fix_context.ls.converters.clone(),
+        Arc::clone(&fix_context.ls.converters),
         fix_context.ls.user_preferences().clone(),
     )))
 }

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use tsrs_ast::{self as ast, Node, SourceFile, Symbol, TokenFlags};
 use tsrs_checker::Checker;
 use tsrs_compiler::Program;
@@ -42,7 +43,7 @@ impl LanguageService {
 
         let old_to_new = self.create_path_updater(&old_path, &new_path);
 
-        let mut change_tracker = change::new_tracker(ctx, &program.options(), self.format_options(), self.converters.clone());
+        let mut change_tracker = change::new_tracker(ctx, &program.options(), self.format_options(), Arc::clone(&self.converters));
         self.update_tsconfig_files(program, &mut change_tracker, &old_to_new, &old_path, &new_path);
         self.update_imports_for_file_rename(program, &mut change_tracker, &old_to_new);
 
@@ -130,7 +131,7 @@ impl LanguageService {
         };
 
         let use_case_sensitive_file_names = self.use_case_sensitive_file_names();
-        let converters = self.converters.clone();
+        let converters = Arc::clone(&self.converters);
         for_each_object_property(Some(json_object_literal), &mut |property, property_name| match property_name {
             "files" | "include" | "exclude" => {
                 let found_exact_match =

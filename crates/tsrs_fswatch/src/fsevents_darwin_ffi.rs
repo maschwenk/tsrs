@@ -197,7 +197,7 @@ fn cf_string_to_go(src: CFTypeRef) -> String {
         let length = CFStringGetLength(src);
         let buf_size = CFStringGetMaximumSizeForEncoding(length, cfStringEncodingUTF8) + 1;
         let mut buf = vec![0u8; buf_size as usize];
-        if CFStringGetCString(src, buf.as_mut_ptr() as *mut c_char, buf_size, cfStringEncodingUTF8) == 0 {
+        if CFStringGetCString(src, buf.as_mut_ptr().cast::<c_char>(), buf_size, cfStringEncodingUTF8) == 0 {
             return String::new();
         }
         // CFStringGetCString writes a NUL terminator; trim it.
@@ -273,6 +273,7 @@ pub(crate) struct streamCallback {
 
 // SAFETY: the dispatch queue handle is a thread-safe libdispatch object; `watches` is immutable after creation.
 unsafe impl Send for streamCallback {}
+// SAFETY: as for Send: the queue handle is thread-safe and `watches` is never mutated after creation.
 unsafe impl Sync for streamCallback {}
 
 // fsevents_darwin_ffi.go:536
@@ -282,7 +283,7 @@ unsafe impl Sync for streamCallback {}
 pub(crate) fn new_stream_callback(watches: &[fseventsWatchSnapshot]) -> Option<Box<streamCallback>> {
     let label = b"typescript.fswatch.fsevents.stream\0";
     // SAFETY: `label` is NUL-terminated; NULL attr = serial queue.
-    let queue = unsafe { dispatch_queue_create(label.as_ptr() as *const c_char, std::ptr::null()) };
+    let queue = unsafe { dispatch_queue_create(label.as_ptr().cast::<c_char>(), std::ptr::null()) };
     if queue.is_null() {
         return None;
     }
@@ -315,7 +316,7 @@ extern "C" fn fs_events_callback_c(_stream: FSEventStreamRef, info: *mut c_void,
     // SAFETY: `info` is the `streamCallback` passed to FSEventStreamCreate; it stays alive until
     // `teardown_stream` has waited for the stream's queue, so no callback outlives it.
     let cb = unsafe { &*(info as *const streamCallback) };
-    let payload = fsEventsCallbackPayload { num_events, paths: event_paths as CFTypeRef, flags: event_flags, ids: event_ids };
+    let payload = fsEventsCallbackPayload { num_events, paths: event_paths.cast_const(), flags: event_flags, ids: event_ids };
     // A panic must not unwind into CoreServices.
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| fs_events_callback(cb, &payload)));
 }
@@ -325,6 +326,7 @@ pub(crate) struct fsEventStream(FSEventStreamRef);
 
 // SAFETY: FSEventStream functions may be called from any thread once the stream is scheduled on a dispatch queue.
 unsafe impl Send for fsEventStream {}
+// SAFETY: as for Send: the stream functions are thread-safe once it is scheduled on a dispatch queue.
 unsafe impl Sync for fsEventStream {}
 
 pub(crate) enum streamStartError {
@@ -348,13 +350,13 @@ pub(crate) fn create_and_start_stream(paths: &[String], cb: &mut Box<streamCallb
         return Err(streamStartError::CFArrayCreateNull);
     };
 
-    let info: *mut streamCallback = &mut **cb;
-    let ctx = FSEventStreamContext { version: 0, info: info as *mut c_void, retain: std::ptr::null(), release: std::ptr::null(), copy_description: std::ptr::null() };
+    let info: *mut streamCallback = &raw mut **cb;
+    let ctx = FSEventStreamContext { version: 0, info: info.cast::<c_void>(), retain: std::ptr::null(), release: std::ptr::null(), copy_description: std::ptr::null() };
     // kFSEventStreamEventIdSinceNow == ((FSEventStreamEventId)0xFFFFFFFFFFFFFFFFULL)
     const eventIDSinceNow: u64 = 0xFFFFFFFFFFFFFFFF;
     // SAFETY: `ctx` is copied by FSEventStreamCreate; `paths_to_watch` is a valid CFArray of CFStrings; `info`
     // points into the boxed callback, whose address is stable until the stream is torn down.
-    let stream = unsafe { FSEventStreamCreate(std::ptr::null(), fs_events_callback_c, &ctx, paths_to_watch.0, eventIDSinceNow, 0.001, fsEventStreamCreateFlags) };
+    let stream = unsafe { FSEventStreamCreate(std::ptr::null(), fs_events_callback_c, &raw const ctx, paths_to_watch.0, eventIDSinceNow, 0.001, fsEventStreamCreateFlags) };
     drop(paths_to_watch);
     drop(cf_strings);
     if stream.is_null() {

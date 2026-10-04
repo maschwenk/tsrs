@@ -186,7 +186,7 @@ pub(crate) fn setup(files: &[(&str, &str)]) -> (Arc<Session>, SessionUtils) {
 // projecttestutil.go:265
 pub(crate) fn setup_with_options(files: &[(&str, &str)], options: Option<SessionOptions>) -> (Arc<Session>, SessionUtils) {
     let (init, session_utils) = get_session_init_options(files, options);
-    (new_session(init), session_utils)
+    (new_session(&init), session_utils)
 }
 
 // projecttestutil.go:285
