@@ -38,7 +38,7 @@ git -C ts-ref sparse-checkout set tsc/testdata && git -C ts-ref checkout "$commi
 ./target/release/tsrs-test run --filter <substring>              # one test or a cluster
 ./target/release/tsrs-test show <suite/name>                     # expected vs actual
 .github/scripts/conformance-gate.sh                              # what CI enforces
-cargo test -p tsrs_core -p tsrs_scanner -p tsrs_tsoptions        # unit tests (see .github/workflows/ci.yml)
+cargo test -p tsrs_core -p tsrs_scanner -p tsrs_tsoptions        # unit tests (see .depot/workflows/ci.yml)
 ```
 
 A change must not lose passing tests: compare `target/test-results/pass.txt` before and after
@@ -51,9 +51,9 @@ For a bug outside the suite, add a reproduction under `testdata/regressions/<nam
 
 ## Landing changes
 
-- External contributors: open a pull request against `main`. CI (`.github/workflows/ci.yml`) must pass. Workflows on
-  pull requests from forks need a maintainer's approval before they run (GitHub's default for outside
-  contributors), and they never get repository secrets.
+- External contributors: open a pull request against `main`. CI (`.depot/workflows/ci.yml`, on Depot CI) runs on pushes
+  to `main` and by manual dispatch, and must pass. Pull requests from forks run only the macOS job of
+  `.github/workflows/node-api.yml`, after a maintainer's approval, and never get repository secrets.
 - Maintainers land small commits directly on `main` (rebase onto `origin/main`, `cargo check --workspace`, re-run the
   affected tests and the full suite, then `git push origin HEAD:main`; never force-push). See `docs/DEBUGGING.md`.
 - Commit messages: `<area>: <what and why>`, plus the conformance totals when they change.
