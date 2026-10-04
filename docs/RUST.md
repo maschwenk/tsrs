@@ -109,8 +109,8 @@ In place:
 
 Measured and rejected (do not retry without new evidence): explicit huge pages, pre-faulting and mmap'd arena chunks
 (`notes/linux-perf.md`); global identifier interning (`notes/mem-round2.md`: parse +9% time); rolling back whole
-regions of speculative work (`notes/mem-overload-rollback.md`); bump regions per inference scope (draft PR #39: 25 to
-50% of scopes keep something reachable).
+regions of speculative work (`notes/mem-overload-rollback.md`); bump regions per inference scope
+(`notes/mem-scoped-arenas.md`: 25 to 50% of scopes keep something reachable).
 
 Not tried. Each needs a measurement and a note before it is adopted; none is applied yet:
 
