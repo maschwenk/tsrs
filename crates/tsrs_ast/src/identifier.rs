@@ -78,6 +78,10 @@ fn source_text_ptr(index: u32) -> *const u8 {
 }
 
 #[inline]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "from_utf8 re-validates the whole file text on every call: 291 G -> 1,247 G instructions, one checker (notes/lint-paydown-compiler.md)"
+)]
 fn source_text(index: u32) -> &'static str {
     let slot = &SOURCE_TEXTS[index as usize];
     // SAFETY: the slot was stored from a `&'static str` by `register_source_text` (see the static's comment).
@@ -143,6 +147,7 @@ fn slot_flow(word: u64) -> Option<P<FlowNode>> {
 
 impl Identifier {
     #[inline]
+    #[expect(clippy::cast_ptr_alignment, reason = "the header starts the `NodeAlloc`, so it has the allocation's alignment")]
     fn node(&self) -> &Node {
         // SAFETY: identifiers are created only by `new_node` inside a `NodeAlloc` (`repr(C)`, header first), so the
         // header lies at this offset before the data struct.
@@ -165,6 +170,7 @@ impl Identifier {
     }
 
     #[inline]
+    #[expect(clippy::disallowed_methods, reason = "from_utf8 here: +1.6% instructions, one checker (notes/lint-paydown-compiler.md)")]
     pub fn text(&self) -> &'static str {
         let word = self.word.get();
         if Self::mode(word) == MODE_TEXT {

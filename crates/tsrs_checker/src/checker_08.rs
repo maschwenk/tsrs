@@ -1333,6 +1333,10 @@ impl Checker {
                     let exported_symbols = visit(c, st, resolved_module, Some(node), is_type_only || node.is_type_only());
                     c.extend_export_symbols(nested_symbols, exported_symbols, Some(&mut lookup_table), Some(node));
                 }
+                #[expect(
+                    clippy::iter_over_hash_type,
+                    reason = "Go ranges over the map too; the loop only adds diagnostics (each names its own export), which the collection sorts on read"
+                )]
                 for (id, s) in lookup_table.iter() {
                     // It's not an error if the file with multiple `export *`s with duplicate names exports a member with that name itself
                     if id == InternalSymbolNameExportEquals || s.exports_with_duplicate.borrow().is_empty() || symbols.lookup(id).is_some() {
@@ -1388,6 +1392,7 @@ impl Checker {
             }
         }
         let mut type_only_export_star_map = st.type_only_export_star_map.unwrap_or_default();
+        #[expect(clippy::iter_over_hash_type, reason = "only removes keys from another map")]
         for name in st.non_type_only_names.keys() {
             type_only_export_star_map.remove(name);
         }

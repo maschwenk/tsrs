@@ -319,7 +319,7 @@ impl Checker {
         // s.candidates (chooseOverload, pickLongestCandidateSignature) are visible to the caller. We
         // re-copy the candidates before every return below to preserve that aliasing.
         if let Some(out) = candidates_out_array.as_deref_mut() {
-            *out = s.candidates.clone();
+            out.clone_from(&s.candidates);
         }
 
         if s.candidates.is_empty() {
@@ -406,14 +406,14 @@ impl Checker {
         self.call_resolution_stack.pop();
         if let Some(result) = result {
             if let Some(out) = candidates_out_array.as_deref_mut() {
-                *out = s.candidates.clone();
+                out.clone_from(&s.candidates);
             }
             return result;
         }
         let args = s.args.clone();
         let result = self.get_candidate_for_overload_failure(s_node, &mut s.candidates, &args, candidates_out_array.is_some(), check_mode);
         if let Some(out) = candidates_out_array.as_deref_mut() {
-            *out = s.candidates.clone();
+            out.clone_from(&s.candidates);
         }
         // Preemptively cache the result; getResolvedSignature will do this after we return, but
         // we need to ensure that the result is present for the error checks below so that if

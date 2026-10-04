@@ -1423,7 +1423,7 @@ impl Checker {
 }
 
 // relater.go:1008
-pub(crate) fn exclude_properties(properties: &[P<Symbol>], excluded_properties: Set<String>) -> Vec<P<Symbol>> {
+pub(crate) fn exclude_properties(properties: &[P<Symbol>], excluded_properties: &Set<String>) -> Vec<P<Symbol>> {
     if excluded_properties.len() == 0 || properties.is_empty() {
         return properties.to_vec();
     }

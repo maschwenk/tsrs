@@ -322,11 +322,16 @@ impl MapFS {
             return Self::get_following_symlinks_worker(inner, target.clone(), p, target);
         }
 
-        // This could be a path underneath a symlinked directory.
-        for (other, target) in &inner.symlinks {
-            if other.len() < p.len() && p.starts_with(other.as_str()) && p.as_bytes()[other.len()] == b'/' {
-                return Self::get_following_symlinks_worker(inner, format!("{}{}", target, &p[other.len()..]), other.clone(), target.clone());
-            }
+        // This could be a path underneath a symlinked directory. Go takes the first match in map order; when the
+        // path is under two symlinks (one inside the other) that is random, so take the outer one, which a file
+        // system resolves first.
+        let outer = inner
+            .symlinks
+            .iter()
+            .filter(|(other, _)| other.len() < p.len() && p.starts_with(other.as_str()) && p.as_bytes()[other.len()] == b'/')
+            .min_by_key(|(other, _)| other.len());
+        if let Some((other, target)) = outer {
+            return Self::get_following_symlinks_worker(inner, format!("{}{}", target, &p[other.len()..]), other.clone(), target.clone());
         }
 
         let err = if !symlink_from.is_empty() {
@@ -597,7 +602,7 @@ impl MapFS {
                 if !file.file.mode.is_regular() {
                     return Err(FsError::Other(format!("append {:?}: path exists but is not a regular file", path)));
                 }
-                existing = file.file.data.clone();
+                existing.clone_from(&file.file.data);
                 existing_mode = file.file.mode;
             }
         }

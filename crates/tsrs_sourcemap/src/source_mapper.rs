@@ -126,6 +126,7 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
             name_index: mapping.name_index,
         });
     }
+    #[expect(clippy::iter_over_hash_type, reason = "sorts each list on its own")]
     for list in source_mappings.values_mut() {
         goslices::sort_func(list, |a, b| {
             assert!(a.source_index == b.source_index, "All source mappings should have the same source index");

@@ -2227,10 +2227,10 @@ pub struct TupleElementInfo {
 }
 
 impl TupleElementInfo {
-    pub fn tuple_element_flags(&self) -> ElementFlags {
+    pub fn tuple_element_flags(self) -> ElementFlags {
         self.flags
     }
-    pub fn labeled_declaration(&self) -> Option<P<Node>> {
+    pub fn labeled_declaration(self) -> Option<P<Node>> {
         self.labeled_declaration
     }
 }

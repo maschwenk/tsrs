@@ -9,7 +9,7 @@ use tsrs_diagnostics as diagnostics;
 
 impl FlowType {
     // flow.go:24
-    pub(crate) fn is_nil(&self) -> bool {
+    pub(crate) fn is_nil(self) -> bool {
         self.t.is_none()
     }
 }

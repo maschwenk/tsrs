@@ -158,6 +158,7 @@ pub fn new_generator(file: &str, source_root: &str, sources_directory_path: &str
 
 impl Generator {
     // generator.go:75
+    #[expect(clippy::misnamed_getters, reason = "Go's Sources() returns rawSources")]
     pub fn sources(&self) -> &[String] {
         &self.raw_sources
     }

@@ -455,7 +455,7 @@ pub fn write_error_summary_text(output: &mut String, all_diagnostics: &[&Diag], 
             None => global_errors += 1,
             Some(f) => match errors_by_file.iter_mut().find(|(g, _)| Rc::ptr_eq(g, f)) {
                 Some((_, v)) => v.push(diagnostic),
-                None => errors_by_file.push((f.clone(), vec![diagnostic])),
+                None => errors_by_file.push((Rc::clone(f), vec![diagnostic])),
             },
         }
     }

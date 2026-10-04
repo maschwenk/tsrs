@@ -237,6 +237,7 @@ impl asyncTransformer {
 
         // names declared in a catch variable are block scoped
         let mut catch_clause_unshadowed_names: Option<FxHashSet<String>> = None;
+        #[expect(clippy::iter_over_hash_type, reason = "removes names from a set; the set it ends with does not depend on the order")]
         for escaped_name in catch_clause_names.iter() {
             let enclosing = self.enclosing_function_parameter_names.borrow();
             if let Some(enclosing) = enclosing.as_ref() {

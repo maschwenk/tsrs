@@ -103,7 +103,7 @@ fn spawn(id: usize, items: &[TestItem], batch: Vec<usize>, opts: &PoolOptions, t
     });
     let stderr_buf = Arc::new(Mutex::new(Vec::new()));
     let mut stderr = child.stderr.take().unwrap();
-    let buf2 = stderr_buf.clone();
+    let buf2 = Arc::clone(&stderr_buf);
     std::thread::spawn(move || {
         let mut chunk = [0u8; 8192];
         while let Ok(n) = stderr.read(&mut chunk) {

@@ -24,7 +24,7 @@ pub fn new_es_module_transformer(opts: &TransformOptions) -> Option<P<Transforme
         base: Transformer::default(),
         compiler_options,
         resolver: opts.resolver,
-        get_emit_module_format_of_file: opts.get_emit_module_format_of_file.clone(),
+        get_emit_module_format_of_file: Rc::clone(&opts.get_emit_module_format_of_file),
         current_source_file: Cell::new(None),
         import_require_statements: RefCell::new(None),
         helper_name_substitutions: RefCell::new(FxHashMap::default()),

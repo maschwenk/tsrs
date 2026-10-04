@@ -1408,7 +1408,7 @@ fn parse_config(
             // the config file location, we'll need to know where that config file was.
             // Since 'paths' can be inherited from an extended config in another directory,
             // we wouldn't know which directory to use unless we store it here.
-            options.paths_base_path = base_path.clone();
+            options.paths_base_path.clone_from(&base_path);
         }
     }
 
@@ -1458,6 +1458,7 @@ fn parse_config(
         }
         if let Some(source_file) = source_file {
             let mut extended_source_files = source_file.extended_source_files.borrow_mut();
+            #[expect(clippy::iter_over_hash_type, reason = "each file is inserted at its sorted position")]
             for extended_source_file in result.extended_source_files {
                 let i = extended_source_files.binary_search(&extended_source_file).unwrap_or_else(|i| i);
                 extended_source_files.insert(i, extended_source_file);

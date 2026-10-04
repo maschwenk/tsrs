@@ -61,37 +61,28 @@ impl Fields {
         false
     }
 
+    // Go ranges over each map in random order, and a caller (string completions) lists the names in the order it is
+    // given; each field's names are visited sorted instead.
     pub fn range_dependencies(&self, mut f: impl FnMut(&str, &str, &str) -> bool) {
-        if let Some(deps) = self.dependencies.get_value() {
-            for (name, version) in deps {
-                if !f(name, version, "dependencies") {
-                    return;
-                }
-            }
-        }
-        if let Some(dev_deps) = self.dev_dependencies.get_value() {
-            for (name, version) in dev_deps {
-                if !f(name, version, "devDependencies") {
-                    return;
-                }
-            }
-        }
-        if let Some(peer_deps) = self.peer_dependencies.get_value() {
-            for (name, version) in peer_deps {
-                if !f(name, version, "peerDependencies") {
-                    return;
-                }
-            }
-        }
-        if let Some(opt_deps) = self.optional_dependencies.get_value() {
-            for (name, version) in opt_deps {
-                if !f(name, version, "optionalDependencies") {
-                    return;
+        for (deps, field) in [
+            (&self.dependencies, "dependencies"),
+            (&self.dev_dependencies, "devDependencies"),
+            (&self.peer_dependencies, "peerDependencies"),
+            (&self.optional_dependencies, "optionalDependencies"),
+        ] {
+            if let Some(deps) = deps.get_value() {
+                let mut sorted: Vec<(&String, &String)> = deps.iter().collect();
+                sorted.sort_unstable_by(|a, b| a.0.cmp(b.0));
+                for (name, version) in sorted {
+                    if !f(name, version, field) {
+                        return;
+                    }
                 }
             }
         }
     }
 
+    #[expect(clippy::iter_over_hash_type, reason = "collects the names into a set")]
     pub fn get_runtime_dependency_names(&self) -> Set<String> {
         let deps = &self.dependencies.value;
         let peer_deps = &self.peer_dependencies.value;

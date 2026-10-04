@@ -85,7 +85,7 @@ impl SymbolTrackerImpl {
         }
         if self.state.resolver.is_expando_function_declaration_unsafe(c, node) {
             // within a node builder call that should already lock the checker, use the unsafe call
-            let report_expando_function_errors = self.state.report_expando_function_errors.get().unwrap().clone();
+            let report_expando_function_errors = Rc::clone(self.state.report_expando_function_errors.get().unwrap());
             report_expando_function_errors(c, node);
         }
         if !self.is_child_of_bound_expando(c, node) {

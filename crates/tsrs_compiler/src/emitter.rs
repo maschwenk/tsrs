@@ -101,7 +101,7 @@ pub(crate) fn get_declaration_diagnostics(host: &'static crate::emithost::EmitHo
     // TODO: use p.getSourceFilesToEmit cache
     // Go passes the emit host as the SourceFileMayBeEmittedHost; its methods forward to the program.
     let full_files: Vec<P<SourceFile>> = get_source_files_to_emit(program, Some(&[file]), false, false).into_iter().filter(|&f| is_source_file_not_json(f)).collect();
-    if !full_files.iter().any(|&f| f == file) {
+    if !full_files.contains(&file) {
         return Vec::new();
     }
     let options = program.options();
@@ -202,19 +202,19 @@ mod emit {
         // diagnostics, print and write the declaration file.
         pub(crate) fn print(&mut self, writer: &mut (dyn EmitTextWriter + 'static)) {
             if let Some(pending) = self.pending_js.take() {
-                self.print_pending(pending, writer);
+                self.print_pending(&pending, writer);
             }
             for elem in std::mem::take(&mut self.declaration_diagnostics) {
                 // Add declaration transform diagnostics to emit diagnostics
                 self.emitter_diagnostics.add(elem);
             }
             if let Some(pending) = self.pending_declaration.take() {
-                self.print_pending(pending, writer);
+                self.print_pending(&pending, writer);
             }
             self.emit_result.diagnostics = self.emitter_diagnostics.get_diagnostics();
         }
 
-        fn print_pending(&mut self, pending: pendingPrint, writer: &mut (dyn EmitTextWriter + 'static)) {
+        fn print_pending(&mut self, pending: &pendingPrint, writer: &mut (dyn EmitTextWriter + 'static)) {
             // create a printer to print the nodes
             let printer = printer::new_printer(pending.printer_options, PrintHandlers::default(), Some(pending.emit_context));
             let options = self.host.options();
@@ -482,8 +482,7 @@ mod emit {
                         self.host.get_current_directory(),
                         &self.host.common_source_directory(),
                         self.host.use_case_sensitive_file_names(),
-                    ))
-                    .to_string();
+                    ));
                 }
                 if tspath::get_root_length(&source_map_dir) == 0 {
                     // The relative paths are relative to the common directory
@@ -491,7 +490,7 @@ mod emit {
                 }
                 return source_map_dir;
             }
-            tspath::get_directory_path(&tspath::normalize_path(file_path)).to_string()
+            tspath::get_directory_path(&tspath::normalize_path(file_path))
         }
 
         // emitter.go:443
@@ -508,7 +507,7 @@ mod emit {
                 return source_map_generator.base64_data_url();
             }
 
-            let source_map_file = tspath::get_base_file_name(&tspath::normalize_slashes(source_map_file_path)).to_string();
+            let source_map_file = tspath::get_base_file_name(&tspath::normalize_slashes(source_map_file_path));
             if !map_options.map_root.is_empty() {
                 let mut source_map_dir = tspath::normalize_slashes(&map_options.map_root);
                 if let Some(source_file) = source_file {
@@ -520,8 +519,7 @@ mod emit {
                         self.host.get_current_directory(),
                         &self.host.common_source_directory(),
                         self.host.use_case_sensitive_file_names(),
-                    ))
-                    .to_string();
+                    ));
                 }
                 if tspath::get_root_length(&source_map_dir) == 0 {
                     // The relative paths are relative to the common directory

@@ -1,5 +1,6 @@
 // Port of execute/incremental/buildinfotosnapshot.go.
 
+use std::sync::Arc;
 use tsrs_ast::RepopulateDiagnosticInfo;
 use tsrs_compiler::CompilerHost;
 use tsrs_core::collections::{new_set_with_size_hint, Set};
@@ -87,7 +88,7 @@ impl toSnapshot<'_> {
 
     // buildinfotosnapshot.go:70
     fn to_file_path_set(&self, file_id_list_id: BuildInfoFileIdListId) -> std::sync::Arc<RefSet> {
-        self.file_path_set[file_id_list_id as usize - 1].clone()
+        Arc::clone(&self.file_path_set[file_id_list_id as usize - 1])
     }
 
     // buildinfotosnapshot.go:74

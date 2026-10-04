@@ -77,7 +77,7 @@ pub fn new_test_logger() -> Arc<dyn LogCollector> {
     let builder = Arc::new(Mutex::new(String::new()));
     Arc::new(logCollector {
         logger: logger::new(
-            Box::new(sharedBuilder(builder.clone())),
+            Box::new(sharedBuilder(Arc::clone(&builder))),
             Box::new(|| format_time(UNIX_EPOCH + Duration::from_secs(1349085672))),
         ),
         builder,

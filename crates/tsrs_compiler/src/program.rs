@@ -127,6 +127,7 @@ pub(crate) struct packageNamesInfo {
 // Go `checkerPool CheckerPool` + `compilerCheckerPool *checkerPool`: the built-in pool is set only when
 // `CreateCheckerPool` was not provided; it enables grouped parallel iteration, non-exclusive access for emit,
 // and direct global diagnostics collection.
+#[expect(clippy::large_enum_variant, reason = "one per program; the built-in pool, the usual variant, is reached on every checker request and stays inline")]
 enum programCheckerPool {
     Compiler(checkerPool),
     External(Box<dyn CheckerPool>),
@@ -346,13 +347,13 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let processing_diagnostics = std::mem::take(&mut processed.file_include_data.processing_diagnostics);
     let files = std::mem::take(&mut processed.files);
     let files_by_path = std::mem::take(&mut processed.files_by_path);
-    let host = opts.host.clone();
+    let host = Arc::clone(&opts.host);
     let mut p = Program {
         opts: opts.program_config(),
         // Go's NewProgram never sets `comparePathsOptions`: it is the zero value (no current directory,
         // case-insensitive), which e.g. makes IsGlobalTypingsFile false when no typings location is set.
         compare_paths_options: ComparePathsOptions::default(),
-        resolution_host: crate::projectreferencefilemapper::resolution_host_for(host.clone()),
+        resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&host)),
         host,
         resolution_data,
         checker_pool: OnceLock::new(),
@@ -382,7 +383,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let p: &'static Program = Box::leak(Box::new(p));
     // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
     tsrs_core::census_scrub_stack();
-    p.init_checker_pool(opts.create_checker_pool.as_ref());
+    p.init_checker_pool(opts.create_checker_pool);
     p
 }
 
@@ -468,7 +469,7 @@ impl Program {
         create_checker_pool: Option<CreateCheckerPool>,
         create_module_resolver: Option<CreateModuleResolver>,
     ) -> (&'static Program, Option<P<SourceFile>>, bool) {
-        let (result, new_file, reused) = self.reuse_program(changed_file_path, new_host.clone(), create_checker_pool.clone(), create_module_resolver.clone());
+        let (result, new_file, reused) = self.reuse_program(changed_file_path, Arc::clone(&new_host), create_checker_pool.clone(), create_module_resolver.clone());
         if reused {
             (result.unwrap(), new_file, true)
         } else {
@@ -536,7 +537,7 @@ impl Program {
         // TODO: reverify compiler options when config has changed?
         let mut result = Program {
             opts: self.opts.clone(),
-            resolution_host: crate::projectreferencefilemapper::resolution_host_for(new_host.clone()),
+            resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&new_host)),
             host: new_host,
             resolution_data: self.resolution_data.clone_data(),
             checker_pool: OnceLock::new(),
@@ -566,7 +567,7 @@ impl Program {
         let index = result.files.iter().position(|file| file.path() == new_file_some.path()).unwrap();
         let mut files = result.files.to_vec();
         files[index] = new_file_some;
-        result.files_by_path = self.files_by_path.clone();
+        result.files_by_path.clone_from(&self.files_by_path);
         result.files_by_path.insert(new_file_some.path().clone(), new_file_some);
         for (i, &old_supplemental) in old_supplemental_files.iter().enumerate() {
             let new_supplemental = new_supplemental_files[i];
@@ -577,12 +578,12 @@ impl Program {
         result.files = tsrs_core::alloc_vec(files);
         let result: &'static Program = Box::leak(Box::new(result));
         tsrs_core::census_scrub_stack();
-        result.init_checker_pool(create_checker_pool.as_ref());
+        result.init_checker_pool(create_checker_pool);
         (Some(result), new_file, true)
     }
 
     // program.go:443
-    fn init_checker_pool(&'static self, create: Option<&CreateCheckerPool>) {
+    fn init_checker_pool(&'static self, create: Option<CreateCheckerPool>) {
         if !self.finished_processing {
             panic!("Program must finish processing files before initializing checker pool");
         }
@@ -697,7 +698,7 @@ impl Program {
 
     // program.go:540
     pub fn get_config_file_parsing_diagnostics(&self) -> Vec<P<Diagnostic>> {
-        self.opts.config.get_config_file_parsing_diagnostics().to_vec()
+        self.opts.config.get_config_file_parsing_diagnostics()
     }
 
     // program.go:546
@@ -726,6 +727,7 @@ impl Program {
         let mut unresolved_imports = Vec::new();
 
         if let Some(resolved_modules) = self.resolved_modules.get(file.path()) {
+            #[expect(clippy::iter_over_hash_type, reason = "the only caller adds the names to a hash set")]
             for (cache_key, resolution) in resolved_modules {
                 let resolved = resolution.is_resolved();
                 if (!resolved || !tspath::extension_is_one_of(resolution.extension, tspath::SUPPORTED_TS_EXTENSIONS_WITH_JSON_FLAT))
@@ -858,6 +860,7 @@ impl Program {
     pub fn get_packages_map(&self) -> &FxHashMap<String, bool> {
         self.packages_map.get_or_init(|| {
             let mut packages_map: FxHashMap<String, bool> = FxHashMap::default();
+            #[expect(clippy::iter_over_hash_type, reason = "ORs one flag per package name; the result does not depend on the order")]
             for resolved_modules_in_file in self.resolved_modules.values() {
                 for module in resolved_modules_in_file.values() {
                     if !module.package_id.name.is_empty() {
@@ -888,7 +891,7 @@ impl Program {
                 diagnostics.concat()
             }
         };
-        filter_and_sort_diagnostics(result)
+        filter_and_sort_diagnostics(&result)
     }
 
     // program.go:686
@@ -925,9 +928,9 @@ impl Program {
             let mut c = self.get_type_checker_for_file_exclusive(ctx, source_file);
             let result = collect(ctx, &mut c, source_file);
             drop(c);
-            return filter_and_sort_diagnostics(result);
+            return filter_and_sort_diagnostics(&result);
         }
-        filter_and_sort_diagnostics(self.collect_checker_diagnostics_from_files(ctx, self.files, &collect).concat())
+        filter_and_sort_diagnostics(&self.collect_checker_diagnostics_from_files(ctx, self.files, &collect).concat())
     }
 
     // program.go:728
@@ -1004,7 +1007,7 @@ impl Program {
         });
         let mut result = FxHashMap::default();
         for (i, diags) in all_diags.into_iter().enumerate() {
-            result.insert(source_files[i], filter_and_sort_diagnostics(diags));
+            result.insert(source_files[i], filter_and_sort_diagnostics(&diags));
         }
         result
     }
@@ -1868,7 +1871,7 @@ impl Program {
                 .concat()
             }
         };
-        filter_and_sort_diagnostics(result)
+        filter_and_sort_diagnostics(&result)
     }
 
     // Declaration emit needs the checker; without it declaration diagnostics are empty.
@@ -1975,6 +1978,10 @@ impl Program {
         let (mut filtered, directives_by_line) = self.get_diagnostics_with_preceding_directives(source_file, diags);
         if let Some(directives_by_line) = directives_by_line {
             // Go iterates this map in random order; the result is sorted by the caller.
+            #[expect(
+                clippy::iter_over_hash_type,
+                reason = "every caller sorts and deduplicates (filter_and_sort_diagnostics); each directive has its own location"
+            )]
             for directive in directives_by_line.values() {
                 // Above we changed all used directive kinds to @ts-ignore, so any @ts-expect-error directives that
                 // remain are unused and thus errors.
@@ -2007,7 +2014,7 @@ impl Program {
         let mut directives_by_line: FxHashMap<usize, ast::CommentDirective> = FxHashMap::default();
         for directive in comment_directives.iter() {
             let line = tsrs_scanner::get_ecma_line_of_position(&*source_file, directive.loc.pos());
-            directives_by_line.insert(line as usize, directive.clone());
+            directives_by_line.insert(line as usize, *directive);
         }
         let line_starts = tsrs_scanner::get_ecma_line_starts(&*source_file);
         let text = source_file.text();
@@ -2411,7 +2418,7 @@ impl Program {
                                 if let Some(package_scope) = resolver.get_package_scope_for_path(&resolved_module.resolved_file_name) {
                                     if package_scope.exists() {
                                         if let Some(scope_name) = package_scope.contents.and_then(|c| c.get().name.get_value()) {
-                                            name = scope_name.to_string();
+                                            name.clone_from(scope_name);
                                         }
                                     }
                                 }
@@ -2475,6 +2482,9 @@ impl Program {
 
             // Check other dependencies for symlinks
             let mut seen_package_jsons: tsrs_core::collections::Set<Path> = tsrs_core::collections::Set::default();
+            // Go ranges over these maps too. Each resolution records the realpath the file system gives a symlink, so
+            // the cache gets the same entries in any order; `has_directory` only skips resolving a directory again.
+            #[expect(clippy::iter_over_hash_type, reason = "see the comment above")]
             for (file_path, meta) in &self.source_file_meta_datas {
                 if meta.package_json_directory.is_empty()
                     || !self.source_file_may_be_emitted(self.get_source_file_by_path(file_path).unwrap(), false)
@@ -2488,6 +2498,7 @@ impl Program {
                     continue;
                 };
 
+                #[expect(clippy::iter_over_hash_type, reason = "see the comment above the outer loop")]
                 for dep in contents.get_runtime_dependency_names().keys() {
                     // Skip work in common case: we already saved a symlink for this package directory
                     // in the node_modules adjacent to this package.json
@@ -2541,6 +2552,10 @@ impl Program {
     }
 }
 
+#[expect(
+    clippy::iter_over_hash_type,
+    reason = "the one caller (KnownSymlinks::set_symlinks_from_resolutions) records file-system symlinks, which come out the same in any order"
+)]
 fn for_each_resolution<T>(
     resolution_cache: &FxHashMap<Path, ModeAwareCache<P<T>>>,
     mut callback: impl FnMut(&T, &str, ResolutionMode, &Path),
@@ -2597,9 +2612,9 @@ fn equal_check_js_directives(d1: Option<P<ast::CheckJsDirective>>, d2: Option<P<
     }
 }
 
-fn filter_and_sort_diagnostics(diags: Vec<P<Diagnostic>>) -> Vec<P<Diagnostic>> {
+fn filter_and_sort_diagnostics(diags: &[P<Diagnostic>]) -> Vec<P<Diagnostic>> {
     // Content-mapped files (span maps) are not ported, so no diagnostic is filtered out here.
-    sort_and_deduplicate_diagnostics(&diags)
+    sort_and_deduplicate_diagnostics(diags)
 }
 
 // getAdditionalJSSyntacticDiagnostics produces option-dependent syntactic diagnostics for JS files

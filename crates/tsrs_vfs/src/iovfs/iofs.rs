@@ -30,12 +30,12 @@ pub trait WritableFS: IoFS {
 // respects case-insensitive file names if needed. Consider using [vfstest.FromMap] for testing.
 pub fn from<T: IoFS + 'static>(fsys: T, use_case_sensitive_file_names: bool) -> IoVFS<T> {
     let fsys = Arc::new(fsys);
-    let root_fsys = fsys.clone();
+    let root_fsys = Arc::clone(&fsys);
     IoVFS {
         common: Common {
             root_for: Box::new(move |root: &str| -> Option<Box<dyn IoFS>> {
                 if root == "/" {
-                    return Some(Box::new(root_fsys.clone()));
+                    return Some(Box::new(Arc::clone(&root_fsys)));
                 }
 
                 let p = tspath::remove_trailing_directory_separator(root);
@@ -46,10 +46,10 @@ pub fn from<T: IoFS + 'static>(fsys: T, use_case_sensitive_file_names: bool) -> 
                     panic!("vfs: failed to create sub file system for {:?}: sub {}: invalid argument", p, p);
                 }
                 if p == "." {
-                    return Some(Box::new(root_fsys.clone()));
+                    return Some(Box::new(Arc::clone(&root_fsys)));
                 }
                 Some(Box::new(SubFS {
-                    fsys: root_fsys.clone(),
+                    fsys: Arc::clone(&root_fsys),
                     dir: p.to_string(),
                 }))
             }),

@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::*;
 use tsrs_ast::*;
 use tsrs_core::*;
@@ -1282,7 +1283,7 @@ impl Checker {
                     enclosing_declaration: ctx.enclosing_declaration,
                     meaning: get_qualified_left_meaning(meaning),
                     use_only_external_aliasing: ctx.use_only_external_aliasing,
-                    visited_symbol_tables_map: ctx.visited_symbol_tables_map.clone(),
+                    visited_symbol_tables_map: Rc::clone(&ctx.visited_symbol_tables_map),
                 })
                 .is_empty()
     }
@@ -1435,7 +1436,6 @@ impl Checker {
      * @param meaning a SymbolFlags to check if such meaning of the symbol is accessible
      * @param shouldComputeAliasToMakeVisible a boolean value to indicate whether to return aliases to be mark visible in case the symbol is accessible
      */
-
     // symbolaccessibility.go:839
     pub fn is_symbol_accessible(&mut self, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_aliases_to_make_visible: bool) -> SymbolAccessibilityResult {
         self.is_symbol_accessible_worker(symbol, enclosing_declaration, meaning, should_compute_aliases_to_make_visible, true /*allowModules*/)

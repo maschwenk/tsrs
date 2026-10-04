@@ -32,15 +32,15 @@ impl<T> IsZeroValue for Option<T> {
 
 impl<K: Hash + Eq + Clone, V: Clone + IsZeroValue> parseCache<K, V> {
     // parseCache.go:18
-    pub(crate) fn load_or_store(&self, key: K, parse: impl FnOnce(&K) -> V, allow_zero: bool) -> V {
+    pub(crate) fn load_or_store(&self, key: &K, parse: impl FnOnce(&K) -> V, allow_zero: bool) -> V {
         let new_entry = Arc::new(parseCacheEntry { value: Mutex::new(None) });
         let mut new_guard = new_entry.value.lock().unwrap();
         let existing = {
             let mut entries = self.entries.lock().unwrap();
-            match entries.get(&key) {
-                Some(entry) => Some(entry.clone()),
+            match entries.get(key) {
+                Some(entry) => Some(Arc::clone(entry)),
                 None => {
-                    entries.insert(key.clone(), new_entry.clone());
+                    entries.insert(key.clone(), Arc::clone(&new_entry));
                     None
                 }
             }
@@ -53,11 +53,11 @@ impl<K: Hash + Eq + Clone, V: Clone + IsZeroValue> parseCache<K, V> {
                     return value.clone();
                 }
             }
-            let value = parse(&key);
+            let value = parse(key);
             *guard = Some(value.clone());
             return value;
         }
-        let value = parse(&key);
+        let value = parse(key);
         *new_guard = Some(value.clone());
         value
     }

@@ -323,7 +323,7 @@ fn walk_symlinks(path: &str) -> io::Result<String> {
                 r -= 1;
             }
             if r < vol_len as isize {
-                dest = vol.clone();
+                dest.clone_from(&vol);
             } else {
                 dest.truncate(r as usize);
             }
@@ -478,6 +478,7 @@ impl DirFS {
     }
 }
 
+#[expect(clippy::needless_pass_by_value, reason = "passed as `map_err(io_error)`, which hands over the error by value")]
 fn io_error(e: io::Error) -> FsError {
     match e.kind() {
         io::ErrorKind::NotFound => FsError::NotExist,

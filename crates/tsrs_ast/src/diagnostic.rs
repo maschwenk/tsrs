@@ -395,10 +395,11 @@ impl DiagnosticsCollection {
                 }
             }
         }
-        if !self.diagnostic_index.contains_key(&key) {
-            self.diagnostic_index.insert(key, diagnostic);
-        } else {
-            self.diagnostic_collisions.entry(key).or_default().push(diagnostic);
+        match self.diagnostic_index.entry(key) {
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(diagnostic);
+            }
+            std::collections::hash_map::Entry::Occupied(e) => self.diagnostic_collisions.entry(e.key().clone()).or_default().push(diagnostic),
         }
 
         self.count += 1;
@@ -457,6 +458,10 @@ impl DiagnosticsCollection {
     pub fn get_diagnostics(&self) -> Vec<P<Diagnostic>> {
         let mut diagnostics = Vec::with_capacity(self.count);
         diagnostics.extend_from_slice(&self.non_file_diagnostics);
+        #[expect(
+            clippy::iter_over_hash_type,
+            reason = "sorted by compare_diagnostics below, which orders by file first; the stable sort keeps each file's own order"
+        )]
         for diags in self.file_diagnostics.values() {
             diagnostics.extend_from_slice(diags);
         }

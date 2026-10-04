@@ -970,7 +970,7 @@ impl Checker {
 // checker.go:1804
 pub(crate) fn get_primitive_type_alias_suggestions(symbols: Option<P<SymbolTable>>) -> Vec<P<Symbol>> {
     let mut result = Vec::new();
-    for (builtin_name, suggestion) in primitive_type_alias_suggestions().iter() {
+    for (builtin_name, suggestion) in primitive_type_alias_suggestions() {
         if symbols.is_some_and(|symbols| symbols.has(builtin_name)) {
             result.push(*suggestion);
         }
