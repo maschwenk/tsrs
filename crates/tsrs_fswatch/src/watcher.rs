@@ -1,5 +1,5 @@
 use std::any::Any;
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, LazyLock, Mutex};
@@ -428,7 +428,7 @@ pub(crate) struct watcher {
 #[derive(Default)]
 struct watcherState {
     impl_: Option<Arc<dyn watcherImpl>>,
-    dir_watches: HashMap<String, Arc<dirWatch>>,
+    dir_watches: FxHashMap<String, Arc<dirWatch>>,
     debounce: Option<Arc<debounce>>, // lazily created in getOrCreateDirWatch
 }
 
@@ -613,7 +613,7 @@ impl Watcher for watcher {
         }
         let mut prepared: Vec<preparedWatch> = Vec::with_capacity(requests.len());
         let mut unique_dir_watches: Vec<Arc<dirWatch>> = Vec::with_capacity(requests.len());
-        let mut seen_dir_watches: HashSet<dwKey> = HashSet::with_capacity(requests.len());
+        let mut seen_dir_watches: FxHashSet<dwKey> = FxHashSet::with_capacity_and_hasher(requests.len(), Default::default());
         let rollback = |prepared: &[preparedWatch]| {
             for p in prepared.iter().rev() {
                 p.dw.unwatch(p.id);
@@ -777,7 +777,7 @@ pub(crate) struct watcherBase {
 
 #[derive(Default)]
 pub(crate) struct watcherBaseState {
-    subscriptions: HashSet<dwKey>,
+    subscriptions: FxHashSet<dwKey>,
     start_err: Option<Error>,
 }
 
@@ -1050,7 +1050,7 @@ impl dirWatch {
         }
         drop(st);
 
-        let comparisons = Mutex::new(comparisonCache::new());
+        let comparisons = Mutex::new(comparisonCache::default());
         for (i, cb) in cbs.iter().enumerate() {
             let mut cb_events = events_by_callback[i].clone();
             if cb.ignore.is_some() || !cb.recursive || cb.dir != self.dir || !cb.file_comparison.path.is_empty() {
@@ -1095,7 +1095,7 @@ impl dirWatch {
     pub(crate) fn terminate_callbacks_for_deleted_root(&self, path: &str, seq: u64, err: Error) -> bool {
         let mut st = self.mu.lock().unwrap();
         let mut changed = false;
-        let comparisons = Mutex::new(comparisonCache::new());
+        let comparisons = Mutex::new(comparisonCache::default());
         let deleted = comparisonPath { path: path.to_string(), cache: Some(&comparisons), ..Default::default() };
         for cb in st.callbacks.iter_mut() {
             if cb.delivered || cb.terminal.is_some() || cb.since_seq >= seq {

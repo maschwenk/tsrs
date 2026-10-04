@@ -1943,9 +1943,8 @@ impl<'r> ResolutionState<'r> {
                 );
                 let paths = version_paths.get_paths();
                 let path_patterns = try_parse_patterns(paths);
-                let package_file_for_loader = package_file.clone();
                 let result = self.try_load_module_using_paths(ext, &module_name, candidate, paths.unwrap(), &path_patterns, &mut |r, extensions, candidate| {
-                    loader(r, extensions, candidate, &package_file_for_loader)
+                    loader(r, extensions, candidate, &package_file)
                 });
                 if let Some(result) = result {
                     if !result.package_id.name.is_empty() {
@@ -2639,7 +2638,7 @@ impl ResolutionState<'_> {
                     entrypoints.push(self.resolver.create_resolved_entrypoint_handling_symlink(
                         &result.unwrap().path,
                         &tspath::resolve_path(package_name, &[subpath]),
-                        include_conditions.clone(),
+                        include_conditions,
                         exclude_conditions.clone(),
                         if exports_str.ends_with('*') { Ending::ExtensionChangeable } else { Ending::Fixed },
                     ));

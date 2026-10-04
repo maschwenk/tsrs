@@ -161,7 +161,7 @@ impl LanguageService {
         let mut literal: Option<LiteralValue> = None;
         for l in &data.literals {
             if completion_name_for_literal(file, &preferences, l) == item_data.name {
-                literal = Some(l.clone());
+                literal = Some(*l);
                 break;
             }
         }

@@ -3,6 +3,9 @@
 # The workspace crates are not published; without this the argument-passing lints skip every `pub fn`.
 avoid-breaking-exported-api = false
 
+# Keys whose Hash and Eq use the pointer, not the contents, so interior mutability cannot change the hash.
+ignore-interior-mutability = ["tsrs_fswatch::watcher::dwKey"]
+
 disallowed-types = [
   { path = "std::collections::HashMap", reason = "SipHash; use rustc_hash::FxHashMap, or tsrs_core::collections::OrderedMap when order matters (docs/PORTING.md)" },
   { path = "std::collections::HashSet", reason = "SipHash; use rustc_hash::FxHashSet, or tsrs_core::collections::OrderedSet when order matters (docs/PORTING.md)" },

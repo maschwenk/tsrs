@@ -167,7 +167,7 @@ pub fn new_lsp_client(mut server_opts: ServerOptions, on_server_request: Option<
     // Start async message router
     {
         let client = client.clone();
-        let ctx = ctx.clone();
+        let ctx = ctx;
         let mut output_reader = transport.client_in;
         threads.push(std::thread::spawn(move || client.message_router(&ctx, &mut *output_reader)));
     }

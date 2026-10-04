@@ -1,5 +1,6 @@
 // internal/testutil/tsbaseline: error_baseline.go and util.go.
 
+use std::fmt::Write as _;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -132,7 +133,7 @@ fn iterate_error_baseline(input_files: &[TestFile], input_diagnostics: &[Diag], 
             .collect();
 
         // Header
-        output_lines.push_str(&format!("{}==== {} ({} errors) ====", new_line(), unit, file_errors.len()));
+        let _ = write!(output_lines, "{}==== {} ({} errors) ====", new_line(), unit, file_errors.len());
 
         // For each line, emit the line followed by any error squiggles matching this line
         let content = input_file.content.as_bytes();

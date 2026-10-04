@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::fmt::Display;
 use std::sync::LazyLock;
 
@@ -562,7 +563,7 @@ fn starts_with_config_dir_template_value(value: &CompilerOptionsValue) -> bool {
 
 fn normalize_non_list_option_value(option: &CommandLineOption, base_path: &str, value: CompilerOptionsValue) -> CompilerOptionsValue {
     if option.is_file_path {
-        let mut value = tspath::normalize_slashes(value.as_str().unwrap()).to_string();
+        let mut value = tspath::normalize_slashes(value.as_str().unwrap());
         if !starts_with_config_dir_template(&value) {
             value = tspath::get_normalized_absolute_path(&value, base_path);
         }
@@ -713,7 +714,7 @@ fn get_extends_config_path(
     value_expression: Option<P<Node>>,
     source_file: Option<P<SourceFile>>,
 ) -> (String, Vec<P<Diagnostic>>) {
-    let extended_config = tspath::normalize_slashes(extended_config).to_string();
+    let extended_config = tspath::normalize_slashes(extended_config);
     let mut errors: Vec<P<Diagnostic>> = Vec::new();
     let error_file = source_file;
     if tspath::is_rooted_disk_path(&extended_config) || extended_config.starts_with("./") || extended_config.starts_with("../") {
@@ -880,7 +881,7 @@ fn convert_array_literal_expression_to_json(
 fn directory_of_combined_path(file_name: &str, base_path: &str) -> String {
     // Use the `getNormalizedAbsolutePath` function to avoid canonicalizing the path, as it must remain noncanonical
     // until consistent casing errors are reported
-    tspath::get_directory_path(&tspath::get_normalized_absolute_path(file_name, base_path)).to_string()
+    tspath::get_directory_path(&tspath::get_normalized_absolute_path(file_name, base_path))
 }
 
 // ParseConfigFileTextToJson parses the text of the tsconfig.json file
@@ -974,7 +975,7 @@ fn convert_object_literal_expression_to_json(
         let mut text_of_key = String::new();
         let name = element.name().unwrap();
         if !tsrs_ast::is_computed_non_literal_name(name) {
-            text_of_key = tsrs_ast::try_get_text_of_property_name(name).map(|s| s.to_string()).unwrap_or_default();
+            text_of_key = tsrs_ast::try_get_text_of_property_name(name).map(|s| s).unwrap_or_default();
         }
         let key_text = text_of_key;
         let mut option: Option<&'static CommandLineOption> = None;
@@ -1198,7 +1199,7 @@ fn convert_compiler_options_from_json_worker(
         convert_options_from_json(&COMMAND_LINE_COMPILER_OPTIONS_MAP, json_options, base_path, CompilerOptionsParser(options));
     let mut options = parser.0;
     if !config_file_name.is_empty() {
-        options.config_file_path = tspath::normalize_slashes(config_file_name).to_string();
+        options.config_file_path = tspath::normalize_slashes(config_file_name);
     }
     (options, errors)
 }
@@ -1372,7 +1373,7 @@ fn parse_config(
     resolution_stack: &[Path],
     extended_config_cache: Option<&dyn ExtendedConfigCache>,
 ) -> (ParsedTsconfig, Vec<P<Diagnostic>>) {
-    let base_path = tspath::normalize_slashes(base_path).to_string();
+    let base_path = tspath::normalize_slashes(base_path);
     let resolved_path = tspath::to_path(config_file_name, &base_path, host.fs().use_case_sensitive_file_names());
     let mut errors: Vec<P<Diagnostic>> = Vec::new();
     if resolution_stack.contains(&resolved_path) {
@@ -1414,7 +1415,7 @@ fn parse_config(
     if let Some(extended_config_paths) = own_config.extended_config_path.clone() {
         // copy the resolution stack so it is never reused between branches in potential diamond-problem scenarios.
         let mut resolution_stack = resolution_stack.to_vec();
-        resolution_stack.push(resolved_path.clone());
+        resolution_stack.push(resolved_path);
         let mut result = ExtendsResult {
             options: CompilerOptions::default(),
             include: None,
@@ -1599,7 +1600,7 @@ fn parse_json_config_file_content_worker(
     let raw_config = parse_json_to_string_key(&parsed_config.raw);
     if !config_file_name.is_empty() {
         if let Some(options) = &mut parsed_config.options {
-            options.config_file_path = tspath::normalize_slashes(config_file_name).to_string();
+            options.config_file_path = tspath::normalize_slashes(config_file_name);
         }
     }
     let get_prop_from_raw = |prop: &str,
@@ -1675,10 +1676,10 @@ fn parse_json_config_file_content_worker(
             if !out_dir.is_empty() || !declaration_dir.is_empty() {
                 let mut values: Vec<CompilerOptionsValue> = Vec::new();
                 if !out_dir.is_empty() {
-                    values.push(CompilerOptionsValue::String(out_dir.to_string()));
+                    values.push(CompilerOptionsValue::String(out_dir.clone()));
                 }
                 if !declaration_dir.is_empty() {
-                    values.push(CompilerOptionsValue::String(declaration_dir.to_string()));
+                    values.push(CompilerOptionsValue::String(declaration_dir.clone()));
                 }
                 exclude_specs = PropOfRaw { slice_value: Some(values), wrong_value: "" };
             }
@@ -1735,9 +1736,9 @@ fn parse_json_config_file_content_worker(
         };
     }
     let config_file_specs = ConfigFileSpecs {
-        files_specs: file_specs.slice_value.clone(),
-        include_specs: include_specs.slice_value.clone(),
-        exclude_specs: exclude_specs.slice_value.clone(),
+        files_specs: file_specs.slice_value,
+        include_specs: include_specs.slice_value,
+        exclude_specs: exclude_specs.slice_value,
         validated_files_spec,
         validated_include_specs,
         validated_exclude_specs,
@@ -1804,7 +1805,7 @@ fn parse_json_config_file_content_worker(
                     ext_node,
                 ));
             } else {
-                seen_content_mapper_extensions.insert(canonical_ext.to_string());
+                seen_content_mapper_extensions.insert(canonical_ext.clone());
                 content_mapper_extensions.push(ext.clone());
                 valid_extensions.push(ext.clone());
             }
@@ -2336,7 +2337,7 @@ pub(crate) fn get_file_names_from_config_specs(
     extra_extensions: &[String],
 ) -> (Vec<String>, usize) {
     let base_path = tspath::normalize_path(base_path);
-    let key_mappper = |value: &str| tspath::get_canonical_file_name(value, host.use_case_sensitive_file_names()).to_string();
+    let key_mappper = |value: &str| tspath::get_canonical_file_name(value, host.use_case_sensitive_file_names());
     // Literal file names (provided via the "files" array in tsconfig.json) are stored in a
     // file map with a possibly case insensitive key. We use this map later when when including
     // wildcard paths.
@@ -2450,7 +2451,7 @@ pub fn get_supported_extensions(compiler_options: Option<&CompilerOptions>, extr
     let flat_builtins: Vec<&String> = builtins.iter().flatten().collect();
     let mut result: Vec<Vec<String>> = Vec::new();
     for ext in extra_extensions {
-        if !flat_builtins.iter().any(|b| *b == ext) {
+        if !flat_builtins.contains(&ext) {
             result.push(vec![ext.clone()]);
         }
     }
@@ -2546,7 +2547,7 @@ fn write_json_string(out: &mut String, s: &str) {
             '\t' => out.push_str("\\t"),
             '\u{8}' => out.push_str("\\b"),
             '\u{c}' => out.push_str("\\f"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c if (c as u32) < 0x20 => { let _ = write!(out, "\\u{:04x}", c as u32); },
             c => out.push(c),
         }
     }

@@ -375,7 +375,7 @@ impl LanguageService {
             name_start_pos = scanner::skip_trivia(file.text(), name.pos()).max(node_start_pos);
             name_end_pos = name.end().max(node_start_pos);
         } else {
-            text = get_unnamed_node_label(node).to_string();
+            text = get_unnamed_node_label(node);
             name_start_pos = node_start_pos;
             name_end_pos = node_start_pos;
         }

@@ -8,5 +8,6 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+rustc-hash.workspace = true
 # kqueue / inotify / pipe / pathconf / stat bindings (Go: golang.org/x/sys/unix).
 libc = "0.2"

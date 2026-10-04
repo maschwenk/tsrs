@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::any::Any;
 use std::io::{Read, Write};
 use std::panic::AssertUnwindSafe;
@@ -769,7 +770,7 @@ impl Server {
             registration(
                 CONTENT_MAPPER_CALL_HIERARCHY_REGISTRATION_ID,
                 lsproto::RegisterOptions {
-                    text_document_prepare_call_hierarchy: Some(lsproto::CallHierarchyRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    text_document_prepare_call_hierarchy: Some(lsproto::CallHierarchyRegistrationOptions { document_selector: selector, ..Default::default() }),
                     ..Default::default()
                 },
             ),
@@ -2629,10 +2630,10 @@ pub(crate) fn not_yet_ported(method: Method) -> Error {
 fn generate_diagnostic_diff_string(missing_from_pre: &[&lsproto::Diagnostic], missing_from_post: &[&lsproto::Diagnostic], stringifier: fn(&lsproto::Diagnostic) -> String) -> String {
     let mut b = String::new();
     for elem in missing_from_pre {
-        b.push_str(&format!("Diagnostic {} was present after emit but not before emit\n", stringifier(elem)));
+        let _ = write!(b, "Diagnostic {} was present after emit but not before emit\n", stringifier(elem));
     }
     for elem in missing_from_post {
-        b.push_str(&format!("Diagnostic {} was present before emit but not after emit\n", stringifier(elem)));
+        let _ = write!(b, "Diagnostic {} was present before emit but not after emit\n", stringifier(elem));
     }
     b
 }
@@ -2889,11 +2890,11 @@ pub(crate) fn go_duration_string(d: Duration) -> String {
     let minutes = rem / 60_000_000_000;
     let secs = rem % 60_000_000_000;
     if hours > 0 {
-        out.push_str(&format!("{}h", hours));
+        let _ = write!(out, "{}h", hours);
     }
     if hours > 0 || minutes > 0 {
-        out.push_str(&format!("{}m", minutes));
+        let _ = write!(out, "{}m", minutes);
     }
-    out.push_str(&format!("{}s", frac(secs, 9)));
+    let _ = write!(out, "{}s", frac(secs, 9));
     out
 }

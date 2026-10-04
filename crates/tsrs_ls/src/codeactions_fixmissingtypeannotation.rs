@@ -853,7 +853,7 @@ impl isolatedDeclarationsFixer<'_> {
         let factory = self.factory();
         let f1 = factory.clone();
         let f2 = factory.clone();
-        let f3 = factory.clone();
+        let f3 = factory;
         self.type_from_spreads(
             node,
             name,
@@ -878,7 +878,7 @@ impl isolatedDeclarationsFixer<'_> {
         let factory = self.factory();
         let f1 = factory.clone();
         let f2 = factory.clone();
-        let f3 = factory.clone();
+        let f3 = factory;
         self.type_from_spreads(
             node,
             name,

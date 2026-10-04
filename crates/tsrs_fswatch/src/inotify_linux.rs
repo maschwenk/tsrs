@@ -6,7 +6,7 @@
 // here it has its own mutex, always taken after watcherBase.mu where Go holds that lock (subscribe and closeWatch
 // run under it via watch_add_many / watch_remove; handleEvent and closeFDs take it first).
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -39,7 +39,7 @@ pub(crate) struct inotifyBackend {
     pipe_read_fd: AtomicI32,
     pipe_write_fd: AtomicI32,
     inotify: AtomicI32,
-    subscriptions: Mutex<HashMap<i32, Vec<inotifySubscription>>>, // multimap<wd, sub>
+    subscriptions: Mutex<FxHashMap<i32, Vec<inotifySubscription>>>, // multimap<wd, sub>
     ended: Mutex<bool>,
     ended_cv: Condvar,
 }
@@ -56,7 +56,7 @@ fn new_inotify_backend() -> inotifyBackend {
         pipe_read_fd: AtomicI32::new(-1),
         pipe_write_fd: AtomicI32::new(-1),
         inotify: AtomicI32::new(-1),
-        subscriptions: Mutex::new(HashMap::new()),
+        subscriptions: Mutex::new(FxHashMap::default()),
         ended: Mutex::new(false),
         ended_cv: Condvar::new(),
     }
@@ -123,7 +123,7 @@ impl inotifyBackend {
     }
 
     // inotify_linux.go:205
-    fn watch_dir(&self, subs: &mut HashMap<i32, Vec<inotifySubscription>>, w: &Arc<dirWatch>, path: &str, watch_path: &str) -> Result<i32, Error> {
+    fn watch_dir(&self, subs: &mut FxHashMap<i32, Vec<inotifySubscription>>, w: &Arc<dirWatch>, path: &str, watch_path: &str) -> Result<i32, Error> {
         let cpath = std::ffi::CString::new(watch_path).map_err(|_| Error::from_errno(libc::EINVAL))?;
         // SAFETY: `cpath` is NUL-terminated and outlives the call.
         let wd = unsafe { libc::inotify_add_watch(self.inotify.load(Ordering::SeqCst), cpath.as_ptr(), inotifyMask) };
@@ -204,7 +204,7 @@ impl inotifyBackend {
     }
 
     // inotify_linux.go:289
-    fn handle_subscription(&self, subs: &mut HashMap<i32, Vec<inotifySubscription>>, ev: &libc::inotify_event, name: &str, sub: &inotifySubscription) -> bool {
+    fn handle_subscription(&self, subs: &mut FxHashMap<i32, Vec<inotifySubscription>>, ev: &libc::inotify_event, name: &str, sub: &inotifySubscription) -> bool {
         let w = &sub.dir_watch;
         let mut path = sub.path.clone();
         let mut watch_path = sub.watch_path.clone();

@@ -624,7 +624,7 @@ impl NodeBuilderImpl {
         for &base in base_types {
             let this_type = c.get_target_type(t).unwrap().as_interface_type().this_type.get();
             let base_with_this = c.get_type_with_this_argument(base, this_type, false);
-            for prop in c.get_properties_of_type(base_with_this).iter().copied() {
+            for prop in c.get_properties_of_type(base_with_this) {
                 if let Some(existing) = props_by_name.get(prop.name()) {
                     if prop.parent() == existing.parent() {
                         inherited.add(prop.name());

@@ -152,7 +152,7 @@ pub fn get_lib_file_name(lib_name: &str) -> Option<String> {
     // checks if the libName is a valid lib name or file name and converts the lib name to the filename if needed
     let lib_name = tspath::to_file_name_lower_case(lib_name);
     if LIB_FILES_SET.contains(lib_name.as_str()) {
-        return Some(lib_name.to_string());
+        return Some(lib_name);
     }
     let lib = LIB_MAP.get(lib_name.as_str())?;
     Some(lib.as_str().unwrap().to_string())

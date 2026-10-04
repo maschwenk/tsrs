@@ -317,11 +317,11 @@ impl Checker {
                             // Get outDir paths, defaulting to root directories if not specified
                             let mut own_out_dir = self.compiler_options.out_dir.clone();
                             if own_out_dir.is_empty() {
-                                own_out_dir = own_root_dir.clone();
+                                own_out_dir = own_root_dir;
                             }
                             let mut other_out_dir = redirect.compiler_options().unwrap().out_dir.clone();
                             if other_out_dir.is_empty() {
-                                other_out_dir = other_root_dir.clone();
+                                other_out_dir = other_root_dir;
                             }
                             let out_dir_path = tspath::get_relative_path_from_directory(&own_out_dir, &other_out_dir, &compare_options);
 
@@ -646,9 +646,8 @@ impl Checker {
             let pattern_ambient_modules = self.pattern_ambient_modules.clone();
             for module in pattern_ambient_modules {
                 let symbol = self.get_merged_symbol(module.symbol);
-                if !seen.contains(&symbol) {
+                if seen.insert(symbol) {
                     self.ambient_modules.push(symbol);
-                    seen.insert(symbol);
                 }
             }
         }

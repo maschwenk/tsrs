@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::time::Duration;
 
 use super::{CompileTimes, EmitInput, System};
@@ -33,7 +34,7 @@ impl table {
         for r in &self.rows {
             // Go: "%-*s %*s\n"
             let name = format!("{}:", r.name);
-            out.push_str(&format!("{:<nw$} {:>vw$}\n", name, r.value, nw = name_width + 1, vw = value_width));
+            let _ = write!(out, "{:<nw$} {:>vw$}\n", name, r.value, nw = name_width + 1, vw = value_width);
         }
         w(&out);
     }

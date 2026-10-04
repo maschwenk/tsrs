@@ -484,7 +484,7 @@ impl FS for overlayFS {
             return Entries::default();
         }
         let host_entries = self.host.fs().get_accessible_entries(directory_name);
-        let mut entries = Entries { files: host_entries.files.clone(), directories: host_entries.directories.clone(), symlinks: host_entries.symlinks.clone() };
+        let mut entries = Entries { files: host_entries.files.clone(), directories: host_entries.directories.clone(), symlinks: host_entries.symlinks };
         let use_case_sensitive_file_names = self.use_case_sensitive_file_names();
         let equal_name = |left: &str, right: &str| {
             tspath::get_canonical_file_name(left, use_case_sensitive_file_names) == tspath::get_canonical_file_name(right, use_case_sensitive_file_names)
@@ -531,7 +531,7 @@ impl FS for overlayFS {
 // overlayfs.go:362 (Go `overlayFileInfo`: name, size, mode 0o444, zero mtime)
 fn overlay_file_info(overlay: &Overlay) -> FileInfo {
     FileInfo {
-        name: tspath::get_base_file_name(overlay.base.file_name()).to_string(),
+        name: tspath::get_base_file_name(overlay.base.file_name()),
         size: overlay.content().len() as i64,
         mode: FileMode::from_bits_retain(0o444),
         mod_time: None,
@@ -555,7 +555,7 @@ fn create_overlay_directories(overlays: &FxHashMap<Path, Arc<Overlay>>) -> FxHas
             if child_path == parent_path {
                 break;
             }
-            overlay_directories.entry(parent_path.clone()).or_default().insert(child_path.clone(), tspath::get_base_file_name(&child).to_string());
+            overlay_directories.entry(parent_path.clone()).or_default().insert(child_path.clone(), tspath::get_base_file_name(&child));
             child_path = parent_path;
             child = parent;
         }

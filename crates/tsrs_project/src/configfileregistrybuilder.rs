@@ -483,7 +483,7 @@ impl configFileRegistryBuilder {
             }
             let file_name = uri.file_name();
             let path = self.to_path(&file_name);
-            let base_name = tspath::get_base_file_name(&path).to_string();
+            let base_name = tspath::get_base_file_name(&path);
             if self.is_config_base_name(&base_name) {
                 created_or_deleted_config_files.insert(path.clone());
             }
@@ -498,7 +498,7 @@ impl configFileRegistryBuilder {
             let file_name = uri.file_name();
             let path = self.to_path(&file_name);
             deleted_files.insert(path.clone(), file_name);
-            let base_name = tspath::get_base_file_name(&path).to_string();
+            let base_name = tspath::get_base_file_name(&path);
             if self.is_config_base_name(&base_name) {
                 created_or_deleted_config_files.insert(path.clone());
             }
@@ -513,7 +513,7 @@ impl configFileRegistryBuilder {
             let file_name = uri.file_name();
             let path = self.to_path(&file_name);
             created_files.insert(path.clone(), file_name);
-            let base_name = tspath::get_base_file_name(&path).to_string();
+            let base_name = tspath::get_base_file_name(&path);
             if self.is_config_base_name(&base_name) {
                 created_or_deleted_config_files.insert(path.clone());
             }

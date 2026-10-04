@@ -1021,7 +1021,7 @@ impl Checker {
                         prop_types.push(prop_type);
                     }
                 }
-                for info in self.get_index_infos_of_type(source).iter().copied() {
+                for info in self.get_index_infos_of_type(source) {
                     if self.is_applicable_index_type(info.key_type(), target_info.key_type()) {
                         prop_types.push(info.value_type());
                     }

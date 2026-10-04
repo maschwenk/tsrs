@@ -27,7 +27,7 @@
 // `mu` for its whole run (Go releases it around directory reads and re-acquires it in `watchPath`); only the
 // event-loop thread mutates entry maps after `subscribe`, so this changes blocking, not results.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -101,9 +101,9 @@ struct kqueueSubscription {
 
 #[derive(Default)]
 struct kqState {
-    subs_by_path: HashMap<String, Vec<kqueueSubscription>>, // multimap<path, sub>
-    fd_to_entry: HashMap<i32, (entriesID, String)>,
-    entry_maps: HashMap<entriesID, HashMap<String, dirEntry>>,
+    subs_by_path: FxHashMap<String, Vec<kqueueSubscription>>, // multimap<path, sub>
+    fd_to_entry: FxHashMap<i32, (entriesID, String)>,
+    entry_maps: FxHashMap<entriesID, FxHashMap<String, dirEntry>>,
 }
 
 pub(crate) struct kqueueBackend {
@@ -251,7 +251,7 @@ impl kqueueBackend {
     // kqueue.go:234
     fn close_subscriptions(&self) {
         let mut st = self.mu.lock().unwrap();
-        let mut seen_fds = std::collections::HashSet::new();
+        let mut seen_fds = rustc_hash::FxHashSet::default();
         for list in st.subs_by_path.values() {
             for sub in list {
                 if sub.fd < 0 {
@@ -263,8 +263,8 @@ impl kqueueBackend {
                 close_fd(sub.fd);
             }
         }
-        st.subs_by_path = HashMap::new();
-        st.fd_to_entry = HashMap::new();
+        st.subs_by_path = FxHashMap::default();
+        st.fd_to_entry = FxHashMap::default();
     }
 
     // kqueue.go:266
@@ -419,9 +419,9 @@ impl kqueueBackend {
         let dir_start = format!("{}/", path);
         struct diskSnapshot {
             entries: Vec<(String, bool)>,
-            current_display_paths: std::collections::HashSet<String>,
+            current_display_paths: rustc_hash::FxHashSet<String>,
         }
-        let mut snapshots: HashMap<String, Arc<diskSnapshot>> = HashMap::new();
+        let mut snapshots: FxHashMap<String, Arc<diskSnapshot>> = FxHashMap::default();
 
         // Each subscription has its own entries map (built in subscribe).
         // Multiple subs at the same path arise from multiple dirWatches
@@ -675,7 +675,7 @@ impl kqState {
     // kqueue.go:468
     // cleanupEntriesLocked closes fds for all entries that have been opened.
     // Called on subscribe failure to avoid fd leaks. Must be called under b.mu.
-    fn cleanup_entries_locked(&mut self, entries: &mut HashMap<String, dirEntry>) {
+    fn cleanup_entries_locked(&mut self, entries: &mut FxHashMap<String, dirEntry>) {
         for e in entries.values_mut() {
             if let Some(fd) = e.state.take() {
                 close_fd(fd);
@@ -701,7 +701,7 @@ fn read_entries(path: &str) -> Result<Vec<(String, bool)>, Error> {
 // kqueue.go:774
 // removeEntryAndDescendants removes path and all paths prefixed with
 // path + separator from the entries map.
-fn remove_entry_and_descendants(entries: &mut HashMap<String, dirEntry>, path: &str) {
+fn remove_entry_and_descendants(entries: &mut FxHashMap<String, dirEntry>, path: &str) {
     entries.remove(path);
     entries.retain(|k, _| !is_descendant(k, path));
 }
@@ -739,7 +739,7 @@ impl watcherImpl for kqueueBackend {
     fn subscribe(&self, w: &Arc<dirWatch>) -> Result<(), Error> {
         // Build the entries map without registering any watches or
         // subscriptions, so the event loop never sees a partially built map.
-        let mut entries: HashMap<String, dirEntry> = HashMap::new();
+        let mut entries: FxHashMap<String, dirEntry> = FxHashMap::default();
         walk_dir(&w.physical_dir, w.recursive, &mut |watch_path, is_dir| {
             let path = w.display_path(watch_path);
             entries.insert(path.clone(), dirEntry { path, watch_path: watch_path.to_string(), is_dir, state: None });
@@ -793,7 +793,7 @@ impl watcherImpl for kqueueBackend {
     fn close_watch(&self, w: &Arc<dirWatch>) -> Result<(), Error> {
         let mut st = self.mu.lock().unwrap();
         let key = dwKey(w.clone());
-        let mut maps_of_watch = std::collections::HashSet::new();
+        let mut maps_of_watch = rustc_hash::FxHashSet::default();
         let paths: Vec<String> = st.subs_by_path.keys().cloned().collect();
         for path in paths {
             let list = st.subs_by_path.get(&path).unwrap();

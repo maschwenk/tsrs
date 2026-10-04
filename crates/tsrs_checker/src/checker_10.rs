@@ -2185,7 +2185,7 @@ impl Checker {
             }
             lazy.resolving.set(true);
             let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
-            for info in self.get_index_infos_of_type(lazy.modifiers_type).iter().copied() {
+            for info in self.get_index_infos_of_type(lazy.modifiers_type) {
                 index_infos = self.append_mapped_type_index_info(
                     index_infos,
                     t,

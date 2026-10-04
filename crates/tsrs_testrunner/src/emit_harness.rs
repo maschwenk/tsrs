@@ -260,7 +260,7 @@ pub(crate) fn file_output(file: &TestFile, settings: &HarnessOptions) -> String 
     let file_name = if settings.full_emit_paths {
         tsbaseline::remove_test_path_prefixes(&file.unit_name, false /*retainTrailingDirectorySeparator*/)
     } else {
-        tspath::get_base_file_name(&file.unit_name).to_string()
+        tspath::get_base_file_name(&file.unit_name)
     };
     format!("//// [{file_name}]\r\n{}", file.content)
 }
@@ -371,7 +371,7 @@ pub fn do_js_emit_baseline(
                         let file_name = if harness_settings.full_emit_paths {
                             tsbaseline::remove_test_path_prefixes(&doc.unit_name, false)
                         } else {
-                            tspath::get_base_file_name(&doc.unit_name).to_string()
+                            tspath::get_base_file_name(&doc.unit_name)
                         };
                         js_code.push_str("//// [");
                         js_code.push_str(&file_name);
@@ -449,7 +449,7 @@ fn prepare_declaration_compilation_context(
                 if !find_unit(&decl_file.unit_name, decl_input_files) && !find_unit(&decl_file.unit_name, decl_other_files) {
                     let content = decl_file.content.strip_prefix('\u{FEFF}').unwrap_or(&decl_file.content).to_string();
                     let dts_files = if into_input { &mut *decl_input_files } else { &mut *decl_other_files };
-                    dts_files.push(TestFile { unit_name: decl_file.unit_name.clone(), content });
+                    dts_files.push(TestFile { unit_name: decl_file.unit_name, content });
                 }
             }
         }

@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, Node, NodeFactory, NodeFactoryHooks, SourceFile};
 use tsrs_checker::Checker;
@@ -379,7 +380,7 @@ fn get_import_attributes_key(attributes: Option<P<Node>>) -> String {
     let import_attrs = attributes.as_import_attributes();
     let mut key = String::new();
     // Go writes `Kind.String()`; the key only groups imports, so any injective rendering of the kind works.
-    key.push_str(&format!("{:?}", import_attrs.token));
+    let _ = write!(key, "{:?}", import_attrs.token);
     key.push(' ');
 
     let mut attr_nodes: Vec<P<Node>> = import_attrs.attributes.nodes().to_vec();

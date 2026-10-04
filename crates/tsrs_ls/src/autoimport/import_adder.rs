@@ -151,7 +151,7 @@ impl ImportAdder for importAdder {
                         symbol_name.clone(),
                         newImportBinding {
                             kind: lsproto::ImportKind::Named,
-                            name: symbol_name.clone(),
+                            name: symbol_name,
                             add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
                             property_name: existing_fix.named_import.as_ref().unwrap().property_name.clone(),
                         },
@@ -165,7 +165,7 @@ impl ImportAdder for importAdder {
                     let prev_type_only = entry.default_import.as_ref().map(|d| d.add_as_type_only).unwrap_or_default();
                     entry.default_import = Some(newImportBinding {
                         kind: lsproto::ImportKind::Default,
-                        name: symbol_name.clone(),
+                        name: symbol_name,
                         add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
                         ..Default::default()
                     });
@@ -185,7 +185,7 @@ impl ImportAdder for importAdder {
                         let prev_type_only = entry.default_import.as_ref().map(|d| d.add_as_type_only).unwrap_or_default();
                         entry.default_import = Some(newImportBinding {
                             kind: lsproto::ImportKind::Default,
-                            name: symbol_name.clone(),
+                            name: symbol_name,
                             add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
                             ..Default::default()
                         });
@@ -197,7 +197,7 @@ impl ImportAdder for importAdder {
                             symbol_name.clone(),
                             newImportBinding {
                                 kind: lsproto::ImportKind::Named,
-                                name: symbol_name.clone(),
+                                name: symbol_name,
                                 add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
                                 // !!! propertyName
                                 ..Default::default()
@@ -212,7 +212,7 @@ impl ImportAdder for importAdder {
                                 symbol_name.clone(),
                                 newImportBinding {
                                     kind: lsproto::ImportKind::CommonJS,
-                                    name: symbol_name.clone(),
+                                    name: symbol_name,
                                     add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
                                     // !!! propertyName
                                     ..Default::default()
@@ -225,7 +225,7 @@ impl ImportAdder for importAdder {
                             );
                             entry.namespace_like_import = Some(newImportBinding {
                                 kind: lsproto::ImportKind::CommonJS,
-                                name: symbol_name.clone(),
+                                name: symbol_name,
                                 add_as_type_only: fix.add_as_type_only,
                                 ..Default::default()
                             });
@@ -239,7 +239,7 @@ impl ImportAdder for importAdder {
                         );
                         entry.namespace_like_import = Some(newImportBinding {
                             kind: lsproto::ImportKind::Namespace,
-                            name: symbol_name.clone(),
+                            name: symbol_name,
                             add_as_type_only: fix.add_as_type_only,
                             ..Default::default()
                         });

@@ -145,7 +145,7 @@ pub(crate) fn get_referenced_location(r: P<FileIncludeReason>, program: &Program
             let specifier = specifier.unwrap();
             let package_id = program
                 .get_resolved_module_from_module_specifier(file, specifier)
-                .map(|r| r.package_id.clone())
+                .map(|r| r.package_id)
                 .unwrap_or_default();
             referenceFileLocation { file, node: Some(specifier), ref_: None, package_id, is_synthetic }
         }

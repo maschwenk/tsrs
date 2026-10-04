@@ -43,5 +43,8 @@ pub(crate) fn resolve_content_mapper_manifest(
     containing_file: &str,
     package_name: &str,
 ) -> (Manifest, String, Option<P<Diagnostic>>) {
-    unimplemented!("content mappers (--runExternalCode)")
+    #[expect(clippy::unimplemented, reason = "content mappers are not ported; only their tsconfig validation is")]
+    {
+        unimplemented!("content mappers (--runExternalCode)")
+    }
 }
