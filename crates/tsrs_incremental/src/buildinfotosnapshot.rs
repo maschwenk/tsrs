@@ -8,6 +8,7 @@ use tsrs_core::P;
 use tsrs_tsoptions::ParsedCommandLine;
 
 use crate::buildinfo::*;
+use crate::referencemap::RefSet;
 use crate::snapshot::{buildInfoDiagnosticWithFileName, get_file_emit_kind, DiagnosticsOrBuildInfoDiagnosticsWithFileName, EmitSignature, Snapshot};
 
 // buildinfotosnapshot.go:12
@@ -44,7 +45,7 @@ pub(crate) fn build_info_to_snapshot(build_info: &BuildInfo, config: &ParsedComm
             for &file_id in file_id_list {
                 file_set.add(to.to_file_path(file_id));
             }
-            std::sync::Arc::new(file_set)
+            std::sync::Arc::new(RefSet::flat(file_set))
         })
         .collect();
     to.set_compiler_options();
@@ -70,7 +71,7 @@ struct toSnapshot<'a> {
     snapshot: Snapshot,
     file_paths: Vec<Path>,
     // Go shares one *Set per id list among the files that reference it.
-    file_path_set: Vec<std::sync::Arc<Set<Path>>>,
+    file_path_set: Vec<std::sync::Arc<RefSet>>,
 }
 
 impl toSnapshot<'_> {
@@ -85,7 +86,7 @@ impl toSnapshot<'_> {
     }
 
     // buildinfotosnapshot.go:70
-    fn to_file_path_set(&self, file_id_list_id: BuildInfoFileIdListId) -> std::sync::Arc<Set<Path>> {
+    fn to_file_path_set(&self, file_id_list_id: BuildInfoFileIdListId) -> std::sync::Arc<RefSet> {
         self.file_path_set[file_id_list_id as usize - 1].clone()
     }
 

@@ -7,6 +7,7 @@ use tsrs_core::tspath::{self, Path};
 use tsrs_core::P;
 
 use crate::program::Program;
+use crate::referencemap::RefSet;
 use crate::snapshot::{
     buildInfoDiagnosticWithFileName, get_file_emit_kind, get_pending_emit_kind_with_options, repopulate_diagnostic_chain, DiagnosticsCache,
     DiagnosticsOrBuildInfoDiagnosticsWithFileName, EmitSignature, FileEmitKind, FileInfo, Snapshot,
@@ -111,7 +112,7 @@ impl toProgramSnapshot {
         // programtosnapshot.go:91: Go queues the per-file work on a work group and lets each function store into the
         // snapshot's sync maps. Here the per-file work runs on the program's worker pool and only reads shared state;
         // its results are stored in file order afterwards, so the maps are filled in the same order as a sequential run.
-        let compute = |file: P<SourceFile>, checker_references: Option<checkerReferences>| -> (FileInfo, Option<std::sync::Arc<Set<Path>>>, fileChange) {
+        let compute = |file: P<SourceFile>, checker_references: Option<checkerReferences>| -> (FileInfo, Option<std::sync::Arc<RefSet>>, fileChange) {
             // Content mappers are not supported by tsrs; Go hashes the original text plus the mapper identity here.
             let version = self.snapshot.compute_hash(file.text());
             let implied_node_format = self.program.get_source_file_meta_data(file.path()).implied_node_format;
@@ -139,7 +140,7 @@ impl toProgramSnapshot {
                     } else if let Some(new_references) = &new_references {
                         // Go ranges over the set and asks, for each path, whether the new program lacks it while the old
                         // state had it; that is membership in deleted_files, which is usually empty.
-                        if !deleted_files.is_empty() && new_references.keys().iter().any(|ref_path| deleted_files.contains(ref_path)) {
+                        if !deleted_files.is_empty() && new_references.iter().any(|ref_path| deleted_files.contains(ref_path)) {
                             // Referenced file was deleted in the new program
                             change.add_to_change_set = true;
                         }
@@ -173,7 +174,7 @@ impl toProgramSnapshot {
             }
             (FileInfo { version, signature, affects_global_scope, implied_node_format }, new_references, change)
         };
-        let results: Vec<(FileInfo, Option<std::sync::Arc<Set<Path>>>, fileChange)> = if self.program.single_threaded() {
+        let results: Vec<(FileInfo, Option<std::sync::Arc<RefSet>>, fileChange)> = if self.program.single_threaded() {
             files.iter().map(|&file| compute(file, None)).collect()
         } else {
             use rayon::prelude::*;
@@ -356,9 +357,9 @@ fn referenced_file_path_from_file_name(program: &CompilerProgram, file_name: &st
     }
 }
 
-// The files declaring each checker's ambient modules (in order, and as a set), keyed by the checker's address; the
-// checkers outlive the loop.
-type AmbientModuleFiles = std::sync::Arc<(Vec<P<SourceFile>>, rustc_hash::FxHashSet<P<SourceFile>>)>;
+// The files declaring each checker's ambient modules (in order, as a set, and the set of their paths that every
+// reference set built from the program shares), keyed by the checker's address; the checkers outlive the loop.
+type AmbientModuleFiles = std::sync::Arc<(Vec<P<SourceFile>>, rustc_hash::FxHashSet<P<SourceFile>>, std::sync::Arc<Set<Path>>)>;
 type AmbientModuleFilesByChecker = std::sync::Mutex<rustc_hash::FxHashMap<usize, AmbientModuleFiles>>;
 
 // The part of getReferencedFiles that needs the file's checker: the files declaring the symbols of the file's imports
@@ -398,7 +399,12 @@ fn checker_references_of(file: P<SourceFile>, checker: &mut Checker, ambient_mod
                 }
             }
         }
-        let declaring_files = std::sync::Arc::new((declaring_files, seen));
+        let mut paths = Set::default();
+        paths.m.reserve(declaring_files.len());
+        for f in &declaring_files {
+            paths.add(f.path().clone());
+        }
+        let declaring_files = std::sync::Arc::new((declaring_files, seen, std::sync::Arc::new(paths)));
         ambient_module_files_by_checker.lock().unwrap().insert(key, declaring_files.clone());
         declaring_files
     });
@@ -418,10 +424,10 @@ fn referenced_files_of(
     program: &'static CompilerProgram,
     file: P<SourceFile>,
     checker_references: checkerReferences,
-    old: Option<&std::sync::Arc<Set<Path>>>,
-) -> Option<std::sync::Arc<Set<Path>>> {
+    old: Option<&std::sync::Arc<RefSet>>,
+) -> Option<std::sync::Arc<RefSet>> {
     let checkerReferences { import_files, augmentation_files, ambient_module_files } = checker_references;
-    let (ambient_files, ambient_file_set) = &*ambient_module_files;
+    let (ambient_files, ambient_file_set, ambient_paths) = &*ambient_module_files;
     let source_file_directory = tspath::get_directory_path(file.file_name());
     // Triple slash references, then type reference directives.
     let mut file_name_paths: Vec<Path> = Vec::new();
@@ -445,23 +451,33 @@ fn referenced_files_of(
     // We need to use a set here since the code can contain the same import twice,
     // but that will only be one dependency.
     // To avoid invernal conversion, the key of the referencedFiles map must be of type Path
-    let mut referenced_files: Set<Path> = Set::default();
-    // The declaring files are distinct apart from repeats among the imports, so this is close to the final size.
-    referenced_files.m.reserve(import_files.len() + file_name_paths.len() + augmentation_files.len() + ambient_files.len());
-    for f in import_files {
-        referenced_files.add(f.path().clone());
+    //
+    // The ambient module files' paths are the checker's shared part of the set (RefSet); the file's own paths are
+    // the rest. The file itself is left out of the shared part (Go filters `file != decl file` there), but stays in
+    // its own part when a triple-slash reference names it.
+    let file_is_ambient = ambient_file_set.contains(&file);
+    let in_shared = |path: &Path| ambient_paths.has(path) && !(file_is_ambient && path == file.path());
+    let mut own: Set<Path> = Set::default();
+    own.m.reserve(import_files.len() + file_name_paths.len() + augmentation_files.len());
+    for f in import_files.into_iter().chain(augmentation_files) {
+        if !in_shared(f.path()) {
+            own.add(f.path().clone());
+        }
     }
     for path in file_name_paths {
-        referenced_files.add(path);
+        if !in_shared(&path) {
+            own.add(path);
+        }
     }
-    for f in augmentation_files.into_iter().chain(ambient_files.iter().copied().filter(|&file_of_decl| file_of_decl != file)) {
-        referenced_files.add(f.path().clone());
+    let shared_len = ambient_paths.len() - usize::from(file_is_ambient);
+    if own.len() + shared_len == 0 {
+        return None;
     }
-    if referenced_files.len() > 0 {
-        Some(std::sync::Arc::new(referenced_files))
-    } else {
-        None
+    if ambient_paths.len() == 0 {
+        return Some(std::sync::Arc::new(RefSet::flat(own)));
     }
+    let skip = if file_is_ambient { Some(file.path().clone()) } else { None };
+    Some(std::sync::Arc::new(RefSet::split(own, ambient_paths.clone(), skip)))
 }
 
 // Whether `old` is exactly the set referenced_files_of would build: as large as the number of distinct paths, and
@@ -474,7 +490,7 @@ fn references_equal(
     ambient_files: &[P<SourceFile>],
     ambient_file_set: &rustc_hash::FxHashSet<P<SourceFile>>,
     file_name_paths: &[Path],
-    old: &Set<Path>,
+    old: &RefSet,
 ) -> bool {
     let file_is_ambient = ambient_file_set.contains(&file);
     let in_ambient = |f: P<SourceFile>| f != file && ambient_file_set.contains(&f);

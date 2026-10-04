@@ -40,6 +40,21 @@ pub fn marshal_indent(v: &Value, prefix: &str, indent: &str) -> Result<String, S
     Ok(out)
 }
 
+/// Appends the compact (`marshal`) encoding of `v`, for writers that stream a large document piece by piece.
+pub fn write_compact(out: &mut String, v: &Value) -> Result<(), String> {
+    write_value(out, v, "", "", 0)
+}
+
+/// Appends the encoding of a string, as `marshal` writes `Value::String`.
+pub fn write_compact_string(out: &mut String, s: &str) {
+    write_string(out, s)
+}
+
+/// Appends the encoding of an integer, as `marshal` writes an integral `Value::Number` or a `Value::Integer`.
+pub fn write_compact_int(out: &mut String, n: i64) {
+    write_i64(out, n)
+}
+
 /// `json.Marshal` of a Go string.
 pub fn marshal_string(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);

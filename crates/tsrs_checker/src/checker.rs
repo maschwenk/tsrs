@@ -1226,6 +1226,14 @@ pub struct Checker {
     pub reported_unreachable_nodes: Set<P<Node>>,
     pub non_existent_properties: Set<NonExistentPropertyKey>,
     pub deferred_diagnostic_callbacks: Vec<Box<dyn FnOnce(&mut Checker)>>,
+    /// tsrs-only: export tables indexed by resolved target, for `get_alias_for_symbol_in_container` (printer.rs).
+    pub exports_by_target_index: FxHashMap<P<SymbolTable>, crate::printer::ExportsByTarget>,
+    /// tsrs-only: the external modules by what they export, for `get_alternative_containing_modules` (printer.rs).
+    pub module_export_index: crate::printer::ModuleExportIndex,
+    /// tsrs-only: the caches above are bypassed while this is nonzero: one per `resolve_alias` and module export
+    /// table computation in progress, plus one until `initialize_checker` has merged the global and augmentation
+    /// symbol tables.
+    pub alias_cache_blockers: u32,
     /// The placeholder that `P<Type>` fields hold until Go would assign them (Go nil). Compare against it where Go
     /// tests such a field against nil (`c.globalObjectType != nil`).
     pub unassigned_type: P<Type>,
@@ -1584,6 +1592,9 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         reported_unreachable_nodes: Set::new(),
         non_existent_properties: Set::new(),
         deferred_diagnostic_callbacks: Vec::new(),
+        exports_by_target_index: FxHashMap::default(),
+        module_export_index: Default::default(),
+        alias_cache_blockers: 1,
         unassigned_type: dummy_type,
         type_to_string_nodebuilder: None,
         emit_resolver: None,
@@ -1710,6 +1721,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         must_have_a_value_diagnostic: &diagnostics::The_type_returned_by_the_0_method_of_an_async_iterator_must_be_a_promise_for_a_type_with_a_value_property,
     });
     c.initialize_checker();
+    c.alias_cache_blockers -= 1;
     c
 }
 
