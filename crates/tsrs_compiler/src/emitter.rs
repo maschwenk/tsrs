@@ -131,7 +131,7 @@ mod emit {
     use tsrs_tsoptions::outputpaths::{self, OutputPaths};
 
     use crate::emithost::EmitHost;
-    use crate::program_emit::{EmitResult, SourceMapEmitResult, WriteFile, WriteFileData};
+    use crate::program_emit::{EmitPhase, EmitResult, EmitTimes, SourceMapEmitResult, WriteFile, WriteFileData};
 
     // emitter.go:24
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -154,6 +154,7 @@ mod emit {
         pub(crate) emit_result: EmitResult,
         pub(crate) force_emit: bool,
         pub(crate) write_file: Option<WriteFile<'a>>,
+        pub(crate) times: &'a EmitTimes,
     }
 
     impl emitter<'_> {
@@ -177,19 +178,25 @@ mod emit {
             let declaration = tsrs_declarations::new_declaration_transformer(self.host, Some(emit_context), self.host.options(), declaration_file_path, declaration_map_path);
             let supplemental = tsrs_declarations::new_supplemental_references_transformer(self.host, source_file, declaration_file_path, force_dts_emit);
             // emitter.go:81
-            let source_file = declaration.base.transform_source_file(source_file);
-            diags.extend(declaration.get_diagnostics());
-            let source_file = supplemental.transform_source_file(source_file);
-            diags.extend(supplemental.get_diagnostics());
+            let source_file = self.times.time(EmitPhase::DeclarationTransform, || {
+                let source_file = declaration.base.transform_source_file(source_file);
+                diags.extend(declaration.get_diagnostics());
+                let source_file = supplemental.transform_source_file(source_file);
+                diags.extend(supplemental.get_diagnostics());
+                source_file
+            });
             (source_file, diags)
         }
 
         // emitter.go:71
         fn run_script_transformers(&mut self, emit_context: P<EmitContext>, mut source_file: P<SourceFile>) -> P<SourceFile> {
-            for transformer in get_script_transformers(emit_context, self.host, source_file) {
-                source_file = transformer.transform_source_file(source_file);
-            }
-            source_file
+            let host = self.host;
+            self.times.time(EmitPhase::ScriptTransform, || {
+                for transformer in get_script_transformers(emit_context, host, source_file) {
+                    source_file = transformer.transform_source_file(source_file);
+                }
+                source_file
+            })
         }
 
         // emitter.go:192
@@ -321,10 +328,13 @@ mod emit {
                 ));
             }
 
+            let print_start = std::time::Instant::now();
             printer_.write(source_file.as_node(), Some(source_file), &mut *self.writer, source_map_generator.as_mut());
+            self.times.add(EmitPhase::Print, print_start);
 
             let mut source_map_url_pos: i32 = -1;
             if let Some(source_map_generator) = &mut source_map_generator {
+                let source_map_start = std::time::Instant::now();
                 if map_options.source_map.is_true() || map_options.inline_source_map.is_true() {
                     self.emit_result.source_maps.push(SourceMapEmitResult {
                         input_source_file_names: source_map_generator.sources().to_vec(),
@@ -347,6 +357,7 @@ mod emit {
                 // Write the source map
                 if !source_map_file_path.is_empty() {
                     let source_map = source_map_generator.string();
+                    self.times.add(EmitPhase::SourceMap, source_map_start);
                     let err = self.write_text(source_map_file_path, &source_map, &mut WriteFileData { source_file: Some(self.source_file), ..Default::default() });
                     match err {
                         Err(err) => {
@@ -356,6 +367,8 @@ mod emit {
                             self.emit_result.emitted_files.push(source_map_file_path.to_string());
                         }
                     }
+                } else {
+                    self.times.add(EmitPhase::SourceMap, source_map_start);
                 }
             } else {
                 self.writer.write_line();
@@ -390,10 +403,12 @@ mod emit {
 
         // emitter.go:436
         fn write_text(&self, file_name: &str, text: &str, data: &mut WriteFileData) -> Result<(), String> {
-            if let Some(write_file) = self.write_file {
-                return write_file(file_name, text, data);
-            }
-            self.host.write_file(file_name, text)
+            self.times.time(EmitPhase::Write, || {
+                if let Some(write_file) = self.write_file {
+                    return write_file(file_name, text, data);
+                }
+                self.host.write_file(file_name, text)
+            })
         }
 
         // emitter.go:460

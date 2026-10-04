@@ -8,7 +8,9 @@
 // runs in input order, which is Go's observable order. With an external pool each file takes its checker from the
 // pool, as in Go.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_core::P;
@@ -59,6 +61,51 @@ pub struct SourceMapEmitResult {
     pub generated_file: String,
 }
 
+// tsrs-only: where emit time goes, summed over the threads that emit (`--extendedDiagnostics` rows "Emit: ...").
+// The print row includes building the source-map mappings (the printer feeds the generator as it prints); the source
+// map row is serializing the map and computing its URL.
+#[derive(Clone, Copy)]
+pub(crate) enum EmitPhase {
+    ScriptTransform,
+    DeclarationTransform,
+    Print,
+    SourceMap,
+    Write,
+}
+
+const EMIT_PHASE_NAMES: [&str; 5] = [
+    "Emit: JS transform (thread sum)",
+    "Emit: declaration transform (thread sum)",
+    "Emit: print (thread sum)",
+    "Emit: source map serialize (thread sum)",
+    "Emit: write files (thread sum)",
+];
+
+#[derive(Default)]
+pub(crate) struct EmitTimes([AtomicU64; 5]);
+
+impl EmitTimes {
+    pub(crate) fn add(&self, phase: EmitPhase, start: Instant) {
+        self.0[phase as usize].fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
+    }
+
+    pub(crate) fn time<T>(&self, phase: EmitPhase, f: impl FnOnce() -> T) -> T {
+        let start = Instant::now();
+        let result = f();
+        self.add(phase, start);
+        result
+    }
+
+    fn record(&self) {
+        for (name, nanos) in EMIT_PHASE_NAMES.iter().zip(&self.0) {
+            let nanos = nanos.load(Ordering::Relaxed);
+            if nanos != 0 {
+                tsrs_core::phases::record(name, Duration::from_nanos(nanos));
+            }
+        }
+    }
+}
+
 impl Program {
     // program.go:1875
     pub fn emit(&'static self, ctx: &Context, options: EmitOptions) -> EmitResult {
@@ -75,6 +122,7 @@ impl Program {
         let source_files = crate::emitter::get_source_files_to_emit(self, options.target_source_files.as_deref(), force_dts_emit, force_js_emit);
 
         let results: Vec<Mutex<Option<EmitResult>>> = source_files.iter().map(|_| Mutex::new(None)).collect();
+        let times = EmitTimes::default();
         let run = |c: &mut tsrs_checker::Checker, index: usize, source_file: P<SourceFile>| {
             let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
             let host = crate::emithost::new_emit_host(self, c.get_emit_resolver(), checker_slot);
@@ -97,6 +145,7 @@ impl Program {
                 emit_result: EmitResult::default(),
                 force_emit: options.force_emit,
                 write_file: options.write_file,
+                times: &times,
             };
             checker_slot.lend(c, || e.emit());
             *results[index].lock().unwrap() = Some(e.emit_result);
@@ -111,6 +160,8 @@ impl Program {
                 }
             }
         }
+
+        times.record();
 
         // collect results from emit, preserving input order
         combine_emit_results(results.into_iter().map(|r| r.into_inner().unwrap()).collect())
