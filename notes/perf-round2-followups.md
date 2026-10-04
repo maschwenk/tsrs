@@ -11,12 +11,6 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Decisions waiting on the owner
 
-- **Hub-edit shortcut** (notes/perf-dev-loop2.md, "Why a hub edit is still slower than cold"). A hub edit costs 12.4 s
-  against ~7 s cold because Go computes 22,405 declaration signatures and then re-checks all 37,863 files anyway.
-  Under `--noEmit`, when the re-check set is nearly every file, store the file version as the signature instead (Go
-  already does that for the rest of the set). Diagnostics identical, later runs correct, hub edit about cold + 0.9 s.
-  Cost: the stored signatures differ from tsgo's in that case, the first deliberate departure from Go's output.
-  Written up, not implemented.
 - **Default checker count** (#48, draft; notes/perf-checker-scaling.md). `clamp(cores/2, 4, 8)` gives -16% wall for
   +1.6 GiB on the 38k-file codebase (-34% on vscode) and makes `--extendedDiagnostics` counters machine-dependent.
   Recommendation: close it and pass `--checkers` where the hardware is known (8 on laptops, 4 or 1 on small boxes).
@@ -54,8 +48,8 @@ pointer compression costs about +4.9% instructions and took back most of the che
    `get_nearest_ancestor_directory_with_package_json` (a memo, ~0.1 s), `get_accessible_symbol_chain_from_symbol_table`,
    each about 3% of emit. Only visible in wall time once writes are not the bound (Linux).
 4. **Signature emit parallelism on hub edits** (notes/perf-dev-loop2.md): about 55% parallel efficiency because each
-   dependency level waits for the previous one; module-specifier computation is 4.3 CPU-s of it. Moot if the
-   hub-edit shortcut above is taken.
+   dependency level waits for the previous one; module-specifier computation is 4.3 CPU-s of it. The two shortcuts
+   around it were rejected (below), so this is what is left for hub edits.
 5. **Checker CPU** (notes/perf-checker-cpu2.md, "What remains"): interned names so `SymbolMap::position` hits compare
    pointers instead of name bytes (~5% of check samples; a parser/binder change);
    `instantiate_type_with_alias_worker` cache probes (~3%). Everything else is below 0.3%. What is left at the top of
@@ -70,6 +64,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Hub-edit shortcut, storing file versions as signatures when an edit re-checks most of the program (#64): hub edit
+  10.7 -> 7.9 s, global `.d.ts` 18.0 -> 7.2 s, but the first later body-only edit of each skipped file re-checks the
+  whole program (1.0 -> 7.6 s), and the stored signatures differ from tsgo's (notes/perf-hub-edit-shortcut.md).
+- Deferred signatures, checking first and computing Go's signatures after the check: ~1 s on the hub edit
+  (11.1 -> 10.0 s), and 7-11 of ~22k signatures differ from base because printed declarations depend on type
+  creation order (tsgo itself is nondeterministic on those files). The global-scope part of it, batching the per-file
+  signature emits, is exact and landed (global `.d.ts` edit 18.0 -> 10.5 s).
 - Persisted, mmap-able front end: 26% of nodes cacheable, 0.02-0.03 s at 18 threads, at most 0.15 GiB
   (docs/PERSISTED_FRONTEND.md on #36).
 - Scope regions for inference contexts: 25-50% of scopes keep a live block (notes/mem-scoped-arenas.md).
