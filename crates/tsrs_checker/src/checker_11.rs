@@ -483,7 +483,18 @@ impl Checker {
      * no constituent property has type 'never', but the intersection of the constituent property types is 'never'.
      */
     // checker.go:22181
+    /// The common no-op cases inline; the rest (a large frame) out of line.
+    #[inline]
     pub fn get_reduced_type(&mut self, t: P<Type>) -> P<Type> {
+        let flags = t.flags();
+        if !flags.intersects(TypeFlags::UnionOrIntersection) || flags.intersects(TypeFlags::Union) && !t.object_flags().intersects(ObjectFlags::ContainsIntersections) {
+            return t;
+        }
+        self.get_reduced_type_worker(t)
+    }
+
+    #[inline(never)]
+    fn get_reduced_type_worker(&mut self, t: P<Type>) -> P<Type> {
         if t.flags().intersects(TypeFlags::Union) {
             if t.object_flags().intersects(ObjectFlags::ContainsIntersections) {
                 if let Some(reduced_type) = t.as_union_type().resolved_reduced_type() {
@@ -901,6 +912,7 @@ impl Checker {
     }
 
     // checker.go:22500
+    #[inline]
     pub(crate) fn instantiate_type_with_alias(&mut self, t: P<Type>, m: Option<P<TypeMapper>>, alias: Option<P<TypeAlias>>) -> P<Type> {
         // Check for type variables in the alias, so things like `type Brand<T> = number & {}` can potentially be copied with new alias type args, despite them being unreferenced.
         // This is the behavior most people using aliases expect, and prevents the cache from leaking type parameters outside their scope of validity.
@@ -913,6 +925,11 @@ impl Checker {
         {
             return t;
         }
+        self.instantiate_type_with_alias_worker(t, m, alias)
+    }
+
+    #[inline(never)]
+    fn instantiate_type_with_alias_worker(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> {
         if self.instantiation_stack.len() == 100 || self.instantiation_count >= 5_000_000 {
             // We have reached 100 recursive type instantiations, or 5M type instantiations caused by the same statement
             // or expression. There is a very high likelihood we're dealing with a combination of infinite generic types
@@ -1086,12 +1103,13 @@ impl Checker {
             if object_flags.intersects(ObjectFlags::Reference | ObjectFlags::Anonymous | ObjectFlags::Mapped) {
                 if object_flags.intersects(ObjectFlags::Reference) && t.as_type_reference().node.get().is_none() {
                     let resolved_type_arguments = t.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]);
-                    let new_type_arguments = self.instantiate_types(resolved_type_arguments, Some(m));
                     // Go core.Same: instantiateList returns the input slice iff no element changed
-                    if new_type_arguments.as_slice() == resolved_type_arguments {
+                    let Some(new_type_arguments) = self.instantiate_types_changed(resolved_type_arguments, m) else {
                         return t;
-                    }
-                    return self.create_normalized_type_reference(t.target().unwrap(), &new_type_arguments);
+                    };
+                    let result = self.create_normalized_type_reference(t.target().unwrap(), &new_type_arguments);
+                    self.free_type_list(new_type_arguments);
+                    return result;
                 }
                 if object_flags.intersects(ObjectFlags::ReverseMapped) {
                     return self.instantiate_reverse_mapped_type(t, m);
@@ -1109,17 +1127,23 @@ impl Checker {
                 }
             }
             let types = source.types();
-            let new_types = self.instantiate_types(types, Some(m));
             // Go core.Same: instantiateList returns the input slice iff no element changed
-            if new_types.as_slice() == types && alias.symbol() == t.alias().symbol() {
+            let changed = self.instantiate_types_changed(types, m);
+            if changed.is_none() && alias.symbol() == t.alias().symbol() {
                 return t;
             }
+            let new_types = changed.as_deref().unwrap_or(types);
             let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), Some(m)) } else { None };
             let alias = AliasArg::given_or_pending(alias, &pending);
-            if source.flags().intersects(TypeFlags::Intersection) {
-                return self.get_intersection_type_ex(&new_types, IntersectionFlags::None, alias);
+            let result = if source.flags().intersects(TypeFlags::Intersection) {
+                self.get_intersection_type_ex(new_types, IntersectionFlags::None, alias)
+            } else {
+                self.get_union_type_ex(new_types, UnionReduction::Literal, alias, None /*origin*/)
+            };
+            if let Some(changed) = changed {
+                self.free_type_list(changed);
             }
-            return self.get_union_type_ex(&new_types, UnionReduction::Literal, alias, None /*origin*/);
+            return result;
         } else if flags.intersects(TypeFlags::Index) {
             let target = self.instantiate_type(t.target().unwrap(), Some(m));
             return self.get_index_type(target);
@@ -1235,9 +1259,10 @@ impl Checker {
         // We are instantiating an anonymous type that has one or more type parameters in scope. Apply the
         // mapper to the type parameters to produce the effective list of type arguments, and compute the
         // instantiation cache key from the type IDs of the type arguments.
-        let mut type_arguments: Vec<P<Type>> = Vec::with_capacity(type_parameters.len());
+        let mut type_arguments = self.free_type_lists.pop().unwrap_or_default();
         for &tp in type_parameters {
-            type_arguments.push(self.map_type_with_composite_mapper(tp, t.mapper(), m.unwrap()));
+            let mapped = self.map_type_with_composite_mapper(tp, t.mapper(), m.unwrap());
+            type_arguments.push(mapped);
         }
         let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), m) } else { None };
         let new_alias = AliasArg::given_or_pending(alias, &pending);
@@ -1245,11 +1270,11 @@ impl Checker {
         // (the target is a declared anonymous or mapped type or a deferred reference, never an interface or tuple).
         assert!(target.try_as_interface_type().is_none(), "object type instantiation of an interface target");
         let key = get_type_instantiation_key(&type_arguments, new_alias, t.object_flags().intersects(ObjectFlags::SingleSignatureType));
-        if !self.object_type_instantiations.contains_key(&target) {
+        let instantiations = self.object_type_instantiations.entry(target).or_insert_with(|| {
             let initial_key = get_type_instantiation_key(type_parameters, target.alias().into(), false);
-            self.object_type_instantiations.insert(target, FxHashMap::from_iter([(initial_key, target)]));
-        }
-        let mut result = self.object_type_instantiations[&target].get(&key).copied();
+            FxHashMap::from_iter([(initial_key, target)])
+        });
+        let mut result = instantiations.get(&key).copied();
         if result.is_none() {
             let new_alias = new_alias.alias();
             let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
@@ -1282,6 +1307,7 @@ impl Checker {
             }
             result = Some(r);
         }
+        self.free_type_list(type_arguments);
         result.unwrap()
     }
 
@@ -1763,6 +1789,34 @@ impl Checker {
     // checker.go:23192
     pub(crate) fn instantiate_types(&mut self, types: &[P<Type>], m: Option<P<TypeMapper>>) -> Vec<P<Type>> {
         self.instantiate_list(types, m, |c, t, m| c.instantiate_type(t, m))
+    }
+
+    /// `instantiate_types` for callers that only read the result: `None` when no element changed (where Go's
+    /// `instantiateList` returns its input), else the new list in a buffer to hand back with `free_type_list`.
+    /// Instantiates the same elements in the same order.
+    pub(crate) fn instantiate_types_changed(&mut self, types: &[P<Type>], m: P<TypeMapper>) -> Option<Vec<P<Type>>> {
+        for (i, &t) in types.iter().enumerate() {
+            let mapped = self.instantiate_type(t, Some(m));
+            if mapped != t {
+                let mut result = self.free_type_lists.pop().unwrap_or_default();
+                result.reserve(types.len());
+                result.extend_from_slice(&types[..i]);
+                result.push(mapped);
+                for &t in &types[i + 1..] {
+                    let mapped = self.instantiate_type(t, Some(m));
+                    result.push(mapped);
+                }
+                return Some(result);
+            }
+        }
+        None
+    }
+
+    pub(crate) fn free_type_list(&mut self, mut list: Vec<P<Type>>) {
+        if list.capacity() <= 256 {
+            list.clear();
+            self.free_type_lists.push(list);
+        }
     }
 
     // checker.go:23196
