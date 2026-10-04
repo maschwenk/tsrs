@@ -632,6 +632,10 @@ pub fn diff_maps<K: Hash + Eq, V: PartialEq>(
     diff_maps_func(m1, m2, |a, b| a == b, Some(on_added), Some(on_removed), Some(on_changed))
 }
 
+#[expect(
+    clippy::iter_over_hash_type,
+    reason = "Go's DiffMapsFunc ranges over the maps too; the one caller (tsrs_project update_watches) collects watch changes, whose order is not output"
+)]
 pub fn diff_maps_func<K: Hash + Eq, V1, V2>(
     m1: &FxHashMap<K, V1>,
     m2: &FxHashMap<K, V2>,
@@ -670,6 +674,7 @@ pub fn copy_map_into<K: Hash + Eq + Clone, V: Clone>(dst: Option<FxHashMap<K, V>
     match dst {
         None => src.clone(),
         Some(mut dst) => {
+            #[expect(clippy::iter_over_hash_type, reason = "inserts distinct keys into a map")]
             for (k, v) in src {
                 dst.insert(k.clone(), v.clone());
             }

@@ -235,6 +235,7 @@ impl Program {
         }
 
         // Commit changes to snapshot
+        #[expect(clippy::iter_over_hash_type, reason = "stores one entry per file in an unordered map")]
         for (file, diagnostics) in diagnostics_per_file {
             self.snapshot.semantic_diagnostics_per_file.store(file.path().clone(), DiagnosticsOrBuildInfoDiagnosticsWithFileName::from_diagnostics(diagnostics));
         }

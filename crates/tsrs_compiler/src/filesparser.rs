@@ -931,6 +931,7 @@ impl filesParser {
         let lib_len = lib_files.len();
         let mut all_files = lib_files;
         all_files.extend(files);
+        #[expect(clippy::iter_over_hash_type, reason = "shifts each index on its own")]
         for redirect_file in redirect_files_by_path.values_mut() {
             redirect_file.index += lib_len;
         }

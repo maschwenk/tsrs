@@ -34,6 +34,10 @@ impl includeProcessor {
             for d in p.processing_diagnostics().iter() {
                 computed.add(d.to_diagnostic(p));
             }
+            // Go ranges over both maps too. The collection drops a diagnostic equal to one it has (equal in
+            // everything compare_diagnostics looks at) and sorts on read, and that comparator only ties on equal
+            // diagnostics, so the order of the adds cannot be seen.
+            #[expect(clippy::iter_over_hash_type, reason = "see the comment above")]
             for resolutions in p.resolved_modules.values() {
                 for resolved_module in resolutions.values() {
                     for &diag in resolved_module.resolution_diagnostics.iter() {
@@ -41,6 +45,7 @@ impl includeProcessor {
                     }
                 }
             }
+            #[expect(clippy::iter_over_hash_type, reason = "see the comment above")]
             for type_resolutions in p.type_resolutions_in_file.values() {
                 for resolved_type_ref in type_resolutions.values() {
                     for &diag in resolved_type_ref.resolution_diagnostics.iter() {

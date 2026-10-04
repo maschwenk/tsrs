@@ -410,6 +410,10 @@ impl affectedFilesHandler<'_> {
     }
 
     // affectedfileshandler.go:339
+    #[expect(
+        clippy::iter_over_hash_type,
+        reason = "each loop stores, deletes or ORs one entry per key of an unordered map; the end state does not depend on the order"
+    )]
     fn update_snapshot(&self) {
         if self.ctx.err().is_some() {
             return;

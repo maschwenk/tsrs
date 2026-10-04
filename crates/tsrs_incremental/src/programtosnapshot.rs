@@ -435,6 +435,7 @@ fn referenced_files_of(
         file_name_paths.push(referenced_file_path_from_file_name(program, &referenced_file.file_name, &source_file_directory));
     }
     if let Some(type_refs_in_file) = program.get_resolved_type_reference_directives().get(file.path()) {
+        #[expect(clippy::iter_over_hash_type, reason = "the paths go into a set, and references_equal does not depend on their order")]
         for type_ref in type_refs_in_file.values() {
             if !type_ref.resolved_file_name.is_empty() {
                 file_name_paths.push(referenced_file_path_from_file_name(program, type_ref.resolved_file_name, &source_file_directory));

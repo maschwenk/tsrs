@@ -566,6 +566,7 @@ impl Orchestrator {
     // A builder panicked: release every waiter so the panic surfaces instead of a hang.
     fn abort(&self) {
         self.aborted.store(true, Ordering::SeqCst);
+        #[expect(clippy::iter_over_hash_type, reason = "wakes every waiter; the order does not matter")]
         for task in self.tasks.lock().unwrap().values() {
             task.done.wake();
             task.built.wake();

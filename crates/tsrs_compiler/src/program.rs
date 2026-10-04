@@ -726,6 +726,7 @@ impl Program {
         let mut unresolved_imports = Vec::new();
 
         if let Some(resolved_modules) = self.resolved_modules.get(file.path()) {
+            #[expect(clippy::iter_over_hash_type, reason = "the only caller adds the names to a hash set")]
             for (cache_key, resolution) in resolved_modules {
                 let resolved = resolution.is_resolved();
                 if (!resolved || !tspath::extension_is_one_of(resolution.extension, tspath::SUPPORTED_TS_EXTENSIONS_WITH_JSON_FLAT))
@@ -858,6 +859,7 @@ impl Program {
     pub fn get_packages_map(&self) -> &FxHashMap<String, bool> {
         self.packages_map.get_or_init(|| {
             let mut packages_map: FxHashMap<String, bool> = FxHashMap::default();
+            #[expect(clippy::iter_over_hash_type, reason = "ORs one flag per package name; the result does not depend on the order")]
             for resolved_modules_in_file in self.resolved_modules.values() {
                 for module in resolved_modules_in_file.values() {
                     if !module.package_id.name.is_empty() {
@@ -1975,6 +1977,10 @@ impl Program {
         let (mut filtered, directives_by_line) = self.get_diagnostics_with_preceding_directives(source_file, diags);
         if let Some(directives_by_line) = directives_by_line {
             // Go iterates this map in random order; the result is sorted by the caller.
+            #[expect(
+                clippy::iter_over_hash_type,
+                reason = "every caller sorts and deduplicates (filter_and_sort_diagnostics); each directive has its own location"
+            )]
             for directive in directives_by_line.values() {
                 // Above we changed all used directive kinds to @ts-ignore, so any @ts-expect-error directives that
                 // remain are unused and thus errors.
@@ -2475,6 +2481,9 @@ impl Program {
 
             // Check other dependencies for symlinks
             let mut seen_package_jsons: tsrs_core::collections::Set<Path> = tsrs_core::collections::Set::default();
+            // Go ranges over these maps too. Each resolution records the realpath the file system gives a symlink, so
+            // the cache gets the same entries in any order; `has_directory` only skips resolving a directory again.
+            #[expect(clippy::iter_over_hash_type, reason = "see the comment above")]
             for (file_path, meta) in &self.source_file_meta_datas {
                 if meta.package_json_directory.is_empty()
                     || !self.source_file_may_be_emitted(self.get_source_file_by_path(file_path).unwrap(), false)
@@ -2488,6 +2497,7 @@ impl Program {
                     continue;
                 };
 
+                #[expect(clippy::iter_over_hash_type, reason = "see the comment above the outer loop")]
                 for dep in contents.get_runtime_dependency_names().keys() {
                     // Skip work in common case: we already saved a symlink for this package directory
                     // in the node_modules adjacent to this package.json
@@ -2541,6 +2551,10 @@ impl Program {
     }
 }
 
+#[expect(
+    clippy::iter_over_hash_type,
+    reason = "the one caller (KnownSymlinks::set_symlinks_from_resolutions) records file-system symlinks, which come out the same in any order"
+)]
 fn for_each_resolution<T>(
     resolution_cache: &FxHashMap<Path, ModeAwareCache<P<T>>>,
     mut callback: impl FnMut(&T, &str, ResolutionMode, &Path),

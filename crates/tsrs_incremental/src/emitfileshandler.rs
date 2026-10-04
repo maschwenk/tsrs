@@ -310,6 +310,10 @@ impl<'a> emitFilesHandler<'a> {
     }
 
     // emitfileshandler.go:300
+    #[expect(
+        clippy::iter_over_hash_type,
+        reason = "the three loops store or delete one entry per key of an unordered map; the results below follow the program's file order"
+    )]
     fn update_snapshot(&self) -> Vec<EmitResult> {
         let snapshot = &self.program.snapshot;
         if snapshot.can_use_incremental_state() {

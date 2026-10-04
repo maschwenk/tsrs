@@ -1458,6 +1458,7 @@ fn parse_config(
         }
         if let Some(source_file) = source_file {
             let mut extended_source_files = source_file.extended_source_files.borrow_mut();
+            #[expect(clippy::iter_over_hash_type, reason = "each file is inserted at its sorted position")]
             for extended_source_file in result.extended_source_files {
                 let i = extended_source_files.binary_search(&extended_source_file).unwrap_or_else(|i| i);
                 extended_source_files.insert(i, extended_source_file);
