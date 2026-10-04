@@ -106,10 +106,9 @@ fn node_header(kind: Kind, data_tag: NodeDataTag) -> Node {
 
 /// Creates a node whose data struct is `data` (Go: the data struct embeds `NodeBase`, one allocation).
 pub(crate) fn new_node<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks) -> P<Node> {
-    let a: &'static NodeAlloc<T> = P::new(NodeAlloc { node: node_header(kind, T::TAG), data }).get();
     // SAFETY: `NodeAlloc` is `repr(C)` with the header first, so the pointer to the allocation is a pointer to
     // its header; the header is never moved or freed (leak arena).
-    let n = P::from_static(unsafe { &*(a as *const NodeAlloc<T>).cast::<Node>() });
+    let n = unsafe { P::new(NodeAlloc { node: node_header(kind, T::TAG), data }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -123,9 +122,8 @@ pub(crate) fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::
     let () = T::SAME_OFFSET;
     let mut header = node_header(kind, T::TAG);
     header.header = OwnedCell::new(header.header.get().with_rare_tail());
-    let a: &'static NodeAllocRare<T, T::Rare> = P::new(NodeAllocRare { node: header, data, rare }).get();
     // SAFETY: as in `new_node` (`NodeAllocRare` is `repr(C)` with the header first).
-    let n = P::from_static(unsafe { &*(a as *const NodeAllocRare<T, T::Rare>).cast::<Node>() });
+    let n = unsafe { P::new(NodeAllocRare { node: header, data, rare }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -498,7 +496,7 @@ impl Node {
     #[inline]
     pub fn as_p(&self) -> P<Node> {
         // SAFETY: see above; nodes are never freed or moved.
-        P::from_static(unsafe { &*(self as *const Node) })
+        unsafe { P::from_arena(&*(self as *const Node)) }
     }
 
     #[inline]

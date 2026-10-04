@@ -318,7 +318,7 @@ pub struct InferenceContext {
     // `non_fixing_mapper()`), see notes/mem-round3.md.
     mapper: Cell<Option<P<TypeMapper>>>,
     non_fixing_mapper: Cell<Option<P<TypeMapper>>>,
-    // The `InferenceContextRare` address (exposed provenance) with the escaped bit (`RARE_ESCAPED`) in bit 0: set
+    // The `InferenceContextRare`'s `P::to_bits` with the escaped bit (`RARE_ESCAPED`) in bit 0: set
     // when one of the context's inference mappers escapes (notes/mem-recycle.md), after which it is never recycled.
     rare: Cell<usize>,
 }
@@ -349,13 +349,12 @@ impl InferenceContext {
     /// The arena handle of this context (contexts are only created in the arena and never moved).
     fn as_p(&self) -> P<InferenceContext> {
         // SAFETY: see above.
-        P::from_static(unsafe { &*(self as *const InferenceContext) })
+        unsafe { P::from_arena(&*(self as *const InferenceContext)) }
     }
 
     fn rare(&self) -> Option<P<InferenceContextRare>> {
-        let a = self.rare.get() & !RARE_ESCAPED;
-        // SAFETY: a non-zero address was stored from a live `P<InferenceContextRare>` (`rare_for_write`).
-        (a != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<InferenceContextRare>(a) }))
+        // SAFETY: nonzero bits were stored from a live `P<InferenceContextRare>` (`rare_for_write`).
+        unsafe { P::from_bits_opt(self.rare.get() & !RARE_ESCAPED) }
     }
 
     /// Whether one of the context's inference mappers escaped (it may be used after its creator is done).
@@ -416,8 +415,7 @@ impl InferenceContext {
             Some(rare) => rare,
             None => {
                 let rare = P::new_recycled(InferenceContextRare::default());
-                let addr = (rare.get() as *const InferenceContextRare).expose_provenance();
-                self.rare.set(addr | (self.rare.get() & RARE_ESCAPED));
+                self.rare.set(rare.to_bits() | (self.rare.get() & RARE_ESCAPED));
                 rare
             }
         }

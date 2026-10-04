@@ -18,14 +18,15 @@ pub enum TypeMapperKind {
 /// closures receive the checker as a parameter of `map` instead.
 ///
 /// Representation (16 bytes; there are tens of millions of mappers): two words. The low three bits of `first`
-/// hold the kind (`TAG_*`); its other bits hold the first payload pointer, which is 8-aligned. The array kinds keep
-/// their list lengths in the top 16 bits of the two slice pointers (when the pointers fit in 48 bits and the lists
-/// in `u16`; otherwise the mapper is out of line). The rare kinds (functions, deferred mappers, long lists) point
+/// hold the kind (`TAG_*`); its other bits hold the first payload: an arena object's `P::to_bits` (8-aligned), or a
+/// list's address shifted left by one (lists of `P<Type>` are 4-aligned). The array kinds keep their list lengths in
+/// the top 16 bits of the two list words (when the addresses are below 2^47 and the lists in `u16`; otherwise the
+/// mapper is out of line). The rare kinds (functions, deferred mappers, long lists) point
 /// to a `RareTypeMapper`. `data()` decodes a mapper into the `TypeMapperData` view that the code matches on.
 pub struct TypeMapper {
-    first: *const (),
+    first: usize,
     // Also holds the escaped bit (`ESCAPED`, notes/mem-recycle.md) in bit 2, which every payload leaves free.
-    second: std::cell::Cell<*const ()>,
+    second: std::cell::Cell<usize>,
 }
 
 const _: () = assert!(std::mem::size_of::<TypeMapper>() == 16);
@@ -86,35 +87,35 @@ impl TypeMapperData {
     }
 }
 
-/// A slice pointer with its length in the top 16 bits, or `None` when either does not fit.
+/// A list's address shifted left by one with its length in the top 16 bits, or `None` when either does not fit.
 #[inline]
-fn pack_slice(s: &'static [P<Type>]) -> Option<*const ()> {
-    let p = s.as_ptr() as *const ();
-    (p.addr() & !ADDR_MASK == 0 && s.len() <= u16::MAX as usize).then(|| p.map_addr(|a| a | s.len() << LEN_SHIFT))
+fn pack_slice(s: &'static [P<Type>]) -> Option<usize> {
+    let a = s.as_ptr().expose_provenance();
+    (a & 3 == 0 && a >> (LEN_SHIFT - 1) == 0 && s.len() <= u16::MAX as usize).then(|| a << 1 | s.len() << LEN_SHIFT)
 }
 
 /// # Safety
 /// `w` must come from `pack_slice` (tag bits may have been added).
 #[inline]
-unsafe fn unpack_slice(w: *const ()) -> &'static [P<Type>] {
-    std::slice::from_raw_parts(w.map_addr(|a| a & ADDR_MASK) as *const P<Type>, w.addr() >> LEN_SHIFT)
+unsafe fn unpack_slice(w: usize) -> &'static [P<Type>] {
+    std::slice::from_raw_parts(std::ptr::with_exposed_provenance::<P<Type>>((w & ADDR_MASK) >> 1), w >> LEN_SHIFT)
 }
 
 #[inline]
-fn tagged<T>(p: &'static T, tag: usize) -> *const () {
-    (p as *const T as *const ()).map_addr(|a| a | tag)
+fn tagged<T>(p: P<T>, tag: usize) -> usize {
+    p.to_bits() | tag
 }
 
 /// # Safety
-/// `w` must hold a `&'static T` (plus tag bits).
+/// `w` must hold a `P<T>`'s bits (plus tag bits).
 #[inline]
-unsafe fn untagged<T>(w: *const ()) -> &'static T {
-    &*(w.map_addr(|a| a & !TAG_MASK) as *const T)
+unsafe fn untagged<T>(w: usize) -> P<T> {
+    P::from_bits(w & !TAG_MASK)
 }
 
 impl TypeMapper {
     fn alloc_rare(rare: RareTypeMapper) -> P<TypeMapper> {
-        P::new_recycled(TypeMapper { first: tagged(alloc(rare), TAG_RARE), second: std::cell::Cell::new(std::ptr::null()) })
+        P::new_recycled(TypeMapper { first: tagged(P::new(rare), TAG_RARE), second: std::cell::Cell::new(0) })
     }
 
     /// The mapper's kind and payload.
@@ -123,14 +124,14 @@ impl TypeMapper {
         let second = self.second.get();
         // SAFETY: the words were encoded for this tag by the constructors below.
         unsafe {
-            match self.first.addr() & TAG_MASK {
-                TAG_SIMPLE => TypeMapperData::Simple { source: P::from_static(untagged(self.first)), target: P::from_static(untagged(second)) },
-                TAG_MERGED => TypeMapperData::Merged { m1: P::from_static(untagged(self.first)), m2: P::from_static(untagged(second)) },
-                TAG_COMPOSITE => TypeMapperData::Composite { m1: P::from_static(untagged(self.first)), m2: P::from_static(untagged(second)) },
-                TAG_INFERENCE => TypeMapperData::Inference { n: P::from_static(untagged(self.first)), fixing: second.addr() & 1 != 0 },
+            match self.first & TAG_MASK {
+                TAG_SIMPLE => TypeMapperData::Simple { source: untagged(self.first), target: untagged(second) },
+                TAG_MERGED => TypeMapperData::Merged { m1: untagged(self.first), m2: untagged(second) },
+                TAG_COMPOSITE => TypeMapperData::Composite { m1: untagged(self.first), m2: untagged(second) },
+                TAG_INFERENCE => TypeMapperData::Inference { n: untagged(self.first), fixing: second & 1 != 0 },
                 TAG_ARRAY => TypeMapperData::Array { sources: unpack_slice(self.first), targets: unpack_slice(second) },
-                TAG_ARRAY_TO_SINGLE => TypeMapperData::ArrayToSingle { sources: unpack_slice(self.first), target: P::from_static(untagged(second)) },
-                _ => match untagged::<RareTypeMapper>(self.first) {
+                TAG_ARRAY_TO_SINGLE => TypeMapperData::ArrayToSingle { sources: unpack_slice(self.first), target: untagged(second) },
+                _ => match untagged::<RareTypeMapper>(self.first).get() {
                     RareTypeMapper::Array { sources, targets } => TypeMapperData::Array { sources, targets },
                     RareTypeMapper::ArrayToSingle { sources, target } => TypeMapperData::ArrayToSingle { sources, target: *target },
                     RareTypeMapper::Deferred(data) => TypeMapperData::Deferred { data },
@@ -144,12 +145,12 @@ impl TypeMapper {
 impl TypeMapper {
     #[inline]
     pub fn escaped(&self) -> bool {
-        self.second.get().addr() & ESCAPED != 0
+        self.second.get() & ESCAPED != 0
     }
 
     #[inline]
     fn set_escaped(&self) {
-        self.second.set(self.second.get().map_addr(|a| a | ESCAPED));
+        self.second.set(self.second.get() | ESCAPED);
     }
 
     pub fn map(&self, c: &mut Checker, t: P<Type>) -> P<Type> {
@@ -347,7 +348,7 @@ impl Checker {
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_inference_type_mapper(n: P<InferenceContext>, fixing: bool) -> P<TypeMapper> {
     tsrs_core::sitecount::hit("mapper", "inference");
-    P::new_recycled(TypeMapper { first: tagged(n.get(), TAG_INFERENCE), second: std::cell::Cell::new(std::ptr::without_provenance(fixing as usize)) })
+    P::new_recycled(TypeMapper { first: tagged(n, TAG_INFERENCE), second: std::cell::Cell::new(fixing as usize) })
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]
@@ -385,14 +386,14 @@ pub(crate) fn append_type_mapping(mapper: Option<P<TypeMapper>>, source: P<Type>
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_simple_type_mapper(source: P<Type>, target: P<Type>) -> P<TypeMapper> {
     tsrs_core::sitecount::hit("mapper", "simple");
-    P::new_recycled(TypeMapper { first: tagged(source.get(), TAG_SIMPLE), second: std::cell::Cell::new(tagged(target.get(), 0)) })
+    P::new_recycled(TypeMapper { first: tagged(source, TAG_SIMPLE), second: std::cell::Cell::new(tagged(target, 0)) })
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_array_type_mapper(sources: &'static [P<Type>], targets: &'static [P<Type>]) -> P<TypeMapper> {
     tsrs_core::sitecount::hit("mapper", "array");
     match (pack_slice(sources), pack_slice(targets)) {
-        (Some(first), Some(second)) => P::new_recycled(TypeMapper { first: first.map_addr(|a| a | TAG_ARRAY), second: std::cell::Cell::new(second) }),
+        (Some(first), Some(second)) => P::new_recycled(TypeMapper { first: first | TAG_ARRAY, second: std::cell::Cell::new(second) }),
         _ => TypeMapper::alloc_rare(RareTypeMapper::Array { sources, targets }),
     }
 }
@@ -401,7 +402,7 @@ pub(crate) fn new_array_type_mapper(sources: &'static [P<Type>], targets: &'stat
 pub(crate) fn new_array_to_single_type_mapper(sources: &'static [P<Type>], target: P<Type>) -> P<TypeMapper> {
     tsrs_core::sitecount::hit("mapper", "array_to_single");
     match pack_slice(sources) {
-        Some(first) => P::new_recycled(TypeMapper { first: first.map_addr(|a| a | TAG_ARRAY_TO_SINGLE), second: std::cell::Cell::new(tagged(target.get(), 0)) }),
+        Some(first) => P::new_recycled(TypeMapper { first: first | TAG_ARRAY_TO_SINGLE, second: std::cell::Cell::new(tagged(target, 0)) }),
         None => TypeMapper::alloc_rare(RareTypeMapper::ArrayToSingle { sources, target }),
     }
 }
@@ -421,11 +422,11 @@ pub(crate) fn new_function_type_mapper(f: fn(&mut Checker, P<Type>) -> P<Type>) 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_merged_type_mapper(m1: P<TypeMapper>, m2: P<TypeMapper>) -> P<TypeMapper> {
     tsrs_core::sitecount::hit("mapper", "merged");
-    P::new_recycled(TypeMapper { first: tagged(m1.get(), TAG_MERGED), second: std::cell::Cell::new(tagged(m2.get(), 0)) })
+    P::new_recycled(TypeMapper { first: tagged(m1, TAG_MERGED), second: std::cell::Cell::new(tagged(m2, 0)) })
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_composite_type_mapper(m1: P<TypeMapper>, m2: P<TypeMapper>) -> P<TypeMapper> {
     tsrs_core::sitecount::hit("mapper", "composite");
-    P::new_recycled(TypeMapper { first: tagged(m1.get(), TAG_COMPOSITE), second: std::cell::Cell::new(tagged(m2.get(), 0)) })
+    P::new_recycled(TypeMapper { first: tagged(m1, TAG_COMPOSITE), second: std::cell::Cell::new(tagged(m2, 0)) })
 }

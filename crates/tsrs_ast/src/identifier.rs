@@ -160,7 +160,7 @@ impl Identifier {
     #[inline]
     fn text_index(word: u64) -> u32 {
         if Self::mode(word) == MODE_SOURCE_FLOW {
-            slot_flow(word).unwrap().text_index
+            slot_flow(word).unwrap().text_index()
         } else {
             (word & SLOT_MASK) as u32
         }
@@ -216,7 +216,7 @@ impl Identifier {
         }
         let word = match flow {
             None => MODE_SOURCE << MODE_SHIFT | len | index as u64,
-            Some(f) if f.text_index == index => MODE_SOURCE_FLOW << MODE_SHIFT | len | flow_slot(flow),
+            Some(f) if f.text_index() == index => MODE_SOURCE_FLOW << MODE_SHIFT | len | flow_slot(flow),
             Some(f) => {
                 match SIDE_FLOW.lock().unwrap().entry(self as *const Identifier as usize) {
                     Entry::Occupied(mut e) => *e.get_mut() = f,

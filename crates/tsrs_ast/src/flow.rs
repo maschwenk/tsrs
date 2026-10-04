@@ -1,7 +1,7 @@
 use std::cell::Cell;
 
 use bitflags::bitflags;
-use tsrs_core::{alloc, OwnedCell, P};
+use tsrs_core::{alloc, OwnedCell, PKey, P};
 
 use crate::ast::{new_node, Node, NodeFactoryHooks};
 use crate::generated::NodeData;
@@ -34,20 +34,23 @@ bitflags! {
 // FlowNode
 
 /// Go's `Antecedent` (all but labels; set at creation) and `Antecedents` (labels; Go's binder creates labels without
-/// an antecedent) are never both set, so they share one word (`link`): the antecedent, or the list with bit 0 set.
-/// 24 bytes; 1.9M flow nodes on the private monorepo.
+/// an antecedent) are never both set, so they share one field (`link`): the antecedent's or the list's `P::key`. A
+/// list is marked by bit 0 of the key (pointers: an address, 8-aligned) or, with compressed pointers (a handle uses
+/// all 32 bits), by bit 31 of `text_index` (text indices are below 2^20 or `NO_SOURCE_TEXT`). 24 bytes (16 with
+/// compressed pointers); 1.9M flow nodes on the private monorepo.
 pub struct FlowNode {
     pub flags: OwnedCell<FlowFlags>,
     // Not in Go: the text index of the file whose binder made this flow node (`NO_SOURCE_TEXT` for the checker's);
     // compact identifiers read their text index from their flow node (identifier.rs).
-    pub text_index: u32,
+    text_index: OwnedCell<u32>,
     pub node: OwnedCell<Option<P<Node>>>, // Associated AST node
-    link: OwnedCell<usize>, // `P::to_bits` of the antecedent, or of the list | FLOW_LINK_LIST
+    link: OwnedCell<PKey>,
 }
 
-const _: () = assert!(std::mem::size_of::<FlowNode>() == 24);
+const _: () = assert!(std::mem::size_of::<FlowNode>() == if tsrs_core::COMPRESSED_PTRS { 16 } else { 24 });
 
-const FLOW_LINK_LIST: usize = 1;
+const FLOW_LINK_LIST: PKey = 1;
+const TEXT_LIST_BIT: u32 = 1 << 31;
 
 /// Census builds: the link word is an antecedent or a list tagged with bit 0 (`crate::census_layouts`).
 pub(crate) fn census_layout() {
@@ -57,8 +60,13 @@ pub(crate) fn census_layout() {
 
 impl FlowNode {
     pub fn new(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32) -> FlowNode {
-        let link = P::to_bits_opt(antecedent);
-        FlowNode { flags: OwnedCell::new(flags), text_index, node: OwnedCell::new(node), link: OwnedCell::new(link) }
+        let text_index = if tsrs_core::COMPRESSED_PTRS { text_index & !TEXT_LIST_BIT } else { text_index };
+        FlowNode {
+            flags: OwnedCell::new(flags),
+            text_index: OwnedCell::new(text_index),
+            node: OwnedCell::new(node),
+            link: OwnedCell::new(P::key_opt(antecedent)),
+        }
     }
     pub fn flags(&self) -> FlowFlags {
         self.flags.get()
@@ -66,24 +74,50 @@ impl FlowNode {
     pub fn node(&self) -> Option<P<Node>> {
         self.node.get()
     }
+    #[inline]
+    pub fn text_index(&self) -> u32 {
+        let t = self.text_index.get();
+        if !tsrs_core::COMPRESSED_PTRS {
+            return t;
+        }
+        let t = t & !TEXT_LIST_BIT;
+        if t == crate::NO_SOURCE_TEXT & !TEXT_LIST_BIT {
+            crate::NO_SOURCE_TEXT
+        } else {
+            t
+        }
+    }
+    #[inline]
+    fn link_is_list(&self) -> bool {
+        if tsrs_core::COMPRESSED_PTRS {
+            self.text_index.get() & TEXT_LIST_BIT != 0
+        } else {
+            self.link.get() & FLOW_LINK_LIST != 0
+        }
+    }
     /// Go `Antecedent` (antecedent for all but FlowLabel).
     #[inline]
     pub fn antecedent(&self) -> Option<P<FlowNode>> {
-        let w = self.link.get();
-        // SAFETY: an untagged nonzero link is the antecedent stored by `new`.
-        (w & FLOW_LINK_LIST == 0).then(|| unsafe { P::from_bits_opt(w) }).flatten()
+        // SAFETY: an untagged link is 0 or the antecedent stored by `new`.
+        (!self.link_is_list()).then(|| unsafe { P::from_key_opt(self.link.get()) }).flatten()
     }
     /// Go `Antecedents` (linked list of antecedents for FlowLabel).
     #[inline]
     pub fn antecedents(&self) -> Option<P<FlowList>> {
-        let w = self.link.get();
+        let key = if tsrs_core::COMPRESSED_PTRS { self.link.get() } else { self.link.get() & !FLOW_LINK_LIST };
         // SAFETY: a tagged link is the list stored by `set_antecedents`.
-        (w & FLOW_LINK_LIST != 0).then(|| unsafe { P::from_bits(w & !FLOW_LINK_LIST) })
+        self.link_is_list().then(|| unsafe { P::from_key(key) })
     }
     /// Go `Antecedents = list`. Panics on a flow node that has an antecedent (Go never gives one both).
     pub fn set_antecedents(&self, list: Option<P<FlowList>>) {
         assert!(self.antecedent().is_none(), "flow node with both an antecedent and antecedents");
-        self.link.set(list.map_or(0, |l| l.to_bits() | FLOW_LINK_LIST));
+        if tsrs_core::COMPRESSED_PTRS {
+            let t = self.text_index.get() & !TEXT_LIST_BIT;
+            self.text_index.set(if list.is_some() { t | TEXT_LIST_BIT } else { t });
+            self.link.set(P::key_opt(list));
+        } else {
+            self.link.set(list.map_or(0, |l| l.key() | FLOW_LINK_LIST));
+        }
     }
 }
 

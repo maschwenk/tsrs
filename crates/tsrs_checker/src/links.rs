@@ -1,11 +1,11 @@
 use crate::*;
-use tsrs_core::PSlot;
+use tsrs_core::{PKey, PSlot};
 
 /// All Go link stores (`core.LinkStore`, `nodeLinkStore`, `symbolArenaLinkStore`) map to this one type.
 /// Values live in the arena, so `get` hands out a `Copy` pointer whose `Cell` fields are mutated in place.
 ///
-/// Keyed by the key's address like Go's `map[K]*V`. A slot is the key address and the value's index (12 bytes,
-/// 4-aligned) instead of two pointers, and the values live in fixed-size arena chunks in first-access order (stable
+/// Keyed by the key's identity like Go's `map[K]*V`. A slot is the key (`P::key`: its handle with compressed pointers,
+/// else its address) and the value's index (8 or 12 bytes, 4-aligned) instead of two pointers, and the values live in fixed-size arena chunks in first-access order (stable
 /// addresses, as before). 5.1M links in 26 stores on the private monorepo single.
 pub struct LinkStore<K: 'static, V: 'static> {
     slots: hashbrown::HashTable<LinkSlot>,
@@ -17,11 +17,11 @@ pub struct LinkStore<K: 'static, V: 'static> {
 #[repr(C, packed(4))]
 #[derive(Clone, Copy)]
 struct LinkSlot {
-    key: usize, // the key's address
+    key: PKey,
     index: u32, // the value's position in `chunks`
 }
 
-const _: () = assert!(std::mem::size_of::<LinkSlot>() == 12);
+const _: () = assert!(std::mem::size_of::<LinkSlot>() == if tsrs_core::COMPRESSED_PTRS { 8 } else { 12 });
 
 const LINK_CHUNK_SHIFT: u32 = 10;
 const LINK_CHUNK: usize = 1 << LINK_CHUNK_SHIFT;
@@ -34,14 +34,14 @@ impl<K: 'static, V: 'static> Default for LinkStore<K, V> {
 
 impl<K: 'static, V: 'static> LinkStore<K, V> {
     #[inline]
-    fn hash(key: usize) -> u64 {
+    fn hash(key: PKey) -> u64 {
         use std::hash::BuildHasher;
         rustc_hash::FxBuildHasher.hash_one(key)
     }
 
     #[inline]
-    fn address(key: P<K>) -> usize {
-        (key.get() as *const K).addr()
+    fn address(key: P<K>) -> PKey {
+        key.key()
     }
 
     #[inline]

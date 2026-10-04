@@ -122,15 +122,17 @@ impl<T> P<T> {
         P::new(value)
     }
 
-    /// The pointer for a value just allocated in an arena with `p_layout`.
+    /// `from_static` without its compressed-mode check, for hot paths whose reference is known to come from the arena.
     ///
     /// # Safety
-    /// `r` must be such a block.
+    /// `r` must be an 8-aligned object in the arena: a block allocated with `p_layout` (`P::new`, `alloc`), or a view
+    /// of one that starts 8-aligned inside it.
     #[inline(always)]
-    unsafe fn from_arena(r: &'static T) -> P<T> {
+    pub unsafe fn from_arena(r: &'static T) -> P<T> {
         #[cfg(feature = "compressed-ptrs")]
         {
             let off = (r as *const T).addr().wrapping_sub(crate::reserve::base().addr());
+            debug_assert!(off < crate::reserve::RESERVE && off & 7 == 0 && off != 0, "P::from_arena outside the arena");
             P(std::num::NonZeroU32::new_unchecked((off >> crate::reserve::UNIT_SHIFT) as u32), std::marker::PhantomData)
         }
         #[cfg(not(feature = "compressed-ptrs"))]
@@ -152,6 +154,27 @@ impl<T> P<T> {
         P(&*std::ptr::with_exposed_provenance::<T>(bits))
     }
 
+    /// The object whose `key` is `key`.
+    ///
+    /// # Safety
+    /// `key` must come from `key` of a live `P<T>` (same `T`, or a type whose value starts there).
+    #[inline(always)]
+    pub unsafe fn from_key(key: PKey) -> P<T> {
+        #[cfg(feature = "compressed-ptrs")]
+        return P(std::num::NonZeroU32::new_unchecked(key), std::marker::PhantomData);
+        #[cfg(not(feature = "compressed-ptrs"))]
+        return P(&*std::ptr::with_exposed_provenance::<T>(key));
+    }
+
+    /// `from_key` for an optional pointer: 0 is `None`.
+    ///
+    /// # Safety
+    /// As `from_key`.
+    #[inline(always)]
+    pub unsafe fn from_key_opt(key: PKey) -> Option<P<T>> {
+        (key != 0).then(|| P::from_key(key))
+    }
+
     /// `from_bits` for an optional pointer: 0 is `None`.
     ///
     /// # Safety
@@ -167,7 +190,10 @@ impl<T> P<T> {
     /// A `U` must live at this address.
     #[inline(always)]
     pub unsafe fn cast<U>(self) -> P<U> {
-        P::from_bits(self.to_bits())
+        #[cfg(feature = "compressed-ptrs")]
+        return P(self.0, std::marker::PhantomData);
+        #[cfg(not(feature = "compressed-ptrs"))]
+        P(&*(self.0 as *const T).cast::<U>())
     }
 
     /// A pointer to an arena object (`P::get` of a live `P`, an object made with `alloc`, or a view of one that
@@ -252,10 +278,32 @@ impl<T: ?Sized> P<T> {
     }
 }
 
+/// The narrowest integer that identifies a `P` (`P::key`): the handle in compressed mode, else the address.
+#[cfg(feature = "compressed-ptrs")]
+pub type PKey = u32;
+#[cfg(not(feature = "compressed-ptrs"))]
+pub type PKey = usize;
+
 impl<T: ?Sized> P<T> {
     #[inline]
     pub fn ptr_eq(self, other: P<T>) -> bool {
         self == other
+    }
+
+    /// Identity as an integer, for tables keyed by object (eq and hash agree with `P`'s) and for packed fields
+    /// (`from_key` turns it back; never 0).
+    #[inline(always)]
+    pub fn key(self) -> PKey {
+        #[cfg(feature = "compressed-ptrs")]
+        return self.0.get();
+        #[cfg(not(feature = "compressed-ptrs"))]
+        return (self.0 as *const T as *const ()).expose_provenance();
+    }
+
+    /// `key` of an optional pointer, 0 for `None`.
+    #[inline(always)]
+    pub fn key_opt(p: Option<P<T>>) -> PKey {
+        p.map_or(0, P::key)
     }
 
     /// `to_bits` of an optional pointer, 0 for `None`.
@@ -360,7 +408,8 @@ impl<V> PSlot<V> {
     #[inline(always)]
     #[cfg_attr(feature = "compressed-ptrs", track_caller)]
     pub fn as_p(&'static self) -> P<V> {
-        P::from_static(&self.0)
+        // SAFETY: slots live only in arena arrays (`alloc_vec`), 8-aligned in compressed mode.
+        unsafe { P::from_arena(&self.0) }
     }
 }
 
