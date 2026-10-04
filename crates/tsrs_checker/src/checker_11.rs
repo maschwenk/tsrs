@@ -920,6 +920,25 @@ impl Checker {
         let Some(m) = m else {
             return t;
         };
+        // `could_contain_type_variables(t)`'s cached answers, so that every path here returns or tail-calls (the
+        // checks that call out are in `instantiate_type_with_alias_slow`, which repeats these).
+        if t.flags().intersects(TypeFlags::StructuredOrInstantiable) {
+            let object_flags = t.object_flags();
+            if !object_flags.intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
+                return self.instantiate_type_with_alias_slow(t, m, alias);
+            }
+            if object_flags.intersects(ObjectFlags::CouldContainTypeVariables) {
+                return self.instantiate_type_with_alias_worker(t, m, alias);
+            }
+        }
+        if t.alias().is_none() {
+            return t;
+        }
+        self.instantiate_type_with_alias_slow(t, m, alias)
+    }
+
+    #[inline(never)]
+    fn instantiate_type_with_alias_slow(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> {
         if !(self.could_contain_type_variables(t)
             || (t.alias().is_some() && !t.alias().type_arguments().is_empty() && t.alias().type_arguments().iter().any(|&a| self.could_contain_type_variables(a))))
         {
