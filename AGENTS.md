@@ -1,6 +1,20 @@
 # Notes for coding agents
 
-`CONTRIBUTING.md` and `docs/PORTING.md` have the porting rules and the test workflow. This file adds one rule.
+`CONTRIBUTING.md` and `docs/PORTING.md` have the porting rules and the test workflow. This file adds two rules.
+
+## Keep the lint ratchet green
+
+Run `tools/lint/ratchet.py` before a change lands. It runs a chosen set of clippy lints (clones, allocations,
+argument passing, hash iteration order, `unsafe`) and fails when a file has more findings of a lint than
+`tools/lint/baseline.tsv` records. `docs/RUST.md` explains the lints, the rules no tool checks, and which performance
+techniques are in place, rejected or untried.
+
+- Fix what it reports in the code you wrote. Do not fix baseline findings in passing; paying them down is its own
+  change (`docs/RUST.md`).
+- If the flagged code is intended, use `#[expect(clippy::<lint>, reason = "...")]` on the smallest item. Never a bare
+  `#[allow]`, and never raise `baseline.tsv`.
+- A performance change needs numbers (instructions retired and peak RSS, before and after) and a note in `notes/`.
+  Check `docs/RUST.md` "Techniques" first: it lists what was already measured and rejected.
 
 ## Keep the README capability table current
 

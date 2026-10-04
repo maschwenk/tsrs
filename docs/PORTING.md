@@ -206,6 +206,8 @@ code is truly unreachable for type checking.
 - No `unsafe` outside `tsrs_core` and generated AST code without a very good reason.
 - No lint/clippy cleanups, no doc comments restating the code, no `// ported from` banners. Keep comments that
   the Go source has when they explain *why*. Do not add `#[allow]`s; workspace lints already silence the noisy ones.
+  The lints that are on (`docs/RUST.md`) are gated by `tools/lint/ratchet.py`: new code must not add findings, and
+  an intended exception is `#[expect(clippy::<lint>, reason = "...")]`.
 - Never leave `todo!()`/`unimplemented!()` for in-scope behavior without listing it in your final report.
 - Your crate must compile (`cargo check -p <crate>`) when you finish, with zero warnings of the kinds not
   silenced workspace-wide. Use your own target dir to avoid lock contention with other agents:
