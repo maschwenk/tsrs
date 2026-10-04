@@ -6,7 +6,7 @@ pub mod reserve;
 pub const COMPRESSED_PTRS: bool = cfg!(compressed_ptrs);
 #[cfg(feature = "alloc-profile")]
 pub mod alloc_profile;
-pub use ptr::{alloc, alloc_slice, alloc_slice_aligned4, alloc_slice_recycled, alloc_str, alloc_vec, alloc_profile_dump, arena_checkpoint, arena_pin, census_layout, census_recording, census_reset, census_scrub_none, census_scrub_slack, census_scrub_stack, CensusField, arena_rewind, free_raw, OptionSliceCell, OptionThinSliceCell, PackedStr, SliceCell, StrCell, SlicePair, StaticSlicePtr, ThinSlice, ThinSliceCell, PKey, PSlot, P, PACK_BITS, SP};
+pub use ptr::{alloc, alloc_slice, alloc_slice_aligned4, alloc_slice_recycled, alloc_str, alloc_vec, alloc_profile_dump, arena_checkpoint, arena_pin, census_layout, census_recording, census_reset, census_scrub_none, census_scrub_slack, census_scrub_stack, CensusField, arena_rewind, free_raw, OptionSliceCell, OptionThinSliceCell, PackedStr, PSliceCell, SliceCell, StrCell, SlicePair, StaticSlicePtr, ThinSlice, ThinSliceCell, PKey, PSlot, P, PACK_BITS, SP};
 
 mod frozen;
 pub use frozen::{FrozenCell, FrozenRef, FrozenRefMut, OwnedCell, OwnedPSliceCell, OwnedSliceCell, OwnedStrCell, OwnedTaggedStrCell};

@@ -908,6 +908,13 @@ impl<T> Default for OptionSliceCell<T> {
 }
 
 
+/// `Cell<&'static [T]>` for structs of handles: a 12-byte 4-aligned `SliceCell` packs with the 4-byte fields around
+/// it next to 8-byte pointers, an 8-byte `ThinSliceCell` packs tighter next to 4-byte handles (compressed pointers).
+#[cfg(not(compressed_ptrs))]
+pub type PSliceCell<T> = SliceCell<T>;
+#[cfg(compressed_ptrs)]
+pub type PSliceCell<T> = ThinSliceCell<T>;
+
 /// A `Cell<&'static str>` in 8 bytes (a `PackedStr`).
 pub struct StrCell(std::cell::Cell<PackedStr>);
 

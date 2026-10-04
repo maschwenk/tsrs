@@ -8,7 +8,7 @@ use std::sync::{LazyLock, OnceLock};
 use bitflags::bitflags;
 
 use crate::*;
-use tsrs_core::SliceCell;
+use tsrs_core::PSliceCell;
 
 // CheckMode
 
@@ -306,11 +306,11 @@ bitflags! {
 // 1.43M contexts on the private monorepo single, so the four fields that fewer than 4% of them set (return mappers, inferred type
 // parameters, intra-expression sites) live in a tail allocated on the first non-default write (`InferenceContextRare`,
 // read through accessors that return the zero value when it is absent), and `inferences` packs with `flags`:
-// 64 bytes instead of 128.
+// 64 bytes instead of 128 (48 with compressed pointers, where `inferences` is a one-word `ThinSliceCell`).
 
 #[derive(Default)]
 pub struct InferenceContext {
-    pub inferences: SliceCell<P<InferenceInfo>>, // Inferences made for each type parameter
+    pub inferences: PSliceCell<P<InferenceInfo>>, // Inferences made for each type parameter
     pub flags: Cell<InferenceFlags>, // Inference flags
     pub signature: Cell<Option<P<Signature>>>, // Generic signature for which inferences are made (if any)
     pub compare_types: Cell<Option<TypeComparer>>, // Type comparer function
@@ -325,7 +325,7 @@ pub struct InferenceContext {
 
 const RARE_ESCAPED: usize = 1;
 
-const _: () = assert!(std::mem::size_of::<InferenceContext>() == if tsrs_core::COMPRESSED_PTRS { 56 } else { 64 });
+const _: () = assert!(std::mem::size_of::<InferenceContext>() == if tsrs_core::COMPRESSED_PTRS { 48 } else { 64 });
 
 #[derive(Default)]
 pub(crate) struct InferenceContextRare {
@@ -338,7 +338,7 @@ pub(crate) struct InferenceContextRare {
 impl InferenceContext {
     pub(crate) fn new(inferences: &'static [P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> InferenceContext {
         InferenceContext {
-            inferences: SliceCell::new(inferences),
+            inferences: PSliceCell::new(inferences),
             signature: Cell::new(signature),
             flags: Cell::new(flags),
             compare_types: Cell::new(Some(compare_types)),
