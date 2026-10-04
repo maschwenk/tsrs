@@ -20,4 +20,5 @@ rustc-hash.workspace = true
 indexmap.workspace = true
 bitflags.workspace = true
 memchr.workspace = true
+libc = "0.2"
 mimalloc = { version = "0.1.52", optional = true }

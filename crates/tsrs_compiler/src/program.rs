@@ -760,6 +760,20 @@ impl Program {
     // program.go:582
     pub fn bind_source_files(&self) {
         let unbound: Vec<P<SourceFile>> = self.files.iter().copied().filter(|f| !f.is_bound()).collect();
+        if tsrs_core::pfe_probe::enabled() {
+            let bind = |f: P<SourceFile>| {
+                let _scope = tsrs_core::arena::enter_owner(f.addr());
+                let t0 = tsrs_core::pfe_probe::thread_cpu_ns();
+                tsrs_binder::bind_source_file(f);
+                tsrs_core::pfe_probe::record_bind(f.addr(), tsrs_core::pfe_probe::thread_cpu_ns() - t0);
+            };
+            if self.single_threaded() {
+                unbound.into_iter().rev().for_each(bind);
+            } else {
+                worker_pool().install(|| unbound.into_par_iter().for_each(bind));
+            }
+            return;
+        }
         if self.single_threaded() {
             // Go's single-threaded work group runs queued functions last-queued first, so files bind in reverse
             // program order. The order is observable: the binder assigns symbol ids (private names).
@@ -2729,6 +2743,7 @@ pub fn get_diagnostics_of_any_program(
     }
     #[cfg(feature = "checker")]
     crate::checkerpool::write_cost_cache(program);
+    crate::pfe_report::write(program);
     all_diagnostics
 }
 

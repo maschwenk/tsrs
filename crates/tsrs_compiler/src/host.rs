@@ -75,6 +75,17 @@ impl CompilerHost for compilerHost {
     fn get_source_file(&self, opts: SourceFileParseOptions) -> Option<P<SourceFile>> {
         let text = self.fs().read_file(&opts.file_name)?;
         let script_kind = ensure_script_kind_from_file_name(&opts.file_name);
+        if tsrs_core::pfe_probe::enabled() {
+            let region = tsrs_core::arena::Region::new(text.len().saturating_mul(10).saturating_add(4 << 10).min(64 << 20));
+            let (file, ns) = {
+                let _scope = region.enter();
+                let t0 = tsrs_core::pfe_probe::thread_cpu_ns();
+                let file = tsrs_parser::parse_source_file_owned(opts, text, script_kind);
+                (file, tsrs_core::pfe_probe::thread_cpu_ns() - t0)
+            };
+            tsrs_core::pfe_probe::register_file(file.addr(), region, ns);
+            return Some(file);
+        }
         Some(tsrs_parser::parse_source_file_owned(opts, text, script_kind))
     }
 

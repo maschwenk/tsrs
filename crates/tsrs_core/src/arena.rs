@@ -420,13 +420,18 @@ thread_local! {
 }
 
 fn new_slab(size: usize, live: usize) -> *const Slab {
+    if crate::pfe_probe::enabled() {
+        let size = size.next_multiple_of(crate::pfe_probe::PAGE);
+        let base = crate::pfe_probe::map_chunk(size);
+        return Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live) }));
+    }
     let size = size.div_ceil(PAGE) * PAGE;
     let base = os_chunk(Layout::from_size_align(size, CHUNK_ALIGN).expect("arena slab layout"));
     Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live) }))
 }
 
 fn slab_carve(size: usize) -> (*mut u8, *const Slab) {
-    if size > SLAB_SIZE / 4 {
+    if size > SLAB_SIZE / 4 || crate::pfe_probe::enabled() {
         let slab = new_slab(size, 1);
         // SAFETY: just made.
         return (unsafe { (*slab).base }, slab);
@@ -465,6 +470,9 @@ fn slab_release(slab: *const Slab) {
     // SAFETY: the caller holds one of the slab's references.
     let s = unsafe { &*slab };
     if s.live.fetch_sub(1, Ordering::AcqRel) != 1 {
+        return;
+    }
+    if crate::pfe_probe::enabled() {
         return;
     }
     // Profile builds map slabs with `mmap` (`census_chunk`) and keep them.
@@ -741,6 +749,16 @@ impl Region {
     pub fn adopt_owner(&self, addr: usize) {
         self.0.owners.lock().unwrap().push(addr);
         REGISTRY.write().unwrap().insert(reg_key(addr), (reg_key(addr + 1), Arc::downgrade(&self.0)));
+    }
+
+    /// Every chunk of the region, (start, size) (persisted front-end probe).
+    pub fn chunk_ranges(&self) -> Vec<(usize, usize)> {
+        self.0.arena.chunks()
+    }
+
+    /// The used part of every chunk, (start, len) (persisted front-end probe).
+    pub fn used_ranges(&self) -> Vec<(usize, usize)> {
+        self.0.arena.used_ranges()
     }
 
     /// Total size of the region's chunks.

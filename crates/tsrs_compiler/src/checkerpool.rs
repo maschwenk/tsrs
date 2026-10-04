@@ -544,6 +544,10 @@ impl checkerPool {
                 program.bind_source_files();
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
+            if tsrs_core::pfe_probe::enabled() {
+                program.bind_source_files();
+                tsrs_core::pfe_probe::protect();
+            }
             let create_start = std::time::Instant::now();
             let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
             run_work_group(self.single_threaded, self.checker_count, |i| {

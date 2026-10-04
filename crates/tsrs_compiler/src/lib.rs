@@ -15,6 +15,7 @@ mod includeprocessor;
 mod outputpaths;
 mod processing_diagnostic;
 mod program;
+mod pfe_report;
 #[cfg(feature = "checker")]
 mod program_emit;
 #[cfg(feature = "checker")]
