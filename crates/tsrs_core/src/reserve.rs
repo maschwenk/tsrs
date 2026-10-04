@@ -58,6 +58,7 @@ pub fn base() -> *mut u8 {
 ///
 /// # Safety
 /// `off` must lie inside a chunk handed out by `alloc_chunk` (or be its end).
+#[expect(clippy::inline_always, reason = "every `P` dereference goes through it; it must fold into the load")]
 #[inline(always)]
 pub unsafe fn at(off: usize) -> *mut u8 {
     if BASE_ADDR == 0 {

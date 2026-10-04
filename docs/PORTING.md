@@ -63,7 +63,8 @@ referenced through `tsrs_core::P<T>`:
 
 - `P<T>`: `Copy`, `Deref<Target = T>`, equality/hash/order **by identity** (like Go pointers).
   Create with `P::new(value)`. `p.get()` returns `&'static T`. It is a 32-bit handle (an offset in 8-byte units into
-  one reserved address range; `tsrs_core::reserve`, notes/mem-pointer-compression.md), or a plain reference with
+  one reserved address range: zero-based on Linux, where the address is `handle << 3`, a fixed high base on macOS;
+  `tsrs_core::reserve`, notes/mem-pointer-compression.md), or a plain reference with
   `--features tsrs_core/plain-ptrs`. So: `P::from_static(r)` only for references to arena objects (an object made
   with `P::new` / `alloc`, or a view that starts 8-aligned inside one); a Go package-level `*T` variable that is a
   Rust `static` is an `SP<T>`. Packed words store `p.to_bits()` / `p.key()`, never addresses.
