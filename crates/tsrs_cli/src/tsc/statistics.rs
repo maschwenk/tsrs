@@ -149,6 +149,7 @@ impl Statistics {
         }
         // tsrs-only sub-phases (tsrs_core::phases), in the order they first ran.
         let mut table = table::default();
+        tsrs_vfs::osvfs::record_call_counts();
         for (name, value) in tsrs_core::phases::snapshot() {
             match value {
                 tsrs_core::phases::PhaseValue::Time(d) => table.add_duration(name, d),

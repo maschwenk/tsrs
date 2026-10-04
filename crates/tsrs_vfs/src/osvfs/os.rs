@@ -8,6 +8,32 @@ use tsrs_core::tspath;
 use crate::internal::{self, Common, IoDirEntry, IoFS};
 use crate::{Entries, FileInfo, FileMode, FsError, FS};
 
+// tsrs-only: file system calls made through this FS, printed as `--extendedDiagnostics` rows.
+static STAT_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static READ_FILE_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static READ_DIR_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static LSTAT_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn count(c: &std::sync::atomic::AtomicU64) {
+    c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Adds the calls counted since the last call to the phase rows.
+pub fn record_call_counts() {
+    use std::sync::atomic::Ordering::Relaxed;
+    for (name, c) in [
+        ("FS: stat", &STAT_CALLS),
+        ("FS: read file", &READ_FILE_CALLS),
+        ("FS: read dir", &READ_DIR_CALLS),
+        ("FS: realpath lstat", &LSTAT_CALLS),
+    ] {
+        let n = c.swap(0, Relaxed);
+        if n > 0 {
+            tsrs_core::phases::count(name, n);
+        }
+    }
+}
+
 // FS creates a new FS from the OS file system.
 pub fn fs() -> &'static dyn FS {
     &*OS_VFS
@@ -257,6 +283,7 @@ fn walk_symlinks(path: &str) -> io::Result<String> {
 
         // Resolve symlink.
 
+        count(&LSTAT_CALLS);
         let fi = fs::symlink_metadata(&dest)?;
 
         if !fi.file_type().is_symlink() {
@@ -529,6 +556,7 @@ fn base(path: &str) -> String {
 impl IoFS for DirFS {
     fn stat(&self, name: &str) -> Result<FileInfo, FsError> {
         let full = self.join(name)?;
+        count(&STAT_CALLS);
         let md = fs::metadata(&full).map_err(io_error)?;
         Ok(FileInfo {
             name: base(&full),
@@ -540,6 +568,7 @@ impl IoFS for DirFS {
 
     fn read_dir(&self, name: &str) -> Result<Vec<IoDirEntry>, FsError> {
         let full = self.join(name)?;
+        count(&READ_DIR_CALLS);
         let mut entries = Vec::new();
         for entry in fs::read_dir(&full).map_err(io_error)? {
             let entry = entry.map_err(io_error)?;
@@ -559,6 +588,7 @@ impl IoFS for DirFS {
 
     fn read_file(&self, name: &str) -> Result<Vec<u8>, FsError> {
         let full = self.join(name)?;
+        count(&READ_FILE_CALLS);
         fs::read(&full).map_err(io_error)
     }
 }
