@@ -184,9 +184,10 @@ memory footprint (`/usr/bin/time -l`):
 | opt-out, 4 checkers, go assignment (1 run) | 10.468 | 8.834 | -1.634 (-15.6%) | 492.0 G | 528.8 G (+7.5%) |
 
 Wall time: only the first round ran on a quiet machine (load 6-7): 1 checker 17.66 -> 17.16 s, 4 checkers 7.38 ->
-7.14 s, `--noCheck` 0.79 -> 0.80 s. Later rounds ran at load 13-43 (other agents) and are not comparable. So: more
-instructions, no slower wall time where it could be measured; a quiet-machine rerun is still owed before claiming
-anything about speed.
+7.14 s, `--noCheck` 0.79 -> 0.80 s. A second set of 5 interleaved rounds (final binary) ran at load 19-26 (other
+agents): 1 checker 23.77 -> 25.17 s (+5.9%), 4 checkers 10.96 -> 10.54 s (-3.8%), peaks and instructions as above
+(-14.9% / -14.1%, +6.4% / +6.7%). Read: the single-threaded run pays for the instructions, four checkers gain from
+the smaller working set; a quiet-machine rerun is still owed before claiming either.
 
 Arena by type (alloc-profile build, 1 checker; arena requested 3,866 -> 3,080 MB, -20%; chunk total 6,317 -> 3,437
 MB because thread chunks stop doubling at 64 MiB). Rows above 29 MB in the base:
