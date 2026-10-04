@@ -642,7 +642,7 @@ pub fn with_client_capabilities(ctx: &tsrs_core::context::Context, caps: std::sy
 // lsp.go:293
 pub fn get_client_capabilities(ctx: &tsrs_core::context::Context) -> std::sync::Arc<crate::ResolvedClientCapabilities> {
     if let Some(caps) = ctx.value::<clientCapabilitiesKey>() {
-        return caps.0.clone();
+        return std::sync::Arc::clone(&caps.0);
     }
     std::sync::Arc::new(crate::ResolvedClientCapabilities::default())
 }
