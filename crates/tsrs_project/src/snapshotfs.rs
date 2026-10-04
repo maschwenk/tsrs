@@ -452,7 +452,7 @@ impl snapshotFSBuilder {
         let mut file_name = String::new();
         entry.locked(&mut |e: &dyn Value<cachedFile>| {
             if let Some(v) = e.value() {
-                file_name = v.base.file_name.clone();
+                file_name.clone_from(&v.base.file_name);
             }
         });
         if file_name.is_empty() {
@@ -482,7 +482,7 @@ impl snapshotFSBuilder {
         entry.locked(&mut |e: &dyn Value<cachedFile>| {
             if let Some(v) = e.value() {
                 if !v.matches_disk_text() {
-                    file_name = v.base.file_name.clone();
+                    file_name.clone_from(&v.base.file_name);
                 }
             }
         });

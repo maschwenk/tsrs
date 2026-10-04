@@ -522,8 +522,8 @@ impl Snapshot {
         let mut inferred_content_mappers = self.inferred_project_content_mappers.clone();
         let mut inferred_content_mapper_extensions = self.inferred_project_content_mapper_extensions.clone();
         if let Some(contributions) = &change.content_mapper_contributions {
-            inferred_content_mappers = contributions.mappers.clone();
-            inferred_content_mapper_extensions = contributions.extensions.clone();
+            inferred_content_mappers.clone_from(&contributions.mappers);
+            inferred_content_mapper_extensions.clone_from(&contributions.extensions);
         }
         let mut base_fs = FsRef::Host(Arc::clone(&store.fs));
         if let Some(fs) = &change.fs {
@@ -561,7 +561,7 @@ impl Snapshot {
         // Compute effective customConfigFileName from user preferences
         let mut custom_config_file_name = self.config_file_registry.custom_config_file_name.clone();
         if let Some(new_config) = &change.new_config {
-            custom_config_file_name = new_config.custom_config_file_name.clone();
+            custom_config_file_name.clone_from(&new_config.custom_config_file_name);
         }
 
         let new_snapshot_id = store.next_snapshot_id();

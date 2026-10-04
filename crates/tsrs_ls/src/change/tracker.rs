@@ -659,11 +659,11 @@ impl Tracker {
         }
         let mut options = NodeOptions::default();
         if original_pos != 0 {
-            options.prefix = self.new_line.clone();
+            options.prefix.clone_from(&self.new_line);
         }
         let text = source_file.text();
         if text.is_empty() || !stringutil::is_line_break(text.as_bytes()[pos as usize] as i32) {
-            options.suffix = self.new_line.clone();
+            options.suffix.clone_from(&self.new_line);
         }
         if blank_line_between {
             options.suffix.push_str(&self.new_line);

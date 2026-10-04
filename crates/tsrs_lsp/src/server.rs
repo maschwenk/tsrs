@@ -1005,7 +1005,7 @@ impl Server {
                     if err.is_code(ErrorCode::InvalidParams) {
                         if let Some(msg) = &msg {
                             if msg.kind == MessageKind::Request {
-                                id = msg.as_request().id.clone();
+                                id.clone_from(&msg.as_request().id);
                             }
                         }
                     }
@@ -1573,10 +1573,10 @@ impl Server {
         } else if let Some(root_uri) = &initialize_params.root_uri.document_uri {
             cwd = root_uri.file_name();
         } else if let Some(lsproto::StringOrNull { string: Some(root_path), .. }) = &initialize_params.root_path {
-            cwd = root_path.clone();
+            cwd.clone_from(root_path);
         }
         if !tspath::path_is_absolute(&cwd) {
-            cwd = self.cwd.clone();
+            cwd.clone_from(&self.cwd);
         }
 
         self.telemetry_enabled.store(enable_telemetry, Ordering::SeqCst);

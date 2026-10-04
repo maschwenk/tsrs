@@ -1757,7 +1757,7 @@ impl registryBuilder<'_> {
 
             if let Some(input_file_name) = project_reference_outputs.get(&realpath_path) {
                 file_name = to_symlink(input_file_name);
-                realpath_file_name = input_file_name.clone();
+                realpath_file_name.clone_from(input_file_name);
                 realpath_path = (self.base.to_path)(&realpath_file_name);
             }
 

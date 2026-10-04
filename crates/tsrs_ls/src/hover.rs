@@ -1207,7 +1207,7 @@ fn write_jsdoc_link(get_mapped_location: DocumentationLocationMapper, b: &mut St
             link_uri = link_text[..comment_pos].to_string();
             link_text = trim_comment_prefix(&link_text[comment_pos..]).to_string();
             if link_text.is_empty() {
-                link_text = link_uri.clone();
+                link_text.clone_from(&link_uri);
             }
         }
         if is_markdown {

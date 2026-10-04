@@ -120,7 +120,7 @@ impl configFileRegistryBuilder {
 
         if self.custom_config_file_name_changed {
             let registry = new_registry.get_or_insert_with(|| self.base.clone_registry());
-            registry.custom_config_file_name = self.custom_config_file_name.clone();
+            registry.custom_config_file_name.clone_from(&self.custom_config_file_name);
         }
 
         match new_registry {

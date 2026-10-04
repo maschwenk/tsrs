@@ -197,7 +197,7 @@ impl WatchOption {
         match self {
             WatchOption::Ignore(f) => opts.ignore = Some(Arc::clone(f)),
             WatchOption::Recursive => opts.recursive = true,
-            WatchOption::File(path) => opts.file = path.clone(),
+            WatchOption::File(path) => opts.file.clone_from(path),
         }
     }
 }
@@ -1065,7 +1065,7 @@ impl dirWatch {
                             Some(suffix) if suffix.is_empty() => {}
                             _ => continue,
                         }
-                        e.path = cb.file_comparison.path.clone();
+                        e.path.clone_from(&cb.file_comparison.path);
                     }
                     if let Some(ignore) = &cb.ignore {
                         if ignore(&e.path) {
@@ -1190,7 +1190,7 @@ impl callback {
             let mut physical_path = comparisonPath { path: self.event_physical_path(&e.path), cache, ..Default::default() };
             let mut root = self.physical_comparison.clone();
             if root.path.is_empty() {
-                root.path = self.physical_dir.clone();
+                root.path.clone_from(&self.physical_dir);
             }
             if let Some(path) = self.comparer.rebase_prepared(&mut physical_path, &root, &self.dir) {
                 e.path = path;

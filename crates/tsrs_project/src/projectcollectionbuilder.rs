@@ -312,7 +312,7 @@ impl ProjectCollectionBuilder {
             #[expect(clippy::iter_over_hash_type, reason = "per-key upsert on unique keys; Go ranges the map too")]
             for (path, file_name) in open_files {
                 let entry = api_state.open_files.entry(path.clone()).or_default();
-                entry.file_name = file_name.clone();
+                entry.file_name.clone_from(file_name);
                 entry.ref_count += 1;
             }
         }
@@ -899,8 +899,8 @@ impl ProjectCollectionBuilder {
                 &mut |p: &mut Project| {
                     // We checked before triggering this change (in Session.triggerATAForUpdatedProjects) that
                     // the set of typings files is actually different.
-                    p.installed_typings_info = ata_change.typings_info.clone();
-                    p.typings_files = ata_change.typings_files.clone();
+                    p.installed_typings_info.clone_from(&ata_change.typings_info);
+                    p.typings_files.clone_from(&ata_change.typings_files);
                     let typings_watch_globs = get_typings_locations_globs(
                         &ata_change.typings_files_to_watch,
                         &self.session_options.typings_location,
@@ -1350,7 +1350,7 @@ impl ProjectCollectionBuilder {
         if let Some(project) = self.inferred_project.value() {
             let command_line = project.command_line.unwrap();
             project_references = command_line.project_references().to_vec();
-            config_file_parsing_diagnostics = command_line.errors.clone();
+            config_file_parsing_diagnostics.clone_from(&command_line.errors);
         }
         self.update_inferred_project(
             root_file_names,
@@ -1418,7 +1418,7 @@ impl ProjectCollectionBuilder {
                     logger.log(&format!("Updating synthetic project config with {} root files", root_file_names.len()));
                 }
                 p.set_command_line(Some(new_command_line));
-                p.module_resolver_factory = module_resolver_factory.clone();
+                p.module_resolver_factory.clone_from(&module_resolver_factory);
                 p.module_resolver_id = module_resolver_id;
             },
         );
@@ -1612,7 +1612,7 @@ impl ProjectCollectionBuilder {
                     project.content_mapper_watch = project.content_mapper_watch.as_ref().map(|w| w.clone_with(watched_files.clone()));
                     project.content_mapper_watched_files = Some(Arc::new(content_mapper_watched_files));
                     project.program = Some(result.program);
-                    project.checker_pool = result.checker_pool.clone();
+                    project.checker_pool.clone_from(&result.checker_pool);
                     project.program_owner = Some(Arc::clone(&result.owner));
                     project.program_update_kind = result.update_kind;
                     project.program_last_update = self.new_snapshot_id;

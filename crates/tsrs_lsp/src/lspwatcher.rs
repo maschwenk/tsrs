@@ -402,7 +402,7 @@ impl watch {
                 }
                 let subscription = watcher.backend.watch_directory(&target_directory, self.target_callback(&target_directory), options)?;
                 let previous = st.subscription.replace(subscription);
-                st.watched_directory = target_directory.clone();
+                st.watched_directory.clone_from(&target_directory);
                 st.watching_target = true;
                 if let Some(previous) = previous {
                     let _ = previous.close();

@@ -621,7 +621,7 @@ impl Project {
         } else {
             let mut typings_location = String::new();
             if self.get_type_acquisition().is_some_and(|ta| ta.enable.is_true()) {
-                typings_location = host.session_options.typings_location.clone();
+                typings_location.clone_from(&host.session_options.typings_location);
             }
             let mut opts = ProgramOptions::new(command_line.unwrap(), host);
             opts.use_source_of_project_reference = true;
