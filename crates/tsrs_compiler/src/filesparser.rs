@@ -340,11 +340,136 @@ pub(crate) struct filesParser {
     queue: Vec<queuedTask>,
     max_depth: i32,
     single_threaded: bool,
+    // Files parsed ahead of the round that loads them, by path (see `prefetch`).
+    speculative: FxHashMap<Path, speculativeParse>,
+    speculated: bool,
+}
+
+// A file parsed, and its references resolved, before a task for it exists: what `prefetch` would compute for the
+// task once a later round queues it.
+struct speculativeParse {
+    file_name: String,
+    metadata: SourceFileMetaData,
+    file: Option<P<SourceFile>>,
+    resolutions: Option<Box<prefetchedResolutions>>,
+}
+
+// The shared state of one speculative walk (`prefetch`).
+struct speculation<'a> {
+    ctx: &'a crate::fileloader::prefetchContext<'a>,
+    claimed: std::sync::Mutex<FxHashSet<Path>>,
+    results: std::sync::Mutex<Vec<(Path, speculativeParse)>>,
+}
+
+impl<'a> speculation<'a> {
+    // The files that loading `file` adds as sub tasks which are certainly loaded and parsed in turn: triple-slash
+    // references and type reference directives that resolved, and imports that `resolved_import_sub_task` adds and
+    // does not elide by depth. Lib reference directives and the synthetic helper/JSX imports are left to the loader.
+    fn sub_tasks(&self, file: P<SourceFile>, resolutions: &prefetchedResolutions) -> Vec<(String, Path)> {
+        let ctx = self.ctx;
+        let host = ctx.host;
+        let to_path = |name: &str| tspath::to_path(name, host.get_current_directory(), host.fs().use_case_sensitive_file_names());
+        let compiler_options = ctx.opts.config.compiler_options().unwrap();
+        let mut out = Vec::new();
+        if !compiler_options.no_resolve.is_true() && !ctx.opts.skip_module_resolution {
+            for (name, diagnostic) in &resolutions.referenced_files {
+                if diagnostic.is_none() {
+                    let name = tspath::normalize_path(name);
+                    let path = to_path(&name);
+                    out.push((name, path));
+                }
+            }
+            for (resolved, _) in &resolutions.type_references {
+                if resolved.is_resolved() {
+                    let name = tspath::normalize_path(resolved.resolved_file_name);
+                    let path = to_path(&name);
+                    out.push((name, path));
+                }
+            }
+        }
+        let (redirect, _) = ctx.project_references.get_redirect_for_resolution(file.file_name(), &file.path());
+        let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
+        let options_for_file = tsrs_module::get_compiler_options_with_redirect(compiler_options, redirect);
+        let imports = file.imports();
+        for (import_index, entry) in resolutions.imports.iter().enumerate().take(imports.len()) {
+            let Some(entry) = entry else { continue };
+            let Ok((resolved, _)) = &entry.resolution else { continue };
+            if !resolved.is_resolved() {
+                continue;
+            }
+            let (should_add_file, elide_on_depth) = crate::fileloader::resolved_import_sub_task(
+                ctx.project_references,
+                host,
+                &options_for_file,
+                file,
+                imports[import_index].text(),
+                import_index as i32,
+                resolved,
+            );
+            if should_add_file && !elide_on_depth {
+                if let Some((name, path)) = &entry.normalized {
+                    out.push((name.clone(), path.clone()));
+                }
+            }
+        }
+        out
+    }
+
+    // Whether a sub task's file goes through the parser when loaded (`task_needs_parse`), and no other task or
+    // speculative job has it.
+    fn claim(&self, file_name: &str, path: &Path) -> bool {
+        let ctx = self.ctx;
+        if !self.claimed.lock().unwrap().insert(path.clone()) {
+            return false;
+        }
+        // A bundled lib file can also be loaded as a lib (with lib metadata) through a lib reference.
+        if tspath::starts_with_directory(file_name, ctx.host.default_library_path(), ctx.host.fs().use_case_sensitive_file_names()) {
+            return false;
+        }
+        if !ctx.project_references.get_parse_file_redirect(file_name, path).is_empty() {
+            return false;
+        }
+        if tspath::has_extension(file_name) && !ctx.opts.config.compiler_options().unwrap().allow_non_ts_extensions.is_true() {
+            let canonical_file_name = tspath::get_canonical_file_name(file_name, ctx.host.fs().use_case_sensitive_file_names());
+            if !crate::fileloader::is_supported_extension(ctx.supported_extensions_with_json, &canonical_file_name) {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn spawn_sub_tasks<'s>(&'s self, scope: &rayon::Scope<'s>, file: P<SourceFile>, resolutions: &prefetchedResolutions) {
+        for (file_name, path) in self.sub_tasks(file, resolutions) {
+            if self.claim(&file_name, &path) {
+                scope.spawn(move |scope| self.run(scope, file_name, path));
+            }
+        }
+    }
+
+    fn run<'s>(&'s self, scope: &rayon::Scope<'s>, file_name: String, path: Path) {
+        let ctx = self.ctx;
+        let metadata = source_file_meta_data(ctx.opts, ctx.resolver, ctx.project_references, &file_name);
+        let file = ctx.host.get_source_file(parse_options_for(ctx.host, ctx.project_references, &file_name, &path, &metadata));
+        file.map(tsrs_binder::bind_source_file);
+        let resolutions = file.map(|file| Box::new(prefetch_resolutions(ctx, file, &metadata)));
+        if let (Some(file), Some(resolutions)) = (file, &resolutions) {
+            self.spawn_sub_tasks(scope, file, resolutions);
+        }
+        self.results.lock().unwrap().push((path, speculativeParse { file_name, metadata, file, resolutions }));
+    }
 }
 
 impl filesParser {
     pub(crate) fn new(single_threaded: bool, max_depth: i32) -> filesParser {
-        filesParser { task_data_by_path: FxHashMap::default(), datas: Vec::new(), queue: Vec::new(), max_depth, single_threaded }
+        filesParser {
+            task_data_by_path: FxHashMap::default(),
+            datas: Vec::new(),
+            queue: Vec::new(),
+            max_depth,
+            single_threaded,
+            speculative: FxHashMap::default(),
+            speculated: false,
+        }
     }
 
     pub(crate) fn parse(loader: &mut fileLoader, tasks: &[TaskId]) {
@@ -361,6 +486,9 @@ impl filesParser {
                 Self::run_queued(loader, item);
             }
             tsrs_core::phases::record("Program:   sequential load", start.elapsed());
+        }
+        if loader.files_parser.speculated && !loader.files_parser.speculative.is_empty() {
+            tsrs_core::phases::count("Program:   parsed ahead, unused", loader.files_parser.speculative.len() as u64);
         }
     }
 
@@ -464,6 +592,29 @@ impl filesParser {
                 to_parse.push(candidate);
             }
         }
+        // Files that an earlier round's speculative walk parsed. The walk only takes files that are certainly loaded
+        // as non-lib tasks under this name, so its metadata, file and resolutions are what this round would compute.
+        if !loader.files_parser.speculative.is_empty() {
+            let mut rest = Vec::with_capacity(to_parse.len());
+            for t in to_parse {
+                let task = &loader.tasks[t];
+                let hit = task.lib_file.is_none()
+                    && loader.files_parser.speculative.get(&task.path).is_some_and(|s| *s.file_name == *task.normalized_file_path);
+                if !hit {
+                    rest.push(t);
+                    continue;
+                }
+                let speculative = loader.files_parser.speculative.remove(&task.path.clone()).unwrap();
+                let task = &mut loader.tasks[t];
+                task.data().metadata = speculative.metadata;
+                task.metadata_loaded = true;
+                task.file = speculative.file;
+                if speculative.resolutions.is_some() {
+                    task.data().prefetched_resolutions = speculative.resolutions;
+                }
+            }
+            to_parse = rest;
+        }
         if to_parse.len() < 2 || loader.files_parser.single_threaded {
             return;
         }
@@ -471,34 +622,60 @@ impl filesParser {
         // its imports and type reference directives (Go does all of this per task in parallel). Traces stay
         // sequential: they say whether a lookup was served from a cache, which depends on the resolution order.
         let resolve_ahead = !loader.opts.config.compiler_options().unwrap().trace_resolution.is_true();
+        // The first parallel round also walks ahead: each parsed file's sub tasks that will certainly be loaded are
+        // parsed and resolved on the spot, recursively, instead of one dependency level per round (Go has no
+        // rounds; it queues each sub task as soon as it is found). Only files the program loads are touched, so the
+        // resolver and package.json caches end up with the same entries. Not with project references (their
+        // redirect lookups record symlink state) or lib replacement (a lib file can live in node_modules).
+        let speculate = resolve_ahead
+            && !loader.files_parser.speculated
+            && loader.opts.config.resolved_project_reference_paths().is_empty()
+            && !loader.opts.config.compiler_options().unwrap().lib_replacement.is_true();
+        loader.files_parser.speculated = true;
         let jobs: Vec<(TaskId, String, Path, bool)> = to_parse
             .into_iter()
             .map(|t| (t, loader.tasks[t].normalized_file_path.to_string(), loader.tasks[t].path.clone(), loader.tasks[t].lib_file.is_some()))
             .collect();
+        let claimed: FxHashSet<Path> = if speculate { loader.files_parser.task_data_by_path.keys().cloned().collect() } else { FxHashSet::default() };
         let ctx = loader.prefetch_context();
+        let spec = speculation { ctx: &ctx, claimed: std::sync::Mutex::new(claimed), results: std::sync::Mutex::new(Vec::new()) };
         let (opts, host, resolver, project_references) = (ctx.opts, ctx.host, ctx.resolver, ctx.project_references);
         let parse_start = std::time::Instant::now();
         let prefetched: Vec<(TaskId, SourceFileMetaData, Option<P<SourceFile>>, Option<Box<prefetchedResolutions>>)> =
             crate::program::worker_pool().install(|| {
-                jobs.into_par_iter()
-                    .map(|(t, file_name, path, is_lib)| {
-                        let metadata = if is_lib {
-                            SourceFileMetaData { implied_node_format: ModuleKind::CommonJS, ..Default::default() }
-                        } else {
-                            source_file_meta_data(opts, resolver, project_references, &file_name)
-                        };
-                        let file = host.get_source_file(parse_options_for(host, project_references, &file_name, &path, &metadata));
-                        let resolutions = match file {
-                            Some(file) if resolve_ahead => {
-                                Some(Box::new(prefetch_resolutions(&ctx, file, &metadata)))
+                rayon::scope(|scope| {
+                    let spec = &spec;
+                    jobs.into_par_iter()
+                        .map(|(t, file_name, path, is_lib)| {
+                            let metadata = if is_lib {
+                                SourceFileMetaData { implied_node_format: ModuleKind::CommonJS, ..Default::default() }
+                            } else {
+                                source_file_meta_data(opts, resolver, project_references, &file_name)
+                            };
+                            let file = host.get_source_file(parse_options_for(host, project_references, &file_name, &path, &metadata));
+                            // Bind here too: the round is bound by file system calls, and the checkers would bind every
+                            // file on the same pool later (binding depends only on the file).
+                            file.map(tsrs_binder::bind_source_file);
+                            let resolutions = match file {
+                                Some(file) if resolve_ahead => Some(Box::new(prefetch_resolutions(&ctx, file, &metadata))),
+                                _ => None,
+                            };
+                            if speculate && !is_lib {
+                                if let (Some(file), Some(resolutions)) = (file, &resolutions) {
+                                    spec.spawn_sub_tasks(scope, file, resolutions);
+                                }
                             }
-                            _ => None,
-                        };
-                        (t, metadata, file, resolutions)
-                    })
-                    .collect()
+                            (t, metadata, file, resolutions)
+                        })
+                        .collect()
+                })
             });
         tsrs_core::phases::record("Program:   parallel parse + resolve", parse_start.elapsed());
+        let speculative = spec.results.into_inner().unwrap();
+        if speculate {
+            tsrs_core::phases::count("Program:   parsed ahead", speculative.len() as u64);
+        }
+        loader.files_parser.speculative.extend(speculative);
         for (t, metadata, file, resolutions) in prefetched {
             let task = &mut loader.tasks[t];
             task.data().metadata = metadata;

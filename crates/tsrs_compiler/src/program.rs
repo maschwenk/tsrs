@@ -785,6 +785,15 @@ impl Program {
         }
     }
 
+    /// Runs `cb` for every file of `files` with the file's checker, one task per checker, each visiting its files in
+    /// the order of `files` under one lock acquisition (`checkerPool::for_each_checker_group_do`). False, without
+    /// calling `cb`, when the program has no checker pool of its own.
+    pub fn for_each_checker_group(&self, files: &[P<SourceFile>], cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync) -> bool {
+        let Some(pool) = self.compiler_checker_pool() else { return false };
+        pool.for_each_checker_group_do(files, self.single_threaded(), cb);
+        true
+    }
+
     // program.go:615
     // Return a checker for the given file. We may have multiple checkers in concurrent scenarios and this
     // method returns the checker that was tasked with checking the file. Note that it isn't possible to mix

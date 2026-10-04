@@ -2,7 +2,8 @@
 //
 // Go runs the per-file work on work groups and guards the handler state with sync maps; tsrs runs it on the
 // calling thread (tsrs_core's WorkGroup is sequential too), in a deterministic order (sorted paths) where Go's
-// order is random.
+// order is random. The declaration signatures of the files referencing a changed file are computed a level at a
+// time with one emit per level, which runs each checker's files on that checker's thread (getFilesAffectedBy).
 
 use std::cell::{Cell, RefCell};
 
@@ -96,8 +97,43 @@ impl affectedFilesHandler<'_> {
         signature.into_inner().unwrap()
     }
 
+    // computeDtsSignature for several files with one emit: the emit runs the files of each checker on that checker's
+    // thread, in the order given. A file without a declaration output is missing from the result, as
+    // computeDtsSignature returns "" for it.
+    fn compute_dts_signatures(&self, files: Vec<P<SourceFile>>) -> FxHashMap<P<SourceFile>, String> {
+        let signatures: std::sync::Mutex<FxHashMap<P<SourceFile>, String>> = std::sync::Mutex::new(FxHashMap::default());
+        let done = self.program.begin_nested_emit();
+        let program = self.program;
+        let write_file = |file_name: &str, text: &str, data: &mut WriteFileData| -> Result<(), String> {
+            if !tspath::is_declaration_file_name(file_name) {
+                panic!("File extension for signature expected to be dts, got : {file_name}");
+            }
+            let file = data.source_file.expect("declaration output of a source file");
+            let signature = program.snapshot.compute_signature_with_diagnostics(file, text, data);
+            signatures.lock().unwrap().insert(file, signature);
+            Ok(())
+        };
+        compiler_program_emit(
+            self.program.p(),
+            self.ctx,
+            EmitOptions { target_source_files: Some(files), emit_only: EmitOnly::EmitOnlyBuilderSignature, write_file: Some(&write_file), ..Default::default() },
+        );
+        done();
+        signatures.into_inner().unwrap()
+    }
+
+    // Whether update_shape_signature(file, false) computes the file's declaration signature.
+    fn needs_dts_signature(&self, file: P<SourceFile>) -> bool {
+        !self.updated_signatures.borrow().contains_key(file.path()) && !file.is_declaration_file() && !ast::is_json_source_file(file)
+    }
+
     // affectedfileshandler.go:87
     fn update_shape_signature(&self, file: P<SourceFile>, use_file_version_as_signature: bool) -> bool {
+        self.update_shape_signature_with(file, use_file_version_as_signature, None)
+    }
+
+    // `computed`: the file's declaration signature when compute_dts_signatures already computed it.
+    fn update_shape_signature_with(&self, file: P<SourceFile>, use_file_version_as_signature: bool, computed: Option<String>) -> bool {
         // If we have cached the result for this file, that means hence forth we should assume file shape is uptodate
         if self.updated_signatures.borrow().contains_key(file.path()) {
             return false;
@@ -113,7 +149,10 @@ impl affectedFilesHandler<'_> {
         // JSON files have no declaration output from which to compute a shape
         // signature, so use the file version to conservatively invalidate dependents.
         if !file.is_declaration_file() && !ast::is_json_source_file(file) && !use_file_version_as_signature {
-            signature = self.compute_dts_signature(file);
+            signature = match computed {
+                Some(computed) => computed,
+                None => self.compute_dts_signature(file),
+            };
         }
         // Default is to use file version as signature
         if signature.is_empty() {
@@ -147,15 +186,36 @@ impl affectedFilesHandler<'_> {
         // Now we need to if each file in the referencedBy list has a shape change as well.
         // Because if so, its own referencedBy files need to be saved as well to make the
         // emitting result consistent with files on disk.
-        let seen_file_names_map = self.for_each_file_referenced_by(file, &mut |current_file, _current_path| {
-            // If the current file is not nil and has a shape change, we need to queue it for processing
-            if let Some(current_file) = current_file {
-                if self.update_shape_signature(current_file, false) {
-                    return (true, false);
+        //
+        // Go walks the referencing files depth first (forEachFileReferencedBy), computing each file's signature in
+        // turn. The files it visits are those reachable through files whose signature changed, and whether a file's
+        // signature changed does not depend on when it is computed, so the walk here goes level by level and
+        // computes each level's signatures with one emit, the checkers in parallel. The visited files and the
+        // signatures are the same.
+        let mut seen_file_names_map: FxHashMap<Path, Option<P<SourceFile>>> = FxHashMap::default();
+        seen_file_names_map.insert(file.path().clone(), Some(file));
+        let mut frontier = sorted(self.program.snapshot.referenced_map.get_referenced_by(file.path()));
+        while !frontier.is_empty() {
+            let mut level: Vec<Option<P<SourceFile>>> = Vec::new();
+            for current_path in frontier {
+                if !seen_file_names_map.contains_key(&current_path) {
+                    let current_file = self.program.p().get_source_file_by_path(&current_path);
+                    seen_file_names_map.insert(current_path, current_file);
+                    level.push(current_file);
                 }
             }
-            (false, false)
-        });
+            let to_compute: Vec<P<SourceFile>> = level.iter().flatten().copied().filter(|&f| self.needs_dts_signature(f)).collect();
+            let mut computed = if to_compute.len() > 1 { self.compute_dts_signatures(to_compute) } else { FxHashMap::default() };
+            let mut next: Vec<Path> = Vec::new();
+            // If the current file is not nil and has a shape change, we need to queue it for processing
+            for current_file in level.into_iter().flatten() {
+                let signature = if computed.is_empty() { None } else { Some(computed.remove(&current_file).unwrap_or_default()) };
+                if self.update_shape_signature_with(current_file, false, signature) {
+                    next.extend(sorted(self.program.snapshot.referenced_map.get_referenced_by(current_file.path())));
+                }
+            }
+            frontier = next;
+        }
         // Return array of values that needs emit
         seen_file_names_map.into_values().flatten().collect()
     }
