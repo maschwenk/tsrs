@@ -347,13 +347,13 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let processing_diagnostics = std::mem::take(&mut processed.file_include_data.processing_diagnostics);
     let files = std::mem::take(&mut processed.files);
     let files_by_path = std::mem::take(&mut processed.files_by_path);
-    let host = opts.host.clone();
+    let host = Arc::clone(&opts.host);
     let mut p = Program {
         opts: opts.program_config(),
         // Go's NewProgram never sets `comparePathsOptions`: it is the zero value (no current directory,
         // case-insensitive), which e.g. makes IsGlobalTypingsFile false when no typings location is set.
         compare_paths_options: ComparePathsOptions::default(),
-        resolution_host: crate::projectreferencefilemapper::resolution_host_for(host.clone()),
+        resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&host)),
         host,
         resolution_data,
         checker_pool: OnceLock::new(),
@@ -469,7 +469,7 @@ impl Program {
         create_checker_pool: Option<CreateCheckerPool>,
         create_module_resolver: Option<CreateModuleResolver>,
     ) -> (&'static Program, Option<P<SourceFile>>, bool) {
-        let (result, new_file, reused) = self.reuse_program(changed_file_path, new_host.clone(), create_checker_pool.clone(), create_module_resolver.clone());
+        let (result, new_file, reused) = self.reuse_program(changed_file_path, Arc::clone(&new_host), create_checker_pool.clone(), create_module_resolver.clone());
         if reused {
             (result.unwrap(), new_file, true)
         } else {
@@ -537,7 +537,7 @@ impl Program {
         // TODO: reverify compiler options when config has changed?
         let mut result = Program {
             opts: self.opts.clone(),
-            resolution_host: crate::projectreferencefilemapper::resolution_host_for(new_host.clone()),
+            resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&new_host)),
             host: new_host,
             resolution_data: self.resolution_data.clone_data(),
             checker_pool: OnceLock::new(),

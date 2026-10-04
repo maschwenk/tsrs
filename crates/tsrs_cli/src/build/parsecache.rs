@@ -38,9 +38,9 @@ impl<K: Hash + Eq + Clone, V: Clone + IsZeroValue> parseCache<K, V> {
         let existing = {
             let mut entries = self.entries.lock().unwrap();
             match entries.get(&key) {
-                Some(entry) => Some(entry.clone()),
+                Some(entry) => Some(Arc::clone(entry)),
                 None => {
-                    entries.insert(key.clone(), new_entry.clone());
+                    entries.insert(key.clone(), Arc::clone(&new_entry));
                     None
                 }
             }

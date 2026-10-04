@@ -5,6 +5,7 @@
 // order is random. The declaration signatures of the files referencing a changed file are computed a level at a
 // time with one emit per level, which runs each checker's files on that checker's thread (getFilesAffectedBy).
 
+use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -45,7 +46,7 @@ impl affectedFilesHandler<'_> {
         let mut m = FxHashMap::default();
         m.insert(affected_file_path, affected_file_emit_kind);
         let result = std::rc::Rc::new(RefCell::new(m));
-        self.dts_may_change.borrow_mut().push(result.clone());
+        self.dts_may_change.borrow_mut().push(Rc::clone(&result));
         result
     }
 

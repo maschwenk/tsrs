@@ -115,7 +115,7 @@ pub fn compile_files_with_host_emit(
     let mut pre_config = tsrs_tsoptions::new_parsed_command_line(P::new(pre_compiler_options), config.file_names().to_vec(), Vec::new(), ComparePathsOptions::default());
     pre_config.config_file = config.config_file;
     pre_config.errors = config.errors.clone();
-    let pre_program = create_program(host.clone(), P::new(pre_config));
+    let pre_program = create_program(Arc::clone(&host), P::new(pre_config));
     pre_errors.extend(pre_program.get_config_file_parsing_diagnostics());
     pre_errors.extend(pre_program.get_program_diagnostics());
     pre_errors.extend(pre_program.get_syntactic_diagnostics(ctx, None));

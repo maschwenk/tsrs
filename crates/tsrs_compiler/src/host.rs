@@ -83,7 +83,7 @@ impl CompilerHost for compilerHost {
         // Go passes the host itself as the `ParseConfigHost`; tsoptions keeps it for the parsed command line's
         // lifetime, so it gets a leaked handle on the same file system and directory.
         let sys: &'static dyn ParseConfigHost =
-            Box::leak(Box::new(parseConfigHost { fs: self.fs.clone(), current_directory: self.current_directory.clone() }));
+            Box::leak(Box::new(parseConfigHost { fs: Arc::clone(&self.fs), current_directory: self.current_directory.clone() }));
         let (command_line, _) = tsrs_tsoptions::get_parsed_command_line_of_config_file_path(
             file_name,
             path,

@@ -27,7 +27,7 @@ impl System for osSys {
     }
 
     fn fs(&self) -> Arc<dyn FS> {
-        self.fs.clone()
+        Arc::clone(&self.fs)
     }
 
     fn default_library_path(&self) -> &str {

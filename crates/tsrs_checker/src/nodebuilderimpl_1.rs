@@ -1867,7 +1867,7 @@ impl NodeBuilderImpl {
             self.track_computed_name(c, node.expression().unwrap(), self.ctx().enclosing_declaration.get());
         }
 
-        let mut visitor = new_node_visitor(Some(self.clone_binding_name_visitor.get().unwrap().clone()), Some(self.f.clone()), NodeVisitorHooks::default());
+        let mut visitor = new_node_visitor(Some(Rc::clone(self.clone_binding_name_visitor.get().unwrap())), Some(self.f.clone()), NodeVisitorHooks::default());
         let mut visited = self.checker_slot.lend(c, || visitor.visit_each_child(Some(node))).unwrap();
 
         if is_binding_element(visited) {

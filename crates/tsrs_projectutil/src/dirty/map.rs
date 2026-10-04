@@ -33,7 +33,7 @@ impl<K: Hash + Eq + Clone, T: Cloneable + Clone> MapEntry<K, T> {
 
     fn register_dirty(self: &Arc<Self>) {
         if let Some(m) = self.m.upgrade() {
-            m.dirty.lock().unwrap().insert(self.key.clone(), self.clone());
+            m.dirty.lock().unwrap().insert(self.key.clone(), Arc::clone(self));
         }
     }
 

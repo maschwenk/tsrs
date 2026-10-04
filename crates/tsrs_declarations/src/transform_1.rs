@@ -534,7 +534,7 @@ impl DeclarationTransformer {
         (
             can_produce_diagnostic,
             Box::new(move || {
-                *self.state.get_symbol_accessibility_diagnostic.borrow_mut() = old_diag.clone();
+                *self.state.get_symbol_accessibility_diagnostic.borrow_mut() = Rc::clone(&old_diag);
                 self.state.error_name_node.set(old_name);
                 self.suppress_new_diagnostic_contexts.set(old_within_object_literal_type);
             }),

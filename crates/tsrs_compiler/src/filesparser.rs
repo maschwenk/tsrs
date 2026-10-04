@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use indexmap::IndexMap;
 use rayon::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -504,7 +505,7 @@ impl filesParser {
                 Some(&data) => (data, true),
                 None => {
                     let mut tasks = TasksByCasing::default();
-                    tasks.insert(loader.tasks[task].normalized_file_path.clone(), task);
+                    tasks.insert(Arc::clone(&loader.tasks[task].normalized_file_path), task);
                     w.datas.push(parseTaskData { tasks, lowest_depth: i32::MAX, started_sub_tasks: false, package_id: PackageId::default() });
                     let id = w.datas.len() - 1;
                     w.task_data_by_path.insert(path, id);
@@ -519,7 +520,7 @@ impl filesParser {
         let queuedTask { task, loaded, data, depth } = item;
         let mut start_subtasks = false;
         if loaded {
-            let casing = loader.tasks[task].normalized_file_path.clone();
+            let casing = Arc::clone(&loader.tasks[task].normalized_file_path);
             if let Some(existing_task) = loader.files_parser.datas[data].tasks.get(&casing) {
                 loader.tasks[task].loaded_task = Some(existing_task);
             } else {
@@ -584,7 +585,7 @@ impl filesParser {
                 candidates.push(item.task);
             }
             for candidate in candidates {
-                let key = (item.data, loader.tasks[candidate].normalized_file_path.clone());
+                let key = (item.data, Arc::clone(&loader.tasks[candidate].normalized_file_path));
                 if planned.contains(&key) || !task_needs_parse(loader, candidate) {
                     continue;
                 }
@@ -843,7 +844,7 @@ impl filesParser {
                                 &loader.compare_paths_options.current_directory,
                             );
                             if checked_absolute_path != input_absolute_path {
-                                let checked_name = checked_name.clone();
+                                let checked_name = Arc::clone(checked_name);
                                 include_data.add_processing_diagnostics_for_file_casing(
                                     loader.tasks[task].path.clone(),
                                     &checked_name,
@@ -854,7 +855,7 @@ impl filesParser {
                         }
                         continue;
                     } else {
-                        c.seen.insert(data, loader.tasks[task].normalized_file_path.clone());
+                        c.seen.insert(data, Arc::clone(&loader.tasks[task].normalized_file_path));
                     }
 
                     if let Some(seen_ignore_case) = &mut tasks_seen_by_name_ignore_case {

@@ -220,7 +220,7 @@ impl Arena {
         self.ptr.set(if self.up { base.wrapping_add(CENSUS_GAP) } else { self.end.get() });
         self.capacity.set(self.capacity.get() + size);
         if let (Some(region), true) = (&self.region, self.registered) {
-            REGISTRY.write().unwrap().insert(reg_key(base.addr()), (reg_key(base.addr() + size), region.clone()));
+            REGISTRY.write().unwrap().insert(reg_key(base.addr()), (reg_key(base.addr() + size), Weak::clone(region)));
         }
     }
 
@@ -238,7 +238,7 @@ impl Arena {
         self.end.set(end.with_addr(new_end));
         self.capacity.set(self.capacity.get() - (end.addr() - new_end));
         if let (Some(region), true) = (&self.region, self.registered) {
-            REGISTRY.write().unwrap().insert(reg_key(start.addr()), (reg_key(new_end), region.clone()));
+            REGISTRY.write().unwrap().insert(reg_key(start.addr()), (reg_key(new_end), Weak::clone(region)));
         }
     }
 
@@ -761,7 +761,7 @@ impl Region {
 
     fn new_in(first_chunk: usize, registered: bool) -> Region {
         Region(Arc::new_cyclic(|weak| RegionInner {
-            arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(weak.clone()), registered)),
+            arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(Weak::clone(weak)), registered)),
             lock: OwnerLock { state: Mutex::new((None, 0)), released: Condvar::new() },
             owners: Mutex::new(Vec::new()),
             on_free: Mutex::new(Vec::new()),

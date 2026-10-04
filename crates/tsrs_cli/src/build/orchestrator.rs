@@ -614,7 +614,7 @@ impl Orchestrator {
             Some(task) => {
                 let builder = {
                     let result = task.result.lock().unwrap();
-                    result.as_ref().unwrap().builder.clone()
+                    Arc::clone(&result.as_ref().unwrap().builder)
                 };
                 std::sync::Arc::new(move |t: &str| builder.lock().unwrap().push_str(t))
             }
@@ -675,7 +675,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
     }));
     let cached_fs = Arc::new(tsrs_vfs::cachedvfs::from(sys.fs()));
     let compiler_host: Arc<dyn CompilerHost> =
-        tsrs_compiler::new_compiler_host(sys.get_current_directory(), cached_fs.clone(), sys.default_library_path(), None, None);
+        tsrs_compiler::new_compiler_host(sys.get_current_directory(), Arc::<tsrs_vfs::cachedvfs::FS<_>>::clone(&cached_fs), sys.default_library_path(), None, None);
     let h: &'static host = Box::leak(Box::new(host {
         orchestrator: OnceLock::new(),
         host: compiler_host,

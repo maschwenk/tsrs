@@ -332,7 +332,7 @@ pub(crate) fn get_existing_node_tree_visitor(c: &mut Checker, b: P<NodeBuilderIm
     let non_local_node = Rc::new(Cell::new(true));
     let visit: VisitFn = Rc::new(move |v: &mut NodeVisitor, node: P<Node>| slot.with(|c| t.visit(c, v, node)));
     let visit_nodes: VisitNodesHook = {
-        let non_local_node = non_local_node.clone();
+        let non_local_node = Rc::clone(&non_local_node);
         Rc::new(move |nodes: Option<P<NodeList>>, v: &mut NodeVisitor| {
             let mut res = v.visit_nodes(nodes);
             if non_local_node.get() {

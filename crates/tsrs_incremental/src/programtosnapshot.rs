@@ -1,5 +1,6 @@
 // Port of execute/incremental/programtosnapshot.go.
 
+use std::sync::Arc;
 use tsrs_ast::{self as ast, Diagnostic, DiagnosticExt, Node, SourceFile, Symbol};
 use tsrs_compiler::{Checker, Context, Program as CompilerProgram};
 use tsrs_core::collections::Set;
@@ -405,7 +406,7 @@ fn checker_references_of(file: P<SourceFile>, checker: &mut Checker, ambient_mod
             paths.add(f.path().clone());
         }
         let declaring_files = std::sync::Arc::new((declaring_files, seen, std::sync::Arc::new(paths)));
-        ambient_module_files_by_checker.lock().unwrap().insert(key, declaring_files.clone());
+        ambient_module_files_by_checker.lock().unwrap().insert(key, Arc::clone(&declaring_files));
         declaring_files
     });
     checkerReferences { import_files, augmentation_files, ambient_module_files }
@@ -445,7 +446,7 @@ fn referenced_files_of(
 
     if let Some(old) = old {
         if references_equal(program, file, &import_files, &augmentation_files, ambient_files, ambient_file_set, &file_name_paths, old) {
-            return Some(old.clone());
+            return Some(Arc::clone(old));
         }
     }
 
@@ -478,7 +479,7 @@ fn referenced_files_of(
         return Some(std::sync::Arc::new(RefSet::flat(own)));
     }
     let skip = if file_is_ambient { Some(file.path().clone()) } else { None };
-    Some(std::sync::Arc::new(RefSet::split(own, ambient_paths.clone(), skip)))
+    Some(std::sync::Arc::new(RefSet::split(own, Arc::clone(ambient_paths), skip)))
 }
 
 // Whether `old` is exactly the set referenced_files_of would build: as large as the number of distinct paths, and
@@ -526,12 +527,12 @@ fn references_equal(
 fn repopulate_diagnostics_of_file(diags: &DiagnosticsCache, p: &'static CompilerProgram, file: P<SourceFile>) -> DiagnosticsCache {
     if let Some(diagnostics) = diags.diagnostics() {
         let Some(repopulated) = repopulate_diagnostics_list(&diagnostics, p, file) else {
-            return diags.clone();
+            return Arc::clone(diags);
         };
         return DiagnosticsOrBuildInfoDiagnosticsWithFileName::from_diagnostics(repopulated);
     }
     // buildInfoDiagnostics will be repopulated via toDiagnostic's repopulateInfo handling
-    diags.clone()
+    Arc::clone(diags)
 }
 
 // repopulateDiagnosticsList repopulates diagnostic chains in a list of diagnostics.

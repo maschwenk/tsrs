@@ -49,7 +49,7 @@ impl<T: Cloneable> Shared<T> {
 
 impl<T> Clone for Shared<T> {
     fn clone(&self) -> Shared<T> {
-        Shared(self.0.clone())
+        Shared(Arc::clone(&self.0))
     }
 }
 

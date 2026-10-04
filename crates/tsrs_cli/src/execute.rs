@@ -318,12 +318,12 @@ fn perform_incremental_compilation(
     // is built; "BuildInfo read time" is the read's own duration. `--singleThreaded` keeps Go's order.
     let read_build_info = || {
         let start = sys.now();
-        let old_program = tsrs_incremental::read_build_info_program(config, &*tsrs_incremental::new_build_info_reader(host.clone()), &*host);
+        let old_program = tsrs_incremental::read_build_info_program(config, &*tsrs_incremental::new_build_info_reader(Arc::clone(&host)), &*host);
         (old_program, sys.now() - start)
     };
     let build_program = || {
         let start = sys.now();
-        let program = new_program(ProgramOptions::new(config, host.clone()));
+        let program = new_program(ProgramOptions::new(config, Arc::clone(&host)));
         (program, sys.now() - start)
     };
     let ((old_program, build_info_read_time), (program, parse_time)) = if config.compiler_options().unwrap().single_threaded.is_true() {

@@ -305,8 +305,8 @@ impl BuildTask {
         compile_times.config_time = host.config_times.lock().unwrap().get(path).copied().unwrap_or_default();
         let sys = orchestrator.opts.sys;
         let build_info_read_start = sys.now();
-        let builder = self.result.lock().unwrap().as_ref().unwrap().builder.clone();
-        let trace_builder = builder.clone();
+        let builder = Arc::clone(&self.result.lock().unwrap().as_ref().unwrap().builder);
+        let trace_builder = Arc::clone(&builder);
         let compiler_host: Arc<dyn tsrs_compiler::CompilerHost> = Arc::new(compilerHost {
             host,
             trace: tsc::get_trace_with_writer_from_sys(Arc::new(move |t: &str| trace_builder.lock().unwrap().push_str(t)), false, orchestrator.opts.testing),
@@ -949,7 +949,7 @@ impl BuildTask {
                 return (entry.build_info.clone(), entry.m_time);
             }
         }
-        let build_info = tsrs_incremental::new_build_info_reader(orchestrator.host().host.clone()).read_build_info(&self.resolved()).map(Arc::new);
+        let build_info = tsrs_incremental::new_build_info_reader(Arc::clone(&orchestrator.host().host)).read_build_info(&self.resolved()).map(Arc::new);
         let m_time = if build_info.is_some() { orchestrator.host().get_m_time(build_info_file_name) } else { None };
         *entry = Some(buildInfoEntry { build_info: build_info.clone(), path, m_time, dts_time: None });
         (build_info, m_time)

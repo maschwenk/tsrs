@@ -1,5 +1,6 @@
 // Port of execute/incremental/emitfileshandler.go.
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
@@ -181,7 +182,7 @@ impl<'a> emitFilesHandler<'a> {
         // Get updated errors that were not included in affected files emit
         let mut cached: Vec<(Path, std::sync::Arc<DiagnosticsOrBuildInfoDiagnosticsWithFileName>)> = Vec::new();
         self.program.snapshot.emit_diagnostics_per_file.range(|path, diagnostics| {
-            cached.push((path.clone(), diagnostics.clone()));
+            cached.push((path.clone(), Arc::clone(diagnostics)));
             true
         });
         cached.sort_by(|a, b| a.0.cmp(&b.0));

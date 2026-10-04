@@ -403,7 +403,7 @@ impl Checker {
                 if array_like_target_parts != self.never_type {
                     let child_types = self.check_jsx_children(containing_element, CheckMode::Normal);
                     let real_source = self.create_tuple_type(&child_types);
-                    let children = self.generate_jsx_children(containing_element, get_invalid_textual_child_diagnostic.clone());
+                    let children = self.generate_jsx_children(containing_element, Rc::clone(&get_invalid_textual_child_diagnostic));
                     reported_error = self.elaborate_iterable_or_array_like_target_elementwise(children, real_source, array_like_target_parts, relation, diagnostic_output.as_deref_mut())
                         || reported_error;
                 } else if {
@@ -422,7 +422,7 @@ impl Checker {
                 }
             } else if non_array_like_target_parts != self.never_type {
                 let child = valid_children[0];
-                let e = self.get_elaboration_element_for_jsx_child(child, children_name_type, get_invalid_textual_child_diagnostic.clone());
+                let e = self.get_elaboration_element_for_jsx_child(child, children_name_type, Rc::clone(&get_invalid_textual_child_diagnostic));
                 if let Some(error_node) = e.error_node {
                     let mut create_diagnostic = e.create_diagnostic.clone().map(|f| move |c: &mut Checker, prop: P<Node>| f(c, prop));
                     reported_error = self.elaborate_element(
@@ -467,7 +467,7 @@ impl Checker {
                 let child = children[i];
                 let name_type = c.get_number_literal_type(Number((i - member_offset) as f64));
                 i += 1;
-                let e = c.get_elaboration_element_for_jsx_child(child, name_type, get_invalid_text_diagnostic.clone());
+                let e = c.get_elaboration_element_for_jsx_child(child, name_type, Rc::clone(&get_invalid_text_diagnostic));
                 if e.error_node.is_some() {
                     return Some(e);
                 } else {

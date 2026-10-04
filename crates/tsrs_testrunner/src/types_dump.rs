@@ -39,7 +39,7 @@ pub struct DumpArgs {
 pub fn run(args: DumpArgs) {
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(osvfs::fs()));
     let cwd = tspath::normalize_path(&std::env::current_dir().unwrap().to_string_lossy());
-    let host: &'static OsParseConfigHost = Box::leak(Box::new(OsParseConfigHost { fs: fs.clone(), cwd: cwd.clone() }));
+    let host: &'static OsParseConfigHost = Box::leak(Box::new(OsParseConfigHost { fs: Arc::clone(&fs), cwd: cwd.clone() }));
     let mut config_path = tspath::get_normalized_absolute_path(&args.project, &cwd);
     if fs.directory_exists(&config_path) {
         config_path = tspath::combine_paths(&config_path, &["tsconfig.json"]);
