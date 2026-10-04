@@ -422,14 +422,17 @@ then-current main:
   text writer is created per file (Go pools them; the output is the same); emit contexts come from
   `get_emit_context()`. `EmitOptions.write_file` is a `&(dyn Fn(&str, &str, &mut WriteFileData) -> Result<(),
   String> + Sync)`, since it is called from the checker threads.
-- **Arena and regions.** Transformed and synthesized nodes, emit contexts and transformer objects are allocated with
-  `P::new` in the arena of the thread that runs the emit (a checker thread in the CLI and the harness), exactly like
-  the nodes the checker's node builder synthesizes. Nothing is freed and no recycling site is added: emit uses no
-  free list, no checkpoint and no `arena_pin`, so the census free-gate (notes/mem-recycle.md) has nothing new to
-  verify; the precise walk does not visit emit output because nothing in the program points to it after emit. The
-  language server (notes/lsp-mem.md regions) does not emit; if it ever does, emit would run inside the checker's
-  region and its nodes would be freed with that region, which is correct because emit output is not stored in the
-  program.
+- **Arena and regions.** Each file's emit (and each file's declaration-diagnostics transform) runs in a scratch
+  region of its own (`arena::Region::new_scratch` + `enter_scratch`), freed once the file is printed and written
+  (notes/mem-emit-regions.md). Transformed and synthesized nodes, emit contexts, transformer objects, printer scratch
+  and the node builder's per-request state (its contexts, trackers, recovery boundaries, pseudo types, links, and
+  the nodes it makes through a per-file emit context's factory, `NodeFactory::scratch`) are allocated there. The
+  checker escapes to its own arena (`CheckerSlot::with` calls `escape_scratch`), and so do diagnostics and the
+  emit host's program calls; the checker caches keyed by nodes that can be synthesized (the referenced-import links of
+  JSX factory names, accessible-chain entries whose scope is a synthesized node) drop those keys when the file's
+  transform ends. At most 2,048 transformed files wait for the print workers. The census (alloc-profile + plain-ptrs
+  build, `TSRS_CENSUS=1`) records a freed region as would-free and checks that nothing reachable points into it;
+  `TSRS_ARENA_POISON=1` fills it and never reuses it.
 - **Writing files.** Go's `emitHost.WriteFile` is `program.Host().FS().WriteFile`. Rust: the compiler's
   `EmitHost::write_file` calls `program.host().fs().write_file` (`tsrs_vfs`): the CLI's cached FS over the OS FS,
   which creates missing directories (iovfs `write_file_ensuring_dir`); the harness's recorder FS over the

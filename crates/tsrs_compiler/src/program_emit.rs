@@ -93,8 +93,11 @@ const EMIT_WRITERS: usize = 4;
 /// median file on the 38k-file codebase allocates about 20 KB during emit.
 const EMIT_REGION_FIRST_CHUNK: usize = 64 << 10;
 
-/// Transformed files waiting to be printed and written, at most (`Program::emit`).
-const EMIT_MAX_PENDING_PRINTS: usize = 256;
+/// Transformed files waiting to be printed and written, at most (`Program::emit`). Each keeps its region and its
+/// emit contexts' tables. The 38k-file codebase is write-bound and had up to 7,000 files waiting (0.35 GiB); a
+/// bound of 256 made emit about 8% slower on vscode (the checker threads stall), 2,048 costs no measurable time
+/// and keeps 0.24 GiB of the 0.35 (notes/mem-emit-regions.md).
+const EMIT_MAX_PENDING_PRINTS: usize = 2048;
 
 #[derive(Default)]
 struct PendingPrints {
@@ -252,15 +255,15 @@ impl Program {
             Some(pool) if !self.single_threaded() => {
                 let pending = PendingPrints::default();
                 crate::program::worker_pool().in_place_scope(|scope| {
-                pool.for_each_checker_group_do(&source_files, false, |c, index, file| {
-                    let e = transform(c, file);
-                    pending.acquire();
-                    let (print, pending) = (&print, &pending);
-                    scope.spawn(move |_| {
-                        print(e, index);
-                        pending.release();
+                    pool.for_each_checker_group_do(&source_files, false, |c, index, file| {
+                        let e = transform(c, file);
+                        pending.acquire();
+                        let (print, pending) = (&print, &pending);
+                        scope.spawn(move |_| {
+                            print(e, index);
+                            pending.release();
+                        });
                     });
-                });
                 })
             }
             Some(pool) => pool.for_each_checker_group_do(&source_files, true, |c, index, file| print(transform(c, file), index)),
