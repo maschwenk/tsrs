@@ -2061,8 +2061,11 @@ impl Program {
         self
     }
 
-    pub fn get_source_file_meta_data(&self, path: &Path) -> SourceFileMetaData {
-        self.source_file_meta_datas.get(path).cloned().unwrap_or_default()
+    /// Go returns the struct by value (sharing its strings); a reference here, so the hot callers (module mode
+    /// lookups during checking) do not copy two strings.
+    pub fn get_source_file_meta_data(&self, path: &Path) -> &SourceFileMetaData {
+        static DEFAULT: std::sync::LazyLock<SourceFileMetaData> = std::sync::LazyLock::new(SourceFileMetaData::default);
+        self.source_file_meta_datas.get(path).unwrap_or(&DEFAULT)
     }
 
     pub fn get_emit_module_format_of_file(&self, source_file: P<SourceFile>) -> ModuleKind {

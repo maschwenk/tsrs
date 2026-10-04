@@ -60,7 +60,7 @@ impl tsrs_checker::Program for Program {
     }
 
     fn get_source_file_meta_data(&self, path: &Path) -> SourceFileMetaData {
-        Program::get_source_file_meta_data(self, path)
+        Program::get_source_file_meta_data(self, path).clone()
     }
 
     fn get_jsx_runtime_import_specifier(&self, path: &Path) -> (String, Option<P<Node>>) {
