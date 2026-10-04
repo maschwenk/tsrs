@@ -111,7 +111,7 @@ impl toProgramSnapshot {
         // programtosnapshot.go:91: Go queues the per-file work on a work group and lets each function store into the
         // snapshot's sync maps. Here the per-file work runs on the program's worker pool and only reads shared state;
         // its results are stored in file order afterwards, so the maps are filled in the same order as a sequential run.
-        let compute = |file: P<SourceFile>, checker_references: Option<checkerReferences>| -> (FileInfo, Option<Set<Path>>, fileChange) {
+        let compute = |file: P<SourceFile>, checker_references: Option<checkerReferences>| -> (FileInfo, Option<std::sync::Arc<Set<Path>>>, fileChange) {
             // Content mappers are not supported by tsrs; Go hashes the original text plus the mapper identity here.
             let version = self.snapshot.compute_hash(file.text());
             let implied_node_format = self.program.get_source_file_meta_data(file.path()).implied_node_format;
@@ -121,17 +121,19 @@ impl toProgramSnapshot {
                 let mut checker = self.program.get_type_checker_for_file_exclusive(&Context::default(), file);
                 checker_references_of(file, &mut checker, &ambient_module_files_by_checker)
             });
-            let new_references = referenced_files_of(self.program, file, checker_references);
+            let old_references = old.and_then(|old| old.referenced_map.get_references(file.path()));
+            let new_references = referenced_files_of(self.program, file, checker_references, old_references.as_ref());
             let mut change = fileChange { add_to_change_set: false, emit_diagnostics: None, semantic_diagnostics: None, emit_signature: None };
             if let Some(old) = old {
                 if let Some(old_file_info) = old.file_infos.load(file.path()) {
-                    let old_references = old.referenced_map.get_references(file.path());
                     if old_file_info.version != version
                         || old_file_info.affects_global_scope != affects_global_scope
                         || old_file_info.implied_node_format != implied_node_format
                     {
                         change.add_to_change_set = true;
-                    } else if new_references.as_ref() != old_references.as_deref() {
+                    } else if !new_references.as_ref().is_some_and(|new| old_references.as_ref().is_some_and(|old| std::sync::Arc::ptr_eq(new, old)))
+                        && new_references.as_deref() != old_references.as_deref()
+                    {
                         // Referenced files changed
                         change.add_to_change_set = true;
                     } else if let Some(new_references) = &new_references {
@@ -171,7 +173,7 @@ impl toProgramSnapshot {
             }
             (FileInfo { version, signature, affects_global_scope, implied_node_format }, new_references, change)
         };
-        let results: Vec<(FileInfo, Option<Set<Path>>, fileChange)> = if self.program.single_threaded() {
+        let results: Vec<(FileInfo, Option<std::sync::Arc<Set<Path>>>, fileChange)> = if self.program.single_threaded() {
             files.iter().map(|&file| compute(file, None)).collect()
         } else {
             use rayon::prelude::*;
@@ -196,7 +198,7 @@ impl toProgramSnapshot {
 
         for (&file, (info, new_references, change)) in files.iter().zip(results) {
             if let Some(new_references) = new_references {
-                self.snapshot.referenced_map.store_references(file.path().clone(), new_references);
+                self.snapshot.referenced_map.store_shared_references(file.path().clone(), new_references);
             }
             if old.is_some() {
                 if change.add_to_change_set {
@@ -344,18 +346,20 @@ fn add_referenced_files_from_import_literal(file: P<SourceFile>, referenced_file
 }
 
 // Gets the path to reference file from file name, it could be resolvedPath if present otherwise path
-// programtosnapshot.go:281
-fn add_referenced_file_from_file_name(program: &CompilerProgram, file_name: &str, referenced_files: &mut Set<Path>, source_file_directory: &str) {
+// programtosnapshot.go:281 (addReferencedFileFromFileName, returning the path it adds)
+fn referenced_file_path_from_file_name(program: &CompilerProgram, file_name: &str, source_file_directory: &str) -> Path {
     let redirect = program.get_parse_file_redirect(file_name);
     if !redirect.is_empty() {
-        referenced_files.add(tspath::to_path(&redirect, program.get_current_directory(), program.use_case_sensitive_file_names()));
+        tspath::to_path(&redirect, program.get_current_directory(), program.use_case_sensitive_file_names())
     } else {
-        referenced_files.add(tspath::to_path(file_name, source_file_directory, program.use_case_sensitive_file_names()));
+        tspath::to_path(file_name, source_file_directory, program.use_case_sensitive_file_names())
     }
 }
 
-// The files declaring each checker's ambient modules, keyed by the checker's address; the checkers outlive the loop.
-type AmbientModuleFilesByChecker = std::sync::Mutex<rustc_hash::FxHashMap<usize, std::sync::Arc<Vec<P<SourceFile>>>>>;
+// The files declaring each checker's ambient modules (in order, and as a set), keyed by the checker's address; the
+// checkers outlive the loop.
+type AmbientModuleFiles = std::sync::Arc<(Vec<P<SourceFile>>, rustc_hash::FxHashSet<P<SourceFile>>)>;
+type AmbientModuleFilesByChecker = std::sync::Mutex<rustc_hash::FxHashMap<usize, AmbientModuleFiles>>;
 
 // The part of getReferencedFiles that needs the file's checker: the files declaring the symbols of the file's imports
 // and module augmentations, and the files declaring the checker's ambient modules (the file itself included;
@@ -363,7 +367,7 @@ type AmbientModuleFilesByChecker = std::sync::Mutex<rustc_hash::FxHashMap<usize,
 struct checkerReferences {
     import_files: Vec<P<SourceFile>>,
     augmentation_files: Vec<P<SourceFile>>,
-    ambient_module_files: std::sync::Arc<Vec<P<SourceFile>>>,
+    ambient_module_files: AmbientModuleFiles,
 }
 
 fn checker_references_of(file: P<SourceFile>, checker: &mut Checker, ambient_module_files_by_checker: &AmbientModuleFilesByChecker) -> checkerReferences {
@@ -394,7 +398,7 @@ fn checker_references_of(file: P<SourceFile>, checker: &mut Checker, ambient_mod
                 }
             }
         }
-        let declaring_files = std::sync::Arc::new(declaring_files);
+        let declaring_files = std::sync::Arc::new((declaring_files, seen));
         ambient_module_files_by_checker.lock().unwrap().insert(key, declaring_files.clone());
         declaring_files
     });
@@ -406,41 +410,95 @@ fn checker_references_of(file: P<SourceFile>, checker: &mut Checker, ambient_mod
 // Go holds the checker for the whole function. Only the symbol lookups need it (checker_references_of); the paths
 // are added here without it, in Go's order: imports, triple slash references, type reference directives, module
 // augmentations, ambient modules.
-fn referenced_files_of(program: &'static CompilerProgram, file: P<SourceFile>, checker_references: checkerReferences) -> Option<Set<Path>> {
+//
+// When the file's old reference set (`old`) has exactly these paths, the old set is returned instead of a new one:
+// an unchanged file then allocates nothing (on the 38k-file codebase every file references the ~390 files declaring
+// ambient modules, ~15 M paths in all).
+fn referenced_files_of(
+    program: &'static CompilerProgram,
+    file: P<SourceFile>,
+    checker_references: checkerReferences,
+    old: Option<&std::sync::Arc<Set<Path>>>,
+) -> Option<std::sync::Arc<Set<Path>>> {
     let checkerReferences { import_files, augmentation_files, ambient_module_files } = checker_references;
+    let (ambient_files, ambient_file_set) = &*ambient_module_files;
+    let source_file_directory = tspath::get_directory_path(file.file_name());
+    // Triple slash references, then type reference directives.
+    let mut file_name_paths: Vec<Path> = Vec::new();
+    for referenced_file in file.referenced_files() {
+        file_name_paths.push(referenced_file_path_from_file_name(program, &referenced_file.file_name, &source_file_directory));
+    }
+    if let Some(type_refs_in_file) = program.get_resolved_type_reference_directives().get(file.path()) {
+        for type_ref in type_refs_in_file.values() {
+            if !type_ref.resolved_file_name.is_empty() {
+                file_name_paths.push(referenced_file_path_from_file_name(program, type_ref.resolved_file_name, &source_file_directory));
+            }
+        }
+    }
+
+    if let Some(old) = old {
+        if references_equal(program, file, &import_files, &augmentation_files, ambient_files, ambient_file_set, &file_name_paths, old) {
+            return Some(old.clone());
+        }
+    }
+
     // We need to use a set here since the code can contain the same import twice,
     // but that will only be one dependency.
     // To avoid invernal conversion, the key of the referencedFiles map must be of type Path
     let mut referenced_files: Set<Path> = Set::default();
     // The declaring files are distinct apart from repeats among the imports, so this is close to the final size.
-    referenced_files.m.reserve(import_files.len() + augmentation_files.len() + ambient_module_files.len());
+    referenced_files.m.reserve(import_files.len() + file_name_paths.len() + augmentation_files.len() + ambient_files.len());
     for f in import_files {
         referenced_files.add(f.path().clone());
     }
-
-    let source_file_directory = tspath::get_directory_path(file.file_name());
-    // Handle triple slash references
-    for referenced_file in file.referenced_files() {
-        add_referenced_file_from_file_name(program, &referenced_file.file_name, &mut referenced_files, &source_file_directory);
+    for path in file_name_paths {
+        referenced_files.add(path);
     }
-
-    // Handle type reference directives
-    if let Some(type_refs_in_file) = program.get_resolved_type_reference_directives().get(file.path()) {
-        for type_ref in type_refs_in_file.values() {
-            if !type_ref.resolved_file_name.is_empty() {
-                add_referenced_file_from_file_name(program, type_ref.resolved_file_name, &mut referenced_files, &source_file_directory);
-            }
-        }
-    }
-
-    for f in augmentation_files.into_iter().chain(ambient_module_files.iter().copied().filter(|&file_of_decl| file_of_decl != file)) {
+    for f in augmentation_files.into_iter().chain(ambient_files.iter().copied().filter(|&file_of_decl| file_of_decl != file)) {
         referenced_files.add(f.path().clone());
     }
     if referenced_files.len() > 0 {
-        Some(referenced_files)
+        Some(std::sync::Arc::new(referenced_files))
     } else {
         None
     }
+}
+
+// Whether `old` is exactly the set referenced_files_of would build: as large as the number of distinct paths, and
+// containing each of them. Distinct program files have distinct paths, and the ambient module files are distinct.
+fn references_equal(
+    program: &CompilerProgram,
+    file: P<SourceFile>,
+    import_files: &[P<SourceFile>],
+    augmentation_files: &[P<SourceFile>],
+    ambient_files: &[P<SourceFile>],
+    ambient_file_set: &rustc_hash::FxHashSet<P<SourceFile>>,
+    file_name_paths: &[Path],
+    old: &Set<Path>,
+) -> bool {
+    let file_is_ambient = ambient_file_set.contains(&file);
+    let in_ambient = |f: P<SourceFile>| f != file && ambient_file_set.contains(&f);
+    // Imported and augmenting files that are not also ambient module files, without repeats.
+    let mut other_files: Vec<P<SourceFile>> = Vec::new();
+    for &f in import_files.iter().chain(augmentation_files) {
+        if !in_ambient(f) && !other_files.contains(&f) {
+            other_files.push(f);
+        }
+    }
+    let mut count = ambient_files.len() - usize::from(file_is_ambient) + other_files.len();
+    for (i, path) in file_name_paths.iter().enumerate() {
+        let is_program_file_path = |f: P<SourceFile>| f.path() == path;
+        let names_counted_file = program.get_source_file_by_path(path).is_some_and(|f| is_program_file_path(f) && (in_ambient(f) || other_files.contains(&f)));
+        if !names_counted_file && !file_name_paths[..i].contains(path) {
+            count += 1;
+        }
+    }
+    if count != old.len() {
+        return false;
+    }
+    other_files.iter().all(|f| old.has(f.path()))
+        && file_name_paths.iter().all(|path| old.has(path))
+        && ambient_files.iter().all(|&f| f == file || old.has(f.path()))
 }
 
 // repopulateDiagnosticsOfFile repopulates diagnostic chains that depend on program state.
