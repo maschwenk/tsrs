@@ -314,7 +314,7 @@ impl<T> WatchedFiles<T> {
             name: self.name.clone(),
             watch_kind: self.watch_kind,
             has_relative_pattern_capability: self.has_relative_pattern_capability,
-            compute_glob_patterns: self.compute_glob_patterns.clone(),
+            compute_glob_patterns: Arc::clone(&self.compute_glob_patterns),
             mu: RwLock::new(watchedFilesState {
                 workspace_watchers: st.workspace_watchers.clone(),
                 outside_workspace_watchers: st.outside_workspace_watchers.clone(),

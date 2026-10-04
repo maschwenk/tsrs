@@ -105,25 +105,25 @@ pub(crate) fn new_project_collection_builder(
     client: Option<Arc<dyn Client>>,
 ) -> ProjectCollectionBuilder {
     let open_files = open_file_paths(&overlays);
-    let is_open_overlays = overlays.clone();
+    let is_open_overlays = Arc::clone(&overlays);
     ProjectCollectionBuilder {
         ctx: ctx.clone(),
-        to_path: fs.to_path.clone(),
+        to_path: Arc::clone(&fs.to_path),
         compiler_options_for_inferred_projects,
         inferred_content_mappers,
         inferred_content_mapper_extensions,
         parse_cache,
         parse_cache_journal: Arc::default(),
         content_mapped_parse_cache,
-        extended_config_cache: extended_config_cache.clone(),
+        extended_config_cache: Arc::clone(&extended_config_cache),
         config_file_registry_builder: Arc::new(new_config_file_registry_builder(
             lsproto::get_client_capabilities(ctx).workspace.did_change_watched_files.relative_pattern_support,
-            fs.clone(),
+            Arc::clone(&fs),
             Box::new(move |path: &Path| is_open_overlays.contains_key(path)),
             old_config_file_registry,
             extended_config_cache,
             new_snapshot_id,
-            session_options.clone(),
+            Arc::clone(&session_options),
             custom_config_file_name,
             &LogTree::nil(),
         )),
@@ -135,8 +135,8 @@ pub(crate) fn new_project_collection_builder(
         default_projects_invalidated: Cell::new(false),
         open_files_changed: Cell::new(!open_files.equals(&old_project_collection.open_files)),
         file_default_projects: RefCell::new(None),
-        configured_projects: dirty::new_sync_map(old_project_collection.configured_projects.clone()),
-        synthetic_projects: dirty::new_sync_map(old_project_collection.synthetic_projects.clone()),
+        configured_projects: dirty::new_sync_map(Arc::clone(&old_project_collection.configured_projects)),
+        synthetic_projects: dirty::new_sync_map(Arc::clone(&old_project_collection.synthetic_projects)),
         inferred_project: dirty::new_box(old_project_collection.inferred_project.clone()),
         created_programs: RefCell::new(Vec::new()),
         api_state: RefCell::new(old_api_state.clone_state()),
@@ -227,7 +227,7 @@ impl ProjectCollectionBuilder {
 
         let config_file_registry = self.config_file_registry_builder.finalize();
         if !Arc::ptr_eq(&config_file_registry, &base.config_file_registry) {
-            ensure_cloned!().config_file_registry = config_file_registry.clone();
+            ensure_cloned!().config_file_registry = Arc::clone(&config_file_registry);
         }
 
         let api_state = self.api_state.borrow().clone();
@@ -243,12 +243,12 @@ impl ProjectCollectionBuilder {
     fn for_each_project(&self, mut f: impl FnMut(&projectEntry) -> bool) {
         let mut keep_going = true;
         self.configured_projects.range(|entry| {
-            keep_going = f(&projectEntry::Configured(entry.clone()));
+            keep_going = f(&projectEntry::Configured(Arc::clone(entry)));
             keep_going
         });
         if keep_going {
             self.synthetic_projects.range(|entry| {
-                keep_going = f(&projectEntry::Synthetic(entry.clone()));
+                keep_going = f(&projectEntry::Synthetic(Arc::clone(entry)));
                 keep_going
             });
         }
@@ -412,14 +412,14 @@ impl ProjectCollectionBuilder {
         // Go updates these programs in parallel goroutines; here they run one after another.
         let mut created_programs = Vec::with_capacity(created_entries.len());
         for entry in &created_entries {
-            let entry = projectEntry::Synthetic(entry.clone());
+            let entry = projectEntry::Synthetic(Arc::clone(entry));
             if self.value_of(&entry).value().unwrap().dirty {
                 self.update_program(&entry, logger);
             }
             created_programs.push(self.value_of(&entry).value());
         }
         for entry in &reconfigured_entries {
-            let entry = projectEntry::Synthetic(entry.clone());
+            let entry = projectEntry::Synthetic(Arc::clone(entry));
             if self.value_of(&entry).value().unwrap().dirty {
                 self.update_program(&entry, logger);
             }
@@ -729,7 +729,7 @@ impl ProjectCollectionBuilder {
 
             // Make sure all projects we know about are up to date...
             self.configured_projects.range(|entry| {
-                has_changes = self.update_program(&projectEntry::Configured(entry.clone()), logger) || has_changes;
+                has_changes = self.update_program(&projectEntry::Configured(Arc::clone(entry)), logger) || has_changes;
                 true
             });
             if has_changes {
@@ -814,7 +814,7 @@ impl ProjectCollectionBuilder {
                         // load this project first
                         if let Some(project) = entry.value() {
                             if project_tree_request.is_all_projects() || project.has_potential_project_reference(project_tree_request) {
-                                self.update_program(&projectEntry::Configured(entry.clone()), logger);
+                                self.update_program(&projectEntry::Configured(Arc::clone(&entry)), logger);
                             }
                         }
                         self.ensure_project_tree(&wg, entry, project_tree_request, &seen_projects, logger);
@@ -833,7 +833,7 @@ impl ProjectCollectionBuilder {
                     let child_project_entry = self
                         .find_or_create_project(child_config.config_name(), &child_config.config_file.unwrap().source_file.get().path(), projectLoadKind::Create, logger)
                         .unwrap();
-                    self.update_program(&projectEntry::Configured(child_project_entry.clone()), logger);
+                    self.update_program(&projectEntry::Configured(Arc::clone(&child_project_entry)), logger);
 
                     // Ensure children for this project
                     self.ensure_project_tree(&wg, child_project_entry, project_tree_request, &seen_projects, logger);
@@ -1037,7 +1037,7 @@ impl ProjectCollectionBuilder {
         self.configured_projects.range(|entry| {
             let configured_path = entry.key().0;
             configured_project_paths.push(configured_path.clone());
-            configured_projects.insert(configured_path, entry.clone());
+            configured_projects.insert(configured_path, Arc::clone(entry));
             true
         });
         configured_project_paths.sort();
@@ -1197,7 +1197,7 @@ impl ProjectCollectionBuilder {
 
                 if node.load_kind == projectLoadKind::Create {
                     // Ensure project is up to date before checking for file inclusion
-                    self.update_program(&projectEntry::Configured(project.clone()), &node.logger);
+                    self.update_program(&projectEntry::Configured(Arc::clone(&project)), &node.logger);
                 }
 
                 let value = project.value().unwrap();
@@ -1608,7 +1608,7 @@ impl ProjectCollectionBuilder {
                     project.content_mapper_watched_files = Some(Arc::new(content_mapper_watched_files));
                     project.program = Some(result.program);
                     project.checker_pool = result.checker_pool.clone();
-                    project.program_owner = Some(result.owner.clone());
+                    project.program_owner = Some(Arc::clone(&result.owner));
                     project.program_update_kind = result.update_kind;
                     project.program_last_update = self.new_snapshot_id;
                     if result.update_kind == ProgramUpdateKind::Cloned {

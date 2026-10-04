@@ -64,17 +64,16 @@ impl fileBase {
 
     // overlayfs.go:61
     fn lsp_line_map(&self) -> Arc<LSPLineMap> {
-        self.line_map.get_or_init(|| lsconv::compute_lsp_line_starts(&self.content)).clone()
+        Arc::clone(self.line_map.get_or_init(|| lsconv::compute_lsp_line_starts(&self.content)))
     }
 
     // overlayfs.go:68
     fn ecma_line_info(&self) -> Arc<ECMALineInfo> {
-        self.line_info
+        Arc::clone(self.line_info
             .get_or_init(|| {
                 let line_starts = compute_ecma_line_starts(&self.content);
                 create_ecma_line_info(self.content.clone(), line_starts)
-            })
-            .clone()
+            }))
     }
 }
 
@@ -359,7 +358,7 @@ pub(crate) fn new_overlay_fs(fs: FsRef, overlays: OverlayMap, position_encoding:
 impl LayeredFileSystem for overlayFS {
     // overlayfs.go:220
     fn overlays(&self) -> OverlayMap {
-        self.mu.read().unwrap().overlays.clone()
+        Arc::clone(&self.mu.read().unwrap().overlays)
     }
 
     fn as_overlay_fs(&self) -> Option<&overlayFS> {
@@ -478,7 +477,7 @@ impl FS for overlayFS {
         let (file, directory, overlays) = {
             let st = self.mu.read().unwrap();
             let path = (self.to_path)(directory_name);
-            (st.overlays.contains_key(&path), st.overlay_directories.get(&path).cloned(), st.overlays.clone())
+            (st.overlays.contains_key(&path), st.overlay_directories.get(&path).cloned(), Arc::clone(&st.overlays))
         };
         if file {
             return Entries::default();
@@ -706,7 +705,7 @@ impl overlayFS {
                             let mut updated = new_overlay(existing.base.file_name.clone(), existing.content().to_string(), existing.version(), existing.kind);
                             updated.matches_disk_text = matches_disk_text;
                             let updated = Arc::new(updated);
-                            new_overlays.insert(path.clone(), updated.clone());
+                            new_overlays.insert(path.clone(), Arc::clone(&updated));
                             o = Some(updated);
                         }
                     }
@@ -721,7 +720,7 @@ impl overlayFS {
                     for text_change in &change.changes {
                         if let Some(partial_change) = &text_change.partial {
                             let line_map = current.lsp_line_map();
-                            let converters = lsconv::new_converters(self.position_encoding, move |_file_name: &str| Some(line_map.clone()));
+                            let converters = lsconv::new_converters(self.position_encoding, move |_file_name: &str| Some(Arc::clone(&line_map)));
                             let ranges = converters.from_lsp_range(&*current, partial_change.range, spanmap::Feature::All);
                             assert!(ranges.len() == 1, "expected exactly one range for partial change");
                             let text_change = TextChange { text_range: ranges[0].span, new_text: partial_change.text.clone() };
@@ -738,7 +737,7 @@ impl overlayFS {
                         next.base.hash = hash_string_128(&next.base.content);
                         next.matches_disk_text = false;
                         current = Arc::new(next);
-                        new_overlays.insert(path.clone(), current.clone());
+                        new_overlays.insert(path.clone(), Arc::clone(&current));
                     }
                     o = Some(current);
                 }
@@ -749,7 +748,7 @@ impl overlayFS {
                     let mut updated = new_overlay(existing.base.file_name.clone(), existing.content().to_string(), existing.version(), existing.kind);
                     updated.matches_disk_text = true;
                     let updated = Arc::new(updated);
-                    new_overlays.insert(path.clone(), updated.clone());
+                    new_overlays.insert(path.clone(), Arc::clone(&updated));
                     o = Some(updated);
                 } else if !events.watch_changed {
                     // File was saved but never opened via didOpen; treat as a disk change.
@@ -768,7 +767,7 @@ impl overlayFS {
 
         let new_overlays: OverlayMap = Arc::new(new_overlays);
         st.overlay_directories = create_overlay_directories(&new_overlays);
-        st.overlays = new_overlays.clone();
+        st.overlays = Arc::clone(&new_overlays);
         (result, new_overlays)
     }
 }

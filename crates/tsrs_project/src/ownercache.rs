@@ -95,7 +95,7 @@ impl<K: Hash + Eq + Clone, V: Clone, LoadArgs> OwnerCache<K, V, LoadArgs> {
         loop {
             let entry = Arc::new(ownerCacheEntry { mu: Mutex::new(ownerCacheEntryState { value: None, owners: FxHashSet::default() }) });
             let mut guard = entry.mu.lock().unwrap();
-            let (existing, loaded) = self.entries.load_or_store(key.clone(), entry.clone());
+            let (existing, loaded) = self.entries.load_or_store(key.clone(), Arc::clone(&entry));
             if loaded {
                 drop(guard);
                 let mut existing_guard = existing.mu.lock().unwrap();

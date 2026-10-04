@@ -31,7 +31,7 @@ pub(crate) struct cachedLayeredFileSystem {
 
 // snapshotfs.go:38
 pub(crate) fn new_cached_layered_file_system(file_system: Arc<dyn LayeredFileSystem>) -> Arc<dyn LayeredFileSystem> {
-    Arc::new(cachedLayeredFileSystem { fs: cachedvfs::from(file_system.clone()), layered: file_system })
+    Arc::new(cachedLayeredFileSystem { fs: cachedvfs::from(Arc::clone(&file_system)), layered: file_system })
 }
 
 impl FileHandleSource for cachedLayeredFileSystem {
@@ -167,7 +167,7 @@ impl FileHandleSource for SnapshotFS {
     // snapshotfs.go:121
     fn get_file_by_path(&self, file_name: &str, path: &Path) -> Option<Arc<dyn FileHandle>> {
         if let Some(file) = self.cache_files.get(path) {
-            return Some(file.arc().clone());
+            return Some(Arc::<cachedFile>::clone(file.arc()));
         }
         let new_entry: memoizedCachedFile = Arc::new(OnceLock::new());
         let (entry, _) = self.read_files.load_or_store(path.clone(), new_entry);
@@ -374,12 +374,12 @@ impl snapshotFSBuilder {
 
         (
             SnapshotFS {
-                fs: self.fs.clone(),
+                fs: Arc::clone(&self.fs),
                 cache_files,
                 cache_directories: self.cache_directories.finalize().0,
                 read_files: SyncMap::default(),
                 node_modules_realpath_aliases,
-                to_path: self.to_path.clone(),
+                to_path: Arc::clone(&self.to_path),
             },
             changed || aliases_changed,
         )
@@ -471,7 +471,7 @@ impl snapshotFSBuilder {
                 e.delete();
             }
         });
-        entry.value().map(|v| v.arc().clone() as Arc<dyn FileHandle>)
+        entry.value().map(|v| Arc::clone(v.arc()) as Arc<dyn FileHandle>)
     }
 
     // snapshotfs.go:424
@@ -503,7 +503,7 @@ impl snapshotFSBuilder {
                 }
             });
         }
-        entry.value().map(|v| v.arc().clone() as Arc<dyn FileHandle>)
+        entry.value().map(|v| Arc::clone(v.arc()) as Arc<dyn FileHandle>)
     }
 
     // snapshotfs.go:455

@@ -154,7 +154,7 @@ pub(crate) fn new_checker_pool(mut opts: CheckerPoolOptions, program: &'static P
         query_sem: semaphore::new(query_slots),
         persistent_sem: semaphore::new(1),
         log,
-        self_ref: self_ref.clone(),
+        self_ref: Weak::clone(self_ref),
         parked: Mutex::new(Vec::new()),
         regions: Mutex::new(FxHashMap::default()),
         owner: Mutex::new(None),
@@ -478,7 +478,7 @@ impl checkerPool {
     // from growing unboundedly with completed request IDs.
     // Must be called with p.mu held; the cleanup runs asynchronously.
     fn register_request_cleanup(&self, ctx: &Context, request_id: &str) {
-        let p = self.self_ref.clone();
+        let p = Weak::clone(&self.self_ref);
         let request_id = request_id.to_string();
         ctx.after_func(move || {
             if let Some(p) = p.upgrade() {
@@ -520,7 +520,7 @@ impl checkerPool {
         if let Some(timer) = &st.cleanup_timer {
             timer.reset(delay);
         } else {
-            let p = self.self_ref.clone();
+            let p = Weak::clone(&self.self_ref);
             st.cleanup_timer = Some(after_func(delay, move || {
                 if let Some(p) = p.upgrade() {
                     p.cleanup_idle_checkers();

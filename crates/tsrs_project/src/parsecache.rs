@@ -93,7 +93,7 @@ impl ParseCacheJournal {
 // it is freed once neither the cache nor any live program refers to the file, as Go's GC would.
 pub fn new_parse_cache(options: RefCountCacheOptions) -> ParseCache {
     let regions: Arc<Mutex<FxHashMap<usize, Region>>> = Arc::default();
-    let parse_regions = regions.clone();
+    let parse_regions = Arc::clone(&regions);
     let mut cache = new_ref_count_cache(options, move |key: &ParseCacheKey, fh: Arc<dyn FileHandle>| {
         let text = fh.content();
         let region = Region::new(file_region_first_chunk(text.len()));
@@ -110,7 +110,7 @@ pub fn new_parse_cache(options: RefCountCacheOptions) -> ParseCache {
         parse_regions.lock().unwrap().insert(file.addr(), region);
         file
     });
-    let evict_regions = regions.clone();
+    let evict_regions = Arc::clone(&regions);
     cache.on_evict = Some(Box::new(move |file: &P<SourceFile>| {
         let region = evict_regions.lock().unwrap().remove(&file.addr());
         drop(region);

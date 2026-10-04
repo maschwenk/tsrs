@@ -50,7 +50,7 @@ impl ConfigFileRegistry {
     // configfileregistry.go:48
     pub(crate) fn content_mappers(&self) -> Arc<configuredContentMappers> {
         if let Some(mappers) = &self.all_configured_content_mappers {
-            return mappers.clone();
+            return Arc::clone(mappers);
         }
         let command_lines: Vec<P<ParsedCommandLine>> = self.configs.values().filter_map(|entry| entry.command_line).collect();
         collect_configured_content_mappers(&command_lines)

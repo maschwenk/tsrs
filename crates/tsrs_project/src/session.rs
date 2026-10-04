@@ -210,13 +210,13 @@ pub fn new_session(init: SessionInit) -> Arc<Session> {
     let snapshot = snapshot_host.new_root_snapshot_with(0, relative_pattern_support);
     // (ATA is not ported: Go creates a typings installer here when TypingsLocation and NpmExecutor are set.)
     Arc::new_cyclic(|self_ref| Session {
-        options: init.options.clone(),
+        options: Arc::clone(&init.options),
         logger: session_logger,
         background_ctx: init.background_ctx.clone(),
-        to_path: snapshot_host.to_path.clone(),
+        to_path: Arc::clone(&snapshot_host.to_path),
         client: init.client.clone(),
         npm_executor: init.npm_executor.clone(),
-        fs: Arc::new(new_overlay_fs(FsRef::Host(snapshot_host.fs.clone()), Arc::default(), init.options.position_encoding, snapshot_host.to_path.clone())),
+        fs: Arc::new(new_overlay_fs(FsRef::Host(Arc::clone(&snapshot_host.fs)), Arc::default(), init.options.position_encoding, Arc::clone(&snapshot_host.to_path))),
         background_queue: new_queue(),
         start_time: Instant::now(),
         snapshot: RwLock::new(snapshot),
@@ -237,7 +237,7 @@ pub fn new_session(init: SessionInit) -> Arc<Session> {
         performance_telemetry_cancel: Mutex::new(None),
         seen_projects: SyncSet::default(),
         global_diag_publish_pending: AtomicBool::new(false),
-        self_ref: self_ref.clone(),
+        self_ref: Weak::clone(self_ref),
     })
 }
 
@@ -416,7 +416,7 @@ impl Session {
         let mut has_relevant_change = false;
         let mut has_config_change = false;
         let snapshot = self.snapshot();
-        let config_file_registry = snapshot.config_file_registry.clone();
+        let config_file_registry = Arc::clone(&snapshot.config_file_registry);
         let (content_mapper_extensions, content_mapper_watched_files) = snapshot.content_mapper_watch_state();
         for change in changes {
             let kind = match change.type_ {
@@ -647,7 +647,7 @@ impl Session {
             timer.stop();
         }
 
-        let s = self.self_ref.clone();
+        let s = Weak::clone(&self.self_ref);
         *timer = Some(after_func(idleCacheCleanDelay, move || {
             let Some(s) = s.upgrade() else {
                 return;
@@ -801,7 +801,7 @@ impl Session {
             }
             return Err(lsproto::Error::new(format!("no project found for URI {}", uri)));
         };
-        let language_service = Arc::new(new_language_service(ProjectID(project.id().0), project.get_program().unwrap(), snapshot.clone(), &uri.file_name()));
+        let language_service = Arc::new(new_language_service(ProjectID(project.id().0), project.get_program().unwrap(), Arc::<Snapshot>::clone(&snapshot), &uri.file_name()));
         Ok((snapshot, project, language_service))
     }
 
@@ -857,7 +857,7 @@ impl Session {
                 continue;
             };
 
-            services.push(Arc::new(new_language_service(ProjectID(project.id().0), program, snapshot.clone(), &active_file)));
+            services.push(Arc::new(new_language_service(ProjectID(project.id().0), program, Arc::<Snapshot>::clone(&snapshot), &active_file)));
         }
         services
     }
@@ -925,7 +925,7 @@ impl Session {
         f: impl FnOnce(Arc<LanguageService>, Arc<Snapshot>) -> Result<Option<AsyncWork>, lsproto::Error>,
     ) -> Result<Option<AsyncWork>, lsproto::Error> {
         let (snapshot, _, language_service) = self.get_snapshot_and_default_project(ctx, uri, true /*callerRef*/)?;
-        let async_work = f(language_service, snapshot.clone());
+        let async_work = f(language_service, Arc::clone(&snapshot));
         match async_work {
             Err(err) => {
                 snapshot.deref();
@@ -960,7 +960,7 @@ impl Session {
             return Err(lsproto::Error::new(format!("no project found for URI {}", uri)));
         };
 
-        self.try_adopt_snapshot_change_in_background(base_snapshot.clone(), new_snapshot.clone());
+        self.try_adopt_snapshot_change_in_background(Arc::clone(base_snapshot), Arc::clone(&new_snapshot));
 
         Ok(Arc::new(new_language_service(ProjectID(project.id().0), project.get_program().unwrap(), new_snapshot, &uri.file_name())))
     }
@@ -995,7 +995,7 @@ impl Session {
         if Arc::ptr_eq(&old_snapshot, base_snapshot) {
             // Session hasn't moved on; adopt the new snapshot. The clone's initial
             // ref is transferred to become the session's ref for its current snapshot.
-            *guard = new_snapshot.clone();
+            *guard = Arc::clone(&new_snapshot);
             old_snapshot.deref();
             drop(guard);
             if self.options.logging_enabled {
@@ -1063,7 +1063,7 @@ impl Session {
             new_snapshot.deref();
             return None;
         }
-        *guard = new_snapshot.clone();
+        *guard = Arc::clone(&new_snapshot);
         if caller_ref {
             new_snapshot.ref_();
         }
@@ -1082,7 +1082,7 @@ impl Session {
         // Enqueue logging, watch updates, and diagnostic refresh tasks
         // !!! userPreferences/configuration updates
         let s = self.arc();
-        let task_snapshot = new_snapshot.clone();
+        let task_snapshot = Arc::clone(&new_snapshot);
         self.background_queue.enqueue(&self.background_context(), move |ctx| {
             let new_snapshot = task_snapshot;
             if s.options.logging_enabled {
@@ -1710,7 +1710,7 @@ impl Session {
                 }
                 let (warm_ctx, cancel) = ctx.with_cancel();
                 if warm_ctx.err().is_none() {
-                    let (c, l, f, cancel) = (warm_ctx.clone(), self.logger.clone(), changed_file.file_name(), cancel.clone());
+                    let (c, l, f, cancel) = (warm_ctx.clone(), Arc::clone(&self.logger), changed_file.file_name(), cancel.clone());
                     *warm = Some(Box::new(move || {
                         if c.err().is_some() {
                             return;

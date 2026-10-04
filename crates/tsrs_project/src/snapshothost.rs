@@ -69,13 +69,13 @@ impl SnapshotHost {
     pub fn acquire_source_file(&self, options: SourceFileParseOptions, text: &str, script_kind: ScriptKind) -> SourceFileLease {
         let file_handle = new_cached_file_handle(&options.file_name, text);
         let key = new_parse_cache_key(options, file_handle.hash(), script_kind);
-        SourceFileLease { cache: self.parse_cache.clone(), key: key.clone(), source_file: self.parse_cache.acquire(key, file_handle), released: Mutex::new(false) }
+        SourceFileLease { cache: Arc::clone(&self.parse_cache), key: key.clone(), source_file: self.parse_cache.acquire(key, file_handle), released: Mutex::new(false) }
     }
 
     // snapshothost.go:65
     pub fn acquire_existing_source_file(&self, key: ParseCacheKey) -> Option<SourceFileLease> {
         let source_file = self.parse_cache.acquire_existing(&key)?;
-        Some(SourceFileLease { cache: self.parse_cache.clone(), key, source_file, released: Mutex::new(false) })
+        Some(SourceFileLease { cache: Arc::clone(&self.parse_cache), key, source_file, released: Mutex::new(false) })
     }
 }
 
@@ -89,9 +89,9 @@ pub fn new_snapshot_host(init: &SessionInit) -> Arc<SnapshotHost> {
         init.content_mapped_parse_cache.clone().unwrap_or_else(|| Arc::new(new_content_mapped_parse_cache(RefCountCacheOptions::default())));
 
     Arc::new(SnapshotHost {
-        options: init.options.clone(),
+        options: Arc::clone(&init.options),
         to_path,
-        fs: init.fs.clone(),
+        fs: Arc::clone(&init.fs),
         parse_cache,
         content_mapped_parse_cache,
         extended_config_cache: Arc::new(new_extended_config_cache()),
@@ -126,7 +126,7 @@ impl SnapshotHost {
         let mut change = SnapshotChange { file_changes, ..Default::default() };
         if let Some(api_request) = &api_request {
             change.fs = match &api_request.layered_file_system {
-                Some(layered) => Some(FsRef::Layered(layered.clone())),
+                Some(layered) => Some(FsRef::Layered(Arc::clone(layered))),
                 None => api_request.file_system.clone().map(FsRef::Host),
             };
             change.file_system_override = change.fs.is_some();
@@ -153,7 +153,7 @@ impl SnapshotHost {
     pub fn clone_snapshot_with_auto_imports(&self, ctx: &Context, base_snapshot: &Snapshot, uri: &lsproto::DocumentUri, logger: Option<&dyn Logger>) -> Arc<Snapshot> {
         let mut change = SnapshotChange {
             reason: UpdateReason::RequestedLanguageServiceWithAutoImports,
-            fs: Some(FsRef::Layered(base_snapshot.fs.fs.clone())),
+            fs: Some(FsRef::Layered(Arc::clone(&base_snapshot.fs.fs))),
             file_system_override: base_snapshot.file_system_override,
             resource_request: base_snapshot.resource_request_for_document(uri),
             ..Default::default()
@@ -164,10 +164,10 @@ impl SnapshotHost {
 
     // snapshothost.go:154
     pub(crate) fn new_root_snapshot_with(self: &Arc<Self>, id: u64, relative_pattern_support: bool) -> Arc<Snapshot> {
-        let file_system = new_overlay_fs(FsRef::Host(self.fs.clone()), Arc::default(), self.options.position_encoding, self.to_path.clone());
+        let file_system = new_overlay_fs(FsRef::Host(Arc::clone(&self.fs)), Arc::default(), self.options.position_encoding, Arc::clone(&self.to_path));
         Arc::new(self.new_snapshot(
             id,
-            Arc::new(new_snapshot_fs(self.to_path.clone(), Arc::new(file_system))),
+            Arc::new(new_snapshot_fs(Arc::clone(&self.to_path), Arc::new(file_system))),
             Arc::default(),
             None,
             lsutil::new_default_user_preferences(),

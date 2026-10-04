@@ -157,7 +157,7 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
         loop {
             let entry = Arc::new(refCountCacheEntry { mu: Mutex::new(refCountCacheEntryState { value: None, ref_count: 1 }) });
             let mut guard = entry.mu.lock().unwrap();
-            let (existing, loaded) = self.entries.load_or_store(key.clone(), entry.clone());
+            let (existing, loaded) = self.entries.load_or_store(key.clone(), Arc::clone(&entry));
             if loaded {
                 drop(guard);
                 let mut existing_guard = existing.mu.lock().unwrap();

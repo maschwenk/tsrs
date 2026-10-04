@@ -53,7 +53,7 @@ pub(crate) fn new_config_file_registry_builder(
     custom_config_file_name: &str,
     _logger: &LogTree,
 ) -> configFileRegistryBuilder {
-    let to_path = fs.to_path.clone();
+    let to_path = Arc::clone(&fs.to_path);
     configFileRegistryBuilder {
         has_relative_pattern_capability,
         fs: Arc::new(new_source_fs(false, fs, to_path)),
@@ -65,8 +65,8 @@ pub(crate) fn new_config_file_registry_builder(
         custom_config_file_name_changed: custom_config_file_name != old_config_file_registry.custom_config_file_name,
         all_configured_content_mappers: Mutex::new(Some(old_config_file_registry.content_mappers())),
 
-        configs: dirty::new_sync_map(old_config_file_registry.configs.clone()),
-        config_file_names: dirty::new_map(old_config_file_registry.config_file_names.clone()),
+        configs: dirty::new_sync_map(Arc::clone(&old_config_file_registry.configs)),
+        config_file_names: dirty::new_map(Arc::clone(&old_config_file_registry.config_file_names)),
         base: old_config_file_registry,
     }
 }
@@ -125,7 +125,7 @@ impl configFileRegistryBuilder {
 
         match new_registry {
             Some(registry) => Arc::new(registry),
-            None => self.base.clone(),
+            None => Arc::clone(&self.base),
         }
     }
 

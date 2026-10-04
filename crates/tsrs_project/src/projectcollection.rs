@@ -189,12 +189,12 @@ impl ProjectCollection {
         let mut projects: Vec<Arc<dyn ls::Project>> = Vec::new();
         for project in self.configured_projects() {
             if project.contains_file(path) {
-                projects.push(project.arc().clone());
+                projects.push(Arc::<Project>::clone(project.arc()));
             }
         }
         if let Some(inferred_project) = &self.inferred_project {
             if inferred_project.contains_file(path) {
-                projects.push(inferred_project.arc().clone());
+                projects.push(Arc::<Project>::clone(inferred_project.arc()));
             }
         }
         projects
@@ -203,7 +203,7 @@ impl ProjectCollection {
     // projectcollection.go:179
     // GetOpenConfiguredProjects returns configured projects containing at least one open file.
     pub fn get_open_configured_projects(&self) -> Arc<Set<ConfiguredProjectID>> {
-        self.open_configured_projects
+        Arc::clone(self.open_configured_projects
             .get_or_init(|| {
                 let mut open_projects = new_set_with_size_hint(self.configured_projects.len());
                 for path in self.open_files.keys() {
@@ -224,8 +224,7 @@ impl ProjectCollection {
                     }
                 }
                 Arc::new(open_projects)
-            })
-            .clone()
+            }))
     }
 
     // projectcollection.go:211
@@ -358,11 +357,11 @@ impl ProjectCollection {
     // clone creates a shallow copy of the project collection.
     pub(crate) fn clone_collection(&self) -> ProjectCollection {
         ProjectCollection {
-            to_path: self.to_path.clone(),
-            config_file_registry: self.config_file_registry.clone(),
-            configured_projects: self.configured_projects.clone(),
-            synthetic_projects: self.synthetic_projects.clone(),
-            open_files: self.open_files.clone(),
+            to_path: Arc::clone(&self.to_path),
+            config_file_registry: Arc::clone(&self.config_file_registry),
+            configured_projects: Arc::clone(&self.configured_projects),
+            synthetic_projects: Arc::clone(&self.synthetic_projects),
+            open_files: Arc::clone(&self.open_files),
             inferred_project: self.inferred_project.clone(),
             file_default_projects: self.file_default_projects.clone(),
             api_state: self.api_state.clone(),
