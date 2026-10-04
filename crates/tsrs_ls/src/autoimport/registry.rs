@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::SourceFile;
 use tsrs_compiler::Program;
 use tsrs_core::collections::{new_set_from_items, Set, SyncMap};
@@ -722,11 +722,11 @@ impl registryBuilder<'_> {
     fn update_bucket_and_directory_existence(&mut self, change: &RegistryChange, logger: &LogTree) {
         let start = Instant::now();
         // Go maps (random iteration order).
-        let mut needed_projects: FxHashMap<ProjectID, ()> = FxHashMap::default();
+        let mut needed_projects: FxHashSet<ProjectID> = FxHashSet::default();
         let mut needed_directories: FxHashMap<Path, String> = FxHashMap::default();
         for (path, file_name) in &change.open_files {
             if let (Some(project_id), _) = self.host.get_default_project(path) {
-                needed_projects.insert(project_id, ());
+                needed_projects.insert(project_id);
             }
             if tspath::is_dynamic_file_name(file_name) {
                 continue;
@@ -753,7 +753,7 @@ impl registryBuilder<'_> {
 
         if !change.requested_file.is_empty() {
             if let (Some(project_id), _) = self.host.get_default_project(&change.requested_file) {
-                needed_projects.insert(project_id, ());
+                needed_projects.insert(project_id);
             }
             if !self.specifier_cache.has(&change.requested_file) {
                 self.specifier_cache.set(change.requested_file.clone(), Arc::new(SyncMap::default()));
@@ -770,7 +770,7 @@ impl registryBuilder<'_> {
         let mut added_projects: Vec<ProjectID> = Vec::new();
         let mut removed_projects: Vec<ProjectID> = Vec::new();
         // core.DiffMapsFunc(base.projects, neededProjects, nil onChanged)
-        for project_id in needed_projects.keys() {
+        for project_id in needed_projects.iter() {
             if !self.base.projects.contains_key(project_id) {
                 // Need and don't have
                 self.projects.add(project_id.clone(), Shared::new(new_registry_bucket()));
@@ -778,7 +778,7 @@ impl registryBuilder<'_> {
             }
         }
         for project_id in self.base.projects.keys() {
-            if !needed_projects.contains_key(project_id) {
+            if !needed_projects.contains(project_id) {
                 // Have and don't need
                 self.projects.delete(project_id);
                 removed_projects.push(project_id.clone());
@@ -897,17 +897,17 @@ impl registryBuilder<'_> {
         }
 
         // Mark files dirty, bailing out if all buckets already have multiple files dirty
-        let mut clean_node_modules_buckets: FxHashMap<Path, ()> = FxHashMap::default();
-        let mut clean_project_buckets: FxHashMap<ProjectID, ()> = FxHashMap::default();
+        let mut clean_node_modules_buckets: FxHashSet<Path> = FxHashSet::default();
+        let mut clean_project_buckets: FxHashSet<ProjectID> = FxHashSet::default();
         self.node_modules.range(|entry| {
             if !entry.value().unwrap().state.multiple_files_dirty {
-                clean_node_modules_buckets.insert(entry.key(), ());
+                clean_node_modules_buckets.insert(entry.key());
             }
             true
         });
         self.projects.range(|entry| {
             if !entry.value().unwrap().state.multiple_files_dirty {
-                clean_project_buckets.insert(entry.key(), ());
+                clean_project_buckets.insert(entry.key());
             }
             true
         });
@@ -924,7 +924,7 @@ impl registryBuilder<'_> {
                     // (for symlinked project references). Both are recorded in Paths for granular updates.
                     if let Some(node_modules_index) = path.find("/node_modules/") {
                         let dir_path = Path::from(&path[..node_modules_index]);
-                        if clean_node_modules_buckets.contains_key(&dir_path) {
+                        if clean_node_modules_buckets.contains(&dir_path) {
                             let entry = b.node_modules.get(&dir_path).unwrap();
                             // Look up the package name for granular updates
                             let package_name = entry.value().unwrap().paths.get(&path).cloned().unwrap_or_default();
@@ -936,7 +936,7 @@ impl registryBuilder<'_> {
                     } else {
                         // Check if this path (possibly a realpath of a workspace package) is in any bucket's Paths.
                         // This handles local workspace packages where the realpath doesn't contain /node_modules/.
-                        let bucket_dir_paths: Vec<Path> = clean_node_modules_buckets.keys().cloned().collect();
+                        let bucket_dir_paths: Vec<Path> = clean_node_modules_buckets.iter().cloned().collect();
                         for bucket_dir_path in bucket_dir_paths {
                             let entry = b.node_modules.get(&bucket_dir_path).unwrap();
                             let package_name = entry.value().unwrap().paths.get(&path).cloned();
@@ -954,7 +954,7 @@ impl registryBuilder<'_> {
                 // For projects, mark the bucket dirty if the bucket contains the file directly.
                 // Any other significant change, like a created failed lookup location, is
                 // handled by newProgramStructure.
-                let project_dir_paths: Vec<ProjectID> = clean_project_buckets.keys().cloned().collect();
+                let project_dir_paths: Vec<ProjectID> = clean_project_buckets.iter().cloned().collect();
                 for project_dir_path in project_dir_paths {
                     let entry = b.projects.get(&project_dir_path).unwrap();
                     if entry.value().unwrap().paths.contains_key(&path) {
