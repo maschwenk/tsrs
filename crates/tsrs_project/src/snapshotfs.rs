@@ -196,7 +196,7 @@ impl FileSource for SnapshotFS {
             return lower_entries;
         };
         merge_cached_directory_entries(
-            lower_entries,
+            &lower_entries,
             directory,
             |path| self.cache_files.contains_key(path) || self.fs.file_exists(path),
             self.fs.use_case_sensitive_file_names(),
@@ -206,7 +206,7 @@ impl FileSource for SnapshotFS {
 
 // snapshotfs.go:144
 fn merge_cached_directory_entries(
-    directory_entries: Entries,
+    directory_entries: &Entries,
     cached_entries: &CloneableMap<Path, String>,
     is_cached_file: impl Fn(&Path) -> bool,
     use_case_sensitive_file_names: bool,
@@ -857,7 +857,7 @@ impl FileSource for snapshotFSBuilder {
         };
         let directory = directory.value().unwrap();
         merge_cached_directory_entries(
-            lower_entries,
+            &lower_entries,
             &directory,
             |path| self.cache_files.load(path).is_some_and(|entry| entry.value().is_some()) || self.fs.file_exists(path),
             self.fs.use_case_sensitive_file_names(),

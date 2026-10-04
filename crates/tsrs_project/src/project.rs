@@ -277,7 +277,7 @@ pub fn new_inferred_project(
 
 // project.go:234
 pub(crate) fn new_synthetic_project(
-    id: SyntheticProjectID,
+    id: &SyntheticProjectID,
     current_directory: &str,
     compiler_options: P<CompilerOptions>,
     root_file_names: Vec<String>,

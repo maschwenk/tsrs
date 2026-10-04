@@ -47,7 +47,7 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
     // value, which is stored and returned with refcount 1.
     //
     // The caller is responsible for calling Deref when done with the value.
-    pub fn acquire(&self, identity: K, acquire_args: AcquireArgs) -> V {
+    pub fn acquire(&self, identity: &K, acquire_args: AcquireArgs) -> V {
         self.load_or_store_new_locked_entry(&identity, |entry, loaded| {
             if !loaded {
                 // New entry - parse the value
@@ -86,7 +86,7 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
     // acquisitions of the same identity that miss serialize on it.
     //
     // The caller is responsible for calling Deref when a value is returned without error.
-    pub fn acquire_or_error<E>(&self, identity: K, produce: impl FnOnce() -> Result<V, E>) -> Result<V, E> {
+    pub fn acquire_or_error<E>(&self, identity: &K, produce: impl FnOnce() -> Result<V, E>) -> Result<V, E> {
         self.load_or_store_new_locked_entry(&identity, |entry, loaded| {
             if loaded {
                 return Ok(entry.value.clone().unwrap());
@@ -109,7 +109,7 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
     // refcountcache.go:105
     // Ref increments the reference count for an existing entry.
     // Panics if the entry does not exist.
-    pub fn ref_(&self, identity: K) {
+    pub fn ref_(&self, identity: &K) {
         let Some(entry) = self.entries.load(&identity) else {
             panic!("cache entry not found");
         };

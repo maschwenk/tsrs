@@ -853,9 +853,9 @@ impl ExtendedConfigCacheTrait for configFileRegistryBuilder {
 
         self.extended_config_cache
             .load_and_acquire(
-                path.clone(),
+                path,
                 self.snapshot_id,
-                ExtendedConfigParseArgs {
+                &ExtendedConfigParseArgs {
                     file_name: file_name.to_string(),
                     content,
                     fs: self.fs.source(),

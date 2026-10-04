@@ -203,7 +203,7 @@ pub struct Session {
 }
 
 // session.go:210
-pub fn new_session(init: SessionInit) -> Arc<Session> {
+pub fn new_session(init: &SessionInit) -> Arc<Session> {
     let snapshot_host = new_snapshot_host(&init);
     let session_logger = init.logger.clone().unwrap_or_else(new_nop_logger);
     let relative_pattern_support = lsproto::get_client_capabilities(&init.background_ctx).workspace.did_change_watched_files.relative_pattern_support;
@@ -972,7 +972,7 @@ impl Session {
         // release it if the session has moved on.
         let s = self.arc();
         self.background_queue.enqueue(&self.background_context(), move |_ctx| {
-            s.adopt_snapshot_change(&base_snapshot, new_snapshot);
+            s.adopt_snapshot_change(&base_snapshot, &new_snapshot);
         });
     }
 
@@ -989,7 +989,7 @@ impl Session {
     // snapshot so future requests benefit from the work already done. If the
     // session has moved on, the snapshot is discarded; the next request needing
     // auto-imports will redo the work on the latest snapshot.
-    fn adopt_snapshot_change(&self, base_snapshot: &Arc<Snapshot>, new_snapshot: Arc<Snapshot>) {
+    fn adopt_snapshot_change(&self, base_snapshot: &Arc<Snapshot>, new_snapshot: &Arc<Snapshot>) {
         let mut guard = self.snapshot.write().unwrap();
         let old_snapshot = guard.clone();
         if Arc::ptr_eq(&old_snapshot, base_snapshot) {
@@ -1750,7 +1750,7 @@ impl Session {
 
             // Conditionally adopt: if the session hasn't moved past newSnapshot,
             // promote the clone so future requests benefit from the warmed cache.
-            self.adopt_snapshot_change(new_snapshot, cloned_snapshot);
+            self.adopt_snapshot_change(new_snapshot, &cloned_snapshot);
         }
     }
 }

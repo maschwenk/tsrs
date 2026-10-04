@@ -59,13 +59,13 @@ pub(crate) struct ParseCacheJournal(Mutex<FxHashMap<ParseCacheKey, i64>>);
 
 impl ParseCacheJournal {
     pub(crate) fn acquire(&self, cache: &ParseCache, key: ParseCacheKey, fh: Arc<dyn FileHandle>) -> P<SourceFile> {
-        let file = cache.acquire(key.clone(), fh);
+        let file = cache.acquire(&key, fh);
         *self.0.lock().unwrap_or_else(|e| e.into_inner()).entry(key).or_default() += 1;
         file
     }
 
     pub(crate) fn ref_(&self, cache: &ParseCache, key: ParseCacheKey) {
-        cache.ref_(key.clone());
+        cache.ref_(&key);
         *self.0.lock().unwrap_or_else(|e| e.into_inner()).entry(key).or_default() += 1;
     }
 

@@ -93,7 +93,7 @@ pub(crate) fn new_project_collection_builder(
     overlays: OverlayMap,
     old_project_collection: Arc<ProjectCollection>,
     old_config_file_registry: Arc<ConfigFileRegistry>,
-    old_api_state: APIState,
+    old_api_state: &APIState,
     compiler_options_for_inferred_projects: Option<P<CompilerOptions>>,
     inferred_content_mappers: Vec<Mapper>,
     inferred_content_mapper_extensions: Vec<String>,
@@ -822,7 +822,7 @@ impl ProjectCollectionBuilder {
                                 self.update_program(&projectEntry::Configured(Arc::clone(&entry)), logger);
                             }
                         }
-                        self.ensure_project_tree(&wg, entry, project_tree_request, &seen_projects, logger);
+                        self.ensure_project_tree(&wg, &entry, project_tree_request, &seen_projects, logger);
                     }
                 }
                 Some(projectTreeWork::Child(program, child_config)) => {
@@ -841,7 +841,7 @@ impl ProjectCollectionBuilder {
                     self.update_program(&projectEntry::Configured(Arc::clone(&child_project_entry)), logger);
 
                     // Ensure children for this project
-                    self.ensure_project_tree(&wg, child_project_entry, project_tree_request, &seen_projects, logger);
+                    self.ensure_project_tree(&wg, &child_project_entry, project_tree_request, &seen_projects, logger);
                 }
             }
         }
@@ -855,7 +855,7 @@ impl ProjectCollectionBuilder {
     fn ensure_project_tree(
         &self,
         wg: &RefCell<Vec<projectTreeWork>>,
-        entry: Arc<SyncMapEntry<ConfiguredProjectID, Project>>,
+        entry: &Arc<SyncMapEntry<ConfiguredProjectID, Project>>,
         _project_tree_request: &ProjectTreeRequest,
         seen_projects: &SyncSet<ConfiguredProjectID>,
         _logger: &LogTree,
@@ -1377,7 +1377,7 @@ impl ProjectCollectionBuilder {
     ) -> Arc<SyncMapEntry<SyntheticProjectID, Project>> {
         let Some(project) = self.synthetic_projects.load(&project_id) else {
             let mut synthetic_project = new_synthetic_project(
-                project_id.clone(),
+                &project_id,
                 &self.session_options.current_directory,
                 compiler_options.unwrap(),
                 root_file_names,

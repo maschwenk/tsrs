@@ -535,7 +535,7 @@ impl Snapshot {
         if change.replace_file_system || self.file_system_override && !change.file_system_override {
             change.file_changes.invalidate_all = true;
         }
-        let layered_fs = layer_overlay_file_system(base_fs, overlays, store.options.position_encoding, Arc::clone(&store.to_path));
+        let layered_fs = layer_overlay_file_system(&base_fs, overlays, store.options.position_encoding, Arc::clone(&store.to_path));
         let overlays = layered_fs.overlays();
         let fs = Arc::new(new_snapshot_fs_builder_from_source(
             layered_fs,
@@ -572,7 +572,7 @@ impl Snapshot {
             Arc::clone(&overlays),
             Arc::clone(&self.project_collection),
             Arc::clone(&self.config_file_registry),
-            self.project_collection.api_state.clone(),
+            &self.project_collection.api_state,
             compiler_options_for_inferred_projects,
             inferred_content_mappers.clone(),
             inferred_content_mapper_extensions.clone(),

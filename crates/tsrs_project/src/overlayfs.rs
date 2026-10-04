@@ -368,7 +368,7 @@ impl LayeredFileSystem for overlayFS {
 
 // overlayfs.go:226
 pub(crate) fn layer_overlay_file_system(
-    file_system: FsRef,
+    file_system: &FsRef,
     overlays: OverlayMap,
     position_encoding: lsproto::PositionEncodingKind,
     to_path: ToPath,
