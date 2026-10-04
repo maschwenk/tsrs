@@ -538,6 +538,9 @@ fn compare_numbers(a: jsnum::Number, b: jsnum::Number) -> i32 {
 }
 
 // utilities.go:414
+/// The identity and flag-order answers inline (union construction sorts and binary-searches with this: on large
+/// projects it runs >100M times, mostly decided by the flags); the rest out of line.
+#[inline]
 pub fn compare_types(c: &mut Checker, t1: Option<P<Type>>, t2: Option<P<Type>>) -> i32 {
     if t1 == t2 {
         return 0;
@@ -553,6 +556,11 @@ pub fn compare_types(c: &mut Checker, t1: Option<P<Type>>, t2: Option<P<Type>>) 
     if r != 0 {
         return r;
     }
+    compare_types_same_flags(c, t1, t2)
+}
+
+#[inline(never)]
+fn compare_types_same_flags(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
     // Order named types by name and, in the case of aliased types, by alias type arguments.
     let r = compare_type_names(c, t1, t2);
     if r != 0 {
