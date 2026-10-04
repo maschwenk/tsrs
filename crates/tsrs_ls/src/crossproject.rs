@@ -104,7 +104,7 @@ impl LanguageService {
 
         // Initial set of projects and locations in the queue, starting with default project
         let initial_item = projectAndTextDocumentPosition {
-            project: default_project.clone(),
+            project: Arc::clone(&default_project),
             ls: Some(default_ls),
             uri: params.text_document_uri().clone(),
             position: params.text_document_position(),
@@ -118,7 +118,7 @@ impl LanguageService {
                     &mut results,
                     &mut queue,
                     projectAndTextDocumentPosition {
-                        project: project.clone(),
+                        project: Arc::clone(project),
                         ls: None,
                         // TODO!! symlinks need to change the URI
                         uri: params.text_document_uri().clone(),

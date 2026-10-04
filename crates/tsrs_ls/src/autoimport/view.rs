@@ -233,7 +233,7 @@ impl View {
             }
             if let Some(existing) = grouped.get_mut(&key) {
                 for i in 0..existing.len() {
-                    let ex = existing[i].clone();
+                    let ex = Arc::clone(&existing[i]);
                     if e.export_id == ex.export_id {
                         existing[i] = Arc::new(Export {
                             export_id: e.export_id.clone(),
@@ -263,7 +263,7 @@ impl View {
             let mut fixes_for_group: Vec<FixAndExport> = Vec::with_capacity(exps.len());
             for e in exps {
                 for fix in self.get_fixes(e, for_jsx, is_type_only_location, Some(position)) {
-                    fixes_for_group.push(FixAndExport { fix, export: e.clone() });
+                    fixes_for_group.push(FixAndExport { fix, export: Arc::clone(e) });
                 }
             }
             fixes.extend(tsrs_core::min_all_func(&fixes_for_group, compare_fixes));

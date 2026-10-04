@@ -840,8 +840,8 @@ impl LanguageService {
                 let mut new_references: Vec<Rc<ReferenceEntry>> = Vec::new();
                 for r in &s.references {
                     if seen_nodes.insert(r.node) {
-                        queue.push_back(r.clone());
-                        new_references.push(r.clone());
+                        queue.push_back(Rc::clone(r));
+                        new_references.push(Rc::clone(r));
                     }
                 }
                 if !new_references.is_empty() || s.definition.is_none() || seen_definitions.insert(s.definition.as_ref().unwrap().symbol) {
@@ -1207,7 +1207,7 @@ impl LanguageService {
         for entry in &data.symbols_and_entries {
             for r in &entry.references {
                 if seen_nodes.insert(r.node) && (!options.drop_origin_nodes || !r.node.unwrap().loc().contains_inclusive(data.position)) {
-                    entries.push(r.clone());
+                    entries.push(Rc::clone(r));
                 }
             }
         }

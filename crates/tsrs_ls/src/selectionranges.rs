@@ -291,8 +291,8 @@ enum VisitedChild {
 
 fn collect_visited_children(node: P<Node>) -> Vec<VisitedChild> {
     let items: Rc<RefCell<Vec<VisitedChild>>> = Rc::new(RefCell::new(Vec::new()));
-    let visit_items = items.clone();
-    let nodes_items = items.clone();
+    let visit_items = Rc::clone(&items);
+    let nodes_items = Rc::clone(&items);
     let mut visitor = ast::new_node_visitor(
         Some(Rc::new(move |_: &mut ast::NodeVisitor, child: P<Node>| {
             visit_items.borrow_mut().push(VisitedChild::Node(child));

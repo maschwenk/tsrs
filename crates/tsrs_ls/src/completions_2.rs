@@ -1,5 +1,6 @@
 // completions.go, lines 1820-3466.
 
+use std::sync::Arc;
 use std::fmt::Write as _;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -863,7 +864,7 @@ impl LanguageService {
 
         let mut import_adder = self.create_import_adder(ctx, type_checker, file)?;
 
-        let change_tracker = change::new_tracker(ctx, &self.get_program().options(), self.format_options(), self.converters.clone());
+        let change_tracker = change::new_tracker(ctx, &self.get_program().options(), self.format_options(), Arc::clone(&self.converters));
 
         let present_modifiers = self.get_present_member_modifiers(context_token, file, position);
         let abstract_ = present_modifiers.modifiers.intersects(ModifierFlags::Abstract) && class_like_declaration.modifier_flags().intersects(ModifierFlags::Abstract);
@@ -1088,7 +1089,7 @@ impl LanguageService {
             file,
             view,
             self.format_options(),
-            self.converters.clone(),
+            Arc::clone(&self.converters),
             self.user_preferences().clone(),
         )))
     }

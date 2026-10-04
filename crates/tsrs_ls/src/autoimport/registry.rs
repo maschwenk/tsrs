@@ -662,12 +662,12 @@ fn new_registry_builder<'r>(registry: &'r Registry, host: &'static dyn RegistryC
         base: registry,
 
         user_preferences: registry.user_preferences.clone(),
-        directories: dirty::new_map(registry.directories.clone()),
-        node_modules: dirty::new_map(registry.node_modules.clone()),
-        projects: dirty::new_map(registry.projects.clone()),
-        specifier_cache: dirty::new_map_builder(registry.specifier_cache.clone(), |v: &SpecifierCache| v.clone(), |v| v),
+        directories: dirty::new_map(Arc::clone(&registry.directories)),
+        node_modules: dirty::new_map(Arc::clone(&registry.node_modules)),
+        projects: dirty::new_map(Arc::clone(&registry.projects)),
+        specifier_cache: dirty::new_map_builder(Arc::clone(&registry.specifier_cache), |v: &SpecifierCache| Arc::clone(v), |v| v),
         unique_package_count: registry.unique_package_count,
-        entrypoints: dirty::new_map_builder(registry.entrypoints.clone(), |v: &Vec<Arc<ResolvedEntrypoint>>| v.clone(), |v| v),
+        entrypoints: dirty::new_map_builder(Arc::clone(&registry.entrypoints), |v: &Vec<Arc<ResolvedEntrypoint>>| v.clone(), |v| v),
         package_json_region: None,
     }
 }
@@ -696,7 +696,7 @@ impl registryBuilder<'_> {
         let directories = self.directories.finalize().0;
         let regions = regions_of_directories(&directories);
         Registry {
-            to_path: self.base.to_path.clone(),
+            to_path: Arc::clone(&self.base.to_path),
             user_preferences: self.user_preferences.clone(),
             directories,
             node_modules: self.node_modules.finalize().0,
@@ -827,7 +827,7 @@ impl registryBuilder<'_> {
             change.changed.has(&uri) || change.deleted.has(&uri) || change.created.has(&uri)
         };
         // core.DiffMapsFunc(base.directories, neededDirectories, equalValues, onAdded, onRemoved, onChanged)
-        let base_directories = self.base.directories.clone();
+        let base_directories = Arc::clone(&self.base.directories);
         for (dir_path, dir_name) in &needed_directories {
             match base_directories.get(dir_path) {
                 None => {
@@ -1119,7 +1119,7 @@ impl registryBuilder<'_> {
                         }
                     }
                     if !pkg.types_realpath.is_empty() {
-                        types_fallback_candidates.push(pkg.clone());
+                        types_fallback_candidates.push(Arc::clone(pkg));
                     }
                 } else if !pkg.types_realpath.is_empty() && !seen.get(&pkg.types_realpath).copied().unwrap_or(false) {
                     seen.insert(pkg.types_realpath.clone(), true);
@@ -1179,7 +1179,7 @@ impl registryBuilder<'_> {
         let mut all_results: Vec<bucketBuildResult> = Vec::new();
 
         for task in &node_modules_tasks {
-            let mut br = bucketBuildResult::new(bucketTarget::NodeModules(task.entry.clone()), task.entry.key());
+            let mut br = bucketBuildResult::new(bucketTarget::NodeModules(Arc::clone(&task.entry)), task.entry.key());
             if task.is_update {
                 self.update_node_modules_bucket(
                     ctx,
@@ -1283,7 +1283,7 @@ impl registryBuilder<'_> {
                     FxHashMap::default(),
                     self.host,
                     module_resolver,
-                    self.base.to_path.clone(),
+                    Arc::clone(&self.base.to_path),
                     Box::new(|_, _| {
                         // no-op
                     }),
@@ -1301,7 +1301,7 @@ impl registryBuilder<'_> {
                     let source_file = alias_resolver.get_source_file(&file_name).expect("nil source file");
                     let fs = self.host.fs();
                     let realpath: PathFunc = Arc::new(move |s: &str| fs.realpath(s));
-                    let mut extractor = new_export_extractor(&package_name, &mut ch, module_resolver, self.base.to_path.clone(), Some(realpath));
+                    let mut extractor = new_export_extractor(&package_name, &mut ch, module_resolver, Arc::clone(&self.base.to_path), Some(realpath));
                     let file_exports = extractor.extract_from_file(source_file);
                     for exp in file_exports {
                         index.insert_as_words(exp);
@@ -1504,7 +1504,7 @@ impl registryBuilder<'_> {
             }
             if ctx.err().is_none() {
                 let checker = pool.get_checker();
-                let mut extractor = new_export_extractor("", checker, module_resolver, self.base.to_path.clone(), None);
+                let mut extractor = new_export_extractor("", checker, module_resolver, Arc::clone(&self.base.to_path), None);
                 let file_exports = extractor.extract_from_file(file);
                 exports.insert(file.path().clone(), file_exports);
                 let stats = extractor.stats();
@@ -1700,7 +1700,7 @@ impl registryBuilder<'_> {
             return None;
         }
         let (to_realpath, to_symlink) = get_package_realpath_funcs(self.host.fs(), package_json.package_directory);
-        let resolver: &'static DefaultResolver = tsrs_core::alloc(get_module_resolver(self.host, to_realpath.clone()));
+        let resolver: &'static DefaultResolver = tsrs_core::alloc(get_module_resolver(self.host, Arc::clone(&to_realpath)));
         let mut package_entrypoints = resolver.get_entrypoints_from_package_json_info(package_json, package_name, enable_directory_search)?;
 
         let mut skipped_entrypoints = 0;
@@ -1768,14 +1768,14 @@ impl registryBuilder<'_> {
         }
         let root_files: Vec<P<SourceFile>> = root_files.into_iter().flatten().collect();
 
-        let on_failed_targets = failed_targets.clone();
-        let on_failed_sources = failed_sources.clone();
+        let on_failed_targets = Arc::clone(&failed_targets);
+        let on_failed_sources = Arc::clone(&failed_sources);
         let alias_resolver = new_alias_resolver(
             root_files,
             symlinks,
             self.host,
             resolver,
-            self.base.to_path.clone(),
+            Arc::clone(&self.base.to_path),
             Box::new(move |source: P<SourceFile>, module_name: &str| {
                 on_failed_targets.lock().unwrap().add(module_name.to_string());
                 on_failed_sources.lock().unwrap().entry(source.path().clone()).or_insert_with(|| {
@@ -1786,7 +1786,7 @@ impl registryBuilder<'_> {
         let alias_resolver: &'static super::aliasresolver::aliasResolver = tsrs_core::alloc(alias_resolver);
 
         let mut ch = tsrs_checker::new_checker(alias_resolver);
-        let mut extractor = new_export_extractor(package_name, &mut ch, resolver, self.base.to_path.clone(), Some(to_realpath));
+        let mut extractor = new_export_extractor(package_name, &mut ch, resolver, Arc::clone(&self.base.to_path), Some(to_realpath));
 
         let mut non_module_files: Set<Path> = Set::new();
         for &entrypoint in &alias_resolver.root_files {
@@ -1824,7 +1824,7 @@ impl registryBuilder<'_> {
         }
 
         // Discard entrypoints for non-module files and empty modules.
-        let to_path = self.base.to_path.clone();
+        let to_path = Arc::clone(&self.base.to_path);
         result.entrypoints.retain(|ep| !non_module_files.has(&to_path(&ep.resolved_file_name)));
 
         let stats = extractor.stats();
@@ -1862,7 +1862,7 @@ fn install_extractions(discovered: &[Arc<discoveredPackage>], extraction_cache: 
         }
         result.entrypoints.push(extraction.entrypoints.clone());
         for (path, source) in &extraction.failed_ambient_module_lookup_sources {
-            result.possible_failed_ambient_module_lookup_sources.load_or_store(path.clone(), source.clone());
+            result.possible_failed_ambient_module_lookup_sources.load_or_store(path.clone(), Arc::clone(source));
         }
         for target in extraction.failed_ambient_module_lookup_targets.keys() {
             result.possible_failed_ambient_module_lookup_targets.add(target.clone());
@@ -1923,7 +1923,7 @@ impl registryBuilder<'_> {
         let mut index: Index<Arc<Export>> = Index::default();
         for file_exports in extraction.exports.values() {
             for exp in file_exports {
-                index.insert_as_words(exp.clone());
+                index.insert_as_words(Arc::clone(exp));
             }
         }
         result.bucket = Some(RegistryBucket {
@@ -1945,7 +1945,7 @@ impl registryBuilder<'_> {
         for entrypoint_set in &extraction.entrypoints {
             for entrypoint in entrypoint_set {
                 let path = (self.base.to_path)(&entrypoint.resolved_file_name);
-                result.entrypoints.entry(path).or_default().push(entrypoint.clone());
+                result.entrypoints.entry(path).or_default().push(Arc::clone(entrypoint));
             }
         }
 
@@ -2068,7 +2068,7 @@ impl registryBuilder<'_> {
         for entrypoint_set in &extraction.entrypoints {
             for entrypoint in entrypoint_set {
                 let path = (self.base.to_path)(&entrypoint.resolved_file_name);
-                new_entrypoints.entry(path).or_default().push(entrypoint.clone());
+                new_entrypoints.entry(path).or_default().push(Arc::clone(entrypoint));
             }
         }
 
@@ -2078,7 +2078,7 @@ impl registryBuilder<'_> {
         let index = new_index.as_mut().expect("nil Index");
         for file_exports in extraction.exports.values() {
             for exp in file_exports {
-                index.insert_as_words(exp.clone());
+                index.insert_as_words(Arc::clone(exp));
             }
         }
 

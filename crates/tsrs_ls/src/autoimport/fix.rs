@@ -69,7 +69,7 @@ impl Fix {
         converters: &Arc<Converters>,
         preferences: &UserPreferences,
     ) -> (Vec<lsproto::TextEdit>, String, bool) {
-        let mut tracker = change::new_tracker(ctx, &compiler_options, format_options, converters.clone());
+        let mut tracker = change::new_tracker(ctx, &compiler_options, format_options, Arc::clone(converters));
         match self.kind {
             lsproto::AutoImportFixKind::UseNamespace => {
                 let description = add_namespace_qualifier(self, &mut tracker, file);
@@ -906,7 +906,7 @@ pub(crate) struct existingImport {
 impl View {
     // fix.go:844
     fn get_existing_imports(&self) -> Rc<FxHashMap<ModuleID, Vec<existingImport>>> {
-        self.existing_imports_cell()
+        Rc::clone(self.existing_imports_cell()
             .get_or_init(|| {
                 let mut result: FxHashMap<ModuleID, Vec<existingImport>> = FxHashMap::default();
 
@@ -937,8 +937,7 @@ impl View {
                     }
                 }
                 Rc::new(result)
-            })
-            .clone()
+            }))
     }
 
     // fix.go:876

@@ -57,7 +57,7 @@ pub fn get_last_visited_child(node: P<Node>, source_file: P<SourceFile>) -> Opti
     let last_child: Rc<std::cell::Cell<Option<P<Node>>>> = Rc::new(std::cell::Cell::new(None));
 
     let visit_node: VisitNodeFn = {
-        let last_child = last_child.clone();
+        let last_child = Rc::clone(&last_child);
         Rc::new(move |n: Option<P<Node>>, _: &mut NodeVisitor| {
             if let Some(nd) = n {
                 if !nd.flags().intersects(NodeFlags::Reparsed) {
@@ -68,7 +68,7 @@ pub fn get_last_visited_child(node: P<Node>, source_file: P<SourceFile>) -> Opti
         })
     };
     let visit_node_list: VisitNodesFn = {
-        let last_child = last_child.clone();
+        let last_child = Rc::clone(&last_child);
         Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| {
             if let Some(list) = node_list {
                 for &v in list.nodes().iter().rev() {
