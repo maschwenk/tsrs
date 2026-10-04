@@ -195,7 +195,7 @@ pub enum WatchOption {
 impl WatchOption {
     fn apply_watch_option(&self, opts: &mut watchOptions) {
         match self {
-            WatchOption::Ignore(f) => opts.ignore = Some(f.clone()),
+            WatchOption::Ignore(f) => opts.ignore = Some(Arc::clone(f)),
             WatchOption::Recursive => opts.recursive = true,
             WatchOption::File(path) => opts.file = path.clone(),
         }
@@ -370,7 +370,7 @@ impl Watcher for fallbackWatcher {
         let mut watches: Vec<Box<dyn Watch>> = Vec::with_capacity(requests.len());
         for request in requests {
             let f = request.callback.clone().ok_or_else(|| Error::from(errNilCallback))?;
-            let mut result = self.primary.watch_directory(&request.dir, f.clone(), request.options.clone());
+            let mut result = self.primary.watch_directory(&request.dir, Arc::clone(&f), request.options.clone());
             if matches!(&result, Err(err) if err.is(ErrFilesystemUnsupported)) {
                 result = self.secondary.watch_directory(&request.dir, f, request.options.clone());
             }
@@ -389,7 +389,7 @@ impl Watcher for fallbackWatcher {
 
     // watcher.go:300
     fn watch_file(&self, path: &str, f: WatchCallback) -> Result<Box<dyn Watch>, Error> {
-        let watch = self.primary.watch_file(path, f.clone());
+        let watch = self.primary.watch_file(path, Arc::clone(&f));
         if matches!(&watch, Err(err) if err.is(ErrFilesystemUnsupported)) {
             return self.secondary.watch_file(path, f);
         }
@@ -450,7 +450,7 @@ impl watcher {
     fn get_impl(&self) -> Result<Arc<dyn watcherImpl>, Error> {
         let st = self.mu.lock().unwrap();
         if let Some(impl_) = &st.impl_ {
-            return Ok(impl_.clone());
+            return Ok(Arc::clone(impl_));
         }
         let factory = self.factory;
         drop(st);
@@ -464,12 +464,12 @@ impl watcher {
 
         let mut st = self.mu.lock().unwrap();
         if let Some(existing) = &st.impl_ {
-            let existing = existing.clone();
+            let existing = Arc::clone(existing);
             drop(st);
             impl_.shutdown();
             return Ok(existing);
         }
-        st.impl_ = Some(impl_.clone());
+        st.impl_ = Some(Arc::clone(&impl_));
         Ok(impl_)
     }
 
@@ -557,10 +557,10 @@ impl watcher {
 
         let key = self.key_for_dir_watch(&dir, recursive);
         if let Some(dw) = st.dir_watches.get(&key) {
-            return Ok(dw.clone());
+            return Ok(Arc::clone(dw));
         }
         let dw = dirWatch::new(dir, physical_dir, st.debounce.clone().unwrap(), comparer, self.sequence, recursive);
-        st.dir_watches.insert(key, dw.clone());
+        st.dir_watches.insert(key, Arc::clone(&dw));
         Ok(dw)
     }
 
@@ -660,8 +660,8 @@ impl Watcher for watcher {
                 }
             };
             let id = dw.add_callback(&dir, &physical_dir, sopts.recursive, f, sopts.ignore, &sopts.file);
-            prepared.push(preparedWatch { dw: dw.clone(), id });
-            if seen_dir_watches.insert(dwKey(dw.clone())) {
+            prepared.push(preparedWatch { dw: Arc::clone(&dw), id });
+            if seen_dir_watches.insert(dwKey(Arc::clone(&dw))) {
                 unique_dir_watches.push(dw);
             }
         }
@@ -681,7 +681,7 @@ impl Watcher for watcher {
         let self_static: &'static watcher = self.as_static();
         Ok(prepared
             .into_iter()
-            .map(|p| Box::new(watch { mu: Mutex::new(false), w: self_static, dw: p.dw, impl_: impl_.clone(), id: p.id }) as Box<dyn Watch>)
+            .map(|p| Box::new(watch { mu: Mutex::new(false), w: self_static, dw: p.dw, impl_: Arc::clone(&impl_), id: p.id }) as Box<dyn Watch>)
             .collect())
     }
 
@@ -795,7 +795,7 @@ impl watcherBase {
     fn handle_start_error(&self, err: Error) {
         let mut st = self.mu.lock().unwrap();
         st.start_err = Some(err.clone());
-        let subs: Vec<Arc<dirWatch>> = st.subscriptions.iter().map(|k| k.0.clone()).collect();
+        let subs: Vec<Arc<dirWatch>> = st.subscriptions.iter().map(|k| Arc::clone(&k.0)).collect();
         drop(st);
         for w in subs {
             w.notify_error(err.clone());
@@ -806,11 +806,11 @@ impl watcherBase {
 
 // watcher.go:680
 fn run(impl_: &Arc<dyn watcherImpl>) -> Result<(), Error> {
-    let starter = impl_.clone();
+    let starter = Arc::clone(impl_);
     std::thread::Builder::new()
         .name("fswatch-backend".to_string())
         .spawn(move || {
-            let base_owner = starter.clone();
+            let base_owner = Arc::clone(&starter);
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || starter.start()));
             match result {
                 Ok(Ok(())) => {}
@@ -836,7 +836,7 @@ pub(crate) fn watch_add(impl_: &Arc<dyn watcherImpl>, w: &Arc<dirWatch>) -> Resu
 // watcher.go:717
 pub(crate) fn watch_add_many(impl_: &Arc<dyn watcherImpl>, watches: &[Arc<dirWatch>]) -> Result<(), Error> {
     let mut st = impl_.base().mu.lock().unwrap();
-    let to_add: Vec<Arc<dirWatch>> = watches.iter().filter(|w| !st.subscriptions.contains(&dwKey((*w).clone()))).cloned().collect();
+    let to_add: Vec<Arc<dirWatch>> = watches.iter().filter(|w| !st.subscriptions.contains(&dwKey(Arc::clone(*w)))).cloned().collect();
     if to_add.is_empty() {
         return Ok(());
     }
@@ -853,12 +853,12 @@ pub(crate) fn watch_add_many(impl_: &Arc<dyn watcherImpl>, watches: &[Arc<dirWat
     for w in to_add {
         if let Err(err) = impl_.subscribe(&w) {
             for added_watch in &added {
-                st.subscriptions.remove(&dwKey(added_watch.clone()));
+                st.subscriptions.remove(&dwKey(Arc::clone(added_watch)));
                 let _ = impl_.close_watch(added_watch);
             }
             return Err(err);
         }
-        st.subscriptions.insert(dwKey(w.clone()));
+        st.subscriptions.insert(dwKey(Arc::clone(&w)));
         added.push(w);
     }
     Ok(())
@@ -867,7 +867,7 @@ pub(crate) fn watch_add_many(impl_: &Arc<dyn watcherImpl>, watches: &[Arc<dirWat
 // watcher.go:764
 pub(crate) fn watch_remove(impl_: &Arc<dyn watcherImpl>, w: &Arc<dirWatch>) {
     let mut st = impl_.base().mu.lock().unwrap();
-    if !st.subscriptions.remove(&dwKey(w.clone())) {
+    if !st.subscriptions.remove(&dwKey(Arc::clone(w))) {
         return;
     }
     let _ = impl_.close_watch(w);
@@ -959,10 +959,10 @@ impl dirWatch {
             physical_dir_fold,
             state: Mutex::new(None),
             sequence,
-            mu: Mutex::new(dirWatchState { callbacks: Vec::new(), debounce: Some(db.clone()), next_cb_id: 0 }),
+            mu: Mutex::new(dirWatchState { callbacks: Vec::new(), debounce: Some(Arc::clone(&db)), next_cb_id: 0 }),
             key: nextDirWatchKey.fetch_add(1, Ordering::Relaxed) as usize,
         });
-        let target = dw.clone();
+        let target = Arc::clone(&dw);
         db.add(dw.key, Arc::new(move || target.trigger_callbacks()));
         dw
     }

@@ -130,7 +130,7 @@ impl inotifyBackend {
         if wd < 0 {
             return Err(Error::from_errno(last_errno()));
         }
-        let sub = inotifySubscription { path: path.to_string(), watch_path: watch_path.to_string(), dir_watch: w.clone(), wd };
+        let sub = inotifySubscription { path: path.to_string(), watch_path: watch_path.to_string(), dir_watch: Arc::clone(w), wd };
         subs.entry(wd).or_default().push(sub);
         Ok(wd)
     }
@@ -258,7 +258,7 @@ impl inotifyBackend {
 
 fn touch(touched: &mut Vec<Arc<dirWatch>>, w: &Arc<dirWatch>) {
     if !touched.iter().any(|t| Arc::ptr_eq(t, w)) {
-        touched.push(w.clone());
+        touched.push(Arc::clone(w));
     }
 }
 
@@ -318,13 +318,13 @@ impl watcherImpl for inotifyBackend {
     // inotify_linux.go:399
     fn close_watch(&self, w: &Arc<dirWatch>) -> Result<(), Error> {
         let mut subs = self.subscriptions.lock().unwrap();
-        let key = dwKey(w.clone());
+        let key = dwKey(Arc::clone(w));
         let mut first_err = None;
         let wds: Vec<i32> = subs.keys().copied().collect();
         for wd in wds {
             let list = subs.get_mut(&wd).unwrap();
             let before = list.len();
-            list.retain(|s| dwKey(s.dir_watch.clone()) != key);
+            list.retain(|s| dwKey(Arc::clone(&s.dir_watch)) != key);
             if list.len() == before {
                 continue;
             }
