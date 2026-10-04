@@ -1293,6 +1293,7 @@ impl Checker {
     }
 
     // inference.go:1145
+    #[inline(never)] // out of get_type_of_symbol, which then needs no frame for its common cases
     pub(crate) fn get_type_of_reverse_mapped_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.resolved_type.get().is_none() {
