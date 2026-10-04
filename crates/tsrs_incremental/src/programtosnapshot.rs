@@ -9,7 +9,7 @@ use tsrs_core::P;
 use crate::program::Program;
 use crate::snapshot::{
     buildInfoDiagnosticWithFileName, get_file_emit_kind, get_pending_emit_kind_with_options, repopulate_diagnostic_chain, DiagnosticsCache,
-    DiagnosticsOrBuildInfoDiagnosticsWithFileName, FileEmitKind, FileInfo, Snapshot,
+    DiagnosticsOrBuildInfoDiagnosticsWithFileName, EmitSignature, FileEmitKind, FileInfo, Snapshot,
 };
 
 // programtosnapshot.go:16
@@ -33,6 +33,14 @@ pub(crate) fn program_to_snapshot(program: &'static CompilerProgram, old_program
         to.handle_pending_check();
     }
     snapshot
+}
+
+// What computeProgramFileChanges' per-file function stores into the snapshot besides the file info and references.
+struct fileChange {
+    add_to_change_set: bool,
+    emit_diagnostics: Option<DiagnosticsCache>,
+    semantic_diagnostics: Option<DiagnosticsCache>,
+    emit_signature: Option<EmitSignature>,
 }
 
 struct toProgramSnapshot {
@@ -88,47 +96,49 @@ impl toProgramSnapshot {
             && self.snapshot.options().skip_default_lib_check.is_true() == old.unwrap().options().skip_default_lib_check.is_true();
 
         let files = self.program.get_source_files();
-        // Go queues every file on a work group; the per-file work only adds to the snapshot's sync maps.
-        for &file in files {
+        let old_options = old.map(|old| old.options());
+        let new_options = self.snapshot.options();
+        // programtosnapshot.go:91: Go queues the per-file work on a work group and lets each function store into the
+        // snapshot's sync maps. Here the per-file work runs on the program's worker pool and only reads shared state;
+        // its results are stored in file order afterwards, so the maps are filled in the same order as a sequential run.
+        let compute = |file: P<SourceFile>| -> (FileInfo, Option<Set<Path>>, fileChange) {
             // Content mappers are not supported by tsrs; Go hashes the original text plus the mapper identity here.
-            let version_text = file.text();
-            let version = self.snapshot.compute_hash(version_text);
+            let version = self.snapshot.compute_hash(file.text());
             let implied_node_format = self.program.get_source_file_meta_data(file.path()).implied_node_format;
             let affects_global_scope = file_affects_global_scope(file);
             let mut signature = String::new();
             let new_references = get_referenced_files(self.program, file);
-            if let Some(new_references) = &new_references {
-                self.snapshot.referenced_map.store_references(file.path().clone(), new_references.clone());
-            }
+            let mut change = fileChange { add_to_change_set: false, emit_diagnostics: None, semantic_diagnostics: None, emit_signature: None };
             if let Some(old) = old {
                 if let Some(old_file_info) = old.file_infos.load(file.path()) {
-                    signature = old_file_info.signature.clone();
                     let old_references = old.referenced_map.get_references(file.path());
                     if old_file_info.version != version
                         || old_file_info.affects_global_scope != affects_global_scope
                         || old_file_info.implied_node_format != implied_node_format
                     {
-                        self.snapshot.add_file_to_change_set(file.path().clone());
+                        change.add_to_change_set = true;
                     } else if new_references.as_ref() != old_references.as_deref() {
                         // Referenced files changed
-                        self.snapshot.add_file_to_change_set(file.path().clone());
+                        change.add_to_change_set = true;
                     } else if let Some(new_references) = &new_references {
-                        let mut keys: Vec<&Path> = new_references.keys().iter().collect();
-                        keys.sort();
-                        for ref_path in keys {
+                        // Go ranges over the set in random order and stops at the first deleted file; the outcome does
+                        // not depend on the order.
+                        for ref_path in new_references.keys() {
                             if self.program.get_source_file_by_path(ref_path).is_none() && old.file_infos.load(ref_path).is_some() {
                                 // Referenced file was deleted in the new program
-                                self.snapshot.add_file_to_change_set(file.path().clone());
+                                change.add_to_change_set = true;
                                 break;
                             }
                         }
                     }
+                    signature = old_file_info.signature;
                 } else {
-                    self.snapshot.add_file_to_change_set(file.path().clone());
+                    change.add_to_change_set = true;
                 }
-                if !self.snapshot.changed_files_set.has(file.path()) {
+                // Only this file's own entry in the change set matters, and the parallel phase does not write the set.
+                if !change.add_to_change_set && !self.snapshot.changed_files_set.has(file.path()) {
                     if let Some(emit_diagnostics) = old.emit_diagnostics_per_file.load(file.path()) {
-                        self.snapshot.emit_diagnostics_per_file.store(file.path().clone(), repopulate_diagnostics_of_file(&emit_diagnostics, self.program, file));
+                        change.emit_diagnostics = Some(repopulate_diagnostics_of_file(&emit_diagnostics, self.program, file));
                     }
                     if can_copy_semantic_diagnostics
                         && (!file.is_declaration_file() || copy_declaration_file_diagnostics)
@@ -136,24 +146,53 @@ impl toProgramSnapshot {
                     {
                         // Unchanged file copy diagnostics
                         if let Some(diagnostics) = old.semantic_diagnostics_per_file.load(file.path()) {
-                            self.snapshot
-                                .semantic_diagnostics_per_file
-                                .store(file.path().clone(), repopulate_diagnostics_of_file(&diagnostics, self.program, file));
+                            change.semantic_diagnostics = Some(repopulate_diagnostics_of_file(&diagnostics, self.program, file));
                         }
                     }
                 }
                 if can_copy_emit_signatures {
                     if let Some(old_emit_signature) = old.emit_signatures.load(file.path()) {
-                        self.snapshot
-                            .emit_signatures
-                            .store(file.path().clone(), old_emit_signature.get_new_emit_signature(&old.options(), &self.snapshot.options()));
+                        change.emit_signature = Some(old_emit_signature.get_new_emit_signature(old_options.as_ref().unwrap(), &new_options));
                     }
                 }
             } else {
-                self.snapshot.add_file_to_affected_files_pending_emit(file.path().clone(), get_file_emit_kind(&self.snapshot.options()));
                 signature = version.clone();
             }
-            self.snapshot.file_infos.store(file.path().clone(), FileInfo { version, signature, affects_global_scope, implied_node_format });
+            (FileInfo { version, signature, affects_global_scope, implied_node_format }, new_references, change)
+        };
+        let results: Vec<(FileInfo, Option<Set<Path>>, fileChange)> = if self.program.single_threaded() {
+            files.iter().map(|&file| compute(file)).collect()
+        } else {
+            use rayon::prelude::*;
+            // Create the checker pool before the parallel loop: its lazy initialization runs on the worker pool, and a
+            // worker that steals another file's function while initializing would re-enter the pool's OnceLock.
+            if let Some(&first) = files.first() {
+                drop(self.program.get_type_checker_for_file_exclusive(&Context::default(), first));
+            }
+            tsrs_compiler::worker_pool().install(|| files.par_iter().map(|&file| compute(file)).collect())
+        };
+
+        for (&file, (info, new_references, change)) in files.iter().zip(results) {
+            if let Some(new_references) = new_references {
+                self.snapshot.referenced_map.store_references(file.path().clone(), new_references);
+            }
+            if old.is_some() {
+                if change.add_to_change_set {
+                    self.snapshot.add_file_to_change_set(file.path().clone());
+                }
+                if let Some(emit_diagnostics) = change.emit_diagnostics {
+                    self.snapshot.emit_diagnostics_per_file.store(file.path().clone(), emit_diagnostics);
+                }
+                if let Some(diagnostics) = change.semantic_diagnostics {
+                    self.snapshot.semantic_diagnostics_per_file.store(file.path().clone(), diagnostics);
+                }
+                if let Some(emit_signature) = change.emit_signature {
+                    self.snapshot.emit_signatures.store(file.path().clone(), emit_signature);
+                }
+            } else {
+                self.snapshot.add_file_to_affected_files_pending_emit(file.path().clone(), get_file_emit_kind(&new_options));
+            }
+            self.snapshot.file_infos.store(file.path().clone(), info);
         }
     }
 
@@ -262,20 +301,22 @@ pub(crate) fn file_affects_global_scope(file: P<SourceFile>) -> bool {
     file.statements().nodes().iter().any(|&stmt| !ast::is_module_with_string_literal_name(stmt))
 }
 
+// Collects the declaring files; get_referenced_files turns them into paths after releasing the checker.
 // programtosnapshot.go:259
-fn add_referenced_files_from_symbol(file: P<SourceFile>, referenced_files: &mut Set<Path>, symbol: Option<P<Symbol>>) {
+fn add_referenced_files_from_symbol(file: P<SourceFile>, referenced_files: &mut Vec<P<SourceFile>>, symbol: Option<P<Symbol>>) {
     let Some(symbol) = symbol else { return };
     for &declaration in symbol.declarations() {
         let Some(file_of_decl) = ast::get_source_file_of_node(declaration) else { continue };
-        if file != file_of_decl {
-            referenced_files.add(file_of_decl.path().clone());
+        // A symbol often has several declarations in one file; skipping the repeat saves hashing its path again.
+        if file != file_of_decl && referenced_files.last() != Some(&file_of_decl) {
+            referenced_files.push(file_of_decl);
         }
     }
 }
 
 // Get the module source file and all augmenting files from the import name node from file
 // programtosnapshot.go:275
-fn add_referenced_files_from_import_literal(file: P<SourceFile>, referenced_files: &mut Set<Path>, checker: &mut Checker, import_name: P<Node>) {
+fn add_referenced_files_from_import_literal(file: P<SourceFile>, referenced_files: &mut Vec<P<SourceFile>>, checker: &mut Checker, import_name: P<Node>) {
     let symbol = checker.get_symbol_at_location_exported(import_name);
     add_referenced_files_from_symbol(file, referenced_files, symbol);
 }
@@ -294,14 +335,36 @@ fn add_referenced_file_from_file_name(program: &CompilerProgram, file_name: &str
 // Gets the referenced files for a file from the program with values for the keys as referenced file's path to be true
 // programtosnapshot.go:290
 fn get_referenced_files(program: &'static CompilerProgram, file: P<SourceFile>) -> Option<Set<Path>> {
-    let mut referenced_files: Set<Path> = Set::default();
+    // Go holds the checker for the whole function. Only the symbol lookups need it, so they collect the declaring
+    // files under the lock and the paths are added below without it, in Go's order: imports, triple slash
+    // references, type reference directives, module augmentations, ambient modules.
+    let mut import_files: Vec<P<SourceFile>> = Vec::new();
+    let mut augmentation_files: Vec<P<SourceFile>> = Vec::new();
+    let mut ambient_module_files: Vec<P<SourceFile>> = Vec::new();
+    {
+        let mut checker = program.get_type_checker_for_file_exclusive(&Context::default(), file);
+        for &import_name in file.imports() {
+            add_referenced_files_from_import_literal(file, &mut import_files, &mut checker, import_name);
+        }
+        // Add module augmentation as references
+        for &module_name in file.module_augmentations() {
+            if !ast::is_string_literal(module_name) {
+                continue;
+            }
+            add_referenced_files_from_import_literal(file, &mut augmentation_files, &mut checker, module_name);
+        }
+        // From ambient modules
+        for ambient_module in checker.get_ambient_modules() {
+            add_referenced_files_from_symbol(file, &mut ambient_module_files, Some(ambient_module));
+        }
+    }
 
     // We need to use a set here since the code can contain the same import twice,
     // but that will only be one dependency.
     // To avoid invernal conversion, the key of the referencedFiles map must be of type Path
-    let mut checker = program.get_type_checker_for_file_exclusive(&Context::default(), file);
-    for &import_name in file.imports() {
-        add_referenced_files_from_import_literal(file, &mut referenced_files, &mut checker, import_name);
+    let mut referenced_files: Set<Path> = Set::default();
+    for f in import_files {
+        referenced_files.add(f.path().clone());
     }
 
     let source_file_directory = tspath::get_directory_path(file.file_name());
@@ -319,19 +382,9 @@ fn get_referenced_files(program: &'static CompilerProgram, file: P<SourceFile>) 
         }
     }
 
-    // Add module augmentation as references
-    for &module_name in file.module_augmentations() {
-        if !ast::is_string_literal(module_name) {
-            continue;
-        }
-        add_referenced_files_from_import_literal(file, &mut referenced_files, &mut checker, module_name);
+    for f in augmentation_files.into_iter().chain(ambient_module_files) {
+        referenced_files.add(f.path().clone());
     }
-
-    // From ambient modules
-    for ambient_module in checker.get_ambient_modules() {
-        add_referenced_files_from_symbol(file, &mut referenced_files, Some(ambient_module));
-    }
-    drop(checker);
     if referenced_files.len() > 0 {
         Some(referenced_files)
     } else {
