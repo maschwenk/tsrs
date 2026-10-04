@@ -998,6 +998,10 @@ impl Checker {
                         };
                         // Inferences made from return types have lower priority than all other inferences.
                         self.infer_types(context.inferences.get(), inference_source_type, inference_target_type, InferencePriority::ReturnType, false);
+                        // The snapshot is garbage now unless its mapper was stored (notes/mem-scoped-arenas.md).
+                        if let Some(cloned) = cloned {
+                            InferenceContext::recycle(cloned);
+                        }
                     }
                     // Create a type mapper for instantiating generic contextual types using the inferences made
                     // from the return type. We need a separate inference pass here because (a) instantiation of
@@ -1021,6 +1025,8 @@ impl Checker {
                     } else {
                         context.set_return_mapper(None);
                     }
+                    // Its inferred part was copied (`cloneInferredPartOfContext` clones the infos).
+                    InferenceContext::recycle(return_context);
                 }
             }
         }

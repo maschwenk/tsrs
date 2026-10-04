@@ -280,6 +280,21 @@ pub(crate) unsafe fn recycle_mapping(m: P<TypeMapper>, appended: bool) {
     }
 }
 
+/// Recycles a mapper made by `new_type_mapper(sources, targets)` whose creator also made `targets` (with
+/// `alloc_slice_recycled`), with that list: an array mapper is its list's only holder, a simple mapper does not
+/// refer to it (`getConditionalTypeInstantiation` does the same inline).
+///
+/// # Safety
+/// As for `recycle_mapper`; `targets` is the list the caller made for `m`.
+pub(crate) unsafe fn recycle_mapper_with_targets(m: P<TypeMapper>, targets: &'static [P<Type>]) {
+    if !m.escaped() {
+        tsrs_core::free!(m);
+        tsrs_core::free_slice!(targets);
+    } else if targets.len() == 1 {
+        tsrs_core::free_slice!(targets);
+    }
+}
+
 /// A stored mapper: `Cell<Option<P<TypeMapper>>>` whose `new` / `set` mark the mapper escaped (`escape_mapper`).
 #[derive(Default)]
 #[repr(transparent)]

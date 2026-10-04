@@ -1653,6 +1653,13 @@ impl Checker {
         let template_mapper = self.combine_type_mappers(object_type.as_mapped_type().mapper.get(), mapper);
         let template_type = self.get_template_type_from_mapped_type(object_type.as_mapped_type().target.get().unwrap_or(object_type));
         let instantiated_template_type = self.instantiate_type(template_type, Some(template_mapper));
+        // SAFETY: both made here for this one instantiation (the composite's children escape with it).
+        unsafe {
+            if template_mapper != mapper {
+                recycle_mapper(template_mapper);
+            }
+            recycle_mapper(mapper);
+        }
         let mut is_optional = get_mapped_type_optionality(object_type) > 0;
         if !is_optional {
             if self.is_generic_type(object_type) {
