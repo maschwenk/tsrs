@@ -1096,6 +1096,10 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
 // processes; 0 for declaration and JSON files that are not type checked (skipLibCheck / skipDefaultLibCheck;
 // JSON files are never checked): no checker does work for them. Other source files keep their weight even
 // when not type checked (noCheck, JS without checkJs), since declaration diagnostics still use their checker.
+// Go's 4x source multiplier separates checked sources from declaration files that are mostly not checked; here
+// unchecked files already weigh 0, so declaration files that are checked (no skipLibCheck) get it too. Measured
+// on webpack (642 checked declaration files): 393 ns of check CPU per base unit for declaration files, 536 for
+// sources; with 4 checkers the slowest checker (the one holding the lib files) went from 53% to 12% above the mean.
 fn checked_file_weights(program: &Program) -> Vec<i64> {
     let files = &program.files;
     let checked: Vec<bool> = files
@@ -1110,7 +1114,7 @@ fn checked_file_weights(program: &Program) -> Vec<i64> {
                 return 0;
             }
             let base = get_checker_association_base_weight(f.node_count.get() as i64, f.text().len() as i64);
-            if f.is_declaration_file.get() { base } else { base * CHECKER_ASSOCIATION_SOURCE_FILE_WEIGHT_MULTIPLIER }
+            base * CHECKER_ASSOCIATION_SOURCE_FILE_WEIGHT_MULTIPLIER
         })
         .collect();
     let import_counts: Vec<i64> = files.iter().enumerate().map(|(i, f)| if checked[i] { f.imports().len() as i64 } else { 0 }).collect();
