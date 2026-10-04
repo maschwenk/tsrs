@@ -138,8 +138,8 @@ layouts that now shrink with compressed handles:
   the parent word into the top of the name word (`OwnedTaggedStrCell`: address, 14-bit length, 2 tags; longer names
   go out of line like `PackedStr`'s long form), the parent field is a `PKey`, and `declarations` is an
   `OwnedPSliceCell` (a `ThinSlice` in compressed mode, the 12-byte `SliceCell` otherwise).
-- `FlowNode` 24 -> 16: the antecedent / list tag sits in bit 31 of `text_index` in compressed mode (a handle has no
-  spare bit; text indices are below 2^20 or `NO_SOURCE_TEXT`).
+- `FlowNode` 24 -> 16: no tag bit at all; a node with `Label` flags holds antecedents, any other node its antecedent
+  (Go gives antecedents only to labels and creates labels without an antecedent; asserted on write).
 - `ValueSymbolLinks` 24 -> 16 (two handles and a bits word with the mode); `LinkSlot` 12 -> 8 (keyed by handle).
 - `TypeMapper` stays 16: its two words now hold `to_bits` with the kind in the low 3 bits (no address round trip on
   decode); lists of `P<Type>` are only 4-aligned now, so list words store the address shifted left by one. Two
@@ -173,8 +173,8 @@ All against origin/main ff92b7f built in this worktree, in both modes (compresse
 
 ## 4. Results
 
-The 38k-file codebase, `--noEmit --incremental false`, base = origin/main, interleaved, medians of 3, peak = peak
-memory footprint (`/usr/bin/time -l`):
+First round (the PR's first version; section 5 has the final numbers). The 38k-file codebase, `--noEmit
+--incremental false`, base = origin/main, interleaved, medians of 3, peak = peak memory footprint (`/usr/bin/time -l`):
 
 | run | base peak GiB | compressed peak GiB | delta | base instructions | compressed instructions |
 | --- | --- | --- | --- | --- | --- |
@@ -204,7 +204,7 @@ MB because thread chunks stop doubling at 64 MiB). Rows above 29 MB in the base:
 | `Signature` | 1.57M | 72 | 56 | 108 | 84 |
 | `[P<Node>]` | 8.76M | 12 avg | 6 avg | 103 | 51 |
 | `[P<Symbol>]` | 2.71M | 36 avg | 18 avg | 95 | 47 |
-| `InferenceContext` | 1.43M | 64 | 56 | 87 | 76 |
+| `InferenceContext` | 1.43M | 64 | 48 | 87 | 66 |
 | `InferenceInfo` | 1.78M | 48 | 32 | 81 | 54 |
 | `StructuredMembers` | 2.64M | 32 | 32 | 80 | 80 |
 | `SymbolTable` | 3.49M | 24 | 24 | 80 | 80 |
@@ -241,16 +241,84 @@ region memory around.
   inference context tail) now go through `from_bits`: +9% -> +7%. The release-mode check in `from_static` cost ~2%
   while it sat on mapper decoding; hot views of arena objects (`Node::as_p`, link slots, node / type allocation
   headers) use `from_arena` or `cast` and skip it.
-- A base with a bit inside the offset range (0x4000_0001_0000), so LLVM keeps an `add` with a zero-extending operand
-  instead of `mov` + `orr`: +0.4%, noise. Not kept.
-- What is left (~+6.5%) is the dereference itself (zero-extend + combine with the base, ~1-2 instructions per access)
-  spread over the whole checker; no single function stands out in a sampled profile.
 
-### Not done
+## 5. Follow-up round: instructions, quiet-machine timing, slices, census
 
-- `PSlice<T>` / `PStr` (offset + length, 8 bytes, position independent) for the remaining absolute slices and strings.
-- The census (alloc-profile + `TSRS_CENSUS=1`) in compressed mode: it would have to decode 32-bit handles; compressed
-  builds refuse it, plain builds keep it (docs/DEBUGGING.md).
+### Where the remaining instructions came from
+
+Method: instructions retired (`/usr/bin/time -l`) on vscode's `src` (`--singleThreaded`, 12 s, +7.9% for the PR head
+against a plain-ptrs build of the same commit, the same ratio as the 38k-file codebase), medians of 3 interleaved;
+the run-to-run spread of one binary is about +-0.5% at load 20+ (page-fault work in the kernel counts too). Hot
+functions from `sample` profiles, codegen read with `objdump` for the hottest ones (`compare_types`,
+`get_apparent_type`, `find_ancestor`, `compare_nodes`, `get_type_at_flow_node`, `NodeLinkStore::get`,
+`get_property_of_type_worker`). Per-function hardware instruction counts were not available: the CPU Counters
+instrument records PMI samples without call stacks in manual mode here, so attribution is by experiment, one change at
+a time:
+
+| step | vscode instructions vs plain | what |
+| --- | --- | --- |
+| PR head | +7.9% | |
+| base `0x4001_0000_0000` | +7.1% | one `movz`, and bit 32 overlaps the offset range, so LLVM emits `add x, base, w, uxtw #3` instead of `mov w, w` + `orr` (the zero-extension of a handle passed in a register was a separate instruction) |
+| `P::pack` / `unpack` | +6.2% | node parents, identifier flow slots, symbol table entries and type symbol words keep the handle in the low 32 bits and read it with no mask (it was `to_bits` / 8 in 45 bits: mask, shift, truncate, and a 45-bit zero test next to the 32-bit one); `as_source_file_p` and reduce-label views skip the `from_static` range check |
+| link stores by handle | +4.3..5.0% | `LinkStore` / `IdLinkStore` keep each chunk's first slot as a `P` and index with handle arithmetic (`P::array_add`); before, every lookup turned the element's address back into a handle (`mov` + `add` + `lsr`) |
+| flow labels | -0.3 pt (noise level) | `antecedent()` / `antecedents()` decided by the `Label` flags, not by a tag bit in `text_index` (one load less per step) |
+| id link store | noise | wide-id hash lookup out of line, chunk index unchecked (applies to both modes) |
+
+Final, the 38k-file codebase against origin/main (5 rounds, below): +3.9% one checker, +5.3% four checkers. What is
+left is the dereference itself: in the hot functions, sample-weighted, 1.2% of the instructions are dereference adds,
+0.6% base materializations (`movz`, once per function that dereferences), 0.5% `ubfiz` address shifts where LLVM
+folded a field offset into the constant, 0.2% zero-extends; that is ~2.5 of the ~4.5 points, and the rest is spread
+(more spills and calls in a few functions whose inlining changed, none above 0.3%). The <2% target is not reached on
+arm64: every pointer chase costs one `add` that a plain pointer does not, and only loads at offset 0 of an 8-byte
+field fold it (`ldr x, [base, w, uxtw #3]`). On x86-64 the base can live in a register and `[base + idx*8 + disp]` is
+one addressing mode, so the cost there should be the base register's pressure only (not measured: no x86 machine).
+Chunk hand-out is not a factor: thread chunks are at most 64 MiB, ~150 `mprotect` calls per run.
+
+### Wall time (load 8-13; it did not go below 6 for a whole run within 45 minutes)
+
+5 interleaved rounds, base = origin/main ff92b7f, new = branch head:
+
+| run | binary | wall s median (range) | peak GiB | instructions | page reclaims (first run) | page faults (first run) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 checker | base | 19.23 (18.56-20.44) | 5.033 | 302.7 G | 331,990 (330,990) | 668 |
+| 1 checker | compressed | 19.50 (18.18-21.63) | 4.285 (-14.9%) | 314.4 G (+3.9%) | 282,807 (282,807) | 1 |
+| 4 checkers | base | 8.42 (7.65-9.29) | 6.684 | 403.2 G | 440,315 (439,542) | 669 |
+| 4 checkers | compressed | 8.35 (8.11-8.86) | 5.727 (-14.3%) | 424.6 G (+5.3%) | 377,365 (377,587) | 1 |
+
+Wall time is the same within the ranges (one checker +1.4% median, four checkers -0.8%). Page reclaims (minor
+faults) drop 15% with the smaller arena; the base's ~670 major faults on its first run and in every later run are
+gone (the compressed build maps its arena itself with `mmap`, mimalloc's arena chunks fault once from the file-backed
+side). During this measurement the corpus changed under the runs (`Lines` 5,941,654 / 5,941,656, flipping in both
+binaries, another session editing a file); runs with the same `Lines` have identical counters and diagnostics.
+
+### `PSlice` / `PStr`
+
+Not done, because the premise no longer holds on today's layout: the slices the brief lists (type lists, node list
+elements, symbol declarations, `resolved_type_arguments`, signature parameter lists) and `PackedStr` are already one
+word (`ThinSlice`, `OptionThinSliceCell`, mem-layout3 step 1), so an 8-byte `PSlice` would not shrink them. Going
+through the alloc-profile type table for types above 0.5M allocations, the only remaining 12- or 16-byte slice field
+is `InferenceContext.inferences` (a 12-byte `SliceCell`, 1.43M contexts): in compressed mode it is now a one-word cell
+(`tsrs_core::PSliceCell`), `InferenceContext` 56 -> 48 bytes, arena requested 3,079.5 -> 3,068.6 MB (-11 MB; most
+contexts are recycled, so the peak delta is within noise). A position-independent `PSlice` remains useful for the
+persisted front end (node lists, declarations, identifier text), where it needs a decision on 4-byte-aligned lists
+(offsets in 4-byte units cover only 16 GiB, or 33-bit offsets with 31-bit lengths) and on empty / static slices,
+whose identity `same_slice` observes.
+
+### Census in compressed mode
+
+Left as is: compressed builds refuse `TSRS_CENSUS=1`; use `--features alloc-profile,tsrs_core/plain-ptrs` (plain
+census on the branch head: strong mark 0 violations, precise walk 48,191,467 references, 0 to freed blocks). Teaching
+the strong mark handles is not cheap: it scans every 4-byte-aligned word conservatively, and as 32-bit handles every
+id, position, count and flag word between 8,192 and the arena's top handle points at some block, so freed blocks
+would be "reached" by integers and the violation count would be noise unless every arena type registered its
+scalar fields; the packed words would also need handle-specific decoders (`to_bits` byte offsets in mappers and
+value-symbol links, `pack` in headers). The precise walk (`TSRS_CENSUS_VERIFY`) uses `addr()` and would work.
+
+## Not done
+
+- Instructions below +2% on arm64 (section 5: what is left is one `add` per pointer chase).
+- `PSlice<T>` / `PStr` for position independence of the front end (section 5).
+- The census strong mark in compressed mode (section 5).
 - The fixed base needs a 47-bit user address space (x86-64, arm64 with 48-bit VA) and no `ulimit -v` below 32 GiB;
   otherwise `tsrs` aborts with a message naming `tsrs_core/plain-ptrs`. Windows builds fall back to plain pointers
   (build.rs; a `VirtualAlloc` reservation would do).
