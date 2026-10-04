@@ -1447,7 +1447,10 @@ impl Checker {
         }
         let links = self.alias_symbol_links.get(symbol);
         if links.alias_target.get().is_none() {
+            // Counted until the target is final (the circularity report below prints with the provisional target).
+            self.alias_cache_blockers += 1;
             if !self.push_type_resolution(symbol.into(), TypeSystemPropertyName::AliasTarget) {
+                self.alias_cache_blockers -= 1;
                 return self.unknown_symbol;
             }
             let node = match self.get_declaration_of_alias_symbol(symbol) {
@@ -1465,6 +1468,7 @@ impl Checker {
                 self.error(Some(node), &diagnostics::Circular_definition_of_import_alias_0, &[&name]);
                 links.alias_target.set(Some(self.unknown_symbol));
             }
+            self.alias_cache_blockers -= 1;
         }
         links.alias_target.get().unwrap()
     }

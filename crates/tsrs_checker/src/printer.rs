@@ -801,9 +801,11 @@ impl Checker {
         }
         let mut candidates: Vec<P<Symbol>> = Vec::new();
         if let Some(exports) = exports {
-            for exported in exports.values() {
-                if self.get_symbol_if_same_reference(exported, symbol).is_some() {
-                    candidates.push(exported);
+            if !self.exports_by_target(exports, symbol, &mut candidates) {
+                for exported in exports.values() {
+                    if self.get_symbol_if_same_reference(exported, symbol).is_some() {
+                        candidates.push(exported);
+                    }
                 }
             }
         }
@@ -812,6 +814,58 @@ impl Checker {
             return Some(candidates[0]);
         }
         None
+    }
+
+    // tsrs-only: the loop of getAliasForSymbolInContainer, answered from an index of the export table by resolved
+    // target (`exported` is a candidate iff `get_symbol_if_same_reference(exported, symbol)`, i.e. their merged
+    // resolved targets are equal). Declaration emit runs that loop ~100M times for one edit of a widely imported file
+    // in the 38k-file codebase, mostly with fresh (instantiated) symbols over the same few tables. Pushes the
+    // candidates in table order, as the loop does, and returns false when the loop has to run instead:
+    // - while an alias resolution is in progress or the checker is initializing (`alias_cache_blockers`): a target
+    //   seen then may be provisional, and initialization replaces table entries;
+    // - for a table whose size changed since it was indexed (late-bound and module export tables are replaced, not
+    //   grown, when their resolution finishes; the size check is a guard).
+    // The first indexing resolves the entries in the loop's order (first entry, `symbol`, the rest); repeats only
+    // read alias targets that are cached by then, as the loop's repeats do.
+    fn exports_by_target(&mut self, exports: P<SymbolTable>, symbol: P<Symbol>, candidates: &mut Vec<P<Symbol>>) -> bool {
+        if self.alias_cache_blockers != 0 {
+            return false;
+        }
+        let len = exports.len();
+        let indexed = self.exports_by_target_index.get(&exports).is_some_and(|index| index.len == len);
+        let target = if indexed {
+            if len == 0 {
+                return true;
+            }
+            self.get_symbol_target_for_alias_lookup(symbol)
+        } else {
+            let entries = exports.values();
+            let mut by_target: FxHashMap<P<Symbol>, Vec<P<Symbol>>> = FxHashMap::default();
+            let mut target = None;
+            for (i, &exported) in entries.iter().enumerate() {
+                let a = self.get_symbol_target_for_alias_lookup(exported);
+                if i == 0 {
+                    target = Some(self.get_symbol_target_for_alias_lookup(symbol));
+                }
+                by_target.entry(a).or_default().push(exported);
+            }
+            self.exports_by_target_index.insert(exports, ExportsByTarget { len, by_target });
+            match target {
+                Some(target) => target,
+                None => return true,
+            }
+        };
+        if let Some(found) = self.exports_by_target_index.get(&exports).and_then(|index| index.by_target.get(&target)) {
+            candidates.extend(found.iter().copied());
+        }
+        true
+    }
+
+    // One side of get_symbol_if_same_reference.
+    fn get_symbol_target_for_alias_lookup(&mut self, s: P<Symbol>) -> P<Symbol> {
+        let m = self.get_merged_symbol(s);
+        let r = self.resolve_symbol(m);
+        self.get_merged_symbol(r)
     }
 
     // symbolaccessibility.go:373
@@ -1463,4 +1517,10 @@ impl SymbolTrackerImpl {
         };
         inner.pop_error_fallback_node();
     }
+}
+
+/// An export table indexed by the merged resolved target of each entry (`Checker::exports_by_target`).
+pub struct ExportsByTarget {
+    len: usize,
+    by_target: FxHashMap<P<Symbol>, Vec<P<Symbol>>>,
 }
