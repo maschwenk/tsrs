@@ -20,7 +20,6 @@
 2	clippy::assigning_clones	crates/tsrs_api_transport/src/reentrancy.rs
 4	clippy::borrow_as_ptr	crates/tsrs_api/src/snapshots.rs
 2	clippy::borrow_as_ptr	crates/tsrs_api/src/sourcefiles.rs
-1	clippy::borrow_as_ptr	crates/tsrs_compiler/src/checkerpool.rs
 2	clippy::clone_on_ref_ptr	crates/tsrs_api/src/checker.rs
 3	clippy::clone_on_ref_ptr	crates/tsrs_api/src/checker/handlers_ls.rs
 1	clippy::clone_on_ref_ptr	crates/tsrs_api/src/checker/lease.rs
@@ -96,7 +95,6 @@
 2	clippy::needless_pass_by_value	crates/tsrs_lsproto/src/lsp.rs
 2	clippy::needless_pass_by_value	crates/tsrs_modulespecifiers/src/specifiers.rs
 1	clippy::needless_pass_by_value	crates/tsrs_project/src/session.rs
-1	clippy::ptr_cast_constness	crates/tsrs_compiler/src/checkerpool.rs
 2	clippy::redundant_clone	crates/tsrs_api/src/config.rs
 2	clippy::redundant_clone	crates/tsrs_api/src/module_resolution.rs
 1	clippy::redundant_clone	crates/tsrs_api/src/printing.rs
@@ -105,7 +103,6 @@
 1	clippy::ref_as_ptr	crates/tsrs_api/src/checker/lease.rs
 3	clippy::ref_as_ptr	crates/tsrs_api/src/predecode.rs
 1	clippy::ref_as_ptr	crates/tsrs_api_transport/src/reentrancy.rs
-1	clippy::ref_as_ptr	crates/tsrs_compiler/src/checkerpool.rs
 5	clippy::result_large_err	crates/tsrs_lsproto/src/json.rs
 1	clippy::result_large_err	crates/tsrs_lsproto/src/lsp.rs
 1	clippy::result_large_err	crates/tsrs_lsproto/src/lsproto_jsonrpc.rs
@@ -116,5 +113,4 @@
 2	clippy::trivially_copy_pass_by_ref	crates/tsrs_api/src/checker/handlers_symbols.rs
 1	clippy::trivially_copy_pass_by_ref	crates/tsrs_api_codec/src/encoder.rs
 2	clippy::undocumented_unsafe_blocks	crates/tsrs_api/src/sourcefiles.rs
-4	clippy::undocumented_unsafe_blocks	crates/tsrs_compiler/src/checkerpool.rs
 1	clippy::unnecessary_box_returns	crates/tsrs_api/src/sourcefiles.rs
