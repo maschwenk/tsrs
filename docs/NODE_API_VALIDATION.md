@@ -126,12 +126,13 @@ temp project outside the repo. It then runs the installed binary through CLI pas
 and async API programs on the OS filesystem (diagnostics plus emit with `TSRS_EMIT` unset), and a nodenext
 typecheck of the published declarations that must report exactly one deliberate error.
 
-`.github/workflows/node-api.yml` runs on main pushes, manual dispatch, and `pull_request` into main for
-API paths. It never uses `pull_request_target`, has read-only permissions and no secrets, and never
-publishes. Manual dispatch only works once the file is on the default branch, so pull requests are how the
-API branches get validated before a merge. The `parity` job runs the Go oracle (must pass), then tsrs
-against the same suites, then the inventory, uploads the results, and fails on any tsrs failure. The
-`package` job builds, packs and runs `consumer.mjs` on linux-x64, linux-arm64 and darwin-arm64.
+`.depot/workflows/node-api.yml` (Depot CI) runs on main pushes, manual dispatch, and `pull_request` into
+main for API paths. It never uses `pull_request_target`, has read-only permissions and no secrets, and
+never publishes. Pull requests are how the API branches get validated before a merge; Depot CI does not run
+pull requests from forks. The `parity` job runs the Go oracle (must pass), then tsrs against the same
+suites, then the inventory, uploads the results, and fails on any tsrs failure. The `package` job builds,
+packs and runs `consumer.mjs` on linux-x64 and linux-arm64; `.github/workflows/node-api.yml` runs it on
+darwin-arm64, because Depot CI has no macOS sandboxes.
 
 ## Current evidence
 
