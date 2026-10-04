@@ -833,7 +833,7 @@ pub fn get_containing_function(node: P<Node>) -> Option<P<Node>> {
 
 pub fn is_implicitly_exported_jsdoc_declaration(node: P<Node>) -> bool {
     let parent = node.parent().unwrap();
-    if !is_source_file(parent) || !is_external_or_common_js_module(P::from_static(parent.as_source_file())) {
+    if !is_source_file(parent) || !is_external_or_common_js_module(parent.as_source_file_p()) {
         return false;
     }
     if is_js_type_alias_declaration(node) {

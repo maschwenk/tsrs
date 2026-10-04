@@ -84,9 +84,8 @@ fn source_text(index: u32) -> &'static str {
     unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(slot.ptr.load(Relaxed), slot.len.load(Relaxed))) }
 }
 
-// The word: bits 0..45 the flow node's address / 8 (provenance exposed when stored, like the node header's parent)
-// or the text index, bits 45..62 the text length, bits 62..64 the mode.
-const SLOT_MASK: u64 = (1 << 45) - 1;
+// The word: bits 0..45 the flow node (`P::pack`, like the node header's parent) or the text index, bits 45..62 the text length, bits 62..64 the mode.
+const SLOT_MASK: u64 = (1 << tsrs_core::PACK_BITS) - 1;
 const LEN_SHIFT: u32 = 45;
 const LEN_MAX: u64 = (1 << 17) - 1;
 const MODE_SHIFT: u32 = 62;
@@ -132,17 +131,14 @@ pub(crate) fn census_layout() {
 
 #[inline]
 fn flow_slot(flow: Option<P<FlowNode>>) -> u64 {
-    let addr = flow.map_or(0, |f| (f.get() as *const FlowNode).expose_provenance()) as u64;
-    assert!(addr & 7 == 0 && addr >> 48 == 0, "flow node address {addr:#x} does not fit an identifier");
-    addr >> 3
+    P::pack_opt(flow)
 }
 
 #[inline]
 fn slot_flow(word: u64) -> Option<P<FlowNode>> {
-    let addr = ((word & SLOT_MASK) << 3) as usize;
     // SAFETY: a nonzero flow slot was stored by `flow_slot` from a live `P<FlowNode>` (arena objects are never moved;
-    // a flow node is recycled only when nothing references it), whose provenance it exposed.
-    (addr != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<FlowNode>(addr) }))
+    // a flow node is recycled only when nothing references it).
+    unsafe { P::unpack_opt(word) }
 }
 
 impl Identifier {
@@ -162,7 +158,7 @@ impl Identifier {
     #[inline]
     fn text_index(word: u64) -> u32 {
         if Self::mode(word) == MODE_SOURCE_FLOW {
-            slot_flow(word).unwrap().text_index
+            slot_flow(word).unwrap().text_index()
         } else {
             (word & SLOT_MASK) as u32
         }
@@ -218,7 +214,7 @@ impl Identifier {
         }
         let word = match flow {
             None => MODE_SOURCE << MODE_SHIFT | len | index as u64,
-            Some(f) if f.text_index == index => MODE_SOURCE_FLOW << MODE_SHIFT | len | flow_slot(flow),
+            Some(f) if f.text_index() == index => MODE_SOURCE_FLOW << MODE_SHIFT | len | flow_slot(flow),
             Some(f) => {
                 match SIDE_FLOW.lock().unwrap().entry(self as *const Identifier as usize) {
                     Entry::Occupied(mut e) => *e.get_mut() = f,

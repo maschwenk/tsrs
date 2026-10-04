@@ -43,8 +43,8 @@ impl PrivateIdentifierKind {
     }
 }
 
-fn helper(h: &'static EmitHelper) -> P<EmitHelper> {
-    P::from_static(h)
+fn helper(h: &'static EmitHelper) -> SP<EmitHelper> {
+    SP::from_static(h)
 }
 
 // factory.go:245

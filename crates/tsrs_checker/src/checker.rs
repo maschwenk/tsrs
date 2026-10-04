@@ -8,7 +8,7 @@ use std::sync::{LazyLock, OnceLock};
 use bitflags::bitflags;
 
 use crate::*;
-use tsrs_core::SliceCell;
+use tsrs_core::PSliceCell;
 
 // CheckMode
 
@@ -306,11 +306,11 @@ bitflags! {
 // 1.43M contexts on the private monorepo single, so the four fields that fewer than 4% of them set (return mappers, inferred type
 // parameters, intra-expression sites) live in a tail allocated on the first non-default write (`InferenceContextRare`,
 // read through accessors that return the zero value when it is absent), and `inferences` packs with `flags`:
-// 64 bytes instead of 128.
+// 64 bytes instead of 128 (48 with compressed pointers, where `inferences` is a one-word `ThinSliceCell`).
 
 #[derive(Default)]
 pub struct InferenceContext {
-    pub inferences: SliceCell<P<InferenceInfo>>, // Inferences made for each type parameter
+    pub inferences: PSliceCell<P<InferenceInfo>>, // Inferences made for each type parameter
     pub flags: Cell<InferenceFlags>, // Inference flags
     pub signature: Cell<Option<P<Signature>>>, // Generic signature for which inferences are made (if any)
     pub compare_types: Cell<Option<TypeComparer>>, // Type comparer function
@@ -318,14 +318,14 @@ pub struct InferenceContext {
     // `non_fixing_mapper()`), see notes/mem-round3.md.
     mapper: Cell<Option<P<TypeMapper>>>,
     non_fixing_mapper: Cell<Option<P<TypeMapper>>>,
-    // The `InferenceContextRare` address (exposed provenance) with the escaped bit (`RARE_ESCAPED`) in bit 0: set
+    // The `InferenceContextRare`'s `P::to_bits` with the escaped bit (`RARE_ESCAPED`) in bit 0: set
     // when one of the context's inference mappers escapes (notes/mem-recycle.md), after which it is never recycled.
     rare: Cell<usize>,
 }
 
 const RARE_ESCAPED: usize = 1;
 
-const _: () = assert!(std::mem::size_of::<InferenceContext>() == 64);
+const _: () = assert!(std::mem::size_of::<InferenceContext>() == if tsrs_core::COMPRESSED_PTRS { 48 } else { 64 });
 
 #[derive(Default)]
 pub(crate) struct InferenceContextRare {
@@ -338,7 +338,7 @@ pub(crate) struct InferenceContextRare {
 impl InferenceContext {
     pub(crate) fn new(inferences: &'static [P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> InferenceContext {
         InferenceContext {
-            inferences: SliceCell::new(inferences),
+            inferences: PSliceCell::new(inferences),
             signature: Cell::new(signature),
             flags: Cell::new(flags),
             compare_types: Cell::new(Some(compare_types)),
@@ -349,13 +349,12 @@ impl InferenceContext {
     /// The arena handle of this context (contexts are only created in the arena and never moved).
     fn as_p(&self) -> P<InferenceContext> {
         // SAFETY: see above.
-        P::from_static(unsafe { &*(self as *const InferenceContext) })
+        unsafe { P::from_arena(&*(self as *const InferenceContext)) }
     }
 
     fn rare(&self) -> Option<P<InferenceContextRare>> {
-        let a = self.rare.get() & !RARE_ESCAPED;
-        // SAFETY: a non-zero address was stored from a live `P<InferenceContextRare>` (`rare_for_write`).
-        (a != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<InferenceContextRare>(a) }))
+        // SAFETY: nonzero bits were stored from a live `P<InferenceContextRare>` (`rare_for_write`).
+        unsafe { P::from_bits_opt(self.rare.get() & !RARE_ESCAPED) }
     }
 
     /// Whether one of the context's inference mappers escaped (it may be used after its creator is done).
@@ -416,8 +415,7 @@ impl InferenceContext {
             Some(rare) => rare,
             None => {
                 let rare = P::new_recycled(InferenceContextRare::default());
-                let addr = (rare.get() as *const InferenceContextRare).expose_provenance();
-                self.rare.set(addr | (self.rare.get() & RARE_ESCAPED));
+                self.rare.set(rare.to_bits() | (self.rare.get() & RARE_ESCAPED));
                 rare
             }
         }
@@ -560,7 +558,7 @@ pub struct InferenceInfo {
     pub implied_arity: Cell<i32>, // Implied arity (or -1)
 }
 
-const _: () = assert!(std::mem::size_of::<InferenceInfo>() == 48);
+const _: () = assert!(std::mem::size_of::<InferenceInfo>() == if tsrs_core::COMPRESSED_PTRS { 28 } else { 48 });
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]

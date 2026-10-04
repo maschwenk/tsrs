@@ -272,7 +272,7 @@ pub struct SymbolReferenceLinks {
 pub struct ValueSymbolLinks {
     pub resolved_type: Cell<Option<P<Type>>>, // Type of value symbol
     first: Cell<Option<P<()>>>,  // plain: target (P<Symbol>); synthetic: containing_type (P<Type>); tail: P<ValueSymbolLinksTail>
-    second: Cell<Option<P<()>>>, // plain: mapper (P<TypeMapper>); synthetic: name_type (P<Type>) | SYNTHETIC; tail: TAIL
+    second: Cell<usize>,         // `P::to_bits` of: plain: mapper (P<TypeMapper>); synthetic: name_type (P<Type>) | SYNTHETIC; tail: TAIL
 }
 
 #[derive(Default)]
@@ -285,7 +285,7 @@ struct ValueSymbolLinksTail {
     function_or_constructor_checked: Cell<bool>,
 }
 
-const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 24);
+const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == if tsrs_core::COMPRESSED_PTRS { 16 } else { 24 });
 
 const MODE_MASK: usize = 3;
 const SYNTHETIC: usize = 1;
@@ -301,33 +301,26 @@ enum LinksMode {
 /// A pointer stored in a link word whose type depends on the mode.
 #[inline]
 fn erase<T>(p: Option<P<T>>) -> Option<P<()>> {
-    // A `&()` may point anywhere (zero-sized); the cast keeps the pointer's provenance.
-    p.map(|p| P::from_static(unsafe { &*(p.get() as *const T).cast::<()>() }))
+    // SAFETY: a `()` is zero-sized; the word only keeps the object's position.
+    p.map(|p| unsafe { p.cast::<()>() })
 }
 
-/// SAFETY: `w` was stored by `erase` from a `P<T>` (arena values are never freed or moved), with the mode bits cleared.
+/// SAFETY: `w` was stored by `erase` from a `P<T>` (arena values are never freed or moved).
 #[inline]
 unsafe fn restore<T: 'static>(w: Option<P<()>>) -> Option<P<T>> {
-    w.map(|w| P::from_static(unsafe { &*(w.get() as *const ()).cast::<T>() }))
+    w.map(|w| unsafe { w.cast::<T>() })
 }
 
-/// `w` with its address mapped by `f` (`None` stands for address 0; a result of 0 is `None`).
+/// SAFETY: `bits` is 0 or `P::to_bits` of a `P<T>` (mode bits cleared).
 #[inline]
-fn map_word(w: Option<P<()>>, f: impl FnOnce(usize) -> usize) -> Option<P<()>> {
-    let ptr = w.map_or(std::ptr::null(), |w| w.get() as *const ()).map_addr(f);
-    // SAFETY: a `&()` only needs to be non-null.
-    (!ptr.is_null()).then(|| P::from_static(unsafe { &*ptr }))
-}
-
-#[inline]
-fn word_bits(w: Option<P<()>>) -> usize {
-    w.map_or(0, |w| (w.get() as *const ()).addr())
+unsafe fn restore_bits<T: 'static>(bits: usize) -> Option<P<T>> {
+    unsafe { P::from_bits_opt(bits) }
 }
 
 impl ValueSymbolLinks {
     #[inline]
     fn mode(&self) -> LinksMode {
-        match word_bits(self.second.get()) & MODE_MASK {
+        match self.second.get() & MODE_MASK {
             0 => LinksMode::Plain,
             SYNTHETIC => LinksMode::Synthetic,
             _ => LinksMode::Tail,
@@ -352,14 +345,14 @@ impl ValueSymbolLinks {
         tail.containing_type.set(self.containing_type());
         tail.name_type.set(self.name_type());
         self.first.set(erase(Some(tail)));
-        self.second.set(map_word(None, |_| TAIL));
+        self.second.set(TAIL);
         tail
     }
 
     /// Moves a plain record without target and mapper to synthetic mode, if it is one.
     fn enter_synthetic_mode(&self) -> bool {
-        if self.mode() == LinksMode::Plain && self.first.get().is_none() && self.second.get().is_none() {
-            self.second.set(map_word(None, |_| SYNTHETIC));
+        if self.mode() == LinksMode::Plain && self.first.get().is_none() && self.second.get() == 0 {
+            self.second.set(SYNTHETIC);
             return true;
         }
         self.mode() == LinksMode::Synthetic
@@ -386,7 +379,7 @@ impl ValueSymbolLinks {
     pub fn mapper(&self) -> Option<P<TypeMapper>> {
         match self.mode() {
             // SAFETY: in plain mode `second` is an erased `P<TypeMapper>` or nil (no mode bits).
-            LinksMode::Plain => unsafe { restore(self.second.get()) },
+            LinksMode::Plain => unsafe { restore_bits(self.second.get()) },
             LinksMode::Synthetic => None,
             LinksMode::Tail => self.tail().mapper.get(),
         }
@@ -397,7 +390,7 @@ impl ValueSymbolLinks {
             escape_mapper(m); // a symbol link outlives the call that made the mapper
         }
         match self.mode() {
-            LinksMode::Plain => self.second.set(erase(mapper)),
+            LinksMode::Plain => self.second.set(P::to_bits_opt(mapper)),
             LinksMode::Synthetic if mapper.is_none() => {}
             _ => self.tail_for_write().mapper.set(mapper),
         }
@@ -427,7 +420,7 @@ impl ValueSymbolLinks {
         match self.mode() {
             LinksMode::Plain => None,
             // SAFETY: in synthetic mode `second` is an erased `P<Type>` or nil plus the mode bits.
-            LinksMode::Synthetic => unsafe { restore(map_word(self.second.get(), |a| a & !MODE_MASK)) },
+            LinksMode::Synthetic => unsafe { restore_bits(self.second.get() & !MODE_MASK) },
             LinksMode::Tail => self.tail().name_type.get(),
         }
     }
@@ -437,7 +430,7 @@ impl ValueSymbolLinks {
             return;
         }
         if self.enter_synthetic_mode() {
-            self.second.set(map_word(erase(t), |a| a | SYNTHETIC));
+            self.second.set(P::to_bits_opt(t) | SYNTHETIC);
         } else {
             self.tail_for_write().name_type.set(t);
         }
@@ -1093,9 +1086,8 @@ struct TypeSymbolAlias {
     alias: Cell<Option<P<TypeAlias>>>,
 }
 
-/// `Type.symbol`, or a `TypeSymbolAlias` record once the type has an alias: an address in the low 48 bits
-/// (provenance exposed when stored, recovered with `with_exposed_provenance`; user-space addresses are below 2^48),
-/// bit 63 set for the record. 0 = no symbol, no alias. The address stays a plain pointer to the start of its block.
+/// `Type.symbol`, or a `TypeSymbolAlias` record once the type has an alias: `P::pack` in the low 45 bits, bit 63 set
+/// for the record. 0 = no symbol, no alias. The address stays a plain pointer to the start of its block.
 #[derive(Clone, Copy, Default)]
 struct TypeSymbolWord(u64);
 
@@ -1103,32 +1095,22 @@ impl TypeSymbolWord {
     const RECORD: u64 = 1 << 63;
 
     #[inline]
-    fn addr(p: *const u8) -> u64 {
-        let addr = p.expose_provenance() as u64;
-        assert!(addr >> 48 == 0, "address {addr:#x} above 2^48");
-        addr
-    }
-
-    #[inline]
     fn symbol_word(symbol: Option<P<Symbol>>) -> TypeSymbolWord {
-        TypeSymbolWord(symbol.map_or(0, |s| Self::addr(s.get() as *const Symbol as *const u8)))
+        TypeSymbolWord(P::pack_opt(symbol))
     }
 
     #[inline]
     fn record(self) -> Option<P<TypeSymbolAlias>> {
-        // SAFETY: a tagged word was stored from a live `P<TypeSymbolAlias>` (arena objects are never moved or
-        // freed), whose provenance `addr` exposed.
-        (self.0 & Self::RECORD != 0).then(|| {
-            P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<TypeSymbolAlias>((self.0 & !Self::RECORD) as usize) })
-        })
+        // SAFETY: a tagged word was stored from a live `P<TypeSymbolAlias>` (arena objects are never moved or freed).
+        (self.0 & Self::RECORD != 0).then(|| unsafe { P::unpack(self.0) })
     }
 
     #[inline]
     fn symbol(self) -> Option<P<Symbol>> {
         match self.record() {
             Some(r) => r.symbol.get(),
-            // SAFETY: a nonzero untagged word was stored from a live `P<Symbol>`, whose provenance `addr` exposed.
-            None => (self.0 != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(self.0 as usize) })),
+            // SAFETY: an untagged word is 0 or was stored from a live `P<Symbol>`.
+            None => unsafe { P::unpack_opt(self.0) },
         }
     }
 }
@@ -1157,7 +1139,7 @@ pub(crate) fn census_layouts() {
         tsrs_ast::census_layouts();
         let sym = offset_of!(Type, symbol_or_alias);
         let mut header = CensusField::all_but(0, size_of::<Type>(), &[sym]);
-        header.push(CensusField::Tagged { off: sym });
+        header.push(CensusField::X8 { off: sym, modes: 0b101 }); // address / 8, bit 63 for the record
         let name = type_name::<TypeAlloc<LiteralType>>();
         tsrs_core::census_layout(&name[..=name.find('<').unwrap()], &header);
         // The number and boolean variants leave the rest of the value uninitialized (its strings are never freed).
@@ -1364,9 +1346,8 @@ impl Type {
     /// Allocates a type whose data struct is `data` (only `Checker::new_type` and the checker's placeholder type).
     pub(crate) fn alloc<T: TypePayload>(flags: TypeFlags, object_flags: ObjectFlags, id: TypeId, data: T) -> P<Type> {
         let header = Type { flags: Cell::new(flags), object_flags: Cell::new(object_flags), id, data_tag: T::TAG, symbol_or_alias: Cell::new(TypeSymbolWord(0)) };
-        let a: &'static TypeAlloc<T> = P::new(TypeAlloc { header, data }).get();
         // SAFETY: `TypeAlloc` is `repr(C)` with the header first; arena values are never moved or freed.
-        P::from_static(unsafe { &*(a as *const TypeAlloc<T>).cast::<Type>() })
+        unsafe { P::new(TypeAlloc { header, data }).cast::<Type>() }
     }
 
     /// The data struct after this type's header. Callers check `data_tag == T::TAG` first.
@@ -1662,7 +1643,7 @@ impl Type {
             Some(r) => r.alias.set(alias),
             None if alias.is_some() => {
                 let r = P::new(TypeSymbolAlias { symbol: Cell::new(word.symbol()), alias: Cell::new(alias) });
-                self.symbol_or_alias.set(TypeSymbolWord(TypeSymbolWord::addr(r.get() as *const TypeSymbolAlias as *const u8) | TypeSymbolWord::RECORD));
+                self.symbol_or_alias.set(TypeSymbolWord(r.pack() | TypeSymbolWord::RECORD));
             }
             None => {}
         }
@@ -1948,7 +1929,7 @@ struct StructuredMembers {
     count_or_index_infos: CountOrIndexInfos,
 }
 
-const _: () = assert!(std::mem::size_of::<StructuredType>() == 8);
+const _: () = assert!(std::mem::size_of::<StructuredType>() == if tsrs_core::COMPRESSED_PTRS { 4 } else { 8 });
 const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 32);
 
 /// Go's `CallSignatureCount` and `IndexInfos` in one word: `count << 1 | 1` while no non-empty index info list was
@@ -2762,7 +2743,7 @@ pub struct Signature {
     rare: SignatureRareWord,
 }
 
-const _: () = assert!(std::mem::size_of::<Signature>() == 72);
+const _: () = assert!(std::mem::size_of::<Signature>() == if tsrs_core::COMPRESSED_PTRS { 56 } else { 72 });
 
 #[derive(Default)]
 struct SignatureRare {
@@ -2788,7 +2769,7 @@ impl SignatureRareWord {
     fn tail(&self) -> Option<P<SignatureRare>> {
         let p = self.0.get().map_addr(|a| a & !SIGNATURE_NO_TYPE_PREDICATE);
         // SAFETY: a non-null address is a `P<SignatureRare>` stored by `set_tail`.
-        (!p.is_null()).then(|| P::from_static(unsafe { &*p }))
+        (!p.is_null()).then(|| unsafe { P::from_arena(&*p) })
     }
     #[inline]
     fn no_type_predicate(&self) -> bool {

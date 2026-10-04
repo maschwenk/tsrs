@@ -338,7 +338,7 @@ pub(crate) fn create_external_helpers_import_declaration_if_needed(
 }
 
 // externalmoduleinfo.go:318
-fn get_imported_helpers(emit_context: P<EmitContext>, source_file: P<SourceFile>) -> Vec<P<EmitHelper>> {
+fn get_imported_helpers(emit_context: P<EmitContext>, source_file: P<SourceFile>) -> Vec<SP<EmitHelper>> {
     let mut helpers = Vec::new();
     for helper in emit_context.get_emit_helpers(source_file.as_node()) {
         if !helper.scoped {
@@ -353,7 +353,7 @@ fn get_or_create_external_helpers_module_name_if_needed(
     emit_context: P<EmitContext>,
     node: P<SourceFile>,
     compiler_options: &CompilerOptions,
-    helpers: &[P<EmitHelper>],
+    helpers: &[SP<EmitHelper>],
     has_export_stars_to_export_values: bool,
     has_import_star_or_import_default: bool,
     file_module_kind: ModuleKind,

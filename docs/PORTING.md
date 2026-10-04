@@ -61,8 +61,12 @@ are compared by identity — AST nodes, symbols, types, signatures, links, flow 
 mappers, inference contexts … — are allocated in a process-lifetime leak arena and
 referenced through `tsrs_core::P<T>`:
 
-- `P<T>`: `Copy`, `Deref<Target = T>`, equality/hash/order **by address** (like Go pointers).
-  Create with `P::new(value)`. `p.get()` returns `&'static T`.
+- `P<T>`: `Copy`, `Deref<Target = T>`, equality/hash/order **by identity** (like Go pointers).
+  Create with `P::new(value)`. `p.get()` returns `&'static T`. It is a 32-bit handle (an offset in 8-byte units into
+  one reserved address range; `tsrs_core::reserve`, notes/mem-pointer-compression.md), or a plain reference with
+  `--features tsrs_core/plain-ptrs`. So: `P::from_static(r)` only for references to arena objects (an object made
+  with `P::new` / `alloc`, or a view that starts 8-aligned inside one); a Go package-level `*T` variable that is a
+  Rust `static` is an `SP<T>`. Packed words store `p.to_bits()` / `p.key()`, never addresses.
 - Go `*T` that can be nil -> `Option<P<T>>`. Go `*T` that is never nil -> `P<T>`.
   Decide from the Go code (nil checks, `return nil`). When unsure, use `Option`.
 - There are **no lifetime parameters** anywhere in this codebase. Arena data is `'static`.
