@@ -785,6 +785,13 @@ impl Program {
         }
     }
 
+    /// The index (as passed to `for_each_checker_parallel`) of the checker the pool assigned `file` to, i.e. the
+    /// checker `for_each_checker_group` runs it on. Creates the checkers on first use. None when the program has no
+    /// checker pool of its own or `file` is not one of its files.
+    pub fn checker_index_of_file(&self, file: P<SourceFile>) -> Option<usize> {
+        self.compiler_checker_pool()?.checker_index_of_file(file)
+    }
+
     /// Runs `cb` for every file of `files` with the file's checker, one task per checker, each visiting its files in
     /// the order of `files` under one lock acquisition (`checkerPool::for_each_checker_group_do`). False, without
     /// calling `cb`, when the program has no checker pool of its own.
