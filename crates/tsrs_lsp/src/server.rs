@@ -481,7 +481,7 @@ impl Server {
     // synchronization and pull diagnostics for the given otherwise unsupported file extensions so the editor forwards their
     // open/change/close notifications to the server and requests diagnostics for them. It is called with the
     // full desired set each time it changes; an empty slice removes any prior registration.
-    pub fn register_content_mapper_extensions(&self, ctx: &Context, extensions: Vec<String>) -> Result<(), Error> {
+    pub fn register_content_mapper_extensions(&self, ctx: &Context, extensions: &[String]) -> Result<(), Error> {
         if !self.client_capabilities().text_document.synchronization.dynamic_registration {
             return Ok(());
         }
@@ -532,7 +532,7 @@ impl Server {
         }
 
         let mut filters = Vec::with_capacity(extensions.len());
-        for ext in &extensions {
+        for ext in extensions {
             filters.push(lsproto::TextDocumentFilterLanguageOrSchemeOrPattern {
                 pattern: Some(lsproto::TextDocumentFilterPattern {
                     pattern: lsproto::PatternOrRelativePattern { pattern: Some(format!("**/*{}", ext)), ..Default::default() },
@@ -543,7 +543,7 @@ impl Server {
         }
         let selector = lsproto::DocumentSelectorOrNull { document_selector: Some(filters) };
         let mut content_mapper_file_rename_filters = Vec::with_capacity(extensions.len());
-        for extension in &extensions {
+        for extension in extensions {
             content_mapper_file_rename_filters.push(lsproto::FileOperationFilter {
                 scheme: Some("file".to_string()),
                 pattern: lsproto::FileOperationPattern { glob: format!("**/*{}", extension), ..Default::default() },
@@ -1027,7 +1027,7 @@ impl Server {
                         }
                     };
                     let resp = self.handle_initialize(ctx, params, &req)?;
-                    self.send_result(req.id.as_ref(), resp)?;
+                    self.send_result(req.id.as_ref(), &resp)?;
                 } else {
                     self.send_error(req.id.as_ref(), ErrorCode::ServerNotInitialized.into())?;
                 }
@@ -1195,7 +1195,7 @@ impl Server {
     }
 
     // server.go:1096
-    pub(crate) fn send_result(&self, id: Option<&ID>, result: impl Json) -> Result<(), Error> {
+    pub(crate) fn send_result(&self, id: Option<&ID>, result: &impl Json) -> Result<(), Error> {
         self.send_response(ResponseMessage { id: id.cloned(), result: Some(result.to_json()), ..Default::default() })
     }
 
@@ -1315,14 +1315,14 @@ impl Server {
         match recover_scope(f) {
             Ok(result) => result,
             Err((payload, stack)) => {
-                self.recover(req, payload, &stack);
+                self.recover(req, &payload, &stack);
                 Ok(())
             }
         }
     }
 
     // server.go:1477
-    fn recover(&self, req: &RequestMessage, r: Box<dyn Any + Send>, stack: &str) {
+    fn recover(&self, req: &RequestMessage, r: &Box<dyn Any + Send>, stack: &str) {
         let r = panic_value_string(&r);
         self.logger.errorf(format_args!("panic handling request {}: {}\n{}", req.method, r, stack));
         if req.id.is_some() {
@@ -1584,7 +1584,7 @@ impl Server {
         let client: Arc<dyn project::Client> = Arc::<Server>::clone(self);
         let logger: Arc<dyn logging::Logger> = self.logger_arc();
         let npm_executor: Arc<dyn project::NpmExecutor> = Arc::<Server>::clone(self);
-        let session = project::new_session(project::SessionInit {
+        let session = project::new_session(&project::SessionInit {
             background_ctx: lsproto::with_client_capabilities(&self.background_ctx(), self.client_capabilities_arc()),
             options: Arc::new(project::SessionOptions {
                 current_directory: cwd,
@@ -2004,7 +2004,7 @@ impl Server {
         match recover_scope(|| language_service.resolve_completion_item(ctx, params, Some(&data))) {
             Ok(result) => result,
             Err((payload, stack)) => {
-                self.recover(req_msg, payload, &stack);
+                self.recover(req_msg, &payload, &stack);
                 Err(Error::new(format!("panic handling request {}", req_msg.method)))
             }
         }
@@ -2464,7 +2464,7 @@ impl handlerMap {
                 if let Some(err) = ctx.err() {
                     return Err(err.into());
                 }
-                s.send_result(req.id.as_ref(), resp)?;
+                s.send_result(req.id.as_ref(), &resp)?;
                 Ok(None)
             }),
         );
@@ -2495,7 +2495,7 @@ impl handlerMap {
                         if let Some(err) = ctx.err() {
                             return Err(err.into());
                         }
-                        s.send_result(req.id.as_ref(), resp)
+                        s.send_result(req.id.as_ref(), &resp)
                     })
                 })))
             }),
@@ -2536,7 +2536,7 @@ impl handlerMap {
                             if let Some(err) = ctx.err() {
                                 return Err(err.into());
                             }
-                            s.send_result(req.id.as_ref(), resp)
+                            s.send_result(req.id.as_ref(), &resp)
                         })
                     }) as project::AsyncWork))
                 })
@@ -2566,7 +2566,7 @@ impl handlerMap {
                         if let Some(err) = ctx.err() {
                             return Err(err.into());
                         }
-                        s.send_result(req.id.as_ref(), resp)
+                        s.send_result(req.id.as_ref(), &resp)
                     })
                 })))
             }),
@@ -2647,7 +2647,7 @@ impl project::Client for Server {
         Server::unwatch_files(self, ctx, &id.0)
     }
     fn register_content_mapper_extensions(&self, ctx: &Context, extensions: Vec<String>) -> Result<(), Error> {
-        Server::register_content_mapper_extensions(self, ctx, extensions)
+        Server::register_content_mapper_extensions(self, ctx, &extensions)
     }
     fn refresh_diagnostics(&self, ctx: &Context) -> Result<(), Error> {
         Server::refresh_diagnostics(self, ctx)

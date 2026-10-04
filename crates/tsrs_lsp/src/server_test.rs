@@ -190,7 +190,7 @@ fn server_shutdown_no_deadlock() {
     // Create session with the server's lifecycle context
     server.init_started.store(true, std::sync::atomic::Ordering::SeqCst);
     let logger: Arc<dyn project::logging::Logger> = server.logger_arc();
-    let session = project::new_session(project::SessionInit {
+    let session = project::new_session(&project::SessionInit {
         background_ctx: ctx.clone(),
         options: Arc::new(project::SessionOptions {
             current_directory: "/test".to_string(),
