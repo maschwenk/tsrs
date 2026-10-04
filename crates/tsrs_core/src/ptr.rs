@@ -280,6 +280,8 @@ impl<T: ?Sized> P<T> {
     /// The underlying `'static` reference (not tied to the borrow of `self`).
     #[inline]
     pub fn get(self) -> &'static T {
+        #[cfg(feature = "alloc-profile")]
+        check_not_freed(self.0);
         self.0
     }
 
@@ -306,7 +308,10 @@ impl<T: ?Sized> P<T> {
         T: Sized,
     {
         // SAFETY: a handle is the offset of a live arena object from the base of the reservation it lives in.
-        unsafe { &*crate::reserve::base().add((self.0.get() as usize) << crate::reserve::UNIT_SHIFT).cast::<T>() }
+        let r = unsafe { &*crate::reserve::base().add((self.0.get() as usize) << crate::reserve::UNIT_SHIFT).cast::<T>() };
+        #[cfg(feature = "alloc-profile")]
+        check_not_freed(r);
+        r
     }
 
     /// The object's address.
@@ -395,6 +400,8 @@ impl<T: ?Sized> Deref for P<T> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &T {
+        #[cfg(feature = "alloc-profile")]
+        check_not_freed(self.0);
         self.0
     }
 }
@@ -405,6 +412,26 @@ impl<T> Deref for P<T> {
     #[inline(always)]
     fn deref(&self) -> &T {
         self.get()
+    }
+}
+
+/// Profile builds with `TSRS_ARENA_POISON=1`: freed and rewound arena memory is filled with `POISON` and never reused,
+/// so a `P` whose target starts with eight poison bytes points into memory the arena gave back. Checked on every
+/// dereference, which turns a use after a wrong free into a panic at the use instead of a changed result.
+#[cfg(feature = "alloc-profile")]
+#[inline]
+fn check_not_freed<T: ?Sized>(r: &T) {
+    // A compressed handle always names an 8-aligned block (`p_layout`); a reference only when `T` is 8-aligned.
+    let aligned = cfg!(compressed_ptrs) || std::mem::align_of_val(r) >= 8;
+    if std::mem::size_of_val(r) >= 8 && aligned && crate::arena::poison_mode() {
+        // SAFETY: `r` is at least 8 bytes and 8-aligned.
+        let w = unsafe { std::ptr::read_volatile(r as *const T as *const u64) };
+        assert!(
+            w != u64::from_ne_bytes([crate::arena::POISON; 8]),
+            "arena: dereference of a freed block at {:p} as {}",
+            r as *const T as *const (),
+            std::any::type_name::<T>()
+        );
     }
 }
 
