@@ -655,7 +655,7 @@ impl RegExpParser {
 
     fn named_capturing_groups_contains(&self, name: &str) -> bool {
         for group in &self.named_capturing_groups {
-            if group.iter().any(|&n| n == name) {
+            if group.contains(&name) {
                 return true;
             }
         }

@@ -959,7 +959,7 @@ impl Checker {
 
     // relater.go:695
     pub(crate) fn has_common_properties(&mut self, source: P<Type>, target: P<Type>, is_comparing_jsx_attributes: bool) -> bool {
-        for prop in self.get_properties_of_type(source).iter().copied() {
+        for prop in self.get_properties_of_type(source) {
             if self.is_known_property(target, prop.name(), is_comparing_jsx_attributes) {
                 return true;
             }

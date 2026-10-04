@@ -70,7 +70,8 @@ impl host {
     // host.go:142
     pub(crate) fn store_m_time_from_old_cache(&self, file: &str, old_cache: &mTimeCache) {
         let path = self.o().to_path(file);
-        if let Some(m_time) = old_cache.lock().unwrap().get(&path).copied() {
+        let m_time = old_cache.lock().unwrap().get(&path).copied();
+        if let Some(m_time) = m_time {
             self.m_times.lock().unwrap().lock().unwrap().insert(path, m_time);
         }
     }

@@ -2,6 +2,7 @@
 // (`.sourcemap.txt` baselines). The Go functions take a `CompilationResult`; the parts they read are passed in
 // through `SourceMapCompilationResult`, which the emit harness fills.
 
+use std::fmt::Write as _;
 use tsrs_core::tspath;
 use tsrs_core::CompilerOptions;
 
@@ -34,7 +35,7 @@ pub(crate) fn file_output(file: &TestFile, settings: &HarnessOptions) -> String 
     let file_name = if settings.full_emit_paths {
         remove_test_path_prefixes(&file.unit_name, false /*retainTrailingDirectorySeparator*/)
     } else {
-        tspath::get_base_file_name(&file.unit_name).to_string()
+        tspath::get_base_file_name(&file.unit_name)
     };
     format!("//// [{}]\r\n{}", file_name, file.content)
 }
@@ -162,7 +163,7 @@ fn query_escape(s: &str) -> String {
             out.push('+');
         } else {
             out.push('%');
-            out.push_str(&format!("{:02X}", c));
+            let _ = write!(out, "{:02X}", c);
         }
     }
     out

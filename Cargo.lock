@@ -492,6 +492,7 @@ name = "tsrs_fswatch"
 version = "0.3.0"
 dependencies = [
  "libc",
+ "rustc-hash",
 ]
 
 [[package]]

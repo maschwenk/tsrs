@@ -551,7 +551,7 @@ impl Checker {
         let mut counts: OrderedMap<&'static str, i32> = OrderedMap::default();
         for (i, &t) in types.iter().enumerate() {
             if Some(i) != skipped {
-                for prop in self.get_properties_of_type(t).iter().copied() {
+                for prop in self.get_properties_of_type(t) {
                     *counts.entry(prop.name()).or_insert(0) += 1;
                 }
             }
@@ -1743,7 +1743,7 @@ impl Checker {
         if t.flags().intersects(TypeFlags::Any) {
             cb(self, self.string_type);
         } else {
-            for info in self.get_index_infos_of_type(t).iter().copied() {
+            for info in self.get_index_infos_of_type(t) {
                 if !strings_only || info.key_type().flags().intersects(TypeFlags::String | TypeFlags::TemplateLiteral) {
                     cb(self, info.key_type());
                 }

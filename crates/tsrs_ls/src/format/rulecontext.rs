@@ -6,9 +6,9 @@ use super::*;
 use crate::astnav;
 use crate::lsutil::{self, FormatCodeSettings, SemicolonPreference};
 
-///
-/// Contexts
-///
+//
+// Contexts
+//
 
 // rulecontext.go:18
 pub(crate) type OptionSelector = fn(&FormatCodeSettings) -> Tristate;

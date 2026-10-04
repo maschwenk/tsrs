@@ -333,7 +333,7 @@ impl BuildTask {
         let this: &'static BuildTask = self;
         let report_diagnostic: tsc::DiagnosticReporter = Box::new(move |d| this.report_diagnostic(d));
         let report_error_summary = tsc::quiet_diagnostics_reporter();
-        let writer_builder = builder.clone();
+        let writer_builder = builder;
         let writer = move |t: &str| writer_builder.lock().unwrap().push_str(t);
         // Called from the checker threads: BuildTask and Orchestrator are Sync (Mutex/atomic state).
         let write_file = move |file_name: &str, text: &str, data: &mut WriteFileData| this.write_file(orchestrator, file_name, text, data);
@@ -423,7 +423,7 @@ impl BuildTask {
             }
 
             self.update_time_stamps(orchestrator, &[], &diagnostics::Updating_output_timestamps_of_project_0);
-            self.set_status(upToDateStatus::with(upToDateStatusType::UpToDate, status.data.clone()));
+            self.set_status(upToDateStatus::with(upToDateStatusType::UpToDate, status.data));
             self.result.lock().unwrap().as_mut().unwrap().build_kind = buildKind::Pseudo;
             return true;
         }
@@ -438,7 +438,8 @@ impl BuildTask {
 
     // buildtask.go:353
     fn get_up_to_date_status(&self, orchestrator: &Orchestrator, config_path: &Path) -> upToDateStatus {
-        if let Some(status) = self.status.lock().unwrap().clone() {
+        let status = self.status.lock().unwrap().clone();
+        if let Some(status) = status {
             return status;
         }
         // Config file not found
@@ -648,7 +649,7 @@ impl BuildTask {
                     // Output file is older than input file
                     return upToDateStatus::with(
                         upToDateStatusType::InputFileNewer,
-                        statusData::InputOutputName(inputOutputName { input: newest_input_file_and_time.file.clone(), output: output_file }),
+                        statusData::InputOutputName(inputOutputName { input: newest_input_file_and_time.file, output: output_file }),
                     );
                 }
 
@@ -686,7 +687,7 @@ impl BuildTask {
                     upToDateStatusType::InputFileNewer,
                     statusData::InputOutputName(inputOutputName {
                         input: resolved.project_references()[upstream.ref_index].path.clone(),
-                        output: oldest_output_file_and_time.file.clone(),
+                        output: oldest_output_file_and_time.file,
                     }),
                 );
             }
@@ -704,7 +705,7 @@ impl BuildTask {
                 upToDateStatusType::InputFileNewer,
                 statusData::InputOutputName(inputOutputName {
                     input: resolved.project_references()[upstream.ref_index].path.clone(),
-                    output: oldest_output_file_and_time.file.clone(),
+                    output: oldest_output_file_and_time.file,
                 }),
             );
         }

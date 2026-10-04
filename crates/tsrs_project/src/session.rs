@@ -632,6 +632,7 @@ impl Session {
     }
 
     // session.go:652
+    #[expect(clippy::significant_drop_in_scrutinee, reason = "Go holds warmAutoImportMu while it cancels")]
     fn cancel_warm_auto_import_cache(&self) {
         if let Some(cancel) = self.warm_auto_import_cancel.lock().unwrap().take() {
             cancel();
@@ -668,6 +669,7 @@ impl Session {
     }
 
     // session.go:694
+    #[expect(clippy::significant_drop_in_scrutinee, reason = "Go holds idleCacheCleanMu while it stops the timer")]
     fn cancel_idle_cache_clean(&self) {
         if let Some(timer) = self.idle_cache_clean_timer.lock().unwrap().take() {
             timer.stop();
@@ -686,7 +688,8 @@ impl Session {
 
     // session.go:730
     fn stop_performance_telemetry(&self) {
-        if let Some(cancel) = self.performance_telemetry_cancel.lock().unwrap().take() {
+        let cancel = self.performance_telemetry_cancel.lock().unwrap().take();
+        if let Some(cancel) = cancel {
             cancel.call();
         }
     }
@@ -868,7 +871,7 @@ impl Session {
         if !project.has_file(&uri.file_name()) {
             return None;
         }
-        Some(Arc::new(new_language_service(ProjectID(project.id().0), project.get_program().unwrap(), snapshot.clone(), &uri.file_name())))
+        Some(Arc::new(new_language_service(ProjectID(project.id().0), project.get_program().unwrap(), snapshot, &uri.file_name())))
     }
 
     // session.go:1202
@@ -901,7 +904,7 @@ impl Session {
         let Some(project) = snapshot.get_default_project(uri) else {
             return Err(lsproto::Error::new(format!("no project found for URI {}", uri)));
         };
-        Ok(Arc::new(new_language_service(ProjectID(project.id().0), project.get_program().unwrap(), snapshot.clone(), &uri.file_name())))
+        Ok(Arc::new(new_language_service(ProjectID(project.id().0), project.get_program().unwrap(), snapshot, &uri.file_name())))
     }
 
     // session.go:1257
@@ -1734,7 +1737,7 @@ impl Session {
 
             let warm_change = SnapshotChange {
                 reason: UpdateReason::RequestedLanguageServiceWithAutoImports,
-                resource_request: ResourceRequest { documents: vec![changed_file.clone()], auto_imports: changed_file.clone(), ..Default::default() },
+                resource_request: ResourceRequest { documents: vec![changed_file.clone()], auto_imports: changed_file, ..Default::default() },
                 ..Default::default()
             };
             let cloned_snapshot = new_snapshot.clone_snapshot(&warm_ctx, warm_change, new_snapshot.overlays(), Some(&*self.logger), self.client.clone());

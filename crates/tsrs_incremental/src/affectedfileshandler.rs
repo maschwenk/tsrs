@@ -198,9 +198,9 @@ impl affectedFilesHandler<'_> {
         while !frontier.is_empty() {
             let mut level: Vec<Option<P<SourceFile>>> = Vec::new();
             for current_path in frontier {
-                if !seen_file_names_map.contains_key(&current_path) {
-                    let current_file = self.program.p().get_source_file_by_path(&current_path);
-                    seen_file_names_map.insert(current_path, current_file);
+                if let std::collections::hash_map::Entry::Vacant(entry) = seen_file_names_map.entry(current_path) {
+                    let current_file = self.program.p().get_source_file_by_path(entry.key());
+                    entry.insert(current_file);
                     level.push(current_file);
                 }
             }

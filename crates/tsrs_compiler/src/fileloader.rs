@@ -443,7 +443,7 @@ pub(crate) fn source_file_meta_data(
                 && module_resolution_kind <= ModuleResolutionKind::NodeNext
                 || file_name.contains("/node_modules/")
             {
-                package_json_type = value.to_string();
+                package_json_type.clone_from(value);
             }
         }
     }
@@ -727,7 +727,7 @@ impl fileLoader {
                 let specifier = self.create_synthetic_import(&jsx_import, file);
                 module_names.push(specifier);
                 self.tasks[t].data().jsx_runtime_import_specifier =
-                    Some(P::new(jsxRuntimeImportSpecifier { module_reference: jsx_import.to_string(), specifier }));
+                    Some(P::new(jsxRuntimeImportSpecifier { module_reference: jsx_import.clone(), specifier }));
             }
         }
 

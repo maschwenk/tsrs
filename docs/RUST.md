@@ -57,7 +57,7 @@ count per lint.
 | Bugs | clippy's `correctness` and `suspicious` groups | Almost always real mistakes (`never_loop`, `mut_from_ref`, `uninit_vec`). rust-analyzer denies `correctness`. |
 | Performance | clippy's `perf` group | Known slower forms: two hash lookups where `entry` does one, `Box<Vec<T>>`, a large `Err` type. rust-analyzer denies `perf`. |
 | Clones | `redundant_clone`, `clone_on_copy`, `implicit_clone`, `clone_on_ref_ptr`, `assigning_clones`, `cloned_instead_of_copied` | Go copies pointers; a port turns many of those into `.clone()`. With these on, a `.clone()` that remains is a real copy, and a reference-count bump reads `Arc::clone(&x)`, which matters on the paths the checker threads share. Bun, oxc, Rolldown, Ruff, Biome. |
-| Allocations | `format_push_string`, `inefficient_to_string`, `needless_collect`, `or_fun_call`, `unnecessary_box_returns`, `rc_buffer`, `vec_box`, `stable_sort_primitive` | A temporary `String`, `Vec` or `Box` that the code did not need. Bun, oxc, Biome. |
+| Allocations | `format_push_string`, `inefficient_to_string`, `needless_collect`, `unnecessary_box_returns`, `rc_buffer`, `vec_box`, `stable_sort_primitive` | A temporary `String`, `Vec` or `Box` that the code did not need. Bun, oxc, Biome. |
 | Arguments and stack | `needless_pass_by_value`, `trivially_copy_pass_by_ref`, `large_types_passed_by_value`, `large_stack_arrays`, `large_stack_frames`, `inline_always` | The signature table in PORTING.md, checked: `&str` and `&[T]` in, small `Copy` values by value. `#[inline(always)]` needs a measurement, as in oxc, where each one carries `#[expect(clippy::inline_always)]` and a comment. Bun, Biome. |
 | Hashing | `disallowed_types` (`std::collections::HashMap` / `HashSet`), `set_contains_or_insert`, `zero_sized_map_values`, `iter_over_hash_type` | PORTING.md already requires `FxHashMap`; std's maps use SipHash. `iter_over_hash_type` flags iterating a hash map or set: the order must never reach a diagnostic or emitted text (sort, or use `OrderedMap`). oxc, Rolldown, rust-analyzer, Bun ban the std maps; Ruff uses `iter_over_hash_type`. |
 | Locks and threads | `mutex_atomic`, `mutex_integer`, `rc_mutex`, `significant_drop_in_scrutinee`, `non_send_fields_in_send_ty` | A mutex around a flag or counter, a lock guard held across a whole `match`, and every new `unsafe impl Send` over non-`Send` fields (the "by decree" impls in PORTING.md "Threading") becomes a reviewed line. |
@@ -65,7 +65,9 @@ count per lint.
 | Leftovers | `dbg_macro`, `todo`, `unimplemented`, `disallowed_macros`, `allow_attributes`, `allow_attributes_without_reason` | Debugging output and placeholders do not land; suppressions are `#[expect]` with a reason. Bun, oxc and Rolldown have all of the first three; rust-analyzer, Ruff and Biome have `dbg_macro`. |
 
 Left off on purpose: the `style`, `complexity` and `pedantic` groups (they would rewrite Go-shaped code), `unwrap_used`
-(Go's nil dereference is a panic too), the cast lints (the port has about 1,000 `as usize`), `print_stdout` /
+(Go's nil dereference is a panic too), `or_fun_call` (it turns `unwrap_or(f())` into `unwrap_or_else(f)`; Go evaluates
+`f` eagerly, and when `f` creates a type or symbol, skipping it changes ids and so output order; oxc and Rolldown
+leave it off too), the cast lints (the port has about 1,000 `as usize`), `print_stdout` /
 `print_stderr` (the CLI and the `TSRS_*` diagnostics print).
 
 ## Rules that only review checks

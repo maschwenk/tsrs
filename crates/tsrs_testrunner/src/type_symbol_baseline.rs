@@ -1,5 +1,6 @@
 // internal/testutil/tsbaseline/type_symbol_baseline.go: the `.types` and `.symbols` baselines.
 
+use std::fmt::Write as _;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -100,7 +101,7 @@ fn file_baseline(unit_name: &str, content: &str, results: &[TypeWriterResult], i
         let type_or_symbol_string = if is_symbol_baseline { &result.symbol } else { &result.typ };
         let line_text = LINE_DELIMITER.replace_all(&result.source_text, "");
         type_lines.push('>');
-        type_lines.push_str(&format!("{line_text} : {type_or_symbol_string}"));
+        let _ = write!(type_lines, "{line_text} : {type_or_symbol_string}");
         type_lines.push_str("\r\n");
         if !result.underline.is_empty() {
             type_lines.push('>');
@@ -291,7 +292,7 @@ impl TypeWriterWalker {
         let declarations = symbol.declarations();
         for (count, &declaration) in declarations.iter().enumerate() {
             if count >= 5 {
-                symbol_string.push_str(&format!(" ... and {} more", declarations.len() - count));
+                let _ = write!(symbol_string, " ... and {} more", declarations.len() - count);
                 break;
             }
             symbol_string.push_str(", ");
@@ -305,7 +306,7 @@ impl TypeWriterWalker {
             if is_default_library_file(&file_name) {
                 symbol_string.push_str("--, --)");
             } else {
-                symbol_string.push_str(&format!("{}, {})", decl_line, decl_char as i64));
+                let _ = write!(symbol_string, "{}, {})", decl_line, decl_char as i64);
             }
         }
         symbol_string.push(')');

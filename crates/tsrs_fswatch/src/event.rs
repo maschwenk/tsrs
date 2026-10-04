@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::Mutex;
 
 use crate::watcher::Error;
@@ -57,7 +57,7 @@ pub(crate) struct eventList {
 
 #[derive(Default)]
 struct eventListState {
-    entries: HashMap<String, eventEntry>,
+    entries: FxHashMap<String, eventEntry>,
     err: Option<Error>,
     seq: u64,
 }
@@ -156,7 +156,7 @@ impl eventList {
         let mut el = self.mu.lock().unwrap();
         let out = el.snapshot_locked();
         let err = el.err.take();
-        el.entries = HashMap::new();
+        el.entries = FxHashMap::default();
         (out, err)
     }
 
@@ -165,7 +165,7 @@ impl eventList {
         let mut el = self.mu.lock().unwrap();
         let out = start_seqs.iter().map(|&start_seq| el.snapshot_since_locked(start_seq)).collect();
         let err = el.err.take();
-        el.entries = HashMap::new();
+        el.entries = FxHashMap::default();
         (out, err)
     }
 

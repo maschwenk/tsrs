@@ -1,5 +1,6 @@
 // completions.go, lines 1820-3466.
 
+use std::fmt::Write as _;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -26,7 +27,7 @@ pub(crate) fn tracker_value(literal: &LiteralValue) -> TrackerValue {
     match literal {
         LiteralValue::String(s) => TrackerValue::String(s.to_string()),
         LiteralValue::Number(n) => TrackerValue::Number(*n),
-        LiteralValue::BigInt(b) => TrackerValue::BigInt(b.clone()),
+        LiteralValue::BigInt(b) => TrackerValue::BigInt(*b),
         LiteralValue::Boolean(_) => panic!("Unsupported type: bool"),
     }
 }
@@ -453,7 +454,7 @@ impl LanguageService {
                 }
             }
 
-            await_text += &format!("(await {})", scanner::get_text_of_node(property_access_to_convert.expression().unwrap()));
+            let _ = write!(await_text, "(await {})", scanner::get_text_of_node(property_access_to_convert.expression().unwrap()));
             if needs_convert_property_access {
                 insert_text = await_text + &insert_text;
             } else {
@@ -576,7 +577,7 @@ impl LanguageService {
                     scanner.set_text(file.text());
                     scanner.reset_pos(position);
                     if !(scanner.scan() == Kind::AsKeyword && scanner.scan() == Kind::Identifier) {
-                        insert_text += &format!(" as {}", generate_identifier_for_arbitrary_string(&name));
+                        let _ = write!(insert_text, " as {}", generate_identifier_for_arbitrary_string(&name));
                     }
                 }
             } else if parent_named_import_or_export.kind() == Kind::NamedImports {

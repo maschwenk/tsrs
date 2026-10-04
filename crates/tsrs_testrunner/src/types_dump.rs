@@ -63,7 +63,7 @@ pub fn run(args: DumpArgs) {
     );
     eprintln!("diagnostics: {}", diags.len());
 
-    let config_dir = tspath::get_directory_path(&config_path).to_string();
+    let config_dir = tspath::get_directory_path(&config_path);
     let mut files = Vec::new();
     for &f in program.source_files() {
         if f.file_name().contains("/node_modules/") || program.is_source_file_default_library(&f.path()) {

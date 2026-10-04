@@ -1,6 +1,7 @@
 // Go testutil/harnessutil/sourcemap_recorder.go: the span recorder behind the `.sourcemap.txt` baselines, and
 // `CompilationResult.GetSourceMapRecord` (harnessutil.go:915).
 
+use std::fmt::Write as _;
 use tsrs_core::json::{self, Value};
 use tsrs_core::{compute_ecma_line_starts, stringutil, TextPos};
 use tsrs_sourcemap::{self as sourcemap, Mapping, RawSourceMap};
@@ -137,11 +138,11 @@ impl sourceMapSpanWriter<'_> {
     fn get_source_map_span_string(&self, map_entry: &Mapping, get_absent_name_index: bool) -> String {
         let mut map_string = format!("Emitted({}, {})", map_entry.generated_line + 1, map_entry.generated_character + 1);
         if map_entry.is_source_mapping() {
-            map_string.push_str(&format!(" Source({}, {}) + SourceIndex({})", map_entry.source_line + 1, map_entry.source_character + 1, map_entry.source_index));
+            let _ = write!(map_string, " Source({}, {}) + SourceIndex({})", map_entry.source_line + 1, map_entry.source_character + 1, map_entry.source_index);
             if map_entry.name_index >= 0 && (map_entry.name_index as usize) < self.source_map_names.len() {
-                map_string.push_str(&format!(" name ({})", self.source_map_names[map_entry.name_index as usize]));
+                let _ = write!(map_string, " name ({})", self.source_map_names[map_entry.name_index as usize]);
             } else if map_entry.name_index != sourcemap::MISSING_NAME || get_absent_name_index {
-                map_string.push_str(&format!(" nameIndex ({})", map_entry.name_index));
+                let _ = write!(map_string, " nameIndex ({})", map_entry.name_index);
             }
         }
         map_string

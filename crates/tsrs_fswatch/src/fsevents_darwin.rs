@@ -18,7 +18,7 @@
 //   receives ErrWatchTerminated. The shared stream remains active for other
 //   watches until the owner closes or reconciles the terminated watch.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -69,7 +69,7 @@ pub(crate) struct fsEventsBackend {
 
 #[derive(Default)]
 struct fsEventsState {
-    watches: HashMap<dwKey, Arc<fseventsState>>,
+    watches: FxHashMap<dwKey, Arc<fseventsState>>,
     streams: Vec<Arc<fseventsStream>>,
 }
 
@@ -163,7 +163,7 @@ fn start_fs_events_streams(
     if watches.is_empty() {
         return Ok(Vec::new());
     }
-    let mut seen = HashSet::with_capacity(watches.len());
+    let mut seen = FxHashSet::with_capacity_and_hasher(watches.len(), Default::default());
     let mut paths = Vec::with_capacity(watches.len());
     for watch in watches {
         let path = watch.w.physical_dir.clone();
@@ -315,7 +315,7 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
     let num_events = payload.num_events;
     let watches = &cb.watches;
     let mut touched: Vec<Arc<dirWatch>> = Vec::new();
-    let mut touched_set: HashSet<dwKey> = HashSet::new();
+    let mut touched_set: FxHashSet<dwKey> = FxHashSet::default();
     let mut touch = |w: &Arc<dirWatch>| {
         if touched_set.insert(dwKey(w.clone())) {
             touched.push(w.clone());

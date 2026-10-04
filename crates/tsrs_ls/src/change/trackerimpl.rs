@@ -484,13 +484,13 @@ impl Tracker {
         let line_map = source_file.ecma_line_map();
         for r in &ranges {
             if r.kind == Kind::MultiLineCommentTrivia {
-                if printer::is_pinned_comment(text, r.clone()) {
-                    last_comment = Some(r.clone());
+                if printer::is_pinned_comment(text, *r) {
+                    last_comment = Some(*r);
                     pinned_or_triple_slash = true;
                     continue;
                 }
-            } else if printer::is_recognized_triple_slash_comment(text, r.clone()) {
-                last_comment = Some(r.clone());
+            } else if printer::is_recognized_triple_slash_comment(text, *r) {
+                last_comment = Some(*r);
                 pinned_or_triple_slash = true;
                 continue;
             }
@@ -522,7 +522,7 @@ impl Tracker {
                     break;
                 }
             }
-            last_comment = Some(r.clone());
+            last_comment = Some(*r);
             pinned_or_triple_slash = false;
         }
 

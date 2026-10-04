@@ -573,7 +573,7 @@ impl SourceDefResolver<'_> {
             if has_concrete_source_declarations(&forwarded) {
                 return unique_declaration_nodes(&forwarded);
             }
-            let mut all = declarations.clone();
+            let mut all = declarations;
             all.extend(forwarded);
             return unique_declaration_nodes(&all);
         }

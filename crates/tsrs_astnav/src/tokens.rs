@@ -162,7 +162,6 @@ pub(crate) fn get_token_at_position_worker(
 
     let visit_node_list: VisitNodesFn = {
         let st = st.clone();
-        let test_node = test_node.clone();
         Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| -> Option<P<NodeList>> {
             let Some(list) = node_list else {
                 return node_list;
@@ -433,7 +432,6 @@ pub fn find_preceding_token_ex(
         };
         let visit_nodes: VisitNodesFn = {
             let found_child = found_child.clone();
-            let prev_child = prev_child.clone();
             Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| {
                 if found_child.get().is_some() {
                     return node_list;

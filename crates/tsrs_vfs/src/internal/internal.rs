@@ -188,10 +188,7 @@ impl Common {
             return Vec::new();
         };
 
-        match fsys.read_dir(&rest) {
-            Ok(entries) => entries,
-            Err(_) => Vec::new(),
-        }
+        fsys.read_dir(&rest).unwrap_or_default()
     }
 
     pub fn read_file(&self, path: &str) -> Option<String> {

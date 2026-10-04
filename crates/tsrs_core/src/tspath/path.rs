@@ -65,7 +65,7 @@ impl fmt::Display for Path {
 pub const DIRECTORY_SEPARATOR: u8 = b'/';
 const URL_SCHEME_SEPARATOR: &str = "://";
 
-//// Path Tests
+// Path Tests
 
 // Determines whether a byte corresponds to `/` or `\`.
 fn is_any_directory_separator(char: u8) -> bool {
@@ -737,7 +737,7 @@ impl Path {
     }
 }
 
-//// Relative Paths
+// Relative Paths
 
 pub fn get_path_components_relative_to(from: &str, to: &str, options: &ComparePathsOptions) -> Vec<String> {
     let from_components = reduce_path_components(&get_path_components(from, &options.current_directory));

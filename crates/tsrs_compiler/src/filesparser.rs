@@ -164,7 +164,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
                         file: None,
                         diagnostic_reason: include_reason,
                         message: &diagnostics::File_0_is_a_JavaScript_file_Did_you_mean_to_enable_the_allowJs_option,
-                        args: vec![normalized_file_path.to_string()],
+                        args: vec![normalized_file_path],
                     }));
                 } else {
                     let flat: Vec<&str> = loader.supported_extensions.iter().flatten().map(|s| s.as_str()).collect();
@@ -172,7 +172,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
                         file: None,
                         diagnostic_reason: include_reason,
                         message: &diagnostics::File_0_has_an_unsupported_extension_The_only_supported_extensions_are_1,
-                        args: vec![normalized_file_path.to_string(), format!("'{}'", flat.join("', '"))],
+                        args: vec![normalized_file_path, format!("'{}'", flat.join("', '"))],
                     }));
                 }
                 return;
@@ -531,7 +531,7 @@ impl filesParser {
 
         // Propagate packageId to data if we have one and data doesn't yet
         if loader.files_parser.datas[data].package_id.name.is_empty() && !loader.tasks[task].package_id.name.is_empty() {
-            loader.files_parser.datas[data].package_id = loader.tasks[task].package_id.clone();
+            loader.files_parser.datas[data].package_id = loader.tasks[task].package_id;
         }
 
         let current_depth = if loader.tasks[task].increase_depth { depth + 1 } else { depth };
@@ -847,7 +847,7 @@ impl filesParser {
                                 include_data.add_processing_diagnostics_for_file_casing(
                                     loader.tasks[task].path.clone(),
                                     &checked_name,
-                                    &loader.tasks[task].normalized_file_path.to_string(),
+                                    loader.tasks[task].normalized_file_path.as_ref(),
                                     include_reason,
                                 );
                             }
@@ -865,7 +865,7 @@ impl filesParser {
                             include_data.add_processing_diagnostics_for_file_casing(
                                 p,
                                 &n,
-                                &loader.tasks[task].normalized_file_path.to_string(),
+                                loader.tasks[task].normalized_file_path.as_ref(),
                                 include_reason,
                             );
                         } else {
@@ -883,7 +883,7 @@ impl filesParser {
                     }
 
                     let file = loader.tasks[task].file;
-                    let data_package_id = loader.files_parser.datas[data].package_id.clone();
+                    let data_package_id = loader.files_parser.datas[data].package_id;
                     if dedupe && !data_package_id.name.is_empty() {
                         if let Some(&package_id_file) = package_id_to_source_file.get(&data_package_id) {
                             if let Some(file) = file {

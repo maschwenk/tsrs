@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::canonicalize::{fold_native_path, nativePathFolding};
 use crate::watcher::{is_in_directory_or_self, join_path_suffix, rebase_path};
@@ -21,7 +21,7 @@ pub(crate) struct comparisonPath<'c> {
 
 // Shared only within a synchronous callback/termination pass, never published
 // to a subscriber or stored on a watch.
-pub(crate) type comparisonCache = HashMap<String, String>;
+pub(crate) type comparisonCache = FxHashMap<String, String>;
 
 impl comparisonPath<'_> {
     pub(crate) fn new(path: &str) -> comparisonPath<'static> {

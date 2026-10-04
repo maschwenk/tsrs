@@ -1239,7 +1239,7 @@ impl ProjectCollectionBuilder {
         if project.is_some() {
             // If we found a project that contains the file, but it is a source from
             // a project reference, record it as a fallback.
-            fallback = Some(searchResult { project: project.clone(), retain: retain.clone() });
+            fallback = Some(searchResult { project, retain: retain.clone() });
         }
 
         // Look for tsconfig.json files higher up the directory tree and do the same. This handles

@@ -282,9 +282,9 @@ impl snapshotFSBuilder {
             if child_path == parent_path {
                 break; // reached root
             }
-            let base_name = tspath::get_base_file_name(&child).to_string();
+            let base_name = tspath::get_base_file_name(&child);
             if let Some(dir_entry) = self.cache_directories.get(&parent_path) {
-                let cp = child_path.clone();
+                let cp = child_path;
                 dir_entry.change(|dir| {
                     dir.insert(cp, base_name);
                 });

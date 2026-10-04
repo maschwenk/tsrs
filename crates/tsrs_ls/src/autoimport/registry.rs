@@ -1027,7 +1027,7 @@ impl registryBuilder<'_> {
 
                 if needs_full_rebuild {
                     node_modules_tasks.push(nodeModulesBucketTask {
-                        entry: node_modules_bucket.clone(),
+                        entry: node_modules_bucket,
                         dependency_names: dependencies,
                         dir_name,
                         dir_path: dir_path.clone(),
@@ -1040,7 +1040,7 @@ impl registryBuilder<'_> {
                     });
                 } else if can_do_granular_update {
                     node_modules_tasks.push(nodeModulesBucketTask {
-                        entry: node_modules_bucket.clone(),
+                        entry: node_modules_bucket,
                         dependency_names: dependencies,
                         dir_name,
                         dir_path: dir_path.clone(),
@@ -1222,7 +1222,7 @@ impl registryBuilder<'_> {
                 }
             }
             if should_rebuild {
-                let mut br = bucketBuildResult::new(bucketTarget::Project(project.clone()), (self.base.to_path)(program.get_current_directory()));
+                let mut br = bucketBuildResult::new(bucketTarget::Project(project), (self.base.to_path)(program.get_current_directory()));
                 self.build_project_bucket(ctx, &mut br, &project_id, resolved_package_names, &logger.fork(&format!("Building project bucket {}", project_id)));
                 all_results.push(br);
             }

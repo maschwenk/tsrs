@@ -71,6 +71,7 @@ pub fn new_view(
 
 impl View {
     // Go's `v.checker`.
+    #[expect(clippy::mut_from_ref, reason = "Go shares the checker pointer; the SAFETY comment states the one-user-at-a-time contract")]
     pub(crate) fn checker(&self) -> &mut Checker {
         // SAFETY: the checker outlives the view (the caller's pool lease covers the request that built the view),
         // and the view, the import adder and the caller use it on one thread, one call at a time, exactly as Go

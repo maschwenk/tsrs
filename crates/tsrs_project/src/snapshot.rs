@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
@@ -470,19 +471,19 @@ impl Snapshot {
             let get_details = || {
                 let mut details = String::new();
                 if !change.resource_request.documents.is_empty() {
-                    details += &format!(" Documents: {:?}", change.resource_request.documents.iter().map(|d| d.0.as_str()).collect::<Vec<_>>());
+                    let _ = write!(details, " Documents: {:?}", change.resource_request.documents.iter().map(|d| d.0.as_str()).collect::<Vec<_>>());
                 }
                 if !change.resource_request.configured_project_documents.is_empty() {
-                    details += &format!(
+                    let _ = write!(details, 
                         " ConfiguredProjectDocuments: {:?}",
                         change.resource_request.configured_project_documents.iter().map(|d| d.0.as_str()).collect::<Vec<_>>()
                     );
                 }
                 if !change.resource_request.projects.is_empty() {
-                    details += &format!(" Projects: {:?}", change.resource_request.projects.iter().map(|p| p.0.as_str()).collect::<Vec<_>>());
+                    let _ = write!(details, " Projects: {:?}", change.resource_request.projects.iter().map(|p| p.0.as_str()).collect::<Vec<_>>());
                 }
                 if let Some(project_tree) = &change.resource_request.project_tree {
-                    details += &format!(" ProjectTree: {:?}", project_tree.projects().iter().map(|p| p.as_str()).collect::<Vec<_>>());
+                    let _ = write!(details, " ProjectTree: {:?}", project_tree.projects().iter().map(|p| p.as_str()).collect::<Vec<_>>());
                 }
                 details
             };
