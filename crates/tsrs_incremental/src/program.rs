@@ -380,18 +380,33 @@ impl Program {
         let mut missing_package_jsons: Vec<String> = Vec::new();
         let config = tspath::get_directory_path(program.command_line().config_name());
         if !config.is_empty() {
+            let mut entries = Vec::new();
             program.package_json_cache_entries(|_key, value| {
+                entries.push(*value);
+                true
+            });
+            // The realpath calls are independent file system lookups, and both lists are sorted below, so they run on
+            // the worker pool.
+            let resolve = |value: &P<tsrs_module::packagejson::InfoCacheEntry>| {
                 let mut package_json = tspath::combine_paths(&value.package_directory, &["package.json"]);
                 if value.exists() || value.directory_exists {
                     package_json = program.host().fs().realpath(&package_json);
                 }
-                if value.exists() {
+                (value.exists(), package_json)
+            };
+            let resolved: Vec<(bool, String)> = if program.single_threaded() {
+                entries.iter().map(resolve).collect()
+            } else {
+                use rayon::prelude::*;
+                tsrs_compiler::worker_pool().install(|| entries.par_iter().map(resolve).collect())
+            };
+            for (exists, package_json) in resolved {
+                if exists {
                     package_jsons.push(package_json);
                 } else if package_json.contains("/node_modules/") {
                     missing_package_jsons.push(package_json);
                 }
-                true
-            });
+            }
         }
         *self.snapshot.package_jsons.borrow_mut() = Some(normalize_package_jsons(package_jsons));
         *self.snapshot.missing_package_jsons.borrow_mut() = Some(normalize_package_jsons(missing_package_jsons));

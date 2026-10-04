@@ -18,6 +18,11 @@ impl ReferenceMap {
         self.references.store(path, std::sync::Arc::new(refs));
     }
 
+    // referencemap.go:18, for a set that other entries share.
+    pub(crate) fn store_shared_references(&self, path: Path, refs: std::sync::Arc<Set<Path>>) {
+        self.references.store(path, refs);
+    }
+
     // referencemap.go:22
     pub(crate) fn get_references(&self, path: &Path) -> Option<std::sync::Arc<Set<Path>>> {
         self.references.load(path)

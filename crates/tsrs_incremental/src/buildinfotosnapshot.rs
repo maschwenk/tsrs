@@ -44,7 +44,7 @@ pub(crate) fn build_info_to_snapshot(build_info: &BuildInfo, config: &ParsedComm
             for &file_id in file_id_list {
                 file_set.add(to.to_file_path(file_id));
             }
-            file_set
+            std::sync::Arc::new(file_set)
         })
         .collect();
     to.set_compiler_options();
@@ -69,7 +69,8 @@ struct toSnapshot<'a> {
     build_info_directory: String,
     snapshot: Snapshot,
     file_paths: Vec<Path>,
-    file_path_set: Vec<Set<Path>>,
+    // Go shares one *Set per id list among the files that reference it.
+    file_path_set: Vec<std::sync::Arc<Set<Path>>>,
 }
 
 impl toSnapshot<'_> {
@@ -84,7 +85,7 @@ impl toSnapshot<'_> {
     }
 
     // buildinfotosnapshot.go:70
-    fn to_file_path_set(&self, file_id_list_id: BuildInfoFileIdListId) -> Set<Path> {
+    fn to_file_path_set(&self, file_id_list_id: BuildInfoFileIdListId) -> std::sync::Arc<Set<Path>> {
         self.file_path_set[file_id_list_id as usize - 1].clone()
     }
 
@@ -159,7 +160,7 @@ impl toSnapshot<'_> {
     // buildinfotosnapshot.go:145
     fn set_referenced_map(&mut self) {
         for entry in &self.build_info.referenced_map {
-            self.snapshot.referenced_map.store_references(self.to_file_path(entry.file_id), self.to_file_path_set(entry.file_id_list_id));
+            self.snapshot.referenced_map.store_shared_references(self.to_file_path(entry.file_id), self.to_file_path_set(entry.file_id_list_id));
         }
     }
 

@@ -27,8 +27,8 @@ impl BuildInfoReader for buildInfoReader {
         }
 
         // Read build info file
-        let data = self.host.fs().read_file(&build_info_file_name)?;
-        BuildInfo::unmarshal(&data).ok()
+        let data = tsrs_core::phases::time("BuildInfo read: read file", || self.host.fs().read_file(&build_info_file_name))?;
+        tsrs_core::phases::time("BuildInfo read: unmarshal", || BuildInfo::unmarshal(&data).ok())
     }
 }
 
@@ -51,5 +51,5 @@ pub fn read_build_info_program(config: P<ParsedCommandLine>, reader: &dyn BuildI
     }
 
     // Convert to information that can be used to create incremental program
-    Some(Program::new_from_snapshot(build_info_to_snapshot(&build_info, &config, host)))
+    Some(Program::new_from_snapshot(tsrs_core::phases::time("BuildInfo read: to snapshot", || build_info_to_snapshot(&build_info, &config, host))))
 }

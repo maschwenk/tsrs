@@ -350,6 +350,12 @@ impl JsonParser<'_> {
             }
         }
         let text = std::str::from_utf8(&self.s[start..self.pos]).unwrap();
+        // Up to 15 digits without fraction or exponent is an integer that f64 holds exactly.
+        let digits = text.strip_prefix('-').unwrap_or(text);
+        if digits.len() <= 15 && digits.bytes().all(|b| b.is_ascii_digit()) {
+            let n = digits.bytes().fold(0u64, |n, b| n * 10 + (b - b'0') as u64) as f64;
+            return Ok(Value::Number(if text.starts_with('-') { -n } else { n }));
+        }
         match text.parse::<f64>() {
             Ok(f) if f.is_finite() => Ok(Value::Number(f)),
             _ => self.err("number out of range"),
@@ -448,5 +454,11 @@ mod tests {
         assert!(marshal_f64(f64::NAN).is_err());
         assert!(unmarshal("{\"a\":1,\"a\":2}").is_err());
         assert!(unmarshal("[1,]").is_err());
+        // The integer fast path agrees with the general parse, including the sign of zero.
+        for text in ["0", "-0", "7", "-42", "123456789012345", "-999999999999999", "1234567890123456", "1.5", "2e3"] {
+            let Value::Number(n) = unmarshal(text).unwrap() else { panic!() };
+            let expected: f64 = text.parse().unwrap();
+            assert_eq!(n.to_bits(), expected.to_bits(), "{text}");
+        }
     }
 }
