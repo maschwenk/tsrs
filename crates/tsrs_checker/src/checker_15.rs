@@ -797,7 +797,7 @@ impl Checker {
     // Return the contextual type for a given expression node. During overload resolution, a contextual type may temporarily
     // be "pushed" onto a node using the contextualType property.
     // checker.go:31175
-    pub(crate) fn get_apparent_type_of_contextual_type(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
+    pub fn get_apparent_type_of_contextual_type(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
         let contextual_type = if ast::is_object_literal_method(node) {
             self.get_contextual_type_for_object_literal_method(node, context_flags)
         } else {
@@ -1144,7 +1144,7 @@ impl Checker {
     }
 
     // checker.go:31467
-    pub(crate) fn has_type_facts(&mut self, t: P<Type>, mask: TypeFacts) -> bool {
+    pub fn has_type_facts(&mut self, t: P<Type>, mask: TypeFacts) -> bool {
         self.get_type_facts(t, mask) != TypeFacts::None
     }
 
