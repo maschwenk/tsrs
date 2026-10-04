@@ -91,9 +91,10 @@ referenced through `tsrs_core::P<T>`:
 ### Threading
 
 Parsing and binding run per file (in parallel) and finish before checking. Checking runs on N checkers
-(Go's default 4, `--checkers N`, `--singleThreaded` = 1), each on its own OS thread with a 512 MB stack
-(`tsrs_compiler::checkerpool`). Each thread allocates in its own leak arena; `P<T>` is `Send + Sync` by decree,
-so the compiler does not police sharing. The rules:
+(`--checkers N`, `--singleThreaded` = 1; Go's default is 4, tsrs's default is half the available parallelism
+clamped to 4..8 and to one checker per 32 checked files, and 4 in build mode: `default_checker_count`), each on
+its own OS thread with a 512 MB stack (`tsrs_compiler::checkerpool`). Each thread allocates in its own leak arena;
+`P<T>` is `Send + Sync` by decree, so the compiler does not police sharing. The rules:
 
 - **Shared, frozen after binding**: AST nodes and node lists, `SourceFile`, binder symbols and symbol tables,
   flow nodes, parse/bind diagnostics, `TsConfigSourceFile`. Their mutable fields are written by the parser/binder

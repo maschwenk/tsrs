@@ -487,12 +487,14 @@ fn get_checker_association_weights(base_weights: &[i64], import_counts: &[i64]) 
 impl checkerPool {
     // checkerpool.go:305 newCheckerPool / checkerpool.go:309 newCheckerPoolWithTracing (tracing is not ported).
     pub(crate) fn new(program: &'static Program) -> checkerPool {
-        let mut checker_count: i64 = 4;
-        if program.single_threaded() {
-            checker_count = 1;
+        // Go's default is a constant 4; tsrs picks it per machine and program (default_checker_count).
+        let checker_count: i64 = if program.single_threaded() {
+            1
         } else if let Some(c) = program.options().checkers {
-            checker_count = c;
-        }
+            c
+        } else {
+            default_checker_count(program)
+        };
 
         // Go `max(min(checkerCount, len(files), 256), 1)` on int: a negative or zero count is one checker.
         let checker_count = checker_count.min(program.files.len() as i64).min(256).max(1) as usize;
@@ -871,6 +873,42 @@ fn checker_assignment() -> CheckerAssignment {
 // kept on one checker.
 const LOCALITY_GROUP_FRACTION: i64 = 4;
 const LOCALITY_PENALTY_MULTIPLIER: i64 = 1;
+
+// Go's checker count without --checkers.
+const GO_DEFAULT_CHECKERS: i64 = 4;
+// Past 8 checkers the duplicated first-touch work, the imbalance and the slower cores eat the gain while every checker
+// adds memory (notes/perf-checker-scaling.md).
+const MAX_DEFAULT_CHECKERS: i64 = 8;
+// A checker beyond Go's 4 needs at least this many type-checked files to be worth its creation and duplicated work.
+const MIN_CHECKED_FILES_PER_DEFAULT_CHECKER: i64 = 32;
+
+static GO_DEFAULT_CHECKER_COUNT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Build mode runs up to 4 projects at once (Go's `--builders` default), each with its own pool, so it keeps Go's
+/// constant default instead of sizing every pool for the whole machine.
+pub fn use_go_default_checker_count() {
+    GO_DEFAULT_CHECKER_COUNT.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+// tsrs-only: the checker count when neither --checkers nor --singleThreaded is given. Go always uses 4. Here: half the
+// available parallelism, at least Go's 4 and at most MAX_DEFAULT_CHECKERS, and no more than one checker per
+// MIN_CHECKED_FILES_PER_DEFAULT_CHECKER type-checked files, so small programs keep Go's 4. Diagnostics do not depend
+// on the count; the --extendedDiagnostics Types / Symbols / Instantiations counters do (each checker counts what it
+// creates), so they now depend on the machine unless --checkers is given.
+fn default_checker_count(program: &Program) -> i64 {
+    if GO_DEFAULT_CHECKER_COUNT.load(std::sync::atomic::Ordering::Relaxed) {
+        return GO_DEFAULT_CHECKERS;
+    }
+    let parallelism = std::thread::available_parallelism().map_or(1, |n| n.get()) as i64;
+    let by_machine = (parallelism / 2).min(MAX_DEFAULT_CHECKERS);
+    if by_machine <= GO_DEFAULT_CHECKERS {
+        return GO_DEFAULT_CHECKERS;
+    }
+    // The files a checker does work for (the same rule as checked_file_weights).
+    let checked =
+        program.files.iter().filter(|&&f| !((f.is_declaration_file.get() || ast::is_json_source_file(f)) && program.skip_type_checking(f, false))).count();
+    by_machine.min(checked as i64 / MIN_CHECKED_FILES_PER_DEFAULT_CHECKER).max(GO_DEFAULT_CHECKERS)
+}
 
 // Checker assignment by locality. Checker state duplication comes from files on different checkers that
 // resolve the same declarations; files of one directory subtree (a feature folder, a package) resolve
