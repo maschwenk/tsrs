@@ -704,7 +704,7 @@ pub(crate) fn is_type_reference_with_generic_arguments(c: &mut Checker, t: P<Typ
 }
 
 // checker.go:17986
-pub(crate) fn is_non_deferred_type_reference(t: P<Type>) -> bool {
+pub fn is_non_deferred_type_reference(t: P<Type>) -> bool {
     t.object_flags().intersects(ObjectFlags::Reference) && t.as_type_reference().node.get().is_none()
 }
 

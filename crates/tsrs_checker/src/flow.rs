@@ -74,7 +74,7 @@ pub(crate) fn get_flow_node_of_node(node: P<Node>) -> Option<P<FlowNode>> {
 
 impl Checker {
     // flow.go:77
-    pub(crate) fn get_flow_type_of_reference(&mut self, reference: P<Node>, declared_type: P<Type>) -> P<Type> {
+    pub fn get_flow_type_of_reference(&mut self, reference: P<Node>, declared_type: P<Type>) -> P<Type> {
         self.get_flow_type_of_reference_ex(reference, declared_type, declared_type, None, None)
     }
 
@@ -1959,7 +1959,8 @@ impl Checker {
     }
 
     // flow.go:1727
-    pub(crate) fn get_accessed_property_name(&mut self, access: P<Node>) -> (String, bool) {
+    // Public for lint rules (tsgolint's shim exposes Checker_getAccessedPropertyName).
+    pub fn get_accessed_property_name(&mut self, access: P<Node>) -> (String, bool) {
         if ast::is_property_access_expression(access) {
             return (access.name().unwrap().text().to_string(), true);
         }
@@ -2396,7 +2397,7 @@ impl Checker {
     }
 
     // flow.go:2107
-    pub(crate) fn get_property_name_for_known_symbol_name(&mut self, symbol_name: &str) -> String {
+    pub fn get_property_name_for_known_symbol_name(&mut self, symbol_name: &str) -> String {
         let ctor_type = self.get_global_es_symbol_constructor_symbol_or_nil();
         if let Some(ctor_type) = ctor_type {
             let ctor_symbol_type = self.get_type_of_symbol(ctor_type);
@@ -2718,7 +2719,7 @@ impl Checker {
     }
 
     // flow.go:2389
-    pub(crate) fn get_type_with_default(&mut self, t: P<Type>, default_expression: Option<P<Node>>) -> P<Type> {
+    pub fn get_type_with_default(&mut self, t: P<Type>, default_expression: Option<P<Node>>) -> P<Type> {
         if let Some(default_expression) = default_expression {
             let non_undefined_type = self.get_non_undefined_type(t);
             let default_type = self.get_type_of_expression(default_expression);
@@ -2731,7 +2732,7 @@ impl Checker {
     // For example, when a variable of type number | string | boolean is assigned a value of type number | boolean,
     // we remove type string.
     // flow.go:2399
-    pub(crate) fn get_assignment_reduced_type(&mut self, declared_type: P<Type>, assigned_type: P<Type>) -> P<Type> {
+    pub fn get_assignment_reduced_type(&mut self, declared_type: P<Type>, assigned_type: P<Type>) -> P<Type> {
         if declared_type == assigned_type {
             return declared_type;
         }
