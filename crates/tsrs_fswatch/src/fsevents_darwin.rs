@@ -125,11 +125,12 @@ impl fsEventsState {
     // fsevents_darwin.go:215
     fn active_watches_locked(&self) -> Vec<fseventsWatchSnapshot> {
         let mut watches = Vec::with_capacity(self.watches.len());
+        #[expect(clippy::iter_over_hash_type, reason = "stream paths are sorted after; each watch's dispatch only touches that watch's own state; Go ranges the map too")]
         for (w, state) in &self.watches {
             if state.terminated.load(Ordering::SeqCst) {
                 continue;
             }
-            watches.push(fseventsWatchSnapshot { w: w.0.clone(), state: state.clone() });
+            watches.push(fseventsWatchSnapshot { w: Arc::clone(&w.0), state: Arc::clone(state) });
         }
         watches
     }
@@ -248,13 +249,13 @@ impl watcherImpl for fsEventsBackend {
             if let Err(err) = check_watcher(w) {
                 return Some(Err(err));
             }
-            states.push((w.clone(), Arc::new(fseventsState::default())));
+            states.push((Arc::clone(w), Arc::new(fseventsState::default())));
         }
 
         let mut st = self.mu.lock().unwrap();
         for (w, state) in &states {
-            *w.state.lock().unwrap() = Some(state.clone());
-            st.watches.insert(dwKey(w.clone()), state.clone());
+            *w.state.lock().unwrap() = Some(Arc::<fseventsState>::clone(state));
+            st.watches.insert(dwKey(Arc::clone(w)), Arc::clone(state));
         }
         let watches = st.active_watches_locked();
         drop(st);
@@ -264,7 +265,7 @@ impl watcherImpl for fsEventsBackend {
             Err(err) => {
                 let mut st = self.mu.lock().unwrap();
                 for (w, state) in &states {
-                    let key = dwKey(w.clone());
+                    let key = dwKey(Arc::clone(w));
                     if st.watches.get(&key).is_some_and(|s| Arc::ptr_eq(s, state)) {
                         st.watches.remove(&key);
                         *w.state.lock().unwrap() = None;
@@ -291,7 +292,7 @@ impl watcherImpl for fsEventsBackend {
         state.terminated.store(true, Ordering::SeqCst);
 
         let mut st = self.mu.lock().unwrap();
-        st.watches.remove(&dwKey(w.clone()));
+        st.watches.remove(&dwKey(Arc::clone(w)));
         let watches = st.active_watches_locked();
         drop(st);
 
@@ -317,8 +318,8 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
     let mut touched: Vec<Arc<dirWatch>> = Vec::new();
     let mut touched_set: FxHashSet<dwKey> = FxHashSet::default();
     let mut touch = |w: &Arc<dirWatch>| {
-        if touched_set.insert(dwKey(w.clone())) {
-            touched.push(w.clone());
+        if touched_set.insert(dwKey(Arc::clone(w))) {
+            touched.push(Arc::clone(w));
         }
     };
 
@@ -392,7 +393,7 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
                 } else {
                     w.events.remove_at(&display_path, event_id);
                 }
-                if w.terminate_callbacks_for_deleted_root(&display_path, event_id, err_watched_directory_removed()) {
+                if w.terminate_callbacks_for_deleted_root(&display_path, event_id, &err_watched_directory_removed()) {
                     touch(w);
                 }
                 if display_path == w.dir {
@@ -416,7 +417,7 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
                     } else {
                         w.events.remove_at(&display_path, event_id);
                     }
-                    if w.terminate_callbacks_for_deleted_root(&display_path, event_id, err_watched_directory_removed()) {
+                    if w.terminate_callbacks_for_deleted_root(&display_path, event_id, &err_watched_directory_removed()) {
                         touch(w);
                     }
                     if display_path == w.dir {

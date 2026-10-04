@@ -81,6 +81,7 @@ impl Snapshot {
                 let mut content_mapper_watched_files = Set::default();
                 for project in self.project_collection.projects() {
                     if let Some(watched) = &project.content_mapper_watched_files {
+                        #[expect(clippy::iter_over_hash_type, reason = "pure set union; Go ranges the set too")]
                         for path in watched.keys() {
                             content_mapper_watched_files.add(path.clone());
                         }
@@ -105,9 +106,9 @@ impl SnapshotHost {
         auto_imports_watch: Option<Arc<WatchedFiles<FxHashMap<Path, String>>>>,
     ) -> Snapshot {
         let overlays = snapshot_overlays(&fs);
-        let line_map_fs = fs.clone();
+        let line_map_fs = Arc::clone(&fs);
         Snapshot {
-            host: self.clone(),
+            host: Arc::clone(self),
             id,
             parent_id: 0,
             ref_count: AtomicI32::new(1),
@@ -119,7 +120,7 @@ impl SnapshotHost {
 
             fs,
             config_file_registry,
-            project_collection: Arc::new(new_project_collection(self.to_path.clone(), open_file_paths(&overlays))),
+            project_collection: Arc::new(new_project_collection(Arc::clone(&self.to_path), open_file_paths(&overlays))),
             compiler_options_for_inferred_projects,
             user_preferences,
             auto_imports,
@@ -356,6 +357,7 @@ impl Snapshot {
             file_changes = fs.mark_dirty_files(file_changes);
             file_changes = fs.convert_open_and_close_to_changes(file_changes, &previous_open_files, &open_files);
         }
+        #[expect(clippy::iter_over_hash_type, reason = "each open path's cache entry is only deleted; commutes; Go ranges the map too")]
         for path in open_files.keys() {
             if let Some(entry) = fs.cache_files.load(path) {
                 fs.delete_cache_entry(&entry);
@@ -433,7 +435,7 @@ impl Snapshot {
 
     // snapshot.go:309
     pub fn fs(&self) -> Arc<dyn FS> {
-        Arc::new(new_source_fs(false, self.fs.clone(), self.host.to_path.clone()))
+        Arc::new(new_source_fs(false, Arc::<SnapshotFS>::clone(&self.fs), Arc::clone(&self.host.to_path)))
     }
 
     // snapshot.go:313
@@ -520,10 +522,10 @@ impl Snapshot {
         let mut inferred_content_mappers = self.inferred_project_content_mappers.clone();
         let mut inferred_content_mapper_extensions = self.inferred_project_content_mapper_extensions.clone();
         if let Some(contributions) = &change.content_mapper_contributions {
-            inferred_content_mappers = contributions.mappers.clone();
-            inferred_content_mapper_extensions = contributions.extensions.clone();
+            inferred_content_mappers.clone_from(&contributions.mappers);
+            inferred_content_mapper_extensions.clone_from(&contributions.extensions);
         }
-        let mut base_fs = FsRef::Host(store.fs.clone());
+        let mut base_fs = FsRef::Host(Arc::clone(&store.fs));
         if let Some(fs) = &change.fs {
             base_fs = fs.clone();
         }
@@ -533,14 +535,14 @@ impl Snapshot {
         if change.replace_file_system || self.file_system_override && !change.file_system_override {
             change.file_changes.invalidate_all = true;
         }
-        let layered_fs = layer_overlay_file_system(base_fs, overlays, store.options.position_encoding, store.to_path.clone());
+        let layered_fs = layer_overlay_file_system(&base_fs, overlays, store.options.position_encoding, Arc::clone(&store.to_path));
         let overlays = layered_fs.overlays();
         let fs = Arc::new(new_snapshot_fs_builder_from_source(
             layered_fs,
-            self.fs.cache_files.clone(),
-            self.fs.cache_directories.clone(),
-            self.fs.node_modules_realpath_aliases.clone(),
-            store.to_path.clone(),
+            Arc::clone(&self.fs.cache_files),
+            Arc::clone(&self.fs.cache_directories),
+            Arc::clone(&self.fs.node_modules_realpath_aliases),
+            Arc::clone(&store.to_path),
         ));
         change.file_changes = self.process_file_changes(
             &fs,
@@ -559,26 +561,26 @@ impl Snapshot {
         // Compute effective customConfigFileName from user preferences
         let mut custom_config_file_name = self.config_file_registry.custom_config_file_name.clone();
         if let Some(new_config) = &change.new_config {
-            custom_config_file_name = new_config.custom_config_file_name.clone();
+            custom_config_file_name.clone_from(&new_config.custom_config_file_name);
         }
 
         let new_snapshot_id = store.next_snapshot_id();
         let project_collection_builder = new_project_collection_builder(
             ctx,
             new_snapshot_id,
-            fs.clone(),
-            overlays.clone(),
-            self.project_collection.clone(),
-            self.config_file_registry.clone(),
-            self.project_collection.api_state.clone(),
+            Arc::clone(&fs),
+            Arc::clone(&overlays),
+            Arc::clone(&self.project_collection),
+            Arc::clone(&self.config_file_registry),
+            &self.project_collection.api_state,
             compiler_options_for_inferred_projects,
             inferred_content_mappers.clone(),
             inferred_content_mapper_extensions.clone(),
-            store.options.clone(),
+            Arc::clone(&store.options),
             &custom_config_file_name,
-            store.parse_cache.clone(),
-            store.content_mapped_parse_cache.clone(),
-            store.extended_config_cache.clone(),
+            Arc::clone(&store.parse_cache),
+            Arc::clone(&store.content_mapped_parse_cache),
+            Arc::clone(&store.extended_config_cache),
             client,
         );
 
@@ -689,8 +691,9 @@ impl Snapshot {
 
         let project_collection = Arc::new(project_collection);
         let auto_import_host =
-            new_auto_import_registry_clone_host(project_collection.clone(), store.parse_cache.clone(), fs.clone(), &store.options.current_directory, store.to_path.clone());
+            new_auto_import_registry_clone_host(Arc::clone(&project_collection), Arc::clone(&store.parse_cache), Arc::clone(&fs), &store.options.current_directory, Arc::clone(&store.to_path));
         let mut open_files: FxHashMap<Path, String> = FxHashMap::default();
+        #[expect(clippy::iter_over_hash_type, reason = "pure map inserts; Go ranges the map too")]
         for (path, overlay) in overlays.iter() {
             open_files.insert(path.clone(), overlay.base.file_name.clone());
         }
@@ -699,8 +702,8 @@ impl Snapshot {
             prepare_auto_imports = change.resource_request.auto_imports.path(self.use_case_sensitive_file_names());
         }
         let old_auto_imports = match &self.auto_imports {
-            Some(auto_imports) => auto_imports.clone(),
-            None => autoimport::new_registry(store.to_path.clone(), self.user_preferences.clone()),
+            Some(auto_imports) => Arc::clone(auto_imports),
+            None => autoimport::new_registry(Arc::clone(&store.to_path), self.user_preferences.clone()),
         };
         let mut auto_imports_watch = None;
         let auto_imports = old_auto_imports.clone_registry(
@@ -725,7 +728,7 @@ impl Snapshot {
         let snapshot_fs = Arc::new(snapshot_fs);
         let mut new_snapshot = store.new_snapshot(
             new_snapshot_id,
-            snapshot_fs.clone(),
+            Arc::clone(&snapshot_fs),
             Arc::default(),
             compiler_options_for_inferred_projects,
             config,
@@ -758,10 +761,11 @@ impl Snapshot {
                     // mutations don't happen afterwards. In the future, we might improve things by
                     // separating what it takes to build a program from what it takes to use a program,
                     // and only pass the former into NewProgram instead of retaining it indefinitely.
-                    project.host.as_ref().unwrap().freeze(snapshot_fs.clone(), new_snapshot.config_file_registry.clone());
+                    project.host.as_ref().unwrap().freeze(Arc::clone(&snapshot_fs), Arc::clone(&new_snapshot.config_file_registry));
                 }
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "only adds this snapshot as an owner (a set insert); Go ranges the map too")]
         for config in new_snapshot.config_file_registry.configs.values() {
             if let Some(command_line) = config.command_line {
                 if let Some(config_file) = command_line.config_file {
@@ -841,6 +845,7 @@ impl Snapshot {
                 }
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "owner releases on distinct keys commute; Go ranges the map too")]
         for config in self.config_file_registry.configs.values() {
             if let Some(command_line) = config.command_line {
                 for file in command_line.extended_source_files() {
@@ -858,8 +863,9 @@ impl Snapshot {
 // snapshot.go:193
 fn overlay_file_handles(overlays: &OverlayMap) -> FxHashMap<Path, Arc<dyn FileHandle>> {
     let mut files: FxHashMap<Path, Arc<dyn FileHandle>> = FxHashMap::with_capacity_and_hasher(overlays.len(), Default::default());
+    #[expect(clippy::iter_over_hash_type, reason = "pure map inserts; Go ranges the map too")]
     for (path, overlay) in overlays.iter() {
-        files.insert(path.clone(), overlay.clone());
+        files.insert(path.clone(), Arc::<crate::overlayfs::Overlay>::clone(overlay));
     }
     files
 }
@@ -879,7 +885,7 @@ impl tsrs_ls::Host for Snapshot {
 
     // snapshot.go:240
     fn converters(&self) -> Arc<Converters> {
-        self.converters.clone()
+        Arc::clone(&self.converters)
     }
 
     // snapshot.go:232
@@ -924,7 +930,7 @@ impl Snapshot {
     }
 
     pub fn converters(&self) -> Arc<Converters> {
-        self.converters.clone()
+        Arc::clone(&self.converters)
     }
 
     pub fn read_file(&self, file_name: &str) -> Option<String> {

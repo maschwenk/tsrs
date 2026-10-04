@@ -26,7 +26,7 @@ fn ctx_with(request_id: &str, lifetime: CheckerLifetime) -> Context {
 fn setup_checker_pool_session(opts: CheckerPoolOptions) -> (Arc<Session>, Arc<checkerPool>) {
     let files = [("/src/tsconfig.json", r#"{ "compilerOptions": { "noLib": true } }"#), ("/src/index.ts", "export const x: number = 1;")];
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files, false)));
-    let session = new_session(SessionInit {
+    let session = new_session(&SessionInit {
         background_ctx: Context::background(),
         options: Arc::new(SessionOptions {
             current_directory: "/".to_string(),

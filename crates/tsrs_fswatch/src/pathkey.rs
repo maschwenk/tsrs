@@ -17,7 +17,7 @@ impl PathComparer {
     // Key returns a watch-only comparison key, not a filesystem path or a compiler
     // identity. Native Darwin comparers use the same CoreFoundation folding as the
     // watcher. Other comparers preserve bytes, including malformed UTF-8.
-    pub fn key(&self, path: &str) -> String {
+    pub fn key(self, path: &str) -> String {
         if !self.comparer.ignore_case || !nativePathFolding {
             return path.to_string();
         }
@@ -36,7 +36,7 @@ impl PathComparer {
     // Rebase replaces a matching directory prefix while preserving the spelling and
     // byte boundaries of the remaining event path. (Rust strings are valid UTF-8, so Go's invalid-UTF-8 branch
     // reduces to the NUL check.)
-    pub fn rebase(&self, path: &str, from: &str, to: &str) -> Option<String> {
+    pub fn rebase(self, path: &str, from: &str, to: &str) -> Option<String> {
         if path.contains('\0') || from.contains('\0') {
             return pathComparer::default().rebase(path, from, to);
         }

@@ -39,7 +39,7 @@ pub(crate) fn is_valid_log_verbosity(v: LogVerbosity) -> bool {
 
 impl logger {
     // logger.go:48
-    fn send_log_message(&self, msg_type: MessageType, message: String) {
+    fn send_log_message(&self, msg_type: MessageType, message: &str) {
         let Some(server) = self.server.upgrade() else {
             return;
         };
@@ -55,7 +55,7 @@ impl logger {
             return;
         }
 
-        let notification = lsproto::WINDOW_LOG_MESSAGE_INFO.new_notification_message(lsproto::LogMessageParams { type_: msg_type, message: message.clone() });
+        let notification = lsproto::WINDOW_LOG_MESSAGE_INFO.new_notification_message(lsproto::LogMessageParams { type_: msg_type, message: message.to_string() });
 
         let background_ctx = server.background_ctx();
         if server.outgoing_queue.put(&background_ctx, notification.message()).is_err() && background_ctx.err().is_some() {
@@ -65,12 +65,12 @@ impl logger {
 
     // logger.go:78
     pub fn log(&self, msg: &str) {
-        self.send_log_message(MessageType::Info, msg.to_string());
+        self.send_log_message(MessageType::Info, msg);
     }
 
     // logger.go:85
     pub fn logf(&self, args: fmt::Arguments<'_>) {
-        self.send_log_message(MessageType::Info, fmt::format(args));
+        self.send_log_message(MessageType::Info, &fmt::format(args));
     }
 
     // logger.go:92
@@ -110,32 +110,32 @@ impl logger {
 
     // logger.go:144
     pub fn error(&self, msg: &str) {
-        self.send_log_message(MessageType::Error, msg.to_string());
+        self.send_log_message(MessageType::Error, msg);
     }
 
     // logger.go:151
     pub fn errorf(&self, args: fmt::Arguments<'_>) {
-        self.send_log_message(MessageType::Error, fmt::format(args));
+        self.send_log_message(MessageType::Error, &fmt::format(args));
     }
 
     // logger.go:158
     pub fn warn(&self, msg: &str) {
-        self.send_log_message(MessageType::Warning, msg.to_string());
+        self.send_log_message(MessageType::Warning, msg);
     }
 
     // logger.go:165
     pub fn warnf(&self, args: fmt::Arguments<'_>) {
-        self.send_log_message(MessageType::Warning, fmt::format(args));
+        self.send_log_message(MessageType::Warning, &fmt::format(args));
     }
 
     // logger.go:172
     pub fn info(&self, msg: &str) {
-        self.send_log_message(MessageType::Info, msg.to_string());
+        self.send_log_message(MessageType::Info, msg);
     }
 
     // logger.go:179
     pub fn infof(&self, args: fmt::Arguments<'_>) {
-        self.send_log_message(MessageType::Info, fmt::format(args));
+        self.send_log_message(MessageType::Info, &fmt::format(args));
     }
 }
 

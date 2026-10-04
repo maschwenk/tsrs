@@ -354,7 +354,7 @@ impl FormattingScanner {
     }
 
     // scanner.go:337
-    pub(crate) fn skip_to_end_of(&mut self, r: &TextRange) {
+    pub(crate) fn skip_to_end_of(&mut self, r: TextRange) {
         self.s.reset_token_state(r.end());
         self.saved_pos = self.s.token_full_start();
         self.last_scan_action = ScanAction::Scan;
@@ -365,7 +365,7 @@ impl FormattingScanner {
     }
 
     // scanner.go:347
-    pub(crate) fn skip_to_start_of(&mut self, r: &TextRange) {
+    pub(crate) fn skip_to_start_of(&mut self, r: TextRange) {
         self.s.reset_token_state(r.pos());
         self.saved_pos = self.s.token_full_start();
         self.last_scan_action = ScanAction::Scan;

@@ -258,7 +258,7 @@ impl ImportAdder for importAdder {
     // import_adder.go:118
     fn edits(&mut self) -> Vec<lsproto::TextEdit> {
         // !!! organize imports?
-        let mut tracker = change::new_tracker(&self.ctx, &self.view.program.options(), self.format_options.clone(), self.converters.clone());
+        let mut tracker = change::new_tracker(&self.ctx, &self.view.program.options(), self.format_options.clone(), Arc::clone(&self.converters));
         let quote_preference = lsutil::get_quote_preference(self.view.importing_file, &self.preferences);
         for fix in &self.add_to_namespace {
             add_namespace_qualifier(fix, &mut tracker, self.view.importing_file);
@@ -446,7 +446,7 @@ fn import_symbols(import_adder: &mut dyn ImportAdder, symbols: &[P<Symbol>]) {
 pub fn try_get_auto_importable_reference_from_type_node(import_type_node: Option<P<Node>>, id_to_symbol: IdToSymbol) -> (Option<P<Node>>, Vec<P<Symbol>>) {
     let symbols: Rc<RefCell<Vec<P<Symbol>>>> = Rc::new(RefCell::new(Vec::new()));
     let factory = NodeFactory::new(NodeFactoryHooks::default());
-    let visit_symbols = symbols.clone();
+    let visit_symbols = Rc::clone(&symbols);
     let visit_factory = factory.clone();
     let visit = move |visitor: &mut NodeVisitor, node: P<Node>| -> Option<P<Node>> {
         if ast::is_literal_import_type_node(node) && node.as_import_type_node().qualifier.is_some() {

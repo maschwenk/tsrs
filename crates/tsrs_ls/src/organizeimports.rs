@@ -1,3 +1,5 @@
+use std::rc::Rc;
+use std::sync::Arc;
 use std::fmt::Write as _;
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, Node, NodeFactory, NodeFactoryHooks, SourceFile};
@@ -28,7 +30,7 @@ impl LanguageService {
         program: &'static Program,
         kind: lsproto::CodeActionKind,
     ) -> OrderedMap<String, Vec<lsproto::TextEdit>> {
-        let mut change_tracker = change::new_tracker(ctx, &program.options(), self.format_options(), self.converters.clone());
+        let mut change_tracker = change::new_tracker(ctx, &program.options(), self.format_options(), Arc::clone(&self.converters));
         let should_sort = kind == lsproto::CodeActionKind::SourceSortImportsTs || kind == lsproto::CodeActionKind::SourceOrganizeImportsTs;
         let should_combine = should_sort;
         let should_remove = kind == lsproto::CodeActionKind::SourceRemoveUnusedImportsTs || kind == lsproto::CodeActionKind::SourceOrganizeImportsTs;
@@ -37,14 +39,14 @@ impl LanguageService {
 
         let preferences = self.user_preferences();
         let (comparers_to_test, type_orders_to_test) = lsutil::get_detection_lists(preferences);
-        let default_comparer = comparers_to_test[0].clone();
+        let default_comparer = Rc::clone(&comparers_to_test[0]);
         let sort = lsutil::resolve_organize_imports_sort(preferences);
 
         let mut module_specifier_comparer: Option<StringComparer> = None;
         let mut named_import_comparer: Option<StringComparer> = None;
         if sort != OrganizeImportsSort::Auto {
-            module_specifier_comparer = Some(default_comparer.clone());
-            named_import_comparer = Some(default_comparer.clone());
+            module_specifier_comparer = Some(Rc::clone(&default_comparer));
+            named_import_comparer = Some(Rc::clone(&default_comparer));
         }
         let mut type_order = preferences.organize_imports_type_order;
 

@@ -47,16 +47,16 @@ pub(crate) fn new_compiler_host(current_directory: &str, project: &Project, buil
     Arc::new(compilerHost {
         config_file_path: project.config_file_path.clone(),
         current_directory: current_directory.to_string(),
-        session_options: builder.session_options.clone(),
+        session_options: Arc::clone(&builder.session_options),
 
-        source_fs: Arc::new(new_source_fs(true, builder.fs.clone(), builder.to_path.clone())),
+        source_fs: Arc::new(new_source_fs(true, Arc::<crate::snapshotfs::snapshotFSBuilder>::clone(&builder.fs), Arc::clone(&builder.to_path))),
         config_file_registry: RwLock::new(None),
 
         project: RwLock::new(Some(project.id())),
         builder: RwLock::new(Some(hostBuilder {
-            parse_cache: builder.parse_cache.clone(),
-            parse_cache_journal: builder.parse_cache_journal.clone(),
-            config_file_registry_builder: builder.config_file_registry_builder.clone(),
+            parse_cache: Arc::clone(&builder.parse_cache),
+            parse_cache_journal: Arc::clone(&builder.parse_cache_journal),
+            config_file_registry_builder: Arc::clone(&builder.config_file_registry_builder),
             ctx: builder.ctx.clone(),
         })),
         logger: RwLock::new(logger),
@@ -91,7 +91,7 @@ impl compilerHost {
     pub(crate) fn builder_parse_cache_journal(&self) -> (Arc<ParseCache>, Arc<ParseCacheJournal>) {
         let builder = self.builder.read().unwrap();
         let builder = builder.as_ref().expect("method must not be called after snapshot initialization");
-        (builder.parse_cache.clone(), builder.parse_cache_journal.clone())
+        (Arc::clone(&builder.parse_cache), Arc::clone(&builder.parse_cache_journal))
     }
 
     pub(crate) fn builder_ctx(&self) -> Context {

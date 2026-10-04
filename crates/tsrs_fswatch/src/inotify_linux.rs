@@ -130,7 +130,7 @@ impl inotifyBackend {
         if wd < 0 {
             return Err(Error::from_errno(last_errno()));
         }
-        let sub = inotifySubscription { path: path.to_string(), watch_path: watch_path.to_string(), dir_watch: w.clone(), wd };
+        let sub = inotifySubscription { path: path.to_string(), watch_path: watch_path.to_string(), dir_watch: Arc::clone(w), wd };
         subs.entry(wd).or_default().push(sub);
         Ok(wd)
     }
@@ -142,7 +142,7 @@ impl inotifyBackend {
 
         loop {
             // SAFETY: `buf` is a writable buffer of `buf.len()` bytes.
-            let n = unsafe { libc::read(self.inotify.load(Ordering::SeqCst), buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+            let n = unsafe { libc::read(self.inotify.load(Ordering::SeqCst), buf.as_mut_ptr().cast::<libc::c_void>(), buf.len()) };
             if n < 0 {
                 let errno = last_errno();
                 if errno == libc::EAGAIN || errno == libc::EWOULDBLOCK {
@@ -157,7 +157,7 @@ impl inotifyBackend {
             let mut offset = 0;
             while offset < n {
                 // SAFETY: the kernel writes whole `inotify_event` records; `offset` is at a record start.
-                let ev: libc::inotify_event = unsafe { std::ptr::read_unaligned(buf.as_ptr().add(offset) as *const libc::inotify_event) };
+                let ev: libc::inotify_event = unsafe { std::ptr::read_unaligned(buf.as_ptr().add(offset).cast::<libc::inotify_event>()) };
                 let record_size = header + ev.len as usize;
                 let mut name = String::new();
                 if ev.len > 0 {
@@ -171,6 +171,7 @@ impl inotifyBackend {
                 if ev.mask & libc::IN_Q_OVERFLOW != 0 {
                     let _base = self.base.mu.lock().unwrap();
                     let subs = self.subscriptions.lock().unwrap();
+                    #[expect(clippy::iter_over_hash_type, reason = "sets the same ErrOverflow on every watch; `touched` only drives coalesced notifies; Go ranges the map too")]
                     for list in subs.values() {
                         for sub in list {
                             sub.dir_watch.events.set_error(ErrOverflow.into());
@@ -258,7 +259,7 @@ impl inotifyBackend {
 
 fn touch(touched: &mut Vec<Arc<dirWatch>>, w: &Arc<dirWatch>) {
     if !touched.iter().any(|t| Arc::ptr_eq(t, w)) {
-        touched.push(w.clone());
+        touched.push(Arc::clone(w));
     }
 }
 
@@ -283,7 +284,7 @@ impl watcherImpl for inotifyBackend {
             return;
         }
         // SAFETY: writing one byte from a live buffer to our own pipe.
-        unsafe { libc::write(fd, b"X".as_ptr() as *const libc::c_void, 1) };
+        unsafe { libc::write(fd, b"X".as_ptr().cast::<libc::c_void>(), 1) };
         let ended = self.ended.lock().unwrap();
         let _ended = self.ended_cv.wait_while(ended, |e| !*e).unwrap();
     }
@@ -318,13 +319,13 @@ impl watcherImpl for inotifyBackend {
     // inotify_linux.go:399
     fn close_watch(&self, w: &Arc<dirWatch>) -> Result<(), Error> {
         let mut subs = self.subscriptions.lock().unwrap();
-        let key = dwKey(w.clone());
+        let key = dwKey(Arc::clone(w));
         let mut first_err = None;
         let wds: Vec<i32> = subs.keys().copied().collect();
         for wd in wds {
             let list = subs.get_mut(&wd).unwrap();
             let before = list.len();
-            list.retain(|s| dwKey(s.dir_watch.clone()) != key);
+            list.retain(|s| dwKey(Arc::clone(&s.dir_watch)) != key);
             if list.len() == before {
                 continue;
             }

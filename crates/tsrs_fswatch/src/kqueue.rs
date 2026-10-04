@@ -252,6 +252,7 @@ impl kqueueBackend {
     fn close_subscriptions(&self) {
         let mut st = self.mu.lock().unwrap();
         let mut seen_fds = rustc_hash::FxHashSet::default();
+        #[expect(clippy::iter_over_hash_type, reason = "closes each distinct fd once, then clears the maps; Go ranges the map too")]
         for list in st.subs_by_path.values() {
             for sub in list {
                 if sub.fd < 0 {
@@ -385,7 +386,7 @@ impl kqueueBackend {
                 fd
             }
         };
-        let sub = kqueueSubscription { id: self.next_id(), dir_watch: w.clone(), path: path.to_string(), entries: map_id, fd };
+        let sub = kqueueSubscription { id: self.next_id(), dir_watch: Arc::clone(w), path: path.to_string(), entries: map_id, fd };
         st.subs_by_path.entry(path.to_string()).or_default().push(sub);
         true
     }
@@ -435,14 +436,14 @@ impl kqueueBackend {
             let watch_dir_start = format!("{}/", watch_path);
 
             let snapshot = match snapshots.get(&watch_path) {
-                Some(s) => s.clone(),
+                Some(s) => Arc::clone(s),
                 None => {
                     let Ok(disk_entries) = read_entries(&watch_path) else {
                         continue;
                     };
                     let current_display_paths = disk_entries.iter().map(|(name, _)| format!("{}{}", dir_start, name)).collect();
                     let s = Arc::new(diskSnapshot { entries: disk_entries, current_display_paths });
-                    snapshots.insert(watch_path.clone(), s.clone());
+                    snapshots.insert(watch_path.clone(), Arc::clone(&s));
                     s
                 }
             };
@@ -515,6 +516,7 @@ impl kqueueBackend {
             // exist on disk.
             let mut to_remove = Vec::new();
             if let Some(m) = st.entry_maps.get(&map_id) {
+                #[expect(clippy::iter_over_hash_type, reason = "stale children are removed from disjoint subtrees and from per-path event entries; Go ranges the map too")]
                 for p in m.keys() {
                     let Some(rest) = p.strip_prefix(&dir_start) else {
                         continue;
@@ -573,7 +575,7 @@ impl kqueueBackend {
 
 fn touch(touched: &mut Vec<Arc<dirWatch>>, w: &Arc<dirWatch>) {
     if !touched.iter().any(|t| Arc::ptr_eq(t, w)) {
-        touched.push(w.clone());
+        touched.push(Arc::clone(w));
     }
 }
 
@@ -585,7 +587,8 @@ fn is_descendant(descendant: &str, path: &str) -> bool {
 fn fstat(fd: i32) -> Option<(u64, u64)> {
     // SAFETY: zeroed `stat` is a valid out-parameter; `fd` is an fd this backend owns.
     let mut st: libc::stat = unsafe { std::mem::zeroed() };
-    if unsafe { libc::fstat(fd, &mut st) } != 0 {
+    // SAFETY: `st` is a live, writable `stat` out-parameter for the call; `fd` is an fd this backend owns.
+    if unsafe { libc::fstat(fd, &raw mut st) } != 0 {
         return None;
     }
     Some((st.st_dev as u64, st.st_ino as u64))
@@ -609,6 +612,7 @@ impl kqState {
             return;
         };
         let mut closed = Vec::new();
+        #[expect(clippy::iter_over_hash_type, reason = "each matching entry is closed and removed once; event entries are per path; Go ranges the map too")]
         for (path, e) in m.iter_mut() {
             if !path.starts_with(&prefix) {
                 continue;
@@ -676,6 +680,7 @@ impl kqState {
     // cleanupEntriesLocked closes fds for all entries that have been opened.
     // Called on subscribe failure to avoid fd leaks. Must be called under b.mu.
     fn cleanup_entries_locked(&mut self, entries: &mut FxHashMap<String, dirEntry>) {
+        #[expect(clippy::iter_over_hash_type, reason = "closes every opened fd and drops its fd_to_entry key; Go ranges the map too")]
         for e in entries.values_mut() {
             if let Some(fd) = e.state.take() {
                 close_fd(fd);
@@ -728,7 +733,7 @@ impl watcherImpl for kqueueBackend {
             return;
         }
         // SAFETY: writing one byte from a live buffer to our own pipe.
-        unsafe { libc::write(fd, b"X".as_ptr() as *const libc::c_void, 1) };
+        unsafe { libc::write(fd, b"X".as_ptr().cast::<libc::c_void>(), 1) };
         let ended = self.ended.lock().unwrap();
         let _ended = self.ended_cv.wait_while(ended, |e| !*e).unwrap();
     }
@@ -779,9 +784,10 @@ impl watcherImpl for kqueueBackend {
             st.fd_to_entry.insert(fd, (map_id, path));
         }
 
+        #[expect(clippy::iter_over_hash_type, reason = "one subscription per distinct path; subscription ids are only compared for equality; Go ranges the map too")]
         for (path, entry) in &entries {
             let fd = entry.state.unwrap();
-            let sub = kqueueSubscription { id: self.next_id(), dir_watch: w.clone(), path: path.clone(), entries: map_id, fd };
+            let sub = kqueueSubscription { id: self.next_id(), dir_watch: Arc::clone(w), path: path.clone(), entries: map_id, fd };
             st.subs_by_path.entry(path.clone()).or_default().push(sub);
         }
         st.entry_maps.insert(map_id, entries);
@@ -792,20 +798,20 @@ impl watcherImpl for kqueueBackend {
     // closeWatch mirrors `kqueueBackend::closeWatch`.
     fn close_watch(&self, w: &Arc<dirWatch>) -> Result<(), Error> {
         let mut st = self.mu.lock().unwrap();
-        let key = dwKey(w.clone());
+        let key = dwKey(Arc::clone(w));
         let mut maps_of_watch = rustc_hash::FxHashSet::default();
         let paths: Vec<String> = st.subs_by_path.keys().cloned().collect();
         for path in paths {
             let list = st.subs_by_path.get(&path).unwrap();
-            let removed_any = list.iter().any(|s| dwKey(s.dir_watch.clone()) == key);
+            let removed_any = list.iter().any(|s| dwKey(Arc::clone(&s.dir_watch)) == key);
             if !removed_any {
                 continue;
             }
-            for s in list.iter().filter(|s| dwKey(s.dir_watch.clone()) == key) {
+            for s in list.iter().filter(|s| dwKey(Arc::clone(&s.dir_watch)) == key) {
                 maps_of_watch.insert(s.entries);
             }
             let first_fd = list[0].fd;
-            let kept: Vec<kqueueSubscription> = list.iter().filter(|s| dwKey(s.dir_watch.clone()) != key).cloned().collect();
+            let kept: Vec<kqueueSubscription> = list.iter().filter(|s| dwKey(Arc::clone(&s.dir_watch)) != key).cloned().collect();
             if kept.is_empty() {
                 // Closing the file descriptor automatically unwatches it in kqueue.
                 close_fd(first_fd);
@@ -816,6 +822,7 @@ impl watcherImpl for kqueueBackend {
             }
         }
         // Go drops the entries map with its last subscription (GC).
+        #[expect(clippy::iter_over_hash_type, reason = "drops each entry map that no subscription references; the removals are independent")]
         for map_id in maps_of_watch {
             let still_used = st.subs_by_path.values().any(|l| l.iter().any(|s| s.entries == map_id));
             if !still_used {

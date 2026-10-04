@@ -840,8 +840,8 @@ impl LanguageService {
                 let mut new_references: Vec<Rc<ReferenceEntry>> = Vec::new();
                 for r in &s.references {
                     if seen_nodes.insert(r.node) {
-                        queue.push_back(r.clone());
-                        new_references.push(r.clone());
+                        queue.push_back(Rc::clone(r));
+                        new_references.push(Rc::clone(r));
                     }
                 }
                 if !new_references.is_empty() || s.definition.is_none() || seen_definitions.insert(s.definition.as_ref().unwrap().symbol) {
@@ -1207,7 +1207,7 @@ impl LanguageService {
         for entry in &data.symbols_and_entries {
             for r in &entry.references {
                 if seen_nodes.insert(r.node) && (!options.drop_origin_nodes || !r.node.unwrap().loc().contains_inclusive(data.position)) {
-                    entries.push(r.clone());
+                    entries.push(Rc::clone(r));
                 }
             }
         }
@@ -1595,7 +1595,6 @@ pub(crate) fn is_string_literal_property_reference(node: P<Node> /*StringLiteral
 impl LanguageService {
     // Go returns nil (no module references) or a slice; `None` is Go's nil.
     // findallreferences.go:1401
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn get_referenced_symbols_for_module_if_declared_by_source_file(
         &self,
         ctx: &Context,
@@ -2146,7 +2145,6 @@ pub(crate) fn get_special_search_kind(node: Option<P<Node>>) -> &'static str {
 }
 
 // findallreferences.go:1853
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn get_referenced_symbols_for_symbol(
     ctx: &Context,
     program: &'static Program,
@@ -2179,7 +2177,7 @@ pub(crate) fn get_referenced_symbols_for_symbol(
         state.get_references_at_export_specifier(export_specifier.name().unwrap(), Some(symbol), export_specifier, &search, true /*addReferencesHere*/, true /*alwaysGetReferences*/);
     } else if node.is_some_and(|node| node.kind() == Kind::DefaultKeyword) && symbol.name() == ast::InternalSymbolNameDefault && symbol.parent().is_some() {
         state.add_reference(node.unwrap(), symbol, EntryKind::Node);
-        state.search_for_imports_of_export(node.unwrap(), symbol, &ExportInfo { exporting_module_symbol: symbol.parent().unwrap(), export_kind: ExportKind::Default });
+        state.search_for_imports_of_export(node.unwrap(), symbol, ExportInfo { exporting_module_symbol: symbol.parent().unwrap(), export_kind: ExportKind::Default });
     } else {
         let all_search_symbols =
             state.populate_search_symbol_set(symbol, node, options.use_ == ReferenceUse::Rename, options.use_aliases_for_rename, options.implementations);
@@ -2244,7 +2242,6 @@ pub(crate) struct RefState<'a> {
 }
 
 // findallreferences.go:1926
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn new_state<'a>(
     ctx: &'a Context,
     program: &'static Program,
@@ -2281,7 +2278,7 @@ impl<'a> RefState<'a> {
     }
 
     // findallreferences.go:1946
-    pub(crate) fn get_import_searches(&mut self, export_symbol: P<Symbol>, export_info: &ExportInfo) -> ImportsResult {
+    pub(crate) fn get_import_searches(&mut self, export_symbol: P<Symbol>, export_info: ExportInfo) -> ImportsResult {
         if self.import_tracker.is_none() {
             self.import_tracker = Some(create_import_tracker(self.ctx, self.program, self.source_files, self.source_files_set, self.checker));
         }
@@ -2744,7 +2741,7 @@ impl<'a> RefState<'a> {
                 self.search_for_imported_symbol(import_or_export.symbol.unwrap());
             }
         } else {
-            self.search_for_imports_of_export(reference_location, import_or_export.symbol.unwrap(), import_or_export.export_info.as_ref().unwrap());
+            self.search_for_imports_of_export(reference_location, import_or_export.symbol.unwrap(), import_or_export.export_info.unwrap());
         }
     }
 
@@ -2820,7 +2817,7 @@ impl<'a> RefState<'a> {
             let export_symbol = export_symbol.unwrap();
             let export_info = get_export_info(export_symbol, export_kind, self.checker);
             if let Some(export_info) = export_info {
-                self.search_for_imports_of_export(reference_location, export_symbol, &export_info);
+                self.search_for_imports_of_export(reference_location, export_symbol, export_info);
             }
         }
 
@@ -2851,7 +2848,7 @@ impl<'a> RefState<'a> {
 
     // Search for all imports of a given exported symbol using `State.getImportSearches`. */
     // findallreferences.go:2461
-    pub(crate) fn search_for_imports_of_export(&mut self, export_location: P<Node>, export_symbol: P<Symbol>, export_info: &ExportInfo) {
+    pub(crate) fn search_for_imports_of_export(&mut self, export_location: P<Node>, export_symbol: P<Symbol>, export_info: ExportInfo) {
         let r = self.get_import_searches(export_symbol, export_info);
 
         // For `import { foo as bar }` just add the reference to `foo`, and don't otherwise search in the file.

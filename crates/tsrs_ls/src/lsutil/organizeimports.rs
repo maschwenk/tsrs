@@ -576,9 +576,9 @@ fn detect_named_import_organization_by_sort_worker(
     best_diff.insert(OrganizeImportsTypeOrder::Last, i64::MAX);
     best_diff.insert(OrganizeImportsTypeOrder::Inline, i64::MAX);
     let mut best_comparer: FxHashMap<OrganizeImportsTypeOrder, StringComparer> = FxHashMap::default();
-    best_comparer.insert(OrganizeImportsTypeOrder::First, comparers_to_test[0].clone());
-    best_comparer.insert(OrganizeImportsTypeOrder::Last, comparers_to_test[0].clone());
-    best_comparer.insert(OrganizeImportsTypeOrder::Inline, comparers_to_test[0].clone());
+    best_comparer.insert(OrganizeImportsTypeOrder::First, Rc::clone(&comparers_to_test[0]));
+    best_comparer.insert(OrganizeImportsTypeOrder::Last, Rc::clone(&comparers_to_test[0]));
+    best_comparer.insert(OrganizeImportsTypeOrder::Inline, Rc::clone(&comparers_to_test[0]));
 
     // Go map reads of a missing key yield the zero value.
     let diff_of = |m: &FxHashMap<OrganizeImportsTypeOrder, i64>, t: OrganizeImportsTypeOrder| m.get(&t).copied().unwrap_or(0);
@@ -601,7 +601,7 @@ fn detect_named_import_organization_by_sort_worker(
         for &type_order in types_to_test {
             if diff_of(&curr_diff, type_order) < diff_of(&best_diff, type_order) {
                 best_diff.insert(type_order, diff_of(&curr_diff, type_order));
-                best_comparer.insert(type_order, cur_comparer.clone());
+                best_comparer.insert(type_order, Rc::clone(cur_comparer));
             }
         }
     }
@@ -676,12 +676,12 @@ fn detect_case_sensitivity_by_sort(original_groups: &[Vec<String>], comparers_to
 
         if diff_of_current_comparer < best_diff {
             best_diff = diff_of_current_comparer;
-            best_comparer = Some(cur_comparer.clone());
+            best_comparer = Some(Rc::clone(cur_comparer));
         }
     }
 
     if best_comparer.is_none() && !comparers_to_test.is_empty() {
-        best_comparer = Some(comparers_to_test[0].clone());
+        best_comparer = Some(Rc::clone(&comparers_to_test[0]));
     }
 
     CaseSensitivityDetectionResult { comparer: best_comparer, is_sorted: best_diff == 0 }
@@ -712,7 +712,7 @@ pub fn get_named_import_specifier_comparer_with_detection(
         import_stmt = Some(import_decl);
     }
 
-    let mut specifier_comparer = get_named_import_specifier_comparer(preferences, Some(comparers_to_test[0].clone()));
+    let mut specifier_comparer = get_named_import_specifier_comparer(preferences, Some(Rc::clone(&comparers_to_test[0])));
     let mut is_sorted = Tristate::Unknown;
 
     if resolve_organize_imports_sort(preferences) == OrganizeImportsSort::Auto

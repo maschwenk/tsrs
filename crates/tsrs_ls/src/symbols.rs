@@ -650,6 +650,7 @@ pub fn provide_workspace_symbols(
     }
     // Create DeclarationInfos for all declarations in the source files.
     let mut infos: Vec<DeclarationInfo> = Vec::new();
+    #[expect(clippy::iter_over_hash_type, reason = "infos are sorted by a total key (score, name, path, pos) before truncation; Go ranges maps too")]
     for source_file in source_files.values() {
         if ctx.err().is_some() {
             return Ok(lsproto::SymbolInformationsOrWorkspaceSymbolsOrNull::default());

@@ -49,7 +49,7 @@ impl debounce {
             latch_mu: Mutex::new(latchState::default()),
             latch_cv: Condvar::new(),
         });
-        let looper = d.clone();
+        let looper = Arc::clone(&d);
         std::thread::Builder::new().name("fswatch-debounce".to_string()).spawn(move || looper.loop_()).expect("failed to spawn fswatch debounce thread");
         d
     }

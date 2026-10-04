@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::cell::RefCell;
 
 use rustc_hash::FxHashMap;
@@ -145,7 +146,7 @@ fn get_all_isolated_declarations_code_actions(ctx: &Context, fix_context: &CodeF
 
     let mut ch = fix_context.program.get_type_checker_for_file(ctx, fix_context.source_file);
 
-    let mut change_tracker = change::new_tracker(ctx, &fix_context.program.options(), fix_context.ls.format_options(), fix_context.ls.converters.clone());
+    let mut change_tracker = change::new_tracker(ctx, &fix_context.program.options(), fix_context.ls.format_options(), Arc::clone(&fix_context.ls.converters));
 
     let mut fixer = isolatedDeclarationsFixer {
         source_file: fix_context.source_file,
@@ -186,7 +187,7 @@ fn try_code_action(
     ch: &mut Checker,
     f: &mut dyn FnMut(&mut isolatedDeclarationsFixer) -> String,
 ) -> Option<CodeAction> {
-    let mut change_tracker = change::new_tracker(ctx, &fix_context.program.options(), fix_context.ls.format_options(), fix_context.ls.converters.clone());
+    let mut change_tracker = change::new_tracker(ctx, &fix_context.program.options(), fix_context.ls.format_options(), Arc::clone(&fix_context.ls.converters));
 
     // importAdder may be nil if the auto-import registry is not available;
     // type node transformation still works without it, just without adding imports.

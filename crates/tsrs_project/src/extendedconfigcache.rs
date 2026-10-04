@@ -60,5 +60,5 @@ fn hash(entry: &tsoptions::ExtendedConfigCacheEntry, args: &ExtendedConfigParseA
 // the call does not outlive.
 pub(crate) fn assume_static<T: ?Sized>(r: &T) -> &'static T {
     // SAFETY: see above; callers pass references that stay valid until the tsoptions call returns.
-    unsafe { &*(r as *const T) }
+    unsafe { &*std::ptr::from_ref::<T>(r) }
 }

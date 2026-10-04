@@ -1675,10 +1675,10 @@ impl LanguageService {
         // Copied from vscode ts extension: `MyCompletionItem.constructor`.
         if is_member_completion && kind_modifiers.intersects(ScriptElementKindModifier::Optional) {
             if insert_text.is_empty() {
-                insert_text = name.clone();
+                insert_text.clone_from(&name);
             }
             if filter_text.is_empty() || is_snippet {
-                filter_text = name.clone();
+                filter_text.clone_from(&name);
             }
             name += "?";
         }
