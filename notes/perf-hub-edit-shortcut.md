@@ -163,18 +163,18 @@ declaration signature with the stored one, finds it unchanged and re-checks that
 stored value is the version, so the edit counts as a declaration change and re-checks the file's whole re-check set
 (for the files of the large cycle: everything, at which point the shortcut fires again). That file's signature is
 computed in that run, so the cost is paid once per file. Measured (body-only edit = a non-exported `const` appended;
-same edit after each history):
+same edit after each history; single runs, load 7-16; the two 8-importer rows rerun with the final binary):
 
 | previous run | next edit | after Go algorithm | after shortcut |
 | --- | --- | --- | --- |
-| service-in-cycle edit | body edit of the 8-importer service (visited by that walk) | 1.20 | 10.48 |
+| service-in-cycle edit | body edit of the 8-importer service (visited by that walk) | 1.38 | 7.08 |
 | global `.d.ts` edit (Go computes every file's signature) | body edit of the in-cycle service | 1.18 | 8.41 |
-| global `.d.ts` edit | body edit of the 8-importer service | 1.12 | 8.08 |
+| global `.d.ts` edit | body edit of the 8-importer service | 1.04 | 7.09 |
 | ORM hub edit | body edit of the in-cycle service (not visited by Go's walk either) | 11.43 | 8.13 |
 | any of the above | body edit of a file nothing imports | 1.1-1.4 | 1.1-1.4 |
 | any | body edit of the file the previous run edited | 1.2-1.4 | 1.2-1.4 (that file keeps its computed signature) |
 
-So the shortcut saves 1.5-11 s on the run that edits a widely used file and costs about a cold check (+6-9 s) on the
+So the shortcut saves 1.5-11 s on the run that edits a widely used file and costs about a cold check (+6-7 s) on the
 first later body-only edit of each file that run skipped (22k files for the ORM hub edit from cold, 21.7k for the
 in-cycle service, 27k for the global `.d.ts`). One such edit already takes back the saving of an ORM hub edit. It
 comes out ahead only when few of the skipped files are edited before their signatures get computed some other way
@@ -183,3 +183,64 @@ comes out ahead only when few of the skipped files are edited before their signa
 Go has the same shape of cost after every cold run: all signatures are versions then, and the first edit of a file
 in the large cycle walks and re-checks everything, but that walk computes the visited files' signatures, so the cost
 is paid once for all of them together rather than once per file.
+
+### Before/after
+
+Base = origin/main `1ab17ae`, new = `8369d76` (this branch before merging origin/main, whose new commits are lint
+changes), tsgo = `tsgo-ref`; 4 checkers;
+seconds, median of 3 interleaved rounds (range), peak footprint GiB; load 5-13. Each binary starts from its own cold
+incremental tsbuildinfo; "hub edit" appends `export type __TsrsHubEditN = number;` to the ORM hub; the next three
+rows each start from the hub-edit run's tsbuildinfo, with the hub edit kept.
+
+| scenario | base | new | tsgo |
+| --- | --- | --- | --- |
+| hub edit | 10.71 (10.63-10.74), peak 6.52 | **7.91** (7.87-7.96), peak 6.42 | 72.6 (70.6-72.9), peak 27.1 |
+| then a body edit of a file the hub edit's walk visited | 1.04 (1.03-1.05), peak 2.38 | **7.57** (7.45-7.70), peak 6.38 | 4.54 (4.50-4.61) |
+| then a body edit of a file nothing imports | 1.03 (1.03-1.04) | 1.07 (1.04-1.11) | 7.39 (7.36-7.44) |
+| then no edit | 1.04 (1.04-1.04) | 1.04 (1.03-1.46) | 4.46 (4.46-4.48) |
+| cold, `--incremental false` | 6.62 (6.57-6.77), peak 5.70 | 6.66 (6.57-10.72), peak 5.70 | 18.19 (18.10-18.31), peak 23.3 |
+
+Hub-edit tsbuildinfo, base vs new, 3/3 rounds: equal except 22,306 signatures (all the version) and 17 fewer
+`missingPackageJsons`; diagnostics identical.
+
+## Exactness checks
+
+- Corpus, multi-step from a cold tsbuildinfo, each step run with the shortcut on, off and `--incremental false`:
+  hub edit that makes `db()`'s parameter required (17,190 errors in dependent files) -> leaf edit -> revert the hub
+  edit (0 errors) -> no-op. Diagnostics identical across the three at every step; tsbuildinfo on vs off equal except
+  signatures (22,306, 22,306, 1,870, 1,870) and the package.json lists.
+- The sweep above: diagnostics identical in all 36 run pairs.
+- `tools/oracle/incremental`: `run-all.sh` now runs tsrs with `TSRS_HUB_SHORTCUT=0` (identical to tsgo as before:
+  inc1, inc2, b1, dmap, graph; `b1-outputs` and `cycle` differ on base and branch alike, macOS `/private/tmp`), then
+  inc1 (the `--noEmit` fixture) once more with the shortcut on and `SIGNATURES_MAY_DIFFER=1`, which accepts a
+  tsbuildinfo only if `cmp-signatures.py` finds every difference to be a signature that is the file's version, or
+  package.json lists that are subsets: identical except signatures in 2 of 6 steps.
+- tsctests (Go baselines): with the switch off, the same 374 / 32 / 1 as base. With the default (on), **4 baselines
+  change** and fail against Go's: `tsc/incremental/json-module-diagnostics-are-cleared-after-fixing-the-json-file`,
+  `tsc/noEmit/dts-errors-with-incremental-as-modules`, `tsc/noEmit/dts-errors-without-dts-enabled-with-incremental-as-modules`,
+  `tsc/noEmit/semantic-errors-with-incremental-as-modules` (374 -> 370 pass). In each, the only differing lines are
+  stored signatures (version instead of d.ts hash), the readable buildinfo's `original`/`size`, and
+  "(used version)" instead of "(computed .d.ts)"; and in `dts-errors-with-incremental-as-modules` one extra
+  "(stored at emit)" line: the later emitting run finds a version-signature and computes the signature during emit
+  (reader 4), after which its tsbuildinfo equals Go's again. No diagnostic or output-file line differs. (Before the
+  pending-emit condition was added, 8 baselines changed, 4 of them also in `affectedFilesPendingEmit` and in files
+  re-emitted with the same content.)
+
+## What the owner is deciding
+
+Whether tsrs may store different `signature` values than tsgo in `--noEmit` incremental runs, by default. In
+exchange a whole-program edit is about a cold run (here 10.7 -> 7.9 s for the ORM hub, 18 -> 7.2 s for a global
+`.d.ts`), and the first later body-only edit of each file that run skipped costs about a cold run instead of ~1 s
+(here 1.0 -> 7.6 s), until each of those files has been edited or walked once. With the default on, 4 tsctests
+baselines no longer match Go's; `TSRS_HUB_SHORTCUT=0` restores tsgo's behavior and bytes.
+
+My read of the numbers: on this codebase the trade is negative for an edit loop that touches a shared file and then
+keeps editing files that depend on it, and positive for one-off whole-program edits (a branch switch, a global
+declaration edit, an edit right before a run whose result is all that matters). If it is taken, opt-in
+(`TSRS_HUB_SHORTCUT=1`) would keep tsgo-identical output by default; that is a one-line change.
+
+## Not done
+
+- Computing the skipped signatures after the check instead (one emit for all of C(F), no level barriers, warm
+  checkers): would keep later runs cheap and differ from tsgo only by storing declaration signatures where tsgo stores
+  versions; not measured.
