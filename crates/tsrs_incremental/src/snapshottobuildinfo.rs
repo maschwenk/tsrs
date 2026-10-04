@@ -10,6 +10,7 @@ use tsrs_core::P;
 use tsrs_tsoptions::{self as tsoptions, CommandLineOption, CommandLineOptionKind, CompilerOptionsValue};
 
 use crate::buildinfo::*;
+use crate::referencemap::RefSet;
 use crate::snapshot::{buildInfoDiagnosticWithFileName, get_file_emit_kind, DiagnosticsOrBuildInfoDiagnosticsWithFileName, Snapshot};
 
 // snapshottobuildinfo.go:18
@@ -89,12 +90,12 @@ impl toBuildInfo<'_> {
     }
 
     // snapshottobuildinfo.go:91
-    fn to_file_id_list_id(&mut self, set: &Set<Path>) -> BuildInfoFileIdListId {
+    fn to_file_id_list_id(&mut self, set: &RefSet) -> BuildInfoFileIdListId {
         // Go maps the set's keys in random order, so a path seen here for the first time gets an id that depends on
         // that order; the port gives new ids in sorted path order. Only paths without an id need sorting.
         let mut file_ids: Vec<BuildInfoFileId> = Vec::with_capacity(set.len());
         let mut new_paths: Vec<&Path> = Vec::new();
-        for path in set.keys() {
+        for path in set.iter() {
             match self.file_name_to_file_id.get(path.as_str()) {
                 Some(&file_id) => file_ids.push(file_id),
                 None => new_paths.push(path),
@@ -341,14 +342,14 @@ impl toBuildInfo<'_> {
     fn set_referenced_map(&mut self) {
         let mut keys = self.snapshot.referenced_map.get_paths_with_references();
         keys.sort();
-        let references: Vec<std::sync::Arc<Set<Path>>> = keys.iter().map(|file_path| self.snapshot.referenced_map.get_references(file_path).unwrap()).collect();
+        let references: Vec<std::sync::Arc<RefSet>> = keys.iter().map(|file_path| self.snapshot.referenced_map.get_references(file_path).unwrap()).collect();
         // Most reference sets name only files that already have ids (every program file got one above). Their sorted
         // id lists are computed up front, on the worker pool, reading the id map only; a set with a path that has no
         // id yet goes through to_file_id_list_id in order below, so new ids are given exactly as before.
         let known_ids = &self.file_name_to_file_id;
-        let ids_if_known = |references: &std::sync::Arc<Set<Path>>| -> Option<Vec<BuildInfoFileId>> {
+        let ids_if_known = |references: &std::sync::Arc<RefSet>| -> Option<Vec<BuildInfoFileId>> {
             let mut file_ids = Vec::with_capacity(references.len());
-            for path in references.keys() {
+            for path in references.iter() {
                 file_ids.push(*known_ids.get(path.as_str())?);
             }
             file_ids.sort_unstable();
