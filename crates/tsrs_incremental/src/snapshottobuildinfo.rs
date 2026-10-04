@@ -61,7 +61,7 @@ struct toBuildInfo<'a> {
     build_info_directory: String,
     compare_paths_options: ComparePathsOptions,
     file_name_to_file_id: FxHashMap<String, BuildInfoFileId>,
-    file_names_to_file_id_list_id: FxHashMap<String, BuildInfoFileIdListId>,
+    file_names_to_file_id_list_id: FxHashMap<Vec<BuildInfoFileId>, BuildInfoFileIdListId>,
     roots: FxHashMap<P<SourceFile>, Path>,
 }
 
@@ -90,18 +90,31 @@ impl toBuildInfo<'_> {
 
     // snapshottobuildinfo.go:91
     fn to_file_id_list_id(&mut self, set: &Set<Path>) -> BuildInfoFileIdListId {
-        // Go iterates the set's keys in random order; the ids are sorted right after.
-        let mut keys: Vec<&Path> = set.keys().iter().collect();
-        keys.sort();
-        let mut file_ids: Vec<BuildInfoFileId> = keys.into_iter().map(|p| self.to_file_id(p)).collect();
-        file_ids.sort();
-        let key = file_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
+        // Go maps the set's keys in random order, so a path seen here for the first time gets an id that depends on
+        // that order; the port gives new ids in sorted path order. Only paths without an id need sorting.
+        let mut file_ids: Vec<BuildInfoFileId> = Vec::with_capacity(set.len());
+        let mut new_paths: Vec<&Path> = Vec::new();
+        for path in set.keys() {
+            match self.file_name_to_file_id.get(path.as_str()) {
+                Some(&file_id) => file_ids.push(file_id),
+                None => new_paths.push(path),
+            }
+        }
+        new_paths.sort();
+        for path in new_paths {
+            file_ids.push(self.to_file_id(path));
+        }
+        file_ids.sort_unstable();
+        self.to_file_id_list_id_of_sorted_ids(file_ids)
+    }
 
-        let mut file_id_list_id = self.file_names_to_file_id_list_id.get(&key).copied().unwrap_or(0);
+    fn to_file_id_list_id_of_sorted_ids(&mut self, file_ids: Vec<BuildInfoFileId>) -> BuildInfoFileIdListId {
+        // Go keys the map by the ids joined with ","; the id list itself is the same key.
+        let mut file_id_list_id = self.file_names_to_file_id_list_id.get(file_ids.as_slice()).copied().unwrap_or(0);
         if file_id_list_id == 0 {
+            self.file_names_to_file_id_list_id.insert(file_ids.clone(), self.build_info.file_ids_list.len() as BuildInfoFileIdListId + 1);
             self.build_info.file_ids_list.push(file_ids);
             file_id_list_id = self.build_info.file_ids_list.len() as BuildInfoFileIdListId;
-            self.file_names_to_file_id_list_id.insert(key, file_id_list_id);
         }
         file_id_list_id
     }
@@ -227,9 +240,12 @@ impl toBuildInfo<'_> {
         for &file in program.get_source_files() {
             let path = file.path().clone();
             let info = snapshot.file_infos.load(&path).unwrap();
+            // A file that gets its id here and is not a lib file is named relative_to_build_info(path), so the check
+            // below holds without computing the relative path again.
+            let named_relative = !self.file_name_to_file_id.contains_key(path.as_str()) && program.get_default_lib_file(&path).is_none();
             let file_id = self.to_file_id(&path);
             //  tryAddRoot(key, fileId);
-            if self.build_info.file_names[file_id as usize - 1] != self.relative_to_build_info(&path) {
+            if !named_relative && self.build_info.file_names[file_id as usize - 1] != self.relative_to_build_info(&path) {
                 match program.get_default_lib_file(&path) {
                     Some(lib_file) if !lib_file.replaced && self.build_info.file_names[file_id as usize - 1] == lib_file.name => {}
                     _ => panic!(
@@ -325,11 +341,32 @@ impl toBuildInfo<'_> {
     fn set_referenced_map(&mut self) {
         let mut keys = self.snapshot.referenced_map.get_paths_with_references();
         keys.sort();
+        let references: Vec<std::sync::Arc<Set<Path>>> = keys.iter().map(|file_path| self.snapshot.referenced_map.get_references(file_path).unwrap()).collect();
+        // Most reference sets name only files that already have ids (every program file got one above). Their sorted
+        // id lists are computed up front, on the worker pool, reading the id map only; a set with a path that has no
+        // id yet goes through to_file_id_list_id in order below, so new ids are given exactly as before.
+        let known_ids = &self.file_name_to_file_id;
+        let ids_if_known = |references: &std::sync::Arc<Set<Path>>| -> Option<Vec<BuildInfoFileId>> {
+            let mut file_ids = Vec::with_capacity(references.len());
+            for path in references.keys() {
+                file_ids.push(*known_ids.get(path.as_str())?);
+            }
+            file_ids.sort_unstable();
+            Some(file_ids)
+        };
+        let known: Vec<Option<Vec<BuildInfoFileId>>> = if self.program.single_threaded() {
+            references.iter().map(ids_if_known).collect()
+        } else {
+            use rayon::prelude::*;
+            tsrs_compiler::worker_pool().install(|| references.par_iter().map(ids_if_known).collect())
+        };
         let mut referenced_map = Vec::with_capacity(keys.len());
-        for file_path in keys {
-            let references = self.snapshot.referenced_map.get_references(&file_path).unwrap();
-            let file_id = self.to_file_id(&file_path);
-            let file_id_list_id = self.to_file_id_list_id(&references);
+        for ((file_path, references), known) in keys.iter().zip(&references).zip(known) {
+            let file_id = self.to_file_id(file_path);
+            let file_id_list_id = match known {
+                Some(file_ids) => self.to_file_id_list_id_of_sorted_ids(file_ids),
+                None => self.to_file_id_list_id(references),
+            };
             referenced_map.push(BuildInfoReferenceMapEntry { file_id, file_id_list_id });
         }
         self.build_info.referenced_map = referenced_map;
