@@ -118,8 +118,9 @@ impl<V: 'static> Default for IdLinkStore<V> {
 impl<V: 'static> IdLinkStore<V> {
     #[inline]
     fn at(&self, slot: u32) -> P<V> {
-        // SAFETY: every stored slot is below `len`; chunks hold `ID_LINK_CHUNK` values.
-        unsafe { PSlot::nth(self.chunks[(slot >> ID_LINK_CHUNK_SHIFT) as usize], slot as usize & (ID_LINK_CHUNK - 1)) }
+        debug_assert!(slot < self.len);
+        // SAFETY: every stored slot is below `len`; chunks hold `ID_LINK_CHUNK` values per started chunk.
+        unsafe { PSlot::nth(*self.chunks.get_unchecked((slot >> ID_LINK_CHUNK_SHIFT) as usize), slot as usize & (ID_LINK_CHUNK - 1)) }
     }
 
     #[inline]
@@ -128,8 +129,15 @@ impl<V: 'static> IdLinkStore<V> {
             let page = self.pages.get((id >> ID_PAGE_SHIFT) as usize)?.as_deref()?;
             page[id as usize & (ID_PAGE - 1)].checked_sub(1)
         } else {
-            self.wide_slots.get(&id).copied()
+            self.wide_slot(id)
         }
+    }
+
+    // Out of line: keeps the hash lookup out of every inlined `get`.
+    #[cold]
+    #[inline(never)]
+    fn wide_slot(&self, id: u64) -> Option<u32> {
+        self.wide_slots.get(&id).copied()
     }
 
     #[inline]
