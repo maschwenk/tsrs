@@ -1259,9 +1259,10 @@ impl Checker {
         // We are instantiating an anonymous type that has one or more type parameters in scope. Apply the
         // mapper to the type parameters to produce the effective list of type arguments, and compute the
         // instantiation cache key from the type IDs of the type arguments.
-        let mut type_arguments: Vec<P<Type>> = Vec::with_capacity(type_parameters.len());
+        let mut type_arguments = self.free_type_lists.pop().unwrap_or_default();
         for &tp in type_parameters {
-            type_arguments.push(self.map_type_with_composite_mapper(tp, t.mapper(), m.unwrap()));
+            let mapped = self.map_type_with_composite_mapper(tp, t.mapper(), m.unwrap());
+            type_arguments.push(mapped);
         }
         let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), m) } else { None };
         let new_alias = AliasArg::given_or_pending(alias, &pending);
@@ -1269,11 +1270,11 @@ impl Checker {
         // (the target is a declared anonymous or mapped type or a deferred reference, never an interface or tuple).
         assert!(target.try_as_interface_type().is_none(), "object type instantiation of an interface target");
         let key = get_type_instantiation_key(&type_arguments, new_alias, t.object_flags().intersects(ObjectFlags::SingleSignatureType));
-        if !self.object_type_instantiations.contains_key(&target) {
+        let instantiations = self.object_type_instantiations.entry(target).or_insert_with(|| {
             let initial_key = get_type_instantiation_key(type_parameters, target.alias().into(), false);
-            self.object_type_instantiations.insert(target, FxHashMap::from_iter([(initial_key, target)]));
-        }
-        let mut result = self.object_type_instantiations[&target].get(&key).copied();
+            FxHashMap::from_iter([(initial_key, target)])
+        });
+        let mut result = instantiations.get(&key).copied();
         if result.is_none() {
             let new_alias = new_alias.alias();
             let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
@@ -1306,6 +1307,7 @@ impl Checker {
             }
             result = Some(r);
         }
+        self.free_type_list(type_arguments);
         result.unwrap()
     }
 
