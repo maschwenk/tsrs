@@ -32,6 +32,14 @@ impl BuildInfoReader for buildInfoReader {
     }
 }
 
+/// Adds the `BuildInfo read: ...` phase rows (at zero) so that they print in the same place when the read runs
+/// concurrently with program construction.
+pub fn register_build_info_read_phases() {
+    for name in ["BuildInfo read: read file", "BuildInfo read: unmarshal", "BuildInfo read: to snapshot"] {
+        tsrs_core::phases::record(name, std::time::Duration::ZERO);
+    }
+}
+
 pub fn new_build_info_reader(host: Arc<dyn CompilerHost>) -> Box<dyn BuildInfoReader> {
     Box::new(buildInfoReader { host })
 }

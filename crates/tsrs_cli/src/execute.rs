@@ -313,13 +313,33 @@ fn perform_incremental_compilation(
         Some(extended_config_cache),
         Some(get_trace_from_sys(sys, testing)),
     );
-    let build_info_read_start = sys.now();
-    let old_program = tsrs_incremental::read_build_info_program(config, &*tsrs_incremental::new_build_info_reader(host.clone()), &*host);
-    compile_times.build_info_read_time = sys.now() - build_info_read_start;
-
-    let parse_start = sys.now();
-    let program = new_program(ProgramOptions::new(config, host.clone()));
-    compile_times.parse_time = sys.now() - parse_start;
+    // Go reads the old program and then builds the new one. The two are independent (the read only uses the
+    // config and the host's file system, both thread-safe), so the read runs on its own thread while the program
+    // is built; "BuildInfo read time" is the read's own duration. `--singleThreaded` keeps Go's order.
+    let read_build_info = || {
+        let start = sys.now();
+        let old_program = tsrs_incremental::read_build_info_program(config, &*tsrs_incremental::new_build_info_reader(host.clone()), &*host);
+        (old_program, sys.now() - start)
+    };
+    let build_program = || {
+        let start = sys.now();
+        let program = new_program(ProgramOptions::new(config, host.clone()));
+        (program, sys.now() - start)
+    };
+    let ((old_program, build_info_read_time), (program, parse_time)) = if config.compiler_options().unwrap().single_threaded.is_true() {
+        let read = read_build_info();
+        (read, build_program())
+    } else {
+        // Rows print in first-recorded order; keep the read's rows ahead of the program's.
+        tsrs_incremental::register_build_info_read_phases();
+        std::thread::scope(|scope| {
+            let read = scope.spawn(read_build_info);
+            let program = build_program();
+            (read.join().unwrap(), program)
+        })
+    };
+    compile_times.build_info_read_time = build_info_read_time;
+    compile_times.parse_time = parse_time;
     let changes_compute_start = sys.now();
     let incremental_program =
         tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), Some(std::time::Instant::now), testing.is_some());

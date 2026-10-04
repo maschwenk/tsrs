@@ -782,32 +782,9 @@ impl fileLoader {
                 }
 
                 let resolved_file_name = resolved_module.resolved_file_name;
-                let is_from_node_modules_search = resolved_module.is_external_library_import;
-                // Don't treat redirected files as JS files.
-                let is_js_file = !resolved_module.resolved_using_extra_extensions
-                    && !tspath::file_extension_is_one_of(resolved_file_name, tspath::SUPPORTED_TS_EXTENSIONS_WITH_JSON_FLAT)
-                    && self
-                        .project_references
-                        .get_redirect_parsed_command_line_for_resolution(resolved_file_name, &self.to_path(resolved_file_name))
-                        .is_none();
-                let is_js_file_from_node_modules = is_from_node_modules_search && is_js_file && resolved_file_name.contains("/node_modules/");
-
-                // add file to program only if:
-                // - resolution was successful
-                // - noResolve is falsy
-                // - module name comes from the list of imports
-                // - it's not a top level JavaScript module that exceeded the search max
-
                 let import_index = index as i32 - imports_start;
-
-                let should_add_file = !module_name.is_empty()
-                    && module::get_resolution_diagnostic(&options_for_file, &resolved_module, file).is_none()
-                    && !options_for_file.no_resolve.is_true()
-                    && !(is_js_file && !options_for_file.get_allow_js())
-                    && (import_index < 0
-                        || ((import_index as usize) < imports.len()
-                            && (ast::is_in_js_file(imports[import_index as usize])
-                                || !imports[import_index as usize].flags().intersects(NodeFlags::JSDoc))));
+                let (should_add_file, is_js_file_from_node_modules) =
+                    resolved_import_sub_task(&self.project_references, &*self.host, &options_for_file, file, module_name, import_index, &resolved_module);
 
                 if should_add_file {
                     let include_reason = FileIncludeReason::new_referenced(
@@ -919,6 +896,48 @@ impl fileLoader {
     }
 }
 
+// The part of resolveImportsAndModuleAugmentations that decides whether the file a resolved import names is added
+// to the program, and whether that sub task is elided past maxNodeModuleJsDepth (`isJsFileFromNodeModules`).
+// The speculative parse (filesParser::prefetch) asks the same question.
+pub(crate) fn resolved_import_sub_task(
+    project_references: &projectReferenceFileMapperBuilder,
+    host: &dyn CompilerHost,
+    options_for_file: &CompilerOptions,
+    file: P<SourceFile>,
+    module_name: &str,
+    import_index: i32,
+    resolved_module: &ResolvedModule,
+) -> (bool, bool) {
+    let imports = file.imports();
+    let resolved_file_name = resolved_module.resolved_file_name;
+    let is_from_node_modules_search = resolved_module.is_external_library_import;
+    // Don't treat redirected files as JS files.
+    let is_js_file = !resolved_module.resolved_using_extra_extensions
+        && !tspath::file_extension_is_one_of(resolved_file_name, tspath::SUPPORTED_TS_EXTENSIONS_WITH_JSON_FLAT)
+        && project_references
+            .get_redirect_parsed_command_line_for_resolution(
+                resolved_file_name,
+                &tspath::to_path(resolved_file_name, host.get_current_directory(), host.fs().use_case_sensitive_file_names()),
+            )
+            .is_none();
+    let is_js_file_from_node_modules = is_from_node_modules_search && is_js_file && resolved_file_name.contains("/node_modules/");
+
+    // add file to program only if:
+    // - resolution was successful
+    // - noResolve is falsy
+    // - module name comes from the list of imports
+    // - it's not a top level JavaScript module that exceeded the search max
+
+    let should_add_file = !module_name.is_empty()
+        && module::get_resolution_diagnostic(options_for_file, resolved_module, file).is_none()
+        && !options_for_file.no_resolve.is_true()
+        && !(is_js_file && !options_for_file.get_allow_js())
+        && (import_index < 0
+            || ((import_index as usize) < imports.len()
+                && (ast::is_in_js_file(imports[import_index as usize]) || !imports[import_index as usize].flags().intersects(NodeFlags::JSDoc))));
+    (should_add_file, is_js_file_from_node_modules)
+}
+
 // fileLoader.getSourceFileFromReference; `is_referenced_file_reason` is what it asks of the include reason.
 pub(crate) fn source_file_from_reference(
     options: &CompilerOptions,
@@ -998,7 +1017,7 @@ pub(crate) fn source_file_from_reference(
     )
 }
 
-fn is_supported_extension(supported_extensions_with_json: &[Vec<String>], canonical_file_name: &str) -> bool {
+pub(crate) fn is_supported_extension(supported_extensions_with_json: &[Vec<String>], canonical_file_name: &str) -> bool {
     supported_extensions_with_json.iter().any(|group| tspath::file_extension_is_one_of(canonical_file_name, &str_slice(group)))
 }
 
