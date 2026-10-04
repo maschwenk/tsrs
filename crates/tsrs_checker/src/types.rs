@@ -26,7 +26,7 @@ impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
     pub fn make(&self) {
         // The table lives where the map field does: a field in an emit scratch region (a node builder request's
         // links, notes/mem-emit-regions.md) must not leave a table outside it that refers into it.
-        let scratch = tsrs_core::arena::scratch_contains(self as *const Self as usize);
+        let scratch = tsrs_core::arena::scratch_contains(std::ptr::from_ref::<Self>(self) as usize);
         self.0.set(Some(P::new_in(scratch, RefCell::new(FxHashMap::default()))));
     }
     pub fn is_nil(&self) -> bool {
@@ -89,7 +89,7 @@ impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
     }
     /// Go `a.m = someFreshlyBuiltMap`.
     pub fn assign(&self, m: FxHashMap<K, V>) {
-        let scratch = tsrs_core::arena::scratch_contains(self as *const Self as usize);
+        let scratch = tsrs_core::arena::scratch_contains(std::ptr::from_ref::<Self>(self) as usize);
         self.0.set(Some(P::new_in(scratch, RefCell::new(m))))
     }
     /// Snapshot of the entries (Go `for k, v := range m`).
@@ -1360,7 +1360,7 @@ impl Type {
         debug_assert!(self.data_tag == T::TAG);
         // SAFETY: a type tagged `T::TAG` was allocated by `Type::alloc::<T>` as a `TypeAlloc<T>` whose header is
         // `self`, so its data struct lives at this offset from the header, for the rest of the process.
-        unsafe { &*(self as *const Type).cast::<u8>().add(std::mem::offset_of!(TypeAlloc<T>, data)).cast::<T>() }
+        unsafe { &*std::ptr::from_ref::<Type>(self).cast::<u8>().add(std::mem::offset_of!(TypeAlloc<T>, data)).cast::<T>() }
     }
 
     /// The type-specific data (Go `t.data`).
@@ -2402,9 +2402,9 @@ impl UnionOrIntersectionType {
         }
         let kind = self.rare.0.get().addr() & RARE_INTERSECTION;
         let p: *const UnionOrIntersectionRare = if kind != 0 {
-            (P::new(IntersectionRare::default()).get() as *const IntersectionRare).cast()
+            std::ptr::from_ref::<IntersectionRare>(P::new(IntersectionRare::default()).get()).cast()
         } else {
-            (P::new(UnionRare::default()).get() as *const UnionRare).cast()
+            std::ptr::from_ref::<UnionRare>(P::new(UnionRare::default()).get()).cast()
         };
         self.rare.0.set(p.map_addr(|a| a | kind));
         // SAFETY: just allocated; `repr(C)` with the shared part first.
@@ -2448,12 +2448,12 @@ impl UnionType {
     fn union_rare(&self) -> Option<&'static UnionRare> {
         debug_assert!(!self.union_or_intersection_type.is_intersection_data());
         // SAFETY: a union's tail is a `UnionRare` (`rare_for_write` with the kind bit clear).
-        self.union_or_intersection_type.rare().map(|r| unsafe { &*(r as *const UnionOrIntersectionRare).cast::<UnionRare>() })
+        self.union_or_intersection_type.rare().map(|r| unsafe { &*std::ptr::from_ref::<UnionOrIntersectionRare>(r).cast::<UnionRare>() })
     }
     fn union_rare_for_write(&self) -> &'static UnionRare {
         let r = self.union_or_intersection_type.rare_for_write();
         // SAFETY: as in `union_rare`.
-        unsafe { &*(r as *const UnionOrIntersectionRare).cast::<UnionRare>() }
+        unsafe { &*std::ptr::from_ref::<UnionOrIntersectionRare>(r).cast::<UnionRare>() }
     }
     #[inline]
     pub fn resolved_reduced_type(&self) -> Option<P<Type>> {
@@ -2522,12 +2522,12 @@ impl IntersectionType {
     fn intersection_rare(&self) -> Option<&'static IntersectionRare> {
         debug_assert!(self.union_or_intersection_type.is_intersection_data());
         // SAFETY: an intersection's tail is an `IntersectionRare` (`rare_for_write` with the kind bit set).
-        self.union_or_intersection_type.rare().map(|r| unsafe { &*(r as *const UnionOrIntersectionRare).cast::<IntersectionRare>() })
+        self.union_or_intersection_type.rare().map(|r| unsafe { &*std::ptr::from_ref::<UnionOrIntersectionRare>(r).cast::<IntersectionRare>() })
     }
     fn intersection_rare_for_write(&self) -> &'static IntersectionRare {
         let r = self.union_or_intersection_type.rare_for_write();
         // SAFETY: as in `intersection_rare`.
-        unsafe { &*(r as *const UnionOrIntersectionRare).cast::<IntersectionRare>() }
+        unsafe { &*std::ptr::from_ref::<UnionOrIntersectionRare>(r).cast::<IntersectionRare>() }
     }
     #[inline]
     pub fn resolved_apparent_type(&self) -> Option<P<Type>> {
@@ -2782,7 +2782,7 @@ impl SignatureRareWord {
     #[inline]
     fn set_tail(&self, tail: P<SignatureRare>) {
         let bit = self.0.get().addr() & SIGNATURE_NO_TYPE_PREDICATE;
-        self.0.set((tail.get() as *const SignatureRare).map_addr(|a| a | bit));
+        self.0.set(std::ptr::from_ref::<SignatureRare>(tail.get()).map_addr(|a| a | bit));
     }
     #[inline]
     fn set_no_type_predicate(&self, on: bool) {
