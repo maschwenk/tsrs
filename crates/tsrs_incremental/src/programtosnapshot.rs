@@ -111,13 +111,17 @@ impl toProgramSnapshot {
         // programtosnapshot.go:91: Go queues the per-file work on a work group and lets each function store into the
         // snapshot's sync maps. Here the per-file work runs on the program's worker pool and only reads shared state;
         // its results are stored in file order afterwards, so the maps are filled in the same order as a sequential run.
-        let compute = |file: P<SourceFile>| -> (FileInfo, Option<Set<Path>>, fileChange) {
+        let compute = |file: P<SourceFile>, checker_references: Option<checkerReferences>| -> (FileInfo, Option<Set<Path>>, fileChange) {
             // Content mappers are not supported by tsrs; Go hashes the original text plus the mapper identity here.
             let version = self.snapshot.compute_hash(file.text());
             let implied_node_format = self.program.get_source_file_meta_data(file.path()).implied_node_format;
             let affects_global_scope = file_affects_global_scope(file);
             let mut signature = String::new();
-            let new_references = get_referenced_files(self.program, file, &ambient_module_files_by_checker);
+            let checker_references = checker_references.unwrap_or_else(|| {
+                let mut checker = self.program.get_type_checker_for_file_exclusive(&Context::default(), file);
+                checker_references_of(file, &mut checker, &ambient_module_files_by_checker)
+            });
+            let new_references = referenced_files_of(self.program, file, checker_references);
             let mut change = fileChange { add_to_change_set: false, emit_diagnostics: None, semantic_diagnostics: None, emit_signature: None };
             if let Some(old) = old {
                 if let Some(old_file_info) = old.file_infos.load(file.path()) {
@@ -168,15 +172,26 @@ impl toProgramSnapshot {
             (FileInfo { version, signature, affects_global_scope, implied_node_format }, new_references, change)
         };
         let results: Vec<(FileInfo, Option<Set<Path>>, fileChange)> = if self.program.single_threaded() {
-            files.iter().map(|&file| compute(file)).collect()
+            files.iter().map(|&file| compute(file, None)).collect()
         } else {
             use rayon::prelude::*;
-            // Create the checker pool before the parallel loop: its lazy initialization runs on the worker pool, and a
-            // worker that steals another file's function while initializing would re-enter the pool's OnceLock.
-            if let Some(&first) = files.first() {
-                drop(self.program.get_type_checker_for_file_exclusive(&Context::default(), first));
+            // The checker lookups first, one task per checker that holds its checker for all of its files (in file
+            // order) instead of 18 workers taking turns on 4 checker locks per file; then the rest of the per-file
+            // work on the worker pool. Without a pool of its own the program locks per file.
+            let checker_references: Vec<std::sync::OnceLock<checkerReferences>> = files.iter().map(|_| std::sync::OnceLock::new()).collect();
+            let batched = self.program.for_each_checker_group(files, |checker, i, file| {
+                let _ = checker_references[i].set(checker_references_of(file, checker, &ambient_module_files_by_checker));
+            });
+            let checker_references: Vec<Option<checkerReferences>> =
+                checker_references.into_iter().map(|r| if batched { r.into_inner() } else { None }).collect();
+            if !batched {
+                // Create the checker pool before the parallel loop: its lazy initialization runs on the worker pool, and a
+                // worker that steals another file's function while initializing would re-enter the pool's OnceLock.
+                if let Some(&first) = files.first() {
+                    drop(self.program.get_type_checker_for_file_exclusive(&Context::default(), first));
+                }
             }
-            tsrs_compiler::worker_pool().install(|| files.par_iter().map(|&file| compute(file)).collect())
+            tsrs_compiler::worker_pool().install(|| files.par_iter().zip(checker_references).map(|(&file, r)| compute(file, r)).collect())
         };
 
         for (&file, (info, new_references, change)) in files.iter().zip(results) {
@@ -308,7 +323,7 @@ pub(crate) fn file_affects_global_scope(file: P<SourceFile>) -> bool {
     file.statements().nodes().iter().any(|&stmt| !ast::is_module_with_string_literal_name(stmt))
 }
 
-// Collects the declaring files; get_referenced_files turns them into paths after releasing the checker.
+// Collects the declaring files; referenced_files_of turns them into paths after releasing the checker.
 // programtosnapshot.go:259
 fn add_referenced_files_from_symbol(file: P<SourceFile>, referenced_files: &mut Vec<P<SourceFile>>, symbol: Option<P<Symbol>>) {
     let Some(symbol) = symbol else { return };
@@ -342,49 +357,57 @@ fn add_referenced_file_from_file_name(program: &CompilerProgram, file_name: &str
 // The files declaring each checker's ambient modules, keyed by the checker's address; the checkers outlive the loop.
 type AmbientModuleFilesByChecker = std::sync::Mutex<rustc_hash::FxHashMap<usize, std::sync::Arc<Vec<P<SourceFile>>>>>;
 
-// Gets the referenced files for a file from the program with values for the keys as referenced file's path to be true
-// programtosnapshot.go:290
-fn get_referenced_files(program: &'static CompilerProgram, file: P<SourceFile>, ambient_module_files_by_checker: &AmbientModuleFilesByChecker) -> Option<Set<Path>> {
-    // Go holds the checker for the whole function. Only the symbol lookups need it, so they collect the declaring
-    // files under the lock and the paths are added below without it, in Go's order: imports, triple slash
-    // references, type reference directives, module augmentations, ambient modules.
+// The part of getReferencedFiles that needs the file's checker: the files declaring the symbols of the file's imports
+// and module augmentations, and the files declaring the checker's ambient modules (the file itself included;
+// referenced_files_of leaves it out).
+struct checkerReferences {
+    import_files: Vec<P<SourceFile>>,
+    augmentation_files: Vec<P<SourceFile>>,
+    ambient_module_files: std::sync::Arc<Vec<P<SourceFile>>>,
+}
+
+fn checker_references_of(file: P<SourceFile>, checker: &mut Checker, ambient_module_files_by_checker: &AmbientModuleFilesByChecker) -> checkerReferences {
     let mut import_files: Vec<P<SourceFile>> = Vec::new();
     let mut augmentation_files: Vec<P<SourceFile>> = Vec::new();
-    let mut ambient_module_files: Vec<P<SourceFile>> = Vec::new();
-    {
-        let mut checker = program.get_type_checker_for_file_exclusive(&Context::default(), file);
-        for &import_name in file.imports() {
-            add_referenced_files_from_import_literal(file, &mut import_files, &mut checker, import_name);
+    for &import_name in file.imports() {
+        add_referenced_files_from_import_literal(file, &mut import_files, checker, import_name);
+    }
+    // Add module augmentation as references
+    for &module_name in file.module_augmentations() {
+        if !ast::is_string_literal(module_name) {
+            continue;
         }
-        // Add module augmentation as references
-        for &module_name in file.module_augmentations() {
-            if !ast::is_string_literal(module_name) {
-                continue;
-            }
-            add_referenced_files_from_import_literal(file, &mut augmentation_files, &mut checker, module_name);
-        }
-        // From ambient modules. A checker's ambient modules and their declarations are fixed once it is initialized,
-        // so their declaring files are collected once per checker and only filtered per file.
-        let key = &*checker as *const Checker as usize;
-        let declaring_files = ambient_module_files_by_checker.lock().unwrap().get(&key).cloned();
-        let declaring_files = declaring_files.unwrap_or_else(|| {
-            let mut declaring_files = Vec::new();
-            let mut seen: rustc_hash::FxHashSet<P<SourceFile>> = rustc_hash::FxHashSet::default();
-            for ambient_module in checker.get_ambient_modules() {
-                for &declaration in ambient_module.declarations() {
-                    let Some(file_of_decl) = ast::get_source_file_of_node(declaration) else { continue };
-                    if seen.insert(file_of_decl) {
-                        declaring_files.push(file_of_decl);
-                    }
+        add_referenced_files_from_import_literal(file, &mut augmentation_files, checker, module_name);
+    }
+    // From ambient modules. A checker's ambient modules and their declarations are fixed once it is initialized,
+    // so their declaring files are collected once per checker and only filtered per file.
+    let key = &*checker as *const Checker as usize;
+    let declaring_files = ambient_module_files_by_checker.lock().unwrap().get(&key).cloned();
+    let ambient_module_files = declaring_files.unwrap_or_else(|| {
+        let mut declaring_files = Vec::new();
+        let mut seen: rustc_hash::FxHashSet<P<SourceFile>> = rustc_hash::FxHashSet::default();
+        for ambient_module in checker.get_ambient_modules() {
+            for &declaration in ambient_module.declarations() {
+                let Some(file_of_decl) = ast::get_source_file_of_node(declaration) else { continue };
+                if seen.insert(file_of_decl) {
+                    declaring_files.push(file_of_decl);
                 }
             }
-            let declaring_files = std::sync::Arc::new(declaring_files);
-            ambient_module_files_by_checker.lock().unwrap().insert(key, declaring_files.clone());
-            declaring_files
-        });
-        ambient_module_files.extend(declaring_files.iter().copied().filter(|&file_of_decl| file_of_decl != file));
-    }
+        }
+        let declaring_files = std::sync::Arc::new(declaring_files);
+        ambient_module_files_by_checker.lock().unwrap().insert(key, declaring_files.clone());
+        declaring_files
+    });
+    checkerReferences { import_files, augmentation_files, ambient_module_files }
+}
 
+// Gets the referenced files for a file from the program with values for the keys as referenced file's path to be true
+// programtosnapshot.go:290
+// Go holds the checker for the whole function. Only the symbol lookups need it (checker_references_of); the paths
+// are added here without it, in Go's order: imports, triple slash references, type reference directives, module
+// augmentations, ambient modules.
+fn referenced_files_of(program: &'static CompilerProgram, file: P<SourceFile>, checker_references: checkerReferences) -> Option<Set<Path>> {
+    let checkerReferences { import_files, augmentation_files, ambient_module_files } = checker_references;
     // We need to use a set here since the code can contain the same import twice,
     // but that will only be one dependency.
     // To avoid invernal conversion, the key of the referencedFiles map must be of type Path
@@ -410,7 +433,7 @@ fn get_referenced_files(program: &'static CompilerProgram, file: P<SourceFile>, 
         }
     }
 
-    for f in augmentation_files.into_iter().chain(ambient_module_files) {
+    for f in augmentation_files.into_iter().chain(ambient_module_files.iter().copied().filter(|&file_of_decl| file_of_decl != file)) {
         referenced_files.add(f.path().clone());
     }
     if referenced_files.len() > 0 {
