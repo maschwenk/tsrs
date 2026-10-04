@@ -579,6 +579,10 @@ impl checkerPool {
         self.checker_count
     }
 
+    pub(crate) fn checker_index_of_file(&self, file: P<SourceFile>) -> Option<usize> {
+        self.create_checkers().file_associations.get(&file).copied()
+    }
+
     // checkerpool.go:451
     // Runs `cb` for each checker in the pool concurrently, locking and unlocking checker mutexes as it goes,
     // making it safe to call `forEachCheckerParallel` from many threads simultaneously.
