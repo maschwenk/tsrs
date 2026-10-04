@@ -313,14 +313,147 @@ would be "reached" by integers and the violation count would be noise unless eve
 scalar fields; the packed words would also need handle-specific decoders (`to_bits` byte offsets in mappers and
 value-symbol links, `pack` in headers). The precise walk (`TSRS_CENSUS_VERIFY`) uses `addr()` and would work.
 
+## 6. Linux x86-64: zero-based handles
+
+Branch `perf/zero-based-handles`. On Linux x86-64 (the Forge sandbox: Intel Xeon 8259CL, 18 vCPU, kernel 7.2) the
+compressed build cost +7% instructions and +6.6% wall against `plain-ptrs` (section 5 guessed x86 addressing modes
+would make it free). The idea tested: put the range in the low address space with base 0, as the JVM's zero-based
+compressed oops do, so the address is `handle << 3` and nothing else. All x86 numbers are `cargo build --release`
+(not the `dist` profile), three binaries from one session: plain = branch head with `plain-ptrs`, today =
+origin/main 0545afd, zero = branch head.
+
+### Codegen
+
+The base 0x4001_0000_0000 does not fit a 32-bit displacement, so LLVM materializes it with a 10-byte `movabs` and
+uses `[base + idx*8]`; it folds the field offset into the constant, so two fields of one object cost two `movabs`
+(`get_reduced_type`, all of it):
+
+```
+plain                      today                                zero-based
+mov    0x8(%rsi),%eax      mov    %esi,%eax                     mov    %esi,%eax
+                           movabs $0x400100000008,%rcx          mov    0x8(,%rax,8),%ecx
+                           mov    (%rcx,%rax,8),%ecx
+test   $0x18000000,%eax    test   $0x18000000,%ecx              test   $0x18000000,%ecx
+...                        ...                                  ...
+testb  $0x2,0xf(%rsi)      movabs $0x40010000000f,%rcx          shl    $0x3,%rax
+                           testb  $0x2,(%rcx,%rax,8)            testb  $0x2,0xf(%rax)
+```
+
+With base 0 the field offset goes into the displacement (`[idx*8 + disp32]`) and the constant disappears; what stays
+is the zero-extension of a handle that arrives in a register (`mov %esi,%eax`: the SysV ABI leaves the upper half of
+a 32-bit argument undefined) and, where LLVM keeps the address live, a `shl $3`. A handle loaded from memory needs no
+extension (32-bit loads clear the upper half), so a pointer chase costs nothing on x86-64: one `mov 16(,%rcx,8),%edi`
+per hop, the same instruction count as plain. Per access, from a probe crate on `tsrs_core` (`cargo rustc --emit asm`;
+instructions beyond plain's single load):
+
+| access | x86-64 today | x86-64 zero | aarch64 today (Linux and macOS) | aarch64 zero (Linux) |
+| --- | --- | --- | --- | --- |
+| one field through a handle in a register | `mov` + `movabs` | `mov` | `ubfiz` + `mov` + `movk` | `ubfiz` |
+| each further hop of a chain | 0 (base hoisted) | 0 | `add x, base, w, lsl #3` | `lsl` |
+| constant per function and field-offset group | `movabs` + a register | none | `mov` + `movk` + a register | none |
+
+The whole binary: 11,992 `movabs` of the base; text instructions plain 3,559,838, today 3,598,574 (+1.09%), zero
+3,579,866 (+0.56%). arm64 has no scaled-index-plus-displacement mode (`ldr w, [x, w, uxtw #2]` scales by the access
+size only), so on arm64 zero-based saves the base constants and their register, not the per-hop instruction.
+
+### Where the remaining instructions are
+
+`perf record -e instructions:u -c 2000003`, one checker, each sampled instruction classified from `objdump` (samples
+include skid, so read the deltas, not the absolute shares):
+
+| category | plain | today | zero |
+| --- | --- | --- | --- |
+| all samples | 119,965 | 128,008 (+8,043) | 124,897 (+4,932) |
+| `movabs` of the base | 0 | 1,557 | 0 |
+| register moves (`mov r32,r32`, `mov r64,r64`, same-register zero-extend) | 12,245 | 14,361 | 14,002 |
+| handle <-> address (`shl $3`, `lea (,r,8)`, `shr $3`) | 849 | 692 | 2,333 |
+| push / pop and stack moves | 24,746 | 26,401 | 25,280 |
+
+Zero-based removes the base (2.7 of the 7.0 points), not most of the cost. Of the 4.1 points left, 1.5 are extra
+register moves (a 32-bit move is how x86 zero-extends, so copying a handle and extending it are one instruction, and
+the handle and its address are often live together), 1.2 are handle <-> address shifts, 0.45 extra spills, and ~1
+point is spread over everything else (the compressed layouts' packed words, inlining differences). These come from
+the representation itself: every time a handle becomes a `&T` (a method on `&self`, an argument passed to a function
+that is not inlined) it is extended and shifted, and every `as_p()` / `from_arena` shifts back. The top functions by
+32-bit register move samples are the checker's hot entry points (`get_apparent_type`, `get_property_of_type_worker`,
+`get_resolved_symbol`, `is_simple_type_related_to`, `get_type_of_symbol`); about a quarter of the 32-bit register
+moves sit in the first 12 instructions of a function (arguments). Two things could still reduce it, neither measured here: the release
+profile (`dist`: fat LTO, one codegen unit, PGO) inlines across crates and removes call boundaries; and APIs that
+take the handle instead of `&T` on the hottest paths.
+
+### Address space per target
+
+- **Linux x86-64**: the range is 4-32 GiB (`FIRST` = 4 GiB, so 28 GiB usable; the worst measured run uses 6 GB).
+  Seen in the sandbox: a PIE executable maps at 0x55..-0x56.. (0x5555_5555_4000 with ASLR off) with its brk heap
+  right after it, shared libraries and default `mmap` below the stack near 0x7f.., mimalloc's own range at 2 TiB.
+  The legacy layout (`ulimit -s unlimited`) maps bottom-up from TASK_SIZE/3 (~42 TiB). A non-PIE executable loads at
+  0x400000 with its brk heap after it (randomized to 0x1930a000 in one run, i.e. ~400 MiB), the reason `FIRST` is 4
+  GiB and not 256 MiB; `MAP_32BIT` users (some JITs) live in the low 2 GiB. tsrs is PIE (rustc's default for
+  `*-linux-gnu`), the release targets are glibc only, and the npm package runs tsrs as a child process (no
+  `cdylib`), so no foreign executable shares its address space. Checked in the sandbox with the zero build: ASLR off
+  (`setarch -R`), `ulimit -s unlimited`: both run. `ulimit -v` 16 GiB: `tsrs: could not reserve the arena address
+  range (compressed pointers: one 28 GiB address range at 0x100000000..0x800000000 for every arena; ...)`. A mapping
+  placed at 5 GiB first (`LD_PRELOAD` constructor): `tsrs: the arena address range is taken by another mapping (...)`.
+  Both abort, as before. The reservation uses `MAP_FIXED_NOREPLACE` (Linux 4.17+; older kernels treat it as a hint,
+  which the address check catches). Not compatible (from ASan's documented layout, not tried): AddressSanitizer, whose x86-64 shadow covers 2
+  GiB-16 TiB (the high base at 64 TiB was outside it); such builds need `plain-ptrs`. Not tried: gVisor (the sandbox is a microVM
+  with a real kernel).
+- **Linux aarch64** (release target `aarch64-unknown-linux-gnu`): same cfg, same range. PIE executables load at 2/3
+  of the address space and `mmap` works top-down, so 4-32 GiB is free; kernels with a 39-bit address space (512 GiB)
+  have no 64 TiB at all, so the old high base would abort there and the low range fits. Codegen from cross-compiled
+  `--emit asm` only (table above); no aarch64 Linux machine was available to run or measure.
+- **macOS arm64**: `__PAGEZERO` covers the low 4 GiB and the executable, dyld shared cache and malloc zones sit above
+  it, so no contiguous low 32 GiB exists. Keeps the fixed base (`cfg(not(target_os = "linux"))`), where it costs no
+  wall time (section 5). This Mac, the 38k-file codebase, one checker, origin/main vs branch head, 2 rounds:
+  289.1 / 289.0 G vs 289.4 / 289.1 G instructions (noise), identical counters.
+- **Windows**: plain pointers, unchanged.
+
+What changed in code: `reserve::BASE_ADDR` (0 on Linux, 0x4001_0000_0000 elsewhere), `reserve::FIRST` (the first
+offset handed out: 4 GiB on Linux, 64 KiB elsewhere), the reservation covers `BASE_ADDR + FIRST .. BASE_ADDR +
+RESERVE`, `reserve::at(off)` builds a pointer from the integer when the base is 0 (`base().add(off)` from a null
+base would be UB), `from_static` / `from_arena` reject offsets below `FIRST`. Packed words, tag bits, `pack`,
+`to_bits` and `key` store handles or offsets, which do not depend on the base; arena addresses stay above `u32::MAX`
+on every target; `SP<T>`, `frozen.rs` and the alloc-profile poison check use real addresses and are unaffected.
+
+### Measurements
+
+7 interleaved rounds (order rotated from round 4), medians, `/usr/bin/time` max RSS, `perf stat` user+kernel
+instructions and cycles; diagnostics (40,543 errors, same md5), Symbols, Types and Instantiations identical in all 42
+runs:
+
+| run | plain | today | zero-based |
+| --- | --- | --- | --- |
+| 1 checker wall | 63.79 s | 65.63 s (+2.9%) | 65.77 s (+3.1%) |
+| 1 checker instructions | 253.5 G | 271.2 G (+7.0%) | 264.3 G (+4.3%) |
+| 1 checker cycles | 210.8 G | 220.3 G (+4.5%) | 221.0 G (+4.8%) |
+| 1 checker max RSS | 5.29 GiB | 4.47 GiB (-15.6%) | 4.47 GiB (-15.6%) |
+| 4 checkers wall | 25.78 s | 27.78 s (+7.8%) | 26.96 s (+4.6%) |
+| 4 checkers instructions | 345.9 G | 369.7 G (+6.9%) | 360.4 G (+4.2%) |
+| 4 checkers cycles | 277.8 G | 293.2 G (+5.5%) | 288.6 G (+3.9%) |
+| 4 checkers max RSS | 6.96 GiB | 5.89 GiB (-15.4%) | 5.89 GiB (-15.3%) |
+
+Wall and cycles are noisy on this host: one binary's wall varies 6-14% across the session. Paired per round, zero vs
+today cycles: median -0.7% with one checker (rounds from -2.8% to +2.4%), -2.0% with four (-3.3% to +1.3%). So the
+instruction saving (2.7 points) shows up at most as ~2% cycles with four checkers and not measurably with one;
+compressed handles still cost 3-5% cycles on x86-64 either way, against 15% less memory.
+
+Gates: in the sandbox, `tsrs-test run --suite all --baselines types,symbols` with the zero build and with a
+`plain-ptrs` build (reference checkout at the pinned commit, as CI does): 13,458 error baselines pass (+2 codes, 2
+fail), 12,779 / 12,779 types / symbols, `test-results` trees identical; `tsrs_core`'s reservation tests pass with
+base 0. On this Mac (high base, unchanged) against origin/main: conformance (default and
+`TSRS_LAZY_MEMBERS=0`), emit baselines and fourslash trees identical, tsctests 374 / 32 / 1 with identical lists.
+
 ## Not done
 
 - Instructions below +2% on arm64 (section 5: what is left is one `add` per pointer chase).
+- x86-64: the 4 points zero-based leaves (section 6: zero-extends and shifts at handle <-> reference conversions);
+  the `dist` profile was not measured.
 - `PSlice<T>` / `PStr` for position independence of the front end (section 5).
 - The census strong mark in compressed mode (section 5).
-- The fixed base needs a 47-bit user address space (x86-64, arm64 with 48-bit VA) and no `ulimit -v` below 32 GiB;
-  otherwise `tsrs` aborts with a message naming `tsrs_core/plain-ptrs`. Windows builds fall back to plain pointers
-  (build.rs; a `VirtualAlloc` reservation would do).
+- The reservation needs no `ulimit -v` below 32 GiB and, outside Linux, a 47-bit user address space (arm64 with 48-bit
+  VA); on Linux the range is 4-32 GiB (section 6), which also rules out AddressSanitizer. Otherwise `tsrs` aborts
+  with a message naming `tsrs_core/plain-ptrs`. Windows builds fall back to plain pointers (build.rs; a
+  `VirtualAlloc` reservation would do).
 - Smaller layouts that compressed handles would allow but need a representation change: the `Type` header 24 -> 20
   bytes (symbol word as a handle plus a record byte; gains only where the payload is 4-aligned, at most ~38 MB),
   `TypeMapper` below 16 bytes (needs a place for kind and escape bits), the checker's raw-pointer tail words.
