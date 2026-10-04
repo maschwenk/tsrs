@@ -260,6 +260,8 @@ impl Checker {
                     if constraint != check_type {
                         let mapper = prepend_type_mapping(root.check_type.get().unwrap(), constraint, d.mapper.get());
                         let instantiated = self.get_conditional_type_instantiation(t, mapper, true /*forConstraint*/, None);
+                        // SAFETY: made here for this one instantiation; kept if the result stored it.
+                        unsafe { recycle_mapping(mapper, false) };
                         if !instantiated.flags().intersects(TypeFlags::Never) {
                             d.resolved_constraint_of_distributive.set(Some(instantiated));
                             return Some(instantiated);
