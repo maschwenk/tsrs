@@ -647,7 +647,7 @@ pub fn diagnostic_to_lsp_pull(ctx: &Context, converters: &Converters, diagnostic
         ctx,
         converters,
         diagnostic,
-        DiagnosticOptions {
+        &DiagnosticOptions {
             report_style_checks_as_warnings, // !!! get through context UserPreferences
             related_information: client_diagnostic_caps.related_information,
             tag_value_set: client_diagnostic_caps.tag_support.value_set.clone(),
@@ -665,7 +665,7 @@ pub fn diagnostic_to_lsp_push(ctx: &Context, converters: &Converters, diagnostic
         ctx,
         converters,
         diagnostic,
-        DiagnosticOptions {
+        &DiagnosticOptions {
             report_style_checks_as_warnings: false,
             related_information: client_diagnostic_caps.related_information,
             tag_value_set: client_diagnostic_caps.tag_support.value_set.clone(),
@@ -692,7 +692,7 @@ static STYLE_CHECK_DIAGNOSTICS: LazyLock<FxHashSet<i32>> = LazyLock::new(|| {
 });
 
 // converters.go:493
-fn diagnostic_to_lsp(_ctx: &Context, converters: &Converters, diagnostic: P<Diagnostic>, opts: DiagnosticOptions) -> lsproto::Diagnostic {
+fn diagnostic_to_lsp(_ctx: &Context, converters: &Converters, diagnostic: P<Diagnostic>, opts: &DiagnosticOptions) -> lsproto::Diagnostic {
     // Go reads locale.FromContext(ctx) here; only English messages are ported.
     let mut severity = diagnostic_severity(diagnostic.category());
 
