@@ -132,7 +132,6 @@ fn new_node_in<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks, sc
 /// Creates a node whose data struct `data` is followed by its rare tail `rare` (`NodeAllocRare`; the header's
 /// rare bit says the tail is there). The factory uses it when one of the struct's rare fields is set.
 fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks: &NodeFactoryHooks, scratch: bool) -> P<Node> {
-    #[allow(clippy::let_unit_value)]
     let () = T::SAME_OFFSET;
     let mut header = node_header(kind, T::TAG);
     header.header = OwnedCell::new(header.header.get().with_rare_tail());
@@ -147,7 +146,6 @@ fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks
 /// The rare tail of the node whose data struct is `data`, if it was allocated with one.
 #[inline]
 pub(crate) fn rare_tail<T: NodeRareTail>(data: &T) -> Option<&'static T::Rare> {
-    #[allow(clippy::let_unit_value)]
     let () = T::SAME_OFFSET;
     let at = std::ptr::from_ref::<T>(data).cast::<u8>();
     // SAFETY: data structs are created only inside a `NodeAlloc<T>` or `NodeAllocRare<T, _>` (both `repr(C)`, header

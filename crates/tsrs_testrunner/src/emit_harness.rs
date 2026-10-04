@@ -272,7 +272,6 @@ pub trait Recompile {
 }
 
 // js_emit_baseline.go:20. Returns the baseline text (`NO_CONTENT` when empty); a Go `t.Fatal` is an `Err`.
-#[allow(clippy::too_many_arguments)]
 pub fn do_js_emit_baseline(
     header: &str,
     options: &CompilerOptions,

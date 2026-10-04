@@ -532,7 +532,6 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:2424
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn transform_constructor_body_worker(
         &self,
         mut statements_out: Vec<P<Node>>,

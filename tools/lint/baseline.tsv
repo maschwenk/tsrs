@@ -1,21 +1,7 @@
 # Lint ratchet baseline: findings that predate the ratchet, as count<TAB>lint<TAB>file.
 # Written by `tools/lint/ratchet.py --update` with clippy from Rust 1.99.0. Counts only go down; never edit by hand.
 1	clippy::allow_attributes	crates/tsrs_api/src/checker/handlers_types.rs
-2	clippy::allow_attributes	crates/tsrs_ast/src/ast.rs
-1	clippy::allow_attributes	crates/tsrs_ast/src/diagnostic.rs
-4	clippy::allow_attributes	crates/tsrs_core/src/compileroptions.rs
-1	clippy::allow_attributes	crates/tsrs_declarations/src/types.rs
-1	clippy::allow_attributes	crates/tsrs_testrunner/src/compile.rs
-1	clippy::allow_attributes	crates/tsrs_testrunner/src/emit_harness.rs
-1	clippy::allow_attributes	crates/tsrs_transformers/src/estransforms/classfields_2.rs
 1	clippy::allow_attributes_without_reason	crates/tsrs_api/src/checker/handlers_types.rs
-2	clippy::allow_attributes_without_reason	crates/tsrs_ast/src/ast.rs
-1	clippy::allow_attributes_without_reason	crates/tsrs_ast/src/diagnostic.rs
-4	clippy::allow_attributes_without_reason	crates/tsrs_core/src/compileroptions.rs
-1	clippy::allow_attributes_without_reason	crates/tsrs_declarations/src/types.rs
-1	clippy::allow_attributes_without_reason	crates/tsrs_testrunner/src/compile.rs
-1	clippy::allow_attributes_without_reason	crates/tsrs_testrunner/src/emit_harness.rs
-1	clippy::allow_attributes_without_reason	crates/tsrs_transformers/src/estransforms/classfields_2.rs
 3	clippy::assigning_clones	crates/tsrs_api/src/module_resolution.rs
 2	clippy::assigning_clones	crates/tsrs_api_transport/src/reentrancy.rs
 4	clippy::borrow_as_ptr	crates/tsrs_api/src/snapshots.rs
