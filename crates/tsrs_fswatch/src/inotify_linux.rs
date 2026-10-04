@@ -171,6 +171,7 @@ impl inotifyBackend {
                 if ev.mask & libc::IN_Q_OVERFLOW != 0 {
                     let _base = self.base.mu.lock().unwrap();
                     let subs = self.subscriptions.lock().unwrap();
+                    #[expect(clippy::iter_over_hash_type, reason = "sets the same ErrOverflow on every watch; `touched` only drives coalesced notifies; Go ranges the map too")]
                     for list in subs.values() {
                         for sub in list {
                             sub.dir_watch.events.set_error(ErrOverflow.into());

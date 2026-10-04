@@ -125,6 +125,7 @@ impl fsEventsState {
     // fsevents_darwin.go:215
     fn active_watches_locked(&self) -> Vec<fseventsWatchSnapshot> {
         let mut watches = Vec::with_capacity(self.watches.len());
+        #[expect(clippy::iter_over_hash_type, reason = "stream paths are sorted after; each watch's dispatch only touches that watch's own state; Go ranges the map too")]
         for (w, state) in &self.watches {
             if state.terminated.load(Ordering::SeqCst) {
                 continue;

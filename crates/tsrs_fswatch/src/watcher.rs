@@ -484,6 +484,7 @@ impl watcher {
     // watcher.go:384
     fn find_covering_recursive_watch_locked(st: &watcherState, dir: &str, physical_dir: &str, comparer: pathComparer) -> Option<Arc<dirWatch>> {
         let mut best: Option<&Arc<dirWatch>> = None;
+        #[expect(clippy::iter_over_hash_type, reason = "the longest covering dir is unique: candidates are prefixes of one path, one key per dir; Go ranges the map too")]
         for dw in st.dir_watches.values() {
             if !dw.recursive || dw.comparer != comparer || !is_in_directory_or_self(&dw.dir, dir) || !is_in_directory_or_self(&dw.physical_dir, physical_dir) {
                 continue;
@@ -511,6 +512,7 @@ impl watcher {
                 return String::new();
             }
             let mut count = 1;
+            #[expect(clippy::iter_over_hash_type, reason = "only counts matches; returns `parent` whichever entries were counted; Go ranges the map too")]
             for dw in st.dir_watches.values() {
                 if is_in_directory_or_self(&parent, &dw.dir) && is_in_directory_or_self(&physical_parent, &dw.physical_dir) {
                     count += 1;
