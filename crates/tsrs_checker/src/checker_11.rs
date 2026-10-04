@@ -950,10 +950,19 @@ impl Checker {
         if index == -1 {
             self.push_active_mapper(m);
         }
-        let mut b = keyBuilder::default();
-        b.write_type(t);
-        b.write_alias(alias);
-        let key = b.hash();
+        let key = match alias {
+            // The bytes `write_type` + `write_alias(None)` produce, without zeroing a key builder.
+            None => {
+                let id = t.id.0.to_le_bytes();
+                CacheHashKey::hash_128(&[id[0], id[1], id[2], id[3], 0])
+            }
+            Some(_) => {
+                let mut b = keyBuilder::default();
+                b.write_type(t);
+                b.write_alias(alias);
+                b.hash()
+            }
+        };
         let cache_index = if index != -1 { index as usize } else { self.active_type_mappers_caches.len() - 1 };
         if let Some(&cached_type) = self.active_type_mappers_caches[cache_index].get(&key) {
             tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", "hit");
