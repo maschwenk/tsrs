@@ -1,7 +1,7 @@
 // Port of the helper definitions of helpers.go (text copied byte for byte). Go keeps `*EmitHelper` package vars;
-// here they are statics, handed out as `P<EmitHelper>` (`P::from_static`), so identity comparisons match Go.
+// here they are statics, handed out as `SP<EmitHelper>` (`SP::from_static`), so identity comparisons match Go.
 
-use tsrs_core::P;
+use tsrs_core::SP;
 
 use crate::{EmitHelper, Priority};
 
@@ -194,7 +194,7 @@ pub static ASYNC_GENERATOR_HELPER: EmitHelper = EmitHelper {
     function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
 };",
     text_callback: None,
-    dependencies: &[P::from_static(&AWAIT_HELPER)],
+    dependencies: &[SP::from_static(&AWAIT_HELPER)],
 };
 
 // helpers.go:308
@@ -209,7 +209,7 @@ pub static ASYNC_DELEGATOR_HELPER: EmitHelper = EmitHelper {
     function verb(n, f) { i[n] = o[n] ? function (v) { return (p = !p) ? { value: __await(o[n](v)), done: false } : f ? f(v) : v; } : f; }
 };",
     text_callback: None,
-    dependencies: &[P::from_static(&AWAIT_HELPER)],
+    dependencies: &[SP::from_static(&AWAIT_HELPER)],
 };
 
 // helpers.go:320
@@ -446,7 +446,7 @@ pub static IMPORT_STAR_HELPER: EmitHelper = EmitHelper {
     };
 })();",
     text_callback: None,
-    dependencies: &[P::from_static(&CREATE_BINDING_HELPER), P::from_static(&SET_MODULE_DEFAULT_HELPER)],
+    dependencies: &[SP::from_static(&CREATE_BINDING_HELPER), SP::from_static(&SET_MODULE_DEFAULT_HELPER)],
 };
 
 // helpers.go:526
@@ -472,7 +472,7 @@ pub static EXPORT_STAR_HELPER: EmitHelper = EmitHelper {
     for (var p in m) if (p !== \"default\" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };",
     text_callback: None,
-    dependencies: &[P::from_static(&CREATE_BINDING_HELPER)],
+    dependencies: &[SP::from_static(&CREATE_BINDING_HELPER)],
 };
 
 // helpers.go:546

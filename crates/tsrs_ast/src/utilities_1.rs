@@ -870,7 +870,7 @@ pub fn get_source_file_of_node(node: impl Into<Option<P<Node>>>) -> Option<P<Sou
     let mut node = node.into();
     while let Some(n) = node {
         if n.kind() == Kind::SourceFile {
-            return Some(P::from_static(n.as_source_file()));
+            return Some(n.as_source_file_p());
         }
         node = n.parent();
     }

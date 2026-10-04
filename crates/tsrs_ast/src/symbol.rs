@@ -4,7 +4,7 @@ use std::sync::atomic::AtomicU32;
 
 use hashbrown::HashTable;
 use rustc_hash::FxBuildHasher;
-use tsrs_core::{FrozenCell, OwnedCell, OwnedSliceCell, OwnedStrCell, P};
+use tsrs_core::{FrozenCell, OwnedCell, OwnedPSliceCell, OwnedTaggedStrCell, PKey, P};
 
 use crate::ast::{Node, SourceFile};
 use crate::checkflags::CheckFlags;
@@ -17,23 +17,23 @@ use crate::*;
 // Go's `Symbol` holds `Members`, `Exports` and `ExportSymbol` inline. Few symbols have any of them (on the private monorepo 5%
 // of 15.3M: binder symbols of classes, interfaces, modules and exported locals; almost no transient symbols), so
 // they live in a tail allocated on the first write of a non-nil value (`members()` / `set_members()` & co.).
-// Reads of an absent tail return nil, like the unset Go field. The tail pointer shares a word with `parent`
-// (`SymbolParentWord`): the word holds the parent until a tail exists, then the tail (which holds the parent).
+// Reads of an absent tail return nil, like the unset Go field. The tail shares a field with `parent`
+// (`parent_or_tables`): the field holds the parent until a tail exists, then the tail (which holds the parent).
 // `ValueDeclaration` is the first declaration in 82% of the symbols and nil in 17.5% (on the private monorepo:
-// 10.88M / 2.31M of 13.2M; another node in 23K), so a bit of that word says "the first declaration" and only
-// another node is kept in the tail (`value_declaration()` / `set_value_declaration()`; a declarations write that
-// replaces the first declaration moves it to the tail first). `name` is a `PackedStr` (pointer and length in one
-// word), `declarations` a 4-byte-aligned (pointer, `u32` length) pair packed with the two flag words and the `u32`
-// id: 40 bytes.
+// 10.88M / 2.31M of 13.2M; another node in 23K), so a bit says "the first declaration" and only another node is
+// kept in the tail (`value_declaration()` / `set_value_declaration()`; a declarations write that replaces the
+// first declaration moves it to the tail first). Both bits (`TAG_TABLES`, `TAG_VALUE_FIRST`) are the tag bits of
+// the name word (`OwnedTaggedStrCell`: pointer, length and tags in one word). `declarations` is an
+// `OwnedPSliceCell`: 40 bytes, 32 with compressed pointers (handle-sized parent, 8-byte declarations).
 
 #[derive(Default)]
 pub struct Symbol {
     pub flags: OwnedCell<SymbolFlags>,
     pub check_flags: OwnedCell<CheckFlags>, // Non-zero only in transient symbols created by Checker
-    pub name: OwnedStrCell,
-    declarations: OwnedSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
-    pub(crate) id: AtomicU32,              // Go uint64; ids above u32::MAX panic in get_symbol_id
-    parent_or_tables: OwnedCell<SymbolParentWord>,
+    pub name: OwnedTaggedStrCell,
+    declarations: OwnedPSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
+    pub(crate) id: AtomicU32,               // Go uint64; ids above u32::MAX panic in get_symbol_id
+    parent_or_tables: OwnedCell<PKey>,      // `P::key` of the parent or (with `TAG_TABLES`) of the tail; 0 = none
 }
 
 #[derive(Default)]
@@ -45,69 +45,23 @@ struct SymbolTables {
     value_declaration: OwnedCell<Option<P<Node>>>, // when it is not the first declaration
 }
 
-const _: () = assert!(std::mem::size_of::<Symbol>() == 40);
+const _: () = assert!(std::mem::size_of::<Symbol>() == if tsrs_core::COMPRESSED_PTRS { 32 } else { 40 });
 
-/// Census builds: the parent word keeps flag bits above the address (`crate::census_layouts`).
+/// `parent_or_tables` holds the `SymbolTables` tail.
+const TAG_TABLES: u8 = 1;
+/// The value declaration is the first declaration.
+const TAG_VALUE_FIRST: u8 = 2;
+
+/// Census builds: the name word keeps its length and tag bits above the address (`crate::census_layouts`).
 pub(crate) fn census_layout() {
-    let off = std::mem::offset_of!(Symbol, parent_or_tables);
+    let off = std::mem::offset_of!(Symbol, name);
     tsrs_core::census_layout(std::any::type_name::<Symbol>(), &[tsrs_core::CensusField::Tagged { off }]);
-}
-
-/// `Symbol.parent` or, once the symbol has a `SymbolTables` tail, the tail: an address (provenance exposed when
-/// stored, recovered with `with_exposed_provenance`) in the low 48 bits (user-space addresses are below 2^48), with
-/// bit 63 set for the tail. Bit 62: the value declaration is the first declaration. 0 = no parent, no tail, no value
-/// declaration. The address part stays a plain pointer to the start of its block.
-#[derive(Clone, Copy, Default)]
-struct SymbolParentWord(u64);
-
-impl SymbolParentWord {
-    const TABLES: u64 = 1 << 63;
-    const VALUE_FIRST: u64 = 1 << 62;
-    const ADDR: u64 = (1 << 48) - 1;
-
-    #[inline]
-    fn parent(p: Option<P<Symbol>>) -> SymbolParentWord {
-        SymbolParentWord(p.map_or(0, |p| Self::addr(p.get() as *const Symbol as *const u8)))
-    }
-
-    #[inline]
-    fn tables(t: P<SymbolTables>) -> SymbolParentWord {
-        SymbolParentWord(Self::addr(t.get() as *const SymbolTables as *const u8) | Self::TABLES)
-    }
-
-    #[inline]
-    fn addr(p: *const u8) -> u64 {
-        let addr = p.expose_provenance() as u64;
-        assert!(addr >> 48 == 0, "symbol address {addr:#x} above 2^48");
-        addr
-    }
-
-    #[inline]
-    fn get_tables(self) -> Option<P<SymbolTables>> {
-        // SAFETY: a tagged word was stored from a live `P<SymbolTables>` (arena objects are never freed or moved),
-        // whose provenance `addr` exposed.
-        (self.0 & Self::TABLES != 0).then(|| {
-            P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<SymbolTables>((self.0 & Self::ADDR) as usize) })
-        })
-    }
-
-    #[inline]
-    fn get_parent(self) -> Option<P<Symbol>> {
-        match self.get_tables() {
-            Some(t) => t.parent.get(),
-            // SAFETY: a nonzero untagged word was stored from a live `P<Symbol>`, whose provenance `addr` exposed.
-            None => {
-                let addr = self.0 & Self::ADDR;
-                (addr != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(addr as usize) }))
-            }
-        }
-    }
 }
 
 impl Symbol {
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).
     pub fn new(flags: SymbolFlags, name: &'static str) -> P<Symbol> {
-        P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedStrCell::new(name), ..Default::default() })
+        P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedTaggedStrCell::new(name), ..Default::default() })
     }
 
     #[inline]
@@ -137,11 +91,11 @@ impl Symbol {
     }
     /// Go `symbol.Declarations = declarations` (shares the slice).
     pub fn set_declarations_static(&self, declarations: &'static [P<Node>]) {
-        let word = self.parent_or_tables.get();
-        if word.0 & SymbolParentWord::VALUE_FIRST != 0 {
+        let tags = self.name.tags();
+        if tags & TAG_VALUE_FIRST != 0 {
             let value_declaration = self.declarations.get()[0];
             if declarations.first() != Some(&value_declaration) {
-                self.parent_or_tables.set(SymbolParentWord(word.0 & !SymbolParentWord::VALUE_FIRST));
+                self.name.set_tags(tags & !TAG_VALUE_FIRST);
                 self.tables_for_write().value_declaration.set(Some(value_declaration));
             }
         }
@@ -159,42 +113,42 @@ impl Symbol {
     }
     #[inline]
     pub fn value_declaration(&self) -> Option<P<Node>> {
-        let word = self.parent_or_tables.get();
-        if word.0 & SymbolParentWord::VALUE_FIRST != 0 {
+        if self.name.tags() & TAG_VALUE_FIRST != 0 {
             let declarations = self.declarations.get();
             debug_assert!(!declarations.is_empty());
             // SAFETY: the bit is set only while the declarations are non-empty (`set_value_declaration`,
             // `set_declarations_static`).
             return Some(unsafe { *declarations.get_unchecked(0) });
         }
-        word.get_tables().and_then(|t| t.value_declaration.get())
+        self.tables().and_then(|t| t.value_declaration.get())
     }
     pub fn set_value_declaration(&self, value_declaration: Option<P<Node>>) {
-        let word = self.parent_or_tables.get();
+        let tags = self.name.tags();
         if value_declaration.is_some() && self.declarations.get().first().copied() == value_declaration {
-            self.parent_or_tables.set(SymbolParentWord(word.0 | SymbolParentWord::VALUE_FIRST));
-            if let Some(tables) = word.get_tables() {
+            self.name.set_tags(tags | TAG_VALUE_FIRST);
+            if let Some(tables) = self.tables() {
                 tables.value_declaration.set(None);
             }
             return;
         }
-        self.parent_or_tables.set(SymbolParentWord(word.0 & !SymbolParentWord::VALUE_FIRST));
-        if value_declaration.is_some() || word.get_tables().is_some() {
+        self.name.set_tags(tags & !TAG_VALUE_FIRST);
+        if value_declaration.is_some() || self.tables().is_some() {
             self.tables_for_write().value_declaration.set(value_declaration);
         }
     }
     #[inline]
     fn tables(&self) -> Option<P<SymbolTables>> {
-        self.parent_or_tables.get().get_tables()
+        // SAFETY: with the tag, the field holds the key of the tail made by `tables_for_write` (never freed).
+        (self.name.tags() & TAG_TABLES != 0).then(|| unsafe { P::from_key(self.parent_or_tables.get()) })
     }
     #[inline]
     fn tables_for_write(&self) -> P<SymbolTables> {
-        let word = self.parent_or_tables.get();
-        match word.get_tables() {
+        match self.tables() {
             Some(tables) => tables,
             None => {
-                let tables = P::new(SymbolTables { parent: OwnedCell::new(word.get_parent()), ..Default::default() });
-                self.parent_or_tables.set(SymbolParentWord(SymbolParentWord::tables(tables).0 | word.0 & SymbolParentWord::VALUE_FIRST));
+                let tables = P::new(SymbolTables { parent: OwnedCell::new(self.parent()), ..Default::default() });
+                self.parent_or_tables.set(tables.key());
+                self.name.set_tags(self.name.tags() | TAG_TABLES);
                 tables
             }
         }
@@ -221,14 +175,17 @@ impl Symbol {
     }
     #[inline]
     pub fn parent(&self) -> Option<P<Symbol>> {
-        self.parent_or_tables.get().get_parent()
+        match self.tables() {
+            Some(tables) => tables.parent.get(),
+            // SAFETY: without the tag, the field is 0 or the key of the parent (a live symbol).
+            None => unsafe { P::from_key_opt(self.parent_or_tables.get()) },
+        }
     }
     #[inline]
     pub fn set_parent(&self, parent: Option<P<Symbol>>) {
-        let word = self.parent_or_tables.get();
-        match word.get_tables() {
+        match self.tables() {
             Some(tables) => tables.parent.set(parent),
-            None => self.parent_or_tables.set(SymbolParentWord(SymbolParentWord::parent(parent).0 | word.0 & SymbolParentWord::VALUE_FIRST)),
+            None => self.parent_or_tables.set(P::key_opt(parent)),
         }
     }
     #[inline]
@@ -428,11 +385,9 @@ impl Drop for EntryVec {
 unsafe impl Send for EntryVec {}
 unsafe impl Sync for EntryVec {}
 
-/// One word: the symbol's address / 8 in the low 45 bits (symbols are 8-aligned and user-space addresses are below
-/// 2^48; checked on store), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
+/// One word: the symbol in the low 45 bits (`P::pack`), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
 /// and the top 12 bits of `hash_name(key)`. 8 bytes instead of 16 (pointer + 32-bit hash + length): symbol table
-/// entries are 465 MB of capacity on the private monorepo. The symbol's provenance is exposed on store and recovered with
-/// `with_exposed_provenance`.
+/// entries are 465 MB of capacity on the private monorepo.
 #[derive(Clone, Copy)]
 struct SymbolMapEntry(u64);
 
@@ -463,7 +418,7 @@ impl KeyPrint {
 }
 
 impl SymbolMapEntry {
-    const ADDR_BITS: u32 = 45;
+    const ADDR_BITS: u32 = tsrs_core::PACK_BITS;
     const ADDR_MASK: u64 = (1 << Self::ADDR_BITS) - 1;
     const ODD_BIT: u64 = 1 << Self::ADDR_BITS;
     const LEN_SHIFT: u32 = Self::ADDR_BITS + 1;
@@ -473,9 +428,7 @@ impl SymbolMapEntry {
 
     #[inline]
     fn addr_bits(symbol: P<Symbol>) -> u64 {
-        let addr = (symbol.get() as *const Symbol).expose_provenance() as u64;
-        assert!(addr & 7 == 0 && addr >> (Self::ADDR_BITS + 3) == 0, "symbol address {addr:#x} does not fit a symbol table entry");
-        addr >> 3
+        symbol.pack()
     }
 
     #[inline]
@@ -485,10 +438,8 @@ impl SymbolMapEntry {
 
     #[inline]
     fn symbol(self) -> P<Symbol> {
-        let addr = ((self.0 & Self::ADDR_MASK) << 3) as usize;
-        // SAFETY: the address was stored from a live `P<Symbol>` (arena symbols are never freed or moved), whose
-        // provenance `addr_bits` exposed.
-        P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(addr) })
+        // SAFETY: the low bits were stored from a live `P<Symbol>` (arena symbols are never freed or moved).
+        unsafe { P::unpack(self.0) }
     }
 
     #[inline]

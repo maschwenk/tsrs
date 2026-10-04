@@ -689,9 +689,9 @@ impl asyncTransformer {
 
         if emit_super_helpers && s.has_super_element_access.get() {
             if s.has_super_property_assignment.get() {
-                self.emit_context().add_emit_helper(updated, &[P::from_static(&printer::ADVANCED_ASYNC_SUPER_HELPER)]);
+                self.emit_context().add_emit_helper(updated, &[SP::from_static(&printer::ADVANCED_ASYNC_SUPER_HELPER)]);
             } else {
-                self.emit_context().add_emit_helper(updated, &[P::from_static(&printer::ASYNC_SUPER_HELPER)]);
+                self.emit_context().add_emit_helper(updated, &[SP::from_static(&printer::ASYNC_SUPER_HELPER)]);
             }
         }
 
@@ -858,9 +858,9 @@ impl asyncTransformer {
 
             if emit_super_helpers && s.has_super_element_access.get() {
                 if s.has_super_property_assignment.get() {
-                    self.emit_context().add_emit_helper(block, &[P::from_static(&printer::ADVANCED_ASYNC_SUPER_HELPER)]);
+                    self.emit_context().add_emit_helper(block, &[SP::from_static(&printer::ADVANCED_ASYNC_SUPER_HELPER)]);
                 } else {
-                    self.emit_context().add_emit_helper(block, &[P::from_static(&printer::ASYNC_SUPER_HELPER)]);
+                    self.emit_context().add_emit_helper(block, &[SP::from_static(&printer::ASYNC_SUPER_HELPER)]);
                 }
             }
 
