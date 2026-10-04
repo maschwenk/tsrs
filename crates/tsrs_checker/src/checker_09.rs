@@ -2373,7 +2373,7 @@ impl Checker {
     pub(crate) fn find_applicable_index_info(&mut self, index_infos: &[P<IndexInfo>], key_type: P<Type>) -> Option<P<IndexInfo>> {
         // Index signatures for type 'string' are considered only when no other index signatures apply.
         let mut string_index_info: Option<P<IndexInfo>> = None;
-        let mut applicable_infos: Vec<P<IndexInfo>> = Vec::with_capacity(8);
+        let mut applicable_infos: Vec<P<IndexInfo>> = Vec::new();
         for &info in index_infos {
             if info.key_type.get() == Some(self.string_type) {
                 string_index_info = Some(info);
@@ -2660,11 +2660,25 @@ impl Checker {
         let lm = match self.lazy_member_tables.get(&t) {
             Some(lm) => lm.clone(),
             None => {
-                let (type_parameters, type_arguments) = self.get_reference_member_type_arguments(t, t.target().unwrap());
-                if type_parameters == &type_arguments[..] {
-                    return None;
-                }
-                let type_arguments = alloc_slice(&type_arguments);
+                // get_reference_member_type_arguments without a temporary list.
+                let type_parameters = source.unwrap().as_interface_type().all_type_parameters.get();
+                let arguments = self.get_type_arguments(t);
+                let type_arguments = if arguments.len() + 1 == type_parameters.len() {
+                    if type_parameters[..arguments.len()] == *arguments && type_parameters[arguments.len()] == t {
+                        return None;
+                    }
+                    let mut padded = self.free_type_lists.pop().unwrap_or_default();
+                    padded.extend_from_slice(arguments);
+                    padded.push(t);
+                    let type_arguments = alloc_slice(&padded);
+                    self.free_type_list(padded);
+                    type_arguments
+                } else {
+                    if type_parameters == arguments {
+                        return None;
+                    }
+                    alloc_slice(arguments)
+                };
                 let lm = std::rc::Rc::new(LazyMemberTable {
                     mapper: {
                         let m = new_type_mapper(type_parameters, type_arguments);

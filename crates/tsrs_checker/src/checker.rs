@@ -1221,6 +1221,7 @@ pub struct Checker {
     pub scratch_mappers: Vec<P<TypeMapper>>,
     pub scratch_contexts: Vec<P<InferenceContext>>,
     pub free_type_mapper_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
+    pub free_type_lists: Vec<Vec<P<Type>>>, // Rust-only: empty buffers for `instantiate_types_changed`
     pub ambient_modules_once: bool, // Go sync.Once: true once ambient_modules has been computed
     pub ambient_modules: Vec<P<Symbol>>,
     pub within_unreachable_code: bool,
@@ -1578,6 +1579,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         scratch_mappers: Vec::new(),
         scratch_contexts: Vec::new(),
         free_type_mapper_caches: Vec::new(),
+        free_type_lists: Vec::new(),
         ambient_modules_once: false,
         ambient_modules: Vec::new(),
         within_unreachable_code: false,

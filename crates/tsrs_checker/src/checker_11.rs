@@ -1086,12 +1086,13 @@ impl Checker {
             if object_flags.intersects(ObjectFlags::Reference | ObjectFlags::Anonymous | ObjectFlags::Mapped) {
                 if object_flags.intersects(ObjectFlags::Reference) && t.as_type_reference().node.get().is_none() {
                     let resolved_type_arguments = t.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]);
-                    let new_type_arguments = self.instantiate_types(resolved_type_arguments, Some(m));
                     // Go core.Same: instantiateList returns the input slice iff no element changed
-                    if new_type_arguments.as_slice() == resolved_type_arguments {
+                    let Some(new_type_arguments) = self.instantiate_types_changed(resolved_type_arguments, m) else {
                         return t;
-                    }
-                    return self.create_normalized_type_reference(t.target().unwrap(), &new_type_arguments);
+                    };
+                    let result = self.create_normalized_type_reference(t.target().unwrap(), &new_type_arguments);
+                    self.free_type_list(new_type_arguments);
+                    return result;
                 }
                 if object_flags.intersects(ObjectFlags::ReverseMapped) {
                     return self.instantiate_reverse_mapped_type(t, m);
@@ -1109,17 +1110,23 @@ impl Checker {
                 }
             }
             let types = source.types();
-            let new_types = self.instantiate_types(types, Some(m));
             // Go core.Same: instantiateList returns the input slice iff no element changed
-            if new_types.as_slice() == types && alias.symbol() == t.alias().symbol() {
+            let changed = self.instantiate_types_changed(types, m);
+            if changed.is_none() && alias.symbol() == t.alias().symbol() {
                 return t;
             }
+            let new_types = changed.as_deref().unwrap_or(types);
             let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), Some(m)) } else { None };
             let alias = AliasArg::given_or_pending(alias, &pending);
-            if source.flags().intersects(TypeFlags::Intersection) {
-                return self.get_intersection_type_ex(&new_types, IntersectionFlags::None, alias);
+            let result = if source.flags().intersects(TypeFlags::Intersection) {
+                self.get_intersection_type_ex(new_types, IntersectionFlags::None, alias)
+            } else {
+                self.get_union_type_ex(new_types, UnionReduction::Literal, alias, None /*origin*/)
+            };
+            if let Some(changed) = changed {
+                self.free_type_list(changed);
             }
-            return self.get_union_type_ex(&new_types, UnionReduction::Literal, alias, None /*origin*/);
+            return result;
         } else if flags.intersects(TypeFlags::Index) {
             let target = self.instantiate_type(t.target().unwrap(), Some(m));
             return self.get_index_type(target);
@@ -1763,6 +1770,34 @@ impl Checker {
     // checker.go:23192
     pub(crate) fn instantiate_types(&mut self, types: &[P<Type>], m: Option<P<TypeMapper>>) -> Vec<P<Type>> {
         self.instantiate_list(types, m, |c, t, m| c.instantiate_type(t, m))
+    }
+
+    /// `instantiate_types` for callers that only read the result: `None` when no element changed (where Go's
+    /// `instantiateList` returns its input), else the new list in a buffer to hand back with `free_type_list`.
+    /// Instantiates the same elements in the same order.
+    pub(crate) fn instantiate_types_changed(&mut self, types: &[P<Type>], m: P<TypeMapper>) -> Option<Vec<P<Type>>> {
+        for (i, &t) in types.iter().enumerate() {
+            let mapped = self.instantiate_type(t, Some(m));
+            if mapped != t {
+                let mut result = self.free_type_lists.pop().unwrap_or_default();
+                result.reserve(types.len());
+                result.extend_from_slice(&types[..i]);
+                result.push(mapped);
+                for &t in &types[i + 1..] {
+                    let mapped = self.instantiate_type(t, Some(m));
+                    result.push(mapped);
+                }
+                return Some(result);
+            }
+        }
+        None
+    }
+
+    pub(crate) fn free_type_list(&mut self, mut list: Vec<P<Type>>) {
+        if list.capacity() <= 256 {
+            list.clear();
+            self.free_type_lists.push(list);
+        }
     }
 
     // checker.go:23196
