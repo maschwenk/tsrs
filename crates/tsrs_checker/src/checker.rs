@@ -1765,7 +1765,16 @@ impl Checker {
         t == self.missing_type || t.flags().intersects(TypeFlags::Union) && t.types()[0] == self.missing_type
     }
 
+    /// The worker's two cached answers inline (most calls); the worker repeats them.
+    #[inline]
     pub(crate) fn could_contain_type_variables(&mut self, t: P<Type>) -> bool {
+        if !t.flags().intersects(TypeFlags::StructuredOrInstantiable) {
+            return false;
+        }
+        let object_flags = t.object_flags();
+        if object_flags.intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
+            return object_flags.intersects(ObjectFlags::CouldContainTypeVariables);
+        }
         self.could_contain_type_variables_worker(t)
     }
 

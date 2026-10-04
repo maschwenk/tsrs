@@ -483,7 +483,18 @@ impl Checker {
      * no constituent property has type 'never', but the intersection of the constituent property types is 'never'.
      */
     // checker.go:22181
+    /// The common no-op cases inline; the rest (a large frame) out of line.
+    #[inline]
     pub fn get_reduced_type(&mut self, t: P<Type>) -> P<Type> {
+        let flags = t.flags();
+        if !flags.intersects(TypeFlags::UnionOrIntersection) || flags.intersects(TypeFlags::Union) && !t.object_flags().intersects(ObjectFlags::ContainsIntersections) {
+            return t;
+        }
+        self.get_reduced_type_worker(t)
+    }
+
+    #[inline(never)]
+    fn get_reduced_type_worker(&mut self, t: P<Type>) -> P<Type> {
         if t.flags().intersects(TypeFlags::Union) {
             if t.object_flags().intersects(ObjectFlags::ContainsIntersections) {
                 if let Some(reduced_type) = t.as_union_type().resolved_reduced_type() {
@@ -901,6 +912,7 @@ impl Checker {
     }
 
     // checker.go:22500
+    #[inline]
     pub(crate) fn instantiate_type_with_alias(&mut self, t: P<Type>, m: Option<P<TypeMapper>>, alias: Option<P<TypeAlias>>) -> P<Type> {
         // Check for type variables in the alias, so things like `type Brand<T> = number & {}` can potentially be copied with new alias type args, despite them being unreferenced.
         // This is the behavior most people using aliases expect, and prevents the cache from leaking type parameters outside their scope of validity.
@@ -913,6 +925,11 @@ impl Checker {
         {
             return t;
         }
+        self.instantiate_type_with_alias_worker(t, m, alias)
+    }
+
+    #[inline(never)]
+    fn instantiate_type_with_alias_worker(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> {
         if self.instantiation_stack.len() == 100 || self.instantiation_count >= 5_000_000 {
             // We have reached 100 recursive type instantiations, or 5M type instantiations caused by the same statement
             // or expression. There is a very high likelihood we're dealing with a combination of infinite generic types
