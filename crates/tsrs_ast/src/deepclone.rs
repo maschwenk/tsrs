@@ -14,7 +14,7 @@ fn get_deep_clone_visitor(f: NodeFactory, synthetic_location: bool) -> NodeVisit
             }
             return Some(visited);
         }
-        let c = node.clone_node(&mut visitor.factory); // forcibly clone leaf nodes, which will then cascade new nodes/arrays upwards via `update` calls
+        let c = node.clone_node(&visitor.factory); // forcibly clone leaf nodes, which will then cascade new nodes/arrays upwards via `update` calls
         // In strada, `factory.cloneNode` was dynamic and did _not_ clone positions for any "special cases", meanwhile
         // Node.Clone in corsa reliably uses `Update` calls for all nodes and so copies locations by default.
         // Deep clones are done to copy a node across files, so here, we explicitly make the location range synthetic on all cloned nodes
@@ -26,7 +26,7 @@ fn get_deep_clone_visitor(f: NodeFactory, synthetic_location: bool) -> NodeVisit
     let visit_nodes: VisitNodesHook = Rc::new(move |nodes: Option<P<NodeList>>, v: &mut NodeVisitor| {
         let nodes = nodes?;
         let visited = v.visit_nodes(Some(nodes)).unwrap();
-        let new_list = if visited != nodes { visited } else { nodes.clone_list(&mut v.factory) };
+        let new_list = if visited != nodes { visited } else { nodes.clone_list(&v.factory) };
         if synthetic_location {
             new_list.loc.set(new_text_range(-1, -1));
             if nodes.has_trailing_comma() {
@@ -38,7 +38,7 @@ fn get_deep_clone_visitor(f: NodeFactory, synthetic_location: bool) -> NodeVisit
     let visit_modifiers: VisitModifiersHook = Rc::new(move |nodes: Option<P<ModifierList>>, v: &mut NodeVisitor| {
         let nodes = nodes?;
         let visited = v.visit_modifiers(Some(nodes)).unwrap();
-        let new_list = if visited != nodes { visited } else { nodes.clone_list(&mut v.factory) };
+        let new_list = if visited != nodes { visited } else { nodes.clone_list(&v.factory) };
         if synthetic_location {
             new_list.list.loc.set(new_text_range(-1, -1));
             if nodes.has_trailing_comma() {

@@ -476,8 +476,9 @@ then-current main:
   `TSRS_EMIT=1`, `TSRS_LIB_PATH=<dir>` makes tsrs read them from a directory like the noembed build (the oracles set it
   to tsgo's directory).
 - **Concurrency.** Go runs the per-file snapshot and affected-file work on work groups; tsrs runs it on the calling
-  thread in a deterministic order (sorted paths). Emit runs on the checker threads (emit/core), so the `WriteFile`
-  callbacks only touch thread-safe state.
+  thread in a deterministic order (sorted paths). The transforms run on the checker threads (emit/core); each
+  transformed file is then printed and written on the rayon worker pool, at most 4 writes at a time
+  (notes/perf-emit.md), so the `WriteFile` callbacks only touch thread-safe state.
 - **Build concurrency** (branch `mfs-cx/emit-builders`). `--builders N` (declsbuild.go: number, `minValue` 1, default
   4, 1 under `--singleThreaded`; validated like Go: TS5002 / TS5073) sets the number of builder threads of
   `rangeTasks`. As at the pinned commit, builders take projects from `Order()` by an atomic index (the stale comment

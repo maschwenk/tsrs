@@ -173,6 +173,9 @@ pub struct Program {
 
     // Cached map of package names to whether they bundle types
     packages_map: OnceLock<FxHashMap<String, bool>>,
+
+    // tsrs-only (tsrs_modulespecifiers::ExportsModuleNameCache)
+    pub(crate) exports_module_name_cache: tsrs_modulespecifiers::ExportsModuleNameCache,
 }
 
 impl std::ops::Deref for Program {
@@ -370,6 +373,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         package_names: OnceLock::new(),
         has_ts_file: OnceLock::new(),
         packages_map: OnceLock::new(),
+        exports_module_name_cache: Default::default(),
     };
     // Go initializes the checker pool before verifying options; the pool factory takes the program by
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
@@ -554,6 +558,7 @@ impl Program {
             package_names: OnceLock::new(),
             has_ts_file: OnceLock::new(),
             packages_map: OnceLock::new(),
+            exports_module_name_cache: Default::default(),
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
         try_reuse(&result.known_symlinks, &self.known_symlinks);

@@ -370,6 +370,9 @@ pub type UTF16Offset = i32;
 // UTF16Len returns the number of UTF-16 code units needed to
 // represent the given UTF-8 encoded string.
 pub fn utf16_len(s: &str) -> UTF16Offset {
+    if s.is_ascii() {
+        return s.len() as UTF16Offset;
+    }
     let bytes = s.as_bytes();
     for i in 0..bytes.len() {
         if bytes[i] >= 0x80 {

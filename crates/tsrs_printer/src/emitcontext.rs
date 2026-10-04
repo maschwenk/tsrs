@@ -75,16 +75,18 @@ impl EmitContext {
         new_emit_context()
     }
 
+    // Go returns the context to a pool; tsrs allocates a new one per file (in the arena, never freed), so `reset`
+    // also releases the tables' memory instead of keeping their capacity.
     pub fn reset(&self) {
-        self.auto_generate.borrow_mut().clear();
-        self.text_source.borrow_mut().clear();
-        self.original.borrow_mut().clear();
-        self.emit_nodes.borrow_mut().clear();
-        self.assigned_name.borrow_mut().clear();
-        self.class_this.borrow_mut().clear();
+        *self.auto_generate.borrow_mut() = Default::default();
+        *self.text_source.borrow_mut() = Default::default();
+        *self.original.borrow_mut() = Default::default();
+        *self.emit_nodes.borrow_mut() = Default::default();
+        *self.assigned_name.borrow_mut() = Default::default();
+        *self.class_this.borrow_mut() = Default::default();
         *self.var_scope_stack.borrow_mut() = Stack::default();
         *self.let_scope_stack.borrow_mut() = Stack::default();
-        self.emit_helpers.borrow_mut().clear();
+        *self.emit_helpers.borrow_mut() = Default::default();
     }
 
     // emitcontext.go:90

@@ -2,13 +2,16 @@
 // LSP work on program.rs merge cheaply (docs/EMIT.md section 11).
 //
 // Threading (docs/EMIT.md section 10): Go queues one task per file on a work group; each task takes the file's
-// checker (`newEmitHost`) for the whole emit of that file. Here, with the compiler's own checker pool, emit runs per
-// checker group on the checker threads (files in program order within a group), the way `get_declaration_diagnostics`
-// does; each file's result goes into a slot indexed by its position in the emit list, and `combine_emit_results`
-// runs in input order, which is Go's observable order. With an external pool each file takes its checker from the
-// pool, as in Go.
+// checker (`newEmitHost`) for the whole emit of that file. Here, with the compiler's own checker pool, the
+// transforms run per checker group on the checker threads (files in program order within a group), the way
+// `get_declaration_diagnostics` does, and each transformed file is printed and written on the worker pool (Go prints
+// while it holds the checker; printing does not use it). Each file's result goes into a slot indexed by its position
+// in the emit list, and `combine_emit_results` runs in input order, which is Go's observable order. With an external
+// pool each file takes its checker from the pool, as in Go, and is printed after the checker is released.
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_core::P;
@@ -59,6 +62,79 @@ pub struct SourceMapEmitResult {
     pub generated_file: String,
 }
 
+// tsrs-only: where emit time goes, summed over the threads that emit (`--extendedDiagnostics` rows "Emit: ...").
+// The print row includes building the source-map mappings (the printer feeds the generator as it prints); the source
+// map row is serializing the map and computing its URL.
+#[derive(Clone, Copy)]
+pub(crate) enum EmitPhase {
+    ScriptTransform,
+    DeclarationTransform,
+    Print,
+    SourceMap,
+    Write,
+}
+
+const EMIT_PHASE_NAMES: [&str; 5] = [
+    "Emit: JS transform (thread sum)",
+    "Emit: declaration transform (thread sum)",
+    "Emit: print (thread sum)",
+    "Emit: source map serialize (thread sum)",
+    "Emit: write files (thread sum)",
+];
+
+// At most this many files are written at a time during emit (Go limits OS writes to 32 at a time, osvfs
+// `writeSema`). Printing runs on the whole worker pool, but file creation is largely serialized by the file system
+// (APFS: ~15k files/s on the development machine whether 1 or 16 threads create them), and more concurrent writers
+// only add kernel lock contention that slows the transforming checker threads (notes/perf-emit.md).
+const EMIT_WRITERS: usize = 4;
+
+#[derive(Default)]
+pub(crate) struct EmitTimes {
+    times: [AtomicU64; 5],
+    writers: Mutex<usize>,
+    writer_done: Condvar,
+}
+
+pub(crate) struct WritePermit<'a>(&'a EmitTimes);
+
+impl Drop for WritePermit<'_> {
+    fn drop(&mut self) {
+        *self.0.writers.lock().unwrap() -= 1;
+        self.0.writer_done.notify_one();
+    }
+}
+
+impl EmitTimes {
+    pub(crate) fn write_permit(&self) -> WritePermit<'_> {
+        let mut writers = self.writers.lock().unwrap();
+        while *writers >= EMIT_WRITERS {
+            writers = self.writer_done.wait(writers).unwrap();
+        }
+        *writers += 1;
+        WritePermit(self)
+    }
+
+    pub(crate) fn add(&self, phase: EmitPhase, start: Instant) {
+        self.times[phase as usize].fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
+    }
+
+    pub(crate) fn time<T>(&self, phase: EmitPhase, f: impl FnOnce() -> T) -> T {
+        let start = Instant::now();
+        let result = f();
+        self.add(phase, start);
+        result
+    }
+
+    fn record(&self) {
+        for (name, nanos) in EMIT_PHASE_NAMES.iter().zip(&self.times) {
+            let nanos = nanos.load(Ordering::Relaxed);
+            if nanos != 0 {
+                tsrs_core::phases::record(name, Duration::from_nanos(nanos));
+            }
+        }
+    }
+}
+
 impl Program {
     // program.go:1875
     pub fn emit(&'static self, ctx: &Context, options: EmitOptions) -> EmitResult {
@@ -75,12 +151,10 @@ impl Program {
         let source_files = crate::emitter::get_source_files_to_emit(self, options.target_source_files.as_deref(), force_dts_emit, force_js_emit);
 
         let results: Vec<Mutex<Option<EmitResult>>> = source_files.iter().map(|_| Mutex::new(None)).collect();
-        let run = |c: &mut tsrs_checker::Checker, index: usize, source_file: P<SourceFile>| {
+        let times = EmitTimes::default();
+        let transform = |c: &mut tsrs_checker::Checker, source_file: P<SourceFile>| {
             let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
             let host = crate::emithost::new_emit_host(self, c.get_emit_resolver(), checker_slot);
-
-            // take an unused writer (Go pools them; a fresh writer prints the same text)
-            let writer = tsrs_printer::new_text_writer(new_line, 0);
             let paths = outputpaths::get_output_paths_for(
                 source_file,
                 &self.options(),
@@ -91,26 +165,49 @@ impl Program {
                 host,
                 emit_only: options.emit_only,
                 emitter_diagnostics: Default::default(),
-                writer,
                 paths,
                 source_file,
                 emit_result: EmitResult::default(),
                 force_emit: options.force_emit,
                 write_file: options.write_file,
+                times: &times,
+                pending_js: None,
+                declaration_diagnostics: Vec::new(),
+                pending_declaration: None,
             };
-            checker_slot.lend(c, || e.emit());
+            checker_slot.lend(c, || e.transform());
+            e
+        };
+        let print = |mut e: emitter, index: usize| {
+            // take an unused writer (Go pools them; a fresh writer prints the same text)
+            let mut writer = tsrs_printer::new_text_writer(new_line, 0);
+            e.print(&mut *writer);
             *results[index].lock().unwrap() = Some(e.emit_result);
         };
 
         match self.compiler_checker_pool() {
-            Some(pool) => pool.for_each_checker_group_do(&source_files, self.single_threaded(), |c, index, file| run(c, index, file)),
+            // Printing and writing do not need the checker (`emitter::print`), so they run on the worker pool while
+            // the checker threads go on transforming; per file the steps keep Go's order.
+            Some(pool) if !self.single_threaded() => crate::program::worker_pool().in_place_scope(|scope| {
+                pool.for_each_checker_group_do(&source_files, false, |c, index, file| {
+                    let e = transform(c, file);
+                    let print = &print;
+                    scope.spawn(move |_| print(e, index));
+                })
+            }),
+            Some(pool) => pool.for_each_checker_group_do(&source_files, true, |c, index, file| print(transform(c, file), index)),
             None => {
                 for (index, &file) in source_files.iter().enumerate() {
-                    let mut guard = self.get_type_checker_for_file(ctx, file);
-                    run(&mut guard, index, file);
+                    let e = {
+                        let mut guard = self.get_type_checker_for_file(ctx, file);
+                        transform(&mut guard, file)
+                    };
+                    print(e, index);
                 }
             }
         }
+
+        times.record();
 
         // collect results from emit, preserving input order
         combine_emit_results(results.into_iter().map(|r| r.into_inner().unwrap()).collect())

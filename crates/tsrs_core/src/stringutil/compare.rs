@@ -57,6 +57,17 @@ pub fn compare_strings_case_insensitive(a: &str, b: &str) -> Comparison {
         return COMPARISON_EQUAL;
     }
     let (mut a, mut b) = (a.as_bytes(), b.as_bytes());
+    // ASCII prefix: `unicode_to_lower` of an ASCII rune is its ASCII lowercase. A non-ASCII rune can lower to ASCII
+    // (U+212A KELVIN SIGN -> 'k'), so the loop below takes over at the first non-ASCII byte on either side.
+    let common = a.iter().zip(b).take_while(|&(&ca, &cb)| ca < 0x80 && cb < 0x80).count();
+    for i in 0..common {
+        let (lca, lcb) = (a[i].to_ascii_lowercase(), b[i].to_ascii_lowercase());
+        if lca != lcb {
+            return if lca < lcb { COMPARISON_LESS_THAN } else { COMPARISON_GREATER_THAN };
+        }
+    }
+    a = &a[common..];
+    b = &b[common..];
     loop {
         let (ca, sa) = decode_rune(a);
         let (cb, sb) = decode_rune(b);
