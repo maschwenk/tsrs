@@ -1893,7 +1893,7 @@ impl Program {
         // The declaration transform runs in a scratch region of its own, freed once its diagnostics are collected
         // (notes/mem-emit-regions.md; the diagnostics themselves escape it).
         let emit_resolver = c.get_emit_resolver();
-        let region = tsrs_core::arena::Region::new(64 << 10);
+        let region = tsrs_core::arena::Region::new_scratch(64 << 10);
         let diagnostics = {
             let _scratch = region.enter_scratch();
             let checker_slot = P::new(tsrs_checker::CheckerSlot::default());

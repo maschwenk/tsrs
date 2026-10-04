@@ -67,6 +67,8 @@ pub struct Arena {
     drops: RefCell<Vec<DropEntry>>,
     /// Regions only: the slab each chunk was carved from, in chunk order (retired chunks, then the current one).
     slabs: RefCell<Vec<*const Slab>>,
+    /// Regions only: the chunks are in the registry (`Region::containing`); scratch regions are not.
+    registered: bool,
 }
 
 struct DropEntry {
@@ -92,10 +94,10 @@ pub struct Checkpoint {
 
 impl Arena {
     pub(crate) fn new() -> Arena {
-        Arena::with_first_chunk(FIRST_CHUNK, None)
+        Arena::with_first_chunk(FIRST_CHUNK, None, false)
     }
 
-    fn with_first_chunk(first_chunk: usize, region: Option<Weak<RegionInner>>) -> Arena {
+    fn with_first_chunk(first_chunk: usize, region: Option<Weak<RegionInner>>, registered: bool) -> Arena {
         let a = Arena {
             ptr: Cell::new(std::ptr::null_mut()),
             up: region.is_some(),
@@ -108,6 +110,7 @@ impl Arena {
             region,
             drops: RefCell::new(Vec::new()),
             slabs: RefCell::new(Vec::new()),
+            registered,
         };
         a.new_chunk(first_chunk);
         a
@@ -216,7 +219,7 @@ impl Arena {
         // (Profile builds: a region's first block does not start at the chunk start, which its arena keeps.)
         self.ptr.set(if self.up { base.wrapping_add(CENSUS_GAP) } else { self.end.get() });
         self.capacity.set(self.capacity.get() + size);
-        if let Some(region) = &self.region {
+        if let (Some(region), true) = (&self.region, self.registered) {
             REGISTRY.write().unwrap().insert(reg_key(base.addr()), (reg_key(base.addr() + size), region.clone()));
         }
     }
@@ -234,7 +237,7 @@ impl Arena {
         }
         self.end.set(end.with_addr(new_end));
         self.capacity.set(self.capacity.get() - (end.addr() - new_end));
-        if let Some(region) = &self.region {
+        if let (Some(region), true) = (&self.region, self.registered) {
             REGISTRY.write().unwrap().insert(reg_key(start.addr()), (reg_key(new_end), region.clone()));
         }
     }
@@ -439,8 +442,23 @@ thread_local! {
     static SLAB: Cell<(*const Slab, usize)> = const { Cell::new((std::ptr::null(), 0)) };
 }
 
+/// Released standard-size slabs kept for reuse instead of going back to the system (compressed pointers: a
+/// decommit and, at the next slab, a commit and fresh page faults). Short-lived regions (one per file during emit)
+/// release and take slabs at a high rate. Addresses, at most `SLAB_CACHE_MAX`.
+#[cfg(compressed_ptrs)]
+static SLAB_CACHE: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+#[cfg(compressed_ptrs)]
+const SLAB_CACHE_MAX: usize = 64;
+
 fn new_slab(size: usize, live: usize) -> *const Slab {
     let size = size.div_ceil(PAGE) * PAGE;
+    #[cfg(compressed_ptrs)]
+    if size == SLAB_SIZE {
+        if let Some(addr) = SLAB_CACHE.lock().unwrap().pop() {
+            let base = std::ptr::with_exposed_provenance_mut::<u8>(addr);
+            return Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live) }));
+        }
+    }
     let base = os_chunk(Layout::from_size_align(size, CHUNK_ALIGN).expect("arena slab layout"));
     Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live) }))
 }
@@ -494,10 +512,16 @@ fn slab_release(slab: *const Slab) {
         std::alloc::dealloc(s.base, Layout::from_size_align(s.size, CHUNK_ALIGN).expect("arena slab layout"))
     };
     #[cfg(compressed_ptrs)]
-    // SAFETY: from `os_chunk` with this size; every chunk carved from it was released.
-    unsafe {
-        crate::reserve::release_chunk(s.base, s.size)
-    };
+    {
+        let mut cache = SLAB_CACHE.lock().unwrap();
+        if s.size == SLAB_SIZE && cache.len() < SLAB_CACHE_MAX {
+            cache.push(s.base.expose_provenance());
+        } else {
+            drop(cache);
+            // SAFETY: from `os_chunk` with this size; every chunk carved from it was released.
+            unsafe { crate::reserve::release_chunk(s.base, s.size) };
+        }
+    }
     // SAFETY: made by `Box::into_raw` in `new_slab`; this was the last reference.
     drop(unsafe { Box::from_raw(slab as *mut Slab) });
 }
@@ -715,8 +739,20 @@ impl Region {
     /// A new, empty region whose first chunk has at least `first_chunk` bytes (rounded up to a page).
     pub fn new(first_chunk: usize) -> Region {
         ANY_REGION.store(true, Ordering::Relaxed);
+        Region::new_in(first_chunk, true)
+    }
+
+    /// A region to be used only through `enter_scratch` (one file's emit): like `new`, but its chunks are not in the
+    /// registry, so `containing` never returns it and creating or freeing it takes no global lock. Lazily filled data
+    /// of an object inside it (`enter_owner`) goes to the current target, the region itself while it is entered. A
+    /// process with only scratch regions (the CLI) keeps `enter_owner` / `enter_table_owner` free.
+    pub fn new_scratch(first_chunk: usize) -> Region {
+        Region::new_in(first_chunk, false)
+    }
+
+    fn new_in(first_chunk: usize, registered: bool) -> Region {
         Region(Arc::new_cyclic(|weak| RegionInner {
-            arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(weak.clone()))),
+            arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(weak.clone()), registered)),
             lock: OwnerLock { state: Mutex::new((None, 0)), released: Condvar::new() },
             owners: Mutex::new(Vec::new()),
             on_free: Mutex::new(Vec::new()),
@@ -869,7 +905,8 @@ pub fn enter_thread_arena() -> RegionScope {
 #[inline]
 pub fn enter_owner(addr: usize) -> Option<RegionScope> {
     if !ANY_REGION.load(Ordering::Relaxed) {
-        return None;
+        // Scratch regions are not registered: data of an object outside the scratch region must not land in it.
+        return escape_scratch_unless_inside(addr);
     }
     Some(match Region::containing(addr) {
         Some(region) => region.enter(),
@@ -885,7 +922,7 @@ pub fn enter_owner(addr: usize) -> Option<RegionScope> {
 #[inline]
 pub fn enter_table_owner(addr: usize) -> Option<RegionScope> {
     if !ANY_REGION.load(Ordering::Relaxed) {
-        return None;
+        return escape_scratch_unless_inside(addr);
     }
     let current = CURRENT.with(|c| c.get());
     match Region::containing(addr) {
@@ -940,6 +977,15 @@ pub fn escape_scratch() -> Option<RegionScope> {
     Some(RegionScope::push(outer, None))
 }
 
+/// `escape_scratch` unless the object at `addr` lives in the scratch region (`enter_owner` without registered regions).
+#[inline]
+fn escape_scratch_unless_inside(addr: usize) -> Option<RegionScope> {
+    if scratch_arena().is_null() || scratch_contains(addr) {
+        return None;
+    }
+    escape_scratch()
+}
+
 /// Whether a scratch region is entered on this thread.
 #[inline]
 pub fn scratch_active() -> bool {
@@ -970,7 +1016,7 @@ impl Drop for RegionInner {
         }
         let arena = &*self.arena;
         let chunks = arena.chunks();
-        {
+        if arena.registered || !self.owners.get_mut().unwrap().is_empty() {
             let mut reg = REGISTRY.write().unwrap();
             for &(start, _) in &chunks {
                 reg.remove(&reg_key(start));
