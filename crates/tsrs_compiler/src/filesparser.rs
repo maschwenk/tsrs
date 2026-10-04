@@ -206,7 +206,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
                     loader.tasks[t].data().processing_diagnostics.push(processing_diagnostic);
                     continue;
                 }
-                Ok(resolved_ref) => loader.add_sub_task(t, resolved_ref, None),
+                Ok(resolved_ref) => loader.add_sub_task(t, &resolved_ref, None),
             }
         }
 
@@ -225,7 +225,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
                 let lib_file = loader.path_for_lib_file(&name);
                 loader.add_sub_task(
                     t,
-                    resolvedRef {
+                    &resolvedRef {
                         file_name: lib_file.path.clone(),
                         increase_depth: false,
                         elide_on_depth: false,
@@ -279,7 +279,7 @@ fn load_automatic_type_directives(t: TaskId, loader: &mut fileLoader) {
     data.type_resolutions_trace = type_resolutions_trace;
     data.processing_diagnostics.extend(p_diagnostics);
     for type_resolution in to_parse_type_refs {
-        loader.add_sub_task(t, type_resolution, None);
+        loader.add_sub_task(t, &type_resolution, None);
     }
 }
 
@@ -324,6 +324,7 @@ impl TasksByCasing {
     }
 }
 
+#[derive(Clone, Copy)]
 struct queuedTask {
     task: TaskId,
     loaded: bool,

@@ -277,7 +277,7 @@ fn perform_compilation(
     let parse_start = sys.now();
     let program = new_program(ProgramOptions::new(config, host));
     compile_times.parse_time = sys.now() - parse_start;
-    let (result, _) = emit_and_report_statistics(EmitInput {
+    let (result, _) = emit_and_report_statistics(&EmitInput {
         sys,
         program,
         config,
@@ -344,7 +344,7 @@ fn perform_incremental_compilation(
     let incremental_program =
         tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), Some(std::time::Instant::now), testing.is_some());
     compile_times.changes_compute_time = sys.now() - changes_compute_start;
-    let (result, _) = emit_and_report_statistics(EmitInput {
+    let (result, _) = emit_and_report_statistics(&EmitInput {
         sys,
         program: incremental_program.get_program(),
         config,

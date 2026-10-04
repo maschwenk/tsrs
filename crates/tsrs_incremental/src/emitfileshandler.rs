@@ -372,7 +372,7 @@ impl<'a> emitFilesHandler<'a> {
 }
 
 // emitfileshandler.go:341
-pub(crate) fn emit_files(ctx: &Context, program: P<Program>, options: EmitOptions, is_for_dts_errors: bool) -> Option<EmitResult> {
+pub(crate) fn emit_files(ctx: &Context, program: P<Program>, options: &EmitOptions, is_for_dts_errors: bool) -> Option<EmitResult> {
     let emit_handler = emitFilesHandler {
         ctx,
         program,
@@ -387,8 +387,8 @@ pub(crate) fn emit_files(ctx: &Context, program: P<Program>, options: EmitOption
 
     // Single file emit - do direct from program
     if !is_for_dts_errors && options.target_source_files.is_some() {
-        let write_file = emit_handler.get_emit_write_file(&options);
-        let result = compiler_program_emit(program.p(), ctx, emit_handler.get_emit_options(&options, write_file.as_deref()));
+        let write_file = emit_handler.get_emit_write_file(options);
+        let result = compiler_program_emit(program.p(), ctx, emit_handler.get_emit_options(options, write_file.as_deref()));
         emit_handler.update_has_emit_diagnostics(result.as_ref());
         if ctx.err().is_some() {
             return None;

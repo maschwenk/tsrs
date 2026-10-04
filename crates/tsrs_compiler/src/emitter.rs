@@ -202,19 +202,19 @@ mod emit {
         // diagnostics, print and write the declaration file.
         pub(crate) fn print(&mut self, writer: &mut (dyn EmitTextWriter + 'static)) {
             if let Some(pending) = self.pending_js.take() {
-                self.print_pending(pending, writer);
+                self.print_pending(&pending, writer);
             }
             for elem in std::mem::take(&mut self.declaration_diagnostics) {
                 // Add declaration transform diagnostics to emit diagnostics
                 self.emitter_diagnostics.add(elem);
             }
             if let Some(pending) = self.pending_declaration.take() {
-                self.print_pending(pending, writer);
+                self.print_pending(&pending, writer);
             }
             self.emit_result.diagnostics = self.emitter_diagnostics.get_diagnostics();
         }
 
-        fn print_pending(&mut self, pending: pendingPrint, writer: &mut (dyn EmitTextWriter + 'static)) {
+        fn print_pending(&mut self, pending: &pendingPrint, writer: &mut (dyn EmitTextWriter + 'static)) {
             // create a printer to print the nodes
             let printer = printer::new_printer(pending.printer_options, PrintHandlers::default(), Some(pending.emit_context));
             let options = self.host.options();

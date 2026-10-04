@@ -383,7 +383,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let p: &'static Program = Box::leak(Box::new(p));
     // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
     tsrs_core::census_scrub_stack();
-    p.init_checker_pool(opts.create_checker_pool.as_ref());
+    p.init_checker_pool(opts.create_checker_pool);
     p
 }
 
@@ -578,12 +578,12 @@ impl Program {
         result.files = tsrs_core::alloc_vec(files);
         let result: &'static Program = Box::leak(Box::new(result));
         tsrs_core::census_scrub_stack();
-        result.init_checker_pool(create_checker_pool.as_ref());
+        result.init_checker_pool(create_checker_pool);
         (Some(result), new_file, true)
     }
 
     // program.go:443
-    fn init_checker_pool(&'static self, create: Option<&CreateCheckerPool>) {
+    fn init_checker_pool(&'static self, create: Option<CreateCheckerPool>) {
         if !self.finished_processing {
             panic!("Program must finish processing files before initializing checker pool");
         }
@@ -891,7 +891,7 @@ impl Program {
                 diagnostics.concat()
             }
         };
-        filter_and_sort_diagnostics(result)
+        filter_and_sort_diagnostics(&result)
     }
 
     // program.go:686
@@ -928,9 +928,9 @@ impl Program {
             let mut c = self.get_type_checker_for_file_exclusive(ctx, source_file);
             let result = collect(ctx, &mut c, source_file);
             drop(c);
-            return filter_and_sort_diagnostics(result);
+            return filter_and_sort_diagnostics(&result);
         }
-        filter_and_sort_diagnostics(self.collect_checker_diagnostics_from_files(ctx, self.files, &collect).concat())
+        filter_and_sort_diagnostics(&self.collect_checker_diagnostics_from_files(ctx, self.files, &collect).concat())
     }
 
     // program.go:728
@@ -1007,7 +1007,7 @@ impl Program {
         });
         let mut result = FxHashMap::default();
         for (i, diags) in all_diags.into_iter().enumerate() {
-            result.insert(source_files[i], filter_and_sort_diagnostics(diags));
+            result.insert(source_files[i], filter_and_sort_diagnostics(&diags));
         }
         result
     }
@@ -1871,7 +1871,7 @@ impl Program {
                 .concat()
             }
         };
-        filter_and_sort_diagnostics(result)
+        filter_and_sort_diagnostics(&result)
     }
 
     // Declaration emit needs the checker; without it declaration diagnostics are empty.
@@ -2612,9 +2612,9 @@ fn equal_check_js_directives(d1: Option<P<ast::CheckJsDirective>>, d2: Option<P<
     }
 }
 
-fn filter_and_sort_diagnostics(diags: Vec<P<Diagnostic>>) -> Vec<P<Diagnostic>> {
+fn filter_and_sort_diagnostics(diags: &[P<Diagnostic>]) -> Vec<P<Diagnostic>> {
     // Content-mapped files (span maps) are not ported, so no diagnostic is filtered out here.
-    sort_and_deduplicate_diagnostics(&diags)
+    sort_and_deduplicate_diagnostics(diags)
 }
 
 // getAdditionalJSSyntacticDiagnostics produces option-dependent syntactic diagnostics for JS files

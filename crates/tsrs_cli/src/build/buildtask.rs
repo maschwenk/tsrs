@@ -341,7 +341,7 @@ impl BuildTask {
         // argument list would live until the call returns, and `host.get_m_time` (WriteFile of a `.d.ts` that differs
         // only in its map, emitfileshandler.go:240) locks the same mutex during emit, which deadlocked.
         let testing_m_times_cache = host.m_times.lock().unwrap().clone();
-        let (result, statistics) = emit_and_report_statistics(EmitInput {
+        let (result, statistics) = emit_and_report_statistics(&EmitInput {
             sys,
             program,
             config: self.resolved(),

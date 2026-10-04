@@ -607,7 +607,7 @@ pub(crate) fn get_local_module_specifier(
         if !package_json_paths_are_equal(
             &nearest_target_package_json,
             &nearest_source_package_json,
-            tspath::ComparePathsOptions {
+            &tspath::ComparePathsOptions {
                 use_case_sensitive_file_names: host.use_case_sensitive_file_names(),
                 current_directory: host.get_current_directory().to_string(),
             },

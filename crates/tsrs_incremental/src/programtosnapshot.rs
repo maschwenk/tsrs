@@ -216,7 +216,7 @@ impl toProgramSnapshot {
                     self.snapshot.emit_signatures.store(file.path().clone(), emit_signature);
                 }
             } else {
-                self.snapshot.add_file_to_affected_files_pending_emit(file.path().clone(), get_file_emit_kind(&new_options));
+                self.snapshot.add_file_to_affected_files_pending_emit(file.path(), get_file_emit_kind(&new_options));
             }
             self.snapshot.file_infos.store(file.path().clone(), info);
         }
@@ -287,7 +287,7 @@ impl toProgramSnapshot {
                 for &file in self.program.get_source_files() {
                     // Add to affectedFilesPending emit only if not changed since any changed file will do full emit
                     if !self.snapshot.changed_files_set.has(file.path()) {
-                        self.snapshot.add_file_to_affected_files_pending_emit(file.path().clone(), pending_emit_kind);
+                        self.snapshot.add_file_to_affected_files_pending_emit(file.path(), pending_emit_kind);
                     }
                 }
                 self.snapshot.build_info_emit_pending.set(true);

@@ -168,7 +168,7 @@ pub(crate) const COMPARISON_LESS_THAN: i32 = -1;
 pub(crate) const COMPARISON_EQUAL_TO: i32 = 0;
 pub(crate) const COMPARISON_GREATER_THAN: i32 = 1;
 
-fn cmp_compare<T: Ord>(a: T, b: T) -> i32 {
+fn cmp_compare<T: Ord + Copy>(a: T, b: T) -> i32 {
     match a.cmp(&b) {
         Ordering::Less => COMPARISON_LESS_THAN,
         Ordering::Equal => COMPARISON_EQUAL_TO,

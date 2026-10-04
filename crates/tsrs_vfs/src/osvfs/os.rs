@@ -478,6 +478,7 @@ impl DirFS {
     }
 }
 
+#[expect(clippy::needless_pass_by_value, reason = "passed as `map_err(io_error)`, which hands over the error by value")]
 fn io_error(e: io::Error) -> FsError {
     match e.kind() {
         io::ErrorKind::NotFound => FsError::NotExist,

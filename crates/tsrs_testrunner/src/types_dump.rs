@@ -36,7 +36,7 @@ pub struct DumpArgs {
     pub sample: Option<String>,
 }
 
-pub fn run(args: DumpArgs) {
+pub fn run(args: &DumpArgs) {
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(osvfs::fs()));
     let cwd = tspath::normalize_path(&std::env::current_dir().unwrap().to_string_lossy());
     let host: &'static OsParseConfigHost = Box::leak(Box::new(OsParseConfigHost { fs: Arc::clone(&fs), cwd: cwd.clone() }));

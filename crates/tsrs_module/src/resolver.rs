@@ -222,7 +222,8 @@ impl ResolverOptions {
 }
 
 pub fn new_resolver(opts: ResolverOptions) -> DefaultResolver {
-    DefaultResolver::new_from_resolution_data(new_resolution_data(&opts), opts.host)
+    let host = opts.host;
+    DefaultResolver::new_from_resolution_data(new_resolution_data(opts), host)
 }
 
 impl DefaultResolver {

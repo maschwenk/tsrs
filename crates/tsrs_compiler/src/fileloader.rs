@@ -115,16 +115,16 @@ pub(crate) struct jsxRuntimeImportSpecifier {
 
 // fileloader.go:337 (Go runs it on the loader before creating the resolver; it only needs the options and the host,
 // and returns the builder the loader keeps)
-fn add_project_reference_tasks(opts: &ProgramConfig, host: std::sync::Arc<dyn CompilerHost>, _single_threaded: bool) -> projectReferenceFileMapperBuilder {
+fn add_project_reference_tasks(opts: &ProgramConfig, host: &Arc<dyn CompilerHost>, _single_threaded: bool) -> projectReferenceFileMapperBuilder {
     let mut mapper = projectReferenceFileMapper::new(opts.config, opts.can_use_project_reference_source());
-    let resolution_host = resolution_host_for(Arc::clone(&host));
+    let resolution_host = resolution_host_for(Arc::clone(host));
     mapper.loader_host = Some(resolution_host);
     let project_references = opts.config.resolved_project_reference_paths();
     if project_references.is_empty() {
         return projectReferenceFileMapperBuilder { mapper: Box::leak(Box::new(mapper)), host: resolution_host };
     }
 
-    let mut parser = projectReferenceParser::new(&*host);
+    let mut parser = projectReferenceParser::new(&**host);
     let mut root_tasks = parser.create_project_reference_parse_tasks(project_references);
     parser.parse(&mut root_tasks, &mut mapper);
     let mapper: &'static projectReferenceFileMapper = Box::leak(Box::new(mapper));
@@ -141,7 +141,7 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
     // every comparison's result.
     let max_node_module_js_depth = compiler_options.max_node_module_js_depth.unwrap_or(0).clamp(i32::MIN as i64, i32::MAX as i64) as i32;
     let host = Arc::clone(&opts.host);
-    let project_references = add_project_reference_tasks(&opts.program_config(), Arc::clone(&host), single_threaded);
+    let project_references = add_project_reference_tasks(&opts.program_config(), &host, single_threaded);
     // The mapper (with its resolution hosts) is leaked for the program to own (`SharedProgramData`). If loading
     // unwinds (a panic while loading, e.g. the module resolver's `Unexpected moduleResolution`, which the API turns
     // into an error), no program will own it: free it then. Declared before the resolver and loader, so it is
@@ -682,7 +682,7 @@ impl fileLoader {
             if resolved.is_resolved() {
                 self.add_sub_task(
                     t,
-                    resolvedRef {
+                    &resolvedRef {
                         file_name: resolved.resolved_file_name.to_string(),
                         increase_depth: resolved.is_external_library_import,
                         elide_on_depth: false,
@@ -796,7 +796,7 @@ impl fileLoader {
                     );
                     self.add_sub_task_normalized(
                         t,
-                        resolvedRef {
+                        &resolvedRef {
                             file_name: resolved_file_name.to_string(),
                             increase_depth: resolved_module.is_external_library_import,
                             elide_on_depth: is_js_file_from_node_modules,
@@ -859,7 +859,7 @@ impl fileLoader {
         }
     }
 
-    pub(crate) fn add_sub_task(&mut self, t: TaskId, ref_: resolvedRef, lib_file: Option<P<LibFile>>) {
+    pub(crate) fn add_sub_task(&mut self, t: TaskId, ref_: &resolvedRef, lib_file: Option<P<LibFile>>) {
         self.add_sub_task_normalized(t, ref_, lib_file, None);
     }
 
@@ -867,7 +867,7 @@ impl fileLoader {
     pub(crate) fn add_sub_task_normalized(
         &mut self,
         t: TaskId,
-        ref_: resolvedRef,
+        ref_: &resolvedRef,
         lib_file: Option<P<LibFile>>,
         normalized: Option<(String, Path)>,
     ) {

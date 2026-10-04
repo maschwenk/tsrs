@@ -1144,7 +1144,7 @@ impl NodeBuilderImpl {
                         sortedSymbolNamePair { sym: symbol, name: String::new() }
                     })
                     .collect();
-                parent_specifiers.sort_by(|a, b| self.sort_by_best_name(c, a.clone(), b.clone()).cmp(&0));
+                parent_specifiers.sort_by(|a, b| self.sort_by_best_name(c, a, b).cmp(&0));
                 for pair in &parent_specifiers {
                     let parent = pair.sym;
                     let parent_chain = self.get_symbol_chain(c, parent, get_qualified_left_meaning(meaning), false, yield_module_symbol);
@@ -1195,7 +1195,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:1153
-    pub(crate) fn sort_by_best_name(&self, c: &mut Checker, a: sortedSymbolNamePair, b: sortedSymbolNamePair) -> i32 {
+    pub(crate) fn sort_by_best_name(&self, c: &mut Checker, a: &sortedSymbolNamePair, b: &sortedSymbolNamePair) -> i32 {
         let specifier_a = &a.name;
         let specifier_b = &b.name;
         if !specifier_a.is_empty() && !specifier_b.is_empty() {

@@ -434,7 +434,7 @@ impl affectedFilesHandler<'_> {
         }
         for change in self.dts_may_change.borrow().iter() {
             for (file_path, &emit_kind) in change.borrow().iter() {
-                snapshot.add_file_to_affected_files_pending_emit(file_path.clone(), emit_kind);
+                snapshot.add_file_to_affected_files_pending_emit(file_path, emit_kind);
             }
         }
         for key in snapshot.changed_files_set.keys() {

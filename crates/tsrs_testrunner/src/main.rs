@@ -281,7 +281,7 @@ impl Selection {
     }
 }
 
-fn cmd_run(mut args: Args, spec: BackendSpec) {
+fn cmd_run(mut args: Args, spec: &BackendSpec) {
     let sel = Selection::from_args(&mut args);
     let jobs = args.num("--jobs").unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()));
     let timeout = Duration::from_secs_f64(args.value("--timeout").map_or(20.0, |v| v.parse().unwrap_or(20.0)));
@@ -384,7 +384,7 @@ fn check_no_extra(args: &Args) {
     }
 }
 
-fn cmd_list(mut args: Args, spec: BackendSpec) {
+fn cmd_list(mut args: Args, spec: &BackendSpec) {
     let sel = Selection::from_args(&mut args);
     check_no_extra(&args);
     for item in sel.select(&option_table(&spec)) {
@@ -493,7 +493,7 @@ fn cmd_types_dump(mut args: Args) {
     let dump = types_dump::DumpArgs { project, out, mode, text, sample };
     std::thread::Builder::new()
         .stack_size(1 << 30)
-        .spawn(move || types_dump::run(dump))
+        .spawn(move || types_dump::run(&dump))
         .unwrap()
         .join()
         .unwrap_or_else(|_| std::process::exit(101));
@@ -529,10 +529,10 @@ fn main() {
     }
     EXTRA_BASELINES.store(extra, std::sync::atomic::Ordering::Relaxed);
     match cmd.as_str() {
-        "run" => cmd_run(args, spec),
+        "run" => cmd_run(args, &spec),
         "show" => cmd_show(args, spec),
         "crashes" => cmd_crashes(args),
-        "list" => cmd_list(args, spec),
+        "list" => cmd_list(args, &spec),
         #[cfg(feature = "checker")]
         "types-dump" => cmd_types_dump(args),
         "__worker" => worker::worker_main(spec),
