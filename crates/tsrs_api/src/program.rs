@@ -197,7 +197,7 @@ impl Session {
         let file = p.document("file")?;
         let Some(source_file) = program.get_source_file(&file.to_file_name()) else { return Ok(Value::Null) };
         let path = source_file.path();
-        let meta = program.get_source_file_meta_data(&path);
+        let meta = program.get_source_file_meta_data(&path).clone();
         Ok(Obj::new()
             .set("isDefaultLibrary", b(program.is_source_file_default_library(&path)))
             .set("isFromExternalLibrary", b(program.is_source_file_from_external_library(source_file)))
