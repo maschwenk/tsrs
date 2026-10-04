@@ -226,15 +226,15 @@ pub(crate) struct poolState {
     pub(crate) group_runs: Mutex<Vec<Vec<(f64, usize)>>>,
     // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, thread CPU seconds per checker.
     pub(crate) group_cpu: Mutex<Vec<Vec<f64>>>,
-    // TSRS_FILE_TIMES only: (file, checker, seconds) per checked file, in completion order.
-    pub(crate) file_times: Mutex<Vec<(P<SourceFile>, usize, f64)>>,
+    // TSRS_FILE_TIMES only: (file, checker, seconds, thread CPU seconds) per checked file, in completion order.
+    pub(crate) file_times: Mutex<Vec<(P<SourceFile>, usize, f64, f64)>>,
     // Cost cache only: (file, thread CPU seconds) per checked file, per checker pass.
     file_cpu: Mutex<Vec<(P<SourceFile>, f64)>>,
 }
 
 // TSRS_FILE_TIMES=<path> (experiments): after checking, write one line per file run by a checker group:
-// checker, seconds, node count, text length, import count, file name, and the file's node-kind histogram
-// (`Kind=count` pairs), for fitting assignment cost models offline.
+// checker, seconds, thread CPU seconds, node count, text length, import count, file name, and the file's node-kind
+// histogram (`Kind=count` pairs), for fitting assignment cost models offline.
 pub(crate) fn file_times_path() -> Option<&'static str> {
     static PATH: OnceLock<Option<String>> = OnceLock::new();
     PATH.get_or_init(|| std::env::var("TSRS_FILE_TIMES").ok().filter(|v| !v.is_empty())).as_deref()
@@ -253,10 +253,10 @@ pub(crate) fn write_file_times(program: &'static Program) {
         });
     }
     let mut out = String::new();
-    for &(file, checker, seconds) in state.file_times.lock().unwrap().iter() {
+    for &(file, checker, seconds, cpu) in state.file_times.lock().unwrap().iter() {
         let mut counts = vec![0u32; tsrs_ast::Kind::Count as usize + 1];
         count_kinds(file.as_node(), &mut counts);
-        let _ = write!(out, "{checker}\t{seconds:.6}\t{}\t{}\t{}\t{}\t", file.node_count.get(), file.text().len(), file.imports().len(), file.file_name());
+        let _ = write!(out, "{checker}\t{seconds:.6}\t{cpu:.6}\t{}\t{}\t{}\t{}\t", file.node_count.get(), file.text().len(), file.imports().len(), file.file_name());
         for (kind, &count) in counts.iter().enumerate().filter(|(_, &c)| c > 0) {
             let _ = write!(out, "{:?}={count} ", tsrs_ast::Kind::from_i16(kind as i16));
         }
@@ -628,10 +628,11 @@ impl checkerPool {
             for (i, &file) in files.iter().enumerate() {
                 if state.file_associations.get(&file) == Some(&checker_idx) {
                     let file_start = file_times.then(std::time::Instant::now);
-                    let cpu_start = if cost_cache { thread_cpu_seconds() } else { 0.0 };
+                    let cpu_start = if cost_cache || file_times { thread_cpu_seconds() } else { 0.0 };
                     cb(&mut guard, i, file);
                     if let Some(file_start) = file_start {
-                        state.file_times.lock().unwrap().push((file, checker_idx, file_start.elapsed().as_secs_f64()));
+                        let cpu = thread_cpu_seconds() - cpu_start;
+                        state.file_times.lock().unwrap().push((file, checker_idx, file_start.elapsed().as_secs_f64(), cpu));
                     }
                     if cost_cache {
                         file_cpu.push((file, thread_cpu_seconds() - cpu_start));
@@ -1095,6 +1096,10 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
 // processes; 0 for declaration and JSON files that are not type checked (skipLibCheck / skipDefaultLibCheck;
 // JSON files are never checked): no checker does work for them. Other source files keep their weight even
 // when not type checked (noCheck, JS without checkJs), since declaration diagnostics still use their checker.
+// Go's 4x source multiplier separates checked sources from declaration files that are mostly not checked; here
+// unchecked files already weigh 0, so declaration files that are checked (no skipLibCheck) get it too. Measured
+// on webpack (642 checked declaration files): 393 ns of check CPU per base unit for declaration files, 536 for
+// sources; with 4 checkers the slowest checker (the one holding the lib files) went from 53% to 12% above the mean.
 fn checked_file_weights(program: &Program) -> Vec<i64> {
     let files = &program.files;
     let checked: Vec<bool> = files
@@ -1109,7 +1114,7 @@ fn checked_file_weights(program: &Program) -> Vec<i64> {
                 return 0;
             }
             let base = get_checker_association_base_weight(f.node_count.get() as i64, f.text().len() as i64);
-            if f.is_declaration_file.get() { base } else { base * CHECKER_ASSOCIATION_SOURCE_FILE_WEIGHT_MULTIPLIER }
+            base * CHECKER_ASSOCIATION_SOURCE_FILE_WEIGHT_MULTIPLIER
         })
         .collect();
     let import_counts: Vec<i64> = files.iter().enumerate().map(|(i, f)| if checked[i] { f.imports().len() as i64 } else { 0 }).collect();
