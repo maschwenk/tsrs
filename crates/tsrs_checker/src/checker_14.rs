@@ -462,21 +462,31 @@ impl Checker {
                     {
                         return;
                     }
-                    let res = find_many_ancestors(
-                        location,
-                        &mut [
-                            &mut |n| is_meta_property(n),
-                            &mut |n| is_decorator(n),
-                            &mut |n| is_for_in_or_of_statement(n),
-                            &mut |n| is_computed_property_name(n),
-                            &mut |n| is_heritage_clause(n),
-                        ],
-                    );
-                    let meta_property = res[0];
-                    let decorator = res[1];
-                    let for_node = res[2];
-                    let computed_name = res[3];
-                    let heritage_clause = res[4];
+                    // Go: ast.FindManyAncestors(location, IsMetaProperty, IsDecorator, IsForInOrOfStatement,
+                    // IsComputedPropertyName, IsHeritageClause). The predicates test disjoint kinds, so one walk with a
+                    // `match` finds the same nearest ancestors (this runs for every identifier emit visits).
+                    let (mut meta_property, mut decorator, mut for_node, mut computed_name, mut heritage_clause) = (None, None, None, None, None);
+                    let mut ancestor = Some(location);
+                    while let Some(n) = ancestor {
+                        let slot = match n.kind() {
+                            Kind::MetaProperty => &mut meta_property,
+                            Kind::Decorator => &mut decorator,
+                            Kind::ForInStatement | Kind::ForOfStatement => &mut for_node,
+                            Kind::ComputedPropertyName => &mut computed_name,
+                            Kind::HeritageClause => &mut heritage_clause,
+                            _ => {
+                                ancestor = n.parent();
+                                continue;
+                            }
+                        };
+                        if slot.is_none() {
+                            *slot = Some(n);
+                            if meta_property.is_some() && decorator.is_some() && for_node.is_some() && computed_name.is_some() && heritage_clause.is_some() {
+                                break;
+                            }
+                        }
+                        ancestor = n.parent();
+                    }
                     if meta_property.is_some() {
                         return; // identifiers in meta properties shouldn't be resolved, but are expressions, so must be filtered
                     }
