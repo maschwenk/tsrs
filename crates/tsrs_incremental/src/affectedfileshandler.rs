@@ -6,6 +6,7 @@
 // time with one emit per level, which runs each checker's files on that checker's thread (getFilesAffectedBy).
 
 use std::cell::{Cell, RefCell};
+use std::sync::OnceLock;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, SourceFile, SymbolFlags};
@@ -18,6 +19,10 @@ use crate::program::{Program, SignatureUpdateKind};
 use crate::snapshot::{get_file_emit_kind, FileEmitKind};
 
 type dtsMayChange = RefCell<FxHashMap<Path, FileEmitKind>>;
+
+// The hub-edit shortcut applies when the files an edit re-checks are at least this share of the program's files
+// outside the default library (affectedFilesHandler::hub_shortcut_allowed).
+const HUB_SHORTCUT_MIN_PERCENT: usize = 50;
 
 fn add_file_to_affected_files_pending_emit(c: &dtsMayChange, file_path: Path, emit_kind: FileEmitKind) {
     c.borrow_mut().insert(file_path, emit_kind);
@@ -127,6 +132,50 @@ impl affectedFilesHandler<'_> {
         !self.updated_signatures.borrow().contains_key(file.path()) && !file.is_declaration_file() && !ast::is_json_source_file(file)
     }
 
+    // Hub-edit shortcut, a departure from Go (notes/perf-hub-edit-shortcut.md). Once a changed file's own signature
+    // changed, the files whose diagnostics are dropped are its whole referenced-by closure, whatever the propagated
+    // signatures turn out to be; those only decide the signatures stored for the visited files. When the closure is
+    // most of the program, the visited files store their version as signature, as Go does for the rest of the
+    // closure, instead of computing a declaration signature each. Same diagnostics; the stored signatures differ from
+    // tsgo's. Only without any emit, where nothing else reads them, and never under the options that take other
+    // branches below. `TSRS_HUB_SHORTCUT=0` restores Go's behavior.
+    fn hub_shortcut_allowed(&self) -> bool {
+        static ENABLED: OnceLock<bool> = OnceLock::new();
+        let options = self.program.snapshot.options();
+        *ENABLED.get_or_init(|| std::env::var("TSRS_HUB_SHORTCUT").map_or(true, |v| v != "0"))
+            && options.no_emit.is_true()
+            && !options.composite.is_true()
+            && !options.build.is_true()
+            && !options.assume_changes_only_affect_direct_dependencies.is_true()
+            && !options.isolated_modules.is_true()
+    }
+
+    // `file` and every file that references it, directly or not; and whether one of those other files affects the
+    // global scope, in which case handle_dts_may_change_of_global_scope drops the diagnostics of every file.
+    fn referenced_by_closure(&self, file: P<SourceFile>) -> (Vec<P<SourceFile>>, bool) {
+        let mut seen: FxHashSet<Path> = FxHashSet::default();
+        seen.insert(file.path().clone());
+        let mut closure = vec![file];
+        let mut reaches_global_scope = false;
+        let mut queue = self.program.snapshot.referenced_map.get_referenced_by(file.path());
+        while let Some(current_path) = queue.pop() {
+            if !seen.insert(current_path.clone()) {
+                continue;
+            }
+            reaches_global_scope |= self.program.snapshot.file_infos.load(&current_path).is_some_and(|info| info.affects_global_scope);
+            if let Some(current_file) = self.program.p().get_source_file_by_path(&current_path) {
+                closure.push(current_file);
+                queue.extend(self.program.snapshot.referenced_map.get_referenced_by(&current_path));
+            }
+        }
+        (closure, reaches_global_scope)
+    }
+
+    fn non_library_file_count(&self) -> usize {
+        let program = self.program.p();
+        program.get_source_files().iter().filter(|file| !program.is_source_file_default_library(file.path())).count()
+    }
+
     // affectedfileshandler.go:87
     fn update_shape_signature(&self, file: P<SourceFile>, use_file_version_as_signature: bool) -> bool {
         self.update_shape_signature_with(file, use_file_version_as_signature, None)
@@ -181,6 +230,18 @@ impl affectedFilesHandler<'_> {
 
         if self.program.snapshot.options().isolated_modules.is_true() {
             return vec![file];
+        }
+
+        if self.hub_shortcut_allowed() {
+            let (closure, reaches_global_scope) = self.referenced_by_closure(file);
+            let all = self.non_library_file_count();
+            let rechecked = if reaches_global_scope { all } else { closure.len() };
+            if rechecked * 100 >= all * HUB_SHORTCUT_MIN_PERCENT {
+                for &current_file in &closure {
+                    self.update_shape_signature(current_file, true);
+                }
+                return closure;
+            }
         }
 
         // Now we need to if each file in the referencedBy list has a shape change as well.
@@ -261,7 +322,7 @@ impl affectedFilesHandler<'_> {
             // When a change affects the global scope, all files are considered to be affected without updating their signature
             // That means when affected file is handled, its signature can be out of date
             // To avoid this, ensure that we update the signature for any affected file in this scenario.
-            self.update_shape_signature(affected_file, false);
+            self.update_shape_signature(affected_file, self.hub_shortcut_allowed());
             return;
         }
 
