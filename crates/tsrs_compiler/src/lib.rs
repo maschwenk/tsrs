@@ -15,6 +15,10 @@ mod includeprocessor;
 mod outputpaths;
 mod processing_diagnostic;
 mod program;
+#[cfg(feature = "checker")]
+mod program_emit;
+#[cfg(feature = "checker")]
+mod programlike;
 mod projectreferencedtsfakinghost;
 mod projectreferencefilemapper;
 mod projectreferenceparser;
@@ -24,10 +28,16 @@ mod program_test;
 mod modulespecifiers_oracle_test;
 
 pub use checkerpool::{assignment_stats_enabled, set_checker_assignment_from_cli, set_checker_cost_cache_from_cli, Checker, CheckerHandle, CheckerPool, Context, PooledChecker};
+#[cfg(feature = "checker")]
+pub use emitter::EmitOnly;
+#[cfg(feature = "checker")]
+pub use programlike::{get_diagnostics_of_any_program_like, ProgramLike};
+#[cfg(feature = "checker")]
+pub use program_emit::{combine_emit_results, handle_no_emit_options, EmitOptions, EmitResult, SourceMapEmitResult, WriteFile, WriteFileData};
 pub use file_include::FileIncludeReason;
 pub use fileloader::{DuplicateSourceFile, LibFile};
 pub use host::{new_cached_fs_compiler_host, new_compiler_host, CompilerHost, TraceFn};
 pub use program::{
-    filter_no_emit_semantic_diagnostics, free_program, get_diagnostics_of_any_program, new_program, sort_and_deduplicate_diagnostics, CreateCheckerPool,
-    CreateModuleResolver, Program, ProgramConfig, ProgramOptions,
+    filter_no_emit_semantic_diagnostics, free_program, free_unshared_program, shared_program_data, SharedProgramData, get_diagnostics_of_any_program, new_program, sort_and_deduplicate_diagnostics, CreateCheckerPool,
+    CreateModuleResolver, Program, ProgramConfig, ProgramOptions, worker_pool,
 };

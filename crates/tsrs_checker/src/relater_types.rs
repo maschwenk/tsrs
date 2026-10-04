@@ -219,7 +219,7 @@ impl Relater {
     /// `r.isRelatedToWorker` & co. as values.
     pub fn as_p(&self) -> P<Relater> {
         // SAFETY: relaters are only created with `P::new` (`Checker::get_relater`) and never freed or moved.
-        P::from_static(unsafe { &*(self as *const Relater) })
+        unsafe { P::from_arena(&*(self as *const Relater)) }
     }
 
     /// `type_comparer` over `r.isRelatedToWorker`.

@@ -1,0 +1,102 @@
+{
+  "async.eofImmediately": {
+    "exitedBeforeEOF": false,
+    "code": 0,
+    "signal": null
+  },
+  "async.garbageText": {
+    "exitedBeforeEOF": true,
+    "code": 1,
+    "signal": null
+  },
+  "async.hugeDeclaredLength": {
+    "exitedBeforeEOF": false,
+    "code": 1,
+    "signal": null
+  },
+  "async.invalidJsonBody": {
+    "exitedBeforeEOF": true,
+    "code": 1,
+    "signal": null
+  },
+  "async.invalidParamsType": {
+    "exitedBeforeEOF": false,
+    "code": 0,
+    "signal": null
+  },
+  "async.nonNumericLength": {
+    "exitedBeforeEOF": true,
+    "code": 1,
+    "signal": null
+  },
+  "async.nonObjectMessage": {
+    "exitedBeforeEOF": true,
+    "code": 1,
+    "signal": null
+  },
+  "async.truncatedBody": {
+    "exitedBeforeEOF": false,
+    "code": 1,
+    "signal": null
+  },
+  "async.unknownMethodThenEcho": {
+    "exitedBeforeEOF": false,
+    "code": 0,
+    "signal": null
+  },
+  "async.validEchoThenEOF": {
+    "exitedBeforeEOF": false,
+    "code": 0,
+    "signal": null
+  },
+  "sync.badTupleArity": {
+    "exitedBeforeEOF": true,
+    "code": 1,
+    "signal": null
+  },
+  "sync.eofImmediately": {
+    "exitedBeforeEOF": false,
+    "code": 0,
+    "signal": null
+  },
+  "sync.garbageText": {
+    "exitedBeforeEOF": true,
+    "code": 1,
+    "signal": null
+  },
+  "sync.hugeDeclaredPayload": {
+    "exitedBeforeEOF": false,
+    "code": 1,
+    "signal": null
+  },
+  "sync.invalidJsonParams": {
+    "exitedBeforeEOF": false,
+    "code": 0,
+    "signal": null
+  },
+  "sync.nonBinMethod": {
+    "exitedBeforeEOF": true,
+    "code": 1,
+    "signal": null
+  },
+  "sync.truncatedFrame": {
+    "exitedBeforeEOF": false,
+    "code": 1,
+    "signal": null
+  },
+  "sync.unknownMessageType": {
+    "exitedBeforeEOF": true,
+    "code": 1,
+    "signal": null
+  },
+  "sync.unknownMethodThenEcho": {
+    "exitedBeforeEOF": false,
+    "code": 0,
+    "signal": null
+  },
+  "sync.validEchoThenEOF": {
+    "exitedBeforeEOF": false,
+    "code": 0,
+    "signal": null
+  }
+}

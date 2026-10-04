@@ -1,0 +1,23 @@
+tsrs patch to the vendored vscode-jsonrpc 9.0.2 (MIT, vendored by microsoft/TypeScript@b85298b6a81f under
+packages/typescript/vendor/vscode-jsonrpc; applied by npm/sdk/sync-upstream.mjs, original recorded in
+npm/tsrs/UPSTREAM.json "patchedFiles").
+
+sendRequest runs inside `new Promise(async (resolve, reject) => ...)`. When writing the request fails (the API
+server died: EPIPE / "write after end"), it rejects the request's promise and then rethrows, and that rethrow
+becomes an unhandled rejection of the executor's own promise, which terminates Node (default
+--unhandled-rejections=throw). The patch drops only the rethrow; the caller still gets the rejection. Seen with
+the pinned upstream client too (tsgo or tsrs server killed with requests queued).
+
+--- a/vendor/vscode-jsonrpc/lib/common/connection.js
++++ b/vendor/vscode-jsonrpc/lib/common/connection.js
+@@ -1145,7 +1145,9 @@
+                     responsePromises.delete(id);
+                     responsePromise.reject(new messages_1.ResponseError(messages_1.ErrorCodes.MessageWriteError, error.message ? error.message : 'Unknown reason'));
+                     logger.error(`Sending request failed.`);
+-                    throw error;
++                    // tsrs patch (npm/sdk/patches/vscode-jsonrpc-send-request-write-error.patch): the request promise
++                    // is already rejected above; rethrowing from this async executor was an unhandled rejection that
++                    // crashed Node when a request was written to a server that had just died.
+                 }
+             });
+         },

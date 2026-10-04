@@ -8,7 +8,7 @@ use std::sync::{LazyLock, OnceLock};
 use bitflags::bitflags;
 
 use crate::*;
-use tsrs_core::SliceCell;
+use tsrs_core::PSliceCell;
 
 // CheckMode
 
@@ -306,11 +306,11 @@ bitflags! {
 // 1.43M contexts on the private monorepo single, so the four fields that fewer than 4% of them set (return mappers, inferred type
 // parameters, intra-expression sites) live in a tail allocated on the first non-default write (`InferenceContextRare`,
 // read through accessors that return the zero value when it is absent), and `inferences` packs with `flags`:
-// 64 bytes instead of 128.
+// 64 bytes instead of 128 (48 with compressed pointers, where `inferences` is a one-word `ThinSliceCell`).
 
 #[derive(Default)]
 pub struct InferenceContext {
-    pub inferences: SliceCell<P<InferenceInfo>>, // Inferences made for each type parameter
+    pub inferences: PSliceCell<P<InferenceInfo>>, // Inferences made for each type parameter
     pub flags: Cell<InferenceFlags>, // Inference flags
     pub signature: Cell<Option<P<Signature>>>, // Generic signature for which inferences are made (if any)
     pub compare_types: Cell<Option<TypeComparer>>, // Type comparer function
@@ -318,14 +318,14 @@ pub struct InferenceContext {
     // `non_fixing_mapper()`), see notes/mem-round3.md.
     mapper: Cell<Option<P<TypeMapper>>>,
     non_fixing_mapper: Cell<Option<P<TypeMapper>>>,
-    // The `InferenceContextRare` address (exposed provenance) with the escaped bit (`RARE_ESCAPED`) in bit 0: set
+    // The `InferenceContextRare`'s `P::to_bits` with the escaped bit (`RARE_ESCAPED`) in bit 0: set
     // when one of the context's inference mappers escapes (notes/mem-recycle.md), after which it is never recycled.
     rare: Cell<usize>,
 }
 
 const RARE_ESCAPED: usize = 1;
 
-const _: () = assert!(std::mem::size_of::<InferenceContext>() == 64);
+const _: () = assert!(std::mem::size_of::<InferenceContext>() == if tsrs_core::COMPRESSED_PTRS { 48 } else { 64 });
 
 #[derive(Default)]
 pub(crate) struct InferenceContextRare {
@@ -338,7 +338,7 @@ pub(crate) struct InferenceContextRare {
 impl InferenceContext {
     pub(crate) fn new(inferences: &'static [P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> InferenceContext {
         InferenceContext {
-            inferences: SliceCell::new(inferences),
+            inferences: PSliceCell::new(inferences),
             signature: Cell::new(signature),
             flags: Cell::new(flags),
             compare_types: Cell::new(Some(compare_types)),
@@ -349,13 +349,12 @@ impl InferenceContext {
     /// The arena handle of this context (contexts are only created in the arena and never moved).
     fn as_p(&self) -> P<InferenceContext> {
         // SAFETY: see above.
-        P::from_static(unsafe { &*(self as *const InferenceContext) })
+        unsafe { P::from_arena(&*(self as *const InferenceContext)) }
     }
 
     fn rare(&self) -> Option<P<InferenceContextRare>> {
-        let a = self.rare.get() & !RARE_ESCAPED;
-        // SAFETY: a non-zero address was stored from a live `P<InferenceContextRare>` (`rare_for_write`).
-        (a != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<InferenceContextRare>(a) }))
+        // SAFETY: nonzero bits were stored from a live `P<InferenceContextRare>` (`rare_for_write`).
+        unsafe { P::from_bits_opt(self.rare.get() & !RARE_ESCAPED) }
     }
 
     /// Whether one of the context's inference mappers escaped (it may be used after its creator is done).
@@ -416,8 +415,7 @@ impl InferenceContext {
             Some(rare) => rare,
             None => {
                 let rare = P::new_recycled(InferenceContextRare::default());
-                let addr = (rare.get() as *const InferenceContextRare).expose_provenance();
-                self.rare.set(addr | (self.rare.get() & RARE_ESCAPED));
+                self.rare.set(rare.to_bits() | (self.rare.get() & RARE_ESCAPED));
                 rare
             }
         }
@@ -560,7 +558,7 @@ pub struct InferenceInfo {
     pub implied_arity: Cell<i32>, // Implied arity (or -1)
 }
 
-const _: () = assert!(std::mem::size_of::<InferenceInfo>() == 48);
+const _: () = assert!(std::mem::size_of::<InferenceInfo>() == if tsrs_core::COMPRESSED_PTRS { 28 } else { 48 });
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
@@ -1221,12 +1219,21 @@ pub struct Checker {
     pub scratch_mappers: Vec<P<TypeMapper>>,
     pub scratch_contexts: Vec<P<InferenceContext>>,
     pub free_type_mapper_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
+    pub free_type_lists: Vec<Vec<P<Type>>>, // Rust-only: empty buffers for `instantiate_types_changed`
     pub ambient_modules_once: bool, // Go sync.Once: true once ambient_modules has been computed
     pub ambient_modules: Vec<P<Symbol>>,
     pub within_unreachable_code: bool,
     pub reported_unreachable_nodes: Set<P<Node>>,
     pub non_existent_properties: Set<NonExistentPropertyKey>,
     pub deferred_diagnostic_callbacks: Vec<Box<dyn FnOnce(&mut Checker)>>,
+    /// tsrs-only: export tables indexed by resolved target, for `get_alias_for_symbol_in_container` (printer.rs).
+    pub exports_by_target_index: FxHashMap<P<SymbolTable>, crate::printer::ExportsByTarget>,
+    /// tsrs-only: the external modules by what they export, for `get_alternative_containing_modules` (printer.rs).
+    pub module_export_index: crate::printer::ModuleExportIndex,
+    /// tsrs-only: the caches above are bypassed while this is nonzero: one per `resolve_alias` and module export
+    /// table computation in progress, plus one until `initialize_checker` has merged the global and augmentation
+    /// symbol tables.
+    pub alias_cache_blockers: u32,
     /// The placeholder that `P<Type>` fields hold until Go would assign them (Go nil). Compare against it where Go
     /// tests such a field against nil (`c.globalObjectType != nil`).
     pub unassigned_type: P<Type>,
@@ -1578,12 +1585,16 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         scratch_mappers: Vec::new(),
         scratch_contexts: Vec::new(),
         free_type_mapper_caches: Vec::new(),
+        free_type_lists: Vec::new(),
         ambient_modules_once: false,
         ambient_modules: Vec::new(),
         within_unreachable_code: false,
         reported_unreachable_nodes: Set::new(),
         non_existent_properties: Set::new(),
         deferred_diagnostic_callbacks: Vec::new(),
+        exports_by_target_index: FxHashMap::default(),
+        module_export_index: Default::default(),
+        alias_cache_blockers: 1,
         unassigned_type: dummy_type,
         type_to_string_nodebuilder: None,
         emit_resolver: None,
@@ -1710,6 +1721,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         must_have_a_value_diagnostic: &diagnostics::The_type_returned_by_the_0_method_of_an_async_iterator_must_be_a_promise_for_a_type_with_a_value_property,
     });
     c.initialize_checker();
+    c.alias_cache_blockers -= 1;
     c
 }
 
@@ -1763,7 +1775,16 @@ impl Checker {
         t == self.missing_type || t.flags().intersects(TypeFlags::Union) && t.types()[0] == self.missing_type
     }
 
+    /// The worker's two cached answers inline (most calls); the worker repeats them.
+    #[inline]
     pub(crate) fn could_contain_type_variables(&mut self, t: P<Type>) -> bool {
+        if !t.flags().intersects(TypeFlags::StructuredOrInstantiable) {
+            return false;
+        }
+        let object_flags = t.object_flags();
+        if object_flags.intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
+            return object_flags.intersects(ObjectFlags::CouldContainTypeVariables);
+        }
         self.could_contain_type_variables_worker(t)
     }
 

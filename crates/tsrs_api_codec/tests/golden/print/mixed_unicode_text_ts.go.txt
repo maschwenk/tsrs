@@ -1,0 +1,23 @@
+// BOM, CRLF and non-ASCII
+const café = "na\u00EFve \u20AC \uD83D\uDE00";
+const 𝒜 = `日本 ${café} 🎉`;
+function λ() { }
+export async function run<// BOM, CRLF and non-ASCII
+T extends object>(// BOM, CRLF and non-ASCII
+a?: string, // BOM, CRLF and non-ASCII
+...rest: number[]): Promise<// BOM, CRLF and non-ASCII
+void> {
+    const // BOM, CRLF and non-ASCII
+    s = `t\u00E9\`x`;
+    if (!a)
+        return;
+    await console
+        .
+            log(// BOM, CRLF and non-ASCII
+    a, // BOM, CRLF and non-ASCII
+    ...rest);
+    // BOM, CRLF and non-ASCII
+}
+let // BOM, CRLF and non-ASCII
+café = "\uD83D\uDE00";
+// BOM, CRLF and non-ASCII

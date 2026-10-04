@@ -1,0 +1,1 @@
+{ "compilerOptions": { "incremental": true, "noEmit": true, "strict": true, "target": "esnext", "module": "nodenext", "tsBuildInfoFile": "./out/tsconfig.tsbuildinfo" }, "include": ["src"] }

@@ -619,17 +619,22 @@ impl Checker {
             return extended_containers.to_vec();
         }
         // No results from files already being imported by this file - expand search (expensive, but not location-specific, so cached)
-        let other_files = self.program.source_files();
-        for &file in other_files {
-            if !ast::is_external_module(file) {
-                continue;
+        match self.modules_exporting(symbol) {
+            Some(found) => results = found,
+            None => {
+                let other_files = self.program.source_files();
+                for &file in other_files {
+                    if !ast::is_external_module(file) {
+                        continue;
+                    }
+                    let sym = self.get_symbol_of_declaration(file.as_node()).unwrap();
+                    let ref_ = self.get_alias_for_symbol_in_container(sym, symbol);
+                    if ref_.is_none() {
+                        continue;
+                    }
+                    results.push(sym);
+                }
             }
-            let sym = self.get_symbol_of_declaration(file.as_node()).unwrap();
-            let ref_ = self.get_alias_for_symbol_in_container(sym, symbol);
-            if ref_.is_none() {
-                continue;
-            }
-            results.push(sym);
         }
         links.extended_containers.set(Some(alloc_slice(&results)));
         results
@@ -801,9 +806,11 @@ impl Checker {
         }
         let mut candidates: Vec<P<Symbol>> = Vec::new();
         if let Some(exports) = exports {
-            for exported in exports.values() {
-                if self.get_symbol_if_same_reference(exported, symbol).is_some() {
-                    candidates.push(exported);
+            if !self.exports_by_target(exports, symbol, &mut candidates) {
+                for exported in exports.values() {
+                    if self.get_symbol_if_same_reference(exported, symbol).is_some() {
+                        candidates.push(exported);
+                    }
                 }
             }
         }
@@ -812,6 +819,144 @@ impl Checker {
             return Some(candidates[0]);
         }
         None
+    }
+
+    // tsrs-only: the loop over every external module of the program in getAlternativeContainingModules: the module
+    // symbols `m` (in program order) for which `get_alias_for_symbol_in_container(m, symbol)` is not nil. The cache
+    // misses for every fresh (instantiated) symbol, so declaration emit ran that loop thousands of times over the
+    // 38k files of the private monorepo (97M calls for one edit of a widely imported file).
+    //
+    // For a module whose answer no longer has side effects, the answer is decided by data that is fixed: it is not
+    // nil iff `m` is `symbol`'s parent, or `m`'s `export=` entry or an entry of its export table resolves (merged) to
+    // `symbol`'s merged resolved target. Such a module is "summarized": its targets go into a reverse index. That
+    // holds once its export table is final (cached in the module links with no export resolution in progress, so
+    // nothing can replace it), `exports_by_target` has indexed that table (every entry resolved) and its `export=`
+    // entry is resolved. Modules not summarized yet are asked in program order exactly as the loop does (which may
+    // summarize them); summarized ones are pure to ask and are answered from the index. `symbol`'s own target is
+    // computed up front, so this is only used when that has no side effects either (not an alias with an unresolved
+    // target), and not while an alias resolution is in progress (None: the caller runs the loop).
+    fn modules_exporting(&mut self, symbol: P<Symbol>) -> Option<Vec<P<Symbol>>> {
+        if self.alias_cache_blockers != 0 {
+            return None;
+        }
+        let merged = self.get_merged_symbol(symbol);
+        if merged.flags().intersects(SymbolFlags::Alias) && self.alias_symbol_links.get(merged).alias_target.get().is_none() {
+            return None;
+        }
+        let target = self.get_symbol_target_for_alias_lookup(symbol);
+        let files = self.program.source_files();
+        if !self.module_export_index.started {
+            self.module_export_index.started = true;
+            self.module_export_index.pending = (0..files.len() as u32).filter(|&i| ast::is_external_module(files[i as usize])).collect();
+        }
+        let mut found: Vec<u32> = Vec::new();
+        let pending = std::mem::take(&mut self.module_export_index.pending);
+        let mut still_pending = Vec::with_capacity(pending.len());
+        for i in pending {
+            let sym = self.get_symbol_of_declaration(files[i as usize].as_node()).unwrap();
+            if self.get_alias_for_symbol_in_container(sym, symbol).is_some() {
+                found.push(i);
+            }
+            if !self.summarize_module_exports(i, sym) {
+                still_pending.push(i);
+            }
+        }
+        self.module_export_index.pending = still_pending;
+        if self.alias_cache_blockers != 0 {
+            // Unreachable as long as resolutions finish before returning; keep the loop's answer otherwise.
+            return None;
+        }
+        if let Some(files_with_target) = self.module_export_index.by_target.get(&target) {
+            found.extend(files_with_target.iter().copied());
+        }
+        if let Some(parent) = self.get_parent_of_symbol(symbol) {
+            if let Some(&i) = self.module_export_index.by_symbol.get(&parent) {
+                found.push(i);
+            }
+        }
+        found.sort_unstable();
+        found.dedup();
+        Some(found.into_iter().map(|i| self.get_symbol_of_declaration(files[i as usize].as_node()).unwrap()).collect())
+    }
+
+    // See modules_exporting; true when module `i` (symbol `sym`) is summarized.
+    fn summarize_module_exports(&mut self, i: u32, sym: P<Symbol>) -> bool {
+        if self.alias_cache_blockers != 0 || !sym.flags().intersects(SymbolFlags::Module) || sym.flags().intersects(SymbolFlags::LateBindingContainer) {
+            return false;
+        }
+        let Some(table) = self.module_symbol_links.get(sym).resolved_exports.get() else { return false };
+        let Some(index) = self.exports_by_target_index.get(&table) else { return false };
+        if index.len != table.len() {
+            return false;
+        }
+        let mut targets: Vec<P<Symbol>> = index.by_target.keys().copied().collect();
+        if let Some(export_equals) = sym.exports().and_then(|exports| exports.lookup(InternalSymbolNameExportEquals)) {
+            let merged = self.get_merged_symbol(export_equals);
+            if merged.flags().intersects(SymbolFlags::Alias) && self.alias_symbol_links.get(merged).alias_target.get().is_none() {
+                return false;
+            }
+            targets.push(self.get_symbol_target_for_alias_lookup(export_equals));
+        }
+        for t in targets {
+            let files = self.module_export_index.by_target.entry(t).or_default();
+            if files.last() != Some(&i) {
+                files.push(i);
+            }
+        }
+        self.module_export_index.by_symbol.insert(sym, i);
+        true
+    }
+
+    // tsrs-only: the loop of getAliasForSymbolInContainer, answered from an index of the export table by resolved
+    // target (`exported` is a candidate iff `get_symbol_if_same_reference(exported, symbol)`, i.e. their merged
+    // resolved targets are equal). Declaration emit runs that loop ~100M times for one edit of a widely imported file
+    // in the 38k-file codebase, mostly with fresh (instantiated) symbols over the same few tables. Pushes the
+    // candidates in table order, as the loop does, and returns false when the loop has to run instead:
+    // - while an alias resolution is in progress or the checker is initializing (`alias_cache_blockers`): a target
+    //   seen then may be provisional, and initialization replaces table entries;
+    // - for a table whose size changed since it was indexed (late-bound and module export tables are replaced, not
+    //   grown, when their resolution finishes; the size check is a guard).
+    // The first indexing resolves the entries in the loop's order (first entry, `symbol`, the rest); repeats only
+    // read alias targets that are cached by then, as the loop's repeats do.
+    fn exports_by_target(&mut self, exports: P<SymbolTable>, symbol: P<Symbol>, candidates: &mut Vec<P<Symbol>>) -> bool {
+        if self.alias_cache_blockers != 0 {
+            return false;
+        }
+        let len = exports.len();
+        let indexed = self.exports_by_target_index.get(&exports).is_some_and(|index| index.len == len);
+        let target = if indexed {
+            if len == 0 {
+                return true;
+            }
+            self.get_symbol_target_for_alias_lookup(symbol)
+        } else {
+            let entries = exports.values();
+            let mut by_target: FxHashMap<P<Symbol>, Vec<P<Symbol>>> = FxHashMap::default();
+            let mut target = None;
+            for (i, &exported) in entries.iter().enumerate() {
+                let a = self.get_symbol_target_for_alias_lookup(exported);
+                if i == 0 {
+                    target = Some(self.get_symbol_target_for_alias_lookup(symbol));
+                }
+                by_target.entry(a).or_default().push(exported);
+            }
+            self.exports_by_target_index.insert(exports, ExportsByTarget { len, by_target });
+            match target {
+                Some(target) => target,
+                None => return true,
+            }
+        };
+        if let Some(found) = self.exports_by_target_index.get(&exports).and_then(|index| index.by_target.get(&target)) {
+            candidates.extend(found.iter().copied());
+        }
+        true
+    }
+
+    // One side of get_symbol_if_same_reference.
+    fn get_symbol_target_for_alias_lookup(&mut self, s: P<Symbol>) -> P<Symbol> {
+        let m = self.get_merged_symbol(s);
+        let r = self.resolve_symbol(m);
+        self.get_merged_symbol(r)
     }
 
     // symbolaccessibility.go:373
@@ -1463,4 +1608,22 @@ impl SymbolTrackerImpl {
         };
         inner.pop_error_fallback_node();
     }
+}
+
+/// tsrs-only: which external modules export what (`Checker::modules_exporting`).
+#[derive(Default)]
+pub struct ModuleExportIndex {
+    started: bool,
+    /// Program file indices of the external modules not summarized yet, in program order.
+    pending: Vec<u32>,
+    /// Merged resolved target -> the summarized modules (file indices) with an entry resolving to it.
+    by_target: FxHashMap<P<Symbol>, Vec<u32>>,
+    /// Summarized module symbol -> its file index.
+    by_symbol: FxHashMap<P<Symbol>, u32>,
+}
+
+/// An export table indexed by the merged resolved target of each entry (`Checker::exports_by_target`).
+pub struct ExportsByTarget {
+    len: usize,
+    by_target: FxHashMap<P<Symbol>, Vec<P<Symbol>>>,
 }

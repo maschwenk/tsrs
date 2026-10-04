@@ -1,0 +1,1 @@
+{ "compilerOptions": { "composite": true, "emitDeclarationOnly": true, "outDir": "dist" }, "references": [{"path":"../y"}] }

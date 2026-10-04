@@ -398,7 +398,7 @@ impl DefaultResolver {
                 result = state.resolve_node_like();
                 trace_builder = state.tracer.take();
             }
-            _ => panic!("Unexpected moduleResolution: {}", module_resolution as i32),
+            _ => panic!("Unexpected moduleResolution: {}", module_resolution.value()),
         }
 
         if let Some(t) = trace_builder.as_mut() {

@@ -4,7 +4,7 @@ use std::sync::atomic::AtomicU32;
 
 use hashbrown::HashTable;
 use rustc_hash::FxBuildHasher;
-use tsrs_core::{FrozenCell, OwnedCell, OwnedSliceCell, OwnedStrCell, P};
+use tsrs_core::{FrozenCell, OwnedCell, OwnedPSliceCell, OwnedTaggedStrCell, PKey, P};
 
 use crate::ast::{Node, SourceFile};
 use crate::checkflags::CheckFlags;
@@ -17,23 +17,23 @@ use crate::*;
 // Go's `Symbol` holds `Members`, `Exports` and `ExportSymbol` inline. Few symbols have any of them (on the private monorepo 5%
 // of 15.3M: binder symbols of classes, interfaces, modules and exported locals; almost no transient symbols), so
 // they live in a tail allocated on the first write of a non-nil value (`members()` / `set_members()` & co.).
-// Reads of an absent tail return nil, like the unset Go field. The tail pointer shares a word with `parent`
-// (`SymbolParentWord`): the word holds the parent until a tail exists, then the tail (which holds the parent).
+// Reads of an absent tail return nil, like the unset Go field. The tail shares a field with `parent`
+// (`parent_or_tables`): the field holds the parent until a tail exists, then the tail (which holds the parent).
 // `ValueDeclaration` is the first declaration in 82% of the symbols and nil in 17.5% (on the private monorepo:
-// 10.88M / 2.31M of 13.2M; another node in 23K), so a bit of that word says "the first declaration" and only
-// another node is kept in the tail (`value_declaration()` / `set_value_declaration()`; a declarations write that
-// replaces the first declaration moves it to the tail first). `name` is a `PackedStr` (pointer and length in one
-// word), `declarations` a 4-byte-aligned (pointer, `u32` length) pair packed with the two flag words and the `u32`
-// id: 40 bytes.
+// 10.88M / 2.31M of 13.2M; another node in 23K), so a bit says "the first declaration" and only another node is
+// kept in the tail (`value_declaration()` / `set_value_declaration()`; a declarations write that replaces the
+// first declaration moves it to the tail first). Both bits (`TAG_TABLES`, `TAG_VALUE_FIRST`) are the tag bits of
+// the name word (`OwnedTaggedStrCell`: pointer, length and tags in one word). `declarations` is an
+// `OwnedPSliceCell`: 40 bytes, 32 with compressed pointers (handle-sized parent, 8-byte declarations).
 
 #[derive(Default)]
 pub struct Symbol {
     pub flags: OwnedCell<SymbolFlags>,
     pub check_flags: OwnedCell<CheckFlags>, // Non-zero only in transient symbols created by Checker
-    pub name: OwnedStrCell,
-    declarations: OwnedSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
-    pub(crate) id: AtomicU32,              // Go uint64; ids above u32::MAX panic in get_symbol_id
-    parent_or_tables: OwnedCell<SymbolParentWord>,
+    pub name: OwnedTaggedStrCell,
+    declarations: OwnedPSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
+    pub(crate) id: AtomicU32,               // Go uint64; ids above u32::MAX panic in get_symbol_id
+    parent_or_tables: OwnedCell<PKey>,      // `P::key` of the parent or (with `TAG_TABLES`) of the tail; 0 = none
 }
 
 #[derive(Default)]
@@ -45,69 +45,23 @@ struct SymbolTables {
     value_declaration: OwnedCell<Option<P<Node>>>, // when it is not the first declaration
 }
 
-const _: () = assert!(std::mem::size_of::<Symbol>() == 40);
+const _: () = assert!(std::mem::size_of::<Symbol>() == if tsrs_core::COMPRESSED_PTRS { 32 } else { 40 });
 
-/// Census builds: the parent word keeps flag bits above the address (`crate::census_layouts`).
+/// `parent_or_tables` holds the `SymbolTables` tail.
+const TAG_TABLES: u8 = 1;
+/// The value declaration is the first declaration.
+const TAG_VALUE_FIRST: u8 = 2;
+
+/// Census builds: the name word keeps its length and tag bits above the address (`crate::census_layouts`).
 pub(crate) fn census_layout() {
-    let off = std::mem::offset_of!(Symbol, parent_or_tables);
+    let off = std::mem::offset_of!(Symbol, name);
     tsrs_core::census_layout(std::any::type_name::<Symbol>(), &[tsrs_core::CensusField::Tagged { off }]);
-}
-
-/// `Symbol.parent` or, once the symbol has a `SymbolTables` tail, the tail: an address (provenance exposed when
-/// stored, recovered with `with_exposed_provenance`) in the low 48 bits (user-space addresses are below 2^48), with
-/// bit 63 set for the tail. Bit 62: the value declaration is the first declaration. 0 = no parent, no tail, no value
-/// declaration. The address part stays a plain pointer to the start of its block.
-#[derive(Clone, Copy, Default)]
-struct SymbolParentWord(u64);
-
-impl SymbolParentWord {
-    const TABLES: u64 = 1 << 63;
-    const VALUE_FIRST: u64 = 1 << 62;
-    const ADDR: u64 = (1 << 48) - 1;
-
-    #[inline]
-    fn parent(p: Option<P<Symbol>>) -> SymbolParentWord {
-        SymbolParentWord(p.map_or(0, |p| Self::addr(p.get() as *const Symbol as *const u8)))
-    }
-
-    #[inline]
-    fn tables(t: P<SymbolTables>) -> SymbolParentWord {
-        SymbolParentWord(Self::addr(t.get() as *const SymbolTables as *const u8) | Self::TABLES)
-    }
-
-    #[inline]
-    fn addr(p: *const u8) -> u64 {
-        let addr = p.expose_provenance() as u64;
-        assert!(addr >> 48 == 0, "symbol address {addr:#x} above 2^48");
-        addr
-    }
-
-    #[inline]
-    fn get_tables(self) -> Option<P<SymbolTables>> {
-        // SAFETY: a tagged word was stored from a live `P<SymbolTables>` (arena objects are never freed or moved),
-        // whose provenance `addr` exposed.
-        (self.0 & Self::TABLES != 0).then(|| {
-            P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<SymbolTables>((self.0 & Self::ADDR) as usize) })
-        })
-    }
-
-    #[inline]
-    fn get_parent(self) -> Option<P<Symbol>> {
-        match self.get_tables() {
-            Some(t) => t.parent.get(),
-            // SAFETY: a nonzero untagged word was stored from a live `P<Symbol>`, whose provenance `addr` exposed.
-            None => {
-                let addr = self.0 & Self::ADDR;
-                (addr != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(addr as usize) }))
-            }
-        }
-    }
 }
 
 impl Symbol {
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).
     pub fn new(flags: SymbolFlags, name: &'static str) -> P<Symbol> {
-        P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedStrCell::new(name), ..Default::default() })
+        P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedTaggedStrCell::new(name), ..Default::default() })
     }
 
     #[inline]
@@ -137,11 +91,11 @@ impl Symbol {
     }
     /// Go `symbol.Declarations = declarations` (shares the slice).
     pub fn set_declarations_static(&self, declarations: &'static [P<Node>]) {
-        let word = self.parent_or_tables.get();
-        if word.0 & SymbolParentWord::VALUE_FIRST != 0 {
+        let tags = self.name.tags();
+        if tags & TAG_VALUE_FIRST != 0 {
             let value_declaration = self.declarations.get()[0];
             if declarations.first() != Some(&value_declaration) {
-                self.parent_or_tables.set(SymbolParentWord(word.0 & !SymbolParentWord::VALUE_FIRST));
+                self.name.set_tags(tags & !TAG_VALUE_FIRST);
                 self.tables_for_write().value_declaration.set(Some(value_declaration));
             }
         }
@@ -159,42 +113,42 @@ impl Symbol {
     }
     #[inline]
     pub fn value_declaration(&self) -> Option<P<Node>> {
-        let word = self.parent_or_tables.get();
-        if word.0 & SymbolParentWord::VALUE_FIRST != 0 {
+        if self.name.tags() & TAG_VALUE_FIRST != 0 {
             let declarations = self.declarations.get();
             debug_assert!(!declarations.is_empty());
             // SAFETY: the bit is set only while the declarations are non-empty (`set_value_declaration`,
             // `set_declarations_static`).
             return Some(unsafe { *declarations.get_unchecked(0) });
         }
-        word.get_tables().and_then(|t| t.value_declaration.get())
+        self.tables().and_then(|t| t.value_declaration.get())
     }
     pub fn set_value_declaration(&self, value_declaration: Option<P<Node>>) {
-        let word = self.parent_or_tables.get();
+        let tags = self.name.tags();
         if value_declaration.is_some() && self.declarations.get().first().copied() == value_declaration {
-            self.parent_or_tables.set(SymbolParentWord(word.0 | SymbolParentWord::VALUE_FIRST));
-            if let Some(tables) = word.get_tables() {
+            self.name.set_tags(tags | TAG_VALUE_FIRST);
+            if let Some(tables) = self.tables() {
                 tables.value_declaration.set(None);
             }
             return;
         }
-        self.parent_or_tables.set(SymbolParentWord(word.0 & !SymbolParentWord::VALUE_FIRST));
-        if value_declaration.is_some() || word.get_tables().is_some() {
+        self.name.set_tags(tags & !TAG_VALUE_FIRST);
+        if value_declaration.is_some() || self.tables().is_some() {
             self.tables_for_write().value_declaration.set(value_declaration);
         }
     }
     #[inline]
     fn tables(&self) -> Option<P<SymbolTables>> {
-        self.parent_or_tables.get().get_tables()
+        // SAFETY: with the tag, the field holds the key of the tail made by `tables_for_write` (never freed).
+        (self.name.tags() & TAG_TABLES != 0).then(|| unsafe { P::from_key(self.parent_or_tables.get()) })
     }
     #[inline]
     fn tables_for_write(&self) -> P<SymbolTables> {
-        let word = self.parent_or_tables.get();
-        match word.get_tables() {
+        match self.tables() {
             Some(tables) => tables,
             None => {
-                let tables = P::new(SymbolTables { parent: OwnedCell::new(word.get_parent()), ..Default::default() });
-                self.parent_or_tables.set(SymbolParentWord(SymbolParentWord::tables(tables).0 | word.0 & SymbolParentWord::VALUE_FIRST));
+                let tables = P::new(SymbolTables { parent: OwnedCell::new(self.parent()), ..Default::default() });
+                self.parent_or_tables.set(tables.key());
+                self.name.set_tags(self.name.tags() | TAG_TABLES);
                 tables
             }
         }
@@ -221,14 +175,17 @@ impl Symbol {
     }
     #[inline]
     pub fn parent(&self) -> Option<P<Symbol>> {
-        self.parent_or_tables.get().get_parent()
+        match self.tables() {
+            Some(tables) => tables.parent.get(),
+            // SAFETY: without the tag, the field is 0 or the key of the parent (a live symbol).
+            None => unsafe { P::from_key_opt(self.parent_or_tables.get()) },
+        }
     }
     #[inline]
     pub fn set_parent(&self, parent: Option<P<Symbol>>) {
-        let word = self.parent_or_tables.get();
-        match word.get_tables() {
+        match self.tables() {
             Some(tables) => tables.parent.set(parent),
-            None => self.parent_or_tables.set(SymbolParentWord(SymbolParentWord::parent(parent).0 | word.0 & SymbolParentWord::VALUE_FIRST)),
+            None => self.parent_or_tables.set(P::key_opt(parent)),
         }
     }
     #[inline]
@@ -312,7 +269,7 @@ const SYMBOL_TABLE_LINEAR_MAX: usize = 16;
 #[derive(Default, Clone)]
 struct SymbolMap {
     entries: EntryVec,
-    extra: Option<Box<SymbolMapExtra>>,
+    extra: ExtraSlot,
 }
 
 const _: () = assert!(std::mem::size_of::<SymbolMap>() == 24);
@@ -428,11 +385,9 @@ impl Drop for EntryVec {
 unsafe impl Send for EntryVec {}
 unsafe impl Sync for EntryVec {}
 
-/// One word: the symbol's address / 8 in the low 45 bits (symbols are 8-aligned and user-space addresses are below
-/// 2^48; checked on store), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
+/// One word: the symbol in the low 45 bits (`P::pack`), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
 /// and the top 12 bits of `hash_name(key)`. 8 bytes instead of 16 (pointer + 32-bit hash + length): symbol table
-/// entries are 465 MB of capacity on the private monorepo. The symbol's provenance is exposed on store and recovered with
-/// `with_exposed_provenance`.
+/// entries are 465 MB of capacity on the private monorepo.
 #[derive(Clone, Copy)]
 struct SymbolMapEntry(u64);
 
@@ -463,7 +418,7 @@ impl KeyPrint {
 }
 
 impl SymbolMapEntry {
-    const ADDR_BITS: u32 = 45;
+    const ADDR_BITS: u32 = tsrs_core::PACK_BITS;
     const ADDR_MASK: u64 = (1 << Self::ADDR_BITS) - 1;
     const ODD_BIT: u64 = 1 << Self::ADDR_BITS;
     const LEN_SHIFT: u32 = Self::ADDR_BITS + 1;
@@ -473,9 +428,7 @@ impl SymbolMapEntry {
 
     #[inline]
     fn addr_bits(symbol: P<Symbol>) -> u64 {
-        let addr = (symbol.get() as *const Symbol).expose_provenance() as u64;
-        assert!(addr & 7 == 0 && addr >> (Self::ADDR_BITS + 3) == 0, "symbol address {addr:#x} does not fit a symbol table entry");
-        addr >> 3
+        symbol.pack()
     }
 
     #[inline]
@@ -485,10 +438,8 @@ impl SymbolMapEntry {
 
     #[inline]
     fn symbol(self) -> P<Symbol> {
-        let addr = ((self.0 & Self::ADDR_MASK) << 3) as usize;
-        // SAFETY: the address was stored from a live `P<Symbol>` (arena symbols are never freed or moved), whose
-        // provenance `addr_bits` exposed.
-        P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(addr) })
+        // SAFETY: the low bits were stored from a live `P<Symbol>` (arena symbols are never freed or moved).
+        unsafe { P::unpack(self.0) }
     }
 
     #[inline]
@@ -518,6 +469,99 @@ struct SymbolMapExtra {
     odd_keys: Vec<(u32, &'static str)>, // (position, key) of the entries whose key is not their symbol's name
 }
 
+/// `SymbolMap::extra`: one word holding either a boxed `SymbolMapExtra` (an even address) or, in a table without
+/// one (a linear table whose keys are all their symbols' names: nearly every table), a 64-bit Bloom filter of its
+/// keys' hashes (two bits per key) whose bit 0 is set as the tag. A lookup the filter rejects returns without
+/// reading the entries, which are a second cache line: over half of all lookups are misses in small tables
+/// (a property lookup tries each type on the apparent-type chain, down to `Object`'s members), and the entries of
+/// a table looked up once in a while are rarely in cache. Deleting a key leaves its bits set (a superset is still
+/// a valid filter).
+struct ExtraSlot(*mut SymbolMapExtra);
+
+impl ExtraSlot {
+    const EMPTY_FILTER: usize = 1;
+
+    #[inline]
+    fn boxed(extra: SymbolMapExtra) -> ExtraSlot {
+        ExtraSlot(Box::into_raw(Box::new(extra)))
+    }
+
+    #[inline]
+    fn is_filter(&self) -> bool {
+        self.0.addr() & 1 != 0
+    }
+
+    #[inline]
+    fn get(&self) -> Option<&SymbolMapExtra> {
+        // SAFETY: an even word is the pointer `boxed` created, owned by this slot.
+        (!self.is_filter()).then(|| unsafe { &*self.0 })
+    }
+
+    #[inline]
+    fn get_mut(&mut self) -> Option<&mut SymbolMapExtra> {
+        // SAFETY: as in `get`, and `&mut self` is unique.
+        (!self.is_filter()).then(|| unsafe { &mut *self.0 })
+    }
+
+    /// The boxed extra, created (dropping the filter) when the slot holds a filter.
+    fn get_or_insert(&mut self) -> &mut SymbolMapExtra {
+        if self.is_filter() {
+            *self = ExtraSlot::boxed(SymbolMapExtra::default());
+        }
+        self.get_mut().unwrap()
+    }
+
+    #[inline]
+    fn filter_bits(hash: u32) -> usize {
+        (1usize << (hash & 63)) | (1usize << ((hash >> 6) & 63))
+    }
+
+    /// False if no key with this hash is in a table whose slot holds a filter.
+    #[inline]
+    fn may_contain(&self, hash: u32) -> bool {
+        let bits = Self::filter_bits(hash);
+        !self.is_filter() || self.0.addr() & bits == bits
+    }
+
+    #[inline]
+    fn add_to_filter(&mut self, hash: u32) {
+        if self.is_filter() {
+            self.0 = std::ptr::without_provenance_mut(self.0.addr() | Self::filter_bits(hash));
+        }
+    }
+}
+
+const _: () = assert!(usize::BITS == 64);
+
+impl Default for ExtraSlot {
+    #[inline]
+    fn default() -> ExtraSlot {
+        ExtraSlot(std::ptr::without_provenance_mut(Self::EMPTY_FILTER))
+    }
+}
+
+impl Clone for ExtraSlot {
+    fn clone(&self) -> ExtraSlot {
+        match self.get() {
+            Some(extra) => ExtraSlot::boxed(extra.clone()),
+            None => ExtraSlot(self.0),
+        }
+    }
+}
+
+impl Drop for ExtraSlot {
+    fn drop(&mut self) {
+        if !self.is_filter() {
+            // SAFETY: an even word is the pointer `boxed` created, owned by this slot.
+            drop(unsafe { Box::from_raw(self.0) });
+        }
+    }
+}
+
+// SAFETY: an `ExtraSlot` owns its `SymbolMapExtra` like a `Box` (or holds plain bits).
+unsafe impl Send for ExtraSlot {}
+unsafe impl Sync for ExtraSlot {}
+
 #[inline]
 fn hash_name(name: &str) -> u32 {
     let h = FxBuildHasher.hash_one(name);
@@ -533,14 +577,17 @@ fn index_hash(hash: u32) -> u64 {
 
 impl SymbolMap {
     fn with_capacity(n: usize) -> SymbolMap {
-        let extra = (n > SYMBOL_TABLE_LINEAR_MAX)
-            .then(|| Box::new(SymbolMapExtra { index: Some(HashTable::with_capacity(n)), odd_keys: Vec::new() }));
+        let extra = if n > SYMBOL_TABLE_LINEAR_MAX {
+            ExtraSlot::boxed(SymbolMapExtra { index: Some(HashTable::with_capacity(n)), odd_keys: Vec::new() })
+        } else {
+            ExtraSlot::default()
+        };
         SymbolMap { entries: EntryVec::with_capacity(n), extra }
     }
 
     #[inline]
     fn index(&self) -> Option<&HashTable<u32>> {
-        self.extra.as_ref().and_then(|e| e.index.as_ref())
+        self.extra.get().and_then(|e| e.index.as_ref())
     }
 
     /// The stored key of entry `i`.
@@ -550,7 +597,7 @@ impl SymbolMap {
         if !e.is_odd() {
             return e.symbol().name();
         }
-        let odd_keys = &self.extra.as_ref().unwrap().odd_keys;
+        let odd_keys = &self.extra.get().unwrap().odd_keys;
         odd_keys.iter().find(|&&(j, _)| j as usize == i).unwrap().1
     }
 
@@ -570,13 +617,12 @@ impl SymbolMap {
     fn position(&self, name: &str) -> Option<usize> {
         match self.index() {
             None => {
-                // Hash the name only once an entry of the same (capped) length turns up.
-                let len = KeyPrint::len_bits(name);
-                let mut hash = None;
-                (0..self.entries.len()).find(|&i| {
-                    self.entries[i].len_bits() == len
-                        && self.entry_matches(i, name, KeyPrint { len, hash: KeyPrint::hash_bits(*hash.get_or_insert_with(|| hash_name(name))) })
-                })
+                let hash = hash_name(name);
+                if !self.extra.may_contain(hash) {
+                    return None;
+                }
+                let print = KeyPrint::of(name, hash);
+                (0..self.entries.len()).find(|&i| self.entry_matches(i, name, print))
             }
             Some(index) => {
                 let hash = hash_name(name);
@@ -588,7 +634,7 @@ impl SymbolMap {
 
     fn add_odd_key(&mut self, i: usize, key: &'static str) {
         self.entries[i].0 |= SymbolMapEntry::ODD_BIT;
-        self.extra.get_or_insert_with(Default::default).odd_keys.push((i as u32, key));
+        self.extra.get_or_insert().odd_keys.push((i as u32, key));
     }
 
     fn insert(&mut self, name: &'static str, symbol: P<Symbol>) {
@@ -610,19 +656,21 @@ impl SymbolMap {
             // symbols (locals of small functions, members of small object literals).
             self.entries.reserve_exact(1);
         }
-        self.entries.push(SymbolMapEntry::new(symbol, KeyPrint::of(name, hash_name(name))));
+        let hash = hash_name(name);
+        self.entries.push(SymbolMapEntry::new(symbol, KeyPrint::of(name, hash)));
+        self.extra.add_to_filter(hash);
         if symbol.name() != name {
             self.add_odd_key(i, name);
         }
         let len = self.entries.len();
         let has_index = self.index().is_some();
         if has_index || len > SYMBOL_TABLE_LINEAR_MAX {
-            let mut index = self.extra.as_mut().and_then(|e| e.index.take()).unwrap_or_else(|| HashTable::with_capacity(len));
+            let mut index = self.extra.get_mut().and_then(|e| e.index.take()).unwrap_or_else(|| HashTable::with_capacity(len));
             let start = if has_index { i } else { 0 };
             for j in start..len {
                 index.insert_unique(index_hash(self.entry_hash(j)), j as u32, |&m| index_hash(self.entry_hash(m as usize)));
             }
-            self.extra.get_or_insert_with(Default::default).index = Some(index);
+            self.extra.get_or_insert().index = Some(index);
         }
     }
 
@@ -631,7 +679,7 @@ impl SymbolMap {
             return;
         };
         let hash = self.entry_hash(i);
-        if let Some(extra) = &mut self.extra {
+        if let Some(extra) = self.extra.get_mut() {
             if let Some(index) = &mut extra.index {
                 if let Ok(entry) = index.find_entry(index_hash(hash), |&j| j as usize == i) {
                     entry.remove();

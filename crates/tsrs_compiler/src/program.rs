@@ -330,7 +330,7 @@ impl Program {
 
 // Parsing and binding recurse deeply on large files; Go's goroutine stacks grow on demand, so the
 // worker threads get large stacks.
-pub(crate) fn worker_pool() -> &'static rayon::ThreadPool {
+pub fn worker_pool() -> &'static rayon::ThreadPool {
     static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
     POOL.get_or_init(|| rayon::ThreadPoolBuilder::new().stack_size(256 << 20).build().unwrap())
 }
@@ -393,6 +393,60 @@ pub unsafe fn free_program(program: &'static Program) {
     drop(Box::from_raw(program as *const Program as *mut Program));
     // Per program (`resolution_host_for`); it keeps the compiler host alive.
     drop(Box::from_raw(resolution_host as *mut dyn ResolutionHost));
+}
+
+// Frees a program from `new_program` that never shared data with another version (it was not the source or the
+// result of `update_program`), including its processed-file data and project reference file mapper, which
+// `free_program` keeps because language-server program versions share them. Used for one-shot programs (the
+// native API's transpileModule / transpileDeclaration).
+//
+// # Safety
+// As `free_program`, and additionally: no other program refers to `program`'s processed files or mapper.
+pub unsafe fn free_unshared_program(program: &'static Program) {
+    let shared = shared_program_data(program);
+    free_program(program);
+    shared.free();
+}
+
+/// The data program versions share (`processed`, the project reference file mapper, the file loader's
+/// resolution host and the mapper's dts-faking host), as an address pair that can be moved into a region's
+/// `on_free` hook.
+pub struct SharedProgramData {
+    processed: usize,
+    mapper: usize,
+}
+
+/// See `SharedProgramData`.
+pub fn shared_program_data(program: &'static Program) -> SharedProgramData {
+    SharedProgramData {
+        processed: program.processed as *const processedFiles as usize,
+        mapper: program.project_reference_file_mapper as *const projectReferenceFileMapper as usize,
+    }
+}
+
+impl SharedProgramData {
+    /// # Safety
+    /// Every program that shares this data has been freed, and nothing else refers to it.
+    pub unsafe fn free(self) {
+        free_project_reference_file_mapper(self.mapper as *mut projectReferenceFileMapper);
+        drop(Box::from_raw(self.processed as *mut processedFiles));
+    }
+}
+
+/// Frees a leaked project reference file mapper with its loader and dts-faking resolution hosts.
+///
+/// # Safety
+/// `mapper` came from `Box::leak` in the file loader, and nothing refers to it or its hosts any more.
+pub(crate) unsafe fn free_project_reference_file_mapper(mapper: *mut projectReferenceFileMapper) {
+    let dts_faking_host = (*mapper).dts_faking_host.get().copied();
+    let loader_host = (*mapper).loader_host;
+    drop(Box::from_raw(mapper));
+    if let Some(h) = dts_faking_host {
+        drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
+    }
+    if let Some(h) = loader_host {
+        drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
+    }
 }
 
 impl Program {
@@ -729,6 +783,15 @@ impl Program {
         if let Some(pool) = self.compiler_checker_pool() {
             pool.for_each_checker_parallel(cb);
         }
+    }
+
+    /// Runs `cb` for every file of `files` with the file's checker, one task per checker, each visiting its files in
+    /// the order of `files` under one lock acquisition (`checkerPool::for_each_checker_group_do`). False, without
+    /// calling `cb`, when the program has no checker pool of its own.
+    pub fn for_each_checker_group(&self, files: &[P<SourceFile>], cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync) -> bool {
+        let Some(pool) = self.compiler_checker_pool() else { return false };
+        pool.for_each_checker_group_do(files, self.single_threaded(), cb);
+        true
     }
 
     // program.go:615
@@ -2007,8 +2070,11 @@ impl Program {
         self
     }
 
-    pub fn get_source_file_meta_data(&self, path: &Path) -> SourceFileMetaData {
-        self.source_file_meta_datas.get(path).cloned().unwrap_or_default()
+    /// Go returns the struct by value (sharing its strings); a reference here, so the hot callers (module mode
+    /// lookups during checking) do not copy two strings.
+    pub fn get_source_file_meta_data(&self, path: &Path) -> &SourceFileMetaData {
+        static DEFAULT: std::sync::LazyLock<SourceFileMetaData> = std::sync::LazyLock::new(SourceFileMetaData::default);
+        self.source_file_meta_datas.get(path).unwrap_or(&DEFAULT)
     }
 
     pub fn get_emit_module_format_of_file(&self, source_file: P<SourceFile>) -> ModuleKind {

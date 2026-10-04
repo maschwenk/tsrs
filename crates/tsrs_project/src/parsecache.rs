@@ -49,6 +49,42 @@ pub(crate) fn parse_cache_key_for_duplicate(file: &DuplicateSourceFile) -> Parse
 
 pub type ParseCache = RefCountCache<ParseCacheKey, P<SourceFile>, Arc<dyn FileHandle>>;
 
+/// The parse-cache references one snapshot clone takes for the programs it builds (`compilerHost::get_source_file`
+/// acquires, the program-update refs and derefs in `Project::create_program`). They are handed to the new snapshot,
+/// which releases them in `Snapshot::dispose`. If the clone unwinds before a snapshot exists (a panic while building
+/// a program, e.g. the module resolver's `Unexpected moduleResolution`), nothing else would release them: the
+/// clone rolls them back with this record so the files' regions are freed.
+#[derive(Default)]
+pub(crate) struct ParseCacheJournal(Mutex<FxHashMap<ParseCacheKey, i64>>);
+
+impl ParseCacheJournal {
+    pub(crate) fn acquire(&self, cache: &ParseCache, key: ParseCacheKey, fh: Arc<dyn FileHandle>) -> P<SourceFile> {
+        let file = cache.acquire(key.clone(), fh);
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()).entry(key).or_default() += 1;
+        file
+    }
+
+    pub(crate) fn ref_(&self, cache: &ParseCache, key: ParseCacheKey) {
+        cache.ref_(key.clone());
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()).entry(key).or_default() += 1;
+    }
+
+    pub(crate) fn deref(&self, cache: &ParseCache, key: &ParseCacheKey) {
+        cache.deref(key);
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()).entry(key.clone()).or_default() -= 1;
+    }
+
+    /// Releases every reference this clone still holds (its programs never reached a snapshot).
+    pub(crate) fn roll_back(&self, cache: &ParseCache) {
+        let held = std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner()));
+        for (key, count) in held {
+            for _ in 0..count.max(0) {
+                cache.deref(&key);
+            }
+        }
+    }
+}
+
 // parsecache.go:74
 //
 // Memory (docs/LSP.md "Memory plan for a long-lived server"): each parsed file version gets its own region; parse

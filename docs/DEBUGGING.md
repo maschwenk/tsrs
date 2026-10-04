@@ -92,8 +92,9 @@ mode (`TSRS_LAZY_MEMBERS=0`; ~30 min and ~122 GB peak for `types`). That mode's 
 
 `$PRIVATE_PROJECT`
 belongs to a working checkout of the private monorepo. Two agents have already written into it by accident (a `tsbuildinfo` from a `tsgo-ref`
-run without `--incremental false`; a bench script's results file). Rules: run only `tsrs` there, with its cwd elsewhere
-and every output path pointing into your worktree's `target/`; run `tsgo-ref` there only with `--noEmit --incremental false`;
+run without `--incremental false`; a bench script's results file). Rules: tsrs emits by default like tsc, so run both `tsrs` and
+`tsgo-ref` there only with `--noEmit --incremental false` (cwd elsewhere), or with every output path (`--outDir`,
+`--declarationDir`, `--tsBuildInfoFile`) redirected into your worktree's `target/` or `/tmp`;
 anything that writes (mutation testing, scripts that create files) uses the disposable clone at
 `$TSRS_WORK/project-clone`. Before you finish, run `git -C <pristine root> status --short`
 (read-only) and confirm it prints nothing.
@@ -105,8 +106,11 @@ parser rewinds; language-server regions; notes/mem-recycle.md, notes/lsp-mem.md)
 still points to is a use-after-free. The alloc-profile build checks that at exit: frees are recorded, never reused,
 and every freed block must be unreachable.
 
+The census decodes 48-bit words as pointers, so it needs plain pointers (compressed handles are 32-bit offsets,
+notes/mem-pointer-compression.md); a compressed build refuses `TSRS_CENSUS=1`.
+
 ```sh
-CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile
+CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile,tsrs_core/plain-ptrs
 cd $PWD/target && TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1 TSRS_CENSUS_TOP=5 \
   ./prof/release/tsrs -p $PRIVATE_PROJECT/tsconfig.json --noEmit --checkers 1 2> census.err
 grep -E "census verify \(recycling\)|strongly reachable freed blocks|violation class" census.err

@@ -81,6 +81,7 @@ impl Any {
         match v {
             Value::Null => Any::Nil,
             Value::Bool(b) => Any::Bool(*b),
+            Value::Integer(n) => Any::Float64(*n as f64),
             Value::Number(n) => Any::Float64(*n),
             Value::String(s) => Any::String(s.clone()),
             Value::Array(a) => Any::Slice(a.iter().map(Any::from_json).collect()),

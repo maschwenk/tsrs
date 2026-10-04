@@ -10,9 +10,9 @@ workspace = true
 [features]
 default = ["compiler", "checker"]
 # The Rust compiler backend (program creation, parse/bind, syntactic diagnostics).
-compiler = ["tsoptions", "dep:tsrs_compiler"]
+compiler = ["tsoptions", "dep:tsrs_compiler", "dep:tsrs_sourcemap", "dep:tsrs_scanner"]
 # Semantic diagnostics through tsrs_checker. Without it every run is --syntax-only.
-checker = ["compiler", "tsrs_compiler/checker", "dep:tsrs_checker", "dep:tsrs_scanner"]
+checker = ["compiler", "tsrs_compiler/checker", "dep:tsrs_checker", "dep:tsrs_scanner", "dep:tsrs_incremental"]
 # Option declarations from tsrs_tsoptions (instead of the oracle's options.json).
 tsoptions = ["dep:tsrs_tsoptions", "dep:tsrs_ast", "dep:tsrs_parser", "dep:tsrs_vfs"]
 # Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
@@ -28,10 +28,13 @@ tsrs_vfs = { workspace = true, optional = true }
 tsrs_tsoptions = { workspace = true, optional = true }
 tsrs_compiler = { path = "../tsrs_compiler", default-features = false, optional = true }
 tsrs_checker = { workspace = true, optional = true }
+tsrs_incremental = { workspace = true, optional = true }
 tsrs_scanner = { workspace = true, optional = true }
+tsrs_sourcemap = { workspace = true, optional = true }
 regex = "1"
 serde_json = "1"
 similar = "3"
+indexmap.workspace = true
 mimalloc = "0.1.52"
 
 [[bin]]

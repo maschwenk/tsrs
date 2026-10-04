@@ -1283,9 +1283,12 @@ impl Checker {
     pub(crate) fn get_exports_of_module(&mut self, module_symbol: P<Symbol>) -> P<SymbolTable> {
         let links = self.module_symbol_links.get(module_symbol);
         if links.resolved_exports.get().is_none() {
+            // A nested computation of the same table (export * cycles) caches its result, which this one then replaces.
+            self.alias_cache_blockers += 1;
             let (exports, type_only_export_star_map) = self.get_exports_of_module_worker(Some(module_symbol));
             links.resolved_exports.set(Some(exports));
             links.type_only_export_star_map.assign(type_only_export_star_map);
+            self.alias_cache_blockers -= 1;
         }
         links.resolved_exports.get().unwrap()
     }
@@ -1447,7 +1450,10 @@ impl Checker {
         }
         let links = self.alias_symbol_links.get(symbol);
         if links.alias_target.get().is_none() {
+            // Counted until the target is final (the circularity report below prints with the provisional target).
+            self.alias_cache_blockers += 1;
             if !self.push_type_resolution(symbol.into(), TypeSystemPropertyName::AliasTarget) {
+                self.alias_cache_blockers -= 1;
                 return self.unknown_symbol;
             }
             let node = match self.get_declaration_of_alias_symbol(symbol) {
@@ -1465,6 +1471,7 @@ impl Checker {
                 self.error(Some(node), &diagnostics::Circular_definition_of_import_alias_0, &[&name]);
                 links.alias_target.set(Some(self.unknown_symbol));
             }
+            self.alias_cache_blockers -= 1;
         }
         links.alias_target.get().unwrap()
     }

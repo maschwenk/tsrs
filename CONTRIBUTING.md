@@ -19,7 +19,7 @@ Requirements: a stable Rust toolchain, Node.js (for `npm/build.mjs`) and git.
 
 ```sh
 cargo build --release -p tsrs_cli -p tsrs_testrunner
-./target/release/tsrs -p path/to/project          # like `tsc --noEmit`
+./target/release/tsrs -p path/to/project          # like `tsc` (emits; add --noEmit to only type check)
 cargo check --workspace                           # must be 0 errors, 0 warnings (CI uses -D warnings)
 ```
 

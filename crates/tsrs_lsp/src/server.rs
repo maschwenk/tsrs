@@ -2815,6 +2815,7 @@ fn go_sprint_value(v: &lsproto::Value) -> String {
     match v {
         lsproto::Value::Null => "<nil>".to_string(),
         lsproto::Value::Bool(b) => b.to_string(),
+        lsproto::Value::Integer(n) => n.to_string(),
         lsproto::Value::Number(n) => go_format_float(*n),
         lsproto::Value::String(s) => s.clone(),
         lsproto::Value::Array(items) => format!("[{}]", items.iter().map(go_sprint_value).collect::<Vec<_>>().join(" ")),
@@ -2846,7 +2847,7 @@ fn go_type_name(v: &lsproto::Value) -> &'static str {
     match v {
         lsproto::Value::Null => "<nil>",
         lsproto::Value::Bool(_) => "bool",
-        lsproto::Value::Number(_) => "float64",
+        lsproto::Value::Number(_) | lsproto::Value::Integer(_) => "float64",
         lsproto::Value::String(_) => "string",
         lsproto::Value::Array(_) => "[]interface {}",
         lsproto::Value::Object(_) => "map[string]interface {}",

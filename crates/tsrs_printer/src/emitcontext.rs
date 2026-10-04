@@ -27,7 +27,7 @@ pub struct EmitContext {
     class_this: RefCell<FxHashMap<P<Node>, P<Node>>>,
     var_scope_stack: RefCell<Stack<Rc<RefCell<varScope>>>>,
     let_scope_stack: RefCell<Stack<Rc<RefCell<varScope>>>>,
-    emit_helpers: RefCell<OrderedSet<P<EmitHelper>>>,
+    emit_helpers: RefCell<OrderedSet<SP<EmitHelper>>>,
 }
 
 bitflags::bitflags! {
@@ -678,7 +678,7 @@ impl EmitContext {
         self.class_this.borrow_mut().insert(node, class_this);
     }
 
-    pub fn request_emit_helper(&self, helper: P<EmitHelper>) {
+    pub fn request_emit_helper(&self, helper: SP<EmitHelper>) {
         if helper.scoped {
             panic!("Cannot request a scoped emit helper");
         }
@@ -688,13 +688,13 @@ impl EmitContext {
         self.emit_helpers.borrow_mut().insert(helper);
     }
 
-    pub fn read_emit_helpers(&self) -> Vec<P<EmitHelper>> {
-        let helpers: Vec<P<EmitHelper>> = self.emit_helpers.borrow().iter().copied().collect();
+    pub fn read_emit_helpers(&self) -> Vec<SP<EmitHelper>> {
+        let helpers: Vec<SP<EmitHelper>> = self.emit_helpers.borrow().iter().copied().collect();
         self.emit_helpers.borrow_mut().clear();
         helpers
     }
 
-    pub fn add_emit_helper(&self, node: P<Node>, helper: &[P<EmitHelper>]) {
+    pub fn add_emit_helper(&self, node: P<Node>, helper: &[SP<EmitHelper>]) {
         let mut emit_nodes = self.emit_nodes.borrow_mut();
         let emit_node = emit_nodes.entry(node).or_default();
         for h in helper {
@@ -704,7 +704,7 @@ impl EmitContext {
         }
     }
 
-    pub fn get_emit_helpers(&self, node: P<Node>) -> Vec<P<EmitHelper>> {
+    pub fn get_emit_helpers(&self, node: P<Node>) -> Vec<SP<EmitHelper>> {
         if let Some(emit_node) = self.emit_nodes.borrow().get(&node) {
             return emit_node.rare().map_or_else(Vec::new, |r| r.helpers.clone());
         }
@@ -1092,7 +1092,7 @@ const _: () = assert!(std::mem::size_of::<emitNode>() == 32);
 #[derive(Clone, Default)]
 struct emitNodeRare {
     token_source_map_ranges: Option<FxHashMap<Kind, TextRange>>,
-    helpers: Vec<P<EmitHelper>>,
+    helpers: Vec<SP<EmitHelper>>,
     external_helpers_module_name: Option<P<Node>>,
     leading_comments: Vec<SynthesizedComment>,
     trailing_comments: Vec<SynthesizedComment>,

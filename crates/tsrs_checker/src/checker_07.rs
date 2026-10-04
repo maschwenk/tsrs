@@ -1980,10 +1980,16 @@ impl Checker {
     }
 
     // checker.go:14637
+    #[inline]
     pub(crate) fn get_late_bound_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol> {
         if !symbol.flags().intersects(SymbolFlags::ClassMember) || symbol.name() != InternalSymbolNameComputed {
             return symbol;
         }
+        self.get_late_bound_symbol_worker(symbol)
+    }
+
+    #[inline(never)]
+    fn get_late_bound_symbol_worker(&mut self, symbol: P<Symbol>) -> P<Symbol> {
         let links = self.late_bound_links.get(symbol);
         if links.late_symbol.get().is_none() && {
             let declarations = symbol.declarations();

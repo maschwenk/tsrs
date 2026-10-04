@@ -199,12 +199,12 @@ pub fn is_module_augmentation_external(node: P<Node>) -> bool {
     // - defined inside ambient module declaration located in the top level scope and source file not an external module
     let parent = node.parent().unwrap();
     match parent.kind() {
-        Kind::SourceFile => is_external_module(P::from_static(parent.as_source_file())),
+        Kind::SourceFile => is_external_module(parent.as_source_file_p()),
         Kind::ModuleBlock => {
             let grand_parent = parent.parent().unwrap();
             is_ambient_module(grand_parent)
                 && is_source_file(grand_parent.parent().unwrap())
-                && !is_external_module(P::from_static(grand_parent.parent().unwrap().as_source_file()))
+                && !is_external_module(grand_parent.parent().unwrap().as_source_file_p())
         }
         _ => false,
     }
@@ -1076,7 +1076,7 @@ pub fn is_const_type_reference(node: P<Node>) -> bool {
 }
 
 pub fn is_global_source_file(node: P<Node>) -> bool {
-    node.kind() == Kind::SourceFile && !is_external_or_common_js_module(P::from_static(node.as_source_file()))
+    node.kind() == Kind::SourceFile && !is_external_or_common_js_module(node.as_source_file_p())
 }
 
 pub fn get_declaration_of_kind(symbol: P<Symbol>, kind: Kind) -> Option<P<Node>> {

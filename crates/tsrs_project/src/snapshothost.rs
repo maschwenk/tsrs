@@ -125,8 +125,11 @@ impl SnapshotHost {
     ) -> Result<Arc<Snapshot>, (Arc<Snapshot>, lsproto::Error)> {
         let mut change = SnapshotChange { file_changes, ..Default::default() };
         if let Some(api_request) = &api_request {
-            change.fs = api_request.file_system.clone().map(FsRef::Host);
-            change.file_system_override = api_request.file_system.is_some();
+            change.fs = match &api_request.layered_file_system {
+                Some(layered) => Some(FsRef::Layered(layered.clone())),
+                None => api_request.file_system.clone().map(FsRef::Host),
+            };
+            change.file_system_override = change.fs.is_some();
             change.replace_file_system = api_request.replace_file_system;
         }
         change.api_request = api_request;

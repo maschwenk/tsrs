@@ -1,0 +1,188 @@
+{
+  "allowJs.result": {
+    "emitSkipped": false,
+    "diagnostics": [],
+    "emittedFiles": [
+      "/dist/lib.js",
+      "/dist/lib.d.ts",
+      "/dist/main.js",
+      "/dist/main.d.ts"
+    ]
+  },
+  "allowJs.writes": {
+    "/dist/lib.d.ts": "/**\n * @param {string} s\n * @returns {number}\n */\nexport declare function len(s: string): number;\nexport declare const answer = 42;\n",
+    "/dist/lib.js": "/**\n * @param {string} s\n * @returns {number}\n */\nexport function len(s) { return s.length; }\nexport const answer = 42;\n",
+    "/dist/main.d.ts": "export declare const n: number;\n",
+    "/dist/main.js": "import { len, answer } from \"./lib.js\";\nexport const n = len(\"abc\") + answer;\n"
+  },
+  "declOnly.result": {
+    "emitSkipped": false,
+    "diagnostics": [],
+    "emittedFiles": [
+      "/dist/helper.d.ts.map",
+      "/dist/helper.d.ts",
+      "/dist/index.d.ts.map",
+      "/dist/index.d.ts"
+    ]
+  },
+  "declOnly.writes": {
+    "/dist/helper.d.ts": "/** doubles */\nexport declare function helper(n: number): number;\n//# sourceMappingURL=helper.d.ts.map",
+    "/dist/helper.d.ts.map": "{\"version\":3,\"file\":\"helper.d.ts\",\"sourceRoot\":\"\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\"AAAA,cAAc;AACd,wBAAgB,MAAM,CAAC,CAAC,EAAE,MAAM,UAAmB\"}",
+    "/dist/index.d.ts": "export declare const value: number;\nexport declare class Box<T> {\n    item: T;\n    constructor(item: T);\n}\n//# sourceMappingURL=index.d.ts.map",
+    "/dist/index.d.ts.map": "{\"version\":3,\"file\":\"index.d.ts\",\"sourceRoot\":\"\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AACA,eAAO,MAAM,KAAK,EAAE,MAAkB,CAAC;AACvC,qBAAa,GAAG,CAAC,CAAC;IAAuB,IAAI,EAAE,CAAC;IAA1B,YAAmB,IAAI,EAAE,CAAC,EAAI;CAAE\"}"
+  },
+  "dtsInput.result": {
+    "emitSkipped": false,
+    "diagnostics": [],
+    "emittedFiles": [
+      "/dist/use.js",
+      "/dist/use.d.ts"
+    ]
+  },
+  "dtsInput.writes": {
+    "/dist/use.d.ts": "export declare const x: number;\n",
+    "/dist/use.js": "export const x = ambient + 1;\n"
+  },
+  "getDeclarationEmit": {
+    "emitSkipped": false,
+    "diagnostics": [],
+    "outputFiles": {
+      "/dist/helper.d.ts": {
+        "text": "/** doubles */\nexport declare function helper(n: number): number;\n",
+        "sourceFileName": "/src/helper.ts"
+      }
+    }
+  },
+  "getJavaScriptEmit": {
+    "emitSkipped": false,
+    "diagnostics": [],
+    "outputFiles": {
+      "/dist/index.js": {
+        "text": "import { helper } from \"./helper\";\nexport const value = helper(2);\nexport class Box {\n    item;\n    constructor(item) {\n        this.item = item;\n    }\n}\n//# sourceMappingURL=index.js.map",
+        "sourceFileName": "/src/index.ts"
+      },
+      "/dist/index.js.map": {
+        "text": "{\"version\":3,\"file\":\"index.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,UAAU,CAAC;AAClC,MAAM,CAAC,MAAM,KAAK,GAAW,MAAM,CAAC,CAAC,CAAC,CAAC;AACvC,MAAM,OAAO,GAAG;IAAyB,IAAI;IAAvB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\"}",
+        "sourceFileName": "/src/index.ts"
+      }
+    }
+  },
+  "noEmit.result": {
+    "emitSkipped": false,
+    "diagnostics": [],
+    "emittedFiles": []
+  },
+  "noEmit.writes": {},
+  "noEmitOnError.result": {
+    "emitSkipped": true,
+    "diagnostics": [
+      {
+        "fileName": "/src/bad.ts",
+        "pos": 13,
+        "end": 16,
+        "startPosition": {
+          "line": 0,
+          "character": 13
+        },
+        "endPosition": {
+          "line": 0,
+          "character": 16
+        },
+        "sourceLines": [
+          {
+            "line": 0,
+            "text": "export const bad: string = 1;\n"
+          }
+        ],
+        "code": 2322,
+        "category": 1,
+        "text": "Type 'number' is not assignable to type 'string'."
+      }
+    ],
+    "emittedFiles": []
+  },
+  "noEmitOnError.writes": {},
+  "sourceMap.result": {
+    "emitSkipped": false,
+    "diagnostics": [],
+    "emittedFiles": [
+      "/dist/helper.js.map",
+      "/dist/helper.js",
+      "/dist/index.js.map",
+      "/dist/index.js"
+    ]
+  },
+  "sourceMap.writes": {
+    "/dist/helper.js": "\"use strict\";\nObject.defineProperty(exports, \"__esModule\", { value: true });\nexports.helper = helper;\n/** doubles */\nfunction helper(n) { return n * 2; }\n//# sourceMappingURL=helper.js.map",
+    "/dist/helper.js.map": "{\"version\":3,\"file\":\"helper.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\";;;AAAA,cAAc;AACd,gBAAuB,CAAS,IAAI,OAAO,CAAC,GAAG,CAAC,CAAC,CAAC,CAAC\",\"sourcesContent\":[\"/** doubles */\\nexport function helper(n: number) { return n * 2; }\\n\"]}",
+    "/dist/index.js": "\"use strict\";\nObject.defineProperty(exports, \"__esModule\", { value: true });\nexports.Box = exports.value = void 0;\nconst helper_1 = require(\"./helper\");\nexports.value = (0, helper_1.helper)(2);\nclass Box {\n    constructor(item) {\n        this.item = item;\n    }\n}\nexports.Box = Box;\n//# sourceMappingURL=index.js.map",
+    "/dist/index.js.map": "{\"version\":3,\"file\":\"index.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\";;;AAAA,qCAAkC;AACrB,QAAA,KAAK,GAAW,IAAA,eAAM,EAAC,CAAC,CAAC,CAAC;AACvC;IAAsB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\",\"sourcesContent\":[\"import { helper } from \\\"./helper\\\";\\nexport const value: number = helper(2);\\nexport class Box<T> { constructor(public item: T) {} }\\n\"]}"
+  },
+  "toString.all": {
+    "emitSkipped": false,
+    "diagnostics": [],
+    "outputFiles": {
+      "/dist/helper.d.ts": {
+        "text": "/** doubles */\nexport declare function helper(n: number): number;\n",
+        "sourceFileName": "/src/helper.ts"
+      },
+      "/dist/helper.js": {
+        "text": "/** doubles */\nexport function helper(n) { return n * 2; }\n//# sourceMappingURL=helper.js.map",
+        "sourceFileName": "/src/helper.ts"
+      },
+      "/dist/helper.js.map": {
+        "text": "{\"version\":3,\"file\":\"helper.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\"AAAA,cAAc;AACd,MAAM,UAAU,MAAM,CAAC,CAAS,IAAI,OAAO,CAAC,GAAG,CAAC,CAAC,CAAC,CAAC\"}",
+        "sourceFileName": "/src/helper.ts"
+      },
+      "/dist/index.d.ts": {
+        "text": "export declare const value: number;\nexport declare class Box<T> {\n    item: T;\n    constructor(item: T);\n}\n",
+        "sourceFileName": "/src/index.ts"
+      },
+      "/dist/index.js": {
+        "text": "import { helper } from \"./helper\";\nexport const value = helper(2);\nexport class Box {\n    item;\n    constructor(item) {\n        this.item = item;\n    }\n}\n//# sourceMappingURL=index.js.map",
+        "sourceFileName": "/src/index.ts"
+      },
+      "/dist/index.js.map": {
+        "text": "{\"version\":3,\"file\":\"index.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,UAAU,CAAC;AAClC,MAAM,CAAC,MAAM,KAAK,GAAW,MAAM,CAAC,CAAC,CAAC,CAAC;AACvC,MAAM,OAAO,GAAG;IAAyB,IAAI;IAAvB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\"}",
+        "sourceFileName": "/src/index.ts"
+      }
+    }
+  },
+  "toString.dts": {
+    "emitSkipped": false,
+    "diagnostics": [],
+    "outputFiles": {
+      "/dist/helper.d.ts": {
+        "text": "/** doubles */\nexport declare function helper(n: number): number;\n",
+        "sourceFileName": "/src/helper.ts"
+      },
+      "/dist/index.d.ts": {
+        "text": "export declare const value: number;\nexport declare class Box<T> {\n    item: T;\n    constructor(item: T);\n}\n",
+        "sourceFileName": "/src/index.ts"
+      }
+    }
+  },
+  "toString.js": {
+    "emitSkipped": false,
+    "diagnostics": [],
+    "outputFiles": {
+      "/dist/helper.js": {
+        "text": "/** doubles */\nexport function helper(n) { return n * 2; }\n//# sourceMappingURL=helper.js.map",
+        "sourceFileName": "/src/helper.ts"
+      },
+      "/dist/helper.js.map": {
+        "text": "{\"version\":3,\"file\":\"helper.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\"AAAA,cAAc;AACd,MAAM,UAAU,MAAM,CAAC,CAAS,IAAI,OAAO,CAAC,GAAG,CAAC,CAAC,CAAC,CAAC\"}",
+        "sourceFileName": "/src/helper.ts"
+      },
+      "/dist/index.js": {
+        "text": "import { helper } from \"./helper\";\nexport const value = helper(2);\nexport class Box {\n    item;\n    constructor(item) {\n        this.item = item;\n    }\n}\n//# sourceMappingURL=index.js.map",
+        "sourceFileName": "/src/index.ts"
+      },
+      "/dist/index.js.map": {
+        "text": "{\"version\":3,\"file\":\"index.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,UAAU,CAAC;AAClC,MAAM,CAAC,MAAM,KAAK,GAAW,MAAM,CAAC,CAAC,CAAC,CAAC;AACvC,MAAM,OAAO,GAAG;IAAyB,IAAI;IAAvB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\"}",
+        "sourceFileName": "/src/index.ts"
+      }
+    }
+  },
+  "toString.writes": {}
+}

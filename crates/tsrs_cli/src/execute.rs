@@ -32,19 +32,30 @@ impl ParseConfigHost for sysParseConfigHost {
 }
 
 fn not_supported(sys: &dyn System, what: &str) -> CommandLineResult {
-    sys.write(&format!("error: {} is not supported by tsrs (type checking only).\n", what));
+    sys.write(&format!("error: {} is not supported by tsrs.\n", what));
     CommandLineResult { status: ExitStatus::NotImplemented }
 }
 
 pub fn command_line(sys: &'static dyn System, command_line_args: Vec<String>) -> CommandLineResult {
+    command_line_with_testing(sys, command_line_args, None)
+}
+
+// tsc.go:56 CommandLine(ctx, sys, commandLineArgs, testing)
+pub fn command_line_with_testing(
+    sys: &'static dyn System,
+    command_line_args: Vec<String>,
+    testing: Option<&'static dyn tsc::CommandLineTesting>,
+) -> CommandLineResult {
     if let Some(first) = command_line_args.first() {
         match first.to_lowercase().as_str() {
-            "-b" | "--b" | "-build" | "--build" => return not_supported(sys, "build mode (--build)"),
+            "-b" | "--b" | "-build" | "--build" => {
+                let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
+                return tsc_build_compilation(sys, P::new(tsoptions::parse_build_command_line(&command_line_args, host)), testing);
+            }
             _ => {}
         }
     }
 
-    // tsrs always behaves like `tsc --noEmit`.
     let mut args = command_line_args;
     // tsrs-only: `--noLazyMembers` turns off the port of the lazy member resolution PRs (tsrs_core::lazymembers).
     for (flag, on) in [("--lazyMembers", true), ("--noLazyMembers", false)] {
@@ -73,15 +84,16 @@ pub fn command_line(sys: &'static dyn System, command_line_args: Vec<String>) ->
         tsrs_compiler::set_checker_cost_cache_from_cli(&path);
         args.drain(pos..pos + 2);
     }
-    if !args.iter().any(|a| a.eq_ignore_ascii_case("--noEmit") || a.eq_ignore_ascii_case("-noEmit")) {
-        args.push("--noEmit".to_string());
-    }
-
     let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
-    tsc_compilation(sys, host, P::new(tsoptions::parse_command_line(&args, host)))
+    tsc_compilation(sys, host, P::new(tsoptions::parse_command_line(&args, host)), testing)
 }
 
-fn tsc_compilation(sys: &'static dyn System, host: &'static sysParseConfigHost, command_line: P<ParsedCommandLine>) -> CommandLineResult {
+fn tsc_compilation(
+    sys: &'static dyn System,
+    host: &'static sysParseConfigHost,
+    command_line: P<ParsedCommandLine>,
+    testing: Option<&'static dyn tsc::CommandLineTesting>,
+) -> CommandLineResult {
     let mut config_file_name = String::new();
     let command_line_options = command_line.compiler_options().unwrap();
     let report_diagnostic = create_diagnostic_reporter(sys, Some(&command_line_options));
@@ -104,7 +116,7 @@ fn tsc_compilation(sys: &'static dyn System, host: &'static sysParseConfigHost, 
 
     if command_line_options.help.is_true() || command_line_options.all.is_true() {
         print_version(sys);
-        sys.write("Usage: tsrs [-p <project>] [options] [files...]\n  Type-checks like `tsc --noEmit`. See `tsc --help` for options.\n");
+        sys.write("Usage: tsrs [-p <project>] [options] [files...]\n  Compiles like `tsc`. See `tsc --help` for options.\n");
         return CommandLineResult { status: ExitStatus::Success };
     }
 
@@ -208,9 +220,19 @@ fn tsc_compilation(sys: &'static dyn System, host: &'static sysParseConfigHost, 
     if config_options.watch.is_true() {
         return not_supported(sys, "watch mode (--watch)");
     }
-    // Incremental compilation (tsbuildinfo) is not supported; incremental projects are checked from scratch
-    // and nothing is written.
-    perform_compilation(sys, config_for_compilation, &report_diagnostic, &report_error_summary, extended_config_cache, compile_times)
+    // tsc.go:245
+    if config_for_compilation.compiler_options().unwrap().is_incremental() {
+        return perform_incremental_compilation(
+            sys,
+            config_for_compilation,
+            &report_diagnostic,
+            &report_error_summary,
+            extended_config_cache,
+            compile_times,
+            testing,
+        );
+    }
+    perform_compilation(sys, config_for_compilation, &report_diagnostic, &report_error_summary, extended_config_cache, compile_times, testing)
 }
 
 fn find_config_file(search_path: &str, file_exists: impl Fn(&str) -> bool, config_name: &str) -> String {
@@ -242,15 +264,14 @@ fn perform_compilation(
     report_error_summary: &tsc::DiagnosticsReporter,
     extended_config_cache: Arc<ExtendedConfigCache>,
     mut compile_times: CompileTimes,
+    testing: Option<&'static dyn tsc::CommandLineTesting>,
 ) -> CommandLineResult {
     let host = new_cached_fs_compiler_host(
         sys.get_current_directory(),
         sys.fs(),
         sys.default_library_path(),
         Some(extended_config_cache),
-        Some(Box::new(move |msg: &'static diagnostics::Message, args: &[&dyn std::fmt::Display]| {
-            sys.write(&format!("{}\n", msg.localize(args)));
-        })),
+        Some(get_trace_from_sys(sys, testing)),
     );
 
     let parse_start = sys.now();
@@ -263,9 +284,115 @@ fn perform_compilation(
         report_diagnostic,
         report_error_summary,
         compile_times,
+        incremental: None,
+        writer: None,
+        write_file: None,
+        testing,
+        testing_m_times_cache: None,
     });
     #[cfg(feature = "alloc-profile")]
     crate::census::run(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
 
     CommandLineResult { status: result.status }
+}
+
+// tsc.go:308
+fn perform_incremental_compilation(
+    sys: &'static dyn System,
+    config: P<ParsedCommandLine>,
+    report_diagnostic: &tsc::DiagnosticReporter,
+    report_error_summary: &tsc::DiagnosticsReporter,
+    extended_config_cache: Arc<ExtendedConfigCache>,
+    mut compile_times: CompileTimes,
+    testing: Option<&'static dyn tsc::CommandLineTesting>,
+) -> CommandLineResult {
+    let host = new_cached_fs_compiler_host(
+        sys.get_current_directory(),
+        sys.fs(),
+        sys.default_library_path(),
+        Some(extended_config_cache),
+        Some(get_trace_from_sys(sys, testing)),
+    );
+    // Go reads the old program and then builds the new one. The two are independent (the read only uses the
+    // config and the host's file system, both thread-safe), so the read runs on its own thread while the program
+    // is built; "BuildInfo read time" is the read's own duration. `--singleThreaded` keeps Go's order.
+    let read_build_info = || {
+        let start = sys.now();
+        let old_program = tsrs_incremental::read_build_info_program(config, &*tsrs_incremental::new_build_info_reader(host.clone()), &*host);
+        (old_program, sys.now() - start)
+    };
+    let build_program = || {
+        let start = sys.now();
+        let program = new_program(ProgramOptions::new(config, host.clone()));
+        (program, sys.now() - start)
+    };
+    let ((old_program, build_info_read_time), (program, parse_time)) = if config.compiler_options().unwrap().single_threaded.is_true() {
+        let read = read_build_info();
+        (read, build_program())
+    } else {
+        // Rows print in first-recorded order; keep the read's rows ahead of the program's.
+        tsrs_incremental::register_build_info_read_phases();
+        std::thread::scope(|scope| {
+            let read = scope.spawn(read_build_info);
+            let program = build_program();
+            (read.join().unwrap(), program)
+        })
+    };
+    compile_times.build_info_read_time = build_info_read_time;
+    compile_times.parse_time = parse_time;
+    let changes_compute_start = sys.now();
+    let incremental_program =
+        tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), Some(std::time::Instant::now), testing.is_some());
+    compile_times.changes_compute_time = sys.now() - changes_compute_start;
+    let (result, _) = emit_and_report_statistics(EmitInput {
+        sys,
+        program: incremental_program.get_program(),
+        config,
+        report_diagnostic,
+        report_error_summary,
+        compile_times,
+        incremental: Some(incremental_program),
+        writer: None,
+        write_file: None,
+        testing,
+        testing_m_times_cache: None,
+    });
+
+    if let Some(testing) = testing {
+        testing.on_program(incremental_program);
+    }
+    CommandLineResult { status: result.status }
+}
+
+// tsc.go:93
+fn tsc_build_compilation(
+    sys: &'static dyn System,
+    build_command: P<tsoptions::ParsedBuildCommandLine>,
+    testing: Option<&'static dyn tsc::CommandLineTesting>,
+) -> CommandLineResult {
+    let report_diagnostic = create_diagnostic_reporter(sys, Some(&build_command.compiler_options));
+
+    if !build_command.errors.is_empty() {
+        for &err in &build_command.errors {
+            report_diagnostic(err);
+        }
+        return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+    }
+
+    if build_command.compiler_options.help.is_true() {
+        print_version(sys);
+        sys.write("Usage: tsrs -b [projects...] [options]\n  See `tsc -b --help` for options.\n");
+        return CommandLineResult { status: ExitStatus::Success };
+    }
+    if build_command.compiler_options.watch.is_true() {
+        return not_supported(sys, "watch mode (--watch)");
+    }
+
+    let orchestrator = crate::build::new_orchestrator(crate::build::Options { sys, command: build_command, testing });
+    orchestrator.start()
+}
+
+// tsc.go getTraceFromSys / tsc.GetTraceWithWriterFromSys
+fn get_trace_from_sys(sys: &'static dyn System, testing: Option<&'static dyn tsc::CommandLineTesting>) -> Box<tsrs_compiler::TraceFn> {
+    tsc::get_trace_with_writer_from_sys(std::sync::Arc::new(move |t: &str| sys.write(t)), true, testing)
 }

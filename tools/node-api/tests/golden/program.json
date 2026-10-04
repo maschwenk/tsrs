@@ -1,0 +1,480 @@
+{
+  "config.global": [
+    {
+      "pos": -1,
+      "end": -1,
+      "code": 6053,
+      "category": 1,
+      "text": "File '/src/missing.ts' not found.",
+      "messageChain": [
+        {
+          "pos": -1,
+          "end": -1,
+          "code": 1430,
+          "category": 3,
+          "text": "The file is in the program because:",
+          "messageChain": [
+            {
+              "pos": -1,
+              "end": -1,
+              "code": 1409,
+              "category": 3,
+              "text": "Part of 'files' list in tsconfig.json"
+            }
+          ]
+        }
+      ],
+      "relatedInformation": [
+        {
+          "fileName": "/tsconfig.json",
+          "pos": 137,
+          "end": 153,
+          "startPosition": {
+            "line": 2,
+            "character": 38
+          },
+          "endPosition": {
+            "line": 2,
+            "character": 54
+          },
+          "sourceLines": [
+            {
+              "line": 2,
+              "text": "                \"files\": [\"src/a.ts\", \"src/missing.ts\"]\n"
+            }
+          ],
+          "code": 1410,
+          "category": 3,
+          "text": "File is matched by 'files' list specified here."
+        }
+      ]
+    }
+  ],
+  "config.names": [
+    "/src/a.ts"
+  ],
+  "config.parsing": [
+    {
+      "fileName": "/tsconfig.json",
+      "pos": 49,
+      "end": 57,
+      "startPosition": {
+        "line": 1,
+        "character": 47
+      },
+      "endPosition": {
+        "line": 1,
+        "character": 55
+      },
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "                \"compilerOptions\": { \"target\": \"es2099\", \"strict\": \"yes\", \"notAnOption\": true },\n"
+        }
+      ],
+      "code": 6046,
+      "category": 1,
+      "text": "Argument for '--target' option must be: 'es6', 'es2015', 'es2016', 'es2017', 'es2018', 'es2019', 'es2020', 'es2021', 'es2022', 'es2023', 'es2024', 'es2025', 'es2026', 'esnext'."
+    },
+    {
+      "fileName": "/tsconfig.json",
+      "pos": 69,
+      "end": 74,
+      "startPosition": {
+        "line": 1,
+        "character": 67
+      },
+      "endPosition": {
+        "line": 1,
+        "character": 72
+      },
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "                \"compilerOptions\": { \"target\": \"es2099\", \"strict\": \"yes\", \"notAnOption\": true },\n"
+        }
+      ],
+      "code": 5024,
+      "category": 1,
+      "text": "Compiler option 'strict' requires a value of type boolean."
+    },
+    {
+      "fileName": "/tsconfig.json",
+      "pos": 76,
+      "end": 89,
+      "startPosition": {
+        "line": 1,
+        "character": 74
+      },
+      "endPosition": {
+        "line": 1,
+        "character": 87
+      },
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "                \"compilerOptions\": { \"target\": \"es2099\", \"strict\": \"yes\", \"notAnOption\": true },\n"
+        }
+      ],
+      "code": 5023,
+      "category": 1,
+      "text": "Unknown compiler option 'notAnOption'."
+    }
+  ],
+  "config.program": [
+    {
+      "pos": -1,
+      "end": -1,
+      "code": 6053,
+      "category": 1,
+      "text": "File '/src/missing.ts' not found.",
+      "messageChain": [
+        {
+          "pos": -1,
+          "end": -1,
+          "code": 1430,
+          "category": 3,
+          "text": "The file is in the program because:",
+          "messageChain": [
+            {
+              "pos": -1,
+              "end": -1,
+              "code": 1409,
+              "category": 3,
+              "text": "Part of 'files' list in tsconfig.json"
+            }
+          ]
+        }
+      ],
+      "relatedInformation": [
+        {
+          "fileName": "/tsconfig.json",
+          "pos": 137,
+          "end": 153,
+          "startPosition": {
+            "line": 2,
+            "character": 38
+          },
+          "endPosition": {
+            "line": 2,
+            "character": 54
+          },
+          "sourceLines": [
+            {
+              "line": 2,
+              "text": "                \"files\": [\"src/a.ts\", \"src/missing.ts\"]\n"
+            }
+          ],
+          "code": 1410,
+          "category": 3,
+          "text": "File is matched by 'files' list specified here."
+        }
+      ]
+    }
+  ],
+  "extends.configFiles": [
+    "/tsconfig.json",
+    "/configs/strict.json",
+    "/node_modules/@cfg/base/tsconfig.json"
+  ],
+  "extends.parsing": [],
+  "extends.semantic": [
+    {
+      "fileName": "/src/index.ts",
+      "pos": 18,
+      "end": 19,
+      "startPosition": {
+        "line": 0,
+        "character": 18
+      },
+      "endPosition": {
+        "line": 0,
+        "character": 19
+      },
+      "sourceLines": [
+        {
+          "line": 0,
+          "text": "export function f(x) { return x; }\n"
+        }
+      ],
+      "code": 7006,
+      "category": 1,
+      "text": "Parameter 'x' implicitly has an 'any' type."
+    },
+    {
+      "fileName": "/src/index.ts",
+      "pos": 48,
+      "end": 49,
+      "startPosition": {
+        "line": 1,
+        "character": 13
+      },
+      "endPosition": {
+        "line": 1,
+        "character": 14
+      },
+      "sourceLines": [
+        {
+          "line": 1,
+          "text": "export const s: string = null;"
+        }
+      ],
+      "code": 2322,
+      "category": 1,
+      "text": "Type 'null' is not assignable to type 'string'."
+    }
+  ],
+  "modules.external": true,
+  "modules.metadata": {
+    "isDefaultLibrary": false,
+    "isFromExternalLibrary": true,
+    "packageJsonType": "module",
+    "packageJsonDirectory": "/node_modules/pkg",
+    "impliedNodeFormat": 99
+  },
+  "modules.names": [
+    "/node_modules/pkg/dist/index.d.ts",
+    "/node_modules/pkg/dist/sub.d.ts",
+    "/src/index.ts"
+  ],
+  "modules.semantic": [
+    {
+      "fileName": "/src/index.ts",
+      "pos": 77,
+      "end": 90,
+      "startPosition": {
+        "line": 2,
+        "character": 21
+      },
+      "endPosition": {
+        "line": 2,
+        "character": 34
+      },
+      "sourceLines": [
+        {
+          "line": 2,
+          "text": "import { nope } from \"pkg/missing\";\n"
+        }
+      ],
+      "code": 2307,
+      "category": 1,
+      "text": "Cannot find module 'pkg/missing' or its corresponding type declarations."
+    },
+    {
+      "fileName": "/src/index.ts",
+      "pos": 113,
+      "end": 124,
+      "startPosition": {
+        "line": 3,
+        "character": 21
+      },
+      "endPosition": {
+        "line": 3,
+        "character": 32
+      },
+      "sourceLines": [
+        {
+          "line": 3,
+          "text": "import { gone } from \"./gone.js\";\n"
+        }
+      ],
+      "code": 2307,
+      "category": 1,
+      "text": "Cannot find module './gone.js' or its corresponding type declarations."
+    },
+    {
+      "fileName": "/src/index.ts",
+      "pos": 170,
+      "end": 171,
+      "startPosition": {
+        "line": 5,
+        "character": 13
+      },
+      "endPosition": {
+        "line": 5,
+        "character": 14
+      },
+      "sourceLines": [
+        {
+          "line": 5,
+          "text": "export const r: number = sub(1);"
+        }
+      ],
+      "code": 2322,
+      "category": 1,
+      "text": "Type 'string' is not assignable to type 'number'."
+    }
+  ],
+  "roots.names": [
+    "/a.ts",
+    "/b.ts"
+  ],
+  "roots.semantic.a": [
+    {
+      "fileName": "/a.ts",
+      "pos": 13,
+      "end": 14,
+      "startPosition": {
+        "line": 0,
+        "character": 13
+      },
+      "endPosition": {
+        "line": 0,
+        "character": 14
+      },
+      "sourceLines": [
+        {
+          "line": 0,
+          "text": "export const a: number = \"no\";"
+        }
+      ],
+      "code": 2322,
+      "category": 1,
+      "text": "Type 'string' is not assignable to type 'number'."
+    }
+  ],
+  "roots.semantic.b": [
+    {
+      "fileName": "/b.ts",
+      "pos": 50,
+      "end": 54,
+      "startPosition": {
+        "line": 0,
+        "character": 50
+      },
+      "endPosition": {
+        "line": 0,
+        "character": 54
+      },
+      "sourceLines": [
+        {
+          "line": 0,
+          "text": "import { a } from \"./a\"; a.toFixed(); const c = a.nope;"
+        }
+      ],
+      "code": 2339,
+      "category": 1,
+      "text": "Property 'nope' does not exist on type 'number'."
+    }
+  ],
+  "utf16.semantic": [
+    {
+      "fileName": "/src/index.ts",
+      "pos": 91,
+      "end": 93,
+      "startPosition": {
+        "line": 2,
+        "character": 19
+      },
+      "endPosition": {
+        "line": 2,
+        "character": 21
+      },
+      "sourceLines": [
+        {
+          "line": 2,
+          "text": "const p: Props = { cb: (x: number) => {} }; // 𝒳\n"
+        }
+      ],
+      "code": 2322,
+      "category": 1,
+      "text": "Type '(x: number) => void' is not assignable to type '(x: string) => void'.",
+      "messageChain": [
+        {
+          "fileName": "/src/index.ts",
+          "pos": 91,
+          "end": 93,
+          "startPosition": {
+            "line": 2,
+            "character": 19
+          },
+          "endPosition": {
+            "line": 2,
+            "character": 21
+          },
+          "sourceLines": [
+            {
+              "line": 2,
+              "text": "const p: Props = { cb: (x: number) => {} }; // 𝒳\n"
+            }
+          ],
+          "code": 2328,
+          "category": 1,
+          "text": "Types of parameters 'x' and 'x' are incompatible.",
+          "messageChain": [
+            {
+              "fileName": "/src/index.ts",
+              "pos": 91,
+              "end": 93,
+              "startPosition": {
+                "line": 2,
+                "character": 19
+              },
+              "endPosition": {
+                "line": 2,
+                "character": 21
+              },
+              "sourceLines": [
+                {
+                  "line": 2,
+                  "text": "const p: Props = { cb: (x: number) => {} }; // 𝒳\n"
+                }
+              ],
+              "code": 2322,
+              "category": 1,
+              "text": "Type 'string' is not assignable to type 'number'."
+            }
+          ]
+        }
+      ],
+      "relatedInformation": [
+        {
+          "fileName": "/src/index.ts",
+          "pos": 46,
+          "end": 48,
+          "startPosition": {
+            "line": 1,
+            "character": 18
+          },
+          "endPosition": {
+            "line": 1,
+            "character": 20
+          },
+          "sourceLines": [
+            {
+              "line": 1,
+              "text": "interface Props { cb: (x: string) => void }\n"
+            }
+          ],
+          "code": 6500,
+          "category": 3,
+          "text": "The expected type comes from property 'cb' which is declared here on type 'Props'"
+        }
+      ]
+    },
+    {
+      "fileName": "/src/index.ts",
+      "pos": 137,
+      "end": 138,
+      "startPosition": {
+        "line": 3,
+        "character": 15
+      },
+      "endPosition": {
+        "line": 3,
+        "character": 16
+      },
+      "sourceLines": [
+        {
+          "line": 3,
+          "text": "/* 🧪 */ const n: number = face;\n"
+        }
+      ],
+      "code": 2322,
+      "category": 1,
+      "text": "Type 'string' is not assignable to type 'number'."
+    }
+  ],
+  "utf16.syntactic": [],
+  "utf16.text": true
+}

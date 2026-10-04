@@ -195,10 +195,25 @@ pub fn parse_source_file(opts: SourceFileParseOptions, source_text: &str, script
     parse_source_file_static(opts, alloc_str(source_text), script_kind)
 }
 
-/// `parse_source_file` for text the caller hands over (a file just read): it becomes the file's text without a
-/// copy into the arena (Go shares the string). Like the arena, the text is never freed.
+/// `parse_source_file` for text the caller hands over (a file just read): outside a region it becomes the file's
+/// text without a copy (Go shares the string) and, like the thread arena, is never freed. Inside a freeable region
+/// (native API transpile and builds) the text is copied into the region and unregistered when the region is freed,
+/// so the file's memory is reclaimed with it.
+///
+/// Lifetime footgun: the returned file now lives exactly as long as the region that was current at the call. A
+/// caller that parses inside a region must not keep the file (or anything derived from it) past that region.
+/// Unregistering frees the text but not its source-text slot: slots are never reused (`register_source_text` has a
+/// fixed capacity, after which lookups take the slower fallback path).
 pub fn parse_source_file_owned(opts: SourceFileParseOptions, source_text: String, script_kind: ScriptKind) -> P<SourceFile> {
-    parse_source_file_static(opts, source_text.leak(), script_kind)
+    match tsrs_core::arena::current_region() {
+        None => parse_source_file_static(opts, source_text.leak(), script_kind),
+        Some(region) => {
+            let file = parse_source_file(opts, &source_text, script_kind);
+            let text_index = file.text_index.get();
+            region.on_free(Box::new(move || ast::unregister_source_text(text_index)));
+            file
+        }
+    }
 }
 
 fn parse_source_file_static(opts: SourceFileParseOptions, source_text: &'static str, script_kind: ScriptKind) -> P<SourceFile> {
@@ -280,7 +295,7 @@ impl Parser {
         let node = self.factory.new_source_file(self.opts.clone(), self.source_text, statements, eof);
         node.as_source_file().text_index.set(self.source_text_index);
         let node = self.finish_node(node, pos);
-        let result = P::from_static(node.as_source_file());
+        let result = node.as_source_file_p();
         if !result.statements.nodes().is_empty() {
             let value = result.statements.nodes()[0].expression();
             self.validate_json_value(result, value);
@@ -601,13 +616,13 @@ impl Parser {
         let node = self.factory.new_source_file(self.opts.clone(), self.source_text, statement_list, eof);
         node.as_source_file().text_index.set(self.source_text_index);
         let node = self.finish_node(node, pos);
-        let mut result = P::from_static(node.as_source_file());
+        let mut result = node.as_source_file_p();
         self.finish_source_file(result, is_declaration_file);
         if !result.is_declaration_file.get() && result.external_module_indicator.get().is_some() && !self.possible_await_spans.is_empty() {
             let reparse = self.reparse_top_level_await(result);
             let reparse = self.finish_node(reparse, pos);
             if node != reparse {
-                result = P::from_static(reparse.as_source_file());
+                result = reparse.as_source_file_p();
                 self.finish_source_file(result, is_declaration_file);
             }
         }

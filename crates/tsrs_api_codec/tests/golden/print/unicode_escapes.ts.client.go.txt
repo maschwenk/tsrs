@@ -1,0 +1,4 @@
+let a = "\uD83D\uDE03";
+let b = "\uD83D\uDE03";
+let c = "\uDC00\uD83D\uDE03";
+let d = "\uD83D\uD83D\uDE03";

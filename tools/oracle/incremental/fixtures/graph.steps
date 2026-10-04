@@ -1,0 +1,4 @@
+true
+true
+echo "export const b: string = \"\";" > b/index.ts
+true

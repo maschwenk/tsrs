@@ -394,7 +394,7 @@ pub(crate) fn to_related_info(r: P<FileIncludeReason>, program: &Program) -> Opt
                     if let Some(target_value_syntax) = tsoptions::for_each_property_assignment(
                         program.include_processor.get_compiler_options_object_literal_syntax(program),
                         "target",
-                        tsoptions::get_callback_for_finding_property_assignment_by_value(target),
+                        tsoptions::get_callback_for_finding_property_assignment_by_value(&target),
                         None,
                     ) {
                         return Some(tsoptions::create_diagnostic_for_node_in_source_file(

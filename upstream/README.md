@@ -1,8 +1,8 @@
 # Upstream patches: lazy member follow-ups to microsoft/TypeScript#64475 / #64526
 
 Go versions of the five checker laziness changes prototyped in tsrs (notes/mem-lazy.md), as a commit stack against
-microsoft/TypeScript, tested the way upstream CI tests and measured on a 38k-file private TypeScript monorepo (5.9M lines; "the private monorepo" below). Nothing here has been pushed or opened
-upstream; the PR texts are drafts for Max.
+microsoft/TypeScript, tested the way upstream CI tests and measured on a 38k-file private TypeScript monorepo (5.9M lines; "the private monorepo" below). Opened upstream as drafts on 2026-10-02: L6 as microsoft/TypeScript#64600 and L5 as #64601 (rebased onto main
+59f5b0233f; vet, gofmt, checker and testrunner tests re-run on the rebased commits). L1, L11 and L10 are not opened.
 
 | # | patch | prototype | what | depends on |
 | --- | --- | --- | --- | --- |

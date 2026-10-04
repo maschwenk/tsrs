@@ -61,7 +61,7 @@ pub(crate) fn new_symbol_extractor<'a>(package_name: &str, checker: &'a mut Chec
     symbolExtractor {
         package_name: package_name.to_string(),
         checker,
-        local_name_resolver: NameResolver::new(P::from_static(&*EMPTY_COMPILER_OPTIONS), None),
+        local_name_resolver: NameResolver::new(tsrs_core::empty_compiler_options(), None),
         stats: Arc::new(extractorStats::default()),
         to_path,
         realpath,

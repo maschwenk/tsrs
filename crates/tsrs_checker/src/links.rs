@@ -1,14 +1,15 @@
 use crate::*;
+use tsrs_core::{PKey, PSlot};
 
 /// All Go link stores (`core.LinkStore`, `nodeLinkStore`, `symbolArenaLinkStore`) map to this one type.
 /// Values live in the arena, so `get` hands out a `Copy` pointer whose `Cell` fields are mutated in place.
 ///
-/// Keyed by the key's address like Go's `map[K]*V`. A slot is the key address and the value's index (12 bytes,
-/// 4-aligned) instead of two pointers, and the values live in fixed-size arena chunks in first-access order (stable
+/// Keyed by the key's identity like Go's `map[K]*V`. A slot is the key (`P::key`: its handle with compressed pointers,
+/// else its address) and the value's index (8 or 12 bytes, 4-aligned) instead of two pointers, and the values live in fixed-size arena chunks in first-access order (stable
 /// addresses, as before). 5.1M links in 26 stores on the private monorepo single.
 pub struct LinkStore<K: 'static, V: 'static> {
     slots: hashbrown::HashTable<LinkSlot>,
-    chunks: Vec<&'static [V]>,
+    chunks: Vec<P<PSlot<V>>>, // first slot of each chunk
     len: u32,
     key: std::marker::PhantomData<P<K>>,
 }
@@ -16,11 +17,11 @@ pub struct LinkStore<K: 'static, V: 'static> {
 #[repr(C, packed(4))]
 #[derive(Clone, Copy)]
 struct LinkSlot {
-    key: usize, // the key's address
+    key: PKey,
     index: u32, // the value's position in `chunks`
 }
 
-const _: () = assert!(std::mem::size_of::<LinkSlot>() == 12);
+const _: () = assert!(std::mem::size_of::<LinkSlot>() == if tsrs_core::COMPRESSED_PTRS { 8 } else { 12 });
 
 const LINK_CHUNK_SHIFT: u32 = 10;
 const LINK_CHUNK: usize = 1 << LINK_CHUNK_SHIFT;
@@ -33,22 +34,22 @@ impl<K: 'static, V: 'static> Default for LinkStore<K, V> {
 
 impl<K: 'static, V: 'static> LinkStore<K, V> {
     #[inline]
-    fn hash(key: usize) -> u64 {
+    fn hash(key: PKey) -> u64 {
         use std::hash::BuildHasher;
         rustc_hash::FxBuildHasher.hash_one(key)
     }
 
     #[inline]
-    fn address(key: P<K>) -> usize {
-        (key.get() as *const K).addr()
+    fn address(key: P<K>) -> PKey {
+        key.key()
     }
 
     #[inline]
     fn at(&self, index: u32) -> P<V> {
         debug_assert!(index < self.len);
         // SAFETY: every stored index is below `len`, and `chunks` holds `LINK_CHUNK` values per started chunk.
-        let chunk = unsafe { self.chunks.get_unchecked((index >> LINK_CHUNK_SHIFT) as usize) };
-        P::from_static(unsafe { chunk.get_unchecked(index as usize & (LINK_CHUNK - 1)) })
+        let chunk = unsafe { *self.chunks.get_unchecked((index >> LINK_CHUNK_SHIFT) as usize) };
+        unsafe { PSlot::nth(chunk, index as usize & (LINK_CHUNK - 1)) }
     }
 
     #[inline]
@@ -81,7 +82,7 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
                 let index = self.len;
                 slot.insert(LinkSlot { key, index });
                 if index as usize % LINK_CHUNK == 0 {
-                    self.chunks.push(alloc_vec((0..LINK_CHUNK).map(|_| V::default()).collect()));
+                    self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
                 }
                 self.len += 1;
                 index
@@ -99,7 +100,7 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
 pub struct IdLinkStore<V: 'static> {
     pages: Vec<Option<Box<[u32; ID_PAGE]>>>,
     wide_slots: FxHashMap<u64, u32>, // ids >= 2^32 (long-running processes such as the test runner)
-    chunks: Vec<&'static [V]>,
+    chunks: Vec<P<PSlot<V>>>,        // first slot of each chunk
     len: u32,
 }
 
@@ -117,7 +118,9 @@ impl<V: 'static> Default for IdLinkStore<V> {
 impl<V: 'static> IdLinkStore<V> {
     #[inline]
     fn at(&self, slot: u32) -> P<V> {
-        P::from_static(&self.chunks[(slot >> ID_LINK_CHUNK_SHIFT) as usize][slot as usize & (ID_LINK_CHUNK - 1)])
+        debug_assert!(slot < self.len);
+        // SAFETY: every stored slot is below `len`; chunks hold `ID_LINK_CHUNK` values per started chunk.
+        unsafe { PSlot::nth(*self.chunks.get_unchecked((slot >> ID_LINK_CHUNK_SHIFT) as usize), slot as usize & (ID_LINK_CHUNK - 1)) }
     }
 
     #[inline]
@@ -126,8 +129,15 @@ impl<V: 'static> IdLinkStore<V> {
             let page = self.pages.get((id >> ID_PAGE_SHIFT) as usize)?.as_deref()?;
             page[id as usize & (ID_PAGE - 1)].checked_sub(1)
         } else {
-            self.wide_slots.get(&id).copied()
+            self.wide_slot(id)
         }
+    }
+
+    // Out of line: keeps the hash lookup out of every inlined `get`.
+    #[cold]
+    #[inline(never)]
+    fn wide_slot(&self, id: u64) -> Option<u32> {
+        self.wide_slots.get(&id).copied()
     }
 
     #[inline]
@@ -157,7 +167,7 @@ impl<V: Default + 'static> IdLinkStore<V> {
         tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
         let slot = self.len;
         if slot as usize % ID_LINK_CHUNK == 0 {
-            self.chunks.push(alloc_vec((0..ID_LINK_CHUNK).map(|_| V::default()).collect()));
+            self.chunks.push(PSlot::first(alloc_vec((0..ID_LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
         }
         self.len += 1;
         if id <= u32::MAX as u64 {

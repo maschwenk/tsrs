@@ -26,7 +26,7 @@ use crate::options::{parse_test_ts_config, test_compiler_options, unsupported_re
 
 thread_local! {
     // harnessutil sourceFileCache: parsed files are shared across the tests a worker runs (lib files above all).
-    static SOURCE_FILE_CACHE: RefCell<FxHashMap<(String, String, bool, String), P<SourceFile>>> = RefCell::new(FxHashMap::default());
+    static SOURCE_FILE_CACHE: RefCell<FxHashMap<(String, String, bool, bool, String), P<SourceFile>>> = RefCell::new(FxHashMap::default());
 }
 
 // cachedCompilerHost
@@ -53,7 +53,7 @@ impl CompilerHost for CachedCompilerHost {
         if script_kind == ScriptKind::Unknown {
             panic!("Unknown script kind for file  {}", opts.file_name);
         }
-        let key = (opts.file_name.clone(), opts.path.as_str().to_string(), opts.external_module_indicator_options.jsx, format!("{:?}{}", script_kind, text));
+        let key = (opts.file_name.clone(), opts.path.as_str().to_string(), opts.external_module_indicator_options.jsx, opts.external_module_indicator_options.force, format!("{:?}{}", script_kind, text));
         if let Some(cached) = SOURCE_FILE_CACHE.with(|c| c.borrow().get(&key).copied()) {
             return Some(cached);
         }
@@ -95,6 +95,44 @@ pub struct CompilationResult {
     pub options: &'static CompilerOptions,
     pub program: &'static compiler::Program,
     pub harness_options: HarnessOptions,
+    pub host: Arc<dyn CompilerHost>,
+    pub tsconfig: Option<P<ParsedCommandLine>>,
+    // The emit outputs, only under `--baselines js` (docs/EMIT.md section 8).
+    #[cfg(feature = "checker")]
+    pub emit: Option<crate::emit_harness::EmitOutputs>,
+}
+
+/// Dev metric for the option sweep (docs/EMIT.md section 13, wave E12): `TSRS_TEST_DTS_ONLY=1` with `--baselines js`
+/// compiles every test that emits declarations with `emitDeclarationOnly` forced on and compares only the `.d.ts`
+/// outputs with the `.d.ts` sections of the reference `.js` baseline (compiler_runner::extract_dts_block). Not a gate:
+/// forcing the option can change diagnostics. Write the results elsewhere (`TSRS_TEST_RESULTS=...`).
+pub fn dts_only_mode() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("TSRS_TEST_DTS_ONLY").as_deref() == Ok("1"))
+}
+
+fn js_baselines() -> bool {
+    cfg!(feature = "checker") && !crate::syntax_only() && crate::extra_baselines() & crate::EXTRA_JS != 0
+}
+
+// Any emit baseline (`.js`, `.js.map`, `.sourcemap.txt`) switches the compilation to Go's pre-/post-emit programs.
+fn emit_baselines() -> bool {
+    cfg!(feature = "checker") && !crate::syntax_only() && crate::extra_baselines() & (crate::EXTRA_JS | crate::EXTRA_JSMAP | crate::EXTRA_SOURCEMAP) != 0
+}
+
+// Go `result.Repeat` / `compileDeclarationFiles` call CompileFilesEx again with the test's harness settings.
+#[cfg(feature = "checker")]
+struct Recompiler<'a> {
+    harness_options: &'a HarnessOptions,
+    current_directory: &'a str,
+    symlinks: &'a BTreeMap<String, String>,
+}
+
+#[cfg(feature = "checker")]
+impl crate::emit_harness::Recompile for Recompiler<'_> {
+    fn compile(&self, input_files: &[TestFile], other_files: &[TestFile], options: CompilerOptions, tsconfig: Option<P<ParsedCommandLine>>) -> CompilationResult {
+        compile_files_ex(input_files, other_files, self.harness_options, options, self.current_directory, self.symlinks, tsconfig).unwrap()
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -106,7 +144,14 @@ fn compile_files(
     current_directory: &str,
     symlinks: &BTreeMap<String, String>,
 ) -> Result<Compiled, String> {
-    let (compiler_options, harness_options) = test_compiler_options(test_config, tsconfig, current_directory)?;
+    let (mut compiler_options, harness_options) = test_compiler_options(test_config, tsconfig, current_directory)?;
+    if dts_only_mode() && js_baselines() {
+        if compiler_options.get_emit_declarations() {
+            compiler_options.emit_declaration_only = Tristate::True;
+        } else {
+            compiler_options.no_emit = Tristate::True;
+        }
+    }
     if let Some(reason) = unsupported_reason(&compiler_options) {
         return Ok(Compiled::Unsupported(reason));
     }
@@ -185,6 +230,13 @@ fn compile_files_ex(
 
     let fs = vfstest::from_map(testfs, harness_options.use_case_sensitive_file_names);
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(fs));
+    #[cfg(feature = "checker")]
+    let recorder = emit_baselines().then(|| crate::emit_harness::new_output_recorder_fs(fs.clone()));
+    #[cfg(feature = "checker")]
+    let fs: Arc<dyn FS> = match &recorder {
+        Some(r) => r.clone(),
+        None => fs,
+    };
 
     let config_file = tsconfig.and_then(|t| t.config_file);
     let errors = tsconfig.map(|t| t.errors.clone()).unwrap_or_default();
@@ -195,15 +247,57 @@ fn compile_files_ex(
 
     let inner = compiler::new_compiler_host(current_directory, fs, &bundled::lib_path(), None, None);
     let host: Arc<dyn CompilerHost> = Arc::new(CachedCompilerHost { inner });
-    Ok(compile_files_with_host(host, config, harness_options))
+    #[cfg(feature = "checker")]
+    if let Some(recorder) = recorder {
+        let (diagnostics, program, emit_result) =
+            crate::emit_harness::compile_files_with_host_emit(host.clone(), config, harness_options, &|host, config| create_program_like(host, config));
+        let options = program.options().get();
+        let emit = crate::emit_harness::new_emit_outputs(&recorder, program, options, &*host, emit_result);
+        return Ok(CompilationResult { diagnostics, options, program, harness_options: harness_options.clone(), host, tsconfig, emit: Some(emit) });
+    }
+    Ok(compile_files_with_host(host, config, harness_options, tsconfig))
 }
 
-fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>, harness_options: &HarnessOptions) -> CompilationResult {
+// harnessutil.go:953 testBuildInfoReader: reads the build info as if this compiler had written it.
+#[cfg(feature = "checker")]
+struct testBuildInfoReader {
+    inner: Box<dyn tsrs_incremental::BuildInfoReader>,
+}
+
+#[cfg(feature = "checker")]
+impl tsrs_incremental::BuildInfoReader for testBuildInfoReader {
+    fn read_build_info(&self, config: &ParsedCommandLine) -> Option<tsrs_incremental::BuildInfo> {
+        let mut r = self.inner.read_build_info(config)?;
+        r.version = tsrs_core::version().to_string();
+        Some(r)
+    }
+}
+
+// harnessutil.go:970 (createProgram), used by the emit harness (`--baselines js`): an `incremental` program is
+// wrapped in `incremental.NewProgram` like Go's. The default mode (no emit baselines) keeps the plain program below.
+#[cfg(feature = "checker")]
+fn create_program_like(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> &'static dyn compiler::ProgramLike {
+    let program = create_program(host.clone(), config);
+    if config.compiler_options().unwrap().incremental.is_true() {
+        let reader = testBuildInfoReader { inner: tsrs_incremental::new_build_info_reader(host.clone()) };
+        let old_program = tsrs_incremental::read_build_info_program(config, &reader, &*host);
+        let incremental_program = tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), None, false);
+        return Box::leak(Box::new(incremental_program.get()));
+    }
+    Box::leak(Box::new(program))
+}
+
+// harnessutil.go:970 (createProgram) without the incremental wrapper: the default (type-check only) mode.
+fn create_program(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> &'static compiler::Program {
     let mut opts = compiler::ProgramOptions::new(config, host);
     if test_program_is_single_threaded() {
         opts.single_threaded = Tristate::True;
     }
-    let program = compiler::new_program(opts);
+    compiler::new_program(opts)
+}
+
+fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>, harness_options: &HarnessOptions, tsconfig: Option<P<ParsedCommandLine>>) -> CompilationResult {
+    let program = create_program(host.clone(), config);
     let harness_options = harness_options.clone();
     let ctx = &compiler::Context::default();
     let mut errors = Vec::new();
@@ -221,7 +315,16 @@ fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandL
         errors.extend(program.get_declaration_diagnostics(ctx, None));
     }
     let errors = compiler::sort_and_deduplicate_diagnostics(&errors);
-    CompilationResult { diagnostics: errors, options: program.options().get(), program, harness_options }
+    CompilationResult {
+        diagnostics: errors,
+        options: program.options().get(),
+        program,
+        harness_options,
+        host,
+        tsconfig,
+        #[cfg(feature = "checker")]
+        emit: None,
+    }
 }
 
 // newCompilerTest + verifyDiagnostics
@@ -255,12 +358,87 @@ pub fn run(item: &TestItem, table: &OptionTable) -> Outcome {
     let diags = convert_diagnostics(&result.diagnostics);
     let files: Vec<TestFile> = ts_config_files.iter().chain(&to_be_compiled).chain(&other_files).cloned().collect();
     let errors = tsbaseline::do_error_baseline(&files, &diags, result.options.pretty.is_true());
+    let js = verify_javascript_output(item, &result, &ts_config_files, &to_be_compiled, &other_files, &payload, &current_directory);
+    let maps = verify_source_maps(&result);
     let types_and_symbols = verify_types_and_symbols(item, &result, &to_be_compiled, &other_files);
-    Outcome::Baseline(errors, types_and_symbols)
+    Outcome::Baseline(errors, types_and_symbols, js, maps)
+}
+
+// compiler_runner.go:429
+const SKIPPED_EMIT_TESTS: [&str; 8] = [
+    "filesEmittingIntoSameOutput.ts",
+    "jsFileCompilationWithJsEmitPathSameAsInput.ts",
+    "grammarErrors.ts",
+    "jsFileCompilationEmitBlockedCorrectly.ts",
+    "jsDeclarationsReexportAliasesEsModuleInterop.ts",
+    "jsFileCompilationWithoutJsExtensions.ts",
+    "typeOnlyMerge2.ts",
+    "typeOnlyMerge3.ts",
+];
+
+// compiler_runner.go:440 (verifyJavaScriptOutput). `None`: no `.js` baseline for this test (not requested, no
+// non-declaration files, or a skipped emit test); a panic while building it is `Err` (Go RecoverAndFail).
+#[cfg(feature = "checker")]
+fn verify_javascript_output(
+    item: &TestItem,
+    result: &CompilationResult,
+    ts_config_files: &[TestFile],
+    to_be_compiled: &[TestFile],
+    other_files: &[TestFile],
+    payload: &test_case_parser::TestCaseContent,
+    current_directory: &str,
+) -> Option<Result<String, String>> {
+    if !js_baselines() || result.emit.is_none() {
+        return None;
+    }
+    // compiler_runner.go:286
+    let has_non_dts_files = payload.test_unit_data.iter().any(|unit| !tspath::file_extension_is(&unit.name, tspath::EXTENSION_DTS));
+    if !has_non_dts_files {
+        return None;
+    }
+    if SKIPPED_EMIT_TESTS.contains(&tspath::get_base_file_name(&item.path).as_ref()) {
+        return None;
+    }
+    if dts_only_mode() {
+        if !result.options.get_emit_declarations() {
+            return None;
+        }
+        let outputs = result.emit.as_ref().unwrap();
+        let mut text = String::new();
+        for file in outputs.dts.values() {
+            text.push_str(&crate::emit_harness::file_output(file, &result.harness_options));
+        }
+        return Some(Ok(if text.is_empty() { crate::baseline::NO_CONTENT.to_string() } else { text }));
+    }
+    let header_components =
+        tspath::get_path_components_relative_to(&compiler_runner::testdata_path().to_string_lossy(), &item.path, &ComparePathsOptions::default());
+    let header = tspath::get_path_from_path_components(&header_components);
+    let recompiler = Recompiler { harness_options: &result.harness_options, current_directory, symlinks: &payload.symlinks };
+    let run = std::panic::AssertUnwindSafe(|| {
+        crate::emit_harness::do_js_emit_baseline(&header, result.options, result, ts_config_files, to_be_compiled, other_files, &result.harness_options, &recompiler)
+    });
+    match std::panic::catch_unwind(run) {
+        Ok(r) => Some(r),
+        Err(_) => Some(Err(crate::worker::take_last_panic_message())),
+    }
+}
+
+#[cfg(not(feature = "checker"))]
+fn verify_javascript_output(
+    _: &TestItem,
+    _: &CompilationResult,
+    _: &[TestFile],
+    _: &[TestFile],
+    _: &[TestFile],
+    _: &test_case_parser::TestCaseContent,
+    _: &str,
+) -> Option<Result<String, String>> {
+    None
 }
 
 // verifyTypesAndSymbols (compiler_runner.go). Go runs the JS emit (verifyJavaScriptOutput) between the error
-// baseline and this; emit is not ported, so checker work the emitter would do first does not happen here.
+// baseline and this; it runs here only under `--baselines js`, so in the default mode checker work the emitter
+// would do first does not happen.
 #[cfg(feature = "checker")]
 fn verify_types_and_symbols(
     item: &TestItem,
@@ -280,6 +458,69 @@ fn verify_types_and_symbols(
     let (types, symbols) =
         crate::type_symbol_baseline::do_type_and_symbol_baseline(&header, program, &all_files, !result.diagnostics.is_empty());
     Some(compiler_runner::TypesAndSymbols { types, symbols })
+}
+
+// compiler_runner.go:468 (verifySourceMapOutput) and :485 (verifySourceMapRecord). A panic or `t.Fatal` is `Err`.
+#[cfg(feature = "checker")]
+fn verify_source_maps(result: &CompilationResult) -> Option<compiler_runner::SourceMapBaselines> {
+    let want = crate::extra_baselines();
+    if !emit_baselines() || want & (crate::EXTRA_JSMAP | crate::EXTRA_SOURCEMAP) == 0 {
+        return None;
+    }
+    let outputs = result.emit.as_ref()?;
+    let program = result.program;
+    let get_program_source_text = |name: &str| program.get_source_file(name).map(|f| f.original_text().to_string());
+    let get_source_map_record = || {
+        let source_maps: Vec<crate::sourcemap_recorder::SourceMapRecordInput> = outputs
+            .emit_result
+            .source_maps
+            .iter()
+            .map(|m| crate::sourcemap_recorder::SourceMapRecordInput {
+                generated_file: &m.generated_file,
+                input_source_file_names: &m.input_source_file_names,
+                source_map: &m.source_map,
+            })
+            .collect();
+        crate::sourcemap_recorder::get_source_map_record(
+            &source_maps,
+            |name| outputs.js.get(name).cloned(),
+            |name| outputs.dts.get(name).cloned(),
+            |name| program.get_source_file(name).map(|f| (f.addr(), f.original_text().to_string())),
+        )
+    };
+    let maps: Vec<TestFile> = outputs.maps.values().cloned().collect();
+    let sm = crate::sourcemap_baseline::SourceMapCompilationResult {
+        maps: &maps,
+        dts_count: outputs.dts.len(),
+        number_of_js_files: outputs.js.values().filter(|f| !tspath::file_extension_is(&f.unit_name, tspath::EXTENSION_JSON)).count(),
+        diagnostics_count: result.diagnostics.len(),
+        outputs: &outputs.outputs,
+        inputs: &outputs.inputs,
+        get_program_source_text: &get_program_source_text,
+        get_source_map_record: &get_source_map_record,
+    };
+    let catch = |f: &dyn Fn() -> Result<Option<String>, String>| match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+        Ok(Ok(Some(s))) => Some(Ok(s)),
+        Ok(Ok(None)) => None,
+        Ok(Err(fatal)) => Some(Err(fatal)),
+        Err(_) => Some(Err(crate::worker::take_last_panic_message())),
+    };
+    let js_map = if want & crate::EXTRA_JSMAP != 0 {
+        catch(&|| crate::sourcemap_baseline::do_sourcemap_baseline("", result.options, &sm, &result.harness_options).map(|r| r.map(|(_, s)| s)))
+    } else {
+        None
+    };
+    let sourcemap = if want & crate::EXTRA_SOURCEMAP != 0 {
+        catch(&|| Ok(Some(crate::sourcemap_baseline::do_sourcemap_record_baseline("", result.options, &sm).1)))
+    } else {
+        None
+    };
+    Some(compiler_runner::SourceMapBaselines { js_map, sourcemap })
+}
+
+#[cfg(not(feature = "checker"))]
+fn verify_source_maps(_: &CompilationResult) -> Option<compiler_runner::SourceMapBaselines> {
+    None
 }
 
 #[cfg(not(feature = "checker"))]

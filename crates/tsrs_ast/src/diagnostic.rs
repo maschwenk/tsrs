@@ -273,6 +273,39 @@ pub fn new_diagnostic(file: Option<P<SourceFile>>, loc: TextRange, message: &'st
     })
 }
 
+// diagnostic.go:166
+pub fn new_diagnostic_from_serialized(
+    file: Option<P<SourceFile>>,
+    loc: TextRange,
+    code: i32,
+    category: Category,
+    message_key: Key,
+    message_args: Vec<String>,
+    message_chain: &[P<Diagnostic>],
+    related_information: &[P<Diagnostic>],
+    reports_unnecessary: bool,
+    reports_deprecated: bool,
+    skipped_on_no_emit: bool,
+) -> P<Diagnostic> {
+    P::new(Diagnostic {
+        file: OwnedCell::new(file),
+        loc: OwnedCell::new(loc),
+        code,
+        category: OwnedCell::new(category),
+        source: OwnedCell::new(""),
+        message: None,
+        message_text: OwnedCell::new(""),
+        message_key,
+        message_args,
+        message_chain: OwnedCell::new(alloc_slice(message_chain)),
+        related_information: OwnedCell::new(alloc_slice(related_information)),
+        reports_unnecessary,
+        reports_deprecated,
+        skipped_on_no_emit: OwnedCell::new(skipped_on_no_emit),
+        repopulate_info: OwnedCell::new(None),
+    })
+}
+
 pub fn new_diagnostic_chain(chain: impl Into<Option<P<Diagnostic>>>, message: &'static Message, args: &[&dyn fmt::Display]) -> P<Diagnostic> {
     if let Some(chain) = chain.into() {
         return new_diagnostic(chain.file.get(), chain.loc.get(), message, args)
@@ -643,4 +676,37 @@ mod tests {
         }
         assert_eq!(collection.get_diagnostics().len(), all.len());
     }
+}
+
+// diagnostic.go NewDiagnosticFromText: a diagnostic whose message is already-localized text (the native API
+// receives these from clients, e.g. `configFileParsingDiagnostics`).
+#[allow(clippy::too_many_arguments)]
+pub fn new_diagnostic_from_text(
+    file: Option<P<SourceFile>>,
+    loc: TextRange,
+    code: i32,
+    category: Category,
+    message_text: &str,
+    message_chain: &[P<Diagnostic>],
+    related_information: &[P<Diagnostic>],
+    reports_unnecessary: bool,
+    reports_deprecated: bool,
+) -> P<Diagnostic> {
+    P::new(Diagnostic {
+        file: OwnedCell::new(file),
+        loc: OwnedCell::new(loc),
+        code,
+        category: OwnedCell::new(category),
+        source: OwnedCell::new(""),
+        message: None,
+        message_text: OwnedCell::new(alloc_str(message_text)),
+        message_key: Key::default(),
+        message_args: Vec::new(),
+        message_chain: OwnedCell::new(alloc_slice(message_chain)),
+        related_information: OwnedCell::new(alloc_slice(related_information)),
+        reports_unnecessary,
+        reports_deprecated,
+        skipped_on_no_emit: OwnedCell::new(false),
+        repopulate_info: OwnedCell::new(None),
+    })
 }

@@ -850,8 +850,9 @@ impl Checker {
     pub(crate) fn get_cross_product_intersections(&mut self, types: &[P<Type>], flags: IntersectionFlags) -> Vec<P<Type>> {
         let count = self.get_cross_product_union_size(types);
         let mut intersections: Vec<P<Type>> = Vec::new();
+        // Every iteration overwrites each union position; the others keep `types[j]`.
+        let mut constituents = types.to_vec();
         for i in 0..count {
-            let mut constituents = types.to_vec();
             let mut n = i;
             for j in (0..types.len()).rev() {
                 if types[j].flags().intersects(TypeFlags::Union) {

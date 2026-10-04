@@ -138,6 +138,12 @@ jobs:
             set +e; "out/${{ matrix.target }}/$exe" bad.ts; status=$?; set -e
             [ "$status" = 2 ] || { echo "expected exit 2 for a type error, got $status"; exit 1; }
           fi
+      - name: Installed-package smoke (CLI and Node API)
+        shell: bash
+        run: |
+          npm ci --prefix npm --no-audit --no-fund
+          node npm/build.mjs --artifacts out --pack
+          node npm/sdk/smoke-consumer.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bin-${{ matrix.target }}
@@ -169,7 +175,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          # Same Node as ci.yml's packaging smoke test, which builds the unstable/* JS API with these tools.
+          node-version: 24
           registry-url: https://registry.npmjs.org
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -182,8 +189,12 @@ jobs:
             test -f "artifacts/$t/tsrs" || { echo "::error::missing binary for $t"; exit 1; }
           done
           ls -lR artifacts
+      # npm/build.mjs compiles the unstable/* JS API with npm/package.json's build-only tools (same
+      # prerequisite as ci.yml's packaging smoke test); branches without that manifest have nothing to install.
       - name: Assemble and pack
-        run: node npm/build.mjs --artifacts artifacts --pack
+        run: |
+          if [ -f npm/package-lock.json ]; then npm ci --prefix npm --no-audit --no-fund; fi
+          node npm/build.mjs --artifacts artifacts --pack
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: npm-packages

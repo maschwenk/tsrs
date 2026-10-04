@@ -2562,7 +2562,7 @@ impl Checker {
                 types = origin.types();
             }
         }
-        let mut mapped_types: Vec<P<Type>> = Vec::with_capacity(16);
+        let mut mapped_types = self.free_type_lists.pop().unwrap_or_default();
         let mut changed = false;
         for &s in types {
             let mapped = if s.flags().intersects(TypeFlags::Union) { self.map_type_ex_worker(s, f, no_reductions) } else { f(self, s) };
@@ -2573,13 +2573,15 @@ impl Checker {
                 mapped_types.push(mapped);
             }
         }
-        if changed {
-            if mapped_types.is_empty() {
-                return None;
-            }
-            return Some(self.get_union_type_ex(&mapped_types, if no_reductions { UnionReduction::None } else { UnionReduction::Literal }, AliasArg::None /*alias*/, None /*origin*/));
-        }
-        Some(t)
+        let result = if !changed {
+            Some(t)
+        } else if mapped_types.is_empty() {
+            None
+        } else {
+            Some(self.get_union_type_ex(&mapped_types, if no_reductions { UnionReduction::None } else { UnionReduction::Literal }, AliasArg::None /*alias*/, None /*origin*/))
+        };
+        self.free_type_list(mapped_types);
+        result
     }
 
     // checker.go:26080

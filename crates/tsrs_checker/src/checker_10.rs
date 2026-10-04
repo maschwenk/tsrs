@@ -2087,10 +2087,16 @@ pub(crate) struct LazyMappedTable {
 }
 
 impl Checker {
+    #[inline]
     pub(crate) fn get_lazy_mapped_table(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMappedTable>> {
         if !self.lazy_members || t.object_flags() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) != ObjectFlags::Mapped {
             return None;
         }
+        self.get_lazy_mapped_table_worker(t)
+    }
+
+    #[inline(never)]
+    fn get_lazy_mapped_table_worker(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMappedTable>> {
         if let Some(lazy) = self.lazy_mapped_tables.get(&t) {
             return Some(lazy.clone());
         }

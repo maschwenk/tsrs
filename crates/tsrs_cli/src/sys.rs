@@ -67,8 +67,21 @@ pub fn new_system() -> osSys {
     osSys {
         cwd: tspath::normalize_path(&cwd.to_string_lossy()),
         fs: Arc::new(bundled::wrap_fs(osvfs::fs())),
-        default_library_path: bundled::lib_path(),
+        default_library_path: default_library_path(),
         writer: Mutex::new(std::io::BufWriter::new(std::io::stdout())),
         start: Instant::now(),
     }
+}
+
+// Go's embedded build reads the default libraries from `bundled:///libs`; its `noembed` build (the npm `tsgo`)
+// reads them from the executable's directory, which changes path-sorted tsbuildinfo fields. tsrs-only:
+// TSRS_LIB_PATH=<dir containing lib.d.ts> behaves like the noembed build (the emit oracles point it at tsgo's
+// directory when comparing tsbuildinfo with the npm tsgo).
+fn default_library_path() -> String {
+    if let Ok(dir) = std::env::var("TSRS_LIB_PATH") {
+        if !dir.is_empty() {
+            return tspath::normalize_path(&dir);
+        }
+    }
+    bundled::lib_path()
 }

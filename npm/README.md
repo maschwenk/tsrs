@@ -4,7 +4,7 @@ tsrs ships on npm the way TypeScript 7 ships its native compiler (`typescript@7`
 
 | package | contents |
 | --- | --- |
-| `@maschwenk/tsrs` | `bin/tsrs` (Node launcher), `lib/` (binary lookup, `version.cjs`), `optionalDependencies` on every platform package |
+| `@maschwenk/tsrs` | `bin/tsrs` (Node launcher), `lib/` (binary lookup, `version.cjs`), `dist/` + `vendor/` (the `unstable/*` JS API, see below), `optionalDependencies` on every platform package |
 | `@maschwenk/tsrs-<os>-<arch>` | the `tsrs` binary for one platform, with `os`/`cpu` (and `libc: glibc` on Linux) so package managers install only the matching one |
 
 Platforms: `darwin-arm64`, `linux-x64` and `linux-arm64` (glibc; `darwin-x64` was published up to 0.2.1). `npm/build.mjs` and the launcher
@@ -16,6 +16,10 @@ the launcher derives that name from its own `package.json` at runtime.
 ## How the launcher finds the binary
 
 `bin/tsrs` -> `lib/tsrs.js` -> `lib/getExePath.js`:
+
+(`bin/tsrs` is a CommonJS stub, via `bin/package.json`, that imports the ESM launcher: Node 16 cannot run an
+extensionless ES module in a `"type": "module"` package. `npm/sdk/smoke-consumer.mjs --node <path>` checks the
+launcher and the JS API on each given Node; 16.20.0, 18, 20, 22 and 24 pass.)
 
 1. `TSRS_BINARY` set: run that file (for local builds: `TSRS_BINARY=$PWD/target/release/tsrs pnpm exec tsrs ...`).
 2. Otherwise resolve `<name>-<process.platform>-<process.arch>/package.json` from the launcher's own location (with
@@ -55,6 +59,7 @@ commit, update `[workspace.metadata.typescript]`.
 
 ```sh
 cargo build --release -p tsrs_cli
+npm ci --prefix npm     # build-only compiler for the JS API
 node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 # -> npm/dist/maschwenk-tsrs-darwin-arm64-<version>.tgz, npm/dist/maschwenk-tsrs-<version>.tgz, npm/dist/packages.json
 ```
@@ -73,6 +78,55 @@ pnpm add -D @maschwenk/tsrs@file:/abs/npm/dist/maschwenk-tsrs-<version>.tgz \
 (The launcher then finds the platform package at the project root. A pnpm `overrides` entry pointing
 `@maschwenk/tsrs-darwin-arm64` at the tarball reproduces the registry layout exactly, but changing `overrides` makes
 pnpm re-resolve the whole lockfile.)
+
+## JS API (`unstable/*` exports)
+
+`npm/tsrs/src`, `npm/tsrs/vendor` (vscode-jsonrpc, MIT, with its license) and `npm/tsrs/test` are TypeScript 7's JS API
+package (`packages/typescript` in microsoft/TypeScript) at the pinned commit, copied by `npm/sdk/sync-upstream.mjs`
+(byte for byte, except a few listed test edits; `npm/tsrs/UPSTREAM.json` holds the commit and sha256 of every file).
+After bumping `[workspace.metadata.typescript]`, check out that commit as `ts-ref` and rerun it;
+`node npm/sdk/sync-upstream.mjs --check` fails if the copy drifted.
+
+```sh
+npm ci --prefix npm                        # build-only tools: typescript@7 (compiler), @types/node, tinybench
+node npm/build.mjs --sdk-only              # npm/tsrs/src -> npm/tsrs/dist (also part of every package build)
+cd npm/tsrs && TSRS_BINARY=/path/to/server node --conditions @typescript/source --test 'test/**/*.test.ts'
+node npm/sdk/smoke-consumer.mjs            # after build.mjs --pack: offline install into a temp consumer, typecheck, sync+async compile
+node npm/sdk/method-coverage.mjs --server tsgo=/path/to/pinned/tsgo --server tsrs=target/release/tsrs  # -> npm/sdk/METHODS.md
+```
+
+The tests and the inventory can run against a tsgo built from the pinned commit (`cd ts-ref/tsc && go build -o
+/tmp/tsgo ./cmd/tsc`) as the reference server. The SDK spawns `getExePath()` (so `TSRS_BINARY` applies) unless the
+caller passes `tsserverPath`.
+
+Deliberate patches (the only differences from the pinned sources; each patch file explains itself, and
+`sync-upstream.mjs` applies them strictly and records the original sha256 in `UPSTREAM.json` `patchedFiles`):
+
+- `npm/sdk/patches/async-client-connection-loss.patch` (`src/api/async/client.ts`): upstream, if the server dies or
+  closes the connection while the async client is open, in-flight and queued requests never settle. Now every
+  pending and later request rejects with an `Error` whose message starts with `API server connection lost: `.
+  A normal `close()` is unchanged; `close()` after a crash rejects promptly with that error if it had snapshots to
+  release.
+- `npm/sdk/patches/vscode-jsonrpc-send-request-write-error.patch` (vendored vscode-jsonrpc 9.0.2): a request written
+  to a dead server also became an unhandled rejection that terminated Node; the request's own rejection is kept.
+
+The sync client is unpatched: after a server crash its next call throws at once with the raw pipe error.
+`npm/sdk/smoke/consumer.mjs` kills the real server with work in flight to cover all of this (the unpatched
+package hangs those requests and crashes on the unhandled rejection).
+
+Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `tsc/internal/ipc`, `src/api/options.ts`):
+
+- argv: `--api [--async] --cwd <dir> --useCaseSensitiveFileNames=<bool> [--callbacks=<names>] [--timing]
+  [--runExternalCode] [--pipe <path>]` (`--pipe` only on Windows for the sync client). stdout carries only protocol
+  bytes; stderr is inherited.
+- sync: every message is a MessagePack 3-array `[uint8 type, bin method, bin payload]`; types 1 request, 2 callback
+  response, 3 callback error (client to server), 4 response, 5 error, 6 callback call (server to client). Payloads are
+  JSON text, except binary responses (`getSourceFile` and friends: the AST encoding, protocol version 9 in the top
+  byte of the metadata word).
+- async: JSON-RPC 2.0 with `Content-Length` framing; filesystem callbacks are server-to-client requests.
+- handshake: the first request is `initialize` with params `null`; the result is
+  `{"useCaseSensitiveFileNames": <bool>, "currentDirectory": "<cwd>"}`. There is no version negotiation: client and
+  server must come from the same commit.
 
 ## Releasing
 
@@ -115,9 +169,10 @@ pnpm add -D @maschwenk/tsrs@0.1.0-ts7.1.0-dev.20260929
 
 # 2. Run it.
 pnpm exec tsrs --version
-pnpm exec tsrs -p path/to/project --extendedDiagnostics
+pnpm exec tsrs -p path/to/project --noEmit --extendedDiagnostics
 
-# 3. Switch a typecheck script from tsc to tsrs: the flags are the same.
+# 3. Switch a tsc script to tsrs: the flags are the same. Like tsc, tsrs emits unless the options say otherwise
+#    (`--noEmit` for a typecheck-only script).
 ```
 
 tsrs runs 4 checker threads by default, like tsgo (`--singleThreaded` for one). `GOMEMLIMIT` has no effect on tsrs.

@@ -106,10 +106,9 @@ fn node_header(kind: Kind, data_tag: NodeDataTag) -> Node {
 
 /// Creates a node whose data struct is `data` (Go: the data struct embeds `NodeBase`, one allocation).
 pub(crate) fn new_node<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks) -> P<Node> {
-    let a: &'static NodeAlloc<T> = P::new(NodeAlloc { node: node_header(kind, T::TAG), data }).get();
     // SAFETY: `NodeAlloc` is `repr(C)` with the header first, so the pointer to the allocation is a pointer to
     // its header; the header is never moved or freed (leak arena).
-    let n = P::from_static(unsafe { &*(a as *const NodeAlloc<T>).cast::<Node>() });
+    let n = unsafe { P::new(NodeAlloc { node: node_header(kind, T::TAG), data }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -123,9 +122,8 @@ pub(crate) fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::
     let () = T::SAME_OFFSET;
     let mut header = node_header(kind, T::TAG);
     header.header = OwnedCell::new(header.header.get().with_rare_tail());
-    let a: &'static NodeAllocRare<T, T::Rare> = P::new(NodeAllocRare { node: header, data, rare }).get();
     // SAFETY: as in `new_node` (`NodeAllocRare` is `repr(C)` with the header first).
-    let n = P::from_static(unsafe { &*(a as *const NodeAllocRare<T, T::Rare>).cast::<Node>() });
+    let n = unsafe { P::new(NodeAllocRare { node: header, data, rare }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -376,16 +374,14 @@ pub fn census_layouts() {
     });
 }
 
-/// A node's kind, data tag and parent in one word: the parent's address divided by 8 in the low 45 bits (nodes are
-/// 8-aligned and user-space addresses are below 2^48 on every supported platform; checked when the parent is set),
-/// the kind in the next 9 bits, the data tag in the 8 above and then the rare bit (the data struct is followed by its
-/// rare tail, `NodeRareTail`). Only the parent changes after creation. The parent's provenance is exposed when it is
-/// stored and recovered with `with_exposed_provenance`.
+/// A node's kind, data tag and parent in one word: the parent in the low 45 bits (`P::pack`), the kind in the next 9 bits, the data
+/// tag in the 8 above and then the rare bit (the data struct is followed by its rare tail, `NodeRareTail`). Only the
+/// parent changes after creation.
 #[derive(Clone, Copy)]
 struct NodeHeaderWord(u64);
 
 impl NodeHeaderWord {
-    const PARENT_BITS: u32 = 45;
+    const PARENT_BITS: u32 = tsrs_core::PACK_BITS;
     const PARENT_MASK: u64 = (1 << Self::PARENT_BITS) - 1;
     const KIND_SHIFT: u32 = Self::PARENT_BITS;
     const KIND_BITS: u32 = 9;
@@ -422,17 +418,13 @@ impl NodeHeaderWord {
 
     #[inline]
     fn parent(self) -> Option<P<Node>> {
-        let addr = ((self.0 & Self::PARENT_MASK) << 3) as usize;
-        // SAFETY: a nonzero address was stored from a live `P<Node>` (arena nodes are never freed or moved), whose
-        // provenance `with_parent` exposed.
-        (addr != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Node>(addr) }))
+        // SAFETY: the low bits were stored by `with_parent` from a live `P<Node>` (arena nodes are never freed or moved).
+        unsafe { P::unpack_opt(self.0) }
     }
 
     #[inline]
     fn with_parent(self, parent: Option<P<Node>>) -> NodeHeaderWord {
-        let addr = parent.map_or(0, |p| (p.get() as *const Node).expose_provenance()) as u64;
-        assert!(addr & 7 == 0 && addr >> (Self::PARENT_BITS + 3) == 0, "node address {addr:#x} does not fit the node header");
-        NodeHeaderWord(self.0 & !Self::PARENT_MASK | addr >> 3)
+        NodeHeaderWord(self.0 & !Self::PARENT_MASK | P::pack_opt(parent))
     }
 }
 
@@ -501,7 +493,7 @@ impl Node {
     #[inline]
     pub fn as_p(&self) -> P<Node> {
         // SAFETY: see above; nodes are never freed or moved.
-        P::from_static(unsafe { &*(self as *const Node) })
+        unsafe { P::from_arena(&*(self as *const Node)) }
     }
 
     #[inline]
@@ -2096,10 +2088,18 @@ impl HasFileName for SourceFile {
 }
 
 impl Node {
+    /// `P<FlowReduceLabelData>` for a reduce-label node.
+    #[inline]
+    pub fn as_flow_reduce_label_data_p(&self) -> P<FlowReduceLabelData> {
+        // SAFETY: as in `as_source_file_p`.
+        unsafe { P::from_arena(self.as_flow_reduce_label_data()) }
+    }
+
     /// `P<SourceFile>` for a SourceFile node (Go code that holds `*ast.SourceFile`).
     #[inline]
     pub fn as_source_file_p(&self) -> P<SourceFile> {
-        P::from_static(self.as_source_file())
+        // SAFETY: the data struct of an arena node (8-aligned: it follows the 24-byte header).
+        unsafe { P::from_arena(self.as_source_file()) }
     }
 }
 

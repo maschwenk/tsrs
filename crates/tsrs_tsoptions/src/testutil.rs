@@ -47,6 +47,12 @@ impl ToJson for Option<Vec<String>> {
     }
 }
 
+impl ToJson for Option<i64> {
+    fn to_json(&self) -> Option<Value> {
+        self.map(|v| Value::Number(v as f64))
+    }
+}
+
 impl ToJson for Option<i32> {
     fn to_json(&self) -> Option<Value> {
         self.map(|v| Value::Number(v as f64))
@@ -88,7 +94,7 @@ macro_rules! enum_to_json {
                 if *self == <$ty>::default() {
                     None
                 } else {
-                    Some(Value::Number(*self as i32 as f64))
+                    Some(Value::Number(self.value() as f64))
                 }
             }
         })*

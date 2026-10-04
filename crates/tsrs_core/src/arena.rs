@@ -33,6 +33,11 @@ use std::sync::{Arc, Condvar, Mutex, RwLock, Weak};
 const FIRST_CHUNK: usize = 1 << 20;
 const CHUNK_ALIGN: usize = 16;
 const PAGE: usize = 4096;
+/// Largest chunk a thread arena grows to in compressed mode (larger single allocations still get their own size).
+#[cfg(compressed_ptrs)]
+const MAX_CHUNK: usize = 64 << 20;
+#[cfg(not(compressed_ptrs))]
+const MAX_CHUNK: usize = usize::MAX;
 
 /// Largest block size kept on a free list; classes are `size / 8`.
 pub const MAX_FREE_SIZE: usize = 512;
@@ -164,7 +169,15 @@ impl Arena {
         let need = layout.size().checked_add(layout.align()).expect("arena allocation size overflow");
         // A region grows by a quarter of what it has (at least 4 KiB): many regions are small (one per parsed file),
         // and the unused tail of a doubled chunk would dominate their footprint.
-        let next = if self.is_region() { (self.capacity.get() / 4).max(PAGE) } else { prev * 2 };
+        // Compressed pointers: thread-arena chunks stop doubling at `MAX_CHUNK`, since every chunk takes its size out
+        // of the fixed reservation, touched or not.
+        let next = if self.is_region() {
+            (self.capacity.get() / 4).max(PAGE)
+        } else if cfg!(compressed_ptrs) {
+            (prev * 2).min(MAX_CHUNK)
+        } else {
+            prev * 2
+        };
         self.new_chunk(next.max(need));
         if self.up {
             return self.alloc_layout_up(layout);
@@ -239,9 +252,11 @@ impl Arena {
         self.chunks().iter().any(|&(start, size)| addr >= start && addr < start + size)
     }
 
+    /// `value` in a block of `layout` (at least `T`'s size and alignment).
     #[inline(always)]
-    pub(crate) fn alloc<T>(&self, value: T) -> &mut T {
-        let p = self.alloc_layout(Layout::new::<T>()).cast::<T>();
+    pub(crate) fn alloc_with<T>(&self, layout: Layout, value: T) -> &mut T {
+        debug_assert!(layout.size() >= std::mem::size_of::<T>() && layout.align() >= std::mem::align_of::<T>());
+        let p = self.alloc_layout(layout).cast::<T>();
         // SAFETY: fresh, aligned, exclusively owned memory for one `T`.
         unsafe {
             p.as_ptr().write(value);
@@ -382,17 +397,22 @@ fn census_chunk(size: usize) -> *mut u8 {
     p.cast()
 }
 
-/// A chunk for a thread's arena.
+/// A chunk for a thread's arena (or a slab). Compressed pointers: from the process-wide reservation (`reserve`).
 fn os_chunk(layout: Layout) -> *mut u8 {
-    #[cfg(feature = "alloc-profile")]
+    #[cfg(compressed_ptrs)]
+    return crate::reserve::alloc_chunk(layout.size());
+    #[cfg(all(feature = "alloc-profile", not(compressed_ptrs)))]
     let base = census_chunk(layout.size());
-    #[cfg(not(feature = "alloc-profile"))]
+    #[cfg(not(any(feature = "alloc-profile", compressed_ptrs)))]
     // SAFETY: non-zero size.
     let base = unsafe { std::alloc::alloc(layout) };
-    if base.is_null() {
-        std::alloc::handle_alloc_error(layout);
+    #[cfg(not(compressed_ptrs))]
+    {
+        if base.is_null() {
+            std::alloc::handle_alloc_error(layout);
+        }
+        base
     }
-    base
 }
 
 /// Region chunks are carved from per-thread slabs, packed back to back: one region per parsed file means tens of
@@ -468,10 +488,15 @@ fn slab_release(slab: *const Slab) {
         return;
     }
     // Profile builds map slabs with `mmap` (`census_chunk`) and keep them.
-    #[cfg(not(feature = "alloc-profile"))]
+    #[cfg(not(any(feature = "alloc-profile", compressed_ptrs)))]
     // SAFETY: allocated by `new_slab` with this layout; every chunk carved from it was released.
     unsafe {
         std::alloc::dealloc(s.base, Layout::from_size_align(s.size, CHUNK_ALIGN).expect("arena slab layout"))
+    };
+    #[cfg(compressed_ptrs)]
+    // SAFETY: from `os_chunk` with this size; every chunk carved from it was released.
+    unsafe {
+        crate::reserve::release_chunk(s.base, s.size)
     };
     // SAFETY: made by `Box::into_raw` in `new_slab`; this was the last reference.
     drop(unsafe { Box::from_raw(slab as *mut Slab) });
@@ -808,6 +833,17 @@ impl Drop for RegionScope {
             region.0.lock.unlock();
         }
     }
+}
+
+/// The region that is the current thread's allocation target, if any (`None`: the thread's own arena).
+pub fn current_region() -> Option<Region> {
+    let p = CURRENT.with(|c| c.get());
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: a non-null `CURRENT` is the thread arena or the arena of a region kept alive by an entered scope.
+    let arena = unsafe { &*p };
+    arena.region.as_ref().and_then(|w| w.upgrade()).map(Region)
 }
 
 /// Makes the current thread's own (never freed) arena the allocation target until the scope is dropped: for data

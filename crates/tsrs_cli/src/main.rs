@@ -5,17 +5,27 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[cfg(feature = "alloc-profile")]
 mod census;
+mod api;
+mod build;
 mod execute;
 mod lsp;
 mod sys;
 mod tsc;
+#[cfg(test)]
+mod tsctests;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    // main.go:21: `--lsp` runs the language server (its threads have their own stacks). `--api` (the IPC API) is
-    // not ported and falls through to the command line like any other argument.
+    // main.go:21: `--lsp` runs the language server (its threads have their own stacks); `--api` runs the
+    // native API server (docs/NODE_API.md).
     if args.first().map(String::as_str) == Some("--lsp") {
         std::process::exit(lsp::run_lsp(&args[1..]));
+    }
+    if args.first().map(String::as_str) == Some("--api") {
+        // Checking recurses deeply; serve requests on a large stack like the command line below.
+        let rest = args[1..].to_vec();
+        let status = std::thread::Builder::new().stack_size(512 << 20).spawn(move || api::run_api(&rest)).unwrap().join().unwrap_or(1);
+        std::process::exit(status);
     }
     // Type checking recurses deeply; run on a thread with a large stack
     // (Go's goroutine stacks grow on demand).

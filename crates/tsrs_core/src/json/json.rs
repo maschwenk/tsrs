@@ -11,13 +11,21 @@ pub enum Value {
     Null,
     Bool(bool),
     Number(f64),
+    /// An exact integer to encode as written (never produced by `unmarshal`): Go `int`/`int64` values that f64
+    /// cannot hold, e.g. a `*int` option echoed back to an API client.
+    Integer(i64),
     String(String),
     Array(Vec<Value>),
     Object(OrderedMap<String, Value>),
 }
 
 pub fn marshal(v: &Value) -> Result<String, String> {
-    let mut out = String::new();
+    marshal_with_capacity(v, 0)
+}
+
+/// `marshal` into a buffer that starts with `capacity` bytes, for callers that know roughly how large the output is.
+pub fn marshal_with_capacity(v: &Value, capacity: usize) -> Result<String, String> {
+    let mut out = String::with_capacity(capacity);
     write_value(&mut out, v, "", "", 0)?;
     Ok(out)
 }
@@ -30,6 +38,21 @@ pub fn marshal_indent(v: &Value, prefix: &str, indent: &str) -> Result<String, S
     let mut out = String::new();
     write_value(&mut out, v, prefix, indent, 0)?;
     Ok(out)
+}
+
+/// Appends the compact (`marshal`) encoding of `v`, for writers that stream a large document piece by piece.
+pub fn write_compact(out: &mut String, v: &Value) -> Result<(), String> {
+    write_value(out, v, "", "", 0)
+}
+
+/// Appends the encoding of a string, as `marshal` writes `Value::String`.
+pub fn write_compact_string(out: &mut String, s: &str) {
+    write_string(out, s)
+}
+
+/// Appends the encoding of an integer, as `marshal` writes an integral `Value::Number` or a `Value::Integer`.
+pub fn write_compact_int(out: &mut String, n: i64) {
+    write_i64(out, n)
 }
 
 /// `json.Marshal` of a Go string.
@@ -98,7 +121,11 @@ fn write_value(out: &mut String, v: &Value, prefix: &str, indent: &str, depth: u
     match v {
         Value::Null => out.push_str("null"),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        // An integral value below 1e21 prints as its digits (es6_number_string's first case); writing those directly
+        // avoids the shortest-digits formatting and its allocations, which dominate large integer arrays.
+        Value::Number(n) if n.fract() == 0.0 && n.abs() < 9007199254740992.0 => write_i64(out, *n as i64),
         Value::Number(n) => out.push_str(&marshal_f64(*n)?),
+        Value::Integer(n) => write_i64(out, *n),
         Value::String(s) => write_string(out, s),
         Value::Array(items) => {
             out.push('[');
@@ -141,11 +168,37 @@ fn write_value(out: &mut String, v: &Value, prefix: &str, indent: &str, depth: u
     Ok(())
 }
 
+fn write_i64(out: &mut String, n: i64) {
+    let mut buf = [0u8; 20];
+    let mut i = buf.len();
+    let mut m = n.unsigned_abs();
+    loop {
+        i -= 1;
+        buf[i] = b'0' + (m % 10) as u8;
+        m /= 10;
+        if m == 0 {
+            break;
+        }
+    }
+    if n < 0 {
+        out.push('-');
+    }
+    // Only ASCII digits were written.
+    out.push_str(std::str::from_utf8(&buf[i..]).unwrap());
+}
+
 fn write_string(out: &mut String, s: &str) {
     out.push('"');
     let bytes = s.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
+        // Copy the run of bytes that need no escaping in one go.
+        let run = bytes[i..].iter().position(|&b| b >= 0x80 || b < 0x20 || b == b'"' || b == b'\\').unwrap_or(bytes.len() - i);
+        if run > 0 {
+            out.push_str(&s[i..i + run]);
+            i += run;
+            continue;
+        }
         let b = bytes[i];
         if b < 0x80 {
             match b {
@@ -312,6 +365,12 @@ impl JsonParser<'_> {
             }
         }
         let text = std::str::from_utf8(&self.s[start..self.pos]).unwrap();
+        // Up to 15 digits without fraction or exponent is an integer that f64 holds exactly.
+        let digits = text.strip_prefix('-').unwrap_or(text);
+        if digits.len() <= 15 && digits.bytes().all(|b| b.is_ascii_digit()) {
+            let n = digits.bytes().fold(0u64, |n, b| n * 10 + (b - b'0') as u64) as f64;
+            return Ok(Value::Number(if text.starts_with('-') { -n } else { n }));
+        }
         match text.parse::<f64>() {
             Ok(f) if f.is_finite() => Ok(Value::Number(f)),
             _ => self.err("number out of range"),
@@ -401,8 +460,20 @@ mod tests {
         assert_eq!(marshal_f64(-0.000001).unwrap(), "-0.000001");
         assert_eq!(marshal_f64(1.5e-7).unwrap(), "1.5e-7");
         assert_eq!(marshal_f64(1e20).unwrap(), "100000000000000000000");
+        // The integer fast path agrees with the general ES6 formatting.
+        for n in [0.0, -0.0, 1.0, -1.0, 9.0, 10.0, 12345.0, -987654321.0, 9007199254740991.0, -9007199254740991.0, 9007199254740992.0, 1e20] {
+            assert_eq!(marshal(&Value::Number(n)).unwrap(), marshal_f64(n).unwrap(), "{n}");
+        }
+        assert_eq!(marshal(&Value::Integer(i64::MIN)).unwrap(), i64::MIN.to_string());
+        assert_eq!(marshal_string("plain/ascii run é \"q\" \\ tab\t end"), "\"plain/ascii run é \\\"q\\\" \\\\ tab\\t end\"");
         assert!(marshal_f64(f64::NAN).is_err());
         assert!(unmarshal("{\"a\":1,\"a\":2}").is_err());
         assert!(unmarshal("[1,]").is_err());
+        // The integer fast path agrees with the general parse, including the sign of zero.
+        for text in ["0", "-0", "7", "-42", "123456789012345", "-999999999999999", "1234567890123456", "1.5", "2e3"] {
+            let Value::Number(n) = unmarshal(text).unwrap() else { panic!() };
+            let expected: f64 = text.parse().unwrap();
+            assert_eq!(n.to_bits(), expected.to_bits(), "{text}");
+        }
     }
 }

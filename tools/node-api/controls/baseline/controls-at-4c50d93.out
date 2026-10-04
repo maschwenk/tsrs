@@ -1,0 +1,19 @@
+FAIL CE1b order fallback must not sort nested declarations: getSymbolsInScope equal (want differs) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":1,"oracleUnstable":0,"unverified":0}
+ok   CE1b control: same elements, oracle order: getSymbolsInScope equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+FAIL CE2 (ce5) identity break inside an unordered result: getSymbolsInScope equal (want differs) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":1,"oracleUnstable":0,"unverified":0}
+ok   CE2 (ce5) control: consistent identity: getSymbolsInScope equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+FAIL CE3 request difference on the unordered path: getSignaturesOfType equal (want differs) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":1,"oracleUnstable":0,"unverified":0}
+FAIL CE1 nested parameter order swapped: getSignaturesOfType equal (want differs) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   CE1 control: getSignaturesOfType equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+FAIL CE4 (ce2) candidate matches neither oracle run: getTypeAtPosition equal (want differs|inconclusive) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":1,"unverified":0}
+FAIL CE5 (ce4) non-canonical base64 strings are distinct: getSourceFile equal (want differs) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   CE5 (ce4) control: getSourceFile differs (want differs) {"okEqual":0,"strictEqual":0,"differ":1,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+FAIL user property __k@1 is not counter-renamed: getPropertiesOfType equal (want differs) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   user property __k@1 control: getPropertiesOfType equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   unique symbol counter suffix is a renaming: getPropertiesOfType equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+FAIL missing candidate process fails closed: getTypeAtPosition equal (want inconclusive) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+FAIL differing >4 MiB hash is inconclusive, not equal: getSourceFile differs (want inconclusive) {"okEqual":1,"strictEqual":0,"differ":1,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+ok   sync binary AST identical: getSourceFile equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":0,"oracleUnstable":0,"unverified":0}
+FAIL sync binary AST drift control: comparator error: --drift: no successful utf8 response for getSourceFile in syn-b
+ok   legit reorder where oracle runs disagree on order: getSymbolsInScope equal (want equal) {"okEqual":1,"strictEqual":0,"differ":0,"equalUnordered":1,"oracleUnstable":0,"unverified":0}
+10 control(s) failed

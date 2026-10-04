@@ -114,6 +114,11 @@ pub fn is_modifier(node: P<Node>) -> bool {
     is_modifier_kind(node.kind())
 }
 
+// utilities.go:108
+pub fn is_modifier_like(node: P<Node>) -> bool {
+    is_modifier(node) || is_decorator(node)
+}
+
 pub fn is_compound_assignment(token: Kind) -> bool {
     token >= Kind::FirstCompoundAssignment && token <= Kind::LastCompoundAssignment
 }
@@ -141,6 +146,27 @@ pub fn is_destructuring_assignment(node: P<Node>) -> bool {
         return kind == Kind::ObjectLiteralExpression || kind == Kind::ArrayLiteralExpression;
     }
     false
+}
+
+// utilities.go:140
+pub fn is_object_binding_or_assignment_element(node: P<Node>) -> bool {
+    matches!(node.kind(), Kind::BindingElement | Kind::PropertyAssignment | Kind::ShorthandPropertyAssignment | Kind::SpreadAssignment)
+}
+
+// utilities.go:151
+pub fn is_array_binding_or_assignment_element(node: P<Node>) -> bool {
+    match node.kind() {
+        Kind::BindingElement
+        | Kind::OmittedExpression
+        | Kind::SpreadElement
+        | Kind::ArrayLiteralExpression
+        | Kind::ObjectLiteralExpression
+        | Kind::Identifier
+        | Kind::PropertyAccessExpression
+        | Kind::ElementAccessExpression => return true,
+        _ => {}
+    }
+    is_assignment_expression(node, true /*excludeCompoundAssignment*/)
 }
 
 pub fn is_binding_pattern(node: P<Node>) -> bool {
@@ -844,7 +870,7 @@ pub fn get_source_file_of_node(node: impl Into<Option<P<Node>>>) -> Option<P<Sou
     let mut node = node.into();
     while let Some(n) = node {
         if n.kind() == Kind::SourceFile {
-            return Some(P::from_static(n.as_source_file()));
+            return Some(n.as_source_file_p());
         }
         node = n.parent();
     }
@@ -1528,4 +1554,9 @@ pub fn get_assigned_name(node: P<Node>) -> Option<P<Node>> {
         }
     }
     None
+}
+
+// utilities.go:80 (added for emit)
+pub fn range_is_synthesized(loc: tsrs_core::TextRange) -> bool {
+    position_is_synthesized(loc.pos()) || position_is_synthesized(loc.end())
 }

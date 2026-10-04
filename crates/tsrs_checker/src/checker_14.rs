@@ -1517,6 +1517,18 @@ impl Checker {
     }
 
     // checker.go:29702
+    /// `get_template_string_for_type` appended to `sb` (without a temporary `String` for string literals).
+    pub(crate) fn push_template_string_for_type(&mut self, sb: &mut String, t: P<Type>) {
+        if t.flags().intersects(TypeFlags::StringLiteral | TypeFlags::NumberLiteral | TypeFlags::BooleanLiteral | TypeFlags::BigIntLiteral) {
+            match t.as_literal_type().value.get().unwrap() {
+                LiteralValue::String(s) => sb.push_str(s),
+                v => sb.push_str(&evaluator::any_to_string(v)),
+            }
+        } else if t.flags().intersects(TypeFlags::Nullable) {
+            sb.push_str(t.as_intrinsic_type().intrinsic_name.get());
+        }
+    }
+
     pub(crate) fn get_template_string_for_type(&mut self, t: P<Type>) -> String {
         if t.flags().intersects(TypeFlags::StringLiteral | TypeFlags::NumberLiteral | TypeFlags::BooleanLiteral | TypeFlags::BigIntLiteral) {
             return evaluator::any_to_string(t.as_literal_type().value.get().unwrap());
@@ -1562,8 +1574,7 @@ struct TemplateSpansState {
 fn add_template_spans(c: &mut Checker, state: &mut TemplateSpansState, texts: &[&str], types: &[P<Type>]) -> bool {
     for (i, &t) in types.iter().enumerate() {
         if t.flags().intersects(TypeFlags::Literal | TypeFlags::Null | TypeFlags::Undefined) {
-            let s = c.get_template_string_for_type(t);
-            state.sb.push_str(&s);
+            c.push_template_string_for_type(&mut state.sb, t);
             state.sb.push_str(texts[i + 1]);
         } else if t.flags().intersects(TypeFlags::TemplateLiteral) {
             state.sb.push_str(t.as_template_literal_type().texts.get()[0]);

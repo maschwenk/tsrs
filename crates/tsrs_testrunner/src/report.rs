@@ -20,6 +20,9 @@ pub struct Entry {
     // `.types` / `.symbols`: (class, first difference), when they were compared.
     pub types: Option<(Class, String)>,
     pub symbols: Option<(Class, String)>,
+    pub js: Option<(Class, String)>,
+    pub jsmap: Option<(Class, String)>,
+    pub sourcemap: Option<(Class, String)>,
 }
 
 impl From<&TestResult> for Entry {
@@ -33,21 +36,26 @@ impl From<&TestResult> for Entry {
             skip: r.skip.clone(),
             types: r.types.clone(),
             symbols: r.symbols.clone(),
+            js: r.js.clone(),
+            jsmap: r.jsmap.clone(),
+            sourcemap: r.sourcemap.clone(),
         }
     }
 }
 
 impl Entry {
     pub fn extra(&self, ext: &str) -> Option<&(Class, String)> {
-        if ext == "types" {
-            self.types.as_ref()
-        } else {
-            self.symbols.as_ref()
+        match ext {
+            "types" => self.types.as_ref(),
+            "js" => self.js.as_ref(),
+            "js.map" => self.jsmap.as_ref(),
+            "sourcemap.txt" => self.sourcemap.as_ref(),
+            _ => self.symbols.as_ref(),
         }
     }
 }
 
-pub const EXTRA_EXTS: [&str; 2] = ["types", "symbols"];
+pub const EXTRA_EXTS: [&str; 5] = ["types", "symbols", "js", "js.map", "sourcemap.txt"];
 
 pub type Summary = BTreeMap<String, Entry>;
 
@@ -70,6 +78,9 @@ pub fn load_summary(path: &Path) -> Summary {
                 skip: s("skip"),
                 types: extra("types"),
                 symbols: extra("symbols"),
+                js: extra("js"),
+                jsmap: extra("js.map"),
+                sourcemap: extra("sourcemap.txt"),
             },
         );
     }

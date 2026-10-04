@@ -336,6 +336,18 @@ pub trait LayeredFileSystem: FS + FileHandleSource {
     fn as_file_change_expander(&self) -> Option<&dyn FileChangeExpander> {
         None
     }
+
+    // Go's `fileSystem.(RebasableFileSystem)` type assertion (API request file systems).
+    fn as_rebasable(&self) -> Option<&dyn RebasableFileSystem> {
+        None
+    }
+}
+
+// overlayfs.go:198 RebasableFileSystem: a layered file system (an API request file system) that can be moved
+// onto a new base, so the snapshot's overlays sit *under* it (`layerOverlayFileSystem`).
+pub trait RebasableFileSystem {
+    fn base_file_system(&self) -> FsRef;
+    fn with_base_file_system(&self, base: FsRef) -> Arc<dyn LayeredFileSystem>;
 }
 
 // overlayfs.go:204
@@ -362,14 +374,25 @@ pub(crate) fn layer_overlay_file_system(
     position_encoding: lsproto::PositionEncodingKind,
     to_path: ToPath,
 ) -> Arc<dyn LayeredFileSystem> {
-    let mut base = file_system;
+    let mut base = file_system.clone();
+    let mut layer: Option<&dyn RebasableFileSystem> = None;
+    if let FsRef::Layered(layered) = &file_system {
+        if let Some(rebasable) = layered.as_rebasable() {
+            layer = Some(rebasable);
+            base = rebasable.base_file_system();
+        }
+    }
     if let FsRef::Layered(layered) = &base {
         if let Some(previous) = layered.as_overlay_fs() {
             let host = previous.host.clone();
             base = host;
         }
     }
-    Arc::new(new_overlay_fs(base, overlays, position_encoding, to_path))
+    let overlay: Arc<dyn LayeredFileSystem> = Arc::new(new_overlay_fs(base, overlays, position_encoding, to_path));
+    match layer {
+        None => overlay,
+        Some(layer) => layer.with_base_file_system(FsRef::Layered(overlay)),
+    }
 }
 
 impl FileHandleSource for overlayFS {

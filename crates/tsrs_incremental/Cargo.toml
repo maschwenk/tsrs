@@ -1,0 +1,23 @@
+[package]
+name = "tsrs_incremental"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tsrs_core.workspace = true
+tsrs_diagnostics.workspace = true
+tsrs_ast.workspace = true
+tsrs_binder.workspace = true
+tsrs_vfs.workspace = true
+tsrs_module.workspace = true
+tsrs_tsoptions.workspace = true
+tsrs_checker.workspace = true
+tsrs_compiler.workspace = true
+rustc-hash.workspace = true
+rayon.workspace = true
+bitflags.workspace = true
+xxhash-rust = { version = "0.8", features = ["xxh3"] }

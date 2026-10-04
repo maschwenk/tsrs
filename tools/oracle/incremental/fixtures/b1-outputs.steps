@@ -1,0 +1,9 @@
+true
+true
+touch core/index.ts
+rm core/dist/index.d.ts
+true
+rm logic/dist/tsconfig.tsbuildinfo
+echo 'export const a: number = 1; export function f(x: string) { return 1 }' > core/index.ts
+rm app/index.ts
+true

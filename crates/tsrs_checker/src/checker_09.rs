@@ -2373,7 +2373,7 @@ impl Checker {
     pub(crate) fn find_applicable_index_info(&mut self, index_infos: &[P<IndexInfo>], key_type: P<Type>) -> Option<P<IndexInfo>> {
         // Index signatures for type 'string' are considered only when no other index signatures apply.
         let mut string_index_info: Option<P<IndexInfo>> = None;
-        let mut applicable_infos: Vec<P<IndexInfo>> = Vec::with_capacity(8);
+        let mut applicable_infos: Vec<P<IndexInfo>> = Vec::new();
         for &info in index_infos {
             if info.key_type.get() == Some(self.string_type) {
                 string_index_info = Some(info);
@@ -2422,6 +2422,7 @@ impl Checker {
 
     // checker.go:19406
     #[cfg_attr(feature = "site-counts", track_caller)]
+    #[inline]
     pub(crate) fn resolve_structured_type_members(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
         #[cfg(feature = "site-counts")]
         if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
@@ -2471,10 +2472,14 @@ impl Checker {
             }
             return r;
         }
+        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            return Some(t.as_structured_type());
+        }
         self.resolve_structured_type_members_worker(t)
     }
 
     #[cfg_attr(feature = "site-counts", track_caller)]
+    #[inline(never)]
     fn resolve_structured_type_members_worker(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
         if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
             if t.flags().intersects(TypeFlags::Object) {
@@ -2629,6 +2634,14 @@ impl Checker {
         (type_parameters, type_arguments)
     }
 
+    /// Whether Go's checker would report `ObjectFlagsMembersResolved` for `t` at this point: its members were
+    /// resolved, or a member query was answered through a lazy member table (the port's replacement for
+    /// `resolveStructuredTypeMembers` on instantiated references, which leaves the flag unset). Read-only;
+    /// never resolves anything. Used by the Node API to report Go's objectFlags.
+    pub fn members_resolved_like_go(&self, t: P<Type>) -> bool {
+        t.object_flags().intersects(ObjectFlags::MembersResolved) || self.lazy_member_tables.contains_key(&t)
+    }
+
     // Returns nil if t has no lazy member table or it is still being prepared.
     pub(crate) fn get_ready_lazy_member_table(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMemberTable>> {
         if !self.lazy_members || !may_have_lazy_members(t) {
@@ -2651,35 +2664,54 @@ impl Checker {
         }
         let lm = match self.lazy_member_tables.get(&t) {
             Some(lm) => lm.clone(),
-            None => {
-                let (type_parameters, type_arguments) = self.get_reference_member_type_arguments(t, t.target().unwrap());
-                if type_parameters == &type_arguments[..] {
-                    return None;
-                }
-                let type_arguments = alloc_slice(&type_arguments);
-                let lm = std::rc::Rc::new(LazyMemberTable {
-                    mapper: {
-                        let m = new_type_mapper(type_parameters, type_arguments);
-                        escape_mapper(m); // kept by the table
-                        m
-                    },
-                    type_arguments,
-                    ready: std::cell::OnceCell::new(),
-                    declared: SymbolTable::default(),
-                    ordered_properties: std::cell::OnceCell::new(),
-                });
-                self.lazy_member_tables.insert(t, lm.clone());
-                self.lazy_member_stats.member_tables_created += 1;
-                if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
-                    self.lazy_member_stats.tuple_tables_created += 1;
-                }
-                self.prepare_lazy_members(t, &lm);
-                lm
-            }
+            None => self.create_lazy_member_table(t, source.unwrap())?,
         };
         if lm.ready.get().is_none() || t.object_flags().intersects(ObjectFlags::MembersResolved) {
             return None;
         }
+        Some(lm)
+    }
+
+    /// The table-creating half of `get_ready_lazy_member_table_worker` (out of line, so the
+    /// lookup half has a small frame). `None` when the reference's arguments are its target's own parameters.
+    #[inline(never)]
+    fn create_lazy_member_table(&mut self, t: P<Type>, source: P<Type>) -> Option<std::rc::Rc<LazyMemberTable>> {
+        // get_reference_member_type_arguments without a temporary list.
+        let type_parameters = source.as_interface_type().all_type_parameters.get();
+        let arguments = self.get_type_arguments(t);
+        let type_arguments = if arguments.len() + 1 == type_parameters.len() {
+            if type_parameters[..arguments.len()] == *arguments && type_parameters[arguments.len()] == t {
+                return None;
+            }
+            let mut padded = self.free_type_lists.pop().unwrap_or_default();
+            padded.extend_from_slice(arguments);
+            padded.push(t);
+            let type_arguments = alloc_slice(&padded);
+            self.free_type_list(padded);
+            type_arguments
+        } else {
+            if type_parameters == arguments {
+                return None;
+            }
+            alloc_slice(arguments)
+        };
+        let lm = std::rc::Rc::new(LazyMemberTable {
+            mapper: {
+                let m = new_type_mapper(type_parameters, type_arguments);
+                escape_mapper(m); // kept by the table
+                m
+            },
+            type_arguments,
+            ready: std::cell::OnceCell::new(),
+            declared: SymbolTable::default(),
+            ordered_properties: std::cell::OnceCell::new(),
+        });
+        self.lazy_member_tables.insert(t, lm.clone());
+        self.lazy_member_stats.member_tables_created += 1;
+        if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
+            self.lazy_member_stats.tuple_tables_created += 1;
+        }
+        self.prepare_lazy_members(t, &lm);
         Some(lm)
     }
 

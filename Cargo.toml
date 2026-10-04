@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -35,6 +35,8 @@ tsrs_pseudochecker = { path = "crates/tsrs_pseudochecker" }
 tsrs_modulespecifiers = { path = "crates/tsrs_modulespecifiers" }
 tsrs_compiler = { path = "crates/tsrs_compiler" }
 tsrs_printer = { path = "crates/tsrs_printer" }
+tsrs_transformers = { path = "crates/tsrs_transformers" }
+tsrs_sourcemap = { path = "crates/tsrs_sourcemap" }
 tsrs_declarations = { path = "crates/tsrs_declarations" }
 tsrs_astnav = { path = "crates/tsrs_astnav" }
 tsrs_lsproto = { path = "crates/tsrs_lsproto" }
@@ -43,6 +45,10 @@ tsrs_project = { path = "crates/tsrs_project" }
 tsrs_projectutil = { path = "crates/tsrs_projectutil" }
 tsrs_lsp = { path = "crates/tsrs_lsp" }
 tsrs_fourslash = { path = "crates/tsrs_fourslash" }
+tsrs_incremental = { path = "crates/tsrs_incremental" }
+tsrs_api = { path = "crates/tsrs_api" }
+tsrs_api_transport = { path = "crates/tsrs_api_transport" }
+tsrs_api_codec = { path = "crates/tsrs_api_codec" }
 
 [profile.dev]
 opt-level = 1
