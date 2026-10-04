@@ -101,7 +101,7 @@ pub(crate) fn get_declaration_diagnostics(host: &'static crate::emithost::EmitHo
     // TODO: use p.getSourceFilesToEmit cache
     // Go passes the emit host as the SourceFileMayBeEmittedHost; its methods forward to the program.
     let full_files: Vec<P<SourceFile>> = get_source_files_to_emit(program, Some(&[file]), false, false).into_iter().filter(|&f| is_source_file_not_json(f)).collect();
-    if !full_files.iter().any(|&f| f == file) {
+    if !full_files.contains(&file) {
         return Vec::new();
     }
     let options = program.options();

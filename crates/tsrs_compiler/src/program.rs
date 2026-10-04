@@ -127,6 +127,7 @@ pub(crate) struct packageNamesInfo {
 // Go `checkerPool CheckerPool` + `compilerCheckerPool *checkerPool`: the built-in pool is set only when
 // `CreateCheckerPool` was not provided; it enables grouped parallel iteration, non-exclusive access for emit,
 // and direct global diagnostics collection.
+#[expect(clippy::large_enum_variant, reason = "one per program; the built-in pool, the usual variant, is reached on every checker request and stays inline")]
 enum programCheckerPool {
     Compiler(checkerPool),
     External(Box<dyn CheckerPool>),
@@ -2013,7 +2014,7 @@ impl Program {
         let mut directives_by_line: FxHashMap<usize, ast::CommentDirective> = FxHashMap::default();
         for directive in comment_directives.iter() {
             let line = tsrs_scanner::get_ecma_line_of_position(&*source_file, directive.loc.pos());
-            directives_by_line.insert(line as usize, directive.clone());
+            directives_by_line.insert(line as usize, *directive);
         }
         let line_starts = tsrs_scanner::get_ecma_line_starts(&*source_file);
         let text = source_file.text();

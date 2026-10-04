@@ -1748,7 +1748,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.zero_type = c.get_number_literal_type(Number(0.0));
     c.zero_big_int_type = c.get_big_int_literal_type(PseudoBigInt::default());
     let mut typeof_names: Vec<&'static str> = typeofNEFacts.keys().copied().collect();
-    typeof_names.sort();
+    typeof_names.sort_unstable();
     let typeof_types: Vec<P<Type>> = typeof_names.iter().map(|name| c.get_string_literal_type(name)).collect();
     c.typeof_type = c.get_union_type(&typeof_types);
     // initializeClosures: the closures are the methods is_primitive_or_object_or_empty_type & co. below.

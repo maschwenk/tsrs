@@ -92,7 +92,7 @@ pub struct Orchestrator {
     use_regions: AtomicBool,
     // API clean existence answers, kept until the next build (which uses a fresh orchestrator): Go's `Clean` asks
     // the orchestrator's cachedvfs, which only `Build`'s recheck clears, so a later clean reuses them.
-    api_clean_exists: Mutex<std::collections::HashMap<String, bool>>,
+    api_clean_exists: Mutex<FxHashMap<String, bool>>,
 
     error_summary_reporter: DiagnosticsReporter<'static>,
 
@@ -671,7 +671,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         schedule_order: Mutex::new(Vec::new()),
         regions: Mutex::new(Vec::new()),
         use_regions: AtomicBool::new(false),
-        api_clean_exists: Mutex::new(std::collections::HashMap::new()),
+        api_clean_exists: Mutex::new(FxHashMap::default()),
     }));
     let cached_fs = Arc::new(tsrs_vfs::cachedvfs::from(sys.fs()));
     let compiler_host: Arc<dyn CompilerHost> =

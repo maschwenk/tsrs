@@ -86,7 +86,7 @@ fn test_lib_folder_map() -> Vec<(String, String)> {
 }
 
 enum Compiled {
-    Result(CompilationResult),
+    Result(Box<CompilationResult>),
     Unsupported(String),
 }
 
@@ -156,7 +156,7 @@ fn compile_files(
         return Ok(Compiled::Unsupported(reason));
     }
 
-    compile_files_ex(input_files, other_files, &harness_options, compiler_options, current_directory, symlinks, tsconfig).map(Compiled::Result)
+    compile_files_ex(input_files, other_files, &harness_options, compiler_options, current_directory, symlinks, tsconfig).map(|r| Compiled::Result(Box::new(r)))
 }
 
 fn compile_files_ex(
@@ -345,7 +345,7 @@ pub fn run(item: &TestItem, table: &OptionTable) -> Outcome {
     let compiler_runner::SplitUnits { current_directory, ts_config_files, to_be_compiled, other_files } = split;
 
     let result = match compile_files(&to_be_compiled, &other_files, Some(&harness_config), ts_config, &current_directory, &payload.symlinks) {
-        Ok(Compiled::Result(r)) => r,
+        Ok(Compiled::Result(r)) => *r,
         // Go checks SkipUnsupportedCompilerOptions after compiling; checking first keeps crashes in
         // unsupported configurations (which have no reference baselines) out of the results.
         Ok(Compiled::Unsupported(reason)) => match reason.strip_prefix("fatal: ") {

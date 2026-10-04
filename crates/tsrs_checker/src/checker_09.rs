@@ -2149,9 +2149,8 @@ impl Checker {
             let mut checked: FxHashSet<&'static str> = FxHashSet::default();
             let mut props: Vec<P<Symbol>> = Vec::new();
             for &current in d.types.get() {
-                for prop in self.get_properties_of_type(current).iter().copied() {
-                    if !checked.contains(prop.name()) {
-                        checked.insert(prop.name());
+                for &prop in self.get_properties_of_type(current) {
+                    if checked.insert(prop.name()) {
                         let combined_prop = self.get_property_of_union_or_intersection_type(
                             t,
                             prop.name(),

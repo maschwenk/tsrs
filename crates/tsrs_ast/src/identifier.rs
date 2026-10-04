@@ -143,6 +143,7 @@ fn slot_flow(word: u64) -> Option<P<FlowNode>> {
 
 impl Identifier {
     #[inline]
+    #[expect(clippy::cast_ptr_alignment, reason = "the header starts the `NodeAlloc`, so it has the allocation's alignment")]
     fn node(&self) -> &Node {
         // SAFETY: identifiers are created only by `new_node` inside a `NodeAlloc` (`repr(C)`, header first), so the
         // header lies at this offset before the data struct.
