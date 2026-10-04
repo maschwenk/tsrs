@@ -163,4 +163,8 @@ impl tsrs_modulespecifiers::ModuleSpecifierGenerationHost for Program {
     fn get_mode_for_usage_location(&self, file: P<SourceFile>, module_specifier: P<Node>) -> ResolutionMode {
         Program::get_mode_for_usage_location(self, file, module_specifier)
     }
+
+    fn exports_module_name_cache(&self, options: &tsrs_core::CompilerOptions) -> Option<&tsrs_modulespecifiers::ExportsModuleNameCache> {
+        std::ptr::eq(options, &*self.options()).then_some(&self.exports_module_name_cache)
+    }
 }

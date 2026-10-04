@@ -78,6 +78,10 @@ impl tsrs_modulespecifiers::ModuleSpecifierGenerationHost for EmitHost {
         tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_package_json_info(self.program, pkg_json_path)
     }
 
+    fn exports_module_name_cache(&self, options: &tsrs_core::CompilerOptions) -> Option<&tsrs_modulespecifiers::ExportsModuleNameCache> {
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::exports_module_name_cache(self.program, options)
+    }
+
     fn get_default_resolution_mode_for_file(&self, file: P<SourceFile>) -> ResolutionMode {
         tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_default_resolution_mode_for_file(self.program, file)
     }

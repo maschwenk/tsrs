@@ -885,15 +885,19 @@ pub(crate) fn try_directory_with_package_json(
 
         let mut from_exports = String::new();
         if let Some(content) = package_json_content.filter(|c| c.fields.exports.type_() != JSONValueType::NotPresent) {
-            from_exports = try_get_module_name_from_exports(
-                options,
-                host,
-                &path_obj.file_name,
-                &package_root_path,
-                &package_name,
-                &content.fields.exports,
-                &conditions,
-            );
+            let compute = || try_get_module_name_from_exports(options, host, &path_obj.file_name, &package_root_path, &package_name, &content.fields.exports, &conditions);
+            from_exports = match host.exports_module_name_cache(options) {
+                Some(cache) => {
+                    // the exports map is the one of `package_root_path`'s package.json
+                    let mut key = format!("{}\0{}\0{}", path_obj.file_name, package_root_path, package_name);
+                    for condition in &conditions {
+                        key.push('\0');
+                        key.push_str(condition);
+                    }
+                    cache.get_or_compute(key, compute)
+                }
+                None => compute(),
+            };
         }
         if !from_exports.is_empty() {
             return pkgJsonDirAttemptResult { module_file_to_try: from_exports, verbatim_from_exports: true, ..Default::default() };
