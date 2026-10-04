@@ -184,7 +184,7 @@ impl Checker {
                     continue;
                 }
             } else if flags.intersects(FlowFlags::ReduceLabel) {
-                f.reduce_labels.borrow_mut().push(P::from_static(flow.node().unwrap().as_flow_reduce_label_data()));
+                f.reduce_labels.borrow_mut().push(flow.node().unwrap().as_flow_reduce_label_data_p());
                 t = self.get_type_at_flow_node(f, flow.antecedent().unwrap());
                 f.reduce_labels.borrow_mut().pop();
             } else if flags.intersects(FlowFlags::Start) {
@@ -2934,7 +2934,7 @@ impl Checker {
             } else if flags.intersects(FlowFlags::ReduceLabel) {
                 // Cache is unreliable once we start adjusting labels
                 self.last_flow_node = None;
-                f.reduce_labels.borrow_mut().push(P::from_static(flow.node().unwrap().as_flow_reduce_label_data()));
+                f.reduce_labels.borrow_mut().push(flow.node().unwrap().as_flow_reduce_label_data_p());
                 let result = self.is_reachable_flow_node_worker(f, flow.antecedent().unwrap(), false /*noCacheCheck*/);
                 f.reduce_labels.borrow_mut().pop();
                 return result;
@@ -3004,7 +3004,7 @@ impl Checker {
                 // A loop is post-super if the control flow path that leads to the top is post-super.
                 flow = flow.antecedents().unwrap().flow;
             } else if flags.intersects(FlowFlags::ReduceLabel) {
-                f.reduce_labels.borrow_mut().push(P::from_static(flow.node().unwrap().as_flow_reduce_label_data()));
+                f.reduce_labels.borrow_mut().push(flow.node().unwrap().as_flow_reduce_label_data_p());
                 let result = self.is_post_super_flow_node_worker(f, flow.antecedent().unwrap(), false /*noCacheCheck*/);
                 f.reduce_labels.borrow_mut().pop();
                 return result;

@@ -385,7 +385,7 @@ impl Drop for EntryVec {
 unsafe impl Send for EntryVec {}
 unsafe impl Sync for EntryVec {}
 
-/// One word: the symbol's `P::to_bits` / 8 in the low 45 bits (8-aligned and below 2^48; checked on store), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
+/// One word: the symbol in the low 45 bits (`P::pack`), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
 /// and the top 12 bits of `hash_name(key)`. 8 bytes instead of 16 (pointer + 32-bit hash + length): symbol table
 /// entries are 465 MB of capacity on the private monorepo.
 #[derive(Clone, Copy)]
@@ -418,7 +418,7 @@ impl KeyPrint {
 }
 
 impl SymbolMapEntry {
-    const ADDR_BITS: u32 = 45;
+    const ADDR_BITS: u32 = tsrs_core::PACK_BITS;
     const ADDR_MASK: u64 = (1 << Self::ADDR_BITS) - 1;
     const ODD_BIT: u64 = 1 << Self::ADDR_BITS;
     const LEN_SHIFT: u32 = Self::ADDR_BITS + 1;
@@ -428,9 +428,7 @@ impl SymbolMapEntry {
 
     #[inline]
     fn addr_bits(symbol: P<Symbol>) -> u64 {
-        let bits = symbol.to_bits() as u64;
-        assert!(bits & 7 == 0 && bits >> (Self::ADDR_BITS + 3) == 0, "symbol bits {bits:#x} do not fit a symbol table entry");
-        bits >> 3
+        symbol.pack()
     }
 
     #[inline]
@@ -440,8 +438,8 @@ impl SymbolMapEntry {
 
     #[inline]
     fn symbol(self) -> P<Symbol> {
-        // SAFETY: the bits were stored from a live `P<Symbol>` (arena symbols are never freed or moved).
-        unsafe { P::from_bits(((self.0 & Self::ADDR_MASK) << 3) as usize) }
+        // SAFETY: the low bits were stored from a live `P<Symbol>` (arena symbols are never freed or moved).
+        unsafe { P::unpack(self.0) }
     }
 
     #[inline]

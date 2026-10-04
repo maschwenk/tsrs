@@ -374,15 +374,14 @@ pub fn census_layouts() {
     });
 }
 
-/// A node's kind, data tag and parent in one word: the parent's `P::to_bits` divided by 8 in the low 45 bits (nodes
-/// are 8-aligned and the bits are below 2^48; checked when the parent is set), the kind in the next 9 bits, the data
+/// A node's kind, data tag and parent in one word: the parent in the low 45 bits (`P::pack`), the kind in the next 9 bits, the data
 /// tag in the 8 above and then the rare bit (the data struct is followed by its rare tail, `NodeRareTail`). Only the
 /// parent changes after creation.
 #[derive(Clone, Copy)]
 struct NodeHeaderWord(u64);
 
 impl NodeHeaderWord {
-    const PARENT_BITS: u32 = 45;
+    const PARENT_BITS: u32 = tsrs_core::PACK_BITS;
     const PARENT_MASK: u64 = (1 << Self::PARENT_BITS) - 1;
     const KIND_SHIFT: u32 = Self::PARENT_BITS;
     const KIND_BITS: u32 = 9;
@@ -419,15 +418,13 @@ impl NodeHeaderWord {
 
     #[inline]
     fn parent(self) -> Option<P<Node>> {
-        // SAFETY: nonzero bits were stored by `with_parent` from a live `P<Node>` (arena nodes are never freed or moved).
-        unsafe { P::from_bits_opt(((self.0 & Self::PARENT_MASK) << 3) as usize) }
+        // SAFETY: the low bits were stored by `with_parent` from a live `P<Node>` (arena nodes are never freed or moved).
+        unsafe { P::unpack_opt(self.0) }
     }
 
     #[inline]
     fn with_parent(self, parent: Option<P<Node>>) -> NodeHeaderWord {
-        let bits = P::to_bits_opt(parent) as u64;
-        assert!(bits & 7 == 0 && bits >> (Self::PARENT_BITS + 3) == 0, "node bits {bits:#x} do not fit the node header");
-        NodeHeaderWord(self.0 & !Self::PARENT_MASK | bits >> 3)
+        NodeHeaderWord(self.0 & !Self::PARENT_MASK | P::pack_opt(parent))
     }
 }
 
@@ -2091,10 +2088,18 @@ impl HasFileName for SourceFile {
 }
 
 impl Node {
+    /// `P<FlowReduceLabelData>` for a reduce-label node.
+    #[inline]
+    pub fn as_flow_reduce_label_data_p(&self) -> P<FlowReduceLabelData> {
+        // SAFETY: as in `as_source_file_p`.
+        unsafe { P::from_arena(self.as_flow_reduce_label_data()) }
+    }
+
     /// `P<SourceFile>` for a SourceFile node (Go code that holds `*ast.SourceFile`).
     #[inline]
     pub fn as_source_file_p(&self) -> P<SourceFile> {
-        P::from_static(self.as_source_file())
+        // SAFETY: the data struct of an arena node (8-aligned: it follows the 24-byte header).
+        unsafe { P::from_arena(self.as_source_file()) }
     }
 }
 

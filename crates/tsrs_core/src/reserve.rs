@@ -18,11 +18,16 @@ pub const RESERVE: usize = 1 << (32 + UNIT_SHIFT);
 const GRANULE: usize = 64 << 10;
 
 /// Where the reservation lives: a fixed address, so `base()` is a constant and turning a handle into an address
-/// costs an add, no load (a loaded base cost ~25% more instructions). 64 TiB is clear of every placement seen on the
-/// supported platforms: macOS keeps 4-448 GiB for the binary, the shared cache and its malloc zones and places other
-/// mappings upward from 448 GiB; mimalloc hints from 2 to 30 TiB; Linux puts PIE binaries near 85 TiB and maps
+/// costs an add, no load (a loaded base cost ~25% more instructions). 64 TiB + 4 GiB is clear of every placement seen
+/// on the supported platforms: macOS keeps 4-448 GiB for the binary, the shared cache and its malloc zones and places
+/// other mappings upward from 448 GiB; mimalloc hints from 2 to 30 TiB; Linux puts PIE binaries near 85 TiB and maps
 /// top-down below the stack (near 128 TiB). It needs a 47-bit address space (x86-64, arm64 with 48-bit VA).
-pub const BASE_ADDR: usize = 0x4000_0000_0000;
+///
+/// The value is chosen for arm64 codegen: one `movz` materializes it (a single 16-bit chunk, `0x4001 << 32`), and
+/// bit 32 overlaps the offset range (`handle << 3` < 2^35), so LLVM cannot turn the add into an `orr`; `add x, base,
+/// w, uxtw #3` then folds the zero-extension and the shift of a 32-bit handle into the one instruction. A base with
+/// disjoint bits (0x4000_0000_0000) gave `mov w, w` + `orr` per dereference of a handle passed in a register.
+pub const BASE_ADDR: usize = 0x4001_0000_0000;
 
 static RESERVED: AtomicBool = AtomicBool::new(false);
 

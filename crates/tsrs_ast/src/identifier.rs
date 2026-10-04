@@ -84,8 +84,8 @@ fn source_text(index: u32) -> &'static str {
     unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(slot.ptr.load(Relaxed), slot.len.load(Relaxed))) }
 }
 
-// The word: bits 0..45 the flow node's `P::to_bits` / 8 (like the node header's parent) or the text index, bits 45..62 the text length, bits 62..64 the mode.
-const SLOT_MASK: u64 = (1 << 45) - 1;
+// The word: bits 0..45 the flow node (`P::pack`, like the node header's parent) or the text index, bits 45..62 the text length, bits 62..64 the mode.
+const SLOT_MASK: u64 = (1 << tsrs_core::PACK_BITS) - 1;
 const LEN_SHIFT: u32 = 45;
 const LEN_MAX: u64 = (1 << 17) - 1;
 const MODE_SHIFT: u32 = 62;
@@ -131,16 +131,14 @@ pub(crate) fn census_layout() {
 
 #[inline]
 fn flow_slot(flow: Option<P<FlowNode>>) -> u64 {
-    let bits = P::to_bits_opt(flow) as u64;
-    assert!(bits & 7 == 0 && bits >> 48 == 0, "flow node bits {bits:#x} do not fit an identifier");
-    bits >> 3
+    P::pack_opt(flow)
 }
 
 #[inline]
 fn slot_flow(word: u64) -> Option<P<FlowNode>> {
     // SAFETY: a nonzero flow slot was stored by `flow_slot` from a live `P<FlowNode>` (arena objects are never moved;
     // a flow node is recycled only when nothing references it).
-    unsafe { P::from_bits_opt(((word & SLOT_MASK) << 3) as usize) }
+    unsafe { P::unpack_opt(word) }
 }
 
 impl Identifier {

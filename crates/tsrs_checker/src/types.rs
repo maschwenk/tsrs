@@ -1086,8 +1086,8 @@ struct TypeSymbolAlias {
     alias: Cell<Option<P<TypeAlias>>>,
 }
 
-/// `Type.symbol`, or a `TypeSymbolAlias` record once the type has an alias: its `P::to_bits` in the low 48 bits,
-/// bit 63 set for the record. 0 = no symbol, no alias. The address stays a plain pointer to the start of its block.
+/// `Type.symbol`, or a `TypeSymbolAlias` record once the type has an alias: `P::pack` in the low 45 bits, bit 63 set
+/// for the record. 0 = no symbol, no alias. The address stays a plain pointer to the start of its block.
 #[derive(Clone, Copy, Default)]
 struct TypeSymbolWord(u64);
 
@@ -1095,29 +1095,22 @@ impl TypeSymbolWord {
     const RECORD: u64 = 1 << 63;
 
     #[inline]
-    fn bits(bits: usize) -> u64 {
-        let bits = bits as u64;
-        assert!(bits >> 48 == 0, "bits {bits:#x} above 2^48");
-        bits
-    }
-
-    #[inline]
     fn symbol_word(symbol: Option<P<Symbol>>) -> TypeSymbolWord {
-        TypeSymbolWord(Self::bits(P::to_bits_opt(symbol)))
+        TypeSymbolWord(P::pack_opt(symbol))
     }
 
     #[inline]
     fn record(self) -> Option<P<TypeSymbolAlias>> {
         // SAFETY: a tagged word was stored from a live `P<TypeSymbolAlias>` (arena objects are never moved or freed).
-        (self.0 & Self::RECORD != 0).then(|| unsafe { P::from_bits((self.0 & !Self::RECORD) as usize) })
+        (self.0 & Self::RECORD != 0).then(|| unsafe { P::unpack(self.0) })
     }
 
     #[inline]
     fn symbol(self) -> Option<P<Symbol>> {
         match self.record() {
             Some(r) => r.symbol.get(),
-            // SAFETY: a nonzero untagged word was stored from a live `P<Symbol>`.
-            None => unsafe { P::from_bits_opt(self.0 as usize) },
+            // SAFETY: an untagged word is 0 or was stored from a live `P<Symbol>`.
+            None => unsafe { P::unpack_opt(self.0) },
         }
     }
 }
@@ -1146,7 +1139,7 @@ pub(crate) fn census_layouts() {
         tsrs_ast::census_layouts();
         let sym = offset_of!(Type, symbol_or_alias);
         let mut header = CensusField::all_but(0, size_of::<Type>(), &[sym]);
-        header.push(CensusField::Tagged { off: sym });
+        header.push(CensusField::X8 { off: sym, modes: 0b101 }); // address / 8, bit 63 for the record
         let name = type_name::<TypeAlloc<LiteralType>>();
         tsrs_core::census_layout(&name[..=name.find('<').unwrap()], &header);
         // The number and boolean variants leave the rest of the value uninitialized (its strings are never freed).
@@ -1650,7 +1643,7 @@ impl Type {
             Some(r) => r.alias.set(alias),
             None if alias.is_some() => {
                 let r = P::new(TypeSymbolAlias { symbol: Cell::new(word.symbol()), alias: Cell::new(alias) });
-                self.symbol_or_alias.set(TypeSymbolWord(TypeSymbolWord::bits(r.to_bits()) | TypeSymbolWord::RECORD));
+                self.symbol_or_alias.set(TypeSymbolWord(r.pack() | TypeSymbolWord::RECORD));
             }
             None => {}
         }

@@ -9,7 +9,7 @@ use tsrs_core::{PKey, PSlot};
 /// addresses, as before). 5.1M links in 26 stores on the private monorepo single.
 pub struct LinkStore<K: 'static, V: 'static> {
     slots: hashbrown::HashTable<LinkSlot>,
-    chunks: Vec<&'static [PSlot<V>]>,
+    chunks: Vec<P<PSlot<V>>>, // first slot of each chunk
     len: u32,
     key: std::marker::PhantomData<P<K>>,
 }
@@ -48,8 +48,8 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
     fn at(&self, index: u32) -> P<V> {
         debug_assert!(index < self.len);
         // SAFETY: every stored index is below `len`, and `chunks` holds `LINK_CHUNK` values per started chunk.
-        let chunk = unsafe { self.chunks.get_unchecked((index >> LINK_CHUNK_SHIFT) as usize) };
-        unsafe { chunk.get_unchecked(index as usize & (LINK_CHUNK - 1)) }.as_p()
+        let chunk = unsafe { *self.chunks.get_unchecked((index >> LINK_CHUNK_SHIFT) as usize) };
+        unsafe { PSlot::nth(chunk, index as usize & (LINK_CHUNK - 1)) }
     }
 
     #[inline]
@@ -82,7 +82,7 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
                 let index = self.len;
                 slot.insert(LinkSlot { key, index });
                 if index as usize % LINK_CHUNK == 0 {
-                    self.chunks.push(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect()));
+                    self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
                 }
                 self.len += 1;
                 index
@@ -100,7 +100,7 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
 pub struct IdLinkStore<V: 'static> {
     pages: Vec<Option<Box<[u32; ID_PAGE]>>>,
     wide_slots: FxHashMap<u64, u32>, // ids >= 2^32 (long-running processes such as the test runner)
-    chunks: Vec<&'static [PSlot<V>]>,
+    chunks: Vec<P<PSlot<V>>>,        // first slot of each chunk
     len: u32,
 }
 
@@ -118,7 +118,8 @@ impl<V: 'static> Default for IdLinkStore<V> {
 impl<V: 'static> IdLinkStore<V> {
     #[inline]
     fn at(&self, slot: u32) -> P<V> {
-        self.chunks[(slot >> ID_LINK_CHUNK_SHIFT) as usize][slot as usize & (ID_LINK_CHUNK - 1)].as_p()
+        // SAFETY: every stored slot is below `len`; chunks hold `ID_LINK_CHUNK` values.
+        unsafe { PSlot::nth(self.chunks[(slot >> ID_LINK_CHUNK_SHIFT) as usize], slot as usize & (ID_LINK_CHUNK - 1)) }
     }
 
     #[inline]
@@ -158,7 +159,7 @@ impl<V: Default + 'static> IdLinkStore<V> {
         tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
         let slot = self.len;
         if slot as usize % ID_LINK_CHUNK == 0 {
-            self.chunks.push(alloc_vec((0..ID_LINK_CHUNK).map(|_| PSlot(V::default())).collect()));
+            self.chunks.push(PSlot::first(alloc_vec((0..ID_LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
         }
         self.len += 1;
         if id <= u32::MAX as u64 {

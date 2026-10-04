@@ -157,6 +157,30 @@ impl<T> P<T> {
         P(&*std::ptr::with_exposed_provenance::<T>(bits))
     }
 
+    /// The object packed in the low bits of `w` by `pack` (higher bits may hold anything).
+    ///
+    /// # Safety
+    /// The low `PACK_BITS` bits of `w` must come from `pack` of a live `P<T>`.
+    #[inline(always)]
+    pub unsafe fn unpack(w: u64) -> P<T> {
+        #[cfg(compressed_ptrs)]
+        return P(std::num::NonZeroU32::new_unchecked(w as u32), std::marker::PhantomData);
+        #[cfg(not(compressed_ptrs))]
+        return P(&*std::ptr::with_exposed_provenance::<T>(((w & PACK_MASK) << 3) as usize));
+    }
+
+    /// `unpack` for an optional pointer (low bits 0 = `None`).
+    ///
+    /// # Safety
+    /// As `unpack`, or the low `PACK_BITS` bits are 0.
+    #[inline(always)]
+    pub unsafe fn unpack_opt(w: u64) -> Option<P<T>> {
+        #[cfg(compressed_ptrs)]
+        return (w as u32 != 0).then(|| P::unpack(w));
+        #[cfg(not(compressed_ptrs))]
+        return (w & PACK_MASK != 0).then(|| P::unpack(w));
+    }
+
     /// The object whose `key` is `key`.
     ///
     /// # Safety
@@ -185,6 +209,23 @@ impl<T> P<T> {
     #[inline(always)]
     pub unsafe fn from_bits_opt(bits: usize) -> Option<P<T>> {
         (bits != 0).then(|| P::from_bits(bits))
+    }
+
+    /// The `n`-th element after this one in an arena array of `T` (pointer `add`; not named `add`, which would shadow `add` methods of `T`). Compressed: handle arithmetic,
+    /// no address round trip (`T`'s size must be a multiple of 8, like every `P` target's).
+    ///
+    /// # Safety
+    /// `self` must be an element of an arena array with at least `n` more elements.
+    #[inline(always)]
+    pub unsafe fn array_add(self, n: usize) -> P<T> {
+        #[cfg(compressed_ptrs)]
+        {
+            const { assert!(std::mem::size_of::<T>() % 8 == 0, "P::array_add needs 8-byte multiples") };
+            let h = self.0.get() + (n * (std::mem::size_of::<T>() >> crate::reserve::UNIT_SHIFT)) as u32;
+            return P(std::num::NonZeroU32::new_unchecked(h), std::marker::PhantomData);
+        }
+        #[cfg(not(compressed_ptrs))]
+        P(&*(self.0 as *const T).add(n))
     }
 
     /// The same object viewed as a `U` (a header at the start of a larger allocation, or the reverse).
@@ -281,6 +322,11 @@ impl<T: ?Sized> P<T> {
     }
 }
 
+/// Bits of a word that `P::pack` uses (the rest belongs to the caller).
+pub const PACK_BITS: u32 = 45;
+#[cfg(not(compressed_ptrs))]
+const PACK_MASK: u64 = (1 << PACK_BITS) - 1;
+
 /// The narrowest integer that identifies a `P` (`P::key`): the handle in compressed mode, else the address.
 #[cfg(compressed_ptrs)]
 pub type PKey = u32;
@@ -301,6 +347,26 @@ impl<T: ?Sized> P<T> {
         return self.0.get();
         #[cfg(not(compressed_ptrs))]
         return (self.0 as *const T as *const ()).expose_provenance();
+    }
+
+    /// The pointer in the low `PACK_BITS` (45) bits of a word whose higher bits belong to the caller: the handle with
+    /// compressed pointers (bits 32..45 stay 0, so `unpack` reads the low 32 bits and needs no mask), else the
+    /// address / 8. 0 for `None` (`pack_opt`).
+    #[inline(always)]
+    pub fn pack(self) -> u64 {
+        #[cfg(compressed_ptrs)]
+        return self.0.get() as u64;
+        #[cfg(not(compressed_ptrs))]
+        {
+            let a = (self.0 as *const T as *const ()).expose_provenance() as u64;
+            assert!(a & 7 == 0 && a >> (PACK_BITS + 3) == 0, "address {a:#x} does not pack in 45 bits");
+            a >> 3
+        }
+    }
+
+    #[inline(always)]
+    pub fn pack_opt(p: Option<P<T>>) -> u64 {
+        p.map_or(0, P::pack)
     }
 
     /// `key` of an optional pointer, 0 for `None`.
@@ -413,6 +479,23 @@ impl<V> PSlot<V> {
     pub fn as_p(&'static self) -> P<V> {
         // SAFETY: slots live only in arena arrays (`alloc_vec`), 8-aligned in compressed mode.
         unsafe { P::from_arena(&self.0) }
+    }
+
+    /// The first slot of an arena array of slots, for `P::array_add` indexing (`nth`).
+    #[inline]
+    pub fn first(slots: &'static [PSlot<V>]) -> P<PSlot<V>> {
+        // SAFETY: as in `as_p`; the array is not empty.
+        unsafe { P::from_arena(&slots[0]) }
+    }
+
+    /// The `i`-th value of the array whose first slot is `first`.
+    ///
+    /// # Safety
+    /// `first` comes from `first` of an array with more than `i` slots.
+    #[inline(always)]
+    pub unsafe fn nth(first: P<PSlot<V>>, i: usize) -> P<V> {
+        // `PSlot` is `repr(C)` / `repr(transparent)` with the value first.
+        first.array_add(i).cast::<V>()
     }
 }
 
