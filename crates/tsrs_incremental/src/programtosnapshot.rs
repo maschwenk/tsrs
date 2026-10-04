@@ -97,6 +97,16 @@ impl toProgramSnapshot {
 
         let files = self.program.get_source_files();
         let old_options = old.map(|old| old.options());
+        let ambient_module_files_by_checker = AmbientModuleFilesByChecker::default();
+        // Files of the old state that the new program does not have.
+        let mut deleted_files: rustc_hash::FxHashSet<Path> = rustc_hash::FxHashSet::default();
+        if let Some(old) = old {
+            for path in old.file_infos.keys() {
+                if self.program.get_source_file_by_path(&path).is_none() {
+                    deleted_files.insert(path);
+                }
+            }
+        }
         let new_options = self.snapshot.options();
         // programtosnapshot.go:91: Go queues the per-file work on a work group and lets each function store into the
         // snapshot's sync maps. Here the per-file work runs on the program's worker pool and only reads shared state;
@@ -107,7 +117,7 @@ impl toProgramSnapshot {
             let implied_node_format = self.program.get_source_file_meta_data(file.path()).implied_node_format;
             let affects_global_scope = file_affects_global_scope(file);
             let mut signature = String::new();
-            let new_references = get_referenced_files(self.program, file);
+            let new_references = get_referenced_files(self.program, file, &ambient_module_files_by_checker);
             let mut change = fileChange { add_to_change_set: false, emit_diagnostics: None, semantic_diagnostics: None, emit_signature: None };
             if let Some(old) = old {
                 if let Some(old_file_info) = old.file_infos.load(file.path()) {
@@ -121,14 +131,11 @@ impl toProgramSnapshot {
                         // Referenced files changed
                         change.add_to_change_set = true;
                     } else if let Some(new_references) = &new_references {
-                        // Go ranges over the set in random order and stops at the first deleted file; the outcome does
-                        // not depend on the order.
-                        for ref_path in new_references.keys() {
-                            if self.program.get_source_file_by_path(ref_path).is_none() && old.file_infos.load(ref_path).is_some() {
-                                // Referenced file was deleted in the new program
-                                change.add_to_change_set = true;
-                                break;
-                            }
+                        // Go ranges over the set and asks, for each path, whether the new program lacks it while the old
+                        // state had it; that is membership in deleted_files, which is usually empty.
+                        if !deleted_files.is_empty() && new_references.keys().iter().any(|ref_path| deleted_files.contains(ref_path)) {
+                            // Referenced file was deleted in the new program
+                            change.add_to_change_set = true;
                         }
                     }
                     signature = old_file_info.signature;
@@ -332,9 +339,12 @@ fn add_referenced_file_from_file_name(program: &CompilerProgram, file_name: &str
     }
 }
 
+// The files declaring each checker's ambient modules, keyed by the checker's address; the checkers outlive the loop.
+type AmbientModuleFilesByChecker = std::sync::Mutex<rustc_hash::FxHashMap<usize, std::sync::Arc<Vec<P<SourceFile>>>>>;
+
 // Gets the referenced files for a file from the program with values for the keys as referenced file's path to be true
 // programtosnapshot.go:290
-fn get_referenced_files(program: &'static CompilerProgram, file: P<SourceFile>) -> Option<Set<Path>> {
+fn get_referenced_files(program: &'static CompilerProgram, file: P<SourceFile>, ambient_module_files_by_checker: &AmbientModuleFilesByChecker) -> Option<Set<Path>> {
     // Go holds the checker for the whole function. Only the symbol lookups need it, so they collect the declaring
     // files under the lock and the paths are added below without it, in Go's order: imports, triple slash
     // references, type reference directives, module augmentations, ambient modules.
@@ -353,16 +363,34 @@ fn get_referenced_files(program: &'static CompilerProgram, file: P<SourceFile>) 
             }
             add_referenced_files_from_import_literal(file, &mut augmentation_files, &mut checker, module_name);
         }
-        // From ambient modules
-        for ambient_module in checker.get_ambient_modules() {
-            add_referenced_files_from_symbol(file, &mut ambient_module_files, Some(ambient_module));
-        }
+        // From ambient modules. A checker's ambient modules and their declarations are fixed once it is initialized,
+        // so their declaring files are collected once per checker and only filtered per file.
+        let key = &*checker as *const Checker as usize;
+        let declaring_files = ambient_module_files_by_checker.lock().unwrap().get(&key).cloned();
+        let declaring_files = declaring_files.unwrap_or_else(|| {
+            let mut declaring_files = Vec::new();
+            let mut seen: rustc_hash::FxHashSet<P<SourceFile>> = rustc_hash::FxHashSet::default();
+            for ambient_module in checker.get_ambient_modules() {
+                for &declaration in ambient_module.declarations() {
+                    let Some(file_of_decl) = ast::get_source_file_of_node(declaration) else { continue };
+                    if seen.insert(file_of_decl) {
+                        declaring_files.push(file_of_decl);
+                    }
+                }
+            }
+            let declaring_files = std::sync::Arc::new(declaring_files);
+            ambient_module_files_by_checker.lock().unwrap().insert(key, declaring_files.clone());
+            declaring_files
+        });
+        ambient_module_files.extend(declaring_files.iter().copied().filter(|&file_of_decl| file_of_decl != file));
     }
 
     // We need to use a set here since the code can contain the same import twice,
     // but that will only be one dependency.
     // To avoid invernal conversion, the key of the referencedFiles map must be of type Path
     let mut referenced_files: Set<Path> = Set::default();
+    // The declaring files are distinct apart from repeats among the imports, so this is close to the final size.
+    referenced_files.m.reserve(import_files.len() + augmentation_files.len() + ambient_module_files.len());
     for f in import_files {
         referenced_files.add(f.path().clone());
     }

@@ -261,7 +261,7 @@ impl Program {
             return None;
         }
         if self.snapshot.has_errors.get() == Tristate::Unknown {
-            self.ensure_has_errors_for_state(ctx, program);
+            tsrs_core::phases::time("BuildInfo: has errors", || self.ensure_has_errors_for_state(ctx, program));
             if self.snapshot.has_errors.get() != self.snapshot.has_errors_from_old_state.get()
                 || self.snapshot.has_semantic_errors.get() != self.snapshot.has_semantic_errors_from_old_state.get()
             {
@@ -269,7 +269,7 @@ impl Program {
             }
         }
         if self.snapshot.package_jsons.borrow().is_none() {
-            self.ensure_package_jsons_for_state();
+            tsrs_core::phases::time("BuildInfo: package.jsons", || self.ensure_package_jsons_for_state());
             if self.snapshot.package_jsons.borrow().as_deref().unwrap_or_default()
                 != self.snapshot.package_jsons_from_old_state.borrow().as_deref().unwrap_or_default()
                 || self.snapshot.missing_package_jsons.borrow().as_deref().unwrap_or_default()
@@ -284,14 +284,15 @@ impl Program {
         if ctx.err().is_some() {
             return None;
         }
-        let build_info = match snapshot_to_build_info(&self.snapshot, program, &build_info_file_name) {
+        let build_info = match tsrs_core::phases::time("BuildInfo: from snapshot", || snapshot_to_build_info(&self.snapshot, program, &build_info_file_name)) {
             Ok(build_info) => build_info,
             Err(err) => {
                 // Go: compiler.ContentMapperProjectDiagnostic(err); content mappers are not supported, so this never fails.
                 return Some(EmitResult { emit_skipped: true, diagnostics: vec![new_compiler_diagnostic(&diagnostics::Could_not_write_file_0_Colon_1, &[&build_info_file_name, &err])], ..Default::default() });
             }
         };
-        let text = build_info.marshal();
+        let text = tsrs_core::phases::time("BuildInfo: marshal", || build_info.marshal());
+        let write_start = std::time::Instant::now();
         let err = match options.write_file {
             Some(write_file) => {
                 let mut data = WriteFileData { build_info: Some(std::sync::Arc::new(build_info)), ..Default::default() };
@@ -299,6 +300,7 @@ impl Program {
             }
             None => program.host().fs().write_file(&build_info_file_name, &text),
         };
+        tsrs_core::phases::record("BuildInfo: write", write_start.elapsed());
         if let Err(err) = err {
             return Some(EmitResult {
                 emit_skipped: true,
