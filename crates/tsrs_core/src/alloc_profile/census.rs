@@ -357,6 +357,10 @@ pub fn run(roots: &[usize]) {
     if !recording() {
         return;
     }
+    // The stack is scanned from this frame up: the census's own frames below it hold, in unset slots, words from
+    // its own work (block addresses it sorted and indexed, freed ones included), which are not program state.
+    let marker = 0u64;
+    STACK_LOW.store(std::hint::black_box(&marker) as *const u64 as usize & !7, Ordering::SeqCst);
     MODE.store(3, Ordering::SeqCst);
     with_guard(|| run_frozen(roots));
 }
@@ -410,10 +414,12 @@ fn data_segments() -> Vec<(usize, usize, String)> {
     out
 }
 
+/// The low end of the stack range the census scans (set by `run`).
+static STACK_LOW: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 #[inline(never)]
 fn scan_stack(table: &mut Table, work: &mut Vec<u32>) -> usize {
-    let marker = 0u64;
-    let low = std::hint::black_box(&marker) as *const u64 as usize & !7;
+    let low = STACK_LOW.load(Ordering::SeqCst);
     // SAFETY: plain libc queries about the current thread.
     let high = unsafe { pthread_get_stackaddr_np(pthread_self()) } as usize;
     table.scan(low, high - low, work);
@@ -1020,8 +1026,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             visit(i, None, &|| "explicit root".into(), &mut work, &mut smark, &mut via);
         }
     }
-    let marker = 0u64;
-    let low = std::hint::black_box(&marker) as *const u64 as usize & !7;
+    let low = STACK_LOW.load(Ordering::SeqCst);
     // SAFETY: plain libc queries about the current thread.
     let high = unsafe { pthread_get_stackaddr_np(pthread_self()) } as usize;
     let mut roots_ranges: Vec<(usize, usize, String)> = data_segments();
