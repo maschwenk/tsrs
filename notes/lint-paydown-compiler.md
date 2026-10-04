@@ -137,7 +137,7 @@ Part 1: main 19c6349 vs f3205b0 (load 15-25):
 | 4 checkers, instructions | 391.62 G | 391.93 G | +0.08% |
 | 4 checkers, peak | 5.694 GiB | 5.693 GiB | 0.0% |
 
-Cumulative: main 19c6349 vs compiler-side-2 (aac1080 code, the inline change and the hand-lowered rows included;
+Cumulative: main 19c6349 vs compiler-side-2 at 2926386 (all code changes of both parts;
 load 8-19):
 
 | | main | part 2 | delta |
