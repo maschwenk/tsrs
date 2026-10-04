@@ -109,6 +109,8 @@ impl<T: ?Sized> P<T> {
     /// The underlying `'static` reference (not tied to the borrow of `self`).
     #[inline]
     pub fn get(self) -> &'static T {
+        #[cfg(feature = "alloc-profile")]
+        check_not_freed(self.0);
         self.0
     }
 
@@ -135,7 +137,27 @@ impl<T: ?Sized> Deref for P<T> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &T {
+        #[cfg(feature = "alloc-profile")]
+        check_not_freed(self.0);
         self.0
+    }
+}
+
+/// Profile builds with `TSRS_ARENA_POISON=1`: freed and rewound arena memory is filled with `POISON` and never reused,
+/// so a `P` whose target starts with eight poison bytes points into memory the arena gave back. Checked on every
+/// dereference, which turns a use after a wrong free into a panic at the use instead of a changed result.
+#[cfg(feature = "alloc-profile")]
+#[inline]
+fn check_not_freed<T: ?Sized>(r: &T) {
+    if std::mem::size_of_val(r) >= 8 && std::mem::align_of_val(r) >= 8 && crate::arena::poison_mode() {
+        // SAFETY: `r` is at least 8 bytes and 8-aligned.
+        let w = unsafe { std::ptr::read_volatile(r as *const T as *const u64) };
+        assert!(
+            w != u64::from_ne_bytes([crate::arena::POISON; 8]),
+            "arena: dereference of a freed block at {:p} as {}",
+            r as *const T as *const (),
+            std::any::type_name::<T>()
+        );
     }
 }
 

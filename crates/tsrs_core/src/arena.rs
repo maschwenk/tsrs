@@ -496,7 +496,7 @@ pub(crate) fn scrub_stack_for_census() {
 static MODE: AtomicU8 = AtomicU8::new(0);
 
 #[inline]
-fn poison_mode() -> bool {
+pub(crate) fn poison_mode() -> bool {
     match MODE.load(Ordering::Relaxed) {
         0 => {
             let on = std::env::var_os("TSRS_ARENA_POISON").is_some_and(|v| v == "1");
