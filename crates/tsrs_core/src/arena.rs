@@ -34,9 +34,9 @@ const FIRST_CHUNK: usize = 1 << 20;
 const CHUNK_ALIGN: usize = 16;
 const PAGE: usize = 4096;
 /// Largest chunk a thread arena grows to in compressed mode (larger single allocations still get their own size).
-#[cfg(feature = "compressed-ptrs")]
+#[cfg(compressed_ptrs)]
 const MAX_CHUNK: usize = 64 << 20;
-#[cfg(not(feature = "compressed-ptrs"))]
+#[cfg(not(compressed_ptrs))]
 const MAX_CHUNK: usize = usize::MAX;
 
 /// Largest block size kept on a free list; classes are `size / 8`.
@@ -173,7 +173,7 @@ impl Arena {
         // of the fixed reservation, touched or not.
         let next = if self.is_region() {
             (self.capacity.get() / 4).max(PAGE)
-        } else if cfg!(feature = "compressed-ptrs") {
+        } else if cfg!(compressed_ptrs) {
             (prev * 2).min(MAX_CHUNK)
         } else {
             prev * 2
@@ -399,14 +399,14 @@ fn census_chunk(size: usize) -> *mut u8 {
 
 /// A chunk for a thread's arena (or a slab). Compressed pointers: from the process-wide reservation (`reserve`).
 fn os_chunk(layout: Layout) -> *mut u8 {
-    #[cfg(feature = "compressed-ptrs")]
+    #[cfg(compressed_ptrs)]
     return crate::reserve::alloc_chunk(layout.size());
-    #[cfg(all(feature = "alloc-profile", not(feature = "compressed-ptrs")))]
+    #[cfg(all(feature = "alloc-profile", not(compressed_ptrs)))]
     let base = census_chunk(layout.size());
-    #[cfg(not(any(feature = "alloc-profile", feature = "compressed-ptrs")))]
+    #[cfg(not(any(feature = "alloc-profile", compressed_ptrs)))]
     // SAFETY: non-zero size.
     let base = unsafe { std::alloc::alloc(layout) };
-    #[cfg(not(feature = "compressed-ptrs"))]
+    #[cfg(not(compressed_ptrs))]
     {
         if base.is_null() {
             std::alloc::handle_alloc_error(layout);
@@ -488,12 +488,12 @@ fn slab_release(slab: *const Slab) {
         return;
     }
     // Profile builds map slabs with `mmap` (`census_chunk`) and keep them.
-    #[cfg(not(any(feature = "alloc-profile", feature = "compressed-ptrs")))]
+    #[cfg(not(any(feature = "alloc-profile", compressed_ptrs)))]
     // SAFETY: allocated by `new_slab` with this layout; every chunk carved from it was released.
     unsafe {
         std::alloc::dealloc(s.base, Layout::from_size_align(s.size, CHUNK_ALIGN).expect("arena slab layout"))
     };
-    #[cfg(feature = "compressed-ptrs")]
+    #[cfg(compressed_ptrs)]
     // SAFETY: from `os_chunk` with this size; every chunk carved from it was released.
     unsafe {
         crate::reserve::release_chunk(s.base, s.size)

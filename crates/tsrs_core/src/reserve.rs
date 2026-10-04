@@ -1,5 +1,5 @@
-//! The process-wide address range behind compressed `P<T>` handles (feature `compressed-ptrs`,
-//! notes/mem-pointer-compression.md).
+//! The process-wide address range behind compressed `P<T>` handles (`cfg(compressed_ptrs)`: the default feature
+//! `compressed-ptrs` on unix, see build.rs; notes/mem-pointer-compression.md).
 //!
 //! The first chunk request reserves `RESERVE` bytes of address space with no access, and every arena chunk of every
 //! thread arena and region is carved from it and committed on hand-out, so one `base()` turns any handle into an
@@ -48,7 +48,7 @@ fn fail(what: &str) -> ! {
     let live = CHUNKS.try_lock().map(|c| c.live).unwrap_or(0);
     eprintln!(
         "tsrs: {what} (compressed pointers: one {} GiB address range for every arena; {} MiB of it in use). \
-         Build without the tsrs_core/compressed-ptrs feature to lift the limit.",
+         Build with the tsrs_core/plain-ptrs feature to lift the limit.",
         RESERVE >> 30,
         live >> 20
     );
@@ -99,9 +99,6 @@ fn decommit(p: *mut u8, len: usize) {
         fail("could not release arena memory");
     }
 }
-
-#[cfg(not(unix))]
-compile_error!("tsrs_core/compressed-ptrs needs mmap (unix only for now)");
 
 impl Chunks {
     /// Offset of a free range of `size` bytes (a multiple of `GRANULE`): first fit among the released ranges, else

@@ -70,7 +70,7 @@ fn enabled() -> bool {
             let on = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1");
             if on && crate::COMPRESSED_PTRS {
                 // The census decodes 48-bit words as pointers; compressed handles are 32-bit offsets.
-                eprintln!("tsrs: TSRS_CENSUS=1 needs a build without tsrs_core/compressed-ptrs");
+                eprintln!("tsrs: TSRS_CENSUS=1 needs a build with tsrs_core/plain-ptrs (compressed pointers are on)");
                 std::process::exit(2);
             }
             MODE.store(if on { 2 } else { 1 }, Ordering::Relaxed);

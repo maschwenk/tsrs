@@ -8,14 +8,18 @@ license.workspace = true
 workspace = true
 
 [features]
+default = ["compressed-ptrs"]
 # Atomic borrow checking for FrozenCell in release builds (always on with debug_assertions).
 checked-cells = []
 # Per-call-site arena allocation profile and a counting global allocator (src/alloc_profile.rs).
 alloc-profile = ["dep:mimalloc"]
 # Creation-site counters for checker objects (src/sitecount.rs).
 site-counts = []
-# `P<T>` as a 32-bit handle into one reserved address range (src/reserve.rs, notes/mem-pointer-compression.md).
+# `P<T>` as a 32-bit handle into one reserved address range (src/reserve.rs, notes/mem-pointer-compression.md), on
+# unix targets (build.rs).
 compressed-ptrs = []
+# Keeps `P<T>` a plain reference even when `compressed-ptrs` is on (for comparisons: `--features tsrs_core/plain-ptrs`).
+plain-ptrs = []
 
 [dependencies]
 rustc-hash.workspace = true

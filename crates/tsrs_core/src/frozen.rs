@@ -364,8 +364,8 @@ impl Default for OwnedTaggedStrCell {
 /// compressed pointers, where a struct of handles packs tighter, a `ThinSliceCell` (8 bytes). `get` returns exactly
 /// the slice last `set`.
 pub struct OwnedPSliceCell<T: 'static>(
-    #[cfg(not(feature = "compressed-ptrs"))] crate::ptr::SliceCell<T>,
-    #[cfg(feature = "compressed-ptrs")] crate::ptr::ThinSliceCell<T>,
+    #[cfg(not(compressed_ptrs))] crate::ptr::SliceCell<T>,
+    #[cfg(compressed_ptrs)] crate::ptr::ThinSliceCell<T>,
 );
 
 impl<T> Default for OwnedPSliceCell<T> {
@@ -378,9 +378,9 @@ impl<T> OwnedPSliceCell<T> {
     #[inline]
     #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(value: &'static [T]) -> OwnedPSliceCell<T> {
-        #[cfg(not(feature = "compressed-ptrs"))]
+        #[cfg(not(compressed_ptrs))]
         return OwnedPSliceCell(crate::ptr::SliceCell::new(value));
-        #[cfg(feature = "compressed-ptrs")]
+        #[cfg(compressed_ptrs)]
         return OwnedPSliceCell(crate::ptr::ThinSliceCell::new(value));
     }
 

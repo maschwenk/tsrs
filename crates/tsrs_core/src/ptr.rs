@@ -66,7 +66,7 @@ fn with_arena<R>(f: impl FnOnce(&'static Arena) -> R) -> R {
 #[inline(always)]
 pub(crate) const fn p_layout<T>() -> std::alloc::Layout {
     let l = std::alloc::Layout::new::<T>();
-    if cfg!(feature = "compressed-ptrs") {
+    if cfg!(compressed_ptrs) {
         match l.align_to(8) {
             Ok(l) => l.pad_to_align(),
             Err(_) => panic!("layout"),
@@ -78,13 +78,13 @@ pub(crate) const fn p_layout<T>() -> std::alloc::Layout {
 
 /// Pointer to an arena value. Never null; use `Option<P<T>>` for Go's nil-able pointers
 /// (it is pointer-sized).
-#[cfg(not(feature = "compressed-ptrs"))]
+#[cfg(not(compressed_ptrs))]
 #[repr(transparent)]
 pub struct P<T: ?Sized + 'static>(&'static T);
 
 /// Handle of an arena value: its offset from `reserve::base()` in 8-byte units (notes/mem-pointer-compression.md).
 /// Never 0; `Option<P<T>>` is 4 bytes too.
-#[cfg(feature = "compressed-ptrs")]
+#[cfg(compressed_ptrs)]
 #[repr(transparent)]
 pub struct P<T: ?Sized + 'static>(std::num::NonZeroU32, std::marker::PhantomData<&'static T>);
 
@@ -129,13 +129,13 @@ impl<T> P<T> {
     /// of one that starts 8-aligned inside it.
     #[inline(always)]
     pub unsafe fn from_arena(r: &'static T) -> P<T> {
-        #[cfg(feature = "compressed-ptrs")]
+        #[cfg(compressed_ptrs)]
         {
             let off = (r as *const T).addr().wrapping_sub(crate::reserve::base().addr());
             debug_assert!(off < crate::reserve::RESERVE && off & 7 == 0 && off != 0, "P::from_arena outside the arena");
             P(std::num::NonZeroU32::new_unchecked((off >> crate::reserve::UNIT_SHIFT) as u32), std::marker::PhantomData)
         }
-        #[cfg(not(feature = "compressed-ptrs"))]
+        #[cfg(not(compressed_ptrs))]
         P(r)
     }
 
@@ -145,12 +145,12 @@ impl<T> P<T> {
     /// `bits` must come from `to_bits` of a live `P<T>` (same `T`, or a type whose value starts there).
     #[inline(always)]
     pub unsafe fn from_bits(bits: usize) -> P<T> {
-        #[cfg(feature = "compressed-ptrs")]
+        #[cfg(compressed_ptrs)]
         {
             debug_assert!(bits != 0 && bits & 7 == 0);
             P(std::num::NonZeroU32::new_unchecked((bits >> crate::reserve::UNIT_SHIFT) as u32), std::marker::PhantomData)
         }
-        #[cfg(not(feature = "compressed-ptrs"))]
+        #[cfg(not(compressed_ptrs))]
         P(&*std::ptr::with_exposed_provenance::<T>(bits))
     }
 
@@ -160,9 +160,9 @@ impl<T> P<T> {
     /// `key` must come from `key` of a live `P<T>` (same `T`, or a type whose value starts there).
     #[inline(always)]
     pub unsafe fn from_key(key: PKey) -> P<T> {
-        #[cfg(feature = "compressed-ptrs")]
+        #[cfg(compressed_ptrs)]
         return P(std::num::NonZeroU32::new_unchecked(key), std::marker::PhantomData);
-        #[cfg(not(feature = "compressed-ptrs"))]
+        #[cfg(not(compressed_ptrs))]
         return P(&*std::ptr::with_exposed_provenance::<T>(key));
     }
 
@@ -190,9 +190,9 @@ impl<T> P<T> {
     /// A `U` must live at this address.
     #[inline(always)]
     pub unsafe fn cast<U>(self) -> P<U> {
-        #[cfg(feature = "compressed-ptrs")]
+        #[cfg(compressed_ptrs)]
         return P(self.0, std::marker::PhantomData);
-        #[cfg(not(feature = "compressed-ptrs"))]
+        #[cfg(not(compressed_ptrs))]
         P(&*(self.0 as *const T).cast::<U>())
     }
 
@@ -200,7 +200,7 @@ impl<T> P<T> {
     /// starts 8-aligned inside it). In compressed mode this is checked: anything outside the arena range (a static,
     /// a heap object) or not 8-aligned panics.
     #[inline]
-    #[cfg(feature = "compressed-ptrs")]
+    #[cfg(compressed_ptrs)]
     #[track_caller]
     pub fn from_static(r: &'static T) -> P<T> {
         let off = (r as *const T).addr().wrapping_sub(crate::reserve::base().addr());
@@ -212,13 +212,13 @@ impl<T> P<T> {
 
     /// The handle (compressed mode only): the object's offset from `reserve::base()` in 8-byte units.
     #[inline(always)]
-    #[cfg(feature = "compressed-ptrs")]
+    #[cfg(compressed_ptrs)]
     pub fn handle(self) -> u32 {
         self.0.get()
     }
 }
 
-#[cfg(feature = "compressed-ptrs")]
+#[cfg(compressed_ptrs)]
 #[cold]
 #[inline(never)]
 #[track_caller]
@@ -226,7 +226,7 @@ fn from_static_failed(ty: &str, addr: usize) -> ! {
     panic!("P::<{ty}>::from_static({addr:#x}): not an 8-aligned object in the arena range (compressed pointers)")
 }
 
-#[cfg(not(feature = "compressed-ptrs"))]
+#[cfg(not(compressed_ptrs))]
 impl<T: ?Sized> P<T> {
     #[inline]
     pub const fn from_static(r: &'static T) -> P<T> {
@@ -253,7 +253,7 @@ impl<T: ?Sized> P<T> {
     }
 }
 
-#[cfg(feature = "compressed-ptrs")]
+#[cfg(compressed_ptrs)]
 impl<T: ?Sized> P<T> {
     /// The value (a `'static` reference, not tied to the borrow of `self`).
     #[inline(always)]
@@ -279,9 +279,9 @@ impl<T: ?Sized> P<T> {
 }
 
 /// The narrowest integer that identifies a `P` (`P::key`): the handle in compressed mode, else the address.
-#[cfg(feature = "compressed-ptrs")]
+#[cfg(compressed_ptrs)]
 pub type PKey = u32;
-#[cfg(not(feature = "compressed-ptrs"))]
+#[cfg(not(compressed_ptrs))]
 pub type PKey = usize;
 
 impl<T: ?Sized> P<T> {
@@ -294,9 +294,9 @@ impl<T: ?Sized> P<T> {
     /// (`from_key` turns it back; never 0).
     #[inline(always)]
     pub fn key(self) -> PKey {
-        #[cfg(feature = "compressed-ptrs")]
+        #[cfg(compressed_ptrs)]
         return self.0.get();
-        #[cfg(not(feature = "compressed-ptrs"))]
+        #[cfg(not(compressed_ptrs))]
         return (self.0 as *const T as *const ()).expose_provenance();
     }
 
@@ -321,7 +321,7 @@ impl<T: ?Sized> Clone for P<T> {
 }
 impl<T: ?Sized> Copy for P<T> {}
 
-#[cfg(not(feature = "compressed-ptrs"))]
+#[cfg(not(compressed_ptrs))]
 impl<T: ?Sized> Deref for P<T> {
     type Target = T;
     #[inline]
@@ -330,7 +330,7 @@ impl<T: ?Sized> Deref for P<T> {
     }
 }
 
-#[cfg(feature = "compressed-ptrs")]
+#[cfg(compressed_ptrs)]
 impl<T> Deref for P<T> {
     type Target = T;
     #[inline(always)]
@@ -339,14 +339,14 @@ impl<T> Deref for P<T> {
     }
 }
 
-#[cfg(not(feature = "compressed-ptrs"))]
+#[cfg(not(compressed_ptrs))]
 impl<T: ?Sized> PartialEq for P<T> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.addr() == other.addr()
     }
 }
-#[cfg(feature = "compressed-ptrs")]
+#[cfg(compressed_ptrs)]
 impl<T: ?Sized> PartialEq for P<T> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
@@ -358,9 +358,9 @@ impl<T: ?Sized> Eq for P<T> {}
 impl<T: ?Sized> Hash for P<T> {
     #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
-        #[cfg(not(feature = "compressed-ptrs"))]
+        #[cfg(not(compressed_ptrs))]
         state.write_usize(self.addr());
-        #[cfg(feature = "compressed-ptrs")]
+        #[cfg(compressed_ptrs)]
         state.write_u32(self.0.get());
     }
 }
@@ -374,9 +374,9 @@ impl<T: ?Sized> PartialOrd for P<T> {
 impl<T: ?Sized> Ord for P<T> {
     #[inline]
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        #[cfg(not(feature = "compressed-ptrs"))]
+        #[cfg(not(compressed_ptrs))]
         return self.addr().cmp(&other.addr());
-        #[cfg(feature = "compressed-ptrs")]
+        #[cfg(compressed_ptrs)]
         return self.0.cmp(&other.0);
     }
 }
@@ -385,9 +385,9 @@ impl<T: ?Sized> Ord for P<T> {
 /// recurse forever.
 impl<T: ?Sized> fmt::Debug for P<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        #[cfg(not(feature = "compressed-ptrs"))]
+        #[cfg(not(compressed_ptrs))]
         return write!(f, "P({:#x})", self.addr());
-        #[cfg(feature = "compressed-ptrs")]
+        #[cfg(compressed_ptrs)]
         return write!(f, "P(#{:#x})", self.0.get());
     }
 }
@@ -398,15 +398,15 @@ unsafe impl<T: ?Sized> Sync for P<T> {}
 
 /// An element of an arena array whose elements are handed out as `P<V>` (link-store pages): 8-aligned in compressed
 /// mode, where `P` targets must be; the same as `V` otherwise.
-#[cfg_attr(feature = "compressed-ptrs", repr(C, align(8)))]
-#[cfg_attr(not(feature = "compressed-ptrs"), repr(transparent))]
+#[cfg_attr(compressed_ptrs, repr(C, align(8)))]
+#[cfg_attr(not(compressed_ptrs), repr(transparent))]
 #[derive(Default)]
 pub struct PSlot<V>(pub V);
 
 impl<V> PSlot<V> {
     /// The pointer to the element of an arena array.
     #[inline(always)]
-    #[cfg_attr(feature = "compressed-ptrs", track_caller)]
+    #[cfg_attr(compressed_ptrs, track_caller)]
     pub fn as_p(&'static self) -> P<V> {
         // SAFETY: slots live only in arena arrays (`alloc_vec`), 8-aligned in compressed mode.
         unsafe { P::from_arena(&self.0) }
