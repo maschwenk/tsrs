@@ -81,6 +81,7 @@ impl Snapshot {
                 let mut content_mapper_watched_files = Set::default();
                 for project in self.project_collection.projects() {
                     if let Some(watched) = &project.content_mapper_watched_files {
+                        #[expect(clippy::iter_over_hash_type, reason = "pure set union; Go ranges the set too")]
                         for path in watched.keys() {
                             content_mapper_watched_files.add(path.clone());
                         }
@@ -356,6 +357,7 @@ impl Snapshot {
             file_changes = fs.mark_dirty_files(file_changes);
             file_changes = fs.convert_open_and_close_to_changes(file_changes, &previous_open_files, &open_files);
         }
+        #[expect(clippy::iter_over_hash_type, reason = "each open path's cache entry is only deleted; commutes; Go ranges the map too")]
         for path in open_files.keys() {
             if let Some(entry) = fs.cache_files.load(path) {
                 fs.delete_cache_entry(&entry);
@@ -691,6 +693,7 @@ impl Snapshot {
         let auto_import_host =
             new_auto_import_registry_clone_host(Arc::clone(&project_collection), Arc::clone(&store.parse_cache), Arc::clone(&fs), &store.options.current_directory, Arc::clone(&store.to_path));
         let mut open_files: FxHashMap<Path, String> = FxHashMap::default();
+        #[expect(clippy::iter_over_hash_type, reason = "pure map inserts; Go ranges the map too")]
         for (path, overlay) in overlays.iter() {
             open_files.insert(path.clone(), overlay.base.file_name.clone());
         }
@@ -762,6 +765,7 @@ impl Snapshot {
                 }
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "only adds this snapshot as an owner (a set insert); Go ranges the map too")]
         for config in new_snapshot.config_file_registry.configs.values() {
             if let Some(command_line) = config.command_line {
                 if let Some(config_file) = command_line.config_file {
@@ -841,6 +845,7 @@ impl Snapshot {
                 }
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "owner releases on distinct keys commute; Go ranges the map too")]
         for config in self.config_file_registry.configs.values() {
             if let Some(command_line) = config.command_line {
                 for file in command_line.extended_source_files() {
@@ -858,6 +863,7 @@ impl Snapshot {
 // snapshot.go:193
 fn overlay_file_handles(overlays: &OverlayMap) -> FxHashMap<Path, Arc<dyn FileHandle>> {
     let mut files: FxHashMap<Path, Arc<dyn FileHandle>> = FxHashMap::with_capacity_and_hasher(overlays.len(), Default::default());
+    #[expect(clippy::iter_over_hash_type, reason = "pure map inserts; Go ranges the map too")]
     for (path, overlay) in overlays.iter() {
         files.insert(path.clone(), Arc::<crate::overlayfs::Overlay>::clone(overlay));
     }

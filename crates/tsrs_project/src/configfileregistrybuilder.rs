@@ -525,6 +525,7 @@ impl configFileRegistryBuilder {
         // Handle closed files - this ranges over config entries and could be combined
         // with the file change handling, but a separate loop is simpler and a snapshot
         // change with both closing and watch changes seems rare.
+        #[expect(clippy::iter_over_hash_type, reason = "each path is only deleted from config_file_names and retaining sets; removals commute; Go ranges the set too")]
         for uri in summary.closed.keys() {
             let file_name = uri.file_name();
             let path = self.to_path(&file_name);
@@ -564,6 +565,7 @@ impl configFileRegistryBuilder {
         }
 
         // Handle created/deleted files named "tsconfig.json" or "jsconfig.json"
+        #[expect(clippy::iter_over_hash_type, reason = "the early return depends only on has_excessive_changes; otherwise deletes and set inserts; Go ranges the map too")]
         for path in &created_or_deleted_config_files {
             if has_excessive_changes {
                 return self.invalidate_cache(logger);
@@ -626,6 +628,7 @@ impl configFileRegistryBuilder {
                             return false;
                         }
                         logger.logf(format_args!("Checking if any of {} created files match root files for config {}", created_files.len(), key.0));
+                        #[expect(clippy::iter_over_hash_type, reason = "any-match predicate; the result does not depend on order; Go ranges the map too")]
                         for (path, file_name) in &created_files {
                             if command_line.possibly_matches_file_name(file_name) {
                                 return true;

@@ -545,6 +545,7 @@ fn overlay_directory_info(name: &str) -> FileInfo {
 // overlayfs.go:384
 fn create_overlay_directories(overlays: &FxHashMap<Path, Arc<Overlay>>) -> FxHashMap<Path, FxHashMap<Path, String>> {
     let mut overlay_directories: FxHashMap<Path, FxHashMap<Path, String>> = FxHashMap::default();
+    #[expect(clippy::iter_over_hash_type, reason = "builds nested maps keyed by path; Go ranges the map too")]
     for (path, overlay) in overlays {
         let mut child_path = path.clone();
         let mut child = overlay.base.file_name().to_string();

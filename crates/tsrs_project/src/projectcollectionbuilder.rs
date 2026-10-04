@@ -265,6 +265,7 @@ impl ProjectCollectionBuilder {
         let mut projects_to_close: Option<FxHashSet<Path>> = None;
         if let Some(close_projects) = &api_request.close_projects {
             let mut api_state = self.api_state.borrow_mut();
+            #[expect(clippy::iter_over_hash_type, reason = "each unique key adjusts only its own counter and set membership; Go ranges the set too")]
             for project_path in close_projects.keys() {
                 let count = api_state.open_projects.get(project_path).copied().unwrap_or(0);
                 if count > 1 {
@@ -294,6 +295,7 @@ impl ProjectCollectionBuilder {
 
         if let Some(close_files) = &api_request.close_files {
             let mut api_state = self.api_state.borrow_mut();
+            #[expect(clippy::iter_over_hash_type, reason = "per-key refcount update on unique keys; Go ranges the set too")]
             for path in close_files.keys() {
                 if let Some(entry) = api_state.open_files.get(path).cloned() {
                     if entry.ref_count > 1 {
@@ -307,6 +309,7 @@ impl ProjectCollectionBuilder {
 
         if let Some(open_files) = &api_request.open_files {
             let mut api_state = self.api_state.borrow_mut();
+            #[expect(clippy::iter_over_hash_type, reason = "per-key upsert on unique keys; Go ranges the map too")]
             for (path, file_name) in open_files {
                 let entry = api_state.open_files.entry(path.clone()).or_default();
                 entry.file_name = file_name.clone();
@@ -314,6 +317,7 @@ impl ProjectCollectionBuilder {
             }
         }
 
+        #[expect(clippy::iter_over_hash_type, reason = "a cached lookup, then a delete from a set; commutes; Go ranges the map too")]
         for overlay in self.overlays.values() {
             if let Some(entry) = self.find_default_configured_project(overlay.base.file_name.as_str(), &(self.to_path)(&overlay.base.file_name)) {
                 if let Some(p) = &mut projects_to_close {
@@ -503,6 +507,7 @@ impl ProjectCollectionBuilder {
                 let command_line = value.value().unwrap().command_line.unwrap();
                 let root_files_map = command_line.file_names_by_path();
                 let mut new_root_files: Vec<String> = command_line.file_names().to_vec();
+                #[expect(clippy::iter_over_hash_type, reason = "removes distinct names by value from new_root_files; removals commute; Go ranges the set too")]
                 for uri in summary.closed.keys() {
                     let file_name = uri.file_name();
                     let path = (self.to_path)(&file_name);

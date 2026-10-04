@@ -77,6 +77,7 @@ impl ParseCacheJournal {
     /// Releases every reference this clone still holds (its programs never reached a snapshot).
     pub(crate) fn roll_back(&self, cache: &ParseCache) {
         let held = std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner()));
+        #[expect(clippy::iter_over_hash_type, reason = "refcount decrements on distinct keys commute (no Go counterpart: Rust-only journal)")]
         for (key, count) in held {
             for _ in 0..count.max(0) {
                 cache.deref(&key);

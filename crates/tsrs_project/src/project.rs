@@ -541,6 +541,7 @@ impl Project {
                 }
             }
         } else if let Some(potential_project_references) = &self.potential_project_references {
+            #[expect(clippy::iter_over_hash_type, reason = "pure membership any(); Go ranges the set too")]
             for path in potential_project_references.keys() {
                 if project_tree_request.is_project_referenced(path) {
                     return true;
