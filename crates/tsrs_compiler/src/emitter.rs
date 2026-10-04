@@ -177,6 +177,10 @@ mod emit {
         // emitter.go:46 `emit` is `transform` followed by `print`. This part runs the transformers (and so needs the
         // file's checker).
         pub(crate) fn transform(&mut self) {
+            tsrs_ast::with_subtree_facts_cache(|| self.transform_worker());
+        }
+
+        fn transform_worker(&mut self) {
             let js_file_path = self.paths.js_file_path().to_string();
             let source_map_file_path = self.paths.source_map_file_path().to_string();
             self.emit_js_file(Some(self.source_file), &js_file_path, &source_map_file_path);
