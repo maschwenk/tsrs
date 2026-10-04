@@ -312,7 +312,7 @@ const SYMBOL_TABLE_LINEAR_MAX: usize = 16;
 #[derive(Default, Clone)]
 struct SymbolMap {
     entries: EntryVec,
-    extra: Option<Box<SymbolMapExtra>>,
+    extra: ExtraSlot,
 }
 
 const _: () = assert!(std::mem::size_of::<SymbolMap>() == 24);
@@ -518,6 +518,99 @@ struct SymbolMapExtra {
     odd_keys: Vec<(u32, &'static str)>, // (position, key) of the entries whose key is not their symbol's name
 }
 
+/// `SymbolMap::extra`: one word holding either a boxed `SymbolMapExtra` (an even address) or, in a table without
+/// one (a linear table whose keys are all their symbols' names: nearly every table), a 64-bit Bloom filter of its
+/// keys' hashes (two bits per key) whose bit 0 is set as the tag. A lookup the filter rejects returns without
+/// reading the entries, which are a second cache line: over half of all lookups are misses in small tables
+/// (a property lookup tries each type on the apparent-type chain, down to `Object`'s members), and the entries of
+/// a table looked up once in a while are rarely in cache. Deleting a key leaves its bits set (a superset is still
+/// a valid filter).
+struct ExtraSlot(*mut SymbolMapExtra);
+
+impl ExtraSlot {
+    const EMPTY_FILTER: usize = 1;
+
+    #[inline]
+    fn boxed(extra: SymbolMapExtra) -> ExtraSlot {
+        ExtraSlot(Box::into_raw(Box::new(extra)))
+    }
+
+    #[inline]
+    fn is_filter(&self) -> bool {
+        self.0.addr() & 1 != 0
+    }
+
+    #[inline]
+    fn get(&self) -> Option<&SymbolMapExtra> {
+        // SAFETY: an even word is the pointer `boxed` created, owned by this slot.
+        (!self.is_filter()).then(|| unsafe { &*self.0 })
+    }
+
+    #[inline]
+    fn get_mut(&mut self) -> Option<&mut SymbolMapExtra> {
+        // SAFETY: as in `get`, and `&mut self` is unique.
+        (!self.is_filter()).then(|| unsafe { &mut *self.0 })
+    }
+
+    /// The boxed extra, created (dropping the filter) when the slot holds a filter.
+    fn get_or_insert(&mut self) -> &mut SymbolMapExtra {
+        if self.is_filter() {
+            *self = ExtraSlot::boxed(SymbolMapExtra::default());
+        }
+        self.get_mut().unwrap()
+    }
+
+    #[inline]
+    fn filter_bits(hash: u32) -> usize {
+        (1usize << (hash & 63)) | (1usize << ((hash >> 6) & 63))
+    }
+
+    /// False if no key with this hash is in a table whose slot holds a filter.
+    #[inline]
+    fn may_contain(&self, hash: u32) -> bool {
+        let bits = Self::filter_bits(hash);
+        !self.is_filter() || self.0.addr() & bits == bits
+    }
+
+    #[inline]
+    fn add_to_filter(&mut self, hash: u32) {
+        if self.is_filter() {
+            self.0 = std::ptr::without_provenance_mut(self.0.addr() | Self::filter_bits(hash));
+        }
+    }
+}
+
+const _: () = assert!(usize::BITS == 64);
+
+impl Default for ExtraSlot {
+    #[inline]
+    fn default() -> ExtraSlot {
+        ExtraSlot(std::ptr::without_provenance_mut(Self::EMPTY_FILTER))
+    }
+}
+
+impl Clone for ExtraSlot {
+    fn clone(&self) -> ExtraSlot {
+        match self.get() {
+            Some(extra) => ExtraSlot::boxed(extra.clone()),
+            None => ExtraSlot(self.0),
+        }
+    }
+}
+
+impl Drop for ExtraSlot {
+    fn drop(&mut self) {
+        if !self.is_filter() {
+            // SAFETY: an even word is the pointer `boxed` created, owned by this slot.
+            drop(unsafe { Box::from_raw(self.0) });
+        }
+    }
+}
+
+// SAFETY: an `ExtraSlot` owns its `SymbolMapExtra` like a `Box` (or holds plain bits).
+unsafe impl Send for ExtraSlot {}
+unsafe impl Sync for ExtraSlot {}
+
 #[inline]
 fn hash_name(name: &str) -> u32 {
     let h = FxBuildHasher.hash_one(name);
@@ -533,14 +626,17 @@ fn index_hash(hash: u32) -> u64 {
 
 impl SymbolMap {
     fn with_capacity(n: usize) -> SymbolMap {
-        let extra = (n > SYMBOL_TABLE_LINEAR_MAX)
-            .then(|| Box::new(SymbolMapExtra { index: Some(HashTable::with_capacity(n)), odd_keys: Vec::new() }));
+        let extra = if n > SYMBOL_TABLE_LINEAR_MAX {
+            ExtraSlot::boxed(SymbolMapExtra { index: Some(HashTable::with_capacity(n)), odd_keys: Vec::new() })
+        } else {
+            ExtraSlot::default()
+        };
         SymbolMap { entries: EntryVec::with_capacity(n), extra }
     }
 
     #[inline]
     fn index(&self) -> Option<&HashTable<u32>> {
-        self.extra.as_ref().and_then(|e| e.index.as_ref())
+        self.extra.get().and_then(|e| e.index.as_ref())
     }
 
     /// The stored key of entry `i`.
@@ -550,7 +646,7 @@ impl SymbolMap {
         if !e.is_odd() {
             return e.symbol().name();
         }
-        let odd_keys = &self.extra.as_ref().unwrap().odd_keys;
+        let odd_keys = &self.extra.get().unwrap().odd_keys;
         odd_keys.iter().find(|&&(j, _)| j as usize == i).unwrap().1
     }
 
@@ -570,13 +666,12 @@ impl SymbolMap {
     fn position(&self, name: &str) -> Option<usize> {
         match self.index() {
             None => {
-                // Hash the name only once an entry of the same (capped) length turns up.
-                let len = KeyPrint::len_bits(name);
-                let mut hash = None;
-                (0..self.entries.len()).find(|&i| {
-                    self.entries[i].len_bits() == len
-                        && self.entry_matches(i, name, KeyPrint { len, hash: KeyPrint::hash_bits(*hash.get_or_insert_with(|| hash_name(name))) })
-                })
+                let hash = hash_name(name);
+                if !self.extra.may_contain(hash) {
+                    return None;
+                }
+                let print = KeyPrint::of(name, hash);
+                (0..self.entries.len()).find(|&i| self.entry_matches(i, name, print))
             }
             Some(index) => {
                 let hash = hash_name(name);
@@ -588,7 +683,7 @@ impl SymbolMap {
 
     fn add_odd_key(&mut self, i: usize, key: &'static str) {
         self.entries[i].0 |= SymbolMapEntry::ODD_BIT;
-        self.extra.get_or_insert_with(Default::default).odd_keys.push((i as u32, key));
+        self.extra.get_or_insert().odd_keys.push((i as u32, key));
     }
 
     fn insert(&mut self, name: &'static str, symbol: P<Symbol>) {
@@ -610,19 +705,21 @@ impl SymbolMap {
             // symbols (locals of small functions, members of small object literals).
             self.entries.reserve_exact(1);
         }
-        self.entries.push(SymbolMapEntry::new(symbol, KeyPrint::of(name, hash_name(name))));
+        let hash = hash_name(name);
+        self.entries.push(SymbolMapEntry::new(symbol, KeyPrint::of(name, hash)));
+        self.extra.add_to_filter(hash);
         if symbol.name() != name {
             self.add_odd_key(i, name);
         }
         let len = self.entries.len();
         let has_index = self.index().is_some();
         if has_index || len > SYMBOL_TABLE_LINEAR_MAX {
-            let mut index = self.extra.as_mut().and_then(|e| e.index.take()).unwrap_or_else(|| HashTable::with_capacity(len));
+            let mut index = self.extra.get_mut().and_then(|e| e.index.take()).unwrap_or_else(|| HashTable::with_capacity(len));
             let start = if has_index { i } else { 0 };
             for j in start..len {
                 index.insert_unique(index_hash(self.entry_hash(j)), j as u32, |&m| index_hash(self.entry_hash(m as usize)));
             }
-            self.extra.get_or_insert_with(Default::default).index = Some(index);
+            self.extra.get_or_insert().index = Some(index);
         }
     }
 
@@ -631,7 +728,7 @@ impl SymbolMap {
             return;
         };
         let hash = self.entry_hash(i);
-        if let Some(extra) = &mut self.extra {
+        if let Some(extra) = self.extra.get_mut() {
             if let Some(index) = &mut extra.index {
                 if let Ok(entry) = index.find_entry(index_hash(hash), |&j| j as usize == i) {
                     entry.remove();
