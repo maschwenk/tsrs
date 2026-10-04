@@ -111,7 +111,7 @@ impl EmitContext {
     pub fn new_node_visitor(&self, visit: VisitFn) -> NodeVisitor {
         // SAFETY: an EmitContext is only ever created by `new_emit_context`, which allocates it in the process-lifetime
         // arena (`P::new`), so `self` is `'static`.
-        let c: P<EmitContext> = P::from_static(unsafe { &*(self as *const EmitContext) });
+        let c: P<EmitContext> = P::from_static(unsafe { &*std::ptr::from_ref::<EmitContext>(self) });
         tsrs_ast::new_node_visitor(
             Some(visit),
             Some(self.factory.as_node_factory().clone()),

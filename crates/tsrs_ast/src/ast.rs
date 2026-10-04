@@ -149,7 +149,7 @@ fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks
 pub(crate) fn rare_tail<T: NodeRareTail>(data: &T) -> Option<&'static T::Rare> {
     #[allow(clippy::let_unit_value)]
     let () = T::SAME_OFFSET;
-    let at = data as *const T as *const u8;
+    let at = std::ptr::from_ref::<T>(data).cast::<u8>();
     // SAFETY: data structs are created only inside a `NodeAlloc<T>` or `NodeAllocRare<T, _>` (both `repr(C)`, header
     // first, data at the same offset: asserted in `NodeRareTail`), which is never moved or freed while reachable.
     #[expect(clippy::cast_ptr_alignment, reason = "the header starts the `NodeAlloc`, so it has the allocation's alignment")]
@@ -534,7 +534,7 @@ impl Node {
         debug_assert!(self.data_tag() == T::TAG);
         // SAFETY: a node tagged `T::TAG` was allocated by `new_node::<T>` as a `NodeAlloc<T>` whose header is
         // `self`, so its data struct lives at this offset from the header, for the rest of the process.
-        unsafe { &*(self as *const Node).cast::<u8>().add(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<T>() }
+        unsafe { &*std::ptr::from_ref::<Node>(self).cast::<u8>().add(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<T>() }
     }
 
     /// The arena pointer for this node. Every `Node` is created by `NodeFactory`/`new_node` in the leak
@@ -543,7 +543,7 @@ impl Node {
     #[inline]
     pub fn as_p(&self) -> P<Node> {
         // SAFETY: see above; nodes are never freed or moved.
-        unsafe { P::from_arena(&*(self as *const Node)) }
+        unsafe { P::from_arena(&*std::ptr::from_ref::<Node>(self)) }
     }
 
     #[inline]
@@ -1888,7 +1888,7 @@ impl SourceFile {
     // any lock of the cache it fills (lock order: region, then cache). No-op without regions (CLI).
     #[inline]
     fn owner_region(&self) -> Option<tsrs_core::arena::RegionScope> {
-        tsrs_core::arena::enter_owner(self as *const SourceFile as usize)
+        tsrs_core::arena::enter_owner(std::ptr::from_ref::<SourceFile>(self) as usize)
     }
 
     pub fn file_name(&self) -> &str {

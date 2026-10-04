@@ -12067,7 +12067,7 @@ impl NodeFactory {
 
     pub fn update_synthetic_expression(&self, node: P<Node>, type_node: &'static dyn Any, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
         let data = node.as_synthetic_expression();
-        if !std::ptr::addr_eq(type_node as *const dyn Any, data.type_() as *const dyn Any) || is_spread != data.is_spread() || tuple_name_source != data.tuple_name_source() {
+        if !std::ptr::addr_eq(std::ptr::from_ref::<dyn Any>(type_node), std::ptr::from_ref::<dyn Any>(data.type_())) || is_spread != data.is_spread() || tuple_name_source != data.tuple_name_source() {
             return update_node(self.new_synthetic_expression(type_node, is_spread, tuple_name_source), node, &self.hooks);
         }
         node

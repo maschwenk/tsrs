@@ -387,30 +387,34 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     p
 }
 
-// Frees a program made by `new_program` or `update_program` (language server; Go's GC). The caller guarantees that
-// nothing uses it any more: no checker of its pool is held, and no snapshot or language service refers to it. What
-// it shares with other versions (`processed`, the project reference file mapper) stays.
-//
-// # Safety
-// `program` came from `new_program` / `update_program` and is not used afterwards.
+/// Frees a program made by `new_program` or `update_program` (language server; Go's GC). The caller guarantees that
+/// nothing uses it any more: no checker of its pool is held, and no snapshot or language service refers to it. What
+/// it shares with other versions (`processed`, the project reference file mapper) stays.
+///
+/// # Safety
+/// `program` came from `new_program` / `update_program` and is not used afterwards.
 pub unsafe fn free_program(program: &'static Program) {
     let resolution_host: *const dyn ResolutionHost = program.resolution_host;
-    drop(Box::from_raw(program as *const Program as *mut Program));
+    // SAFETY: both functions leak the program from a `Box`, and nothing uses it afterwards (this function's contract).
+    drop(unsafe { Box::from_raw(std::ptr::from_ref::<Program>(program).cast_mut()) });
     // Per program (`resolution_host_for`); it keeps the compiler host alive.
-    drop(Box::from_raw(resolution_host as *mut dyn ResolutionHost));
+    // SAFETY: `resolution_host_for` leaked it from a `Box` for this program alone, which is gone.
+    drop(unsafe { Box::from_raw(resolution_host as *mut dyn ResolutionHost) });
 }
 
-// Frees a program from `new_program` that never shared data with another version (it was not the source or the
-// result of `update_program`), including its processed-file data and project reference file mapper, which
-// `free_program` keeps because language-server program versions share them. Used for one-shot programs (the
-// native API's transpileModule / transpileDeclaration).
-//
-// # Safety
-// As `free_program`, and additionally: no other program refers to `program`'s processed files or mapper.
+/// Frees a program from `new_program` that never shared data with another version (it was not the source or the
+/// result of `update_program`), including its processed-file data and project reference file mapper, which
+/// `free_program` keeps because language-server program versions share them. Used for one-shot programs (the
+/// native API's transpileModule / transpileDeclaration).
+///
+/// # Safety
+/// As `free_program`, and additionally: no other program refers to `program`'s processed files or mapper.
 pub unsafe fn free_unshared_program(program: &'static Program) {
     let shared = shared_program_data(program);
-    free_program(program);
-    shared.free();
+    // SAFETY: this function's contract includes `free_program`'s.
+    unsafe { free_program(program) };
+    // SAFETY: the only program that shared this data was just freed (this function's contract).
+    unsafe { shared.free() };
 }
 
 /// The data program versions share (`processed`, the project reference file mapper, the file loader's
@@ -424,8 +428,8 @@ pub struct SharedProgramData {
 /// See `SharedProgramData`.
 pub fn shared_program_data(program: &'static Program) -> SharedProgramData {
     SharedProgramData {
-        processed: program.processed as *const processedFiles as usize,
-        mapper: program.project_reference_file_mapper as *const projectReferenceFileMapper as usize,
+        processed: std::ptr::from_ref::<processedFiles>(program.processed) as usize,
+        mapper: std::ptr::from_ref::<projectReferenceFileMapper>(program.project_reference_file_mapper) as usize,
     }
 }
 
@@ -433,8 +437,10 @@ impl SharedProgramData {
     /// # Safety
     /// Every program that shares this data has been freed, and nothing else refers to it.
     pub unsafe fn free(self) {
-        free_project_reference_file_mapper(self.mapper as *mut projectReferenceFileMapper);
-        drop(Box::from_raw(self.processed as *mut processedFiles));
+        // SAFETY: the file loader leaked the mapper from a `Box`, and nothing refers to it (this function's contract).
+        unsafe { free_project_reference_file_mapper(self.mapper as *mut projectReferenceFileMapper) };
+        // SAFETY: `new_program` leaked `processed` from a `Box`, and nothing refers to it (this function's contract).
+        drop(unsafe { Box::from_raw(self.processed as *mut processedFiles) });
     }
 }
 
@@ -443,14 +449,17 @@ impl SharedProgramData {
 /// # Safety
 /// `mapper` came from `Box::leak` in the file loader, and nothing refers to it or its hosts any more.
 pub(crate) unsafe fn free_project_reference_file_mapper(mapper: *mut projectReferenceFileMapper) {
-    let dts_faking_host = (*mapper).dts_faking_host.get().copied();
-    let loader_host = (*mapper).loader_host;
-    drop(Box::from_raw(mapper));
+    // SAFETY: `mapper` is a live leaked `Box` (this function's contract).
+    let (dts_faking_host, loader_host) = unsafe { ((*mapper).dts_faking_host.get().copied(), (*mapper).loader_host) };
+    // SAFETY: it came from `Box::leak`, and nothing refers to it any more (this function's contract).
+    drop(unsafe { Box::from_raw(mapper) });
     if let Some(h) = dts_faking_host {
-        drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
+        // SAFETY: `new_project_reference_dts_faking_host` leaked it from a `Box` for this mapper, which is gone.
+        drop(unsafe { Box::from_raw(std::ptr::from_ref::<dyn ResolutionHost>(h) as *mut dyn ResolutionHost) });
     }
     if let Some(h) = loader_host {
-        drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
+        // SAFETY: `resolution_host_for` leaked it from a `Box` for this mapper's loader, which is gone.
+        drop(unsafe { Box::from_raw(std::ptr::from_ref::<dyn ResolutionHost>(h) as *mut dyn ResolutionHost) });
     }
 }
 
@@ -2467,7 +2476,7 @@ impl Program {
         }
         // `UpdateProgram` hands the cache to the next program version, which shares `processed`: in the language
         // server it lives in the region that owns `processed` (the full build's), not in this version's.
-        let _region = tsrs_core::arena::enter_owner(self.processed as *const processedFiles as usize);
+        let _region = tsrs_core::arena::enter_owner(std::ptr::from_ref::<processedFiles>(self.processed) as usize);
         *self.known_symlinks.get_or_init(|| {
             let resolver = self.new_resolver();
             let known_symlinks = symlinks::new_known_symlink(self.get_current_directory(), self.use_case_sensitive_file_names());

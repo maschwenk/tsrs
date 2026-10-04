@@ -349,7 +349,7 @@ impl InferenceContext {
     /// The arena handle of this context (contexts are only created in the arena and never moved).
     fn as_p(&self) -> P<InferenceContext> {
         // SAFETY: see above.
-        unsafe { P::from_arena(&*(self as *const InferenceContext)) }
+        unsafe { P::from_arena(&*std::ptr::from_ref::<InferenceContext>(self)) }
     }
 
     fn rare(&self) -> Option<P<InferenceContextRare>> {

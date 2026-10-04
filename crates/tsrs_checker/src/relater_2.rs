@@ -2550,7 +2550,7 @@ impl Relater {
                 }
             }
             Some(message) => {
-                if std::ptr::eq(message, &diagnostics::Argument_of_type_0_is_not_assignable_to_parameter_of_type_1) && c.exact_optional_property_types && !c.get_exact_optional_unassignable_properties(source, target).is_empty() {
+                if std::ptr::eq(message, &raw const diagnostics::Argument_of_type_0_is_not_assignable_to_parameter_of_type_1) && c.exact_optional_property_types && !c.get_exact_optional_unassignable_properties(source, target).is_empty() {
                     &diagnostics::Argument_of_type_0_is_not_assignable_to_parameter_of_type_1_with_exactOptionalPropertyTypes_Colon_true_Consider_adding_undefined_to_the_types_of_the_target_s_properties
                 } else {
                     message
@@ -2591,7 +2591,7 @@ impl Relater {
     pub(crate) fn report_error(&self, c: &mut Checker, message: &'static Message, args: &[&dyn Display]) {
         let mut message = message;
         let mut args = diagnostics::stringify_args(args);
-        if std::ptr::eq(message, &diagnostics::Types_of_property_0_are_incompatible) {
+        if std::ptr::eq(message, &raw const diagnostics::Types_of_property_0_are_incompatible) {
             // Suppress if next message is an excess property error
             let chain_message = self.get_chain_message(c, 0);
             if is_message(chain_message, &diagnostics::Object_literal_may_only_specify_known_properties_and_0_does_not_exist_in_type_1)
@@ -2630,7 +2630,7 @@ impl Relater {
                 let tail = get_property_name_arg(&self.error_chain.get().unwrap().next.unwrap().args[0]);
                 let arg = add_to_dotted_name(&head, &tail);
                 self.error_chain.set(self.error_chain.get().unwrap().next.unwrap().next);
-                if std::ptr::eq(message, &diagnostics::Types_of_property_0_are_incompatible) {
+                if std::ptr::eq(message, &raw const diagnostics::Types_of_property_0_are_incompatible) {
                     message = &diagnostics::The_types_of_0_are_incompatible_between_these_types;
                 }
                 self.report_error(c, message, &[&arg]);
@@ -2710,12 +2710,12 @@ pub(crate) fn get_property_name_arg(arg: &str) -> String {
 
 // relater.go:4967
 pub(crate) fn is_conversion_or_interface_implementation_message(message: &'static Message) -> bool {
-    std::ptr::eq(message, &diagnostics::Class_0_incorrectly_implements_interface_1)
-        || std::ptr::eq(message, &diagnostics::Class_0_incorrectly_implements_class_1_Did_you_mean_to_extend_1_and_inherit_its_members_as_a_subclass)
-        || std::ptr::eq(message, &diagnostics::Conversion_of_type_0_to_type_1_may_be_a_mistake_because_neither_type_sufficiently_overlaps_with_the_other_If_this_was_intentional_convert_the_expression_to_unknown_first)
-        || std::ptr::eq(message, &diagnostics::Its_instance_type_0_is_not_a_valid_JSX_element)
-        || std::ptr::eq(message, &diagnostics::Its_return_type_0_is_not_a_valid_JSX_element)
-        || std::ptr::eq(message, &diagnostics::Its_element_type_0_is_not_a_valid_JSX_element)
+    std::ptr::eq(message, &raw const diagnostics::Class_0_incorrectly_implements_interface_1)
+        || std::ptr::eq(message, &raw const diagnostics::Class_0_incorrectly_implements_class_1_Did_you_mean_to_extend_1_and_inherit_its_members_as_a_subclass)
+        || std::ptr::eq(message, &raw const diagnostics::Conversion_of_type_0_to_type_1_may_be_a_mistake_because_neither_type_sufficiently_overlaps_with_the_other_If_this_was_intentional_convert_the_expression_to_unknown_first)
+        || std::ptr::eq(message, &raw const diagnostics::Its_instance_type_0_is_not_a_valid_JSX_element)
+        || std::ptr::eq(message, &raw const diagnostics::Its_return_type_0_is_not_a_valid_JSX_element)
+        || std::ptr::eq(message, &raw const diagnostics::Its_element_type_0_is_not_a_valid_JSX_element)
 }
 
 // relater.go:4976

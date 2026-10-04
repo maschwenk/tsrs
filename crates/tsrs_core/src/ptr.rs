@@ -176,7 +176,9 @@ impl<T> P<T> {
         {
             let off = std::ptr::from_ref::<T>(r).addr().wrapping_sub(crate::reserve::base().addr());
             debug_assert!(off < crate::reserve::RESERVE && off & 7 == 0 && off != 0, "P::from_arena outside the arena");
-            P(std::num::NonZeroU32::new_unchecked((off >> crate::reserve::UNIT_SHIFT) as u32), std::marker::PhantomData)
+            // SAFETY: `r` is an arena object (this function's contract), and the reservation's first granule is never
+            // handed out, so its handle is not 0.
+            P(unsafe { std::num::NonZeroU32::new_unchecked((off >> crate::reserve::UNIT_SHIFT) as u32) }, std::marker::PhantomData)
         }
         #[cfg(not(compressed_ptrs))]
         P(r)
@@ -191,10 +193,12 @@ impl<T> P<T> {
         #[cfg(compressed_ptrs)]
         {
             debug_assert!(bits != 0 && bits & 7 == 0);
-            P(std::num::NonZeroU32::new_unchecked((bits >> crate::reserve::UNIT_SHIFT) as u32), std::marker::PhantomData)
+            // SAFETY: `bits` came from `to_bits` of a live `P<T>` (this function's contract), whose handle is not 0.
+            P(unsafe { std::num::NonZeroU32::new_unchecked((bits >> crate::reserve::UNIT_SHIFT) as u32) }, std::marker::PhantomData)
         }
         #[cfg(not(compressed_ptrs))]
-        P(&*std::ptr::with_exposed_provenance::<T>(bits))
+        // SAFETY: `bits` is the exposed address of a live arena object (this function's contract).
+        P(unsafe { &*std::ptr::with_exposed_provenance::<T>(bits) })
     }
 
     /// The object packed in the low bits of `w` by `pack` (higher bits may hold anything).
@@ -204,9 +208,11 @@ impl<T> P<T> {
     #[inline(always)]
     pub unsafe fn unpack(w: u64) -> P<T> {
         #[cfg(compressed_ptrs)]
-        return P(std::num::NonZeroU32::new_unchecked(w as u32), std::marker::PhantomData);
+        // SAFETY: the low bits came from `pack` of a live `P<T>` (this function's contract): its handle, not 0.
+        return P(unsafe { std::num::NonZeroU32::new_unchecked(w as u32) }, std::marker::PhantomData);
         #[cfg(not(compressed_ptrs))]
-        return P(&*std::ptr::with_exposed_provenance::<T>(((w & PACK_MASK) << 3) as usize));
+        // SAFETY: the low bits are the address of a live arena object, shifted by `pack` (this function's contract).
+        return P(unsafe { &*std::ptr::with_exposed_provenance::<T>(((w & PACK_MASK) << 3) as usize) });
     }
 
     /// `unpack` for an optional pointer (low bits 0 = `None`).
@@ -216,9 +222,11 @@ impl<T> P<T> {
     #[inline(always)]
     pub unsafe fn unpack_opt(w: u64) -> Option<P<T>> {
         #[cfg(compressed_ptrs)]
-        return (w as u32 != 0).then(|| P::unpack(w));
+        // SAFETY: nonzero low bits came from `pack` (this function's contract).
+        return (w as u32 != 0).then(|| unsafe { P::unpack(w) });
         #[cfg(not(compressed_ptrs))]
-        return (w & PACK_MASK != 0).then(|| P::unpack(w));
+        // SAFETY: nonzero low bits came from `pack` (this function's contract).
+        return (w & PACK_MASK != 0).then(|| unsafe { P::unpack(w) });
     }
 
     /// The object whose `key` is `key`.
@@ -228,9 +236,11 @@ impl<T> P<T> {
     #[inline(always)]
     pub unsafe fn from_key(key: PKey) -> P<T> {
         #[cfg(compressed_ptrs)]
-        return P(std::num::NonZeroU32::new_unchecked(key), std::marker::PhantomData);
+        // SAFETY: `key` came from `key` of a live `P<T>` (this function's contract): its handle, not 0.
+        return P(unsafe { std::num::NonZeroU32::new_unchecked(key) }, std::marker::PhantomData);
         #[cfg(not(compressed_ptrs))]
-        return P(&*std::ptr::with_exposed_provenance::<T>(key));
+        // SAFETY: `key` is the exposed address of a live arena object (this function's contract).
+        return P(unsafe { &*std::ptr::with_exposed_provenance::<T>(key) });
     }
 
     /// `from_key` for an optional pointer: 0 is `None`.
@@ -239,7 +249,8 @@ impl<T> P<T> {
     /// As `from_key`.
     #[inline(always)]
     pub unsafe fn from_key_opt(key: PKey) -> Option<P<T>> {
-        (key != 0).then(|| P::from_key(key))
+        // SAFETY: a nonzero `key` came from `key` of a live `P<T>` (this function's contract).
+        (key != 0).then(|| unsafe { P::from_key(key) })
     }
 
     /// `from_bits` for an optional pointer: 0 is `None`.
@@ -248,7 +259,8 @@ impl<T> P<T> {
     /// As `from_bits`.
     #[inline(always)]
     pub unsafe fn from_bits_opt(bits: usize) -> Option<P<T>> {
-        (bits != 0).then(|| P::from_bits(bits))
+        // SAFETY: nonzero `bits` came from `to_bits` of a live `P<T>` (this function's contract).
+        (bits != 0).then(|| unsafe { P::from_bits(bits) })
     }
 
     /// The `n`-th element after this one in an arena array of `T` (pointer `add`; not named `add`, which would shadow `add` methods of `T`). Compressed: handle arithmetic,
@@ -262,10 +274,12 @@ impl<T> P<T> {
         {
             const { assert!(std::mem::size_of::<T>() % 8 == 0, "P::array_add needs 8-byte multiples") };
             let h = self.0.get() + (n * (std::mem::size_of::<T>() >> crate::reserve::UNIT_SHIFT)) as u32;
-            return P(std::num::NonZeroU32::new_unchecked(h), std::marker::PhantomData);
+            // SAFETY: `h` is past a nonzero handle, inside the same array (this function's contract).
+            return P(unsafe { std::num::NonZeroU32::new_unchecked(h) }, std::marker::PhantomData);
         }
         #[cfg(not(compressed_ptrs))]
-        P(&*(self.0 as *const T).add(n))
+        // SAFETY: the array has at least `n` more elements after `self` (this function's contract).
+        P(unsafe { &*std::ptr::from_ref::<T>(self.0).add(n) })
     }
 
     /// The same object viewed as a `U` (a header at the start of a larger allocation, or the reverse).
@@ -528,8 +542,10 @@ impl<T: ?Sized> fmt::Debug for P<T> {
     }
 }
 
-// See the threading contract in the module docs.
+// SAFETY: by decree, under the threading contract in the module docs: an arena value is mutated only by the thread
+// that created it, and a file's AST and symbols are read-only once it is bound.
 unsafe impl<T: ?Sized> Send for P<T> {}
+// SAFETY: as for `Send`.
 unsafe impl<T: ?Sized> Sync for P<T> {}
 
 /// An element of an arena array whose elements are handed out as `P<V>` (link-store pages): 8-aligned in compressed
@@ -561,8 +577,9 @@ impl<V> PSlot<V> {
     /// `first` comes from `first` of an array with more than `i` slots.
     #[inline(always)]
     pub unsafe fn nth(first: P<PSlot<V>>, i: usize) -> P<V> {
-        // `PSlot` is `repr(C)` / `repr(transparent)` with the value first.
-        first.array_add(i).cast::<V>()
+        // SAFETY: the array has more than `i` slots (this function's contract), and `PSlot` is `repr(C)` /
+        // `repr(transparent)` with the value first, so a `V` lives at the slot's address.
+        unsafe { first.array_add(i).cast::<V>() }
     }
 }
 
@@ -618,7 +635,9 @@ impl<T> fmt::Debug for SP<T> {
         write!(f, "SP({:#x})", self.addr())
     }
 }
+// SAFETY: an `SP` is a `&'static T` with `P`'s identity semantics and falls under the same threading contract.
 unsafe impl<T> Send for SP<T> {}
+// SAFETY: as for `Send`.
 unsafe impl<T> Sync for SP<T> {}
 
 /// Two `&'static` slices in 24 bytes (u32 lengths) instead of 32, so an enum variant holding both still fits in a
@@ -661,8 +680,9 @@ impl<A, B> SlicePair<A, B> {
     }
 }
 
-// Same contract as `P`.
+// SAFETY: two `&'static` slices of arena or static data, under `P`'s threading contract.
 unsafe impl<A, B> Send for SlicePair<A, B> {}
+// SAFETY: as for `Send`; the pair is never written through.
 unsafe impl<A, B> Sync for SlicePair<A, B> {}
 
 /// The data pointer of a `&'static [T]` whose length is stored next to it by the owner (so an enum variant can
@@ -688,12 +708,14 @@ impl<T> StaticSlicePtr<T> {
     /// `len` must be the length of the slice this pointer was built from.
     #[inline]
     pub unsafe fn slice(self, len: usize) -> &'static [T] {
-        std::slice::from_raw_parts(self.0.as_ptr(), len)
+        // SAFETY: the pointer is the data pointer of a `&'static [T]` of length `len` (this function's contract).
+        unsafe { std::slice::from_raw_parts(self.0.as_ptr(), len) }
     }
 }
 
-// Same contract as `P`.
+// SAFETY: the data pointer of a `&'static [T]` of arena or static data, under `P`'s threading contract.
 unsafe impl<T> Send for StaticSlicePtr<T> {}
+// SAFETY: as for `Send`; the slice is never written through.
 unsafe impl<T> Sync for StaticSlicePtr<T> {}
 
 /// A `&'static str` in 8 bytes: the data pointer in the low 48 bits and the length in the high 16. A string of
@@ -748,8 +770,9 @@ impl PackedStr {
     }
 }
 
-// Same contract as `P`.
+// SAFETY: a `PackedStr` stands for a `&'static str` (immutable bytes), which is `Send`.
 unsafe impl Send for PackedStr {}
+// SAFETY: a `&'static str` is `Sync`.
 unsafe impl Sync for PackedStr {}
 
 impl fmt::Debug for PackedStr {
@@ -819,8 +842,9 @@ impl<T> ThinSlice<T> {
     }
 }
 
-// Same contract as `P`.
+// SAFETY: a `ThinSlice` stands for a `&'static [T]` of arena or static data, under `P`'s threading contract.
 unsafe impl<T> Send for ThinSlice<T> {}
+// SAFETY: as for `Send`; the slice is never written through.
 unsafe impl<T> Sync for ThinSlice<T> {}
 
 impl<T: fmt::Debug> fmt::Debug for ThinSlice<T> {
@@ -1118,7 +1142,8 @@ pub fn alloc_slice_recycled<T: Copy>(items: &[T]) -> &'static [T] {
 /// `size` bytes.
 #[inline]
 pub unsafe fn free_raw(addr: usize, size: usize, align: usize, needs_drop: bool) {
-    with_arena(|a| arena::free_block(a, addr, size, align, needs_drop));
+    // SAFETY: nothing points into the block afterwards (this function's contract).
+    with_arena(|a| unsafe { arena::free_block(a, addr, size, align, needs_drop) });
 }
 
 #[doc(hidden)]

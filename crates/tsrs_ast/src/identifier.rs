@@ -151,7 +151,7 @@ impl Identifier {
     fn node(&self) -> &Node {
         // SAFETY: identifiers are created only by `new_node` inside a `NodeAlloc` (`repr(C)`, header first), so the
         // header lies at this offset before the data struct.
-        unsafe { &*(self as *const Identifier).cast::<u8>().sub(std::mem::offset_of!(NodeAlloc<Identifier>, data)).cast::<Node>() }
+        unsafe { &*std::ptr::from_ref::<Identifier>(self).cast::<u8>().sub(std::mem::offset_of!(NodeAlloc<Identifier>, data)).cast::<Node>() }
     }
 
     #[inline]
@@ -188,7 +188,7 @@ impl Identifier {
     #[cold]
     fn stored_text(&self) -> &'static str {
         // SAFETY: identifiers in `MODE_TEXT` were allocated as `IdentifierWithText` (`repr(C)`, identifier first).
-        unsafe { &*(self as *const Identifier).cast::<IdentifierWithText>() }.text.as_str()
+        unsafe { &*std::ptr::from_ref::<Identifier>(self).cast::<IdentifierWithText>() }.text.as_str()
     }
 
     #[inline]
@@ -203,7 +203,7 @@ impl Identifier {
 
     #[cold]
     fn side_flow(&self) -> Option<P<FlowNode>> {
-        SIDE_FLOW.lock().unwrap().get(&(self as *const Identifier as usize)).copied()
+        SIDE_FLOW.lock().unwrap().get(&(std::ptr::from_ref::<Identifier>(self) as usize)).copied()
     }
 
     pub fn set_flow_node(&self, flow: Option<P<FlowNode>>) {
@@ -216,13 +216,13 @@ impl Identifier {
         let index = Self::text_index(word);
         let len = word & (LEN_MAX << LEN_SHIFT);
         if mode == MODE_SOURCE_SIDE {
-            SIDE_FLOW.lock().unwrap().remove(&(self as *const Identifier as usize));
+            SIDE_FLOW.lock().unwrap().remove(&(std::ptr::from_ref::<Identifier>(self) as usize));
         }
         let word = match flow {
             None => MODE_SOURCE << MODE_SHIFT | len | index as u64,
             Some(f) if f.text_index() == index => MODE_SOURCE_FLOW << MODE_SHIFT | len | flow_slot(flow),
             Some(f) => {
-                match SIDE_FLOW.lock().unwrap().entry(self as *const Identifier as usize) {
+                match SIDE_FLOW.lock().unwrap().entry(std::ptr::from_ref::<Identifier>(self) as usize) {
                     Entry::Occupied(mut e) => *e.get_mut() = f,
                     Entry::Vacant(e) => {
                         e.insert(f);

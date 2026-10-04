@@ -312,12 +312,14 @@ fn erase<T>(p: Option<P<T>>) -> Option<P<()>> {
 /// SAFETY: `w` was stored by `erase` from a `P<T>` (arena values are never freed or moved).
 #[inline]
 unsafe fn restore<T: 'static>(w: Option<P<()>>) -> Option<P<T>> {
+    // SAFETY: this function's contract: `w` was a `P<T>`.
     w.map(|w| unsafe { w.cast::<T>() })
 }
 
 /// SAFETY: `bits` is 0 or `P::to_bits` of a `P<T>` (mode bits cleared).
 #[inline]
 unsafe fn restore_bits<T: 'static>(bits: usize) -> Option<P<T>> {
+    // SAFETY: this function's contract: `bits` is 0 or the bits of a `P<T>`.
     unsafe { P::from_bits_opt(bits) }
 }
 
