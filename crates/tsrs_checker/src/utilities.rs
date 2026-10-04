@@ -472,7 +472,7 @@ impl Checker {
         } else if d2.is_some() {
             return 1;
         }
-        let r = s1.name().cmp(s2.name()) as i32;
+        let r = compare_names(s1.name(), s2.name());
         if r != 0 {
             return r;
         }
@@ -843,12 +843,22 @@ pub(crate) fn compare_type_names(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i
     let Some(s2) = s2 else {
         return -1;
     };
-    let r = s1.name().cmp(s2.name()) as i32;
+    let r = compare_names(s1.name(), s2.name());
     if r != 0 {
         return r;
     }
     // Keep distinct same-named declarations together before comparing alias arguments or structure.
     c.compare_symbols(Some(s1), Some(s2))
+}
+
+/// `a.cmp(b)` as Go's `strings.Compare`, without reading the bytes when both are the same string (distinct symbols
+/// often share their declaration's name string).
+#[inline]
+fn compare_names(a: &str, b: &str) -> i32 {
+    if a.len() == b.len() && std::ptr::eq(a.as_ptr(), b.as_ptr()) {
+        return 0;
+    }
+    a.cmp(b) as i32
 }
 
 // utilities.go:651

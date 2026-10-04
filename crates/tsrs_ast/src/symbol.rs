@@ -572,6 +572,14 @@ fn hash_name(name: &str) -> u32 {
     (h ^ (h >> 32)) as u32
 }
 
+/// `a == b`, decided without reading the bytes when both are the same string: over 40% of lookup hits use the very
+/// string the symbol was named with (an instantiated property looked up by its declaration's name), and an insert
+/// nearly always stores a symbol under its own name.
+#[inline]
+fn same_text(a: &str, b: &str) -> bool {
+    a.len() == b.len() && (std::ptr::eq(a.as_ptr(), b.as_ptr()) || a.as_bytes() == b.as_bytes())
+}
+
 /// The index's hash of an entry: its 32-bit hash spread over 64 bits (hashbrown takes its tag from the top bits).
 #[inline]
 fn index_hash(hash: u32) -> u64 {
@@ -605,15 +613,10 @@ impl SymbolMap {
         odd_keys.iter().find(|&&(j, _)| j as usize == i).unwrap().1
     }
 
-    /// Whether entry `i`'s key is `name` (whose fingerprint is `print`). The same pointer and length decide a hit
-    /// without reading the bytes: over 40% of hits look a name up by the very string the symbol was named with (an
-    /// instantiated property by its declaration's name).
+    /// Whether entry `i`'s key is `name` (whose fingerprint is `print`).
     #[inline]
     fn entry_matches(&self, i: usize, name: &str, print: KeyPrint) -> bool {
-        self.entries[i].print() == print && {
-            let key = self.key(i);
-            key.len() == name.len() && (std::ptr::eq(key.as_ptr(), name.as_ptr()) || key.as_bytes() == name.as_bytes())
-        }
+        self.entries[i].print() == print && same_text(self.key(i), name)
     }
 
     /// The hash of entry `i`'s key (rehashing the index, removing from it).
@@ -654,7 +657,7 @@ impl SymbolMap {
         if let Some(i) = if self.extra.may_contain(hash) { self.search(name, hash) } else { None } {
             // Go keeps the stored key; it is no longer the new symbol's name when that differs.
             self.entries[i].set_symbol(symbol);
-            if !self.entries[i].is_odd() && symbol.name() != name {
+            if !self.entries[i].is_odd() && !same_text(symbol.name(), name) {
                 self.add_odd_key(i, name);
             }
             return;
@@ -671,7 +674,7 @@ impl SymbolMap {
         }
         self.entries.push(SymbolMapEntry::new(symbol, KeyPrint::of(name, hash)));
         self.extra.add_to_filter(hash);
-        if symbol.name() != name {
+        if !same_text(symbol.name(), name) {
             self.add_odd_key(i, name);
         }
         let len = self.entries.len();
