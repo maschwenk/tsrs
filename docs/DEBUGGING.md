@@ -106,8 +106,11 @@ parser rewinds; language-server regions; notes/mem-recycle.md, notes/lsp-mem.md)
 still points to is a use-after-free. The alloc-profile build checks that at exit: frees are recorded, never reused,
 and every freed block must be unreachable.
 
+The census decodes 48-bit words as pointers, so it needs plain pointers (compressed handles are 32-bit offsets,
+notes/mem-pointer-compression.md); a compressed build refuses `TSRS_CENSUS=1`.
+
 ```sh
-CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile
+CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile,tsrs_core/plain-ptrs
 cd $PWD/target && TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1 TSRS_CENSUS_TOP=5 \
   ./prof/release/tsrs -p $PRIVATE_PROJECT/tsconfig.json --noEmit --checkers 1 2> census.err
 grep -E "census verify \(recycling\)|strongly reachable freed blocks|violation class" census.err

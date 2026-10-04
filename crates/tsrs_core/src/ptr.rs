@@ -3,7 +3,10 @@
 //! The Go compiler is a graph of long-lived, mutually referencing, identity-compared
 //! heap objects (nodes, symbols, types, links). We model that with a leak arena:
 //! `P<T>` is a `Copy` pointer to a value that lives for the rest of the process.
-//! Equality, hashing and ordering are by address, exactly like Go pointers.
+//! Equality, hashing and ordering are by identity, like Go pointers. With compressed pointers (the default on
+//! unix, `cfg(compressed_ptrs)`) a `P<T>` is a 32-bit handle: the value's offset in 8-byte units from the one
+//! reserved range every arena allocates from (`reserve`). Handles are position independent: nothing that stores a
+//! `P` (or its `to_bits` / `key`) stores an address.
 //!
 //! Mutable fields inside arena values use `Cell` / `RefCell`, or `OwnedCell` / `FrozenCell` in
 //! objects shared between checker threads.
